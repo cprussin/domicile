@@ -11,12 +11,9 @@ describe(Button, () => {
       expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
     });
 
-    // A BUTTON HANDS BACK THE ELEMENT IT DREW. It keeps a ref of its own —
-    // for the loading handoff — and a ref of its own that replaced the
-    // caller's is a button that cannot be an anchor: base-ui positions a
-    // popover against the element its trigger handed back, and a trigger that
-    // hands back nothing leaves the panel unpositioned at the top corner of
-    // the screen with nothing drawn.
+    // Button keeps an internal ref too. base-ui positions a popover against
+    // the trigger's ref, so dropping the caller's ref leaves the popover
+    // unpositioned.
     it("gives the element it drew to a ref it is passed", () => {
       const seen: (HTMLElement | null)[] = [];
       render(

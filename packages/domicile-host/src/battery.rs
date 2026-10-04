@@ -1,95 +1,65 @@
-//! The charge, read where a Linux kernel keeps it.
+//! Reads battery charge from `/sys/class/power_supply`.
 //!
-//! **Not `navigator.getBattery`, and that is the whole reason this module is
-//! here.** The Battery Status API answers through UPower over D-Bus, and a
-//! desktop on a bare tty has neither a session bus nor that daemon — see the
-//! `ERROR:dbus/bus.cc` line `scripts/test-shell-guard.sh` already treats as
-//! ordinary engine noise. Chromium then resolves with its *default*
-//! `BatteryStatus`: charging, and full. That reading is indistinguishable from
-//! a real laptop on a full battery, so no page can tell it from the truth, and
-//! the bar said `100%` on a machine running flat.
-//!
-//! `/sys/class/power_supply` is in every kernel, needs no daemon and no bus,
-//! and belongs to the process that already owns the machine. [`Directory`]'s
-//! opposite number is [`PowerSupplies`]: the compositor passes
-//! [`RealPowerSupplies`], the tests pass a map.
-//!
-//! [`Directory`]: crate::home_walk::Directory
+//! Replaces `navigator.getBattery`, which needs UPower over D-Bus. Without
+//! them, as on a bare tty, Chromium reports a full, charging battery. Tests
+//! implement [`PowerSupplies`] with a map. See
+//! `packages/shell-manganese/docs/HOST-READOUTS.md`.
 
 use std::path::{Path, PathBuf};
 
-/// Where the kernel publishes every battery and every lead.
+/// Sysfs directory listing every battery and charger.
 const POWER_SUPPLY: &str = "/sys/class/power_supply";
 
-/// The pairs of files a battery may report its level in, best first.
+/// File pairs a battery may report its level in, preferred first.
 ///
-/// `energy_*` is watt-hours and `charge_*` is amp-hours; which one a battery
-/// reports is its driver's business. A ratio is unitless, so nothing below
-/// needs to know which it got — only that both halves came from the same pair.
+/// `energy_*` is in watt-hours and `charge_*` in amp-hours, depending on the
+/// driver. The ratio is unitless as long as both halves come from one pair.
 const LEVELS: &[(&str, &str)] = &[("energy_now", "energy_full"), ("charge_now", "charge_full")];
 
-/// The field the kernel names a power supply's subsystem with, whole.
-///
-/// Matched entire rather than by prefix: nothing is called
-/// `power_supply_something` today, and a prefix match is the kind of thing
-/// that stays right until it is not.
+/// The uevent field for the power supply subsystem. Matched whole, not by
+/// prefix, so a future `power_supply_*` subsystem cannot match.
 const POWER_SUPPLY_SUBSYSTEM: &[u8] = b"SUBSYSTEM=power_supply";
 
-/// Whether a uevent datagram is the kernel reporting a power supply.
+/// Whether a uevent datagram concerns a power supply, meaning [`reading`]
+/// should run again.
 ///
-/// **A doorbell rather than a reading.** Nothing is parsed out of the message
-/// and nothing in it is believed: what it means is "go and look", and looking
-/// is [`reading`] against `/sys`, which is the kernel's own answer. That is
-/// what makes a netlink socket safe to hang this on — a datagram from anywhere
-/// at all, malformed or invented, costs one read of four small files and
-/// cannot make the bar say anything untrue.
+/// The contents are not trusted: a forged datagram only costs a re-read of
+/// `/sys`. The filter skips re-reading for unrelated devices.
 ///
-/// The filter is for the desktop's sake rather than for correctness: a machine
-/// announces a uevent for every device that comes, goes or changes, and
-/// re-reading the charge because a USB stick was plugged in would be the
-/// polling this replaced, on somebody else's clock.
-///
-/// The format is the kernel's own, which is what group 1 of
-/// `NETLINK_KOBJECT_UEVENT` carries: NUL-separated fields, the first
-/// `ACTION@DEVPATH` and the rest `KEY=VALUE`. (udevd's processed messages are
-/// a different shape on another group, and this never subscribes to them —
-/// see `uevents.rs` in the compositor for why that matters on a bare tty.)
+/// Expects the kernel format from group 1 of `NETLINK_KOBJECT_UEVENT`:
+/// NUL-separated fields, `ACTION@DEVPATH` then `KEY=VALUE`. udevd's messages
+/// use another group and format; see `uevents.rs` in the compositor.
 pub fn announces_a_power_supply(datagram: &[u8]) -> bool {
     datagram
         .split(|byte| *byte == 0)
         .any(|field| field == POWER_SUPPLY_SUBSYSTEM)
 }
 
-/// What the desktop can say about the machine's battery.
+/// A battery reading.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Reading {
-    /// How full, 0.0 through 1.0 — the scale the page draws the meter on.
+    /// Charge from 0.0 to 1.0.
     pub charge: f64,
-    /// Whether a lead is in.
+    /// Whether a charger is connected.
     pub charging: bool,
 }
 
-/// The machine's power supplies, so the reading can be tested without a `/sys`.
+/// Access to power supplies, so reading can be tested without `/sys`.
 pub trait PowerSupplies {
-    /// Every supply the kernel lists: the batteries and the leads together,
-    /// because which is which is a file inside each one.
+    /// Every supply, batteries and chargers alike. Each one's `type` file says
+    /// which it is.
     fn supplies(&self) -> Vec<PathBuf>;
 
-    /// One file of one supply, whitespace trimmed, or `None` when this supply
-    /// does not have it. Which files exist varies by driver, so an absent one
-    /// is the ordinary case rather than a failure.
+    /// One file of `supply`, trimmed, or `None` if absent. Which files exist
+    /// varies by driver.
     fn read(&self, supply: &Path, name: &str) -> Option<String>;
 }
 
-/// The machine this compositor is running on.
+/// Power supplies from the real `/sys`.
 pub struct RealPowerSupplies;
 
 impl PowerSupplies for RealPowerSupplies {
-    /// Nothing at all when the class is not there to read.
-    ///
-    /// A machine with no `/sys/class/power_supply` has no battery to report,
-    /// which is a fact about it rather than a failure to read one — the same
-    /// answer a desktop PC gives, and [`reading`] turns both into no message.
+    /// Empty when the class directory is missing, which means no battery.
     fn supplies(&self) -> Vec<PathBuf> {
         std::fs::read_dir(POWER_SUPPLY)
             .map(|entries| {
@@ -107,12 +77,8 @@ impl PowerSupplies for RealPowerSupplies {
     }
 }
 
-/// The charge, or `None` for a machine with no battery.
-///
-/// `None` is a desktop PC rather than a broken reading: there is no meter to
-/// draw, so the compositor sends nothing and the bar shows nothing. The
-/// failure this module exists to prevent is the opposite one — an invented
-/// reading that looks like a real one.
+/// The battery reading, or `None` if the machine has no battery. On `None`
+/// the compositor sends nothing and the bar shows no meter.
 pub fn reading(supplies: &impl PowerSupplies) -> Option<Reading> {
     let batteries: Vec<PathBuf> = supplies
         .supplies()
@@ -125,13 +91,10 @@ pub fn reading(supplies: &impl PowerSupplies) -> Option<Reading> {
     })
 }
 
-/// How full every battery is together, 0.0 through 1.0.
+/// Combined charge of all batteries, from 0.0 to 1.0.
 ///
-/// **Summed rather than averaged**, which is the one thing a per-battery
-/// percentage cannot do: a small cell nearly full beside a large one nearly
-/// empty is not a machine at half charge. `capacity` is the last resort for
-/// exactly that reason — it is already a ratio, so the sizes it came from are
-/// gone and a second battery can only be averaged in.
+/// Sums absolute levels so batteries of different sizes weigh correctly.
+/// Falls back to averaging `capacity` percentages, which lose the sizes.
 fn charge(batteries: &[PathBuf], supplies: &impl PowerSupplies) -> Option<f64> {
     LEVELS
         .iter()
@@ -139,9 +102,8 @@ fn charge(batteries: &[PathBuf], supplies: &impl PowerSupplies) -> Option<f64> {
         .or_else(|| percentage(batteries, supplies))
 }
 
-/// The summed `now` over the summed `full`, or `None` unless every battery
-/// reported both — a machine where one of two batteries is missing a file
-/// would otherwise read as that battery being empty.
+/// Summed `now` over summed `full`. `None` unless every battery reports both,
+/// so a missing file does not read as an empty battery.
 fn ratio(
     batteries: &[PathBuf],
     now: &str,
@@ -163,8 +125,7 @@ fn ratio(
     (capacity > 0.0).then_some(held / capacity)
 }
 
-/// The mean of what the batteries say about themselves, for the ones that
-/// report no absolute level at all.
+/// Mean `capacity` percentage, for batteries with no absolute level.
 fn percentage(batteries: &[PathBuf], supplies: &impl PowerSupplies) -> Option<f64> {
     let reported: Vec<f64> = batteries
         .iter()
@@ -173,17 +134,12 @@ fn percentage(batteries: &[PathBuf], supplies: &impl PowerSupplies) -> Option<f6
     (!reported.is_empty()).then(|| reported.iter().sum::<f64>() / (reported.len() as f64 * 100.0))
 }
 
-/// Whether a lead is in.
+/// Whether a charger is connected.
 ///
-/// **Anything that is not a battery and is online**, rather than the one
-/// called `AC`: a laptop charging over USB-C reports its charger as a `USB`
-/// supply, and a desktop that looked for `Mains` alone would say the lead was
-/// out while the machine charged.
-///
-/// A machine that lists no charger at all is asked the other way about, off
-/// the battery's own account of itself. Anything but `Discharging` is a
-/// battery that is not running the machine — charging, full, or held at a
-/// threshold its owner set.
+/// Any online non-battery supply counts, since USB-C chargers report as `USB`
+/// rather than `Mains`. With no charger listed, falls back to battery
+/// `status`: anything but `Discharging` (charging, full, or held at a charge
+/// threshold) counts.
 fn charging(batteries: &[PathBuf], supplies: &impl PowerSupplies) -> bool {
     let leads: Vec<PathBuf> = supplies
         .supplies()
@@ -203,43 +159,33 @@ fn charging(batteries: &[PathBuf], supplies: &impl PowerSupplies) -> bool {
     }
 }
 
-/// Whether this supply's `type` is the one named. A supply with no `type` is
-/// none of them, which keeps a driver that omits it out of both lists rather
-/// than counting it as a lead that is never online.
+/// Whether this supply's `type` is `kind`. A supply with no `type` matches
+/// nothing, keeping it out of both the battery and charger lists.
 fn is_a(supply: &Path, kind: &str, supplies: &impl PowerSupplies) -> bool {
     supplies
         .read(supply, "type")
         .is_some_and(|found| found == kind)
 }
 
-/// One file read as a number, or `None` when it is absent or is not one.
+/// One file parsed as a number, or `None` if absent or not numeric.
 fn number(supply: &Path, name: &str, supplies: &impl PowerSupplies) -> Option<f64> {
     supplies.read(supply, name)?.parse().ok()
 }
 
-/// What the chromes have been told about the battery.
+/// The battery reading last sent to the chromes.
 ///
-/// A reading is taken whenever the kernel says a supply changed, and again on
-/// a slow backstop — and almost none of them are worth a message, because
-/// `energy_now` moves by a few units a second on a machine doing nothing and
-/// one uevent for a lead is two, the charger's and the battery's.
-///
-/// **News is a whole percent, or the lead.** That is the resolution the bar
-/// draws at — it rounds the fraction to figures and fills a meter with the
-/// same number — so a change too small to move the figures is a change nothing
-/// on screen could show. What goes out is still the fraction: rounding belongs
-/// where it is drawn, once, so the meter and the figures cannot disagree.
+/// Readings are frequent and mostly noise: `energy_now` drifts constantly and
+/// plugging in a charger sends two uevents. Only a whole-percent change or a
+/// charger change is sent, since the bar shows no finer. The value sent is
+/// still the unrounded fraction, so the bar rounds it in one place.
 #[derive(Debug, Default)]
 pub struct Charge(Option<Reading>);
 
 impl Charge {
-    /// The reading to broadcast now, or `None` when the chromes already have
-    /// this one.
+    /// The reading to broadcast, or `None` if the chromes already have it.
     ///
-    /// `now` is `None` for a machine with no battery, which is never a
-    /// message: there is no reading to draw, and there is no "the battery is
-    /// gone" to send. It is recorded all the same, so a battery that comes
-    /// back is news.
+    /// A `None` reading is never sent but is recorded, so a battery that
+    /// reappears is broadcast.
     pub fn moved_to(&mut self, now: Option<Reading>) -> Option<Reading> {
         if shown(self.0) == shown(now) {
             None
@@ -249,22 +195,16 @@ impl Charge {
         }
     }
 
-    /// The reading to send a chrome that has just connected, whether or not it
-    /// has moved.
+    /// The reading to send a newly connected chrome.
     ///
-    /// A page that reloaded has no charge at all until something says one, and
-    /// what [`Charge::moved_to`] says is what *changed* — so on a settled
-    /// machine the next thing it says could be minutes away, and the bar would
-    /// carry a gap where the meter goes for all of it.
+    /// [`Charge::moved_to`] only reports changes, which may be minutes apart,
+    /// so a reloaded page needs the current reading.
     pub fn again(&self) -> Option<Reading> {
         self.0
     }
 }
 
-/// The reading as the bar would draw it: the whole percent, and the lead.
-///
-/// Two readings that agree here are one reading as far as anything on screen
-/// is concerned, which is what makes the difference between them silence.
+/// The reading at the bar's resolution: whole percent and charger state.
 fn shown(reading: Option<Reading>) -> Option<(i64, bool)> {
     reading.map(|read| ((read.charge * 100.0).round() as i64, read.charging))
 }

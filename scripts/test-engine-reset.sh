@@ -1,24 +1,14 @@
 #!/usr/bin/env bash
-# What the reset takes out of the shared checkout, and what it must not.
+# Asserts what `engine-reset.sh` removes from the shared checkout and what it
+# keeps.
 #
-# `git reset --hard` restores tracked files and leaves untracked ones, and that
-# one sentence is the whole history of this step: the series' own files are
-# untracked in Chromium's repository, so for five runs they survived every
-# reset, `apply.sh` refused the tree as dirty, and nothing noticed. It was
-# fixed by removing them by name. Then somebody else's work in progress landed
-# in the same checkout and failed a pull request that had nothing to do with
-# it, and the cause had to be reconstructed from a workflow comment.
+# `git reset --hard` leaves untracked files. The series' own files are
+# untracked in Chromium, so the script removes them by name. Any other
+# untracked file may be someone's work in progress: the script must keep it and
+# refuse with a diagnostic, not delete it.
 #
-# So both halves are asserted here: the series' files go, and anything that is
-# not the series' STAYS — with a diagnostic that says whose it is and what to
-# do. A reset that "fixed" the second failure by deleting the file would pass
-# a naive version of this test and destroy hours of somebody's work.
-#
-# The real script, run at the path it derives its repo root from: it reads
-# `CHROMIUM_PIN` and `packages/domicile-engine/src` relative to itself, and a
-# test cannot use the real ones (the pin is a Chromium commit no fixture has).
-# So the fixture is a repository shaped like this one with the actual script
-# copied into place, rather than the script's logic copied into the test.
+# The real script runs from a fixture shaped like this repository, since it
+# reads `CHROMIUM_PIN` and `packages/domicile-engine/src` relative to itself.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -49,8 +39,8 @@ contains() {
   esac
 }
 
-# A repository shaped like this one: the script at the path whose `../..` is
-# the root, a pin file, and a series with one file in it at a nested path.
+# A repository like this one: the script at the path whose `../..` is the
+# root, a pin file, and a series with one file at a nested path.
 FAKE="$WORK/repo"
 mkdir -p "$FAKE/.github/scripts" "$FAKE/packages/domicile-engine/src/components/domicile"
 cp "$RESET_SH" "$FAKE/.github/scripts/engine-reset.sh"
@@ -58,7 +48,7 @@ cat >"$FAKE/packages/domicile-engine/src/components/domicile/thing.cc" <<'EOF'
 // the series' own file
 EOF
 
-# And a checkout to reset: one upstream commit, which is the pin.
+# A checkout to reset, with one upstream commit as the pin.
 TREE="$WORK/chromium/src"
 mkdir -p "$TREE"
 git -C "$TREE" init -q
@@ -71,8 +61,8 @@ PIN="$(git -C "$TREE" rev-parse HEAD)"
 echo "# what the series is against" >"$FAKE/packages/domicile-engine/CHROMIUM_PIN"
 echo "$PIN" >>"$FAKE/packages/domicile-engine/CHROMIUM_PIN"
 
-# What `apply.sh` leaves behind: the series' files copied in, and a commit per
-# patch on top of the pin.
+# What `apply.sh` leaves: the series' files copied in, and a commit per patch
+# on top of the pin.
 lay_the_series_down() {
   mkdir -p "$TREE/components/domicile"
   cp "$FAKE/packages/domicile-engine/src/components/domicile/thing.cc" \
@@ -94,30 +84,26 @@ status() { printf '%s\n' "$1" | head -1; }
 lay_the_series_down
 expect "a tree with the series applied is reset" ok "$(status "$(run_reset)")"
 expect "the tree is back at the pin" "$PIN" "$(git -C "$TREE" rev-parse HEAD)"
-# The one the five stale runs turned on. `reset --hard` does not touch this
-# file, so if this line ever reads `still there`, every run after the first is
-# building the first one's sources again.
+# `reset --hard` does not remove this file. If it survives, every later run
+# builds stale sources.
 expect "the series' own file is gone, which reset --hard does not do" \
   "gone" \
   "$([ -e "$TREE/components/domicile/thing.cc" ] && echo "still there" || echo gone)"
 expect "and apply.sh will take the tree" "" "$(git -C "$TREE" status --porcelain)"
 
-# Twice in a row, because that is what CI does: this runs before every build,
-# and the second run starts from whatever the first left.
+# Twice in a row, as in CI: the second run starts from what the first left.
 lay_the_series_down
 expect "and again on the next run" ok "$(status "$(run_reset)")"
 
-# `git am` writes commits, and one that died mid-series leaves .git/rebase-apply
-# behind — after which every git command in the tree refuses until it is
-# aborted. The abort is the first thing the script does.
+# An interrupted `git am` leaves .git/rebase-apply, and every git command
+# refuses until it is aborted. The script aborts it first.
 lay_the_series_down
 mkdir -p "$TREE/.git/rebase-apply"
 expect "a tree left mid-\`git am\` is reset rather than refused" ok \
   "$(status "$(run_reset)")"
 
-# A git killed mid-operation leaves .git/index.lock, and every later git in the
-# tree refuses with "index.lock: File exists" — runs 36165934836 and
-# 36172865348. The job holds the tree lock by now, so the lock is stale.
+# A killed git leaves .git/index.lock, and later git commands fail with
+# "index.lock: File exists". The job holds the tree lock, so the file is stale.
 lay_the_series_down
 touch "$TREE/.git/index.lock"
 stale="$(run_reset)"
@@ -125,10 +111,9 @@ expect "a tree with a stale index.lock is reset rather than refused" ok \
   "$(status "$stale")"
 contains "and says it removed the lock" "removed a stale" "$stale"
 
-# And `git am --abort` does not always clear rebase-apply: run 36179097048 got
-# past the reset with it still there and `git am` refused the series. What it
-# leaves depends on the git and on where the killed am stopped; a stray file is
-# the shape every git leaves alone, so it stands in for the rest.
+# `git am --abort` does not always remove rebase-apply; what remains depends
+# on the git version and where am stopped. A stray file stands in for those
+# cases.
 lay_the_series_down
 rm -rf "$TREE/.git/rebase-apply"
 echo "left by a killed git am" >"$TREE/.git/rebase-apply"
@@ -138,36 +123,26 @@ expect "a tree whose rebase-apply outlives the abort is reset" ok \
 expect "and git am can run in it again" gone \
   "$([ -e "$TREE/.git/rebase-apply" ] && echo "still there" || echo gone)"
 
-# The identity `git am` needs, in the checkout's own config: the runner has no
-# ~/.gitconfig and never will, and apply.sh runs inside a bwrap FHS shell that
-# curates the environment.
+# `git am` needs an identity in the checkout's config: the runner has no
+# ~/.gitconfig, and apply.sh runs in a bwrap FHS shell with a curated
+# environment.
 expect "the checkout is given an identity to commit with" \
   "domicile CI ci@domicile.invalid" \
   "$(git -C "$TREE" config user.name) $(git -C "$TREE" config user.email)"
 
 # ---- a path with no checkout behind it -----------------------------------
 
-# WHAT AN EMPTY TREE SLOT LOOKED LIKE FROM HERE, on run 35703990131.
-# `engine-tree-pool.sh` pointed /build/chromium at a slot with no Chromium in
-# it, so every `git -C` below ran against a directory that was not there and
-# failed identically — and the fetch reported the first of those as "origin
-# would not serve that one revision", which is a sentence about Gitiles'
-# `uploadpack.allowReachableSHA1InWant` and had nothing to do with what was
-# wrong. The job then died on `fatal: cannot change to '.../src'`, four lines
-# after the message that was supposed to explain it.
-#
-# The pool is fixed not to hand out such a slot. This is what must be said if
-# a path ever arrives here with nothing behind it anyway: name the checkout,
-# not a server's capabilities.
+# A path with no checkout must be reported as such. Otherwise every `git -C`
+# fails and the fetch's error blames the server for refusing a revision, which
+# misleads the reader.
 missing="$(run_reset "$WORK/no-such-tree/src")"
 expect "a checkout that is not there is refused" refused "$(status "$missing")"
 contains "and the path is named" "$WORK/no-such-tree/src" "$missing"
 expect "and it is not diagnosed as a server refusing a revision" "0" \
   "$(printf '%s\n' "$missing" | grep -c 'would not serve' || true)"
 
-# The same class with the other cause: a directory that is there and holds no
-# repository. `git -C` answers a third way for it — `not a git repository`
-# rather than `cannot change to` — and a reader needs neither.
+# A directory without a repository. `git -C` reports `not a git repository`
+# here; the script must still name the checkout.
 mkdir -p "$WORK/not-a-checkout/src"
 not_git="$(run_reset "$WORK/not-a-checkout/src")"
 expect "a path that is not a git checkout is refused" refused "$(status "$not_git")"
@@ -175,18 +150,15 @@ contains "and says that is what is wrong with it" "not a git checkout" "$not_git
 
 # ---- the previous run's series, from a branch this one is not ------------
 
-# THE FAILURE THIS SECTION IS ABOUT. Two branches use one checkout: the first
-# lays down a file its `src/` has, the second's `src/` does not have it, so
-# removing "the series' files" removes the wrong set and the file survives
-# untracked forever. Every run after that stops at the dirty check, on whatever
-# pull request happens to be next. It cost two runs and an hour to see.
+# Two branches share one checkout. Removing only this branch's series files
+# would leave a file from the previous branch's series untracked, and every
+# later run would fail the dirty check.
 lay_the_series_down
-# A file the *last* run had and this one does not: laid into the tree, and
-# absent from the fixture's `src/`.
+# A file the previous run laid down that this branch's `src/` lacks.
 mkdir -p "$TREE/third_party/blink/renderer/core/html/domicile"
 echo "// patch 0007's" \
   >"$TREE/third_party/blink/renderer/core/html/domicile/html_app_element.cc"
-# What that run would have written down, at the path the script looks for it.
+# The previous run's manifest, at the path the script reads.
 printf '%s\n' \
   "components/domicile/thing.cc" \
   "third_party/blink/renderer/core/html/domicile/html_app_element.cc" \
@@ -199,13 +171,13 @@ expect "and that branch's file is gone" \
   "$([ -e "$TREE/third_party/blink/renderer/core/html/domicile/html_app_element.cc" ] &&
        echo "still there" || echo gone)"
 
-# And the manifest now describes *this* run, so the next one can undo it.
+# The manifest now lists this run's files, so the next run can remove them.
 expect "the run writes down what it lays down" \
   "components/domicile/thing.cc" \
   "$(cat "$WORK/chromium/.domicile-series-files")"
 
-# The manifest names paths that get removed, so it is read as such. Nothing
-# outside the checkout, and nothing above it.
+# The manifest names paths to delete, so paths outside the checkout are
+# ignored.
 outside="$WORK/not-the-checkout"
 echo "do not remove me" >"$outside"
 printf '%s\n' "$outside" "../../not-the-checkout" "components/../../../not-the-checkout" \
@@ -217,18 +189,15 @@ expect "and what it pointed at is untouched" "do not remove me" "$(cat "$outside
 
 # ---- somebody else's work in the same checkout ---------------------------
 
-# Not the series', so nothing removes it by name, and untracked, so the reset
-# leaves it. This is the state that failed a pull request that had nothing to
-# do with it.
+# Untracked and not the series', so the reset neither removes nor restores it.
 mkdir -p "$TREE/components/domicile/browser"
 echo "in progress" >"$TREE/components/domicile/browser/shell_url_loader_factory.cc"
 dirty="$(run_reset)"
 expect "a tree with somebody's work in it is refused" refused "$(status "$dirty")"
 contains "and the file is named" \
   "components/domicile/browser/shell_url_loader_factory.cc" "$dirty"
-# `--untracked-files=all`. The default collapses this to `?? components/`,
-# which is the line this job actually printed and which names none of the
-# files under it.
+# Requires `--untracked-files=all`: the default collapses this to
+# `?? components/`, which names no file.
 expect "by its whole path, not as the directory above it" \
   "0" \
   "$(printf '%s\n' "$dirty" | grep -c 'components/domicile/$' || true)"
@@ -239,15 +208,13 @@ contains "it gives the mirrored path the file belongs at" \
 contains "and warns against the tool a reader would reach for" \
   "DO NOT clear this with" "$dirty"
 
-# THE ASSERTION THAT MATTERS MOST HERE. The refusal is an inconvenience; a
-# reset that resolved it by deleting the file would be hours of somebody's
-# uncommitted work, silently, on a machine where the only copy of it was.
+# The reset must never delete the file: it may be the only copy of someone's
+# uncommitted work.
 expect "the work is still there afterward" \
   "in progress" \
   "$(cat "$TREE/components/domicile/browser/shell_url_loader_factory.cc")"
 
-# And it stays refused until somebody deals with it, rather than passing on the
-# second attempt because the first one tidied up.
+# It stays refused until someone removes the work.
 expect "and it is refused again on the next run" refused "$(status "$(run_reset)")"
 
 rm -rf "$TREE/components/domicile/browser"
@@ -256,9 +223,8 @@ expect "once the work is out of the tree the reset passes" ok \
 
 # ---- the other kind of dirty --------------------------------------------
 
-# A tracked file edited by hand. `reset --hard` restores this one, which is
-# exactly the difference the diagnostic draws: tracked mods cannot survive the
-# reset, so anything that does is someone writing into the tree right now.
+# `reset --hard` restores a tracked file, so tracked edits are not refused.
+# Only untracked files can mean someone is writing into the tree.
 echo "someone was editing this" >>"$TREE/upstream.cc"
 expect "an edit to an upstream file is reset, not refused" ok \
   "$(status "$(run_reset)")"
@@ -267,15 +233,11 @@ expect "and the upstream file is back to the pin's version" "upstream" \
 
 # ---- a pin the checkout has never heard of -------------------------------
 
-# WHAT A REPIN LOOKS LIKE FROM HERE, and the reason this section exists: the
-# revision in `CHROMIUM_PIN` is newer than anything in the shared checkout, so
-# `reset --hard` has nothing to reset to. Every engine workflow used to stop
-# at that point with an instruction to go and run `git fetch origin` on the
-# build host by hand, which made moving the pin a two-machine operation. The
-# fetch is this script's now. `engine-sync.sh` is the other half — the DEPS —
-# and `test-engine-sync.sh` asserts that one.
+# A repin: `CHROMIUM_PIN` names a revision the checkout lacks, so the script
+# fetches it before resetting. `engine-sync.sh` syncs DEPS afterward and is
+# tested in `test-engine-sync.sh`.
 
-# An upstream with a commit this checkout does not have.
+# An upstream with a commit the checkout lacks.
 UPSTREAM="$WORK/upstream"
 git clone -q "$TREE" "$UPSTREAM"
 git -C "$UPSTREAM" config user.email upstream@example.invalid
@@ -290,18 +252,16 @@ repin() {
   echo "$1" >>"$FAKE/packages/domicile-engine/CHROMIUM_PIN"
 }
 
-# Fetching by revision is what a server with `uploadpack.allowReachableSHA1InWant`
-# allows — Chromium's does — and it costs the commits between here and there
-# rather than every ref there is.
+# A server with `uploadpack.allowReachableSHA1InWant` (as Chromium's has) can
+# fetch a single revision, which costs only the commits in between.
 git -C "$UPSTREAM" config uploadpack.allowReachableSHA1InWant true
 repin "$NEW_PIN"
 expect "a pin the checkout does not have is fetched rather than refused" ok \
   "$(status "$(run_reset)")"
 expect "and the tree is at it" "$NEW_PIN" "$(git -C "$TREE" rev-parse HEAD)"
 
-# And where the server does not allow that, which most do not: it refuses the
-# request rather than 404ing, so the ordinary fetch is the fallback and the
-# pin has to arrive by it.
+# Most servers refuse a fetch by revision, so the script falls back to an
+# ordinary fetch.
 git -C "$UPSTREAM" config uploadpack.allowReachableSHA1InWant false
 git -C "$TREE" -c advice.detachedHead=false checkout -q "$PIN"
 git -C "$TREE" fetch -q origin "+refs/heads/*:refs/hidden/*" 2>/dev/null || true
@@ -315,9 +275,8 @@ expect "a server that will not serve one revision is fetched from wholesale" ok 
   "$(status "$(run_reset)")"
 expect "and the tree is at that pin too" "$NEWER_PIN" "$(git -C "$TREE" rev-parse HEAD)"
 
-# A pin nobody has is a typo or an unpushed revision, and it is the one case
-# left that a person has to answer. It must say so rather than fail inside a
-# `git reset` whose message names neither the file nor the fix.
+# A pin upstream lacks is a typo or an unpushed revision. The error must name
+# the revision and `CHROMIUM_PIN`, not fail inside `git reset`.
 repin "0000000000000000000000000000000000000000"
 missing="$(run_reset)"
 expect "a pin upstream does not have is refused" refused "$(status "$missing")"
@@ -327,25 +286,15 @@ repin "$NEWER_PIN"
 
 # ---- DEPS that are out of step with the pin ------------------------------
 
-# WHAT BLOCKED EVERY ENGINE BUILD IN THE REPOSITORY ON 2026-09-20, and the one
-# kind of dirty that is nobody's mistake. Chromium's DEPS are git submodules of
-# the superproject, so they are gitlinks rather than files — and `reset --hard`
-# in a superproject does not touch a submodule's working tree. A `gclient sync`
-# at a newer revision moves them; the next run's reset puts the superproject
-# back on the pin and cannot put them back with it; `git status` then reports
-# every one of them as ` M`, and the tree stays that way until a sync at the
-# pin runs.
+# Chromium's DEPS are git submodules. `reset --hard` does not move a
+# submodule's working tree, so after a `gclient sync` at another pin, `git
+# status` reports each dep as ` M` until a sync at this pin runs.
 #
-# `engine-sync.sh` is that sync and it runs immediately after this script, so
-# the state is the next step's input rather than a reason to stop. What must
-# not happen is this step refusing the job before that step can fix it, which
-# is what failed three pull requests and `main` in one morning.
-#
-# What must ALSO not happen is the deferral becoming a hole: a dep out of step
-# excuses the dep, and nothing else in the tree.
+# `engine-sync.sh` runs right after this script and fixes that, so the reset
+# must not refuse. It excuses only out-of-step deps, nothing else in the tree.
 
-# A dep with two revisions, carried as a real submodule: `.gitmodules` and a
-# gitlink, which is what a Chromium checkout has.
+# A dep with two revisions, as a real submodule (`.gitmodules` and a gitlink),
+# as in a Chromium checkout.
 DEP="$WORK/dep"
 mkdir -p "$DEP"
 git -C "$DEP" init -q
@@ -359,8 +308,7 @@ echo "a later revision" >>"$DEP/dep.cc"
 git -C "$DEP" -c commit.gpgsign=false commit -qam "the revision a newer DEPS names"
 DEP_AHEAD="$(git -C "$DEP" rev-parse HEAD)"
 
-# `protocol.file.allow`: git refuses a file:// submodule clone by default since
-# CVE-2022-39253, and the fixture has nowhere else to clone one from.
+# git refuses file:// submodule clones by default since CVE-2022-39253.
 git -C "$TREE" -c protocol.file.allow=always submodule add -q "$DEP" third_party/dep
 git -C "$TREE/third_party/dep" checkout -q "$DEP_AT_PIN"
 git -C "$TREE" add -A
@@ -368,20 +316,19 @@ git -C "$TREE" -c commit.gpgsign=false commit -qm "a pin whose DEPS are submodul
 SUB_PIN="$(git -C "$TREE" rev-parse HEAD)"
 repin "$SUB_PIN"
 
-# The stamp `engine-sync.sh` reads to decide whether it may skip the sync, at
-# the path it derives when nothing overrides it.
+# The stamp `engine-sync.sh` reads to decide whether to skip the sync, at its
+# default path.
 STAMP="$WORK/chromium/.domicile-synced-pin"
 stamp_says_the_pin() { printf '%s\n' "$SUB_PIN" >"$STAMP"; }
 
-# What a sync at another pin leaves behind, exactly: the submodule's working
-# tree at the other revision, and the superproject back on the pin.
+# The state a sync at another pin leaves: the submodule at the other revision
+# and the superproject back on the pin.
 diverge_the_deps() { git -C "$TREE/third_party/dep" checkout -q "$DEP_AHEAD"; }
 step_the_deps_back() { git -C "$TREE/third_party/dep" checkout -q "$DEP_AT_PIN"; }
 
-# And what that sync also leaves: a dep a newer DEPS names and this pin does
-# not. It is a gclient clone, so it is a git repository of its own, which is
-# why `git status -uall` prints it as a directory rather than listing the files
-# under it — the real one read `?? third_party/jetstream/v3.0/`.
+# A sync at another pin can also leave a dep this pin does not name. It is a
+# gclient clone with its own repository, so `git status -uall` lists only its
+# directory.
 a_dep_this_pin_does_not_name() {
   mkdir -p "$TREE/third_party/jetstream/v3.0"
   git -C "$TREE/third_party/jetstream/v3.0" init -q
@@ -391,9 +338,7 @@ a_dep_this_pin_does_not_name() {
 # ---- neither kind of dirty ----
 
 stamp_says_the_pin
-# Nothing to say, and above all nothing to clear. A reset that dropped the
-# stamp here would put a `gclient sync` in front of every ordinary build, which
-# is minutes on the one machine that has the tree.
+# The stamp must survive, or every build runs a `gclient sync` first.
 expect "a clean tree is reset without comment" ok "$(status "$(run_reset)")"
 expect "and the sync's fast path is left alone" "$SUB_PIN" "$(cat "$STAMP")"
 
@@ -405,13 +350,12 @@ expect "DEPS out of step with the pin are not treated as contamination" ok \
   "$(status "$deps")"
 contains "the dep is named" "third_party/dep" "$deps"
 contains "and it says whose job it is" "engine-sync.sh" "$deps"
-# The advice the old diagnostic gave for this class, which is wrong for it: a
-# gitlink is not a file, and there is no mirrored path it belongs at.
+# A gitlink is not a file, so there is no mirrored path to suggest.
 expect "it does not tell anyone to commit a submodule into the series" "0" \
   "$(printf '%s\n' "$deps" | grep -c 'packages/domicile-engine/src/third_party/dep' || true)"
 expect "and the sync cannot be skipped after it" "" "$(cat "$STAMP" 2>/dev/null)"
-# This step cannot fix that and does not pretend to. `apply.sh` is the gate
-# that still refuses it, after the sync has had its turn.
+# The reset leaves the dep alone. `apply.sh` refuses it if the sync does not
+# fix it.
 expect "the reset leaves the dep where it found it" "$DEP_AHEAD" \
   "$(git -C "$TREE/third_party/dep" rev-parse HEAD)"
 
@@ -429,11 +373,9 @@ expect "and nothing of it is deleted here" "fetched by a sync at another pin" \
 
 # ---- a loose untracked file, alongside them ----
 
-# THE HOLE THE DEFERRAL MUST NOT OPEN. `gclient sync -D` removes a *dep* the
-# current DEPS no longer names — it reads `.gclient_entries`, not the tree — so
-# it does nothing at all about a file somebody wrote. Deferring one would hand
-# the refusal to `apply.sh` minutes later, with none of the advice below it and
-# none of the warning against `git clean -fdx`.
+# The deferral must not cover loose files. `gclient sync -D` removes only deps
+# listed in `.gclient_entries`, so a stray file would reach `apply.sh` without
+# this script's diagnostic.
 stamp_says_the_pin
 mkdir -p "$TREE/components/domicile/browser"
 echo "in progress" >"$TREE/components/domicile/browser/shell_url_loader_factory.cc"
@@ -453,10 +395,9 @@ rm -rf "$TREE/third_party/jetstream"
 
 # ---- a tracked file that is not a dep, alongside them ----
 
-# `reset --hard` restores a tracked file, so the only way one is dirty when
-# this check runs is that something wrote it afterward — here, this script's
-# own manifest naming a path it should not. Whatever wrote it, it is not a
-# gitlink and the sync will not put it back.
+# `reset --hard` restores tracked files, so a dirty tracked file was written
+# afterward, here by a bad manifest entry. It is not a gitlink, so the sync
+# will not fix it.
 stamp_says_the_pin
 printf '%s\n' "upstream.cc" >"$WORK/chromium/.domicile-series-files"
 tracked_too="$(run_reset)"
@@ -468,13 +409,10 @@ git -C "$TREE" checkout -q -- upstream.cc
 
 # ---- a dep dirty in its own files, with its revision at the pin ----
 
-# NOT A PIN MISMATCH, so not the sync's and not a reason to clear the stamp.
-# ` M third_party/dep` means either "the recorded revision is not this one" or
-# "there is something in its working tree", and only the first is what
-# `engine-sync.sh` exists to fix — `gclient sync --reset` does not pass
-# `--force`, so a stray file inside a dep survives it. Clearing the stamp for
-# one would put a full `gclient sync` in front of every build from then on, and
-# fix nothing.
+# ` M third_party/dep` can mean a different revision or a dirty working tree.
+# Only the first is a pin mismatch. `gclient sync --reset` does not pass
+# `--force`, so it leaves stray files; clearing the stamp here would force a
+# full sync on every later build and fix nothing.
 stamp_says_the_pin
 step_the_deps_back
 echo "left by a build" >"$TREE/third_party/dep/scratch.o"
@@ -487,9 +425,8 @@ rm -f "$TREE/third_party/dep/scratch.o"
 
 # ---- a stamp that names another pin ----
 
-# The state the repin left the machine in. It must not come out of this
-# claiming anything: the DEPS it describes are at neither pin until a sync
-# says otherwise.
+# The state after a repin. The stamp must be cleared, since the DEPS match
+# neither pin until a sync runs.
 printf '%s\n' "0000000000000000000000000000000000000000" >"$STAMP"
 diverge_the_deps
 expect "a stamp naming another pin is cleared too, not left standing" ok \
@@ -497,9 +434,8 @@ expect "a stamp naming another pin is cleared too, not left standing" ok \
 expect "and it claims neither pin afterward" "" "$(cat "$STAMP" 2>/dev/null)"
 step_the_deps_back
 
-# THE TWO SCRIPTS MUST NAME THE SAME FILE. This one clears the stamp and that
-# one reads it; a path spelled two ways is a fast path that skips the sync this
-# step just asked for, and nothing would say so.
+# Both scripts must use the same stamp path, or the sync's fast path skips a
+# sync this script requested.
 stamp_line() { grep '^STAMP=' "$1"; }
 expect "the stamp path is engine-sync.sh's, character for character" \
   "$(stamp_line "$ROOT/.github/scripts/engine-sync.sh")" \

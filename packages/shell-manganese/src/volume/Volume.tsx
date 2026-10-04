@@ -19,26 +19,21 @@ import type { watchAudioLevels } from "./watch-audio-levels";
 const WHEEL_STEP = 0.05;
 
 type Props = {
-  /** Where the sound comes from and where a change is asked for. */
+  /** Source of audio state and target of volume changes. */
   domicile: DomicileClient;
-  /** How it is watched; injected so tests can drive a sound server. */
+  /** Injected so tests can drive the audio state. */
   watch?: typeof watchAudio | undefined;
-  /** How the meters are watched, likewise. */
+  /** Injected so tests can drive the meters. */
   watchLevels?: typeof watchAudioLevels | undefined;
 };
 
 /**
- * The desk's sound, on the bar: a speaker drawn as loud as the default output
- * is, which opens the whole mixer in a panel hung off the bar — and which the
- * wheel turns without opening anything.
+ * Top bar volume item: a speaker icon that opens the {@link Mixer}. The wheel
+ * over the icon changes the default output's volume.
  *
- * The panel is {@link Mixer}: the default output and microphone, with their
- * meters, and the rest in drawers under them. It is metered only while it is
- * open — the meters stop when it shuts, because metering a microphone records
- * it.
- *
- * Nothing is drawn until the host has said the sound, which on a desk with no
- * sound server is never.
+ * Renders nothing until the host reports audio, so it stays hidden without a
+ * sound server. The mixer meters only while open, because metering a
+ * microphone records it.
  */
 export const Volume = ({
   domicile,
@@ -89,11 +84,7 @@ const triggerLabel = (output: AudioDevice | undefined) => {
   }
 };
 
-/**
- * A speaker whose waves follow the default output — none, one, two, or a
- * cross when it is muted — so the bar says roughly how loud the desk is
- * without a figure.
- */
+/** A speaker icon whose waves show the default output's rough volume. */
 const Speaker = ({ output }: { output: AudioDevice | undefined }) => {
   if (output === undefined) {
     return <SpeakerSimpleSlashIcon size={15} weight="bold" />;
@@ -108,10 +99,7 @@ const Speaker = ({ output }: { output: AudioDevice | undefined }) => {
   }
 };
 
-/**
- * A notch of the wheel from where the output is, rounded to the percent and
- * kept between silence and 100%.
- */
+/** The output's volume after one wheel notch, rounded and clamped to 0–1. */
 const stepped = (output: AudioDevice, event: WheelEvent) => {
   const step = event.deltaY < 0 ? WHEEL_STEP : -WHEEL_STEP;
   return Math.min(
@@ -120,7 +108,7 @@ const stepped = (output: AudioDevice, event: WheelEvent) => {
   );
 };
 
-// The bar's button, as the brightness's is and for its reason.
+// Matches the brightness item's button.
 const triggerStyles = css({
   _hover: {
     backgroundColor: "color-mix(in oklab, white 16%, transparent)",

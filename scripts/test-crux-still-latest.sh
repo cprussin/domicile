@@ -1,13 +1,10 @@
 #!/usr/bin/env bash
-# crux-still-latest.sh: whether a push run's commit is still the last one on
-# its branch that engine.yml will build.
+# Tests `crux-still-latest.sh`: whether a push run's commit is still the latest
+# on its branch that engine.yml will build.
 #
-# Main's engine run for 13cc49a waited over six hours for the compile slot
-# while main moved four commits past it, and main's run for the newer f944d9d
-# queued behind it. A push run is replaced only by a later commit that gets an
-# engine run of its own, and engine.yml's path filter decides which do: a
-# commit touching no engine path gets none, so "is this still main's head"
-# would give up a run nothing is coming to replace.
+# A push run is replaced only by a later commit that gets its own engine run,
+# and engine.yml's path filter decides which commits do. Checking only "is this
+# the head" would cancel a run that nothing will replace.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -44,8 +41,8 @@ land packages/domicile-engine/patches/0001-a.patch
 run="$(git rev-parse HEAD)"
 contains "main's head is still wanted" "exit=0" "$(still_latest "$run")"
 
-# THE PATH FILTER. Neither of these starts an engine run, so nothing replaces
-# this one: the second is the release write-back engine.yml itself pushes.
+# Neither commit starts an engine run, so neither replaces this one. The second
+# is the release write-back engine.yml pushes itself.
 land README.md
 contains "a later commit touching no engine path does not replace it" \
   "exit=0" "$(still_latest "$run")"
@@ -66,8 +63,7 @@ git remote set-url origin "$WORK/nowhere.git"
 contains "an unreachable origin is an error, not an answer" \
   "exit=3" "$(still_latest "$newer")"
 
-# And engine.yml asks it while a push run waits for the compile slot, where
-# crux-still-head.sh's "no" already becomes a cancel rather than a red run.
+# engine.yml asks this for push runs while they wait for the compile slot.
 WORKFLOW="$ROOT/.github/workflows/engine.yml"
 slot="$(awk '$0 == "      - name: Take the compile slot" {on=1; print; next}
              on && /^      - name:/ {exit} on' "$WORKFLOW")"

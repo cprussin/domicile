@@ -7,42 +7,40 @@ import { arrivals } from "./arrivals";
 import { toastTimeout } from "./toast-timeout";
 
 export type NotificationCenter = {
-  /** Every notification nobody has cleared, newest first. */
+  /** Every uncleared notification, newest first. */
   items: readonly Notification[];
   /** How many arrived since the drawer was last opened. */
   unread: number;
-  /** The drawer opened: everything in it has been seen. */
+  /** Mark everything as seen; called when the drawer opens. */
   read: () => void;
-  /** Clear `ids`, which their applications are told. */
+  /** Clear `ids` and tell their applications. */
   dismiss: (ids: readonly number[]) => void;
-  /** Press `action` on `id` — `"default"` for the notification itself. */
+  /** Press `action` on `id`; `"default"` for the notification itself. */
   invoke: (id: number, action: string) => void;
 };
 
-/** Where the desk's notifications are and what they have to say. */
+/** The notifications and how far the user has read. */
 type Desk = {
   /** As the compositor sent them: oldest first. */
   items: readonly Notification[];
   /**
-   * The latest `time` the user has seen, or `undefined` before the first
-   * list: that list is the history, and is seen by being the history.
+   * The latest `time` the user has seen, or `undefined` before the first list,
+   * which counts as seen.
    */
   readUpTo: number | undefined;
 };
 
 /**
- * The desk's notifications, the toasts for the ones that just arrived, and
- * what has not been seen yet.
+ * The desktop's notifications, toasts for new arrivals, and the unseen count.
  *
- * `useTray`'s shape, and registered once for the whole desk for its reason:
- * pushed, whole, on every change and once more to a page that has just
- * connected. The list is the compositor's, so a reload keeps it; which of it is
- * new is this page's to tell — see `arrivals` — and a reload toasts nothing.
+ * Like `useTray`, it registers once for the whole desktop and receives the full
+ * list on every change and on connect. The compositor owns the list, so it
+ * survives a reload; `arrivals` decides what is new, so a reload toasts
+ * nothing.
  *
- * **A toast is a notification interrupting**, and nothing more: the toasts are
- * `toasts`', closed by the user or their timeout without the notification
- * going anywhere. It leaves when it is cleared — here or on another page —
- * or its application closes it, and its toast goes with it.
+ * A toast only interrupts. Closing it or timing out leaves the notification in
+ * place. Clearing the notification (on any page) or its application closing it
+ * removes the toast too. See docs/architecture/NOTIFICATIONS.md.
  */
 export const useNotifications = (
   domicile: DomicileClient,
@@ -52,9 +50,8 @@ export const useNotifications = (
     items: [],
     readUpTo: undefined,
   });
-  // The list the page was last told, for `arrivals` to tell news by. A ref,
-  // because the toasting it decides is done in the handler that hears the
-  // next list rather than drawn from.
+  // The last list received, for `arrivals`. A ref because it is only used in
+  // the handler, not for rendering.
   const told = useRef<readonly Notification[] | undefined>(undefined);
 
   useEffect(() => {

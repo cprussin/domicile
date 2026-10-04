@@ -1,15 +1,14 @@
 #!/usr/bin/env bash
-# Whether the workflow run a lock's owner names is over.
+# Whether the workflow run named by a lock's owner is over.
 #
 #   crux-run-finished.sh "<workflow>.yml run <id> attempt <n>"
 #                         0 over, 1 still going, 3 could not ask
 #
-# engine.yml and engine-release.yml ask this about the compile slot's holder
-# while they wait for it. A runner shut down mid-build never drops the slot,
-# and until this only that same runner could clear it.
+# engine.yml and engine-release.yml ask this while waiting for the compile
+# slot. A runner shut down mid-build never releases the slot, so a waiter needs
+# to know when it may clear it.
 #
-# Not named `engine-*.sh`, for crux-stale-runs.sh's reason: engine.yml runs on
-# changes to those, and a change to this is not a change to the build.
+# Not named `engine-*.sh`; see crux-stale-runs.sh.
 set -u
 
 [ $# -eq 1 ] || { echo "usage: $(basename "$0") '<workflow>.yml run <id> attempt <n>'" >&2; exit 2; }

@@ -1,52 +1,43 @@
-//! What a launcher's query finds in the file index.
+//! Searches the file index for the launcher.
 //!
-//! **The page asks and the compositor looks.** The index is the whole home —
-//! hundreds of thousands of paths on a real one — and it used to cross into
-//! the page whole, on every change, so that a launcher could filter it there.
-//! Each crossing was tens of megabytes through the engine's control channel,
-//! and a desktop that took no input while one was in flight. A query is a few
-//! bytes and its answer is a panel of rows, so the filter is here.
+//! The search runs in the compositor because the index can hold hundreds of
+//! thousands of paths, too many to send to the page.
 //!
-//! The matching is `fzf --exact`, which is what the launcher this desktop is
-//! modeled on filters with: every word has to appear somewhere in the path, in
-//! any order, ignoring case. No ranking and no reordering — the index is
-//! already sorted, and a second rule about order would be a second chance for
-//! the list to jump around under a keystroke that only narrowed it.
+//! Matches like `fzf --exact`: every query word must appear in the path,
+//! case-insensitively. Results keep index order, so narrowing a query does not
+//! reorder the list.
 
-/// The index, in the form a query reads.
+/// A searchable snapshot of the file index.
 ///
-/// Built once per change to the index rather than once per query, because the
-/// folding is what costs: on 120,000 paths, lowering them is 28 ms and
-/// scanning the lowered ones is 5.
+/// Rebuild it per index change, not per query: lowercasing 120,000 paths takes
+/// 28 ms, while scanning them takes 5 ms.
 #[derive(Debug, Default)]
 pub struct FileSearch {
-    /// The paths, in the index's byte order.
+    /// Paths in byte order.
     paths: Vec<String>,
-    /// `paths` in lower case, which is the only form a query compares against.
+    /// `paths` lowercased, for matching.
     lowered: Vec<String>,
 }
 
-/// What a query found.
+/// A query's results.
 #[derive(Debug, PartialEq)]
 pub struct Found {
-    /// The front of what matched, in the index's order.
+    /// The first matches, in index order.
     ///
-    /// A directory ends in `/`. A page has no filesystem to ask, and the index
-    /// holds names rather than kinds, so the evidence is the host's: a path
-    /// that another path is inside of cannot be anything else.
+    /// A path with other paths under it ends in `/`, marking it a directory.
     pub files: Vec<String>,
-    /// How many matched, of which `files` is the front.
+    /// The total number of matches.
     pub matched: usize,
 }
 
 impl FileSearch {
-    /// The search over `paths`, which are in the index's byte order.
+    /// A search over `paths`, which must be in byte order.
     pub fn new(paths: Vec<String>) -> Self {
         let lowered = paths.iter().map(|path| path.to_lowercase()).collect();
         FileSearch { paths, lowered }
     }
 
-    /// The first `limit` paths that `query` matches, and how many it matched.
+    /// The first `limit` matches for `query`, and the total match count.
     pub fn find(&self, query: &str, limit: usize) -> Found {
         let query = query.to_lowercase();
         let words: Vec<&str> = query.split_whitespace().collect();
@@ -67,19 +58,17 @@ impl FileSearch {
         }
     }
 
-    /// Whether the index holds `path`, which is what a preview is allowed to
-    /// read.
+    /// Whether the index holds `path`. Previews may read only such paths.
     pub fn holds(&self, path: &str) -> bool {
         self.paths
             .binary_search_by(|other| other.as_str().cmp(path))
             .is_ok()
     }
 
-    /// `path`, with a `/` after it if anything is inside it.
+    /// `path`, with a trailing `/` if anything is under it.
     ///
-    /// A binary search rather than a look at the next path, because the next
-    /// path in byte order need not be inside it: `Notes-old` sorts between
-    /// `Notes` and `Notes/today.org`.
+    /// Searches for `path/` rather than checking the next path, because
+    /// `Notes-old` sorts between `Notes` and `Notes/today.org`.
     fn marked(&self, path: &str) -> String {
         let inside = format!("{path}/");
         let next = self.paths.partition_point(|other| *other < inside);

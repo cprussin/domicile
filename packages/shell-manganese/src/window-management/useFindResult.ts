@@ -2,22 +2,19 @@ import { WEBVIEW_FIND_CHANGE_EVENT } from "@domicile-desktop/sdk/webview-element
 import { useEffect, useState } from "react";
 
 /**
- * What a find in the page has found: how many matches, and which of them is
- * selected, counted from 1. Both 0 while there is no find.
+ * A find-in-page result: the match count and the 1-based active match. Both are
+ * 0 when there is no find.
  */
 export type FindResult = { activeMatch: number; matches: number };
 
-/** No find, which is where a page starts. */
+/** The result before any find. */
 const NOTHING_FOUND: FindResult = { activeMatch: 0, matches: 0 };
 
 /**
- * What a find in the page inside a `<webview>` has found, kept current.
+ * The current find-in-page result of a `<webview>`.
  *
- * **The element is the state and the event is only a nudge**, the same way
- * `useZoom` is: read once as it mounts and again every time the view says so.
- *
- * `null` rather than `undefined` for the missing view because that is what
- * React's ref API hands a callback ref, which is where the element comes from.
+ * Reads the element's properties on mount and on each change event, like
+ * `useZoom`. Takes `null` because the element comes from a callback ref.
  */
 export const useFindResult = (view: HTMLWebViewElement | null): FindResult => {
   const [result, setResult] = useState(NOTHING_FOUND);

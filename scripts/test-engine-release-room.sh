@@ -1,42 +1,20 @@
 #!/usr/bin/env bash
-# That a build reclaims the pool's caches rather than telling a person to, and
-# reclaims the cheap ones.
+# Asserts `engine-release-room.sh` frees space on the build pool itself,
+# cheapest caches first.
 #
-# The space check refused run 35552629257 in two seconds with 54G free on a
-# 200G dataset, printed the remedy — "Reclaim it by removing $CHROMIUM/$OUT,
-# which is a cache and nothing else" — and then did not apply it. Nobody can
-# log into `crux` from CI, so that sentence stopped the release outright.
-# engine.yml kept that sentence, and run 36224113579 died on it twice: 58G
-# free, then 52G, on a /build every tree in the pool and the compiler cache
-# share.
+# Nobody can log into `crux` from CI, so a space check that only prints a
+# remedy stops the release. Reclaim order, cheapest first, is listed in
+# `.github/scripts/engine-release-room.sh`.
 #
-# THEN IT RECLAIMED THE WRONG THINGS. Against a 60G floor written for a "~40G"
-# out/Release that measures 1.9-2.8G, run 36235996990 emptied the compiler
-# cache and deleted its own out/Release, and built cold for 4h20m, while 82G of
-# nix-shell temp directories leaked into /build/tmp and 7.9G of published
-# tarballs in /build/engine-release sat untouched. So the cases below go
-# cheapest first, and two things never go at all: this run's own build and the
-# compiler cache as a whole.
+# Never reclaimed: this run's build, trees another run holds, temp directories
+# a live job may own, and today's compiler cache. A build that still cannot fit
+# must refuse to start.
 #
-# WHAT THE TEST IS REALLY ABOUT IS WHAT MUST SURVIVE. A step that frees space
-# on a shared build host has one interesting failure and it is not "did not
-# free enough": it is freeing something that belongs to somebody else. A tree
-# another run holds is that run's, however long ago it was used, and a temp
-# directory made today may be a live job's, so every case that reclaims
-# anything also asserts those are still there. The other half is the floor
-# itself, which is not a thing to negotiate with: a build that cannot finish
-# must still refuse to start.
+# `df` and `ccache` are stubbed on PATH. The `df` stub computes free space from
+# which caches remain, so a reclaim that deletes nothing cannot pass.
 #
-# `df` and `ccache` are stubbed on PATH rather than injected, because they are
-# the collaborators here this repository does not own and a test cannot make a
-# 200G dataset 54G full to order. The `df` stub answers from the pool rather
-# than from a script of numbers: how much is free is a function of which caches
-# are still on disk, which is exactly the relationship under test — a reclaim
-# that deletes nothing cannot be made to look like one that worked.
-#
-# The clock is injected (`DOMICILE_NOW`) for the one question it answers: a
-# directory's ctime cannot be set from a test, so "made two days ago" is asked
-# by moving now rather than the directory.
+# `DOMICILE_NOW` injects the clock, since a test cannot set a directory's
+# ctime.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -49,8 +27,8 @@ ENGINE_FLOW="$ROOT/.github/workflows/engine.yml"
 WORK="$(mktemp -d)"
 trap 'chmod -R u+w "$WORK"; rm -rf "$WORK"' EXIT
 
-# The pool as it is on `crux`: this run's tree and three others. tree-1 was
-# asked for longest ago, tree-2 recently, and tree-3 is another run's.
+# The pool on `crux`: this run's tree and three others. tree-1 was used
+# longest ago, tree-2 recently, and tree-3 is held by another run.
 export DOMICILE_BUILD_ROOT="$WORK/build"
 TREES="$DOMICILE_BUILD_ROOT/trees"
 TMP="$DOMICILE_BUILD_ROOT/tmp"
@@ -81,11 +59,9 @@ contains() {
 }
 there() { [ -e "$1" ] && echo yes || echo no; }
 
-# What each thing gives back when it goes, in the proportions measured on
-# `crux`: the leaked temp directories were 82G and the published tarballs
-# 7.9G, a whole out/Release is 1.9-2.8G and the compiler cache 3.3-4G all
-# told — a gigabyte of it a week old, one a day old, and today's, which
-# nothing may take.
+# Space each item frees, in proportions measured on `crux`: leaked temp
+# directories are the largest, then published tarballs, builds, and the
+# compiler cache (split into week-old, day-old and today's entries).
 mkdir -p "$WORK/bin"
 cat >"$WORK/bin/df" <<'DF'
 #!/usr/bin/env bash
@@ -104,8 +80,8 @@ done
 echo "Avail"
 echo "${free}G"
 DF
-# `--clear` is modeled rather than refused, so that a script which reaches for
-# it fails the assertions about what survives rather than just exiting.
+# Model `--clear` instead of rejecting it, so a script that uses it fails the
+# survival assertions.
 cat >"$WORK/bin/ccache" <<'CCACHE'
 #!/usr/bin/env bash
 case "$*" in
@@ -121,11 +97,10 @@ export FAKE_TMP="$TMP" FAKE_LEGACY="$LEGACY" FAKE_TREES="$TREES" \
   FAKE_CCACHE="$WORK/ccache"
 export DOMICILE_CC_WRAPPER="$WORK/bin/ccache"
 
-# The pool a run arrives at: every tree built, each with a stage and an
-# unpacked tarball; published tarballs where the stage used to be; a temp
-# directory nix leaked (read-only inside, as a copy out of the store is), one
-# a job never dropped, and one thing in /build/tmp that neither made; and a
-# compiler cache.
+# A pool as a run finds it: every tree built, each with a stage and an
+# unpacked tarball; published tarballs; a leaked nix-shell directory
+# (read-only inside, like a store copy), a job's undeleted temp directory, and
+# an unrelated entry in /build/tmp; and a compiler cache.
 a_pool() {
   local slot
   if [ -d "$DOMICILE_BUILD_ROOT" ]; then
@@ -150,17 +125,15 @@ a_pool() {
   : >"$WORK/ccache/day"
   : >"$WORK/ccache/today"
   "$LOCK_SH" take "$CHROMIUM" "$ME" >/dev/null
-  # Held by another run, and never handed out by the pool, so the oldest of
-  # them all: least recently used is the order the free trees go in, never a
-  # reason to take a held one.
+  # Held by another run and never handed out, so it is the oldest. Least
+  # recently used orders free trees only; it never makes a held tree eligible.
   "$LOCK_SH" take "$TREES/tree-3/src" "$THEM" >/dev/null
 }
 held_by_them() { # slot
   "$LOCK_SH" take "$TREES/tree-$1/src" "$THEM" >/dev/null
 }
 
-# Status on the first line, what it said after — the shape the tree lock's
-# test uses, because a refusal's words are half of what is being asserted.
+# Prints status on the first line and the script's output after it.
 room() { # free gigabytes to start from
   local out
   if out="$(FAKE_FREE_GB="$1" "$ROOM" "$CHROMIUM" out/Release "$STAGE" "$ME" 2>&1)"; then
@@ -178,8 +151,8 @@ published() { there "$LEGACY/domicile-engine-0000000-linux-x64.tar.zst"; }
 
 # --- room already, so nothing is touched ------------------------------------
 
-# THE CASE THAT COSTS HOURS TO GET WRONG. A step that reclaims on every run
-# throws away an incremental build that fits perfectly well, every time.
+# A run with enough room must not reclaim, or it discards a usable incremental
+# build.
 a_pool
 SAID="$(DOMICILE_NOW=$TWO_DAYS_ON room 15)"
 expect "a tree with room in it is left alone" ok "$(status "$SAID")"
@@ -190,9 +163,8 @@ contains "the floor is what a build measured, not ~40G" "floor of 15G" "$SAID"
 
 # --- short, and what nix leaked is enough -----------------------------------
 
-# FIRST, AND WORTH MORE THAN EVERYTHING ELSE PUT TOGETHER on the day it was
-# measured. A temp directory made more than a day ago belongs to no job that
-# can still be running.
+# Leaked temp directories go first; they free the most. One older than a day
+# belongs to no running job.
 a_pool
 SAID="$(DOMICILE_NOW=$TWO_DAYS_ON room 7)"
 expect "a day-old leak is enough, so the run goes ahead" ok "$(status "$SAID")"
@@ -207,8 +179,8 @@ contains "it says what it dropped" "nix-shell.leaked" "$SAID"
 
 # --- short, and the published tarballs are enough ---------------------------
 
-# A temp directory made today may be a live job's, on this runner or the other
-# one, and it is never touched however short the run is.
+# A temp directory made today may belong to a live job on either runner, so it
+# is never deleted.
 a_pool
 SAID="$(room 10)"
 expect "a run short by the tarballs gets there" ok "$(status "$SAID")"
@@ -219,8 +191,7 @@ expect "and this run's own stage" no "$(stage 0)"
 expect "but its unpacked tarball is kept, because it was not needed" yes \
   "$(staged 0)"
 
-# What an earlier run already reclaimed is not there to reclaim again, and its
-# absence is no reason to stop short of the rest.
+# Items an earlier run already removed must not stop the reclaim.
 a_pool
 rm -rf "$LEGACY"/* "$STAGE" "$CHROMIUM/out/Release-staged"
 SAID="$(room 4)"
@@ -247,9 +218,9 @@ expect "and the compiler cache is not touched" yes "$(there "$WORK/ccache/week")
 
 # --- short, and a free tree's build is enough -------------------------------
 
-# A week-old cache entry goes before any build, and one free tree's build
-# before a younger entry: a build costs a rebuild only if a run wants that
-# tree's pin again.
+# Week-old cache entries go before any build, and one free tree's build goes
+# before newer entries: a build only costs a rebuild if a run needs that tree's
+# pin again.
 a_pool
 SAID="$(room 2)"
 expect "a pool that needs one free tree's build gets there" ok "$(status "$SAID")"
@@ -276,8 +247,7 @@ expect "they go" no "$(there "$WORK/ccache/day")"
 expect "and today's stay: the cache is trimmed, never emptied" yes \
   "$(there "$WORK/ccache/today")"
 
-# A machine that names no compiler cache has none to trim, which is not a
-# reason to stop short of the reclaim that is left.
+# Without a compiler cache, the reclaim continues with what is left.
 a_pool
 SAID="$(DOMICILE_CC_WRAPPER='' room 2)"
 expect "no compiler cache is no reason to refuse" ok "$(status "$SAID")"
@@ -286,9 +256,9 @@ expect "and the cache it did not name is not touched" yes \
 
 # --- short even with everything gone ----------------------------------------
 
-# THE FLOOR IS NOT NEGOTIABLE, AND NEITHER IS THIS RUN'S BUILD. Deleting it is
-# what turned run 36235996990 into a 4h20m cold build; a run that cannot fit
-# after everything else refuses and says why, and the next run is still warm.
+# The floor holds, and this run's build is kept: deleting it forces a cold
+# build of over four hours. The run refuses and says why, and the next run
+# stays warm.
 a_pool
 held_by_them 1
 held_by_them 2
@@ -305,9 +275,8 @@ expect "and the checkout is not a cache" yes "$(there "$CHROMIUM")"
 
 # --- stale is provable only against the longest job -------------------------
 
-# "Made more than a day ago, so no live job's" holds only while no job on these
-# runners can run that long. The bound is in the script and the budgets are in
-# the workflows, so this is where the two are held against each other.
+# "Older than a day, so no live job's" holds only while no job runs that long.
+# Checks the script's bound against the workflows' timeouts.
 STALE="$(sed -n 's/^STALE_TMP_MINUTES=\([0-9]*\).*/\1/p' "$ROOM")"
 LONGEST="$(grep -h '^ *timeout-minutes:' "$ROOT"/.github/workflows/*.yml |
   tr -dc '0-9\n' | sort -n | tail -1)"
@@ -322,20 +291,12 @@ fi
 
 # --- the workflows this exists for ------------------------------------------
 
-# A SCRIPT NOTHING CALLS IS THE OLD FAILURE WITH A TEST OVER IT. Every case
-# above stays green if a workflow goes on measuring inline, which is what
-# engine.yml did when run 36224113579 failed.
+# Both workflows must call this script, or every case above passes while the
+# workflow measures inline.
 #
-# AND WHERE IT IS CALLED FROM IS THE WHOLE SAFETY ARGUMENT. `out/Release` and
-# `out/Release-staged` are inside a shared checkout, and deleting anything in
-# there while another writer is in that tree is precisely what the tree lock
-# exists to prevent. And the tree this run reclaims in is whichever one the
-# pool handed it -- `$CHROMIUM` is written by that step, so a reclaim before it
-# would resolve to nothing at all.
-#
-# Both halves are one step now: `engine-tree-pool.sh pick` chooses a tree and
-# locks it in the same call, because choosing and then locking is a tree
-# another run can take in between.
+# It must run after `engine-tree-pool.sh pick`, which picks and locks a tree in
+# one call and sets `$CHROMIUM`. Deleting in a shared checkout is safe only
+# under the tree lock, and before the pick `$CHROMIUM` is unset.
 for flow in "$RELEASE_FLOW" "$ENGINE_FLOW"; do
   name="$(basename "$flow")"
   POOL="$(grep -n 'engine-tree-pool.sh pick' "$flow" | head -1 | cut -d: -f1)"

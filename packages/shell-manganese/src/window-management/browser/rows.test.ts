@@ -3,7 +3,7 @@ import { describe, expect, it } from "bun:test";
 import { ChooserMode } from "./file-request";
 import { RowKind, rowsIn } from "./rows";
 
-/** What the engine listed, in its own vocabulary: a directory ends in `/`. */
+/** A fake listing; directory names end in `/`. */
 const ENTRIES = [
   "photo.PNG",
   "zines/",
@@ -27,7 +27,6 @@ const listed = (
   );
 
 describe("rowsIn", () => {
-  // The way back up is the first row of every directory but the root's.
   it("starts with the parent, then directories, then files", () => {
     expect(listed(ChooserMode.Open)).toStrictEqual([
       "..",
@@ -57,7 +56,7 @@ describe("rowsIn", () => {
     ]);
   });
 
-  // The browser has already turned `image/*` into extensions, lower case.
+  // The browser has already expanded `image/*` into lowercase extensions.
   it("offers only the files the page will take, whatever their case", () => {
     expect(
       listed(ChooserMode.Open, { accept: ["png"] }).filter((name) =>
@@ -70,14 +69,14 @@ describe("rowsIn", () => {
     expect(listed(ChooserMode.OpenFolder)).not.toContain("notes.txt");
   });
 
-  // A save shows what is already there, whatever the page asked for.
+  // A save shows existing files regardless of `accept`.
   it("offers every file to save over", () => {
     expect(listed(ChooserMode.Save, { accept: ["png"] })).toContain(
       "notes.txt",
     );
   });
 
-  // So Enter after typing a name takes the one that starts with it.
+  // So Enter after typing a name picks the one that starts with it.
   it("narrows to what holds the filter, what starts with it first", () => {
     expect(listed(ChooserMode.Open, { filter: "scr" })).toStrictEqual([
       "Scratch",
@@ -85,7 +84,7 @@ describe("rowsIn", () => {
     ]);
   });
 
-  // A shell's convention: a dot is typed to see what starts with one.
+  // As in a shell, dotfiles show only once a dot is typed.
   it("hides what starts with a dot until a dot is typed", () => {
     expect(listed(ChooserMode.Open)).not.toContain(".cache");
     expect(listed(ChooserMode.Open, { filter: "." })).toStrictEqual([

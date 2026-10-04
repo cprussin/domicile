@@ -1,37 +1,18 @@
 #!/usr/bin/env bash
-# One closed set, written down in five places, compared.
+# Checks that the five display transform lists agree, in order.
 #
-# A config says a monitor is on its side and the name crosses four boundaries
-# to become a CSS transform: `domicile_config::Transform` parses the file, the
-# compositor serializes `domicile_protocol::DisplayTransform`, the browser
-# process parses it against
-# `components/domicile/common/display_transform.h` into
-# `mojom::DisplayTransform`, and the SDK reads the name back off
-# `DomicileDisplay.transform` through `displayTransformSchema` in
-# `display-transform.ts` in `@domicile-desktop/sdk`. Five enumerations of one
-# set, in Rust twice, C++, mojom and TypeScript.
+# A transform name crosses the config (`domicile_config::Transform`), the
+# compositor (`domicile_protocol::DisplayTransform`), the browser
+# (`components/domicile/common/display_transform.h`), mojom
+# (`mojom::DisplayTransform`) and the SDK (`displayTransformSchema`).
 #
-# The sibling of `test-cursor-shapes-agree.sh`, and what drift costs here is
-# worse than there. A cursor nobody knows is refused at the boundary that
-# never heard of it, which at least stops. A TURN nobody knows falls back to
-# `normal` -- deliberately, because refusing it would drop the whole desktop
-# description and leave a shell with no screens -- so a name that four lists
-# spell one way and the fifth spells another is a monitor drawn face-up on its
-# side, silently, with the desk otherwise working.
+# An unknown name falls back to `normal` instead of dropping the whole display
+# list, so drift silently draws a monitor unrotated. The mojom numbers by
+# position, so order matters too.
 #
-# ORDER, NOT JUST MEMBERSHIP, for the reason the cursor script gives: the mojom
-# is an `enum class : int32_t` whose numbering comes from position, so two
-# lists that agree on membership and disagree on order do not fail. They turn
-# a monitor the wrong way.
-#
-# There is no WebIDL list here, and that is not an omission.
-# `DomicileDisplay.transform` is a `DOMString` rather than a generated enum --
-# `domicile_display.idl` says why -- so the engine has nothing to enumerate and
-# the browser's list is handed to the page as a string.
-#
-# BUILDLESS ON PURPOSE, like its sibling: nothing here compiles anything, and
-# the failure it catches would otherwise surface as an engine build on the one
-# runner that can do it, or not at all.
+# There is no WebIDL list: `DomicileDisplay.transform` is a `DOMString` (see
+# `domicile_display.idl`). Like `test-cursor-shapes-agree.sh`, this builds
+# nothing.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -48,13 +29,10 @@ done
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-# The two Rust lists: the `#[serde(rename = "...")]` inside each enum, which IS
-# the wire name. Read rather than derived, unlike the cursor script's, because
-# both of these spell their names out by hand -- serde's kebab-case reads
-# `Rotate270` as one word and writes `rotate270`, which is neither what the
-# config file says nor what `wl_output` is called anywhere. A list that went
-# back to `rename_all` would therefore be a list of different names, and this
-# pattern would read nothing from it and fail on the count below.
+# Rust: the `#[serde(rename = "...")]` on each variant is the wire name. Both
+# enums spell names by hand, because `rename_all = "kebab-case"` would write
+# `rotate270`. If they switch to `rename_all`, this reads nothing and fails the
+# count check.
 renames() { # file, enum name
   awk -v want="pub enum $2 {" '
     index($0, want) { inside = 1; next }
@@ -68,13 +46,12 @@ renames() { # file, enum name
 renames "$PROTOCOL" DisplayTransform >"$WORK/protocol"
 renames "$CONFIG" Transform >"$WORK/config"
 
-# C++: the second argument of each X-macro entry, which IS the wire name.
+# C++: the second argument of each X-macro entry is the wire name.
 sed -n 's/^  X([A-Za-z0-9]*, "\([^"]*\)").*/\1/p' "$CPP" >"$WORK/cpp"
 
-# mojom: the enumerators of `enum DisplayTransform`, turned into wire names the
-# way the C++ list pairs them -- `kRotate90` is `rotate-90`. Derived rather
-# than read, because the mojom has no strings in it at all: what it contributes
-# to this comparison is the ORDER, which is what its int32 numbering is.
+# mojom: the enumerators of `enum DisplayTransform`, mapped to wire names as
+# the C++ list pairs them (`kRotate90` is `rotate-90`). The mojom has no
+# strings; it contributes the order.
 sed -n '/^enum DisplayTransform {$/,/^};$/p' "$MOJOM" |
   sed -n 's/^  k\([A-Za-z0-9]*\),$/\1/p' |
   sed -E 's/([a-z])([0-9])/\1-\2/' |
@@ -87,10 +64,8 @@ sed -n '/displayTransformSchema = z.enum(\[/,/\]);/p' "$TS" |
 FAILED=0
 for f in protocol config cpp mojom ts; do
   n="$(wc -l <"$WORK/$f" | tr -d ' ')"
-  # A pattern that stops matching reads as an empty list, and an empty list
-  # compares equal to another empty list. That is this script failing open --
-  # the shape of bug it exists to catch, one level up -- so the count is
-  # asserted before anything is compared.
+  # A pattern that stops matching yields an empty list, which equals any
+  # other empty list. Check the count first.
   if [ "$n" -lt 2 ]; then
     printf '  FAIL  read %s turns from the %s list, so its pattern no longer matches\n' \
       "$n" "$f"

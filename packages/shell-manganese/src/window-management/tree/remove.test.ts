@@ -78,8 +78,7 @@ describe("removed", () => {
   });
 
   it("flattens a container left holding one window", () => {
-    // Which is i3's own rule: a container of one is not a layout, it is a
-    // window with a box drawn round it.
+    // As in i3, a one-child container collapses into its child.
     expect(removed(NESTED, "c").root).toEqual(
       LayoutNode.Container(
         Layout.SplitH,
@@ -110,14 +109,13 @@ describe("removed", () => {
   });
 
   it("leaves a tree that never held the window alone", () => {
-    // The host drains events for windows on other workspaces, and a close
-    // that names one of those is not this tree's business.
+    // The host sends closes for windows on other workspaces; ignore them.
     expect(removed(ROW, "z")).toBe(ROW);
   });
 
   it("empties a workspace whose lone split loses its only child", () => {
-    // A container of one is what `splith` on a single window leaves behind,
-    // and the window closing takes the container with it.
+    // `splith` on a lone window leaves a one-child container, which goes with
+    // the window.
     const split = {
       depth: 1,
       root: LayoutNode.Container(Layout.SplitV, [LayoutNode.Window("a")]),

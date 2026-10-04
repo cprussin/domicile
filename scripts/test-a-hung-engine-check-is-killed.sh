@@ -1,12 +1,10 @@
 #!/usr/bin/env bash
-# An engine check that never returns is killed and fails, rather than holding
-# the job until its 12-hour timeout. Engine run 36820989982 hung in the webview
-# batch at 06:51; its guards stayed registered as noise, so run 36820571967's
-# latency guard waited on them on the other runner, and the two held both of
-# `crux`'s slots until they were canceled at 14:25.
+# Checks an engine check that never returns is killed and fails, instead of
+# holding the job until its 12-hour timeout.
 #
-# Killed means all of it: the check, what it started, and its noise -- or the
-# other run's latency guard is still waiting.
+# The kill must cover the check, its children and its noise registration.
+# Otherwise another run's latency guard keeps waiting on the noise and both of
+# `crux`'s runner slots stay held.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -19,9 +17,8 @@ FAILED=0
 ok() { printf '  ok    %s\n' "$1"; }
 fail() { printf '  FAIL  %s\n    %s\n' "$1" "$2"; FAILED=$((FAILED + 1)); }
 
-# A repository holding check.sh and a stand-in for every engine check. The one
-# named in HANG starts a child and then sleeps far past the budget, the way a
-# guard waiting on a browser that never answers does.
+# A repo with check.sh and a stub for each engine check. The stub named in HANG
+# starts a child and sleeps past the budget.
 mkdir -p "$WORK/repo/scripts" "$WORK/repo/.github/scripts" "$WORK/bin"
 cp "$ROOT/scripts/check.sh" "$WORK/repo/scripts/"
 cp "$ROOT/.github/scripts/engine-render-node-lock.sh" "$WORK/repo/.github/scripts/"
@@ -63,7 +60,7 @@ grep -qE "^  engine-guard-webview-click +FAILED$" "$WORK/out" &&
 grep -q "ran past 2s" "$WORK/out" && grep -q "waiting on a browser" "$WORK/out" &&
   ok "saying it timed out, beside its own log" ||
   fail "saying it timed out, beside its own log" "$(cat "$WORK/out")"
-# Dead or a zombie: a container whose init reaps nothing keeps the second.
+# Dead or a zombie: a container whose init reaps nothing leaves zombies.
 child="$(cat "$WORK/child.pid" 2>/dev/null)"
 [ -n "$child" ] && case "$(ps -o stat= -p "$child")" in (''|Z*) true ;; (*) false ;; esac &&
   ok "what it started is killed with it" ||
@@ -74,7 +71,7 @@ sleep 1
   fail "and it is no longer noise another run's latency guard waits on" \
     "$(cat "$WORK"/noise/*/owner 2>/dev/null)"
 
-# Serial, outside the batch, and with no job name: the path a person runs.
+# Serial, outside the batch, with no job name: how a person runs it.
 rm -f "$WORK/child.pid"
 HANG=engine-guard-shell PATH="$WORK/bin:$PATH" \
   DOMICILE_ENGINE_CHECK_TIMEOUT=2 DOMICILE_CHECK_LOG_DIR="$WORK/logs" \

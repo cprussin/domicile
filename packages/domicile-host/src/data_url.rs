@@ -1,14 +1,13 @@
-//! Bytes a page may draw but cannot fetch, written into the URL itself.
+//! Encodes bytes as `data:` URLs so a page can draw files it cannot fetch.
 
 const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
-/// `bytes` as a `data:` URL of type `mime`.
+/// Encodes `bytes` as a `data:` URL of type `mime`.
 pub fn data_url(mime: &str, bytes: &[u8]) -> String {
     format!("data:{mime};base64,{}", base64(bytes))
 }
 
-/// Standard base64, padded. Written out rather than taken as a dependency: it
-/// is this function, and one caller.
+/// Standard padded base64. Small enough not to need a dependency.
 fn base64(bytes: &[u8]) -> String {
     bytes
         .chunks(3)

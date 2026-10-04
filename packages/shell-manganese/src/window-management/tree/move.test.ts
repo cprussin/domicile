@@ -20,7 +20,7 @@ const ROW = {
   ]),
 };
 
-/** A window beside a column of two, the column last used at its foot. */
+/** A window beside a column of two, the column focused at its bottom. */
 const NESTED = {
   depth: 2,
   root: LayoutNode.Container(Layout.SplitH, [
@@ -33,7 +33,7 @@ const NESTED = {
   ]),
 };
 
-/** A column of two beside a window, which the window is moved back into. */
+/** A column of two beside a window, which the window moves into. */
 const NESTED_LEFT = {
   depth: 2,
   root: LayoutNode.Container(Layout.SplitH, [
@@ -46,7 +46,7 @@ const NESTED_LEFT = {
   ]),
 };
 
-/** Three windows sharing a row unevenly, the middle one a column of two. */
+/** An uneven row of three; the middle is a column of two. */
 const RESIZED_ROW = {
   depth: 1,
   root: LayoutNode.Container(
@@ -64,7 +64,7 @@ const RESIZED_ROW = {
   ),
 };
 
-/** A window beside a tabbed container of two, open at its second tab. */
+/** A window beside a tabbed container of two, showing its second tab. */
 const TABBED = {
   depth: 2,
   root: LayoutNode.Container(Layout.SplitH, [
@@ -97,9 +97,8 @@ describe("movedBy", () => {
   });
 
   it("splits the workspace the other way to move across it", () => {
-    // What i3 does with a window moved perpendicular to its container: the
-    // workspace gains a split of the other orientation and the window goes to
-    // that side of everything.
+    // As in i3, moving across the container's axis splits the workspace the
+    // other way.
     const moved = movedBy(withFocusOn(ROW, "a"), Direction.Down);
 
     expect(moved.root).toMatchObject({ layout: Layout.SplitV });
@@ -144,22 +143,19 @@ describe("movedBy", () => {
   });
 
   it("moves a window into the container beside it", () => {
-    // sway's own: a window pushed at a container joins it rather than
-    // swapping past it, which is what a split and a move make a group with.
+    // As in sway, a window moved at a container joins it instead of swapping.
     const moved = movedBy(withFocusOn(NESTED, "a"), Direction.Right);
 
-    // Beside the child that container last had the focus in, and on the side
-    // the window came from.
+    // Beside the container's last-focused child, on the side it came from.
     expect(windowsOf(moved)).toEqual(["b", "a", "c"]);
     expect(focusedIdOf(moved)).toBe("a");
-    // What it left behind is one container of one, which is its only child.
+    // The container left with one child collapses into it.
     expect(moved.root).toMatchObject({ layout: Layout.SplitV });
   });
 
   it("enters a container running its way at the edge it came from", () => {
-    // A tabbed container runs left and right, so a window pushed into one
-    // from its left becomes the first tab rather than landing beside the tab
-    // that is open.
+    // A tabbed container runs horizontally, so entering from the left makes
+    // the window the first tab.
     const moved = movedBy(withFocusOn(TABBED, "a"), Direction.Right);
 
     expect(windowsOf(moved)).toEqual(["a", "b", "c"]);
@@ -167,9 +163,8 @@ describe("movedBy", () => {
   });
 
   it("enters a container it is moved back into from the other side", () => {
-    // The same rule read the other way: the window comes in on the side it
-    // came from, which for a column it is pushed *into* from the right is
-    // under the window that column last had the focus in.
+    // Entering a column across its axis lands beside its last-focused window,
+    // on the side the window came from.
     const moved = movedBy(withFocusOn(NESTED_LEFT, "a"), Direction.Left);
 
     expect(windowsOf(moved)).toEqual(["b", "c", "a"]);
@@ -193,10 +188,9 @@ describe("movedBy", () => {
   });
 
   it("goes on into the container the one it entered is showing", () => {
-    // sway asks the same question again of whatever the container it entered
-    // last had the focus in — `container_move_to_container_from_direction`
-    // calls itself — so a column showing a row the window is moving along
-    // takes it into that row rather than beside it.
+    // sway recurses into the focused child
+    // (`container_move_to_container_from_direction`), so the window joins
+    // the nested row.
     const deep = {
       depth: 1,
       root: LayoutNode.Container(Layout.SplitH, [
@@ -213,7 +207,7 @@ describe("movedBy", () => {
 
     const moved = movedBy(withFocusOn(deep, "a"), Direction.Right);
 
-    // At the near end of that row, which is the side it came from.
+    // At the row's near end.
     expect(windowsOf(moved)).toEqual(["a", "b", "c", "d"]);
     expect(moved.root).toMatchObject({
       children: [{ children: [{}, {}, {}] }, {}],
@@ -222,13 +216,11 @@ describe("movedBy", () => {
   });
 
   it("gives the row the window left its share back", () => {
-    // What a closed window's container does with the space, because that is
-    // what this is: the row lost a child and nothing was put into it. The
-    // windows that are left keep their sizes relative to each other.
+    // The row collapses as after a close; the rest keep their relative sizes.
     const moved = movedBy(withFocusOn(RESIZED_ROW, "a"), Direction.Right);
 
     expect(windowsOf(moved)).toEqual(["a", "c", "d", "b"]);
-    // The column had 0.6 of the row and `b` 0.2, which is three to one.
+    // The column had 0.6 and `b` 0.2: three to one.
     expect(moved.root).toMatchObject({
       fractions: [expect.closeTo(0.75), expect.closeTo(0.25)],
     });
@@ -251,7 +243,7 @@ describe("movedBy", () => {
 
     const moved = movedBy(row, Direction.Right);
 
-    // The whole column, in among the two windows of the one it was moved at.
+    // The whole column lands between the other column's two windows.
     expect(windowsOf(moved)).toEqual(["a", "b", "c", "d"]);
     expect(moved.root).toMatchObject({
       children: [{ children: [{}, {}] }, {}, {}],
@@ -260,8 +252,8 @@ describe("movedBy", () => {
   });
 
   it("keeps a container selected through the move that moved it", () => {
-    // `focus parent` survives a move in sway: what the keys moved is what the
-    // next press moves, rather than the window inside it.
+    // In sway, `focus parent` survives a move, so the next press moves the
+    // same container.
     const selected = { ...withFocusOn(NESTED, "c"), depth: 1 };
 
     const moved = movedBy(selected, Direction.Left);

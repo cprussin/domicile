@@ -2,37 +2,29 @@ import type { FoundFilesMessage } from "@domicile-desktop/sdk/host-message";
 import { useEffect, useState } from "react";
 
 /**
- * How long an answer from a half-built index stands before it is asked again.
+ * How often to repeat a query while the host's index is still building.
  *
- * The walk of a real home takes seconds, and nothing tells this page when it
- * has found more — so while the host says it is still looking, the question is
- * put again on this clock. A second is a panel that visibly fills in, and not
- * a search per frame.
+ * Indexing a home takes seconds and nothing signals new results, so the hook
+ * polls. One second fills the list visibly without searching every frame.
  */
 const ASK_AGAIN_MS = 1000;
 
-/** What the host found for the box, less the query it answered. */
+/** The host's search result, without its query. */
 export type Found = Omit<FoundFilesMessage, "query">;
 
-/** What a launcher has found before the host has answered anything. */
+/** The result before the host has answered. */
 const NOTHING_YET: Found = { files: [], indexing: false, matched: 0 };
 
 /**
- * What the host found for `query`, asked for whenever it changes.
+ * The host's file search results for `query`, re-queried on every change.
  *
- * **The host searches and the page draws.** The compositor's index is the
- * whole home, and all that crosses into this page is what one query matched —
- * see `domicile_host::file_search`. So every keystroke is a question, and the
- * rows are the latest answer.
+ * The compositor indexes home and returns only matches (see
+ * `domicile_host::file_search`). Answers for a stale query are dropped, since
+ * they can arrive out of order.
  *
- * An answer to a query the box no longer says is dropped: two searches are in
- * flight whenever somebody types faster than the host answers, and the host
- * owes them no order.
- *
- * The rows before the first answer are none, which is not drawn as a failure
- * or as an index being built — neither has been said yet. A home the
- * compositor could not read is never answered at all, deliberately; the box
- * still takes a path, a URL or a query.
+ * Before the first answer the result is empty, not an error or "indexing". If
+ * the compositor can't read home it never answers; the box still accepts a
+ * path, URL or search.
  */
 export const useFound = (
   search: (query: string) => Promise<FoundFilesMessage>,

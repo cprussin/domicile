@@ -3,16 +3,11 @@ import { describe, expect, it } from "bun:test";
 import { PROTOCOL_VERSION } from "./protocol";
 
 /**
- * The two halves of the wire contract, checked against each other.
+ * Checks the TypeScript and Rust protocol versions match.
  *
- * `packages/domicile-protocol` and this package are one protocol written
- * twice, and `negotiate` requires the two numbers to be *equal* — a chrome
- * that says 7 to a host speaking 8 gets no `welcome`, and every message it
- * sends afterward is dropped on the floor. The desktop does not start.
- *
- * Nothing else catches that. Every Rust test reads the Rust constant and every
- * test here reads this one, so both suites stay green while the product is
- * dead. This is the only check that fails when half the contract moves.
+ * `negotiate` requires equal versions, or the desktop does not start. Each
+ * side's own tests read only its own constant, so only this test catches a
+ * mismatch.
  */
 const RUST_CONSTANT = /^pub const PROTOCOL_VERSION: u32 = (\d+);$/m;
 
@@ -23,9 +18,8 @@ describe("the protocol version", () => {
     ).text();
     const found = RUST_CONSTANT.exec(crate);
 
-    // Not `?.[1]`: a rename in the crate that stopped this matching would make
-    // the assertion below compare against `undefined` and pass nothing, which
-    // is the same silence this test exists to break.
+    // Assert the match first, so a renamed constant fails rather than
+    // comparing `undefined`.
     expect(found).not.toBeNull();
     expect(Number(found?.[1])).toBe(PROTOCOL_VERSION);
   });

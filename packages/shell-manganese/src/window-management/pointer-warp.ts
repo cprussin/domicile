@@ -1,60 +1,47 @@
-// Where the pointer goes when the keyboard moves the focus, and when it stays.
+// Decides where to warp the pointer after a keyed focus change, like sway's
+// `mouse_warping`.
 //
-// sway's `mouse_warping`, and this desktop needs it for sway's own reason:
-// focus follows the cursor here, so a keyed focus change that left the pointer
-// where it was would be handed straight back. `mod+l` moves the focus right,
-// the window that was on the right slides under the stationary pointer, and
-// the `pointerover` that fires as it arrives focuses it again — the press
-// undone by the layout it caused.
-//
-// The decision only. What a page can do about it is `usePointerWarp`, which is
-// the one caller.
+// Focus follows the pointer, so a window that moves under a stationary pointer
+// would take focus back. `usePointerWarp` performs the warp. See
+// packages/shell-manganese/docs/WINDOW-MANAGEMENT.md#pointer-warping.
 
 import type { Rect } from "./rect";
 
 /**
- * A place on the desktop, in the page's own pixels — which are the desktop's:
- * the engine turns and scales a monitor's window, not the page.
+ * A point in page pixels, which equal desktop pixels; the engine transforms
+ * each monitor's window, not the page.
  */
 export type Spot = readonly [x: number, y: number];
 
-/**
- * The window the keyboard is in and the box it is drawn in — or, on a screen
- * with nothing on it, the screen itself.
- */
+/** The focused window and its box, or an empty screen's box. */
 export type Focus = {
   box: Rect;
-  /** The window, or `undefined` for a screen with no window to be in. */
+  /** The window, or `undefined` for an empty screen. */
   id: string | undefined;
 };
 
 type Move = {
-  /** Where the keyboard was before the press. */
+  /** The focus before the key press. */
   from: Focus | undefined;
-  /** Where the page last saw the pointer, or nothing if it never has. */
+  /** Where the page last saw the pointer, if ever. */
   pointer: Spot | undefined;
-  /** Where it is now. */
+  /** The focus now. */
   to: Focus | undefined;
 };
 
 /**
- * Where the pointer has to be for the focus to stay where it was put, or
- * `undefined` for a press that leaves it where it is.
+ * Where to warp the pointer, or `undefined` to leave it.
  *
- * Two questions, and both have to answer yes. **Did the keyboard move** — a
- * different window, or the same window in a different box, which is what
- * `mod+shift+h` does. And **is the pointer somewhere else**: a window arriving
- * under the pointer it was already under can take no focus away from itself,
- * and neither can a tab of the container the pointer is over. Warping anyway
- * would move the cursor on keys that have nothing to do with where it is —
- * a split, a layout, the launcher — which is a desktop that fidgets.
+ * Warps only when the focus changed window or box (as `mod+shift+h` does) and
+ * the pointer is outside the new box. Other keys, such as a split or the
+ * launcher, must not move the cursor.
  */
 export const warpTo = ({ from, pointer, to }: Move): Spot | undefined =>
   to === undefined || settled(from, to) || holds(to.box, pointer)
     ? undefined
     : middleOf(to.box);
 
-/** Whether the press left the keyboard in the same window in the same place. */
+/** Whether the focus stayed on the same window in the same box. */
 const settled = (from: Focus | undefined, to: Focus): boolean =>
   from !== undefined &&
   from.id === to.id &&
@@ -66,9 +53,8 @@ const settled = (from: Focus | undefined, to: Focus): boolean =>
 /**
  * Whether the pointer is over `box`.
  *
- * A pointer the page has never seen is over nothing: the engine has drawn it
- * somewhere and said nothing about where, and guessing it is over the window
- * is the guess that leaves the focus able to bounce.
+ * An unknown pointer counts as outside, so the warp happens and focus cannot
+ * bounce back.
  */
 const holds = (box: Rect, pointer: Spot | undefined): boolean =>
   pointer !== undefined &&
@@ -78,12 +64,10 @@ const holds = (box: Rect, pointer: Spot | undefined): boolean =>
   pointer[1] <= box.y + box.height;
 
 /**
- * The middle of `box`, at a whole pixel.
+ * The middle of `box`, rounded to a whole pixel.
  *
- * Rounded here rather than left to the engine, which rounds it anyway:
- * `PointerWarpTarget` pins the spot with `base::ClampRound`, so a fraction
- * asked for comes back as the pixel next to it — and the page has to be able
- * to recognize its own warp arriving. See `usePointerWarp`.
+ * The engine rounds warps with `base::ClampRound`, and the page must recognize
+ * its own warp when it arrives. See `usePointerWarp`.
  */
 const middleOf = (box: Rect): Spot => [
   Math.round(box.x + box.width / 2),

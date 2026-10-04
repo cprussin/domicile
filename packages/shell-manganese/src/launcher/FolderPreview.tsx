@@ -14,16 +14,15 @@ import { EntryKind, entryKindOf } from "./entry-kind";
 import type { FileRow } from "./file-row";
 import { homeUrl } from "./media";
 
-/** How big a glyph is in an entry's tile. */
+/** Glyph size in an entry's tile. */
 const TILE_ICON_SIZE = 32;
 
-/** How big the folder's own glyph is, beside its name. */
+/** Glyph size beside the folder's name. */
 const HEAD_ICON_SIZE = 24;
 
 /**
- * A folder as a folder: its name over what it holds, and what it holds as a
- * grid of tiles — folders first, each file drawn as the kind of thing it is,
- * and a picture as itself.
+ * A folder's name over a grid of its entries: folders first, files by kind,
+ * and images as thumbnails.
  */
 export const FolderPreview = ({
   entries,
@@ -57,7 +56,7 @@ export const FolderPreview = ({
   );
 };
 
-/** One thing in the folder: a tile for what it is, over its name. */
+/** One entry: a tile showing its kind, over its name. */
 const Entry = ({ entry, folder }: { entry: string; folder: string }) => {
   const kind = entryKindOf(entry);
   const name = kind === EntryKind.Folder ? entry.slice(0, -1) : entry;
@@ -65,8 +64,8 @@ const Entry = ({ entry, folder }: { entry: string; folder: string }) => {
     <li className={entryStyles} data-kind={EntryKind[kind]}>
       <span className={tileStyles}>
         {kind === EntryKind.Image ? (
-          // Keyed on the picture, so one that would not load does not leave
-          // the next without its own chance.
+          // Keyed on the image, so a failed load doesn't carry over to the
+          // next one.
           <Thumbnail
             key={name}
             name={name}
@@ -82,9 +81,8 @@ const Entry = ({ entry, folder }: { entry: string; folder: string }) => {
 };
 
 /**
- * A picture in the folder, drawn from where the engine serves the home — or
- * its kind's glyph, for one the engine will not draw: a dotfile, or a file
- * whose name is the only thing about it that is a picture.
+ * An image thumbnail served by the engine, or its kind's glyph if it fails to
+ * load (e.g. a dotfile, or a file that is not really an image).
  */
 const Thumbnail = ({ name, url }: { name: string; url: string }) => {
   const [failed, setFailed] = useState(false);
@@ -124,7 +122,7 @@ const ICONS: Readonly<Record<EntryKind, typeof FileIcon>> = {
   [EntryKind.Other]: FileIcon,
 };
 
-/** `1 folder`, `2 files`: a count, and its noun agreeing with it. */
+/** A count with its noun pluralized, e.g. `1 folder`, `2 files`. */
 const counted = (count: number, noun: string): string =>
   `${count} ${noun}${count === 1 ? "" : "s"}`;
 
@@ -133,12 +131,8 @@ const paneStyles = css({
   flexDirection: "column",
 });
 
-// The folder's name the pane's title: a tile in the desktop's accent for the
-// glyph, the one splash of color up here, so the head reads as a head and the
-// grid under it as what it heads.
-//
-// Held at the top while the pane scrolls the grid under it, on a frosted
-// ground of its own so the tiles passing beneath do not show through the name.
+// The header: the folder's name with an accent-colored glyph tile. Sticky, with
+// a frosted background so scrolled tiles don't show through.
 const headStyles = hstack({
   backdropFilter: "blur({spacing.3})",
   backgroundColor: "color-mix(in oklab, {colors.background} 75%, transparent)",
@@ -187,9 +181,7 @@ const countStyles = css({
   fontVariantNumeric: "tabular-nums",
 });
 
-// As many columns as fit, each wide enough for a name to be read. The pane
-// scrolls it — the one scroller the launcher's wheel reaches — and the head
-// stays where it is.
+// As many columns as fit, each wide enough for a readable name.
 const entriesStyles = grid({
   alignContent: "start",
   gap: 1,
@@ -199,9 +191,7 @@ const entriesStyles = grid({
   padding: 3,
 });
 
-// Each kind a hue of the desktop's own, quiet enough on its tile that the grid
-// reads as names first: folders in the accent, since they are where the
-// folder goes on to.
+// A muted desktop hue per kind, so names stand out. Folders use the accent.
 const entryStyles = vstack({
   "&[data-kind=Audio]": { color: "warning" },
   "&[data-kind=Code]": {
@@ -219,8 +209,7 @@ const entryStyles = vstack({
   padding: 1.5,
 });
 
-// A square of ground for the entry to sit on, the same for a glyph and for a
-// picture, so a folder of both still lines up.
+// The same square for glyphs and thumbnails, so a mixed grid lines up.
 const tileStyles = css({
   aspectRatio: "1",
   backgroundColor: "color-mix(in oklab, {colors.foreground} 5%, transparent)",
@@ -232,8 +221,7 @@ const tileStyles = css({
   placeItems: "center",
 });
 
-// A picture fills its tile and is cropped to it: a thumbnail is recognized by
-// its middle, and a letterboxed one would be a smaller picture in a frame.
+// Thumbnails fill and crop to the tile rather than letterbox.
 const thumbnailStyles = css({
   blockSize: "100%",
   display: "block",
@@ -241,8 +229,7 @@ const thumbnailStyles = css({
   objectFit: "cover",
 });
 
-// Two lines of name at most, centered under the tile, in the foreground: the
-// name is what is read, and the tile only says what kind of thing it names.
+// At most two lines, centered under the tile.
 const entryNameStyles = css({
   color: "foreground",
   fontSize: "xs",

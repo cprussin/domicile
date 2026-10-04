@@ -1,65 +1,12 @@
-//! The HiDPI chain, from a chrome's `devicePixelRatio` to the frame it gets
-//! back.
+//! Tests that a chrome's `devicePixelRatio` reaches Wayland clients.
 //!
-//! Ported from `scripts/e2e-hidpi.sh`, deleted in the change that added this
-//! file. `desktop.rs`'s `a_density_one_chrome_reports_is_described_to_the_others`
-//! is the first link and stays there: it is about what the *chromes* are told,
-//! and every chrome hearing a density one of them reported is its own rule.
-//! This is the rest of the chain, which needs a real Wayland client.
+//! `desktop.rs` covers what other chromes are told. These need a real client.
+//! A wrong scale only shows as slightly soft text, so each step is checked
+//! directly.
 //!
-//! Break any link and a screenshot looks the same — slightly soft text — so
-//! each is asserted where it can be seen rather than at the end.
-//!
-//! # What was uncovered, measured before this file was written
-//!
-//! Whole workspace, `--no-fail-fast`, each mutation applied on its own:
-//!
-//! | mutation | killed by |
-//! |---|---|
-//! | `set_output_scale` drops the chrome's density | `desktop.rs`, already |
-//! | `set_output`'s client-visible `Scale::Integer(scale)` forced to 1 | **nothing** |
-//! | `AppFrame`'s `scale` forced to 1 | **nothing** |
-//! | the resize path's `logical_size` replaced by the raw pixels | **nothing** |
-//! | `set_output`'s mode given the logical size rather than the physical one | **nothing** |
-//!
-//! Four of the five links after the first had no cover at all. Two are worth
-//! spelling out, and they are the same split twice.
-//!
-//! `outputs.rs` does catch a client-visible scale forced to 1, but at
-//! `restate_output` — the *described*-desktop path. The density a chrome
-//! reports drives `set_output` instead, and that site had nothing.
-//!
-//! `screens.rs`'s `a_mode_is_the_logical_size_in_physical_pixels` does catch a
-//! mode that is not the logical size times the scale, but it pins
-//! `Advertised::mode()`'s arithmetic. That `set_output` *calls* it, rather than
-//! passing the logical size straight through, is a different claim at a
-//! different site, and that one had nothing either. A mode left at the logical
-//! size is an `xdg_output.logical_size` of half the desktop: every client told
-//! the screen is half the size the chrome lays out against.
-//!
-//! That link was missing from a first version of this file, which called the
-//! chain five links and ported four of the script's five verdicts.
-//!
-//! A window-following desktop on purpose: `set_output_scale` refuses a chrome's
-//! density on a described one, which is `desktop.rs`'s
-//! `a_described_desktop_refuses_a_chromes_density`, and there would be no
-//! chain to follow.
-//!
-//! # One check, not two
-//!
-//! A second was written here and deleted for killing nothing: it started a
-//! real client and asserted it redrew at `set_buffer_scale(2)`, which is the
-//! script's own third phase. Measured — with it deleted, all four mutations
-//! above are still killed by the one below, and it was the sole killer of
-//! none.
-//!
-//! The reason is that the links are chained rather than parallel. The frame's
-//! `scale` *is* the buffer scale the client set, so a compositor that
-//! advertises the wrong density produces a client that draws at the wrong one
-//! and a frame that reports it; there is no mutation that breaks the redraw
-//! and leaves the frame right. What that costs is a sharper failure message
-//! for one case, which is not coverage — the rule this migration applies
-//! everywhere else applies to its own output too.
+//! The desktop is window-following because `set_output_scale` refuses a
+//! chrome's density on a described desktop
+//! (`desktop.rs`'s `a_described_desktop_refuses_a_chromes_density`).
 
 mod running;
 
@@ -67,25 +14,20 @@ use domicile_protocol::{ChromeMessage, HostMessage};
 
 use crate::running::Compositor;
 
-/// A desktop with no configured displays, so the chrome's density is what sets
-/// the scale.
+/// A desktop with no configured displays, so the chrome's density sets the
+/// scale.
 ///
-/// Nothing configured at all, which is what makes the desktop the window's:
-/// the size is the compositor's own `UNDESCRIBED_DESKTOP`, and the mode
-/// assertion below spells those numbers doubled rather than reading them from
-/// here. Two copies of one number that have to be edited together, which is
-/// the cost of the check naming the mode it expects.
+/// Its size is the compositor's `UNDESCRIBED_DESKTOP`. The mode assertion
+/// below hardcodes that size doubled, so keep the two in sync.
 const FOLLOWING: &str = "{}";
 
-/// The density the chrome reports, and what the client should draw at.
+/// The density the chrome reports.
 const DENSITY: f64 = 2.0;
 
-/// A chrome past the handshake that has reported [`DENSITY`].
+/// A chrome past the handshake whose [`DENSITY`] the compositor has applied.
 ///
-/// Waited for through the compositor's own log rather than by sleeping: the
-/// client below has to start *after* the scale is advertised, because a client
-/// that binds the output first is told scale 1 and only learns better on the
-/// next change — which is a race this check has no reason to run.
+/// Start clients only after this returns: a client that binds the output
+/// earlier is told scale 1.
 fn a_chrome_reporting_two(compositor: &Compositor) -> domicile_test_chrome::Chrome {
     let mut chrome = compositor.chrome();
     chrome
@@ -103,39 +45,17 @@ fn a_chrome_reporting_two(compositor: &Compositor) -> domicile_test_chrome::Chro
     chrome
 }
 
-/// The mode grows with the density, the frame carries it, and the size the
-/// chrome lays out in is the buffer's pixels divided by it.
+/// The output mode a client sees is the desktop size times the density.
 ///
-/// The payoff, and the one a screenshot cannot show. The chrome sizes its
-/// canvas from `scale` and lays out — and maps every pointer coordinate
-/// through — the size in `app_resized`. Reported as the buffer's own pixels,
-/// the picture is right and every click lands at half the position it should.
-///
-/// Three assertions and three sources for the numbers in them, which is worth
-/// keeping straight because only one pair is compared against each other.
-///
-/// The mode is the *desktop's*, so it is literals that have to agree with
-/// [`FOLLOWING`]. The scale is the *chrome's*, so the `2` here is a literal
-/// that has to agree with [`DENSITY`] — and with the one in
-/// [`a_chrome_reporting_two`]. Only the buffer's size is the *client's*, and
-/// that is the one compared rather than spelled: `width` against `size[0]`
-/// times [`DENSITY`], so a client that redrew at another size still proves the
-/// same thing.
-///
-/// The frame and the resize read off one commit: `app_resized` rides ahead of
-/// the frame, so a wait for the frame is a wait for both.
+/// The literals are `UNDESCRIBED_DESKTOP` times [`DENSITY`].
 #[test]
 fn the_mode_carries_the_density() {
     let compositor = Compositor::started_with(FOLLOWING);
     let _chrome = a_chrome_reporting_two(&compositor);
     let mut client = compositor.client("app");
 
-    // Read from the client rather than from the chrome: it is the half of the
-    // advertisement a buffer scale cannot speak for, and the only place it is
-    // visible. A mode is physical pixels, so raising the density has to raise
-    // it — left at the logical size, `xdg_output` reports half the desktop and
-    // every client is told the screen is half the size the chrome lays out
-    // against.
+    // A mode is in physical pixels. Left at the logical size, `xdg_output`
+    // tells clients the screen is half the size the chrome lays out against.
     assert!(
         client.wait_for_trace(&format!(".mode(3, {}, {},", 1280 * 2, 800 * 2), 1),
         "the mode did not grow with the density, so every client computes a \
@@ -144,15 +64,7 @@ fn the_mode_carries_the_density() {
     );
 }
 
-// The other half of this test went with the copy path. It asserted that an
-// `AppFrame` carried the density and that `AppResized` agreed with the buffer
-// width — the round trip that kept a pointer coordinate honest at scale > 1.
-// Neither message is sent any more: the client's buffer goes to viz and the
-// page's own layout sizes the element.
-//
-// **This is a real gap, not a tidy-up.** Nothing now checks that a window at
-// density 2 is laid out at logical units rather than device pixels, and
-// getting that wrong puts every pointer coordinate out by the scale. The
-// check belongs against the engine path — the size the page lays the `<app>`
-// element out at, against the buffer the client committed — and it does not
-// exist yet.
+// Known gap: nothing checks that a window at density 2 is laid out in logical
+// units rather than device pixels. Getting it wrong scales every pointer
+// coordinate. The check belongs in the engine path: the `<app>` element's
+// layout size against the client's committed buffer.

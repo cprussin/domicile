@@ -1,19 +1,12 @@
 #!/usr/bin/env bash
-# That an engine job's temp files leave with the job.
+# Tests `engine-job-tmp.sh`, which gives each engine job a temp directory that
+# is removed when the job ends.
 #
-# /build/tmp on `crux` held 82G: ~70 `nix-shell.XXXXXX` directories of ~1.2G.
-# Nix makes one for every `nix-shell` and every `nix develop` and neither
-# removes it here. `nix develop` never does: its rc script is
-# `export NIX_BUILD_TOP="$(mktemp -d -t nix-shell.XXXXXX)"` with TMPDIR pointed
-# at it and no cleanup at all. `nix-shell` removes its own from an EXIT trap in
-# the rc bash, and Chromium's shell.nix is a buildFHSEnv whose shellHook
-# `exec`s bwrap, which replaces that bash before the trap can run. Either way
-# TMPDIR inside is that directory, so everything the build wrote to TMPDIR
-# stays with it.
-#
-# So each job makes a directory of its own under the unit's TMPDIR, points
-# TMPDIR at it for every later step, and drops it in an `if: always()` step:
-# whatever nix leaves inside goes with it, on failure and on cancel too.
+# Nix creates a `nix-shell.XXXXXX` directory for every `nix-shell` and
+# `nix develop` and does not remove it here: `nix develop` has no cleanup, and
+# Chromium's buildFHSEnv shellHook `exec`s bwrap before `nix-shell`'s EXIT trap
+# can run. These filled /build/tmp on `crux`. Each job points TMPDIR at its own
+# directory and drops it in an `if: always()` step.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -45,14 +38,10 @@ expect "a job's temp directory is under the unit's TMPDIR" "$WORK/tmp" \
 expect "and named so the room check knows whose kind it is" dj \
   "$(basename "$MINE" | cut -d. -f1)"
 
-# CHROME PUTS A SOCKET UNDER TMPDIR. With --user-data-dir, its process
-# singleton binds `$TMPDIR/.org.chromium.Chromium.XXXXXX/SingletonSocket` and
-# CHECKs that the path fits a Unix socket's 107 bytes, or dies at startup. The
-# CSS guard's TMPDIR is this directory, then `nix develop`'s nix-shell.XXXXXX,
-# then Chromium's own `nix-shell`'s nix-shell-<pid>-<random> inside that: 112
-# bytes even from /build/tmp/dj.XXXXXX, and runs 36271265799 and 36275518102
-# lost all three of that guard's engines. No name under /build/tmp leaves room,
-# so the browser spike.sh starts takes a TMPDIR of its own on /tmp.
+# Chrome's process singleton binds
+# `$TMPDIR/.org.chromium.Chromium.XXXXXX/SingletonSocket` and dies if the path
+# exceeds a Unix socket's 107 bytes. Nested nix shells under this directory
+# exceed it, so spike.sh starts Chrome with TMPDIR on /tmp.
 socket="/build/tmp/$(basename "$MINE")/nix-shell.XXXXXX/nix-shell-4194304-4294967295/.org.chromium.Chromium.XXXXXX/SingletonSocket"
 expect "a nested nix-shell under it is too deep for Chrome's socket" too-deep \
   "$([ "${#socket}" -gt 107 ] && echo too-deep || echo fits)"
@@ -64,9 +53,7 @@ expect "two jobs get two" yes "$([ "$MINE" != "$THEIRS" ] && echo yes || echo no
 
 # --- dropped with what nix left in it ---------------------------------------
 
-# What nix leaves is partly read-only: a copy out of the store keeps the
-# store's modes, and a plain `rm -rf` stops at the first directory it cannot
-# write.
+# Store copies keep read-only modes, which stop a plain `rm -rf`.
 mkdir -p "$MINE/nix-shell.abcdef/store-copy"
 : >"$MINE/nix-shell.abcdef/store-copy/rc"
 chmod a-w "$MINE/nix-shell.abcdef/store-copy"
@@ -77,8 +64,8 @@ expect "and leaves another job's alone" yes "$(there "$THEIRS/live")"
 
 # --- and only ever a job's ---------------------------------------------------
 
-# It is an `rm -rf` of a path that came through $GITHUB_ENV; a path that is not
-# a job's temp directory is a bug upstream of it, and says so.
+# The path comes through $GITHUB_ENV and is `rm -rf`'d, so refuse anything
+# that is not a job's temp directory.
 mkdir -p "$WORK/tmp/not-a-job"
 if "$JOB_TMP" drop "$WORK/tmp/not-a-job" 2>/dev/null; then
   expect "a path that is not a job's temp directory is refused" refused ok
@@ -89,9 +76,8 @@ expect "and left where it was" yes "$(there "$WORK/tmp/not-a-job")"
 
 # --- the jobs this exists for ------------------------------------------------
 
-# A SCRIPT NOTHING CALLS IS THE LEAK WITH A TEST OVER IT. Each job on the
-# `crux` runners makes its directory before anything enters a nix shell, and
-# drops it in a step that runs whatever happened above it.
+# Each `crux` job must make its directory before entering a nix shell and drop
+# it in a step that always runs.
 for flow in engine.yml engine-release.yml engine-drm-probe.yml; do
   file="$ROOT/.github/workflows/$flow"
   MAKE="$(grep -n 'engine-job-tmp.sh make' "$file" | head -1 | cut -d: -f1)"

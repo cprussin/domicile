@@ -1,20 +1,19 @@
 import { Direction } from "../window-management/direction";
 import type { Rect } from "../window-management/rect";
 
-/** A screen of the desk, and where it is on it. */
+/** A screen and its position on the desktop. */
 export type PlacedScreen = {
-  /** Where it is on the desk, in the pixels the host describes it in. */
+  /** Its rectangle, in the host's pixels. */
   box: Rect;
-  /** The display's name, which is what a `<Screen name>` matches. */
+  /** The display name, matched by `<Screen name>`. */
   name: string;
 };
 
 /**
- * The screen `focus <direction>` goes to from `from` once there is nowhere
- * left to go on it, or `undefined` for none.
+ * The screen `focus <direction>` moves to from `from`, or `undefined` for none.
  *
- * sway's (wlroots') rule: of the screens lying wholly past that edge, the one
- * nearest the middle of this one.
+ * Follows sway (wlroots): of the screens wholly past that edge, the one nearest
+ * this screen's center.
  */
 export const screenToward = (
   screens: readonly PlacedScreen[],
@@ -57,7 +56,7 @@ const middleOf = (box: Rect): readonly [x: number, y: number] => [
   box.y + box.height / 2,
 ];
 
-/** How far `point` is from the nearest point of `box`, squared. */
+/** The squared distance from `point` to the nearest point of `box`. */
 const distance = (
   box: Rect,
   [x, y]: readonly [x: number, y: number],

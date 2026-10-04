@@ -8,16 +8,10 @@ const config: StorybookConfig = {
   stories: ["../src/**/*.stories.tsx"],
   viteFinal: (config) =>
     mergeConfig(config, {
-      // Rolldown's "lazy barrel" optimization miscompiles `@base-ui/react`'s
-      // side-effect-free store barrel (`@base-ui/utils/store`): when a
-      // component pulls only part of the barrel (e.g. Dialog imports
-      // `createSelector` but not `createSelectorMemoized`), the unused
-      // re-export module is emitted with its top-level `createSelectorCreator`
-      // call retained but its `reselect` import binding dropped, so the
-      // production build throws `createSelectorCreator is not defined` at
-      // render time. Disabling the optimization restores the correct binding.
-      // Only affects the production `storybook build`; the dev server (esbuild)
-      // is unaffected. Remove once the Rolldown bug is fixed upstream.
+      // Rolldown's lazy barrel optimization drops the `reselect` import from
+      // `@base-ui/utils/store`, so `storybook build` throws
+      // `createSelectorCreator is not defined` at render. Remove once Rolldown
+      // fixes it.
       build: { rolldownOptions: { experimental: { lazyBarrel: false } } },
       css: { postcss: { plugins: [pandacssPostcssPlugin] } },
     }),

@@ -1,28 +1,20 @@
-//! The GPU buffers an shm client's frames are copied into.
+//! Tracks which per-window GPU buffers for shm frames are free.
 //!
-//! The engine imports a dmabuf and nothing else, and a client that draws into
-//! `wl_shm` has none. So the compositor keeps a few of its own per window,
-//! copies each shm frame into a free one and submits that — and the client's
-//! buffer goes back to it the moment the copy is done, because nothing samples
-//! it after that.
+//! The engine imports only dmabufs, so the compositor copies each `wl_shm`
+//! frame into a buffer of its own and releases the client's buffer after the
+//! copy.
 //!
-//! What this module owns is which of those buffers is free. A buffer handed to
-//! the engine is viz's until viz releases it, exactly as a client's dmabuf is,
-//! so a copy never goes into one that is out: that is the tear. A window with
-//! every buffer out gets another one rather than waiting, because waiting is a
-//! client whose frame is not shown.
-//!
-//! **A buffer is the shape of the frame copied into it.** A window that resized
-//! has buffers of the old shape, and those are dropped the next time the
-//! window takes one — the free ones then, the ones viz still has once it gives
-//! them back. Every dropped one is the caller's to tell the engine about, which
-//! is why [`Uploads::take`] hands their ids back.
+//! - A buffer stays out until viz releases it. Copying into one that is out
+//!   would tear.
+//! - When every buffer is out, a new one is allocated instead of waiting.
+//! - After a resize, buffers of the old shape are dropped once free.
+//!   [`Uploads::take`] returns their ids so the caller can tell the engine.
 
-/// One of the compositor's buffers, as the engine session knows it.
+/// The engine session's id for one of the compositor's buffers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct UploadId(u64);
 
-/// What a frame needs a buffer to be: its size and its DRM fourcc.
+/// A buffer's size and DRM fourcc.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Shape {
     pub width: u32,
@@ -30,12 +22,11 @@ pub struct Shape {
     pub fourcc: u32,
 }
 
-/// A free buffer, and the buffers this take dropped.
+/// The buffer [`Uploads::take`] handed out, and the buffers it dropped.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Taken {
     pub id: UploadId,
-    /// Buffers of a shape this window no longer draws at. Each is an import
-    /// the engine is still keeping, and the caller's to forget.
+    /// Stale-shaped buffers. The caller must tell the engine to forget each.
     pub dropped: Vec<UploadId>,
 }
 
@@ -65,10 +56,10 @@ impl<B> Default for Uploads<B> {
 }
 
 impl<B> Uploads<B> {
-    /// A buffer of `shape` for `app_id` that nothing is reading, marked out.
+    /// Marks a free `shape` buffer for `app_id` as out, allocating one if none
+    /// is free.
     ///
-    /// One is allocated when the window has none free. An allocation that
-    /// fails is the caller's error, and nothing is marked out for it.
+    /// On allocation failure nothing is marked out.
     pub fn take<E>(
         &mut self,
         app_id: &str,
@@ -118,16 +109,16 @@ impl<B> Uploads<B> {
             .map(|slot| &mut slot.buffer)
     }
 
-    /// Nothing is reading `id` any more: viz released it, or the frame copied
-    /// into it never reached viz. A buffer already dropped is nothing to do.
+    /// Marks `id` free: viz released it, or its frame never reached viz. A
+    /// dropped id is ignored.
     pub fn give_back(&mut self, id: UploadId) {
         if let Some(slot) = self.slots.iter_mut().find(|slot| slot.id == id) {
             slot.out = false;
         }
     }
 
-    /// The window is gone, and every buffer it had goes with it. Their ids are
-    /// the caller's, for the same reason [`Taken::dropped`] is.
+    /// Drops every buffer of a closed window and returns their ids, as
+    /// [`Taken::dropped`] does.
     pub fn forget(&mut self, app_id: &str) -> Vec<UploadId> {
         let (gone, kept) = std::mem::take(&mut self.slots)
             .into_iter()
@@ -136,11 +127,10 @@ impl<B> Uploads<B> {
         gone.into_iter().map(|slot: Slot<B>| slot.id).collect()
     }
 
-    /// Drop `app_id`'s free buffers that are not `shape`.
+    /// Drops `app_id`'s free buffers that are not `shape`.
     ///
-    /// Free ones only: a buffer viz still has is on screen, or about to stop
-    /// being, and dropping it would take the import out from under viz. It
-    /// is dropped by the first take after it comes back.
+    /// Buffers viz still holds are kept until they come back, so the import is
+    /// not removed while viz reads it.
     fn drop_stale(&mut self, app_id: &str, shape: Shape) -> Vec<UploadId> {
         let (stale, kept) = std::mem::take(&mut self.slots)
             .into_iter()
@@ -165,8 +155,7 @@ mod tests {
         fourcc: 0x3432_5241,
     };
 
-    /// An allocator that names each buffer after the shape it was asked for,
-    /// and never fails.
+    /// An allocator that returns the requested shape and never fails.
     fn allocate(shape: Shape) -> Result<Shape, ()> {
         Ok(shape)
     }

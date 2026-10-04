@@ -1,13 +1,9 @@
-//! The applications a launcher offers, read from the machine's desktop entries.
+//! Reads desktop entries for the launcher's application results.
 //!
-//! **Read on every search, not indexed.** A machine has hundreds of entries
-//! rather than a home's hundreds of thousands of paths, so reading them is
-//! milliseconds — and an application installed a moment ago is offered on the
-//! next keystroke, with no watch to keep.
-//!
-//! Where they are is the XDG base directory spec's to say: `applications/`
-//! under `$XDG_DATA_HOME`, then under each of `$XDG_DATA_DIRS`. What an entry
-//! means is the desktop entry spec's, as much of it as a launcher needs.
+//! Entries are read on every search rather than indexed. There are only
+//! hundreds, so a read takes milliseconds, and newly installed applications
+//! appear without a watch. Entries live in `applications/` under
+//! `$XDG_DATA_HOME`, then each of `$XDG_DATA_DIRS`.
 
 use std::collections::{HashMap, HashSet};
 use std::ffi::OsString;
@@ -16,40 +12,38 @@ use std::path::{Path, PathBuf};
 
 use domicile_protocol::DesktopEntry;
 
-/// The group every key a launcher reads is in.
+/// The only group the launcher reads keys from.
 const GROUP: &str = "[Desktop Entry]";
 
-/// What `XDG_DATA_DIRS` means when it is unset or empty.
+/// The spec's default for an unset or empty `XDG_DATA_DIRS`.
 const DEFAULT_DATA_DIRS: &str = "/usr/local/share:/usr/share";
 
-/// An application an entry offers, and what a query is matched against.
+/// A launchable application and the text a query matches against.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Entry {
-    /// What a launcher is sent.
+    /// The entry sent to the launcher.
     pub entry: DesktopEntry,
     /// `Name`, `GenericName` and `Keywords`, in lower case.
     words: String,
-    /// `Icon`, as the entry names it: a theme name, or an absolute path.
+    /// `Icon`: a theme name or an absolute path.
     icon_name: Option<String>,
-    /// `X-Domicile-Preview`, named as `Icon` is.
+    /// `X-Domicile-Preview`, in the same form as `Icon`.
     preview_name: Option<String>,
 }
 
 impl Entry {
-    /// The icon this entry names, for `crate::app_icons` to find.
+    /// The icon name, for `crate::app_icons` to resolve.
     pub fn icon_name(&self) -> Option<&str> {
         self.icon_name.as_deref()
     }
 
-    /// The picture this entry names for a launcher's preview, for
-    /// `crate::app_icons` to find as it finds an icon.
+    /// The preview image name, for `crate::app_icons` to resolve.
     pub fn preview_name(&self) -> Option<&str> {
         self.preview_name.as_deref()
     }
 }
 
-/// The directories entries are read from, the one that wins first: `data_dirs`
-/// with `applications/` under each.
+/// `applications/` under each of [`data_dirs`], highest priority first.
 pub fn application_dirs(
     data_home: Option<OsString>,
     data_dirs: Option<OsString>,
@@ -61,11 +55,11 @@ pub fn application_dirs(
         .collect()
 }
 
-/// The XDG data directories, the one that wins first.
+/// The XDG data directories, highest priority first.
 ///
-/// `data_home` and `data_dirs` are `XDG_DATA_HOME` and `XDG_DATA_DIRS`; unset
-/// and empty are the same thing, which is the spec's rule. With neither a data
-/// home nor a home to default it under, there is no data home to read.
+/// `data_home` and `data_dirs` are `XDG_DATA_HOME` and `XDG_DATA_DIRS`. Per
+/// the spec, empty means unset. Without either `data_home` or `home`, the data
+/// home is omitted.
 pub fn data_dirs(
     data_home: Option<OsString>,
     data_dirs: Option<OsString>,
@@ -84,32 +78,29 @@ pub fn data_dirs(
         .collect()
 }
 
-/// Every application the entries under `dirs` offer, in no order.
+/// Every application under `dirs`, unordered.
 ///
-/// An ID found in an earlier directory hides the same ID in a later one —
-/// including when the earlier one is `Hidden`, which is how a user removes a
-/// system entry from their menu. A directory that does not exist is an
-/// ordinary one to list in `XDG_DATA_DIRS`, and offers nothing.
+/// An ID in an earlier directory hides the same ID in later ones, even when
+/// the earlier entry is `Hidden`. That is how a user removes a system entry.
+/// Missing directories are skipped.
 pub fn installed(dirs: &[PathBuf]) -> Vec<Entry> {
     let mut seen = HashSet::new();
     dirs.iter()
         .flat_map(|dir| entry_files(dir, dir))
         .filter(|(id, _)| seen.insert(id.clone()))
         .filter_map(|(id, path)| {
-            // Unreadable or not UTF-8 is ignored, as the desktop entry spec
-            // has a launcher do with any file it cannot read.
+            // The spec says to ignore unreadable files.
             let text = fs::read_to_string(path).ok()?;
             parse(&id, &text)
         })
         .collect()
 }
 
-/// The application `text` offers under `id`, if it is one a launcher shows.
+/// Parses entry `text` as `id`, or `None` if the launcher should not show it.
 ///
-/// Only the `[Desktop Entry]` group, and only unlocalized keys. Not an
-/// application — a link, a directory, one that is `Hidden` or `NoDisplay`, one
-/// with no `Name` or no command — is nothing. So is one that runs in a
-/// terminal: which terminal is not something this desktop knows.
+/// Reads only unlocalized keys in `[Desktop Entry]`. Rejects non-applications,
+/// `Hidden` or `NoDisplay` entries, and entries missing `Name` or `Exec`. Also
+/// rejects `Terminal` entries, since there is no configured terminal.
 pub fn parse(id: &str, text: &str) -> Option<Entry> {
     let mut group = "";
     let mut keys = HashMap::new();
@@ -145,7 +136,7 @@ pub fn parse(id: &str, text: &str) -> Option<Entry> {
             name,
             comment: unescaped(keys.get("Comment").unwrap_or(&"")),
             command,
-            // Found and drawn later, and only for what a search sends.
+            // Resolved later, only for entries a search returns.
             icon: None,
             preview: None,
         },
@@ -157,11 +148,11 @@ pub fn parse(id: &str, text: &str) -> Option<Entry> {
     })
 }
 
-/// The argv an `Exec` value runs, or nothing if it cannot be read.
+/// Parses an `Exec` value into argv, or `None` if it is malformed.
 ///
-/// Its string escapes first, then its quoting, as the spec orders them. Field
-/// codes stand for what a launcher does not hand over — files, URLs, an icon —
-/// so they are dropped, and an argument that was only one goes with them.
+/// Unescapes strings, then quoting, in the spec's order. Drops field codes,
+/// since the launcher passes no files, URLs or icon, along with any argument
+/// that was only a field code.
 pub fn command(exec: &str) -> Option<Vec<String>> {
     let exec = unescaped(exec);
     let mut words = Vec::new();
@@ -188,12 +179,11 @@ pub fn command(exec: &str) -> Option<Vec<String>> {
     (!words.is_empty()).then_some(words)
 }
 
-/// The first `limit` applications `query` matches, best first.
+/// Up to `limit` applications matching `query`, best first.
 ///
-/// Every word of the query, in any order and ignoring case, in the name, the
-/// generic name or a keyword — the file search's rule, so the two halves of a
-/// launcher agree about what matching is. A name that starts with the query
-/// is best; after that, by name.
+/// Every query word must appear, case-insensitively, in the name, generic name
+/// or keywords, matching the file search's rule. Names that start with the
+/// query rank first, then sort by name.
 pub fn find<'a>(entries: &'a [Entry], query: &str, limit: usize) -> Vec<&'a Entry> {
     let query = query.trim().to_lowercase();
     let words: Vec<&str> = query.split_whitespace().collect();
@@ -205,8 +195,7 @@ pub fn find<'a>(entries: &'a [Entry], query: &str, limit: usize) -> Vec<&'a Entr
             (!name.starts_with(&query), name, entry)
         })
         .collect();
-    // The ID last, so two entries of one name come out in the same order
-    // whatever order the directories listed them in.
+    // Break name ties by ID so the order does not depend on directory listing.
     matched.sort_by(|a, b| (a.0, &a.1, &a.2.entry.id).cmp(&(b.0, &b.1, &b.2.entry.id)));
     matched
         .into_iter()
@@ -215,7 +204,7 @@ pub fn find<'a>(entries: &'a [Entry], query: &str, limit: usize) -> Vec<&'a Entr
         .collect()
 }
 
-/// Every `.desktop` file under `dir`, with the ID `root` gives it.
+/// Every `.desktop` file under `dir`, with its ID relative to `root`.
 fn entry_files(root: &Path, dir: &Path) -> Vec<(String, PathBuf)> {
     let Ok(listed) = fs::read_dir(dir) else {
         return Vec::new();
@@ -240,15 +229,15 @@ fn entry_files(root: &Path, dir: &Path) -> Vec<(String, PathBuf)> {
         .collect()
 }
 
-/// A word ended at a space: kept unless nothing is left of it, which is a
-/// field code on its own or a run of spaces.
+/// Ends the current word, dropping it if empty (a lone field code or repeated
+/// spaces).
 fn finish(words: &mut Vec<String>, word: &mut String) {
     if !word.is_empty() {
         words.push(std::mem::take(word));
     }
 }
 
-/// A string value with the desktop entry spec's escapes read.
+/// Resolves the desktop entry spec's string escapes.
 fn unescaped(value: &str) -> String {
     let mut out = String::with_capacity(value.len());
     let mut chars = value.chars();

@@ -12,39 +12,30 @@ import { DEFAULT_TOP_BAR } from "./top-bar/layout";
 
 type Props = {
   /**
-   * Where the desktop comes from — the host over the control channel, or the
-   * window itself where there is no host. Passed in rather than built here
-   * because the entry point is what knows which of those this is, and because a
-   * source is the connection: the provider re-registers whenever its identity
-   * changes and `DomicileClient.on` is a single slot, so one built per render
-   * would re-register per render.
+   * The source of display descriptions: the host, or the window when there is
+   * no host.
+   *
+   * Must be stable: the provider re-registers when its identity changes, and
+   * `DomicileClient.on` has a single slot.
    */
   displays: DisplaySource;
   domicile: DomicileClient;
-  /**
-   * The keys this desktop binds itself, under the config's: sway's, on Meta,
-   * when not given.
-   */
+  /** The keys this desktop binds, under the config's. Defaults to sway's. */
   keybindings?: ShellKeybindings | undefined;
   /**
-   * Where the theme comes from, and what the bar's toggle asks. The host over
-   * the control channel, or the page itself where there is no host — passed in
-   * for {@link displays}'s reason, and for one more: the theme is the
-   * desktop's, so a shell that built its own would be the one place that
-   * changed.
+   * The source of the theme, and where the bar's toggle sends changes. Passed
+   * in, like {@link displays}, so the shell uses the desktop's theme.
    */
   theme: ThemeSource;
-  /** What goes on every monitor's bar: manganese's own when not given. */
+  /** The layout of every monitor's bar. Defaults to manganese's. */
   topBar?: TopBarLayout | undefined;
 };
 
 /**
- * The reference chrome over the desktop the host described.
+ * The reference shell chrome.
  *
- * The page spans every display, so this is the composition root in the literal
- * sense as well: it holds the one {@link DisplayProvider} the whole tree reads
- * its screens from. `on` is a single slot, so there is exactly one listener for
- * the host's descriptions and every `<Screen>` below fans out from it.
+ * Holds the single {@link DisplayProvider} every `<Screen>` reads from, since
+ * `on` has a single slot.
  */
 export const Shell = ({
   displays,
@@ -60,7 +51,7 @@ export const Shell = ({
   </Provider>
 );
 
-/** Manganese's own keys: one value, so the binding is made once. */
+/** Manganese's default keybindings, defined once so the reference is stable. */
 const DEFAULT_SHELL_KEYBINDINGS: ShellKeybindings = {
   keybindings: DEFAULT_KEYBINDINGS,
   modes: DEFAULT_MODES,

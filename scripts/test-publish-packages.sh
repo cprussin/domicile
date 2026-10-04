@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# .github/scripts/publish-packages.sh packs what npm gets: every published
-# `@domicile-desktop/*` package at `0.0.0-alpha-<sha>`, depending on its siblings at
-# that same version, with no `workspace:` or `catalog:` left for npm to choke
-# on, and the working tree as it found it.
+# Tests that .github/scripts/publish-packages.sh packs each published
+# `@domicile-desktop/*` package at `0.0.0-alpha-<sha>`, with siblings at the
+# same version, no `workspace:` or `catalog:` ranges, and the working tree
+# unchanged.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

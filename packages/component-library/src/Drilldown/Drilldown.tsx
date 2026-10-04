@@ -5,7 +5,7 @@ import { useState } from "react";
 import { css, cva } from "../../styled-system/css";
 import { hstack } from "../../styled-system/patterns";
 
-/** What slides in: a title over its content. */
+/** The detail view: a title and its content. */
 export type DrilldownDetail = {
   title: string;
   content: ReactNode;
@@ -14,26 +14,19 @@ export type DrilldownDetail = {
 type Props = {
   /** The main view, shown while there is no detail. */
   children: ReactNode;
-  /** What slides in over the main view, or `undefined` for none. */
+  /** The detail to show over the main view, or `undefined` for none. */
   detail: DrilldownDetail | undefined;
-  /** The back button was pressed: drop the detail. */
+  /** Called when the back button is pressed; the caller drops the detail. */
   onBack: () => void;
 };
 
 /**
- * A view that something slides in over from the side and back out of: a list
- * of choices for one row of the main view, with a back button above it — the
- * way a phone's settings go one level deeper without leaving the screen.
+ * A main view with a detail view that slides in over it, with a back button.
  *
- * For a panel that has no room for a second panel, or no business opening
- * one: a popover that a `Select`'s own popup would close, say.
- *
- * **The view that is not shown is not there**: `inert` and `aria-hidden`, so a
- * keyboard and a screen reader skip it, and out of the flow, so the panel is as tall as what
- * it shows. The detail that slid out is kept until the next one replaces it,
- * so it can slide out rather than vanish.
- *
- * Drawn in `currentcolor`, as `Slider` is.
+ * Use it where a second panel won't fit, e.g. inside a popover that a
+ * `Select` popup would close. The hidden view is `inert`, `aria-hidden` and
+ * out of the flow. The last detail stays rendered so it can slide out. Drawn
+ * in `currentcolor`.
  */
 export const Drilldown = ({ children, detail, onBack }: Props) => {
   const [shown, setShown] = useState(detail);
@@ -81,8 +74,8 @@ const rootStyles = css({
   position: "relative",
 });
 
-// The pane shown is in the flow; the other is laid over it, slid off to its
-// side and hidden once it has gone — `visibility` waits out the slide.
+// The hidden pane overlays the shown one, slid aside. `visibility` changes
+// after the slide ends.
 const paneStyles = cva({
   base: {
     transition:

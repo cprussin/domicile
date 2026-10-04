@@ -1,24 +1,20 @@
-// What an entry is made of: every file of the user's it reaches, and every
-// package it imports.
-//
-// Read before anything is installed or bundled, because both questions are
-// answered from it: which packages the project needs, and whether anything
-// changed since the last build.
+// Reads an entry's import graph: the user's files it reaches and the packages
+// it imports. The graph decides which packages to install and the cache key.
 
 import path from "node:path";
 
-/** What a file is, read off disk: its text, or `undefined` for none. */
+/** Read a file's text, or `undefined` if there is none. */
 export type ReadFile = (file: string) => string | undefined;
 
 /** An entry's local files and the packages they import. */
 export type Graph = {
-  /** Every file of the user's the entry reaches, by absolute path. */
+  /** The user's files the entry reaches, by absolute path, with their text. */
   readonly files: ReadonlyMap<string, string>;
   /** Every package imported, by name: `zod`, `@domicile-desktop/sdk`. */
   readonly packages: ReadonlySet<string>;
 };
 
-/** The suffixes a relative import may leave off, in the order they are tried. */
+/** Suffixes tried, in order, to resolve a relative import. */
 const SUFFIXES = [
   "",
   ".ts",
@@ -32,7 +28,7 @@ const SUFFIXES = [
   "/index.jsx",
 ];
 
-/** The files whose imports are read; anything else is a leaf, like CSS. */
+/** Extensions whose imports are scanned; other files, like CSS, are leaves. */
 const SCRIPTS: ReadonlyMap<string, "ts" | "tsx" | "js" | "jsx"> = new Map([
   [".ts", "ts"],
   [".tsx", "tsx"],
@@ -42,11 +38,11 @@ const SCRIPTS: ReadonlyMap<string, "ts" | "tsx" | "js" | "jsx"> = new Map([
 ]);
 
 /**
- * Every file `entry` reaches by relative imports, and every package any of
- * them imports.
+ * Every file `entry` reaches by relative imports, and every package they
+ * import.
  *
- * Throws on a relative import that names no file: the bundler would refuse
- * it too, later and in more words.
+ * Throws on a relative import that names no file. The bundler would reject it
+ * too, but later and less clearly.
  */
 export const importGraph = (entry: string, read: ReadFile): Graph => {
   const files = new Map<string, string>();
@@ -91,7 +87,7 @@ const isRelative = (specifier: string): boolean =>
   specifier.startsWith("../") ||
   specifier.startsWith("/");
 
-/** The file a relative import from `directory` names, trying each suffix. */
+/** Resolve a relative import from `directory`, trying each suffix. */
 const resolved = (
   directory: string,
   specifier: string,

@@ -1,44 +1,23 @@
-//! What a component said on the way out, kept so the run can say it again.
+//! Keeps the tail of the compositor's stderr to repeat when a run fails.
 //!
-//! THE REASON A DESK WILL NOT COME UP IS NOT WHERE ANYONE LOOKS. A desktop
-//! that fails is started again, four times, and each attempt is a Chromium
-//! launch: the compositor's own six lines about the config it could not read
-//! land somewhere around line 11 of 220, between an ozone modeset and a GLib
-//! assertion, and then four more times at even worse odds. Measured on a real
-//! desk, and the line the run *ended* on was "Every one of them said why
-//! above" — a pointer, at the one place on the terminal a person actually
-//! reads, to a sentence two hundred lines up.
+//! A failing desktop restarts several times, each with hundreds of lines of
+//! Chromium output, so the compositor's error scrolls out of view. The run
+//! repeats it at the end. Live output is still shown.
 //!
-//! So the run keeps what the compositor wrote and says it again at the bottom.
-//! Nothing is suppressed on the way past: the live output is what a desk that
-//! comes up on the fifth try wants, and the repeat is for the one that never
-//! does.
-//!
-//! THE COMPOSITOR AND NOT THE ENGINE. The engine's stderr is Chromium's, which
-//! is the volume this exists to cut through — repeating its tail would repeat
-//! the noise. The compositor's is its own and is nearly always empty: its
-//! tracing goes to stdout, so what arrives here is the fatal complaint
-//! `main` prints and a panic if it had one, which is exactly what a person
-//! reading the bottom of a failed run wants.
+//! Only the compositor is kept. Its stderr is nearly always empty except for
+//! fatal errors and panics (its tracing goes to stdout), while the engine's is
+//! the noise this cuts through.
 
 use std::collections::VecDeque;
 
-/// The tail of what one component wrote.
-///
-/// The last lines rather than the first, because this is about how a component
-/// *ended*: a compositor that ran for an hour and then panicked says nothing
-/// useful in its first twenty lines.
+/// The last lines a component wrote, which explain how it ended.
 pub struct Heard {
     said: VecDeque<String>,
     keep: usize,
 }
 
 impl Heard {
-    /// One that keeps the last `keep` lines it is given.
-    ///
-    /// How many is the caller's, the way a restart policy is: what is worth
-    /// repeating is a fact about the terminal a run is watched on rather than
-    /// about a queue. `bin/domicile.rs` argues the number this run uses.
+    /// Keeps the last `keep` lines. `bin/domicile.rs` picks the count.
     pub fn new(keep: usize) -> Self {
         Heard {
             said: VecDeque::new(),
@@ -46,13 +25,10 @@ impl Heard {
         }
     }
 
-    /// Take one line of what it said.
+    /// Records one line.
     ///
-    /// Blank lines are dropped rather than kept, which is not tidying: the
-    /// complaint ends in a newline, so one arrives after every real line, and
-    /// a tail of twenty that counted them would repeat ten. It also settles
-    /// the trailing blank that would otherwise sit between the repeat and
-    /// whatever the shell prints next.
+    /// Blank lines are dropped so they do not use up the tail, since one
+    /// follows every real line.
     pub fn line(&mut self, line: &str) {
         if line.trim().is_empty() {
             return;
@@ -63,11 +39,8 @@ impl Heard {
         self.said.push_back(line.to_string());
     }
 
-    /// What to say again, or `None` from a component that said nothing.
-    ///
-    /// `None` rather than an empty string because the caller prints a heading
-    /// over this, and a heading over an empty quote is worse than no heading —
-    /// every desktop that came up and was used ends that way.
+    /// The kept lines, or `None` if there are none, so the caller can skip
+    /// the heading.
     pub fn said(&self) -> Option<String> {
         match self.said.is_empty() {
             true => None,

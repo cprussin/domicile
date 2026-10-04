@@ -8,22 +8,22 @@ import { useFloatBorderDrag } from "./useFloatBorderDrag";
 
 type Props = {
   cursor: GrabCursor;
-  /** How it stacks, which is the depth of the window it resizes. */
+  /** The stacking depth of the window it resizes. */
   depth: number;
   float: Float;
   grip: Grip;
   onDrop: () => void;
   onGrab: () => void;
   onResize: (box: Rect) => void;
-  /** Where it is — see `float-borders.ts`. */
+  /** Its box. See `float-borders.ts`. */
   rect: Rect;
-  /** The window it belongs to — see `FloatGrab`. */
+  /** The window it resizes. See `FloatGrab`. */
   window: string;
 };
 
 /**
- * One edge or corner of a floating window that resizes it when dragged, with
- * no modifier held — `TileBorder`'s counterpart.
+ * An edge or corner of a floating window that resizes it when dragged, without
+ * a modifier. The floating counterpart of `TileBorder`.
  */
 export const FloatBorder = ({
   cursor,
@@ -36,14 +36,14 @@ export const FloatBorder = ({
 }: Props) => {
   const events = useFloatBorderDrag({ float, grip, ...handlers });
   return (
-    // Presentational, and `aria-hidden` for `FloatGrab`'s reason: resize mode
-    // offers the same from the keyboard.
+    // Hidden from assistive tech: resize mode offers the same from the
+    // keyboard.
     <div
       aria-hidden
       className={cx(borderStyles, grabCursorStyles[cursor])}
-      // Which is a border rather than the sheet a held modifier puts up.
+      // Distinguishes a border from a `FloatGrab`.
       data-border
-      // Which window this border belongs to — see `FloatGrab`.
+      // See `FloatGrab`.
       data-window={window}
       style={placedAt(rect, depth)}
       {...events}

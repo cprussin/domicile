@@ -7,20 +7,17 @@ import type { Aim, Corner, Target } from "./aim";
 import { aimAt, cornerOf } from "./aim";
 
 /**
- * A drag in progress, and everything about it settled when the window was
- * taken hold of — see `useFloatDrag`, whose reasons these are.
+ * A drag in progress, fixed when it started. See `useFloatDrag`.
  *
- * The windows it can be dropped on are among them: nothing retiles while a
- * window is being moved, so the boxes they were at the press are the boxes
- * they are at the release.
+ * Holds the drop targets too, since nothing retiles during a move.
  */
 type Drag = {
-  /** Where it would land if let go of now, while it is being moved. */
+  /** Where a move would land if dropped now. */
   aim: Aim | undefined;
-  /** The edges being moved, while it is being resized. */
+  /** The edges a resize drags. */
   corner: Corner | undefined;
   id: string;
-  /** Where the pointer was at the last move, which the next is measured from. */
+  /** The pointer at the last move; the next delta is measured from it. */
   last: { x: number; y: number };
   onAim: (aim: Aim | undefined) => void;
   onDrop: () => void;
@@ -29,49 +26,44 @@ type Drag = {
   targets: readonly Target[];
 };
 
-/** The secondary button, which resizes whatever it takes hold of. */
+/** The secondary button, which resizes. */
 const SECONDARY_BUTTON = 2;
 
 export type TileDrag = {
   /**
-   * Whether a drag is running, and the corner it is resizing from, or
-   * `undefined` for a move.
+   * The running drag, if any, with the corner it resizes from (`undefined`
+   * for a move).
    */
   drag: { corner: Corner | undefined } | undefined;
-  /** Swallow the menu the secondary button would otherwise open. */
+  /** Suppresses the context menu, since the right button resizes. */
   onContextMenu: (event: { preventDefault: () => void }) => void;
   onPointerDown: (event: ReactPointerEvent<HTMLElement>) => void;
 };
 
 type Options = {
-  /** The window's whole box, whose quarters say which corner a resize drives. */
+  /** The window's box; the pointer's quarter picks the resize corner. */
   frame: Rect;
   id: string;
-  /** Where it would land if let go of now, to be drawn. */
+  /** Reports where a drop would land, for drawing. */
   onAim: (aim: Aim | undefined) => void;
   onDrop: () => void;
   onDropOn: (target: string, edge: Direction | undefined) => void;
   onGrab: () => void;
-  /** An edge of the window dragged `by` pixels, rightwards or downwards. */
+  /** An edge dragged `by` pixels, rightwards or downwards. */
   onStretch: (edge: Direction, by: number) => void;
-  /** Whether taking hold now would resize the window rather than move it. */
+  /** Whether a drag started now resizes instead of moves. */
   resizes: boolean;
-  /** The tiled windows on this screen, which it can be dropped on. */
+  /** The tiled windows on this screen it can be dropped on. */
   targets: readonly Target[];
 };
 
 /**
- * Turning pointer events into where a tiled window goes: sway's
- * `floating_modifier` drag, on a window in the tree.
+ * Moves or resizes a tiled window by Meta+drag, like sway's
+ * `floating_modifier` drag.
  *
- * A move is a window picked up and put down: nothing retiles until it is let
- * go of, over the window it is dropped on — see `aim.ts`. A resize drags the
- * two edges of the quarter of the window it took hold of, and the tree
- * follows the pointer move by move.
- *
- * **The rest of the drag is the window's, not the element's**, and the drag
- * is a ref beside state that is only what to draw — both for the reasons
- * `useFloatDrag` gives.
+ * A move retiles only on drop (see `aim.ts`). A resize drags the corner of the
+ * pointer's quarter and updates the tree on each move. Listens on `window`, as
+ * `useFloatDrag` explains.
  */
 export const useTileDrag = ({
   frame,
@@ -96,8 +88,7 @@ export const useTileDrag = ({
         running.current = followed(started, event.clientX, event.clientY);
       }
     };
-    // Idempotent, because both a release and a cancel can arrive for one
-    // drag — see `useFloatDrag`.
+    // Idempotent: one drag can get both a release and a cancel.
     const ended = () => {
       const started = running.current;
       if (started !== undefined) {
@@ -144,13 +135,12 @@ export const useTileDrag = ({
   };
 };
 
-/** The drag with the pointer at `x`, `y`: stretched, or aimed somewhere new. */
+/** The drag with the pointer at `x`, `y`: resized, or re-aimed. */
 const followed = (drag: Drag, x: number, y: number): Drag => {
   const { corner } = drag;
   if (corner === undefined) {
     const aim = aimAt(drag.targets, drag.id, x, y);
-    // Only when it is somewhere new: every move would otherwise redraw the
-    // desktop to say the same thing.
+    // Report only changes, to avoid a redraw on every move.
     if (aim?.id !== drag.aim?.id || aim?.edge !== drag.aim?.edge) {
       drag.onAim(aim);
     }
@@ -168,7 +158,7 @@ const followed = (drag: Drag, x: number, y: number): Drag => {
   }
 };
 
-/** A drag let go of: put down where it was aimed, if anywhere, and ended. */
+/** Ends a drag, dropping onto its aim if it has one. */
 const dropped = (drag: Drag): void => {
   const { aim } = drag;
   if (aim !== undefined) {

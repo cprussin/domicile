@@ -9,9 +9,8 @@ import { notification } from "./fixture";
 import { useNotifications } from "./useNotifications";
 
 /**
- * A stand-in for the client that takes the one handler this hook registers,
- * lets a test say what the compositor said, and keeps what the hook asked of
- * it. Narrow for `useTray`'s reason.
+ * A client stub that captures the hook's handler, lets a test send compositor
+ * messages and records the hook's requests.
  */
 const client = () => {
   let handler: ((message: HostMessageOf<"notifications">) => void) | undefined;
@@ -42,7 +41,7 @@ const client = () => {
   };
 };
 
-/** A toast manager that keeps what it was asked to show and take down. */
+/** A toast manager stub that records what it is asked to show and dismiss. */
 const toasts = () => {
   const added: unknown[] = [];
   const closed: string[] = [];
@@ -129,8 +128,7 @@ describe("useNotifications", () => {
     });
 
     it("takes a toast down when its notification goes", () => {
-      // Its application closed it, or it was cleared on another monitor's
-      // page.
+      // Its application closed it, or it was cleared on another monitor's page.
       const { host, shown } = mounted();
       host.says([notification({ id: 7 })]);
 

@@ -1,20 +1,16 @@
-//! The mixer's level meters: a `parec` per device or stream a chrome asked to
-//! see, read for its loudest sample, and every chrome told twenty times a
-//! second.
+//! The mixer's level meters: one `parec` per device or stream a chrome
+//! watches, sampled for its peak and sent to every chrome 20 times a second.
 //!
-//! **Only what is asked for, and only while it is.** Metering a microphone
-//! records it, and a sound server shows that as a recording — so nothing is
-//! metered until a chrome asks, by id, and a chrome's ask is a lease it has to
-//! renew: see `domicile_host::audio::LevelWatches`. When the last lease lapses
-//! every `parec` is stopped.
+//! Metering a microphone records it, and the sound server shows a recording.
+//! So nothing is metered until a chrome asks by id, and each ask is a lease
+//! the chrome must renew (see `domicile_host::audio::LevelWatches`). When the
+//! last lease lapses, every `parec` stops.
 //!
-//! **`parec`, for `pactl`'s reason**: `DOMICILE_PAREC` names it, and `parec` on
-//! the `PATH` otherwise. pavucontrol meters the same way, through the server's
-//! own peak detection; `parec` cannot ask for that, so it records a thousand
-//! mono samples a second and the peak is taken here.
+//! `DOMICILE_PAREC` names the `parec` binary, falling back to `PATH`. `parec`
+//! cannot use the server's own peak detection, so it records 1000 mono
+//! samples a second and the peak is taken here.
 //!
-//! **Nothing here can take the desktop down**: a `parec` that cannot start is
-//! a meter that reads nothing, said once in the log.
+//! A `parec` that cannot start leaves its meter silent and is logged once.
 
 use std::collections::BTreeMap;
 use std::ffi::OsString;
@@ -46,14 +42,15 @@ pub struct Meters {
 }
 
 impl Meters {
-    /// `chrome` wants `ids` metered: a lease, renewed by asking again.
+    /// Meter `ids` for `chrome`. The lease lapses unless renewed by calling
+    /// again.
     pub fn watch(&self, chrome: usize, ids: Vec<String>) {
-        // A closed channel is a thread that has stopped, which it does only
-        // when the compositor has gone.
+        // Fails only once the meter thread has exited with the compositor.
         let _ = self.told.send(Watch { chrome, ids });
     }
 
-    /// What each id is metered off now, as the sound server was last read.
+    /// Set the source each id is metered from, as last read from the sound
+    /// server.
     pub fn take_up(&self, meters: BTreeMap<String, Meter>) {
         *self.sources.lock().unwrap() = meters;
     }
@@ -70,8 +67,8 @@ pub fn serve(publish: impl Fn(Vec<AudioLevel>) + Send + 'static) -> Meters {
     Meters { told, sources }
 }
 
-/// One `parec`, and the loudest sample it has read since it was last asked —
-/// `None` until it has read any.
+/// A running `parec` and its peak since last read, `None` until it has read
+/// a sample.
 struct Running {
     meter: Meter,
     child: Child,
@@ -80,7 +77,7 @@ struct Running {
 
 impl Drop for Running {
     fn drop(&mut self) {
-        // Already gone is gone; either way it is reaped.
+        // Kill and reap; a child that already exited is fine.
         let _ = self.child.kill();
         let _ = self.child.wait();
     }
@@ -130,8 +127,7 @@ fn meter(
     }
 }
 
-/// The ids to meter and what each is metered off: what was asked for, of
-/// what can be metered.
+/// The ids to meter and their sources: those watched that can be metered.
 fn wanted(
     watched: &std::collections::BTreeSet<String>,
     sources: &BTreeMap<String, Meter>,
@@ -142,9 +138,9 @@ fn wanted(
         .collect()
 }
 
-/// Which `parec`s to stop and which to start to go from `running` to
-/// `wanted`. One whose source moved — a stream played on another device keeps
-/// its id — is stopped and started again.
+/// The `parec`s to stop and start to go from `running` to `wanted`. A meter
+/// whose source changed is restarted: a stream moved to another device keeps
+/// its id.
 fn changes(
     running: &BTreeMap<String, Meter>,
     wanted: &BTreeMap<String, Meter>,
@@ -190,8 +186,8 @@ fn record(parec: &OsString, meter: &Meter) -> std::io::Result<Running> {
     })
 }
 
-/// Each meter's loudest sample since the last tick, starting the next tick
-/// from silence. A meter that has read nothing yet is left out.
+/// Each meter's peak since the last tick, resetting it for the next tick.
+/// Meters that have read nothing yet are omitted.
 fn levels(running: &BTreeMap<String, Running>) -> Vec<AudioLevel> {
     running
         .iter()

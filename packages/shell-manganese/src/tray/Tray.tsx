@@ -14,39 +14,35 @@ import { TrayEntryKind, trayEntries } from "./tray-entry";
 const PRIMARY_BUTTON = 0;
 
 type Props = {
-  /** What every click asks. */
+  /** Where clicks are sent. */
   domicile: DomicileClient;
   /** Every extension with an action, as the engine last described them. */
   extensions: readonly Extension[];
   /** The applications' icons, as the compositor last described them. */
   items: readonly TrayItem[];
-  /** Drag `dragged` onto `target`, among the `shown` keys; see `moveTo`. */
+  /** Move `dragged` onto `target` among the `shown` keys; see `moveTo`. */
   onMove: (shown: readonly string[], dragged: string, target: string) => void;
   /** Open an extension's popup, or close the open one with `undefined`. */
   onOpen: (id: string | undefined) => void;
-  /** The extension whose popup is open, or `undefined` when none is. */
+  /** The extension whose popup is open, or `undefined`. */
   opened: string | undefined;
-  /** The order the user put the icons in; see `useTrayOrder`. */
+  /** The user's icon order; see `useTrayOrder`. */
   order: readonly string[];
 };
 
 /**
- * The tray: every application's StatusNotifierItem and every extension's
- * action, in one row, in the order the user dragged them into.
+ * The tray: application StatusNotifierItems and extension actions, in one row,
+ * in the user's order. See docs/architecture/SYSTEM-TRAY.md.
  *
- * **One row rather than two**, because to the user both are the same thing —
- * an icon for something running, whose click is its own. Which kind each is
- * decides only what the click asks.
+ * One row because to the user both are icons for something running; the kind
+ * only decides what a click does.
  *
- * **A drag is the pointer's, not the engine's**: pressed on an icon, the icon
- * moves to wherever the pointer goes over another, and is left there when the
- * button comes up. A native drag and drop would go through the platform's
- * drag controller, which a desk on a bare tty does not have. A press that
- * moved an icon is not a click — the icon is not activated for being put
- * down — and one that moved none is.
+ * Reordering uses pointer events, not native drag and drop, which needs a
+ * platform drag controller that a bare tty lacks. A press that moved an icon
+ * does not also activate it.
  *
- * A disabled action is not drawn. The state is each action's default rather
- * than the focused page's until actions are per tab — see EXTENSIONS.md.
+ * Disabled actions are hidden. The state is each action's default, not the
+ * focused tab's; see docs/architecture/EXTENSIONS.md.
  */
 export const Tray = ({
   domicile,
@@ -60,14 +56,14 @@ export const Tray = ({
   const entries = trayEntries(items, extensions, order);
   const shown = entries.map(({ key }) => key);
 
-  // The key of the icon being dragged, while the button is down on one.
+  // The key of the icon being dragged while the button is down.
   const [dragged, setDragged] = useState<string | undefined>(undefined);
-  // Whether this press moved an icon, which makes its click not one. A ref,
-  // because the click that reads it is in the same event loop turn as the
-  // release that ends the drag, and nothing is drawn from it.
+  // Whether this press moved an icon, which suppresses its click. A ref because
+  // the click fires in the same turn as the release and nothing renders from
+  // it.
   const moved = useRef(false);
 
-  // Ended wherever the button comes up — over the bar or not.
+  // Ends wherever the button is released, on the bar or not.
   useEffect(() => {
     if (dragged === undefined) {
       return undefined;
@@ -126,7 +122,7 @@ type EntryProps = Pick<Props, "domicile" | "onOpen" | "opened"> & {
   entry: TrayEntry;
 };
 
-/** One icon, drawn by its kind. */
+/** One icon, rendered by kind. */
 const Entry = ({ domicile, entry, onOpen, opened }: EntryProps) => {
   switch (entry.kind) {
     case TrayEntryKind.Extension: {
@@ -147,5 +143,5 @@ const Entry = ({ domicile, entry, onOpen, opened }: EntryProps) => {
 
 const trayStyles = hstack({ gap: 0.5 });
 
-// A box of the icon's own size, so the row is laid out as it was without one.
+// A box the icon's size, so the row layout does not change.
 const entryStyles = css({ display: "flex" });

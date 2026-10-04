@@ -16,7 +16,7 @@ const FLOAT: Float = {
   y: 20,
 };
 
-/** A press, carrying what the hook actually reads off a pointer event. */
+/** A press with only the pointer-event fields the hook reads. */
 const press = (x = 0, y = 0, button = 0) =>
   ({
     button,
@@ -27,19 +27,16 @@ const press = (x = 0, y = 0, button = 0) =>
     // biome-ignore lint/suspicious/noExplicitAny: a stand-in for the fields read
   }) as any;
 
-/** The secondary button, which resizes whatever it takes hold of. */
+/** The secondary button, which resizes. */
 const SECONDARY = 2;
 
-/** A point in the window's bottom-right quarter, whose corner a resize drives. */
+/** A point in the window's bottom-right quarter, for a corner resize. */
 const BOTTOM_RIGHT = [
   FLOAT.x + FLOAT.width - 1,
   FLOAT.y + FLOAT.height - 1,
 ] as const;
 
-/**
- * The rest of a drag, which the hook listens for on `window` rather than on
- * the element the press landed on — so that is where the tests raise it.
- */
+/** The rest of a drag, raised on `window` where the hook listens. */
 const moveTo = (x: number, y: number): void => {
   fireEvent.pointerMove(window, { clientX: x, clientY: y, pointerId: 1 });
 };
@@ -82,9 +79,8 @@ describe("useFloatDrag", () => {
     });
 
     it("measures every move from where the drag started", () => {
-      // Not from the move before it: a delta applied to the box the window has
-      // since been given would compound, and the window would run away from
-      // the pointer at a rate of one drag per move.
+      // The delta is from the press, not the last move; otherwise deltas
+      // would compound and the window would outrun the pointer.
       const { calls, grab } = dragging();
       grab();
       act(() => {
@@ -129,8 +125,7 @@ describe("useFloatDrag", () => {
     });
 
     it("drags the top-left corner when taken hold of near it", () => {
-      // sway's: the corner driven is the one of the quarter the pointer is in,
-      // so a window can be grown towards whichever side there is room on.
+      // As in sway, the dragged corner is the one in the pointer's quarter.
       const { calls, grab } = dragging(true);
       grab(FLOAT.x + 1, FLOAT.y + 1);
       act(() => {
@@ -145,9 +140,8 @@ describe("useFloatDrag", () => {
     });
 
     it("goes on resizing after Shift is let go of mid-drag", () => {
-      // Which it is, is read when the drag starts and then kept: a resize that
-      // turned into a move half way through would jump the window to wherever
-      // the pointer had got to.
+      // The mode is fixed at the start; switching mid-drag would make the
+      // window jump.
       const { calls, grab, rerender } = dragging(true);
       grab();
       act(() => {
@@ -161,9 +155,7 @@ describe("useFloatDrag", () => {
     });
 
     it("resizes when the drag is taken hold of with the secondary button", () => {
-      // The other way to reach a resize, and the one that needs no second
-      // modifier: whatever handed the pointer to the shell, the right button
-      // means the corner rather than the whole window.
+      // The right button resizes without a second modifier.
       const { calls, result } = dragging();
       act(() => {
         result.current.onPointerDown(press(...BOTTOM_RIGHT, SECONDARY));
@@ -190,8 +182,8 @@ describe("useFloatDrag", () => {
   });
 
   describe("a window that leaves the screen it was pressed on", () => {
-    // Its middle crossed onto the next monitor, so this page stops drawing it
-    // and the element the press landed on goes. The hand has not let go.
+    // The window crossed onto another screen, so the pressed element unmounts
+    // while the button is still down.
     it("goes on following the pointer", () => {
       const { calls, grab, unmount } = dragging();
       grab();
@@ -231,8 +223,7 @@ describe("useFloatDrag", () => {
     });
 
     it("drops a grab that never moved", () => {
-      // A click on the sheet: the window was grabbed, so it is drawn
-      // see-through and click-through, and nothing but a drop puts it back.
+      // A click grabs the window, and only a drop restores it.
       const { calls, grab } = dragging();
       grab();
       act(() => {
@@ -242,8 +233,7 @@ describe("useFloatDrag", () => {
     });
 
     it("drops a grab and a release that arrive together", () => {
-      // One batch, which is what a click that beats React's commit looks like:
-      // the handler that sees the release was built before the grab.
+      // One batch simulates a click whose release beats React's commit.
       const { calls, result } = dragging();
       act(() => {
         result.current.onPointerDown(press());
@@ -262,8 +252,8 @@ describe("useFloatDrag", () => {
     });
 
     it("drops only once when a release and a cancel both arrive", () => {
-      // A browser that ends a gesture itself sends the cancel after the
-      // release, and dropping twice raises whatever ended up under the window.
+      // A browser can send a cancel after the release; dropping twice would
+      // raise whatever is underneath.
       const { calls, grab } = dragging();
       grab();
       act(() => {
@@ -305,8 +295,7 @@ describe("useFloatDrag", () => {
     });
 
     it("ignores a move that follows no grab", () => {
-      // The listeners are only there while a drag is, so an ordinary pointer
-      // crossing the desktop moves nothing.
+      // Listeners exist only during a drag.
       const { calls } = dragging();
       act(() => {
         moveTo(70, 30);
@@ -321,8 +310,7 @@ describe("useFloatDrag", () => {
   });
 
   describe("with no floating window", () => {
-    // A tiled window's bar calls this too, so its element outlives the window
-    // being floated — and it has nothing to take hold of.
+    // A tiled window's title bar uses this hook too, with no float to drag.
     it("throws when pressed", () => {
       const { result } = renderHook(() =>
         useFloatDrag({

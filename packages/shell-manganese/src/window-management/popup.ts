@@ -1,10 +1,10 @@
-// A client's popups — its menus and tooltips — as this shell places them.
+// Places client popups, such as menus and tooltips, on screen.
 
 import type { Placement } from "./placement";
 import type { Rect } from "./rect";
 import { appWindowId } from "./window";
 
-/** A popup the host announced, as the reducer holds it. */
+/** A popup announced by the host, as stored in the reducer. */
 export type Popup = {
   appId: string;
   /** The window or popup it is over, by app id. */
@@ -21,13 +21,11 @@ export type PlacedPopup = {
 };
 
 /**
- * Where each popup goes over the windows placed on this screen: its offset
- * from what it is over, all the way down to a window's contents, and that
- * window's depth — later in the document than the window, so it wins the tie.
+ * Places each popup at its offset from its parent chain's window, at that
+ * window's depth. Popups come later in the document, so they draw on top.
  *
- * None for a window with no contents here: one on another workspace, or on
- * another page of the desk, where embedding the popup would take its pixels
- * from the page that shows its window.
+ * Skips popups whose window has no contents on this screen; embedding one here
+ * would take its pixels from the page that shows the window.
  */
 export const popupsOver = (
   popups: readonly Popup[],
@@ -51,7 +49,7 @@ export const popupsOver = (
         ];
   });
 
-/** The top-left of `appId`'s box on screen, and the depth of its window. */
+/** The top-left of `appId`'s box on screen, and its window's depth. */
 const origin = (
   popups: readonly Popup[],
   placements: readonly Placement[],

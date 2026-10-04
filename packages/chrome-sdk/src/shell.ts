@@ -1,11 +1,10 @@
-// What a shell module is, to the document Domicile writes.
+// The type of a shell module's entry point.
 
 /**
- * A shell: the function a shell module exports as `Shell`.
+ * The function a shell module exports as `Shell`.
  *
- * Domicile imports the module and calls this once with the element to draw
- * in. Every other export is ignored, so one file can be both a config and a
- * shell. Importing the module does nothing but install its stylesheet; the
- * desktop starts here.
+ * Domicile calls it once with the root element to draw in. Other exports are
+ * ignored, so one file can be both a config and a shell. Importing the module
+ * should only install its stylesheet. See `docs/WRITING-A-SHELL.md`.
  */
 export type Shell = (root: HTMLElement) => void;

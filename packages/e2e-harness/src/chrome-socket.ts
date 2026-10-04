@@ -1,7 +1,6 @@
-// A minimal headless stand-in for the chrome, used by the repo's e2e scripts.
-// The real chrome is the fork's engine running a shell page — `shell-manganese`
-// is one — and this connects to the same compositor socket, speaks the same
-// newline-delimited JSON framing, and lets a script drive it.
+// A headless chrome client for the e2e scripts. It connects to the
+// compositor's chrome socket and speaks the same newline-delimited JSON as a
+// real chrome.
 
 import net from "node:net";
 
@@ -26,10 +25,8 @@ export type ChromeSocketOptions = {
 /**
  * Connect to the compositor's chrome socket and complete the handshake.
  *
- * Socket errors are dropped deliberately: these harnesses are killed by the
- * scripts that spawn them, so a teardown-time ECONNRESET is the expected end of
- * a successful run rather than a failure worth reporting. Without a listener
- * node would raise it as an uncaught exception instead.
+ * Socket errors are ignored. The calling scripts kill these harnesses, so an
+ * ECONNRESET at teardown is normal. Without a listener, node would throw it.
  */
 export const connectChromeSocket = (
   socketPath: string,
@@ -41,9 +38,8 @@ export const connectChromeSocket = (
     socket.write(withFrameDelimiter(JSON.stringify(message)));
   };
 
-  // Read as bytes: an app frame's pixels follow its header raw, and treating
-  // them as text would cut the frame at the first pixel that happens to be a
-  // newline. The harnesses only assert on the JSON, so the pixels are dropped.
+  // Read as bytes: raw pixels follow an app frame's header, and a pixel byte
+  // equal to a newline would split the frame. The pixels are dropped.
   const readHost = createHostStreamReader();
   socket.on("data", (chunk: Buffer) => {
     for (const item of readHost(chunk)) {
@@ -89,12 +85,9 @@ export const listenWindowMs = (
 const DEFAULT_LISTEN_MS = 6000;
 
 /**
- * The display density the calling script wants this harness to claim, or
- * `undefined` to claim none.
+ * The device pixel ratio the calling script wants reported, or `undefined`.
  *
- * Read from the environment rather than assumed, because a headless harness
- * has no display: reporting a made-up ratio would have the compositor scale
- * every client for a screen nobody is looking at.
+ * A headless harness has no display, so it reports a ratio only when asked.
  */
 export const devicePixelRatio = (
   environment: Record<string, string | undefined>,

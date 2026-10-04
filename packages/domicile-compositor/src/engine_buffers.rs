@@ -1,101 +1,67 @@
-//! Which client buffers the engine is holding, and getting them back.
+//! Tracks which client buffers the engine holds and returns them to clients.
 //!
-//! Under the copy path a `wl_buffer` is released the moment its pixels have
-//! been read: the compositor owns them from then on and the client may draw
-//! again. Under the engine it may not. Viz samples the client's dmabuf
-//! directly, so the release has to wait for viz to say it is done — that is
-//! what `wl_buffer.release` means and it is the difference between a window and
-//! a tear.
+//! Viz samples a client's dmabuf directly, so the compositor may send
+//! `wl_buffer.release` only after viz releases the buffer. Releasing earlier
+//! lets the client draw into a buffer on screen.
 //!
-//! Waiting introduces a way to hang that the copy path did not have. A client
-//! whose buffers are all outstanding cannot draw at all, so if a release never
-//! comes it stops forever, and a compositor that quietly stops a client is the
-//! defect `ERRORS.md` exists to prevent. So a hold has a deadline: past it the
-//! buffer is released anyway and the caller is told, loud enough to debug.
+//! A hold that a newer submission replaced has a deadline, timed from the
+//! replacement. Past it the buffer is released anyway and the caller logs an
+//! error, so a missing release cannot stop a client forever. The newest hold
+//! for a surface has no deadline: viz keeps it because it is the frame on
+//! screen, for as long as the client is idle.
 //!
-//! **The deadline applies only to a hold something newer replaced, and runs
-//! from the replacement.** Viz hands
-//! a resource back when a later frame supersedes it, which means the newest
-//! hold for a surface is held *because it is the frame on screen* — and stays
-//! held for as long as the client is idle, which is as long as nobody touches
-//! that window. Expiring it takes the buffer the display is reading and gives
-//! it to the client to draw into, then reports viz for holding "a dmabuf it
-//! has finished with", which viz has not.
-//!
-//! That was the behavior, and the latency guard found it: three of those
-//! errors and two abandoned rounds on each of two runs, identical figures,
-//! because the guard's floor phase holds the screen still for sixty samples on
-//! purpose. Deterministic, so not a race.
-//!
-//! What is left unguarded is a client that renders in place into a single
-//! dmabuf and never submits a second one: its sole hold is its newest, so it
-//! is never taken back. Nothing here has ever seen one — a client's buffer is
-//! held only when it is a dmabuf (an shm frame is copied and its buffer
-//! released at once), and a GL client's swapchain is at least double-buffered. A frame
-//! that tears once is worse than a frame that does not; a client that never
-//! draws again is worse than both; a compositor that hands out the buffer
-//! being scanned out is worse still.
+//! A client that renders in place into a single dmabuf is not covered: its
+//! only hold is its newest, so it is never taken back. Shm frames are copied
+//! and released at once, and GL swapchains are at least double-buffered.
 
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
 use crate::engine::{BufferId, SurfaceId};
 
-/// How long a buffer may sit with viz before the compositor takes it back.
+/// How long viz may keep a superseded buffer before the compositor takes it
+/// back.
 ///
-/// Generous by the standards of a 60Hz display — tens of frames — because the
-/// only thing on the other side of it is a bug, and a slow machine under load
-/// is not one. Short enough that a stuck client is noticed in a session rather
-/// than in a bug report.
+/// Tens of frames at 60Hz, so a slow machine under load does not trip it.
 pub const HOLD_DEADLINE: Duration = Duration::from_millis(500);
 
 /// A buffer the engine was given and has not handed back.
 #[derive(Debug)]
 struct Held<B> {
     buffer: B,
-    /// When a newer submission for the same surface replaced this one, which
-    /// is when its deadline starts. `None` while it is the frame on screen.
+    /// When a newer submission for the same surface replaced this one. The
+    /// deadline starts here. `None` while it is the frame on screen.
     superseded: Option<Instant>,
 }
 
 /// Why a buffer came back.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Returned {
-    /// Viz released it, which is the ordinary path.
+    /// Viz released it.
     Released,
-    /// It sat past [`HOLD_DEADLINE`] and was taken back so the client could
-    /// draw. Something is wrong and the caller is expected to say so.
+    /// It sat past [`HOLD_DEADLINE`] and was taken back so the client can
+    /// draw. The caller logs an error.
     Expired,
-    /// The surface or the engine went away, so nothing will ever release it.
+    /// The surface or the engine went away, so nothing will release it.
     Abandoned,
 }
 
-/// Everything an engine that went away was holding, sorted by what the caller
-/// owes each one. See [`HeldBuffers::take_all`].
+/// Everything a lost engine was holding. See [`HeldBuffers::take_all`].
 #[derive(Debug)]
 pub struct Taken<B> {
-    /// The frame each surface had on screen, to import and submit again to the
-    /// engine that replaced the one that had it. Still the client's buffer and
-    /// still not to be released.
+    /// The frame each surface had on screen. The caller submits it to the new
+    /// engine and must not release it.
     pub on_screen: Vec<((SurfaceId, BufferId), B)>,
-    /// Frames a newer one had already replaced. Nothing was drawing them and
-    /// nothing ever will, so every one is a `wl_buffer.release` the client is
-    /// owed.
+    /// Frames a newer one had replaced. The caller releases each to its
+    /// client.
     pub superseded: Vec<((SurfaceId, BufferId), B)>,
 }
 
-/// The buffers the engine is holding, keyed by the surface **and** the id it
-/// knows them by.
+/// The buffers the engine is holding, keyed by surface and buffer id.
 ///
-/// Both halves, and the second window is what says so. A `BufferId` is minted
-/// by the browser's `BrokeredFrameSink`, one counter per sink, so the first
-/// buffer of every window is 1 — the ids are only unique within a surface, and
-/// the protocol says as much by qualifying every one of them with a
-/// `frame_sink_id`. Keyed on the id alone, a second window's first buffer
-/// evicted the first window's, whose client was then owed a release that could
-/// never arrive; it stopped drawing, and the compositor reported that viz was
-/// holding a buffer it had finished with. That is a plausible enough story to
-/// have gone looking in viz for it, which is where the afternoon goes.
+/// `BrokeredFrameSink` counts buffer ids per sink, so ids are unique only
+/// within a surface. Keying on the id alone lets one window's hold evict
+/// another's, and the evicted client never gets its release.
 #[derive(Debug)]
 pub struct HeldBuffers<B> {
     held: HashMap<(SurfaceId, BufferId), Held<B>>,
@@ -116,25 +82,18 @@ impl<B> HeldBuffers<B> {
         }
     }
 
-    /// Whether anything is outstanding. The compositor does not ask; the tests
-    /// do, because "released" and "released twice" look the same from outside.
+    /// Whether anything is outstanding.
     #[cfg(test)]
     pub fn is_empty(&self) -> bool {
         self.held.is_empty()
     }
 
-    /// Records that `buffer` was submitted and must not be released yet, and
-    /// that every other hold on `surface` was replaced at `now`, which is when
-    /// their deadlines start.
+    /// Holds `buffer` as the frame on screen for `surface` and starts the
+    /// deadline of every other hold on `surface` at `now`.
     ///
-    /// Submitting the same id on the same surface again — a client committing
-    /// one buffer twice — replaces the hold, making it the frame on screen
-    /// again, and
-    /// hands back the previous entry. That entry is the *same* buffer, because
-    /// a surface and an id together name one buffer, so it is the caller's to
-    /// **drop and not release**: viz has just been handed it, and the client is
-    /// owed exactly one release, when viz is done with the submission it
-    /// actually has.
+    /// Resubmitting a held id returns the previous entry. It is the same
+    /// buffer, which viz now holds, so the caller must drop it without
+    /// releasing it.
     pub fn hold(&mut self, surface: SurfaceId, id: BufferId, buffer: B, now: Instant) -> Option<B> {
         for ((held_surface, _), held) in &mut self.held {
             if *held_surface == surface && held.superseded.is_none() {
@@ -157,26 +116,12 @@ impl<B> HeldBuffers<B> {
         self.held.remove(&(surface, id)).map(|held| held.buffer)
     }
 
-    /// Every *superseded* buffer that has sat longer than the deadline, taken
-    /// back so the client can draw. The caller is expected to log each one.
+    /// Removes and returns every superseded buffer past its deadline. The
+    /// caller logs each one.
     ///
-    /// SUPERSEDED, AND THAT IS THE WHOLE RULE. Viz hands a resource back when
-    /// a newer frame replaces it, so the newest submission for a surface is
-    /// held precisely because it is the one on screen — for as long as the
-    /// client stays idle, which is as long as the user does not touch it.
-    /// Expiring that is not taking back a leaked buffer, it is taking back the
-    /// buffer the display is reading, and handing it to a client to draw into.
-    ///
-    /// It was expiring it, and the latency guard caught it: three of these per
-    /// run and two abandoned rounds, the same figures on two runs, because the
-    /// floor phase holds the screen still for sixty samples by design.
-    ///
-    /// A buffer a *newer* submission replaced is a different thing. Nothing is
-    /// drawing it, nothing will release it, and the client is owed it back —
-    /// but only once viz has had the deadline to draw its replacement, so the
-    /// clock starts when it was replaced, not when it was submitted. Timed from
-    /// its submission, an idle window's first new frame expired the one it
-    /// replaced on the very next pump.
+    /// The newest hold for a surface never expires: viz keeps it because it is
+    /// on screen. The deadline runs from replacement, so viz has time to draw
+    /// the newer frame before the old one is taken back.
     pub fn expired(&mut self, now: Instant) -> Vec<((SurfaceId, BufferId), B)> {
         let overdue: Vec<(SurfaceId, BufferId)> = self
             .held
@@ -193,19 +138,11 @@ impl<B> HeldBuffers<B> {
             .collect()
     }
 
-    /// Everything held, because the engine holding it is gone, sorted into the
-    /// frame each surface had on screen and the rest.
+    /// Removes every hold after the engine is lost, split into each surface's
+    /// on-screen frame and the rest.
     ///
-    /// THE SPLIT IS WHAT MAKES A WINDOW COME BACK RATHER THAN COME BACK BLANK.
-    /// A new engine knows none of these ids, so no release will ever arrive
-    /// for any of them and nothing may stay held. But the newest submission
-    /// for a surface is the frame that was on the screen — see [`expired`],
-    /// which is the same rule read the other way — so it is the one to import
-    /// and submit again to the engine that replaced the one that had it. The
-    /// rest are frames nothing was drawing, and their clients are owed them
-    /// back.
-    ///
-    /// [`expired`]: HeldBuffers::expired
+    /// The new engine knows none of these ids, so nothing may stay held.
+    /// Resubmitting the on-screen frames keeps windows from coming back blank.
     pub fn take_all(&mut self) -> Taken<B> {
         let (kept, returned) = self
             .held
@@ -223,8 +160,7 @@ impl<B> HeldBuffers<B> {
         }
     }
 
-    /// Everything held for `surface`, because the surface is gone and no
-    /// release will ever arrive for it.
+    /// Removes every hold for `surface` after the surface is gone.
     pub fn abandon(&mut self, surface: SurfaceId) -> Vec<((SurfaceId, BufferId), B)> {
         let orphaned: Vec<(SurfaceId, BufferId)> = self
             .held
@@ -267,15 +203,7 @@ mod tests {
         assert_eq!(held.release(SURFACE, 7), None);
     }
 
-    // THE ONE ON SCREEN IS NOT OVERDUE, however long it sits there.
-    //
-    // Measured, twice, on the latency guard: exactly three of these fired on
-    // each run and two rounds were abandoned, which is not what a race looks
-    // like. Viz returns a resource when a *newer* frame supersedes it, so a
-    // client that is idle — which the guard's floor phase deliberately makes
-    // it, for sixty samples of a still screen — has its last buffer held
-    // because that frame is what the display is showing. Taking it back then
-    // hands the client a buffer viz is still sampling and calls it a leak.
+    // Viz keeps an idle client's last buffer because it is on screen.
     #[test]
     fn the_latest_submission_is_never_overdue() {
         let now = Instant::now();
@@ -289,16 +217,8 @@ mod tests {
         );
     }
 
-    // And the leak it was written for still is one: viz was handed something
-    // newer, so nothing is drawing the old one and nothing ever will release
-    // it.
-    //
-    // THE DEADLINE RUNS FROM THE REPLACEMENT, NOT THE SUBMISSION. Until the
-    // newer frame arrives the old one is on screen, and viz cannot hand it
-    // back before it has drawn what replaced it. Timed from its own submission,
-    // an idle window's first frame expired the one it replaced on the very next
-    // pump: seen on an AMD desktop as this error ~30 ms after a window idle for
-    // 2.6 s was resized, twice in one session, and never mid-animation.
+    // The deadline runs from the replacement, since the old frame stays on
+    // screen until then.
     #[test]
     fn a_superseded_buffer_viz_never_releases_is_taken_back() {
         let now = Instant::now();
@@ -331,10 +251,8 @@ mod tests {
         assert!(held.expired(at(now, 5_000)).is_empty());
     }
 
-    // A client that commits the same buffer twice has not given the compositor
-    // two buffers to release. The older entry comes back so the caller can drop
-    // it — releasing it would hand the client a buffer viz has just been given
-    // — and the deadline restarts on the submission viz actually has.
+    // A buffer committed twice is owed one release. The older entry comes back
+    // for the caller to drop.
     #[test]
     fn resubmitting_a_buffer_hands_the_previous_hold_back() {
         let now = Instant::now();
@@ -350,9 +268,7 @@ mod tests {
         assert_eq!(held.release(SURFACE, 7), Some("second"));
     }
 
-    // A surface that goes away takes its buffers with it: no release will ever
-    // arrive, and waiting out the deadline for each would stall the client for
-    // no reason.
+    // No release arrives for a lost surface, so its buffers return at once.
     #[test]
     fn a_lost_surface_gives_its_buffers_back_at_once() {
         let now = Instant::now();
@@ -368,10 +284,8 @@ mod tests {
         );
     }
 
-    // THE ENGINE WENT AWAY, so every hold is owed back — and which one each
-    // surface had on screen is the difference between a window that comes back
-    // and a window that is there and blank. The new engine knows none of these
-    // ids, so nothing will ever release any of them.
+    // A new engine knows none of the old ids, so every hold comes back, with
+    // each surface's on-screen frame marked for resubmission.
     #[test]
     fn a_new_engine_takes_every_hold_and_says_which_was_on_screen() {
         let now = Instant::now();
@@ -398,11 +312,7 @@ mod tests {
         );
     }
 
-    // A SURFACE HAS ONE FRAME ON SCREEN, and two holds stamped the same
-    // instant must not make it two: the caller re-submits what comes back
-    // under `on_screen`, and submitting two buffers for one window would put
-    // the older of them up. The order they were submitted in decides, not the
-    // clock.
+    // Submission order, not the timestamp, decides which frame is on screen.
     #[test]
     fn two_frames_stamped_the_same_instant_leave_one_on_screen() {
         let now = Instant::now();
@@ -416,15 +326,8 @@ mod tests {
         assert_eq!(taken.superseded, vec![((SURFACE, 1), "first")]);
     }
 
-    // THE TWO-WINDOW BUG, and the reason this map is keyed by a pair.
-    //
-    // `BrokeredFrameSink` mints buffer ids from a counter of its own, one per
-    // sink, so the first buffer of the second window is 1 exactly as the first
-    // window's was. Keyed on the id alone, this hold evicted the other
-    // window's — silently, and returning it to a caller whose contract is to
-    // drop what comes back, because "the same id is the same buffer" was true
-    // of one surface and of nothing else. The evicted client was then owed a
-    // release that could never arrive, and stopped drawing.
+    // `BrokeredFrameSink` counts buffer ids per sink, so two windows can both
+    // have buffer 1.
     #[test]
     fn two_surfaces_may_use_the_same_buffer_id() {
         let now = Instant::now();
@@ -445,13 +348,8 @@ mod tests {
         assert!(held.is_empty());
     }
 
-    // The same collision seen from the deadline: with one key per id, the
-    // second window's hold replaced the first's and the first's deadline went
-    // with it, so nothing was ever reported overdue for a client that had in
-    // fact stopped.
     #[test]
-    // Each surface is judged on its own submissions, so one window's leak is
-    // taken back while another's displayed buffer is left alone.
+    // Each surface's holds expire based on its own submissions.
     fn each_surfaces_hold_has_its_own_deadline() {
         let now = Instant::now();
         let mut held = HeldBuffers::with_deadline(Duration::from_millis(500));

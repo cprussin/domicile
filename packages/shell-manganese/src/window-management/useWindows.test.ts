@@ -18,12 +18,8 @@ const LEFT: Display = {
 const RIGHT: Display = { ...LEFT, name: "right", position: [1920, 0] };
 
 /**
- * A stand-in for the client: it takes the handlers this hook registers and
- * lets a test say what the compositor said.
- *
- * Narrower than a `DomicileClient` because the hook uses three of its members,
- * and a double that implemented the other fifteen would be claiming a seam
- * that size.
+ * A fake client that captures the hook's handlers so a test can emit
+ * compositor events. It implements only the three members the hook uses.
  */
 const client = () => {
   const handlers = new Map<string, (message: never) => void>();
@@ -148,9 +144,8 @@ describe("a command", () => {
   });
 
   it("opens a window on the screen the keyboard is on", () => {
-    // The whole of what a desk of several monitors is for, end to end: the
-    // keyboard is moved to the second screen and the client that appears is
-    // laid out there.
+    // End to end: focus moves to the second screen, and a new client is laid
+    // out there.
     const { host, result } = desktop([LEFT, RIGHT]);
 
     act(() => {

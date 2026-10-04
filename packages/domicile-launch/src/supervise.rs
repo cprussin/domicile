@@ -1,20 +1,11 @@
-//! Two processes, in the one order they can be started in.
+//! Starts, watches and stops the engine and compositor processes.
 //!
-//! The engine first: it serves the shell itself over `domicile://` and creates
-//! the broker socket. Then the compositor, which connects to that socket as a
-//! producer. The compositor's own control socket is named to the engine up
-//! front and dialed later, when the page asks for `navigator.domicile`, so
-//! nothing here has to wait for it.
+//! The engine starts first and creates the broker socket. The compositor then
+//! connects to it. The engine dials the compositor's control socket later,
+//! when the page needs it, so nothing waits on it here.
 //!
-//! There were three, and the first was a bridge serving the page over a
-//! loopback HTTP port. The fork serves it, so that process and the wait for
-//! the URL it printed are both gone.
-//!
-//! Everything decidable is decided elsewhere: `spawn` says what each process
-//! is started with, `platform` which platform, `components` where each lives,
-//! `milestones` what a run has to reach and what to say when it does not.
-//! What is left here is starting them, watching them, and making sure nothing
-//! outlives the run.
+//! Command lines come from `spawn`. This module makes sure no child outlives
+//! the run.
 
 use std::io::{BufRead, BufReader};
 use std::os::unix::process::CommandExt;
@@ -27,15 +18,13 @@ use std::time::Duration;
 use crate::heard::Heard;
 use crate::spawn::Spawn;
 
-/// How often the components are asked whether they are still components.
+/// How often to poll the components for exit.
 ///
-/// The same number the broker socket was polled at, and for the same reason:
-/// there is nothing a parent can wait on that covers "either of these two,
-/// whichever is first" without a signal handler, and a tenth of a second is
-/// below what anyone reads as a delay.
+/// Waiting on whichever of several children exits first needs a signal
+/// handler, so we poll. 100 ms is not a noticeable delay.
 pub const ASK_EVERY: Duration = Duration::from_millis(100);
 
-/// A run that could not be started, and what went wrong.
+/// A component could not be started.
 #[derive(Debug, thiserror::Error)]
 pub enum RunError {
     #[error("could not start the {what} at {}: {source}", .program.display())]
@@ -48,9 +37,8 @@ pub enum RunError {
 
 /// A component that is no longer running.
 ///
-/// `how` is the status as the shell would say it — `exit status: 1`, `signal:
-/// 11 (SIGSEGV)` — rather than a number, because a desktop killed by a signal
-/// and one that returned 11 are different failures and a bare `11` is both.
+/// `how` is the formatted status, such as `signal: 11 (SIGSEGV)`, so a
+/// signal is not confused with an exit code.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error("the {what} exited ({how})")]
 pub struct Exit {
@@ -58,31 +46,16 @@ pub struct Exit {
     pub how: String,
 }
 
-/// How long a component gets to put the machine down tidily before it is
-/// taken down.
+/// Grace period between `SIGTERM` and `SIGKILL`.
 ///
-/// NOT LONG ENOUGH TO MATTER FOR THE CONSOLE, AND IT DOES NOT NEED TO BE.
-/// The console is not handed back by the engine on its way out under either
-/// signal: Chromium's `SIGTERM` handler ends in
-/// `TerminateCurrentProcessImmediately`, which is `_exit`, so no destructor
-/// runs on the term path any more than on the kill path. What gives the tty
-/// back is logind, which restores `VT_AUTO`, the keyboard mode and `KD_TEXT`
-/// and revokes every device it handed out when the controller's bus name
-/// drops (`session_drop_controller`, systemd `src/login/logind-session.c`) --
-/// and a closed socket is a closed socket whether it was closed by `_exit` or
-/// by `SIGKILL`. So this grace is not racing the console.
-///
-/// It is still asked to stop rather than stopped, for the profile Chromium
-/// writes on the way out. Lengthening it would not make a tty safer; what
-/// makes a tty safe is that nothing gets orphaned while still holding the
-/// console, which is [`crate::milestones::reach`]'s business.
+/// `SIGTERM` lets Chromium save its profile. The console does not depend on
+/// it: logind restores the VT when the engine's bus connection closes, however
+/// the engine exits.
 const LAST_WORDS: Duration = Duration::from_secs(3);
 
 /// Children killed when the run ends, however it ends.
 ///
-/// A desktop that exits leaving an engine behind holds the Wayland display its
-/// replacement wants, and the second one fails about a socket rather than
-/// about the first still running.
+/// A leftover engine would hold sockets the next desktop needs.
 pub struct Running {
     components: Vec<(&'static str, Child)>,
     listeners: Vec<JoinHandle<()>>,
@@ -93,40 +66,27 @@ impl Drop for Running {
         for (_, child) in &mut self.components {
             end_the_group(child);
         }
-        // AFTER the groups are gone, and that order is the whole of why this
-        // terminates: a listener sits in a read on a component's stderr, and
-        // what ends that read is the last process holding the write end going
-        // away. Joined rather than detached because the run repeats what it
-        // heard the moment this returns -- a listener still draining would be
-        // a repeat missing its last lines, and the last lines are the reason.
+        // Join after the groups are gone: a listener's read ends only when
+        // every writer to the pipe has exited. Joining, not detaching,
+        // ensures the caller sees the last lines of stderr.
         //
-        // A panicked listener is the only `Err` a join has, and there is
-        // nothing to do with one here: unwrapping it would panic inside a
-        // `Drop` that is itself most often running during an unwind, which
-        // aborts the process and takes the sentence with it.
+        // Ignore a panicked listener. Panicking in `Drop` during an unwind
+        // would abort.
         for listener in self.listeners.drain(..) {
             let _ = listener.join();
         }
     }
 }
 
-/// Stop a component and everything it started.
+/// Stops a component and everything it started.
 ///
-/// THE ENGINE IS NOT ONE PROCESS, which is what made this necessary.
-/// Chromium forks a GPU process, a zygote and more, and `Child::kill` reaches
-/// the browser alone: on 2026-09-15 the browser took `SIGSEGV` two hundred
-/// milliseconds into a tty run and a sibling was still logging eight seconds
-/// later, holding DRM master on the card. The console was not recoverable and
-/// nothing said why, because from here the component had exited.
+/// Chromium forks GPU and zygote processes that `Child::kill` would miss. An
+/// orphaned one can keep DRM master and lock up the console. So each
+/// component leads a process group, which gets `SIGTERM`, then `SIGKILL`
+/// after [`LAST_WORDS`].
 ///
-/// So each one leads a process group and the group is what is signaled.
-/// `SIGTERM` first, because the engine has a console to hand back; `SIGKILL`
-/// after `LAST_WORDS`, because a component that will not go is worse than one
-/// that did not get to say goodbye.
-///
-/// Signaling the group by the leader's pid stays right after the leader has
-/// been reaped: a process group outlives its leader as long as it has members,
-/// and the members are exactly what this is for.
+/// The group outlives its leader while it has members, so signaling it by the
+/// leader's pid works after the leader is reaped.
 fn end_the_group(child: &mut Child) {
     let group = child.id() as libc::pid_t;
     signal_group(group, libc::SIGTERM);
@@ -143,7 +103,7 @@ fn end_the_group(child: &mut Child) {
     let _ = child.wait();
 }
 
-/// One component, started, with its stderr wherever the caller wants it.
+/// Starts one component with the given stderr.
 fn started(what: &'static str, spawn: &Spawn, stderr: fn() -> Stdio) -> Result<Child, RunError> {
     command(spawn)
         .stderr(stderr())
@@ -155,22 +115,17 @@ fn started(what: &'static str, spawn: &Spawn, stderr: fn() -> Stdio) -> Result<C
         })
 }
 
-/// Read one component's stderr: past, so a run watching a tty sees it as it
-/// happens, and into `heard`, so a run that gives up can say it again.
+/// Copies a component's stderr to ours and into `heard`, for repeating if the
+/// run gives up.
 ///
-/// Bytes rather than `lines()`, which yields a `Result` per line and fails the
-/// whole iterator on the first byte that is not UTF-8. What arrives here is
-/// whatever a component chose to write, and a stray one would otherwise take
-/// the rest of the complaint with it -- including, on a compositor that died
-/// mid-sentence, the half that says why.
+/// Reads bytes rather than `lines()`, which stops at the first invalid UTF-8.
 fn overhear(what: &'static str, stderr: std::process::ChildStderr, heard: &Mutex<Heard>) {
     let mut reader = BufReader::new(stderr);
     let mut line = Vec::new();
     loop {
         line.clear();
         match reader.read_until(b'\n', &mut line) {
-            // The component closed its stderr, which is the ordinary end of
-            // this: it exited, and `Running` is joining this thread.
+            // The component exited.
             Ok(0) => return,
             Ok(_) => {
                 let said = String::from_utf8_lossy(&line);
@@ -181,10 +136,7 @@ fn overhear(what: &'static str, stderr: std::process::ChildStderr, heard: &Mutex
                     .expect("nothing panics holding what a component said")
                     .line(said);
             }
-            // Not the end of the stream and not something to recover from:
-            // whatever the component says after this is gone either way. Said
-            // out loud rather than returned, because there is nobody to return
-            // it to -- this is a thread whose whole job is the terminal.
+            // Unrecoverable. Report it; this thread has no caller to return to.
             Err(why) => {
                 eprintln!("domicile: lost the rest of what the {what} said: {why}");
                 return;
@@ -193,9 +145,8 @@ fn overhear(what: &'static str, stderr: std::process::ChildStderr, heard: &Mutex
     }
 }
 
-/// `killpg`, with the failure ignored on purpose: the only one reachable here
-/// is `ESRCH`, which means the group is already gone, which is the outcome
-/// being asked for.
+/// Calls `killpg`, ignoring failure. The only reachable error is `ESRCH`: the
+/// group is already gone.
 fn signal_group(group: libc::pid_t, signal: libc::c_int) {
     unsafe {
         libc::killpg(group, signal);
@@ -210,19 +161,16 @@ impl Running {
         }
     }
 
-    /// Start one, with its stdout going wherever the caller's does.
+    /// Starts a component that inherits our stderr.
     pub fn start(&mut self, what: &'static str, spawn: &Spawn) -> Result<(), RunError> {
         let child = started(what, spawn, Stdio::inherit)?;
         self.components.push((what, child));
         Ok(())
     }
 
-    /// Start one, and keep what it writes on stderr as well as letting it past.
+    /// Starts a component, echoing its stderr and keeping a copy in `heard`.
     ///
-    /// Both halves matter and they are for different runs. The live output is
-    /// what a desk that comes up on the fifth try is reading; what is kept is
-    /// for the one that never comes up, where the run repeats it at the bottom
-    /// rather than pointing at it. [`crate::heard`] holds why.
+    /// The copy is repeated if the run gives up; see [`crate::heard`].
     pub fn start_overheard(
         &mut self,
         what: &'static str,
@@ -239,21 +187,11 @@ impl Running {
         Ok(())
     }
 
-    /// Stop holding one component, and stop everything it started.
+    /// Stops the named component's process group and forgets it.
     ///
-    /// FOR THE ONE THAT IS BEING REPLACED RATHER THAN FOR A TEARDOWN. An
-    /// engine that died leaves the group it led behind — Chromium's GPU
-    /// process and its zygote outlive the browser, and on a tty one of them is
-    /// still on the card — so the group is signaled here exactly as it is on
-    /// the way out, and only then is the entry dropped.
-    ///
-    /// DROPPED, and it has to be: a `wait` on a child that has already exited
-    /// answers the same thing forever, so a run that kept the corpse would
-    /// report it on every poll and never notice the engine that replaced it.
-    ///
-    /// A name nothing is holding is the outcome being asked for rather than a
-    /// failure — an engine that could not be started is one there is nothing
-    /// to let go of — so nothing comes back.
+    /// Used to replace a dead engine, whose GPU and zygote processes may still
+    /// hold the card. The entry must be removed, or [`Running::exited`] would
+    /// report the old exit forever. An unknown name is a no-op.
     pub fn let_go_of(&mut self, what: &'static str) {
         for (_, child) in self.components.iter_mut().filter(|(held, _)| *held == what) {
             end_the_group(child);
@@ -261,15 +199,9 @@ impl Running {
         self.components.retain(|(held, _)| *held != what);
     }
 
-    /// The first component that has stopped being one, if any has.
+    /// Returns the first component that has exited, without blocking.
     ///
-    /// Asked rather than waited on: this is what a startup wait consults
-    /// between polls, and it must answer "not yet" without blocking.
-    ///
-    /// A `wait` that fails on a child this process started and holds is an
-    /// invariant violation rather than a condition — there is no state left to
-    /// report from — so it takes the run down here rather than being folded
-    /// into an error nobody could act on.
+    /// Panics if `try_wait` fails, which cannot happen for our own child.
     pub fn exited(&mut self) -> Option<Exit> {
         self.components.iter_mut().find_map(|(what, child)| {
             child
@@ -279,12 +211,7 @@ impl Running {
         })
     }
 
-    /// Block until one of them exits, and say which.
-    ///
-    /// Whichever one, rather than the last started. Waiting on the compositor
-    /// was what made an engine that died a desktop that hung: the window was
-    /// gone, the compositor was still up, and the run sat in `wait` with
-    /// nothing on the terminal.
+    /// Blocks until any component exits or a stop is requested.
     pub fn until_one_exits(&mut self) -> Exit {
         loop {
             if let Some(exit) = self.exited() {
@@ -307,32 +234,19 @@ impl Default for Running {
     }
 }
 
-/// Set by the handler, read by the poll loop. A `static` because a signal
-/// handler has no other way to reach the program, and an `AtomicBool` because
-/// it is the only thing it is allowed to touch.
+/// Set by the signal handler and read by the poll loop. An atomic is all a
+/// signal handler may safely touch.
 static INTERRUPTED: AtomicBool = AtomicBool::new(false);
 
 extern "C" fn note_the_interrupt(_signal: libc::c_int) {
     INTERRUPTED.store(true, Ordering::Relaxed);
 }
 
-/// Make Ctrl-C end the run rather than end this process.
+/// Makes `SIGINT` and `SIGTERM` end the run instead of killing this process.
 ///
-/// WITHOUT THIS, PUTTING THE COMPONENTS IN THEIR OWN GROUPS WOULD BREAK
-/// CTRL-C. The kernel sends `SIGINT` to the terminal's foreground process
-/// group, and all three used to be in it, so Ctrl-C reached the engine and the
-/// compositor directly and the default action stopped them. They are not in it
-/// any more -- that is the point, so that `end_the_group` can reach what they
-/// fork -- so the signal now arrives here alone, and the default action would
-/// kill this process before `Running::drop` could run. The desktop would be
-/// exactly as orphaned as the crash this change is about.
-///
-/// A flag rather than a teardown in the handler, because a handler may call
-/// almost nothing and `kill` is not the half of it. The supervisor already
-/// polls at `ASK_EVERY`; this is one more thing for it to notice.
-///
-/// `SIGTERM` as well as `SIGINT`: a `systemctl stop` and a Ctrl-C are the same
-/// request, and a desktop left running by the first is the same wedged console.
+/// Components run in their own process groups, so Ctrl-C reaches only this
+/// process. Without a handler it would die before `Running::drop` stopped
+/// them. The handler only sets a flag, which the poll loop checks.
 pub fn catch_interrupts() {
     for signal in [libc::SIGINT, libc::SIGTERM] {
         // SAFETY: `note_the_interrupt` touches one atomic and nothing else,
@@ -364,13 +278,9 @@ fn command(spawn: &Spawn) -> Command {
     for (name, value) in &spawn.env {
         command.env(name, value);
     }
-    // A GROUP OF ITS OWN, so that `end_the_group` can reach what this process
-    // goes on to fork. `0` means "a new group led by the child".
-    //
-    // It also takes the child out of the terminal's foreground group, which is
-    // why `catch_interrupts` exists: Ctrl-C used to reach all three because
-    // they shared that group, and without a handler here it would now reach
-    // this process alone and kill it before any of this ran.
+    // A new process group led by the child, so `end_the_group` reaches its
+    // forks. This also removes it from the terminal's foreground group; see
+    // `catch_interrupts`.
     command.process_group(0);
     command
 }

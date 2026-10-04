@@ -59,10 +59,8 @@ type Options = {
 };
 
 /**
- * Builds a `renderVariation(size, config, props)` function used by the
- * Input/Textarea `AllVariations` and `AllInvalidVariations` stories. Each
- * caller provides the wrapped component + the icons it wants to demonstrate
- * with; the switch over adornment configs is shared.
+ * Builds a `renderVariation(size, config, props)` function for the Input and
+ * Textarea variation stories.
  */
 export const createRenderVariation = <
   P extends { rounded?: boolean | undefined },
@@ -169,11 +167,7 @@ export const createRenderVariation = <
   };
 };
 
-/**
- * Picks a Button size one step smaller than the surrounding control, used
- * for example suffix buttons in the AllVariations stories so they don't
- * overpower the wrapping Input/Textarea visually.
- */
+/** A Button size one step smaller than the control, for suffix buttons. */
 const innerButtonSize = (size: Size): Size => {
   switch (size) {
     case "xs":

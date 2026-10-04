@@ -1,11 +1,9 @@
-// Keyboard input, which is the page's and has to be told whose it is.
+// Forwards the page's key events to the focused Wayland window.
 //
-// A key event is delivered to `document` and never to an element: a Wayland
-// client is a surface rather than a browsing context, so there is nothing for
-// the browser to give focus to. The SDK routes them to whichever window was last
-// reached for — a click, or a `focusApp` — and a click anywhere else hands the
-// keyboard back to the chrome, unless the shell says that click was for a
-// window after all: see `releaseAllowed`.
+// Key events reach `document`, never an `<app>`, since a Wayland surface
+// cannot take browser focus. The SDK forwards them to the window last clicked
+// or passed to `focusApp`. A click elsewhere returns focus to the chrome
+// unless the shell objects (see `releaseAllowed`).
 
 import type { AppFocusReleaseRequest } from "./app-element";
 import { APP_FOCUS_RELEASE_REQUESTED_EVENT, APP_TAG_NAME } from "./app-element";
@@ -16,24 +14,15 @@ import { evdevFromCode } from "./input";
 import type { KeyPress } from "./shortcut-claims";
 import { isClaimed } from "./shortcut-claims";
 
-// The app each forwarded press was sent for, until the key comes up.
+// The app each forwarded press went to, until its key is released.
 //
-// A release has to be sent for every press, wherever the keyboard has moved
-// in between — the compositor's keyboard state is one seat's, it outlives
-// every window, and a press it never sees released stays down in it for good.
-// A lock key is where that is fatal rather than untidy: xkb unlocks one only
-// on the release of the press that locked it, so under `caps:swapescape` —
-// where the physical Escape key *is* Caps_Lock — a dropped release latches
-// capitals into every Wayland client, the ones opened afterward included,
-// and no later press of that key can clear it. The chrome's own webviews
-// never touch that state, so they keep typing normally, which is what makes
-// the failure look like it belongs to the terminals.
+// Every forwarded press needs a release, even if focus has moved. The seat's
+// key state outlives windows, so a lost release leaves the key stuck for all
+// clients. With a lock key (e.g. Caps_Lock under `caps:swapescape`) the stuck
+// state cannot be cleared by pressing the key again.
 //
-// The app id is what the message carries rather than where the release goes:
-// the compositor injects a key into the seat and lets the focus it already
-// has deliver it. What protects the client that took the press is
-// `wl_keyboard.leave`, which tells it every key is up — so naming the app the
-// press was sent for is simply the truthful value for the field.
+// The compositor delivers a release to the seat's current focus; the app id
+// is informational.
 const heldKeys = new Map<number, string>();
 
 /** Route the page's keystrokes to whichever window the user reached for. */
@@ -42,19 +31,16 @@ export const installKeyboardInput = (context: ElementContext): void => {
   document.addEventListener("keydown", forwardPress(context));
   document.addEventListener("keyup", forwardRelease(context));
   document.addEventListener("pointerdown", releaseFocusOffApp(context));
-  // A page that has lost the keyboard — or is going away — is never told the
-  // key came up. `pagehide` as well as `blur` because a reload is not a focus
-  // change, and it is the event a navigation fires reliably.
+  // A page that loses focus or unloads never sees the key releases. A reload
+  // fires `pagehide` but not `blur`.
   window.addEventListener("blur", releaseHeld);
   window.addEventListener("pagehide", releaseHeld);
   document.addEventListener("focusin", releaseIntoGuest(releaseHeld));
 };
 
-// A key released while a `<webview>` guest has the focus comes up on the site
-// and never in this document, so what this page is holding is let go as the
-// guest takes it. Without that, Super held on a terminal through
-// the chord that focuses a browser window stays down in the seat, and every
-// window afterward takes each key as a Super chord.
+// A key released inside a focused `<webview>` never reaches this document, so
+// release held keys when a guest takes focus. Otherwise a Super held while
+// switching to a browser window stays stuck in the seat.
 const releaseIntoGuest =
   (releaseHeld: () => void) =>
   (event: FocusEvent): void => {
@@ -71,20 +57,16 @@ const forwardPress =
   (event: KeyboardEvent): void => {
     const appId = keyboardTarget(context);
     const keycode = evdevFromCode(event.code);
-    // A combination the desktop claimed is not the window's, wherever the
-    // keyboard is pointed: the page is where it is answered, and forwarding it
-    // as well is the window acting on a key the shell already spent. The
-    // release is not forwarded either, because it was never taken down as held.
+    // A claimed shortcut belongs to the shell, so do not forward it. Its
+    // release is skipped too.
     if (
       appId !== undefined &&
       keycode !== undefined &&
       !isClaimed(press(event, keycode))
     ) {
       event.preventDefault();
-      // The browser repeats a held key; Wayland does not. A client synthesizes
-      // repeat itself from `wl_keyboard.repeat_info`, so forwarding these as
-      // fresh presses would give it two repeat sources at once — which it
-      // draws as the same character over and over.
+      // Wayland clients generate key repeat themselves, so forwarding the
+      // browser's repeats would double it.
       if (!event.repeat) {
         heldKeys.set(keycode, appId);
         context.domicile.key(appId, keycode, true);
@@ -92,15 +74,10 @@ const forwardPress =
     }
   };
 
-// Every release this page hears, not only the ones for a press it forwarded.
-// A key held while the page reloads comes up on a page that never saw it go
-// down. Kept back, it stays down in the seat and every key after it reaches
-// the client with it held. The compositor drops a release for a key
-// its seat does not hold, which is what makes sending them all safe: a key
-// typed into the page's own launcher comes up as a release nobody pressed.
-//
-// Except a chord the desktop claimed, the mirror of the press: its release is
-// the desktop's too.
+// Forwards every release, not only those for forwarded presses: a key held
+// across a page reload is released on a page that never saw the press. The
+// compositor ignores releases for keys the seat does not hold, so this is
+// safe. Claimed shortcuts are skipped, as in `forwardPress`.
 const forwardRelease =
   (context: ElementContext) =>
   (event: KeyboardEvent): void => {
@@ -111,19 +88,12 @@ const forwardRelease =
         event.preventDefault();
         heldKeys.delete(keycode);
       }
-      // Whatever is bound now, rather than what took the press: the context
-      // is one cell that a rebind writes through, and what the release is
-      // for is the compositor's seat — this is the connection to it. The app
-      // id is the one the press was sent for where this page sent it, and
-      // otherwise the window the desk says has the keyboard; the compositor
-      // reads neither, and the empty one is a desk where no window has it.
+      // The compositor ignores the app id; send the best one available.
       context.domicile.key(held ?? focusedApp() ?? "", keycode, false);
     }
   };
 
-// Every key still down, released. Called when the page stops hearing the
-// keyboard at all, which is the one case where the releases are not merely
-// going somewhere else — they are never coming.
+// Releases every held key. Called when the page will not see the releases.
 const releaseHeldKeys = (context: ElementContext) => (): void => {
   for (const [keycode, appId] of heldKeys) {
     context.domicile.key(appId, keycode, false);
@@ -148,18 +118,11 @@ const releaseFocusOffApp =
   };
 
 /**
- * Whether the window `appId` is to give the keyboard up for this press.
+ * Whether window `appId` should lose focus for a press outside every `<app>`.
  *
- * The shell's to answer, because the SDK cannot: a press that landed off every
- * `<app>` landed on the page, and nothing in it says whether that page was the
- * desktop behind the windows or the title bar of the window being asked about.
- * Left unanswered — a shell with no chrome of its own, which is most of
- * them — it is a yes, so this changes nothing for a shell that has never heard
- * of the event.
- *
- * A window whose element has left the page is not asked and not kept: there is
- * nothing to dispatch on, and a keyboard held for a window that is gone is the
- * desktop that stopped listening {@link keyboardTarget} exists to prevent.
+ * The shell decides by canceling `APP_FOCUS_RELEASE_REQUESTED_EVENT` (e.g. for
+ * a click on the window's title bar). Defaults to yes. A window whose element
+ * is gone always releases.
  */
 const releaseAllowed = (
   appId: string,
@@ -178,24 +141,13 @@ const releaseAllowed = (
 };
 
 /**
- * Which client a press belongs to, or `undefined` for the chrome's own page.
+ * The app a press goes to, or `undefined` for the chrome.
  *
- * The window the keyboard was routed to can leave the page without the SDK
- * hearing: a shell takes an element down when its client closes, and with the
- * tag the engine's there is no `disconnectedCallback` to notice it in. Left
- * alone, every keystroke after a window closes is taken from the page — the
- * forward calls `preventDefault()` — and sent to a client that is gone, which is
- * a desktop that works right up until you close a window.
- *
- * Asked here rather than pushed from the host's `app_closed`, because this is the
- * one place the answer is used and `DomicileClient.on` is a single slot the
- * shell's own handler wants. It costs one walk of the windows per keystroke,
- * against a socket write on the same path.
- *
- * The repair is not only local: the compositor's seat still points at the client
- * that went, so the chrome says the keyboard is its again. That is the truthful
- * thing to say — the page is where a closed client's keyboard goes — and the
- * alternative is a desktop that has stopped listening.
+ * If the focused window's element has left the page, focus returns to the
+ * chrome. Otherwise keys would go to a closed client and the page would never
+ * get them. The SDK cannot observe element removal (no
+ * `disconnectedCallback`), and `DomicileClient.on` belongs to the shell, so
+ * this checks on each press.
  */
 const keyboardTarget = (context: ElementContext): string | undefined => {
   const appId = focusedApp();
@@ -211,18 +163,17 @@ const keyboardTarget = (context: ElementContext): string | undefined => {
 const onPage = (appId: string): boolean => appElement(appId) !== undefined;
 
 /**
- * The `<app>` showing `appId`, or `undefined` when none is on the page.
+ * The `<app>` showing `appId`, or `undefined` if none.
  *
- * Read off the attribute rather than the `appId` property, for the reason the
- * rest of the delegation does: a shell running on stock Chromium gets an
- * `HTMLUnknownElement` with none of the fork's properties on it.
+ * Reads the attribute, not the `appId` property, because stock Chromium makes
+ * `<app>` an `HTMLUnknownElement`.
  */
 const appElement = (appId: string): Element | undefined =>
   [...document.querySelectorAll(APP_TAG_NAME)].find(
     (element) => element.getAttribute("app-id") === appId,
   );
 
-/** The press, in the terms a claim is written in. */
+/** Converts a key event to the form shortcut claims use. */
 const press = (event: KeyboardEvent, keycode: number): KeyPress => ({
   altKey: event.altKey,
   ctrlKey: event.ctrlKey,

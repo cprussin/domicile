@@ -7,7 +7,7 @@ import { restacked, SHUFFLE } from "./restacking";
 import type { Shown } from "./shown";
 
 const LEFT: Rect = { height: 400, width: 600, x: 0, y: 0 };
-// Straight to the right of `LEFT`, and overlapping it.
+// Right of `LEFT`, overlapping it.
 const OVERLAPPING: Rect = { height: 400, width: 600, x: 300, y: 0 };
 const APART: Rect = { height: 400, width: 600, x: 900, y: 0 };
 
@@ -32,9 +32,7 @@ const desktop = (placements: readonly Placement[], current = "1"): Shown => ({
 });
 
 describe("restacked", () => {
-  // A SHUFFLE. The two part, trade places in the stack while they are apart,
-  // and come back together the other way up — so the one raised is seen to
-  // come out from under the other and go over it.
+  // The two move apart, swap depth, and move back.
   it("parts the two windows that traded places, each away from the other", () => {
     expect(
       restacked(
@@ -47,8 +45,7 @@ describe("restacked", () => {
     ]);
   });
 
-  // NOTHING TO SEE. Two windows side by side cover nothing of each other, so
-  // which is over which is not something the screen shows.
+  // Windows that do not overlap show no change in order.
   it("leaves windows that do not overlap alone", () => {
     expect(
       restacked(
@@ -67,8 +64,7 @@ describe("restacked", () => {
     ).toStrictEqual([]);
   });
 
-  // A WINDOW TAKING THE SCREEN OR GIVING IT BACK is already a movement of its
-  // own — see `settlingStyles` — and a shuffle on top of it is two at once.
+  // Fullscreen changes have their own animation. See `settlingStyles`.
   it("is only between floats", () => {
     expect(
       restacked(
@@ -78,8 +74,7 @@ describe("restacked", () => {
     ).toStrictEqual([]);
   });
 
-  // The whole screenful changes on a switch, and it slides rather than
-  // shuffles.
+  // A workspace switch slides the whole screen instead.
   it("is nothing across a workspace switch", () => {
     expect(
       restacked(
@@ -89,8 +84,7 @@ describe("restacked", () => {
     ).toStrictEqual([]);
   });
 
-  // Two windows exactly on top of each other have no side to part towards,
-  // and still have to part to be seen trading places.
+  // Windows with the same center still part, horizontally.
   it("parts two windows with one middle along the row", () => {
     expect(
       restacked(

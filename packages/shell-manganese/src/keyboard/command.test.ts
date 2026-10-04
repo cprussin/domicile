@@ -7,7 +7,7 @@ import type { WindowAction as Action } from "../window-management/window-state";
 import { WindowAction } from "../window-management/window-state";
 import { parseCommand } from "./command";
 
-/** A command as the config writes it, after `send-shell`. */
+/** Parse a command as written after `send-shell`. */
 const parsing = (command: string) => parseCommand(command.split(" "));
 
 describe("parseCommand", () => {
@@ -56,13 +56,13 @@ describe("parseCommand", () => {
   });
 
   it.each([
-    // A verb this desktop does not have.
+    // Unknown verb.
     "terminal",
-    // A word the verb does not take.
+    // Unknown argument.
     "focus sideways",
-    // A workspace that is not one of the ten.
+    // Workspace out of range.
     "workspace 11",
-    // And one word too many, which is a typo rather than a command.
+    // Extra word.
     "kill now",
   ])("refuses `%s`, naming it", (command) => {
     expect(parsing(command)).toStrictEqual(

@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import { claimShortcut, isClaimed } from "./shortcut-claims";
 
-/** Enter, in the evdev numbering a claim and a press are both written in. */
+/** The evdev code for Enter. */
 const ENTER = 28;
 
 describe("shortcut claims", () => {
@@ -21,9 +21,7 @@ describe("shortcut claims", () => {
   });
 
   it("does not hold a press carrying a modifier the claim leaves out", () => {
-    // An omitted modifier is one that must *not* be held, the same reading the
-    // engine's dictionary gives it: Ctrl+Alt+Enter is a combination nobody
-    // claimed, and the window is entitled to it.
+    // An omitted modifier must not be held, matching the engine.
     claimShortcut({ altKey: true, keycode: ENTER });
 
     expect(

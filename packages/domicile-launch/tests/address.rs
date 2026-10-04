@@ -1,4 +1,4 @@
-//! What `domicile open-url` hands the engine, from the word it was given.
+//! Tests for the URL `domicile open-url` sends the engine.
 
 use std::path::Path;
 
@@ -18,8 +18,8 @@ fn an_address_is_handed_on_as_it_was_given() {
 
 #[test]
 fn a_path_is_a_file_in_the_directory_it_was_typed_in() {
-    // `cargo doc --open` hands `BROWSER` a path, not a URL — and relative to a
-    // working directory the engine does not share.
+    // `cargo doc --open` passes `BROWSER` a relative path, and the engine has
+    // a different working directory.
     assert_eq!(
         url_for("target/doc/index.html", Path::new("/work")),
         "file:///work/target/doc/index.html"
@@ -32,8 +32,7 @@ fn a_path_is_a_file_in_the_directory_it_was_typed_in() {
 
 #[test]
 fn a_path_is_escaped_into_a_url() {
-    // A space, or a `#`, is a different address unescaped: the first is no
-    // URL at all and the second is a fragment of a shorter path.
+    // Unescaped, a space makes an invalid URL and `#` starts a fragment.
     assert_eq!(
         url_for("/tmp/my page #2.html", Path::new("/work")),
         "file:///tmp/my%20page%20%232.html"

@@ -5,21 +5,21 @@ import { fireEvent, render, screen } from "@testing-library/react";
 
 import { TrayIcon } from "./TrayIcon";
 
-/** An application that sent a picture. */
+/** An application with an image. */
 const network: TrayItem = {
   icon: "data:image/png;base64,iVBORw0KGgo=",
   id: ":1.42/org/ayatana/nm",
   title: "Wired connection 1",
 };
 
-/** And one whose picture the compositor could not draw. */
+/** An application whose image the compositor could not decode. */
 const sync: TrayItem = {
   icon: undefined,
   id: "org.kde.StatusNotifierItem-4071-1/StatusNotifierItem",
   title: "Syncthing",
 };
 
-/** A client resolving with the first click the tray hands it. */
+/** A client that resolves with the first click the tray forwards. */
 const clicked = (): {
   domicile: DomicileClient;
   click: Promise<[string, TrayAction]>;
@@ -36,7 +36,7 @@ const clicked = (): {
   return { click, domicile };
 };
 
-/** A client for a tray whose clicks the test does not read. */
+/** A client for tests that ignore clicks. */
 const NO_DOMICILE = {
   activateTrayItem: () => undefined,
 } as unknown as DomicileClient;
@@ -45,7 +45,7 @@ const renderIcon = (item: TrayItem) => {
   render(<TrayIcon domicile={NO_DOMICILE} item={item} />);
 };
 
-/** The icon of `item`, resolving with the first click it hands on. */
+/** Renders `item`'s icon, resolving with the first click it forwards. */
 const iconOf = (item: TrayItem) => {
   const { click, domicile } = clicked();
   render(<TrayIcon domicile={domicile} item={item} />);
@@ -96,8 +96,8 @@ describe("TrayIcon", () => {
     it("keeps the page's own menu away from the secondary button", () => {
       renderIcon(network);
 
-      // `false` is a default that was prevented: the engine's context menu
-      // would otherwise open over the application's.
+      // `false` means the default was prevented, so the engine's context menu
+      // does not open over the application's.
       expect(
         fireEvent.contextMenu(
           screen.getByRole("button", { name: network.title }),

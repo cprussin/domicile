@@ -1,8 +1,6 @@
-// The four ways a desktop keyed with `focus`, `move` and `resize` points.
+// The directions for `focus`, `move` and `resize` commands.
 //
-// Its own module because three different things read one of these: the
-// bindings that produce them, the tree that walks them, and a floating
-// window's own box.
+// Shared by the keybindings, the layout tree and floating windows.
 
 /** Which way a container lays its children out. */
 export enum Axis {
@@ -17,7 +15,7 @@ export enum Direction {
   Right,
 }
 
-/** Which axis moving this way runs along. */
+/** The axis a direction runs along. */
 export const axisOf = (direction: Direction): Axis => {
   switch (direction) {
     case Direction.Left:
@@ -32,8 +30,8 @@ export const axisOf = (direction: Direction): Axis => {
 };
 
 /**
- * Whether this way is forward along its axis — towards the end of a
- * container's children, and towards the bottom-right of the screen.
+ * Whether a direction points towards the end of a container's children, which
+ * is the bottom-right of the screen.
  */
 export const isForward = (direction: Direction): boolean => {
   switch (direction) {

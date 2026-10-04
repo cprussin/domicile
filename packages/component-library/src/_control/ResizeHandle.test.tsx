@@ -46,12 +46,10 @@ describe(ResizeHandle, () => {
   it("does not re-apply the drag-start cursor on a post-drag unmount", () => {
     document.body.style.cursor = "auto";
     const { handle, unmount } = setupHandle();
-    // Drag and end normally.
     fireEvent.mouseDown(handle, { clientY: 100 });
     fireEvent.mouseUp(document);
-    // Something else (e.g. another component) now sets the cursor.
+    // Another component sets the cursor after the drag.
     document.body.style.cursor = "wait";
-    // Unmount should not re-apply the captured "auto" from drag-start.
     unmount();
     expect(document.body.style.cursor).toBe("wait");
   });

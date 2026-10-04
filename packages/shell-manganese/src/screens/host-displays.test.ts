@@ -9,17 +9,15 @@ import type {
 
 import { hostDisplays } from "./host-displays";
 
-/** What every call *out* to the compositor does here, which is nothing. */
+/** A no-op for every outgoing call to the compositor. */
 const ignored = (): undefined => undefined;
 
 /**
- * A compositor that only ever describes a desktop.
+ * A compositor stub that only describes a desktop.
  *
- * The adapter reads `displays` and registers through `on`, and neither of those
- * is a call *out* — so every method here is a no-op and only the attribute and
- * the one event do anything. Written out rather than cast from a partial,
- * because `DomicileClient` registers a listener for every event type in its
- * constructor and a double missing `addEventListener` would throw there.
+ * The adapter only reads `displays` and listens through `on`, so every other
+ * method is a no-op. Written out rather than cast from a partial because
+ * `DomicileClient`'s constructor calls `addEventListener`.
  */
 class Host implements DomicileHost {
   displays: readonly DomicileDisplay[] | null = null;
@@ -34,7 +32,7 @@ class Host implements DomicileHost {
     this.#listeners.set(type, listener);
   }
 
-  /** The attribute, and then the bare event — the engine's own order. */
+  /** Sets the attribute, then fires the event, in the engine's order. */
   describes(displays: readonly DomicileDisplay[]): void {
     this.displays = displays;
     this.#listeners.get("displayschanged")?.(
@@ -42,9 +40,8 @@ class Host implements DomicileHost {
     );
   }
 
-  // Everything the chrome can ask a compositor for. None of it is this
-  // module's half — the adapter only ever reads and listens — so they are one
-  // shared no-op rather than fourteen empty bodies.
+  // Every outgoing compositor call. The adapter makes none, so they share one
+  // no-op.
   readonly activateExtension = ignored;
   readonly activateTrayItem = ignored;
   readonly dismissNotifications = ignored;
@@ -92,7 +89,7 @@ const LEFT: DomicileDisplay = {
 };
 const RIGHT: DomicileDisplay = { ...LEFT, name: "right", x: 1920 };
 
-/** The same screen, as `<Screen>` lays out against it. */
+/** The same screen, as `<Screen>` expects it. */
 const LEFT_LAID_OUT: Display = {
   name: "left",
   position: [0, 0],
@@ -105,7 +102,7 @@ const RIGHT_LAID_OUT: Display = {
   position: [1920, 0],
 };
 
-/** A domicile client and the compositor that describes desktops to it. */
+/** A client and the compositor stub behind it. */
 const connected = (): [DomicileClient, Host] => {
   const host = new Host();
   return [new DomicileClient(host), host];
@@ -113,11 +110,9 @@ const connected = (): [DomicileClient, Host] => {
 
 describe("the desktop a shell lays out against", () => {
   it("is regrouped into the rectangle the layout wants", () => {
-    // The two shapes are the same logical CSS pixels in the same desktop-wide
-    // space, and nothing is converted — but the engine names the corner and
-    // the extent as four numbers, because WebIDL has no tuple, and `<Screen>`
-    // positions against a pair and a pair. This module is where that happens,
-    // and it is the whole reason it is not a pass-through any more.
+    // Both shapes use the same logical CSS pixels. The engine uses four numbers
+    // (WebIDL has no tuples) and `<Screen>` uses two pairs; regrouping them is
+    // this module's job.
     const [client, host] = connected();
 
     host.describes([LEFT]);
@@ -126,9 +121,8 @@ describe("the desktop a shell lays out against", () => {
   });
 
   it("reads the domicile when asked, not when built", () => {
-    // A snapshot taken at construction would hand a provider that mounts later
-    // the desktop as of the moment the source was made, which on a desktop
-    // that changed in between is the one that is gone.
+    // A snapshot at construction would give a later-mounted provider a stale
+    // desktop.
     const [client, host] = connected();
     const source = hostDisplays(client);
     expect(source.displays).toBeUndefined();
@@ -168,10 +162,9 @@ describe("the desktop a shell lays out against", () => {
   });
 
   it("does not silence a handler that displaced it", () => {
-    // `DomicileClient.on` is a single slot, so a second source over one client
-    // replaces the first. A teardown that removed whatever it found would
-    // then silence the live handler — which is a desktop that stops updating
-    // with nothing anywhere to say why.
+    // `DomicileClient.on` is a single slot, so a second source replaces the
+    // first. Removing whatever handler is registered on teardown would silence
+    // the live one, and the desktop would stop updating.
     const [client, host] = connected();
     const source = hostDisplays(client);
     const seen: unknown[] = [];

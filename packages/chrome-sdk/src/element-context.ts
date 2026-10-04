@@ -1,33 +1,18 @@
-// What the chrome bound the SDK with, and which app has the keyboard.
+// The client the SDK is bound to, and which app has the keyboard.
 //
-// The input routing is installed on `document` once, at startup, and it
-// outlives any particular client: `registerElements` binds a domicile client
-// (and optionally a measurement strategy) into the one cell below, and
-// everything it installs reads that cell at dispatch rather than closing over
-// what it was handed. So a rebind reaches listeners that are already
-// registered, and tests bind their own to inject a double — which is why the
-// setter is exported.
-//
-// This used to exist because a custom element is constructed by the DOM, which
-// hands it nothing, so `<domicile-app>` could not take its collaborators as
-// constructor arguments the way the rest of the SDK does. The element is the
-// engine's now and there is nothing to construct; what is left is the reason
-// above, which is the one that outlived it.
+// Input listeners are installed on `document` once and read this state at
+// dispatch time, so a rebind reaches listeners that already exist. Tests bind
+// their own client to inject a double.
 
 import type { DomicileClient } from "./domicile-client";
 import type { Measure } from "./measure";
 import { defaultMeasure } from "./measure";
 
 /**
- * What the SDK was bound with, as one cell that outlives the binding.
+ * The client and measurement strategy the SDK is bound to.
  *
- * Handed to everything `registerElements` installs, rather than read back per
- * call. None of it exists before the bind that created it, so for those
- * listeners there is no unbound case to represent, and a client that cannot be
- * `undefined` is a message that cannot be silently dropped.
- *
- * Mutable, and the same object across binds, because those are installed once
- * and a rebind has to reach them.
+ * Mutable and shared across binds: listeners are installed once, so a rebind
+ * must update the object they already hold.
  */
 export type ElementContext = {
   domicile: DomicileClient;
@@ -49,9 +34,10 @@ export const bindElementContext = (
 };
 
 /**
- * The app currently receiving keyboard input. Keyboard events are delivered to
- * the document rather than to an element, so the SDK routes them to whichever
- * `<app>` was last reached for.
+ * The app that receives keyboard input.
+ *
+ * Keyboard events arrive at the document, not at an element, so the SDK
+ * tracks the target itself.
  */
 export const focusedApp = (): string | undefined => focusedAppId;
 

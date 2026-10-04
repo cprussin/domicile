@@ -5,7 +5,7 @@ import { act, renderHook } from "@testing-library/react";
 
 import { usePreview } from "./usePreview";
 
-/** The host's preview, answered by the test in whatever order it likes. */
+/** Fake host preview that a test answers in any order. */
 const host = () => {
   const asked: { path: string; settle: (found: FilePreviewMessage) => void }[] =
     [];
@@ -43,8 +43,7 @@ describe("usePreview", () => {
   });
 
   it("drops the answer for a path the highlight has already left", async () => {
-    // An arrow key is faster than a disk, and the host owes the answers no
-    // order: the pane shows the row it is on, not the one answered last.
+    // Answers can arrive out of order; the pane shows the current row's.
     const home = host();
     const { rerender, result } = renderHook(
       ({ path }) => usePreview(home.preview, path),

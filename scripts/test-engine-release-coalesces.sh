@@ -1,16 +1,13 @@
 #!/usr/bin/env bash
-# engine-release.yml builds on a schedule, not once per engine merge.
+# Asserts engine-release.yml builds on a schedule, not on every engine merge.
 #
-# MEASURED: it ran on every merge to main that moved the engine. Over 24h that
-# was 10-12 official builds, 9.4 runner-hours of Build, one of crux's two
-# runners busy ~40% of the day and ~2.2h of runner queue for pull requests'
-# engine jobs. Nothing pins `engine-official-*`, so nothing needs a build per
-# merge: one of the newest main a night is the same engine, later.
+# Building per merge cost 10-12 official builds a day and queued pull
+# requests' engine jobs on crux. Nothing pins `engine-official-*`, so a nightly
+# build of main is enough.
 #
-# So: a nightly cron and a dispatch, and no push to a branch. A tag push still
-# publishes that tag. The concurrency group (asserted by
-# scripts/test-engine-concurrency.sh) keeps one running and one pending, so a
-# dispatch during the nightly is one more build after it, never a cancel.
+# Triggers: a nightly cron, a dispatch, and tag pushes; no branch pushes. The
+# concurrency group (asserted by scripts/test-engine-concurrency.sh) keeps one
+# run and one pending, so a dispatch during the nightly queues after it.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -24,8 +21,8 @@ fail() {
   FAILED=$((FAILED + 1))
 }
 
-# A top-level block's lines, comments out: from `<key>:` at column zero to the
-# next column-zero line.
+# A top-level block's lines with comments removed, from `<key>:` at column zero
+# to the next column-zero line.
 top_block() { # key
   sed 's/[[:space:]]*#.*$//' "$WORKFLOW" |
     awk -v key="$1:" '$0 == key { inside = 1; next }

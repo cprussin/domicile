@@ -1,29 +1,15 @@
-// The wire contract with the Domicile host, mirroring the Rust
-// `domicile-protocol` crate. Host messages arrive as untrusted JSON text, so
-// they are parsed with zod rather than cast — the schemas below are the only
-// place a raw frame becomes a typed value.
+// Zod schemas for the compositor's JSON wire, mirroring the Rust
+// `domicile-protocol` crate. Host frames are untrusted, so they are parsed, not
+// cast.
 //
-// **A page reads almost none of this.** Under the fork the compositor's JSON
-// is decoded in the browser process and reaches the document as typed events on
-// `window.domicile`; `host-message.ts` is what a shell sees. What still
-// reads these schemas is `@domicile-desktop/e2e-harness`, a headless stand-in for a
-// chrome that connects to the compositor's own socket — because what those
-// scripts assert is what the *compositor* sends, and a harness that went
-// through the browser process would be asserting the browser process too.
+// Pages receive typed events on `window.domicile` instead (see
+// `host-message.ts`). These schemas serve `@domicile-desktop/e2e-harness`,
+// which reads the compositor's socket directly. The exception is
+// {@link shellConfigSchema}, which `host-message.ts` parses because WebIDL
+// cannot type a shell's `options` table.
 //
-// The one exception is `shell_config`. A shell's `options` table is whatever
-// its config said, which WebIDL cannot type, so the engine forwards the
-// compositor's line as a string and `host-message.ts` parses it with
-// {@link shellConfigSchema} — the page reads that one schema itself.
-//
-// That makes this and `packages/domicile-protocol` two halves of one contract
-// with no page between them, and they still have to move together: see
-// `wire-fixture.test.ts`, which requires these schemas to accept the bytes
-// Rust is pinned to writing.
-//
-// Each schema is deliberately loose about unknown keys so a newer host can add
-// fields without breaking an older reader; it is strict about the fields the
-// harness actually reads.
+// `wire-fixture.test.ts` checks that these schemas accept what Rust writes.
+// Schemas ignore unknown keys so a newer host can add fields.
 
 import { z } from "zod";
 
@@ -38,22 +24,15 @@ export const PROTOCOL_VERSION = 1;
 const sizeSchema = z.tuple([z.number(), z.number()]);
 
 /**
- * What a client calls its window, and `undefined` for one with no name.
+ * A window's title, or `undefined` when it has none.
  *
- * Three shapes mean the same nothing, so they are one thing by the time a page
- * sees them. `null` is serde's `Option<String>::None` — a window nobody has
- * named yet. The empty string is a client that named it *nothing*, which
- * `xdg_toplevel.set_title("")` is the only way to say, xdg-shell having no
- * request that takes a name back. And an absent key is a host too old to send
- * one. A chrome that draws names has one answer for all three, and this is
- * where they become it, rather than at every place a name is drawn.
+ * `null` (unset), `""` (cleared with `set_title("")`) and a missing key all
+ * mean no title.
  */
 const titleSchema = z
   .string()
   .nullish()
-  // serde's `Option<String>::None`, or a host too old to send the field.
   .transform((title) => title ?? undefined)
-  // And a client that named its window nothing.
   .transform((title) => (title === "" ? undefined : title));
 
 const welcomeSchema = z.looseObject({
@@ -61,27 +40,18 @@ const welcomeSchema = z.looseObject({
   type: z.literal("welcome"),
 });
 
-// Not once per client. The host replays every window already running to every
-// connected chrome whenever any chrome shakes hands, so a page can be told
-// about a window it already holds — and is expected to ignore that, keying its
-// windows by app id. A chrome that mounts an element per message instead ends
-// up with two for one client, the first of them orphaned.
+// Can repeat for a known window: the host replays all windows to every chrome
+// whenever any chrome connects. Key windows by app id.
 const appAppearedSchema = z.looseObject({
   app_id: z.string(),
-  // Absent until the client has committed a buffer, which it has not when this
-  // message goes out: a toplevel maps before it draws, and how big a Wayland
-  // client wants to be is something it says by drawing. The size arrives on
-  // the `app_resized` that follows. A chrome with none has to decide the
-  // window's size itself — believing a number here is what opened windows at
-  // nothing at all when the host sent `[0, 0]` for this case.
+  // Usually absent: the client has not drawn yet. The size arrives in a later
+  // `app_resized`.
   size: sizeSchema.nullish().transform((size) => size ?? undefined),
   title: titleSchema,
   type: z.literal("app_appeared"),
 });
 
-// A client names its window with `set_title`, which it sends after creating
-// the toplevel the announcement was for — so the name is not in the
-// announcement, and arrives here instead, again each time it changes.
+// Sent on each `set_title`. Clients usually set a title after `app_appeared`.
 const appTitledSchema = z.looseObject({
   app_id: z.string(),
   title: titleSchema,
@@ -94,9 +64,8 @@ const appResizedSchema = z.looseObject({
   type: z.literal("app_resized"),
 });
 
-// A popup a client opened over one of its windows: an `<app>` of its own,
-// placed at `position` from `parent`'s box rather than laid out. Sent again
-// when the client moves it; it goes with `app_closed`, like a window.
+// A client popup, placed at `position` relative to `parent`. Sent again when
+// it moves; closed with `app_closed`.
 const popupPlacedSchema = z.looseObject({
   app_id: z.string(),
   grab: z.boolean(),
@@ -106,8 +75,8 @@ const popupPlacedSchema = z.looseObject({
   type: z.literal("popup_placed"),
 });
 
-// The smallest and largest a client will draw its window, with `0` on an axis
-// for no limit — xdg-shell's own spelling, passed through.
+// A window's size limits, as xdg-shell sends them: `0` on an axis means no
+// limit.
 const appMinSizeSchema = z.looseObject({
   app_id: z.string(),
   size: sizeSchema,
@@ -133,19 +102,15 @@ const shortcutSchema = z.looseObject({
   shift: z.boolean(),
 });
 
-// A combination the chrome claimed, pressed. It arrives here rather than as a
-// DOM event because the page is not what received it — the point of claiming
-// one is that it works while a window has the keyboard.
+// A claimed shortcut was pressed. It comes from the compositor because it must
+// work while a window has keyboard focus.
 const shortcutMessageSchema = z.looseObject({
   shortcut: shortcutSchema,
   type: z.literal("shortcut"),
 });
 
-// Which modifiers are held now. The page cannot see this for itself once a
-// window has the keyboard — `wl_keyboard.modifiers` goes to the focused
-// surface — and a chrome whose windows answer to a held modifier, alt to drag
-// one, needs to know exactly then. Sent on a change, so a modifier held down
-// arrives once.
+// The held modifiers, sent on change. The page cannot see them while a window
+// has keyboard focus, but needs them for gestures such as alt-drag.
 const modifiersSchema = z.looseObject({
   alt: z.boolean(),
   ctrl: z.boolean(),
@@ -154,17 +119,10 @@ const modifiersSchema = z.looseObject({
   type: z.literal("modifiers"),
 });
 
-// Who holds the keyboard now. The chrome asks for focus with `focus_app`, but
-// it is not the only thing that moves it — a click on a window focuses it in
-// the compositor, and a focused client going away hands the keyboard back — so
-// a chrome that tracked only its own requests would be right until the first
-// click and wrong afterward.
+// The window with keyboard focus. Focus also moves without `focus_app` (clicks,
+// closed clients), so track this rather than your own requests.
 const focusChangedSchema = z.looseObject({
-  // `null` on the wire, not absent: the chrome holding the keyboard is an
-  // answer, and one a desktop draws differently from any window being active.
-  // Normalized here so no `null` reaches the SDK, the same way `app_appeared`
-  // handles its optional title — the wire's shape is serde's business and the
-  // page's is not.
+  // `null` on the wire when the chrome has focus; normalized to `undefined`.
   app_id: z
     .string()
     .nullable()
@@ -172,74 +130,46 @@ const focusChangedSchema = z.looseObject({
   type: z.literal("focus_changed"),
 });
 
-// A client asking for the keyboard, which is a question rather than news: the
-// shell answers it with `focus_app` or lets it go unanswered. The compositor
-// deciding for itself is what this message exists instead of.
+// A client requests keyboard focus. The shell grants it with `focus_app` or
+// ignores it; the compositor does not decide.
 const focusRequestedSchema = z.looseObject({
-  // Never `null`, unlike `focus_changed`'s: a request comes from a client, and
-  // the chrome asking itself for focus is not a thing that crosses the wire.
   app_id: z.string(),
   type: z.literal("focus_requested"),
 });
 
-// One display of the desktop. Logical — the CSS pixels the chrome lays out in
-// — but for `mode`, and all of it in one desktop-wide space whose origin is
-// the top-left of the displays' bounding box, so `position` is directly where
-// a `<Screen>` goes on the page.
+// One display, in logical (CSS) pixels except `mode`. `position` is relative
+// to the top-left of all displays' bounding box. See `docs/DISPLAYS.md`.
 const displayInfoSchema = z.looseObject({
-  // The pixels the monitor scans out, un-turned — the one field here that is
-  // not logical. NOT a second spelling of `size`: a monitor on its side scans
-  // out exactly as it did lying down, and `size` is that mode turned and
-  // divided by the density. Nothing can be derived from the other two, because
-  // `scale` is the integer `wl_output` one and a 1.2 display's is 2.
-  //
-  // Optional, and `[0, 0]` where the host has nothing to say — a message from
-  // before the fork scanned anything out, a captured session, a hand-written
-  // fixture. Description only: nothing divides by it.
+  // The scanout mode in physical pixels, before rotation. It cannot be derived
+  // from `size` and `scale`, since `scale` is rounded to an integer.
+  // Informational only; `[0, 0]` when unknown.
   mode: z
     .tuple([z.int().nonnegative(), z.int().nonnegative()])
     .nullish()
     .transform((mode) => mode ?? ([0, 0] as const)),
-  // Non-empty, as `DisplayConfig::validate` requires: the name is what a
-  // `<Screen name="…">` matches on, and one that is not there matches nothing
-  // and renders an empty region rather than an error.
+  // Non-empty: `<Screen name="…">` matches on it, and an empty name would
+  // silently match nothing.
   name: z.string().min(1),
-  // Signed, because it mirrors `xdg_output.logical_position` and the
-  // compositor's normalization subtracts. Integer, because a display sits on a
-  // pixel.
+  // Signed, mirroring `xdg_output.logical_position`.
   position: z.tuple([z.int(), z.int()]),
-  // What clients on this display draw at. Not what the chrome renders at: the
-  // chrome is one page over every display, at one `devicePixelRatio`. Integer
-  // because `wl_output` scale is — a fractional one needs
-  // `wp_fractional_scale_v1`, which is its own protocol. Positive rather than
-  // merely non-negative, because both the config and `wl_output` say so, and a
-  // display at scale 0 would render as an empty region rather than an error.
+  // The integer `wl_output` scale clients draw at. The chrome renders every
+  // display at one `devicePixelRatio`.
   scale: z.int().positive(),
-  // Its own, not `sizeSchema`: that one is a client's size in logical units
-  // and is `[f64; 2]` in Rust, where a display's is `[u32; 2]`. Sharing a
-  // validator would make tightening either wait on the other. Positive for the
-  // same reason the config rejects a zero-sized display: it is not a screen.
+  // Integer, unlike `sizeSchema`, which holds `f64` client sizes.
   size: z.tuple([z.int().positive(), z.int().positive()]),
-  // Which way up the monitor is bolted to the desk, named for the turn the
-  // CONTENT takes rather than the one the panel did — the `wl_output`
-  // convention, which the config file and the host both follow. A page applies
-  // it as written.
+  // The rotation applied to content, per the `wl_output` convention. Apply it
+  // as given.
   transform: displayTransformSchema
     .nullish()
     .transform((transform) => transform ?? "normal"),
 });
 
-// Answered to `hello` after `welcome`, and sent again whenever the desktop
-// changes — with no displays configured the desktop is Domicile's own window,
-// so resizing it or changing its density re-describes it.
+// The desktop's displays, sent after `welcome` and on every change. The latest
+// message wins; one can arrive before `welcome`, because broadcasts reach
+// connections that have not finished the handshake.
 //
-// Latest wins, and that is the only ordering guaranteed: a change broadcast
-// reaches every connection, including one accepted but not yet welcomed, so it
-// can arrive before the `welcome` the handshake answer follows.
-//
-// An empty list is a desktop of no screens, which the compositor does not
-// send: it describes at least one output, and the window-following case is a
-// display named `domicile-0` rather than an absence.
+// Never empty. When Domicile runs in a window, that window is a display named
+// `domicile-0`.
 const displaysSchema = z.looseObject({
   displays: z.array(displayInfoSchema),
   type: z.literal("displays"),
@@ -251,47 +181,27 @@ const appCursorSchema = z.looseObject({
   type: z.literal("app_cursor"),
 });
 
-// The keymap the compositor compiled, in `XKB_KEYMAP_FORMAT_TEXT_V1` — the
-// same text `wl_keyboard.keymap` hands a client.
-//
-// Nothing in a page reads it, and nothing should: what it is for is the
-// browser process, whose own `KeyboardLayoutEngine` decodes every key the
-// desktop is typed with and, off ChromeOS, is never given a keymap by anything
-// else. It is here because these schemas are the compositor's wire rather than
-// the page's surface — see the note at the top of this file — and
-// `wire-fixture.test.ts` requires them to read every line Rust writes.
-//
-// Non-empty rather than merely a string: an empty keymap compiles to nothing
-// and what follows from it is a keyboard that types nothing, which is the
-// failure this message exists to end.
+// The compositor's XKB keymap, in `XKB_KEYMAP_FORMAT_TEXT_V1`. The browser
+// process uses it for its `KeyboardLayoutEngine`; pages do not read it.
+// Non-empty, since an empty keymap types nothing.
 const keymapSchema = z.looseObject({
   keymap: z.string().min(1),
   type: z.literal("keymap"),
 });
 
-// The Chrome extensions the desk's config names: Web Store ids, and absolute
-// paths to unpacked extensions. Like `keymap`, what it is for is the browser
-// process, which installs them into the profile its browser windows use — see
-// `docs/architecture/EXTENSIONS.md` — and it rides with the handshake and again
-// on a reload that changes it. It is here for `keymap`'s reason: these schemas
-// are the compositor's wire, and `wire-fixture.test.ts` reads every line.
+// The configured Chrome extensions: Web Store ids and absolute paths to
+// unpacked ones. Sent with the handshake and on config reload. The browser
+// process installs them; see `docs/architecture/EXTENSIONS.md`.
 const extensionsSchema = z.looseObject({
   type: z.literal("extensions"),
   unpacked: z.array(z.string()),
   web_store: z.array(z.string()),
 });
 
-// What matched a `search_files`, answering it and nothing else: the index
-// itself never crosses. `query` is the one answered; `files` is the front of
-// what matched, relative to the home directory, in byte order, with a
-// directory ending in `/`; `matched` is how many there were in all.
-//
-// A home that could not be read is not this message at all: the compositor
-// logs that and says nothing, so a launcher shows no list rather than an empty
-// one it would have to explain.
-//
-// `indexing` is whether the compositor has finished walking the home the
-// answer was found in.
+// The reply to `search_files`. `files` holds the first matches, relative to
+// home, in byte order, with directories ending in `/`. `matched` is the total
+// count. `indexing` is true while the home directory is still being indexed.
+// No reply is sent if the home directory cannot be read.
 const foundFilesSchema = z.looseObject({
   files: z.array(z.string()),
   indexing: z.boolean(),
@@ -300,9 +210,8 @@ const foundFilesSchema = z.looseObject({
   type: z.literal("found_files"),
 });
 
-// The applications a `search_apps` matched, best first. Each carries the argv
-// it runs, for `spawn`, a `comment` that is empty when the entry has none, and
-// an `icon` and a `preview` as `data:` URLs when the compositor found them.
+// An application matching `search_apps`. `command` is the argv for `spawn`.
+// `icon` and `preview` are `data:` URLs, absent when not found.
 const desktopEntrySchema = z.looseObject({
   command: z.array(z.string()),
   comment: z.string(),
@@ -312,8 +221,8 @@ const desktopEntrySchema = z.looseObject({
   preview: z.string().optional(),
 });
 
-// A URL the desk offers by name, from `applications.bookmarks`, with the
-// `icon` its site names as a `data:` URL once the compositor has found it.
+// A bookmark from `applications.bookmarks`. `icon` is the site's icon as a
+// `data:` URL, once fetched.
 const bookmarkSchema = z.looseObject({
   icon: z.string().optional(),
   name: z.string(),
@@ -327,9 +236,8 @@ const foundAppsSchema = z.looseObject({
   type: z.literal("found_apps"),
 });
 
-// What a path holds, answering `preview_file`. `kind` says which of `text`,
-// `entries` and a song's tags it carries; a `binary` or `unreadable` preview
-// carries none of them.
+// The reply to `preview_file`. `kind` says which optional fields are set;
+// `binary` and `unreadable` set none.
 const filePreviewSchema = z.looseObject({
   album: z.string().optional(),
   artist: z.string().optional(),
@@ -343,47 +251,31 @@ const filePreviewSchema = z.looseObject({
   type: z.literal("file_preview"),
 });
 
-// The machine's battery: how full, and whether a lead is in.
+// Battery charge and charging state, read from `/sys/class/power_supply`.
+// Pushed on a visible change and on connect.
 //
-// Pushed rather than answered — a charge changes on its own, so there is no
-// `list_battery`. The compositor reads
-// `/sys/class/power_supply` and sends this when the reading moves far enough
-// to draw, plus once to a chrome that has just connected.
+// Use this, not `navigator.getBattery`: that API needs UPower over D-Bus and,
+// without it, reports a full, charging battery.
 //
-// **Not `navigator.getBattery`**, which is where a shell would otherwise read
-// this and is a trap: that API answers through UPower over D-Bus, a desktop on
-// a bare tty has neither, and Chromium resolves with its default
-// `BatteryStatus` — charging, and full — which is indistinguishable from a
-// real laptop on a full battery.
-//
-// `charge` is a fraction rather than a percentage, and is not clamped here: a
-// number outside 0..1 would be a compositor bug, and rejecting the message
-// would hide it behind a bar with no meter on it.
+// `charge` is a fraction. It is not clamped, so a compositor bug stays
+// visible.
 const batterySchema = z.looseObject({
   charge: z.number(),
   charging: z.boolean(),
   type: z.literal("battery"),
 });
 
-// How bright the screen is, as a fraction. Pushed like the battery, and not
-// clamped for the battery's reason. A machine with no backlight sends none.
+// Screen brightness as an unclamped fraction. Pushed like `battery`. Not sent
+// without a backlight.
 const brightnessSchema = z.looseObject({
   level: z.number(),
   type: z.literal("brightness"),
 });
 
-// What has been copied on this desktop, newest first.
+// Clipboard history, newest first. Pushed on change and on connect.
 //
-// Pushed, like the battery: a copy is an event the compositor already hears,
-// so there is no `list_clipboard`. Sent whenever the
-// history changes and again to a chrome that has just connected — an empty
-// list is a desktop nothing has been copied on yet, which is an answer and the
-// ordinary state of one that has just started.
-//
-// A preview and an id rather than the text. The compositor keeps the bytes and
-// a shell hands the id back with `copy_clipboard_entry`; what crosses here is
-// enough to draw a row and no more, which matters because a password
-// manager's copy is a row in this list.
+// Entries carry a preview and an id, not the full text, which limits exposure
+// of copied passwords. Copy one back with `copy_clipboard_entry`.
 const clipboardEntrySchema = z.looseObject({
   id: z.number(),
   preview: z.string(),
@@ -394,14 +286,9 @@ const clipboardSchema = z.looseObject({
   type: z.literal("clipboard"),
 });
 
-// The system tray: every application showing an icon, in the order they
-// registered.
-//
-// Pushed like the clipboard, and the whole list every time: the compositor is
-// the StatusNotifierItem host, and sends this whenever an icon arrives, leaves
-// or changes how it looks, and again to a chrome that has just connected. A
-// click goes back as `activate_tray_item` with the id. `icon` is a `data:` URL,
-// absent for an item the compositor could not draw.
+// The full system tray (StatusNotifierItem), in registration order. Pushed on
+// change and on connect. Activate an item with `activate_tray_item`. `icon` is
+// a `data:` URL, absent when it could not be rendered.
 const trayItemSchema = z.looseObject({
   icon: z.string().optional(),
   id: z.string(),
@@ -413,13 +300,11 @@ const traySchema = z.looseObject({
   type: z.literal("tray"),
 });
 
-// The desk's notifications: every one not yet cleared, oldest first.
-//
-// Pushed like the tray, and the whole list every time: the compositor serves
-// `org.freedesktop.Notifications` and sends this whenever one arrives, is
-// replaced or goes, and again to a chrome that has just connected. A clear goes
-// back as `dismiss_notifications`, a press as `invoke_notification_action`.
-// `icon` is a `data:` URL, and `timeout_ms` absent is the shell's choice.
+// All uncleared notifications, oldest first. Pushed on change and on connect.
+// Clear with `dismiss_notifications`; press an action with
+// `invoke_notification_action`. `icon` is a `data:` URL. Without
+// `timeout_ms`, the shell picks the timeout. See
+// `docs/architecture/NOTIFICATIONS.md`.
 const notificationSchema = z.looseObject({
   actions: z.array(z.looseObject({ key: z.string(), label: z.string() })),
   app_name: z.string(),
@@ -438,106 +323,59 @@ const notificationsSchema = z.looseObject({
   type: z.literal("notifications"),
 });
 
-// Which way round the desktop is drawn now.
+// The desktop's light or dark theme. Sent with the handshake, after any
+// `setTheme` (to every chrome) and on config reload.
 //
-// Pushed like the battery, and the one pushed message a page can cause: a
-// shell's toggle calls `setTheme` and the compositor answers this to every
-// chrome on the desk, the one that asked included. It also arrives with the
-// handshake -- so a page paints in the desk's theme rather than painting and
-// flipping -- and whenever a reload of the config moves `theme`.
-//
-// Refused rather than defaulted, which is `battery`'s answer rather than
-// `displays`'s and for a sharper version of its reason: a theme defaulted to
-// dark is not a missing reading, it is a decision, and one that would repaint
-// a desk somebody had just put into light. `themeSchema` has no fallback for
-// the same reason.
+// Required, with no default: a wrong default would repaint the desktop in the
+// wrong theme.
 const themeMessageSchema = z.looseObject({
   theme: themeSchema,
   type: z.literal("theme"),
 });
 
-// Whether anybody is at this desktop: `true` is a desk nobody has touched for
-// `idle.blank_after_seconds`, `false` is somebody back at it.
+// Whether the desktop is idle: `true` after `idle.blank_after_seconds` with no
+// input, `false` on activity. Sent on change and on connect, so a reloaded
+// page learns the current state.
 //
-// THE STATE, THOUGH THE COMPOSITOR SENDS IT ON THE EDGE. That seam reports the
-// turn the answer changed on, because lighting a connector is a modeset and a
-// dark desk asking for one per tick is a modeset a second with nobody in the
-// room. A page has the opposite problem — it reloads, and one that has just
-// loaded has missed every edge there was — so what crosses here is where the
-// desk stands, and a chrome that has just connected is told it, like the
-// clipboard and unlike a shortcut.
-//
-// It does not lead the blanking: it goes out on the turn the screens are told
-// to go dark, ahead of the modeset rather than ahead of the timeout. What
-// leads is the other edge — a relight takes tens of milliseconds and a repaint
-// takes one — so what the dark edge is good for is arranging what will be true
-// when the screens come back.
-//
-// A desktop that never blanks sends none of these, not even a `false`: no
-// timeout is no clock, and silence is what a desk with no opinion about who is
-// at it has to say.
+// `true` arrives as the screens blank, so use it to prepare what shows on
+// wake. Not sent when blanking is disabled. See `docs/IDLE.md`.
 const idleSchema = z.looseObject({
-  // Required, and not defaulted the way `mode` is: there is no reading of an
-  // absent field here that is not a guess about which way the desk went, and
-  // a guess that came out `false` would clear a shell's lock screen on a host
-  // too old to have sent one.
+  // Required: defaulting to `false` could dismiss a lock screen.
   idle: z.boolean(),
   type: z.literal("idle"),
 });
 
-// Whether this desk is locked: `true` is a desktop that will not deliver a
-// keystroke or a click to any client until somebody says the passphrase.
+// Whether the desktop is locked. While `true`, the compositor drops all input
+// to clients, so reloading or editing the page cannot unlock it. The page
+// still gets keys, so it can draw a lock screen and send the passphrase with
+// `unlock`.
 //
-// THE COMPOSITOR HOLDS IT, AND THAT IS WHY THIS MESSAGE EXISTS AT ALL. Input on
-// this system does not originate there — the shell's page owns it and forwards
-// it, and the compositor injects it into a Wayland seat — so a locked desk is
-// that injection not happening. A page reload does not open it, an engine that
-// died and came back does not open it, and a page edited in the devtools of the
-// browser drawing it does not open it either.
-//
-// So the page keeps every key it has while this is `true`, which reads like a
-// hole and is the opposite: the page is the thing forwarding, and what it
-// forwards is dropped at the seat — so it can draw a lock screen and take a
-// passphrase while no client on the desk sees a keystroke. `unlock` is how it
-// offers one, and the answer is another one of these.
-//
-// A state rather than an edge, like `idle`, and a chrome that has just connected
-// is told it — which here is the property the whole design is for rather than a
-// convenience, because the reload is exactly what must not open the desk.
-//
-// A desktop with no `lock.passphrase` configured sends none of these, not even
-// a `false`: it cannot lock, because a desk that locked with nothing to unlock it
-// would be a desk nobody could get back into.
+// Sent on change and on connect. Not sent when `lock.passphrase` is unset. See
+// `docs/LOCK.md`.
 const lockedSchema = z.looseObject({
-  // Required, for `idle`'s reason at its sharpest: a missing field here has no
-  // reading that is not a guess about whether this desk is listening, and a
-  // guess that came out `false` would clear a lock screen over a desktop that
-  // looks open, takes a password into a field nothing will ever read, and is
-  // not.
+  // Required: defaulting to `false` would hide the lock screen while input
+  // stays blocked.
   locked: z.boolean(),
   type: z.literal("locked"),
 });
 
-// Which way round the desk's windows are drawn now: `theme`'s other half,
-// sent once every chrome has captured the frame its wipe starts from and the
-// windows have repainted, and with the handshake. Refused rather than
-// defaulted, for `theme`'s reason.
+// The theme client windows use. Sent with the handshake and after a theme
+// change, once every chrome has captured its transition frame and the windows
+// have repainted. Required, like `theme`.
 const windowsThemeMessageSchema = z.looseObject({
   theme: themeSchema,
   type: z.literal("windows_theme"),
 });
 
-// The keyboard, for the keys a shell binds: every keysym it can type and the
-// evdev key it is on. Once after the handshake and again whenever a reload
-// moves the layout. The shell's chords are resolved against it by the SDK.
+// Maps each typeable keysym to its evdev key, for resolving shell shortcuts.
+// Sent after the handshake and when the layout changes.
 export const shellConfigSchema = z.looseObject({
   keys: z.record(z.string(), z.number().int().nonnegative()),
   type: z.literal("shell_config"),
 });
 
-// The desk's sound, whole every time: every device, stream and card the
-// sound server has. Pushed like the tray. A desk with no sound server sends
-// none.
+// The full audio state: devices, streams and cards. Pushed on change and on
+// connect. Not sent without a sound server.
 const audioChoiceSchema = z.looseObject({
   available: z.boolean(),
   description: z.string(),
@@ -580,16 +418,15 @@ const audioSchema = z.looseObject({
   type: z.literal("audio"),
 });
 
-// The meters' peaks, some twenty times a second while any are watched.
+// Meter peaks, about 20 times a second while any meter is watched.
 const audioLevelsSchema = z.looseObject({
   levels: z.array(z.looseObject({ id: z.string(), peak: z.number() })),
   type: z.literal("audio_levels"),
 });
 
 /**
- * A host message the chrome understands. Unknown `type` values are not an
- * error — {@link parseHostMessage} reports them separately so a newer host can
- * introduce messages an older chrome simply ignores.
+ * A host message this build understands. {@link parseHostMessage} returns
+ * `undefined` for unknown types so a newer host can add messages.
  */
 export const hostMessageSchema = z.discriminatedUnion("type", [
   welcomeSchema,
@@ -628,13 +465,7 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
 /** A decoded host message. */
 export type HostMessage = z.infer<typeof hostMessageSchema>;
 
-/**
- * A host message exactly as it decodes from JSON.
- *
- * The same type as {@link HostMessage} now that every message is wholly JSON.
- * It stays a distinct name because the stream still parses before it dispatches
- * and the two steps read better named apart.
- */
+/** A host message as decoded from JSON. Same type as {@link HostMessage}. */
 export type HostMessageJson = z.infer<typeof hostMessageSchema>;
 export type WelcomeMessage = z.infer<typeof welcomeSchema>;
 export type AppAppearedMessage = z.infer<typeof appAppearedSchema>;
@@ -679,8 +510,7 @@ export type HostMessageOf<T extends HostMessageType> = Extract<
   { type: T }
 >;
 
-// Every frame carries a string `type`; only the payload beyond it varies. A
-// frame that does not even have one is malformed rather than merely unknown.
+// A frame without a string `type` is malformed, not unknown.
 const envelopeSchema = z.looseObject({ type: z.string() });
 
 const KNOWN_TYPES: ReadonlySet<string> = new Set(
@@ -690,11 +520,8 @@ const KNOWN_TYPES: ReadonlySet<string> = new Set(
 /**
  * Decode one frame of host JSON.
  *
- * @returns The typed message, or `undefined` when the host sent a well-formed
- *   frame whose `type` this build does not know. Throws on JSON that does not
- *   parse, on a frame with no `type`, and on a known `type` whose payload does
- *   not match its schema — all of which are host bugs, not forward
- *   compatibility.
+ * @returns The typed message, or `undefined` for an unknown `type`. Throws on
+ *   invalid JSON, a missing `type`, or a known `type` with a bad payload.
  */
 export const parseHostMessage = (text: string): HostMessageJson | undefined => {
   const envelope = envelopeSchema.parse(JSON.parse(text));

@@ -47,155 +47,95 @@ import {
 
 type Props = {
   /**
-   * How the window says a client no longer holds the keyboard.
-   *
-   * A browser window's keyboard is its page's, and its page is part of this
-   * one — so taking focus here is a client somewhere losing it, and there is
-   * nothing else in the tree that knows.
+   * Used to tell the host that no client holds the keyboard. The page lives in
+   * the shell's own window, so focusing it takes focus from any client.
    */
   domicile: DomicileClient;
-  /**
-   * Whether the pointer goes through this window to the page behind it.
-   *
-   * What lets the shell drag a window at all: the pointer over a client's
-   * surface belongs to the client, so the shell has to be given it back
-   * before it can be told where the window is being dragged to.
-   */
+  /** Whether the pointer passes through this window, as during a drag. */
   clickThrough: boolean;
   /**
-   * Whether a tab its container is showing is drawn over it. Nothing can be
-   * clicked in a page under another, so its guest taking focus is never the
-   * user reaching for it — see `onReach`.
+   * Whether another tab in its container covers it. A covered page cannot be
+   * clicked, so its guest taking focus is not a user reach (see `onReach`).
    */
   covered: boolean;
-  /** How it stacks: the window's own `z-index`, which the SDK reports. */
+  /** The window's `z-index`, which the SDK reports to the host. */
   depth: number;
-  /** Whether the user has hold of this window, which makes it see-through. */
+  /** Whether the user is dragging this window. */
   dragging: boolean;
-  /** Whether the user is working in this window, so it takes the keyboard. */
+  /** Whether the shell considers this window focused. */
   focused: boolean;
   /**
-   * The whole box this window's bar and contents span, which both of them turn
-   * about — see {@link scaledAbout}. `undefined` for a window that is not on
-   * screen, exactly as {@link Props.rect} is.
+   * The box spanning the title bar and contents; the transform origin (see
+   * {@link scaledAbout}). `undefined` when {@link Props.rect} is.
    */
   frame: Rect | undefined;
-  /**
-   * Whether this window fills the screen, which squares its corners and drops
-   * its edge: the screen's own are the only ones it has.
-   */
+  /** Whether this window is fullscreen, which removes its edge and corners. */
   fullscreen: boolean;
   /**
-   * What this window is doing that the page has to draw over time: arriving,
-   * leaving, or nothing at all.
+   * The window's current animation, if any.
    *
-   * A window that is leaving is drawn and nothing else. Its page goes on being
-   * shown — that is the point of drawing the window rather than something
-   * standing in for it — while the window itself asks for no keyboard, takes
-   * no pointer and is nothing a keyboard can reach.
+   * A leaving window keeps showing its page but requests no keyboard, takes
+   * no pointer and is inert.
    */
   motion: WindowMotion;
   /**
-   * Called when the page asks for this window to close — its own
-   * `window.close()`, or an extension's `chrome.tabs.remove`. The engine
-   * closes nothing and asks, in `WEBVIEW_CLOSE_EVENT`, so the window goes the
-   * way its Close button takes it.
+   * Called when the page asks to close the window (`window.close()` or an
+   * extension's `chrome.tabs.remove`). The engine only reports the request;
+   * see `WEBVIEW_CLOSE_EVENT`.
    */
   onClose: () => void;
   /**
-   * Called with the address this window was sent to, whenever the shell sends
-   * it somewhere.
-   *
-   * Every navigation the shell can see, which is not every navigation: the
-   * page inside is a guest in the browser process, and where a link or a
-   * redirect takes it is not reported back — the engine pushes the guest's
-   * history *availability* and whether it is *loading* onto the element, and
-   * nothing that names an address. So a tab named from this says where the
-   * user asked to go rather than where they ended up.
-   */
-  /**
-   * Called when it has played that motion all the way out.
-   *
-   * Which is how the desktop knows a window it has closed can be taken off the
-   * page. Rather than a timer: how long the motion takes is the stylesheet's,
-   * and a duration written in the shell as well is a second copy of it to keep
-   * in step.
+   * Called when the motion's animation ends, so a closed window can be
+   * removed. Uses the animation event so the duration lives only in CSS.
    */
   onMotionEnded: () => void;
+  /** Called with the page's URL each time the page reports a new one. */
   onNavigate: (url: string) => void;
   /**
-   * Called with the address the page inside this window asked to open in a
-   * window of its own — a link with `target="_blank"`, a `window.open`.
-   *
-   * A second window, which is the desktop's to open and not this one's: this
-   * component draws one window, and where another goes is the layout's
-   * question. The browser process opens none either — a guest cannot be handed
-   * a window content made — so an address that arrives here and is dropped is
-   * a `target="_blank"` that does nothing at all.
+   * Called with a URL the page asked to open in a new window
+   * (`target="_blank"`, `window.open`). The engine opens nothing, so ignoring
+   * this makes such links do nothing.
    */
   onOpenWindow: (url: string) => void;
   /**
-   * Called with the window an extension asked for — a
-   * `chrome.windows.create` with a popup — when this is the window the user
-   * was last working in, which is the one the engine asks.
-   *
-   * The desktop's to open, for {@link Props.onOpenWindow}'s reason. Dropped,
-   * it is an extension's "Unlock" that does nothing, and a `windows.create`
-   * that never answers.
+   * Called with an extension's `chrome.windows.create` popup request. The
+   * engine sends it to the last focused window. Ignoring it leaves the
+   * extension's `windows.create` call unanswered.
    */
   onOpenPopupWindow: (request: PopupWindowRequest) => void;
   /**
-   * Called when the focus lands anywhere in this window — the page, the
-   * address bar — without this window having put it there.
+   * Called when the user moves focus into this window (page or address bar).
+   * Fires for every click, since a click raises the window even when it is
+   * already focused.
    *
-   * A press on the chrome is the frame's to report — see `WindowFrame` — but a
-   * click inside the *page* is one the shell never sees: the view hosts a
-   * browsing context of its own, so no pointer event crosses back out of it,
-   * and neither does the focus that click takes — Blink dispatches no focus
-   * event across a remote frame's boundary, and `focusin` fires only while the
-   * page is focused, which is exactly what a guest taking focus ends. So the
-   * element says so itself, in {@link WEBVIEW_GUEST_FOCUS_EVENT}, and the
-   * window listens for that as well as for focus reaching its own chrome from
-   * the keyboard.
-   *
-   * Reported for every click, including one in the window the user is already
-   * in: focus follows the cursor here, so the pointer has already made this
-   * the active window, and a click is still what raises it.
+   * Clicks inside the guest page send no pointer or focus events to this
+   * document, so the element reports them with
+   * {@link WEBVIEW_GUEST_FOCUS_EVENT}.
    */
   onReach: () => void;
   /**
-   * The id of the extension's window this is, to `chrome.windows`, or
-   * `undefined` for a browser window of the user's own — see
-   * {@link Props.onOpenPopupWindow}.
+   * The `chrome.windows` id for an extension popup window, or `undefined` for
+   * a normal browser window (see {@link Props.onOpenPopupWindow}). Popup
+   * windows have no address bar, as in Chrome.
    *
-   * Read by the engine once, as the view asks for its guest, so it is the
-   * view's from its first render and never changes: a view made again for it
-   * would be a second guest. And an extension's window has no address bar,
-   * which is how Chrome draws one: it is the extension's page, not somewhere
-   * the user browses from.
+   * The engine reads it once when creating the guest, so it must not change.
    */
   popupWindow?: number | undefined;
   /**
-   * Where the window's contents go, or `undefined` when it is not on screen
-   * at all — on another workspace, or inside a container behind a tab.
+   * The contents' box, or `undefined` when off screen (another workspace, or
+   * behind a tab).
    */
   rect: Rect | undefined;
-  /**
-   * The shuffle it is playing while it trades places with another float in
-   * the stack — see `shuffledBy` — or `undefined` while it is not.
-   */
+  /** The restack shuffle in progress, if any. See `shuffledBy`. */
   restack?: Restack | undefined;
-  /** Where the window starts. The view owns navigation from there. */
+  /** The initial URL. The view owns navigation after that. */
   src: string;
 };
 
 /**
- * A browser window: an address bar over a `<webview>`.
- *
- * The window is ordinary chrome, built from the same component library as the
- * rest of it — so the controls a browser needs cost nothing to style and match
- * every other control in the shell. The view element owns the navigation
- * itself; this is the chrome the user drives it with.
+ * A browser window: an address bar over a `<webview>`. See
+ * `docs/SHELL-BROWSER-WINDOWS.md` and
+ * `packages/shell-manganese/docs/FOCUS-INTERNALS.md`.
  */
 export const BrowserWindow = ({
   clickThrough,
@@ -218,78 +158,52 @@ export const BrowserWindow = ({
   restack,
   src,
 }: Props) => {
-  // A window the desktop no longer has is being drawn and nothing else. What
-  // it says about the keyboard and what it does about it part company here:
-  // its bar goes on saying the keyboard was in it, which is what keeps the
-  // window from changing while the user watches it go, and it stops reaching
-  // for the keyboard itself — which has moved on to whatever is left.
+  // A leaving window still draws as focused but stops taking the keyboard,
+  // which has moved to the next window.
   const leaving = isLeaving(motion);
   const holdsKeyboard = focused && !leaving;
-  // `null` rather than `undefined` because that is what React's ref API hands
-  // a callback ref on unmount.
+  // `null` because React passes `null` to a callback ref on unmount.
   const [view, setView] = useState<HTMLWebViewElement | null>(null);
-  // The whole window, which is what says whether the keyboard is in it: the
-  // page is one half of this element's subtree and the chrome over it is the
-  // other. A ref rather than state like the view above, because nothing reads
-  // it as it arrives — it is read inside the effects, where the render that
-  // set it has already been committed.
+  // The whole window, used to check whether focus is inside it. A ref because
+  // only effects read it.
   const element = useRef<HTMLElement>(null);
-  // Where the shell last SENT the window, which is not where the page is —
-  // it is what the bar shows for the moment between asking for a page and the
-  // browser reporting one, the way any browser shows a pending address. The
-  // page itself comes from `useShownPage` below.
+  // The URL the shell last navigated to. The bar shows it until the page
+  // reports its own URL.
   const [sent, setSent] = useState(src);
-  // AND WHERE THE PAGE ACTUALLY IS, with the browser's verdict on the
-  // connection behind it. A link followed, a redirect taken, a form posted:
-  // none of them is a navigation the shell made, and all of them move this.
+  // The page's actual URL and connection security, including navigations
+  // the shell did not start (links, redirects, form posts).
   const shown = useShownPage(view);
   const { canGoBack, canGoForward } = useHistoryAvailability(view);
   const loading = useLoading(view);
   const zoom = useZoom(view);
-  // How many times the user has zoomed this window, which is what puts the
-  // zoom indicator up afresh each time — see `ZoomIndicator`.
+  // Zoom count; each change re-shows the zoom indicator (see `ZoomIndicator`).
   const [zoomsAnnounced, setZoomsAnnounced] = useState(0);
-  // Whether the focus arriving in the page is the focus this window is putting
-  // there, which is the one thing about it the announcements cannot say: the
-  // element says a guest took focus whichever route the focus came by, and
-  // `focusin` says as little. Held across the call rather than across a render,
-  // because that is the span it has to tell apart — the engine dispatches from
-  // inside `focus()`, and so does the DOM.
+  // True while `focusOwn` is calling `focus()`. Focus events fire
+  // synchronously inside that call, so this marks them as not user reaches.
   const focusing = useRef(false);
-  // THE FILE THE PAGE IS WAITING ON, which is this window's to pick: the
-  // engine draws no dialog of its own and refuses a question nobody takes —
-  // see `useFileRequest`.
+  // A pending file request from the page. The engine draws no dialog; see
+  // `useFileRequest`.
   const asking = useFileRequest(view);
-  // The picker's box, while there is a picker: where this window's keyboard
-  // goes instead of the page, which is waiting on it. `null` for the ref API's
-  // reason, as the view's is.
+  // The file picker's input. While open it takes the window's keyboard.
   const [pickerBox, setPickerBox] = useState<HTMLInputElement | null>(null);
-  // WHETHER THE FIND BAR IS UP, and its box while it is: where the keyboard
-  // goes when the user asks to find, and back to the page when they are done.
-  // `null` for the ref API's reason, as the picker's is.
+  // Whether the find bar is open, and its input.
   const [finding, setFinding] = useState(false);
   const [findBox, setFindBox] = useState<HTMLInputElement | null>(null);
   const found = useFindResult(view);
 
-  // Every focus this window puts in its own page — or in the picker over it —
-  // goes through here, because each of them comes back as the announcement a
-  // click there makes and the window has to spend the ones it caused.
-  // Bracketing the call is what tells them apart: the element says so from
-  // inside `focus()`, and so does the DOM.
+  // Focuses an element in this window without reporting it as a user reach.
+  // All programmatic focus here must go through this.
   const focusOwn = useCallback((target: HTMLElement) => {
     focusing.current = true;
     target.focus();
     focusing.current = false;
   }, []);
 
-  // The click in the page, which is the half of this window the shell cannot
-  // see: the element dispatches this when its guest takes focus, because
-  // nothing else about that click leaves the guest — see `onReach`.
+  // Reports a click in the guest page (see `onReach`).
   //
-  // NOT FOR A PAGE UNDER ANOTHER TAB. The engine hands the focus back to the
-  // guest that last had it when the page gets the keyboard back from a client
-  // — which the launcher opening over one does — and announces that exactly
-  // as it does a click. Answered, it raised the tab behind.
+  // Ignored for a covered tab. When the page regains the keyboard (such as
+  // when the launcher opens), the engine refocuses the last guest and fires
+  // this event as if clicked, which would raise the hidden tab.
   useEffect(() => {
     if (view === null) {
       return undefined;
@@ -306,9 +220,8 @@ export const BrowserWindow = ({
     }
   }, [covered, onReach, view]);
 
-  // An extension asking for this window in front — `chrome.tabs.update` with
-  // `active`, or `chrome.windows.update` with `focused` — which is a reach the
-  // user did not make: the engine raises nothing, and asks. See
+  // An extension asked to raise this window (`chrome.tabs.update` with
+  // `active`, or `chrome.windows.update` with `focused`). See
   // `WEBVIEW_FOCUS_REQUEST_EVENT`.
   useEffect(() => {
     if (view === null) {
@@ -321,7 +234,7 @@ export const BrowserWindow = ({
     }
   }, [onReach, view]);
 
-  // The page asking to be closed — see `onClose`.
+  // See `onClose`.
   useEffect(() => {
     if (view === null) {
       return undefined;
@@ -333,12 +246,7 @@ export const BrowserWindow = ({
     }
   }, [onClose, view]);
 
-  // A window the page asked for, which is the one thing this window hears from
-  // its page that is not about this window: a link with `target="_blank"` opens
-  // a second browser window, and where that goes is the desktop's to decide.
-  // The engine reports the address rather than opening anything — see
-  // `WEBVIEW_NEW_WINDOW_EVENT` — so a shell that ignores this is a desktop
-  // where such a link does nothing.
+  // See `onOpenWindow` and `WEBVIEW_NEW_WINDOW_EVENT`.
   useEffect(() => {
     if (view === null) {
       return undefined;
@@ -353,11 +261,8 @@ export const BrowserWindow = ({
     }
   }, [onOpenWindow, view]);
 
-  // A window an extension asked for, which is the same question from further
-  // away: the engine heard it from an extension rather than from this page,
-  // and asks the window the user last worked in because a question has to be
-  // dispatched somewhere. Copied off the event so what reaches the desktop is
-  // the ask rather than the event it came in.
+  // See `onOpenPopupWindow`. Copies the fields so the callback gets a plain
+  // object rather than the event.
   useEffect(() => {
     if (view === null) {
       return undefined;
@@ -377,13 +282,11 @@ export const BrowserWindow = ({
     }
   }, [onOpenPopupWindow, view]);
 
-  // WHAT A BROWSER'S KEYS AND ITS ZOOM DO, in one place, because three
-  // different things ask for them: a chord pressed in the address bar, a chord
-  // the page left alone and the engine handed back, and the buttons.
+  // Runs a browser command from a chord in the address bar, a chord the page
+  // did not handle, or a button.
   //
-  // A zoom is a step from wherever the element says the page IS, read at the
-  // moment of the press rather than from a render: the zoom is the site's, so
-  // another window on the same site can have moved it since.
+  // Zoom steps from `view.zoom` at press time, not render state, because zoom
+  // is per site and another window may have changed it.
   const run = useCallback(
     (command: BrowserCommand) => {
       if (view === null) {
@@ -394,9 +297,8 @@ export const BrowserWindow = ({
             view.goBack();
             break;
           }
-          // A bar already up takes the keyboard again, with what it holds
-          // selected so the next thing typed replaces it — Chrome's Ctrl+F.
-          // One coming up takes it as it mounts; see the effect below.
+          // An open bar refocuses with its text selected, as in Chrome. A new
+          // bar focuses on mount; see the effect below.
           case BrowserCommand.Find: {
             setFinding(true);
             if (findBox !== null) {
@@ -434,19 +336,16 @@ export const BrowserWindow = ({
     [findBox, focusOwn, view],
   );
 
-  // The find bar takes the keyboard as it comes up: the user asked to find,
-  // and what they type next is what to find.
+  // Focuses the find bar when it opens.
   useEffect(() => {
     if (findBox !== null) {
       focusOwn(findBox);
     }
   }, [findBox, focusOwn]);
 
-  // THE PAGE'S HALF OF THE KEYBOARD, which sends nothing out on its own: a key
-  // pressed in a guest never reaches this document. The engine hands back the
-  // chords the page left alone, and Ctrl and the wheel over the page as a
-  // request, so a site that binds a chord for itself keeps it — Chrome's
-  // order. See `WEBVIEW_GUEST_KEYDOWN_EVENT`.
+  // Keys pressed in the guest never reach this document. The engine forwards
+  // chords the page did not handle, and Ctrl+wheel as zoom requests, so sites
+  // keep their own bindings as in Chrome. See `WEBVIEW_GUEST_KEYDOWN_EVENT`.
   useEffect(() => {
     if (view === null) {
       return undefined;
@@ -474,35 +373,15 @@ export const BrowserWindow = ({
     }
   }, [run, view]);
 
-  // The window the user is working in takes the keyboard, and a browser
-  // window's belongs to its page rather than to the chrome around it.
+  // Gives the keyboard to the focused window's page.
   //
-  // The host has to be told as well, which the SDK does for an `<app>` and
-  // cannot do for this element. There is one seat: the compositor holds `wl_keyboard`
-  // focus on whichever client the chrome last named, and a browser window names
-  // none — its page is inside the chrome's own window. Without `focusChrome`
-  // the focus a terminal was given stays with it while the user types into a
-  // site, and every key they press is delivered to a window they have switched
-  // away from.
-  //
-  // The SDK's `focusChrome` rather than the client's, because the page routes
-  // keys too: the client's moves the seat and leaves the SDK forwarding every
-  // key this document hears to the client it last named. The guest hides that
-  // — the document hears none of its keys — until something of the page's own
-  // takes typing, like the launcher's box, and every letter goes elsewhere.
-  //
-  // THE PAGE IS NOT WHERE IT GOES WHEN THIS WINDOW ALREADY HAS IT. A press in
-  // the address bar is a reach like any other — it is what makes this the
-  // window being worked in — so this runs on the focus that same press has
-  // just taken, and a window that focused its page here would spend it: the
-  // caret lands in the bar and is pulled into the page a moment later, which
-  // is an address bar that cannot be typed into at all. What the user reached
-  // for is already in this window, so there is nothing for this to move.
-  //
-  // A PICKER IS THE EXCEPTION, AND TAKES THE KEYBOARD WHEREVER IN THIS WINDOW
-  // IT IS. The page is waiting on it, so a keyboard left in the page or in the
-  // bar is typing into something that cannot go on until the picker is
-  // answered. Once it is, the page has it back.
+  // - Calls the SDK's `focusChrome` so the compositor stops sending keys to
+  //   the last client and the SDK stops forwarding to it. The SDK does this
+  //   for `<app>` but not for `<webview>`.
+  // - Skips the page if focus is already in this window. Otherwise a click in
+  //   the address bar would have its focus pulled into the page.
+  // - Focuses the file picker instead while one is open, since the page is
+  //   waiting on it.
   useEffect(() => {
     if (holdsKeyboard && view !== null) {
       focusChrome(domicile);
@@ -514,34 +393,21 @@ export const BrowserWindow = ({
     }
   }, [domicile, focusOwn, holdsKeyboard, pickerBox, view]);
 
-  // AND GIVES IT BACK WHEN THE USER MOVES ON, which nothing else in the
-  // desktop can do for this window. Every key the compositor delivers arrives
-  // in this document first and is forwarded from here to whichever client the
-  // shell named — and a key pressed while a guest holds the page's focus never
-  // arrives at all, because it is delivered inside a browsing context of its
-  // own and the document around it hears nothing. Moving the seat does not
-  // touch that: `focusApp` tells the compositor where to send what this page
-  // forwards, and this page is forwarding nothing. So a browser window left
-  // holding the focus is a desktop where no other window can be typed into —
-  // open a browser window and every terminal after it goes deaf.
+  // Releases focus when the window loses it. The SDK forwards keys from this
+  // document to clients, but keys sent to a focused guest never reach the
+  // document. A guest left focused would block typing into every client.
   useEffect(() => {
     if (!holdsKeyboard) {
       releaseFocus(element.current);
     }
   }, [holdsKeyboard]);
 
-  // And keeps it, which is a separate job: the effect above runs when this
-  // window becomes the one being worked in, and the chrome can take the focus
-  // off the page long after that without this window hearing anything. Closing
-  // another window is the case that costs the user their keyboard — see
-  // `useReclaimFocus`.
-  //
-  // Into the picker while there is one, for the reason above.
+  // Restores focus if chrome takes it later, such as when another window
+  // closes. See `useReclaimFocus`. Targets the picker while one is open.
   useReclaimFocus<HTMLElement>(pickerBox ?? view, holdsKeyboard, focusOwn);
 
-  // Every control here drives the view element, which is rendered by this
-  // component and so is attached by the time anyone can press one. A press
-  // that finds no view is a wiring bug, not a case to absorb quietly.
+  // The view is attached before any control can be pressed, so a missing view
+  // is a bug.
   const withView = (command: (view: HTMLWebViewElement) => void): void => {
     if (view === null) {
       throw new Error("browser window: no view to drive");
@@ -554,21 +420,17 @@ export const BrowserWindow = ({
     withView(command);
   };
 
-  // Focus arriving anywhere in this window is the user starting to work in it.
+  // Reports focus entering this window as a user reach.
   const reach = (event: FocusEvent) => {
-    // Whichever window was the active one: focus follows the cursor here, so
-    // the pointer made this window the active one on its way in and a click is
-    // still what raises it. The reaches that are not the user's are the focus
-    // this window gives its own page — see `focusing` — and a page under
-    // another tab taking it back, which the engine reports as a `focusin` on
-    // the view as well as in its own event — see the effect above.
+    // Skips focus from `focusOwn` and a covered tab's guest regaining focus,
+    // which also fires `focusin` on the view.
     if (!(focusing.current || (covered && event.target === view))) {
       onReach();
     }
   };
 
-  // Put the find bar away and the keyboard back in the page it was finding in,
-  // with the match it was on still selected — Escape in Chrome's.
+  // Closes the find bar and refocuses the page, keeping the current match
+  // selected, as Escape does in Chrome.
   const stopFinding = () => {
     withView((loaded) => {
       loaded.stopFinding();
@@ -579,32 +441,19 @@ export const BrowserWindow = ({
 
   const navigate = (url: string) => {
     withView((loaded) => {
-      // The attribute rather than the property: `src` is reflected, so on the
-      // engine the two are one operation, and the attribute is the half that
-      // exists whatever this page is running on. On a browser with no
-      // `<webview>` the property would be a value hung off an unknown element
-      // and the DOM would go on saying the address the window opened at.
+      // The attribute works without engine support; on a browser without
+      // `<webview>` the property would not update the DOM.
       loaded.setAttribute("src", url);
       setSent(url);
     });
   };
 
-  // WHAT THE WINDOW IS CALLED FOLLOWS THE PAGE, not the ask. The desktop names
-  // a browser window after the site in it, and before the browser reported its
-  // own address the only thing there was to name it after was wherever the
-  // shell had last sent it — so a window whose page had followed a link went on
-  // wearing the name of the page the user left.
+  // Reports the page's actual URL, so the window is named after the page
+  // shown. An effect because most navigations (links, redirects) do not go
+  // through `navigate`.
   //
-  // An effect rather than a call inside `navigate`, because most of what moves
-  // a page is not `navigate`: the shell hears about a link the same way it
-  // hears about a redirect, which is the element reporting a new page.
-  //
-  // AND A PAGE IS REPORTED ONCE, WHICH THE DEPENDENCIES ALONE WILL NOT DO. The
-  // desktop builds `onNavigate` inline, so it is a new function on every
-  // render and this effect runs on every render — and a second report of the
-  // same page renames the window, which renders it again, which reports again.
-  // The ref is what makes the page rather than the callback the thing that
-  // decides, so the dependency array can go on telling the truth.
+  // The ref reports each URL once. `onNavigate` is a new function each
+  // render, and a repeat report would re-render and loop.
   const reported = useRef("");
   useEffect(() => {
     if (shown.url !== "" && shown.url !== reported.current) {
@@ -614,46 +463,40 @@ export const BrowserWindow = ({
   }, [onNavigate, shown.url]);
 
   return (
-    // biome-ignore lint/a11y/noNoninteractiveElementInteractions: a window is not a control and is not being made into one — these say the user moved the focus into it, which is what raises a window in any desktop, and answer a browser's chords pressed in its chrome
+    // biome-ignore lint/a11y/noNoninteractiveElementInteractions: a window is not a control; focus raises the window, and keydown runs browser chords pressed in its chrome
     <section
       aria-label="Browser"
       className={cx(
         windowStyles,
         browserStyles,
-        // The bar above carries the top edge; this picks up the other three.
-        // Neither a line nor rounded corners around the screen's own edge.
+        // The title bar draws the top edge. Fullscreen has no edge or corners.
         !fullscreen && edgeStyles,
         !fullscreen && bottomCornerStyles,
         noTopEdgeStyles,
         movingStyles({ motion }),
         (clickThrough || leaving) && clickThroughStyles,
-        // A dragged window is written at a new box on every pointer move, so
-        // it takes the box it is given rather than easing towards it. Its
-        // colors go on easing either way — see `settlingStyles`.
+        // A dragged window gets a new box on every pointer move, so it skips
+        // easing. Colors still ease; see `settlingStyles`.
         dragging && draggingStyles,
         settlingStyles({ dragging }),
       )}
-      // What it is doing, as an attribute as well as an animation: the
-      // desktop's own state is worth being able to read off the element.
+      // Exposes the motion on the element for tests and debugging.
       data-motion={motion}
       hidden={rect === undefined}
-      // Nothing a keyboard can reach, for as long as it is only being drawn.
+      // A leaving window is unreachable by keyboard.
       inert={leaving}
-      // Its own rather than one of the chrome's on its way up the document —
-      // the spinner in the address bar turns for as long as a page is
-      // arriving, and each turn of it ends.
+      // Ignores animations bubbling up from descendants, such as the address
+      // bar's loading spinner.
       onAnimationEnd={(event) => {
         if (event.target === event.currentTarget) {
           onMotionEnded();
         }
       }}
-      // Focus rather than the press, which is the frame's: reaching the address
-      // bar with the keyboard is no pointer event. What happens in the page
-      // arrives on the element instead — see `onReach`, and the effect above.
+      // Focus rather than press, so keyboard focus counts too. Page clicks
+      // arrive through `WEBVIEW_GUEST_FOCUS_EVENT`; see `onReach`.
       onFocus={reach}
-      // The chrome's half of the keyboard: the same chords, pressed in the
-      // address bar. Taken from the field once answered, so Ctrl+R in the bar
-      // is a reload and not a keystroke the field goes on to do something with.
+      // Browser chords pressed in the address bar. `preventDefault` keeps the
+      // input from also handling them.
       onKeyDown={(event) => {
         const command = browserCommandFor(event);
         if (command !== undefined) {
@@ -662,9 +505,7 @@ export const BrowserWindow = ({
         }
       }}
       ref={element}
-      // Inline because the box is a runtime number and Panda reads literals;
-      // `window-styles` owns everything static. `undefined` is a window with no
-      // rectangle, which is a window that is not on screen.
+      // Inline because the box is a runtime value Panda cannot extract.
       style={
         rect === undefined || frame === undefined
           ? undefined
@@ -710,16 +551,14 @@ export const BrowserWindow = ({
         />
       )}
       {/*
-        The page, and the find bar and the picker it is waiting on over it: a
-        box of their own so either covers the page and leaves the bar above it
-        alone.
+        Wraps the page so the find bar and file picker cover the page but not
+        the address bar.
       */}
       <div className={pageStyles}>
         <webview
           className={viewStyles}
-          // As an attribute on the first render, which React writes before it
-          // puts the element in the document — the one moment the engine reads
-          // it. See `popupWindow`.
+          // React sets attributes before insertion, when the engine reads it.
+          // See `popupWindow`.
           popupwindow={popupWindow?.toString()}
           ref={setView}
           src={src}
@@ -738,7 +577,7 @@ export const BrowserWindow = ({
         )}
         {asking !== undefined && (
           <FilePicker
-            // A picker per question, so a second one starts on an empty box.
+            // A new picker per request, so each starts empty.
             key={asking.serial}
             ref={setPickerBox}
             request={asking}
@@ -750,30 +589,21 @@ export const BrowserWindow = ({
 };
 
 /**
- * Whether the keyboard is already somewhere in this window.
+ * Whether focus is anywhere in this window, page or chrome.
  *
- * Either half counts, and the page counts because of the fork: a `<webview>`
- * whose guest has the focus is the embedder document's `activeElement` — that
- * is what patch 0011 is for — so a window whose page is being typed into
- * answers yes here the same way one whose address bar is answers yes.
- *
- * `null` for the window rather than `undefined` because that is what a React
- * ref holds before it is attached, and a window that is not in the document
- * holds nothing.
+ * The engine fork makes a `<webview>` with a focused guest the document's
+ * `activeElement`, so page focus counts. `frame` is `null` before the ref
+ * attaches.
  */
 const holdsFocus = (frame: HTMLElement | null): boolean =>
   frame?.contains(document.activeElement) === true;
 
 /**
- * Take this document's focus off the window, if the window is holding it.
+ * Blurs the focused element if it is in this window.
  *
- * A blur rather than a focus of something else, because the document is where
- * the keyboard belongs when no window holds it: the SDK listens for keys on
- * `document` and sends them to whichever client the shell named, and the page
- * a guest was typing into cannot hear them. Blink hands the embedder's own
- * frame the focus on the way out — `Element::blur` focuses the document's
- * frame as it clears the element — which is what moves the browser process's
- * focused frame tree back off the guest's.
+ * Blurring returns focus to the document, where the SDK listens for keys to
+ * forward to clients. Blink's `Element::blur` also moves the browser process's
+ * focused frame off the guest.
  */
 const releaseFocus = (frame: HTMLElement | null): void => {
   const held = document.activeElement;
@@ -783,18 +613,15 @@ const releaseFocus = (frame: HTMLElement | null): void => {
 };
 
 const browserStyles = flex({
-  // Its own, because `windowStyles` paints none: this window draws a page
-  // rather than standing in for a client's surface, so it wants a ground.
+  // Unlike a client surface, a page needs a background, and `windowStyles`
+  // sets none.
   backgroundColor: "background",
   direction: "column",
-  // So the page in the view is clipped to the frame's rounded bottom rather
-  // than drawn square over it.
+  // Clips the page to the frame's rounded bottom corners.
   overflow: "hidden",
 });
 
-// The page's box takes whatever height the address bar leaves, and is what
-// the picker over the page is positioned in. A flex column of its own so the
-// view inside it stretches the same way.
+// Fills the height below the address bar and positions the overlays.
 const pageStyles = flex({
   direction: "column",
   flex: 1,
@@ -803,16 +630,10 @@ const pageStyles = flex({
   position: "relative",
 });
 
-// The view takes the whole of the page's box, which it has to be told to do:
-// a `<webview>` is a replaced element with an intrinsic size, so one left to
-// itself is 300x150 inside however tall a window it is put in.
-//
-// `min-block-size: 0` because `auto` on a flex item refuses to shrink below
-// that intrinsic size, which is what would put the bottom of the page under the
-// bottom of the window.
-//
-// The element's own `display` is left alone on purpose: the engine gives it
-// one, and a flex item is blockified whatever it says.
+// A `<webview>` is a replaced element with a 300x150 intrinsic size, so it
+// must be stretched. `min-block-size: 0` lets it shrink below that size so
+// the page does not overflow the window. `display` is unset because flex items
+// are blockified anyway.
 const viewStyles = css({
   borderStyle: "none",
   flex: 1,
@@ -820,21 +641,15 @@ const viewStyles = css({
   minInlineSize: 0,
 });
 
-// A browser window meets its title bar at the top, and the seam between the
-// two is not a line to draw twice.
+// The title bar draws the top edge.
 const noTopEdgeStyles = css({ borderBlockStartWidth: 0 });
 
 /**
- * The address the bar shows: where the page is, or where it was sent while
- * nothing has arrived there yet.
+ * The address bar's URL: the page's URL, or the pending one before the first
+ * commit.
  *
- * A BROWSER SHOWS A PENDING ADDRESS, which is what the fallback is for and not
- * a gap being papered over. Between Enter and the first commit there is no
- * page to report, and a bar that blanked for that span would flicker on every
- * navigation. What keeps the fallback honest is that it moves no lock with it:
- * the security beside it is the browser's, and the browser says nothing about
- * a page it has not committed — so a pending address is shown with the
- * indicator that says exactly that.
+ * Avoids a blank bar during navigation. The security indicator still comes
+ * from the browser, so a pending URL shows no lock.
  */
 const addressOf = (shown: string, sent: string): string =>
   shown === "" ? sent : shown;

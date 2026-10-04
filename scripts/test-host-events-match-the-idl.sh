@@ -1,26 +1,13 @@
 #!/usr/bin/env bash
-# The engine's event interfaces and the SDK's types for them, compared.
+# Checks that the SDK event types in `domicile-host.ts` declare the same
+# fields as the engine's WebIDL event interfaces.
 #
-# `navigator.domicile` fires five typed event interfaces. What they carry is
-# declared twice: once in WebIDL, where Blink generates the bindings from it,
-# and once in `@domicile-desktop/sdk`'s `domicile-host.ts`, where a shell reads
-# it. Nothing makes the two agree, and neither half can notice on its own:
+# Nothing else keeps them in sync:
+#   - an IDL attribute missing from the SDK can only be read with a cast
+#   - an SDK field with no IDL attribute type-checks but reads `undefined`
 #
-#   an attribute added to the IDL and not to the SDK is a value a shell cannot
-#     see without casting -- which is the thing DATA.md forbids, arrived at by
-#     the SDK being out of date rather than by anyone choosing it
-#   a field in the SDK that no IDL declares is worse: it type-checks, it reads
-#     `undefined` at runtime, and arithmetic on it is `NaN` rather than an error
-#
-# The second is not hypothetical. The SDK carried a `hop` window for a stage
-# nothing ever recorded into, and the shell printed `ipc_ms=0` every interval
-# for as long as it existed -- a measurement, to whoever read the log.
-#
-# Names only, not types. WebIDL's `DOMHighResTimeStamp` and TypeScript's
-# `number` are the same thing said twice, and a script that tried to decide
-# which spellings correspond would be a worse version of the compiler. What it
-# can say for certain is that a field exists on both sides or on neither, which
-# is the failure that actually happens.
+# Compares names only. Mapping WebIDL types to TypeScript types is the
+# compiler's job.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -36,18 +23,14 @@ fail() {
   FAILED=$((FAILED + 1))
 }
 
-# `readonly attribute <type> <name>;` -- the last word before the semicolon,
-# sorted, one per line. Nullability and array brackets ride on the type, which
-# is not read here.
+# Attribute names from `readonly attribute <type> <name>;` lines, sorted.
 idl_attributes() {
   sed -n 's/^[[:space:]]*readonly attribute[[:space:]].*[[:space:]]\([A-Za-z0-9_]*\);.*/\1/p' \
     "$1" | sort -u
 }
 
-# The property names of one exported type in `domicile-host.ts`. The block runs
-# from `export type <Name> = Event & {` to the `};` at column zero, which is how
-# every type in that file is written; a property is `readonly <name>:` inside
-# it.
+# Property names of `export type <Name> = Event & {` in `domicile-host.ts`.
+# Assumes the block ends at a `};` in column zero.
 sdk_fields() {
   awk -v name="$1" '
     $0 == "export type " name " = Event & {" { inside = 1; next }
@@ -57,10 +40,8 @@ sdk_fields() {
     sort -u
 }
 
-# THE POSITIVE FIRST: a pair that matched nothing on both sides agrees
-# vacuously, which is how a renamed file or a reformatted type declaration
-# turns this into a green no-op. Both sides must be non-empty before their
-# agreement means anything.
+# Both sides must be non-empty first. Otherwise a renamed file or reformatted
+# type makes both lists empty and the comparison passes.
 compare() { # interface, idl file
   local interface="$1" idl="$IDL_DIR/$2" declared read_back only_idl only_sdk
   [ -f "$idl" ] || { fail "$interface is declared in WebIDL" "no $idl"; return; }
@@ -79,8 +60,6 @@ compare() { # interface, idl file
     return
   fi
 
-  # Comma separated and with no trailing space, because this string is read in
-  # a sentence rather than by anything.
   only_idl="$(comm -23 <(printf '%s\n' "$declared") <(printf '%s\n' "$read_back") | paste -sd, -)"
   only_sdk="$(comm -13 <(printf '%s\n' "$declared") <(printf '%s\n' "$read_back") | paste -sd, -)"
 

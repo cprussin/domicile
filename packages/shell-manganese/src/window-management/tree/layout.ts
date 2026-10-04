@@ -1,12 +1,10 @@
-// `splith`, `splitv`, `layout tabbed`, `layout stacking` and `layout toggle
-// split`: how the container around the focus is arranged.
+// Layout commands: `splith`, `splitv`, `layout tabbed`, `layout stacking` and
+// `layout toggle split`.
 //
-// Which container that is follows sway: a split wraps whatever the focus is
-// pointed at, and a layout rearranges the container the focus is *in* — its
-// parent, where the focus is a window, and itself where `focus parent` has
-// selected one. A workspace holding a single window has no container at all,
-// so a layout command gives it one, the way sway's workspace container is
-// always there.
+// As in sway, a split wraps the focused node, and a layout changes the
+// container the focus is in (the node itself if `focus parent` selected a
+// container). A lone window gets a container, since sway always has a
+// workspace container.
 
 import type { Axis } from "../direction";
 import type { LayoutNode } from "./node";
@@ -15,13 +13,13 @@ import { nodeAt, replacedAt } from "./path";
 import type { Tiling } from "./tiling";
 import { focusPathOf, withCommandsOn } from "./tiling";
 
-/** `splith` / `splitv`: the focus wrapped in a container of one. */
+/** `splith` / `splitv`: wraps the focus in a one-child container. */
 export const split = (tiling: Tiling, axis: Axis): Tiling =>
   rearranged(tiling, (root, path) =>
     replacedAt(root, path, (node) => Node.Container(splitFor(axis), [node])),
   );
 
-/** `layout tabbed` / `layout stacking`: the container around the focus. */
+/** `layout tabbed` / `layout stacking` on the container around the focus. */
 export const laidOut = (tiling: Tiling, layout: Layout): Tiling =>
   rearranged(tiling, (root, path) => relaid(root, path, () => layout));
 
@@ -33,9 +31,8 @@ export const splitToggled = (tiling: Tiling): Tiling =>
     ),
   );
 
-// The container the focus is in, given a new layout. Where the focus is a
-// window with no container of its own — a workspace holding one window — it
-// gets one, which is the container sway's workspace always has.
+// Gives the container around the focus a new layout, creating one for a lone
+// window.
 const relaid = (
   root: LayoutNode,
   path: readonly number[],
@@ -64,9 +61,7 @@ const relaid = (
         ),
       );
     } else {
-      // A workspace of one window: the layout it is given is the container it
-      // did not have, and `SplitH` is what a toggle reads as the layout it was
-      // not in.
+      // A lone window gets a new container. A toggle treats it as `SplitH`.
       return replacedAt(root, parent, (node) =>
         Node.Container(into(Layout.SplitH), [node]),
       );
@@ -74,11 +69,9 @@ const relaid = (
   }
 };
 
-// Every command here changes the shape around the focus and none of them move
-// it, so each is the same two steps: edit the tree, then point the commands
-// back at what they were on — the chain through it is a level longer or
-// shorter than it was. At what they were on rather than at the window inside
-// it, because a split of a selected container leaves that container selected.
+// Edits the tree, then re-points the commands at the same node, whose depth
+// may have changed. Re-points at the node, not its window, so a split keeps a
+// selected container selected.
 const rearranged = (
   tiling: Tiling,
   into: (root: LayoutNode, path: readonly number[]) => LayoutNode,

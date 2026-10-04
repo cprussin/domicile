@@ -1,26 +1,15 @@
 #!/usr/bin/env bash
-# Whether logind owns the console, and whether anything asks it to switch.
+# Checks that logind owns the console and that the desktop asks logind to
+# switch VTs.
 #
-# TWO HALVES, AND ONLY ONE OF THEM EXISTED. `Ctrl+Alt+F<n>` on a tty did
-# nothing at all, because `org.freedesktop.login1.Session.TakeControl` --
-# which patch `0020` calls, and must, since no ACL covers a keyboard -- puts
-# the VT in `K_OFF`, `KD_GRAPHICS` and `VT_PROCESS` itself. The three strings
-# are adjacent in `session_prepare_vt` and readable in any shipped
-# `systemd-logind`. So the kernel's own chord handling is off from the moment
-# the desktop takes its input, and the only process that can start a switch is
-# this one.
+# `Session.TakeControl` puts the VT in `K_OFF`, `KD_GRAPHICS` and
+# `VT_PROCESS`, so the kernel ignores `Ctrl+Alt+F<n>` and the desktop must
+# request the switch itself. A second `VT_SETMODE` silently replaces logind's
+# handshake, after which logind never releases the console. Like other Wayland
+# compositors, the desktop uses no VT ioctls and follows the session instead.
 #
-# AND THE OTHER HALF WAS FIGHTING logind FOR THE VT. A second `VT_SETMODE`
-# overwrites `vt_mode` and `vt_pid` with no `EBUSY`, so a handshake installed
-# here silently takes logind's away: logind never gets its release signal,
-# never pauses the devices it lent out, and never hands the console over. The
-# fix is to stop asking for the handshake at all and to follow the session
-# instead -- which is what every Wayland compositor does, because libseat's
-# logind backend has no VT ioctl in it either.
-#
-# NO CHROMIUM TREE. The series is the source of truth, so this reads `src/`
-# and `patches/`, which is what makes it cheap enough to run in the shell
-# group on every push rather than only when the fork is built.
+# Reads `src/` and `patches/` instead of a Chromium tree, so it is cheap
+# enough to run on every push.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -33,9 +22,8 @@ FAILED=0
 ok()   { printf '  ok    %s\n' "$1"; }
 fail() { printf '  FAIL  %s\n    %s\n' "$1" "$2"; FAILED=$((FAILED + 1)); }
 
-# Added lines only (`^+`), so a patch that merely quotes upstream in context
-# cannot satisfy this -- and, for the refusals below, so that upstream code a
-# patch happens to sit next to cannot fail it.
+# Added lines only (`^+`), so context lines quoting upstream neither satisfy
+# nor fail a check.
 added="$(cat "$PATCHES"/*.patch 2>/dev/null | grep -a '^+' || true)"
 in_patches() { case "$added" in (*"$1"*) return 0 ;; (*) return 1 ;; esac }
 
@@ -51,16 +39,12 @@ for f in drm_vt_switcher.h drm_vt_switcher.cc drm_vt_switcher_unittest.cc; do
   fi
 done
 
-# THE REFUSAL THIS FILE EXISTS FOR. Every one of these is a way of taking the
-# console back off logind, and each of them looks like the obvious thing to
-# write. `VT_SETMODE` steals the handshake -- the kernel overwrites `vt_mode`
-# and `vt_pid` with no `EBUSY`, so logind simply stops getting its signals --
-# and `VT_RELDISP` answers one that no longer arrives here.
+# Each of these takes the console from logind. `VT_SETMODE` replaces logind's
+# handshake without `EBUSY`, and `VT_RELDISP` answers a signal that no longer
+# arrives here.
 #
-# COUNTED IN THE PATCHES RATHER THAN FORBIDDEN, because the series is a
-# history: `0017` installed a handshake of its own and `0022` takes it back
-# out, so what the applied tree carries is the net. A line added and never
-# removed is one that is still there.
+# Compares added and removed counts, since a later patch can remove a line an
+# earlier one added.
 removed="$(cat "$PATCHES"/*.patch 2>/dev/null | grep -a '^-' || true)"
 count() { printf '%s\n' "$2" | grep -a -c -F "$1" || true; }
 for gone in 'open("/dev/tty' 'VT_RELDISP' 'VT_SETMODE' 'linux/vt.h'; do
@@ -72,10 +56,8 @@ for gone in 'open("/dev/tty' 'VT_RELDISP' 'VT_SETMODE' 'linux/vt.h'; do
   fi
 done
 
-# And in `src/`, where there is no history to net out. Prose about the
-# handshake that used to be here is the point of the file and must stay
-# readable, so what is refused is the include that any of it needs and the
-# call itself.
+# In `src/`, refuse the include and the ioctl call. Comments about the
+# handshake may still mention the names.
 if grep -rql 'linux/vt.h' "$DOMICILE" 2>/dev/null; then
   fail "no domicile source reaches for the VT ioctls" \
     "something under $DOMICILE includes <linux/vt.h>"
@@ -90,11 +72,9 @@ else
   ok "no domicile source drives the console itself"
 fi
 
-# THE SWITCH ITSELF, which is the half that never existed. logind's
-# `Seat.SwitchTo(u)` is what a compositor asks for a console switch -- the
-# session's own `Activate` cannot express "whichever session is on VT 3" --
-# and `org.freedesktop.login1.chvt` is `allow_active yes` in logind's shipped
-# polkit policy, so an active session needs no authentication for it.
+# `Seat.SwitchTo(u)` switches to a VT number; `Session.Activate` cannot.
+# logind's polkit policy allows `chvt` for an active session without
+# authentication.
 if in_sources 'SwitchTo'; then
   ok "the seat's SwitchTo is named"
 else
@@ -102,19 +82,9 @@ else
     "no SwitchTo in domicile/drm_vt_switcher.cc"
 fi
 
-# AND THE OBJECT IT IS SENT TO IS READ RATHER THAN WRITTEN DOWN, which is the
-# half that shipped broken. `SwitchTo` went to
-# `/org/freedesktop/login1/seat/self` and logind answered `UnknownObject` on a
-# real tty: `self` is not a name logind stores, it is a lookup through the
-# sending connection's own credentials, and `seat_object_find` answers "no such
-# object" for every way that lookup comes up empty. `seat0` written out instead
-# is the other way to be wrong, on the second seat of a machine that has two.
-# The session object `GetSessionByPID` already answered carries the seat it is
-# on, so that is what the path comes off.
-#
-# NAMED RATHER THAN FORBIDDEN BY ITS STRING, because the prose explaining the
-# alias is the point of the file: what is checked is the reader that replaced
-# it, and that no constant spells a seat path again.
+# Read the seat path from the session's `Seat` property. logind answers
+# `UnknownObject` for `/org/freedesktop/login1/seat/self` in some cases, and a
+# hard-coded `seat0` is wrong on a multi-seat machine.
 if in_sources 'SeatOfSession'; then
   ok "the seat comes off the session's own Seat property"
 else
@@ -129,11 +99,9 @@ else
   ok "no seat object path is written down"
 fi
 
-# WHERE THE CHORD HAS TO BE BOUND, and it is not a free choice. The compositor
-# advertises a `wl_seat` and reads no evdev node at all -- it has neither
-# libinput nor a session backend -- so the browser process is the only one
-# holding a keyboard descriptor, and `PlatformEventObserver` is where a key
-# reaches this platform before anything can consume it.
+# The compositor opens no evdev nodes, so the browser process holds the only
+# keyboard descriptor. `PlatformEventObserver` sees each key before anything
+# can consume it.
 if in_sources 'WillProcessEvent'; then
   ok "the chord is read off the platform's own event stream"
 else
@@ -148,9 +116,8 @@ else
     "no patch gives DrmVtSwitcher the PlatformEventSource keys arrive on"
 fi
 
-# THE DISPLAY FOLLOWS THE SESSION, not a signal. logind hands the VT over on
-# its own schedule now, so the only thing that says the desktop is no longer
-# in front of the user is the session's `Active` property.
+# logind switches the VT itself, so the session's `Active` property is the
+# only signal that the desktop lost the console.
 for member in PropertiesChanged Active; do
   if in_sources "$member"; then
     ok "the session's $member is followed"
@@ -160,9 +127,8 @@ for member in PropertiesChanged Active; do
   fi
 done
 
-# And the seam that does the dropping is still upstream's, reached from the
-# process that can: `DrmMaster` (patch `0019`) keeps the browser's own dup of
-# every card, and this is its only caller.
+# `DrmMaster` keeps the browser's copy of each card descriptor, and the
+# switcher calls upstream's display control methods on it.
 for seam in RelinquishDisplayControl TakeDisplayControl; do
   if in_sources "$seam"; then
     ok "$seam is what a switch drives"
@@ -172,15 +138,11 @@ for seam in RelinquishDisplayControl TakeDisplayControl; do
   fi
 done
 
-# AND THE TAKE IS NOT THE WHOLE OF COMING BACK. Master says who may program
-# the card and nothing about what it is programmed to: the kernel restores its
-# own framebuffer when the last master goes, so a console handed back has been
-# modeset by whoever held it. Flipping into the controller state from before
-# the switch is a refused commit, and `PageFlipWatchdog` turns fifteen seconds
-# of those into `LOG(FATAL) ... Crashing GPU process` -- which is a desktop
-# that locks up on the way back. Nothing else sends that modeset either: the
-# connectors read the same as they did on the way out, which is what
-# `ModesetWouldChangeAnything` answers "asking again cannot help" to.
+# Taking DRM master back is not enough. The kernel restores its own
+# framebuffer when the last master leaves, so the card has been modeset by the
+# console. Flipping into the old state fails, and `PageFlipWatchdog` crashes
+# the GPU process. `ModesetWouldChangeAnything` sees unchanged connectors and
+# skips the modeset, so the switcher must call `DrmModeset::Relight`.
 if in_sources 'Relight'; then
   ok "the screens are lit again when the console comes back"
 else
@@ -196,13 +158,8 @@ else
     "no patch gives DrmVtSwitcher the DrmModeset it relights through"
 fi
 
-# THE FLOOR, WHICH HAS ONE HOME NOW. It used to be written in both
-# engine.yml and engine-drm-probe.yml, and this asserted it was in each —
-# which is the check that noticed nothing when the two copies parted
-# (`DrmScreenTest:26` against `:18`, and this suite missing from one of
-# them altogether). `scripts/engine-drm-unit-tests.sh` is the one list, and
-# both jobs run it, so there is one thing to assert and the filter that
-# runs is derived from the same array rather than written beside it.
+# `scripts/engine-drm-unit-tests.sh` holds the minimum test count per suite,
+# and both engine jobs run it.
 FLOORS="$ROOT/scripts/engine-drm-unit-tests.sh"
 if grep -qE "^ *DrmVtSwitcherTest:[0-9]+$" "$FLOORS" 2>/dev/null; then
   ok "the DRM suite list carries a floor for the suite"

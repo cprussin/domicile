@@ -7,12 +7,10 @@ describe("ShellWindow", () => {
     it("namespaces the app id so a client cannot collide with a browser", () => {
       expect(ShellWindow.App("term", "Terminal")).toStrictEqual({
         appId: "term",
-        // A window opens knowing nothing the client has not said yet: it asks
-        // for a cursor once it has something to ask about.
+        // Unset until the client reports them.
         cursor: undefined,
         id: "app:term",
         kind: WindowKind.App,
-        // Nor any limit on its size, until the client says one.
         maxSize: [undefined, undefined],
         minSize: [undefined, undefined],
         title: "Terminal",
@@ -50,12 +48,7 @@ describe("siteOf", () => {
     expect(siteOf("https://docs.example.com/guide")).toBe("docs.example.com");
   });
 
-  // WHAT A PAGE CAN NAVIGATE ITSELF TO, which is not what the shell can send
-  // it to. Every address this saw used to be the shell's own — `HOME_PAGE`, or
-  // something `typedAddress` built, both of which have a host. It now sees
-  // whatever the browser reports, and a page that goes to `about:blank` or a
-  // `data:` URL has no host at all: a window named from the hostname would
-  // lose its name and the user would be left with an unlabelled tab.
+  // A page can navigate to `about:blank` or a `data:` URL, which have no host.
   it("falls back to the whole address when there is no host to name", () => {
     expect(siteOf("about:blank")).toBe("about:blank");
     expect(siteOf("data:text/html,hi")).toBe("data:text/html,hi");

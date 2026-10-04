@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
-# Which end the browser window's notifications guard blames, and which answers
-# it calls a pass.
+# Tests the verdict of `guard-webview-notifications.sh`: which readings pass
+# and which component a failure blames.
 #
-# The unit is the verdict block in `guard-webview-notifications.sh`, run out of
-# the real script so a rewrite that moves it fails here. The control is where
-# it matters: its second leg passes on an ABSENT color, and only after its
-# first leg found one.
+# Runs the verdict block from the real guard, so moving it fails here. The
+# control's second leg passes on an absent color, but only if its first leg
+# found one.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

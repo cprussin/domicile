@@ -8,11 +8,8 @@ import type { CursorShape } from "@domicile-desktop/sdk/cursor-shape";
 const APP_PREFIX = "app:";
 
 /**
- * Where a browser window opens.
- *
- * The window model's rather than either caller's, because both of them open
- * the same window: the bar's `+` and the key the sway config puts its
- * launcher on.
+ * Where a new browser window opens, from the bar's `+` or the sway launcher
+ * key.
  */
 export const HOME_PAGE = "https://www.google.com";
 
@@ -25,23 +22,12 @@ export enum WindowKind {
 /**
  * A Wayland client's window, as the shell holds it.
  *
- * Two kinds of fact on one record: the shell's own — a title — and the
- * cursor, which is the client's and arrives as a host message. The cursor is
- * here for the reason state is anywhere: the element for a window is unmounted
- * and mounted again whenever the shell stops rendering it and starts again, and
- * the style it is given on the way back has to be current.
- *
- * The size the client drew at used to be here too, and is not: the SDK records
- * it as the message goes past, because scaling the pointer by it is the only
- * thing anyone does with it. This shell was a courier.
- *
- * Written out rather than left to the constructor's inferred shape because a
- * field the client has not reported yet still has a type — a client that has
- * asked for no cursor is `undefined`, not absent.
+ * The cursor is stored here because a window's element can unmount and
+ * remount, and must get the current cursor back when it does.
  */
 export type ClientWindow = {
   appId: string;
-  /** The cursor the client asked for, or `undefined` while it has asked for none. */
+  /** The cursor the client asked for, or `undefined` if none. */
   cursor: CursorShape | undefined;
   id: string;
   kind: WindowKind.App;
@@ -53,9 +39,8 @@ export type ClientWindow = {
 };
 
 /**
- * The window an extension asked for with `chrome.windows.create` — see
- * `WEBVIEW_POPUP_WINDOW_EVENT`: the id `chrome.windows` already gave it, the
- * address to show and the size it wanted, 0 on an axis it did not ask about.
+ * A window an extension requested with `chrome.windows.create` (see
+ * `WEBVIEW_POPUP_WINDOW_EVENT`). A size of 0 means the axis was unspecified.
  */
 export type PopupWindowRequest = {
   height: number;
@@ -65,21 +50,21 @@ export type PopupWindowRequest = {
 };
 
 /**
- * How far a client will size its window, per axis, in the pixels its box is
- * laid out in — `undefined` on an axis it does not limit.
+ * A client's size limit per axis, in layout pixels. `undefined` means no
+ * limit.
  */
 export type SizeLimit = readonly [
   width: number | undefined,
   height: number | undefined,
 ];
 
-/** No limit on either axis, which is where every window starts. */
+/** No limit on either axis; the initial value for every window. */
 export const UNLIMITED: SizeLimit = [undefined, undefined];
 
 export const ShellWindow = {
   /**
-   * A Wayland client's window. `appId` is the host's name for the client and
-   * `id` namespaces it, so a client can never collide with a browser window.
+   * A Wayland client's window. `id` is namespaced so it cannot collide with a
+   * browser window's.
    */
   App: (appId: string, title: string): ClientWindow => ({
     appId,
@@ -92,9 +77,8 @@ export const ShellWindow = {
   }),
 
   /**
-   * A browser window the shell opened. `src` is the address it starts at and
-   * never changes afterward — the embedded view owns navigation from there,
-   * and rewriting `src` would reload the page out from under it.
+   * A browser window the shell opened. `src` is the start address and never
+   * changes: the view owns navigation, and changing `src` would reload it.
    */
   Browser: (ordinal: number, src: string) => ({
     id: `browser:${ordinal.toString()}`,
@@ -105,11 +89,8 @@ export const ShellWindow = {
   }),
 
   /**
-   * A browser window that is an extension's window — see
-   * {@link PopupWindowRequest}. A browser window in every other way, which is
-   * why it is one: tiled, floated and closed the same, sharing their ids.
-   * `popupWindow` is its id to `chrome.windows`, which the view is handed as
-   * it is made.
+   * A browser window opened by an extension (see {@link PopupWindowRequest}).
+   * `popupWindow` is its `chrome.windows` id, passed to the view on creation.
    */
   PopupWindow: (ordinal: number, { url, windowId }: PopupWindowRequest) => ({
     id: `browser:${ordinal.toString()}`,
@@ -125,31 +106,20 @@ export type ShellWindow = ReturnType<
 >;
 
 /**
- * The window id for a client the host announced. Separate from the constructor
- * so a lookup by app id doesn't have to build a whole window to get at it.
+ * The window id for a host client, usable without building a window.
  */
 export const appWindowId = (appId: string): string => `${APP_PREFIX}${appId}`;
 
 /**
- * The client behind a window id, or `undefined` when the shell opened the
- * window itself.
- *
- * The inverse of {@link appWindowId}, and here for the same reason: what the
- * chrome reports is an id, and what the host answers to is an app id.
+ * The inverse of {@link appWindowId}: the client's app id, or `undefined` for
+ * a window the shell opened itself.
  */
 export const appIdOf = (id: string): string | undefined =>
   id.startsWith(APP_PREFIX) ? id.slice(APP_PREFIX.length) : undefined;
 
 /**
- * A window is named after the site it is showing, the way a browser tab is —
- * or after the whole address, when there is no site in it to use.
- *
- * THE FALLBACK IS FOR THE PAGE'S OWN NAVIGATIONS. Every address this saw used
- * to be one the shell built: `HOME_PAGE`, or something `typedAddress` made,
- * and both have a host. It now gets whatever the browser reports the guest is
- * showing, and `about:blank` and a `data:` URL have no host at all — so a
- * window named from the hostname alone would quietly lose its name and leave
- * the user an unlabelled tab.
+ * A window's title: the host of the URL it shows, or the whole URL when it has
+ * no host (such as `about:blank` or `data:` URLs a page navigates to).
  */
 export const siteOf = (url: string): string => {
   const { hostname } = new URL(url);

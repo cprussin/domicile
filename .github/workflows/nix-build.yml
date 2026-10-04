@@ -1,17 +1,13 @@
 name: Nix build
 
-# Everything the flake produces, asserted on a runner nobody is waiting for.
+# Build everything the flake produces.
 #
-# AND IT CARRIES NO `paths:`, WHICH IS LOAD-BEARING. `engine.yml` excludes
-# `packages/domicile-engine/engine-release.nix` from its own filter because it
-# cannot read it — it resets the tree to `CHROMIUM_PIN` and applies `patches/`
-# over it, so a repin cannot change what that build produces. What proves a
-# repin is this job: `nix build .#manganese .#simple` reaches `domicileEngine`,
-# which is `fetchurl` of exactly the url and hash in that file, so a tag that
-# was deleted or a hash off by a byte fails here in three minutes instead of
-# taking the `crux` slot for twenty-seven. The moment this grows a `paths:`
-# filter that exclusion stops being safe, and
-# `scripts/test-engine-path-filter.sh` fails if it ever does.
+# No `paths:` filter. engine.yml ignores changes to
+# `packages/domicile-engine/engine-release.nix`, because a repin cannot change
+# what it builds. This job covers a repin instead: `nix build .#manganese
+# .#simple` fetches the url and hash in that file, so a deleted tag or bad hash
+# fails here in minutes. `scripts/test-engine-path-filter.sh` fails if this job
+# gains a `paths:` filter.
 on:
   pull_request:
   push:
@@ -22,10 +18,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # A skip here is a check that stopped running, not a fact about the machine:
-  # nix is installed two steps up, so every `scripts/nix-*.sh` can run and any
-  # that says it cannot is reporting that the install failed or that it went
-  # looking for something else. No expected skips, so none are named.
+  # Nix is installed below, so a skip means a `scripts/nix-*.sh` check broke.
+  # No skips are expected.
   DOMICILE_CHECK_STRICT: "1"
 
 jobs:
@@ -39,15 +33,6 @@ jobs:
           extra_nix_config: |
             experimental-features = nix-command flakes
 
-      # Every assertion this job makes, and not one of them defined here. The
-      # six `scripts/nix-*.sh` are what a person runs to ask the same questions
-      # out of a checkout, which was the thing that did not exist while they
-      # were a hundred and twenty lines of `run:` block: that `bin/domicile` is
-      # not a symlink, that a desktop's wrapper names a page and every store
-      # path it names is in the store, that an installed `domicile` complains
-      # about the shell rather than about its own missing components.
-      #
-      # `check.sh` installs no node_modules for this group, because nothing in
-      # it reads one: a nix build has its own. That is why there is no bun set
-      # up above.
+      # The assertions live in `scripts/nix-*.sh`, so they can also be run from
+      # a checkout. A nix build has its own node_modules, so bun is not set up.
       - run: ./scripts/check.sh nix

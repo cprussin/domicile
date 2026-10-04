@@ -16,20 +16,14 @@ const RIGHT = {
 
 let warps: Spot[] = [];
 
-/** The whole of the host this hook reaches for. */
+/** The part of the host client this hook uses. */
 const recordingDomicile = {
   warpPointer: (to: Spot) => {
     warps.push(to);
   },
 } as unknown as DomicileClient;
 
-/**
- * One render of the desktop: where the keyboard is, and what windows there
- * are.
- *
- * Both, because the hook answers two questions off them — whether the focus
- * moved, and whether the window it is on is one that has only just opened.
- */
+/** One render's inputs: the focused window and the open windows. */
 type Desktop = {
   focus: Focus | undefined;
   windows: readonly string[];
@@ -39,18 +33,14 @@ type Desktop = {
 const NOTHING: Desktop = { focus: undefined, windows: [] };
 
 /**
- * The hook, on a desktop that has reached `desktop` the way a real one does:
- * mounted with nothing on it, and the windows opened into it.
+ * The hook, mounted empty with `desktop`'s windows then opened into it.
  *
- * Mounted empty rather than handed its windows, because a window arriving is
- * itself one of the things this hook answers — a fixture that started with
- * them would be asserting against a state the chrome is never in. What those
- * openings moved is cleared before the case begins.
+ * Mounts empty because the chrome always does, and opening a window is itself
+ * something the hook reacts to. Warps from the openings are cleared before the
+ * case runs.
  */
 const warping = (desktop: Desktop) => {
-  // The desk's count of keyed presses, which every monitor reads off the
-  // desktop: one keyboard serves several screens, and the monitor that
-  // answers a press is the one the focus landed on.
+  // The desk's key press count, shared by every monitor.
   let pressed = 0;
   const view = renderHook(
     (current: Desktop) =>
@@ -79,16 +69,14 @@ const desktopOf = (focus: Focus, windows: readonly string[]): Desktop => ({
   windows,
 });
 
-/** The pair of windows every case but the opening ones starts from. */
+/** The two windows most cases start from. */
 const BOTH = [LEFT.id, RIGHT.id];
 
 /**
- * The place the warp at `at` asked for.
+ * The target of warp number `at`.
  *
- * Throws where there is no such warp, rather than standing a place in for
- * one: `[0, 0]` is a spot this hook answers for like any other, so a case
- * that asked about a warp which never happened would pass on the answer to a
- * question it did not mean to ask.
+ * Throws if there is none, since `[0, 0]` is a valid spot and a default would
+ * hide a missing warp.
  */
 const warpNumber = (at: number): Spot => {
   const asked = warps[at];
@@ -121,9 +109,8 @@ describe("usePointerWarp", () => {
   });
 
   it("leaves it where it is when the focus moved on its own account", () => {
-    // The pointer crossing a window is what moved this focus — `onHover` in
-    // `Desktop` — and a desktop that answered by moving the pointer would be
-    // chasing itself.
+    // Focus moved because the pointer crossed a window (`onHover` in
+    // `Desktop`). Warping here would chase the pointer.
     const { rerender } = warping(desktopOf(LEFT, BOTH));
     pointerAt(600, 350);
     rerender(desktopOf(RIGHT, BOTH));
@@ -144,9 +131,8 @@ describe("usePointerWarp", () => {
   });
 
   it("does not warp twice for one press", () => {
-    // The press is spent on the render that answered it. A later render — a
-    // clock ticking, a window renaming itself — is not a press, and a desktop
-    // that took the pointer on one would move it while nobody was typing.
+    // A press is spent on the render that answers it. Later renders, such as a
+    // title change, must not warp.
     const { rerender, press } = warping(desktopOf(LEFT, BOTH));
     pointerAt(200, 300);
 
@@ -160,10 +146,9 @@ describe("usePointerWarp", () => {
   });
 
   it("takes the pointer to a window that has just opened", () => {
-    // A window opens on the workspace being looked at and takes the keyboard,
-    // and nobody pressed a key for it: a terminal finishing its startup, a
-    // link opening a browser window. The pointer is still over whatever the
-    // new window was laid out beside, which is what would take the focus back.
+    // A window opens and takes focus with no key press, such as a terminal
+    // finishing startup. The pointer is still over the neighbor, which would
+    // take focus back.
     const { rerender } = warping(desktopOf(LEFT, [LEFT.id]));
     pointerAt(200, 300);
 
@@ -183,9 +168,8 @@ describe("usePointerWarp", () => {
   });
 
   it("leaves the pointer alone for a window that opens somewhere it is not", () => {
-    // Only the window that TOOK the keyboard is a reason to move the pointer.
-    // One that opens without it — on another workspace — has nothing to do
-    // with where the user is working.
+    // A window that opens without focus, such as on another workspace, is
+    // ignored.
     const { rerender } = warping(desktopOf(LEFT, [LEFT.id]));
     pointerAt(200, 300);
 
@@ -195,8 +179,8 @@ describe("usePointerWarp", () => {
   });
 
   it("leaves the pointer alone for a window that opens as a tab of the focused stack", () => {
-    // Drawn in the box the keyboard was already in, so nothing slid under the
-    // pointer — which may be anywhere, the top bar included.
+    // It takes the focused window's box, so nothing moved under the pointer,
+    // which may be anywhere.
     const { rerender } = warping(desktopOf(LEFT, [LEFT.id]));
     pointerAt(900, 10);
 
@@ -217,12 +201,9 @@ describe("usePointerWarp", () => {
   });
 
   it("reads a window arriving where the pointer already is as no pointing", () => {
-    // The layout moving under a stationary hand fires `pointerover` the same
-    // way the pointer crossing a window does, and the desktop has to tell
-    // the two apart: one is the user choosing a window, the other is the
-    // desktop rearranging itself around a hand that has not moved. The place
-    // the event carries is what says which — a window that arrived under the
-    // pointer arrives at the pointer's own spot.
+    // Layout moving under a still pointer fires `pointerover` like a real
+    // crossing. The position tells them apart: a window arriving under the
+    // pointer arrives at the pointer's spot.
     const { result } = warping(desktopOf(LEFT, BOTH));
     pointerAt(200, 300);
 
@@ -237,10 +218,8 @@ describe("usePointerWarp", () => {
   });
 
   it("still reads the place it left as where the pointer is, after a warp", () => {
-    // The engine is asked to move the cursor and the page is told nothing
-    // about it having happened, so between the ask and the arrival there are
-    // two places the cursor may be — and a window arriving at either of them
-    // is a window that came to the pointer.
+    // The engine does not report when a warp lands, so the cursor may be at its
+    // old spot or the target. A window arriving at either came to the pointer.
     const { rerender, press, result } = warping(desktopOf(LEFT, BOTH));
     pointerAt(200, 300);
     act(() => {
@@ -252,10 +231,8 @@ describe("usePointerWarp", () => {
   });
 
   it("counts where it put the pointer itself as where the pointer is", () => {
-    // The warp is the desktop moving the cursor, so the window it lands on
-    // is not one the user pointed at — and the window it lands on first may
-    // not even be the one it was aimed at, because the boxes are still
-    // easing towards where the press put them.
+    // The landing is not a user choice. The first window it lands on may not be
+    // the target, since boxes are still animating.
     const { rerender, press, result } = warping(desktopOf(LEFT, BOTH));
     pointerAt(200, 300);
     act(() => {
@@ -268,19 +245,17 @@ describe("usePointerWarp", () => {
   });
 
   it("answers for a pointer it has never seen at all", () => {
-    // The engine draws a cursor and says nothing about where: a desktop that
-    // took its own guess for the pointer's place would swallow the first
-    // window the user crossed into.
+    // The pointer's position is unknown at first. Guessing it would swallow the
+    // user's first crossing.
     const { result } = warping(desktopOf(LEFT, BOTH));
 
     expect(result.current.pointing([200, 300])).toBe(true);
   });
 
   it("remembers every place it has asked for that nothing has reached yet", () => {
-    // A second press before the first warp has landed: the engine is asked
-    // twice and answers twice, and both answers are the desktop's own move
-    // rather than a hand. One slot for the place asked for would forget the
-    // first, and the window it came down on would be read as pointed at.
+    // Two presses before the first warp lands produce two landings, both from
+    // the desktop. A single slot would forget the first and misread its
+    // landing.
     const { rerender, press, result } = warping(desktopOf(LEFT, BOTH));
     pointerAt(200, 300);
 
@@ -302,14 +277,10 @@ describe("usePointerWarp", () => {
   });
 
   it("gives up on a place it asked for once a later one is reached", () => {
-    // Warps are carried out in order, so something turning up at the second
-    // says the first will never be answered — the engine coalesces two
-    // cursor moves in a frame into the last of them, and the crossing the
-    // skipped one would have fired is never dispatched. Kept anyway, that
-    // first place is where this page thinks the cursor is, and the next
-    // press is measured against somewhere it has not been: the window the
-    // keyboard moves to looks like the one the pointer is already in, and
-    // the pointer is left behind.
+    // Warps run in order, so a landing at the second means the first will never
+    // report: the engine coalesces moves within a frame. Keeping the first
+    // would measure the next press from the wrong place and leave the pointer
+    // behind.
     const { rerender, press, result } = warping(desktopOf(LEFT, BOTH));
     pointerAt(200, 300);
     act(() => {
@@ -322,7 +293,7 @@ describe("usePointerWarp", () => {
     rerender(desktopOf(LEFT, BOTH));
     warps = [];
 
-    // Only the second of the two lands anywhere this page hears about.
+    // Only the second landing is reported.
     pointerAt(200, 350);
     act(() => {
       press();
@@ -334,10 +305,8 @@ describe("usePointerWarp", () => {
   });
 
   it("answers every landing when the engine reports each of them", () => {
-    // Three presses, the third aiming back where the first did — and the
-    // engine carries all three out and says so three times. Every one of
-    // them is the desktop's own move, including the middle one it passed
-    // through on the way back.
+    // Three presses, the third back at the first target, each reported by the
+    // engine. All three landings are the desktop's.
     const { rerender, press, result } = warping(desktopOf(LEFT, BOTH));
     pointerAt(200, 300);
     for (const to of [RIGHT, LEFT, RIGHT]) {
@@ -358,18 +327,10 @@ describe("usePointerWarp", () => {
   });
 
   it("cannot tell a landing it never heard of from a hand, and says so", () => {
-    // The same three presses with the engine coalescing them into the last,
-    // which is the ordering this cannot tell from the one above: the places
-    // asked for before it are left listed, and a crossing at one of them
-    // reads as the desktop's own rather than as the user's.
-    //
-    // Which is the cheaper half of an ambiguity that has no free answer. A
-    // place left listed is the middle of a window, and a middle is where the
-    // desktop puts a cursor rather than where a pointer crosses one — a
-    // crossing lands on the edge it came in by. The reverse mistake is the
-    // desktop reading its own cursor landing as the user, which is a
-    // keyboard handed to a window nobody reached for and a `focus parent`
-    // selection undone with it.
+    // The same presses, coalesced by the engine into the last. This is
+    // indistinguishable from the case above, so the earlier targets stay listed
+    // and a crossing at one reads as a warp. See `Pointer.pointing` for why
+    // this side of the ambiguity was chosen.
     const { rerender, press, result } = warping(desktopOf(LEFT, BOTH));
     pointerAt(200, 300);
     for (const to of [RIGHT, LEFT, RIGHT]) {
@@ -379,16 +340,15 @@ describe("usePointerWarp", () => {
       rerender(desktopOf(to, BOTH));
     }
 
-    // Only the place it ended at is reported.
+    // Only the final landing is reported.
     pointerAt(600, 350);
 
     expect(result.current.pointing([200, 350])).toBe(false);
   });
 
   it("reads a landing as where the cursor got to", () => {
-    // The place a warp is answered at is the place the cursor is now, and
-    // the next press is measured against it: a window the cursor is already
-    // inside is one there is nothing to move it to.
+    // A landing updates the pointer position, so the next press needs no warp
+    // when the cursor is already inside the target.
     const { rerender, press } = warping(desktopOf(LEFT, BOTH));
     pointerAt(200, 300);
     act(() => {
@@ -409,15 +369,14 @@ describe("usePointerWarp", () => {
   });
 
   it("forgets the oldest place once too many go unanswered", () => {
-    // What the cap costs, which is worth pinning rather than only writing
-    // down: a place given up on is one the cursor arriving there is read as
-    // the hand at, and that answer takes the rest of the list with it.
+    // Pins the cost of `IN_FLIGHT`: a landing at a dropped target reads as a
+    // user move, which clears the remaining targets.
     const strips = [0, 1, 2, 3, 4].map((at) => ({
       box: { height: 100, width: 100, x: at * 200, y: 0 },
       id: `strip${at.toString()}`,
     }));
     const all = [...strips.map(({ id }) => id), LEFT.id];
-    // Started somewhere else, so that all five of them are moves.
+    // Start elsewhere so all five presses warp.
     const { rerender, press, result } = warping(desktopOf(LEFT, all));
     pointerAt(1500, 900);
 
@@ -429,18 +388,15 @@ describe("usePointerWarp", () => {
     }
 
     expect(warps).toHaveLength(5);
-    // The first of the five is not one of the four kept, so the cursor
-    // arriving there reads as the hand — and that answer takes the four
-    // still outstanding down with it, which the second line is what says.
+    // The first target was dropped, so its landing reads as the user and clears
+    // the other four.
     expect(result.current.pointing(warpNumber(0))).toBe(true);
     expect(result.current.pointing(warpNumber(1))).toBe(true);
   });
 
   it("takes the pointer with the keyboard when a window closes", () => {
-    // The third focus change the desktop makes for itself, beside a press
-    // and a window opening: the window the keyboard was in is gone, the
-    // tiling closes over it, and the keyboard lands somewhere the pointer is
-    // not — with a window sliding under the pointer as it goes.
+    // Closing the focused window moves focus elsewhere while the tiling slides
+    // a window under the pointer.
     const { rerender } = warping(desktopOf(LEFT, BOTH));
     pointerAt(200, 300);
 
@@ -450,9 +406,8 @@ describe("usePointerWarp", () => {
   });
 
   it("leaves the pointer alone when a tab closes onto the next one", () => {
-    // The tab after it is drawn in the box the closed one was, so nothing
-    // slid under the pointer — which is on the tab bar, above that box,
-    // having just pressed the close button.
+    // The next tab takes the closed tab's box, so nothing moved under the
+    // pointer, which is on the tab bar's close button.
     const { rerender } = warping(desktopOf(LEFT, [...BOTH, "firefox"]));
     pointerAt(200, 90);
 
@@ -464,10 +419,8 @@ describe("usePointerWarp", () => {
   });
 
   it("remembers where it put the pointer", () => {
-    // Nothing promises to tell this page where the pointer went: the engine
-    // moves the one it draws. A page that went on believing the pointer was
-    // where it last saw it would read the next press against a place the
-    // pointer has not been since.
+    // The engine does not report warps, so the hook records its own targets.
+    // Otherwise the next press would be measured from a stale position.
     const all = [...BOTH, "firefox"];
     const { rerender, press } = warping(desktopOf(LEFT, all));
     pointerAt(200, 300);
@@ -485,7 +438,7 @@ describe("usePointerWarp", () => {
   });
 
   describe("a screen with nothing on it", () => {
-    /** This page's screen, with no window on it: the screen is the focus. */
+    /** A screen with no windows, where the screen itself is the focus. */
     const EMPTY: Focus = {
       box: { height: 600, width: 800, x: 0, y: 0 },
       id: undefined,

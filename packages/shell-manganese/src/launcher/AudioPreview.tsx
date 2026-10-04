@@ -8,21 +8,18 @@ import { clockOf } from "./clock";
 import type { FileRow } from "./file-row";
 import { homeUrl } from "./media";
 
-/** How big the glyph is on a song with no picture of its own. */
+/** Glyph size for a song with no cover art. */
 const COVER_ICON_SIZE = 56;
 
-/** How many bars the meter beside the length has. */
+/** Number of bars in the level meter. */
 const BARS = [0, 1, 2, 3, 4];
 
 /**
- * A song by what it says of itself — its picture, its title, who made it and
- * on what — over a player for it. `tags` is `undefined` for a file the host
- * could not read as one, which is still a file the engine may play: it is
- * named, and offered.
+ * A song's cover, title, artist and album over a player.
  *
- * The meter beside the length moves while the song plays and rests when it
- * does not. It is not the song's own waveform: the page cannot read the file
- * to draw one, and a picture of a sound that was not this one would be a lie.
+ * `tags` is `undefined` when the host couldn't read them; the engine may still
+ * play the file. The meter animates while playing and is decorative: the page
+ * can't read the file to draw its real waveform.
  */
 export const AudioPreview = ({
   row,
@@ -84,9 +81,7 @@ export const AudioPreview = ({
   );
 };
 
-// The song centered in the pane, over a wash of its own picture: the pane
-// takes on the record's colors without the picture being drawn twice at a
-// size anyone reads.
+// Centered over a blurred copy of the cover, so the pane takes on its colors.
 const paneStyles = vstack({
   blockSize: "100%",
   gap: 3,
@@ -97,9 +92,8 @@ const paneStyles = vstack({
   position: "relative",
 });
 
-// The picture blurred to a wash, a scrim of the pane's own ground over it so
-// the text on top reads on any sleeve, and drawn past the pane's edges, where
-// the blur would otherwise fade to nothing.
+// The blurred cover, under a scrim so text stays readable, and extended past
+// the pane's edges so the blur doesn't fade out at them.
 const backdropStyles = css({
   _after: {
     backgroundColor:
@@ -134,8 +128,7 @@ const coverStyles = css({
   objectFit: "cover",
 });
 
-// A record with no sleeve: the same square, lit in the desktop's accent, with
-// the glyph for music where the picture would be.
+// Placeholder for a song with no cover: an accent square with a music glyph.
 const noCoverStyles = css({
   backgroundImage:
     "linear-gradient(135deg, color-mix(in oklab, {colors.accent} 45%, transparent), color-mix(in oklab, {colors.accent} 8%, transparent))",
@@ -183,9 +176,8 @@ const meterRowStyles = hstack({
   gap: 2,
 });
 
-// Five bars in the accent, resting at staggered heights and, while the song
-// plays, each bouncing on a beat of its own: offsets rather than one beat, so
-// the five read as a level rather than as a single blinking block.
+// Bars at staggered heights. While playing, each animates with its own offset
+// so they read as a level meter rather than one blinking block.
 const meterStyles = hstack({
   "& > span:nth-child(2)": {
     animationDelay: "calc(-1 * {durations.slow})",
@@ -221,8 +213,8 @@ const barStyles = css({
   transformOrigin: "bottom",
 });
 
-// The engine draws the controls, so it is told which way round the desk is
-// or it draws a light player on a dark desk.
+// The engine draws the controls, so it needs the color scheme to match the
+// desk.
 const playerStyles = css({
   _light: { colorScheme: "light" },
   colorScheme: "dark",

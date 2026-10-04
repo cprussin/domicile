@@ -15,10 +15,8 @@ describe("elementToScreen", () => {
   });
 
   it("anchors a turned element by the corner its box reports", () => {
-    // A 100x50 element rotated a quarter turn occupies a 50x100 screen box, so
-    // its local (0,0) corner sits at the box's top-right rather than top-left.
-    // Which is also why `transform-origin` cannot matter: the anchoring
-    // subtracts whatever offset the origin introduced.
+    // A 100x50 element rotated a quarter turn has a 50x100 screen box, so its
+    // local (0,0) corner is at the box's top-right.
     const matrix = elementToScreen({
       box: { left: 10, top: 20 },
       linear: rotate(Math.PI / 2),
@@ -33,8 +31,8 @@ describe("elementToScreen", () => {
   });
 
   it("accounts for scale shrinking the on-screen box", () => {
-    // Scaled about its center, a half-size 100x100 element keeps its center and
-    // reports a 50x50 box, so local (0,0) still maps to the box's top-left.
+    // A 100x100 element scaled by half reports a 50x50 box, so local (0,0)
+    // still maps to the box's top-left.
     expect(
       elementToScreen({
         box: { left: 0, top: 0 },

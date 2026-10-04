@@ -5,9 +5,8 @@ import type { BatteryMessage } from "@domicile-desktop/sdk/host-message";
 import { watchBattery } from "./watch-battery";
 
 /**
- * The client, as much of it as this touches: one slot per message type, and an
- * `off` that removes a handler only if it is still the registered one — which
- * is `DomicileClient`'s own contract and the thing a teardown has to honor.
+ * A minimal client: one handler per message type, and an `off` that removes a
+ * handler only if it is still registered, as `DomicileClient` does.
  */
 const heldClient = () => {
   const handlers = new Map<string, (message: BatteryMessage) => void>();

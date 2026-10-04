@@ -1,16 +1,14 @@
-//! Accumulating a run of durations and reporting them on an interval.
+//! Accumulates durations and reports them on an interval.
 //!
-//! The frame path spans two threads, and telling "we are slow" from "we are
-//! waiting" needs both halves timed. This is the accumulate-and-report shape
-//! both use; the clock is a parameter so the arithmetic can be tested without
-//! one.
+//! Both threads of the frame path use it, so slow work can be told apart from
+//! waiting. Callers pass the durations in, so the arithmetic is testable
+//! without a clock.
 
 use std::time::Duration;
 
-/// What one reporting window saw.
+/// The summary of one reporting window.
 ///
-/// The default is the empty window's reading — nothing recorded, no time spent
-/// — which is what a report shows for a path that did not run in that window.
+/// The default (all zeros) is what a report shows for a path that did not run.
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct Timings {
     pub count: usize,
@@ -33,10 +31,10 @@ impl TimingWindow {
         self.worst = self.worst.max(elapsed);
     }
 
-    /// Take what was recorded and start a fresh window.
+    /// Returns the summary and starts a fresh window.
     ///
-    /// `None` when nothing was recorded: a window with nothing in it has
-    /// nothing to say, and an idle desktop should not fill the log.
+    /// `None` when nothing was recorded, so an idle desktop does not fill the
+    /// log.
     pub fn take(&mut self) -> Option<Timings> {
         let taken = (self.count > 0).then(|| Timings {
             count: self.count,
@@ -65,9 +63,7 @@ mod tests {
 
     #[test]
     fn reports_the_average_and_the_worst_case() {
-        // The worst case is reported alongside the average because a path that
-        // is usually fast and occasionally terrible is what a stutter is, and
-        // an average alone hides exactly that.
+        // The worst case shows stutters that the average hides.
         let mut window = TimingWindow::default();
         window.record(ms(2));
         window.record(ms(10));

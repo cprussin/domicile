@@ -1,9 +1,9 @@
-//! The keyboard, as the chrome is told it for the keys a shell binds.
+//! The keysym-to-key map a shell resolves its keybindings against.
 //!
-//! A shell's keys are its props, written as chords that name keysyms, and a
-//! press arrives as a key — so somebody has to say which key each keysym is
-//! on, and the compositor is the one holding the keymap `input.keyboard`
-//! compiles to. See [`domicile_protocol::HostMessage::ShellConfig`].
+//! A shell binds chords by keysym, but presses arrive as keys. The compositor
+//! compiles the keymap, so it sends the map. See
+//! [`domicile_protocol::HostMessage::ShellConfig`] and
+//! `docs/architecture/KEYBINDINGS.md`.
 
 use std::collections::BTreeMap;
 
@@ -11,12 +11,11 @@ use domicile_config::Config;
 
 use crate::keymap::{Keyboard, UnknownLayout};
 
-/// Every keysym the keyboard `config` names can type, and the key it is on.
+/// Every keysym `config`'s keyboard can type, mapped to the key it is on.
 ///
-/// Compiled from `input.keyboard` rather than handed the seat's keymap, for
-/// the reason `crate::keymap` compiles twice: the seat's is only lent through
-/// the compositor state, and this is called before there is one. One
-/// `KeyboardConfig` and one libxkbcommon make the same keymap each time.
+/// Compiles `input.keyboard` itself because this runs before the compositor
+/// state, which owns the seat's keymap, exists. The same config always
+/// compiles to the same keymap.
 pub fn keys(config: &Config) -> Result<BTreeMap<String, u32>, UnknownLayout> {
     Keyboard::compiled(&config.input.keyboard).map(|keyboard| keyboard.keys())
 }
@@ -25,7 +24,7 @@ pub fn keys(config: &Config) -> Result<BTreeMap<String, u32>, UnknownLayout> {
 mod tests {
     use super::*;
 
-    /// `Escape` and `p` as evdev numbers them: on `dvp` the last carries `l`.
+    /// Evdev codes for `Escape` and `p`. On `dvp`, the `p` key types `l`.
     const KEY_ESC: u32 = 1;
     const KEY_P: u32 = 25;
 
@@ -35,7 +34,6 @@ mod tests {
 
     #[test]
     fn every_keysym_the_keyboard_types_goes_out_for_a_shell_s_chords() {
-        // `l` on `dvp` is the key `us` prints a p on.
         let keys = keys(&parsed(
             r#"{ "input": { "keyboard": { "xkb_variant": "dvp" } } }"#,
         ))

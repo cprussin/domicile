@@ -1,18 +1,13 @@
-//! `domicile ./my-desktop/dist/shell.js` — a desktop, in one command. And
-//! `domicile which-shell`, `domicile load-shell <path>` or
-//! `domicile open-url <url>` — commands for the desktop already running.
+//! The `domicile` binary: runs a desktop, or sends a command to a running one.
 //!
-//! Everything with a decision in it is a module of `domicile_launch` with
-//! tests of its own; this is the part that reads the world and starts things.
-//! It is deliberately short, because it is the part nothing can test: no CI
-//! runner has a display, and the shell script it replaces was not run by
-//! anything either. `scripts/test-the-control-socket.sh` and
-//! `scripts/test-a-desktop-that-fails-says-why.sh` are what cover the wiring
-//! below that the unit tests cannot reach — the second of them starts this
-//! binary against components that die on purpose, which is the only place the
-//! restart loop is driven by real processes rather than by a closure, and
-//! `scripts/test-a-running-desktop-takes-a-new-shell.sh` is where a
-//! `load-shell` goes all the way from a command line to an engine's socket.
+//! Logic with decisions lives in `domicile_launch` with unit tests. This file
+//! only reads the environment and starts processes, which CI cannot test
+//! without a display. These scripts cover the wiring:
+//! - `scripts/test-the-control-socket.sh`
+//! - `scripts/test-a-desktop-that-fails-says-why.sh` (restart loop with real
+//!   processes)
+//! - `scripts/test-a-running-desktop-takes-a-new-shell.sh` (`load-shell`
+//!   end to end)
 
 use std::io::{BufRead, BufReader, IsTerminal, Write};
 use std::path::{Path, PathBuf};
@@ -48,17 +43,15 @@ use domicile_launch::shell_source::{shell_source, ShellSource};
 use domicile_launch::spawn::{compositor, engine, Runtime};
 use domicile_launch::supervise::{catch_interrupts, interrupted, Running, ASK_EVERY};
 
-/// How long each component gets to do the one thing the next one waits on. A
-/// debug build on a loaded machine is seconds, not milliseconds.
+/// How long each startup milestone may take. A debug build on a loaded
+/// machine takes seconds.
 const PATIENCE: Duration = Duration::from_secs(30);
 
-/// How many of the compositor's last lines a run that gave up says again.
+/// How many of the compositor's last stderr lines to repeat when a run gives
+/// up.
 ///
-/// The complaint about a config it could not read is six lines, so twenty is
-/// room for the shape of one rather than a guess at a size. The cap is for the
-/// other end: a desktop that came up, was used and then panicked leaves a
-/// backtrace on that stream, and repeating all of it would bury the repeat the
-/// way the original was buried.
+/// Fits a typical config error (about six lines) without repeating a whole
+/// panic backtrace.
 const WORTH_REPEATING: usize = 20;
 
 fn main() -> ExitCode {
@@ -86,20 +79,11 @@ fn run() -> Result<ExitCode, String> {
     }
 }
 
-/// Which shell `domicile load-shell <path>` names, resolved here and sent
-/// resolved.
+/// Resolves the shell for `domicile load-shell` on the client side.
 ///
-/// IN FRONT OF THE PERSON WHO TYPED IT. A relative path and a `~` mean what
-/// they mean on this command line, in this terminal — and neither the desktop
-/// answering the control socket nor the engine serving the page shares this
-/// working directory. So the same [`shell_module`] a run resolves its own
-/// shell with resolves this one, against the same filesystem, and a typo is
-/// answered here rather than by an engine reporting a module that would not
-/// load. And an entry or a package is built here, in front of the person who
-/// asked, with the bar drawn in their terminal.
-///
-/// `DOMICILE_PAGE` has no part in it: a packaged desktop hands over the module
-/// it was built with, and this command is somebody naming another one.
+/// Relative paths and `~` must resolve in the user's terminal, since neither
+/// the desktop nor the engine shares its working directory. Builds happen here
+/// too, so the user sees errors and progress. `DOMICILE_PAGE` is ignored.
 fn shell_to_load(shell: &str) -> Result<Request, String> {
     let page = shell_named(shell, None, None)?;
     Ok(Request::LoadShell {
@@ -108,14 +92,10 @@ fn shell_to_load(shell: &str) -> Result<Request, String> {
     })
 }
 
-/// The module `shell` names, built first where it is an entry or a package.
+/// The module `shell` names, built first if it is an entry or a package.
 ///
-/// WHERE THIS WAS TYPED AND WHOSE HOME `~` IS, because `shell_source` decides
-/// what a relative path and a tilde mean and neither is a question about the
-/// filesystem. Read here: this is the part of the program that reads the
-/// world.
-/// `from` is where a relative path starts when it was not typed: the
-/// directory of the config that named it.
+/// `from` is the base for relative paths when the shell came from a config
+/// file: the config's directory. Otherwise the working directory is used.
 fn shell_named(shell: &str, handed_in: Option<&str>, from: Option<&Path>) -> Result<Shell, String> {
     let env = |name: &str| std::env::var(name).ok();
     let here = match from {
@@ -136,7 +116,7 @@ fn shell_named(shell: &str, handed_in: Option<&str>, from: Option<&Path>) -> Res
     let binary = std::env::current_exe().map_err(|why| format!("cannot find myself: {why}"))?;
     match source {
         ShellSource::Module(page) => Ok(page),
-        // Prebuilt in the install: nothing is started for it.
+        // Prebuilt in the install, so no build is needed.
         ShellSource::Ours(name) => our_shell(&binary, &name, &env, &|path| path.exists())
             .map(|root| Shell {
                 root,
@@ -152,12 +132,10 @@ fn shell_named(shell: &str, handed_in: Option<&str>, from: Option<&Path>) -> Res
     }
 }
 
-/// Build a shell with the builder beside this binary, drawing its steps as a
-/// bar, and answer with the module it built.
+/// Runs the shell builder and returns its final result, showing progress.
 ///
-/// The bar is redrawn in place on a terminal and said a line a step
-/// elsewhere, where a log is reading it. What the build says that is not a
-/// step is kept, and said only if the build fails.
+/// On a terminal the bar redraws in place; otherwise each step is one line.
+/// Build log lines are printed only if the build fails.
 fn built(binary: &Path, asked: &[std::ffi::OsString]) -> Result<BuilderHeard, String> {
     let env = |name: &str| std::env::var(name).ok();
     let builder =
@@ -220,7 +198,7 @@ fn built(binary: &Path, asked: &[std::ffi::OsString]) -> Result<BuilderHeard, St
     }
 }
 
-/// The module a build answered with.
+/// Extracts the built module from the builder's result.
 fn as_shell(heard: BuilderHeard) -> Result<Shell, String> {
     match heard {
         BuilderHeard::Built(page) => Ok(page),
@@ -228,7 +206,7 @@ fn as_shell(heard: BuilderHeard) -> Result<Shell, String> {
     }
 }
 
-/// The JSON the module config at `config` evaluates to, by the builder.
+/// Evaluates the module config at `config` to JSON with the builder.
 fn evaluated_json(binary: &Path, config: &Path) -> Result<PathBuf, String> {
     match built(
         binary,
@@ -241,8 +219,8 @@ fn evaluated_json(binary: &Path, config: &Path) -> Result<PathBuf, String> {
     }
 }
 
-/// The `shell` a JSON config names, if it is JSON and names one. The
-/// compositor reads the rest; this is the one key that is `domicile`'s.
+/// The `shell` key of a JSON config, if any. The compositor reads the other
+/// keys.
 fn shell_in(config: &Path) -> Option<String> {
     let json = config
         .extension()
@@ -253,15 +231,14 @@ fn shell_in(config: &Path) -> Option<String> {
         .and_then(|value| value.get("shell")?.as_str().map(str::to_string))
 }
 
-/// The directory `config` is in, which a shell it names is relative to.
+/// The directory containing `config`, which a shell it names is relative to.
 fn beside(config: &Path) -> PathBuf {
     config
         .parent()
         .map_or_else(|| PathBuf::from("."), Path::to_path_buf)
 }
 
-/// Put one command to the desktop that is already running, and say what it
-/// said.
+/// Sends one request to the running desktop and prints its response.
 fn asked(request: &Request) -> Result<ExitCode, String> {
     let socket =
         advertised(std::env::var(VARIABLE).ok().as_deref()).map_err(|why| why.to_string())?;
@@ -272,9 +249,7 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
             Ok(ExitCode::SUCCESS)
         }
         Response::Opened => Ok(ExitCode::SUCCESS),
-        // The desktop refused. It is a desktop of another build, or something
-        // else is answering at that path — either way the asker gets the
-        // sentence the desktop wrote rather than one invented here.
+        // Print the desktop's own reason.
         Response::Refused { why } => {
             eprintln!("domicile: {why}");
             Ok(ExitCode::FAILURE)
@@ -282,22 +257,13 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
     }
 }
 
-/// Run desktops on `shell` — one after another, for as long as they keep
-/// failing and [`Policy`] keeps allowing them — with the compositor reading the
-/// config file `flag` names or the one where a config lives.
+/// Runs desktops on `shell`, restarting them while [`Policy`] allows.
 ///
-/// Whichever it is, the path is handed on rather than read here: what is in it
-/// is the compositor's business, and this process opening it first would be a
-/// second reader to disagree with — and the one whose complaint arrives before
-/// the compositor has said anything about its own file. The one question asked
-/// of the filesystem is whether the default is there at all, which is the
-/// difference between a path to hand on and none.
-///
-/// A MODULE CONFIG IS EVALUATED FIRST, by the builder, into the JSON the
-/// compositor reads -- the compositor runs no JavaScript -- and that JSON is
-/// the path handed on. And with no shell given, the config's is the shell: a
-/// module config's own `Shell`, or a JSON config's `shell`, relative to the
-/// config.
+/// The config path is passed to the compositor without being read here, so
+/// only one process reports errors in it. A module config is first evaluated
+/// to JSON by the builder, since the compositor runs no JavaScript. With no
+/// `shell`, the config's `Shell` export or `shell` key is used, relative to
+/// the config.
 fn desktop(shell: Option<&str>, flag: Option<&Path>) -> Result<ExitCode, String> {
     let env = |name: &str| std::env::var(name).ok();
     let config = config_file(flag, &env, &|path| path.exists());
@@ -319,36 +285,27 @@ fn desktop(shell: Option<&str>, flag: Option<&Path>) -> Result<ExitCode, String>
     };
     let components =
         components(&binary, &env, &|path| path.exists()).map_err(|missing| missing.to_string())?;
-    // What `BROWSER` names for every app this desktop starts: the program
-    // beside this one, in the same place for the same reason its components
-    // are — see `domicile_launch::components`.
+    // `BROWSER` for apps in this desktop, installed next to this binary.
     let browser = binary.with_file_name("domicile-open-url");
 
-    // `DOMICILE_PAGE` names the module, exactly as the argument does — a
-    // packaged desktop is a wrapper that types the command line so its user
-    // does not have to, and a second spelling of "which shell" would only be
-    // a second thing to get wrong. Built first, if it is built at all, so a
-    // shell that cannot be built starts nothing.
+    // `DOMICILE_PAGE` names the module like the argument does, for packaged
+    // desktops. Build before starting anything, so a broken shell starts
+    // nothing.
     let page = match (shell, named) {
         (Some(shell), _) => shell_named(shell, env("DOMICILE_PAGE").as_deref(), None)?,
         (None, Some((named, from))) => shell_named(&named, None, Some(&from))?,
         (None, None) => return Err(CliError::NoShell.to_string()),
     };
 
-    // Kept between runs, unlike everything below it: a profile thrown away
-    // with the run is every sign-in thrown away with it. Refused rather than
-    // guessed when nothing names a home, because a person's logins kept
-    // somewhere nobody named are logins nobody can find to delete.
+    // The profile persists across runs to keep sign-ins. Fail rather than
+    // guess a location, so the user can always find and delete it.
     let kept = profile_directory(&env)
         .ok_or("nowhere to keep the engine's profile -- neither XDG_STATE_HOME nor HOME is set")?;
-    // Held until this returns, across every desktop the run starts: another
-    // desktop running on the same profile is an engine that never starts.
+    // Held for the whole run: two engines cannot share a profile.
     let profile = claim(&kept)
         .map_err(|why| format!("cannot claim a profile beside {}: {why}", kept.display()))?;
 
-    // One directory per run, thrown away with it. The sockets go in it, so a
-    // desktop that exits leaves nothing behind and two running at once do not
-    // meet.
+    // A per-run directory for sockets, so concurrent desktops do not collide.
     let runtime = tempdir().map_err(|why| format!("no runtime directory: {why}"))?;
     let places = Runtime {
         broker: runtime.join("broker"),
@@ -361,45 +318,28 @@ fn desktop(shell: Option<&str>, flag: Option<&Path>) -> Result<ExitCode, String>
     };
     shim_xdg_open(&places.shims, &binary.with_file_name("domicile-xdg-open"))?;
 
-    // What was chosen, before anything is started: a failure below is about
-    // this shell, and naming it after the failure is too late to be read. The
-    // module rather than its directory, because the directory is what this
-    // used to print and it agreed with the wrong file as readily as the right
-    // one — the whole of the bug `shell_path` describes was invisible in it.
-    // Absolute, because `shell_path` resolved it: the answer below goes to
-    // processes that were started somewhere else, with working directories of
-    // their own, and a relative path read from one of those is a different
-    // file.
+    // Print the choices before starting anything, so later failures can be
+    // read against them. Print the absolute module path, not its directory, so
+    // a wrong file is visible.
     let module = page.root.join(&page.module);
     println!("shell: {}", module.display());
-    // Said for the same reason the shell is: a desk that comes up in the wrong
-    // arrangement is most often this file being a different one than the
-    // person thinks, and the alternative to printing it is reading a process
-    // list to find out. Which of the four answers it is and not just the path,
-    // now that one of them is a file nobody typed: a `--config` that went to
-    // the wrong place and a default that was picked up instead are the same
-    // line otherwise.
+    // Print how the config was chosen; a wrong config is a common cause of a
+    // wrong monitor layout.
     println!("config: {config}");
-    // A path nobody typed, and the one that decides which sign-ins a desk
-    // comes up with.
+    // The profile decides which sign-ins the desktop has.
     println!("profile: {}", places.profile.display());
 
-    // Taken before anything is started, because the compositor is started with
-    // this path in its environment and there is nothing to hand on if the bind
-    // has not happened. Taken by this process rather than by a component,
-    // because the commands after the first one are not all answered in the
-    // same place — and named after this process for the same reason: the
-    // display the compositor will bind does not exist yet, and a desktop
-    // cannot be named after something that has not happened.
+    // Bind before starting components, which inherit the path. The
+    // supervisor owns it because it routes some commands to the engine, and it
+    // is keyed on the pid because no Wayland display exists yet.
     let control = take(&places.control).map_err(|why| why.to_string())?;
     let serving = Arc::new(Mutex::new(module));
     answering(&control, Arc::clone(&serving), places.command.clone())?;
     println!("{VARIABLE}={}", places.control.display());
 
-    // A MODULE CONFIG IS WATCHED, and so is everything beside it: an edit is
-    // evaluated again into the file the compositor reads — which it watches —
-    // and, where the config is the shell, built again and loaded. A failure is
-    // said and leaves the desk as it was.
+    // Watch a module config's directory. On an edit, re-evaluate it into the
+    // JSON the compositor watches, and if the config is also the shell,
+    // rebuild and load it. A failure is reported and changes nothing.
     let compositor_config = match (config.path(), compositor_config) {
         (Some(module_config), Some(evaluated)) if is_module(module_config) => {
             let stable = runtime.join("config.json");
@@ -432,22 +372,16 @@ fn desktop(shell: Option<&str>, flag: Option<&Path>) -> Result<ExitCode, String>
     .map_err(|why| why.to_string())?;
     println!("the engine is taking the {platform} platform");
 
-    // BEFORE THE FIRST COMPONENT STARTS, because each one leads a process
-    // group of its own and is therefore out of the terminal's foreground
-    // group: Ctrl-C reaches this process alone now, and its default action
-    // would kill it before the components it started were stopped.
+    // Install before starting components. Each runs in its own process
+    // group, so Ctrl-C reaches only this process, whose default action would
+    // exit without stopping them.
     catch_interrupts();
 
-    // EVERYTHING ABOVE THIS LINE IS DECIDED ONCE AND EVERYTHING BELOW IT CAN
-    // BE HAD AGAIN. A missing engine, a refused platform and a control socket
-    // that could not be taken are the same answer however many times they are
-    // asked, so a run that started them again would be a run that never
-    // stopped being wrong. What is started again is an engine, for as long as
-    // there is a compositor to put one under, and a whole desktop when there
-    // is not. `domicile_launch::restart` holds why those are the two units.
+    // Everything above runs once, since retrying would give the same result.
+    // Below, the engine restarts while the compositor lives, and the whole
+    // desktop restarts otherwise. See `domicile_launch::restart`.
     let policy = Policy::default();
-    // Held for the whole run: dropped, it ends the session the user manager
-    // was told about, whichever way this function returns.
+    // Held for the whole run. Dropping it ends the graphical session.
     let said = SaidSession::new(&platform);
     let desktop = Desktop {
         browser: &browser,
@@ -460,10 +394,8 @@ fn desktop(shell: Option<&str>, flag: Option<&Path>) -> Result<ExitCode, String>
         policy: &policy,
         said: &said,
     };
-    // What the last desktop's compositor said, kept across the loop so that a
-    // run which gives up ends on the reason rather than on a pointer to it.
-    // The *last* one and not all five: they are the same six lines five times
-    // over, and a repeat of thirty is the wall this exists to cut down.
+    // The last desktop's compositor output, repeated if the run gives up.
+    // Only the last, since each attempt usually fails the same way.
     let mut said = None;
     let ending = keep_a_desktop_up(
         &policy,
@@ -474,18 +406,10 @@ fn desktop(shell: Option<&str>, flag: Option<&Path>) -> Result<ExitCode, String>
     );
     Ok(match ending {
         Ending::Over => ExitCode::SUCCESS,
-        // A stop is not a success, which is what this said before there was
-        // anything to restart: a run that was interrupted did not do what it
-        // was asked to.
+        // An interrupted run did not finish what was asked.
         Ending::Stopped => ExitCode::FAILURE,
-        // THE LAST THING ON THE TERMINAL IS THE ONE THING ANYONE READS, and
-        // for a desk that would not come up it used to be "every one of them
-        // said why above" -- true, and a pointer into two hundred lines of
-        // Chromium's startup log. The compositor's own words go here instead.
-        //
-        // Only where there are any: a run whose engine never started has
-        // nothing of the compositor's to repeat, and the pointer is then the
-        // honest answer rather than a heading over an empty quote.
+        // End on the compositor's own error, since the last line is what users
+        // read. If the compositor never ran, point to the output above.
         Ending::GaveUp { .. } => {
             match &said {
                 Some(said) => eprintln!("\ndomicile: the last compositor said:\n\n{said}"),
@@ -496,8 +420,7 @@ fn desktop(shell: Option<&str>, flag: Option<&Path>) -> Result<ExitCode, String>
     })
 }
 
-/// Everything one desktop is started from, worked out once and used for every
-/// desktop a run has.
+/// Inputs shared by every desktop a run starts.
 struct Desktop<'a> {
     browser: &'a Path,
     components: &'a Components,
@@ -506,32 +429,20 @@ struct Desktop<'a> {
     page: &'a Shell,
     places: &'a Runtime,
     platform: &'a str,
-    /// Shared by the two loops and counted separately by each: how long an
-    /// engine started again waits is the same question as how long a desktop
-    /// started again waits, and the answer is not two numbers.
+    /// The restart policy, shared by the engine and desktop loops. Each loop
+    /// counts its own failures.
     policy: &'a Policy,
-    /// The session the user manager is told about, said by each desktop.
+    /// The graphical session registration, renewed by each desktop.
     said: &'a SaidSession,
 }
 
-/// One desktop, from its first process to its last.
+/// Runs one desktop until its compositor exits.
 ///
-/// A DESKTOP IS AS LONG AS ITS COMPOSITOR, AND THAT IS WHAT MAKES ONE THE
-/// UNIT. An engine that dies inside it is replaced inside it — the loop for
-/// that is in [`up`] — so the failure that reaches here is a compositor that
-/// went, or an engine that would not stay up under one that did not. Whichever
-/// it was, the [`Running`] holding both is dropped when this returns, which
-/// signals each process group and waits for it.
-/// `domicile_launch::restart` holds why the compositor is the half that cannot
-/// be replaced under the other.
-///
-/// The failure is said here rather than carried out, because this is where the
-/// sentence is: an exit and a milestone that was never reached each already
-/// know how to say what happened.
+/// Engine restarts happen inside [`up`]. Returning drops the [`Running`],
+/// which stops every process group. See `domicile_launch::restart` for why the
+/// compositor cannot be replaced on its own.
 fn one_desktop(desktop: &Desktop, said: &mut Option<String>) -> Attempt {
-    // One per desktop rather than one per run: each attempt's compositor is a
-    // new process with its own reason, and a tail shared across five would be
-    // five reasons deep and the earliest of them cut in half.
+    // One per desktop, so the tail holds only this compositor's output.
     let heard = Arc::new(Mutex::new(Heard::new(WORTH_REPEATING)));
     let started = Instant::now();
     let attempt = match up(desktop, &heard) {
@@ -543,9 +454,8 @@ fn one_desktop(desktop: &Desktop, said: &mut Option<String>) -> Attempt {
             }
         }
     };
-    // After `up`, which is after its `Running` was dropped -- and that drop is
-    // what ends the listener and joins it, so everything the compositor said
-    // is in hand by this line. See `supervise::Running::drop`.
+    // `up` dropped its `Running`, which joins the stderr listener, so all
+    // output is captured. See `supervise::Running::drop`.
     *said = heard
         .lock()
         .expect("nothing panics holding what a component said")
@@ -553,23 +463,17 @@ fn one_desktop(desktop: &Desktop, said: &mut Option<String>) -> Attempt {
     attempt
 }
 
-/// Start the two components in the one order they can be started in, keep an
-/// engine under the compositor for as long as the compositor lasts, and return
-/// when the compositor does not.
+/// Starts the engine, then the compositor, and restarts the engine until the
+/// compositor exits.
 fn up(desktop: &Desktop, heard: &Arc<Mutex<Heard>>) -> Result<(), String> {
-    // WHAT THE LAST DESKTOP LEFT WOULD BE READ AS THIS ONE'S. The session
-    // document is the one that matters: the wait below is for that file to
-    // appear, so one still on disk is a desktop announced up before its
-    // compositor has bound anything.
+    // Remove the last desktop's files. A stale session document would make
+    // the wait below succeed too early.
     clear_the_last_one(desktop.places).map_err(|leftover| leftover.to_string())?;
 
     let mut running = Running::new();
     start_an_engine(desktop, &mut running)?;
 
-    // Overheard, where the engine is not: this one's stderr is its own -- its
-    // tracing goes to stdout -- so what arrives is the fatal complaint and
-    // nothing else, while the engine's is Chromium's and is the volume being
-    // cut through.
+    // Capture only the compositor's stderr; see `domicile_launch::heard`.
     running
         .start_overheard(
             "compositor",
@@ -596,16 +500,9 @@ fn up(desktop: &Desktop, heard: &Arc<Mutex<Heard>>) -> Result<(), String> {
     println!("domicile is up. Apps connect to the WAYLAND_DISPLAY the compositor names above.");
     println!("Ctrl-C to stop.");
 
-    // AN ENGINE THAT DIES IS REPLACED UNDER THE COMPOSITOR AND A COMPOSITOR
-    // THAT DIES IS NOT. `domicile_launch::restart` holds which way round that
-    // is and why; what it means here is that the loop below is the engine's,
-    // and the one thing that ends it is the compositor — whose death, or whose
-    // clean exit, is this desktop being over.
-    //
-    // `over` carries that out rather than being returned, because the loop's
-    // own return value is about the engine: `Ending::Over` is "the attempt
-    // said there is nothing more to start", and what actually happened is the
-    // exit the attempt saw.
+    // Restart the engine until the compositor exits; see
+    // `domicile_launch::restart`. `over` records how the compositor exited,
+    // because the loop's own result describes the engine.
     let mut over = None;
     let mut first = true;
     let ending = keep_the_engine_up(
@@ -618,10 +515,7 @@ fn up(desktop: &Desktop, heard: &Arc<Mutex<Heard>>) -> Result<(), String> {
     match ending {
         Ending::Over => over.expect("the engine's loop ends on an exit it recorded"),
         Ending::Stopped => Err("a stop was asked for".to_string()),
-        // Not this loop's to fix. A whole new desktop is a different thing to
-        // try — a fresh compositor, a fresh page, a directory cleared of
-        // everything either of them bound — and the loop that stands one up is
-        // the caller's.
+        // The caller restarts the whole desktop.
         Ending::GaveUp { failures } => Err(format!(
             "{failures} engines in a row have failed under this compositor, so the desktop \
              goes with them"
@@ -629,17 +523,12 @@ fn up(desktop: &Desktop, heard: &Arc<Mutex<Heard>>) -> Result<(), String> {
     }
 }
 
-/// One engine, from the process starting to whatever ended the wait.
+/// Runs one engine until a component exits.
 ///
-/// `first` is whether the engine this attempt is about has already been
-/// started — the first one of a desktop is, above, because the compositor
-/// cannot be started until its broker socket is there. Every one after it is
-/// started here, which is what puts it AFTER the backoff the last one's death
-/// earned rather than before it.
-///
-/// [`Attempt::Ended`] is the compositor going rather than the engine, and the
-/// exit that says so is put in `over` for [`up`] to return: there is nothing
-/// left to put an engine under, so this desktop is finished either way.
+/// `first` is true when [`up`] already started this engine, since the
+/// compositor needs its broker socket. Later engines start here, after the
+/// backoff. A compositor exit returns [`Attempt::Ended`] and stores the result
+/// in `over` for [`up`].
 fn one_engine(
     desktop: &Desktop,
     running: &mut Running,
@@ -648,9 +537,8 @@ fn one_engine(
 ) -> Attempt {
     let started = Instant::now();
     if !*first {
-        // What the last engine bound and the next one binds over. NOT the
-        // compositor's socket or its session document, which are a live
-        // desktop's — see `clear_the_last_engine`.
+        // Clear only the engine's files; the compositor is still live. See
+        // `clear_the_last_engine`.
         let cleared = clear_the_last_engine(desktop.places)
             .map_err(|leftover| leftover.to_string())
             .and_then(|()| start_an_engine(desktop, running));
@@ -664,16 +552,11 @@ fn one_engine(
     *first = false;
     let exit = running.until_one_exits();
     match exit.what == "engine" && exit.how != CLEANLY {
-        // The compositor is still serving, its clients are still connected,
-        // and it re-dials the engine that replaces this one the moment that
-        // engine's page reaches it -- `engine_restart` in the compositor is
-        // the other half of this sentence.
+        // The compositor keeps serving and reconnects to the next engine; see
+        // `engine_restart` in the compositor.
         true => {
-            // SAID HERE, because this is the one exit nothing further up sees:
-            // `one_desktop` prints what `up` returns, and what `up` returns
-            // for a desktop that is still serving is nothing at all. An engine
-            // that went without a line saying which status it went with is a
-            // window that vanished for no stated reason.
+            // Print here: no caller reports an engine exit while the desktop
+            // is still up.
             eprintln!("domicile: {exit}");
             running.let_go_of("engine");
             Attempt::Failed {
@@ -690,12 +573,9 @@ fn one_engine(
     }
 }
 
-/// Start an engine and wait for the broker socket it exists to create.
+/// Starts an engine and waits for its broker socket.
 ///
-/// Every wait here is watched rather than slept through. What a component did
-/// instead of the thing being waited for is the answer, and it is most often
-/// that it is no longer running — which used to be thirty seconds of nothing
-/// followed by a sentence about a socket.
+/// The wait also watches for exits, so a crash is reported at once.
 fn start_an_engine(desktop: &Desktop, running: &mut Running) -> Result<(), String> {
     running
         .start(
@@ -716,12 +596,9 @@ fn start_an_engine(desktop: &Desktop, running: &mut Running) -> Result<(), Strin
     )
 }
 
-/// Wait out the backoff, in the same slices everything else here waits in, so
-/// that a Ctrl-C between two desktops is noticed when it arrives rather than
-/// when the next one would have started.
+/// Sleeps for the backoff, returning early on a stop request.
 ///
-/// Returning early is not the answer to the stop and does not have to be: the
-/// caller asks [`interrupted`] again the moment this returns.
+/// The caller checks [`interrupted`] again on return.
 fn wait_or_notice_a_stop(wait: Duration) {
     let until = Instant::now() + wait;
     while Instant::now() < until && !interrupted() {
@@ -729,31 +606,19 @@ fn wait_or_notice_a_stop(wait: Duration) {
     }
 }
 
-/// What `ExitStatus` says about a component that stopped on purpose. Compared
-/// as a string because that is what an [`Exit`](domicile_launch::supervise::Exit)
-/// carries: the status is kept the way a shell would say it so that a desktop
-/// killed by a signal and one that returned 11 do not read the same.
+/// The `ExitStatus` text for a clean exit.
+///
+/// A string because [`Exit`](domicile_launch::supervise::Exit) stores the
+/// status as displayed, which tells signals apart from exit codes.
 const CLEANLY: &str = "exit status: 0";
 
-/// Answer the control socket for as long as the desktop is up, with `engine`
-/// the socket the commands that route are routed to.
+/// Serves the control socket on a thread, routing engine commands to `engine`.
 ///
-/// On a thread of its own because the rest of this program is a supervisor
-/// that blocks: it waits on a file, then on a pair of children, and a command
-/// arriving in the middle of either is not a command that should wait for
-/// them.
-///
-/// A connection that fails is logged and the next one is taken. There is
-/// nothing to recover from — the asker is gone, or said nothing — and a
-/// desktop that stopped answering because one client hung up would be a
-/// control socket that goes away at the first misbehaving caller.
-///
-/// WHICH SHELL IS SERVED IS KEPT HERE, and it changes: a `load-shell` the
-/// engine carried out makes every later `which-shell` a different answer, and
-/// a supervisor that went on naming the module its run started with would be
-/// answering for a desktop that no longer exists. Read out before the line is
-/// answered and written after the engine has taken it, so the dial never
-/// happens with the lock held.
+/// A separate thread because the supervisor blocks on its children. A failed
+/// connection is logged and skipped, so one bad client cannot stop the socket.
+/// `serving` tracks the current shell; it is read before answering and written
+/// only after the engine accepts a load, so the lock is never held across the
+/// call.
 fn answering(
     control: &Control,
     serving: Arc<Mutex<PathBuf>>,
@@ -786,10 +651,11 @@ fn answering(
     Ok(())
 }
 
-/// Watch the module config at `config` and everything beside it: evaluate an
-/// edit again into `evaluated`, which the compositor reads and watches, and —
-/// with `shell`, the module being served and the engine's socket — build the
-/// config again as the shell and load it.
+/// Watches the module config's directory and reloads on edits.
+///
+/// Re-evaluates into `evaluated`, which the compositor watches. With `shell`
+/// (the served module and the engine socket), also rebuilds the config as the
+/// shell and loads it.
 fn watching_the_config(
     binary: &Path,
     config: &Path,
@@ -822,9 +688,8 @@ fn watching_the_config(
     })
 }
 
-/// Say a reload failed as a notification, because the user is looking at the
-/// desk and not at the terminal it was started from. Only on stderr when it
-/// cannot be said: the line above already holds what went wrong.
+/// Reports a failed reload as a notification, since the user is not watching
+/// the terminal.
 fn say_on_the_desk(config: &Path, why: &str) {
     let name = config
         .file_name()
@@ -837,8 +702,8 @@ fn say_on_the_desk(config: &Path, why: &str) {
     }
 }
 
-/// Evaluate `config` again and put the result at `evaluated`, whole: written
-/// beside it and renamed over, so the compositor never reads half of one.
+/// Re-evaluates `config` into `evaluated` atomically, so the compositor never
+/// reads a partial file.
 fn reevaluated(binary: &Path, config: &Path, evaluated: &Path) -> Result<(), String> {
     let fresh = evaluated_json(binary, config)?;
     let staged = evaluated.with_extension("json.next");
@@ -847,7 +712,7 @@ fn reevaluated(binary: &Path, config: &Path, evaluated: &Path) -> Result<(), Str
         .map_err(|why| format!("cannot place the evaluated config: {why}"))
 }
 
-/// The module this desktop is serving as of this command.
+/// The module the desktop is currently serving.
 fn shell(serving: &Mutex<PathBuf>) -> PathBuf {
     serving
         .lock()
@@ -855,12 +720,10 @@ fn shell(serving: &Mutex<PathBuf>) -> PathBuf {
         .clone()
 }
 
-/// Put one `load_shell` to the engine, and remember what it is serving once it
-/// has taken it.
+/// Sends `load_shell` to the engine and records the new shell.
 ///
-/// Written only on the way out of a load the engine answered `loaded` to: an
-/// engine that refused is still serving what it was, and a supervisor that
-/// wrote first would answer `which-shell` with a shell nothing is on.
+/// `serving` is updated only after the engine accepts, since a refused load
+/// leaves the old shell in place.
 fn load_the_shell(
     engine: &Path,
     root: &Path,
@@ -874,15 +737,10 @@ fn load_the_shell(
     Ok(())
 }
 
-/// Wait for one milestone against the real world: the filesystem for whether
-/// it happened, the components for whether one of them stopped, the signal
-/// handler's flag for whether a stop has been asked for, and the clock for how
-/// long it has been.
+/// Waits for a milestone file, watching for exits and stop requests.
 ///
-/// The flag is read here as well as in [`Running::until_one_exits`], because
-/// between them is where a run spends its first minute. A Ctrl-C in that
-/// minute used to do nothing at all — see [`reach`] for what that leaves on a
-/// tty.
+/// Checking for a stop here matters because startup can take a minute; see
+/// [`reach`] for what an ignored Ctrl-C leaves on a tty.
 fn wait_for(milestone: &Milestone, path: &Path, running: &mut Running) -> Result<(), String> {
     let started = Instant::now();
     reach(
@@ -898,8 +756,7 @@ fn wait_for(milestone: &Milestone, path: &Path, running: &mut Running) -> Result
     .map_err(|stalled| stalled.to_string())
 }
 
-/// The engine's half of a desktop: it creates this before anything can be
-/// submitted to it, and the compositor is not started until it is there.
+/// The engine's broker socket, which must exist before the compositor starts.
 fn broker(broker: &Path, engine: &Path) -> Milestone {
     Milestone {
         awaited: format!("the engine's broker socket at {}", broker.display()),
@@ -913,8 +770,7 @@ fn broker(broker: &Path, engine: &Path) -> Milestone {
     }
 }
 
-/// The compositor's half: published once every socket is bound and its window
-/// is open, which is the last thing it does before it serves.
+/// The compositor's session document, written once it is ready to serve.
 fn session(session: &Path) -> Milestone {
     Milestone {
         awaited: format!("the compositor's session document at {}", session.display()),
@@ -926,24 +782,16 @@ fn session(session: &Path) -> Milestone {
     }
 }
 
-/// A run's desktops as the login session, said to the systemd user manager —
-/// see `domicile_launch::graphical_session`.
+/// Registers the run's desktops as the graphical session; see
+/// `domicile_launch::graphical_session`.
 ///
-/// SAID FOR EACH DESKTOP, ENDED ONCE. Every desktop a run stands up says
-/// itself again — its display may be another, and saying is idempotent — but
-/// the session ends only when the run does: ending it is irreversible, and a
-/// desktop started again straight after would find its graphical session
-/// refused while that is still going down.
-///
-/// ONLY ON THE DRM PLATFORM, which is a desk that owns the screen and so is the
-/// session; a desk in a window says nothing, its session being the host's.
-///
-/// BEST EFFORT, LIKE THE COMPOSITOR'S OWN WORD TO THE BUS. A machine with no
-/// systemd user manager, or none that has `domicile-session.target`, is an
-/// ordinary desk whose portal does not start; it is said as a warning, rather
-/// than refusing a desk over it. A launcher killed outright never ends what it
-/// began, so a session started after it finds its variables until it says its
-/// own.
+/// - Each desktop registers again (its display may differ), but the session
+///   ends only once, when the run ends. Ending is irreversible, and a desktop
+///   restarted while the session is shutting down would be refused.
+/// - Only on the DRM platform. A nested desktop leaves this to its host.
+/// - Best effort: without a systemd user manager or `domicile-session.target`,
+///   the portal does not start and a warning is printed. If the launcher is
+///   killed, its variables remain until the next session sets its own.
 struct SaidSession {
     is_the_session: bool,
     manager: Mutex<Option<zbus::blocking::Connection>>,
@@ -957,7 +805,7 @@ impl SaidSession {
         }
     }
 
-    /// Say the desktop that is up now.
+    /// Registers the desktop that just came up.
     fn say(&self, places: &Runtime) {
         if self.is_the_session {
             match Self::said(places) {
@@ -996,9 +844,11 @@ impl Drop for SaidSession {
     }
 }
 
-/// `xdg-open` in `shims`, as `domicile-xdg-open` — see
-/// `domicile_launch::xdg_open`. A link rather than a copy: that program finds
-/// `domicile` beside itself, and a link resolves to where it really is.
+/// Links `domicile-xdg-open` as `xdg-open` in `shims`; see
+/// `domicile_launch::xdg_open`.
+///
+/// A symlink, not a copy, so the program can find `domicile` next to its real
+/// path.
 fn shim_xdg_open(shims: &Path, program: &Path) -> Result<(), String> {
     std::fs::create_dir_all(shims)
         .map_err(|why| format!("cannot make {}: {why}", shims.display()))?;
@@ -1006,10 +856,10 @@ fn shim_xdg_open(shims: &Path, program: &Path) -> Result<(), String> {
         .map_err(|why| format!("cannot put xdg-open in {}: {why}", shims.display()))
 }
 
-/// The `share` of the installation `browser` is in: `$out/share` beside
-/// `$out/bin`, which carries `domicile-mimeapps.list` and the
-/// `domicile-open-url` entry it names. Out of a checkout it is a `share` that
-/// is not there, and a data directory that does not exist is skipped.
+/// The installation's `share` directory, which holds `domicile-mimeapps.list`
+/// and the `domicile-open-url` desktop entry.
+///
+/// In a checkout it does not exist, and missing data directories are skipped.
 fn data_of(browser: &Path) -> Result<PathBuf, String> {
     browser
         .parent()
@@ -1018,10 +868,11 @@ fn data_of(browser: &Path) -> Result<PathBuf, String> {
         .ok_or_else(|| format!("{} is in no installation of its own", browser.display()))
 }
 
-/// A directory of this run's own, under the runtime directory when there is
-/// one. `XDG_RUNTIME_DIR` is the user's and mode 700, which is where sockets
-/// belong; `/tmp` is the fallback and is world-readable, so the sockets' own
-/// permissions are what protect them there.
+/// Creates this run's directory under `XDG_RUNTIME_DIR` (mode 700), or the
+/// temp directory as a fallback.
+///
+/// The temp directory is world-readable, so there the sockets' own permissions
+/// protect them.
 fn tempdir() -> std::io::Result<std::path::PathBuf> {
     let base = std::env::var("XDG_RUNTIME_DIR")
         .map(std::path::PathBuf::from)

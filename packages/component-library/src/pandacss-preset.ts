@@ -5,23 +5,15 @@ import type { Size } from "./control-sizes";
 import { CONTROL_HEIGHT, CONTROL_PADDING_INLINE } from "./control-sizes";
 import { SPACING_STEP_REM } from "./spacing";
 
-// The pandacss preset and `@pandacss/dev`'s Preset shape are slightly
-// different. The values are compatible at runtime. Bind to a typed local with a
-// ts-expect-error so the suppression fails loudly — and can be deleted along
-// with this comment — the moment the two packages' types converge.
+// The two packages' Preset types differ but are compatible at runtime. The
+// ts-expect-error fails once the types agree, so it can then be removed.
 // @ts-expect-error preset shape mismatch between @pandacss/preset-panda and @pandacss/dev
 const basePreset: Preset = pandacssPreset;
 
-// Extends the default Panda spacing scale with every quarter-step from `0`
-// through `MAX_SPACING_STEP`, each resolving to `step * SPACING_STEP_REM`
-// rem. The upper bound is large because compound-variants and inline
-// `width`/`height` numeric props all read from this scale; capping low
-// would silently break dynamically-sized containers. The set is sparse at
-// the consumer (only referenced steps emit CSS) but listed densely here so
-// any lookup succeeds.
+// Adds every quarter step up to `MAX_SPACING_STEP` to the spacing scale. The
+// bound is high because numeric size props use this scale, and a missing step
+// silently emits no style. Only referenced steps produce CSS.
 const MAX_SPACING_STEP = 1000;
-// Distance between adjacent keys: 0, 0.25, 0.5, … (the rem value of one step,
-// `SPACING_STEP_REM`, is shared with the runtime helpers in `./spacing`).
 const SPACING_STEP_KEY_INCREMENT = 0.25;
 const quarterStepSpacing = Object.fromEntries(
   Array.from(
@@ -38,54 +30,34 @@ export const domicilePreset = definePreset({
     extend: {
       activeEnabled: "&:active:not(:disabled):not([data-disabled])",
       hoverEnabled: "&:hover:not(:disabled):not([data-disabled])",
-      // Panda's built-in `_light` condition keys off a `light` *class*; the
-      // chrome flips themes with `data-theme="light"` on `<html>` instead, so
-      // the attribute and the theme it names stay together in the markup.
+      // Panda's default `_light` matches a `light` class; we use
+      // `data-theme="light"` on `<html>`.
       light: "[data-theme=light] &",
-      // Touch-input device. The `pointer` media feature is the only
-      // correct signal for "primary input is a finger" — viewport width
-      // alone misclassifies a docked laptop in tablet mode (still
-      // mouse) and a touchscreen monitor (still mouse). Anything driven
-      // by a coarse pointer wants larger tap targets and a visible
-      // backdrop scrim around overlays.
+      // Primary input is touch. Uses `pointer` because viewport width can't
+      // tell a touchscreen monitor from a mouse-driven one.
       pointerCoarse: "@media (pointer: coarse)",
-      // Touch device on a tablet-sized or larger screen — centered
-      // modal-style overlay. Same large tap targets and visible
-      // backdrop as `touchSheet`, but the popup floats in the middle
-      // of the viewport with all four corners rounded instead of
-      // riding the bottom edge.
+      // Touch on a tablet or larger screen: popups are centered overlays.
       touchOverlay: "@media (pointer: coarse) and (min-width: 640px)",
-      // Touch device on a small (phone-sized) screen — mobile sheet
-      // pattern: bottom drawer pulled up from the viewport edge. 640px
-      // matches Panda's `sm` breakpoint and aligns the boundary with
-      // `touchOverlay` below so devices land in exactly one mode.
+      // Touch on a phone-sized screen: popups are bottom sheets. 640px is
+      // Panda's `sm` breakpoint and the boundary with `touchOverlay`.
       touchSheet: "@media (pointer: coarse) and (max-width: 639px)",
     },
   },
   // biome-ignore assist/source/useSortedKeys: Theme-toggle-wipe rules are kept grouped under their shared explanatory comment instead of being scattered alphabetically.
   globalCss: {
-    // Theme-toggle wipe. Consumers that trigger a theme flip via
-    // `document.startViewTransition(...)` get the new theme wiped over
-    // the old one as a clip-path swipe across the viewport — smoother
-    // than animating every color property individually (which would
-    // force a global `transition` declaration that overrides element-
-    // specific transitions). Direction is selected by the
-    // `data-theme-flip-to` attribute set on `<html>` before the
-    // transition starts: going *to* dark wipes in from the top,
-    // going *to* light wipes in from the bottom. The browser skips view
-    // transitions automatically under `prefers-reduced-motion`.
+    // Theme change wipe: a view transition clips the new theme in over the
+    // old. This avoids a global color `transition` that would override
+    // element transitions. `data-theme-flip-to` on `<html>` sets the
+    // direction: dark from the top, light from the bottom.
     "::view-transition-old(root)": {
-      // The old snapshot stays fully opaque underneath; only the new
-      // layer animates. Without this the browser's default fade-out
-      // plays alongside the wipe and we get a half-fade plus a swipe.
+      // Disable the default fade-out so only the wipe plays.
       animationName: "none",
     },
     "::view-transition-new(root)": {
       animationDuration: "{durations.slowest}",
       animationTimingFunction: "{easings.outQuart}",
-      // Force opaque composition so the wipe is a clean reveal instead
-      // of the default `plus-lighter` blend, which would leave an
-      // additive seam at the leading edge of the clip.
+      // The default `plus-lighter` blend leaves a bright seam at the clip
+      // edge.
       mixBlendMode: "normal",
     },
     "html[data-theme-flip-to='dark']::view-transition-new(root)": {
@@ -94,19 +66,10 @@ export const domicilePreset = definePreset({
     "html[data-theme-flip-to='light']::view-transition-new(root)": {
       animationName: "themeSwipeFromBottom",
     },
-    // Suppress every element-level transition while a theme flip is in
-    // flight. Without this, transitions like the control recipe's
-    // `background-color {durations.fastest}` are still mid-flight when
-    // the browser captures the "new" snapshot — the snapshot ends up
-    // looking nearly identical to the old one, so the crossfade has
-    // nothing to fade *between* for those elements, and once the
-    // transition reveals the real DOM at the end, the in-flight
-    // per-element transitions snap to completion visibly. The
-    // `data-theme-flipping` attribute is set on `<html>` immediately
-    // before `startViewTransition` and cleared in its `finished`
-    // handler. `!important` is necessary to override per-element
-    // `transition` declarations that have higher specificity than
-    // `[data-theme-flipping] *`.
+    // Disable element transitions during a theme change. Otherwise they are
+    // mid-flight when the new snapshot is captured, so the snapshot shows the
+    // old colors and the elements snap at the end. `!important` beats more
+    // specific `transition` rules.
     "[data-theme-flipping] *, [data-theme-flipping] *::before, [data-theme-flipping] *::after":
       {
         transition: "none !important",
@@ -162,11 +125,7 @@ export const domicilePreset = definePreset({
           "50%": { opacity: "0.7" },
           "100%": { opacity: "0.3" },
         },
-        // A full turn, for a control saying something is on its way: a
-        // spinner reads as motion rather than as a state, which is what a
-        // page still arriving is. `pulse` beside it is the other half of the
-        // same vocabulary — it dims a control that is busy, where this turns
-        // an indicator that is waiting.
+        // A loading spinner. `pulse` is for a busy control instead.
         spin: {
           "0%": { transform: "rotate(0deg)" },
           "100%": { transform: "rotate(360deg)" },
@@ -179,8 +138,7 @@ export const domicilePreset = definePreset({
           "0%": { clipPath: "inset(0 0 100% 0)" },
           "100%": { clipPath: "inset(0 0 0 0)" },
         },
-        // A toast's countdown: the hairline along its foot running out, as
-        // long as the toast stays up — see `Toaster`.
+        // The countdown bar in `Toaster`.
         toastCountdown: {
           "0%": { transform: "scaleX(1)" },
           "100%": { transform: "scaleX(0)" },
@@ -204,12 +162,8 @@ export const domicilePreset = definePreset({
             `,
           },
           className: "control",
-          // Bind to the JSX components that consume the recipe so Panda
-          // extracts `size` from `<Button size="sm">` at consumer call sites.
-          // Without this, only sizes that appear as object literals (e.g.
-          // `control({ size: "md" })`, recipe compoundVariants) get emitted —
-          // runtime calls like `control({ size })` inside the wrapper are
-          // opaque to the static extractor.
+          // Lets Panda extract `size` from props such as `<Button size="sm">`.
+          // It can't see runtime calls like `control({ size })`.
           jsx: ["Button", "Input", "Select", "Textarea"],
           variants: {
             // biome-ignore assist/source/useSortedKeys: The sort order is useful here
@@ -283,31 +237,19 @@ export const domicilePreset = definePreset({
         }),
       },
       semanticTokens: {
-        // Light/dark theming: `base` is the dark palette (matches the
-        // app's original look). Setting `data-theme="light"` on `<html>`
-        // (or any ancestor) flips to the `_light` overrides via Panda's
-        // built-in `_light` condition.
+        // `base` is dark; `_light` applies under `data-theme="light"`.
         //
-        // Only the *primitive* color tokens (foreground, background,
-        // accent, danger, success, warning) need per-theme values. The
-        // derived tokens below resolve at CSS time via `color-mix(...,
-        // var(--colors-foreground), var(--colors-background))` — when
-        // the CSS variables for foreground/background flip, every
-        // derived token recomputes automatically.
+        // Only foreground, background, accent, danger, success and warning
+        // have per-theme values. The rest are `color-mix(...)` of those, so
+        // they follow the theme.
         colors: {
           accent: {
-            // 700 on the light ground and 500 on the dark one, which is not a
-            // matched pair and is not meant to be: what is matched is how far
-            // each sits from the ground it is drawn on. The same step in both
-            // themes would be legible in one of them — `pandacss-preset.test.ts`
-            // is what says which, and it is the rule the other three colors
-            // below were already written to.
+            // Steps differ per theme so each has enough contrast with its
+            // background. `pandacss-preset.test.ts` checks this.
             value: { _light: "{colors.cyan.700}", base: "{colors.cyan.500}" },
           },
           backdrop: {
-            // Black scrim works for both modes: in dark mode it creates
-            // depth; in light mode it dims the page enough to focus on
-            // the modal without losing readability.
+            // Black works in both themes.
             value: "rgb(from black r g b / 70%)",
           },
           background: {
@@ -345,10 +287,8 @@ export const domicilePreset = definePreset({
             value:
               "color-mix(in oklab, {colors.foreground} 55%, {colors.background})",
           },
-          // Lettering and the panels it sits in, drawn straight onto a
-          // photograph — the wallpaper under the bar. The same in both
-          // themes, for `shadows.textOverPhoto`'s reason: a photograph is not
-          // a theme.
+          // Text and panels drawn over the wallpaper. Theme-independent
+          // because the wallpaper doesn't change with the theme.
           onPhoto: {
             value: "white",
           },
@@ -367,13 +307,8 @@ export const domicilePreset = definePreset({
           },
         },
         shadows: {
-          // Soft, broad drop shadow for a surface that floats over the page
-          // it belongs to — `Select`'s popup is the one consumer. Bigger and
-          // softer than the default `shadows.md` so the elevation reads on the
-          // dark `background` without looking crisply outlined. Light mode
-          // drops the alpha dramatically (50% → 15%) because the same shadow
-          // on a light surface looks heavy and grayed-out — light surfaces
-          // need just enough contrast to imply lift, not a hard halo.
+          // A soft shadow for floating surfaces such as popups. Lighter in
+          // light mode, where the dark value looks heavy.
           lifted: {
             value: {
               _light: "0 6px 24px rgb(from black r g b / 15%)",
@@ -383,13 +318,9 @@ export const domicilePreset = definePreset({
           modal: {
             value: "0 20px 48px rgb(from black r g b / 60%)",
           },
-          // A *text* shadow, which is what `textShadow` reads this category
-          // for: light text over a photograph, where nothing else separates
-          // the two. Tight and nearly opaque rather than soft and broad — a
-          // blurred shadow under 10px type reads as a smudge, and what this
-          // has to survive is a wallpaper that may be white behind any
-          // given letter. The same in both themes, because a photograph is
-          // not a theme.
+          // A text shadow for light text over the wallpaper. Tight and dark
+          // because a blurred shadow under small text looks smudged.
+          // Theme-independent, like `onPhoto`.
           textOverPhoto: {
             value: "0 1px 2px rgb(from black r g b / 80%)",
           },
@@ -397,35 +328,22 @@ export const domicilePreset = definePreset({
       },
       tokens: {
         borderWidths: {
-          // A stroke around each letter in its own color, painted under it
-          // (`paintOrder: "stroke"`) so only its outer half shows: that reads
-          // as semibold without a heavier weight's wider letters, for emphasis
-          // that must not move the text around it. In `em` so it thickens
-          // with the type.
+          // A text stroke painted under the glyphs (`paintOrder: "stroke"`)
+          // to look semibold without a wider font weight shifting layout.
           fauxBold: { value: "0.05em" },
         },
         durations: {
-          // A dissolve between two pictures — far longer than any of the
-          // default durations, which measure how long a control takes to
-          // answer. Nothing is waiting on this one: the shell's wallpaper
-          // crossfades over it while the user carries on working.
+          // Wallpaper crossfade. Long because nothing waits on it.
           crossfade: { value: "2s" },
           pulse: { value: "1.5s" },
-          // One turn of `spin`. Faster than `pulse`, because a spinner that
-          // turns as slowly as a control pulses reads as stuck rather than as
-          // working.
+          // One turn of `spin`. A slower spinner looks stuck.
           spin: { value: "1s" },
         },
         easings: {
-          // Back-out with a ~15% overshoot at the end of the curve.
-          // Used by the ThemeSwitch slot's rise transition to give the
-          // landing icon a small bounce.
+          // Ease-out with a small overshoot, for a landing bounce.
           outBack: { value: "cubic-bezier(0.34, 1.8, 0.64, 1)" },
-          // Moderately strong ease-out (easeOutQuart). Decelerates
-          // noticeably — fast at the start, easing to a soft landing —
-          // but less abrupt than easeOutExpo. Use for "settling"
-          // animations (e.g. the theme-toggle wipe) where the default
-          // `easings.out` feels too linear.
+          // easeOutQuart, for settling animations where `easings.out` feels
+          // too linear.
           outQuart: { value: "cubic-bezier(0.25, 1, 0.5, 1)" },
         },
         fonts: {
@@ -435,23 +353,12 @@ export const domicilePreset = definePreset({
           },
         },
         gradients: {
-          // The ground under light text drawn straight onto a photograph —
-          // the other half of `shadows.textOverPhoto`, which is a hairline
-          // under each letter and not enough on its own when the picture is
-          // bright across the whole band. It ends fully transparent so the
-          // band finishes in the wallpaper rather than against a line, and
-          // the stop two thirds of the way down is what keeps the text's own
-          // row dark: a straight ramp is already half gone by the middle,
-          // which is exactly where the letters are. Black rather than a
-          // theme color, and the same in both themes, because a photograph
-          // is not a theme. `to bottom` is physical because
-          // `linear-gradient` has no logical direction keyword; a scrim
-          // under a bar hung from the top of the screen is physical anyway.
+          // A dark band behind light text at the top of the wallpaper, for
+          // when `shadows.textOverPhoto` is not enough. The 65% stop keeps the
+          // text row dark before the fade. Theme-independent, like `onPhoto`.
           //
-          // IT IS SIZED FOR A BAND DEEPER THAN THE TEXT IT CARRIES. Drawn at
-          // exactly the height of the text's own row it reads as a smear,
-          // because the fade has nowhere to happen; the consumer gives it
-          // room below the text and the ramp lands in that room.
+          // Make the band taller than the text so the fade has room below
+          // it.
           scrimOverPhoto: {
             value:
               "linear-gradient(to bottom, rgb(from black r g b / 85%), rgb(from black r g b / 55%) 65%, transparent)",
@@ -459,31 +366,21 @@ export const domicilePreset = definePreset({
         },
         opacity: {
           disabled: { value: "0.6" },
-          // A dragged element fades to signal it's the one in flight, so the
-          // drop target reads clearly underneath it.
+          // Fades a dragged element so the drop target shows through.
           dragging: { value: "0.4" },
           pulseMin: { value: "0.3" },
         },
-        // `sizes` mirrors `spacing` so bare numbers on size props
-        // (`inlineSize`, `blockSize`, `min*Size`, `max*Size`) resolve through
-        // the same quarter-step scale. Without this, Panda treats numeric
-        // size values as raw pixels (`inlineSize: 65` → `65px` instead of
-        // `var(--sizes-65)` = `16.25rem`).
+        // Without this, Panda treats numeric sizes as pixels
+        // (`inlineSize: 65` would be `65px`, not `16.25rem`).
         sizes: quarterStepSpacing,
         spacing: quarterStepSpacing,
         zIndex: {
-          // Over `modal`, and the only thing that is: a shell's lock screen
-          // covers the whole desktop including whatever panel was open when
-          // nobody was left at it. A lock under an open launcher would be a
-          // locked desk somebody could still type a path into.
+          // Above everything, so an open panel can't be used while locked.
           lock: { value: "202" },
           modal: { value: "201" },
           modalBackdrop: { value: "200" },
-          // Under a modal and its backdrop, and over everything a page lays
-          // out: a toast is news about the page, and drawn over a dialog it
-          // would cover the thing being answered. Panda's own is 1700, over
-          // the lock screen, which would put a notification on a locked
-          // desk; this preset's scale is the one above.
+          // Below modals so it never covers a dialog, and below the lock
+          // screen. Panda's default (1700) would be above both.
           toast: { value: "199" },
         },
       },

@@ -1,5 +1,4 @@
-//! The desk's sound, read off `pactl -f json` and asked of it in `pactl`'s own
-//! words.
+//! Reading audio state from `pactl -f json` and building `pactl` commands.
 
 use std::collections::BTreeSet;
 use std::time::{Duration, Instant};
@@ -9,10 +8,10 @@ use domicile_host::audio::{
 };
 use domicile_protocol::{AudioCard, AudioChoice, AudioDevice, AudioStream};
 
-/// `pactl -f json info`, cut down to what is read.
+/// `pactl -f json info`, trimmed to the fields read.
 const INFO: &str = r#"{"server_name":"PulseAudio (on PipeWire 1.2.7)","default_sink_name":"alsa_output.analog-stereo","default_source_name":"alsa_input.analog-stereo"}"#;
 
-/// `pactl -f json list`, cut down to what is read and one of everything.
+/// `pactl -f json list`, trimmed to the fields read, one of each kind.
 const LIST: &str = r#"{
   "modules": [],
   "sinks": [
@@ -97,7 +96,7 @@ mod reading_the_server {
                     ],
                     port: Some("analog-output-speaker".into()),
                 },
-                // A volume the server calls invalid reads as silence.
+                // An invalid volume reads as silence.
                 AudioDevice {
                     id: "output:hdmi".into(),
                     description: "HDMI".into(),
@@ -149,7 +148,7 @@ mod reading_the_server {
                     muted: false,
                     device: Some("output:alsa_output.analog-stereo".into()),
                 },
-                // No application name: the media's stands in, said once.
+                // Without an application name, the media name stands in.
                 AudioStream {
                     id: "playback:43".into(),
                     application: "bell".into(),
@@ -158,7 +157,7 @@ mod reading_the_server {
                     muted: false,
                     device: Some("output:alsa_output.analog-stereo".into()),
                 },
-                // On a sink the list has not caught up with.
+                // On a sink missing from the list.
                 AudioStream {
                     id: "playback:44".into(),
                     application: "late".into(),
@@ -199,7 +198,7 @@ mod reading_the_server {
                     ],
                     profile: Some("output:analog-stereo".into()),
                 },
-                // No description of its own: named by its name.
+                // Without a description, the name stands in.
                 AudioCard {
                     id: "bluez_card.00_11".into(),
                     description: "bluez_card.00_11".into(),
@@ -255,7 +254,7 @@ mod asking_the_server {
         );
     }
 
-    /// pavucontrol's ceiling, and never below silence.
+    /// Clamped to pavucontrol's maximum and to silence.
     #[test]
     fn a_volume_is_kept_between_silence_and_the_ceiling() {
         assert_eq!(
@@ -392,8 +391,8 @@ mod asking_the_server {
     }
 }
 
-/// A slider being dragged asks many times a second; only where it ends up,
-/// per thing dragged, is worth a `pactl`.
+/// A dragged slider sends many requests a second; only the latest per target
+/// needs a `pactl` call.
 #[test]
 fn a_drag_is_asked_for_where_it_ends_up() {
     let volume = |id: &str, volume| Request::Volume {
@@ -422,8 +421,8 @@ fn a_drag_is_asked_for_where_it_ends_up() {
     );
 }
 
-/// `pactl subscribe` reports its own `pactl list` as a client coming and
-/// going: re-reading on that would be reading forever.
+/// `pactl subscribe` reports each `pactl list` as a client event, so re-reading
+/// on client events would loop.
 #[test]
 fn only_the_mixers_own_things_are_news() {
     for on in [
@@ -461,7 +460,7 @@ mod metering {
             audio.meters.get("input:alsa_input.analog-stereo"),
             Some(&Meter::Source("alsa_input.analog-stereo".into()))
         );
-        // An output whose monitor the server did not name has no meter.
+        // An output with no monitor source has no meter.
         assert_eq!(audio.meters.get("output:hdmi"), None);
     }
 
@@ -472,8 +471,8 @@ mod metering {
         assert_eq!(audio.meters.get("playback:42"), Some(&Meter::Stream(42)));
     }
 
-    /// Mono floats, a few hundred a second, tagged so the mixer does not list
-    /// its own meters as recordings.
+    /// Mono floats, tagged so the mixer does not list its meters as
+    /// recordings.
     #[test]
     fn a_meter_records_mono_floats_and_names_itself() {
         let common = [
@@ -519,7 +518,7 @@ mod metering {
         assert_eq!(peak(&[]), 0.0);
     }
 
-    /// Clipped, because a float stream can carry more than full scale.
+    /// Clipped, because float samples can exceed full scale.
     #[test]
     fn the_peak_never_reads_past_full_scale() {
         assert_eq!(peak(&1.5f32.to_le_bytes()), 1.0);
@@ -570,8 +569,8 @@ mod watching {
         assert_eq!(watches.watched(now), BTreeSet::new());
     }
 
-    /// The lease: a page that went away without saying so stops being
-    /// metered, rather than leaving a microphone recording.
+    /// Watches expire, so a page that vanished does not leave a microphone
+    /// recording.
     #[test]
     fn a_watch_nobody_renewed_lapses() {
         let then = Instant::now();

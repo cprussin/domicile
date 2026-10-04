@@ -1,31 +1,19 @@
 #!/usr/bin/env bash
-# Whether anything written here is spelled the British way.
+# Fails on British spellings in tracked files and filenames. See AGENTS.md.
 #
-# The repo is American English throughout — prose, comments, identifiers and
-# test names alike. That is not a taste: an agent reads this tree before it
-# writes, so whichever spelling is in it is the spelling that comes back out,
-# and a tree holding both teaches both. One sweep put 155 lines right; without
-# something that says so, the next session puts a few back.
+# Uses a fixed list of British forms (`-our`, `-re`, `-ise`, doubled `-ll-`
+# and some one-off words) instead of a spell checker: the list is easy to
+# review and needs nothing installed.
 #
-# What it looks for is a list of British forms, not a dictionary: the four
-# families that actually appear in technical prose (`-our`, `-re`, `-ise` and
-# the doubled `-ll-`) plus the handful of one-off words. A list is checkable by
-# reading it, which a spell checker with a 40,000-word corpus and a project
-# wordlist is not, and it has no dependency to install on a runner.
-#
-# It reads tracked files only, so a scratch file or a vendored checkout in the
-# working tree cannot fail a run that has nothing to do with it.
+# Reads tracked files only, so untracked files cannot fail the run.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-# One extended regex, whole words, case insensitive. Each alternative is a form
-# that is *only* British: `colour` is here and `color` is not, `centre` is here
-# and `center` is not. Anything that is also a correct American word stays out
-# — `advertise`, `promise` and `controller` all end in letters this would
-# otherwise catch, which is why the `-ise` and `-ll-` families are listed word
-# by word rather than as a suffix pattern.
+# Whole words, case insensitive. Only forms that are never American: the
+# `-ise` and `-ll-` families are listed word by word because suffix patterns
+# would match `advertise`, `promise` and `controller`.
 BRITISH='\b('\
 'colour|colours|coloured|colouring|colourful|'\
 'behaviour|behaviours|favour|favours|favoured|favourite|favourites|'\
@@ -65,16 +53,12 @@ BRITISH='\b('\
 'foetus|oesophagus|oestrogen|orthopaedic|paediatric|haemoglobin|leukaemia'\
 ')\b'
 
-# `nix-store --realise` is Nix's flag and `cancelled()` is GitHub's. Spelled
-# the American way, neither runs -- so the line is exempt rather than the
-# word, which keeps both caught everywhere else.
+# Other projects' APIs: Nix's `--realise` flag and GitHub's `cancelled()`.
+# Only those exact forms are exempt.
 EXEMPT='--realise\b|\bcancelled\(\)'
 
-# Binaries and lockfiles have nothing to read and are megabytes of it. This
-# file goes too, and has to: the list above is sixty British words, so a check
-# that read itself would fail on the thing that defines failing. So does the
-# vendored TLD list, which is IANA's words rather than ours — `.theatre` is a
-# registry, and spelled the American way it resolves nowhere.
+# Skip binaries, lockfiles, this file (it contains the list) and the vendored
+# IANA TLD list (`.theatre` is a real TLD).
 SELF="scripts/$(basename "$0")"
 TLDS="packages/shell-manganese/src/address/tlds.ts"
 FILES="$(git ls-files \
@@ -85,15 +69,13 @@ FILES="$(git ls-files \
   exit 77
 }
 
-# `grep -I` drops anything that turns out to be binary despite the extension.
-# The exempt lines go out after the match rather than before, so the exemption
-# is visible in one place instead of being folded into the pattern above.
+# `grep -I` skips binary files missed by the extension filter. Exempt lines
+# are filtered after matching so the exemption stays in one place.
 HITS="$(printf '%s\n' "$FILES" \
   | xargs grep -InEi -- "$BRITISH" 2>/dev/null \
   | grep -vE -- "$EXEMPT" || true)"
 
-# Filenames as well as contents. The sweep that came before this found one in a
-# script's own name, where nothing reading file contents would ever have looked.
+# Filenames too, not only contents.
 NAMES="$(printf '%s\n' "$FILES" | grep -Ei -- "$BRITISH" || true)"
 
 if [ -z "$HITS" ] && [ -z "$NAMES" ]; then

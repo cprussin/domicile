@@ -1,47 +1,27 @@
-//! The kernel's own device notifications, as a file descriptor.
+//! A netlink socket for kernel uevents, used to see battery and charger
+//! changes as they happen instead of polling.
 //!
-//! **Why this exists at all: a battery has no other event.** The charge used
-//! to be polled on a ten-second timer, which is the wrong mechanism twice
-//! over — a lead going in is something the user is watching for and ten
-//! seconds is a long time to stare at a bolt that has not lit, and between
-//! those events the timer wakes a laptop's CPU to tell it nothing. The kernel
-//! already announces the change: `power_supply_changed()` in the driver is a
-//! `KOBJ_CHANGE` uevent, sent the moment the lead moves.
-//!
-//! **A socket, not libudev.** `domicile-compositor`'s manifest deliberately
-//! takes neither Smithay's udev backend nor any C library beyond libxkbcommon,
-//! and this keeps that promise: libudev's monitor is itself a thin wrapper
-//! over `NETLINK_KOBJECT_UEVENT`, so opening that socket directly costs one
-//! `libc` call and adds no crate to the tree.
-//!
-//! **Group 1, which is the kernel's own.** udevd re-broadcasts processed
-//! events on another group in a format of its own, and subscribing there would
-//! make the bar's charge depend on a daemon running. A desktop on a bare tty
-//! is exactly the machine least likely to have one — see
-//! `docs/architecture/A-DESKTOP-ON-A-TTY.md`, which is the same reasoning that
-//! took the input path to logind rather than to a helper.
-//!
-//! **Nothing here is believed.** The datagram is a doorbell: the reading comes
-//! from `/sys` afterwards, so an invented message costs one read of four small
-//! files and can make the bar say nothing untrue. That is what makes a socket
-//! anybody may write to safe to hang this on, and why there is no check on the
-//! sender here — see `domicile_host::battery::announces_a_power_supply`.
+//! - **Netlink, not libudev.** The crate links no C library beyond
+//!   libxkbcommon, and libudev's monitor wraps this same socket.
+//! - **Group 1, the kernel's.** udevd's group would make the battery readout
+//!   depend on udevd, which a bare tty may not run (see
+//!   `docs/architecture/A-DESKTOP-ON-A-TTY.md`).
+//! - **No sender check.** A uevent only triggers a re-read of `/sys`, so a
+//!   forged one cannot make the readout wrong. See
+//!   `domicile_host::battery::announces_a_power_supply`.
 
 use std::io;
 use std::os::fd::{FromRawFd, OwnedFd};
 
-/// The most a uevent can be, which is the kernel's own limit on one.
+/// The kernel's maximum uevent size.
 ///
-/// A datagram longer than the buffer is truncated rather than split, and a
-/// truncated one only ever reads as "not a power supply" — so the cost of
-/// being wrong here is a missed notification, and the backstop timer is what
-/// covers that.
+/// A longer datagram is truncated and reads as "not a power supply". The
+/// backstop timer covers that missed notification.
 const BIGGEST_UEVENT: usize = 8192;
 
-/// Subscribe to the kernel's device notifications.
+/// Subscribes to kernel uevents.
 ///
-/// The descriptor is non-blocking, so the caller can read it until it is empty
-/// from an event loop that must not stop.
+/// The descriptor is non-blocking so an event loop can drain it.
 pub fn subscribe() -> io::Result<OwnedFd> {
     // SAFETY: a socket with no borrowed memory. The descriptor is wrapped in
     // an `OwnedFd` before anything can return early, so it is closed on every
@@ -64,10 +44,10 @@ pub fn subscribe() -> io::Result<OwnedFd> {
     // matters is set below.
     let mut address: libc::sockaddr_nl = unsafe { std::mem::zeroed() };
     address.nl_family = libc::AF_NETLINK as libc::sa_family_t;
-    // The kernel picks the port, which is what a zero here asks for: a
-    // hard-coded one collides with any other subscriber in this process.
+    // Zero lets the kernel pick the port, so it cannot collide with another
+    // subscriber in this process.
     address.nl_pid = 0;
-    // Group 1 is the kernel's, as above.
+    // The kernel's group; see the module comment.
     address.nl_groups = 1;
 
     // SAFETY: the address is a `sockaddr_nl` this stack frame owns, and the
@@ -86,17 +66,13 @@ pub fn subscribe() -> io::Result<OwnedFd> {
     }
 }
 
-/// Read what is waiting, and say whether any of it was a power supply.
+/// Drains the socket and returns whether any datagram was `interesting`.
 ///
-/// Drains the socket rather than taking one datagram, because the source that
-/// calls this is level-triggered and a single plug produces an event for the
-/// charger and one for the battery — leaving the second queued would mean
-/// re-reading `/sys` twice for one movement of one lead.
+/// Drains instead of reading one datagram because one plug sends events for
+/// both charger and battery, and each would cost a `/sys` re-read.
 ///
-/// Any failed read ends the drain, an empty socket and an interrupted call
-/// alike, and what has been seen so far is the answer. Nothing is lost by not
-/// telling them apart: the source is level-triggered, so a socket that still
-/// has something in it wakes the loop again straight away.
+/// Any failed read ends the drain. The source is level-triggered, so data left
+/// after an interrupted read wakes the loop again.
 pub fn drain(socket: &OwnedFd, mut interesting: impl FnMut(&[u8]) -> bool) -> bool {
     let mut buffer = [0_u8; BIGGEST_UEVENT];
     let mut worth_reading = false;

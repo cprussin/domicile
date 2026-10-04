@@ -1,4 +1,4 @@
-//! What a launcher is offered of the desk's bookmarks.
+//! Bookmarks offered to the launcher.
 
 use domicile_host::bookmarks::find;
 use domicile_protocol::Bookmark;

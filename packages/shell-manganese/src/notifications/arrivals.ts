@@ -1,13 +1,12 @@
 import type { Notification } from "@domicile-desktop/sdk/notification";
 
 /**
- * Which of `next` just happened, given the list the page had been told before
- * it, `previous` — `undefined` for none yet.
+ * The notifications in `next` that are new since `previous`, or none when
+ * `previous` is `undefined`.
  *
- * The compositor sends every notification every time, so news is a difference:
- * an id the page had not been told, or one whose sender replaced it, which
- * moves its `time`. The first list a page is told is the desk's history, so
- * none of it is news — a page that reloaded must not toast everything again.
+ * The compositor always sends the full list, so news is the difference: an
+ * unseen id, or a replaced one with a new `time`. The first list is history, so
+ * a reload toasts nothing.
  */
 export const arrivals = (
   previous: readonly Notification[] | undefined,

@@ -1,17 +1,12 @@
-//! Behavior tests for the layout a profile makes of the monitors that are
-//! plugged in, written before the implementation.
+//! Tests for the layout a profile makes of the connected monitors.
 //!
-//! The difference from `desktop.rs` is where the sizes come from. A described
-//! desktop states its own — it is a nested compositor's arithmetic, and no
-//! hardware is consulted. A profile states a *placement* and the monitors
-//! state their modes, so the same config yields a different desktop as
-//! monitors come and go. That is the whole point of it: the config is matched
-//! against what is connected and applied again on every hotplug.
+//! Unlike `desktop.rs`, sizes come from the monitors' modes, so one config
+//! gives different layouts as monitors are plugged in. See
+//! [docs/DISPLAYS.md](../../../docs/DISPLAYS.md#profiles).
 
 use domicile_config::{Config, Connected, Desk, Layout, Transform};
 
-/// The layout `text`'s profiles make of `connected`, or a panic naming which
-/// of the two ways it failed to produce one.
+/// The layout `text`'s profiles make of `connected`; panics if none.
 fn layout(text: &str, connected: &[Connected]) -> Layout {
     Config::parse(text)
         .expect("the config should parse")
@@ -21,20 +16,19 @@ fn layout(text: &str, connected: &[Connected]) -> Layout {
         .expect("a profile should match")
 }
 
-/// One monitor as the compositor found it, named only by its output name --
-/// the case where the engine had no EDID to build a description out of.
+/// A monitor with only an output name, as when it has no EDID.
 fn connected(name: &str, mode: (u32, u32)) -> Connected {
     described(name, "", mode)
 }
 
-/// One monitor named by its output and by its panel, on a machine with no
-/// `pnp.ids` to spell the vendor out of the panel's three-letter id.
+/// A monitor with an output name and an EDID description, but no `pnp.ids`
+/// vendor name.
 fn described(name: &str, description: &str, mode: (u32, u32)) -> Connected {
     spelled_out(name, description, "", mode)
 }
 
-/// One monitor with every name it answers to: the output's, the panel's own
-/// off its EDID, and that one again with the vendor spelled out.
+/// A monitor with an output name, an EDID description, and the description
+/// with the vendor name from `pnp.ids`.
 fn spelled_out(name: &str, description: &str, spelled_out: &str, mode: (u32, u32)) -> Connected {
     Connected {
         name: name.to_owned(),
@@ -44,23 +38,20 @@ fn spelled_out(name: &str, description: &str, spelled_out: &str, mode: (u32, u32
     }
 }
 
-/// The laptop panel and the three identical monitors on the desk, in the shape
-/// the home office profiles below place them.
+/// Output names for the laptop panel and the three desk monitors.
 const LAPTOP: &str = "drm-1";
 const LEFT: &str = "drm-2";
 const CENTER: &str = "drm-3";
 const RIGHT: &str = "drm-4";
 
-/// 2880x1920 at scale 1.5 is 1920x1280 logical; 3840x2160 at 1.2 is 3200x1800,
-/// and 1800x3200 once it is stood on its side.
+/// 2880x1920 at scale 1.5 is 1920x1280 logical. 3840x2160 at 1.2 is
+/// 3200x1800, or 1800x3200 rotated.
 const PANEL_MODE: (u32, u32) = (2880, 1920);
 const DESK_MODE: (u32, u32) = (3840, 2160);
 
 #[test]
 fn no_profiles_configured_is_no_layout() {
-    // Not an empty one, and not a desktop of no screens: a config that says
-    // nothing about placement leaves the monitors where the engine put them,
-    // which is the behavior that existed before profiles did.
+    // With no profiles, monitors stay where the engine put them.
     assert!(
         Config::parse("{}")
             .unwrap()
@@ -74,15 +65,11 @@ fn no_profiles_configured_is_no_layout() {
 
 #[test]
 fn a_profile_applies_only_to_the_exact_set_of_displays_it_names() {
-    // Both halves, because either one alone is a profile that fires on the
-    // wrong desk. A profile whose displays are merely *present* would apply
-    // the two-monitor layout with a third monitor plugged in and leave it
-    // dark; one that merely overlaps would apply the three-monitor layout to
-    // two and place a window on a screen that is not there.
+    // A subset match would leave an extra monitor dark. An overlap match would
+    // place windows on a missing monitor.
     //
-    // One profile in the config, so that what is asserted is this profile's
-    // own matching rather than a second one further down the list catching
-    // the sets it turns away.
+    // The config has one profile so no other profile can catch the rejected
+    // sets.
     let config = Config::parse(ONE_DESK).expect("the config should parse");
     let matched = |connected: &[Connected]| {
         config
@@ -111,10 +98,8 @@ fn a_profile_applies_only_to_the_exact_set_of_displays_it_names() {
 
 #[test]
 fn a_profile_can_name_a_monitor_by_its_panel_rather_than_its_output() {
-    // The point of carrying a description at all. `drm-3` is an int64 off an
-    // EDID: stable, unique, and impossible to predict from looking at a desk.
-    // The panel's own name is what a person can write down, and it is the
-    // string kanshi and sway already match on.
+    // Output names can't be predicted by looking at the hardware. The panel
+    // name can, and kanshi and sway match on it too.
     let layout = layout(
         r#"
 {
@@ -149,9 +134,8 @@ fn a_profile_can_name_a_monitor_by_its_panel_rather_than_its_output() {
 
 #[test]
 fn a_profile_may_name_a_monitor_by_the_vendor_spelled_out() {
-    // What sway and kanshi print, because they read hwdata's `pnp.ids` and an
-    // EDID does not carry it: `Dell Inc.` where the firmware says `DEL`. A
-    // desk written down off a running sway is written down in these words.
+    // sway and kanshi print the vendor from hwdata's `pnp.ids` (`Dell Inc.`
+    // for `DEL`), so configs copied from them use this form.
     assert!(
         the_desk_profile_matches("Dell Inc. DELL U3219Q G3MS413"),
         "a profile naming the vendor the way hwdata spells it should match"
@@ -160,17 +144,16 @@ fn a_profile_may_name_a_monitor_by_the_vendor_spelled_out() {
 
 #[test]
 fn a_profile_written_before_the_vendor_was_spelled_out_goes_on_matching() {
-    // The reason both spellings match rather than the better one replacing
-    // the other. Every config naming a monitor was written against the three
-    // letters, and a desk that came up right yesterday comes up right today.
+    // Existing configs use the three-letter vendor id, so it must keep
+    // matching.
     assert!(
         the_desk_profile_matches("DEL DELL U3219Q G3MS413"),
         "the three letters an EDID states are still one of the names it answers to"
     );
 }
 
-/// Whether the desk profile matches a monitor answering to both spellings of
-/// its panel's name when the profile writes it `display`.
+/// Whether a profile naming `display` matches a monitor with both vendor
+/// spellings.
 fn the_desk_profile_matches(display: &str) -> bool {
     Config::parse(&format!(
         r#"
@@ -195,10 +178,8 @@ fn the_desk_profile_matches(display: &str) -> bool {
 
 #[test]
 fn a_scale_of_exactly_one_may_be_written_as_an_integer() {
-    // An unscaled monitor is the commonest thing anybody configures, so
-    // `"scale": 1` is what gets written, and a parser that refused it would
-    // refuse the easy case first. Serde takes an integer into an `f64`; this
-    // is that stated rather than read out of the deserializer.
+    // `"scale": 1` is the most common value. Checks that serde accepts an
+    // integer for the `f64`.
     let layout = layout(
         r#"
 {
@@ -227,9 +208,7 @@ fn a_scale_of_exactly_one_may_be_written_as_an_integer() {
 
 #[test]
 fn a_profile_may_name_some_monitors_by_panel_and_others_by_output() {
-    // A desk part-way through being written down: the monitor whose name has
-    // been read off a running desktop, and the laptop panel that reports no
-    // EDID name at all and can only be named by its output.
+    // A laptop panel with no EDID name can only be named by its output.
     let layout = layout(
         r#"
 {
@@ -264,11 +243,8 @@ fn a_profile_may_name_some_monitors_by_panel_and_others_by_output() {
 
 #[test]
 fn two_entries_naming_one_monitor_two_ways_is_not_a_match() {
-    // The hole that opens as soon as a display answers to two names: a profile
-    // naming the same monitor by its output AND by its panel has as many
-    // entries as there are monitors, and every entry finds one -- so counting
-    // says the set matches when a whole monitor is unaccounted for. It would
-    // apply the two-monitor layout with one screen left dark.
+    // Both entries resolve to one monitor. Counting entries alone would call
+    // this a match and leave the other monitor dark.
     let config = Config::parse(
         r#"
 {
@@ -302,9 +278,8 @@ fn two_entries_naming_one_monitor_two_ways_is_not_a_match() {
 
 #[test]
 fn a_monitor_that_reports_no_panel_name_is_not_matched_by_an_empty_one() {
-    // Every display with no EDID name shares the same empty description, so a
-    // description is only an identity when there is one. `display` cannot be
-    // empty -- the config refuses that -- and this is the other half of it.
+    // Displays with no EDID name share an empty description, so it must not
+    // act as an identity. The config refuses an empty `display`.
     let config = Config::parse(
         r#"
 {
@@ -327,9 +302,8 @@ fn a_monitor_that_reports_no_panel_name_is_not_matched_by_an_empty_one() {
 
 #[test]
 fn the_first_profile_that_matches_is_the_one_that_applies() {
-    // Order is the tie-break and nothing else is: two profiles can name the
-    // same set, and a desk with a "work" and a "play" arrangement of the same
-    // monitors is the ordinary reason to write them.
+    // Two profiles may name the same monitors, e.g. "work" and "play"
+    // arrangements. Config order breaks the tie.
     let layout = layout(
         r#"
 {
@@ -348,11 +322,7 @@ fn the_first_profile_that_matches_is_the_one_that_applies() {
 
 #[test]
 fn a_scale_divides_the_mode_into_the_logical_size() {
-    // The mode is the panel's and the logical size is what the desktop is laid
-    // out in, so a scale is the ratio between them — 1.5 on a 2880x1920 panel
-    // is the 1920x1280 desktop this laptop is actually used at. Fractional
-    // because every scale on this desk is: an integer-only scale would round
-    // 1.5 to 2 and halve the usable desktop.
+    // Scales are fractional. Rounding 1.5 to 2 would shrink the desktop.
     let layout = layout(ONE_PANEL, &[connected(LAPTOP, PANEL_MODE)]);
     let placed = layout.placed().next().expect("the panel should be placed");
     assert_eq!(placed.logical, (1920, 1280));
@@ -362,11 +332,8 @@ fn a_scale_divides_the_mode_into_the_logical_size() {
 
 #[test]
 fn a_quarter_turn_swaps_a_displays_axes() {
-    // The mode is what the connector scans out and does not turn with the
-    // monitor; the logical size is what the desktop is laid out in and does.
-    // Applied before the scale so that a rotated 3840x2160 at 1.2 is 1800x3200
-    // rather than 3200x1800 relabeled — the desk below stands three monitors
-    // on their sides and steps across them by 1800.
+    // The mode is what the connector scans out, so it does not rotate. The
+    // logical size is what the desktop is laid out in, so it does.
     let layout = layout(
         r#"
 {
@@ -403,11 +370,8 @@ fn a_quarter_turn_swaps_a_displays_axes() {
 
 #[test]
 fn a_disabled_display_has_to_be_connected_and_is_not_on_the_desktop() {
-    // Both halves of what `status = "disable"` means, and they pull opposite
-    // ways. The laptop panel is named so that closing the lid on a full desk
-    // is a *match* — the profile below is the one that applies when all four
-    // are plugged in — and it is disabled so that no window lands on a panel
-    // nobody can see.
+    // The profile names the closed laptop panel so it matches when all four
+    // monitors are connected. Disabling it keeps windows off the panel.
     let layout = layout(
         HOME_OFFICE_FULL,
         &[
@@ -422,8 +386,7 @@ fn a_disabled_display_has_to_be_connected_and_is_not_on_the_desktop() {
         vec![LEFT, CENTER, RIGHT],
         "the disabled panel is matched on and then left off"
     );
-    // Three monitors on their sides, stepped across by the 1800 each is wide
-    // once turned.
+    // Each rotated monitor is 1800 wide.
     assert_eq!(
         layout.placed().map(|p| p.position).collect::<Vec<_>>(),
         vec![(0, 0), (1800, 0), (3600, 0)]
@@ -433,11 +396,8 @@ fn a_disabled_display_has_to_be_connected_and_is_not_on_the_desktop() {
 
 #[test]
 fn a_disabled_display_is_a_connector_to_leave_dark() {
-    // The other half of `enabled: false`, and the half the desktop cannot
-    // carry: `placed` drops a disabled display, so what is left of it is a
-    // name and an instruction. Without this the engine goes on lighting a
-    // panel the profile turned off -- it lights every connector that reports
-    // a mode -- and the lid comes down on a screen that is still on.
+    // `placed` drops a disabled display, so `scanout` must report it. The
+    // engine otherwise lights every connector that reports a mode.
     let layout = layout(
         HOME_OFFICE_FULL,
         &[
@@ -454,10 +414,8 @@ fn a_disabled_display_is_a_connector_to_leave_dark() {
             .map(|display| (display.name.as_str(), display.enabled, display.origin))
             .collect::<Vec<_>>(),
         vec![
-            // The dark panel is named so it can be turned off -- and given a
-            // corner anyway, past the three that are lit. The engine's display
-            // list carries a dark connector as much as a lit one, and two
-            // displays claiming one rectangle is worse than one that is off.
+            // The engine's display list includes dark connectors, so this one
+            // gets an origin past the lit ones to avoid overlapping them.
             (LAPTOP, false, (11520, 0)),
             (LEFT, true, (0, 0)),
             (CENTER, true, (3840, 0)),
@@ -470,10 +428,8 @@ fn a_disabled_display_is_a_connector_to_leave_dark() {
 
 #[test]
 fn a_connector_says_where_the_profile_placed_it() {
-    // The engine's desktop is a row of CRTCs, which says nothing about which
-    // monitor is above or beside which. The pointer crosses between monitors
-    // by where the profile put them, so that goes to the engine too -- and a
-    // dark one has nowhere to be.
+    // The engine lays CRTCs out in a row. Pointer crossing needs the
+    // profile's placement, which a dark connector lacks.
     let layout = layout(
         HOME_OFFICE_FULL,
         &[
@@ -518,10 +474,9 @@ fn a_connector_says_where_the_profile_placed_it() {
 
 #[test]
 fn a_connector_carries_the_turn_and_scale_its_window_is_drawn_at() {
-    // The engine draws each monitor's page, so it is the engine that turns and
-    // scales it -- a shell lays out in logical pixels and never hears about
-    // either. That makes the turn and the scale a fact about the connector as
-    // much as about the desktop, and the dark one keeps what its entry says.
+    // The engine rotates and scales each monitor's page, and the shell only
+    // sees logical pixels, so `scanout` carries both. A dark connector keeps
+    // its entry's values.
     let layout = layout(
         HOME_OFFICE_FULL,
         &[
@@ -548,16 +503,11 @@ fn a_connector_carries_the_turn_and_scale_its_window_is_drawn_at() {
 
 #[test]
 fn the_connectors_are_stepped_across_in_the_order_the_profile_places_them() {
-    // NOT the order the entries are written in, and not the order the engine
-    // reported them: the order they are placed left to right. The engine's own
-    // arrangement is connector order, which is the card's business and has
-    // nothing to do with which monitor is on which side of the desk -- so a
-    // pointer leaving one screen arrives on whichever the card happened to
-    // enumerate next.
+    // Connectors follow left-to-right placement, not config or connector
+    // order. Connector order would send the pointer to the wrong screen.
     //
-    // The mode rather than the logical size, because this is the engine's
-    // desktop: what a connector scans out is what it occupies there, whatever
-    // the scale divides it into on ours.
+    // Steps use the mode, since that is what a connector occupies on the
+    // engine's desktop.
     let layout = layout(
         CROSSED_DESK,
         &[connected(LEFT, DESK_MODE), connected(CENTER, PANEL_MODE)],
@@ -577,12 +527,8 @@ fn the_connectors_are_stepped_across_in_the_order_the_profile_places_them() {
 
 #[test]
 fn a_layout_is_placed_about_its_own_top_left_corner() {
-    // "Above and to the left of that one" is how a second monitor is
-    // described, so negative coordinates are the natural way to write one —
-    // and the desktop the chrome lays out in starts at zero. The same
-    // normalization `Desktop` does for a described desktop, for the same
-    // reason, and it has to happen here too because a profile's origin moves
-    // as monitors come and go.
+    // Profiles may use negative positions, but the chrome's desktop starts at
+    // zero. `Desktop` normalizes the same way.
     let layout = layout(
         r#"
 {
@@ -609,15 +555,13 @@ fn a_layout_is_placed_about_its_own_top_left_corner() {
         layout.placed().map(|p| p.position).collect::<Vec<_>>(),
         vec![(0, 0), (1920, 1080)]
     );
-    // The box the two reach together, gap included: 1920 + 3200 across, and
-    // 1080 + 1800 down, which is further than either display's own corner.
+    // 1920 + 3200 across, 1080 + 1800 down.
     assert_eq!(layout.size(), (5120, 2880));
 }
 
 #[test]
 fn a_gap_between_two_placed_displays_is_part_of_the_desktop() {
-    // The page spans the hole, exactly as it does for a described desktop, so
-    // the box is what the displays reach rather than what they cover.
+    // The page spans gaps, as for a described desktop.
     let layout = layout(
         r#"
 {
@@ -641,11 +585,8 @@ fn a_gap_between_two_placed_displays_is_part_of_the_desktop() {
 
 #[test]
 fn a_layout_that_does_not_fit_the_coordinate_space_is_refused_rather_than_wrapped() {
-    // The one failure a profile can have that parsing cannot catch: the
-    // positions are the config's and the sizes are the hardware's, so how far
-    // apart two displays end up is not known until a monitor is plugged in.
-    // An error rather than a panic, because the caller is a compositor holding
-    // a working desktop and a config the user can edit again.
+    // Sizes come from the hardware, so parsing can't catch this. It returns an
+    // error, not a panic, so the compositor keeps its current desktop.
     let refused = Config::parse(
         r#"
 {
@@ -676,10 +617,8 @@ fn a_layout_that_does_not_fit_the_coordinate_space_is_refused_rather_than_wrappe
 
 #[test]
 fn rejects_a_profile_that_would_leave_the_desktop_empty() {
-    // Every display disabled is not a smaller desktop, it is no desktop: every
-    // window lands off it and nothing says why. Caught at parse time, where
-    // the config can still be fixed, rather than on the hotplug that applies
-    // it.
+    // With every display disabled, windows have nowhere to go. Refused at
+    // parse time rather than on hotplug.
     let err = Config::parse(
         r#"
 {
@@ -703,17 +642,13 @@ fn rejects_a_profile_that_would_leave_the_desktop_empty() {
 
 #[test]
 fn rejects_a_profile_that_cannot_be_applied_as_written() {
-    // Each of these is a config that parses as JSON and describes no layout.
-    // Grouped rather than written out one per test because the assertion is
-    // the same in every case — that the config is refused at parse time, when
-    // the user is still looking at it.
+    // Valid JSON that describes no usable layout, refused at parse time.
     for text in [
-        // A profile with no displays matches only a machine with no monitors,
-        // which `DrmScreen` never reports.
+        // No displays: `DrmScreen` never reports zero monitors.
         r#"
 { "output": { "profiles": [{ "name": "empty", "displays": [] }] } }
 "#,
-        // Two entries for one display: which of the two places it?
+        // Two entries for one display.
         r#"
 {
   "output": {
@@ -726,8 +661,7 @@ fn rejects_a_profile_that_cannot_be_applied_as_written() {
   }
 }
 "#,
-        // Two profiles with one name: the log line that says which applied
-        // would name both.
+        // Duplicate profile names make the log ambiguous.
         r#"
 {
   "output": {
@@ -738,20 +672,19 @@ fn rejects_a_profile_that_cannot_be_applied_as_written() {
   }
 }
 "#,
-        // A profile with no name, which is the name the log line has to print.
+        // Empty profile name: the log line prints it.
         r#"
 {
   "output": { "profiles": [{ "name": "", "displays": [{ "display": "drm-1" }] }] }
 }
 "#,
-        // An unnamed display matches nothing, so the profile never applies.
+        // Empty display name never matches.
         r#"
 {
   "output": { "profiles": [{ "name": "anon", "displays": [{ "display": "" }] }] }
 }
 "#,
-        // A scale of zero divides the mode into a desktop of no size; a
-        // negative one turns it inside out; neither is a density.
+        // Zero and negative scales.
         r#"
 {
   "output": {
@@ -776,7 +709,7 @@ fn rejects_a_profile_that_cannot_be_applied_as_written() {
   }
 }
 "#,
-        // A transform nothing can apply.
+        // Unknown transform.
         r#"
 {
   "output": {
@@ -789,9 +722,7 @@ fn rejects_a_profile_that_cannot_be_applied_as_written() {
   }
 }
 "#,
-        // A mode with no pixels on an axis, which is not something a
-        // connector scans out. Checkable here, unlike whether *this* monitor
-        // is at the mode: that one waits for the monitor.
+        // A mode with a zero axis.
         r#"
 {
   "output": {
@@ -804,7 +735,7 @@ fn rejects_a_profile_that_cannot_be_applied_as_written() {
   }
 }
 "#,
-        // A field nobody reads, which is a typo in one that is read.
+        // Unknown field, likely a typo.
         r#"
 {
   "output": {
@@ -827,11 +758,8 @@ fn rejects_a_profile_that_cannot_be_applied_as_written() {
 
 #[test]
 fn a_scale_that_leaves_a_monitor_no_logical_pixels_is_refused() {
-    // The other failure that waits for the hardware. How large a scale is too
-    // large depends on the mode, and the mode arrives with the monitor — so a
-    // scale is checked for being a number at parse time and for being a
-    // number *this panel* can carry here. Refused rather than floored at one
-    // pixel: a display one pixel across is a screen every window misses.
+    // The maximum scale depends on the monitor's mode, so this is checked when
+    // the layout is built. Clamping to one pixel would make an unusable screen.
     let refused = Config::parse(
         r#"
 {
@@ -859,12 +787,8 @@ fn a_scale_that_leaves_a_monitor_no_logical_pixels_is_refused() {
 
 #[test]
 fn a_profile_may_state_the_mode_its_positions_were_written_for() {
-    // A stated mode is an assertion about the monitor rather than a request
-    // to it. Nothing on this side modesets — the engine holds DRM master and
-    // lights every connector at its native mode — so what a profile can do
-    // with a mode is say which one its arithmetic was written against, and a
-    // monitor that is at that mode is placed exactly as it is with nothing
-    // stated.
+    // `mode` asserts the monitor's mode; it does not set it. The engine holds
+    // DRM master and uses each connector's native mode.
     assert_eq!(
         layout(LAPTOP_AT_ITS_MODE, &[connected(LAPTOP, PANEL_MODE)]),
         layout(ONE_PANEL, &[connected(LAPTOP, PANEL_MODE)]),
@@ -874,13 +798,8 @@ fn a_profile_may_state_the_mode_its_positions_were_written_for() {
 
 #[test]
 fn a_monitor_that_is_not_at_the_mode_its_profile_states_is_refused() {
-    // The failure the field exists to make loud. A profile's positions are
-    // sums of the modes it places, so one written for a 2880x1920 panel lays
-    // the rest of the desk out around 1920 logical units that are not there
-    // when the panel comes up at 1920x1080 — every display after it lands
-    // somewhere nobody chose, and nothing says so. Refused rather than
-    // applied at the mode that arrived, which is the silent fallback nobody
-    // can see.
+    // Positions are written for specific modes. Applying the profile at a
+    // different mode would misplace the other displays.
     let refused = Config::parse(LAPTOP_AT_ITS_MODE)
         .expect("the config should parse")
         .output
@@ -899,11 +818,8 @@ fn a_monitor_that_is_not_at_the_mode_its_profile_states_is_refused() {
 
 #[test]
 fn a_dark_monitor_is_held_to_the_mode_its_profile_states_too() {
-    // Not an oversight and not a special case: a stated mode says what this
-    // monitor *is*, and a monitor a profile turns off is still the monitor
-    // the rest of the profile was written beside. Its own mode is also what
-    // the row of connectors steps across, so a profile wrong about it is
-    // wrong about where the dark ones land.
+    // The connector row steps across dark monitors' modes too, so a wrong mode
+    // misplaces them.
     let refused = Config::parse(
         r#"
 {
@@ -937,11 +853,8 @@ fn a_dark_monitor_is_held_to_the_mode_its_profile_states_too() {
 
 #[test]
 fn a_profile_is_matched_again_on_every_reading_of_the_monitors() {
-    // The requirement the whole mechanism exists for. The same config answers
-    // differently as monitors come and go, because matching is a function of
-    // what is connected rather than something decided once at startup — so
-    // unplugging the desk is the laptop-only layout without anything being
-    // reloaded or restarted.
+    // Matching runs on every hotplug, so unplugging the monitor switches to
+    // the laptop-only layout without a reload.
     let config = Config::parse(TWO_MONITORS).expect("the config should parse");
     let applied = |connected: &[Connected]| {
         config
@@ -960,8 +873,7 @@ fn a_profile_is_matched_again_on_every_reading_of_the_monitors() {
     );
 }
 
-/// The desk with one monitor on it and nothing beneath it, so that a set it
-/// turns away has no second profile to fall through to.
+/// A single profile for the laptop and one monitor, with no fallback.
 const ONE_DESK: &str = r#"
 {
   "output": {
@@ -978,8 +890,7 @@ const ONE_DESK: &str = r#"
 }
 "#;
 
-/// The laptop-only profile again, saying out loud which mode its scale was
-/// written to divide.
+/// The laptop-only profile with its `mode` stated.
 const LAPTOP_AT_ITS_MODE: &str = r#"
 {
   "output": {
@@ -993,8 +904,7 @@ const LAPTOP_AT_ITS_MODE: &str = r#"
 }
 "#;
 
-/// One display, scaled and nothing else — the laptop with its lid open and
-/// nothing plugged in.
+/// The laptop panel alone, scaled.
 const ONE_PANEL: &str = r#"
 {
   "output": {
@@ -1008,12 +918,10 @@ const ONE_PANEL: &str = r#"
 }
 "#;
 
-/// The desk with one monitor on it, and the laptop-only profile beneath it, so
-/// that one config answers for both.
+/// The laptop plus one monitor, with a laptop-only fallback.
 ///
-/// The panel is centered under the monitor: 1920 logical wide against 3200, so
-/// (3200 - 1920) / 2 = 640 across, and 1800 down, which is the monitor's own
-/// logical height.
+/// The panel is centered under the monitor: (3200 - 1920) / 2 = 640 across,
+/// and 1800 (the monitor's logical height) down.
 const TWO_MONITORS: &str = r#"
 {
   "output": {
@@ -1068,12 +976,8 @@ const HOME_OFFICE_FULL: &str = r#"
 }
 "#;
 
-/// Two monitors written in the opposite order to the one they are placed in:
-/// the entry for the monitor on the right comes first.
-///
-/// Which is ordinary rather than perverse -- a profile is written a monitor at
-/// a time as each one's name is read off a running desktop -- and it is what
-/// tells "the order they were written" apart from "the order they are placed".
+/// Two monitors with the right-hand one listed first, so config order
+/// differs from placement order.
 const CROSSED_DESK: &str = r#"
 {
   "output": {

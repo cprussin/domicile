@@ -1,10 +1,7 @@
-//! A client's committed dmabuf, in the terms the engine imports it by.
+//! Converts a client's Smithay dmabuf into the description the engine
+//! imports: size, fourcc, modifier and one entry per plane.
 //!
-//! A fourcc, a modifier and one plane per buffer fd, so the `SharedImage` the
-//! engine makes binds to exactly what the client allocated. Smithay describes
-//! the same buffer in its own types; this is the one place the two meet, kept
-//! separate — and tested — so the GPU glue around it stays free of the
-//! translation.
+//! Kept separate from the GPU glue so it can be tested without a GPU.
 
 use std::os::fd::AsRawFd as _;
 
@@ -31,11 +28,10 @@ pub struct DmabufDescriptor {
     pub planes: Vec<DmabufPlane>,
 }
 
-/// Describe `dmabuf` in the terms above.
+/// Describes `dmabuf` for the engine.
 ///
-/// The plane fds are borrowed, not owned: they stay valid only as long as the
-/// `Dmabuf` the descriptor was taken from, so a caller that keeps the
-/// descriptor must keep that buffer alive too.
+/// The plane fds are borrowed: keep the `Dmabuf` alive as long as the
+/// descriptor.
 pub fn descriptor_from(dmabuf: &Dmabuf) -> DmabufDescriptor {
     let format = dmabuf.format();
     DmabufDescriptor {
@@ -66,8 +62,7 @@ mod tests {
 
     use super::{descriptor_from, DmabufPlane};
 
-    /// A dmabuf needs real file descriptors; their contents never matter here,
-    /// only that each plane carries the fd it was built with.
+    /// A real file descriptor for a test plane. Its contents do not matter.
     fn fd() -> OwnedFd {
         OwnedFd::from(File::open("/dev/null").expect("/dev/null opens"))
     }
@@ -102,8 +97,8 @@ mod tests {
 
     #[test]
     fn carries_every_plane_in_order() {
-        // Multi-planar formats (and modifiers with a compression plane) attach
-        // more than one fd; the engine needs all of them, in index order.
+        // Multi-planar formats and compression modifiers use several fds; the
+        // engine needs all of them, in index order.
         let (first, second) = (fd(), fd());
         let (first_raw, second_raw) = (first.as_raw_fd(), second.as_raw_fd());
         let mut builder = Dmabuf::builder(

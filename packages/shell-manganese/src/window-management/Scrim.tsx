@@ -11,46 +11,39 @@ import {
 } from "./window-styles";
 
 type Props = {
-  /** How it stacks: the depth of the window it is over. */
+  /** The covered window's depth. */
   depth: number;
-  /** Whether the window it is over is one the commands are not pointed at. */
+  /** Whether the covered window is unfocused and should be dimmed. */
   dimmed: boolean;
   /**
-   * Whether the user has hold of the window it is over, so it takes each box
-   * outright rather than easing after it — see `settlingStyles`.
+   * Whether the covered window is being dragged, which disables easing. See
+   * `settlingStyles`.
    */
   dragging: boolean;
-  /** The whole box of the window it is over, which it turns about. */
+  /** The covered window's full frame; the transform origin. */
   frame: Rect;
-  /** What the window it is over is doing, which it does with it. */
+  /** The covered window's motion, which the scrim plays too. */
   motion: WindowMotion;
-  /** What it covers: the window's whole frame, or its tab alone. */
+  /** The covered box: the window's frame, or only its tab. */
   rect: Rect;
-  /** The shuffle the window it is over is playing, if it is. */
+  /** The covered window's restack shuffle, if any. */
   restack?: Restack | undefined;
   /** Whether it covers a tab rather than a whole window. */
   tab: boolean;
-  /** The window it is over, or the one a container's tab is named after. */
+  /** The covered window, or the window a container's tab is named after. */
   window: string;
 };
 
 /**
- * A wash of the page's own ground over a window the commands are not pointed
- * at, which is how the desktop says where they are: every other window
- * recedes, rather than a line being drawn around the one that does not.
+ * A translucent overlay that dims an unfocused window.
  *
- * **The ground rather than black**, so it reads the same way in either theme:
- * darker in the dark one and paler in the light one — and a dark window in the
- * dark theme, which a filter's `brightness` barely moves, still sinks.
- *
- * **Over the window rather than a filter on it**, so the client's own pixels
- * are composited untouched and nothing about the window's layer changes.
- *
- * At the depth of the window it covers and after every window in the
- * document, which puts it over that window and its bar — and under the floats
- * over it. It moves as that window does, since a scrim left standing while
- * its window slid away would be a gray box on the desk. It takes no pointer,
- * so the window under it is reached straight through it.
+ * - It uses the theme's `background` color rather than black, so it works in
+ *   both themes and still dims a dark window in the dark theme.
+ * - It is an overlay rather than a filter, so the client's layer is
+ *   untouched.
+ * - It sits at the window's depth after every window in the document: over
+ *   that window and its bar, under floats above it.
+ * - It plays the window's motion and takes no pointer events.
  */
 export const Scrim = ({
   depth,
@@ -69,12 +62,10 @@ export const Scrim = ({
       movingStyles({ motion }),
       settlingStyles({ dragging }),
     )}
-    // Whether it is washing its window, as an attribute as well as a color:
-    // the desktop's own state is worth being able to read off the element.
+    // Exposes the state on the element for tests and debugging.
     data-dimmed={dimmed || undefined}
-    // Which window it is over, for the same reason. Not `data-window`, which
-    // is what a press on the chrome reads to find the window it reached for —
-    // and nothing presses this.
+    // Not `data-window`: presses on chrome read that to find their window,
+    // and the scrim takes no presses.
     data-scrim={window}
     style={{
       ...placedAt(rect, depth),
@@ -91,8 +82,8 @@ const scrimStyles = cva({
     pointerEvents: "none",
   },
   variants: {
-    // Faded rather than taken away, so the focus moving eases — see
-    // `settlingStyles`, which eases `background-color`.
+    // Transparent rather than removed, so focus changes ease. See
+    // `settlingStyles`.
     dimmed: {
       false: { backgroundColor: "transparent" },
       true: {
@@ -100,8 +91,8 @@ const scrimStyles = cva({
           "color-mix(in oklab, {colors.background} 55%, transparent)",
       },
     },
-    // Rounded at the bottom as a window's frame is — see
-    // `bottomCornerStyles` — but square under a tab, as the tab is.
+    // Matches the frame's rounded bottom (`bottomCornerStyles`); a tab has
+    // square bottom corners.
     tab: {
       false: { borderEndEndRadius: "lg", borderEndStartRadius: "lg" },
       true: {},

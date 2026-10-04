@@ -8,36 +8,30 @@ import { rectOf } from "./float";
 import { useFloatDrag } from "./useFloatDrag";
 
 type Props = {
-  /** How it stacks, which is the depth of the window it covers. */
+  /** The stacking depth of the window it covers. */
   depth: number;
   float: Float;
   onDrop: () => void;
   onGrab: () => void;
   onMove: (x: number, y: number) => void;
   onResize: (box: Rect) => void;
-  /** Whether taking hold now would resize the window rather than move it. */
+  /** Whether a drag resizes the window instead of moving it. */
   resizes: boolean;
   /**
-   * The window it belongs to: the one the float's own focus is on, which is
-   * the float's only window unless a group floats in it.
+   * The float's focused window, which is its only window unless it holds a
+   * group.
    */
   window: string;
 };
 
 /**
- * The sheet the pointer lands on while the desktop's modifier is held, over
- * one floating window.
+ * An overlay that catches pointer drags on a floating window while the
+ * modifier is held.
  *
- * A window is an `<app>`, and the pointer over one belongs to the client
- * behind it — that is the whole point of Domicile. So a drag cannot be handled
- * on the window: the shell has to take the mouse back first, which it does by
- * making the window click-through (see `clickThroughStyles`) and putting this
- * over it to catch what falls through.
- *
- * Mounted only while the modifier is held or a drag is running, so a window is
- * an ordinary window the rest of the time. Over the whole frame rather than the
- * surface alone, so a drag started on the title bar resizes like one started
- * anywhere else.
+ * The pointer over an `<app>` goes to its client, so the shell makes the
+ * window click-through (see `clickThroughStyles`) and catches the pointer
+ * here instead. Mounted only while the modifier is held or a drag runs.
+ * Covers the whole frame, so a drag behaves the same on the title bar.
  */
 export const FloatGrab = ({
   depth,
@@ -57,16 +51,14 @@ export const FloatGrab = ({
     resizes,
   });
   return (
-    // Presentational, and `aria-hidden` for that reason: everything this
-    // offers is offered by the keyboard as well, so there is nothing here a
-    // keyboard cannot reach elsewhere.
+    // Hidden from assistive tech: everything here is also available from the
+    // keyboard.
     <div
       aria-hidden
       className={cx(grabStyles, grabCursorStyles[cursor])}
-      // Which window this sheet belongs to, which is a fact the SDK asks for
-      // rather than a styling hook: a press here lands off every `<app>`, and
-      // left unanswered that is the chrome taking the keyboard off the window
-      // the user has just taken hold of. See `AppWindow`.
+      // Read by the SDK, not for styling: a press here lands outside every
+      // `<app>`, so the window is named for the focus handling in
+      // `AppWindow`.
       data-window={window}
       onPointerMove={onPointerMove}
       style={placedAt(rectOf(float), depth)}

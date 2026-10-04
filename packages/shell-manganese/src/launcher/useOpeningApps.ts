@@ -3,28 +3,24 @@ import { useEffect, useRef, useState } from "react";
 
 import type { FoundApps } from "./useFoundApps";
 
-/** What is offered before the host has answered. */
+/** The result before the host has answered. */
 const NOTHING: FoundApps = { apps: [], bookmarks: [] };
 
 /**
- * The applications and bookmarks the launcher's empty box offers, found before
- * it is opened.
+ * The applications and bookmarks for the launcher's empty query, fetched
+ * before it opens.
  *
- * Asked while the launcher is shut — as the desk starts, and again each time
- * it is put away — rather than as it opens: an answer that landed after the
- * panel did would push every row under it down a moment after the panel
- * appeared. Asked again on every close because the host reads the desktop
- * entries afresh for every question, so what was installed since the last
- * open is there by the next one.
+ * Fetched at startup and on every close, not on open, so rows don't shift in
+ * after the panel appears. Refetching on close picks up newly installed apps.
  */
 export const useOpeningApps = (
   searchApps: (query: string) => Promise<FoundAppsMessage>,
   open: boolean,
 ): FoundApps => {
   const [found, setFound] = useState<FoundApps>(NOTHING);
-  // Which ask is the latest, so an older answer never replaces a newer one.
-  // Counted rather than dropped in an effect's cleanup, because opening the
-  // launcher is not a newer ask: what was asked as it was shut still stands.
+  // Request counter, so an older answer never replaces a newer one. Not an
+  // effect cleanup, because opening the launcher must not cancel the request
+  // made on close.
   const latest = useRef(0);
 
   useEffect(() => {

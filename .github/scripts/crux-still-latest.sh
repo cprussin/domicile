@@ -5,23 +5,21 @@
 #   crux-still-latest.sh <branch> <sha>   0 yes, 1 no (a later commit gets its
 #                                         own run), 3 could not ask
 #
-# engine.yml asks this while a push run waits for the compile slot; see
-# crux-still-head.sh for a pull request's. Main's run for 13cc49a waited over
-# six hours there while main moved four commits past it.
+# engine.yml asks this while a push run waits for the compile slot;
+# crux-still-head.sh covers pull requests. Without it a push run can wait hours
+# after main has moved on.
 #
-# NOT "IS IT STILL THE HEAD", because the push filter means most commits get no
-# engine run: a run given up for a later README fix is replaced by nothing. So
-# the question is whether anything engine.yml's `on.push.paths` covers differs
-# between <sha> and the branch's head. When it does, some push since touched an
-# engine path and started a run of its own. When it does not, this run builds
-# the same engine inputs the head has.
+# The push path filter means most commits get no engine run, so checking for
+# the head would give up runs nothing replaces. Instead this checks whether any
+# path in engine.yml's `on.push.paths` differs between <sha> and the head. If
+# one does, a later push started its own run.
 #
-# Read from engine.yml, not copied. Its `!` patterns become pathspec excludes,
-# which drop a file whatever order they come in where GitHub lets the last
-# pattern win; the difference can only keep a run waiting, never end one.
+# The paths are read from engine.yml. Its `!` patterns become pathspec
+# excludes, which apply regardless of order, while GitHub lets the last
+# matching pattern win. The difference can only keep a run waiting, never end
+# one.
 #
-# Not named `engine-*.sh`, for crux-stale-runs.sh's reason: engine.yml runs on
-# changes to those, and a change to this is not a change to the build.
+# Not named `engine-*.sh`; see crux-stale-runs.sh.
 set -u
 
 [ $# -eq 2 ] || { echo "usage: $(basename "$0") <branch> <sha>" >&2; exit 2; }

@@ -6,10 +6,7 @@ import { act, renderHook } from "@testing-library/react";
 
 import { useExtensions } from "./useExtensions";
 
-/**
- * A stand-in for the client that takes the one handler this hook registers and
- * lets a test say what the engine said. Narrow for `useClipboard`'s reason.
- */
+/** Fake client that captures the hook's handler so a test can send messages. */
 const client = () => {
   let handler: ((message: HostMessageOf<"extensions">) => void) | undefined;
   const domicile = {
@@ -55,8 +52,8 @@ describe("useExtensions", () => {
   });
 
   it("is the list last said, whole", () => {
-    // Every change is the whole list, so an extension the config dropped is
-    // gone by leaving it out rather than by a message of its own.
+    // Each message carries the full list, so a removed extension is simply
+    // absent.
     const host = client();
     const { result } = renderHook(() => useExtensions(host.domicile));
 

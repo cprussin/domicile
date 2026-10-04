@@ -1,43 +1,21 @@
-//! `domicile`: everything it decides, and the boundary it decides it across.
+//! The logic behind the `domicile` binary and the compositor's command line.
 //!
-//! `domicile ./my-desktop/dist/shell.js` starts an engine and a compositor.
-//! What that takes is a handful of decisions, and each is a module here with
-//! tests of its own — which command line was given ([`cli`]), which module to
-//! load ([`shell_path`]), which config file the compositor reads
-//! ([`config_path`]), where the engine keeps its profile ([`profile_path`])
-//! and which one this desktop holds ([`profile_claim`]), which ozone platform
-//! ([`platform`]), where the two
-//! components are ([`components`]), what each is started with ([`spawn`]),
-//! and the order they go up in ([`supervise`]) — and, when one of them stops
-//! being a component, whether there is another desktop in it ([`restart`]).
+//! - `domicile <shell>`: parse the command line ([`cli`]), resolve the shell
+//!   ([`shell_path`]), config ([`config_path`]), profile ([`profile_path`],
+//!   [`profile_claim`]), platform ([`platform`]) and components
+//!   ([`components`]), then start ([`spawn`]), order ([`supervise`]) and
+//!   restart ([`restart`]) them.
+//! - `domicile which-shell`: query a running desktop ([`control`],
+//!   [`control_socket`]).
+//! - `domicile load-shell` and `domicile open-url`: forwarded to the engine
+//!   ([`command`], [`command_socket`], [`address`]).
+//! - Failed runs report the compositor's last output ([`heard`]).
+//! - The compositor's side: its command line ([`arguments`]), the session
+//!   document it publishes ([`session`]), and whether a page connected
+//!   ([`handshake`]).
 //!
-//! `domicile which-shell` puts a command to a desktop that is already
-//! running. That is the same binary read the other way, and two more modules:
-//! what a desktop can be asked and what it answers ([`control`]), and where it
-//! answers ([`control_socket`]).
-//!
-//! `domicile load-shell <path>` and `domicile open-url <url>` are the commands
-//! a desktop does not answer on its own account: the page belongs to the
-//! engine, so the supervisor routes them on — `open-url`'s address made a URL
-//! first ([`address`]). What that says is [`command`] — the one contract here with a version
-//! in it, because the engine is published separately from this — and where it
-//! says it is [`command_socket`].
-//!
-//! What a run that gave up says at the end is [`heard`]: the compositor's own
-//! words, kept as they go past so that the last line of a failed run is the
-//! reason rather than a pointer to it.
-//!
-//! The other boundary is the compositor's own: the command line it is started
-//! with ([`arguments`]), the session document it
-//! publishes once it is up ([`session`]), and whether a page ever reached it
-//! at all ([`handshake`]).
-//!
-//! All of it is here rather than in the compositor or in
-//! the `domicile` binary because both of those need
-//! something this does not: the compositor a GPU-capable toolchain to build
-//! and a display to do anything, the binary a machine with a screen. Neither
-//! is a place to keep logic that can be tested with a string and a temp
-//! directory.
+//! This lives in a library so it can be tested without a GPU or a display. See
+//! `docs/architecture/THE-DOMICILE-BINARY.md`.
 
 pub mod address;
 pub mod arguments;

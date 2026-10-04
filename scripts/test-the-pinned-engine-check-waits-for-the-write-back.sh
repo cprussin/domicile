@@ -1,22 +1,21 @@
 #!/usr/bin/env bash
-# A pull request whose engine write-back is still coming is not red.
+# Tests that a pull request waiting on its engine write-back is skipped, not
+# failed.
 #
-# `test-the-pinned-engine-is-this-series.sh` fails whenever the series in hand
-# differs from the one `engine-release.nix` names. On a pull request that moves
-# the fork that is "not yet": `engine.yml` publishes the release and writes the
-# file back onto the branch, and until it does, every e2e run was red — 37 of
-# 113 in one day, hiding the real failures beside them.
-#
-# So on a pull request, and only there, a mismatch whose engine run is still
-# going is a skip. Every other mismatch still fails, and each has a case:
+# `test-the-pinned-engine-is-this-series.sh` fails when the series differs
+# from the one `engine-release.nix` names. On a pull request that changes the
+# fork, `engine.yml` publishes the release and writes the file back to the
+# branch; until then the mismatch is expected. So on a pull request, a mismatch
+# with an engine run still going is a skip. Every other mismatch fails, and
+# each has a case:
 #
 #   - main (no pull request named), whatever the engine is doing;
 #   - an engine run that finished and wrote nothing back;
 #   - no engine run at all;
-#   - a pin that is neither this series nor the base's, which no write-back
-#     explains — somebody edited the generated file.
+#   - a pin that is neither this series nor the base's, which means the
+#     generated file was edited.
 #
-# The API half is faked. What is under test is the decision, not GitHub.
+# The GitHub API is faked; the decision is under test.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -52,8 +51,8 @@ OLD=0000000000000000000000000000000000000000000000000000000000000000
 BOGUS=ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
 IDENTITY="$(cd "$ROOT" && .github/scripts/engine-series-stamp.sh identity)"
 
-# GitHub, as far as the check can tell: engine.yml's runs for `$HEAD_SHA` have
-# the statuses in `$FAKE_RUNS`, and the base's engine-release.nix pins `$OLD`.
+# Fake GitHub: engine.yml's runs for `$HEAD_SHA` have the statuses in
+# `$FAKE_RUNS`, and the base's engine-release.nix pins `$OLD`.
 BIN="$WORK/bin"
 mkdir -p "$BIN"
 cat > "$BIN/curl" <<FAKE

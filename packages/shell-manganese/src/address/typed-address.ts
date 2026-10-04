@@ -1,20 +1,15 @@
-// What a line of typed text means as a web address.
+// Interprets a typed line as a site or a search.
 //
-// Two answers, ranked: a site, then a search. The order is the whole of the
-// design — every query is a search if nothing better claims it first, so the
-// claim above it has to be one that can be made confidently. A site is a
-// scheme somebody wrote down, or a host under a TLD that exists; what is left
-// is words, and words are a search.
+// A line is a site only when that is certain: an explicit scheme, or a host
+// under a real TLD. Everything else is a search.
 //
-// Both the launcher's box and a browser window's address bar ask this
-// question, and they have to answer it the same way: a desktop where `mod+space`
-// and the address bar disagree about what `localhost:5173` means is one where
-// the user has to remember which box they are in.
+// The launcher and the browser address bar share this so they agree on what
+// input like `localhost:5173` means.
 
 import { searchUrl } from "./search";
 import { TLDS } from "./tlds";
 
-/** Which of the two things a typed line can turn out to be. */
+/** What a typed line turns out to be. */
 export enum TypedAddressKind {
   Site,
   Search,
@@ -22,16 +17,15 @@ export enum TypedAddressKind {
 
 export const TypedAddress = {
   /**
-   * Words, and where they go. `query` is what was typed — the address bar
-   * offers it back as "Search for …", so it is worth keeping beside the URL
-   * it made rather than escaping it twice.
+   * Words and their search URL. `query` is kept so the address bar can show
+   * "Search for …" without unescaping the URL.
    */
   Search: (query: string, url: string) => ({
     kind: TypedAddressKind.Search as const,
     query,
     url,
   }),
-  /** A site: a scheme somebody wrote down, or a host under a TLD that exists. */
+  /** An explicit scheme, or a host under a real TLD. */
   Site: (url: string) => ({ kind: TypedAddressKind.Site as const, url }),
 };
 
@@ -40,11 +34,9 @@ export type TypedAddress = ReturnType<
 >;
 
 /**
- * What `typed` means, or `undefined` for a line with nothing in it.
+ * What `typed` means, or `undefined` for an empty line.
  *
- * Nothing rather than a guess for the empty line: Enter on an empty box is a
- * keystroke nobody meant as a command, and a search for the empty string is
- * worse than not answering.
+ * Enter on an empty box does nothing rather than search for nothing.
  */
 export const typedAddress = (typed: string): TypedAddress | undefined => {
   const query = typed.trim();
@@ -53,8 +45,7 @@ export const typedAddress = (typed: string): TypedAddress | undefined => {
   } else if (hasScheme(query)) {
     return TypedAddress.Site(query);
   } else if (isHost(query)) {
-    // https rather than http: a desktop should not make the insecure guess on
-    // a user's behalf, and a site that only speaks http will say so.
+    // https, not http: do not make the insecure guess for the user.
     return TypedAddress.Site(`https://${query}`);
   } else {
     return TypedAddress.Search(query, searchUrl(query));
@@ -62,14 +53,11 @@ export const typedAddress = (typed: string): TypedAddress | undefined => {
 };
 
 /**
- * The schemes that address a thing without an authority after the colon.
+ * Schemes typed without `//`, such as `about:blank`.
  *
- * A named set rather than "any scheme", because the `//` is what tells a
- * scheme from a word with a colon after it everywhere else: `note:to self` is
- * a search, and `ratio 16:9` is a search, and neither should become a
- * navigation because it is spelled like one. These are the ones a person types
- * on purpose — `domicile:` among them, because this desktop's own shell is
- * served over it.
+ * A fixed list, because without `//` a colon usually just means words:
+ * `note:to self` and `ratio 16:9` are searches. `domicile:` serves this
+ * desktop's own shell.
  */
 const BARE_SCHEMES: readonly string[] = [
   "about",
@@ -79,17 +67,15 @@ const BARE_SCHEMES: readonly string[] = [
   "view-source",
 ];
 
-/** Whether somebody wrote a scheme down, in which case there is nothing to guess. */
+/** Whether `typed` starts with an explicit scheme. */
 const hasScheme = (typed: string): boolean =>
   /^[a-z][a-z\d+.-]*:\/\//i.test(typed) ||
   BARE_SCHEMES.some((scheme) => typed.toLowerCase().startsWith(`${scheme}:`));
 
 /**
- * Whether `typed` is a host, with or without a port and a path after it.
+ * Whether `typed` is a host, optionally with a port and path.
  *
- * `localhost` by name, because it is the one hostname with no dot in it that a
- * person types on purpose — and on a machine that is also a development box,
- * types constantly.
+ * `localhost` is special-cased as the one dotless hostname people type.
  */
 const isHost = (typed: string): boolean => {
   const host = typed.split(/[/:?#]/)[0] ?? "";

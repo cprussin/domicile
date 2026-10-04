@@ -3,20 +3,17 @@ import { vstack } from "../../styled-system/patterns";
 import type { wallClock } from "../clock/useNow";
 import { useNow } from "../clock/useNow";
 
-/** The locale the day is named in, fixed for the top bar's reason — see `clock/reading.ts`. */
+/** The locale for the date; fixed for the reason in `clock/reading.ts`. */
 const LOCALE = "en-US";
 
-/** How wide the hour and the minute are written. */
+/** The hour and minute format. */
 const DIGITS = 2;
 
 type Props = {
   now?: typeof wallClock | undefined;
 };
 
-/**
- * The time, large, over a locked desk: the one thing somebody walking up to it
- * wants to know before whether it is theirs.
- */
+/** The large clock on the lock screen. */
 export const LockClock = ({ now }: Props) => {
   const time = useNow(now);
 
@@ -40,9 +37,8 @@ const day = (now: Date): string =>
     weekday: "long",
   });
 
-// Drawn straight onto the blurred desktop rather than onto the pane, so it
-// takes the photograph's text shadow: what is behind it is whatever was on the
-// screen, and that may be white behind any given stroke.
+// Drawn on the blurred desktop, not the pane, so it needs a text shadow: the
+// background may be white.
 const clockStyles = vstack({
   color: "foreground",
   gap: 1,

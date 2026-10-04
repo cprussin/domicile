@@ -59,78 +59,63 @@ import { VideoPreview } from "./VideoPreview";
 import { WikipediaLogoIcon } from "./WikipediaLogoIcon";
 import { highlightIn, keepInView, stepOf, steppedTo } from "./walk";
 
-/** What the box asks for, as its placeholder and as its accessible name. */
+/** The box's placeholder and accessible name. */
 const PROMPT = "Open an app, a file, a URL, or search";
 
 /**
- * How long the highlight has to stay on a row before it is previewed: long
- * enough that typing a name is not a preview per letter, short enough that
- * stopping on a row is not waiting for one.
+ * How long the highlight must rest on a row before it is previewed. Long
+ * enough to skip previews while typing, short enough to feel immediate.
  */
 const PREVIEW_SETTLE_MS = 200;
 
-/** `WheelEvent.DOM_DELTA_PIXEL`: a wheel's deltas in pixels. */
+/** `WheelEvent.DOM_DELTA_PIXEL`. */
 const DOM_DELTA_PIXEL = 0;
 
-/** How big the glyph for a pane with no picture of its own is drawn. */
+/** Glyph size in a preview pane with no image. */
 const EMPTY_ICON_SIZE = 64;
 
-/** How big the glyph beside a row, and in the box, is drawn. */
+/** Glyph size in rows and the box. */
 const ICON_SIZE = 16;
 
 type Props = {
-  /** Escape, or a click on the backdrop. The desktop decides what that means. */
+  /** Called on Escape or a backdrop click. The desktop decides what to do. */
   onDismiss: () => void;
   onLaunch: (launch: Launch) => void;
   open: boolean;
   /**
-   * The applications and bookmarks its empty box offers, found before it was
-   * opened, so they are drawn with the panel rather than landing a moment
-   * after it. See `useOpeningApps`.
+   * Results for the empty query, fetched before opening so they render with
+   * the panel. See `useOpeningApps`.
    */
   opening: FoundApps;
-  /** What a path holds, answered by the host, for the preview. */
+  /** Asks the host for a file preview. */
   preview: Preview;
-  /**
-   * What in the home matches a query, answered by the host.
-   *
-   * The host searches and the panel draws: the compositor's index is the whole
-   * home, and all a page is ever told is what one query found in it.
-   */
+  /** Asks the host for files in home matching a query. */
   search: Search;
-  /** Which installed applications match a query, answered by the host. */
+  /** Asks the host for applications matching a query. */
   searchApps: SearchApps;
-  /** The screen it opens on: the one the keyboard is on. */
+  /** The screen to open on: the one with keyboard focus. */
   screen: string;
 };
 
-/** How the panel asks what matches what is in its box. */
+/** Search home for files matching a query. */
 type Search = (query: string) => Promise<FoundFilesMessage>;
 
-/** How the panel asks which applications match what is in its box. */
+/** Search for applications matching a query. */
 type SearchApps = (query: string) => Promise<FoundAppsMessage>;
 
-/** How the panel asks what the highlighted file holds. */
+/** Fetch a file's preview. */
 type Preview = (path: string) => Promise<FilePreviewMessage>;
 
-/** How a bookmark's preview says the icon its page named. */
+/** Record the icon a bookmark's page names. */
 type Learn = (bookmark: string, icon: string) => void;
 
 /**
- * One box, over a backdrop, that runs an application or opens a file, a URL
- * or a search.
+ * The launcher: a search box that runs an application or opens a file, URL or
+ * search. Opened with `mod+space`.
  *
- * `mod+space` is what puts it up. What goes in is a query rather than a
- * command — there is nothing to choose between first — and which of the
- * things it means is `launch.ts`'s to decide, on evidence rather than on a
- * prefix the user has to remember.
- *
- * **It does not close itself.** Whether the launcher is open is desktop state,
- * kept in the same reduction as everything else the keys do, so Escape and a
- * click on the backdrop are reported rather than acted on. A panel that closed
- * itself would be a second copy of that state, and the two would part company
- * the first time `mod+space` was pressed over one the desktop thought was
- * shut.
+ * It never closes itself. Open state lives in the desktop's reducer, so
+ * Escape and backdrop clicks call `onDismiss`; a local copy of the state could
+ * drift from the desktop's.
  */
 export const Launcher = ({
   onDismiss,
@@ -143,9 +128,7 @@ export const Launcher = ({
   searchApps,
 }: Props) => (
   <ModalDialog
-    // Escape and the backdrop are what put it away, and the footer says the
-    // first of those — a corner ✕ on a panel driven from the keyboard is a
-    // button nobody aims at and a line of chrome over the thing being read.
+    // Keyboard-driven, so no close button; the footer shows Escape.
     closeButton={false}
     footer={<Keys />}
     onOpenChange={(next) => {
@@ -154,24 +137,18 @@ export const Launcher = ({
       }
     }}
     open={open}
-    // Where a launcher has always been, and where it covers least of the
-    // desktop it is opening something onto.
+    // Conventional placement, covering the least of the desktop.
     placement="top"
     screen={screen}
-    // Wide, because a row is a name and the directory it is in, and beside
-    // the rows is a preview of the one the highlight is on.
+    // Wide enough for the rows and the preview side by side.
     size="xl"
-    // A pane rather than a card, because there is a desktop behind it worth
-    // keeping: a launcher is a thing held up over your work for a second and
-    // a half, and one that blanked what it was over would read as a page the
-    // desktop had navigated to.
+    // Translucent, so the desktop stays visible behind a brief overlay.
     surface="glass"
     title="Open"
   >
     {/*
-      Inside the dialog, so it is unmounted with it: base-ui portals the popup
-      only while it is open, which is what makes every open start on an empty
-      box and a full list without an effect anywhere to clear them.
+      Inside the dialog so it unmounts on close, and every open starts with an
+      empty box without an effect to reset it.
     */}
     <Query
       onLaunch={onLaunch}
@@ -192,13 +169,10 @@ type QueryProps = {
 };
 
 /**
- * The box and the list under it, with the keyboard that moves between them.
+ * The search box, result list and preview.
  *
- * A combobox over a listbox rather than a box beside some buttons: the rows
- * are one choice among many and the keyboard never leaves the box, which is
- * what `aria-activedescendant` is for. It is also what the interaction
- * actually is — a person types, watches the list narrow, and presses Enter
- * without having looked at the screen for the last two of those.
+ * A combobox over a listbox: focus stays in the box and
+ * `aria-activedescendant` marks the highlighted row.
  */
 const Query = ({
   onLaunch,
@@ -209,16 +183,12 @@ const Query = ({
 }: QueryProps) => {
   const listId = useId();
   const [query, setQuery] = useState("");
-  // Where the arrow keys or the pointer have taken the highlight, from the
-  // first row. Not the highlight itself — see `highlightIn`, which keeps it
-  // inside a list that has narrowed since.
+  // The requested highlight index. `highlightIn` clamps it to the current
+  // list.
   const [stepped, setStepped] = useState(0);
 
   const found = useFound(search, query);
   const offered = useFoundApps(searchApps, query, opening);
-  // Every row is a thing Enter can do — the applications, the bookmarks and
-  // the files, and a site and a search around them — so the list is the whole
-  // answer to what it will do.
   const choices = choicesFor(
     query,
     found.files,
@@ -227,10 +197,8 @@ const Query = ({
   );
   const highlighted = highlightIn(choices.length, stepped);
   const chosen = highlighted === undefined ? undefined : choices[highlighted];
-  // What the pane shows: the highlighted row once the highlight has stood on
-  // it, and until then the one it showed before — a preview, then the next,
-  // with nothing in between. Keyed, because a choice is a new object on every
-  // render and would never be seen to settle.
+  // The previewed row: the highlighted one once it has settled, else the
+  // previous one. Settles by key, since a choice is a new object per render.
   const shown = useSettled(
     chosen,
     chosen === undefined ? undefined : keyOf(chosen),
@@ -238,8 +206,7 @@ const Query = ({
   );
   const box = useRef<HTMLInputElement>(null);
   const pane = useRef<HTMLElement>(null);
-  // The icons bookmarks' own pages named when they were previewed: read once
-  // as the panel opens, and again whenever a preview names one.
+  // Icons learned from bookmark previews. Read on open and on each new icon.
   const [learned, setLearned] = useState(learnedIcons);
   const learn = useCallback((bookmark: string, icon: string) => {
     learnIcon(bookmark, icon);
@@ -257,52 +224,38 @@ const Query = ({
         }
         aria-controls={listId}
         aria-expanded
-        // Named as well as placeheld, because it is no longer the only
-        // combobox a desktop can have on screen: a browser window's address
-        // bar is one too, and a placeholder is not an accessible name — it is
-        // gone the moment anything is typed.
+        // A placeholder isn't an accessible name, and browser address bars are
+        // comboboxes too, so this needs a label.
         aria-label={PROMPT}
-        // The box is why the panel is up, and a launcher you have to click
-        // into is a launcher that costs more than the terminal it replaces.
         autoFocus
         onChange={(event) => {
           setQuery(event.target.value);
-          // The walk belongs to the list that was on screen when it happened.
-          // A narrower list would otherwise keep an index into the old one,
-          // which is a highlight on a row nobody chose.
+          // Reset, since the old index refers to the previous list.
           setStepped(0);
         }}
         onKeyDown={(event) => {
           const step = stepOf(event);
           if (step !== undefined) {
-            // Taken from the box, which would otherwise put the caret at the
-            // end of the query on the way past.
+            // Stop the box from moving the caret.
             event.preventDefault();
-            // From the highlight rather than from `stepped`, which a list
-            // that narrowed under it can have left past the end. No highlight
-            // is no list, which has nowhere to walk to but the top.
+            // Step from the clamped highlight, since `stepped` may be past the
+            // end of a narrowed list.
             setStepped(steppedTo(highlighted ?? 0, step, choices.length));
           } else if (event.key === "Enter" && chosen !== undefined) {
-            // Nothing highlighted is an empty list, which has nothing to open.
             onLaunch(launchOf(chosen));
           } else if (event.key === "Tab") {
-            // The keyboard never leaves the box: see `keepKeyboardIn`.
+            // Keep focus in the box (see `keepKeyboardIn`).
             event.preventDefault();
           }
         }}
         placeholder={PROMPT}
-        // The glyph the whole panel is about, at the head of the one thing in
-        // it that takes typing.
         prefixIcon={<MagnifyingGlassIcon size={ICON_SIZE} />}
         ref={box}
         role="combobox"
         size="lg"
-        // A home full of file names is not prose, and a list of them underlined
-        // in red reads as a panel full of mistakes.
+        // File names would be flagged as misspellings.
         spellCheck={false}
-        // How much of the home is still answering, in the field doing the
-        // narrowing — a find bar's counter, and the one number that says
-        // whether one more letter is worth typing.
+        // Match count, like a find bar's.
         suffixIcon={
           <span aria-hidden="true" className={countStyles}>
             {`${found.matched.toString()} matched`}
@@ -312,23 +265,14 @@ const Query = ({
       />
       <div className={splitStyles}>
         {/*
-          THE SAME SIZE WHATEVER IS IN IT. The rows are filtered on every
-          keystroke and the host's answer lands after the panel is already up,
-          so a box that fitted its contents would resize under the hand typing
-          into it — a panel that grew and shrank between one letter and the
-          next, taking everything below the rows with it.
+          Fixed size, so the panel doesn't resize as results change while
+          typing.
         */}
         <div className={resultsStyles}>
           {/*
-            A listbox of options rather than a list of buttons: the rows are
-            one choice among many and the keyboard that walks them never leaves
-            the box above, which is what `aria-activedescendant` says. Two
-            hundred buttons would say there are two hundred things to press.
-
-            Divs rather than `ul`/`li` because an `li` is non-interactive
-            markup and an option is not — the roles are the structure here, and
-            doubling them up with list elements is what the lint is objecting
-            to.
+            A listbox rather than buttons, since focus stays in the box (see
+            `aria-activedescendant`). Divs rather than `ul`/`li`, because lint
+            rejects interactive roles on list elements.
           */}
           <div className={listStyles} id={listId} role="listbox">
             {choices.map((choice, at) => (
@@ -342,22 +286,18 @@ const Query = ({
                 onClick={() => {
                   onLaunch(launchOf(choice));
                 }}
-                // The pointer moves the one highlight rather than drawing a
-                // hover of its own beside it: two marks on the list is two
-                // answers to what Enter takes. A move rather than an enter,
-                // because a row scrolled under a pointer that has not moved
-                // is the keyboard's walk, not the pointer's.
+                // The pointer moves the highlight instead of a separate hover
+                // state, so only one row looks selected. Pointer move rather
+                // than enter, so rows scrolling under a still pointer don't
+                // steal the highlight.
                 onPointerMove={() => {
                   setStepped(at);
                 }}
-                // Only the highlighted row carries it, and it is the same
-                // function every render, so React calls it exactly when the
-                // highlight arrives at a row rather than on every keystroke.
+                // A stable function on the highlighted row only, so React
+                // calls it only when the highlight moves.
                 ref={at === highlighted ? keepInView : undefined}
                 role="option"
-                // Reachable programmatically and never in the tab ring: focus
-                // stays in the box, which is what makes typing and choosing
-                // one gesture rather than two.
+                // Out of the tab order; focus stays in the box.
                 tabIndex={-1}
               >
                 <ChoiceRow choice={choice} learned={learned} query={query} />
@@ -365,11 +305,8 @@ const Query = ({
             ))}
           </div>
           {/*
-            After the last row and inside the box they scroll in, because it is
-            about the list rather than about any row in it: the end of the rows
-            is where somebody looking for a file that is not there yet looks.
-            Beside the listbox rather than in it, which holds options and
-            nothing else.
+            After the rows, in the scroll area but outside the listbox, which
+            may hold only options.
           */}
           {found.indexing && <StillIndexing />}
         </div>
@@ -381,7 +318,7 @@ const Query = ({
   );
 };
 
-/** What `ref` holds once its element is mounted, which an effect runs after. */
+/** A ref's element, which must be mounted (as it is inside an effect). */
 const mounted = <T,>(ref: RefObject<T | null>): T => {
   if (ref.current === null) {
     throw new Error("An effect ran before its element was mounted");
@@ -390,13 +327,11 @@ const mounted = <T,>(ref: RefObject<T | null>): T => {
 };
 
 /**
- * Keep the keyboard in `box` for as long as the panel is up: a press anywhere
- * in the document does not move the focus, and a site in the preview that
- * takes it on a click gives it straight back. Tab is refused in the box
- * itself. Returns what undoes it.
+ * Keep focus in `box`: block focus changes from presses anywhere in the
+ * document, and reclaim it from a focused preview page. Returns a cleanup.
  *
- * The whole document rather than the panel, because the dialog's title and
- * footer are outside it and are just as able to take the focus.
+ * Listens on the document because the dialog's title and footer are outside
+ * the panel.
  */
 const keepKeyboardIn = (box: HTMLInputElement): (() => void) => {
   const document = box.ownerDocument;
@@ -417,11 +352,10 @@ const keepKeyboardIn = (box: HTMLInputElement): (() => void) => {
 };
 
 /**
- * Scroll `pane` by the wheel ourselves rather than leaving it to the engine,
- * which in Domicile scrolls a keyboard-focused pane but not one under the
- * pointer. Returns what undoes it.
+ * Scroll `pane` on wheel events. The engine scrolls only a focused pane, not
+ * one under the pointer. Returns a cleanup.
  *
- * Pixels only, which is all Chromium sends.
+ * Handles pixel deltas only, which is all Chromium sends.
  */
 const scrollOnWheel = (pane: HTMLElement): (() => void) => {
   const scroll = (event: WheelEvent) => {
@@ -433,15 +367,14 @@ const scrollOnWheel = (pane: HTMLElement): (() => void) => {
     event.preventDefault();
     pane.scrollBy(event.deltaX, event.deltaY);
   };
-  // Not passive, so the engine's own scroll is canceled rather than doubled
-  // wherever it does work.
+  // Not passive, so it can cancel the engine's scroll and avoid doubling it.
   pane.addEventListener("wheel", scroll, { passive: false });
   return () => {
     pane.removeEventListener("wheel", scroll);
   };
 };
 
-/** What one row says, by the kind of thing Enter on it would do. */
+/** One row's content, by choice kind. */
 const ChoiceRow = ({
   choice,
   learned,
@@ -465,8 +398,8 @@ const ChoiceRow = ({
     case ChoiceKind.Bookmark: {
       return (
         <>
-          {/* Keyed on what it would draw, so an icon that would not load does
-              not leave the next one learned drawn as the fallback. */}
+          {/* Keyed on the icons, so a failed load doesn't stick when a new
+              icon is learned. */}
           <BookmarkTile
             found={choice.icon}
             key={`${choice.url} ${learned[choice.url] ?? ""}`}
@@ -544,14 +477,11 @@ const FileChoice = ({ query, row }: { query: string; row: FileRow }) => (
 );
 
 /**
- * The glyph a row starts with, in a tile of its own.
+ * A row's glyph in a tile.
  *
- * Drawn twice and one of them shown, because a weight is a different set of
- * paths rather than a color: an outline Phosphor glyph is filled shapes with
- * holes in them, so nothing in CSS can thicken one. The pair is what the
- * component library does for its own icon swap — see
- * `_control/PrefixIconStack` — and it costs the row a second `<svg>` that is
- * never laid out on its own.
+ * Renders both the outline and fill weights and shows one, since CSS can't
+ * change a Phosphor glyph's weight. Same approach as the component library's
+ * `_control/PrefixIconStack`.
  */
 const RowTile = ({ icon: Icon }: { icon: typeof FileIcon }) => (
   <span className={rowTileStyles} data-row-tile="">
@@ -564,10 +494,7 @@ const RowTile = ({ icon: Icon }: { icon: typeof FileIcon }) => (
   </span>
 );
 
-/**
- * An application's tile: the icon its entry names, or a generic glyph for one
- * the host did not find.
- */
+/** An application's icon, or a generic glyph if the host found none. */
 const AppTile = ({ icon }: { icon: string | undefined }) =>
   icon === undefined ? (
     <RowTile icon={AppWindowIcon} />
@@ -576,10 +503,9 @@ const AppTile = ({ icon }: { icon: string | undefined }) =>
   );
 
 /**
- * A bookmark's tile: the icon learned from its own page, or else the one the
- * host found its site naming, or else a bookmark's glyph. A learned icon that
- * will not load — a signed-in page's, say, once the user has signed out —
- * gives way to the host's.
+ * A bookmark's icon: the learned one, else the host's, else a bookmark glyph.
+ * Falls back to the host's if the learned icon fails to load (e.g. after the
+ * user signs out).
  */
 const BookmarkTile = ({
   found,
@@ -607,12 +533,8 @@ const BookmarkTile = ({
 };
 
 /**
- * An icon that is a picture — an application's, a site's — in a glyph tile's
- * place, and without its frame: the picture is its own shape, and a box round
- * it is a box drawn round somebody else's logo.
- *
- * One picture rather than RowTile's pair: there is no second weight of it to
- * swap to when the row is reached.
+ * An image icon in place of a glyph tile, without the tile's frame, since
+ * logos have their own shape.
  */
 const PictureTile = ({
   onError,
@@ -628,8 +550,8 @@ const PictureTile = ({
 );
 
 /**
- * What the pane shows, which is never nothing: a blank pane reads as a broken
- * one. With no row highlighted it says how to choose one.
+ * The preview pane's content. Never blank, since that looks broken; with no
+ * row highlighted it shows a hint.
  */
 const PreviewOf = ({
   choice,
@@ -651,10 +573,8 @@ const PreviewOf = ({
   );
 
 /**
- * An application: the picture of itself its entry names, or else its name,
- * what its entry says it is for, and the command Enter runs — which is the one
- * thing a launcher's row cannot show and the thing that tells two entries of
- * the same name apart.
+ * An application's preview image, or else its name, comment and command. The
+ * command tells apart entries with the same name.
  */
 const AppPreview = ({ entry }: { entry: DesktopEntry }) =>
   entry.preview === undefined ? (
@@ -663,7 +583,7 @@ const AppPreview = ({ entry }: { entry: DesktopEntry }) =>
     <img alt={entry.name} className={mediaStyles} src={entry.preview} />
   );
 
-/** An application with no picture of itself, described. */
+/** An application's name, comment and command. */
 const AppCard = ({ entry }: { entry: DesktopEntry }) => (
   <Placeholder
     icon={AppWindowIcon}
@@ -678,7 +598,7 @@ const AppCard = ({ entry }: { entry: DesktopEntry }) => (
   />
 );
 
-/** A file by name and kind alone, with `note` saying why that is all. */
+/** A file's name and kind, with `note` explaining why there is no preview. */
 const NamedFile = ({ note, row }: { note?: string; row: FileRow }) => (
   <Placeholder
     icon={row.isDirectory ? FolderIcon : FileIcon}
@@ -688,8 +608,8 @@ const NamedFile = ({ note, row }: { note?: string; row: FileRow }) => (
 );
 
 /**
- * A large glyph over a title and a quieter line: a pane with no picture — or
- * with only a small one, `picture`, drawn in the glyph's place.
+ * A large glyph (or small `picture`) over a title and a note, for a pane with
+ * no full preview.
  */
 const Placeholder = ({
   icon: Icon,
@@ -716,15 +636,12 @@ const Placeholder = ({
 );
 
 /**
- * What the highlighted row is: a file's front, the file itself, or the page a
- * URL is.
+ * The preview of the highlighted row.
  *
- * A site in a `<webview>` of its own, which the pointer reaches so the wheel
- * scrolls it; a click in it takes the keyboard, which `keepKeyboardIn` hands
- * straight back to the box. A file the engine can draw — an image, a video, a
- * PDF — is drawn from `domicile://home/`; a song is played from there too,
- * under what the host reads of its tags; anything else is what the host reads
- * of it.
+ * - A site loads in a `<webview>`. `keepKeyboardIn` takes back focus from it.
+ * - Images, videos, PDFs and songs load from `domicile://home/`; the host
+ *   reads song tags.
+ * - Other files show what the host reads of them.
  */
 const ChoicePreview = ({
   choice,
@@ -736,14 +653,13 @@ const ChoicePreview = ({
   preview: Preview;
 }) => {
   switch (choice.kind) {
-    // Everything there is to say about one arrived with the row, so there is
-    // nothing to wait for.
+    // The row already has everything to show.
     case ChoiceKind.App: {
       return <AppPreview entry={choice.entry} />;
     }
     case ChoiceKind.File: {
-      // Keyed on the path, so what one row learned — an image that would not
-      // load, a song that was playing — is not carried onto the next.
+      // Keyed on the path, so state (a failed image, a playing song) resets
+      // per row.
       return (
         <FileChoicePreview
           key={choice.row.path}
@@ -753,8 +669,8 @@ const ChoicePreview = ({
       );
     }
     case ChoiceKind.Bookmark: {
-      // Keyed on the address, so each bookmark has a guest of its own and no
-      // icon the last one's page names is heard as this one's.
+      // Keyed on the URL, so each bookmark gets its own guest and icons don't
+      // leak between them.
       return (
         <BookmarkPreview key={choice.url} onLearn={onLearn} url={choice.url} />
       );
@@ -771,21 +687,19 @@ const ChoicePreview = ({
 };
 
 /**
- * A bookmark's page, from which its icon is learned: the page is the user's
- * browser, signed in as they are, so the icon it names is the one a site keeps
- * for people signed in — which no anonymous lookup sees.
+ * A bookmark's page. Loads with the user's sign-in, so it can learn icons the
+ * compositor's anonymous lookup can't see.
  */
 const BookmarkPreview = ({ onLearn, url }: { onLearn: Learn; url: string }) => {
-  // `null` rather than `undefined` because that is what React's ref API hands
-  // a callback ref on unmount.
+  // `null` because React passes it to a callback ref on unmount.
   const [view, setView] = useState<HTMLWebViewElement | null>(null);
 
   useEffect(() => {
     if (view === null) {
       return undefined;
     } else {
-      // Only from the bookmark's own site: signed out, its page is a sign-in
-      // page, and a link followed in the preview is another site's.
+      // Only learn from the bookmark's own origin. A sign-in redirect or a
+      // followed link would give another site's icon.
       const heard = () => {
         if (view.favicon !== "" && sameOrigin(view.url, url)) {
           onLearn(url, view.favicon);
@@ -801,11 +715,11 @@ const BookmarkPreview = ({ onLearn, url }: { onLearn: Learn; url: string }) => {
   return <webview className={viewStyles} ref={setView} src={url} title={url} />;
 };
 
-/** Whether `a` and `b` are on one origin; an address that is none is not. */
+/** Whether `a` and `b` are valid URLs with the same origin. */
 const sameOrigin = (a: string, b: string) =>
   URL.canParse(a) && URL.canParse(b) && new URL(a).origin === new URL(b).origin;
 
-/** A file, drawn by the element its kind is drawn in. */
+/** A file's preview, by media kind. */
 const FileChoicePreview = ({
   preview,
   row,
@@ -830,9 +744,8 @@ const FileChoicePreview = ({
 };
 
 /**
- * A file drawn as itself, from where the engine serves the home — or, when
- * the engine could not draw it after all, named as one it cannot. An extension
- * is a guess, and a broken image is a blank pane.
+ * A media file loaded from the engine, or a "cannot preview" placeholder if it
+ * fails to load (the extension is only a guess).
  */
 const MediaPreview = ({
   kind,
@@ -865,8 +778,7 @@ const MediaPreview = ({
         return <VideoPreview name={row.name} onError={fail} url={url} />;
       }
       case MediaKind.Pdf: {
-        // The viewer's open parameters: no toolbar, no page sidebar — the
-        // page is all a pane this size has room for.
+        // PDF viewer parameters: hide the toolbar and sidebar in a small pane.
         return (
           <iframe
             className={viewStyles}
@@ -879,7 +791,7 @@ const MediaPreview = ({
   }
 };
 
-/** A file whose kind nothing here can draw, by name. */
+/** Placeholder for a file that can't be previewed. */
 const CannotPreview = ({ row }: { row: FileRow }) => (
   <Placeholder
     icon={BinaryIcon}
@@ -889,17 +801,15 @@ const CannotPreview = ({ row }: { row: FileRow }) => (
 );
 
 /**
- * What kind of element `row` is drawn in, or `undefined` for one the host
- * reads. Only under home, which is all the engine serves, and never a
- * directory, whatever its name ends in.
+ * The media kind of `row`, or `undefined` if the host previews it. Only paths
+ * under home (all the engine serves), and never directories.
  */
 const mediaIn = (row: FileRow): MediaKind | undefined =>
   row.isDirectory || row.path.startsWith("/") ? undefined : mediaOf(row.path);
 
 /**
- * A song, played from where the engine serves the home, under the tags the
- * host reads of it. One the host could not read as a song is still offered:
- * its name said it is one, and the engine may yet play it.
+ * A song played by the engine, with tags read by the host. Shown even if the
+ * host can't read tags, since the engine may still play it.
  */
 const SongPane = ({ preview, row }: { preview: Preview; row: FileRow }) => {
   const shown = usePreview(preview, row.path);
@@ -913,7 +823,7 @@ const SongPane = ({ preview, row }: { preview: Preview; row: FileRow }) => {
   );
 };
 
-/** What the host says a path holds, drawn by kind. */
+/** The host's preview of a path, by kind. */
 const FilePreviewPane = ({
   preview,
   row,
@@ -923,8 +833,7 @@ const FilePreviewPane = ({
 }) => {
   const shown = usePreview(preview, row.path);
   switch (shown?.kind) {
-    // The host has not answered yet, and a desktop with no index never will:
-    // either way the row is known, so it is what the pane says.
+    // No answer yet (or ever, without an index): show the name.
     case undefined: {
       return <NamedFile row={row} />;
     }
@@ -932,8 +841,7 @@ const FilePreviewPane = ({
       return <TextPreview path={row.path} text={shown.text} />;
     }
     case FilePreviewKind.Directory: {
-      // An empty list is an answer, and a blank pane would read as one still
-      // on its way.
+      // Say the folder is empty, since a blank pane looks like loading.
       return shown.entries.length === 0 ? (
         <Placeholder
           icon={FolderDashedIcon}
@@ -963,20 +871,15 @@ const FilePreviewPane = ({
 };
 
 /**
- * A row's text with the letters the query is responsible for lit.
+ * A row's text with the query's matches highlighted.
  *
- * `mark` rather than a styled span, because that is what the element is for
- * and because it is the one piece of this the browser's own find-in-page and
- * a screen reader already understand. It leaves the text alone — the run it
- * wraps is the run it was given — so what a row *says* is what it said
- * before anybody typed.
+ * Uses `mark` for its semantics, which screen readers understand.
  */
 const Marked = ({ marks }: { marks: readonly Mark[] }) => (
   <>
     {marks.map((mark, at) =>
       mark.matched ? (
-        // Index as the key because that is what a run is: the third piece of
-        // this name, which is a different piece the moment the query changes.
+        // Runs have no identity beyond their position.
         <mark className={markStyles} key={at}>
           {mark.text}
         </mark>
@@ -988,11 +891,9 @@ const Marked = ({ marks }: { marks: readonly Mark[] }) => (
 );
 
 /**
- * The line that says the list is not all of the home yet.
+ * A notice that the home index is still building.
  *
- * `role="status"` so it is announced rather than only drawn: a person driving
- * this from the keyboard with a screen reader is the person least able to
- * notice rows arriving on their own.
+ * `role="status"` so screen readers announce it.
  */
 const StillIndexing = () => (
   <p className={indexingStyles} role="status">
@@ -1003,12 +904,7 @@ const StillIndexing = () => (
   </p>
 );
 
-/**
- * The three keys the panel answers, spelled out under it.
- *
- * A launcher is a keyboard instrument, and the whole of its interface is keys
- * nothing on screen otherwise names.
- */
+/** Footer hints for the launcher's three keys. */
 const Keys = () => (
   <div className={keysStyles}>
     <span className={keyStyles}>
@@ -1024,7 +920,7 @@ const Keys = () => (
   </div>
 );
 
-/** What tells one row from the others across a keystroke. */
+/** A stable key for a row across renders. */
 const keyOf = (choice: Choice): string => {
   switch (choice.kind) {
     case ChoiceKind.App: {
@@ -1036,8 +932,7 @@ const keyOf = (choice: Choice): string => {
     case ChoiceKind.File: {
       return `file:${choice.row.path}`;
     }
-    // The URL as well as the kind, so a search that changed with the typing
-    // is a new row for the preview to settle on.
+    // Include the URL, so a changed search is a new row for the preview.
     case ChoiceKind.Site: {
       return `site:${choice.url}`;
     }
@@ -1053,10 +948,7 @@ const keyOf = (choice: Choice): string => {
   }
 };
 
-/**
- * The logo of the site a tagged search goes to: the row says where the words
- * are going before its text is read. Images and Maps are Google's.
- */
+/** The logo of a tagged search's site. Images and Maps use Google's. */
 const logoOf = (engine: Engine): typeof FileIcon => {
   switch (engine) {
     case Engine.GitHub: {
@@ -1095,7 +987,7 @@ const nameOf = (engine: Engine): string => {
   }
 };
 
-/** A row's own id, which is what `aria-activedescendant` points at. */
+/** A row's DOM id, for `aria-activedescendant`. */
 const rowId = (listId: string, at: number): string =>
   `${listId}-${at.toString()}`;
 
@@ -1104,51 +996,34 @@ const panelStyles = vstack({
   gap: 3,
 });
 
-// The rows and the preview side by side, the preview the wider: a row is a
-// name over its directory and needs little width, and the preview is a page,
-// a picture or a file's text.
+// Rows and preview side by side; the preview gets more width.
 const splitStyles = css({
   display: "grid",
   gap: 3,
   gridTemplateColumns: "minmax(0, 2fr) minmax(0, 3fr)",
 });
 
-// Tall enough to be worth scrolling and short enough to leave the backdrop
-// showing: the panel is a thing over the desktop, and one that reached the
-// bottom of the screen would read as a page. A block size rather than a
-// maximum, so the panel is the same height however many rows the query left
-// — see the note at the call site.
+// A fixed height, not a maximum, so the panel doesn't resize with the results
+// (see the call site). Short enough to leave the backdrop visible.
 const resultsStyles = css({
-  // A ground a shade off the panel's, so the room the fixed height keeps
-  // reads as a box waiting to be filled rather than as panel nobody used.
+  // A slightly different background marks the empty space as part of the
+  // list.
   backgroundColor: "color-mix(in oklab, {colors.foreground} 4%, transparent)",
-  // A fraction of the screen rather than a spacing token, because what it is
-  // measured against is the screen: most of it, less the room the box, the
-  // footer and the offset from the top take, so the panel stops short of the
-  // bottom edge on any monitor.
+  // Relative to the screen, leaving room for the box, footer and top offset on
+  // any monitor.
   blockSize: "60vh",
   borderRadius: "md",
   overflowY: "auto",
   padding: 1,
-  // A bar the width of a hairline and the color of one, because this list is
-  // scrolled with the arrow keys: what it is for here is saying there is more
-  // below, not being dragged.
+  // Thin, since the list is scrolled by keyboard; it only signals more rows.
   scrollbarColor: "{colors.border} transparent",
   scrollbarWidth: "thin",
-  // So a row scrolled to by `keepInView` lands inside the box rather than
-  // flush against the edge it came over.
+  // Keeps a row scrolled by `keepInView` off the edge.
   scrollPaddingBlock: 1,
 });
 
-// The same ground and the same height as the rows beside it, so the two read
-// as one box split in half.
-//
-// Its own color, because the pane is a region of its own: text in it is drawn
-// in the panel's foreground rather than whatever the document defaults to,
-// which over the glass was a dark gray on dark glass.
-//
-// Scrolled when a file's text or a folder's entries run past it, with the same
-// hairline bar as the rows.
+// Matches the results list's background and height. Sets `color` explicitly,
+// since the document default is unreadable on the glass surface.
 const previewStyles = css({
   backgroundColor: "color-mix(in oklab, {colors.foreground} 4%, transparent)",
   blockSize: "60vh",
@@ -1159,7 +1034,7 @@ const previewStyles = css({
   scrollbarWidth: "thin",
 });
 
-// A picture or a video the size of the pane at most, and never cropped.
+// Fit within the pane, uncropped.
 const mediaStyles = css({
   blockSize: "100%",
   display: "block",
@@ -1167,9 +1042,7 @@ const mediaStyles = css({
   objectFit: "contain",
 });
 
-// A pane with no picture of its own: a large outline glyph for the kind of
-// thing it is about, in the middle, quiet enough to read as an absence rather
-// than as something to look at, over what it is and why that is all.
+// Centered, muted glyph and text for a pane with no preview.
 const placeholderStyles = vstack({
   blockSize: "100%",
   color: "muted",
@@ -1179,7 +1052,7 @@ const placeholderStyles = vstack({
   textAlign: "center",
 });
 
-// An application's icon at the glyph's size, whatever size the file is.
+// Scale an application icon to the glyph's size.
 const placeholderPictureStyles = css({
   blockSize: 16,
   inlineSize: 16,
@@ -1199,21 +1072,17 @@ const placeholderNoteStyles = css({
   fontSize: "sm",
 });
 
-// An application's comment over its command, each a line of its own.
 const appNoteStyles = vstack({
   gap: 2,
 });
 
-// The command as it will be run: monospaced, and broken anywhere rather than
-// run off the pane, because a path in it has no spaces to break at.
+// Break anywhere, since paths have no spaces to wrap at.
 const commandStyles = css({
   color: "textTertiary",
   fontFamily: "mono",
   wordBreak: "break-all",
 });
 
-// The page a URL is, drawn small. The pointer reaches it so the wheel scrolls
-// it; the focus a click takes is `keepKeyboardIn`'s to give back.
 const viewStyles = css({
   blockSize: "100%",
   border: "none",
@@ -1227,16 +1096,14 @@ const listStyles = flex({
 });
 
 const rowStyles = hstack({
-  // The highlighted row, walked to by the keyboard or the pointer, in the
-  // desktop's own accent: a wash that fades across the row rather than a band
-  // of flat color. There is no hover beside it — the pointer moves this.
+  // An accent gradient. There is no separate hover style; the pointer moves
+  // the highlight.
   "&[data-highlighted]": {
     backgroundImage:
       "linear-gradient(to right, color-mix(in oklab, {colors.accent} 30%, transparent), color-mix(in oklab, {colors.accent} 8%, transparent))",
   },
-  // A SOLID GLYPH FOR THE HIGHLIGHTED ROW. An outline glyph is mostly the
-  // ground it is drawn on, so a row that lightens its ground takes the glyph's
-  // contrast with it and the thing meant to be read best is read worst.
+  // A filled glyph on the highlighted row, since an outline glyph loses
+  // contrast on the lighter background.
   "&[data-highlighted] [data-row-glyph=reached]": { opacity: 1 },
   "&[data-highlighted] [data-row-glyph=resting]": { opacity: 0 },
   "&[data-highlighted] [data-row-tile]": {
@@ -1254,9 +1121,8 @@ const rowStyles = hstack({
   transition: "background-color {durations.fast} {easings.out}",
 });
 
-// The glyph sits in a tile of its own rather than loose beside the name: it
-// gives every row the same shoulder to start at whatever the name's length,
-// and it is the thing the highlight can light up without touching the text.
+// A fixed-size tile aligns every row's text and gives the highlight something
+// to color.
 const rowTileStyles = css({
   blockSize: 7,
   border: "1px solid color-mix(in oklab, {colors.foreground} 8%, transparent)",
@@ -1270,8 +1136,7 @@ const rowTileStyles = css({
     "background-color {durations.fast} {easings.out}, border-color {durations.fast} {easings.out}, color {durations.fast} {easings.out}",
 });
 
-// A picture in a glyph tile's place: the tile's size, with no frame to stay
-// inside of.
+// The tile's size, without its frame.
 const pictureTileStyles = css({
   blockSize: 7,
   display: "grid",
@@ -1280,31 +1145,25 @@ const pictureTileStyles = css({
   placeItems: "center",
 });
 
-// An icon a little bigger than the glyph, whatever size the file is: the frame
-// a glyph has is what makes up the difference.
+// Slightly larger than a glyph, since it has no frame.
 const rowPictureStyles = css({
   blockSize: 5,
   inlineSize: 5,
   objectFit: "contain",
 });
 
-// Both weights in the one cell the tile has, so the swap moves nothing and
-// the tile's size is the glyph's whichever of them is showing.
+// Both weights share one grid cell, so swapping doesn't shift layout.
 const rowGlyphStyles = css({
-  // The outline one is what a row is drawn with, so it is the one that needs
-  // no rule; the row above is what shows the other.
+  // Hidden by default; `rowStyles` shows it on the highlighted row.
   "&[data-row-glyph=reached]": { opacity: 0 },
   display: "inline-flex",
   gridArea: "1 / 1",
   transition: "opacity {durations.fast} {easings.out}",
 });
 
-// The letters the query is responsible for. `mark`'s own yellow is a
-// highlighter pen on a page; what this is marking is why a row is on screen,
-// so it is said in the color the desktop says "this one" in. Bold by stroke
-// rather than weight: a heavier letter is a wider one, and the row would shift
-// with every key pressed. The stroke is painted under each letter so only its
-// outer half shows, which thickens the letter without filling in its holes.
+// Matched letters in the accent color instead of `mark`'s yellow. Emboldened
+// with a stroke rather than font weight, which would widen letters and shift
+// the row on every key. `paint-order: stroke` keeps letter holes open.
 const markStyles = css({
   backgroundColor: "transparent",
   color: "accent",
@@ -1312,9 +1171,7 @@ const markStyles = css({
   WebkitTextStroke: "{borderWidths.fauxBold} currentColor",
 });
 
-// The directory over the name, each a line of its own that gives way at its
-// own end: stacked, neither can take the other's width, and the row needs only
-// as much of the panel as its longer line.
+// Directory over name, each truncating independently.
 const rowTextStyles = css({
   display: "flex",
   flex: "1 1 auto",
@@ -1322,7 +1179,6 @@ const rowTextStyles = css({
   minInlineSize: 0,
 });
 
-// What was typed part of, so the larger of the two lines.
 const rowNameStyles = css({
   fontSize: "md",
   overflow: "hidden",
@@ -1330,14 +1186,12 @@ const rowNameStyles = css({
   whiteSpace: "nowrap",
 });
 
-// What a site or a search row does, said quieter than what it does it to.
+// The action word on site and search rows, muted.
 const rowVerbStyles = css({
   color: "muted",
 });
 
-// A small line over the name. A directory is what tells two files of one name
-// apart, so it is read when the names alone have not settled it, and it is
-// said quieter than the name for that reason.
+// Smaller and muted, since it only disambiguates same-named files.
 const rowDirectoryStyles = css({
   color: "muted",
   fontSize: "xs",
@@ -1346,8 +1200,7 @@ const rowDirectoryStyles = css({
   whiteSpace: "nowrap",
 });
 
-// Figures that keep their width as they change, so the counter does not
-// shuffle sideways under the typing.
+// Tabular figures, so the count doesn't shift as it changes.
 const countStyles = css({
   color: "muted",
   fontSize: "xs",
@@ -1355,8 +1208,7 @@ const countStyles = css({
   whiteSpace: "nowrap",
 });
 
-// A row's inset, so its glyph lines up under the tiles above it, in the color
-// the panel says everything provisional in.
+// Same inset as a row, so the glyph aligns with the row tiles.
 const indexingStyles = hstack({
   color: "muted",
   fontSize: "xs",
@@ -1366,14 +1218,9 @@ const indexingStyles = hstack({
   paddingInline: 2,
 });
 
-// A full turn, for the one thing on this panel that is still happening. On the
-// span rather than on the glyph, because a Phosphor icon is somebody else's
-// component and this panel styles its icons by what they sit in — the same
-// wrapper the row tiles use.
-//
-// `prefers-reduced-motion` stops it: what the line says is in the words, and
-// the turn is only what keeps them from reading as a state nobody is working
-// on.
+// Spins the wrapper rather than the Phosphor icon, which this file styles
+// through its container. Stops under `prefers-reduced-motion`; the text
+// already says what is happening.
 const spinnerStyles = css({
   _motionReduce: { animationName: "none" },
   alignItems: "center",

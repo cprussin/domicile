@@ -23,7 +23,7 @@ const SITES: readonly Suggestion<string>[] = [
   },
 ];
 
-/** The field as a consumer drives it: it owns the text, the list is given. */
+/** A controlled field, as a consumer uses it. */
 const Driven = ({
   autoHighlight = false,
   onSelected,
@@ -50,9 +50,8 @@ const Driven = ({
 describe(Autocomplete, () => {
   describe("rendering", () => {
     it("puts the controls it is given at the inline start, where they can be pressed", async () => {
-      // A `prefixIcon` is decoration and takes no pointer; a control at the
-      // same end of the field is a control, which is what a browser's site
-      // indicator is.
+      // Unlike `prefixIcon`, these take pointer input, e.g. a browser's site
+      // indicator.
       const pressed: string[] = [];
       render(
         <Autocomplete
@@ -117,9 +116,8 @@ describe(Autocomplete, () => {
       expect(taken).toStrictEqual(["https://docs.example.com"]);
     });
 
-    // What an address bar needs from it: the line the field is already
-    // halfway to is the first one, so Enter takes it without the user having
-    // to arrow down to what they were already typing.
+    // An address bar needs Enter to take the first match without arrowing
+    // down to it.
     it("takes the first suggestion on Enter when it highlights as the user types", async () => {
       const taken: string[] = [];
       render(

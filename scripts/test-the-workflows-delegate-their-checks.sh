@@ -1,27 +1,10 @@
 #!/usr/bin/env bash
-# That a workflow triggers the checks rather than being where they live.
+# Checks that workflows call checks defined under `scripts/` instead of
+# defining them in `run:` blocks.
 #
-# This repository has three task runners already — bun, turbo and cargo — and a
-# fourth, `scripts/check.sh`, that spans them because the end-to-end checks
-# span the languages. None of that helps while a check's only definition is a
-# `run:` block, and for a long time that is where most of them were:
-# `engine.yml` alone was 1278 lines and 47 steps, 24 of them a guard invocation
-# and 11 of those a control, and the only way to run the engine's guard suite
-# was to read the YAML and retype it. `guard-css-and-resize.sh` said so in its
-# own header: it had never been run by anything but a person.
-#
-# THE COST WAS NOT CONVENIENCE, IT WAS DRIFT, and it is measurable. The DRM
-# suites' floors were written twice, once in `engine.yml` and once in
-# `engine-drm-probe.yml`, and the two copies disagreed: `DrmScreenTest:26`
-# against `DrmScreenTest:18`, and the probe's list had no `DrmEdidSerialTest`
-# at all. Both were correct on the day they were written. Neither could be run
-# outside CI, so nothing but CI could notice they had parted.
-#
-# So the rules below are about WHERE a check is defined, not what it asserts.
-# A guard is named by a script under `scripts/`, a workflow names the script,
-# and the floors have one home. What a workflow is still allowed to carry is
-# the things that are only true of CI: the runner label, the path filter, the
-# concurrency group, the tree lock, and fetching a toolchain.
+# A check defined only in YAML cannot run outside CI, so copies of it drift
+# unnoticed. Workflows may still carry what is specific to CI: the runner
+# label, path filter, concurrency group, tree lock and toolchain fetch.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -39,31 +22,23 @@ fail() {
   FAILED=$((FAILED + 1))
 }
 
-# A workflow with its comments taken out, because a comment naming a script is
-# how these files explain themselves and every rule below would read it as an
-# invocation. Only whole-line comments: a `#` after code is not one of these
-# files' habits, and stripping to the first `#` would cut a shell parameter
-# expansion in half.
+# Prints a workflow without whole-line comments, so a comment that names a
+# script is not read as an invocation. Trailing comments stay: stripping from
+# the first `#` would cut a `${var#...}` expansion.
 without_comments() { # workflow
   grep -v '^[[:space:]]*#' "$1"
 }
 
 # --- the guards are not invoked from YAML -----------------------------------
 
-# What a workflow may not name. Each of these is a check's own entry point, so
-# a workflow that names one is a workflow holding the definition of a check:
-# the shell it needs, the wrapper it runs under, and — for a guard — whether
-# this is the positive run or the control, which is the part that was only ever
-# written in `env:`.
+# A workflow must not name a check's entry point. Doing so puts the check's
+# definition (its shell, wrapper, and for a guard whether this is the control
+# run) in YAML.
 echo "no workflow holds a check's definition"
 
-# Invocations rather than mentions. An earlier version of this matched the bare
-# names and caught three things that were not offenses: the word
-# `ozone_unittests` inside a `::error::` message, and — twice —
-# `engine-guard-client-window.sh`, which is the *replacement*, because
-# `guard-client-window.sh` is a substring of it. A rule that fails on a
-# workflow for naming the script it correctly delegates to is a rule nobody
-# will keep.
+# Patterns match invocations, not bare names: `engine-guard-client-window.sh`
+# contains `guard-client-window.sh`, and an error message may mention
+# `ozone_unittests`.
 for pattern in \
   'packages/domicile-engine/scripts/guard-' \
   'packages/domicile-engine/scripts/spike' \
@@ -72,9 +47,8 @@ for pattern in \
 do
   offenders=""
   for workflow in "$WORKFLOWS"/*.yml; do
-    # `-e`, because one of these patterns starts with `--` and grep read it as
-    # an option: three of the four rules here reported `ok` having run no grep
-    # at all, which is the silent pass this whole file is about.
+    # `-e` because one pattern starts with `--`, which grep would read as an
+    # option and then match nothing.
     without_comments "$workflow" | grep -qE -e "$pattern" &&
       offenders="$offenders $(basename "$workflow")"
   done
@@ -88,10 +62,8 @@ done
 
 # --- every guard is reachable from a script ---------------------------------
 
-# The other direction, and the one a path filter cannot give you: a guard
-# script added to the package and wired to nothing is a check that was written
-# and never runs. `check.sh`'s groups glob rather than list for exactly this
-# reason, and this is the same rule one level up.
+# Every guard script must be run by some `scripts/engine-*.sh`; otherwise it
+# never runs.
 echo "every guard is run by something"
 
 guards=0
@@ -107,9 +79,7 @@ for guard in "$GUARDS"/guard-*.sh; do
   fi
 done
 
-# The positive, established rather than assumed: a glob that matched nothing
-# reports every rule above as passing, which is how a renamed directory turns
-# this half of the file into a green no-op.
+# Require that guards were found, so an empty glob cannot pass every rule.
 if [ "$guards" -ge 10 ]; then
   ok "the guards were found at all ($guards of them)"
 else
@@ -119,14 +89,8 @@ fi
 
 # --- the engine group's list holds every engine check ------------------------
 
-# `check.sh` globs every other group and writes this one out, because the engine
-# checks have an order worth keeping: the cheap ones first, so a run that has
-# already found the symbol missing does not then spend the ten minutes of
-# guards that follow photographing pixels to say so again. A glob cannot carry
-# an order, and a list cannot carry completeness — so the order lives there and
-# completeness lives here. Without this, a check added to `scripts/` and left
-# out of the list is one that never runs, which is the failure the globs exist
-# to prevent.
+# `check.sh` lists the engine group's scripts in order (cheap checks first)
+# instead of globbing them. This rule ensures the list stays complete.
 echo "the engine group runs every engine check"
 
 engine_checks=0
@@ -151,14 +115,9 @@ fi
 
 # --- the group itself never opts out of its controls -------------------------
 
-# FOURTEEN OF THE SIXTEEN GUARD CHECKS HAVE A CONTROL, and
-# `DOMICILE_GUARD_CONTROL=0` turns one off. That switch exists because `pinned-engine.yml` and
-# `engine-release.yml` each run one guard and said in prose that a second run
-# would buy nothing and spend the slot twice — and the job it must never be set
-# for is the one whose controls ARE the point. A `engine.yml` that opted out
-# would still be green, still run every guard, and no longer establish that
-# any of them can fail. That is this repository's oldest failure mode with a new
-# door, and it would not show up as a red check anywhere.
+# `DOMICILE_GUARD_CONTROL=0` skips a guard's control run. `pinned-engine.yml`
+# and `engine-release.yml` set it to save CI time. The engine jobs must not:
+# without controls they stay green but no longer show that a guard can fail.
 echo "the engine job keeps its controls"
 
 for name in engine engine-drm-probe; do
@@ -172,10 +131,8 @@ for name in engine engine-drm-probe; do
   fi
 done
 
-# THE POSITIVE, because a rule about a switch nothing uses asserts nothing: if
-# the two callers that opt out stopped doing so, the rule above would pass
-# forever while the switch quietly became dead code — and the ~65s it saves on
-# every pull request would be back with nobody looking.
+# Require that some workflow does opt out, so the rule above has a subject and
+# the switch is not dead code.
 optouts=0
 for workflow in "$WORKFLOWS"/*.yml; do
   without_comments "$workflow" | grep -q 'DOMICILE_GUARD_CONTROL=0' &&
@@ -190,15 +147,11 @@ fi
 
 # --- every group is run by a workflow ---------------------------------------
 
-# A group `check.sh` knows and no workflow names is a group that runs on
-# somebody's laptop and nowhere else. That is how `engine-drm-probe.yml` came
-# to be the only thing running the DRM suites — a `workflow_dispatch`, so a
-# test that runs after the change that broke it has already landed.
+# Every `check.sh` group must be run by a workflow, or it runs only by hand.
 echo "every check.sh group is run by a workflow"
 
-# `KNOWN` is the list `check.sh` validates a named group against, so it is the
-# whole set of groups there are. Read from the assignment rather than from a
-# copy kept here, which would drift the way the floors did.
+# `KNOWN` in `check.sh` lists every group. Read it from there so this script
+# holds no copy that can drift.
 known="$(sed -n 's/^KNOWN=(\(.*\))$/\1/p' "$CHECK")"
 if [ -z "$known" ]; then
   fail "check.sh's groups were read at all" \
@@ -218,16 +171,14 @@ fi
 
 # --- the workflows that check, check through scripts/ -----------------------
 
-# Named rather than derived, because the set is small and the interesting thing
-# about a workflow joining it is that somebody decided it should. The ones left
-# out are left out for a reason and each reason is written down:
+# Workflows that check things must do so through `scripts/`. The list is
+# explicit. Excluded:
 #
-#   engine-cancel-stale.yml   cancels stale runs; it asserts nothing.
-#   engine-release.yml        builds and publishes a tarball. The guard it runs
-#                             on the packaged build is a `scripts/` one, which
-#                             the first rule above already forces.
-#   engine-drm-probe.yml      a dispatch-only run on hardware. Same: the suites
-#                             it runs are a `scripts/` one now.
+#   engine-cancel-stale.yml   cancels stale runs; asserts nothing.
+#   engine-release.yml        builds and publishes a tarball; its guard runs
+#                             from `scripts/`, which the first rule enforces.
+#   engine-drm-probe.yml      dispatch-only hardware run; its suites run from
+#                             `scripts/`.
 echo "the checking workflows check through scripts/"
 
 for name in cargo-test turbo-test e2e nix-build engine pinned-engine; do

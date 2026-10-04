@@ -1,9 +1,6 @@
 import type { Notification } from "@domicile-desktop/sdk/notification";
 
-/**
- * A notification, for a test: an ordinary one from Firefox at `time` 0, with
- * whatever a case is about laid over it.
- */
+/** A test notification from Firefox at `time` 0, with `fields` applied. */
 export const notification = (fields: Partial<Notification>): Notification => ({
   actions: [],
   appName: "Firefox",

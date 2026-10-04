@@ -5,62 +5,42 @@ import type { Spot } from "./pointer-warp";
 import { slidAcross } from "./window-styles";
 
 type Props = {
-  /** The window's parts: its contents and, while it is on screen, its bar. */
+  /** The window's contents and, when on screen, its bar. */
   children: ReactNode;
   /**
-   * Called when the pointer crosses into any part of this window, with the
-   * place on the page it crossed at.
-   *
-   * Focus follows the cursor in this shell, so arriving over a window is the
-   * user starting to work in it — where the pointer is what did the arriving,
-   * which is what the place is for: see `usePointerWarp`.
+   * Called when the pointer enters any part of this window, with the page
+   * position. Focus follows the cursor; `usePointerWarp` uses the position to
+   * tell a real pointer move from a window appearing under a still pointer.
    */
   onHover: (at: Spot) => void;
   /**
-   * Called when the user presses any part of this window.
-   *
-   * Every press, including one in the window the user is already in: focus
-   * follows the cursor, so the pointer has already made this the active
-   * window, and a press is still what raises it.
+   * Called on every press in this window, even when it is already active:
+   * focus follows the cursor, but only a press raises the window.
    */
   onReach: () => void;
-  /**
-   * How wide the screen it is on is, which is how far a workspace switch
-   * slides it — or `undefined` while it is on none.
-   */
+  /** Its screen's width, which a workspace switch slides it by. */
   width: number | undefined;
 };
 
 /**
- * The attribute every window's frame carries, which is how a listener on the
- * document tells a pointer over a window from one over the bare desk — see
- * `useScreenFollowsPointer`.
+ * Marks window frames, so document listeners can tell a window from the bare
+ * desk. See `useScreenFollowsPointer`.
  */
 export const WINDOW_FRAME = "data-window-frame";
 
 /**
- * One window, whatever is in it: the element its bar and its contents share,
- * which hears the pointer for both.
+ * Wraps a window's bar and contents to handle pointer hover and press for
+ * every kind of window in one place.
  *
- * **One place for every part, so every kind of window is worked the same.** An
- * `<app>`, a `<webview>`, the chrome around one and the bar over either are
- * all elements of this page, so the pointer arriving over any of them, or a
- * press on one, comes up the document through here. What is left to each kind
- * is only what this cannot hear: the SDK's request for a client's keyboard,
- * and the focus a guest page takes, which never leaves it.
- *
- * **It draws nothing.** `display: contents` gives it no box, so each part is
- * placed, stacked and hit-tested exactly as it would be without it — this is
- * a node in the document for events to pass through, not a layer. Its parts
- * still inherit from it, which is how they know how far to slide.
+ * Uses `display: contents`, so it has no box and does not affect layout,
+ * stacking or hit-testing. Its children inherit the slide width from it.
  */
 export const WindowFrame = ({ children, onHover, onReach, width }: Props) => (
   <div
     className={frameStyles}
     {...{ [WINDOW_FRAME]: "" }}
     onPointerDown={onReach}
-    // `pointerover` rather than `pointerenter`: the one that bubbles from the
-    // part it crossed into, which is where the place comes from.
+    // `pointerover` bubbles from whichever part the pointer entered.
     onPointerOver={(event) => {
       onHover([event.clientX, event.clientY]);
     }}

@@ -8,7 +8,7 @@ import type { WindowAction } from "../window-management/window-state";
 import { WindowActionKind } from "../window-management/window-state";
 import { parseCommand } from "./command";
 
-/** Where a command a binding names and this desktop does not know is said. */
+/** Report an unknown command. */
 const logToConsole = (error: string): void => {
   // biome-ignore lint/suspicious/noConsole: the bindings are the user's, and the console is where a shell tells them one named nothing
   console.error(error);
@@ -16,41 +16,33 @@ const logToConsole = (error: string): void => {
 
 type Options = {
   domicile: DomicileClient;
-  /** The keys this desktop binds. */
+  /** The shell's keybindings. */
   keybindings: ShellKeybindings;
-  /** Whether the launcher is up, which silences every key but its own. */
+  /** Whether the launcher is open, which blocks every key but its own. */
   launcherOpen: boolean;
-  /**
-   * The binding mode the desk is in, which the keys this page hears are read
-   * in — whichever page's key entered it.
-   */
+  /** The desk-wide binding mode, whichever page entered it. */
   mode: string;
-  /** What the desktop is being asked to do. */
+  /** Receives the action a key asks for. */
   onAction: (action: WindowAction) => void;
-  /** A key on this page entered a binding mode. */
+  /** Called when a key on this page enters a binding mode. */
   onModeChanged: (mode: string) => void;
-  /** Where an unknown command is reported. Injected so a test can read it. */
+  /** Reports unknown commands. Injectable for tests. */
   report?: typeof logToConsole;
 };
 
 /**
- * The keys this desktop binds, answered.
+ * Bind the shell's keys and dispatch their commands.
  *
- * The SDK claims every chord, hears each press by whichever path it took, and
- * reads it in the binding mode; what is left here is what manganese means by
- * `send-shell <words>` — see `command.ts` — the launcher's modality, and the
- * mode itself, which is the desk's rather than this page's.
+ * The SDK grabs and reads the keys. This hook parses `send-shell` commands
+ * (see `command.ts`), blocks keys while the launcher is open, and syncs the
+ * binding mode.
  *
- * **THE MODE SPANS THE DESK.** A desk of several monitors is several pages,
- * and the key that entered resize mode may have landed on another one than
- * the next key does. So a mode a key enters goes out as `onModeChanged`, into
- * the desktop every page shares, and the mode that desktop is in comes back as
- * `mode` and is handed to the SDK — on this page and every other.
+ * The mode is desk-wide: each monitor is a separate page, so a mode entered on
+ * one page goes out via `onModeChanged` and comes back to every page as
+ * `mode`.
  *
- * Bound once per client and set of keys, not once per render: the keyboard
- * arrives once and again only when it changes, so a binding torn down and
- * made again would miss it. `keybindings` is a shell's options, made once. What changes between renders is read when a key is pressed.
- *
+ * Binds once per client and keybindings, not per render: the keyboard layout
+ * arrives only on change, so a rebinding would miss it.
  */
 export const useKeybindings = ({
   domicile,
@@ -87,19 +79,17 @@ export const useKeybindings = ({
     return bound.unbind;
   }, [domicile, keybindings]);
 
-  // After the binding above, which effects run in order of: the first mode
-  // reaches a binding that exists.
+  // Must follow the binding effect, so the first mode reaches a live binding.
   useEffect(() => {
     binding.current?.setMode(mode);
   }, [mode]);
 };
 
 /**
- * Whether a press is answered while the launcher is up.
+ * Whether an action runs while the launcher is open.
  *
- * Only its own key is, which is what closes it. The panel is modal, and a
- * workspace switched or a window killed behind it is the desktop reacting to
- * keys somebody pressed at the panel.
+ * Only the launcher toggle does. The launcher is modal, so other keys must not
+ * act on windows behind it.
  */
 const heardOverLauncher = (action: WindowAction): boolean =>
   action.kind === WindowActionKind.LauncherToggled;

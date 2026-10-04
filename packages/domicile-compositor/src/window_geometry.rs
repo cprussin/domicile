@@ -1,30 +1,20 @@
-//! What `xdg_surface.set_window_geometry` says about the surface it is set on.
+//! Crop and pointer offset from `xdg_surface.set_window_geometry`.
 //!
-//! A client that draws its own shadows — Electron, GTK, anything with
-//! client-side decorations — commits a buffer larger than its window and says
-//! which part of it is the window. The `<app>` element's box is that part, so
-//! the rest is not shown and a pointer over the box is over the window, not
-//! over the shadow's top-left corner. Ignoring it draws the shadow as dead
-//! space inside the box and lands every click off by the shadow's width.
+//! Clients with client-side decorations (Electron, GTK) draw shadows outside
+//! the window geometry. The `<app>` element's box is the geometry, so the
+//! shadow is cropped away and pointer coordinates are offset by its origin.
 
-/// The part of a `buffer`-pixel buffer, on a surface `surface` logical units
-/// across, that `geometry` names — as `(x, y, width, height)` in the buffer's
-/// pixels, which is what the engine crops by.
+/// The engine's crop for a surface, as `(x, y, width, height)` in buffer
+/// pixels. `(0, 0, 0, 0)` means the whole buffer.
 ///
-/// No larger than `configured`, the logical size the client was last told its
-/// box is. The engine stretches whatever it is given over the whole box, so a
-/// window that will not go that small — a minimum size, or a frame drawn
-/// before it caught up with a shrink — is cut off at the box's edge rather
-/// than squeezed into it. A window smaller than its box is still stretched:
-/// a crop cannot add pixels.
-///
-/// The surface is `source` of the buffer, in its pixels, where a viewport
-/// names one — see `viewport::source_pixels` — and the whole buffer where not.
-///
-/// An empty rectangle is the whole buffer, the engine's own convention and
-/// what a surface with no geometry is. A geometry reaching past the surface is
-/// clipped to it, as xdg-shell says; one that misses it entirely is not a
-/// window at all, and the surface is shown whole rather than as nothing.
+/// - The crop is at most `configured`, the client's last configured size. The
+///   engine stretches the crop over the box, so a window larger than its box
+///   is cut off, not squeezed.
+/// - `source` is the viewport's source in buffer pixels (see
+///   `viewport::source_pixels`); without one the surface maps to the whole
+///   buffer.
+/// - A geometry past the surface is clipped, per xdg-shell. One entirely
+///   outside it is ignored, so the surface shows whole.
 pub fn crop(
     geometry: Option<(i32, i32, i32, i32)>,
     configured: Option<(i32, i32)>,
@@ -67,8 +57,7 @@ pub fn crop(
     }
 }
 
-/// Where a point `(x, y)` in the `<app>` element's box is on the surface: the
-/// box is the window geometry, so its origin is the geometry's.
+/// Maps a point in the `<app>` element's box to surface coordinates.
 pub fn surface_point(geometry: Option<(i32, i32, i32, i32)>, point: (f64, f64)) -> (f64, f64) {
     let (x, y, _, _) = geometry.unwrap_or_default();
     (point.0 + f64::from(x), point.1 + f64::from(y))
@@ -85,7 +74,7 @@ mod tests {
 
     #[test]
     fn a_shadow_outside_the_geometry_is_cropped_away() {
-        // Bitwarden's shape: a 25-unit shadow on every side of the window.
+        // Bitwarden: a 25-unit shadow on every side.
         assert_eq!(
             crop(Some((25, 25, 800, 600)), None, (850, 650), (850, 650), None),
             (25, 25, 800, 600)
@@ -94,8 +83,7 @@ mod tests {
 
     #[test]
     fn the_crop_is_in_buffer_pixels_whatever_the_scale() {
-        // A scale-2 buffer, or one a viewport scales: the geometry is logical
-        // and the crop is not.
+        // The geometry is logical; the crop is in buffer pixels.
         assert_eq!(
             crop(
                 Some((25, 25, 800, 600)),
@@ -121,7 +109,7 @@ mod tests {
             ),
             (0, 20, 800, 580)
         );
-        // And one that misses it is no window: shown whole, not as nothing.
+        // A geometry entirely outside the surface shows it whole.
         assert_eq!(
             crop(Some((900, 0, 100, 100)), None, (800, 600), (800, 600), None),
             (0, 0, 0, 0)
@@ -130,9 +118,8 @@ mod tests {
 
     #[test]
     fn a_window_larger_than_its_box_is_cropped_to_the_box_not_squeezed_into_it() {
-        // Bitwarden's shape: it will not go below 680x500, so a 640x420 box
-        // gets a 680x500 frame. Squeezed, the window warps; cropped, it is
-        // cut off at the box's edge, as on any other desktop.
+        // Bitwarden's minimum is 680x500, so a 640x420 box gets a 680x500
+        // frame. Cropping cuts it off at the box edge instead of warping it.
         assert_eq!(
             crop(None, Some((640, 420)), (680, 500), (680, 500), None),
             (0, 0, 640, 420)
@@ -157,9 +144,8 @@ mod tests {
 
     #[test]
     fn a_viewport_source_is_the_part_of_the_buffer_the_surface_is() {
-        // Chromium mid-resize: it keeps drawing into the buffer it had,
-        // oversized, and names the valid part with `set_source`. The rest is
-        // stale, so it is not shown, and the surface maps onto the part.
+        // Chromium mid-resize: an oversized buffer whose valid part is named
+        // by `set_source`.
         assert_eq!(
             crop(
                 None,
@@ -170,7 +156,7 @@ mod tests {
             ),
             (0, 0, 2016, 1418)
         );
-        // A geometry inside it is from the source's origin, at its scale.
+        // A geometry is relative to the source's origin, at its scale.
         assert_eq!(
             crop(
                 Some((10, 10, 400, 300)),

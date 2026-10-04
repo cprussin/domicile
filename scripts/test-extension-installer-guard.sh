@@ -1,17 +1,16 @@
 #!/usr/bin/env bash
-# Which end the extension-installer guard blames, and which answers it calls a
-# pass.
+# Asserts the extension-installer guard's verdict: which answers pass, and
+# which end each failure blames.
 #
-# The unit is the verdict block in `guard-extension-installer.sh`, run out of
-# the real script rather than copied, as `test-webview-content-script-guard.sh`
-# does. The cases that matter most: a run whose list never crossed the socket
-# must fail whatever its probe read, because "not installed" and "never told"
-# are the same picture -- and so is a control that saw nothing because nothing
-# was sent.
+# Runs the verdict block from `guard-extension-installer.sh` itself, as
+# `test-webview-content-script-guard.sh` does. A run whose list never crossed
+# the socket must fail whatever the probe read: "not installed" and "never
+# told" look the same, as does a control that saw nothing because nothing was
+# sent.
 #
-# Plus what the guard cannot check at runtime: the color it looks for is the
-# one the fixture extension paints, and the message it sends is spelled as the
-# compositor writes it and as the engine reads it.
+# Also checks what the guard cannot check at runtime: its color matches the
+# fixture extension's, and its message matches what the compositor writes and
+# the engine reads.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -39,7 +38,7 @@ expect() {
   fi
 }
 
-# Pass or fail, not the sentence: the sentences will be reworded.
+# Prints pass or fail, not the message, which may be reworded.
 verdict() { # $1 MEASURED
   (
     MEASURED="$1"
@@ -54,8 +53,7 @@ verdict() { # $1 MEASURED
   )
 }
 
-# Whether the failing sentence names `$2`, where WHICH end it blames is the
-# point.
+# Whether the failure message contains `$2`; the end it blames matters.
 says() { # $1 MEASURED, $2 what the sentence must contain
   case "$(
     MEASURED="$1"
@@ -87,13 +85,13 @@ echo
 echo "the control — the same run, the list empty"
 expect "sent, drawn and unmarked is the pass" "pass" "$(verdict "control 1 1")"
 
-# INVERTED: the mark is the failure.
+# Inverted: a mark is the failure.
 expect "a mark from an empty list is a failure" "fail" \
   "$(verdict "control 0 1")"
 expect "and says the installer added what it was not told to" "yes" \
   "$(says "control 0 1" "not told")"
 
-# THE CASE THE SENT READING IS FOR: an absence nothing was asked about.
+# A control with no mark proves nothing if the list was never sent, so it fails.
 expect "unmarked but never sent is a failure" "fail" \
   "$(verdict "control 1 0")"
 expect "a guest that never drew is a failure" "fail" \
@@ -114,9 +112,9 @@ expect "and the content script paints it" "yes" \
   "$(grep -qi "#$COLOR" "$SCRIPTS/guard-webview-content-script-extension/content.js" 2>/dev/null &&
     echo yes || echo no)"
 
-# The compositor's spelling, from the wire fixture `domicile-protocol` is held
-# to: a message the stand-in spells differently is one the engine drops, and
-# the guard would blame the installer for it.
+# The compositor's spelling, from the wire fixture `domicile-protocol` is
+# tested against. If the stand-in spells the message differently, the engine
+# drops it and the guard blames the installer.
 WIRE="$ROOT/packages/domicile-protocol/wire/host-messages.jsonl"
 expect "the wire has an extensions line" "yes" \
   "$(grep -q '"type":"extensions","web_store":\[' "$WIRE" && echo yes || echo no)"

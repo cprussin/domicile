@@ -6,33 +6,25 @@ edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
-# Library only. The `domicile-test-client` executable is a `[[bin]]` of
-# `domicile-compositor`, because cargo builds a package's binaries whenever it
-# builds that package's tests and cannot be told to build another package's —
-# see this crate's `lib.rs` and that manifest for the whole of it.
+# Library only. The executable is a `[[bin]]` of `domicile-compositor` so that
+# its tests build it; see `lib.rs`.
 [lib]
 name = "domicile_test_client"
 path = "src/lib.rs"
 
-# The pure-Rust backend, deliberately: no `system`, no `dlopen`, no
-# libwayland. A client that links nothing builds in the core dev shell and on
-# any machine that can run `cargo`, which is the whole point of replacing the
-# weston demos — those are what made ten checks skip.
-#
-# Both crates are already in `Cargo.lock`; Smithay pulls them for the
-# compositor's own server side, so this adds no new dependency to the tree.
+# Pure-Rust backend (no `system` or `dlopen` feature), so the client builds
+# without libwayland on any machine that runs `cargo`. Smithay already pulls
+# these crates in, so they add nothing to `Cargo.lock`.
 [dependencies]
 thiserror.workspace = true
 wayland-client = "0.31"
-# `staging` and `unstable` for `wp_cursor_shape_v1`, which is how a client asks
-# for a named cursor and so how `tests/input.rs` sees one reach the chrome.
-# Neither feature reaches the compositor's build as a change: Smithay already
-# turns both on for its own server side, so this adds no crate and no code to it.
+# `staging` and `unstable` for `wp_cursor_shape_v1`, which `tests/input.rs`
+# uses to request a named cursor. Smithay already enables both.
 wayland-protocols = { version = "0.32", features = [
   "client",
   "staging",
   "unstable",
 ] }
-# `org_kde_kwin_server_decoration`, the frame request GTK3 makes, so
-# `tests/decorations.rs` can make it too. Already in the tree through Smithay.
+# `org_kde_kwin_server_decoration`, the decoration request GTK3 makes, for
+# `tests/decorations.rs`.
 wayland-protocols-misc = { version = "0.3", features = ["client"] }

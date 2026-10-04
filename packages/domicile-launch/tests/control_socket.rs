@@ -1,4 +1,4 @@
-//! Where a running desktop answers, and what happens to whoever else is there.
+//! Control socket naming, ownership and client errors.
 
 use std::io::Write as _;
 use std::os::unix::fs::PermissionsExt as _;
@@ -11,16 +11,14 @@ use domicile_launch::control_socket::{
     address, advertised, answer_one, ask, take, AskError, NotInADesktop, TakeError,
 };
 
-/// Long enough that a machine under load does not report a client that never
-/// wrote as one that did, short enough that a test which waits it out is not
-/// the reason the suite is slow.
+/// Read timeout: long enough not to flake under load, short enough to keep the
+/// suite fast.
 const BRIEFLY: Duration = Duration::from_millis(200);
 
 #[test]
 fn the_socket_is_named_after_the_desktop_that_answers_on_it() {
-    // One name per desktop rather than one name per session, the way sway
-    // keys `sway-ipc.<uid>.<pid>.sock`. A compositor that refuses to start
-    // beside another compositor is not a compositor.
+    // One socket per desktop, keyed by pid like sway's
+    // `sway-ipc.<uid>.<pid>.sock`.
     assert_eq!(
         address(Some("/run/user/1000"), 4242),
         PathBuf::from("/run/user/1000/domicile-ipc.4242.sock")
@@ -29,10 +27,8 @@ fn the_socket_is_named_after_the_desktop_that_answers_on_it() {
 
 #[test]
 fn with_no_runtime_directory_it_goes_where_the_runs_own_files_do() {
-    // The same fallback the run directory takes, because it is the same
-    // question: where do this user's runtime files go. Two answers would mean
-    // a desktop whose sockets and whose control socket are in different
-    // places, and a client that has to guess which rule ran.
+    // Same fallback as the run directory, so a desktop's sockets and its
+    // control socket stay together.
     assert_eq!(
         address(None, 4242),
         std::env::temp_dir().join("domicile-ipc.4242.sock")
@@ -41,10 +37,8 @@ fn with_no_runtime_directory_it_goes_where_the_runs_own_files_do() {
 
 #[test]
 fn a_client_is_told_which_desktop_it_is_inside() {
-    // The variable and nothing else. There is no rule that turns a runtime
-    // directory back into one socket now that a session can hold several, and
-    // scanning for them would leave the client guessing which desktop the
-    // person meant.
+    // Only the variable counts. A session can hold several desktops, so
+    // scanning the runtime directory would have to guess.
     assert_eq!(
         advertised(Some("/run/user/1000/domicile-ipc.4242.sock")),
         Ok(PathBuf::from("/run/user/1000/domicile-ipc.4242.sock"))
@@ -65,10 +59,7 @@ fn a_desktop_takes_the_socket_and_keeps_it_to_itself() {
         UnixStream::connect(&path).is_ok(),
         "a desktop that took the socket is answering on it"
     );
-    // 0600, because the fallback above is world-readable: the run directory
-    // under XDG_RUNTIME_DIR is the user's own and mode 700, and /tmp is not.
-    // Every other process on the machine can see this path, and what it
-    // carries is what the desktop is.
+    // 0600 because the /tmp fallback is shared with every user on the machine.
     assert_eq!(
         std::fs::metadata(&path)
             .expect("the socket is on disk")
@@ -87,10 +78,8 @@ fn a_desktop_takes_the_socket_and_keeps_it_to_itself() {
 
 #[test]
 fn two_desktops_on_one_session_each_answer_a_socket_of_their_own() {
-    // The whole point of keying the name on the pid. Wayland itself counts
-    // `wayland-0` up rather than refusing a second display, and a desktop
-    // that would not start because another one was running would be the only
-    // compositor on the machine that behaved that way.
+    // Keying the name on the pid lets several desktops run at once, as Wayland
+    // counts up from `wayland-0`.
     let scratch = tempfile::tempdir().expect("a scratch directory");
     let session = scratch.path().to_str().expect("a utf-8 scratch directory");
     let mine = address(Some(session), 4242);
@@ -105,10 +94,8 @@ fn two_desktops_on_one_session_each_answer_a_socket_of_their_own() {
 
 #[test]
 fn a_socket_that_is_already_answering_is_not_taken_from_whoever_has_it() {
-    // Out of a second desktop's reach now that the name carries this
-    // process's own pid, and kept because what is at stake is deleting a
-    // socket something else is serving on. Whatever answers there, it is not
-    // this run's to replace.
+    // The pid in the name keeps desktops apart. The check stays so a run never
+    // deletes a socket another process is serving.
     let (_scratch, path) = scratch();
     let _first = take(&path).expect("nothing was there");
 
@@ -122,8 +109,8 @@ fn a_socket_that_is_already_answering_is_not_taken_from_whoever_has_it() {
 
 #[test]
 fn the_socket_a_dead_desktop_left_behind_is_replaced() {
-    // A desktop killed with SIGKILL never unlinks its socket, and a file that
-    // nothing is listening on must not be what stops the next one starting.
+    // A desktop killed with SIGKILL leaves its socket file behind. That file
+    // must not block the next start.
     let (_scratch, path) = scratch();
     drop(UnixListener::bind(&path).expect("a desktop that is no longer running"));
     assert!(path.exists(), "the file outlives the listener");
@@ -133,9 +120,8 @@ fn the_socket_a_dead_desktop_left_behind_is_replaced() {
 
 #[test]
 fn something_that_is_not_a_socket_in_the_way_is_not_deleted() {
-    // Connecting to a plain file is refused exactly as connecting to a dead
-    // socket is, so "nothing answered" is not enough to unlink by. Whatever
-    // this is, it is not a desktop's leavings.
+    // Connecting to a plain file fails the same way as connecting to a dead
+    // socket, so a failed connect alone does not justify unlinking.
     let (_scratch, path) = scratch();
     std::fs::write(&path, "not a socket").expect("scratch is writable");
 
@@ -189,11 +175,9 @@ fn asking_where_no_desktop_is_running_says_so() {
 
 #[test]
 fn the_socket_a_dead_desktop_left_behind_is_a_failure_rather_than_a_wait() {
-    // A desktop killed with SIGKILL never unlinks its socket, and every
-    // terminal that outlived it still has that path in `DOMICILE_SOCK`. The
-    // file is there and nothing is behind it, which the kernel refuses rather
-    // than accepts — so this is a sentence rather than a client sitting out
-    // the patience timeout.
+    // Terminals that outlived a SIGKILLed desktop still have its path in
+    // `DOMICILE_SOCK`. The kernel refuses the connect, so the client fails at
+    // once instead of waiting out the timeout.
     let (_scratch, path) = scratch();
     drop(UnixListener::bind(&path).expect("a desktop that is no longer running"));
 
@@ -207,9 +191,8 @@ fn the_socket_a_dead_desktop_left_behind_is_a_failure_rather_than_a_wait() {
 
 #[test]
 fn a_connection_that_says_nothing_is_given_up_on() {
-    // The desktop answers one connection at a time, so a client that connects
-    // and never writes would otherwise be the whole control socket, for the
-    // life of the desktop, from any process that can reach the path.
+    // The desktop answers one connection at a time, so a silent client would
+    // block the control socket indefinitely.
     let (_scratch, path) = scratch();
     let control = take(&path).expect("nothing was there");
     let listener = control.listener().expect("the run's own listener");
@@ -224,10 +207,8 @@ fn a_connection_that_says_nothing_is_given_up_on() {
 
 #[test]
 fn a_line_with_no_newline_on_it_is_still_answered() {
-    // A client that writes its request and closes its end of the connection
-    // has said everything it is going to say, whether or not the last byte was
-    // a newline. Waiting for one is a desktop that hangs on a well-behaved
-    // client.
+    // A client that writes and closes its end has finished, with or without a
+    // trailing newline. Waiting for one would hang.
     let (_scratch, path) = scratch();
     let control = take(&path).expect("nothing was there");
     let listener = control.listener().expect("the run's own listener");
@@ -249,10 +230,8 @@ fn a_line_with_no_newline_on_it_is_still_answered() {
 
 #[test]
 fn a_desktop_that_takes_the_connection_and_says_nothing_is_not_a_transport_fault() {
-    // "WouldBlock" is what the read gives back, and it is the wrong sentence
-    // for a person: nothing is wrong with the socket, the desktop on the far
-    // end of it has stopped answering. They are different things to go and
-    // look at.
+    // The read returns WouldBlock, but the socket is fine: the desktop stopped
+    // answering. The error says so.
     let (_scratch, path) = scratch();
     let control = take(&path).expect("nothing was there");
     let listener = control.listener().expect("the run's own listener");
@@ -273,9 +252,8 @@ fn a_desktop_that_takes_the_connection_and_says_nothing_is_not_a_transport_fault
 
 #[test]
 fn a_desktop_that_hangs_up_without_answering_is_the_same_answer() {
-    // Read as an unreadable response it is a sentence with nothing after the
-    // colon — "answered something that is not a response: " — which reads as
-    // a bug in whoever wrote the message rather than as what happened.
+    // Reported as an unreadable response, the message would end in an empty
+    // "not a response: " and look like a bug.
     let (_scratch, path) = scratch();
     let control = take(&path).expect("nothing was there");
     let listener = control.listener().expect("the run's own listener");
@@ -292,11 +270,9 @@ fn a_desktop_that_hangs_up_without_answering_is_the_same_answer() {
     hanging_up.join().expect("the desktop that hung up");
 }
 
-/// A directory of this test's own, and the socket path inside it.
+/// A temporary directory and a socket path inside it.
 ///
-/// The directory is returned with the path because dropping it deletes it, and
-/// a test that only kept the path would be binding a socket in a directory
-/// that is already gone.
+/// Keep the directory alive: dropping it deletes the directory.
 fn scratch() -> (tempfile::TempDir, PathBuf) {
     let scratch = tempfile::tempdir().expect("a scratch directory");
     let path = scratch.path().join("domicile-ipc.4242.sock");

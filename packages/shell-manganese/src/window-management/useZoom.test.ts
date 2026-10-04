@@ -5,9 +5,8 @@ import { act, renderHook } from "@testing-library/react";
 import { useZoom } from "./useZoom";
 
 /**
- * A stand-in for the fork's element: the zoom a chrome reads, and the event
- * that tells it to read it again. `defineProperty` because it is readonly on
- * the real element — the zoom is the browser's answer.
+ * A fake `<webview>` with `zoom` and the change event. `defineProperty`
+ * because `zoom` is readonly on the real element.
  */
 const guest = () => {
   const element = document.createElement("webview");

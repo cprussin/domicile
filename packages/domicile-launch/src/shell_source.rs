@@ -1,5 +1,5 @@
-//! What a shell argument is: a module to serve as it is, an entry to build,
-//! one of Domicile's own shells, or a package to install.
+//! Classifies a shell argument: a module, an entry to build, one of
+//! Domicile's shells, or a package to install.
 //!
 //! ```text
 //! domicile load-shell /path/to/bundle.js      a module, served as it is
@@ -8,9 +8,8 @@
 //! domicile load-shell github:me/my-shell      a package, installed and built
 //! ```
 //!
-//! Decided here, before anything is spawned, because the common case — a
-//! prebuilt shell, Domicile's or a bundle — must start nothing: no builder,
-//! no bun, no network. Only an entry or a package goes to the builder.
+//! Only an entry or a package needs the builder. Prebuilt shells start
+//! without bun or network access.
 
 use std::path::{Path, PathBuf};
 
@@ -33,9 +32,10 @@ pub enum ShellSource {
 /// The scope Domicile's own shells are named under.
 const OURS: &str = "@domicile-desktop/";
 
-/// What `argument` names. [`shell_module`]'s rules for a path, with
-/// `handed_in` a packaged desktop's module; `read` is a file's text, for
-/// telling a bundle from a JavaScript entry.
+/// Classifies `argument`.
+///
+/// Paths follow [`shell_module`]'s rules. `read` returns a file's text, used
+/// to tell a bundle from a JavaScript entry.
 pub fn shell_source(
     argument: &str,
     handed_in: Option<&str>,
@@ -46,8 +46,8 @@ pub fn shell_source(
 ) -> Result<ShellSource, ShellPathError> {
     if handed_in.is_none() {
         if let Some(name) = argument.strip_prefix(OURS) {
-            // `@domicile-desktop/shell-simple` is the workspace's name for the
-            // simple shell, which is not published under one of its own.
+            // `@domicile-desktop/shell-simple` is the workspace name of the
+            // `simple` shell.
             return Ok(ShellSource::Ours(
                 name.strip_prefix("shell-").unwrap_or(name).to_string(),
             ));
@@ -65,8 +65,8 @@ pub fn shell_source(
     })
 }
 
-/// Whether `argument` names a package rather than a path: `github:`, a scope,
-/// or a bare word with nothing of that name where it was typed.
+/// Whether `argument` names a package: a `github:` or `npm:` prefix, a scope,
+/// or a bare word that does not exist under `here`.
 fn is_package(argument: &str, here: &Path, exists: &dyn Fn(&Path) -> Option<bool>) -> bool {
     argument.starts_with("github:")
         || argument.starts_with("npm:")
@@ -80,8 +80,7 @@ fn is_package(argument: &str, here: &Path, exists: &dyn Fn(&Path) -> Option<bool
 /// Whether the file at `file` has to be built before it is served.
 ///
 /// TypeScript and JSX always do. JavaScript does when it imports a package
-/// by name — `import { x } from "zod"` — which a browser cannot resolve; a
-/// bundle imports nothing but files beside it, and is served as it is.
+/// by name, which a browser cannot resolve.
 fn needs_building(file: &Path, read: &dyn Fn(&Path) -> Option<String>) -> bool {
     match file.extension().and_then(|extension| extension.to_str()) {
         Some("ts" | "tsx" | "mts" | "jsx") => true,
@@ -92,10 +91,8 @@ fn needs_building(file: &Path, read: &dyn Fn(&Path) -> Option<String>) -> bool {
 
 /// Whether `text` imports a package by name.
 ///
-/// Read off the quotes after `from`, `import` and `import(`, which is loose —
-/// a string in a comment counts — and loose the safe way: a bundle mistaken
-/// for an entry is built again and still works, where an entry mistaken for a
-/// bundle is a module the browser cannot load.
+/// A loose scan that also matches comments. A false positive only rebuilds a
+/// bundle; a false negative would serve a module the browser cannot load.
 pub fn imports_a_package(text: &str) -> bool {
     ["from", "import", "import("].iter().any(|keyword| {
         text.match_indices(keyword).any(|(at, _)| {
@@ -112,7 +109,8 @@ pub fn imports_a_package(text: &str) -> bool {
     })
 }
 
-/// A specifier a browser cannot resolve: not relative, absolute, or a URL.
+/// Whether a browser cannot resolve `specifier`: it is not relative,
+/// absolute or a URL.
 fn is_bare(specifier: &str) -> bool {
     !specifier.is_empty()
         && !specifier.starts_with('.')

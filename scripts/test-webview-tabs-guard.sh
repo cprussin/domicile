@@ -1,18 +1,14 @@
 #!/usr/bin/env bash
-# Which end the webview-tabs guard blames, and which answers it calls a pass.
+# Tests the verdict of `guard-webview-tabs.sh`: which readings pass and which
+# component a failure blames.
 #
-# The unit is the verdict block in `guard-webview-tabs.sh`, run out of the real
-# script rather than copied, as `test-extension-tray-guard.sh` does. The cases
-# that matter most are the two that name the wrong window: a popup's answer
-# that is the other <webview> is a desk whose active tab is not the focused
-# one -- the first made, or the last -- and only the control, which focuses the
-# other window, can tell a desk that follows focus from one that happens to
-# agree with it. The same goes for the zoom the popup then sets: only the
-# control can tell a desk that zooms the tab named from one that zooms a fixed
-# one.
+# Runs the verdict block from the real guard. Key cases: the popup's answer
+# names the other <webview>, so the active tab is not the focused one. Only
+# the control, which focuses the other window, separates following focus from
+# coincidence. Likewise for the zoom the popup sets.
 #
-# Plus what the guard cannot check at runtime: the id it expects is the one the
-# fixture's key makes, and the fixture asks what the guard reads.
+# Also checks that the expected id matches the fixture's key and that the
+# fixture requests what the guard reads.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -41,7 +37,7 @@ expect() {
   fi
 }
 
-# Pass or fail, not the sentence: the sentences will be reworded.
+# Prints pass, fail or neither. Sentences are not compared, since they change.
 verdict() { # $1 MEASURED
   (
     MEASURED="$1"
@@ -56,8 +52,7 @@ verdict() { # $1 MEASURED
   )
 }
 
-# Whether the failing sentence names `$2`, where WHICH end it blames is the
-# point.
+# Whether the failure message contains `$2`, i.e. blames the right component.
 says() { # $1 MEASURED, $2 what the sentence must contain
   case "$(
     MEASURED="$1"
@@ -70,12 +65,17 @@ says() { # $1 MEASURED, $2 what the sentence must contain
 }
 
 # MEASURED is "<leg> <sent> <tray> <shown> <focused> <answered> <named-a>
-# <named-b> <zoomed-a> <zoomed-b> <read>": whether the stand-in sent the list,
-# whether the fixture's popup was in the tray, whether both windows showed
-# their pages, whether the shell focused its window, whether the popup answered
-# at all, whether that answer named window a's page, or window b's, whether
-# window a's element heard the popup's tabs.setZoom, or window b's, and whether
-# the popup's tabs.getZoom read it back.
+# <named-b> <zoomed-a> <zoomed-b> <read>", each 0 or 1:
+#   sent      the stand-in sent the list
+#   tray      the fixture's popup was in the tray
+#   shown     both windows showed their pages
+#   focused   the shell focused its window
+#   answered  the popup answered
+#   named-a   the answer named window a's page
+#   named-b   the answer named window b's page
+#   zoomed-a  window a's element received the popup's tabs.setZoom
+#   zoomed-b  window b's element received it
+#   read      the popup's tabs.getZoom read it back
 echo "the claim — window a focused, and the popup names it and zooms it"
 expect "a, zoomed and read back, is the pass" "pass" \
   "$(verdict "tabs 1 1 1 1 1 1 0 1 0 1")"
@@ -96,12 +96,12 @@ expect "an answer naming neither is a failure" "fail" \
 expect "and says the desk found no tab" "yes" \
   "$(says "tabs 1 1 1 1 1 0 0 0 0 0" "no active tab")"
 
-# THE CASE THE GUARD IS FOR: an answer, and the wrong window.
+# The case the guard exists for: an answer naming the wrong window.
 expect "naming b is a failure" "fail" "$(verdict "tabs 1 1 1 1 1 0 1 0 1 1")"
 expect "and says focus was not followed" "yes" \
   "$(says "tabs 1 1 1 1 1 0 1 0 1 1" "focus")"
 
-# And the zoom: the named tab, and only it, zoomed where its element hears it.
+# Only the named tab is zoomed, and its element reports it.
 expect "a zoom no element heard is a failure" "fail" \
   "$(verdict "tabs 1 1 1 1 1 1 0 0 0 0")"
 expect "and blames the desk's tabs.setZoom" "yes" \
@@ -125,13 +125,12 @@ echo
 echo "the control — window b focused, and the popup must not name or zoom a"
 expect "b, zoomed and read back, is the pass" "pass" \
   "$(verdict "control 1 1 1 1 1 0 1 0 1 1")"
-# INVERTED: a is the failure, because it is the claim's reading.
+# Inverted: a is the failure, because it is the claim's reading.
 expect "naming a is a failure" "fail" \
   "$(verdict "control 1 1 1 1 1 1 0 1 0 1")"
 expect "and says the claim's answer is not focus's" "yes" \
   "$(says "control 1 1 1 1 1 1 0 1 0 1" "first made")"
-# INVERTED too, and the control's reason to be: naming b and zooming a is a
-# desk whose setZoom lands on one tab whichever it is asked for.
+# Also inverted: naming b and zooming a means setZoom always hits one tab.
 expect "naming b and zooming a is a failure" "fail" \
   "$(verdict "control 1 1 1 1 1 0 1 1 0 1")"
 expect "and says the zoom is not the named tab's" "yes" \

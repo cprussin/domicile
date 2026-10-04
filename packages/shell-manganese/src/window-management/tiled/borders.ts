@@ -1,14 +1,13 @@
-// Where a tiled window's edge can be taken hold of without the desktop's
-// modifier: along every side it shares with another window, over its own
-// border and the gap beside it.
+// Resize strips for tiled windows, usable without the modifier: along each
+// side shared with another window, covering the border and the gap.
 
 import { Direction } from "../direction";
 import type { Rect } from "../rect";
 import type { Target } from "./aim";
 
 /**
- * How far into the window its border reaches: enough to find without hunting
- * for it, and little enough to leave the client its own edge pixels.
+ * How far a border reaches into the window: easy to hit, while leaving the
+ * client its edge pixels.
  */
 const INSIDE = 4;
 
@@ -29,10 +28,8 @@ export type Border = {
 /**
  * The borders of the tiled windows on screen.
  *
- * Only on a side that faces another window: a side against the workspace's
- * edge has nothing to take from. Each reaches half way across the gap, so the
- * two windows either side of it split it between them and the whole of it is
- * a grip.
+ * Only sides facing another window get one. Each reaches halfway across the
+ * gap, so the whole gap is grabbable.
  */
 export const bordersOf = (targets: readonly Target[]): readonly Border[] =>
   targets.flatMap(({ frame, id }) =>
@@ -47,8 +44,8 @@ export const bordersOf = (targets: readonly Target[]): readonly Border[] =>
   );
 
 /**
- * How far `other` is past the `edge` side of `frame`, as a list of one — or
- * of none where it is not beside that side at all.
+ * The gap from `frame`'s `edge` side to `other`, as a one-item list, or empty
+ * when `other` is not beside that side.
  */
 const gapTo = (
   frame: Rect,

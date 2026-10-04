@@ -9,10 +9,8 @@ import { registerNodeInspection } from "./node-inspection";
 // modules evaluate. Static imports are hoisted above this call, so they are
 // deferred to dynamic imports.
 //
-// Frames are left at the address they were sent to rather than fetched: what
-// a shell puts in one is a `domicile://` page only the engine serves, and
-// fetching it is I/O a unit test must not do — which happy-dom fails at, and
-// logs, on every frame a test renders.
+// Frames are not navigated: they point at `domicile://` pages that only the
+// engine serves, and unit tests must not do I/O.
 GlobalRegistrator.register({
   settings: { navigation: { disableChildFrameNavigation: true } },
 });

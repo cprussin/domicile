@@ -12,23 +12,14 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: "1"
-  # A skip here is a check that stopped running, which is the worst outcome a
-  # check can have and the one nobody notices. On a developer's machine a
-  # missing tool is a fact about the machine; here everything is installed,
-  # so a skip means the job quietly stopped testing.
+  # Everything is installed, so a skip means a check stopped running.
   DOMICILE_CHECK_STRICT: "1"
-  # Except this one, which is a fact about the runner rather than about the
-  # code: `ubuntu-latest` has no DRM render node, so no client can allocate a
-  # dmabuf and `e2e-dmabuf.sh` proves the global is advertised and stops.
-  # Named rather than suppressed wholesale — that is the difference between
-  # "we know this box has no GPU" and "something stopped working", and it is
-  # what keeps a *new* skip fatal.
-  #
-  # And on a pull request only, the pinned-engine check while the engine job's
-  # write-back is still coming: red there was "not yet", 37 of 113 runs in one
-  # day, and it hid the real failures. The script skips only while that run is
-  # going and the pin is still the base's; see its header. On main a skip of
-  # it is fatal like any other.
+  # Expected skips:
+  # - `e2e-dmabuf`: `ubuntu-latest` has no DRM render node, so no client can
+  #   allocate a dmabuf.
+  # - On pull requests, the pinned-engine check while engine.yml's write-back
+  #   is still pending. The script skips only while that run is going and the
+  #   pin matches the base's; see its header.
   DOMICILE_CHECK_ALLOW_SKIP: ${{ github.event_name == 'pull_request' && 'e2e-dmabuf test-the-pinned-engine-is-this-series' || 'e2e-dmabuf' }}
 
 # `actions: read` so the pinned-engine check can ask whether engine.yml's run
@@ -38,14 +29,8 @@ permissions:
   actions: read
 
 jobs:
-  # The behavioral half. `cargo test` and `turbo test` have their own jobs and
-  # prove the units; this proves what only exists once the pieces are wired
-  # together — pixels through a real GLES stack, and a real Wayland client
-  # through the compositor to the chrome.
-  #
-  # None of it ran in CI before. Every suite was something whoever was working
-  # had to remember to run, and the bugs that reached review in the change that
-  # added this job were all of a kind no unit test can see.
+  # Checks that need the pieces wired together: pixels through a real GLES
+  # stack, and a real Wayland client through the compositor to the chrome.
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -55,31 +40,10 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - uses: oven-sh/setup-bun@v2
 
-      # The runner's own graphics stack rather than the flake's, which is not
-      # the obvious choice and was not the first one. `nix develop .#full` says
-      # what these scripts need in one place and would be the tidier answer.
-      # Measured both ways on this runner: the pixel checks pass under apt, and
-      # under the flake shell the compositor comes up `no EGL renderer:
-      # serving wl_shm clients only` and every one of them fails.
-      #
-      # Not for want of `LD_LIBRARY_PATH` — `devShells.full` already sets it,
-      # mesa included. libglvnd finds its vendor through
-      # `__EGL_VENDOR_LIBRARY_DIRS` and the gallium driver through
-      # `LIBGL_DRIVERS_PATH`, neither of which a library path covers, and nix
-      # puts both inside its own closure at `${mesa}/share/glvnd/egl_vendor.d`
-      # and `${mesa}/lib/dri`. So the fix is likely two more lines in the block
-      # that already exists rather than anything about the host — worth doing,
-      # untested from here, and not on the way to this.
-      #
-      # NO X HERE ANY MORE. `libxkbcommon-x11-0`, `xdotool` and `xvfb` were what
-      # made the *presented* path testable — a winit window on an Xvfb, resized
-      # by `xdotool` because an Xvfb has no window manager. That path is gone
-      # and nothing left in this job opens a window: the compositor is headless
-      # and the checks read pixels out of an offscreen buffer.
-      #
-      # Retried with a deadline per attempt, for the reason `cargo-test.yml`
-      # spells out: a stalled apt mirror fails by hanging, so a plain
-      # `apt-get` can burn the whole job budget getting nowhere.
+      # The runner's graphics stack, not the flake's: under `nix develop .#full`
+      # the compositor finds no EGL renderer and the pixel checks fail. A likely
+      # fix is setting `__EGL_VENDOR_LIBRARY_DIRS` and `LIBGL_DRIVERS_PATH` to
+      # mesa's store paths in `devShells.full`; it is untested.
       - name: Install the graphics and client stacks
         run: |
           .github/scripts/apt-install.sh \
@@ -90,23 +54,20 @@ jobs:
             libdrm2 libxkbcommon0
 
 
-      # Which tools and libraries actually arrived. When a suite fails on a
-      # runner nobody can log into, the first question is always whether it
-      # failed or whether it never had what it needed.
+      # Shows which tools arrived, to tell a failing suite from one missing
+      # its dependencies.
       - name: What is here
         run: |
           for tool in wayland-info eglinfo; do
             printf '%-16s %s\n' "$tool" "$(command -v "$tool" || echo MISSING)"
           done
 
-      # `shell` alongside `e2e` because it is the group holding the tests of
-      # the harness itself. It needs no graphics stack and takes under a
-      # second, and this is the only job that invokes `check.sh` at all, so
-      # anywhere else it would be a check that never runs.
+      # `shell` holds the harness's own tests. It needs no graphics stack, and
+      # no other job runs `check.sh`.
       #
-      # The pull request's head and base are what let the pinned-engine check
-      # tell "the write-back is coming" from "it never will". Empty on main,
-      # where that check stays strict.
+      # The pull request's head and base let the pinned-engine check tell a
+      # pending write-back from a missing one. They are empty on main, where
+      # that check stays strict.
       - run: ./scripts/check.sh shell e2e
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

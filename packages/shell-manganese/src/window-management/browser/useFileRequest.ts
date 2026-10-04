@@ -5,41 +5,30 @@ import type { FileRequest } from "./file-request";
 import { fileRequestOf } from "./file-request";
 
 /**
- * A question this window is holding, with which one it is: a count of every
- * question the view has asked, so a picker drawn for the next one is drawn
- * afresh rather than carrying the last one's typing over.
+ * A pending request with a serial number, so each new request remounts the
+ * picker instead of keeping the last one's input.
  */
 export type HeldRequest = FileRequest & { serial: number };
 
 /**
- * The file the page in `view` is waiting on, or `undefined` while it is
- * waiting on none.
+ * The file request the page in `view` is waiting on, if any.
  *
- * **TAKEN, OR REFUSED FOR US.** The engine cancels a question nobody takes as
- * soon as its dispatch returns, so the `preventDefault()` here is this window
- * saying it will draw the picker — see `WEBVIEW_FILE_CHOOSER_EVENT`. One whose
- * mode this shell cannot read is not taken: the parse throws first, and the
- * engine refuses it rather than a picker answering the wrong question.
+ * `preventDefault()` claims the request; the engine cancels unclaimed ones
+ * when dispatch returns (see `WEBVIEW_FILE_CHOOSER_EVENT`). An unknown mode
+ * throws before claiming, so the engine cancels it.
  *
- * **ONE AT A TIME, THE NEWEST.** A page can only be waiting on the picker it
- * can see, and the question that just arrived is the one the user just caused
- * — so the one it replaces is canceled rather than queued behind it. And a
- * window that goes with a question open cancels it: a page left waiting on a
- * picker nobody can reach waits for good.
+ * Only the newest request is kept: a new one cancels the previous one, and
+ * unmounting cancels any open one so the page does not wait forever.
+ * Answering the request clears it.
  *
- * Answering the request this returns puts it away, which is what takes the
- * picker off the page.
- *
- * `null` rather than `undefined` for the missing view because that is what
- * React's ref API hands a callback ref.
+ * `view` is `null` when missing, as React's callback refs provide.
  */
 export const useFileRequest = (
   view: HTMLElement | null,
 ): HeldRequest | undefined => {
   const [asking, setAsking] = useState<HeldRequest | undefined>(undefined);
-  // The question the engine is still waiting on, which the listener has to
-  // read at the moment the next one arrives — two can land before a render.
-  // State is what draws it; this is what answers it.
+  // The pending request, in a ref because two can arrive before a render.
+  // State drives rendering; this is what gets canceled.
   const outstanding = useRef<HeldRequest | undefined>(undefined);
   const asked = useRef(0);
 

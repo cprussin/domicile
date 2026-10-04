@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
-# The framing guard's probe finds libdomicile_engine.so outside a component
-# build. Only a component build gives executables an `$ORIGIN` rpath, so in
-# out/Release the probe exited 127 until the guard put the out dir on
-# LD_LIBRARY_PATH, as the other guards already do.
+# Tests that the framing guard's probe finds libdomicile_engine.so outside a
+# component build. Only a component build gives executables an `$ORIGIN`
+# rpath, so the guard must put the out dir on LD_LIBRARY_PATH.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

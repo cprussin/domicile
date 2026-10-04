@@ -8,38 +8,35 @@ import { useState } from "react";
 import { css } from "../../styled-system/css";
 import { hstack } from "../../styled-system/patterns";
 
-/** Which way the sound goes, which is what the mute button is drawn as. */
+/** The sound's direction, which picks the mute button's icon. */
 export type Direction = "output" | "input";
 
 type Props = {
   direction: Direction;
-  /** What the slider sets, and what its mute button names. */
+  /** The slider's label, also used to name its mute button. */
   label: string;
-  /** Where the desk says it is, as a fraction of the server's 100%. */
+  /** The current volume, as a fraction of the server's 100%. */
   level: number;
-  /** How loud it is now, 0 through 1 of its meter; absent for no meter. */
+  /** The current level, 0 to 1 of the meter; absent for no meter. */
   meter?: number | undefined;
   muted: boolean;
   onLevel: (level: number) => void;
   onMuted: (muted: boolean) => void;
 };
 
-/** A request still on its way, and the reading it was made over. */
+/** A pending request, and the reading it was made against. */
 type Held = { level: number; over: number };
 
 /**
- * One volume: a mute button, a slider with its meter under it, and the
- * figure — a device's or a stream's.
+ * One volume control: mute button, slider with meter, and percentage, for a
+ * device or a stream.
  *
- * **It follows the desk, not its own drag**, as the brightness does: a move
- * asks the compositor, and what comes back is the level every chrome is told.
- * What the slider was moved to is held while it is dragged, and after, until
- * the desk says something new — the answers to the drag's own earlier requests
- * arrive behind it, and a slider that took them would jump back.
+ * Like brightness, it follows the compositor rather than the drag. The dragged
+ * value is held during and after the drag until a new value arrives, because
+ * answers to earlier requests from the same drag would make it jump back.
  *
- * **Never past 100%** from here. A device another mixer turned up beyond it
- * reads its figure and sits at the end of the track; moving it brings it back
- * within.
+ * It never sets above 100%. A device raised past that elsewhere shows its value
+ * and sits at the end of the track; moving it brings it back in range.
  */
 export const Level = ({
   direction,
@@ -119,9 +116,8 @@ const rowStyles = hstack({
   inlineSize: "100%",
 });
 
-// THE BAR'S BUTTON, AND NOT THE LIBRARY'S, for the brightness's reason: drawn
-// in `currentcolor`, so it is white on the bar's panel and `foreground` in the
-// mixer, where the library's ghost would be gray over a photograph.
+// The bar's button style, not the library's, as in brightness: it uses
+// `currentcolor`, so it is white on the bar and `foreground` in the mixer.
 const muteStyles = css({
   _hover: {
     backgroundColor: "color-mix(in oklab, currentcolor 16%, transparent)",
@@ -141,7 +137,7 @@ const muteStyles = css({
   transition: "background-color {durations.fast} {easings.default}",
 });
 
-// The brightness's figures, and for their reason.
+// The same figure style as brightness, for the same reason.
 const percentStyles = css({
   fontSize: "0.625rem",
   fontVariantNumeric: "tabular-nums",

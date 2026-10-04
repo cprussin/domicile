@@ -1,24 +1,15 @@
 import { defineConfig } from "vite";
 
-// The page, and the whole of this shell's build.
+// Build config for the shell bundle. Domicile needs each non-default setting
+// below; /docs/SHELL-PACKAGING.md#bundling explains why:
 //
-// Four things here are not vite's defaults, and Domicile needs all four —
-// /docs/SHELL-PACKAGING.md#bundling says why each one, and what fails quietly
-// without it:
+// - `input` is a `.ts` entry, since Domicile writes the document itself.
+// - `entryFileNames` is fixed so the `shell.js` path is stable.
+// - `preserveEntrySignatures` keeps the `Shell` export.
+// - `base: "./"` makes URLs relative to the document.
 //
-//   the entry     a `.ts` file, not an HTML file. Domicile writes the
-//                 document, so a shell that emitted one would be shipping a
-//                 file nothing loads
-//   its name      fixed rather than hashed, because `shell.js` is a path
-//                 somebody types and a hash changes every build
-//   its exports   kept: an app build drops them, and `Shell` is what Domicile
-//                 calls
-//   base "./"     so the emitted URLs are relative to the document Domicile
-//                 writes rather than to a server root
-//
-// There is no CSS in this shell, so there is no fifth thing. A shell with a
-// stylesheet has to fold it back into the bundle — vite extracts it and
-// expects a document to `<link>` it, and there is no link.
+// A shell with CSS must also inline it into the bundle, since no document
+// `<link>`s it.
 export default defineConfig({
   base: "./",
   build: {

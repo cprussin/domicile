@@ -1,54 +1,43 @@
-//! What a reload has to restate, beyond the display list.
+//! What a config reload must restate, beyond the display list.
 //!
-//! A reload is an edit rather than a file: the desktop is already running on
-//! the old config, so what has to happen is whatever the two of them differ
-//! by. Deciding that here — arithmetic over two [`Config`]s, with no seat, no
-//! `wl_output` and no socket in reach — is what makes it testable, and leaves
-//! the effectful half in `main` a walk down this answer.
-//!
-//! It is also what keeps a reload quiet. A config file is rewritten for all
-//! sorts of reasons and an editor's atomic-rename save produces several events
-//! for one edit; every client on the desktop is handed a keymap when the
-//! keyboard changes, so "restate everything each time" is a desk that
-//! re-advertises itself whenever anything writes to its directory.
+//! A reload applies only what differs between the old and new [`Config`].
+//! Computing that here, away from the seat, outputs and sockets, keeps it
+//! testable; `main` applies the result. Restating only what changed matters:
+//! an editor's save can fire several events, and a keyboard change sends
+//! every client a new keymap.
 //!
 //! # Every field, and what a reload does with it
 //!
 //! | field | on a reload |
 //! |---|---|
-//! | `input.keyboard.*` | recompiled, given to the seat and to the chrome — `retype_the_desktop` |
-//! | `output.max_scale` | the new cap, applied to the desktop that is up — `cap_the_scale_at` |
-//! | `output.displays` | the desktop it describes — `Screens::reloaded_into`, `adopt_the_desktop` |
-//! | `output.profiles` | re-matched against the monitors that are plugged in, same path |
-//! | `idle.blank_after_seconds` | the clock restarted and its timer re-armed — `reset_the_idle_clock` |
-//! | `theme.mode` | told to every chrome and to the desk's clients — `take_up_the_theme` |
-//! | `files.omit` | handed to the index, which walks the home again under it — `omit_from_the_index` |
-//! | `applications` | the omit rule and bookmarks the next `search_apps` is answered under — `offer_the_applications` |
-//! | `extensions.*` | told to every chrome, whose browser process installs them — `hand_over_the_extensions` |
-//! | `keybindings` | resolved on the keyboard and told to every chrome — `rebind_the_keys` |
+//! | `input.keyboard.*` | recompiled and sent to the seat and chrome (`retype_the_desktop`) |
+//! | `output.max_scale` | applied to the running desktop (`cap_the_scale_at`) |
+//! | `output.displays` | applied (`Screens::reloaded_into`, `adopt_the_desktop`) |
+//! | `output.profiles` | re-matched against the connected monitors, same path |
+//! | `idle.blank_after_seconds` | idle clock restarted and timer re-armed (`reset_the_idle_clock`) |
+//! | `theme.mode` | sent to every chrome and the desk's clients (`take_up_the_theme`) |
+//! | `files.omit` | sent to the index, which rewalks the home (`omit_from_the_index`) |
+//! | `applications` | used for the next `search_apps` (`offer_the_applications`) |
+//! | `extensions.*` | sent to every chrome, whose browser installs them (`hand_over_the_extensions`) |
+//! | `keybindings` | resolved on the keyboard and sent to every chrome (`rebind_the_keys`) |
 //! | `modes` | the same, with `keybindings` |
 //! | `shells` | the same, with `keybindings` |
 //!
-//! Twelve rows for the twelve fields [`Config`] has: a reload acts on each of
-//! them rather than storing it. The last three are restated together and also
-//! whenever `input.keyboard` moves, because a chord names a keysym and which
-//! key that is belongs to the layout. Four limits read like gaps and are not.
-//! `output.max_scale` governs only the output that follows Domicile's own
-//! window — a described display states its own scale, and a desktop the config
-//! describes refuses a density from anywhere else. A keyboard xkb cannot
-//! compile is refused rather than taken up, which is `retype_the_desktop`'s own
-//! doc comment, and a keysym it cannot type is refused the same way, which is
-//! `rebind_the_keys`'. And an edited idle timeout lights a desk whose screens
-//! were off, which `reset_the_idle_clock` argues is the only honest answer
-//! rather than a convenience.
+//! The last three are also restated when `input.keyboard` changes, because a
+//! chord names a keysym and the layout decides which key that is.
 //!
-//! **This table is the account of record, so a field added to [`Config`] has
-//! to appear in it** — with a line in [`Restatement`] and an arm in
-//! `adopt_the_rest_of_the_config` where a reload can act on it, or with its
-//! row saying outright that a reload cannot and why. A field that is neither
-//! is the gap this module closed, growing back one entry at a time and with
-//! nothing anywhere saying so. The unit tests below are the shape to copy:
-//! what moved is restated, and what did not is not.
+//! Limits:
+//! - `output.max_scale` only affects the output that follows Domicile's own
+//!   window. A described display sets its own scale.
+//! - A keyboard xkb cannot compile, or a keysym it cannot type, is refused
+//!   (see `retype_the_desktop` and `rebind_the_keys`).
+//! - Changing the idle timeout wakes blanked screens (see
+//!   `reset_the_idle_clock`).
+//!
+//! A field added to [`Config`] needs a row here, plus either a field in
+//! [`Restatement`] and an arm in `adopt_the_rest_of_the_config`, or a row that
+//! says why a reload cannot apply it. Copy the tests below: a changed field is
+//! restated and an unchanged one is not.
 
 use domicile_config::{
     ApplicationsConfig, Config, ExtensionsConfig, IdleConfig, KeyboardConfig, Omit, ThemeMode,
@@ -57,37 +46,29 @@ use domicile_config::{
 /// What a reloaded config asks the compositor to restate.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Restatement {
-    /// The keyboard to compile a keymap from, or `None` where the live one is
-    /// still the config's.
+    /// The keyboard to compile a keymap from, or `None` if unchanged.
     pub keyboard: Option<KeyboardConfig>,
-    /// The new cap on the scale advertised to clients, or `None` where it did
-    /// not move.
+    /// The new cap on the scale advertised to clients, or `None` if
+    /// unchanged.
     pub max_scale: Option<u32>,
-    /// When the screens go dark, or `None` where that did not move.
+    /// When the screens blank, or `None` if unchanged.
     ///
-    /// The whole section rather than its one duration, so that "says nothing
-    /// about idle" — a desktop that never blanks — is a value this can carry
-    /// rather than a second `None` meaning the opposite of the first.
+    /// The whole section, so an absent section (never blank) is distinct from
+    /// `None`.
     pub idle: Option<IdleConfig>,
-    /// Which way round the desk is drawn, or `None` where the file did not
-    /// move it.
+    /// The theme mode, or `None` if unchanged.
     ///
-    /// The mode rather than the whole `theme` section, which is the
-    /// opposite of what `idle` above does, and the difference is that a theme
-    /// has no absence: saying nothing about `theme` is dark, the same value
-    /// as saying `"mode": "dark"`, where saying nothing about `idle` is a
-    /// desk that never blanks and has no spelling of its own.
+    /// Just the mode, unlike `idle`: an absent `theme` means dark, so it needs
+    /// no separate value.
     pub theme: Option<ThemeMode>,
-    /// What the file index leaves out, or `None` where that did not move.
+    /// What the file index leaves out, or `None` if unchanged.
     pub omit: Option<Omit>,
-    /// Which applications a launcher is offered, or `None` where that did not
-    /// move.
+    /// Which applications a launcher is offered, or `None` if unchanged.
     pub applications: Option<ApplicationsConfig>,
-    /// The extensions the browser process installs, or `None` where the list
-    /// did not move.
+    /// The extensions the browser process installs, or `None` if unchanged.
     pub extensions: Option<ExtensionsConfig>,
-    /// Whether the chromes are to be told the keyboard again: a keysym moves
-    /// with the layout.
+    /// Whether to resend the key config to the chromes, because keysyms
+    /// depend on the layout.
     pub shell_config: bool,
 }
 
@@ -164,11 +145,9 @@ mod tests {
 
     #[test]
     fn a_file_that_restates_the_theme_it_already_had_restates_nothing() {
-        // The edit that matters here is the one somebody made to a *different*
-        // field: `theme` is generated along with the rest of the file, so a
-        // reload that moved a display rewrites the theme line untouched. A
-        // restatement for it would run the wipe on every page on the desk over
-        // a theme that did not change.
+        // `theme` is generated with the rest of the file, so an edit to
+        // another field rewrites it unchanged. Restating it would re-theme
+        // every page for nothing.
         let was = parsed(A_DESK_DRAWN_LIGHT);
 
         assert_eq!(
@@ -222,8 +201,7 @@ mod tests {
 
     #[test]
     fn the_keys_are_restated_when_the_keyboard_moved() {
-        // A shell's chord names a keysym and the key it resolves to is the
-        // layout's: the same chord on another layout is another key.
+        // A chord names a keysym, and the layout decides which key that is.
         let was = parsed(A_DVORAK_DESK);
         assert!(Restatement::between(&was, &parsed(A_PLAIN_DESK)).shell_config);
     }
@@ -238,10 +216,8 @@ mod tests {
 
     #[test]
     fn a_desk_that_only_moved_its_displays_restates_neither() {
-        // The discipline `adopt_the_desktop` already applies, from this side:
-        // a config file is rewritten for all sorts of reasons, and an edit to
-        // the display list must not hand every client a keymap or a density it
-        // already has.
+        // An edit to the display list must not resend every client a keymap
+        // or scale it already has.
         let was = parsed(A_DVORAK_DESK);
         let now = parsed(A_DVORAK_DESK_WITH_A_SECOND_DISPLAY);
 
@@ -294,12 +270,12 @@ mod tests {
 }
 "#;
 
-    /// The same desk typing US QWERTY as it comes.
+    /// The same desk with the default US QWERTY layout.
     const A_PLAIN_DESK: &str = r#"
 { "output": { "displays": [{ "name": "one", "size": [1024, 768] }] } }
 "#;
 
-    /// The same desk, told to turn its screens off after a minute alone.
+    /// The same desk, blanking after a minute idle.
     const A_DESK_THAT_BLANKS: &str = r#"
 {
   "input": {
@@ -310,7 +286,7 @@ mod tests {
 }
 "#;
 
-    /// The same keyboard, with scaling turned off.
+    /// The same desk, with the scale capped at 1.
     const A_CAPPED_DESK: &str = r#"
 {
   "input": {
@@ -323,7 +299,7 @@ mod tests {
 }
 "#;
 
-    /// The same desk, stated the other way round.
+    /// The same desk in light mode.
     const A_DESK_DRAWN_LIGHT: &str = r#"
 {
   "input": {

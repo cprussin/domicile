@@ -7,8 +7,8 @@ import { act, renderHook } from "@testing-library/react";
 import { useTray } from "./useTray";
 
 /**
- * A stand-in for the client that takes the one handler this hook registers and
- * lets a test say what the compositor said. Narrow for `useClipboard`'s reason.
+ * A client stub that captures the hook's handler and lets a test send
+ * compositor messages.
  */
 const client = () => {
   let handler: ((message: HostMessageOf<"tray">) => void) | undefined;
@@ -43,8 +43,7 @@ describe("useTray", () => {
   });
 
   it("is the tray last said, whole", () => {
-    // Every change is the whole tray, so an application that went is gone by
-    // being left out rather than by a message of its own.
+    // Each update is the whole tray, so a removed icon is simply absent.
     const host = client();
     const { result } = renderHook(() => useTray(host.domicile));
 

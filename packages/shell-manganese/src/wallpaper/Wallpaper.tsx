@@ -6,61 +6,44 @@ import { css } from "../../styled-system/css";
 import { token } from "../../styled-system/tokens";
 import { WALLPAPER_PHOTOS } from "./photos";
 
-/** How long one photograph stays up before the next fades in over it. */
+/** How long each photograph shows before the next fades in. */
 const DWELL_MS = 60_000;
 
 /**
- * How long the fade takes, after which the photograph it left is put away.
- * The token the transition below is written in, so the two cannot disagree.
+ * Crossfade duration in ms. Read from the same token as the CSS transition so
+ * the two stay in sync.
  */
 const CROSSFADE_MS = Number.parseFloat(token("durations.crossfade")) * 1000;
 
 /**
- * What a layer is to the rotation, which is the whole of how the fade works.
+ * A photograph's role in the rotation. Styles are in {@link layerStyles}.
  *
- * Every photograph is mounted all the time — that is what has them loaded
- * before their turn — so what changes on a tick is which of three things each
- * one is. The CSS is in {@link layerStyles} and the reason for the third state
- * is the dissolve: the photograph coming in rises from transparent *over* one
- * that is still opaque, so the two alphas always sum to a covered screen.
- * Fading one out as the other rises would leave the theme's `background`
- * showing through the middle of every transition, at a quarter strength,
- * which reads as the desktop blinking.
+ * The incoming photograph fades in over an opaque previous one. Fading both
+ * at once would let the background show through mid-fade, which looks like a
+ * blink.
  */
 enum Layer {
-  /** On screen, rising over {@link Layer.Previous}. */
+  /** On screen, fading in over {@link Layer.Previous}. */
   Current = "current",
-  /**
-   * Still opaque underneath it, until the one above has arrived — and then
-   * put away, so that it is transparent again before its next turn.
-   */
+  /** Opaque underneath the current photograph until its fade ends. */
   Previous = "previous",
-  /** Loaded, transparent, waiting its turn. */
+  /** Loaded and transparent. */
   Waiting = "waiting",
 }
 
 /**
- * The desktop's wallpaper: a photograph behind everything, and the next one a
- * minute later.
+ * The desktop wallpaper: a photograph rotation that changes every minute. See
+ * `packages/shell-manganese/docs/WALLPAPER.md`.
  *
- * One sheet for the whole desktop rather than one per screen. The page spans
- * every display, so `position: fixed` *is* the desktop — and a `<Screen>` of
- * its own would put a second region on every display, which is one region too
- * many for anything that looks a display up by `data-screen`.
- *
- * **One rotation per theme**, both mounted and stepping together, and CSS
- * showing whichever the desk is in. Mounted rather than chosen in React so the
- * other theme's photographs are loaded before a flip — the wipe reveals one
- * that is already here — and so the flip is the `data-theme` attribute alone,
- * like the rest of the page's colors.
- *
- * **It takes no pointer.** Paint and nothing else: the desktop behind the
- * chrome was never a hit target, and a sheet over the whole of it that took the
- * pointer would make it one.
+ * - One sheet spans the whole desktop. A `<Screen>` would add a second region
+ *   per display, which breaks lookups by `data-screen`.
+ * - Both themes' rotations stay mounted and CSS shows one, so a theme switch
+ *   shows loaded photographs and needs only the `data-theme` attribute.
+ * - It takes no pointer events.
  */
 export const Wallpaper = () => {
   const [step, setStep] = useState(0);
-  // Whether this step's fade is over, and the photograph it left put away.
+  // Whether this step's fade has finished.
   const [settled, setSettled] = useState(true);
 
   useEffect(() => {
@@ -94,11 +77,9 @@ export const Wallpaper = () => {
           key={theme}
         >
           {WALLPAPER_PHOTOS[theme].map((photo, index, photos) => (
-            // `alt=""`, because a wallpaper is decoration: there is nothing
-            // here to announce to a reader that the chrome in front of it does
-            // not say better. The role is an attribute rather than a class so
-            // that one stylesheet covers all three states — and so the
-            // rotation is legible from outside, which is what its tests read.
+            // Empty `alt` because the wallpaper is decorative. The role is an
+            // attribute so one stylesheet covers all states and tests can
+            // read it.
             <img
               alt=""
               className={layerStyles}
@@ -114,16 +95,10 @@ export const Wallpaper = () => {
 };
 
 /**
- * Which role the photograph at `index` plays on this step of the rotation.
+ * The role of the photograph at `index` on this `step` of the rotation.
  *
- * `step` counts up for ever and a rotation's `length` photographs are a ring,
- * so the modulus is what turns one into the other. The previous step needs no
- * guard for the first tick: `-1 % n` is `-1`, which is no photograph's index.
- *
- * Once the fade is `settled` there is no previous: every photograph but the
- * one on screen is transparent, which is what lets each of them rise from
- * nothing when its turn comes — the photograph a rotation of two comes back
- * to included.
+ * At step 0 the previous index is `-1 % n`, which is `-1` and matches no
+ * photograph. Once `settled`, there is no previous layer.
  */
 const layerOf = (
   index: number,
@@ -142,37 +117,30 @@ const layerOf = (
 
 const sheetStyles = css({
   inset: 0,
-  // Keeps the current layer's `z-index` to itself. Without a stacking context
-  // here that 1 is in the *page's*, where it would be a wallpaper painted over
-  // the chrome — and level with a floating window, which is the one thing on
-  // this page that stacks by number.
+  // Scopes the layers' `z-index` here. Otherwise the current layer would
+  // stack in the page's context, over the chrome and level with floats.
   isolation: "isolate",
   pointerEvents: "none",
-  // The viewport is the desktop: the compositor configures this window to the
-  // desktop's own size, so a fixed sheet at the origin covers every screen.
+  // The viewport is sized to the whole desktop, so this covers every screen.
   position: "fixed",
-  // Under the page's own stack, at the depth of a window a tab is hiding —
-  // `COVERED` in `placement.ts` — which comes later in the document and so is
-  // drawn over it. Left at the page's own level it would cover those windows,
-  // and show through a window opening or closing in front of one.
+  // The depth of windows hidden behind a tab (`COVERED` in `placement.ts`).
+  // They come later in the document, so they draw over the wallpaper. Higher,
+  // the wallpaper would show through a window opening or closing in front.
   zIndex: -2,
 });
 
-// `contents`, so a rotation is no box of its own: its layers stay positioned
-// against the sheet, and stacked in the sheet's isolated context.
+// `contents` keeps the layers positioned and stacked against the sheet.
 const rotationStyles: Record<Theme, string> = {
   dark: css({ _light: { display: "none" } }),
   light: css({ _light: { display: "contents" }, display: "none" }),
 };
 
 const layerStyles = css({
-  // The stacking is the role's, not the markup's: the photograph coming in has
-  // to be over the one going out, and at the end of the rotation it is the
-  // earlier element of the two.
+  // Stacking comes from the role because on wrap-around the incoming
+  // photograph is the earlier element.
   //
-  // AND THE FADE IS ITS ALONE. Every other change of role happens under an
-  // opaque photograph, so it is never seen; a transition on one would run
-  // over the top of the one coming in wherever the markup put it later.
+  // Only this role transitions. Other role changes happen under an opaque
+  // photograph, and a transition on them could draw over the incoming one.
   '&[data-wallpaper="current"]': {
     opacity: 1,
     transition: "opacity {durations.crossfade} {easings.in-out}",
@@ -182,8 +150,7 @@ const layerStyles = css({
   blockSize: "100%",
   inlineSize: "100%",
   inset: 0,
-  // A photograph is not the shape of a desktop; this is the half of the answer
-  // the size in the URL is not.
+  // Crops the photograph to the desktop's shape.
   objectFit: "cover",
   opacity: 0,
   position: "absolute",

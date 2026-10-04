@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
-# Which end the upload guard blames, and which answers it calls a pass.
+# Tests the verdict logic of `guard-webview-upload.sh`: which layer a failure
+# blames, and which results count as a pass.
 #
-# The unit is the verdict block in `guard-webview-upload.sh`, run out of the
-# real script rather than copied, so a rewrite that moves it fails here. The
-# readings are ordered -- a page that never ran has established nothing, and
-# "the shell was not asked" is only a finding once the browser was -- and an
-# ordered chain can name the wrong layer in a way no failing engine reveals.
+# The verdict block is extracted from the real script, not copied, so this test
+# fails if the block's markers move. The checks run in order, and a wrong order
+# can blame the wrong layer without any engine failing.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -32,7 +31,7 @@ expect() {
   fi
 }
 
-# A positive run in which everything is true; each case changes one reading.
+# Starts from a passing positive run; each case overrides one reading.
 run_block() { # $1 NEGATIVE, then NAME=value overrides
   SAW_SHELL=1
   SAW_PAGE=1
@@ -75,7 +74,7 @@ blames() { # $1 word, then the args verdict takes
   esac
 }
 
-# The control's own shape: the shell canceled, so no file and a cancel heard.
+# Control run readings: the shell canceled, so no file and a cancel event.
 CONTROL="SAW_PICKED=0 SAW_ANY_PICK=0 SAW_NOTHING=1"
 
 echo "a run that never got as far as measuring anything"

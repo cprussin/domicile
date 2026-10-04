@@ -6,12 +6,10 @@ export const Kbd = (props: ExtendProps<"kbd">) => (
 );
 
 /**
- * Kbd intentionally uses `em` units for sizing rather than the spacing-token
- * scale. The chip is meant to sit inline with surrounding text and stay
- * proportional to it whether it's rendered inside body copy, a heading, or a
- * footnote — see the `AllVariations` story which embeds Kbd at every
- * `fontSize` token to verify. This is the documented exception to the
- * tokens-required rule.
+ * A keyboard key chip, inline with text.
+ *
+ * Sized in `em` instead of spacing tokens so it scales with the surrounding
+ * text. This is the documented exception to the tokens-required rule.
  */
 const kbdStyles = css({
   backgroundColor: "card",

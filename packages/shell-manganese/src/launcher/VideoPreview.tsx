@@ -5,16 +5,14 @@ import { css } from "../../styled-system/css";
 import { hstack } from "../../styled-system/patterns";
 import { clockOf } from "./clock";
 
-/** How big the play glyph is in the badge. */
+/** Play glyph size in the badge. */
 const PLAY_ICON_SIZE = 12;
 
 /**
- * A video as one still, a tenth of the way in, with its length over it.
+ * A still from a tenth of the way into a video, with its duration.
  *
- * A still rather than the video playing, because a preview that moves pulls
- * the eye off the list it is a preview of; and a way in rather than its first
- * frame, which for most videos is black. The engine draws the frame: the
- * element loads only enough to seek, and never plays.
+ * A still, because motion distracts from the list. Not the first frame,
+ * because it is often black. The element loads only enough to seek.
  */
 export const VideoPreview = ({
   name,
@@ -53,7 +51,7 @@ export const VideoPreview = ({
   );
 };
 
-/** Where the still is taken: a tenth in, or the start of one of no length. */
+/** Time of the still: a tenth in, or 0 for a video with no duration. */
 const stillAt = (duration: number): number =>
   Number.isFinite(duration) ? duration / 10 : 0;
 
@@ -62,8 +60,7 @@ const paneStyles = css({
   position: "relative",
 });
 
-// The whole frame, never cropped: a still is a picture of the video, and a
-// cropped one is a picture of part of it.
+// Show the whole frame, uncropped.
 const videoStyles = css({
   blockSize: "100%",
   display: "block",
@@ -71,8 +68,7 @@ const videoStyles = css({
   objectFit: "contain",
 });
 
-// The length in a pill in the corner, on a frosted ground of the pane's own
-// color, so it reads over a frame of any brightness.
+// Duration pill on a frosted background, readable over any frame.
 const badgeStyles = hstack({
   backdropFilter: "blur({spacing.2})",
   backgroundColor: "color-mix(in oklab, {colors.background} 70%, transparent)",

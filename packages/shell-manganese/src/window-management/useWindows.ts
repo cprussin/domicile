@@ -16,32 +16,22 @@ import {
 
 export type Windows = WindowState & {
   /**
-   * Ask the desktop for something — a keystroke's command, or a press on the
-   * chrome.
+   * Dispatches a desktop action from a key binding or the chrome.
    *
-   * One entry point rather than one callback per command, because the
-   * bindings are a table of exactly these: what a key does is data, and this
-   * is what runs it. The two things the *state* cannot do on its own happen
-   * here as well — see the `kill` and the `exec` below.
+   * A single entry point keeps the key bindings a table of actions. It also
+   * runs the side effects the reducer cannot, such as `exec` and `kill`.
    */
   act: (action: WindowAction) => void;
-  /** The window the user is working in, floating or tiled. */
+  /** The active window, floating or tiled. */
   activeId: string | undefined;
 };
 
 /**
- * The desktop's windows, and everything that changes them.
+ * The desktop's windows and the actions that change them.
  *
- * The host's lifecycle events (a client appeared, a client is gone) are the
- * other half of the user's own commands, so both go through one reducer — and
- * so does the cursor a client asks for, because that is a fact about its
- * window in exactly the way its title is, and because a cursor is CSS on an
- * element this shell owns.
- *
- * Two things a client says about itself do not come through here. Its *pixels*
- * do not come through the page at all: the compositor submits its buffer and
- * the `<app>` element embeds the surface. And the size it drew at is the
- * SDK's, because scaling the pointer by it is the only use anyone has for it.
+ * Host events (clients appearing, closing, setting a cursor) and user commands
+ * share one reducer. Client pixels never pass through the page: the `<app>`
+ * element embeds the compositor's surface.
  *
  * @param displays - the desk the host described. `undefined` until it has
  *   described one.
@@ -52,11 +42,10 @@ export const useWindows = (
 ): Windows => {
   const [state, dispatch] = useReducer(reduceWindows, NO_WINDOWS);
 
-  // Everything the state cannot do itself: an `exec` is a process the
-  // compositor starts, the lock is the compositor's, and a client's window is the client's to close — the
-  // compositor sends its toplevel a close and the window goes when the host
-  // says it went. Both are still actions, so that the bindings stay one table
-  // and the reduction stays pure.
+  // Side effects the reducer cannot perform: spawning processes, locking, and
+  // asking a client to close. The window is removed when the host reports it
+  // closed. Keeping these as actions keeps the reducer pure and the bindings
+  // one table.
   const act = useCallback(
     (action: WindowAction) => {
       dispatch(action);
@@ -66,9 +55,8 @@ export const useWindows = (
       if (action.kind === WindowActionKind.DeskLocked) {
         domicile.lock();
       }
-      // The launcher's other half. `openCommand` is where the argv is built
-      // and why it has a shell in it: `$HOME` lives in the process the
-      // compositor starts, not in a page served over `domicile://`.
+      // `openCommand` runs through a shell because `$HOME` is only known to the
+      // spawned process, not to a page served over `domicile://`.
       if (action.kind === WindowActionKind.FileOpened) {
         domicile.spawn(openCommand(action.path));
       }
@@ -93,11 +81,8 @@ export const useWindows = (
   );
 
   useEffect(() => {
-    // The size an announcement can carry is not read here, and there is no
-    // `app_resized` handler below either. What a client drew at is only ever an
-    // input to the SDK's pointer arithmetic, and the SDK records it as the
-    // message goes past `DomicileClient` — this shell was carrying a fact it had
-    // no other use for.
+    // Client buffer sizes are ignored: only the SDK's pointer scaling uses
+    // them, and `DomicileClient` records them itself.
     domicile.on("app_appeared", ({ app_id, title }) => {
       dispatch(Action.AppAppeared(app_id, title));
     });
@@ -123,17 +108,17 @@ export const useWindows = (
       dispatch(Action.FocusChanged(app_id));
     });
     domicile.on("focus_requested", ({ app_id }) => {
-      // A client asking, which the compositor forwards without granting — so
-      // what happens next is `reduceWindows`'s to say and not the desktop's.
+      // The compositor forwards the request without granting it;
+      // `reduceWindows` decides.
       dispatch(Action.FocusRequested(app_id));
     });
-    // `domicile open-url`, which is what `BROWSER` runs inside the desktop.
+    // `domicile open-url`, which `BROWSER` runs inside the desktop.
     domicile.on("open_url", ({ url }) => {
       dispatch(Action.BrowserOpened(url));
     });
   }, [domicile]);
 
-  // The desk the host described, which is what says where a window can be.
+  // The desk the host described, which bounds where windows can go.
   useEffect(() => {
     if (displays !== undefined) {
       dispatch(Action.ScreensDescribed(placedOf(displays)));

@@ -33,48 +33,43 @@ import {
 
 type Props = {
   /**
-   * The address to show when nobody is typing into the bar: where the page is,
-   * or where it was sent while nothing has arrived there yet.
+   * The address shown while the user is not typing: the current page, or the
+   * pending one.
    *
-   * IT IS THE ONE `security` DESCRIBES. The two come off one report about one
-   * entry — see `useShownPage` — and a bar that showed an address from one
-   * place beside a lock from another would be drawing a padlock for a page it
-   * is not displaying, which is the shape of every address-bar spoof.
+   * Must come from the same report as `security` (see `useShownPage`), or the
+   * lock could describe a different page, which enables address-bar spoofing.
    */
   address: string;
   canGoBack: boolean;
   canGoForward: boolean;
-  /** Whether a page is on its way, which is what makes Reload a Stop. */
+  /** Whether a page is loading, which turns Reload into Stop. */
   loading: boolean;
   onBack: () => void;
   onForward: () => void;
-  /** Load this address. Already a URL — the bar has decided what was typed. */
+  /** Loads `url`, already resolved from what was typed. */
   onNavigate: (url: string) => void;
   onReload: () => void;
   onStop: () => void;
   onZoomIn: () => void;
   onZoomOut: () => void;
   onZoomReset: () => void;
-  /** The browser's verdict on the connection behind {@link Props.address}. */
+  /** The browser's security state for {@link Props.address}. */
   security: ConnectionSafety;
-  /** Everywhere the window has been sent, oldest first. */
+  /** Visited addresses, oldest first. */
   visited: readonly string[];
-  /** The page's zoom, as a factor: 1 is 100%. */
+  /** The page zoom factor; 1 is 100%. */
   zoom: number;
   /**
-   * How many times the user has zoomed this window. Each one shows the zoom
-   * indicator afresh; 0 is a window nobody has zoomed, which shows none.
+   * How many times the user has zoomed. Each change re-shows the zoom
+   * indicator; 0 shows none.
    */
   zoomsAnnounced: number;
 };
 
 /**
- * A browser window's top bar: where it has been, where it is going, and the
- * lock that says how it got there.
+ * A browser window's toolbar: history controls, address field and zoom.
  *
- * The shape is Chromium's, because it is the one the user already knows —
- * history controls and a single reload/stop at the inline start, then the
- * address as a pill with its connection indicator inside it, then the zoom.
+ * Follows Chromium's layout, which users already know.
  */
 export const AddressBar = ({
   address,
@@ -94,11 +89,8 @@ export const AddressBar = ({
   zoom,
   zoomsAnnounced,
 }: Props) => {
-  // The bar shows the address until the user starts typing, and goes back to
-  // showing it the moment the window is sent somewhere else. Adjusted during
-  // the render that brings the new address rather than from an effect, because
-  // an effect paints the line the user typed over the page they are now on
-  // first and corrects it after — a visible flash of the wrong address.
+  // Typing is discarded when the address changes. Reset during render, not in
+  // an effect, to avoid a frame showing stale text over the new page.
   const [edit, setEdit] = useState({ address, typed: address });
   if (edit.address !== address) {
     setEdit({ address, typed: address });
@@ -109,9 +101,7 @@ export const AddressBar = ({
     setEdit({ address, typed: next });
   };
 
-  // ENTER ON AN EMPTY LINE IS NOT A COMMAND. Every way of answering it — a
-  // search for nothing, a reload of where the window already is — is worse
-  // than leaving the user where they are, which is what a browser does.
+  // Enter on an empty line does nothing, as in other browsers.
   const submit = (event: FormEvent) => {
     event.preventDefault();
     const action = typedAddress(typed);
@@ -124,10 +114,6 @@ export const AddressBar = ({
     <form className={barStyles} onSubmit={submit}>
       <div className={historyStyles}>
         <Button
-          // A control that would do nothing says so before it is pressed:
-          // `goBack()` on a history with nothing behind it is a no-op in the
-          // browser process, and a live-looking button is this window offering
-          // the user something it cannot do.
           disabled={!canGoBack}
           label="Back"
           onClick={onBack}
@@ -147,12 +133,8 @@ export const AddressBar = ({
         >
           <CaretRightIcon size={16} />
         </Button>
-        {/* ONE BUTTON, BECAUSE THERE IS ONLY EVER ONE THING TO DO. A page is
-            either arriving or it is not: a stop that is live while a reload is
-            live offers a choice that never exists, and two buttons each dead
-            half the time cost the width of both. Which one it is is also the
-            whole of what the bar says about loading — the same trade every
-            browser makes, and the reason there is no spinner here. */}
+        {/* One button for Reload and Stop, since only one applies at a time.
+            It is also the only loading indicator, as in other browsers. */}
         <Button
           label={loading ? "Stop" : "Reload"}
           onClick={loading ? onStop : onReload}
@@ -166,16 +148,12 @@ export const AddressBar = ({
       <Autocomplete
         aria-label="Address"
         autoComplete="off"
-        // ENTER MEANS THE FIRST LINE, and the first line is what the typed
-        // text would do — see `addressSuggestions`. So Enter takes the obvious
-        // thing without an arrow key first, and the field fills with it ahead
-        // of the caret, which is the inline completion an address bar does.
+        // Highlights the first suggestion, which is what the typed text would
+        // do (see `addressSuggestions`), so Enter takes it and the field
+        // completes inline.
         //
-        // Off for an empty line, where the list is the places the window has
-        // been rather than anything the user is halfway to: Enter on an empty
-        // bar would otherwise load whichever of them happened to be first.
-        // With nothing highlighted the press reaches this form instead, which
-        // answers an empty line by doing nothing.
+        // Off for an empty line, where the list is only history: Enter then
+        // reaches the form, which ignores it.
         autoHighlight={typed.trim() !== ""}
         onSuggestionTaken={onNavigate}
         onValueChange={type}
@@ -188,10 +166,8 @@ export const AddressBar = ({
         suggestions={suggestionsFor(typed, visited)}
         value={typed}
       />
-      {/* AT THE INLINE END, where Chrome puts its own zoom: the address is
-          what the eye lands on, and these are read once and left alone. One
-          capsule drawn like the field beside it, so the bar reads as two
-          pills rather than a pill and three loose controls. */}
+      {/* At the inline end, as in Chrome. Styled as a capsule like the
+          address field, so the bar reads as two pills. */}
       <div aria-label="Zoom" className={zoomStyles} role="group">
         <Button
           disabled={isFullyZoomedOut(zoom)}
@@ -204,9 +180,8 @@ export const AddressBar = ({
           <MinusIcon size={12} weight="bold" />
         </Button>
         <span aria-hidden className={dividerStyles} />
-        {/* The zoom, and pressing it puts the page back to 100% — which is
-            why it is dead at 100%, like any control with nothing to do. A
-            fixed width, so the bar does not shift as the number does. */}
+        {/* The zoom level; pressing it resets to 100%. Fixed width so the
+            bar does not shift as the number changes. */}
         <span className={readoutStyles}>
           <Button
             disabled={isUnzoomed(zoom)}
@@ -238,7 +213,7 @@ export const AddressBar = ({
   );
 };
 
-/** The lines to offer under the bar, drawn the way an address bar draws them. */
+/** The suggestion list for the typed text. */
 const suggestionsFor = (
   typed: string,
   visited: readonly string[],
@@ -246,12 +221,10 @@ const suggestionsFor = (
   addressSuggestions(typed, visited).map(lineFor);
 
 /**
- * One suggestion as a line of the list.
+ * One suggestion as a list line.
  *
- * `text` is what the field fills with when the line is highlighted, and it is
- * not always the URL: highlighting a search should leave the words in the bar
- * — replacing them with `google.com/search?q=…` is the bar telling the user
- * their query has become a URL they now have to edit.
+ * `text` fills the field when the line is highlighted. For a search it is the
+ * query, not the search URL, so the user can keep editing their words.
  */
 const lineFor = (suggestion: AddressSuggestion): Suggestion<string> => {
   switch (suggestion.kind) {
@@ -285,9 +258,7 @@ const lineFor = (suggestion: AddressSuggestion): Suggestion<string> => {
   }
 };
 
-// A ground of its own, a shade off the window's, so the bar reads as chrome
-// over the page rather than as the top of it. The line under it is the seam
-// the page starts at.
+// A slightly different background, so the bar reads as chrome, not page.
 const barStyles = hstack({
   backgroundColor:
     "color-mix(in oklab, {colors.card} 88%, {colors.background})",
@@ -296,21 +267,18 @@ const barStyles = hstack({
   gap: 2,
   paddingBlock: 1.5,
   paddingInline: 2,
-  // What the zoom indicator hangs from.
+  // Anchors the zoom indicator.
   position: "relative",
 });
 
-// Tighter than the bar's own gap: the three of them are one group of
-// controls, and reading as one is what keeps the address the thing the eye
-// lands on.
+// Tighter than the bar's gap, so the three buttons read as one group.
 const historyStyles = hstack({
   flex: "none",
   gap: 0.5,
 });
 
-// The field's own shape — its height, its border and its ground — so the two
-// read as a pair. The buttons inside are a size down, which leaves the
-// capsule's edge as a ring around them rather than a second outline.
+// Matches the address field's height, border and background. The buttons
+// are a size smaller so they sit inside the capsule's edge.
 const zoomStyles = hstack({
   backgroundColor: "background",
   blockSize: 6,
@@ -321,7 +289,7 @@ const zoomStyles = hstack({
   paddingInline: 0.5,
 });
 
-// Room for the widest reading, 500%, in figures that do not change width.
+// Fits the widest value, 500%, with fixed-width digits.
 const readoutStyles = css({
   display: "inline-flex",
   fontVariantNumeric: "tabular-nums",

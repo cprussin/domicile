@@ -1,27 +1,17 @@
 #!/usr/bin/env bash
-# The input drivers' wire, checked without an engine.
+# Tests the input drivers' WebSocket client, without an engine.
 #
-# `guard_webview_devtools.py` carries a WebSocket client, because `crux` runs
-# these out of a nix shell with python3 and no wheels and one text frame on one
-# connection is not worth a dependency. That client is the one piece of the
-# guards that use it which is neither exercised by anything else nor visible
-# when it is wrong: a frame it encodes badly is a connection Chromium closes,
-# the guard reports that nothing fired, and the reading is about the harness
-# while the sentence is about the layer under test. Each of those costs a run on
-# the shared tree.
+# `guard_webview_devtools.py` has its own WebSocket client because `crux` runs
+# the guards with python3 and no extra packages. A badly framed message makes
+# Chromium close the connection, and the guard then blames the wrong layer.
 #
-# So the framing is asserted here, in the check suite that runs on every commit:
-# what `send` writes is decoded back by an independent reader, and what
-# `receive` reads is written by hand. Both directions, because they are
-# different halves of RFC 6455 — a client frame MUST be masked and a server
-# frame MUST NOT be, and getting that backward is the classic way to write a
-# WebSocket client that never works.
+# Both directions are checked: `send` is decoded by an independent reader, and
+# `receive` reads hand-written frames. RFC 6455 requires client frames to be
+# masked and server frames not to be.
 #
-# `pick_target` is here for a different reason. It decides which page the input
-# is dispatched at, and the wrong answer is not an error: a browser window is a
-# page target of its own, and dispatching at *it* would deliver a key straight
-# to the guest with the shell still holding the keyboard, and hit-test a press
-# against the guest's own viewport rather than the desktop the shell laid out.
+# `pick_target` must choose the shell page. A browser window is its own page
+# target; dispatching there would bypass the shell's keyboard focus and
+# hit-test against the guest's viewport.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -42,13 +32,10 @@ import socket
 import struct
 import sys
 
-# No .pyc beside it: this runs out of the working tree on every check, and a
-# __pycache__ that appears when the suite is run is a dirty tree nobody asked
-# for.
+# Keep the working tree clean of __pycache__.
 sys.dont_write_bytecode = True
 
-# The drivers find this module the same way, by being run out of the directory
-# it is in.
+# The drivers import this module from their own directory too.
 sys.path.insert(0, sys.argv[1])
 import guard_webview_devtools as driver
 
@@ -105,8 +92,8 @@ client, server = socket.socketpair()
 driver.send(client, {"id": 1, "method": "Input.dispatchKeyEvent"})
 frame = read_client_frame(server)
 expect("a final text frame", (True, 1), (frame["fin"], frame["opcode"]))
-# The one a server enforces: RFC 6455 says a client frame that is not masked
-# must be rejected, and Chromium's does reject it.
+# RFC 6455 requires a server to reject an unmasked client frame, and Chromium
+# does.
 expect("masked, as every client frame must be", True, frame["masked"])
 expect(
     "carrying the command",
@@ -114,8 +101,7 @@ expect(
     json.loads(frame["payload"]),
 )
 
-# The extended-length branch, which a short command never reaches and a real
-# Input.dispatchKeyEvent with commands would.
+# Covers the extended-length branch, which a real command can reach.
 long_message = {"id": 2, "method": "x" * 400}
 driver.send(client, long_message)
 frame = read_client_frame(server)

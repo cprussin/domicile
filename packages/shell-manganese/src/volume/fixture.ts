@@ -6,7 +6,7 @@ import type {
 } from "@domicile-desktop/sdk/host-message";
 import { act } from "@testing-library/react";
 
-/** A device, with whatever a test says differently. */
+/** An audio device with test overrides. */
 export const device = (overrides: Partial<AudioDevice>): AudioDevice => ({
   default: false,
   description: "Speakers",
@@ -19,7 +19,7 @@ export const device = (overrides: Partial<AudioDevice>): AudioDevice => ({
   ...overrides,
 });
 
-/** A stream, likewise. */
+/** An audio stream with test overrides. */
 export const stream = (overrides: Partial<AudioStream>): AudioStream => ({
   application: "Firefox",
   device: "output:speakers",
@@ -30,7 +30,7 @@ export const stream = (overrides: Partial<AudioStream>): AudioStream => ({
   ...overrides,
 });
 
-/** A laptop's sound: speakers, headphones, a microphone, a song playing. */
+/** Laptop audio: speakers, headphones, a microphone and one playing stream. */
 export const laptop: AudioMessage = {
   cards: [
     {
@@ -91,19 +91,21 @@ export const laptop: AudioMessage = {
   ],
 };
 
-/** One thing the shell asked of the desk's sound. */
+/** One audio request the shell made: method name and arguments. */
 export type Asked = readonly [method: string, ...args: unknown[]];
 
 /**
- * A sound server the test holds the wire to: `watch` stands in for the
- * host's, `report` is the compositor saying the sound, and `asked` is every
- * request the shell made.
+ * A fake audio host for tests.
+ *
+ * - `watch` and `watchLevels` replace the real watchers.
+ * - `report` and `levels` send host messages.
+ * - `asked` and `metered` record the shell's requests.
  */
 export const heldSound = () => {
   const listeners: ((audio: AudioMessage) => void)[] = [];
   const meters: ((levels: AudioLevelsMessage) => void)[] = [];
   const asked: Asked[] = [];
-  /** Every set of ids the shell asked to meter, in order. */
+  /** Each set of ids the shell asked to meter, in order. */
   const metered: (readonly string[])[] = [];
   const record =
     (method: string) =>
@@ -123,7 +125,7 @@ export const heldSound = () => {
         metered.push(ids);
       },
     } as unknown as DomicileClient,
-    /** The compositor saying how loud each metered id is. */
+    /** Sends a level for each metered id. */
     levels: (levels: ReadonlyMap<string, number>) => {
       act(() => {
         for (const onLevels of meters) {

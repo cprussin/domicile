@@ -1,8 +1,7 @@
 // Every top-level domain in the IANA root zone, from the `tlds` npm package
-// (1.261.0), which is generated from
-// https://data.iana.org/TLD/tlds-alpha-by-domain.txt. Vendored rather than
-// depended on: it is data, and a registry adds a TLD rarely enough that
-// refreshing it by hand costs less than a runtime dependency.
+// (1.261.0), generated from https://data.iana.org/TLD/tlds-alpha-by-domain.txt.
+// Vendored because new TLDs are rare and refreshing by hand is cheaper than a
+// runtime dependency.
 
 /** Every TLD that exists, lowercase, internationalized ones in Unicode. */
 export const TLDS: ReadonlySet<string> = new Set([

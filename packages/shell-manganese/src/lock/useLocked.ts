@@ -1,42 +1,32 @@
 import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
 import { useCallback, useEffect, useState } from "react";
 
-/** Where this desk's lock stands, as the compositor last said. */
+/** The desktop's lock state, as the compositor last reported it. */
 type LockState = {
-  /** Whether the desk is locked. */
+  /** Whether the desktop is locked. */
   locked: boolean;
-  /** Whether a passphrase is out with the compositor, unanswered. */
+  /** Whether a submitted passphrase is awaiting the compositor's answer. */
   checking: boolean;
   /**
-   * How many passphrases the compositor has turned down. A count rather than a
-   * flag, so the same refusal twice is two changes a lock screen can answer.
+   * How many passphrases the compositor has refused. A count, not a flag, so
+   * repeated refusals each register as a change.
    */
   refusals: number;
 };
 
 /**
- * Whether this desk is locked, and the way to offer it a passphrase.
+ * Whether the desktop is locked, and a way to submit a passphrase.
  *
- * **Pushed rather than asked for, and held by the compositor rather than here.**
- * This page does not decide the lock and cannot: input on this system is
- * forwarded by this page and injected into a Wayland seat by the compositor, and
- * a locked desk is that injection not happening. So what this hook holds is the
- * compositor's answer and nothing else — there is no local `setLocked` for a
- * click to reach, which is what makes the lock survive a reload of this page and
- * an engine that died and came back.
+ * The compositor owns the lock and pushes its state; this hook only mirrors it.
+ * There is no local setter, so a page reload or engine restart cannot unlock
+ * the desktop. See docs/LOCK.md.
  *
- * `false` until the compositor has said otherwise, which is a moment rather than
- * a state worth drawing: it says where the desk stands as this page connects, so
- * a page that reloaded over a locked desk is told inside the handshake. Starting
- * from `true` would put a lock screen over every desktop for the length of one —
- * including the ones with no passphrase configured, which can never be asked for
- * one and would have nothing to clear it.
+ * Starts `false`. The compositor sends the state during the handshake, and
+ * starting `true` would flash the lock screen on every connect, including on
+ * desktops with no passphrase configured.
  *
- * **A REFUSAL IS `locked: true` WHILE A PASSPHRASE IS OUT.** The compositor
- * answers every check that leaves the desk shut by telling every chrome the
- * desk is locked again, and nothing else sends one to a desk being checked —
- * that desk is already shut. So an answer that does not open the desk is told
- * apart from the edge that shut it by whether this page was waiting on one.
+ * A refusal arrives as `locked: true` while a passphrase is pending. That is
+ * how it is told apart from the message that locked the desktop.
  */
 export const useLocked = (
   domicile: DomicileClient,
@@ -47,10 +37,9 @@ export const useLocked = (
     refusals: 0,
   });
 
-  // Registered once and for the life of the shell, like `useClipboard`'s: `on`
-  // is a single slot whose hold delivers whatever arrived before it, and the
-  // message this is here for is exactly the one that arrives before the first
-  // render is over.
+  // Registered once for the shell's lifetime, like `useClipboard`. `on` is a
+  // single slot that replays messages received before registration, and the
+  // lock state arrives before the first render ends.
   useEffect(() => {
     domicile.on("locked", (message) => {
       setState((was) => ({

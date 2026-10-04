@@ -1,4 +1,4 @@
-//! What the builder says, as `domicile` reads it and draws it.
+//! Tests for parsing builder output and drawing the progress bar.
 
 use std::path::PathBuf;
 
@@ -39,7 +39,7 @@ fn a_build_ends_with_the_module_or_why_not() {
 
 #[test]
 fn anything_else_is_the_build_s_log() {
-    // Panda says how long it took, on the same stdout.
+    // Panda logs timings to the same stdout.
     assert_eq!(
         heard("🐼 info [hrtime] Extracted in (2185.91ms)"),
         Heard::Log("🐼 info [hrtime] Extracted in (2185.91ms)".into())

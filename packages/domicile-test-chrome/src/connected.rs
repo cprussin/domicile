@@ -11,26 +11,14 @@ use crate::conversation::{greet, hear, say, ChromeError};
 
 /// A chrome connected to a compositor, past the handshake.
 ///
-/// Keeps every message it has heard. A test's question is usually about what a
-/// compositor said and in what order, and a reader that matched one line and
-/// dropped the rest could only answer half of it.
+/// Keeps every message it has heard, so failures can show the full transcript.
 pub struct Chrome {
     heard: Vec<HostMessage>,
-    /// Which of `heard` [`Chrome::wait_for`] has already handed back, by
-    /// position.
+    /// Which messages in `heard` [`Chrome::wait_for`] has already returned.
     ///
-    /// Without it a wait is satisfied by a message an earlier wait already
-    /// returned, so a test that waits twice for the same shape asserts nothing
-    /// the second time. Not hypothetical: a reload test passed in 40ms against
-    /// a compositor that was never reconfigured, because the desktop it was
-    /// waiting for had already arrived with the handshake.
-    ///
-    /// One mark per message rather than a high-water mark, because the host
-    /// does not promise an order. A chrome joins the compositor's broadcast
-    /// list at connect rather than at handshake, so an `app_appeared` can land
-    /// ahead of the desktop; a cursor that skipped everything in front of a
-    /// match would throw that away, and the next wait for it would sit out its
-    /// whole patience and then report the compositor for something it did.
+    /// Stops a second wait from matching a message an earlier wait returned.
+    /// One flag per message, not a high-water mark: the host does not promise
+    /// an order, so messages skipped by one wait must stay available.
     returned: Vec<bool>,
     reader: BufReader<UnixStream>,
     writer: UnixStream,
@@ -40,18 +28,15 @@ pub struct Chrome {
 impl Chrome {
     /// Connect to a compositor's chrome socket and handshake.
     ///
-    /// Retries until `patience` runs out: the socket exists before anything is
-    /// listening on it for a moment, and a test that raced that would fail
-    /// about a connection rather than about its subject.
+    /// Retries until `patience` runs out, because the socket can exist briefly
+    /// before the compositor listens on it.
     pub fn connect(socket: &Path, patience: Duration) -> Result<Chrome, ChromeError> {
         let until = Instant::now() + patience;
         loop {
             match UnixStream::connect(socket) {
                 Ok(stream) => return Chrome::on(stream, patience),
-                // Named rather than left as a bare `Io(NotFound)`: what a test
-                // needs to know here is which socket and how long it was
-                // waited on, and a kind on its own reads like a bug in the
-                // stand-in rather than a compositor that never listened.
+                // Name the socket and wait time; a bare `Io(NotFound)` looks
+                // like a bug in the stand-in.
                 Err(err) if Instant::now() >= until => {
                     return Err(ChromeError::NeverListened {
                         socket: socket.display().to_string(),
@@ -64,8 +49,8 @@ impl Chrome {
         }
     }
 
-    /// The same on a socket the caller already has, which is how a test plays
-    /// the host itself.
+    /// Handshake on an existing socket, such as one end of a pair whose other
+    /// end the test drives as the host.
     pub fn on(stream: UnixStream, patience: Duration) -> Result<Chrome, ChromeError> {
         stream
             .set_read_timeout(Some(patience))
@@ -80,9 +65,7 @@ impl Chrome {
         let greeting = greet(&mut reader, &mut greeting, patience)?;
         Ok(Chrome {
             returned: vec![false; greeting.early.len()],
-            // Kept, not dropped: what the host said before its welcome is
-            // still what the host said, and a test asking what a compositor
-            // said should not have a hole where the greeting was.
+            // Keep messages that arrived before the welcome.
             heard: greeting.early,
             patience,
             reader,
@@ -97,22 +80,11 @@ impl Chrome {
 
     /// The next message the host sent that `wanted` accepts.
     ///
-    /// The transcript first and only then the socket, because a message can
-    /// arrive before the caller thinks to ask for it — `greet` hands over
-    /// whatever beat the welcome, and the desktop rides with the handshake.
-    /// So this is not "read until": a wait can be answered without reading.
-    ///
-    /// *Next*, though, rather than *any*: a match is consumed, so a second
-    /// wait for the same shape is a wait for a second message. Waiting on
-    /// history would let a test assert that a compositor re-described the
-    /// desktop and be answered by the description it started with.
-    ///
-    /// Only the match, though — everything it was found behind stays waitable,
-    /// because nothing promises the order two kinds of message arrive in.
-    ///
-    /// Everything read on the way is kept, and the failure carries it: "the
-    /// compositor never sent that message" is half an answer, and the other
-    /// half is what it sent instead.
+    /// Checks messages already heard before reading the socket, since some
+    /// (such as the desktop) arrive with the handshake. Each match is returned
+    /// once, so waiting twice for the same shape needs two messages. Unmatched
+    /// messages stay available to later waits. On timeout the error carries
+    /// the transcript.
     pub fn wait_for(
         &mut self,
         wanted: impl Fn(&HostMessage) -> bool,
@@ -139,15 +111,11 @@ impl Chrome {
                     self.returned.push(false);
                 }
                 Ok(None) => return Err(ChromeError::Closed),
-                // A reset is the peer going away too. A socket pair reports
-                // one where a closed pipe reports end-of-file, and to a test
-                // asserting "the compositor died" they are the same event.
+                // A socket pair reports a closed peer as a reset, not EOF.
                 Err(ChromeError::Io(
                     std::io::ErrorKind::ConnectionReset | std::io::ErrorKind::BrokenPipe,
                 )) => return Err(ChromeError::Closed),
-                // A read that ran out of time is the deadline, reported with
-                // the transcript rather than as an I/O failure about a socket
-                // that is working exactly as asked.
+                // A read timeout is the deadline, not an I/O failure.
                 Err(ChromeError::Io(
                     std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut,
                 )) => {
@@ -160,7 +128,7 @@ impl Chrome {
         }
     }
 
-    /// What the host has said, as the lines it said them on.
+    /// The messages heard so far, one wire line each.
     fn transcript(&self) -> String {
         crate::conversation::transcript(&self.heard)
     }

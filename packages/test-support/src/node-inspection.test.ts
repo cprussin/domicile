@@ -45,10 +45,8 @@ describe("registerNodeInspection", () => {
   });
 
   it("holds a detached node's inspection to the node itself", () => {
-    // happy-dom nodes carry `ownerDocument` and window references, so
-    // walking one reaches the whole rendered tree however small the node
-    // is. A detached comment beside a large document is the sharpest
-    // case: nothing about it is big, and it used to print the document.
+    // happy-dom nodes reference their document and window, so a naive
+    // inspection of a small node prints the whole document.
     const filler = document.createElement("div");
     filler.innerHTML = "<span>padding</span>".repeat(500);
     document.body.append(filler);

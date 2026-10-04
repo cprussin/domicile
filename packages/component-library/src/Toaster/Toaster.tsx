@@ -6,49 +6,29 @@ import type { ExtendProps } from "../extend-props";
 
 export const { createToastManager, useToastManager } = BaseToast;
 
-/** A manager held outside React, which `Toaster.Provider` takes. */
+/** A toast manager created outside React, for `Toaster.Provider`. */
 export type ToastManager = ReturnType<typeof createToastManager>;
 
-/** What a toast may be marked as, which the stylesheet draws differently. */
+/** Toast types with their own styling. */
 export const TYPES = ["danger"] as const;
 export type Type = (typeof TYPES)[number];
 
 type Props<Data extends object> = ExtendProps<
   typeof BaseToast.Viewport,
   {
-    /**
-     * What one toast says. The toaster draws the card, the stack and the
-     * countdown; what is on the card is the caller's, and it is handed the
-     * toast the manager holds — `title`, `description`, `data` and the rest.
-     */
+    /** Renders a toast's content. The toaster draws the card around it. */
     children: (toast: ToastObject<Data>) => ReactNode;
-    /** What the region the toasts are in is called, to a screen reader. */
+    /** Accessible label for the toast region. */
     label: string;
   }
 >;
 
 /**
- * Toasts: short-lived cards stacked in the top trailing corner of whatever box
- * it is put in, which the caller places.
+ * A stack of toasts in the top trailing corner of the containing box.
  *
- * **A deck, not a list.** The newest is in front and the rest peek out from
- * behind it, a little smaller each; pointing at the stack (or focusing it) fans
- * it out so every card can be read, and base-ui holds every timer while it is.
- * A card slides in from the trailing edge, and a swipe toward that edge — or
- * up, out of the way — puts it away.
- *
- * **What a toast says is the caller's**, through `children`; this owns the
- * card it is said on. `Toaster.Title` and `Toaster.Description` are the parts
- * that name the toast to a screen reader, and draw as plain text in whatever
- * the caller's own markup styles them as.
- *
- * A toast with a `timeout` above zero carries a hairline along its foot that
- * runs out with it, and stops while the stack is fanned out because the timer
- * does. One of `type: "danger"` is drawn in the danger color.
- *
- * Wraps base-ui's Toast, so `Toaster.Provider` and the manager are base-ui's:
- * `createToastManager()` for one held outside React, `useToastManager()` inside
- * the provider.
+ * Hovering or focusing the stack expands it and pauses the timers. Toasts with
+ * a positive `timeout` show a countdown bar. Wraps base-ui's Toast, so the
+ * provider and manager are base-ui's.
  */
 const ToasterComponent = <Data extends object>({
   children,
@@ -78,8 +58,7 @@ const ToasterComponent = <Data extends object>({
               aria-hidden
               className={countdownStyles}
               data-toast-countdown=""
-              // The one value here that is not a token, because it is not a
-              // decision: the hairline runs out exactly when the toast does.
+              // Not a token: the bar must end when the toast does.
               style={
                 { "--toast-timeout": `${toast.timeout}ms` } as CSSProperties
               }
@@ -91,12 +70,12 @@ const ToasterComponent = <Data extends object>({
   );
 };
 
-/** The toast's title, as plain text for the caller's markup to style. */
+/** The toast's title, which names it to screen readers. Unstyled. */
 const Title = (props: ExtendProps<typeof BaseToast.Title, object>) => (
   <BaseToast.Title render={<span />} {...props} />
 );
 
-/** The toast's description, as plain text for the caller's markup to style. */
+/** The toast's description, which describes it to screen readers. Unstyled. */
 const Description = (
   props: ExtendProps<typeof BaseToast.Description, object>,
 ) => <BaseToast.Description render={<span />} {...props} />;
@@ -107,9 +86,7 @@ export const Toaster = Object.assign(ToasterComponent, {
   Title,
 });
 
-// The stack's own box: as wide as a card, in the top trailing corner of the
-// box the caller put it in, and above the page but under any modal panel —
-// a toast over an open dialog would be drawn over the thing being answered.
+// Stacks below modal panels so a toast never covers an open dialog.
 const viewportStyles = css({
   inlineSize: "min({spacing.96}, 100%)",
   insetBlockStart: 0,
@@ -119,17 +96,13 @@ const viewportStyles = css({
   zIndex: "toast",
 });
 
-// One card of the deck.
-//
-// THE STACK IS CUSTOM PROPERTIES, which base-ui sets on every card: its place
-// in the deck (`--toast-index`, the front one 0), how far down it sits when the
-// deck is fanned out (`--toast-offset-y`), and how far a swipe has dragged it.
-// Collapsed, each card behind the front one is shrunk a tenth more and peeks a
-// step below it, clamped to the front card's height so the deck is as tall as
-// one card; fanned out, every card sits at its own height, a gap apart.
+// Positioned from base-ui's custom properties (`--toast-index`,
+// `--toast-offset-y`, swipe movement). Collapsed, cards behind the front one
+// shrink, peek below it and take its height. Expanded, each card has its own
+// height and a gap.
 const rootStyles = css({
-  // A bridge across the gap under a fanned-out card, so moving the pointer
-  // from one card to the next does not leave the stack and fold it.
+  // Covers the gap between expanded cards so the pointer moving between them
+  // doesn't collapse the stack.
   _after: {
     blockSize: "calc(var(--gap) + 1px)",
     content: '""',
@@ -150,8 +123,7 @@ const rootStyles = css({
   "&[data-ending-style]": {
     opacity: 0,
   },
-  // Out the way it came in, unless it was swiped: then on in the direction of
-  // the swipe, from wherever the finger let go.
+  // Exit toward the trailing edge, or in the swipe direction if swiped.
   "&[data-ending-style]:not([data-swipe-direction])": {
     transform:
       "translateX(calc(100% + {spacing.6})) translateY(var(--offset-y))",
@@ -168,12 +140,10 @@ const rootStyles = css({
     transform:
       "translateX(var(--toast-swipe-movement-x)) translateY(var(--offset-y))",
   },
-  // Past the provider's `limit`: still mounted, so it can leave gracefully,
-  // and not shown.
+  // Over the provider's `limit`: hidden but mounted so it can animate out.
   "&[data-limited]": {
     opacity: 0,
   },
-  // In from beyond the trailing edge.
   "&[data-starting-style]": {
     transform: "translateX(calc(100% + {spacing.6}))",
   },
@@ -205,9 +175,8 @@ const rootStyles = css({
   zIndex: "calc(1000 - var(--toast-index))",
 });
 
-// A card behind the front one has the front one's height while the deck is
-// folded, so what it says would be cut off half way: it fades out until the
-// deck fans open, and back in when it does.
+// Hides the content of cards behind the front one while collapsed, since
+// they take the front card's height and would be cut off.
 const contentStyles = css({
   "&[data-behind]": {
     opacity: 0,
@@ -218,15 +187,11 @@ const contentStyles = css({
   transition: "opacity {durations.normal} {easings.outQuart}",
 });
 
-// The hairline along the foot of a card that runs out with its timer. It
-// stops while the deck is fanned out, which is exactly when base-ui holds the
-// timer, so the two agree. It runs out toward the leading edge and brightens
-// toward the trailing one, the corner the card came in from: physical
-// `left`/`to right` because `linear-gradient` and `transform-origin` have no
-// logical keywords, and a desk is drawn left to right.
+// The countdown bar. It pauses while expanded, matching base-ui's timers.
+// Uses physical `left`/`to right` because `linear-gradient` and
+// `transform-origin` have no logical keywords.
 const countdownStyles = css({
-  // Only the front card's shows while the deck is folded: the others' would
-  // be lines peeking out from under it, saying nothing anyone can read.
+  // Only the front card shows its bar while collapsed.
   "[data-behind] ~ &": {
     opacity: 0,
   },

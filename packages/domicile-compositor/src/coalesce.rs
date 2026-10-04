@@ -1,36 +1,22 @@
-//! Taking the last of a burst, rather than acting on every event in it.
+//! Coalesces a burst of events into its last value.
 //!
-//! One save of a config file is several filesystem events, and the ones in the
-//! middle are of a file that is halfway written. A truncated config still
-//! *parses* — it just says less — so acting on each event in turn means acting
-//! on a desktop the user never described, then correcting it a moment later.
-//!
-//! Here rather than inline on the watcher thread so it can be tested: the
-//! interesting behavior is entirely about timing between two channel ends,
-//! which is a `Receiver` and two `Duration`s and nothing else.
+//! One save of a config file produces several filesystem events, and the
+//! middle ones see a half-written file. A truncated config still parses, so
+//! acting on each event would briefly apply the wrong config.
 
 use std::sync::mpsc::Receiver;
 use std::time::{Duration, Instant};
 
-/// The last value of the burst `first` opened.
+/// Returns the last value of the burst that `first` started.
 ///
-/// Waits `settle` for another value, taking each one it gets, and stops when
-/// that quiet passes — or when `burst` has elapsed since the first, whichever
-/// comes first.
-///
-/// **Both bounds, and the second is not decoration.** Waiting only for quiet
-/// restarts the budget on every value, so a sender that never goes quiet for
-/// `settle` is never answered at all: the result is not delivered late, it is
-/// not delivered. A config file whose *directory* is written to often — which
-/// is the ordinary case, since the watch is on the directory so that an atomic
-/// rename is caught — is exactly such a sender.
+/// Stops after `settle` passes with no new value, or after `burst` since the
+/// start, whichever comes first. The `burst` cap matters: the watch is on the
+/// config's directory, which may be written to more often than `settle`, and
+/// without the cap the function would never return.
 pub fn last_of_burst<T>(rx: &Receiver<T>, first: T, settle: Duration, burst: Duration) -> T {
     let deadline = Instant::now() + burst;
     let mut latest = first;
-    // Never longer than what is left of the burst, so the wait cannot outlast
-    // the deadline it is bounded by. Once that is zero `recv_timeout` returns
-    // at once — either empty-handed, which ends the loop, or with one more
-    // value, which the check below then ends on.
+    // Cap each wait at the time left before the deadline.
     while let Ok(next) =
         rx.recv_timeout(settle.min(deadline.saturating_duration_since(Instant::now())))
     {
@@ -50,19 +36,14 @@ mod tests {
 
     use super::last_of_burst;
 
-    // Generous against the sleeps below rather than tuned to them: these are
-    // wall-clock tests, and a runner that stalls a thread for one settle window
-    // would otherwise report a burst that ended early as a bug in the code.
-    // Every margin here is at least four times the gap it has to beat.
+    // Wall-clock tests: every margin is at least four times the gap it must
+    // beat, so a stalled runner does not cause a false failure.
     const SETTLE: Duration = Duration::from_millis(100);
     const BURST: Duration = Duration::from_millis(800);
 
     #[test]
     fn a_sender_that_has_gone_away_ends_the_burst_at_once() {
-        // The disconnected arm, which is not the same as the quiet one below:
-        // this returns as soon as the channel says there will be no more,
-        // without waiting out `settle`. Named for that rather than for being
-        // one event, which was the old name and described the other test.
+        // A disconnected channel returns at once, without waiting `settle`.
         let (tx, rx) = channel::<u8>();
         drop(tx);
         let started = std::time::Instant::now();
@@ -75,16 +56,12 @@ mod tests {
 
     #[test]
     fn a_burst_comes_back_as_the_last_of_it() {
-        // The save: several writes close together, and only the final state is
-        // the file the user meant.
+        // Several writes close together: only the last one counts.
         let (tx, rx) = channel();
         thread::spawn(move || {
             for value in 2..=4 {
-                // Sent before the sleep, not after: a thread that is spawned
-                // and then sleeps has to be scheduled *and* wait before its
-                // first value, and a stall over one settle window there ends
-                // the burst at `1` — a flake in the test, reported as the code
-                // coalescing nothing.
+                // Send before sleeping, so a slow thread start cannot end
+                // the burst before the first value arrives.
                 if tx.send(value).is_err() {
                     return;
                 }
@@ -96,10 +73,8 @@ mod tests {
 
     #[test]
     fn a_sender_that_never_goes_quiet_is_still_answered() {
-        // The regression. Bounded by quiet alone, this never returns: each
-        // value restarts the wait, so a directory written to faster than
-        // `settle` defers the answer for as long as the writing goes on — and
-        // the reload is not late, it never happens.
+        // Without the `burst` cap, a sender faster than `settle` would keep
+        // restarting the wait and the function would never return.
         let (tx, rx) = channel();
         let sending = thread::spawn(move || {
             // Comfortably faster than `SETTLE`, for longer than `BURST`.
@@ -124,8 +99,7 @@ mod tests {
 
     #[test]
     fn a_gap_longer_than_the_quiet_ends_the_burst() {
-        // Two saves are two reloads, not one: the second is a separate edit and
-        // the desktop between them was one the user asked for.
+        // Two separate saves are two reloads.
         let (tx, rx) = channel();
         thread::spawn(move || {
             thread::sleep(SETTLE * 4);

@@ -1,32 +1,27 @@
-//! Setting the screen's backlight, through logind.
+//! Sets the screen backlight through logind.
 //!
-//! `/sys/class/backlight/*/brightness` is root's, and this compositor is not.
-//! logind's `Session.SetBrightness` is how a session's owner sets its own
-//! backlight without a udev rule or a setuid helper — the same call
-//! `brightnessctl` and GNOME make. What the shell sees of it is the uevent the
-//! write produces, read back by `domicile_host::backlight`.
+//! `/sys/class/backlight/*/brightness` is writable only by root. logind's
+//! `Session.SetBrightness` lets the session owner set it without a udev rule
+//! or setuid helper. The shell reads the new level back from the uevent, in
+//! `domicile_host::backlight`.
 //!
-//! **On a thread of its own**, like `crate::appearance`: a D-Bus round trip is
-//! nothing the Wayland thread should wait on. A slider being dragged asks many
-//! times a second, so the thread takes the newest request and drops the ones
-//! it overtook — only where the drag ends up matters.
-//!
-//! **Nothing here can take the desktop down.** No system bus, or no logind
-//! session, is a desk whose slider does nothing, and the log says why.
+//! Runs on its own thread so D-Bus calls never block the Wayland thread. A
+//! dragged slider sends many requests, so only the newest is written. Failures
+//! are logged and never stop the compositor.
 
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::thread;
 
 use tracing::warn;
 
-/// One write: the device under `/sys/class/backlight` and its raw value.
+/// A device under `/sys/class/backlight` and the raw value to write.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Request {
     pub device: String,
     pub raw: u32,
 }
 
-/// A handle on the writer. Dropping the last one ends its thread.
+/// Handle to the writer thread. Dropping the last one ends the thread.
 #[derive(Clone)]
 pub struct Backlight {
     told: Sender<Request>,
@@ -34,8 +29,7 @@ pub struct Backlight {
 
 impl Backlight {
     pub fn set(&self, request: Request) {
-        // The thread only goes when this handle does, so a failed send is a
-        // writer that already logged why it stopped.
+        // A failed send means the writer stopped and already logged why.
         let _ = self.told.send(request);
     }
 }
@@ -51,11 +45,11 @@ pub fn serve() -> Backlight {
     Backlight { told }
 }
 
-/// Connect, then write each newest request. Returns only on failure to reach
-/// the bus, or when the compositor has gone.
+/// Connects to the system bus and writes the newest request each time.
+/// Returns on a bus connection failure or when every handle is dropped.
 ///
-/// A refused write is logged and the thread carries on: a session that was
-/// not active a moment ago (a console switch) may be by the next drag.
+/// A refused write is logged and skipped: an inactive session (after a console
+/// switch) may be active again by the next request.
 fn write(requests: &Receiver<Request>) -> Result<(), zbus::Error> {
     let connection = zbus::blocking::Connection::system()?;
     while let Some(request) = newest(requests) {
@@ -72,8 +66,8 @@ fn write(requests: &Receiver<Request>) -> Result<(), zbus::Error> {
     Ok(())
 }
 
-/// The next request, skipping every one a later request has overtaken, or
-/// `None` once every sender has gone.
+/// Blocks for the next request and returns the newest one queued, or `None`
+/// once every sender is gone.
 fn newest(requests: &Receiver<Request>) -> Option<Request> {
     let first = requests.recv().ok()?;
     Some(requests.try_iter().last().unwrap_or(first))

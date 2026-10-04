@@ -83,7 +83,7 @@ describe("focusMoved", () => {
 
 describe("leavesBy", () => {
   it("is where nothing lies that way before the focus would wrap", () => {
-    // sway goes to the screen that way before it wraps round.
+    // sway moves to the next screen before it wraps.
     expect(leavesBy(withFocusOn(ROW, "c"), Direction.Right)).toBe(true);
     expect(leavesBy(withFocusOn(ROW, "b"), Direction.Down)).toBe(true);
     expect(leavesBy(withFocusOn(NESTED, "b"), Direction.Right)).toBe(true);

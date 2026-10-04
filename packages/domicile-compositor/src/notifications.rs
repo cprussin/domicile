@@ -1,31 +1,24 @@
-//! Notifications: this compositor is the desk's notification server.
+//! The desktop's `org.freedesktop.Notifications` server.
 //!
-//! **`org.freedesktop.Notifications` is how every application on a Linux
-//! desktop says something happened** — `notify-send`, GTK and Qt, Electron,
-//! and the browser itself: Chrome on Linux shows a page's Web Notification by
-//! calling this same server, so a site in a `<webview>` and a Wayland client
-//! arrive here the same way. A desktop's notification daemon is normally a
-//! program of its own; here the drawing is the shell's, and the shell is a
-//! page with no bus, so this process owns the name and tells every chrome the
-//! desk's notifications as a
+//! Linux applications send notifications over this D-Bus interface, and so
+//! does Chromium for a page's Web Notifications. The shell is a page with no
+//! bus access, so this process owns the name and sends the notifications to
+//! every chrome as
 //! [`HostMessage::Notifications`](domicile_protocol::HostMessage::Notifications).
-//! A press on one comes back as `invoke_notification_action`, a clear as
-//! `dismiss_notifications`, and the application hears `ActionInvoked` and
-//! `NotificationClosed`.
+//! Presses and clears come back as `invoke_notification_action` and
+//! `dismiss_notifications`, and the application gets `ActionInvoked` and
+//! `NotificationClosed`. See `docs/architecture/NOTIFICATIONS.md`.
 //!
-//! What a notification is *shown as*, and the history of them, is
-//! `domicile_host::notifications`, which is pure and tested there. This is the
-//! bus, and nothing else.
+//! The notification model is in `domicile_host::notifications`; this module
+//! is only the bus.
 //!
-//! **`Notify` is answered on the bus's own executor**, unlike the tray's
-//! work: it has to return the id, and taking up a notification waits on
-//! nothing but the store's lock and, at worst, reading one icon file. A
-//! shell's dismissals and presses go to a worker instead, which says the
-//! signals.
+//! `Notify` runs on the bus executor because it must return the id, and it
+//! waits only on the store lock and at most one icon read. Dismissals and
+//! presses go to a worker thread, which emits the signals.
 //!
-//! **Nothing here can take the desktop down**, for [`crate::tray`]'s reason:
-//! a desk with no session bus, or one inside a session whose own daemon holds
-//! the name, has no notifications, and the log says why once.
+//! Failure is not fatal, as with [`crate::tray`]: with no session bus, or
+//! another daemon holding the name, the desktop has no notifications and logs
+//! why once.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -49,15 +42,13 @@ const SERVER_NAME: &str = "org.freedesktop.Notifications";
 /// Where it answers.
 const SERVER_PATH: &str = "/org/freedesktop/Notifications";
 
-/// What this server can do, as `GetCapabilities` says it.
+/// The capabilities `GetCapabilities` reports.
 ///
-/// **No `body-markup`.** A body is drawn as text, and a sender that is told
-/// the server takes no markup sends none — the browser among them, which
-/// otherwise escapes a page's text into markup for a server to parse back.
-/// `persistence` is the drawer: a notification stays until it is cleared.
-/// `x-kde-origin-name` is KDE's, and the browser looks for it: a server that
-/// takes it is told the site a Web Notification came from as a hint, rather
-/// than as a line written into the top of the body.
+/// - No `body-markup`: bodies are drawn as plain text, and senders such as
+///   Chromium then send no markup.
+/// - `persistence`: a notification stays until it is cleared.
+/// - `x-kde-origin-name`: Chromium then sends a Web Notification's site as a
+///   hint instead of prepending it to the body.
 const CAPABILITIES: &[&str] = &[
     "actions",
     "body",
@@ -72,7 +63,7 @@ const SPEC_VERSION: &str = "1.2";
 /// Why a notification closed, as `NotificationClosed` numbers the reasons.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Reason {
-    /// Let go of to make room in the history.
+    /// Evicted to make room in the history.
     Expired = 1,
     /// The user cleared it, or took one of its actions.
     Dismissed = 2,
@@ -88,11 +79,9 @@ enum Event {
     Invoke { id: u32, action: String },
 }
 
-/// A handle on the server: tell it what the user did and the applications
-/// hear about it.
+/// A handle for passing user actions on to the applications.
 ///
-/// [`crate::tray::Tray`]'s shape and for its reason: a desk whose server never
-/// started holds one of these that goes nowhere.
+/// As with [`crate::tray::Tray`], it does nothing if the server never started.
 #[derive(Debug, Clone)]
 pub struct NotificationServer {
     told: Sender<Event>,
@@ -101,8 +90,7 @@ pub struct NotificationServer {
 impl NotificationServer {
     /// The user cleared `ids`.
     pub fn dismiss(&self, ids: Vec<u32>) {
-        // A closed channel is a worker that has stopped, which it does only
-        // after saying why.
+        // Fails only once the worker has stopped and logged why.
         let _ = self.told.send(Event::Dismiss { ids });
     }
 
@@ -112,12 +100,10 @@ impl NotificationServer {
     }
 }
 
-/// Start being the desk's notification server, calling `publish` with the
-/// notifications whenever they change. Icons are looked for under
-/// `data_dirs`.
+/// Start the notification server, calling `publish` with the notifications
+/// whenever they change. Icons are looked up under `data_dirs`.
 ///
-/// Returns as soon as the thread is spawned, for [`crate::tray::serve`]'s
-/// reason.
+/// Returns once the thread is spawned, like [`crate::tray::serve`].
 pub fn serve(
     data_dirs: Vec<PathBuf>,
     publish: impl Fn(Vec<Notification>) + Send + Sync + 'static,
@@ -146,9 +132,8 @@ struct Store {
 }
 
 impl Store {
-    /// Change the notifications with `change`, and publish what they are
-    /// after it — under the lock, so two changes are published in the order
-    /// they were made.
+    /// Apply `change` and publish the result. Publishing under the lock keeps
+    /// changes in order.
     fn change<T>(&self, change: impl FnOnce(&mut Notifications) -> T) -> T {
         let mut held = self.held.lock().unwrap();
         let changed = change(&mut held);
@@ -157,8 +142,8 @@ impl Store {
     }
 }
 
-/// Serve the name, and do each of the user's events in turn. Returns only on
-/// failure, or when the compositor has gone.
+/// Serve the name and handle user events in order. Returns on failure or
+/// when the compositor exits.
 fn answer(store: Arc<Store>, events: &Receiver<Event>) -> zbus::Result<()> {
     let connection = Connection::session()?;
     connection.object_server().at(
@@ -173,7 +158,7 @@ fn answer(store: Arc<Store>, events: &Receiver<Event>) -> zbus::Result<()> {
     let server = connection
         .object_server()
         .interface::<_, Server>(SERVER_PATH)?;
-    // Ends when every sender has gone, which is the compositor exiting.
+    // Ends when the compositor exits and drops every sender.
     for event in events {
         match event {
             Event::Dismiss { ids } => {
@@ -195,8 +180,8 @@ fn answer(store: Arc<Store>, events: &Receiver<Event>) -> zbus::Result<()> {
     Ok(())
 }
 
-/// Say `NotificationClosed`. A failure is said and gone past, for
-/// `crate::tray::listed`'s reason.
+/// Emit `NotificationClosed`. A failure is logged and ignored, as in
+/// `crate::tray::listed`.
 fn closed(server: &InterfaceRef<Server>, id: u32, reason: Reason) {
     let said = zbus::block_on(Server::notification_closed(
         server.signal_emitter(),
@@ -208,7 +193,7 @@ fn closed(server: &InterfaceRef<Server>, id: u32, reason: Reason) {
     }
 }
 
-/// Say `ActionInvoked`.
+/// Emit `ActionInvoked`.
 fn invoked(server: &InterfaceRef<Server>, id: u32, action: &str) {
     let said = zbus::block_on(Server::action_invoked(server.signal_emitter(), id, action));
     if let Err(why) = said {
@@ -216,8 +201,7 @@ fn invoked(server: &InterfaceRef<Server>, id: u32, action: &str) {
     }
 }
 
-/// Milliseconds since the epoch, which is what a shell says "two minutes ago"
-/// from.
+/// Milliseconds since the epoch, which shells use for relative times.
 fn now() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -225,9 +209,8 @@ fn now() -> u64 {
         .as_millis() as u64
 }
 
-/// The hints a `Notify` carries, as [`Hints`]. A hint left out, or sent as
-/// something the spec does not say it is, is read as absent; the ones a shell
-/// has no use for are dropped.
+/// Parse a `Notify`'s hints. A missing or mistyped hint reads as absent;
+/// hints the shell does not use are dropped.
 fn hints(mut sent: HashMap<String, OwnedValue>) -> Hints {
     let mut first = |names: &[&str]| names.iter().find_map(|name| sent.remove(*name));
     let urgency = first(&["urgency"]).and_then(|value| u8::try_from(value).ok());
@@ -274,8 +257,8 @@ impl Server {
             .collect()
     }
 
-    /// A notification, which is held, published, and answered with its id.
-    /// One let go of to make room is said to have expired.
+    /// Store and publish a notification and return its id. A notification
+    /// evicted to make room is reported as expired.
     #[allow(clippy::too_many_arguments)] // The spec's own signature.
     async fn notify(
         &self,
@@ -310,8 +293,8 @@ impl Server {
         notified.id
     }
 
-    /// The application taking its notification down. One already gone is
-    /// nothing to say.
+    /// The application closing its notification. Closing one already gone
+    /// emits nothing.
     async fn close_notification(
         &self,
         #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,

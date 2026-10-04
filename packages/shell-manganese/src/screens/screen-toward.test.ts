@@ -3,7 +3,7 @@ import { describe, expect, it } from "bun:test";
 import { Direction } from "../window-management/direction";
 import { screenToward } from "./screen-toward";
 
-// A laptop under the left half of a wide monitor, and a portrait one to the
+// A laptop under the left half of a wide monitor, and a portrait monitor to the
 // right of both.
 const WIDE = { box: { height: 1080, width: 1920, x: 0, y: 0 }, name: "wide" };
 const LAPTOP = {
@@ -29,8 +29,8 @@ describe("screenToward", () => {
   });
 
   it("picks the nearest to this screen's middle of several that way", () => {
-    // Both are to the right of the laptop; the tall one is nearer its middle
-    // than the one far off below.
+    // Both are to the right of the laptop; the portrait one is nearer its
+    // middle.
     const far = {
       box: { height: 800, width: 1280, x: 1280, y: 5000 },
       name: "far",

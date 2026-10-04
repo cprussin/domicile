@@ -1,17 +1,13 @@
 #!/usr/bin/env bash
-# That `nix build .#engine` is the production engine whenever there is one of
-# this series, and the checked engine otherwise.
+# Checks `nix build .#engine` picks the official engine of this series when
+# pinned, and the checked engine otherwise.
 #
-# Two engines are published per series: the CHECKED build a pull request
-# proves (DCHECKs on, no PGO), and the OFFICIAL build engine-release.yml makes
-# after the merge (PGO, ThinLTO, no DCHECKs). Users should run the second. But
-# it arrives hours after the merge, so between the two a pin to it would be a
-# pin to the previous series' engine: the fork's new patches missing from the
-# desktop, and nothing saying so.
-#
-# So both are pinned, and `engine-pin.nix` takes the official one only when its
-# identity is the checked one's -- which is the identity
-# `test-the-pinned-engine-is-this-series.sh` holds to the fork in the tree.
+# Each series has a checked build (DCHECKs, no PGO) from the pull request and
+# an official build (PGO, ThinLTO) from engine-release.yml, hours after merge.
+# Until the official build lands, its pin points at the previous series, which
+# lacks the new patches. So `engine-pin.nix` takes the official engine only
+# when its identity matches the checked one. See
+# packages/domicile-engine/docs/RELEASES.md.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -42,7 +38,7 @@ pick() { # checked identity, official identity or "none"
   exit 1
 }
 
-# And that the flake asks it, about the two files it actually has.
+# Check the flake uses `engine-pin.nix` with the checked-in pin files.
 want="$(nix eval --raw --impure --expr '
   let
     official = ./packages/domicile-engine/engine-official.nix;

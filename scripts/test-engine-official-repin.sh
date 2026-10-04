@@ -1,25 +1,18 @@
 #!/usr/bin/env bash
-# The production engine's pin, and how it reaches main.
+# Tests `engine-official-repin.sh`, which lands the official engine's pin on
+# main.
 #
 # `engine-release.yml` builds the official engine (PGO, ThinLTO, no DCHECKs)
-# after a merge, hours after the pull request that moved the fork repinned the
-# CHECKED engine. What it publishes is only used once `engine-official.nix`
-# names it, and that file can only be written after the build, because the
-# hash is the tarball's. So the release job writes it and lands it on main.
+# after a merge. `engine-official.nix` holds the tarball's hash, so it can only
+# be written after the build. Main accepts changes only through pull requests,
+# so the job pushes a branch, opens a pull request with the repository's token
+# and enables auto-merge, reusing one a previous run left open. GitHub's
+# refusals are printed.
 #
-# MAIN TAKES CHANGES ONLY THROUGH A PULL REQUEST, so the job pushes a branch of
-# its own, opens one and turns on its auto-merge. What is asserted here is what
-# that push is built on, when there is nothing to land, and that the pull
-# request is opened with the repository's own token and set to merge -- once,
-# even when a previous run left one open -- and that GitHub's refusal is
-# printed rather than swallowed.
+# If main's series changed during the build, nothing lands: engine-pin.nix
+# uses the official pin only when its identity matches the checked pin.
 #
-# NOT WHEN MAIN HAS MOVED ON. A merge that moved the fork again while this
-# built makes this engine the wrong series for main; the flake would ignore it
-# anyway (engine-pin.nix picks the official pin only when its identity is the
-# checked pin's), so landing it would be a commit that changes nothing.
-#
-# `curl` and the generator are faked, `git` is real against a local remote.
+# `curl` and the generator are stubbed; `git` runs against a local remote.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -53,9 +46,8 @@ contains() {
 CHECKED=packages/domicile-engine/engine-release.nix
 OFFICIAL=packages/domicile-engine/engine-official.nix
 
-# A repository whose main pins the checked engine of series <identity>, pushed
-# to a bare remote, and a checkout standing on main as `actions/checkout`
-# leaves it: detached.
+# A repository whose main pins the checked engine of the given series, pushed
+# to a bare remote, with a detached checkout as `actions/checkout` leaves it.
 setup() { # main's series
   rm -rf "$WORK/remote" "$WORK/repo" "$WORK/bin"
   git init -q --bare "$WORK/remote"
@@ -69,7 +61,7 @@ setup() { # main's series
   printf '{\n  identity = "%s";\n}\n' "$1" >"$WORK/repo/$CHECKED"
   echo main >"$WORK/repo/marker"
 
-  # The generator, faked: the real one downloads a tarball and hashes it.
+  # A generator stub; the real one downloads and hashes a tarball.
   cat >"$WORK/repo/scripts/update-engine-release.sh" <<'GEN'
 #!/usr/bin/env bash
 set -eu
@@ -86,9 +78,8 @@ GEN
   git -C "$WORK/repo" checkout -q --detach
   MAIN_TIP="$(git -C "$WORK/repo" rev-parse HEAD)"
 
-  # GitHub, faked: every call and the token it carried are written down, and
-  # each answer is the status and body the API gives. A pull request that
-  # already exists is refused with a 422 until it is looked up by its head.
+  # A GitHub stub that records each call and its token. Creating a pull
+  # request that already exists returns 422.
   mkdir -p "$WORK/bin"
   : >"$WORK/calls"
   : >"$WORK/auth"
@@ -161,13 +152,13 @@ calls="$(cat "$WORK/calls")"
 contains "a pull request is opened from that branch" \
   "POST https://api.github.com/repos/owner/repo/pulls" "$calls"
 contains "into main" '"base":"main"' "$calls"
-# GITHUB_TOKEN may not open pull requests here, and one it opens runs no checks.
+# GITHUB_TOKEN cannot open pull requests here, and ones it opens run no checks.
 expect "with the repository's own token, on every call" "Authorization: Bearer token" \
   "$(sort -u "$WORK/auth")"
 contains "and set to merge once its checks pass" \
   'POST https://api.github.com/graphql {"query":"mutation($id: ID!) { enablePullRequestAutoMerge(input: {pullRequestId: $id, mergeMethod: SQUASH}) { clientMutationId } }","variables":{"id":"PR_7"}}' \
   "$calls"
-# Merged at once it would be refused: its required checks have not run yet.
+# An immediate merge would be refused: required checks have not run.
 expect "not merged before them" "" "$(grep '/merge' "$WORK/calls")"
 
 echo "== a pull request a previous run left open is the one set to merge =="

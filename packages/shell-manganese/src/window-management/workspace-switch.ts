@@ -1,16 +1,9 @@
-// The workspace that has just left the screen, while it is still leaving.
+// Keeps the workspace that was just switched away from so it can slide off
+// screen. Like `closing.ts`, this is needed because a switch replaces the
+// screen state in one reduction.
 //
-// The other half of `closing.ts`, and for the same reason: switching workspace
-// replaces what is on screen in one reduction, so the workspace that was there
-// is not anywhere to be drawn from. What is kept here is the screenful it
-// had — where its windows were, the tabs over them, and which of them the
-// keyboard was in — so that it can slide off rather than blink out.
-//
-// **And which way it goes.** A workspace switch is the one change on this
-// desktop with a direction: the workspaces are a row, and going from 2 to 3 is
-// not the same movement as going from 2 to 1. The windows arriving come in
-// from the side the new workspace was on and the ones leaving go the other
-// way, so the two pass each other.
+// Also records the direction: workspaces form a row, so incoming windows
+// enter from the new workspace's side and outgoing ones leave the other way.
 
 import type { PlacedTab, Placement } from "./placement";
 import type { Shown } from "./shown";
@@ -19,7 +12,7 @@ import { WORKSPACES } from "./window-state";
 
 /** A workspace on its way off the screen, with the screenful it had. */
 export type WorkspaceSwitch = {
-  /** The window the keyboard was in, which its bar goes on saying. */
+  /** The window that had focus, which its bar keeps showing. */
   activeId: string | undefined;
   placements: readonly Placement[];
   tabs: readonly PlacedTab[];
@@ -29,9 +22,7 @@ export type WorkspaceSwitch = {
 /**
  * Which way the desktop moves going from one workspace to another.
  *
- * In the order the desktop names them rather than the order their names sort
- * in, which are not the same order: `10` is the last workspace and `"10"` is
- * the second string.
+ * Uses the desktop's workspace order, not string order: `10` is last.
  */
 export const towardsOf = (before: string, after: string): Towards =>
   orderOf(after) > orderOf(before) ? "end" : "start";
@@ -39,11 +30,9 @@ export const towardsOf = (before: string, after: string): Towards =>
 /**
  * The workspace that has just been left, or `undefined` when none has.
  *
- * Nothing is kept for a switch between two workspaces with nothing on either
- * of them. A switch is over when something on screen says its animation has
- * ended, and there is nothing there to say so — so one recorded would be one
- * that never finished, and the next window to open would slide in as though it
- * had been on another workspace all along.
+ * Returns `undefined` when both workspaces are empty. A switch ends when an
+ * animation on screen ends, so with nothing on screen it would never end and
+ * the next window would slide in as if from another workspace.
  */
 export const switchedTo = (
   before: Shown,
@@ -66,7 +55,7 @@ export const switchedTo = (
   }
 };
 
-/** Where a workspace comes in the row. Throws for one the desktop has not got. */
+/** A workspace's position in the row. Throws for an unknown workspace. */
 const orderOf = (name: string): number => {
   const at = WORKSPACES.indexOf(name);
   if (at === -1) {

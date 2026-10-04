@@ -1,22 +1,17 @@
-//! The last frame each surface committed before a page embedded it.
+//! Holds the last frame each surface committed before a page embedded it.
 //!
-//! The engine drops a frame for a surface no page has embedded — see
-//! `engine_surfaces` — and a window gets over that because the embed resizes
-//! it, and a client told a new size draws again. A popup is not resized: it is
-//! placed at the size its client asked for, and a menu draws once and waits
-//! for the pointer. Released, that one frame is gone and the menu is blank
-//! until something is hovered. Kept here instead, it goes up the moment the
-//! page embeds the surface.
+//! The engine drops frames for unembedded surfaces (see `engine_surfaces`). A
+//! window recovers because the embed resizes it and the client redraws. A
+//! popup is not resized, and a menu draws once, so without this its first
+//! frame is lost and it stays blank until hovered.
 //!
-//! One per surface, the newest: a frame that is waiting is out of date the
-//! moment another arrives, and the older buffer goes back to whoever owns it.
+//! Only the newest frame per surface is kept; the caller releases older ones.
 
 use std::collections::HashMap;
 
 use crate::engine::SurfaceId;
 
-/// The frames waiting for an embed, by surface. What a frame is — a buffer
-/// and how to submit it — is the session's.
+/// Frames waiting for an embed, by surface. The session defines `F`.
 #[derive(Debug)]
 pub struct Waiting<F> {
     frames: HashMap<SurfaceId, F>,
@@ -31,25 +26,24 @@ impl<F> Default for Waiting<F> {
 }
 
 impl<F> Waiting<F> {
-    /// Keep `frame` until `surface` is embedded. Answers the frame it
-    /// replaces, whose buffer the caller gives back.
+    /// Keeps `frame` until `surface` is embedded. Returns the replaced frame,
+    /// whose buffer the caller releases.
     pub fn wait(&mut self, surface: SurfaceId, frame: F) -> Option<F> {
         self.frames.insert(surface, frame)
     }
 
-    /// The frame waiting for `surface`, taken now that it has somewhere to go
-    /// — or because the surface is gone.
+    /// Removes the frame waiting for `surface`.
     pub fn take(&mut self, surface: SurfaceId) -> Option<F> {
         self.frames.remove(&surface)
     }
 
-    /// The frame `is` picks, taken: its buffer was destroyed.
+    /// Removes the frame `is` matches, for a destroyed buffer.
     pub fn take_where(&mut self, is: impl Fn(&F) -> bool) -> Option<(SurfaceId, F)> {
         let surface = *self.frames.iter().find(|(_, frame)| is(frame))?.0;
         self.frames.remove(&surface).map(|frame| (surface, frame))
     }
 
-    /// Every frame, taken: the engine the surfaces belonged to is gone.
+    /// Removes every frame, for a lost engine.
     pub fn take_all(&mut self) -> Vec<(SurfaceId, F)> {
         self.frames.drain().collect()
     }
@@ -61,7 +55,7 @@ mod tests {
 
     const SURFACE: SurfaceId = 1;
 
-    /// A frame, as far as this module can tell one from another.
+    /// A stand-in frame identified by its buffer.
     fn frame(buffer: u32) -> u32 {
         buffer
     }

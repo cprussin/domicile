@@ -1,9 +1,7 @@
-// `focus left` and the other three: which window the keys point at next.
+// Directional focus (`focus left` and so on), using sway's algorithm.
 //
-// sway's own walk. Start at the container the focus is in and work outwards
-// until one of them runs the way the user asked to go, then cross into the
-// neighbor on that side — by *its* own focus, so a container is entered at
-// whichever window was last used in it rather than at its first.
+// Walks out from the focused container to the first one running that way,
+// then enters the neighbor at its last-focused window.
 
 import type { Direction } from "../direction";
 import { axisOf as axisOfDirection, isForward } from "../direction";
@@ -22,9 +20,7 @@ import {
 /**
  * The tiling with the focus moved one window `direction`.
  *
- * Wrapping at the ends of a container, which is what the desktop's config asks
- * for (`focus.wrapping = "yes"`): the focus comes round to the other side of
- * the container it was walking rather than stopping against its edge.
+ * Wraps at a container's ends, per `focus.wrapping = "yes"`.
  */
 export const focusMoved = (tiling: Tiling, direction: Direction): Tiling => {
   const { root } = tiling;
@@ -39,11 +35,11 @@ export const focusMoved = (tiling: Tiling, direction: Direction): Tiling => {
 };
 
 /**
- * Whether `focus <direction>` goes off the side of the tiling: nothing lies
- * that way before the focus would wrap, or nothing is tiled at all.
+ * Whether `focus <direction>` leaves the tiling: nothing lies that way before
+ * wrapping, or nothing is tiled.
  *
- * Which is where sway goes on to the screen that way, if there is one — it
- * wraps only when there is not.
+ * Like sway, the caller then moves to the next screen, and wraps only if there
+ * is none.
  */
 export const leavesBy = (tiling: Tiling, direction: Direction): boolean => {
   const { root } = tiling;
@@ -54,12 +50,11 @@ export const leavesBy = (tiling: Tiling, direction: Direction): boolean => {
 };
 
 /**
- * The window the focus lands on coming into the tiling from another screen,
- * moving `direction`, or `undefined` when nothing is tiled.
+ * The window focused when entering the tiling from another screen moving
+ * `direction`, or `undefined` when nothing is tiled.
  *
- * sway's: the child on the near edge of a split that runs that way, and the
- * tiling's own focus otherwise — by the window each last had the focus in. A
- * tabbed or stacked tiling keeps the tab it is showing.
+ * As in sway: the near-edge child of a split running that way, else the
+ * tiling's own focus. A tabbed or stacked tiling keeps its shown tab.
  */
 export const enteredFrom = (
   tiling: Tiling,
@@ -81,13 +76,10 @@ export const enteredFrom = (
 };
 
 /**
- * What the focus crosses into, or `undefined` when nothing around it runs that
- * way at all.
+ * Where the focus moves, or `undefined` if no container runs that way.
  *
- * The candidates in the order sway tries them: the innermost container that
- * runs along the direction and has somewhere to go, then the ones outside it,
- * and last the wrap round the innermost one — so a container with a neighbor
- * two levels up is reached before the focus comes round on itself.
+ * Tries a neighbor at each level, innermost first, before wrapping the
+ * innermost container, as sway does.
  */
 const crossing = (
   root: LayoutNode,
@@ -139,11 +131,9 @@ const neighbor = (
 };
 
 /**
- * The child the focus comes round to at the end of a container.
+ * The child the focus wraps to at a container's end.
  *
- * `undefined` for a container of one, which has nowhere to wrap to: the focus
- * would land back on the window it started on, and reporting that as a change
- * re-renders the desktop for a keystroke that moved nothing.
+ * `undefined` for a single child, so a no-op key press does not re-render.
  */
 const wrapped = (
   { container }: Ancestor,

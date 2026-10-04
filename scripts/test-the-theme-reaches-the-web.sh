@@ -1,19 +1,15 @@
 #!/usr/bin/env bash
-# The desktop's theme reaches the pages in its browser windows.
+# Tests that the desktop's theme reaches pages in its browser windows.
 #
 # The compositor writes `{"type":"theme",...}` to the chrome socket, and
-# `ControlChannel::DispatchLine` hands it to the shell's page. That repaints
-# the panels. It does not repaint a site: a page's `prefers-color-scheme` is
-# the engine's own `ui::NativeTheme`, and nothing told it -- so a toggle turned
-# the desk over and left every website the way it was.
+# `ControlChannel::DispatchLine` passes it to the shell's page. A site's
+# `prefers-color-scheme` comes from the engine's `ui::NativeTheme`, which
+# `color_scheme.cc` sets. As with the keymap, this needs two halves in the
+# fork's files and one line in a Chromium file. Missing any one still
+# compiles.
 #
-# `color_scheme.cc` is what tells it, and like the keymap's crossing it is two
-# halves in the fork's own files and a line in a file Chromium owns. Any one of
-# the three missing compiles and does nothing.
-#
-# BUILDLESS ON PURPOSE, like `test-the-keymap-reaches-the-browser.sh`.
-# `color_scheme_unittest.cc` is the half that asserts the override itself, and
-# it runs only where an engine builds.
+# Needs no engine build, like `test-the-keymap-reaches-the-browser.sh`.
+# `color_scheme_unittest.cc` tests the override itself where an engine builds.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -34,10 +30,10 @@ fail() {
   "Nothing sets the engine's color scheme, so a site's prefers-color-scheme" \
   "never follows the desktop's theme."
 
-# The channel's `windows_theme` arm hands the theme on, not only to the page.
-# That arm and not `theme`'s: the chrome is told first, and the windows --
-# sites included -- only once every chrome has captured the frame its wipe
-# starts from. A site turned on `theme` is in that frame already turned.
+# The `windows_theme` arm passes the theme on, not the `theme` arm. The chrome
+# is updated first, and windows (including sites) only after every chrome has
+# captured the frame its wipe transition starts from. Updating sites on
+# `theme` would put them in that frame already changed.
 awk '/\*type == "windows_theme"/,/^  }$/' "$CHANNEL" | grep -q 'theme_sink_.Run' || fail \
   "$CHANNEL's \`windows_theme\` arm does not run theme_sink_" \
   "The page hears the theme; the engine's NativeTheme does not, and every" \

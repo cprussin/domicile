@@ -25,14 +25,12 @@ describe("the parts of a window's frame", () => {
   });
 
   it("takes the bar out of the window rather than adding it on", () => {
-    // A window's box is the whole frame, so a window dragged to a size is
-    // that size, bar included, and a resize needs no frame that grows with it.
+    // A window's box includes its title bar.
     expect(barOf(FRAME).height + surfaceOf(FRAME).height).toBe(FRAME.height);
   });
 
   it("never gives the surface a negative height", () => {
-    // Nothing places a window shorter than its own bar, so this holds — but a
-    // negative height reaches the compositor as a window turned inside out.
+    // A negative height would break the compositor.
     expect(surfaceOf({ ...FRAME, height: 1 }).height).toBe(0);
   });
 });

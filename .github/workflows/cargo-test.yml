@@ -1,8 +1,7 @@
 name: Cargo test
 
-# The cargo workspace: `fmt`, `clippy -D warnings` and `test`, which is what
-# /docs/guidelines/RUST.md names as the required checks and what
-# `./scripts/check.sh rust` runs.
+# The cargo workspace's required checks (`fmt`, `clippy -D warnings`, `test`;
+# see /docs/guidelines/RUST.md), as `./scripts/check.sh rust` runs them.
 on:
   pull_request:
   push:
@@ -15,23 +14,13 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: "1"
-  # Nothing in this group may skip: the toolchain is installed below and the
-  # libraries the compositor links are installed with it, so a skip here is a
-  # check that stopped running rather than a fact about the runner.
+  # Nothing in this group may skip: the toolchain and libraries are installed
+  # below.
   DOMICILE_CHECK_STRICT: "1"
 
 jobs:
-  # ONE JOB, WHERE THIS WAS TWO. The split was `core` over the workspace's
-  # `default-members` and `compositor` over the one crate left out of them,
-  # because only that crate needs `libxkbcommon` and `libwayland` and installing
-  # them for the rest was a minute nobody needed. What it cost was a third
-  # definition of "the Rust checks" — `check.sh rust` runs `--workspace`, these
-  # two ran `default-members` and then `-p domicile-compositor`, and whether the
-  # three agreed was something a person had to work out by reading all of them.
-  #
-  # `--workspace` needs the libraries, so the libraries are installed once here
-  # and the parallelism goes. That is wall-clock on a runner nobody is waiting
-  # for, against one list instead of three.
+  # One job over `--workspace`, so CI runs the same checks as
+  # `check.sh rust`. That needs the compositor's libraries for every crate.
   workspace:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -41,11 +30,10 @@ jobs:
         with:
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
-      # Mesa's EGL and libgbm as well: `shm_upload`'s test draws on
-      # llvmpipe, and `gbm`'s loads the real libgbm. Neither needs a GPU.
+      # Mesa's EGL and libgbm: `shm_upload`'s test draws on llvmpipe, and
+      # `gbm`'s loads the real libgbm. Neither needs a GPU.
       - name: Install the libraries the compositor links and loads
         run: .github/scripts/apt-install.sh libxkbcommon-dev libwayland-dev libegl1 libegl-mesa0 libgles2 libgl1-mesa-dri libgbm1
 
-      # `check.sh` installs no node_modules for this group, because nothing in
-      # it reads one — which is why there is no bun set up above.
+      # This group needs no node_modules, so bun is not set up.
       - run: ./scripts/check.sh rust

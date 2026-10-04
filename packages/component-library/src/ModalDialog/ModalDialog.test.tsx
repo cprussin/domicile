@@ -109,9 +109,8 @@ describe(ModalDialog, () => {
     });
 
     it("takes the backdrop away when a dialog drawn without its popup closes", async () => {
-      // A modal finishes closing when its popup has, so one that has no popup
-      // has to have something to finish on -- or its backdrop is never taken
-      // away, and goes on taking every click on the page.
+      // Closing completes when the popup closes. Without a popup the
+      // backdrop would stay and block every click.
       const { baseElement, rerender } = render(
         <ModalDialog open popup={false}>
           Body
@@ -294,9 +293,7 @@ describe(ModalDialog, () => {
       render(<HandleHarness />);
       await user.click(screen.getByRole("button", { name: "External Open" }));
       expect(await screen.findByText("Body")).toBeInTheDocument();
-      // `hidden: true` because the open modal applies `aria-hidden` to
-      // outside content (base-ui's focus trap); the External Close button
-      // is therefore outside the accessible tree by default.
+      // The open modal sets `aria-hidden` on content outside it.
       await user.click(
         screen.getByRole("button", { hidden: true, name: "External Close" }),
       );

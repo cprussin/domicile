@@ -1,20 +1,17 @@
-// The rows the launcher offers for what was typed into it.
+// The launcher's rows for a query. Each row is an action Enter can take.
 //
-// Every row is a thing Enter can do, so the list is the whole answer to "what
-// will this do" — there is no second line under it saying so. In order: the
-// page a `!` tag's site has for the words, if it has one; the search the tag
-// names, if the box carries one; a site, if the box holds one; the
-// applications and the desk's bookmarks the host matched, as one list by
-// name; a path, if it is spelled like one; the files the host found; and a
-// search on Google for the line as typed, always. A URL
-// typed whole is a URL meant, so it goes on top; an application is above a
-// file, because a launcher is asked for one far more often; the search goes
-// last, because it is what is left when nothing above it was.
+// Order:
+// 1. The page a `!` tag's site has for the words, if any.
+// 2. The tagged search, if the query has a tag.
+// 3. A site, if the query is a URL. A full URL is almost always meant as one.
+// 4. Matching applications and bookmarks, as one list.
+// 5. A path, if the query is spelled like one.
+// 6. Matching files. Applications rank above files because they are asked
+//    for more often.
+// 7. A Google search for the query, always, as the fallback.
 //
-// `typedAddress` is the one place that decides whether a line is a site or a
-// search: a desktop where this box and a browser window's address bar
-// disagree about `localhost:5173` is one where the user has to remember which
-// box they are in.
+// `typedAddress` decides site vs. search, so this box and a browser window's
+// address bar agree.
 
 import type {
   Bookmark,
@@ -27,7 +24,7 @@ import { TypedAddressKind, typedAddress } from "../address/typed-address";
 import { fileRow } from "./file-row";
 import { Launch } from "./launch";
 
-/** Which of the seven kinds of row a choice is. */
+/** The kind of a launcher row. */
 export enum ChoiceKind {
   App,
   Bookmark,
@@ -39,25 +36,24 @@ export enum ChoiceKind {
 }
 
 export const Choice = {
-  /** An application a desktop entry offers, as the host found it. */
+  /** An application from a desktop entry. */
   App: (entry: DesktopEntry) => ({
     entry,
     kind: ChoiceKind.App as const,
   }),
-  /** A URL the desk offers by name, as the host found it. */
+  /** A bookmark. */
   Bookmark: (bookmark: Bookmark) => ({
     kind: ChoiceKind.Bookmark as const,
     ...bookmark,
   }),
-  /** A path, as the host named it: a directory ends in `/`. */
+  /** A path. A directory ends in `/`. */
   File: (found: string) => ({
     kind: ChoiceKind.File as const,
     row: fileRow(found),
   }),
   /**
-   * The words, and where they go. The row says the words, not the URL they
-   * would become: answering "kate bush" with `google.com/search?q=kate%20bush`
-   * tells the user their query has turned into a URL they now have to read.
+   * A web search. The row shows the words rather than the search URL, which
+   * is harder to read.
    */
   Search: (query: string, url: string) => ({
     kind: ChoiceKind.Search as const,
@@ -65,12 +61,12 @@ export const Choice = {
     url,
   }),
   Site: (url: string) => ({ kind: ChoiceKind.Site as const, url }),
-  /** The words, on the site their tag named. */
+  /** A search on the site a tag names. */
   TaggedSearch: (search: TaggedSearch) => ({
     kind: ChoiceKind.TaggedSearch as const,
     ...search,
   }),
-  /** The page on the site a tag named that the words are the name of. */
+  /** The page on a tag's site whose name is the words. */
   TaggedSite: (site: TaggedSite) => ({
     kind: ChoiceKind.TaggedSite as const,
     ...site,
@@ -80,13 +76,11 @@ export const Choice = {
 export type Choice = ReturnType<(typeof Choice)[keyof typeof Choice]>;
 
 /**
- * The rows for `query`, given the files, applications and bookmarks the host
- * found for it.
+ * The rows for `query`, given what the host found for it.
  *
- * A tagged query gets its tagged search on top — the tag is the user saying
- * where they meant to go — with the page the words name there above it, if
- * they name one. Below them are the rows the line gets as typed, its search
- * on Google rather than a second row for the tag's engine.
+ * A tagged query puts the tag's page and search first, since the tag says
+ * where the user meant to go. The rows for the line as typed follow, with a
+ * Google search rather than a second search on the tag's engine.
  */
 export const choicesFor = (
   query: string,
@@ -103,7 +97,7 @@ export const choicesFor = (
   ];
 };
 
-/** What choosing `choice` launches. */
+/** The launch for `choice`. */
 export const launchOf = (choice: Choice): Launch => {
   switch (choice.kind) {
     case ChoiceKind.App: {
@@ -149,9 +143,9 @@ const plainChoicesFor = (
 };
 
 /**
- * The applications and bookmarks as one list, in the order the host ranks
- * each of them: a name that starts with the query first, then by name. Sorted
- * stably, so two of one name keep the host's order.
+ * Applications and bookmarks merged and ranked as the host ranks each: prefix
+ * matches first, then by name. The sort is stable, so equal names keep the
+ * host's order.
  */
 const byName = (
   typed: string,
@@ -171,7 +165,7 @@ const byName = (
     .map(({ choice }) => choice);
 };
 
-/** `a` against `b` code unit by code unit, as the host compares names. */
+/** Compare by UTF-16 code unit, as the host does. */
 const compared = (a: string, b: string): number => {
   if (a < b) {
     return -1;
@@ -194,12 +188,11 @@ const nameOf = (
 };
 
 /**
- * The row for a path spelled the one way nothing else is, unless the host
- * already found it.
+ * A row for a query that starts with `/`, `./`, `../` or `~/`, unless the host
+ * already found that path.
  *
- * A leading `/`, `./`, `../` or `~/` cannot be a hostname or a search anybody
- * meant, and the host's list is what a home has in it rather than what exists:
- * `/etc/hosts` is not under home and is still a file.
+ * Such a query can't be a hostname or a search. It is needed because the host
+ * only searches home, so `/etc/hosts` would otherwise be missing.
  */
 const typedPath = (typed: string, found: readonly string[]): Choice[] => {
   const path = typed.startsWith("~/") ? typed.slice(2) : typed;

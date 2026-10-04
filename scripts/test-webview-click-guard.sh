@@ -1,31 +1,18 @@
 #!/usr/bin/env bash
-# Which end the click guard blames, and which answers it calls a pass.
+# Tests the verdict of `guard-webview-click.sh`: which readings pass and which
+# component a failure blames.
 #
-# The unit is the verdict block in `guard-webview-click.sh` — the `if` chain
-# that turns fourteen readings and the run's mode into either a pass or one
-# sentence naming an end. The readings are not independent: a run where the shell page
-# never ran has established nothing, a run where no press reached that document
-# is not a run about what crosses into it, and "the press did not cross out of
-# the guest" is only a finding once something has landed in the guest. So the
-# chain is ordered, and an ordered chain is a thing that can be got wrong in a
-# way no failing engine would ever reveal — the wrong arm answers, with a
-# true-sounding sentence about the wrong layer, and the next person spends a CI
-# cycle on it.
+# The verdict is an ordered `if` chain over many readings. A wrong order still
+# prints a plausible sentence about the wrong layer, so each arm is tested.
+# Easy to get backward:
 #
-# It matters most for the three readings a verdict written by symmetry gets
-# backward:
+#   - In the control run, the element being reached is the failure, and so is
+#     a press that lands in the guest.
+#   - A press that never reached the guest blames the harness, not the defect.
+#   - The element not being activeElement still passes: the shell acts on the
+#     focus event and never reads activeElement.
 #
-#   in the control run, the element being REACHED is the failure, and so is a
-#     press that landed in the guest it was aimed away from
-#   a press that never reached the guest is the harness rather than the defect
-#     — the claim is about what crosses out of a guest, and nothing went in
-#   the element not being activeElement is a PASS, one reading short: the shell
-#     raises a window on the focus event and reads activeElement never, so that
-#     absence is worth reporting and is not the claim
-#
-# The block is run out of the real script rather than copied, so a rewrite that
-# moves it fails here loudly instead of leaving this passing against a version
-# nobody ships.
+# Runs the verdict block from the real guard, so moving it fails here.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -35,10 +22,8 @@ GUARD="$ROOT/packages/domicile-engine/scripts/guard-webview-click.sh"
   exit 1
 }
 
-# From `FAILURE=""` to the `fi` that closes the decision. Both ends are whole
-# lines at column zero, so this cannot half-match: the nested `fi` in the
-# negative arm is indented, and the block stops before the `if [ -n "$PASSED" ]`
-# below it — a verdict is a value here, not a status.
+# From `FAILURE=""` to the column-zero `fi` that ends the decision. The nested
+# `fi` is indented, so the match cannot stop early.
 BLOCK="$(awk '/^FAILURE=""$/,/^fi$/' "$GUARD")"
 [ -n "$BLOCK" ] || {
   echo "no verdict block in $GUARD — its markers moved. Fix this test with it." >&2
@@ -56,10 +41,8 @@ expect() {
   fi
 }
 
-# A run in which everything the guard wants is true; each case below changes one
-# reading. Written as a baseline plus overrides rather than nine positional
-# arguments, because a case that says `SAW_REACHED=0` says what it is testing
-# and a case that says `1 1 1 1 0 1` does not.
+# A run where every reading is true; each case overrides one by name, which
+# reads better than positional arguments.
 verdict() { # $1 NEGATIVE, then NAME=value overrides
   (
     SAW_SHELL=1
@@ -93,9 +76,8 @@ verdict() { # $1 NEGATIVE, then NAME=value overrides
   )
 }
 
-# The failing sentence, for the cases where WHICH end it names is the point. Not
-# the whole wording: sentences are prose and will be reworded, and a test that
-# pinned them would fail for edits that changed no behavior.
+# The failure message, for cases that check which component it blames. Tests
+# match a keyword, not the whole sentence.
 reason() { # $1 NEGATIVE, then NAME=value overrides
   (
     SAW_SHELL=1
@@ -135,9 +117,8 @@ blames() { # $1 word, then the args verdict takes
 echo "a run that never got as far as measuring anything"
 expect "a shell that never ran is a failure in the positive run" "fail" \
   "$(verdict 0 SAW_SHELL=0)"
-# AND IN THE CONTROL RUN, which is the arm a verdict written as "the control
-# passes when nothing is reached" gets wrong: with no page at all, nothing
-# being reached is what a broken harness looks like too.
+# The control must fail too: with no page, nothing being reached is also what
+# a broken harness looks like.
 expect "a shell that never ran is a failure in the control run" "fail" \
   "$(verdict 1 SAW_SHELL=0)"
 expect "a shell that never ran blames the harness" "yes" \
@@ -152,31 +133,27 @@ expect "no press in the shell's document blames the harness" "yes" \
 echo
 echo "the positive run — a press in the guest, which the shell must be told of"
 expect "everything arriving is the pass" "pass" "$(verdict 0)"
-# An empty window is a guest that was never made, which is the guest layer's
-# business rather than the crossing's — and it is asked ONLY of the positive
-# run, because the control never clicks into the window at all.
+# An empty window means the guest was never created. Only the positive run
+# checks this; the control never clicks into the window.
 expect "an empty window is a failure" "fail" "$(verdict 0 SAW_PAGE=0)"
 expect "an empty window names the guest" "yes" \
   "$(blames "the guest" 0 SAW_PAGE=0)"
-# THE ONE THAT READS LIKE THE DEFECT AND IS NOT. Nothing landed in the guest,
-# so nothing was asked to cross out of it.
+# Looks like the defect but is not: nothing landed in the guest, so nothing
+# had to cross out of it.
 expect "a press that never reached the guest is a failure" "fail" \
   "$(verdict 0 SAW_GUEST=0)"
 expect "a press that never reached the guest blames the hit test" "yes" \
   "$(blames "hit-tested" 0 SAW_GUEST=0)"
 expect "a press that never reached the guest is not read as the defect" "no" \
   "$(blames "THE DEFECT" 0 SAW_GUEST=0)"
-# SAW_AT_ELEMENT=0 with it, because "the element said nothing" is the case
-# this arm is about: an event that fired and did not travel is the arm below.
-# With the step readings present this is the sharper arm rather than the
-# generic one: the guard knows the focus took and the override did not run.
+# With SAW_AT_ELEMENT=0 the element heard nothing; an event that fired but did
+# not travel is a different arm. With the step readings set, the guard knows
+# the focus took and the override did not run.
 expect "a press that landed and did not cross is the defect" "yes" \
   "$(blames "OVERRIDE DID NOT RUN" 0 SAW_REACHED=0 SAW_AT_ELEMENT=0 \
     SAW_ANNOUNCING=0 SAW_ANNOUNCED=0 SAW_SET_FOCUSED=0)"
-# AND WHICH SIDE OF THE BOUNDARY IT IS ON, which is the whole reason the blur
-# is read at all: the same absence means two different faults, in two different
-# processes, and a sentence that named one of them by symmetry would send the
-# next person to the wrong one.
+# The blur says which side of the process boundary the fault is on. The same
+# absence means different faults in different processes.
 expect "a blur with no reach still blames this renderer" "yes" \
   "$(blames "ON THIS SIDE" 0 SAW_REACHED=0 SAW_AT_ELEMENT=0 SAW_BLUR=1 \
     SAW_ANNOUNCING=0 SAW_ANNOUNCED=0)"
@@ -188,49 +165,41 @@ expect "no blur at all does not blame this renderer" "no" \
   "$(blames "ON THIS SIDE" 0 SAW_REACHED=0 SAW_AT_ELEMENT=0 SAW_BLUR=0 \
     SAW_ANNOUNCING=0 SAW_ANNOUNCED=0 SAW_BRANCH=0 SAW_FOCUSED_IT=0 \
     SAW_SET_FOCUSED=0)"
-# AND THE DISPATCH THAT DID NOT TRAVEL, which is a third thing again: the event
-# fired on the element and never reached the document. Asked before the branch
-# is blamed, because an event that fired is not a branch that did not run.
+# The event fired on the element but never reached the document. This is
+# checked before the branch is blamed.
 expect "an event heard only at the element is its own failure" "fail" \
   "$(verdict 0 SAW_REACHED=0 SAW_AT_ELEMENT=1)"
 expect "an event heard only at the element blames the event, not the branch" \
   "yes" "$(blames "does not travel" 0 SAW_REACHED=0 SAW_AT_ELEMENT=1)"
 expect "an element that said nothing at all does not blame bubbling" "no" \
   "$(blames "does not travel" 0 SAW_REACHED=0 SAW_AT_ELEMENT=0)"
-# AND THE ORDER THE TWO ARE ASKED IN, which is the whole reason this chain is
-# ordered: with neither reading, the press never arriving is what happened.
+# With neither reading, the press never arrived, so the hit test is blamed.
 expect "neither reading blames the hit test rather than the crossing" "yes" \
   "$(blames "hit-tested" 0 SAW_GUEST=0 SAW_REACHED=0)"
 
 echo
 echo "what the engine itself said, which is the layer the page cannot report"
-# THE THREE THAT READ IDENTICALLY FROM THE PAGE. Every reading above is a
-# listener in a document, so all of them go quiet together — and the engine
-# never running, the engine running and the page not hearing, and a handler
-# that never returned are three faults in three layers with one symptom. These
-# are the arms that tell them apart, and they are asked BEFORE the blur, which
-# only ever said which side of the process boundary to look on.
+# Every page reading is a document listener, so they all go quiet together.
+# These engine log lines tell apart three faults with that one symptom: the
+# engine never ran, the page did not hear it, or the handler never returned.
+# They are checked before the blur.
 expect "an announcement that never finished blames the handler" "yes" \
   "$(blames "DID NOT COME OUT" 0 SAW_REACHED=0 SAW_AT_ELEMENT=0 SAW_ANNOUNCED=0)"
 expect "an announcement that finished, unheard, blames the event" "yes" \
   "$(blames "NOTHING IN THE DOCUMENT HEARD" 0 SAW_REACHED=0 SAW_AT_ELEMENT=0)"
-# AND THE ONE THAT IS STILL THE FORK'S OWN CODE: the engine said nothing, so
-# SetFocused never ran with received=true, whatever the element ended up as.
-# Every step reported and still nothing announced: the one arm left, and
-# the only one that says the fault is inside the announcement itself.
+# The engine said nothing, so SetFocused never ran with received=true. With
+# every earlier step reported, the fault is inside the announcement itself.
 expect "no announcement with every step reported blames the last two lines" \
   "yes" "$(blames "ON THIS SIDE" 0 SAW_REACHED=0 SAW_AT_ELEMENT=0 \
     SAW_ANNOUNCING=0 SAW_ANNOUNCED=0)"
 expect "no announcement at all does not blame the event" "no" \
   "$(blames "NOTHING IN THE DOCUMENT HEARD" 0 SAW_REACHED=0 SAW_AT_ELEMENT=0 \
     SAW_ANNOUNCING=0 SAW_ANNOUNCED=0 SAW_SET_FOCUSED=0)"
-# An event that fired at the element is still the bubbling arm, announced or
-# not: the dispatch demonstrably happened, so which layer it happened in is
-# no longer the question.
+# An event that fired at the element is the bubbling arm whether or not it
+# was announced.
 expect "an event heard at the element outranks the engine's own lines" "yes" \
   "$(blames "does not travel" 0 SAW_REACHED=0 SAW_AT_ELEMENT=1)"
-# And the browser-process arm survives all of it: with no blur AND no
-# announcement, nothing crossed into this renderer at all.
+# With no blur and no announcement, nothing reached this renderer.
 expect "no blur and no announcement still blames the browser process" "yes" \
   "$(blames "browser process" 0 SAW_REACHED=0 SAW_AT_ELEMENT=0 SAW_BLUR=0 \
     SAW_ANNOUNCING=0 SAW_ANNOUNCED=0 SAW_BRANCH=0 SAW_FOCUSED_IT=0 \
@@ -238,11 +207,11 @@ expect "no blur and no announcement still blames the browser process" "yes" \
 
 echo
 echo "which step of the fork's own path stopped, once nothing was announced"
-# THREE STEPS, ASKED OUTWARD IN. Run 193 read activeElement=webview with
-# nothing announced, which four different faults produce and which no reading
-# taken in the page can separate: the branch not running, the owner not
-# casting, the focus being refused, and the override not being on the path.
-silent() { # the run 193 shape, then overrides
+# activeElement=webview with nothing announced has four possible causes that
+# no page reading can separate: the branch did not run, the owner cast
+# failed, focus was refused, or the override was not on the path. The steps
+# are checked from the outermost in.
+silent() { # nothing announced, then overrides
   blames "$1" 0 SAW_REACHED=0 SAW_AT_ELEMENT=0 SAW_ANNOUNCING=0     SAW_ANNOUNCED=0 "${@:2}"
 }
 expect "a branch that never saw a webview is named first" "yes" \
@@ -252,9 +221,7 @@ expect "a branch that ran and was refused names the refusal" "yes" \
   "$(silent "FOCUS WAS REFUSED" SAW_FOCUSED_IT=0 SAW_SET_FOCUSED=0)"
 expect "a focus that took, with no override, names the override" "yes" \
   "$(silent "OVERRIDE DID NOT RUN" SAW_SET_FOCUSED=0)"
-# AND THE ORDER, which is the point of asking them outward in: a run with none
-# of the three is the first arm, not the last, because a branch that never ran
-# explains the two readings after it and they do not explain it.
+# A branch that never ran explains the later readings, so it is named first.
 expect "a branch that never ran does not blame the override" "no" \
   "$(silent "OVERRIDE DID NOT RUN" SAW_BRANCH=0 SAW_FOCUSED_IT=0 \
     SAW_SET_FOCUSED=0)"
@@ -264,10 +231,8 @@ expect "a branch that never ran does not blame the refusal" "no" \
 
 echo
 echo "the focus event, which every focus-based handler in a shell is written against"
-# THE ENGINE'S OWN EVENT IS NOT ENOUGH ON ITS OWN. A popover's focus-out
-# dismissal, a focus trap and React's onFocus all listen for `focusin`, so a
-# run where only the element's announcement arrived is one where every one of
-# them is still blind to a click in a page.
+# Popover dismissal, focus traps and React's onFocus all listen for `focusin`,
+# so the engine's own event alone is not enough.
 expect "an announcement with no focusin is a failure" "fail" \
   "$(verdict 0 SAW_FOCUSIN=0)"
 expect "an announcement with no focusin names the focus event" "yes" \
@@ -293,14 +258,13 @@ expect "nothing reached is the pass" "pass" \
 expect "a reach is the failure" "fail" "$(verdict 1 SAW_GUEST=0)"
 expect "a reach says the positive run would be measuring the configuration" \
   "yes" "$(blames "not evidence" 1 SAW_GUEST=0)"
-# The press landing in the guest at all means the two runs differ somewhere
-# other than where they were meant to, and the geometry is the only thing that
-# decides where a press lands.
+# A press in the guest means the two runs differ in geometry, which decides
+# where a press lands.
 expect "a press in the guest is the control's failure" "fail" "$(verdict 1)"
 expect "a press in the guest blames the geometry" "yes" \
   "$(blames "geometry" 1)"
-# The control is a control whatever the rest of the readings say: it never
-# clicks into the window, so what the window contains is not its business.
+# The control never clicks into the window, so the window's contents and
+# activeElement do not matter.
 expect "an empty window is not the control's business" "pass" \
   "$(verdict 1 SAW_GUEST=0 SAW_REACHED=0 SAW_FOCUSIN=0 SAW_PAGE=0)"
 expect "activeElement is not the control's business" "pass" \

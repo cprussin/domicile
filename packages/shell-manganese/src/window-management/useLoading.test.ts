@@ -5,12 +5,8 @@ import { act, renderHook } from "@testing-library/react";
 import { useLoading } from "./useLoading";
 
 /**
- * A stand-in for the fork's element: the property a chrome reads, and the
- * event that tells it to read it again.
- *
- * `defineProperty` rather than assignment because it is readonly on the real
- * element — whether the guest is still fetching its page is the browser
- * process's to say, and nothing in the page writes it.
+ * A fake `<webview>` with `loading` and the change event. `defineProperty`
+ * because `loading` is readonly on the real element.
  */
 const guest = () => {
   const element = document.createElement("webview");
@@ -30,10 +26,8 @@ const guest = () => {
 };
 
 describe("useLoading", () => {
-  // THE PROPERTY IS THE STATE AND THE EVENT IS ONLY A NUDGE. A chrome that
-  // learned this from the event alone would know nothing about a guest that
-  // started loading before this hook's first effect ran, and would show a
-  // settled window over a page still on its way.
+  // The hook must read on mount: a guest may start loading before the first
+  // effect runs, and that event is missed.
   it("reads whether the view is loading as it mounts, having heard nothing", () => {
     const view = guest();
     view.loads(true);

@@ -36,9 +36,7 @@ describe(Select, () => {
           placeholder="Choose a font…"
         />,
       );
-      // The trigger contains the value span AND the caret icon; assert on
-      // the substring so the caret's text representation doesn't poison the
-      // equality check.
+      // The trigger also holds the caret icon, so match a substring.
       expect(
         screen.getByRole("combobox", { name: "Font" }).textContent,
       ).toContain("Serif");
@@ -78,9 +76,7 @@ describe(Select, () => {
       const user = userEvent.setup();
       let seen: string | null | undefined;
       const Controlled = () => {
-        // `null` (not `undefined`) for the initial controlled state so
-        // base-ui doesn't see a controlled/uncontrolled transition when
-        // the first selection lands.
+        // `null`, not `undefined`, keeps base-ui in controlled mode.
         const [value, setValue] = useState<string | null>(null);
         return (
           <Select

@@ -1,6 +1,5 @@
-// The shell's entry point: `Shell`, which wires the SDK to whatever host this
-// page was opened under and mounts the React desktop on top of it. Importing
-// this module does nothing but install its stylesheet.
+// Entry point: `Shell` connects the SDK to the host and mounts the React
+// desktop. Importing this module only installs its stylesheet.
 
 import { connectToHost } from "@domicile-desktop/sdk/connect-to-host";
 import { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
@@ -14,15 +13,14 @@ import "./shell.css";
 
 /** The simple desktop, mounted into `root`. */
 export const Shell: ShellModule = (root) => {
-  // Under the fork this is `window.domicile`, the control channel the engine
-  // puts on a document it served. In a plain browser there is none, and
-  // `connectToHost` says so on the console and hands back a stand-in, so the
-  // desktop still opens against windows that will never arrive.
+  // Under the fork this is `window.domicile`, the engine's control channel. In
+  // a plain browser `connectToHost` logs a warning and returns a stub, so the
+  // desktop still opens.
   const domicile = new DomicileClient(connectToHost(window));
   registerElements(domicile);
 
-  // A container of our own: the document reports a failure by appending to
-  // `root`, and a React root that owned it would wipe the report.
+  // Mount in a separate container: the document appends failure reports to
+  // `root`, and a React root there would erase them.
   const mount = document.createElement("div");
   root.append(mount);
   createRoot(mount).render(<Desktop domicile={domicile} />);

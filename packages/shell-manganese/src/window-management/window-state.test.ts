@@ -81,8 +81,8 @@ describe("the windows a host announces", () => {
   });
 
   it("grants a client asking for the keyboard, on the workspace it is on", () => {
-    // A client asking over xdg-activation, which the compositor forwards
-    // without granting: manganese grants it and goes to where the window is.
+    // The compositor forwards xdg-activation requests without granting them;
+    // manganese grants them and switches to the window's workspace.
     const state = reduce(
       desktop("kitty", "editor"),
       WindowAction.WorkspaceSelected("2"),
@@ -116,16 +116,16 @@ describe("the browser windows the shell opens itself", () => {
   });
 
   it("leaves a client's window for the client to close", () => {
-    // `closeApp` is a request: an editor with unsaved work may put a dialog
-    // up and stay, so the window goes when the host says it went.
+    // `closeApp` is a request: an editor with unsaved work may stay open, so
+    // the window is removed only when the host reports it closed.
     const state = reduce(desktop("editor"), WindowAction.WindowKilled());
 
     expect(state.windows).toHaveLength(1);
   });
 });
 
-// `chrome.windows.create` with a popup — Bitwarden's "Unlock" — which the
-// desktop opens as a browser window that is the extension's window.
+// `chrome.windows.create` with a popup (such as Bitwarden's "Unlock"), opened
+// as a browser window owned by the extension.
 describe("the windows an extension asks for", () => {
   const POPUP = "chrome-extension://vault/popup/index.html?uilocation=popout";
 
@@ -155,7 +155,7 @@ describe("the windows an extension asks for", () => {
     expect(floatOf(state)).toMatchObject({ height: 630, width: 380 });
   });
 
-  // 0 is the engine saying the extension named no size on that axis.
+  // 0 means the extension gave no size on that axis.
   it("opens at a float's own size on an axis it did not ask about", () => {
     const state = reduce(
       desktop("kitty"),
@@ -174,9 +174,8 @@ describe("the windows an extension asks for", () => {
 
 describe("the screens", () => {
   it("is one screen nobody has named until the host describes a desk", () => {
-    // A window can open before the handshake is answered, so there is always
-    // somewhere for one to be. No display is called "", so nothing is drawn
-    // on this screen -- it is where the desktop is while nobody can see it.
+    // A window can open before the handshake, so a screen always exists. No
+    // display is named "", so nothing is drawn on it.
     expect(NO_WINDOWS.screens).toEqual([
       {
         box: { height: 0, width: 0, x: 0, y: 0 },
@@ -188,10 +187,8 @@ describe("the screens", () => {
   });
 
   it("gives the first named screen what the unnamed one was showing", () => {
-    // The handshake's worth of desktop. A window that opened before the desk
-    // was described is on a workspace, and that workspace is what the screen
-    // it is finally drawn on shows -- otherwise the first frame of a desk is
-    // a window that has already been lost.
+    // A window opened before the desk was described keeps its workspace, which
+    // the first real screen then shows.
     const state = reduce(
       desktop("kitty"),
       WindowAction.ScreensDescribed(sideBySide("left", "right")),
@@ -203,9 +200,8 @@ describe("the screens", () => {
   });
 
   it("shows a workspace nobody else is on when a monitor is plugged in", () => {
-    // A SCREEN IS A WORKSPACE THE USER CAN SEE, and two screens showing one
-    // workspace would be one workspace drawn twice -- which is one window
-    // embedded twice, and the second embedding takes the first's pixels.
+    // Two screens on one workspace would embed each window twice, and the
+    // second embedding takes the first's pixels.
     const state = reduce(
       desktop("kitty"),
       WindowAction.ScreensDescribed(sideBySide("left")),
@@ -217,8 +213,8 @@ describe("the screens", () => {
   });
 
   it("leaves a screen that was already there showing what it was", () => {
-    // Every hotplug re-describes the whole desk, and a monitor that had
-    // nothing to do with it must not have its workspace taken away.
+    // Every hotplug re-describes the whole desk, so unaffected monitors must
+    // keep their workspaces.
     const state = reduce(
       desktop("kitty"),
       WindowAction.ScreensDescribed(sideBySide("left", "right")),
@@ -231,8 +227,8 @@ describe("the screens", () => {
   });
 
   it("keeps where each screen is on the desk, as the host last said", () => {
-    // What `focus left` reads to find the screen beside this one, and a
-    // monitor dragged about in the display settings is one re-described.
+    // `focus left` uses these positions, and moving a monitor in display
+    // settings re-describes it.
     const state = reduce(
       desktop(),
       WindowAction.ScreensDescribed(sideBySide("left", "right")),
@@ -246,13 +242,12 @@ describe("the screens", () => {
   });
 
   it("hands a swapped monitor what the one it replaced was showing", () => {
-    // A dock changed and every name is new. The workspaces are the user's
-    // work and the screens are hardware, so the work stays where it was
-    // rather than every monitor coming back on workspace 1.
+    // A dock change renames every output. Workspaces carry over instead of
+    // every monitor resetting to workspace 1.
     const state = reduce(
       desktop("kitty"),
       WindowAction.ScreensDescribed(sideBySide("left", "right")),
-      // To the right-hand monitor, and then to some workspace on it.
+      // Switch to the right monitor, then to a workspace on it.
       WindowAction.WorkspaceSelected("2"),
       WindowAction.WorkspaceSelected("7"),
       WindowAction.ScreensDescribed(sideBySide("left", "docked")),
@@ -274,9 +269,8 @@ describe("the screens", () => {
   });
 
   it("keeps the desktop on one unnamed screen when the last monitor goes", () => {
-    // A lid shut on a laptop with nothing plugged in. The windows are still
-    // open and still on their workspaces; there is nowhere to draw them, which
-    // is a different thing and is what the empty name says.
+    // A laptop lid closed with nothing plugged in. Windows stay on their
+    // workspaces; the empty name means there is nowhere to draw them.
     const state = reduce(
       desktop("kitty"),
       WindowAction.ScreensDescribed(sideBySide("left")),
@@ -296,8 +290,8 @@ describe("the screens", () => {
 
 describe("a key pressed on the desk", () => {
   it("is counted", () => {
-    // In the desktop rather than in the component that heard it, because what
-    // answers it by moving the pointer is the monitor the keyboard went to.
+    // Counted in the desk state because the monitor that receives focus answers
+    // it by warping the pointer.
     const pressed = reduce(
       NO_WINDOWS,
       WindowAction.KeyPressed(),
@@ -332,11 +326,8 @@ describe("the workspaces", () => {
   });
 
   it("moves the keyboard to the screen already showing the one named", () => {
-    // sway's own answer, and the only one that keeps a workspace in one
-    // place: the user asked for work they can already see, so what moves is
-    // the keyboard rather than the workspace. Taking it here instead would
-    // leave the monitor it came from showing nothing and put two screens on
-    // one workspace.
+    // As in sway, focus moves to the screen showing the workspace instead of
+    // moving the workspace. Moving it would leave one monitor empty.
     const state = reduce(
       desktop("kitty"),
       WindowAction.ScreensDescribed(sideBySide("left", "right")),
@@ -361,9 +352,7 @@ describe("the workspaces", () => {
   });
 
   it("opens a window on the screen the keyboard is on", () => {
-    // Windows per screen is the whole point of the desk having several. A
-    // window that opened on the first screen whatever the user was looking at
-    // is a desk of one monitor with two dark ones beside it.
+    // A new window opens on the focused screen, not always on the first.
     const state = reduce(
       desktop(),
       WindowAction.ScreensDescribed(sideBySide("left", "right")),
@@ -388,8 +377,8 @@ describe("the workspaces", () => {
   });
 
   it("tiles it there even while a floating group has the keyboard", () => {
-    // Only a window that opens joins the floating group; one sent over lands
-    // tiled, however that workspace was left.
+    // Only a newly opened window joins the floating group; a window sent here
+    // lands tiled.
     const state = reduce(
       desktop("kitty", "editor"),
       WindowAction.ContainerSplit(Axis.Vertical),
@@ -421,8 +410,8 @@ describe("the workspaces", () => {
 
 describe("the workspaces each screen has", () => {
   /**
-   * Two monitors, with kitty on the left-hand one's workspace 1 and an editor
-   * on workspace 2, which the right-hand one showed and has since left for 3.
+   * Two monitors: kitty on the left one's workspace 1, and an editor on
+   * workspace 2, which the right one showed before switching to 3.
    */
   const twoScreens = (): WindowState =>
     reduce(
@@ -434,7 +423,7 @@ describe("the workspaces each screen has", () => {
     );
 
   it("keeps a workspace on the screen it was last shown on", () => {
-    // sway's: a workspace belongs to one output, and only that output's bar
+    // As in sway, a workspace belongs to one output, and only that output's bar
     // lists it.
     const state = twoScreens();
 
@@ -534,7 +523,7 @@ describe("the scratchpad", () => {
 });
 
 describe("focus across screens", () => {
-  /** Kitty on the left screen, the editor and a terminal on the right. */
+  /** Kitty on the left screen; the editor and a terminal on the right. */
   const twoScreens = () =>
     reduce(
       desktop("kitty"),
@@ -545,8 +534,7 @@ describe("focus across screens", () => {
     );
 
   it("goes on to the screen that way from the edge of the tiling", () => {
-    // sway's order: a window that way, then a screen that way, and only then
-    // the wrap round.
+    // sway's order: a window that way, then a screen that way, then wrap.
     const state = reduce(
       twoScreens(),
       WindowAction.FocusStepped(Direction.Left),
@@ -695,8 +683,8 @@ describe("what the compositor says about the keyboard", () => {
   });
 
   it("leaves the window being worked in alone when the chrome takes it", () => {
-    // Pressing the top bar hands the keyboard back to the page, and the
-    // window the user is working in has not changed.
+    // Pressing the top bar gives keyboard focus to the page, but the active
+    // window is unchanged.
     const state = reduce(
       desktop("kitty", "editor"),
       WindowAction.FocusChanged(undefined),
@@ -707,8 +695,8 @@ describe("what the compositor says about the keyboard", () => {
   });
 
   it("says nothing twice", () => {
-    // The host tells a chrome that has just connected where the keyboard is,
-    // which is usually what the shell already knew.
+    // The host reports focus to a newly connected chrome, which usually matches
+    // the existing state.
     const state = reduce(desktop("kitty"), WindowAction.FocusChanged("kitty"));
 
     expect(reduceWindows(state, WindowAction.FocusChanged("kitty"))).toBe(
@@ -729,9 +717,7 @@ describe("the pointer", () => {
   });
 
   it("raises a floating window it crosses into", () => {
-    // Every kind of window the same way: a client's window used to come up
-    // only because the compositor echoed the focus back as a reach, and a
-    // browser window, which names no client, never did.
+    // Applies to every window kind, including browser windows with no client.
     const state = reduce(
       desktop("kitty", "editor"),
       WindowAction.FloatToggled(),
@@ -745,9 +731,8 @@ describe("the pointer", () => {
     ).toEqual([APP("kitty"), APP("editor")]);
   });
 
-  // A HIDDEN TAB IS NOT A WINDOW THE POINTER CAN BE IN. Crossing a tab row on
-  // the way into a container is arriving at the container, so the keyboard
-  // goes to the tab it shows; changing which one it shows is a click's job.
+  // Crossing a tab row enters the container, so focus goes to its shown tab.
+  // Only a click changes the shown tab.
   it("goes to the open tab of a container whose hidden tab it crosses", () => {
     const state = reduce(
       desktop("kitty", "editor"),
@@ -779,7 +764,7 @@ describe("the pointer", () => {
   });
 
   it("goes to a fullscreen window a tab opened since would hide", () => {
-    // A window filling the screen is on screen whatever the tree says.
+    // A fullscreen window is visible regardless of the tree.
     const state = reduce(
       desktop("kitty"),
       WindowAction.FullscreenToggled(false),
@@ -791,8 +776,8 @@ describe("the pointer", () => {
   });
 
   it("reports a window on another workspace as nothing at all", () => {
-    // Which cannot happen from the page — an off-screen window has no box to
-    // point at — and would be a focus on something the user cannot see.
+    // The page cannot report this, since an off-screen window has no box, and
+    // it would focus something invisible.
     const state = reduce(
       desktop("kitty", "editor"),
       WindowAction.WindowSentToWorkspace("2"),
@@ -804,12 +789,9 @@ describe("the pointer", () => {
   });
 
   it("answers a press in the window it is already in with the same state", () => {
-    // `AppWindow` reports every press a client's window takes, the ones that
-    // move no focus included — focus follows the cursor, so that is most of
-    // them — and leans on the reduction to make those cost nothing. An
-    // object that came back different would re-render the desktop on every
-    // click, and would run the focus chain back down to the window, which is
-    // `focus parent` undone.
+    // `AppWindow` reports every press, most of which change nothing. Returning
+    // a new object would re-render the desktop on every click and undo `focus
+    // parent`.
     const state = reduce(
       desktop("kitty", "editor"),
       WindowAction.ParentFocused(),
@@ -821,10 +803,8 @@ describe("the pointer", () => {
   });
 
   it("goes to the workspace of a window that asks to be reached", () => {
-    // `xdg-activation`, which this shell grants: the window is already the
-    // one its own workspace has the focus on, so reaching for it moves
-    // nothing *there* — and going there is the whole of what granting it
-    // means.
+    // `xdg-activation`, which this shell grants. The window already has its
+    // workspace's focus, so granting means switching to that workspace.
     const state = reduce(
       desktop("kitty", "editor"),
       WindowAction.WindowSentToWorkspace("2"),
@@ -836,10 +816,8 @@ describe("the pointer", () => {
   });
 
   it("moves the keyboard to the screen the window it crossed is on", () => {
-    // FOCUS FOLLOWS THE POINTER ACROSS MONITORS, which is the whole of how a
-    // desk of several is worked: the hand moves to the other screen and the
-    // keys follow it. Each screen is a page of its own drawing its own
-    // windows, so the page that saw the pointer is the one that says this.
+    // Focus follows the pointer across monitors. Each screen is its own page,
+    // so the page that saw the pointer reports it.
     const state = reduce(
       desktop(),
       WindowAction.ScreensDescribed(sideBySide("left", "right")),
@@ -854,8 +832,8 @@ describe("the pointer", () => {
   });
 
   it("moves the keyboard to a screen it crossed onto with no window under it", () => {
-    // sway's focus follows the pointer onto an empty output too: a workspace
-    // with nothing on it is still where the next window should open.
+    // As in sway, focus follows the pointer onto an empty output, where the
+    // next window should open.
     const state = reduce(
       desktop(),
       WindowAction.ScreensDescribed(sideBySide("left", "right")),
@@ -868,8 +846,7 @@ describe("the pointer", () => {
   });
 
   it("answers a pointer on the screen the keyboard is on with the same state", () => {
-    // Said on every move of the hand, so a move that changed nothing must
-    // cost the desktop nothing.
+    // Reported on every pointer move, so a no-op must return the same state.
     const state = reduce(
       desktop(),
       WindowAction.ScreensDescribed(sideBySide("left", "right")),
@@ -881,8 +858,8 @@ describe("the pointer", () => {
   });
 
   it("leaves the keyboard where it is for a screen the desk has not taken up", () => {
-    // A monitor just plugged in is a page that can see the pointer a beat
-    // before the page that reduces has been told the screen is there.
+    // A new monitor's page can see the pointer before the reducer learns the
+    // screen exists.
     const state = reduce(
       desktop(),
       WindowAction.ScreensDescribed(sideBySide("left", "right")),
@@ -921,8 +898,8 @@ describe("the pointer", () => {
   });
 
   it("drags a tiled window's edge by a share of the screen it is on", () => {
-    // Two windows split a 1020-pixel screen across a 20-pixel gap, so a
-    // hundred pixels is a tenth of what they share.
+    // Two windows share a 1020px screen minus a 20px gap, so 100px is a tenth
+    // of their share.
     const state = reduce(
       desktop("kitty", "editor"),
       WindowAction.LayoutSet(Layout.SplitH),
@@ -963,7 +940,7 @@ describe("the pointer", () => {
 });
 
 describe("a floating window dragged across screens", () => {
-  /** Kitty floating on the left of two screens, taken hold of. */
+  /** Kitty floating on the left of two screens, grabbed. */
   const held = () =>
     reduce(
       desktop("kitty"),
@@ -973,7 +950,7 @@ describe("a floating window dragged across screens", () => {
     );
 
   it("goes to the screen its middle crosses onto, in that screen's pixels", () => {
-    // 640 wide from 1700 puts its middle at 2020, a hundred past the edge.
+    // 640 wide from 1700 puts its center at 2020, 100 past the edge.
     const state = reduce(
       held(),
       WindowAction.WindowMoved(APP("kitty"), 1700, 100),
@@ -990,8 +967,8 @@ describe("a floating window dragged across screens", () => {
   });
 
   it("takes the drag in the page's pixels, whichever screen it is on", () => {
-    // One page spans the desk, so a drag is in the desk's coordinates: the
-    // second move lands on the right screen at 1800 - 1920.
+    // One page spans the desk, so drags use desk coordinates: the second move
+    // lands on the right screen at 1800 - 1920.
     const state = reduce(
       held(),
       WindowAction.WindowMoved(APP("kitty"), 1700, 100),
@@ -1033,9 +1010,8 @@ describe("a floating window dragged across screens", () => {
   });
 
   it("takes a browser window across like any other", () => {
-    // The desk draws each window once, so the `<webview>` that crosses is the
-    // one that was there: the page in it does not load again. See
-    // docs/architecture/ONE-PAGE-FOR-THE-DESK.md.
+    // The desk draws each window once, so the `<webview>` keeps its element and
+    // does not reload. See docs/architecture/ONE-PAGE-FOR-THE-DESK.md.
     const state = reduce(
       desktop(),
       WindowAction.ScreensDescribed(sideBySide("left", "right")),
@@ -1055,9 +1031,7 @@ describe("a floating window dragged across screens", () => {
 
 describe("the buttons on a window's own title bar", () => {
   it("fills the screen with the window whose bar it is, not the one being worked in", () => {
-    // The bar is the window's, so pressing anything on it is reaching for that
-    // window: the button fullscreens what it is drawn on rather than whatever
-    // the keyboard happened to be in.
+    // A title bar button acts on its own window, not the focused one.
     const state = reduce(
       desktop("kitty", "editor"),
       WindowAction.WindowFullscreened(APP("kitty")),
@@ -1071,7 +1045,7 @@ describe("the buttons on a window's own title bar", () => {
   });
 
   it("gives the screen back when the same button is pressed again", () => {
-    // The same toggle `mod+f` is, because it is the same command.
+    // The same toggle as `mod+f`.
     const state = reduce(
       desktop("kitty"),
       WindowAction.WindowFullscreened(APP("kitty")),
@@ -1088,8 +1062,7 @@ describe("the clipboard panel", () => {
   });
 
   it("opens and shuts on the same key", () => {
-    // The launcher's rule, for the launcher's reason: the press that reaches
-    // the panel is the press that gives up on it.
+    // Same as the launcher: the key that opens the panel also closes it.
     const opened = reduce(NO_WINDOWS, WindowAction.ClipboardToggled());
     expect(opened.clipboardOpen).toBe(true);
 
@@ -1099,9 +1072,8 @@ describe("the clipboard panel", () => {
   });
 
   it("shuts when it is dismissed, however many times", () => {
-    // Escape, a click on the backdrop, and a row chosen — the panel reports
-    // its own closing on all three, so dismissing a shut one is a state
-    // nobody should have to think about.
+    // Escape, a backdrop click and choosing a row all report a close, so
+    // dismissing a closed panel must be a no-op.
     const dismissed = reduce(
       NO_WINDOWS,
       WindowAction.ClipboardToggled(),
@@ -1119,9 +1091,8 @@ describe("the launcher", () => {
   });
 
   it("opens and shuts on the same key", () => {
-    // One binding, because `mod+space` is what a person presses to *reach*
-    // the launcher and pressing it again is the same reflex as Escape. Two
-    // actions would be a key that only works one way round.
+    // One binding: pressing `mod+space` again to close is the same reflex as
+    // Escape.
     const opened = reduce(NO_WINDOWS, WindowAction.LauncherToggled());
     expect(opened.launcherOpen).toBe(true);
 
@@ -1131,9 +1102,8 @@ describe("the launcher", () => {
   });
 
   it("shuts when it is dismissed, however many times", () => {
-    // Escape, and a click on the backdrop, both of which the dialog reports as
-    // one thing. Idempotent because the dialog reports its own closing too:
-    // dismissing a shut launcher is a state nobody should have to think about.
+    // Escape and a backdrop click both report a close, and the dialog also
+    // reports its own closing, so dismissing a closed launcher must be a no-op.
     const dismissed = reduce(
       NO_WINDOWS,
       WindowAction.LauncherToggled(),
@@ -1145,10 +1115,8 @@ describe("the launcher", () => {
   });
 
   it("shuts behind the browser window it opened", () => {
-    // The panel is how the window was asked for; leaving it up over the answer
-    // would mean typing a URL and then having to dismiss the thing you typed
-    // it into. Nothing else has to remember to close it — the launch closes
-    // it, on whichever of the two paths the query took.
+    // Leaving the launcher over the new window would force the user to dismiss
+    // it. The launch action closes it on both query paths.
     const launched = reduce(
       NO_WINDOWS,
       WindowAction.LauncherToggled(),
@@ -1160,7 +1128,7 @@ describe("the launcher", () => {
   });
 
   it("shuts behind the application it ran, and opens no window itself", () => {
-    // The application is a Wayland client, like the one that opens a file.
+    // The application is a Wayland client, as with opening a file.
     const launched = reduce(
       NO_WINDOWS,
       WindowAction.LauncherToggled(),
@@ -1172,10 +1140,8 @@ describe("the launcher", () => {
   });
 
   it("shuts behind the file it opened, and opens no window itself", () => {
-    // What opens the file is a Wayland client the compositor spawns, so its
-    // window arrives as an `app_appeared` like any other client's. Nothing
-    // here has a window to add, which is the same shape `CommandExecuted`
-    // has.
+    // The file opener is a spawned Wayland client, so its window arrives
+    // through `app_appeared`, as with `CommandExecuted`.
     const launched = reduce(
       NO_WINDOWS,
       WindowAction.LauncherToggled(),
@@ -1199,9 +1165,9 @@ describe("a client's limits on its size", () => {
   };
 
   it("float a window no smaller than its client will draw", () => {
-    // Bitwarden's: a 680x500 minimum, over what a float opens at while no
-    // screen is described.
-    // Smaller, its frame is cut off at the box's edge. Its bar comes on top.
+    // Bitwarden's 680x500 minimum exceeds the default float size when no screen
+    // is described. Smaller, its frame would be cut off at the box's edge. Its
+    // bar comes on top.
     const state = reduce(
       desktop("vault"),
       WindowAction.AppMinSize("vault", [680, 500]),
@@ -1228,8 +1194,8 @@ describe("a client's limits on its size", () => {
   });
 
   it("grow a float when the limit arrives after it", () => {
-    // A client says its limits on a commit of its own, which can come after
-    // the user floated it.
+    // A client sends its limits on its own commit, which can come after the
+    // window was floated.
     const state = reduce(
       desktop("vault"),
       WindowAction.FloatToggled(),
@@ -1261,8 +1227,8 @@ describe("a client's limits on its size", () => {
   });
 
   it("keep the edge nobody dragged where it was", () => {
-    // Dragged in from the left, the right edge stays put — so a window held
-    // at its smallest stops rather than sliding right.
+    // Dragged in from the left, the right edge stays put, so a window at its
+    // minimum stops instead of sliding right.
     const floated = reduce(
       desktop("vault"),
       WindowAction.AppMinSize("vault", [680, undefined]),
@@ -1301,7 +1267,7 @@ describe("a client's popups", () => {
     );
 
     expect(state.popups).toEqual([{ ...MENU, position: [40, 30] }]);
-    // And never as windows: a menu in a frame of its own is the bug.
+    // Popups are never windows: a menu in its own frame is a bug.
     expect(state.windows.map(({ id }) => id)).toEqual([APP("term")]);
   });
 

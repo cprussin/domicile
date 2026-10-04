@@ -3,23 +3,19 @@ import { useEffect, useState } from "react";
 
 import { watchAudioLevels } from "./watch-audio-levels";
 
-/** How often the ask is renewed: well inside the compositor's lease. */
+/** Renewal interval in ms; shorter than the compositor's metering lease. */
 const RENEW_EVERY = 1000;
 
-/** The quietest a meter shows, in decibels: anything below is empty. */
+/** The lowest level a meter shows, in dB. Quieter reads as empty. */
 const FLOOR_DB = -60;
 
 /**
- * Meter `ids` while this is mounted, and read each one's level — 0 through 1
- * of the meter, in decibels from {@link FLOOR_DB} to full scale, which is how
- * a meter reads loud and quiet alike.
+ * Meters `ids` while mounted and returns each one's level from 0 to 1, on a dB
+ * scale from {@link FLOOR_DB} to full scale.
  *
- * **The ask is a lease**: renewed every second, and let go of when this
- * unmounts or the ids change — metering a microphone records it, and a panel
- * that shut must not leave it recording. See `watchAudioLevels` on the client.
- *
- * `watch` and `renewEvery` are injected so a test can drive the meters and
- * wait out a renewal.
+ * The request is a lease: it is renewed every `renewEvery` ms and released on
+ * unmount or when `ids` change. Metering a microphone records it, so a closed
+ * panel must not leave metering on. See `watchAudioLevels` on the client.
  */
 export const useMeters = (
   domicile: DomicileClient,
@@ -41,8 +37,7 @@ export const useMeters = (
       }),
     [domicile, watch],
   );
-  // One string, so an array that is new each render but says the same thing
-  // asks nothing again.
+  // Joined so a new array with the same ids does not re-run the effect.
   const asked = ids.join("\n");
   useEffect(() => {
     const watched = asked === "" ? [] : asked.split("\n");
@@ -58,7 +53,7 @@ export const useMeters = (
   return levels;
 };
 
-/** A linear peak as a point on the meter. */
+/** Converts a linear peak to a 0–1 meter position. */
 const onTheMeter = (peak: number) =>
   peak <= 0
     ? 0

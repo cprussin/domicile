@@ -1,14 +1,11 @@
-//! GPU buffers of the compositor's own, allocated through libgbm.
+//! Allocates the compositor's own GPU buffers through libgbm.
 //!
-//! An shm client has no dmabuf, and the engine takes nothing else, so the
-//! compositor makes one per frame it copies — see [`crate::uploads`]. EGL
-//! cannot allocate a dmabuf and Smithay's allocator links libgbm, which would
-//! break the promise `Cargo.toml` makes about linking nothing but
-//! libxkbcommon; so libgbm is `dlopen`ed, the way libEGL and libpam are.
+//! The engine accepts only dmabufs, so shm frames are copied into these (see
+//! [`crate::uploads`]). libgbm is `dlopen`ed, like libEGL and libpam, because
+//! `Cargo.toml` links only libxkbcommon.
 //!
-//! **A buffer is exported and the gbm object dropped at once.** The dmabuf fd
-//! holds its own reference to the memory, so the compositor keeps an fd and
-//! nothing else — which is also all the engine is ever handed.
+//! Each buffer is exported and its gbm object destroyed at once. The dmabuf fd
+//! keeps the memory alive.
 
 use std::ffi::{c_int, c_void, CString};
 use std::fs::File;
@@ -22,10 +19,10 @@ use thiserror::Error;
 
 use crate::uploads::Shape;
 
-/// The name every Mesa and NVIDIA install answers to.
+/// The libgbm soname on Mesa and NVIDIA installs.
 pub const LIBRARY: &str = "libgbm.so.1";
 
-/// Why there is no allocator. Each says what to install or what is wrong.
+/// Why the allocator could not be created. Each message says what to fix.
 #[derive(Debug, Error)]
 pub enum NoGbm {
     #[error("{library} is not loadable, so shm clients cannot be shown: {source}")]
@@ -53,7 +50,7 @@ pub enum NoGbm {
     Device { node: PathBuf },
 }
 
-/// Why one buffer could not be made.
+/// Why a buffer could not be allocated.
 #[derive(Debug, Error)]
 pub enum AllocationError {
     #[error("libgbm would not allocate a {width}x{height} buffer of fourcc {fourcc:#010x}")]
@@ -70,8 +67,8 @@ pub enum AllocationError {
 pub struct Gbm {
     functions: Functions,
     device: *mut c_void,
-    /// The node the device was created on. libgbm does not own the fd, so it
-    /// is kept open for as long as the device is.
+    /// The render node. libgbm does not own the fd, so it stays open for the
+    /// device's lifetime.
     _node: File,
 }
 
@@ -82,7 +79,7 @@ impl std::fmt::Debug for Gbm {
 }
 
 impl Gbm {
-    /// A device on `node`, through the libgbm named `library`.
+    /// Opens a device on `node` through the libgbm named `library`.
     pub fn open(library: &str, node: &Path) -> Result<Gbm, NoGbm> {
         let functions = Functions::load(library)?;
         let file = File::options()
@@ -108,8 +105,8 @@ impl Gbm {
         }
     }
 
-    /// A buffer of `shape` the GPU can render into, laid out with one of
-    /// `modifiers` — or as the driver likes, when none is named.
+    /// Allocates a renderable buffer of `shape` with one of `modifiers`, or the
+    /// driver's choice if `modifiers` is empty.
     pub fn allocate(&self, shape: Shape, modifiers: &[u64]) -> Result<Dmabuf, AllocationError> {
         let Shape {
             width,
@@ -146,7 +143,7 @@ impl Gbm {
         exported
     }
 
-    /// Every plane of `bo` as a Smithay dmabuf.
+    /// Exports every plane of `bo` as a Smithay dmabuf.
     fn export(&self, bo: *mut c_void, shape: Shape) -> Result<Dmabuf, AllocationError> {
         let format = Fourcc::try_from(shape.fourcc).map_err(|_| AllocationError::Export)?;
         // SAFETY: `bo` is live for the whole of this function.
@@ -189,7 +186,7 @@ impl Drop for Gbm {
     }
 }
 
-/// `GBM_BO_USE_RENDERING`: the GPU draws into it, which is how the copy lands.
+/// `GBM_BO_USE_RENDERING`: the copy is drawn into the buffer by the GPU.
 const USE_RENDERING: u32 = 1 << 2;
 
 type CreateDevice = unsafe extern "C" fn(fd: c_int) -> *mut c_void;
@@ -217,8 +214,7 @@ type BoGetFdForPlane = unsafe extern "C" fn(bo: *mut c_void, plane: c_int) -> c_
 type BoGetOffset = unsafe extern "C" fn(bo: *mut c_void, plane: c_int) -> u32;
 type BoGetStrideForPlane = unsafe extern "C" fn(bo: *mut c_void, plane: c_int) -> u32;
 
-/// The entry points of libgbm this uses, and the library that keeps them
-/// valid.
+/// The libgbm entry points this module uses.
 struct Functions {
     create_device: CreateDevice,
     device_destroy: DeviceDestroy,
@@ -230,7 +226,7 @@ struct Functions {
     bo_get_fd_for_plane: BoGetFdForPlane,
     bo_get_offset: BoGetOffset,
     bo_get_stride_for_plane: BoGetStrideForPlane,
-    /// Held so the entry points above stay mapped. Never read.
+    /// Keeps the entry points mapped. Never read.
     _library: Library,
 }
 
@@ -265,7 +261,7 @@ impl Functions {
     }
 }
 
-/// One entry point out of `library`, or which one it lacks.
+/// Loads one entry point from `library`, or names the missing one.
 ///
 /// # Safety
 ///
@@ -300,7 +296,7 @@ mod tests {
 
     #[test]
     fn a_library_that_is_not_libgbm_is_said_by_what_it_lacks() {
-        // libc is on every machine this runs on, and it is not gbm.
+        // libc is always present and has no gbm symbols.
         let Err(NoGbm::Symbol { symbol, .. }) = Gbm::open("libc.so.6", Path::new("/dev/null"))
         else {
             panic!("a library with no gbm in it is refused");
@@ -310,9 +306,8 @@ mod tests {
 
     #[test]
     fn the_real_libgbm_has_every_entry_point_this_uses() {
-        // Whether a device comes up on a file that is no GPU is Mesa's to
-        // decide -- it falls back to a software one -- so what is asserted is
-        // only that nothing this module calls is missing.
+        // Mesa may fall back to a software device on a non-GPU file, so only
+        // assert that no entry point is missing.
         let opened = Gbm::open(LIBRARY, Path::new("/dev/null"));
         assert!(
             matches!(opened, Ok(_) | Err(NoGbm::Device { .. })),

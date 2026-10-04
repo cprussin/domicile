@@ -5,9 +5,8 @@ import { css } from "../../styled-system/css";
 import { Workspaces } from "./Workspaces";
 
 /**
- * The switcher over four workspaces, with the second of them on screen. The
- * tenth is in the list because two digits are the case a circle drawn around
- * its contents stops being a circle for.
+ * The switcher with four workspaces and the second on screen. Includes the
+ * tenth to test that a two-digit label still gets a circle.
  */
 const switcher = (focused = true) => {
   render(
@@ -32,8 +31,8 @@ describe("Workspaces", () => {
   });
 
   it("rings the one on screen, unfilled, on a screen the keyboard is not on", () => {
-    // One workspace has the keyboard, and it is on one screen: sway's
-    // `focused_workspace` against its `active_workspace`.
+    // One workspace has keyboard focus and it is on one screen: sway's
+    // `focused_workspace` versus `active_workspace`.
     const workspace = switcher(false);
 
     expect(workspace("2").className).not.toContain(
@@ -58,12 +57,9 @@ describe("Workspaces", () => {
   });
 
   it("centers the number on the circle rather than on its baseline", () => {
-    // A line box is as tall as the font's ascent and descent, and a digit
-    // has neither an accent above it nor a tail below: centering that box
-    // leaves the figure sitting a couple of pixels high in the ring.
-    // Trimming the box to the cap and the baseline is what centers what is
-    // actually drawn — and the trim is only honored on a block container,
-    // which is why the chip is one rather than a flex box.
+    // Digits have no ascenders or descenders, so centering the line box leaves
+    // them a few pixels high. Trimming the box to cap height and baseline
+    // centers the glyph, and the trim only works on a block container.
     const workspace = switcher();
 
     for (const name of ["1", "2", "3", "10"]) {
@@ -82,8 +78,7 @@ describe("Workspaces", () => {
         css({ borderRadius: "full" }),
       );
       expect(workspace(name).className).toContain(css({ blockSize: 6 }));
-      // The size, not a floor on it: a circle that took the width of what is
-      // written in it is a lozenge around `10`.
+      // A fixed size, not a minimum, so `10` does not stretch the circle.
       expect(workspace(name).className).toContain(css({ inlineSize: 6 }));
     }
   });

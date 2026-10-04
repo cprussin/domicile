@@ -18,9 +18,8 @@ export { SIZES, type Size } from "../control-sizes";
 type CommonProps = Partial<ControlVariant> & {
   clearable?: boolean | undefined;
   prefixIcon?: ReactNode | undefined;
-  // Narrower than the `Ref<HTMLElement>` base-ui's Input declares: this only
-  // ever draws an `<input>`, and a ref object is invariant in its element, so
-  // the wider type is what would force a cast to hand the element back.
+  // Narrower than base-ui's `Ref<HTMLElement>` since this always renders an
+  // `<input>`. Ref objects are invariant, so the wider type would need a cast.
   ref?: Ref<HTMLInputElement> | undefined;
   rounded?: boolean | undefined;
   width?: number | undefined;
@@ -45,10 +44,8 @@ export const Input = ({
   width,
   ...props
 }: Props) => {
-  // The caller's ref as well as this input's own. The `ref` below is set
-  // after `props` is spread, so an input that did not pass it on here would
-  // replace the caller's ref with its own and hand the element back to
-  // nobody — see `useStableRef` for what that breaks.
+  // Merges the caller's ref with ours, since `ref` below is set after
+  // spreading `props`. See `useStableRef`.
   const [inputRef, setInputRef] = useStableRef<HTMLInputElement>(props.ref);
   const { isEmpty, setValue } = useControlValue({
     defaultValue: props.defaultValue,
@@ -116,17 +113,13 @@ const inputStyles = css({
   textOverflow: "ellipsis",
 });
 
-// The rounded variant inflates inline padding by 1.5 spacing units on top of
-// the `control` recipe's per-size padding (xs: 1.5, sm: 2.5, md: 3, lg: 3.5,
-// xl: 4 — see `CONTROL_PADDING_INLINE` in `control-sizes.ts`), so the pill
-// shape doesn't crowd content. Values inlined as literals (not derived from a
-// helper) so Panda's static extractor can emit the corresponding atomic
-// classes — values from a helper return are opaque to the extractor.
+// `rounded` adds 1.5 spacing units to the recipe's inline padding
+// (`CONTROL_PADDING_INLINE` in `control-sizes.ts`) so the pill shape doesn't
+// crowd content. Values are literals because Panda's static extractor can't
+// read helper results.
 const wrapperStyles = cva({
   base: {
-    // Owned here (not in `wrapperBase`) so Select can override to
-    // `pointer` without losing the property race — see `wrapperBase.ts`
-    // for the rationale.
+    // Not in `wrapperBase`, so Select can override it; see `wrapperBase.ts`.
     cursor: "text",
   },
   compoundVariants: [

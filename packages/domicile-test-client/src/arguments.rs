@@ -1,146 +1,92 @@
-//! What the client was told to open.
+//! The client's command line.
 //!
-//! Stated rather than defaulted, for the reason `domicile-launch` gives about
-//! the compositor's own command line: a check that meant to open a window
-//! called `left` can say so, and one that gets a different window because a
-//! default moved has no way to notice.
+//! Parsing is strict: unknown, repeated and empty arguments are errors, so a
+//! check never gets a different window than it asked for.
 //!
-//! The window's size is not here. Nothing in `scripts/` asks for one — they
-//! need *a* window and assert on what the compositor did with it — so the size
-//! is a constant in `window.rs`, and the flag comes back with the first check
-//! that wants it.
+//! The initial window size is a constant in `window.rs`; no check needs to set
+//! it.
 
 use std::ffi::OsString;
 
 /// What to open.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Arguments {
-    /// The toplevel's title, which is how a chrome names the window and how a
-    /// check tells two of them apart.
+    /// The toplevel's title, which checks use to tell windows apart.
     pub title: String,
-    /// Whether to report the protocol messages this client sees. Off by
-    /// default: a buffer release arrives every frame, and the checks that only
-    /// need a window open should not pay a write for each one.
+    /// Whether to print the protocol messages this client receives.
     pub trace: bool,
-    /// Whether to take the size the compositor configures rather than keeping
-    /// the one this client asked for.
+    /// Whether to resize to the configured size instead of keeping its own.
     ///
-    /// Off by default, and that default is the older behavior on purpose:
-    /// almost every check states a size and wants *that* size, so a client
-    /// that quietly grew to whatever a configure said would make those checks
-    /// about the compositor's arithmetic instead of about their own subject.
-    ///
-    /// On, this client is the chrome. A chrome is the one Wayland client of
-    /// Domicile's whose size is not its own to choose — the compositor sizes
-    /// it to the desktop, so a chrome that ignored a configure is a page in the
-    /// corner of the screen. `e2e-chrome-fills-the-desktop.sh` is that claim,
-    /// and this is what it puts on the chrome's end of it.
+    /// Off by default because most checks rely on a fixed window size. On, the
+    /// client behaves like the chrome, which the compositor sizes to the
+    /// desktop (see `e2e-chrome-fills-the-desktop.sh`).
     pub follow_configure: bool,
 
-    /// Whether the window is see-through rather than opaque.
+    /// Whether the window is half-transparent.
     ///
-    /// Off by default. `e2e-window-shows-through.sh` was its only caller and
-    /// went with the copy path; the flag is kept because a translucent client
-    /// is still the one thing that shows what is behind a window.
-    /// That check reads what the chrome painted where the window is, and a
-    /// headless compositor copies every window into the page rather than
-    /// drawing it itself — so what is legitimately there is the client's own
-    /// pixels. With an opaque client those are indistinguishable from a
-    /// background painted over the window; a half-opaque one makes *fully*
-    /// opaque mean one thing only.
+    /// Lets a check tell the client's own pixels apart from something painted
+    /// over the window.
     pub translucent: bool,
 
-    /// Whether to ask for the keyboard once the window is up.
-    ///
-    /// Off by default: a client that asked on every run would make every check
-    /// about focus. On, it binds `xdg_activation_v1` and activates its own
-    /// surface — the request a Domicile shell is free to refuse, and the only
-    /// way to produce one from a real client.
+    /// Whether to request focus with `xdg_activation_v1` once the window is
+    /// up.
     pub ask_for_focus: bool,
 
-    /// What to put on the clipboard, or nothing to leave it alone.
+    /// Text to offer on the clipboard.
     ///
-    /// **A clipboard check needs a client to hold the bytes.** A Wayland
-    /// selection is an offer rather than a copy: the compositor is told which
-    /// mime types are on offer and every paste is served by the client that
-    /// offered them. So nothing but a real client can put something on a
-    /// clipboard, which is what this is for.
+    /// A Wayland client serves every paste of its own selection, so clipboard
+    /// checks need a real client to hold the data.
     pub copy: Option<String>,
 
-    /// What to put on the middle-click selection, or nothing to leave it
-    /// alone.
+    /// Text to offer on the primary (middle-click) selection.
     ///
-    /// Separate from [`copy`](Self::copy) because the two selections are
-    /// separate — `zwp_primary_selection_device_manager_v1` is its own global
-    /// with its own device — and a client that wrote both from one flag could
-    /// not show a desktop that confuses them.
+    /// Separate from [`copy`](Self::copy) so checks can catch a compositor that
+    /// mixes up the two selections.
     pub copy_primary: Option<String>,
 
-    /// When to take an idle inhibitor, or `None` to take none.
-    ///
-    /// `None` by default: almost every check wants a plain window, and a
-    /// client that vetoed blanking on every run would make the idle checks
-    /// about this flag. Either way round it binds
-    /// `zwp_idle_inhibit_manager_v1` and takes an inhibitor on its own
-    /// surface — what a video player does, and the only way to produce one
-    /// from a real client.
+    /// When to take a `zwp_idle_inhibit_manager_v1` inhibitor on its surface,
+    /// if at all.
     pub hold_the_screens_on: Option<HoldTheScreensOn>,
 
-    /// Whether this client stays when its window is closed.
+    /// Whether to stay connected after its window is closed.
     ///
-    /// Off by default: a client whose window is closed is a client whose job
-    /// is over, and every check but one wants to see it go. On, it destroys
-    /// the `xdg_toplevel` and keeps its connection — which is the one way to
-    /// tell a *window* going away apart from the *client* that had it going
-    /// away, because everything a dead client was holding goes with it.
+    /// On, the client destroys the `xdg_toplevel` but keeps the connection, so
+    /// checks can tell a closed window apart from a client disconnecting.
     pub outlive_its_window: bool,
 
-    /// Whether to read out whatever is offered on either selection.
+    /// Whether to read and trace every offer on either selection.
     ///
-    /// Off by default: a selection is only offered to the client that holds
-    /// the keyboard, so a client that read one would make every check about
-    /// who was focused. On, each offer is read to the end and traced — which
-    /// is a real paste, pipe and all, rather than a report that one was
-    /// possible.
+    /// Selections are only offered to the focused client, so this only works
+    /// once the window has keyboard focus.
     pub paste: bool,
 
-    /// Whether to open a popup over the window once it is up — see
-    /// [`crate::window::POPUP`] for where and how big.
+    /// Whether to open a popup over the window once it is up.
     ///
-    /// Off by default. On, it is a menu that a check can find: its own
-    /// surface, placed against the window's by a positioner, in a color the
-    /// window never draws.
+    /// See [`crate::window::POPUP`] for its placement and color.
     pub popup: bool,
 
-    /// Whether that popup grabs, as a menu does: `--popup-grab` is `--popup`
-    /// with `xdg_popup.grab` before its first commit.
+    /// Whether the popup calls `xdg_popup.grab` before its first commit, as a
+    /// menu does. Implies `popup`.
     pub popup_grab: bool,
-    /// The smallest and largest the window will be, in surface pixels, as
-    /// `xdg_toplevel.set_min_size` and `set_max_size` say them — `0` on an
-    /// axis for no limit. Neither is said unless asked, which is what most
-    /// clients do.
+    /// Size limits for `xdg_toplevel.set_min_size` and `set_max_size`, in
+    /// surface pixels. `0` on an axis means no limit.
     pub min_size: Option<(i32, i32)>,
     pub max_size: Option<(i32, i32)>,
 }
 
-/// When a client takes the inhibitor it was asked for.
-///
-/// Two moments rather than a flag and a second flag, because they are two
-/// answers to one question and a client takes one inhibitor.
+/// When the client takes its idle inhibitor.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HoldTheScreensOn {
-    /// Once the surface has a window, which is when a video player asks.
+    /// After the surface becomes a window, as a video player does.
     OnItsWindow,
-    /// Before the surface has a window at all.
+    /// Before the surface has a role.
     ///
-    /// The protocol allows it — an inhibitor names a surface, and a surface
-    /// need not be anything anybody can see — and it is what a desktop has to
-    /// answer for: a client that took one here and never showed the surface
-    /// would hold the screens on for as long as it ran.
+    /// The protocol allows this. A desktop must not honor it, or a client with
+    /// no visible window could keep the screens on.
     BeforeItHasAWindow,
 }
 
-/// A command line the client will not run.
+/// Why a command line was rejected.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ArgumentError {
     #[error("{flag} needs a value after it")]
@@ -159,7 +105,7 @@ pub enum ArgumentError {
     Unknown { argument: String },
 }
 
-/// Read a client command line, or say why it cannot be run.
+/// Parse the client's command line.
 pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, ArgumentError> {
     let mut title = None;
     let mut trace = None;
@@ -255,11 +201,9 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
     })
 }
 
-/// The value after a flag, refusing one that is missing or empty.
+/// The value after a flag, rejecting a missing or empty one.
 ///
-/// Empty is refused rather than taken: `--title ""` is a caller that meant to
-/// name a window and passed a variable that was not set, and a window with no
-/// name is exactly what a check looking for one by name cannot find.
+/// An empty value usually means the caller passed an unset shell variable.
 fn value(args: &mut impl Iterator<Item = OsString>, flag: &str) -> Result<String, ArgumentError> {
     let stated = args
         .next()
@@ -292,10 +236,7 @@ fn size(
         })
 }
 
-/// Store a flag's value, refusing a second one.
-///
-/// A repeated flag is a caller that thinks it said two things and will be
-/// obeyed on one of them, which is worse than being told.
+/// Store a flag's value, rejecting a repeated flag.
 fn take<T>(slot: &mut Option<T>, flag: &str, stated: T) -> Result<(), ArgumentError> {
     if slot.is_some() {
         Err(ArgumentError::Repeated {

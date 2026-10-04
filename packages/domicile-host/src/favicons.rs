@@ -1,36 +1,34 @@
-//! The icon a bookmark's site names for itself, as a `data:` URL.
-//!
-//! What a browser does: the `<link rel="icon">` the page names, else
-//! `/favicon.ico`. Fetching is the caller's, so this is the choosing and
-//! nothing that touches a network.
+//! Picks a bookmark's favicon as a `data:` URL, the way a browser does: the
+//! page's `<link rel="icon">`, else `/favicon.ico`. The caller does the
+//! fetching.
 
 use url::Url;
 
 use crate::data_url::data_url;
 
-/// The biggest icon sent, for `crate::app_icons`'s reason.
+/// Largest icon sent. Same limit as `crate::app_icons`.
 const LARGEST: usize = 128 * 1024;
 
-/// The size a touch icon is when its link does not say: Apple's.
+/// Assumed size of an unsized touch icon, per Apple.
 const TOUCH_ICON_SIZE: u32 = 180;
 
-/// The size an icon is when its link does not say: a tab's.
+/// Assumed size of an unsized icon, as in a browser tab.
 const UNSIZED: u32 = 16;
 
-/// What a fetch found: where it ended after redirects, what it said it is, and
-/// what it is.
+/// A fetch result: the final URL after redirects, the content type and the
+/// body.
 pub struct Page {
     pub url: String,
     pub content_type: Option<String>,
     pub body: Vec<u8>,
 }
 
-/// The icon `url`'s site names for itself, or none it could be found or drawn.
+/// The favicon for `url` as a `data:` URL, or `None` if none is usable.
 ///
-/// The page's own links first, best first — a drawing, then the biggest — and
-/// only a page that is still on `url`'s site — its host, or one above or
-/// below it, `www.` say: one that redirected elsewhere, to a sign-in page say,
-/// is another site's. Then `/favicon.ico` on that host.
+/// Tries the page's icon links first, SVG then largest. Links are ignored if
+/// the page redirected off-site, for example to a sign-in page; a parent or
+/// subdomain such as `www.` counts as the same site. Then tries
+/// `/favicon.ico`.
 pub fn favicon(url: &str, fetch: impl Fn(&str) -> Option<Page>) -> Option<String> {
     let asked = Url::parse(url).ok()?;
     let linked = fetch(url)
@@ -47,8 +45,7 @@ pub fn favicon(url: &str, fetch: impl Fn(&str) -> Option<Page>) -> Option<String
         .find_map(|icon| fetch(icon.as_str()).and_then(|found| picture(&found)))
 }
 
-/// Whether `landed` is on `asked`'s site: the same host, or one a subdomain of
-/// the other.
+/// Whether the hosts match or one is a subdomain of the other.
 fn same_site(asked: &Url, landed: &Url) -> bool {
     match (asked.host_str(), landed.host_str()) {
         (Some(asked), Some(landed)) => {
@@ -60,7 +57,7 @@ fn same_site(asked: &Url, landed: &Url) -> bool {
     }
 }
 
-/// The icons `html` links, read against `base`, best first.
+/// Icon links in `html`, resolved against `base`, best first.
 fn icon_links(html: &str, base: &Url) -> Vec<Url> {
     let mut found: Vec<(bool, u32, Url)> = tags(&without_comments(html), "link")
         .into_iter()
@@ -87,12 +84,12 @@ fn icon_links(html: &str, base: &Url) -> Vec<Url> {
             Some((drawn, size, href))
         })
         .collect();
-    // Stable, so of two alike the page's first is first.
+    // Stable sort keeps page order among equal icons.
     found.sort_by_key(|(drawn, size, _)| std::cmp::Reverse((*drawn, *size)));
     found.into_iter().map(|(_, _, href)| href).collect()
 }
 
-/// The biggest of a `sizes` attribute's `WxH`s, `any` being bigger than all.
+/// The largest size in a `sizes` attribute. `any` is largest.
 fn largest_size(sizes: &str) -> Option<u32> {
     sizes
         .split_whitespace()
@@ -112,8 +109,7 @@ fn largest_size(sizes: &str) -> Option<u32> {
         .max()
 }
 
-/// `html` with its `<!-- -->` comments taken out, so what they hold is not
-/// read as markup.
+/// Strips `<!-- -->` comments so links inside them are ignored.
 fn without_comments(html: &str) -> String {
     let mut kept = String::with_capacity(html.len());
     let mut rest = html;
@@ -127,7 +123,7 @@ fn without_comments(html: &str) -> String {
     kept
 }
 
-/// An attribute value with the character references a URL has in it read.
+/// Decodes the character references common in URL attributes.
 fn unescaped(value: &str) -> String {
     value
         .replace("&quot;", "\"")
@@ -138,9 +134,9 @@ fn unescaped(value: &str) -> String {
         .replace("&amp;", "&")
 }
 
-/// Every `<name ...>` tag's attributes in `html`, ignoring case. Enough HTML
-/// for a `<head>`: quoted, single-quoted and bare values, a `>` in a quoted
-/// one included.
+/// Attributes of every `<name ...>` tag in `html`, case-insensitively.
+/// Handles double-quoted, single-quoted and bare values, including `>` inside
+/// quotes.
 fn tags(html: &str, name: &str) -> Vec<Vec<(String, String)>> {
     let lower = html.to_ascii_lowercase();
     let opening = format!("<{name}");
@@ -148,7 +144,7 @@ fn tags(html: &str, name: &str) -> Vec<Vec<(String, String)>> {
     let mut from = 0;
     while let Some(at) = lower[from..].find(&opening) {
         let start = from + at + opening.len();
-        // `<linkedin` is not a `<link`, and is passed over without reading it.
+        // Skip tags that only start with `name`, such as `<linkedin`.
         let named = html[start..]
             .chars()
             .next()
@@ -167,9 +163,8 @@ fn tags(html: &str, name: &str) -> Vec<Vec<(String, String)>> {
     found
 }
 
-/// Where the tag `inside` is the rest of ends: its first `>` outside quotes.
-/// A quote opens a value only straight after its `=`: `Bob's` is a bare value
-/// with an apostrophe in it.
+/// Offset of the first `>` outside quotes. A quote opens a value only right
+/// after `=`, so `Bob's` is a bare value.
 fn tag_end(inside: &str) -> Option<usize> {
     let mut quote = None;
     let mut after_equals = false;
@@ -187,7 +182,7 @@ fn tag_end(inside: &str) -> Option<usize> {
     })
 }
 
-/// The `key=value` pairs in the inside of a tag.
+/// The `key=value` pairs inside a tag.
 fn attributes(inside: &str) -> Vec<(String, String)> {
     let mut found = Vec::new();
     let mut rest = inside.trim_start_matches(['/', ' ', '\t', '\n', '\r']);
@@ -232,9 +227,9 @@ fn is_html(page: &Page) -> bool {
     })
 }
 
-/// `page` as a `data:` URL, if it is a picture small enough to send: one that
-/// says it is an image, or that starts the way one does — a server that does
-/// not know `.ico` sends it as bytes.
+/// `page` as a `data:` URL if it is a small enough image. Sniffs the body
+/// when the content type is not `image/*`, since some servers send `.ico`
+/// without one.
 fn picture(page: &Page) -> Option<String> {
     let said = page
         .content_type
@@ -246,7 +241,7 @@ fn picture(page: &Page) -> Option<String> {
     (page.body.len() <= LARGEST).then(|| data_url(kind, &page.body))
 }
 
-/// The type of picture `body` starts like, if it starts like one.
+/// The image type `body`'s magic bytes indicate, if any.
 fn sniffed(body: &[u8]) -> Option<&'static str> {
     const STARTS: &[(&[u8], &str)] = &[
         (b"\x89PNG", "image/png"),

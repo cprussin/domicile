@@ -1,19 +1,9 @@
 #!/usr/bin/env bash
-# What the latency guard decides, given a run's log.
+# Tests the verdict block of `guard-latency.sh` against fixture logs.
 #
-# The unit is the verdict block at the end of `guard-latency.sh` — everything
-# after the run has finished and the numbers are in hand. It is run out of the
-# real script rather than copied, through the real `annotate` and the real
-# `lib-latency.sh`, so a rewrite that moves it fails here loudly instead of
-# leaving this passing against a version nobody ships.
-#
-# It exists because that block is nine branches deep and every one of them can
-# only be reached by building Chromium, starting a browser and waiting several
-# minutes. This branch has already shipped a box assertion that compared digits
-# out of a color string and a stability check that measured an idle client; a
-# guard that reads its own measurement wrongly is the same class of defect, and
-# the negative control is where it would hide, because a control that passes for
-# the wrong reason looks exactly like one that works.
+# Runs the block from the real script with the real `lib-annotate.sh` and
+# `lib-latency.sh`, so moving or rewriting it fails here. Each branch is
+# otherwise reachable only by building Chromium and running a browser.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -23,8 +13,8 @@ GUARD="$ROOT/packages/domicile-engine/scripts/guard-latency.sh"
 # shellcheck source=packages/domicile-engine/scripts/lib-latency.sh
 . "$ROOT/packages/domicile-engine/scripts/lib-latency.sh"
 
-# From the line that reads the ending to the end of the file. A whole-line
-# anchor, so it cannot half-match; empty if it moves, which bails below.
+# From the line that reads the ending to the end of the file. Empty if that
+# line moves, which fails below.
 VERDICT="$(sed -n '/^ENDED="\$(latency_ended "\$COMP_LOG")"$/,$p' "$GUARD")"
 [ -n "$VERDICT" ] || {
   echo "no verdict block in $GUARD — its first line moved. Fix this test with it." >&2
@@ -45,8 +35,7 @@ expect() {
 FIXTURES="$(mktemp -d)"
 trap 'rm -rf "$FIXTURES"' EXIT
 
-# The lines the compositor writes, as `Spread::line` builds them and
-# `latency.rs`'s own tests assert them.
+# Log lines in the format `Spread::line` writes.
 say() { printf '2026-09-07T14:00:00.0Z  INFO domicile::engine::spike: %s\n' "$1"; }
 spread() { # $1 label, $2 median
   say "latency $1: min $2, median $2, max $2 ms over 60 (median 1.0 frames)"
@@ -55,9 +44,7 @@ spread() { # $1 label, $2 median
 run_log() { # $1 floor, $2 commit-to-pixel ("" for none), $3 abandoned, $4 ending, $5 undelivered, $6 display frame, $7 moved before the answer, $8 answered too late, $9 commits passed over for coming too soon
   local f; f="$(mktemp "$FIXTURES/XXXXXX")"
   {
-    # The compositor says this first, and the guard divides by it. Defaulted to
-    # 60Hz, which is what `crux` advertises, so that a fixture only says
-    # otherwise when the frame is what it is about.
+    # The guard divides by this. Defaults to 60Hz, which `crux` advertises.
     [ -n "${6-16.67}" ] && say "latency: the display frame is ${6-16.67} ms"
     [ -n "$1" ] && spread floor "$1"
     say "latency key to commit: min 1.40, median 1.40, max 1.40 ms over 60 (median 0.1 frames)"
@@ -82,8 +69,7 @@ run_log() { # $1 floor, $2 commit-to-pixel ("" for none), $3 abandoned, $4 endin
   echo "$f"
 }
 
-# Runs the real block. The subshell keeps its `exit` from ending this test, and
-# the annotation is what the block actually says.
+# Runs the real block in a subshell so its `exit` does not end this test.
 verdict() { # $1 log, $2 NEGATIVE
   (
     COMP_LOG="$1"
@@ -111,57 +97,48 @@ expect "and says what it was measured against" \
   "PASS: a client's frame reaches the page in 16.68ms, within 2 display frames of 16.67ms." \
   "$(verdict "$GOOD" 0)"
 
-# The whole point of the threshold: a stage of its own is what a readback, an
-# extra composite or a frame held for a queue would look like.
+# A frame over the threshold suggests an extra stage, such as a readback, an
+# extra composite or a queued frame.
 SLOW="$(run_log 16.67 50.10 0 completed)"
 expect "a frame that takes three display frames fails" "1" "$(verdict_code "$SLOW" 0)"
 expect "and names the frame it is measured against" \
   "::error::guard-latency: commit to pixel is 50.10ms against a display frame of 16.67ms, more than 2x — a client's frame is waiting on a stage of its own somewhere between the commit and the page" \
   "$(verdict "$SLOW" 0)"
 
-# Just inside and just outside, because this is a float comparison in a shell.
+# Boundary cases, since this is a float comparison in shell.
 expect "just under twice the display frame passes" \
   "0" "$(verdict_code "$(run_log 16.67 33.33 0 completed)" 0)"
 expect "just over twice the display frame fails" \
   "1" "$(verdict_code "$(run_log 16.67 33.35 0 completed)" 0)"
 
-# THE PAIR THIS DENOMINATOR EXISTS FOR, and both are readings off real CI runs
-# rather than shapes somebody imagined. `commit to pixel` came back at 28-29 ms
-# on all four runs there have been; the floor came back at 16.43 on one and
-# 48.71 on another, of the same probe on the same machine. Against the display
-# frame the verdict is the same both times. Against the floor it was 1.70 and
-# 0.60 — the same reading, three quarters of the way to failing on one run and
-# comfortable on the next.
+# Readings from real CI runs. `commit to pixel` was 28-29 ms each time, but
+# the floor varied from 16.43 to 48.71 ms on the same machine. Measured against
+# the display frame, both runs give the same verdict.
 expect "a run whose floor sampled one frame passes" \
   "0" "$(verdict_code "$(run_log 16.43 27.99 0 completed)" 0)"
 expect "and the same reading against a floor that sampled three still passes" \
   "0" "$(verdict_code "$(run_log 48.71 29.18 0 completed)" 0)"
 
-# The other end of it, and the one that matters more: a floor sampled high used
-# to RAISE the bar, so a run that had genuinely grown a stage would have been
-# let through by the same noise. 50.10ms is three display frames and fails
-# whatever the floor did.
+# A high floor must not raise the bar: 50.10 ms is three display frames and
+# fails regardless of the floor.
 expect "a floor that sampled three frames does not excuse a slow one" \
   "1" "$(verdict_code "$(run_log 48.71 50.10 0 completed)" 0)"
-# And a floor sampled below one frame does not manufacture a failure out of a
-# reading every other run called a pass.
+# A low floor must not fail a normal reading.
 expect "nor does a floor that sampled low condemn a good one" \
   "0" "$(verdict_code "$(run_log 13.50 28.18 0 completed)" 0)"
 
-# THE FLOOR STILL HAS A JOB, and this is it: the display frame is what this
-# desktop *advertises* — `display_interval` in the compositor says so — and
-# nothing else here can ask viz what it really is. The floor is the same
-# quantity measured, so a frame far larger than the floor means the number the
-# bar is built from is not the number the display is running at. It can only
-# fire in that direction: contention pushes the floor up, never below the frame.
+# The display frame is the interval the compositor advertises. The floor
+# measures the same interval, so a floor far below it means the advertised
+# rate is wrong. Contention only raises the floor, so this check fires in one
+# direction only.
 expect "a display frame nowhere near the floor is not a bar at all" \
   "1" "$(verdict_code "$(run_log 4.20 28.18 0 completed 0 16.67)" 0)"
 expect "and says which two numbers disagree" \
   "::error::guard-latency: the run reports a display frame of 16.67ms and priced its probe at 4.20ms — a probe round trip is one display frame, so the frame this would be measured against is not the one this desktop is drawing at" \
   "$(verdict "$(run_log 4.20 28.18 0 completed 0 16.67)" 0)"
 
-# A round nobody answered means the client did not do the thing being timed, so
-# whatever was measured is not a keystroke reaching a pixel.
+# An unanswered round means the client did not respond to the key, so the
+# measurement is not key-to-pixel latency.
 ABANDONED="$(run_log 16.67 16.68 4 completed)"
 expect "an unanswered round fails even with a good number" \
   "1" "$(verdict_code "$ABANDONED" 0)"
@@ -169,7 +146,7 @@ expect "and blames the client not changing color" \
   "::error::guard-latency: 4 round(s) went unanswered — the client did not change color when a key was pressed, so what was measured is not a keystroke reaching a pixel" \
   "$(verdict "$ABANDONED" 0)"
 
-# The two give-up endings point at different things and must say so.
+# The two give-up endings have different causes.
 expect "a screen that never settled points at a redrawing client" \
   "::error::guard-latency: the screen at the probe point never held still, so the probe could not be priced. A client redrawing on its own — a blinking cursor — does this; see cursor_blink_interval in this script" \
   "$(verdict "$(run_log '' '' 0 unsettled)" 0)"
@@ -177,38 +154,35 @@ expect "a dark probe points at the page or the browser" \
   "::error::guard-latency: the probe stopped answering, so nothing could be read. Either the page never embedded or the browser is not compositing" \
   "$(verdict "$(run_log '' '' 0 dark)" 0)"
 
-# A completed run with no numbers in it is not a pass. The message is asserted
-# and not only the exit code: `latency_within` refuses an unreadable operand
-# too, so a code-only check passes through that instead of through the branch
-# it names — and the branch could be deleted outright with these still green.
+# Assert the message, not just the exit code. `latency_within` also fails on
+# an unreadable operand, so a code-only check would pass even if this branch
+# were deleted.
 expect "a completed run with no floor is not a measurement" \
   "::error::guard-latency: the run completed without all of a floor, a display frame and a commit-to-pixel figure, so there is nothing to compare" \
   "$(verdict "$(run_log '' 16.68 0 completed)" 0)"
 expect "nor one with no commit-to-pixel" \
   "::error::guard-latency: the run completed without all of a floor, a display frame and a commit-to-pixel figure, so there is nothing to compare" \
   "$(verdict "$(run_log 16.67 '' 0 completed)" 0)"
-# And a run that never said what a display frame is has no denominator at all,
-# which must be its own answer rather than a comparison against an empty string.
+# A missing display frame gets its own message, not a comparison against an
+# empty string.
 expect "nor one that never reported a display frame" \
   "::error::guard-latency: the run completed without all of a floor, a display frame and a commit-to-pixel figure, so there is nothing to compare" \
   "$(verdict "$(run_log 16.67 16.68 0 completed 0 '')" 0)"
 
-# One unanswered round out of sixty is the signal this guard exists for, and
-# the only abandoned fixture above uses four — which a `-gt 3` would let past.
+# A single unanswered round must fail. The fixture above uses four, which a
+# `-gt 3` check would pass.
 expect "even a single unanswered round fails" \
   "1" "$(verdict_code "$(run_log 16.67 16.68 1 completed)" 0)"
 
-# A round whose key we never delivered is our failure, not the client's, and it
-# means the median is over a smaller run than the one reported.
+# An undelivered key is the compositor's failure, and it shrinks the sample
+# the median covers.
 expect "an undelivered key fails, and is not the client's fault" \
   "::error::guard-latency: 2 round(s) never had their key delivered, so the run measured fewer rounds than it set out to and the compositor is what failed, not the client" \
   "$(verdict "$(run_log 16.67 16.68 0 completed 2)" 0)"
 
-# The third thing a round can be. Nothing the client draws in answer can reach
-# the screen before the commit the round waits for, so a probe point that
-# changed color before that commit was changed by a frame from before the key —
-# and the round is given up rather than timed from whichever commit came next.
-# It costs the run a round exactly as the two above do.
+# The client's answer cannot reach the screen before the commit the round
+# waits for. So a probe point that changed earlier was changed by an older
+# frame, and the round is dropped.
 MOVED="$(run_log 16.67 16.68 0 completed 0 16.67 2)"
 expect "a round whose pixel moved before the client answered fails" \
   "1" "$(verdict_code "$MOVED" 0)"
@@ -216,11 +190,8 @@ expect "and says the keystroke is not what moved it" \
   "::error::guard-latency: 2 round(s) had the probe point change color before the client answered, so a frame from before the keystroke is what changed it and the run measured fewer rounds than it set out to" \
   "$(verdict "$MOVED" 0)"
 
-# The fourth thing a round can be, and the one the negative control caught by
-# failing a second time. The client committed, in the right order, and the
-# pixel followed — 55 display frames after the key, which no client's answer
-# is. The round is given up and costs the run a round exactly as the three
-# above do.
+# A commit long after the key (55 display frames in the observed case) is a
+# client redraw, not the key's answer. The round is dropped.
 LATE="$(run_log 16.67 16.68 0 completed 0 16.67 0 2)"
 expect "a round whose commit came too late fails" \
   "1" "$(verdict_code "$LATE" 0)"
@@ -228,36 +199,30 @@ expect "and says the wait is what is wrong with it" \
   "::error::guard-latency: 2 round(s) had the client commit too long after the key for the key to have caused it, so what would have been timed is a redraw of the client's own and the run measured fewer rounds than it set out to" \
   "$(verdict "$LATE" 0)"
 
-# The near end of that same wait is not a lost round. A commit 0.82 ms after a
-# key is a frame the client already had in flight, and the round passes over it
-# and waits on for the key's answer. Failing on it failed engine run
-# 36758359911, whose every round was measured or accounted for elsewhere.
+# A commit very soon after the key is a frame already in flight. The round
+# skips it and keeps waiting, so the run does not fail.
 SOON="$(run_log 16.67 16.68 0 completed 0 16.67 0 0 2)"
 expect "a commit passed over for coming too soon does not fail the run" \
   "0" "$(verdict_code "$SOON" 0)"
 
-# A run that never reported at all. Distinct from every case above, which all
-# have an ending: a round only advances on a commit, so a client that answers a
-# key with no redraw leaves the run waiting rather than abandoning rounds. A
-# terminal that does not take OSC 11 for its background lands here, and the
-# message has to name that rather than blaming the seam.
-# Empty, so the title stands alone and can be compared whole: `annotate_from`
-# appends the log's tail, which is the right behavior and not what is being
-# asserted here.
+# A run with no ending. A round advances only on a commit, so a client that
+# never redraws after a key leaves the run waiting. A terminal that ignores
+# OSC 11 does this, so the message names it.
+# The log is empty so the title can be compared whole; `annotate_from`
+# appends the log's tail.
 NOTHING="$(mktemp "$FIXTURES/XXXXXX")"
 expect "a run that never reported fails" "1" "$(verdict_code "$NOTHING" 0)"
 expect "and names the client's redraw as a cause" \
   "::error::guard-latency: the run never finished. Either the client never committed a frame after a key — check that it takes OSC 11 for its background — or the compositor stopped before it could report" \
   "$(verdict "$NOTHING" 0)"
 
-# And with a log behind it, which is the real case: still a failure, and the
-# log's tail comes with the annotation.
+# A partial log still fails; the annotation includes its tail.
 STARTED_ONLY="$(mktemp "$FIXTURES/XXXXXX")"
 say "latency: the display frame is 16.67 ms" >"$STARTED_ONLY"
 expect "a run that priced the probe and then stopped also fails" \
   "1" "$(verdict_code "$STARTED_ONLY" 0)"
 
-# --- the negative control, which is where a wrong answer hides ---
+# --- the negative control ---
 
 CONTROL="$(run_log 16.67 '' 3 completed)"
 expect "a client answering no keys is a correct control" \
@@ -266,16 +231,16 @@ expect "and says so" \
   "PASS: negative control: correct, a client that answers no keys is not a measurement" \
   "$(verdict "$CONTROL" 1)"
 
-# THE CASE THE CONTROL EXISTS FOR. If the guard were matching something other
-# than the client's own keystrokes, the control would still produce a figure.
+# If the guard matched something other than the client's keystrokes, the
+# control would still produce a figure.
 expect "a control that still measured something fails" \
   "1" "$(verdict_code "$(run_log 16.67 16.68 3 completed)" 1)"
 expect "and says what that means" \
   "::error::guard-latency negative control: a client that answers no keys still produced a commit-to-pixel figure of 16.68 ms — the run is measuring something other than its own keystrokes" \
   "$(verdict "$(run_log 16.67 16.68 3 completed)" 1)"
 
-# A control that passes because the run fell over proves nothing about the
-# guard: it has to get as far as pricing the probe and then find nothing.
+# A control must price the probe and then measure nothing. A run that fell
+# over proves nothing.
 expect "a control whose run never completed fails" \
   "1" "$(verdict_code "$(run_log '' '' 0 dark)" 1)"
 expect "a control that never priced the probe fails" \
@@ -283,34 +248,24 @@ expect "a control that never priced the probe fails" \
 expect "a control where nothing was abandoned fails" \
   "1" "$(verdict_code "$(run_log 16.67 '' 0 completed)" 1)"
 
-# The check above belongs to the measurement and not to the control: what the
-# control proves is that a client answering no keys produces no figure, and a
-# round given up before that client answered is the guard doing its job rather
-# than a reason to fail it. Without this, moving that check above the control's
-# branch would go unnoticed.
+# The "moved before the answer" check belongs to the measurement, not the
+# control. This fails if that check moves above the control's branch.
 expect "a control whose rounds moved before an answer is still a correct control" \
   "0" "$(verdict_code "$(run_log 16.67 '' 1 completed 0 16.67 2)" 1)"
 
-# And what the control is asking is "did the guard give a round up", not "did
-# it give one up in this particular way". A control's rounds can all end in one
-# of the other two buckets — the client answers no keys, so whether a round
-# ends as abandoned, as moved, or as a commit too late to be an answer is a
-# matter of where its self-redraw happened to land — and a control that failed
-# because the count it reads is the one that happened to be empty would be a
-# flake rather than a finding.
+# The control asks whether any round was dropped, not how. Where a
+# self-redraw lands decides which count a dropped round goes to, so requiring
+# a particular count would flake.
 expect "a control whose rounds all moved before an answer is still a correct control" \
   "0" "$(verdict_code "$(run_log 16.67 '' 0 completed 0 16.67 2)" 1)"
 expect "a control whose rounds all came too late is still a correct control" \
   "0" "$(verdict_code "$(run_log 16.67 '' 0 completed 0 16.67 0 3)" 1)"
-# A commit passed over for coming too soon is not a round given up: the round
-# waited on. A control whose only count is those gave nothing up.
+# A commit skipped for coming too soon does not drop the round.
 expect "a control whose only count is commits passed over for coming too soon fails" \
   "1" "$(verdict_code "$(run_log 16.67 '' 0 completed 0 16.67 0 0 3)" 1)"
 
-# And one is enough. What the control proves is that the guard *notices* a
-# client answering nothing, so the check is "at least one", not "how many" —
-# without this, tightening it to demand several would go unnoticed and a
-# control that worked would start failing.
+# One dropped round is enough. The control checks that the guard notices,
+# not how often.
 expect "a control with a single abandoned round is enough" \
   "0" "$(verdict_code "$(run_log 16.67 '' 1 completed)" 1)"
 

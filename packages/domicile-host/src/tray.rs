@@ -1,15 +1,9 @@
-//! What a StatusNotifierItem is, as the system tray draws it.
+//! StatusNotifierItem state for the system tray.
 //!
-//! The D-Bus half — owning `org.kde.StatusNotifierWatcher`, reading each
-//! item's properties, following its signals — is `crate::tray` in
-//! `domicile-compositor`, because a bus is not something this crate can have.
-//! What it reads is handed here as [`Properties`], and what comes back is the
-//! [`TrayItem`] a shell is told about: which title, which picture, and whether
-//! the icon is in the tray at all.
-//!
-//! **A picture a page can draw without reading a file.** An item names its
-//! icon or sends its pixels; both become a `data:` URL here, the way a
-//! launcher's application icons do — see [`crate::app_icons`].
+//! The D-Bus side lives in `domicile-compositor`'s `tray` module. It passes
+//! each item's [`Properties`] here and sends shells the resulting
+//! [`TrayItem`]s. Icons become `data:` URLs, as in [`crate::app_icons`]. See
+//! `docs/architecture/SYSTEM-TRAY.md`.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -20,38 +14,34 @@ use crate::app_icons::{read, KINDS};
 use crate::data_url::data_url;
 use crate::png::png;
 
-/// Where the spec says an item registered by bus name answers.
+/// The object path of an item registered by bus name alone.
 const ITEM_PATH: &str = "/StatusNotifierItem";
 
-/// The pixels a tray icon is drawn at, at a density of two: a pixmap at least
-/// this big is taken over a bigger one, so the page scales down rather than
-/// up.
+/// The preferred pixmap width: a tray icon's size at a scale of 2. The
+/// smallest pixmap at least this wide wins, so the page only scales down.
 const WANTED_PIXELS: i32 = 32;
 
-/// The sizes an icon theme is looked through at, the ones a panel's icons are
-/// drawn for first.
+/// Icon theme sizes to search, panel sizes first.
 const SIZES: &[&str] = &[
     "22x22", "24x24", "scalable", "32x32", "16x16", "48x48", "64x64", "256x256",
 ];
 
-/// The directories of a theme a tray icon may be in. `status` is where most
-/// are; an application that uses its own icon puts it in `apps`.
+/// Icon theme categories to search. Most tray icons are in `status`.
 const CATEGORIES: &[&str] = &["status", "apps", "devices", "panel"];
 
-/// An item's `Status`: whether it has anything to say right now.
+/// An item's `Status` property.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Status {
-    /// Nothing to say: every tray hides it.
+    /// Hidden from the tray.
     Passive,
     Active,
-    /// Something to say, which it says with its attention icon.
+    /// Shown with its attention icon.
     NeedsAttention,
 }
 
 impl Status {
-    /// The spec's three words, read. A word it does not have is `Active`: an
-    /// item that misspelled its status still asked to be in a tray, and
-    /// hiding it is the one reading that loses an icon.
+    /// Parse a `Status` value. Unknown values are `Active`, so an icon is
+    /// never hidden by mistake.
     pub fn from_wire(word: &str) -> Status {
         match word {
             "Passive" => Status::Passive,
@@ -61,8 +51,7 @@ impl Status {
     }
 }
 
-/// One picture of an icon, as `IconPixmap` sends it: ARGB, big-endian, rows
-/// top to bottom.
+/// One `IconPixmap` image: big-endian ARGB, rows top to bottom.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Pixmap {
     pub width: i32,
@@ -70,31 +59,27 @@ pub struct Pixmap {
     pub argb: Vec<u8>,
 }
 
-/// What an item says about itself: its `org.kde.StatusNotifierItem`
-/// properties, with every one it left out read as empty.
+/// An item's `org.kde.StatusNotifierItem` properties. Missing ones are empty.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Properties {
     pub id: String,
     pub title: String,
-    /// The title of its `ToolTip`, which is the one piece of it a tray label
-    /// can say.
+    /// The title of its `ToolTip`.
     pub tooltip: String,
     pub status: Status,
     pub icon_name: String,
     pub icon_pixmaps: Vec<Pixmap>,
     pub attention_icon_name: String,
     pub attention_pixmaps: Vec<Pixmap>,
-    /// A directory of the item's own that its icons may be in.
+    /// The item's own icon directory.
     pub icon_theme_path: String,
 }
 
-/// Where the item a `RegisterStatusNotifierItem(service)` from `sender`
-/// registered answers: its bus name and its object path.
+/// The bus name and object path for a `RegisterStatusNotifierItem(service)`
+/// call from `sender`.
 ///
-/// The spec says `service` is a bus name and the item is at
-/// `/StatusNotifierItem` on it, which is what KDE sends. libappindicator sends
-/// a path of its own instead, on the connection that made the call; and a few
-/// send a name with a path after it. All three are answered.
+/// `service` may be a bus name (the spec, and KDE), an object path on the
+/// sender's connection (libappindicator), or a bus name followed by a path.
 pub fn address(service: &str, sender: &str) -> (String, String) {
     match service.find('/') {
         Some(0) => (sender.to_string(), service.to_string()),
@@ -103,7 +88,7 @@ pub fn address(service: &str, sender: &str) -> (String, String) {
     }
 }
 
-/// The method of `org.kde.StatusNotifierItem` a click with `action` calls.
+/// The `org.kde.StatusNotifierItem` method a click with `action` calls.
 pub fn method(action: TrayAction) -> &'static str {
     match action {
         TrayAction::Primary => "Activate",
@@ -112,14 +97,14 @@ pub fn method(action: TrayAction) -> &'static str {
     }
 }
 
-/// Every item registered with the watcher, in the order it registered, and
-/// what each is shown as.
+/// The items registered with the watcher, in registration order.
 ///
-/// An item is known by four names, and this is what keeps them straight: its
-/// id here (its bus name and path, written together), the name a shell is told
-/// (see [`Registry::named`]), the bus name it is called on — which may be a
-/// well-known one — and the unique name of the connection behind it, which is
-/// what its signals and its going away arrive under.
+/// Each item has four names:
+/// - its id here: bus name and path, concatenated;
+/// - its name for shells (see [`Registry::named`]);
+/// - the bus name it is called on, possibly well-known;
+/// - the unique name of its connection, which its signals and disconnect
+///   come from.
 #[derive(Debug, Default)]
 pub struct Registry {
     entries: Vec<Entry>,
@@ -131,15 +116,15 @@ struct Entry {
     bus: String,
     owner: String,
     path: String,
-    /// The name a shell is told: `None` until its properties have been read.
+    /// The name for shells. `None` until its properties have been read.
     name: Option<String>,
     /// `None` until its properties have been read, and while it is passive.
     shown: Option<TrayItem>,
 }
 
 impl Registry {
-    /// Hold the item at `path` on `bus`, whose connection is `owner`, and
-    /// hand back its id — or `None` where it was already held.
+    /// Register the item at `path` on `bus`, owned by connection `owner`.
+    /// Returns its id, or `None` if already registered.
     pub fn register(&mut self, bus: &str, owner: &str, path: &str) -> Option<String> {
         let id = format!("{bus}{path}");
         (!self.entries.iter().any(|entry| entry.id == id)).then(|| {
@@ -155,16 +140,15 @@ impl Registry {
         })
     }
 
-    /// Say what the item `id` is shown as now: `None` for an item that is not
-    /// to be shown. An id no longer held is an item that went while it was
-    /// being read, and there is nothing to say about it.
+    /// Set how item `id` is shown, or `None` to hide it. Ignores an id that
+    /// vanished while its properties were being read.
     pub fn show(&mut self, id: &str, shown: Option<TrayItem>) {
         if let Some(entry) = self.entries.iter_mut().find(|entry| entry.id == id) {
             entry.shown = shown;
         }
     }
 
-    /// Where the item `id` is called: its bus name and its path.
+    /// The bus name and path of item `id`.
     pub fn address(&self, id: &str) -> Option<(String, String)> {
         self.entries
             .iter()
@@ -172,14 +156,12 @@ impl Registry {
             .map(|entry| (entry.bus.clone(), entry.path.clone()))
     }
 
-    /// The name the item `id` is told to a shell by, which `calls_itself` —
-    /// its `Id` — settles the first time it is asked.
+    /// The name shells know item `id` by, set from its `Id` property
+    /// (`calls_itself`) on the first call.
     ///
-    /// **A name that outlives the item**, because a shell keeps an icon's
-    /// place by it: the spec has an item's `Id` stay the same between runs,
-    /// where the bus name in `id` is a new one each time. Two items calling
-    /// themselves one thing are told apart by a number, and one calling
-    /// itself nothing is named by `id`.
+    /// Shells keep an icon's position by this name, so it comes from `Id`,
+    /// which is stable across runs, rather than the bus name. Duplicates get a
+    /// `#n` suffix, and an empty `Id` falls back to `id`.
     pub fn named(&mut self, id: &str, calls_itself: &str) -> String {
         let taken: Vec<String> = self
             .entries
@@ -210,8 +192,7 @@ impl Registry {
             .clone()
     }
 
-    /// Where the item a shell named `name` is called: its bus name and its
-    /// path.
+    /// The bus name and path of the item shells know as `name`.
     pub fn clicked(&self, name: &str) -> Option<(String, String)> {
         self.entries
             .iter()
@@ -219,7 +200,7 @@ impl Registry {
             .map(|entry| (entry.bus.clone(), entry.path.clone()))
     }
 
-    /// The items a signal from `sender` about `path` is about.
+    /// The ids of items a signal from `sender` on `path` refers to.
     pub fn sent_by(&self, sender: &str, path: &str) -> Vec<String> {
         self.entries
             .iter()
@@ -228,8 +209,8 @@ impl Registry {
             .collect()
     }
 
-    /// Let go of every item `name` — a connection or a well-known name — was
-    /// behind, and hand back their ids.
+    /// Remove every item owned by `name`, a unique or well-known bus name.
+    /// Returns their ids.
     pub fn vanished(&mut self, name: &str) -> Vec<String> {
         let (gone, kept) = std::mem::take(&mut self.entries)
             .into_iter()
@@ -238,20 +219,20 @@ impl Registry {
         gone.into_iter().map(|entry: Entry| entry.id).collect()
     }
 
-    /// Follow the well-known name `name` to the connection that holds it now,
-    /// `owner`: an item's signals arrive from there.
+    /// Record that well-known name `name` moved to connection `owner`, which
+    /// its items' signals now come from.
     pub fn moved(&mut self, name: &str, owner: &str) {
         for entry in self.entries.iter_mut().filter(|entry| entry.bus == name) {
             entry.owner = owner.to_string();
         }
     }
 
-    /// Every item held, by id, which is what the watcher lists.
+    /// Every registered item's id, for the watcher's item list.
     pub fn ids(&self) -> Vec<String> {
         self.entries.iter().map(|entry| entry.id.clone()).collect()
     }
 
-    /// What the tray shows.
+    /// The items to show in the tray.
     pub fn items(&self) -> Vec<TrayItem> {
         self.entries
             .iter()
@@ -260,9 +241,8 @@ impl Registry {
     }
 }
 
-/// The icon an item with `properties` is in the tray as, called `id` — or
-/// `None` for an item that has asked not to be shown. Titled by `id` where it
-/// says nothing about itself, so a title is never empty.
+/// The tray entry for an item, or `None` if it is passive. The title falls
+/// back to `id`, so it is never empty.
 pub fn item(id: &str, properties: Properties, icons: &mut TrayIcons) -> Option<TrayItem> {
     (properties.status != Status::Passive).then(|| TrayItem {
         id: id.to_string(),
@@ -274,9 +254,8 @@ pub fn item(id: &str, properties: Properties, icons: &mut TrayIcons) -> Option<T
     })
 }
 
-/// The picture `properties` asks to be drawn with: its attention icon while
-/// it needs attention and it has one, and its own otherwise. A name is looked
-/// for before pixels are drawn, which is the order the spec prefers them in.
+/// The item's picture: the attention icon if it needs attention and has one,
+/// else its icon. Names come before pixmaps, as the spec prefers.
 fn picture(properties: &Properties, icons: &mut TrayIcons) -> Option<String> {
     let path = &properties.icon_theme_path;
     let attention = (properties.status == Status::NeedsAttention)
@@ -292,8 +271,8 @@ fn picture(properties: &Properties, icons: &mut TrayIcons) -> Option<String> {
 }
 
 /// The best of `pixmaps` as a PNG `data:` URL: the smallest at least
-/// [`WANTED_PIXELS`] across, or the biggest where none is. One whose bytes do
-/// not add up to its size is not a picture and is passed over.
+/// [`WANTED_PIXELS`] wide, else the biggest. Skips pixmaps whose data does not
+/// match their size.
 fn pixmap(pixmaps: &[Pixmap]) -> Option<String> {
     let whole = pixmaps.iter().filter(|pixmap| {
         pixmap.width > 0
@@ -314,19 +293,18 @@ fn pixmap(pixmaps: &[Pixmap]) -> Option<String> {
         })
 }
 
-/// Tray icons by name, out of the data directories they were looked for in.
+/// Tray icon lookup by name in the XDG data directories.
 ///
-/// [`crate::app_icons::AppIcons`]'s shape, for a different question: a
-/// launcher's icons are `apps`, a tray's are mostly `status`, and an item may
-/// name a directory of its own. Cached for the life of the compositor, a miss
-/// included — an item that changes its icon names another one.
+/// Like [`crate::app_icons::AppIcons`], but searches `status` and an item's
+/// own directory. Results, including misses, are cached for the compositor's
+/// lifetime: an item that changes its icon uses a new name.
 pub struct TrayIcons {
     data_dirs: Vec<PathBuf>,
     found: HashMap<(String, String), Option<String>>,
 }
 
 impl TrayIcons {
-    /// Icons under `data_dirs`, the one that wins first.
+    /// Look up icons under `data_dirs`, highest priority first.
     pub fn new(data_dirs: Vec<PathBuf>) -> Self {
         TrayIcons {
             data_dirs,
@@ -334,8 +312,8 @@ impl TrayIcons {
         }
     }
 
-    /// The icon `name` is, looked for in `theme_path` before anywhere else, as
-    /// a `data:` URL — or nothing a page could draw. An empty name is none.
+    /// Icon `name` as a `data:` URL, searching `theme_path` first. `None` for
+    /// an empty name or no drawable icon.
     pub fn icon(&mut self, name: &str, theme_path: &str) -> Option<String> {
         if name.is_empty() {
             return None;
@@ -353,8 +331,8 @@ impl TrayIcons {
         if Path::new(name).is_absolute() {
             return read(Path::new(name));
         }
-        // The item's own directory is a theme root and a pixmap directory at
-        // once: applications put their icons in either shape.
+        // Applications use their own directory as either a theme root or a
+        // flat pixmap directory, so search it as both.
         let own: Vec<PathBuf> = (!theme_path.is_empty())
             .then(|| PathBuf::from(theme_path))
             .into_iter()
@@ -378,8 +356,7 @@ impl TrayIcons {
     }
 }
 
-/// Every directory of the theme at `root` a tray icon may be in, the sizes a
-/// panel draws at first.
+/// The directories of the theme at `root` to search, panel sizes first.
 fn themed(root: PathBuf) -> impl Iterator<Item = PathBuf> {
     SIZES.iter().flat_map(move |size| {
         let root = root.clone();

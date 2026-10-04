@@ -1,10 +1,7 @@
-//! `domicile-open-url <url>` — `domicile open-url <url>`, as one program.
+//! Runs `domicile open-url` as a single program, for use as `BROWSER`.
 //!
-//! What `BROWSER` names inside a desktop (see `domicile_launch::spawn`). Much
-//! of what reads that variable runs it as a single word, so `domicile
-//! open-url` cannot go in it; this is that command under a name of its own.
-//! It execs `domicile` beside it rather than carrying the command's code a
-//! second time.
+//! Many programs run `BROWSER` as one word, so it cannot hold a subcommand.
+//! See `domicile_launch::spawn`.
 
 use std::os::unix::process::CommandExt as _;
 use std::process::{Command, ExitCode};

@@ -2,10 +2,8 @@
 // `matrix(a,b,c,d,e,f)`. A matrix maps a local point to screen space:
 // screen = (a*x + c*y + e, b*x + d*y + f).
 //
-// None of this crosses the socket any more: an `<app>` is a layer the page
-// positions, so the host is never told where a window is. What the chrome still
-// needs a matrix for is its own inversion — a pointer position on screen into
-// the client's surface, which is `surface-coordinates`.
+// Used by `surface-coordinates` to map a screen pointer position into a
+// client's surface.
 
 export type Matrix = readonly [
   a: number,
@@ -61,8 +59,7 @@ export const apply = (matrix: Matrix, [x, y]: Point): Point => [
   matrix[1] * x + matrix[3] * y + matrix[5],
 ];
 
-// Below this the linear part is treated as singular: the determinant is small
-// enough that the inverse would be dominated by floating-point noise.
+// Below this determinant the inverse would be mostly floating-point noise.
 const SINGULAR_DETERMINANT = 1e-12;
 
 /** The inverse matrix, or `undefined` if the linear part is singular. */

@@ -1,43 +1,11 @@
-//! How the compositor tells the desktop from the things running on it.
+//! How the compositor tells the chrome from the apps running on it.
 //!
-//! Ported from `scripts/e2e-chrome-layer.sh`, deleted in the change that added
-//! this file.
+//! The compositor serves two Wayland displays. A client on the chrome's display
+//! is the desktop; a client on the apps' display is a window. The display is
+//! the only signal, so only a running compositor can test it. If it is wrong,
+//! the chrome shows itself as a window inside itself.
 //!
-//! The compositor serves two Wayland displays and publishes both. A client that
-//! arrives on one becomes a window on the desktop; a client that arrives on the
-//! other *is* the desktop. Which socket it came in on is the whole of the
-//! distinction — there is no handshake and nothing in the surface to read.
-//!
-//! Get it wrong in the direction this guards and the chrome mounts an `<app>`
-//! element for itself, inside itself. The recursion is the least of it: the
-//! desktop becomes a window on the desktop, and every window on it is drawn
-//! inside that.
-//!
-//! # It was uncovered, and strikingly so
-//!
-//! `is_chrome_surface` rewritten to `false` — every client an app, the
-//! distinction gone entirely — **passed the whole Rust suite**. Measured
-//! before this file was written. Nothing below the e2e level had an opinion
-//! about it, because the classification is a fact about the *connection*, and
-//! a unit test has none. It now fails four of the five checks here and nothing
-//! anywhere else.
-//!
-//! # One check was written here and deleted for killing nothing
-//!
-//! `the_compositor_says_it_recognized_the_chrome` started a chrome-side client
-//! and waited for `the chrome mapped its toplevel`, arguing that the check
-//! above reads what the *host was told* and this reads what the compositor
-//! *decided*. The second half is true and not of this check uniquely: its
-//! whole body is a strict prefix of four of the five checks below, each of
-//! which waits on the same line as its own premise. So every mutation that
-//! fails it fails those too — re-added under `is_chrome_surface` forced to
-//! `false`, it failed alongside exactly the four that fail without it — and it
-//! cost a compositor start and a real client start to say nothing new. Same
-//! rule `stuck_keys.rs` applies to its own deleted lock check.
-//!
-//! Headless on purpose: what is under test happens before anything is drawn.
-//! Whether the chrome's pixels land over the apps needs a display, and the
-//! only thing that has one is a desktop actually running.
+//! Headless, because the classification happens before anything is drawn.
 
 mod running;
 
@@ -52,16 +20,13 @@ const ONE_DISPLAY: &str = r#"
 /// `a`, in the evdev code a chrome sends.
 const KEY_A: u32 = 30;
 
-/// The `app_id` on a `key`, which the compositor discards — see [`key`].
+/// The `app_id` on a `key`, which the compositor ignores. See [`key`].
 const WHEREVER_THE_KEYBOARD_IS: &str = "wherever-the-keyboard-is";
 
 /// Type one key at whatever holds the keyboard.
 ///
-/// *Whatever holds it*, and not `app_id`: the compositor destructures that
-/// field away and `ClientRequest::Key` carries no id at all, so the key goes
-/// where the seat's focus is. It is passed because the protocol has the field,
-/// and one placeholder is used everywhere so that no reader takes it for a
-/// route.
+/// The compositor ignores `app_id` and sends the key to the seat's focus. One
+/// placeholder is used everywhere so nobody reads it as a route.
 fn key(chrome: &mut domicile_test_chrome::Chrome, keycode: u32, pressed: bool) {
     chrome
         .say(&ChromeMessage::Key {
@@ -73,11 +38,6 @@ fn key(chrome: &mut domicile_test_chrome::Chrome, keycode: u32, pressed: bool) {
 }
 
 /// Give the window the keyboard.
-///
-/// It used to be placed first, because `focus_app` refused an app the chrome
-/// had not placed. The gate is the host's own map of apps now, and appearing
-/// is what puts an app in it -- but the focus itself still matters here, since
-/// a window that is not focused is not the one being tested.
 fn focus(chrome: &mut domicile_test_chrome::Chrome, app_id: &str) {
     chrome
         .say(&ChromeMessage::FocusApp {
@@ -89,29 +49,19 @@ fn focus(chrome: &mut domicile_test_chrome::Chrome, app_id: &str) {
 /// A client on the chrome's display is the desktop; one on the apps' display is
 /// a window on it.
 ///
-/// Two identical clients — same binary, same arguments but the title — told
-/// apart by nothing except which display they opened on. That is what makes
-/// this a test of the classification rather than of anything about the clients.
+/// The two clients are identical except for their display and title.
+/// `app_appeared` carries no title, so `app_titled` identifies which client
+/// was announced.
 ///
-/// The discriminator is *which* client the announcement belongs to, and it is
-/// reached by way of the name rather than the announcement: `app_appeared` is
-/// sent when the toplevel is created and carries no title, because a client
-/// names its window in the request after that one. So the announcement says an
-/// app exists and `app_titled` says which — and the test needs both.
-///
-/// The chrome-side client is started, and *waited for*, before the app-side
-/// one. That ordering is what makes the failure deterministic rather than a
-/// race: with the classification removed the chrome-side client is announced
-/// first, so the first `app_appeared` belongs to it and the name that arrives
-/// for `app-side` belongs to a different one.
+/// The chrome-side client is started and waited for first. Without the
+/// classification it would be announced first, so the test fails reliably
+/// rather than by race.
 #[test]
 fn a_client_on_the_chrome_display_is_the_desktop_rather_than_a_window_on_it() {
     let compositor = Compositor::started_with(ONE_DISPLAY);
     let mut chrome = compositor.chrome();
 
-    // Started and settled first, so that a compositor which announces it
-    // announces it first. Waiting on the compositor's own classification
-    // rather than on a sleep: this is the moment the decision has been made.
+    // Wait for the compositor's own classification, not a sleep.
     let _desktop = compositor.chrome_side_client("chrome-side");
     compositor.wait_for_log("the chrome mapped its toplevel");
 
@@ -143,23 +93,14 @@ fn a_client_on_the_chrome_display_is_the_desktop_rather_than_a_window_on_it() {
 
 /// Focusing a window that has no surface leaves the keyboard with the chrome.
 ///
-/// The race a real chrome loses whenever a window closes while its own focus
-/// message is in flight. Handing the keyboard to nothing is what makes a
-/// desktop go permanently deaf, because nothing afterward takes it back — and
-/// the compositor is what has to survive it, since the page cannot know its
-/// message was overtaken.
+/// A real chrome hits this when a window closes while its focus message is in
+/// flight. If the keyboard went to nothing, nothing would take it back and
+/// the desktop would stop receiving keys. An id the host has never seen is
+/// handled the same as one whose window just closed, so this uses one.
 ///
-/// An app id the host has never seen is the same shape as one whose window has
-/// just gone: the host has no such app either way, so it refuses the focus and
-/// the seat is told what it settled on. This is the only refusal left — the
-/// check above used to be its other end, where a window existed and had not
-/// been placed, and placement going took that case with it.
-///
-/// Asserted by typing, not by the log. The refusal is logged *before* the
-/// keyboard is put anywhere, so a version that logs and then hands the seat
-/// over regardless keeps the line — measured, on a first version of this
-/// test. What matters is that the next key still reaches somebody, and the
-/// desktop is the somebody.
+/// Asserted by typing, not by the log: the refusal is logged before the focus
+/// moves, so a compositor that logs and then moves the focus anyway keeps the
+/// log line.
 #[test]
 fn focusing_a_window_that_never_existed_leaves_the_keyboard_with_the_chrome() {
     let compositor = Compositor::started_with(ONE_DISPLAY);
@@ -186,29 +127,16 @@ fn focusing_a_window_that_never_existed_leaves_the_keyboard_with_the_chrome() {
 
 /// A window can take the keyboard the moment it appears.
 ///
-/// This test used to assert the opposite, and the reversal is the point. The
-/// scene refused focus for an app the chrome had not placed, while the seat
-/// had no such check — `ClientRequest::KeyboardFocus` looks only for a
-/// *surface* — so the two answered differently and the keyboard went to a
-/// window the page was still marking inactive.
+/// `app_appeared` arrives before the shell has laid out the window, so a shell
+/// that focuses windows as they open does exactly this.
 ///
-/// Two sources of truth disagreeing is what caused that, and there is one now:
-/// the host's own map of apps, which `app_appeared` is what puts an app in.
-/// So the refusal is gone rather than fixed, and what is left to pin is that
-/// the focus lands.
-///
-/// The case is an ordinary desktop, not a contrived one: `app_appeared`
-/// arrives before the element showing the window has been laid out at all, so
-/// a shell that focuses a window as it opens asks for exactly this.
-///
-/// Two assertions, because the line alone would not catch it: a compositor
-/// that logs the focus and does not move the seat keeps the line. The key is
-/// what says where the keyboard actually is.
+/// Asserted by typing as well as by the log, because a compositor can log the
+/// focus without moving the seat.
 #[test]
 fn a_window_takes_the_keyboard_before_it_has_been_laid_out() {
     let compositor = Compositor::started_with(ONE_DISPLAY);
-    // The desktop is started and left alone: this check is about where the
-    // keyboard went, and it went to the window.
+    // The desktop is started but not focused: the keyboard should go to the
+    // window.
     let _desktop = compositor.chrome_side_client("chrome-side");
     compositor.wait_for_log("the chrome mapped its toplevel");
     let mut chrome = compositor.chrome();
@@ -221,8 +149,7 @@ fn a_window_takes_the_keyboard_before_it_has_been_laid_out() {
         unreachable!("the wait matched on this variant")
     };
 
-    // Focused the instant it appeared, with nothing said about its size --
-    // which is all a shell knows about a window at this point.
+    // Focus it at once, before the shell knows its size.
     focus(&mut chrome, &app_id);
     compositor.wait_for_log("keyboard focus -> client");
 
@@ -239,21 +166,12 @@ fn a_window_takes_the_keyboard_before_it_has_been_laid_out() {
 
 /// The keyboard comes back to the chrome when the window holding it goes away.
 ///
-/// A keyboard with nowhere to go is a desktop that has stopped listening —
-/// working perfectly until you close a window, and then deaf. The chrome will
-/// usually ask for it back, but it does not have to, and a client that crashed
-/// rather than closed never got the chance. So the compositor guarantees it.
+/// Otherwise the desktop stops receiving keys. The chrome usually asks for the
+/// keyboard back, but a crashed client gives it no chance, so the compositor
+/// must do it.
 ///
-/// The wait counts occurrences rather than looking for the line, because the
-/// chrome takes the keyboard once already when its own toplevel maps. The
-/// interesting one is the second — "and again", after the window went.
-///
-/// And then a key, because the line is not the thing. A first version stopped
-/// at the count, and a compositor whose `focus_chrome` keeps its `info!` and
-/// drops the `set_focus` beneath it passed — saying twice that the chrome has
-/// the keyboard while leaving the desktop deaf, which is the exact failure
-/// this test names. Measured. The line says the compositor decided; the key
-/// says it happened.
+/// The wait counts log lines because the chrome already took the keyboard once
+/// when it mapped. The key confirms the seat moved, not just the log.
 #[test]
 fn the_keyboard_comes_back_to_the_chrome_when_a_window_goes_away() {
     let compositor = Compositor::started_with(ONE_DISPLAY);
@@ -272,8 +190,7 @@ fn the_keyboard_comes_back_to_the_chrome_when_a_window_goes_away() {
     focus(&mut chrome, &app_id);
     compositor.wait_for_log("keyboard focus -> client");
 
-    // The window crashes rather than closing: nothing asks for the keyboard
-    // back, which is the case the compositor has to survive on its own.
+    // The window crashes, so nothing asks for the keyboard back.
     drop(window);
 
     compositor.wait_for_log_times("the chrome has the window's keyboard", 2);
@@ -288,35 +205,20 @@ fn the_keyboard_comes_back_to_the_chrome_when_a_window_goes_away() {
     );
 }
 
-/// The desktop's own window mapping takes the keyboard back in the brain as
-/// well as in the seat.
+/// When the desktop's window maps, it takes the keyboard back in both the seat
+/// and the chrome's record of the active window.
 ///
-/// `focus_chrome` moves two things: the seat, and — through
-/// `broadcast_focus_decision` — the chrome's own idea of what is active. The
-/// second is separately droppable, and dropping it leaves `keyboard_target`
-/// naming a window the compositor has stopped typing into, with the page still
-/// marking it active. It was uncovered: deleting that call passed the whole
-/// workspace.
+/// `focus_chrome` moves the seat and, through `broadcast_focus_decision`, tells
+/// the chrome which window is active. Without the second, the page keeps a
+/// window marked active that no longer gets keys.
 ///
-/// The check above cannot see it, and that was measured rather than assumed.
-/// On the destroy path `toplevel_destroyed` runs `broadcast_closed` first,
-/// which has already told the chrome the focus moved — so a `focus_changed`
-/// waited for there arrives whether or not the line under test ran.
+/// The previous test cannot catch this: on the destroy path `broadcast_closed`
+/// already sends `focus_changed`. Here the desktop maps late while an app
+/// holds the keyboard, which is the one `focus_chrome` call site reachable
+/// headless.
 ///
-/// This drives another route instead: the desktop's window turning up while an
-/// app holds the keyboard, which is a real chrome starting late — the case
-/// `a_chrome_that_connects_late_is_told_about_a_window_already_open`
-/// (`tests/apps.rs`) is about. `focus_chrome` has three call sites, the
-/// destroy path above is the second, and the third is `WinitEvent::Focus(true)`
-/// — alt-tabbing in, which needs a real winit window. So this is the one route
-/// that can see the line *and* be driven headless. A click on the desktop is
-/// not among them at all: `focus_pointed_at` broadcasts the same decision from
-/// its own arm and never comes through here.
-///
-/// The startup `focus_changed` is consumed first. Without that the last wait
-/// is answered by the message the compositor sends before any window exists,
-/// and passes with the line deleted — which is how a first version of this
-/// mis-measured.
+/// The startup `focus_changed` is consumed first, or it would answer the last
+/// wait.
 #[test]
 fn the_desktop_mapping_late_takes_the_keyboard_back_in_the_brain_too() {
     let compositor = Compositor::started_with(ONE_DISPLAY);

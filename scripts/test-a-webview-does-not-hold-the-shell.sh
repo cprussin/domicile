@@ -1,28 +1,16 @@
 #!/usr/bin/env bash
-# Whether a <webview> being resized can hold back the shell's frame.
+# Checks resizing a <webview> does not hold back the shell's frame.
 #
-# A <webview>'s guest is embedded the way an out-of-process <iframe> is: a
-# RemoteFrame in the shell's page, whose ChildFrameCompositingHelper puts a
-# cc::SurfaceLayer on the guest's surface. Upstream embeds it with
-# `cc::DeadlinePolicy::UseDefaultDeadline()`, so every new size the shell gives
-# it is a new surface the shell's own CompositorFrame depends on -- and viz
-# holds that frame back until the guest draws at the new size, or until the
-# deadline passes. That is the whole desktop, every window on it, waiting on one
-# page to lay out and raster.
+# A <webview> guest is embedded like an out-of-process <iframe>. Upstream uses
+# `cc::DeadlinePolicy::UseDefaultDeadline()`, so viz delays the shell's frame
+# until the guest draws at its new size. A shell resizes on every frame of a
+# drag, so the whole desktop would wait on one page.
 #
-# A shell resizes a browser window on every frame of a drag or a tiling
-# animation, so it waited on every frame. An <app> never did: its
-# SurfaceLayerBridge embeds with `UseSpecifiedDeadline(0u)`, and viz draws the
-# client's latest frame until the new one comes. That difference was the whole
-# of "a browser window is sluggish to resize and a terminal is not".
+# The patches embed a <webview> with `UseSpecifiedDeadline(0u)`, as <app>
+# does; viz draws the guest's latest surface meanwhile. An ordinary <iframe>
+# keeps the default, since it is part of its page's layout.
 #
-# So a <webview> embeds as an <app> does, and an ordinary <iframe> still as
-# upstream does -- a frame that is part of its page's own layout is right to
-# wait for it. Nothing blanks meanwhile: without a fallback, viz draws the
-# latest surface of the same allocation group, which a resize stays in.
-#
-# NO CHROMIUM TREE. This reads the series, which is the source of truth, so it
-# is cheap enough for the shell group on every push.
+# Reads the patches, not a Chromium tree, so it runs in the shell group.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -36,7 +24,7 @@ fail() {
   FAILED=$((FAILED + 1))
 }
 
-# Every line the series adds to <file>, across every patch that touches it.
+# Prints every line the series adds to <file>.
 added_to() {
   awk -v file="$1" '
     /^diff --git a\// { in_file = ($0 ~ ("/" file "$")) }

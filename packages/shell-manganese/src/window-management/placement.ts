@@ -1,10 +1,8 @@
-// What is on the screen right now: one rectangle per visible window, and the
-// order they stack in.
+// Turns window state into what one screen shows: a rectangle and stacking
+// depth per visible window.
 //
-// The join between the state and the page. Nothing above this knows about
-// trees or workspaces, and nothing below it knows how big a screen is — the
-// geometry comes from the display the chrome is on, which only the chrome
-// knows, so it is an argument rather than a field.
+// Screen geometry is an argument because only the chrome knows which display
+// it is on.
 
 import { onScreen, rectOf } from "./floating/float";
 import { floatingGapOf, gapOf } from "./gaps";
@@ -18,135 +16,101 @@ import type { Workspace } from "./workspace";
 
 /** Where one window is drawn, and how it stacks against the others. */
 export type Placement = {
-  /** Its title bar: its own, or its tab in the container it is in. */
+  /** Its title bar, or its tab in a tabbed container. */
   bar: Rect;
   /**
-   * Where a window a tab is hiding is drawn instead: under the one its
-   * container shows, at {@link COVERED}. `undefined` for a window with a
-   * `surface` — see `Frame.behind`.
+   * For a hidden tab, where it is drawn under the shown one, at
+   * {@link COVERED}. `undefined` when `surface` is set. See `Frame.behind`.
    */
   behind: Rect | undefined;
   /**
-   * The window's own `z-index`.
+   * The window's `z-index`.
    *
-   * Nothing reports it. The window is a layer in this page's layer tree, so
-   * the page's compositor stacks the client's surface by this the way it
-   * stacks anything else, and the element it is written on is the one the
-   * pointer hit-tests against.
+   * The page's compositor stacks client surfaces by it, and the pointer
+   * hit-tests by it, so no separate stacking is reported.
    */
   depth: number;
   /**
-   * The whole of what the window occupies: its bar and its contents together.
+   * The bar and contents together; just the bar for a hidden tab.
    *
-   * What both of those elements turn about when the window arrives or leaves.
-   * They are separate elements, so halves that scaled about their own centers
-   * would pull apart by a fraction of the window's height — one shared point
-   * is what keeps a frame a frame. It is the box of the bar alone for a window
-   * a tab is hiding, which is all such a window has on screen.
+   * Open and close animations scale both elements about this box's center.
+   * Scaling each about its own center would pull them apart.
    */
   frame: Rect;
   id: string;
-  /** The window its container's open tab is named after — see `Frame.openTab`. */
+  /** The window its container's open tab is named after. See `Frame.openTab`. */
   openTab: string | undefined;
-  /** Whether it is inside the container `focus parent` selected — see `Frame.selected`. */
+  /** Whether it is in the container `focus parent` selected. See `Frame.selected`. */
   selected: boolean;
-  /**
-   * Where its contents go, or `undefined` for a window a tabbed container is
-   * not showing: the tab is on screen and the window behind it is not.
-   */
+  /** Where its contents go, or `undefined` for a hidden tab. */
   surface: Rect | undefined;
-  /** Which way the tabs its bar is one of run — see `Frame.tabbed`. */
+  /** The direction of the tab row its bar is in. See `Frame.tabbed`. */
   tabbed: TabLayout | undefined;
 };
 
-/** The rectangles one screen of the desk has to offer. */
+/** The rectangles of one screen. */
 export type Geometry = {
-  /** Every display's bounding box — what `fullscreen global` fills. */
+  /** The bounding box of every display, which `fullscreen global` fills. */
   desktop: Rect;
-  /** Which screen this is, which is what says whose windows go on it. */
+  /** The screen's name, which selects its workspace. */
   name: string;
-  /** The screen itself, which is what `fullscreen` fills. */
+  /** The whole screen, which `fullscreen` fills. */
   screen: Rect;
-  /** What is left of that screen under the top bar: where the windows go. */
+  /** The screen below the top bar, where windows go. */
   workspace: Rect;
 };
 
-/** A container's tab, and how it stacks: with the float it is in, if any. */
+/** A container's tab, stacked with its float, if any. */
 export type PlacedTab = Tab & { depth: number };
 
-/** Everything the screen shows: the windows, and the tabs of any container. */
+/** The windows and container tabs a screen shows. */
 export type Screenful = {
   placements: readonly Placement[];
   tabs: readonly PlacedTab[];
 };
 
 /**
- * Under every tiled window, a window a tab is hiding — see
+ * The depth of hidden tabs, under every tiled window. See
  * {@link Placement.behind}.
  *
- * Under the page's own stack rather than at the bottom of it, and still over
- * the wallpaper: that sits at this depth too and comes first in the document,
- * and two elements at one `z-index` are decided by the order they come in it.
- *
- * Two under the tiling rather than one, which leaves the depth between for
- * the window a tab switch is hiding while the one it shows fades in over it
- * (`windowConcealing`). Level with the other hidden tabs, whichever of them
- * came later in the document would be drawn over it and show through the fade.
+ * The wallpaper shares this depth but comes first in the document, so it stays
+ * underneath. It is two below the tiling, leaving -1 for the tab a tab switch
+ * is hiding while the new one fades in (`windowConcealing`). If it shared -2
+ * with the other hidden tabs, one later in the document would draw over it and
+ * show through the fade.
  */
 const COVERED = -2;
 
-/** The `z-index` the tiled windows share: the bottom of the page's stack. */
+/** The `z-index` all tiled windows share. */
 export const TILED = 0;
 
-/** The lowest `z-index` a floating window is given — above every tiled one. */
+/** The lowest floating `z-index`, above every tiled window. */
 const FLOATING = 1;
 
 /**
- * Over every window that is still open, a window that has closed and is still
- * shrinking away.
+ * The depth of a closing window, over every open one.
  *
- * Because its neighbors are easing into the space it had while it does. At
- * the depth it used to have they would cover it before it had finished going:
- * two elements at one `z-index` are decided by the order they come in the
- * document, and a closing window goes on being drawn where it always was —
- * see `closing.ts` for why it cannot simply be moved to the end.
+ * Its neighbors grow into its space during the close animation and would
+ * otherwise cover it. See `closing.ts` for why it is not just moved to the end
+ * of the document.
  */
 export const LEAVING = 1000;
 
 /**
- * And over all of that, a window filling the screen: sway's fullscreen covers
- * whatever else the workspace has on it, and here that is everything the page
- * draws — the floats, and a window on its way out among them.
+ * The depth of a fullscreen window, over everything else, as in sway.
  *
- * Above `LEAVING` rather than under it, because a fullscreen window covers the
- * space a closing one is shrinking away inside: a departure drawn over it
- * would be a window playing out across a screen that is no longer showing it.
- * It costs the window that *is* closing nothing, because a fullscreen window
- * that closes takes its workspace's fullscreen with it — see
- * `workspace.ts` — so there is never one left over it to hide it.
+ * It is above `LEAVING` so a closing window does not animate over it. A
+ * closing fullscreen window clears its workspace's fullscreen (see
+ * `workspace.ts`), so it is never hidden itself.
  */
 const FULLSCREEN = 2000;
 
 /**
  * Everything the screen shows, fullscreen included.
  *
- * **A fullscreen window is one window over the workspace rather than the
- * workspace replaced by one window.** The tiling and the floats are laid out
- * the way they always are and the window filling the screen is put over them
- * at {@link FULLSCREEN}; the only thing that is different about the screenful
- * is that one window's rectangle.
- *
- * Which is what makes taking the screen and giving it back a movement. The
- * boxes ease — see `settlingStyles` — so the window grows out of the place it
- * had and shrinks back into it, and the windows it covers are drawn the whole
- * way, disappearing behind it as it arrives rather than a frame before it
- * starts. A screenful holding the fullscreen window alone blinked every other
- * window out at the first frame and put them all back at the last, which is
- * the desktop showing a state that is neither where it came from nor where it
- * is going.
- *
- * It is the same arithmetic on both sides of the change for the same reason:
- * what is under a fullscreen window *is* what the screen goes back to.
+ * A fullscreen window is placed at {@link FULLSCREEN} over the normal layout,
+ * which stays in place. That lets it animate from its tiled box and back (see
+ * `settlingStyles`) while the other windows stay drawn underneath.
  */
 export const placementsOf = (
   state: WindowState,
@@ -158,8 +122,7 @@ export const placementsOf = (
     geometry.workspace,
     gapOf(workspace.tiling),
   );
-  // Over them, in the order the workspace stacks them: each float's own tree
-  // laid out in its box.
+  // Floats go above, in workspace stacking order, each tree laid out in its box.
   const floating = workspace.floats
     .map((float) => onScreen(float, geometry.screen))
     .map((float, at) => ({
@@ -173,8 +136,7 @@ export const placementsOf = (
     ),
   ];
   const full = fullscreen(workspace, geometry);
-  // The fullscreen window replaces the rectangle it already had rather than
-  // being given a second one.
+  // Replace the fullscreen window's tiled rectangle instead of adding a second.
   const placements =
     full === undefined
       ? laidOut
@@ -191,9 +153,8 @@ export const placementsOf = (
 };
 
 /**
- * Where a window's contents are drawn and how they stack: at its `surface`,
- * or under the window its container shows when a tab is hiding it — or
- * `undefined` for a window that is not on screen at all.
+ * Where a window's contents are drawn and at what depth: its `surface`, its
+ * `behind` rect for a hidden tab, or `undefined` when off screen.
  */
 export const contentsOf = (
   placement: Placement | undefined,
@@ -207,10 +168,7 @@ export const contentsOf = (
   }
 };
 
-// The one window a fullscreen workspace shows, or `undefined` when none is
-// asked for. A fullscreen that names a window the workspace no longer has is
-// nothing to draw — `closed` clears it, so this is the ordering rather than a
-// state anyone can reach.
+// The workspace's fullscreen window, or `undefined` when there is none.
 const fullscreen = (
   workspace: Workspace,
   geometry: Geometry,
@@ -236,11 +194,8 @@ const fullscreen = (
 };
 
 /**
- * One window's frame, stacked at `depth`.
- *
- * The one place a {@link Placement} is made, so that the box the two halves
- * turn about is worked out once rather than at each of the three ways a
- * window reaches the screen.
+ * One window's frame, stacked at `depth`. The only place a {@link Placement}
+ * is built, so `frame` is computed one way.
  */
 const placed = (
   { bar, behind, id, openTab, selected, surface, tabbed }: Frame,
@@ -257,7 +212,7 @@ const placed = (
   tabbed,
 });
 
-/** The smallest box holding both of them. */
+/** The smallest box holding both. */
 const spanning = (bar: Rect, surface: Rect): Rect => {
   const x = Math.min(bar.x, surface.x);
   const y = Math.min(bar.y, surface.y);

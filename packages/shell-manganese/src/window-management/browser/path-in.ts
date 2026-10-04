@@ -1,6 +1,3 @@
-/**
- * Where `name` in `directory` is. The root already ends in the `/` a name goes
- * after.
- */
+/** The path of `name` inside `directory`, handling the root's trailing `/`. */
 export const pathIn = (directory: string, name: string): string =>
   directory === "/" ? `/${name}` : `${directory}/${name}`;

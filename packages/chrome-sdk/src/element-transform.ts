@@ -1,17 +1,14 @@
-// Recovering an element's exact local->screen affine from what the DOM will
-// tell us about it.
+// Computes an element's local-to-screen affine from DOM measurements.
 //
-// `getBoundingClientRect` reports the *axis-aligned* box of an element after
-// its transform, which is not where the element's own coordinate system starts
-// once it rotates or skews. Composing the transform's linear part with that box
-// recovers the real mapping, which is what surface-local pointer coordinates
-// invert through. `transform-origin` is not part of it
-// — see `elementToScreen` for why it cannot be.
+// `getBoundingClientRect` gives the axis-aligned box after the transform, which
+// is not the element's origin once it rotates or skews. Combining the box with
+// the transform's linear part gives the exact mapping, which pointer
+// coordinates are inverted through.
 
 import type { Matrix, Point } from "./matrix";
 import { apply, multiply, translate } from "./matrix";
 
-/** What the DOM reports about one element, in the form the mapping needs. */
+/** DOM measurements of one element. */
 export type ElementGeometry = {
   /** The element's untransformed border-box size, in CSS pixels. */
   size: Point;
@@ -22,19 +19,11 @@ export type ElementGeometry = {
 };
 
 /**
- * The element's local-pixel -> screen affine.
+ * The element's local-pixel to screen affine.
  *
- * Local coordinates run from `(0, 0)` at the element's untransformed top-left
- * corner to `size`, exactly as CSS pixels inside the element do.
- *
- * `transform-origin` is not a parameter, because it cannot change the answer.
- * CSS applies a transform about its origin, which is the conjugation
- * `T(o) · L · T(-o)` — and conjugating by a translation leaves the linear part
- * `L` untouched, moving only the result. This then anchors that result to
- * where `getBoundingClientRect` says the box is, which subtracts exactly the
- * offset the origin introduced. The two cancel algebraically, not
- * approximately: every origin gives the same affine. Passing one in cost a
- * `getComputedStyle` string parse per window per frame and bought nothing.
+ * Local coordinates run from `(0, 0)` at the untransformed top-left corner to
+ * `size`. `transform-origin` is not needed: it only translates the result, and
+ * anchoring to the bounding box removes that translation exactly.
  */
 export const elementToScreen = ({
   size,
@@ -45,9 +34,8 @@ export const elementToScreen = ({
   return multiply(translate(box.left - left, box.top - top), linear);
 };
 
-// The top-left of the transformed element's axis-aligned bounding box, in the
-// same local-origin-relative space the transform produces. Subtracting it from
-// `getBoundingClientRect` is what anchors the mapping to the screen.
+// The top-left of the transformed element's axis-aligned bounding box,
+// relative to the transformed local origin.
 const boundingCorner = (matrix: Matrix, [width, height]: Point): Point => {
   const corners = (
     [

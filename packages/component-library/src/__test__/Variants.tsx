@@ -27,10 +27,8 @@ type Props<Row, Column> =
       columnLabel?: undefined;
     };
 
-// Storybook-only display grid for cross-product variant matrices. Plain
-// `<div>` containers because the prior `<ul>` was invalid HTML (it can't
-// hold `<span>` header cells as direct children) and an ARIA `role="grid"`
-// would imply keyboard-navigable interactivity the demo doesn't provide.
+// A Storybook grid of component variants. Uses plain `<div>`s: a list can't
+// hold header cells, and `role="grid"` would imply keyboard navigation.
 export const Variants = <Row, Column>(props: Props<Row, Column>) => {
   const { rows, columns, columnLabel } = props;
   return (

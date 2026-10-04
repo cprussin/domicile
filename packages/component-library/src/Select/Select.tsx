@@ -19,18 +19,16 @@ export type SelectOption<V> = {
   value: V;
   label: ReactNode;
   /**
-   * Optional plain-text label used for keyboard text-search and for
-   * rendering the value in the trigger when `value` is an object. Defaults
-   * to `label` when `label` is a string; required otherwise.
+   * Plain text for type-ahead search and the trigger. Defaults to `label`
+   * when it is a string, else `String(value)`.
    */
   textLabel?: string | undefined;
   disabled?: boolean | undefined;
 };
 
 type CommonProps<V> = Partial<ControlVariant> & {
-  // `null` is base-ui's controlled-with-no-selection sentinel; `undefined`
-  // means uncontrolled. We forward both verbatim so consumers can pick
-  // either model without triggering the controlled/uncontrolled warning.
+  // base-ui uses `null` for "controlled, nothing selected" and `undefined`
+  // for uncontrolled; both pass through unchanged.
   defaultValue?: V | null | undefined;
   disabled?: boolean | undefined;
   options: readonly SelectOption<V>[];
@@ -45,12 +43,8 @@ type CommonProps<V> = Partial<ControlVariant> & {
 
 type Props<V> = ExtendProps<typeof BaseSelect.Trigger, CommonProps<V>>;
 
-// The Select component composes the same `control` recipe + `wrapperBase`
-// state matrix as Input/Textarea. The trigger button carries `data-control`
-// so the wrapper's `:has([data-control]:disabled)` / `:focus-visible` /
-// `[data-invalid]` selectors fire identically — the visual surface, focus
-// outline, hover border, and invalid styling match the rest of the form
-// controls verbatim. A right-aligned caret replaces the resize handle.
+// A dropdown styled like Input. The trigger carries `data-control` so
+// `wrapperBase`'s state selectors apply to it.
 export const Select = <V,>({
   defaultValue,
   disabled,
@@ -69,43 +63,22 @@ export const Select = <V,>({
   const textLabelForOption = (option: SelectOption<V>): string =>
     option.textLabel ??
     (typeof option.label === "string" ? option.label : String(option.value));
-  // `active` stays true for the *entire* open lifecycle — set on open,
-  // cleared only after base-ui finishes the close animation and returns
-  // focus to the trigger (`onOpenChangeComplete(false)`). The trigger
-  // receives this as `data-active`; `wrapperBase`'s focused-state
-  // selectors recognize it alongside `:focus` and `[data-popup-open]`.
-  // Together those three signals form a continuous "looks focused"
-  // window with no gap during close, so the wrapper never transitions
-  // toward its unfocused appearance and there's nothing to flash.
+  // True from open until base-ui finishes closing and refocuses the trigger.
+  // Sets `data-active`, which keeps the wrapper's focus style on through the
+  // close animation so it doesn't flash.
   const [active, setActive] = useState(false);
-  // Controlled open state, used to suppress an immediate re-open
-  // sequence that fires when the user clicks the Field's label while
-  // the popup is open:
-  //   1. mousedown on label → base-ui's useDismiss (document-level,
-  //      *capture* phase, default 'sloppy' outsidePressEvent) closes the
-  //      popup before any label-level handler can run.
-  //   2. click on label → browser dispatches a synthetic click on the
-  //      trigger via the label's `htmlFor`.
-  //   3. base-ui's useClick (configured `event: 'mousedown'`) reads
-  //      `pointerType === undefined` for that synthetic click (no real
-  //      pointerdown ever hit the trigger) and toggles → reopens.
-  // The synthetic click in (2) fires synchronously inside the same
-  // browser task as the mousedown in (1), so a lockout flag cleared on
-  // the next macrotask via `setTimeout(0)` spans the entire sequence
-  // without affecting real user interactions (a human can't click twice
-  // inside a single task). When the lockout is set and base-ui asks to
-  // open, we drop the request.
+  // Controlled so a label click can't reopen the popup it just closed:
+  //   1. mousedown on the label: base-ui's outside-press handler closes it.
+  //   2. click on the label: the browser clicks the trigger via `htmlFor`.
+  //   3. base-ui treats that synthetic click as a toggle and reopens.
+  // A short lockout after closing drops the reopen.
   const [open, setOpen] = useState(false);
   const reopenLockoutRef = useRef(false);
   const reopenLockoutTimeoutRef = useRef<
     ReturnType<typeof setTimeout> | undefined
   >(undefined);
-  // base-ui's Positioner uses the trigger as its anchor by default, so
-  // `--anchor-width` would be the trigger button's width (= wrapper
-  // inner width minus paddings minus the prefix icon). Anchoring to the
-  // wrapper instead makes `--anchor-width` equal the visible field's
-  // outer width, which the popup then reads via `inlineSize:
-  // var(--anchor-width)` so its width matches the field exactly.
+  // The popup anchors to the wrapper, not the trigger, so `--anchor-width`
+  // is the visible field's width.
   const wrapperRef = useRef<HTMLDivElement>(null);
   return (
     <BaseSelect.Root<V>
@@ -120,10 +93,7 @@ export const Select = <V,>({
       name={name}
       onOpenChange={(nextOpen, eventDetails) => {
         if (nextOpen && reopenLockoutRef.current) {
-          // Cancel the open at base-ui's level so it doesn't update its
-          // internal `openUnwrapped` state either. Returning silently
-          // would also work for the controlled state we own, but cancel()
-          // keeps base-ui's bookkeeping in sync.
+          // `cancel()` keeps base-ui's internal open state in sync.
           eventDetails.cancel();
           return;
         }
@@ -132,12 +102,9 @@ export const Select = <V,>({
           if (reopenLockoutTimeoutRef.current !== undefined) {
             clearTimeout(reopenLockoutTimeoutRef.current);
           }
-          // The synthetic click that the browser fires on the trigger via
-          // the label's htmlFor lands a few browser tasks after the close.
-          // Macrotask schedulers (`setTimeout(0)`) and microtasks can race
-          // and clear before the synthetic click arrives — a fixed delay
-          // comfortably longer than the click sequence avoids the race
-          // and is still far shorter than human re-click latency (~200ms+).
+          // The label's synthetic click lands a few tasks after the close,
+          // so `setTimeout(0)` can clear too early. 100ms covers it and is
+          // shorter than a human re-click.
           reopenLockoutTimeoutRef.current = setTimeout(() => {
             reopenLockoutRef.current = false;
             reopenLockoutTimeoutRef.current = undefined;
@@ -189,19 +156,10 @@ export const Select = <V,>({
         <BaseSelect.Backdrop className={backdropStyles} />
         <BaseSelect.Positioner
           align="start"
-          // `false` keeps the popup sitting cleanly below the field with
-          // its left edge at the wrapper's left edge. base-ui's default
-          // (`true`) shifts the popup horizontally to line up the popup
-          // selected-item text with the trigger value text, which when
-          // there's a prefix icon shifts the popup right past the
-          // wrapper's edge — the popup ends up at the trigger button's
-          // left, not the wrapper's left, so it no longer visually
-          // "matches" the field.
+          // Keeps the popup's edge aligned with the wrapper. The default
+          // aligns item text with the trigger, which a prefix icon pushes
+          // past the wrapper's edge.
           alignItemWithTrigger={false}
-          // Anchor to the field's outer wrapper (not the inner trigger
-          // button) so `--anchor-width` reflects the visible field width,
-          // including paddings and prefix icon — read by the popup's
-          // `inlineSize: var(--anchor-width)` to match the field exactly.
           anchor={wrapperRef}
           className={positionerStyles}
           side="bottom"
@@ -233,12 +191,8 @@ export const Select = <V,>({
   );
 };
 
-// Forward clicks that landed on the wrapper (padding around the trigger,
-// or the prefix icon area whose `pointer-events: none` lets clicks fall
-// through) to the trigger button so any click within the container opens
-// the dropdown. Clicks that already landed on the trigger (or one of its
-// descendants — Value, caret) bubble up here too; the contains() guard
-// stops us from double-firing in that case.
+// Forwards clicks on the wrapper's padding or prefix icon to the trigger.
+// Skips clicks inside the trigger, which already opened it.
 const openTriggerOnWrapperClick: MouseEventHandler<HTMLDivElement> = (
   event,
 ) => {
@@ -254,11 +208,8 @@ const openTriggerOnWrapperClick: MouseEventHandler<HTMLDivElement> = (
 };
 
 const triggerStyles = css({
-  // Empty-value placeholder gets the muted color the wrapper would have
-  // shown if it owned the text.
   "&[data-popup-open]": {
-    // No special-case styling for now; the wrapper's `_focusVisible`
-    // outline already conveys "open".
+    // The wrapper's focus style already shows the open state.
   },
   alignItems: "center",
   backgroundColor: "transparent",
@@ -270,19 +221,15 @@ const triggerStyles = css({
   fontFamily: "inherit",
   fontSize: "inherit",
   gap: "inherit",
-  // Items are arranged with `Value` taking the available width and the
-  // caret pinned at the inline end. `justify-content` would fight any
-  // wrappers, so flex-grow on the value span (below) does the work.
   inlineSize: "100%",
   minInlineSize: 0,
   outlineStyle: "none",
-  // `padding: 0` so the wrapper's per-size paddingInline owns the inset.
+  // The wrapper owns the padding.
   padding: 0,
   textAlign: "start",
 });
 
-// One line, cut short, however long the chosen option: the field keeps its
-// height in a row.
+// Truncates to one line so the field's height stays fixed.
 const valueStyles = css({
   flexShrink: 1,
   minInlineSize: 0,
@@ -297,24 +244,16 @@ const caretStyles = css({
   },
   color: "muted",
   flexShrink: 0,
-  // Pin the caret to the inline-end regardless of the value text width.
-  // The auto margin absorbs every pixel between the value and the caret,
-  // so a one-character value and a hundred-character value both end at
-  // the same right edge.
+  // Pins the caret to the inline end.
   marginInlineStart: "auto",
   transition: "transform {durations.fast} {easings.default}",
 });
 
-// The rounded variant inflates inline padding by 1.5 spacing units on top of
-// the `control` recipe's per-size padding (xs: 1.5, sm: 2.5, md: 3, lg: 3.5,
-// xl: 4, 2xl: 5.5, 3xl: 7.5, 4xl: 10 — see `CONTROL_PADDING_INLINE` in
-// `control-sizes.ts`), matching Input's `rounded` overrides. Values inlined
-// as literals (not derived from a helper) so Panda's static extractor can
-// emit the corresponding atomic classes — helper return values are opaque.
+// `rounded` adds 1.5 spacing units to the recipe's inline padding
+// (`CONTROL_PADDING_INLINE` in `control-sizes.ts`), as in Input. Values are
+// literals because Panda's static extractor can't read helper results.
 //
-// `cursor: pointer` overrides the `cursor: text` from `wrapperBase` — for
-// Input/Textarea the wrapper hints "click here to start typing", but for
-// Select the whole container is a click-to-open surface (see
+// `cursor: pointer` because a click anywhere opens the popup (see
 // `openTriggerOnWrapperClick`).
 const wrapperStyles = cva({
   base: {
@@ -347,11 +286,8 @@ const wrapperStyles = cva({
   },
 });
 
-// Visible in both touch modes (sheet + centered overlay) — the dim
-// behind any modal-style popup on touch devices. In mouse mode the
-// backdrop stays transparent (base-ui still uses it for outside-click
-// handling because Select runs in `modal` mode by default; we just
-// don't paint anything).
+// Dims the page on touch devices only. With a mouse it stays transparent
+// but still catches outside clicks for base-ui's modal mode.
 const backdropStyles = css({
   _pointerCoarse: {
     "&[data-ending-style]": {
@@ -369,12 +305,8 @@ const backdropStyles = css({
 });
 
 const positionerStyles = css({
-  // Touch-overlay mode: centered modal-style popup. Override base-ui's
-  // Floating-UI positioning so the positioner sits at the viewport
-  // center via `top: 50% / left: 50%` plus a `-50%` translate. The
-  // popup inside has its own transform for the open/close animation —
-  // those compose without conflict because they're on different
-  // elements.
+  // Touch overlay: centered in the viewport. `!important` beats Floating
+  // UI's inline styles.
   _touchOverlay: {
     bottom: "auto !important",
     left: "50% !important",
@@ -383,15 +315,8 @@ const positionerStyles = css({
     top: "50% !important",
     transform: "translate(-50%, -50%) !important",
   },
-  // Touch-sheet mode: override base-ui's Floating-UI inline positioning
-  // and pin the positioner to the bottom of the viewport. Side insets
-  // give the drawer `{spacing.2}` (0.5rem) of breathing room on either
-  // side against the backdrop; the bottom is flush with the viewport
-  // edge (no gap) so the drawer reads as a bottom sheet pulled up. The
-  // home indicator on iOS is cleared via inner `paddingBlockEnd` on
-  // the popup. `!important` is necessary because Floating UI sets the
-  // conflicting values via the `style` attribute — pure stylesheet
-  // rules can't outrank it on specificity.
+  // Touch sheet: pinned to the viewport bottom with small side insets.
+  // `!important` beats Floating UI's inline styles.
   _touchSheet: {
     bottom: "0 !important",
     left: "{spacing.2} !important",
@@ -405,12 +330,8 @@ const positionerStyles = css({
 });
 
 const popupStyles = css({
-  // Touch-overlay mode: centered modal-style popup. Same sizing /
-  // padding as the touch sheet — large tap targets, generous max
-  // height — but the popup floats in the viewport center with all
-  // four corners rounded and a normal border on every side. Animates
-  // with a fade + subtle scale (matches `ModalDialog`'s entry feel)
-  // since slide-up makes no sense for a centered popup.
+  // Touch overlay: a centered popup that fades and scales in, like
+  // `ModalDialog`.
   _touchOverlay: {
     "&[data-ending-style]": {
       opacity: 0,
@@ -427,30 +348,14 @@ const popupStyles = css({
     maxBlockSize: "min(70vh, {spacing.160})",
     maxInlineSize: "min({spacing.120}, 90vw)",
     minInlineSize: "{spacing.80}",
-    // Symmetric block padding — the centered overlay has all four
-    // corners rounded, so the first and last items both need the same
-    // breathing room from their rounded edge.
     paddingBlockEnd: 3,
     paddingBlockStart: 3,
     transform: "scale(1)",
     transition:
       "opacity {durations.normal} {easings.out}, transform {durations.normal} {easings.out}",
   },
-  // Touch-sheet mode: bottom drawer that's flush with the viewport's
-  // bottom edge but inset on the sides. The bottom-corner radius is 0
-  // so the drawer meets the bottom cleanly; only the top corners are
-  // rounded. Extra top padding gives the first list item breathing
-  // room from the rounded top edge; the bottom padding maxes the
-  // standard list gap with `env(safe-area-inset-bottom)` so iOS
-  // devices with a home indicator don't overlap the last item.
-  //
-  // We drive the enter animation through `&[data-starting-style]` (set
-  // and cleared by base-ui via JS) rather than Panda's `_starting`
-  // (which maps to the CSS `@starting-style` at-rule). base-ui's
-  // attribute fires reliably for newly-mounted portaled elements; the
-  // browser's `@starting-style` doesn't always fire for a popup that
-  // mounts inside a portal, which leaves the popup snapped to its
-  // resting position with no animation.
+  // Touch sheet: a bottom drawer that slides up. The bottom padding clears
+  // the iOS home indicator.
   _touchSheet: {
     "&[data-ending-style]": {
       opacity: 1,
@@ -480,17 +385,9 @@ const popupStyles = css({
     transition:
       "opacity {durations.fast} {easings.in}, transform {durations.fast} {easings.in}",
   },
-  // Non-touch enter animation: fade in + slide down from above + small
-  // scale-up, with `transform-origin: top` so the scale grows from the
-  // top edge (the side closest to the trigger). We drive this through
-  // `&[data-starting-style]` (set and cleared by base-ui via JS) rather
-  // than Panda's `_starting` (which maps to the CSS `@starting-style`
-  // at-rule) because `@starting-style` doesn't reliably fire for
-  // portaled popups — the popup would snap into place with no
-  // transition. The touch modes below use the same attribute approach
-  // for the same reason. Touch-mode overrides (`_touchOverlay`,
-  // `_touchSheet`) below replace this with mode-appropriate motion
-  // (scale for centered, slide-from-bottom for sheet).
+  // base-ui's attribute instead of Panda's `_starting` throughout:
+  // `@starting-style` does not reliably fire for elements mounted in a
+  // portal.
   "&[data-starting-style]": {
     opacity: 0,
     transform: "scaleY(0.8)",
@@ -499,20 +396,13 @@ const popupStyles = css({
   border: "1px solid {colors.border}",
   borderRadius: "md",
   boxShadow: "lifted",
-  // The popup is a flex column with `overflow: hidden`; the inner List
-  // is the actual scroll container (see `listStyles`). That keeps the
-  // scrolling content clipped inside the popup's padding box, so items
-  // never visibly slide behind the rounded border on scroll.
+  // The list scrolls, not the popup, so items stay clipped inside the
+  // rounded border.
   display: "flex",
   flexDirection: "column",
-  // At least the trigger's width, so the popup reads as a continuation of
-  // the field (`alignItemWithTrigger`), and wider when an option needs it —
-  // up to the room there is — rather than cutting a short label to a few
-  // letters in a narrow field. `--anchor-width` and `--available-width` are
-  // base-ui's anchor positioner's, via Floating UI's `size()` middleware.
-  // An option longer than the room still truncates, on the item text.
+  // At least the field's width, and wider for long options up to the
+  // available space.
   inlineSize: "max-content",
-  // Cap the visible window; the List inside handles scroll.
   maxBlockSize: "min(60vh, {spacing.96})",
   maxInlineSize: "var(--available-width)",
   minInlineSize: "var(--anchor-width)",
@@ -521,19 +411,14 @@ const popupStyles = css({
   overflow: "hidden",
   paddingBlock: 1,
   transform: "translateY(0) scale(1)",
-  // Anchor the scale transform to the top edge so the popup appears to
-  // grow downward out of the trigger, rather than puffing out from its
-  // own center.
+  // Grows down from the trigger.
   transformOrigin: "top",
   transition:
     "opacity {durations.normal} {easings.out}, transform {durations.normal} {easings.out}",
 });
 
-// The actual scroll container: takes the remaining height of the popup's
-// flex column and scrolls its contents. `minBlockSize: 0` is required to
-// let a flex child shrink below its content size so `overflow-y: auto`
-// can engage — without it, the List would simply expand the popup and
-// no scroll would appear.
+// The scroll container. `minBlockSize: 0` lets it shrink below its content
+// so it scrolls instead of growing the popup.
 const listStyles = css({
   flexGrow: 1,
   minBlockSize: 0,
@@ -541,10 +426,7 @@ const listStyles = css({
 });
 
 const itemStyles = css({
-  // Touch devices (both sheet and centered-overlay modes): bump
-  // font-size and tap-target padding so items are comfortable to hit
-  // with a finger (Apple HIG recommends 44px minimum, Material 48dp —
-  // these paddings clear both).
+  // Touch targets of at least 48px.
   _pointerCoarse: {
     fontSize: "md",
     paddingBlock: 3.5,
@@ -554,9 +436,7 @@ const itemStyles = css({
     color: "muted",
     opacity: "disabled",
   },
-  // `data-highlighted` is set by base-ui on the keyboard-focused item;
-  // hover separately tints via Panda's `_hover` so mouse and keyboard
-  // navigation feel the same.
+  // Keyboard highlight and mouse hover look the same.
   "&[data-highlighted], &:hover:not([data-disabled])": {
     backgroundColor: "color-mix(in oklab, {colors.foreground} 8%, transparent)",
   },
@@ -566,7 +446,7 @@ const itemStyles = css({
   display: "grid",
   fontSize: "sm",
   gap: 2,
-  // 1fr for the label, auto for the trailing check indicator.
+  // Label, then the check indicator.
   gridTemplateColumns: "1fr auto",
   outlineStyle: "none",
   paddingBlock: 1.5,

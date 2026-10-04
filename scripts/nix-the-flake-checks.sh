@@ -1,12 +1,10 @@
 #!/usr/bin/env bash
-# `nix flake check`, which is where the home-manager module is evaluated.
+# Runs `nix flake check`, which evaluates the home-manager module.
 #
-# `scripts/test-the-home-manager-module-agrees.sh` compares the module's
-# options against the Rust config struct textually, because there is no nix in
-# every session that needs to run it. That is the half that needs no nix. This
-# is the other half: a module that declares an option it then fails to write
-# into the config file is a mismatch no text comparison sees, and evaluating it
-# against a real configuration is what catches it.
+# `scripts/test-the-home-manager-module-agrees.sh` compares options against
+# the Rust config struct as text, without nix. Evaluation catches what text
+# comparison cannot, such as an option that is declared but never written to
+# the config file.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

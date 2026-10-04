@@ -1,10 +1,10 @@
-//! Where the compositor's config comes from when nobody named one.
+//! Tests for finding the config file when `--config` is not given.
 
 use std::path::{Path, PathBuf};
 
 use domicile_launch::config_path::{config_file, is_module, ConfigFile};
 
-/// The environment as a pair of variables, which is all this reads.
+/// A fake environment with `XDG_CONFIG_HOME` and `HOME`.
 fn env(xdg: Option<&'static str>, home: Option<&'static str>) -> impl Fn(&str) -> Option<String> {
     move |name| match name {
         "XDG_CONFIG_HOME" => xdg.map(str::to_string),
@@ -13,7 +13,7 @@ fn env(xdg: Option<&'static str>, home: Option<&'static str>) -> impl Fn(&str) -
     }
 }
 
-/// A tiny filesystem: the paths that exist, and nothing else does.
+/// A fake filesystem containing only `entries`.
 fn tree(entries: &'static [&'static str]) -> impl Fn(&Path) -> bool {
     move |path| entries.iter().any(|there| Path::new(there) == path)
 }
@@ -24,16 +24,13 @@ fn nothing(_: &Path) -> bool {
 
 const DEFAULT: &str = "/home/somebody/.config/domicile/domicile.json";
 
-/// Where a config lives, which is what an absent one names.
+/// The config directory, reported when no config is found.
 const HOME_DIR: &str = "/home/somebody/.config/domicile";
 
 #[test]
 fn the_flag_wins_and_is_not_looked_for() {
-    // Handed on unexamined, the way it always was: what is in it is the
-    // compositor's business, and this process opening it first would be a
-    // second reader to disagree with. A path that does not exist is still the
-    // path they asked for, and the compositor's complaint about it is the one
-    // that names the file it could not read.
+    // Passed through unchecked. The compositor reports a missing or invalid
+    // file.
     assert_eq!(
         config_file(
             Some(Path::new("/tmp/desk.json")),
@@ -66,12 +63,8 @@ fn xdg_config_home_is_preferred_over_the_guess_at_it() {
 
 #[test]
 fn a_config_home_that_is_not_a_path_is_not_one() {
-    // The spec says so outright: `XDG_CONFIG_HOME` is used when it is set to
-    // an absolute path, and treated as unset otherwise. Both ways it can fail
-    // are here, and both are a variable somebody exported by hand -- a
-    // relative path resolves against whatever directory the desktop happened
-    // to be started from, and the empty string is what an unset variable
-    // looks like to a shell that exported it anyway.
+    // Per the XDG spec, an empty or relative `XDG_CONFIG_HOME` is treated as
+    // unset.
     for nonsense in ["", "config", "./config"] {
         assert_eq!(
             config_file(
@@ -87,11 +80,8 @@ fn a_config_home_that_is_not_a_path_is_not_one() {
 
 #[test]
 fn no_file_there_is_the_defaults_and_says_where_it_looked() {
-    // NOT AN ERROR, and the path is carried anyway. A desktop with no monitors
-    // written down is a desktop -- that is what made the flag optional in the
-    // first place -- but "the compositor's defaults" on its own is the same
-    // sentence whether the file is missing, misspelled or in the other config
-    // directory, so it names the one place that was looked.
+    // Not an error: the compositor uses defaults. The directory is kept so
+    // the message can say where it looked.
     assert_eq!(
         config_file(None, &env(None, Some("/home/somebody")), &nothing),
         ConfigFile::Absent(PathBuf::from(HOME_DIR))
@@ -100,10 +90,8 @@ fn no_file_there_is_the_defaults_and_says_where_it_looked() {
 
 #[test]
 fn a_run_with_no_home_at_all_has_nowhere_to_look() {
-    // There is no fallback for this and there should not be: a config home
-    // guessed without a home directory would be somebody else's. A daemon or
-    // a container starts like this, and it is a run of the defaults rather
-    // than a run to refuse.
+    // No guessed fallback. Daemons and containers run like this and get the
+    // defaults.
     assert_eq!(
         config_file(None, &env(None, None), &tree(&[DEFAULT])),
         ConfigFile::Nowhere
@@ -116,10 +104,7 @@ fn a_run_with_no_home_at_all_has_nowhere_to_look() {
 
 #[test]
 fn what_each_answer_is_run_with() {
-    // The whole point of the enum: three of the four hand the compositor a
-    // path and one hands it nothing. A `--config` that got dropped on the way
-    // through here would be a desk coming up unplaced with its own config file
-    // sitting right there.
+    // Only a named or found file is passed to the compositor.
     assert_eq!(
         ConfigFile::Named(PathBuf::from("/tmp/desk.json")).path(),
         Some(Path::new("/tmp/desk.json"))
@@ -134,10 +119,8 @@ fn what_each_answer_is_run_with() {
 
 #[test]
 fn every_answer_says_which_one_it_is() {
-    // Printed by the binary before anything starts, because a desk in the
-    // wrong arrangement is most often this file being a different one than the
-    // person thinks -- and now that one of the four is a file nobody typed,
-    // "config: <path>" alone no longer says which.
+    // The binary prints this at startup, so each case says how the file was
+    // chosen.
     assert_eq!(
         ConfigFile::Named(PathBuf::from("/tmp/desk.json")).to_string(),
         "/tmp/desk.json, because --config names it"
@@ -184,7 +167,7 @@ fn a_config_is_a_module_or_json() {
 
 #[test]
 fn two_configs_where_one_lives_are_refused_by_name() {
-    // Which of the two is the desk is not a question this gets to answer.
+    // Ambiguous, so refused.
     let found = config_file(
         None,
         &env(None, Some("/home/somebody")),
@@ -209,9 +192,7 @@ fn a_module_config_is_one_to_evaluate() {
 
 #[test]
 fn a_toml_config_is_not_one() {
-    // TOML is gone, and a file left over from it is not read: the desk runs
-    // the defaults and says it found nothing, rather than a compositor
-    // refusing a file nobody can write any more.
+    // TOML is not a config format, so the result is the defaults.
     assert_eq!(
         config_file(
             None,

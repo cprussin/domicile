@@ -1,24 +1,21 @@
 #!/usr/bin/env bash
-# Every webview guard runs beside another run of itself.
+# Tests that every webview guard can run beside another run of itself.
 #
-# `crux` is one machine with two runners, and two engine runs' guards overlap.
-# /tmp is each runner's own (PrivateTmp); the network is not. The guards used to
-# take fixed ports -- 8731-8737 for their pages, 9232-9236 for the debugging
-# port -- so PR #603's run 36235045048 on `crux-two` failed five guards at once,
-# `OSError: [Errno 98] Address already in use`, while PR #598's run 36235026989
-# on `crux` was in the same guards.
+# `crux` runs two runners on one machine, and their engine runs' guards
+# overlap. /tmp is private to each runner (PrivateTmp); the network is shared.
+# Fixed ports collide with `OSError: [Errno 98] Address already in use`.
 #
-# So every one of those ports is held here, by a listener that writes down
-# anyone who connects -- the other run -- and each guard is started against a
-# stand-in engine. What each must do:
+# This holds the fixed ports a guard might use, with a listener that records
+# any connection, and starts each guard against a stand-in engine. Each guard
+# must:
 #
-#   get its page served              the engine was started, and the address it
+#   get its page served              the engine started, and the address it
 #                                    was given answers
-#   drive the engine it started      `--remote-debugging-port=0`, and the port
-#                                    that engine reported is the one asked, and
-#                                    never a held one: a second browser on a
-#                                    fixed port would take the keys meant for
-#                                    this one
+#   drive the engine it started      `--remote-debugging-port=0`, using the
+#                                    port that engine reported and never a
+#                                    held one; a second browser on a fixed
+#                                    port would take the keys meant for this
+#                                    one
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -48,9 +45,8 @@ expect() {
   fi
 }
 
-# THE OTHER RUN: every port a guard ever took, held, and anyone who connects
-# written down. A port something else on this machine already holds is held all
-# the same, which is the condition under test.
+# The other run: holds every fixed port and records any connection. A port
+# already held by something else counts as held too.
 python3 - "$WORK/held.log" >"$WORK/holder.log" 2>&1 <<'EOF' &
 import selectors, socket, sys
 
@@ -83,10 +79,10 @@ grep -q holding "$WORK/holder.log" || {
   exit 1
 }
 
-# THE ENGINE, standing in: opens its broker socket, asks for the page it was
-# pointed at, and -- when asked for a debugging port -- serves one on whatever
-# port it gets and says which in its profile, as Chromium does for port 0. Then
-# prints every line a guard waits for before it drives, and stays up.
+# The stand-in engine: opens its broker socket, requests its page, and, when
+# asked for a debugging port, serves one on any free port and writes it to the
+# profile, as Chromium does for port 0. It then prints every line a guard waits
+# for before driving, and stays up.
 ENGINE="$WORK/engine"
 mkdir -p "$ENGINE/out/Domicile"
 cat >"$ENGINE/out/Domicile/chrome" <<'EOF'
@@ -145,7 +141,7 @@ EOF
 printf '#!/bin/sh\nexit 1\n' >"$ENGINE/out/Domicile/domicile_color_probe"
 chmod +x "$ENGINE/out/Domicile/chrome" "$ENGINE/out/Domicile/domicile_color_probe"
 
-# Every guard at once, as `check.sh` runs them, each in a directory of its own.
+# Every guard at once, as `check.sh` runs them, each in its own directory.
 PIDS=()
 for guard in "$GUARDS"/guard-webview-*.sh; do
   name="$(basename "$guard" .sh)"

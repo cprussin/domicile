@@ -1,17 +1,15 @@
-//! Which modifier keys the desktop's keyboard has down, and who has been told.
+//! Tracks the modifier keys held on the desktop's keyboard and tells the
+//! chrome when they change.
 //!
-//! The chrome cannot see this for itself. `wl_keyboard.modifiers` goes to the
-//! surface that holds the keyboard, so the moment a window is focused the page
-//! stops hearing about the modifiers — and a chrome whose windows answer to a
-//! held one, alt to drag a window being the reason this exists, needs to know
-//! exactly then. So the compositor says.
+//! `wl_keyboard.modifiers` goes only to the surface with keyboard focus, so
+//! the chrome stops seeing modifiers once a window is focused. It needs them
+//! then, for example to drag a window while alt is held.
 
 /// The modifiers held.
 ///
-/// Its own type rather than Smithay's, which carries the toggles as well —
-/// caps lock and num lock are states of the keyboard rather than keys a user
-/// is holding, and matching on them would make a shortcut stop working the
-/// moment Num Lock was on.
+/// Not Smithay's type, which includes caps lock and num lock. Those are
+/// keyboard states, not held keys, and matching on them would break shortcuts
+/// while Num Lock is on.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Modifiers {
     pub alt: bool,
@@ -20,12 +18,10 @@ pub struct Modifiers {
     pub logo: bool,
 }
 
-/// What the chrome was last told, so that a change is a message and everything
-/// else is silence.
+/// The modifiers the chrome was last sent, so only changes are sent.
 ///
-/// Every key that arrives moves the seat's modifier state, and almost none of
-/// them move *this* — a page told on every keystroke would be reading a
-/// keystroke counter, and the answer it wanted was already on screen.
+/// Most key events leave the held modifiers unchanged and should not reach
+/// the chrome.
 #[derive(Debug, Default)]
 pub struct Held(Modifiers);
 
@@ -60,15 +56,14 @@ mod tests {
     fn a_key_that_leaves_the_modifiers_alone_says_nothing() {
         let mut held = Held::default();
         held.moved_to(ALT);
-        // Every ordinary key pressed while alt is held arrives here with alt
-        // still down, and none of them is news.
+        // Ordinary keys pressed with alt held still report alt down.
         assert_eq!(held.moved_to(ALT), None);
     }
 
     #[test]
     fn letting_go_is_a_message_too() {
-        // The half a chrome most needs: a page that heard alt go down and
-        // never heard it come up drags the next window the user clicks.
+        // Without the release, the chrome thinks alt is still held and drags
+        // the next window the user clicks.
         let mut held = Held::default();
         held.moved_to(ALT);
         assert_eq!(
@@ -79,8 +74,7 @@ mod tests {
 
     #[test]
     fn a_second_modifier_is_its_own_message() {
-        // Alt+Shift is a different answer from Alt, and the chrome resizes
-        // rather than moves on the strength of it.
+        // The chrome resizes on Alt+Shift but moves on Alt.
         let mut held = Held::default();
         held.moved_to(ALT);
         let with_shift = Modifiers { shift: true, ..ALT };

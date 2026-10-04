@@ -1,39 +1,33 @@
-//! What the compositor publishes once it is up.
+//! The session file the compositor writes once it is ready.
 //!
-//! The shell picks the path (`--session PATH`) and waits for the file to
-//! appear; the compositor writes it after everything is bound and before it
-//! starts serving. Everything the shell cannot know in advance is in it: the
-//! Wayland displays are named by the compositor, and whether it is compositing
-//! is decided by whether it got a window.
+//! The shell picks the path (`--session PATH`) and waits for the file. The
+//! compositor writes it after binding its sockets and before serving. It holds
+//! what the shell cannot know in advance, such as the Wayland display names.
 
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-/// A running compositor, described to the shell that started it.
+/// A running compositor's endpoints, as read by the shell.
 ///
-/// `PartialEq` so a test can assert a round trip; the field names are the wire
-/// format, read by a TypeScript program on the other side.
+/// The field names are the wire format, read by TypeScript.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Session {
-    /// The host protocol version this compositor speaks. A shell built against
-    /// another one has to say so rather than connect and misbehave.
+    /// The host protocol version. A shell built for another version must
+    /// refuse to connect.
     pub protocol: u32,
     /// The Unix socket the host protocol is served on.
     pub chrome_socket: PathBuf,
     /// The display applications connect to.
     pub wayland_display: String,
-    /// The display the *chrome's own window* goes on, which is a different
-    /// socket: which one a client arrived on is how the compositor tells the
-    /// desktop from the things running on it.
+    /// The display for the chrome's own window. A separate socket lets the
+    /// compositor tell the chrome from apps.
     pub chrome_wayland_display: String,
 }
 
-/// Could not write the session document.
+/// Could not write the session file.
 ///
-/// Carries the path the caller asked for rather than the temporary the write
-/// actually failed on: the temporary is this function's business, and naming it
-/// in an error would send the reader looking for a file that never existed.
+/// Names the requested path, not the staging file, which the reader never sees.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error("could not publish the session to {path}: {kind:?}")]
 pub struct PublishError {
@@ -41,31 +35,25 @@ pub struct PublishError {
     pub kind: std::io::ErrorKind,
 }
 
-/// Write `session` to `path`, atomically.
+/// Writes `session` to `path` atomically.
 ///
-/// By rename, because the reader is a shell polling for the file: a plain write
-/// would let it open a document that is half a JSON object, and there is no
-/// second chance to notice — a session is published once.
+/// Uses a rename because the shell polls for the file and would otherwise read
+/// partial JSON.
 pub fn publish(session: &Session, path: &Path) -> Result<(), PublishError> {
     let document = serde_json::to_string_pretty(session)
         .expect("a session is plain data and always serializes");
     let staging = staging_path(path)?;
-    // Both steps behind the same cleanup, not only the rename. `fs::write`
-    // creates and truncates before it writes, so a failure part way through —
-    // a full filesystem, a quota — leaves the staging file exactly as a failed
-    // rename does: a file named almost right beside the one a shell is waiting
-    // for, which the next run would inherit.
+    // A failed write (such as a full disk) leaves a staging file just like a
+    // failed rename, so both steps share the cleanup.
     through(&staging, path, || {
         std::fs::write(&staging, document)?;
         std::fs::rename(&staging, path)
     })
 }
 
-/// Run the two steps of a publish, taking the staging file with them if either
-/// fails.
+/// Runs `steps`, removing the staging file if they fail.
 ///
-/// The error is captured before the removal so a filesystem that will not let
-/// go of the staging file cannot replace the reason the publish failed.
+/// The error is captured before the removal so a failed removal cannot hide it.
 fn through(
     staging: &Path,
     path: &Path,
@@ -81,15 +69,10 @@ fn through(
     }
 }
 
-/// Where the document is written before it is renamed into place.
+/// Returns the staging path: a `.new` sibling of `path`.
 ///
-/// A sibling, because `rename` is only atomic within a filesystem and the one
-/// place guaranteed to share `path`'s is `path`'s own directory.
-///
-/// A path with no file name — `/`, or one ending in `..` — is refused rather
-/// than defaulted into a staging file called `.new`: it is a shell that named
-/// a directory where a document goes, and answering that for it would write
-/// somewhere nobody asked for.
+/// It is a sibling because `rename` is only atomic within one filesystem. A
+/// path with no file name, such as `/`, is refused.
 fn staging_path(path: &Path) -> Result<PathBuf, PublishError> {
     let Some(name) = path.file_name() else {
         return Err(PublishError {

@@ -1,16 +1,13 @@
-// Where a query that is not a file and not a URL goes.
+// Search URLs for launcher queries that are neither a file nor a URL.
 //
-// The bang tags of the launcher this desktop is modeled on: a query carries
-// `!yt` or `!wiki` somewhere in it and that word picks the engine, and a query
-// that carries none goes to Google. Anywhere in the query rather than at the
-// front, because that is how a tag actually gets typed — the words go in, the
-// wrong results are imagined, and the tag is appended.
+// A bang tag such as `!yt` or `!wiki` anywhere in the query picks the engine;
+// untagged queries go to Google. Tags are often appended after the words, so
+// any position counts.
 //
-// A site can also have pages a name goes to: `!gh cprussin/domicile` is a
-// repository before it is a search, so a tagged name goes there, and the
-// search for it is the second answer rather than the first.
+// Some tags also resolve names to pages: `!gh cprussin/domicile` opens the
+// repository, and the search becomes the second option.
 
-/** How a query becomes a URL, with `%QUERY%` standing in for the escaped text. */
+/** Google's search URL; `%QUERY%` stands for the escaped text. */
 const GOOGLE = "https://google.com/search?q=%QUERY%";
 
 /** The sites a tag can send a query to. */
@@ -36,19 +33,18 @@ type Site = {
   url: string;
 };
 
-/** A page on a site a tag named, which the query's one word is the name of. */
+/** A page on a tagged site, named by the query's single word. */
 export type TaggedSite = {
   engine: Engine;
-  /** The word, as the page's path. */
+  /** The word, used as the page's path. */
   path: string;
   url: string;
 };
 
 /**
- * The tags, and the engine each one picks.
+ * The tags and the engine each picks.
  *
- * A plain table rather than a `Map`, so the tag is spelled once. The keys carry their `!` because that is what the user
- * types and because a bare `yt` is a word somebody may be searching for.
+ * Keys keep the `!` because a bare `yt` may be a search term.
  */
 const TAGS: Readonly<Record<string, Engine>> = {
   "!gh": Engine.GitHub,
@@ -69,12 +65,11 @@ const ENGINE_URLS: Readonly<Record<Engine, string>> = {
 };
 
 /**
- * The engines with pages a name goes to: the shape a name there has, and the
- * URL it makes, with `%PATH%` standing in for the name.
+ * Engines whose names map to pages: the name's shape and the page URL, with
+ * `%PATH%` standing for the name.
  *
- * On GitHub a user or an organization, or one of their repositories: one
- * segment or two, of the characters GitHub allows in them — none of which a
- * URL needs escaped. Anything else is words, and words are a search.
+ * GitHub: a user or organization, optionally with a repository. These
+ * characters need no URL escaping. Anything else is a search.
  */
 const SITES: Readonly<Partial<Record<Engine, Site>>> = {
   [Engine.GitHub]: {
@@ -83,17 +78,14 @@ const SITES: Readonly<Partial<Record<Engine, Site>>> = {
   },
 };
 
-/**
- * Where to send `query`: the page its tag's site has for it, the engine its
- * tag names, or Google.
- */
+/** The URL for `query`: its tag's page, its tag's search, or Google. */
 export const searchUrl = (query: string): string =>
   taggedSite(query)?.url ?? taggedSearch(query)?.url ?? googleUrl(query);
 
-/** `query` searched on Google as it is, tag and all. */
+/** `query` searched on Google unchanged, tag included. */
 export const googleUrl = (query: string): string => urlOf(GOOGLE, query);
 
-/** The search `query`'s tag names, or `undefined` for one that carries none. */
+/** The search `query`'s tag names, or `undefined` if untagged. */
 export const taggedSearch = (query: string): TaggedSearch | undefined => {
   const tag = tagIn(query);
   if (tag === undefined) {
@@ -110,8 +102,8 @@ export const taggedSearch = (query: string): TaggedSearch | undefined => {
 };
 
 /**
- * The page `query`'s tag has for its words, or `undefined` for a query whose
- * tag names a site without pages or whose words are not one name there.
+ * The page `query`'s tag names, or `undefined` if the tag's site has no pages
+ * or the words are not a single name there.
  */
 export const taggedSite = (query: string): TaggedSite | undefined => {
   const tag = tagIn(query);
@@ -140,17 +132,15 @@ const urlOf = (template: string, query: string): string =>
   template.replace("%QUERY%", encodeURIComponent(query.trim()));
 
 /**
- * The tag `query` carries, or `undefined` for one that carries none.
+ * The tag in `query`, or `undefined` if none.
  *
- * A whole word, so `hello!yt world` is three words of a search rather than a
- * change of engine that also eats three letters. The first one wins: two tags
- * is not a thing to have a policy about, and picking one is better than
- * running a query with both taken out.
+ * Must be a whole word, so `hello!yt world` stays a plain search. The first
+ * tag wins.
  */
 const tagIn = (query: string): string | undefined =>
   words(query).find((word) => word in TAGS);
 
-/** `query` with the tag taken out, and the gap it left closed up. */
+/** `query` without the tag, whitespace collapsed. */
 const withoutTag = (query: string, tag: string): string =>
   words(query)
     .filter((word) => word !== tag)

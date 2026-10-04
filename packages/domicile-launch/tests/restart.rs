@@ -1,9 +1,8 @@
-//! What a desktop that died earns, and how many times it earns it.
+//! Restart policy for a desktop or engine that dies: backoff, give-up and stop.
 //!
-//! No processes: a desktop is a closure that says how it ended, so the whole
-//! policy — the backoff, the give-up, and the stop that overrules both — is a
-//! unit test. The one part that touches a filesystem is what the last desktop
-//! left in the run's directory, and a temp directory is enough for that.
+//! A desktop is a closure that reports how it ended, so the policy runs without
+//! processes. Only clearing leftovers touches the filesystem, in a temp
+//! directory.
 
 use std::cell::Cell;
 use std::time::Duration;
@@ -53,8 +52,7 @@ fn a_desktop_that_dies_is_started_again_until_it_is_given_up_on() {
         &mut |next| said.push(next.to_string()),
     );
 
-    // Five failures in a row, four of which were started again: the fifth is
-    // the one nothing follows.
+    // Five failures in a row and four restarts: nothing follows the fifth.
     assert_eq!(attempts.get(), policy.give_up_after);
     assert_eq!(
         waited,
@@ -65,9 +63,8 @@ fn a_desktop_that_dies_is_started_again_until_it_is_given_up_on() {
             Duration::from_secs(8),
         ]
     );
-    // Every failure is said, the last one included: a run that gave up
-    // silently would be a desktop that stopped coming back with nothing on the
-    // terminal about why.
+    // Every failure is reported, including the last, so a run that gives up
+    // says why.
     assert_eq!(said.len(), policy.give_up_after as usize);
     assert!(said[1].contains("2s"), "{}", said[1]);
     assert!(said[1].contains("failure 2 of 5"), "{}", said[1]);
@@ -83,9 +80,8 @@ fn a_desktop_that_dies_is_started_again_until_it_is_given_up_on() {
 
 #[test]
 fn the_wait_stops_doubling_at_the_longest_one() {
-    // A policy with small numbers, so the cap is reached where it can be read
-    // rather than in an arithmetic coincidence, and one that gives up a
-    // failure later than the default so there are waits past the cap to read.
+    // Small numbers keep the cap easy to read. One more attempt than the
+    // default leaves waits past the cap.
     let policy = Policy {
         first_wait: Duration::from_secs(1),
         longest_wait: Duration::from_secs(4),
@@ -118,10 +114,8 @@ fn the_wait_stops_doubling_at_the_longest_one() {
 
 #[test]
 fn a_desktop_that_lived_long_enough_starts_the_count_over() {
-    // A desktop somebody used and then lost is an incident rather than a crash
-    // loop: the one after it waits a second again rather than picking up where
-    // the doubling left off, and the failures before it stop counting towards
-    // the give-up.
+    // A desktop that ran long enough was in use, so its loss is an incident and
+    // not a crash loop. The wait and the failure count reset.
     let policy = Policy::default();
     let attempts = Cell::new(0);
     let mut waited: Vec<Duration> = Vec::new();
@@ -147,8 +141,7 @@ fn a_desktop_that_lived_long_enough_starts_the_count_over() {
         vec![
             Duration::from_secs(1),
             Duration::from_secs(2),
-            // The third desktop lived a minute, so it is the first failure of
-            // a new row rather than the third of the old one.
+            // The third desktop lived long enough, so the count starts over.
             Duration::from_secs(1),
             Duration::from_secs(2),
             Duration::from_secs(4),
@@ -181,8 +174,8 @@ fn a_desktop_that_was_stopped_is_not_started_again() {
 
 #[test]
 fn a_stop_asked_for_while_the_next_one_is_waited_for_is_not_started_again() {
-    // Ctrl-C in the gap between two desktops. The wait is what notices it —
-    // the run is not in a component at that moment, so nothing else can.
+    // Ctrl-C between two desktops. No component is running then, so only the
+    // wait can notice it.
     let attempts = Cell::new(0);
     let stopped = Cell::new(false);
 
@@ -226,29 +219,26 @@ fn nothing_the_last_desktop_bound_or_published_outlives_it() {
         !runtime.chrome_socket.exists(),
         "the chrome socket is still there"
     );
-    // The engine binds this one, and binds it loudly: a path that is already
-    // there is a `CHECK` in the browser process rather than a desktop that
-    // comes up without a command socket. The engine the last desktop died with
-    // left this file exactly where the next one is told to bind.
+    // If this path exists, the engine fails a `CHECK` in the browser process
+    // instead of starting without a command socket.
     assert!(
         !runtime.command.exists(),
         "the engine's command socket is still there"
     );
-    // THE ONE THAT MATTERS MOST: the launcher waits for this file to appear,
-    // so one left behind is a desktop reported up before its compositor has
-    // bound anything.
+    // Most important: the launcher waits for this file to appear, so a stale
+    // one reports a desktop up before its compositor has bound anything.
     assert!(
         !runtime.session.exists(),
         "the session document is still there"
     );
-    // Not the profile: it is the person's, kept between desktops, and a
-    // desktop that fails is not a reason to sign them out of everything.
+    // The profile is the person's and kept between desktops. A failed desktop
+    // must not sign them out.
     assert!(
         runtime.profile.join("Cookies").exists(),
         "the engine's profile was cleared"
     );
-    // Not the control socket: it is this process's, it is still bound, and
-    // `DOMICILE_SOCK` still names it.
+    // Not the control socket: this process still binds it, and `DOMICILE_SOCK`
+    // names it.
     assert!(runtime.control.exists(), "the control socket was cleared");
 }
 
@@ -263,8 +253,8 @@ fn a_desktop_that_left_nothing_behind_is_nothing_to_clear() {
 fn what_cannot_be_cleared_is_said_rather_than_started_over() {
     let directory = tempfile::tempdir().expect("a temp directory");
     let runtime = runtime(directory.path());
-    // A directory where the session document goes: `remove_file` refuses it,
-    // which is the shape of any leftover this process cannot take away.
+    // A directory where the session document goes. `remove_file` refuses it,
+    // like any leftover this process cannot remove.
     std::fs::create_dir(&runtime.session).expect("it is created");
 
     let leftover = clear_the_last_one(&runtime).expect_err("it cannot be cleared");
@@ -275,10 +265,8 @@ fn what_cannot_be_cleared_is_said_rather_than_started_over() {
 
 #[test]
 fn an_engine_that_dies_is_started_again_under_the_compositor_that_did_not() {
-    // The same policy, counted on its own and said about the engine rather
-    // than about the desktop: what is being started again is one component,
-    // and a sentence that named the desktop would be describing a restart
-    // nobody asked for and the windows did not survive.
+    // Same policy, counted separately, with messages that name the engine. Only
+    // the engine restarts; the desktop and its windows survive.
     let policy = Policy::default();
     let attempts = Cell::new(0);
     let mut waited: Vec<Duration> = Vec::new();
@@ -324,8 +312,8 @@ fn an_engine_that_dies_is_started_again_under_the_compositor_that_did_not() {
 
 #[test]
 fn a_compositor_that_outlives_its_engines_ends_the_run_rather_than_the_engine() {
-    // `Attempt::Ended` on the engine's loop is the compositor going, which is
-    // the desktop being over: there is nothing left to put an engine under.
+    // `Attempt::Ended` on the engine's loop means the compositor exited, so the
+    // desktop is over.
     let attempts = Cell::new(0);
 
     let ending = keep_the_engine_up(
@@ -345,11 +333,9 @@ fn a_compositor_that_outlives_its_engines_ends_the_run_rather_than_the_engine() 
 
 #[test]
 fn what_the_last_engine_left_goes_and_what_the_compositor_bound_stays() {
-    // An engine started again under a compositor that is still serving. The
-    // engine's own paths are leftovers the next one cannot bind over; the
-    // compositor's are a socket it is still listening on and a document that
-    // is still true, and taking either away would be this run deleting a live
-    // desktop's answer to "is it up".
+    // The engine restarts under a compositor that is still serving. The
+    // engine's paths go so the next engine can bind them. The compositor's
+    // socket and session document are still live and stay.
     let directory = tempfile::tempdir().expect("a temp directory");
     let runtime = runtime(directory.path());
     for path in [

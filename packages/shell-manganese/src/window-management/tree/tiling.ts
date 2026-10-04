@@ -1,12 +1,10 @@
-// A workspace's tiled windows: the tree, and how deep in it the focus sits.
+// A workspace's tiled windows: the layout tree plus a focus depth.
 //
-// **Focus is one chain and a depth along it.** Every container keeps which
-// child it last had the focus in, so following those from the root reaches
-// exactly one window — that is the window the keyboard is in, always. The
-// depth says how much of that chain the *commands* are pointed at: at the full
-// length the focus is the window, and `focus parent` shortens it by one so
-// that a split or a layout change acts on the container instead. Two facts in
-// two places would have to be kept in step; this way there is one.
+// Each container records its focused child, so the chain from the root always
+// ends at the keyboard-focused window. `depth` is how much of that chain
+// commands target: the full length targets the window, and `focus parent`
+// shortens it so commands act on a container. Storing the selection as a depth
+// keeps it consistent with the chain.
 
 import type { Container, LayoutNode } from "./node";
 import { NodeKind, showsOneChild, windowsIn } from "./node";
@@ -14,7 +12,7 @@ import type { Path } from "./path";
 import { ancestorsOf, nodeAt, pathTo } from "./path";
 
 export type Tiling = {
-  /** How many children of the chain below the commands are pointed at. */
+  /** How many steps of the focus chain commands target. */
   depth: number;
   /** The tree, or `undefined` for a workspace with nothing tiled on it. */
   root: LayoutNode | undefined;
@@ -27,11 +25,11 @@ export const NOTHING_TILED: Tiling = { depth: 0, root: undefined };
 export const windowsOf = ({ root }: Tiling): readonly string[] =>
   root === undefined ? [] : windowsIn(root);
 
-/** The window the keyboard is in, or `undefined` when nothing is tiled. */
+/** The keyboard-focused window, or `undefined` when nothing is tiled. */
 export const focusedIdOf = ({ root }: Tiling): string | undefined =>
   root === undefined ? undefined : focusedWindowIn(root);
 
-/** The window at the end of `node`'s own chain of focused children. */
+/** The window at the end of `node`'s focus chain. */
 export const focusedWindowIn = (node: LayoutNode): string => {
   switch (node.kind) {
     case NodeKind.Container: {
@@ -44,11 +42,10 @@ export const focusedWindowIn = (node: LayoutNode): string => {
 };
 
 /**
- * The window showing where `id` is drawn: `id` itself, or the open tab of the
- * outermost tabbed or stacking container hiding it — a hidden window has only
- * its tab on screen, which is the container's rather than its own.
+ * The window visible where `id` is drawn: `id`, or the open tab of the
+ * outermost tabbed or stacking container hiding it.
  *
- * Throws for a window not in `root`: the caller found it there.
+ * Throws if `id` is not in `root`.
  */
 export const shownOver = (root: LayoutNode, id: string): string => {
   const path = pathTo(root, id);
@@ -64,11 +61,10 @@ export const shownOver = (root: LayoutNode, id: string): string => {
 };
 
 /**
- * The node the commands are pointed at — a window, or the container `focus
- * parent` selected.
+ * The node commands target: a window, or the container `focus parent`
+ * selected.
  *
- * Throws on an empty workspace: there is nothing there to command, and the
- * callers all ask whether anything is tiled first.
+ * Throws on an empty workspace; callers check for one first.
  */
 export const focusedNodeOf = (tiling: Tiling): LayoutNode => {
   const { root } = tiling;
@@ -79,13 +75,13 @@ export const focusedNodeOf = (tiling: Tiling): LayoutNode => {
   }
 };
 
-/** Where in the tree the commands are pointed. */
+/** The path to the node commands target. */
 export const focusPathOf = (root: LayoutNode, depth: number): Path => {
   const chain = focusChainOf(root);
   return chain.slice(0, Math.min(depth, chain.length));
 };
 
-/** The children each container last had the focus in, from the root down. */
+/** Each container's focused child index, from the root down. */
 export const focusChainOf = (root: LayoutNode): Path => {
   switch (root.kind) {
     case NodeKind.Container: {
@@ -98,12 +94,10 @@ export const focusChainOf = (root: LayoutNode): Path => {
 };
 
 /**
- * The same tree with the focus on the window `id`, container by container on
- * the way to it.
+ * The tiling with focus on window `id` and every container on its path.
  *
- * Throws for a window that is not tiled here: the callers know which
- * workspace holds a window before they point the focus at it, and a focus on
- * nothing would leave the desktop untypeable.
+ * Throws if `id` is not tiled here: focusing nothing would leave the desktop
+ * without keyboard focus.
  */
 export const withFocusOn = (tiling: Tiling, id: string): Tiling => {
   const { root } = tiling;
@@ -116,14 +110,11 @@ export const withFocusOn = (tiling: Tiling, id: string): Tiling => {
 };
 
 /**
- * The same tree with the focus on the window inside `node`, and the commands
- * still pointed at `node` itself.
+ * The tiling with focus on the window inside `node` and commands targeting
+ * `node`.
  *
- * What carries a `focus parent` selection through a move or a layout change,
- * which is what sway does with one: the chain is re-pointed at the window the
- * keyboard is in, and the depth comes back up by however many levels of
- * container the selection holds. For a window it is {@link withFocusOn}
- * exactly, because a window holds none.
+ * Keeps a `focus parent` selection across a move or layout change, as sway
+ * does. For a window it equals {@link withFocusOn}.
  */
 export const withCommandsOn = (tiling: Tiling, node: LayoutNode): Tiling => {
   const focused = withFocusOn(tiling, focusedWindowIn(node));
@@ -131,26 +122,24 @@ export const withCommandsOn = (tiling: Tiling, node: LayoutNode): Tiling => {
 };
 
 /**
- * The commands back on the window the tiling's focus is in, whatever
- * `focus parent` had them pointed at.
+ * The tiling with commands targeting the focused window, clearing any
+ * `focus parent` selection.
  *
- * What the keyboard leaving the tiling costs a selection: the tree is not
- * where the keys are going any more, so the container one of them chose is
- * not a thing for the next one to act on — or for the desktop to draw a line
- * around.
+ * Used when the keyboard leaves the tiling, so a stale container selection is
+ * neither acted on nor outlined.
  */
 export const withCommandsOnWindow = (tiling: Tiling): Tiling =>
   tiling.root === undefined
     ? tiling
     : { ...tiling, depth: focusChainOf(tiling.root).length };
 
-/** `focus parent`: the container the focus is in, up to the root. */
+/** `focus parent`: select the enclosing container, stopping at the root. */
 export const focusedParent = (tiling: Tiling): Tiling => ({
   ...tiling,
   depth: Math.max(0, tiling.depth - 1),
 });
 
-/** `focus child`: back down the chain, as far as the window it ends on. */
+/** `focus child`: select one level down, stopping at the window. */
 export const focusedChild = (tiling: Tiling): Tiling => {
   const { root } = tiling;
   return root === undefined
@@ -162,14 +151,10 @@ export const focusedChild = (tiling: Tiling): Tiling => {
 };
 
 /**
- * The child a container last had the focus in.
+ * A container's focused child.
  *
- * Throws where that index is not a child, which nothing here can produce: a
- * container holds at least one node and every edit that takes one away brings
- * the index back inside the list.
- *
- * Exported because it is also what a container is *entered* through — see
- * `move.ts` — rather than only what the focus chain runs along.
+ * Exported for `move.ts`, which enters containers through this child. Throws if
+ * `focused` is out of range, which every tree edit prevents.
  */
 export const focusedChildIn = (container: Container): LayoutNode => {
   const child = container.children[container.focused];
@@ -182,9 +167,8 @@ export const focusedChildIn = (container: Container): LayoutNode => {
   }
 };
 
-// Each container on the way to `path` pointed at the child the path takes,
-// which is what makes the chain reach the window at the end of it. The ones
-// off the path are the objects they already were.
+// Sets each container's focus along `path`. Nodes off the path keep their
+// identity.
 const pointedAt = (root: LayoutNode, path: Path): LayoutNode => {
   const [index, ...rest] = path;
   if (index === undefined || root.kind === NodeKind.Window) {

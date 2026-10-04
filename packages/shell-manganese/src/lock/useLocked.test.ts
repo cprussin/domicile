@@ -6,13 +6,10 @@ import { act, renderHook } from "@testing-library/react";
 import { useLocked } from "./useLocked";
 
 /**
- * A stand-in for the client: it takes the one handler this hook registers and
- * lets a test say what the compositor said, and it records every passphrase it
- * was handed.
+ * A client stub that captures the hook's handler, lets a test send compositor
+ * messages and records submitted passphrases.
  *
- * Narrower than a `DomicileClient` for `useClipboard`'s reason — the hook uses
- * two members of it, and a double that implemented the rest would be claiming
- * a seam that size.
+ * Only the two members the hook uses, like `useClipboard`'s test.
  */
 const client = () => {
   let handler: ((message: HostMessageOf<"locked">) => void) | undefined;
@@ -42,11 +39,9 @@ const client = () => {
 
 describe("useLocked", () => {
   it("is open until the compositor has said otherwise", () => {
-    // NOT LOCKED, and the direction matters: a desk that came up locked would
-    // be one the compositor has said so about, and it says so as this page
-    // connects. Starting from `true` instead would put a lock screen over every
-    // desktop for the length of a handshake, including every desk that has no
-    // lock at all and can never be asked for a passphrase.
+    // Starts unlocked. The compositor reports the lock state on connect;
+    // starting locked would flash the lock screen on every connect, even on
+    // desktops with no lock configured.
     const host = client();
 
     const { result } = renderHook(() => useLocked(host.domicile));
@@ -55,9 +50,8 @@ describe("useLocked", () => {
   });
 
   it("is whichever the compositor last said, both ways round", () => {
-    // Both directions in one test because the failure is an inversion, and an
-    // inversion reads perfectly well from either one alone: a shell that locked
-    // when the desk opened and cleared when it shut is the same bug seen twice.
+    // Both directions in one test because the likely bug is an inversion, which
+    // each direction alone would not catch.
     const host = client();
     const { result } = renderHook(() => useLocked(host.domicile));
 
@@ -83,9 +77,8 @@ describe("useLocked", () => {
     });
 
     it("is refused by the compositor saying the desk is still locked", () => {
-      // `locked: true` while a passphrase is out is the answer to it: nothing
-      // else sends one to a desk being checked, because that desk is already
-      // shut.
+      // `locked: true` while a passphrase is pending is the refusal: nothing
+      // else sends it to an already locked desktop.
       const host = client();
       const { result } = renderHook(() => useLocked(host.domicile));
       host.says(true);
@@ -120,7 +113,7 @@ describe("useLocked", () => {
     });
 
     it("is not refused by a desk that shut with nothing out", () => {
-      // The edge that raises the lock screen is not an answer to anything.
+      // The lock transition itself is not an answer.
       const host = client();
       const { result } = renderHook(() => useLocked(host.domicile));
 

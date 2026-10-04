@@ -37,8 +37,7 @@ describe("createHostStreamReader", () => {
   });
 
   it("holds a message that straddles a chunk boundary until it is whole", () => {
-    // A socket cuts wherever it likes. Emitting the first half as a message
-    // would hand the page a fragment of JSON to parse.
+    // A socket can split a line anywhere; a partial line is not valid JSON.
     const read = createHostStreamReader();
     const line = '{"type":"app_closed","app_id":"terminal"}\n';
     expect(read(bytes(line.slice(0, 20)))).toEqual([]);
@@ -53,10 +52,7 @@ describe("createHostStreamReader", () => {
   });
 
   it("reads a long run of messages in linear time", () => {
-    // Messages arrive in many chunks and the reader keeps them as they came,
-    // joining only to complete a line. Joining the whole backlog per chunk is
-    // quadratic — the shape that cost seconds when frames came down here too,
-    // and the reason the pending chunks are still kept as a list.
+    // Joining the whole backlog on every chunk would be quadratic.
     const read = createHostStreamReader();
     const line = `{"type":"app_titled","app_id":"a","title":"${"x".repeat(1000)}"}\n`;
     const started = performance.now();

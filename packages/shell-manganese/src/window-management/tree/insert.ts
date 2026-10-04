@@ -1,4 +1,4 @@
-// A window opening into the tree: beside the one being worked in, and focused.
+// Inserts a new window into the tree next to the focus, and focuses it.
 
 import type { LayoutNode } from "./node";
 import { Layout, LayoutNode as Node, NodeKind, withChildAt } from "./node";
@@ -6,25 +6,21 @@ import { nodeAt, replacedAt } from "./path";
 import type { Tiling } from "./tiling";
 import { focusedWindowIn, focusPathOf, withFocusOn } from "./tiling";
 
-/**
- * The layout a workspace's first container has: sway's `workspace_layout`,
- * which this desktop sets to tabbed.
- */
+/** The layout of a workspace's first container (sway's `workspace_layout`). */
 const WORKSPACE_LAYOUT = Layout.Tabbed;
 
 /**
- * The tree with the window `id` opened in it, focused.
+ * The tree with window `id` opened and focused.
  *
- * Where it lands is sway's rule and depends on what the focus is pointed at: a
- * window gets a sibling beside it, and a container that `focus parent`
- * selected gets a child of its own.
+ * As in sway, a focused window gets a sibling, and a container selected by
+ * `focus parent` gets a new child.
  */
 export const inserted = (tiling: Tiling, id: string): Tiling =>
   insertedNode(tiling, Node.Window(id));
 
 /**
- * The same, for a whole node: a floating group rejoining the tiling, with the
- * focus on the window it was in.
+ * The same for a whole node, such as a floating group rejoining the tiling.
+ * Focus goes to its last-focused window.
  */
 export const insertedNode = (tiling: Tiling, node: LayoutNode): Tiling => {
   const { root } = tiling;
@@ -46,7 +42,7 @@ const besideFocus = (
   const focused = nodeAt(root, path);
   switch (focused.kind) {
     case NodeKind.Container: {
-      // Into the container itself, after the child it last had the focus in.
+      // Into the container, after its last-focused child.
       return replacedAt(root, path, () =>
         withChildAt(focused, focused.focused + 1, opened),
       );
@@ -57,8 +53,8 @@ const besideFocus = (
   }
 };
 
-// A window's sibling, which is a question for its parent — and where there is
-// no parent, the workspace's first container: one window becomes two tabs.
+// Adds a sibling after the window. A lone root window gets a new
+// `WORKSPACE_LAYOUT` container.
 const besideWindow = (
   root: LayoutNode,
   path: readonly number[],

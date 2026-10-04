@@ -1,44 +1,17 @@
 #!/usr/bin/env bash
-# How long a control waits for something that must not happen, asserted.
+# Tests `lib-control-budget.sh`, which sets how long a control waits.
 #
-# A guard and its control are the same run with one thing changed, and they
-# cost wildly different amounts for a reason that is structural rather than
-# accidental: the guard stops the moment it sees what it is looking for, and
-# the control cannot stop until it has given up. Measured on engine run
-# 35496858205, the five pairs that do this are 10m08 of the job:
+# A guard stops when it sees its signal; its control must wait until it gives
+# up. The guard records how long it took, and the control waits a multiple of
+# that instead of a fixed timeout. A slow machine makes the guard slow, so the
+# budget scales with it.
 #
-#   A client's window on the page            1m07   the guard
-#   The guard can still fail                 2m04   its control
-#   A shell on the fork ...                  0m12   the guard
-#   The shell guard is looking at the pixels 1m41   its control
+# Every rule below prevents a control from stopping too early:
 #
-# The control's patience was a constant -- 60 polls, 90 polls, `--for-seconds`
-# -- chosen as "long enough on a slow machine" for the GUARD. The control pays
-# that number every single time, because nothing is ever going to arrive.
-#
-# WHAT REPLACES IT IS THE GUARD'S OWN MEASUREMENT. The two run back to back, in
-# the same job, against the same build, on the same machine, so how long the
-# guard took to see its signal is the best available statement of how long the
-# control should wait to be sure it will not. The guard writes that number
-# down; the control multiplies it and waits that long instead.
-#
-# This is not a shorter constant. On a slow machine the guard is slow, so the
-# control's budget goes up with it -- which a constant cannot do, and which is
-# the case a constant is chosen to survive.
-#
-# THE FOUR THINGS IT HAS TO GET RIGHT, and all four are ways to be wrong in the
-# direction of a control that stops watching too early:
-#
-# - no note means the full budget, so a control run on its own -- by a person,
-#   or by a job where the guard failed before it could measure -- is exactly as
-#   patient as it was before this existed;
-# - the budget never exceeds the full one, so this can only ever make a control
-#   cheaper and never make it wait longer than the number somebody chose;
-# - a floor, because a guard that answered in 200ms does not license a control
-#   that watches for 800ms;
-# - a note has to be recent, because these runners are not ephemeral and /tmp
-#   outlives a job. A number from a build two hours ago is not a measurement of
-#   this one.
+# - No note means the full budget, so a control run alone keeps its timeout.
+# - The budget never exceeds the full one.
+# - A floor applies, so a 200ms guard does not yield an 800ms control.
+# - A note must be recent: runners are not ephemeral and /tmp outlives a job.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -46,8 +19,8 @@ LIB="$ROOT/packages/domicile-engine/scripts/lib-control-budget.sh"
 [ -f "$LIB" ] || { echo "no $LIB" >&2; exit 1; }
 
 WORK="$(mktemp -d)"
-# The cross-step case below writes a note where the library really puts one,
-# under a name nothing else uses, so this takes that back too.
+# The cross-step case writes a note in the library's real directory, under a
+# unique name, so clean that up too.
 CROSSING="control-budget-test-$$"
 trap 'rm -rf "$WORK"; rm -f "/tmp/domicile-control-budgets/$CROSSING"' EXIT
 export DOMICILE_CONTROL_BUDGET_DIR="$WORK"
@@ -71,9 +44,8 @@ says() { # what, pattern
   fi
 }
 
-# What the library explains goes to stderr, so the number on stdout stays a
-# number a `$(...)` can use. Kept rather than printed, because the cases below
-# read it.
+# The library explains itself on stderr so stdout stays a number. Keep it for
+# the cases that read it.
 SAID="$WORK/said"
 : >"$SAID"
 budget() { budget_for "$@" 2>>"$SAID"; }
@@ -117,20 +89,15 @@ expect "each guard's note is its own (client-window)" 80 "$(budget client-window
 
 # --- a note from a previous job ---------------------------------------------
 
-# THE RUNNERS ARE NOT EPHEMERAL and /tmp outlives a job, so this is the case
-# that turns a saving into a wrong answer: a 3s note from a build two hours ago
-# would hand today's control a 12s budget on evidence about something else.
-# Aged by rewriting the timestamp the note carries, not by touching the file.
-# The note records when it was taken rather than relying on its own mtime,
-# because reading an mtime costs `find -newermt` or `stat` and what is on that
-# runner's PATH is not something to assume -- see the no-find case below.
+# A stale 3s note would give this job's control a 12s budget. The note carries
+# its own timestamp, so age it by rewriting that rather than the file's mtime.
+# Reading an mtime needs `find -newermt` or `stat`, which the runner may lack.
 printf '3\n%s\n' "$(($(date +%s) - 7200))" >"$WORK/shell"
 expect "a note older than this job is not a measurement of it" \
   90 "$(budget shell 90)"
 
-# A note from a run that died between its two lines. Half a reading is not a
-# reading, and the missing half must not be read as "taken at epoch zero" --
-# which would be stale, right for the wrong reason -- nor skipped.
+# A note from a run that died between its two lines. The missing timestamp must
+# not be read as epoch zero or skipped.
 printf '3\n' >"$WORK/shell"
 expect "a note that was never finished is not a measurement either" \
   90 "$(budget shell 90)"
@@ -147,18 +114,10 @@ expect "nor is one whose timestamp is not a number" \
 
 # --- the tools this is allowed to assume ------------------------------------
 
-# THE RUNNER HAS COREUTILS AND NOT MUCH ELSE, and this file learned that from
-# the sibling change rather than from first principles. `engine-series-stamp.sh`
-# compared files with `cmp`, `cmp` is diffutils, diffutils is not on that unit's
-# PATH, and run 35475442242 failed with `cmp: command not found` after a
-# 35-patch series had applied cleanly.
-#
-# The staleness check here used `find -newermt`, which is a GNU extension of a
-# tool nothing else on that machine invokes with that flag. Rather than bet on
-# it, the note carries its own timestamp and `date` reads the clock -- both
-# coreutils, both already used by every script on that runner. This case is
-# what holds that: `find` is shadowed with a stub that exits 127 the way a
-# missing command does, and the answers must not change.
+# The runner has coreutils and little else (run 35475442242 failed on a missing
+# `cmp`). The library uses only `date` and the note's own timestamp. Shadow
+# `find` with a stub that exits 127, like a missing command, and check the
+# answers do not change.
 NOFIND="$WORK/no-find"
 mkdir -p "$NOFIND"
 printf '#!/bin/sh\nexit 127\n' >"$NOFIND/find"
@@ -173,35 +132,19 @@ expect "and a stale one is still rejected without find" 90 "$(budget shell 90)"
 
 # --- the two steps of one job ------------------------------------------------
 
-# WHERE THE NOTE GOES IS THE WHOLE POINT, and it is what this got wrong. A guard
-# and its control run inside `nix develop .#full --command`, and there are
-# callers where each of them is its own invocation of it -- `pinned-engine.yml`,
-# `engine-release.yml`, and a person running one guard by hand. (`engine.yml` is
-# no longer one of them: its checks are a single `check.sh engine` inside one
-# shell now. The case below is still the one that decides, because it is the
-# arrangement the other callers have.) The rc script `nix develop` writes ends
-# in
+# The guard and control can run in separate `nix develop .#full --command`
+# invocations (`pinned-engine.yml`, `engine-release.yml`, or by hand). Each
+# invocation gets its own $TMPDIR (src/nix/develop.cc, makeRcScript):
 #
 #   export NIX_BUILD_TOP="$(mktemp -d -t nix-shell.XXXXXX)"
 #   export TMPDIR="$NIX_BUILD_TOP"      # and TMP, TEMP, TEMPDIR
 #
-# -- src/nix/develop.cc, makeRcScript -- so every invocation of it gets a
-# directory of its own and the guard's $TMPDIR is never the control's. A note
-# written under $TMPDIR is written where nothing will read it, the control
-# lands on "no measurement to hand", and it spends its full budget in silence.
-# Measured on engine runs 35492633677 and 35529548154: both shell controls
-# spent all 90 polls with the change in, the same as without it.
+# So a note under $TMPDIR is never read, and the control spends its full
+# budget. The framing guard and the client-window pair do not cover this: one
+# stays in one process, the other's budget hits the ceiling either way.
 #
-# The framing guard looked like proof that this worked and was not: its control
-# writes the note in its permitted leg and reads it in its refused leg, both
-# inside one process, so it never crosses a step at all. Nor does the
-# client-window pair settle it -- four times its guard's minute is past the
-# ceiling, so the capped answer and the no-note answer are the same number.
-#
-# Two processes with two different $TMPDIRs, because the directory is resolved
-# when the library is sourced and a same-process case would not touch it.
-# $STEP is the step's $TMPDIR. The library is sourced inside, because that is
-# when it decides where a note lives.
+# The library resolves its directory when sourced, so this needs two processes
+# with different $TMPDIRs. $STEP is the step's $TMPDIR.
 in_a_step() {
   env -u DOMICILE_CONTROL_BUDGET_DIR TMPDIR="$STEP" \
     bash -c '. "$1"; shift; "$@"' bash "$LIB" "$@" 2>>"$SAID"
@@ -218,11 +161,8 @@ expect "the note the guard wrote is there for the control in the next step" \
 
 # --- and it says which it was ------------------------------------------------
 
-# A CONTROL THAT SPENDS ITS FULL BUDGET LOOKS THE SAME either way -- because
-# nothing was measured, or because the measurement was written somewhere the
-# control cannot see -- and the run log said neither. That silence is what let
-# the defect above survive two engine runs and a reading of the source. So
-# every answer names itself.
+# A control that spends its full budget looks the same whether no note existed
+# or it was written where the control cannot see it. Every answer says which.
 rm -f "$WORK/shell"
 : >"$SAID"
 budget shell 90 >/dev/null
@@ -235,12 +175,9 @@ says "and one with a note says what it read" '3s'
 
 # --- the guards that are supposed to be using this ---------------------------
 
-# A LIBRARY NOTHING CALLS IS A SAVING THAT QUIETLY WENT AWAY. Every assertion
-# above is about arithmetic, and all of it stays green if a guard stops asking.
-# These are the controls measured burning a fixed timeout on engine run
-# 35496858205; each has to both source this and ask it something, and the positive
-# path has to write the note the control reads — a guard that only ever asks
-# gets the full budget forever and looks exactly like this working.
+# The arithmetic above stays green if a guard stops calling the library. On
+# engine run 35496858205 these guards' controls each spent a fixed timeout. A
+# guard that asks but never writes a note gives its control the full budget.
 GUARDS="$ROOT/packages/domicile-engine/scripts"
 for guard in guard-client-window guard-shell guard-webview-framing \
   guard-shell-local-network \
@@ -268,10 +205,8 @@ for guard in guard-client-window guard-shell guard-webview-framing \
   done
 done
 
-# The keyboard control is the other shape and has no budget: it was waiting for
-# `GUARD guest-loaded`, which its own <iframe> removes and which its verdict
-# never reads. There is nothing to calibrate, only a wait to not do — so what
-# is asserted is that the wait is conditional rather than that a number moved.
+# The keyboard control has no budget. It must skip waiting for
+# `GUARD guest-loaded`, which its <iframe> removes and its verdict never reads.
 keyboard="$GUARDS/guard-webview-keyboard.sh"
 if grep -B4 'wait_for_line "$TRIES" "GUARD guest-loaded"' "$keyboard" |
      grep -q 'NEGATIVE.*!= *"1"'; then

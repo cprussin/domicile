@@ -1,23 +1,14 @@
-# Domicile as a NixOS module: the half of a desk that is the machine's.
+# NixOS module for the machine-level parts of a Domicile desk.
 #
-# `nix/home-manager.nix` describes the desk itself -- the config file, the
-# shell, the keys -- and declines the rest, because how a machine boots and
-# which PAM services it has are not a home directory's to decide. This is that
-# rest: the `domicile` login session and the user unit it starts, the PAM
-# service a desk's lock opens through, and where the desk's portal calls are
-# routed.
+# `nix/home-manager.nix` configures the desk itself. This module provides the
+# `domicile` login session and its user units, the PAM service the lock uses,
+# and portal routing. See docs/RUNNING-A-DESKTOP.md#on-nixos.
 #
-# ONE SESSION, WHATEVER THE DESK. `domicile` runs the shell its config names,
-# so which desktop a machine boots into is the config's to say, not the login
-# screen's.
+# The session runs whichever shell the config names. The module sets no
+# default session and enables no display manager; set
+# `services.displayManager.defaultSession = "domicile"` for that.
 #
-# IT CHOOSES NO DEFAULT SESSION AND ENABLES NO DISPLAY MANAGER. Offering the
-# session is this module's; booting into it is
-# `services.displayManager.defaultSession = "domicile"` in the machine's own
-# configuration.
-#
-# CURRIED, for the reason the home-manager module is: `domicilePackages` is
-# this flake's own, for the defaults.
+# Curried so `domicilePackages` can supply this flake's package defaults.
 {domicilePackages}: {
   lib,
   pkgs,
@@ -51,23 +42,21 @@ in {
   config = lib.mkIf cfg.enable {
     services.displayManager.sessionPackages = [cfg.package];
 
-    # `domicile-session.target`, which a desk that is the session starts so
-    # that `graphical-session.target` -- and with it the portal -- can.
+    # Installs `domicile-session.target`, which starts
+    # `graphical-session.target` and so the portal.
     systemd.packages = [cfg.package];
 
-    # On the system profile too, for the portal: it runs outside the desk and
-    # finds `domicile-mimeapps.list` only here. Read only where
-    # `XDG_CURRENT_DESKTOP` is `domicile`, which only a desk that is the
-    # session says to the user manager.
+    # The portal runs outside the desk and finds `domicile-mimeapps.list` only
+    # on the system profile. It is read only when `XDG_CURRENT_DESKTOP` is
+    # `domicile`.
     environment.systemPackages = [cfg.package];
 
-    # What `lock.pam_service = "domicile"` names. A desk that names a service
-    # the machine does not have does not come up.
+    # Named by `lock.pam_service = "domicile"`. A desk whose PAM service is
+    # missing fails to start.
     security.pam.services.domicile = {};
 
-    # Inert unless the machine turns `xdg.portal` on; then Domicile answers
-    # `Settings` and its `domicile-portals.conf` routes the rest to gtk, which
-    # comes with it so that conf names a backend that is there.
+    # Takes effect only when `xdg.portal.enable` is set. gtk is included
+    # because `domicile-portals.conf` routes unhandled interfaces to it.
     xdg.portal = {
       extraPortals = [cfg.package pkgs.xdg-desktop-portal-gtk];
       configPackages = [cfg.package];

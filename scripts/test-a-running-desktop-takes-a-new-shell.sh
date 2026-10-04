@@ -1,24 +1,17 @@
 #!/usr/bin/env bash
-# A desktop that is up is told to serve another shell, and does — and to open
-# an address, which it hands the engine the same way, from `domicile open-url`,
-# `BROWSER` or the `xdg-open` it puts first on its apps' PATH.
+# Checks a running desktop loads a new shell and opens URLs on command, via
+# `domicile load-shell`, `BROWSER` and the `xdg-open` shim on its apps' PATH.
 #
 #   ./scripts/test-a-running-desktop-takes-a-new-shell.sh
 #
-# The unit tests own both halves of this on their own: `tests/cli.rs` what the
-# verb takes, `tests/command.rs` the line the engine is sent, and
-# `tests/command_socket.rs` what comes back. This owns the join, which is the
-# half they cannot reach — that the supervisor puts a command socket on the
-# engine's command line, that a `domicile load-shell` typed in another terminal
-# reaches the supervisor over DOMICILE_SOCK and is routed on to that socket,
-# and that an engine's refusal comes back out of the terminal the command was
-# typed in rather than into a log nobody is reading.
+# Unit tests cover the parts: `tests/cli.rs` the arguments, `tests/command.rs`
+# the line sent, `tests/command_socket.rs` the reply. This covers the wiring:
+# the supervisor gives the engine a command socket, a command from another
+# terminal reaches it over DOMICILE_SOCK, and a refusal is printed in that
+# terminal.
 #
-# THE ENGINE HERE IS TWENTY LINES OF PYTHON, and it is the fake that makes this
-# testable at all: the real one is a Chromium that takes four hours to build
-# and a display to run. What it stands in for is exactly the socket —
-# `components/domicile/browser/command_protocol.cc` is the engine's own half
-# and has unit tests of its own in that tree.
+# The engine is a small Python stub of the command socket. The real side,
+# `components/domicile/browser/command_protocol.cc`, has its own unit tests.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -46,20 +39,18 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-# Two shells: the one the desktop starts on and the one it is told to take.
-# Neither is loaded by anything — the engine here serves no pages — but they
-# are the files that have to be on disk for a path to resolve to one.
+# The starting shell and the one to load. Never run, but must exist for the
+# paths to resolve.
 mkdir -p "$WORK/first" "$WORK/second"
 : >"$WORK/first/shell.js"
 : >"$WORK/second/shell.js"
 
-# What the engine answers next. Written by the test, read per connection, so
-# one desktop covers a command that was carried out and one that was refused.
+# The stub engine's next answer, read per connection, so one desktop can test
+# both success and refusal.
 echo loaded >"$WORK/answer"
 
-# The engine: creates the broker socket, binds the command socket it was given,
-# and answers one line per connection — which is the engine's own rule, not
-# this fake's convenience.
+# Stub engine: creates the broker socket, binds the command socket, and
+# answers one line per connection, as the real engine does.
 mkdir -p "$WORK/engine"
 cat >"$WORK/engine/chrome" <<ENGINE
 #!/usr/bin/env python3
@@ -72,21 +63,18 @@ for arg in sys.argv[1:]:
     elif arg.startswith("--domicile-command-socket="):
         command = arg.split("=", 1)[1]
 
-# What the supervisor put on the command line, for the test to read back.
+# Record the arguments for the test to check.
 with open("$WORK/engine-argv", "w") as saying:
     saying.write("\n".join(sys.argv[1:]))
 
 if command is None:
-    # An engine with no command socket has nothing to serve here, and a
-    # desktop that came up anyway would let every assertion below pass for
-    # the wrong reason.
+    # Fail fast so the desktop does not come up without a command socket.
     sys.exit("no --domicile-command-socket")
 
 listening = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
 listening.bind(command)
 listening.listen(4)
-# After the bind, so the supervisor's wait for the broker is also a wait for
-# a command socket that is ready to be dialed.
+# After the bind, so the command socket is ready once the broker appears.
 open(broker, "w").close()
 
 while True:
@@ -115,7 +103,7 @@ while [ $# -gt 0 ]; do
   case "$1" in --session) session="$2"; shift ;; esac
   shift
 done
-# What every app this desktop starts would inherit, for the test to read back.
+# Record the environment apps inherit, for the test to check.
 printf '%s' "$BROWSER" >"$(dirname "$session")/browser"
 printf '%s' "$PATH" >"$(dirname "$session")/path"
 : >"$session"
@@ -147,7 +135,7 @@ SOCK="$(sed -n 's/^DOMICILE_SOCK=//p' "$LOG")"
 
 FAILED=0
 
-# Put one command to the desktop, the way a terminal started inside it would.
+# Runs a `domicile` command as a terminal inside the desktop would.
 ask_desktop() {
   env DOMICILE_SOCK="$SOCK" "$DOMICILE" "$@" 2>&1
 }
@@ -184,9 +172,7 @@ else
 fi
 
 echo "== which-shell answers with the shell that was loaded, not the one it started on =="
-# The supervisor holds which shell is served and a load changes it. Answering
-# with the module this run began on would be a desktop describing one that is
-# no longer there.
+# The supervisor must update the served shell after a load.
 NOW="$(ask_desktop which-shell)"
 if [ "$NOW" = "$WORK/second/shell.js" ]; then
   echo "PASS: $NOW"
@@ -212,8 +198,8 @@ else
 fi
 
 echo "== a path that names no shell is refused before any engine hears it =="
-# Answered at the terminal it was typed in, which is the reason `load-shell`
-# resolves the path in the client rather than sending the word along.
+# `load-shell` resolves the path in the client, so the error is local and the
+# engine never sees it.
 BEFORE="$(wc -l <"$WORK/engine-heard")"
 MISSING="$WORK/missing.log"
 if ask_desktop load-shell "$WORK/nothing-here.js" >"$MISSING" 2>&1; then
@@ -240,8 +226,8 @@ else
 fi
 
 echo "== BROWSER reaches the engine as the line the protocol says it is =="
-# The program BROWSER names, run the way an app runs it: with one word, and a
-# path made a URL against the directory it was run in.
+# Run BROWSER as an app would, with one argument. A relative path becomes a
+# file URL against the working directory.
 echo loaded >"$WORK/answer"
 if ! ( cd "$WORK" && env DOMICILE_SOCK="$SOCK" "$TARGET/debug/domicile-open-url" \
          "first/a page.html" ) >"$WORK/opened.log" 2>&1; then
@@ -288,7 +274,7 @@ else
 fi
 
 echo "== and anything else reaches the xdg-open behind it =="
-# The machine's own, standing in for the one that knows what opens a PDF.
+# A stub system xdg-open, which handles non-URL arguments.
 mkdir -p "$WORK/system"
 cat >"$WORK/system/xdg-open" <<SYSTEM
 #!/bin/sh

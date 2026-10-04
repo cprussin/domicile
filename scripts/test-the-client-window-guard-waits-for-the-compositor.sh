@@ -1,51 +1,29 @@
 #!/usr/bin/env bash
-# What `guard-client-window.sh` waits for between starting the compositor and
-# starting its client, asserted.
+# Tests what `guard-client-window.sh` waits for between starting the compositor
+# and starting its client.
 #
-# WHAT THIS IS ABOUT. That wait used to be for `brokered a frame sink`, which
-# the compositor logs from `surface_for` in `engine_session.rs` — and
-# `surface_for` is reached when a WAYLAND CLIENT COMMITS A FRAME. The guard
-# does not start its client until after this block. So the grep could not match
-# however long it ran, the loop spent all 120 of its half-second looks, and
-# every run of the guard — green ones included, on both `engine.yml` and
-# `pinned-engine.yml` — paid a guaranteed minute for a signal that could not
-# arrive. It was measured: `lib-control-budget.sh` records the whole guard step
-# at ~1m05 of which the draw poll was ~5s.
+# The guard waits for the compositor to log that it bound the chrome protocol
+# socket. That depends only on the compositor, so it can happen before any
+# client runs. `brokered a frame sink` must not satisfy the wait: a client
+# produces that line, and the guard starts its client only after this wait.
+# `guard-two-windows.sh` shows the right order for that line: `start_client`,
+# then `await_broker`.
 #
-# It was worse than slow. The client was started a minute later than it needed
-# to be, which is what put `spike-page.html`'s 20s embed deadline out of reach
-# by construction and printed a second line reading as a failure on every green
-# run.
-#
-# `guard-two-windows.sh` has the right shape and is worth reading beside this:
-# `start_client` first, then `await_broker`. A frame sink is a fact about a
-# CLIENT, so it can only be waited for once there is one.
-#
-# WHAT IT WAITS FOR NOW is the compositor saying its own startup got as far as
-# binding the chrome protocol socket, which is a fact about the COMPOSITOR and
-# therefore reachable with nothing else running. The cases below are the run
-# that works and the three failures it has to be told apart from, plus the
-# defect stated from the other side: a line only a client can produce is not
-# what a compositor's readiness looks like.
-#
-# The block is run out of the real script rather than copied, as
-# `test-shell-guard.sh` does, so a rewrite that moves it fails here loudly
-# instead of leaving this passing against a version nobody ships, and it
-# reports through the real `annotate`.
+# The block is cut out of the real script, as `test-shell-guard.sh` does, so a
+# rewrite that moves it fails here. It reports through the real `annotate`.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 GUARD="$ROOT/packages/domicile-engine/scripts/guard-client-window.sh"
 [ -f "$GUARD" ] || { echo "no $GUARD" >&2; exit 1; }
-# The real one, as test-annotate.sh does: what a guard says is the behavior,
-# and a stub that spells `::error::` itself would not be it.
+# The real `annotate`, as test-annotate.sh does: the annotation text is the
+# behavior under test.
 # shellcheck source=packages/domicile-engine/scripts/lib-annotate.sh
 . "$ROOT/packages/domicile-engine/scripts/lib-annotate.sh"
 
-# From the compositor's pid being recorded to the comment that introduces the
-# next stage. Both ends are whole lines, and both are lines the block itself
-# does not own — so this slice is the wait and nothing but the wait, whichever
-# shape the wait is in.
+# From recording the compositor's pid to the comment that starts the next
+# stage. Neither end belongs to the wait, so the slice holds the whole wait
+# whatever its shape.
 BLOCK="$(awk '/^STARTED\+=\("\$COMP"\)$/,/^# Which wayland socket it opened for apps\.$/' "$GUARD")"
 [ -n "$BLOCK" ] || {
   echo "no compositor wait in $GUARD — its markers moved. Fix this test with it." >&2
@@ -78,40 +56,32 @@ at_most() { # what, ceiling, got
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-# What the compositor writes when its own startup has got far enough for a
-# client to be worth starting. BUILT from the format string at
-# domicile-compositor's main.rs:813 rather than copied: reword that log site
-# and this test keeps passing while the guard stops seeing the line.
+# The compositor's line once startup is far enough to start a client. Built
+# from the format string at domicile-compositor's main.rs:813, so rewording
+# that log site must be mirrored here.
 #
 # `bind_chrome_socket` runs on the main thread and a failed bind ends the run,
-# so this line means the socket is bound — and the wayland listening socket,
-# which the client actually dials, was made above it.
+# so this line means the socket is bound. The wayland socket the client dials
+# is created before it.
 UP='2026-09-22T00:03:21.004411Z  INFO domicile_compositor: chrome protocol socket up path="/run/user/0/domicile-client-window.sock"'
-# The line the wait used to be for. BUILT from engine_session.rs:208, and here
-# for one purpose: a client is what produces it, so a block satisfied by this
-# is a block that cannot be satisfied before its client exists. That is the
-# defect, and the case below is the only one that can state it.
+# Built from engine_session.rs:208. Only a client produces this line, so a wait
+# it satisfies cannot finish before the client starts.
 BROKERED='2026-09-22T00:04:29.112233Z  INFO domicile_compositor: the browser brokered a frame sink app_id=app-1 surface=1'
-
-# The wait, against a compositor whose log holds `$2` and which is either
-# `alive` or `dead`. Prints what the block said and how long it took, one per
-# line, so a case can assert on either.
+# Runs the wait against a compositor whose log holds `$2` and which is `alive`
+# or `dead`. Prints the block's message and the seconds it took, one per line.
 #
-# A compositor that outlives every case by a wide margin, rather than one timed
-# to the case: `kill -0` is how the block tells a compositor that died from one
-# that is quiet, and a stand-in reaped while the block is still looping would
-# hand a case the other sentence and read as the defect it is testing for.
+# The stand-in compositor outlives every case. The block uses `kill -0` to tell
+# a dead compositor from a quiet one, so a stand-in reaped mid-loop would
+# produce the wrong message.
 #
-# Deliberately NOT a pipeline: a pipeline puts the block in a subshell, `exit
-# 1` leaves only that, and what follows runs anyway — so a test written that
-# way pins the sentence and lets the stop be deleted.
+# Not a pipeline: that would run the block in a subshell where `exit 1` leaves
+# only the subshell, so a test could pass with the stop deleted.
 wait_for() { # $1 how patient, $2 what the log holds, $3 alive or dead
   local dir; dir="$(mktemp -d "$WORK/XXXXXX")"
   printf '%s\n' "$2" >"$dir/comp"
-  # Out here rather than inside the subshell, with its output sent nowhere: the
-  # block ends in `exit` on every failing case, which leaves whatever it
-  # started running — and a background process holding the write end of this
-  # function's command substitution keeps it open for the whole 900s.
+  # Started out here with output discarded. The block exits on every failing
+  # case without killing what it started, and a background process holding the
+  # command substitution's write end would keep it open for 900s.
   local comp
   sleep 900 >/dev/null 2>&1 & comp=$!
   if [ "$3" = dead ]; then
@@ -130,58 +100,46 @@ wait_for() { # $1 how patient, $2 what the log holds, $3 alive or dead
   local waited=$(($(date +%s) - began))
   kill "$comp" 2>/dev/null
   wait "$comp" 2>/dev/null
-  # The annotation's title, without the log it carries. `annotate_from` puts
-  # the tail of the compositor's own words after a `%0A%0A`, which is what a
-  # person reading the check wants and is not what a case here is about — and
-  # a fixture log is the one thing a case can always change without the
-  # behavior changing at all.
+  # The annotation's title only. `annotate_from` appends the compositor log
+  # after `%0A%0A`, and that varies with the fixture, not the behavior.
   local said; said="$(head -1 "$dir/out")"
   printf '%s\n%s\n' "${said%%"%0A"*}" "$waited"
 }
 
-# THE ONE THAT WAS COSTING A MINUTE A RUN. Nothing but the compositor's own
-# startup is in this log — no client has been started, because starting one is
-# what comes after this block — and that has to be enough.
+# Only the compositor's startup line is in the log; no client has started.
+# That must be enough.
 r="$(wait_for 120 "$UP" alive)"
 expect "a compositor that bound its chrome socket is a compositor to start a client against" \
   "the compositor is up, and nothing has asked it for a window yet" \
   "$(printf '%s\n' "$r" | head -1)"
-# The whole claim, and the reason the assertion is a clock rather than a
-# sentence: the old wait ran its full 120 looks at half a second each on every
-# green run there has ever been. Ten seconds is far above what reading a file
-# that already has the line in it can cost and far below the minute.
+# The wait must finish quickly once the line is present. Ten seconds is well
+# above the cost of reading the file and well below the 60s of a full wait.
 at_most "and it does not spend a minute finding that out" \
   10 "$(printf '%s\n' "$r" | tail -1)"
 
-# THE DEFECT, STATED FROM THE OTHER SIDE. A frame sink is brokered when a
-# client commits, so a wait satisfied by this line is a wait that cannot end
-# before the client the guard has not started yet. Without this case, widening
-# the grep to match both lines would pass everything above.
+# A wait satisfied by the frame-sink line could not finish before the client
+# starts. This case stops the grep from being widened to match both lines.
 r="$(wait_for 2 "$BROKERED" alive)"
 expect "a frame sink is not what a compositor's readiness looks like" \
   "::error::guard-client-window: the compositor is running and never bound its chrome socket" \
   "$(printf '%s\n' "$r" | head -1)"
 
-# The bound, which the case above rests on: a compositor that never says
-# anything must end the wait and say so, rather than run until GitHub's
-# `timeout-minutes` kills the job — which reports nothing about the seam.
+# A compositor that never logs anything must end the wait with a message,
+# instead of running until GitHub's `timeout-minutes` kills the job.
 r="$(wait_for 2 "" alive)"
 expect "a compositor that never says it is up ends the wait" \
   "::error::guard-client-window: the compositor is running and never bound its chrome socket" \
   "$(printf '%s\n' "$r" | head -1)"
 
-# The failure this block has always been able to name, kept: a compositor that
-# died is a different sentence from one that is running and quiet, and telling
-# them apart is what sends whoever reads the annotation to the right end.
+# A dead compositor gets a different message from a quiet one, so the reader
+# knows which end to look at.
 r="$(wait_for 120 "" dead)"
 expect "a compositor that died says so instead" \
   "::error::guard-client-window: the compositor did not start" \
   "$(printf '%s\n' "$r" | head -1)"
 
-# How patient it is by default, which is the number CI runs: neither workflow
-# sets `COMPOSITOR_LOOKS`. A floor rather than a value, and the floor is what
-# the wait used to cost — the point of this change is that the wait can now be
-# satisfied, not that the guard got less willing to wait on a slow machine.
+# The default, which CI uses: neither workflow sets `COMPOSITOR_LOOKS`. A
+# floor, so the guard stays as patient on a slow machine.
 LOOKS_DEFAULT="$(sed -n 's/^COMPOSITOR_LOOKS="${COMPOSITOR_LOOKS:-\([0-9]*\)}"$/\1/p' "$GUARD")"
 case "$LOOKS_DEFAULT" in
   (''|*[!0-9]*)

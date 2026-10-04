@@ -1,23 +1,19 @@
-// How the launcher reads one of the paths the host found.
+// Splits a found path into name and directory for display.
 //
-// A path is read from its end. The name is what identifies it — it is what
-// the user typed part of — and the directories above it are only there to
-// tell two files of the same name apart, so the row draws the two separately
-// rather than handing a line of text to `text-overflow` and hoping the
-// interesting half survives.
+// The name identifies the file; the directory only disambiguates. The row
+// draws them separately so truncation never hides the name.
 //
-// WHAT IS A DIRECTORY IS THE HOST'S TO SAY, and it says it with a trailing
-// `/` — see `domicile_host::file_search`. A page has no filesystem, and the
-// host is the one holding every other path it could be told apart by.
+// The host marks directories with a trailing `/` (see
+// `domicile_host::file_search`), since the page has no filesystem access.
 
-/** A path as the list draws it. */
+/** A path split for display. */
 export type FileRow = {
-  /** What is above the name, or `undefined` at the top of home. */
+  /** The parent directory, or `undefined` at the top of home. */
   directory: string | undefined;
   isDirectory: boolean;
-  /** The last segment: what identifies the path. */
+  /** The last segment. */
   name: string;
-  /** The path itself, without the host's slash: what a row opens. */
+  /** The path without the trailing slash, for opening. */
   path: string;
 };
 

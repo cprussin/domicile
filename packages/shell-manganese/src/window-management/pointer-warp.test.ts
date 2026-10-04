@@ -13,11 +13,8 @@ describe("warpTo", () => {
   });
 
   it("asks for a whole pixel, which is what the engine will give", () => {
-    // The engine rounds what it is asked for — `PointerWarpTarget` pins the
-    // spot with `base::ClampRound` — and the page hears back the pixel it
-    // landed on. A fraction asked for is a fraction the arrival never
-    // matches, and an arrival that matches nothing is read as the user
-    // having pointed at whatever the cursor came down on.
+    // The engine rounds warps (`base::ClampRound`). A fractional target would
+    // never match the arrival, which would then read as a user move.
     const odd = { box: { height: 501, width: 401, x: 0, y: 0 }, id: "kitty" };
 
     expect(warpTo({ from: LEFT, pointer: [900, 900], to: odd })).toStrictEqual([
@@ -26,19 +23,15 @@ describe("warpTo", () => {
   });
 
   it("takes it there when the pointer has never been anywhere", () => {
-    // A desktop nobody has touched the trackpad on yet. The pointer is still
-    // somewhere — the engine draws it at the middle of the screen — and this
-    // page has not been told where, which is not a reason to leave the focus
-    // able to hand itself back.
+    // The page has not seen the pointer yet, so it warps anyway.
     expect(
       warpTo({ from: undefined, pointer: undefined, to: LEFT }),
     ).toStrictEqual([200, 350]);
   });
 
   it("follows the window when the window is what moved", () => {
-    // `mod+shift+l`: the same window, somewhere else. The pointer is over
-    // whatever slid into the space it left, which is the window that would
-    // take the focus back.
+    // `mod+shift+l` moves the same window; the pointer is now over whatever
+    // took its place.
     expect(
       warpTo({
         from: { ...LEFT, id: "kitty" },
@@ -49,8 +42,7 @@ describe("warpTo", () => {
   });
 
   it("leaves the pointer alone when it is already over that window", () => {
-    // A tab of the container the pointer is over: the box is the same box, so
-    // there is nothing to move to and nothing that can take the focus back.
+    // Switching tabs keeps the same box, so there is nothing to warp to.
     expect(
       warpTo({
         from: LEFT,
@@ -61,8 +53,7 @@ describe("warpTo", () => {
   });
 
   it("leaves it alone when the keyboard did not move", () => {
-    // Every other key: a layout change, a split, the launcher. The pointer is
-    // where the user put it and nothing has come between it and the focus.
+    // Keys that do not move the focus, such as a split, leave the pointer.
     expect(
       warpTo({ from: LEFT, pointer: [900, 900], to: LEFT }),
     ).toBeUndefined();

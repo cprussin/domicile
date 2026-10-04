@@ -1,16 +1,13 @@
 #!/usr/bin/env bash
-# A run that will compile queues for the compile slot on GitHub, not on a
-# `crux` runner.
+# Asserts a run that will compile queues on GitHub for the compile slot, not
+# on a `crux` runner.
 #
-# `crux` and `crux-two` share one compile slot. A job that took a runner and
-# then waited in `engine-compile-slot.sh take` held that runner idle: over 24h,
-# 22.8 runner-hours, while runs that compile nothing queued for a runner
-# (36194734502: 200 minutes queued for a 6-minute run).
-#
-# So a `plan` job asks the pool whether the tree this run would get is already
-# built from its series, and the build job's concurrency group is the compile
-# queue only when it is not. A pending job holds no runner, and `queue: max`
-# keeps every pending run rather than evicting all but one.
+# `crux` and `crux-two` share one compile slot. A job waiting in
+# `engine-compile-slot.sh take` holds its runner idle, so runs that compile
+# nothing queue behind it. A `plan` job asks the pool whether this run's tree
+# is already built from its series; only if not does the build job join the
+# compile concurrency group. A pending job holds no runner, and `queue: max`
+# keeps every pending run.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -38,7 +35,7 @@ lacks() { # what, pattern, text
   fi
 }
 
-# One job's lines, comments out: from `  <job>:` to the next job.
+# One job's lines with comments removed, from `  <job>:` to the next job.
 job() { # name
   awk -v j="  $1:" '
     /^jobs:/ { in_jobs = 1; next }
@@ -67,11 +64,9 @@ echo "the build job"
 build="$(job build)"
 has "needs the plan" 'needs: \[gate, plan\]' "$build"
 queue="$(concurrency_of "$build")"
-# The compile queue unless the plan positively said no compile: a plan that
-# failed or was skipped answers nothing, and queueing is the safe side.
-# And the warm queue only when the plan positively said warm, so one cold
-# compile never holds the queue warm ones wait in: 80 minutes of one kept five
-# pull requests needing ~2 minutes of compile each waiting 40-86 minutes.
+# Use a compile queue unless the plan said no compile: a failed or skipped plan
+# gives no answer, and queueing is the safe default. Use the warm queue only if
+# the plan said warm, so a long cold compile does not delay warm ones.
 has "queues on a compile queue unless the plan said it compiles nothing, the warm one only if it said warm" \
   "group: \\$\\{\\{ needs\\.plan\\.outputs\\.compile == 'false' && .* \\|\\| needs\\.plan\\.outputs\\.cold == 'false' && 'crux-compile' \\|\\| 'crux-compile-cold' \\}\\}" "$queue"
 has "and otherwise on a group of its own run" \
@@ -79,15 +74,14 @@ has "and otherwise on a group of its own run" \
 has "keeping every pending run, not the newest" '^[[:space:]]*queue: max$' "$queue"
 lacks "and never canceling a run in progress" 'cancel-in-progress: true' "$queue"
 
-# The slot stays, as the backstop for a guess that went stale and for
-# engine-release.yml, which compiles in the same trees.
+# The slot remains as a backstop for a stale plan and for engine-release.yml,
+# which compiles in the same trees.
 has "and still takes the compile slot before compiling" \
   'engine-compile-slot\.sh take "\$LOCK_OWNER"' "$build"
 
-# THE TWO QUEUES SHARE ONE SLOT, so a warm compile reaching it while a cold one
-# holds it would still wait out the cold one, on a runner. So a cold build
-# steps aside for it -- one compile at a time still -- and only for it: at rank
-# 1, which engine-release.yml's rank-0 build steps aside for in turn.
+# Both queues share one slot, so a warm compile could still wait on a runner
+# for a cold one. A cold build (rank 1) yields the slot to it, and
+# engine-release.yml's build (rank 0) yields to both.
 has "a cold build ranks 1 for the slot" \
   "DOMICILE_COMPILE_SLOT_RANK: \\$\\{\\{ needs\\.plan\\.outputs\\.cold != 'false' && '1' \\|\\| '' \\}\\}" "$build"
 step="$(printf '%s\n' "$build" | awk '/^      - / { if (hit) { exit } step = "" }
@@ -99,8 +93,8 @@ has "waiting to take it back as long as the slot step waits" 'DOMICILE_COMPILE_S
 release="$(grep -v '^[[:space:]]*#' "$ROOT/.github/workflows/engine-release.yml")"
 has "and the production build ranks 0, below it" 'DOMICILE_COMPILE_SLOT_RANK: 0$' "$release"
 
-# THE CRUX WORKFLOWS' OWN GROUPS STAY PER REF (test-engine-concurrency.sh), so
-# no other workflow may queue on this one's name by accident.
+# The other crux workflows keep per-ref groups (test-engine-concurrency.sh), so
+# none may use this queue's name.
 others="$(for flow in "$ROOT"/.github/workflows/*.yml; do
   [ "$(basename "$flow")" = engine.yml ] && continue
   grep -v '^[[:space:]]*#' "$flow" | grep -q 'crux-compile' && basename "$flow"

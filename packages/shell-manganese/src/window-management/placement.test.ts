@@ -16,8 +16,7 @@ import {
 
 const GEOMETRY: Geometry = {
   desktop: { height: 1080, width: 3200, x: 0, y: 0 },
-  // The screen a desk that nobody has described yet is on -- which is where
-  // `NO_WINDOWS` puts every window these place.
+  // The default screen, where `NO_WINDOWS` puts every window.
   name: "",
   screen: { height: 1080, width: 1920, x: 0, y: 0 },
   workspace: { height: 1048, width: 1920, x: 0, y: 32 },
@@ -48,8 +47,7 @@ describe("placementsOf", () => {
   });
 
   it("marks the windows inside the container `focus parent` selected", () => {
-    // `mod+a` with two windows tiled points the commands at the container
-    // holding both, which is the whole of the workspace.
+    // `mod+a` with two tiled windows selects the workspace's root container.
     const state = reduce(
       desktop("kitty", "editor"),
       WindowAction.ParentFocused(),
@@ -61,8 +59,7 @@ describe("placementsOf", () => {
   });
 
   it("gives a lone tiled window the whole workspace, with no gaps", () => {
-    // `gaps.smartGaps`: a workspace showing one window has nothing to space
-    // it away from.
+    // `gaps.smartGaps`: a lone window gets no gap.
     expect(placementFor(desktop("kitty"), "kitty")).toEqual({
       bar: { height: TITLE_BAR, width: 1920, x: 0, y: 32 },
       behind: undefined,
@@ -82,8 +79,8 @@ describe("placementsOf", () => {
   });
 
   it("puts the config's gap between two of them", () => {
-    // `gaps.inner = 20`, so 1900 is shared out and the second starts 20 past
-    // the first.
+    // `gaps.inner = 20`: 1900 is shared and the second starts 20 past the
+    // first.
     const state = reduce(
       desktop("kitty", "editor"),
       WindowAction.LayoutSet(Layout.SplitH),
@@ -119,8 +116,7 @@ describe("placementsOf", () => {
   });
 
   it("puts a float where it is on its own screen, wherever that screen is", () => {
-    // A float is in its screen's pixels, and a page that is the whole desk
-    // has that screen somewhere other than its own corner.
+    // A float is in screen pixels, and this screen is offset in the page.
     const state = reduce(desktop("kitty"), WindowAction.FloatToggled());
     const right = { ...GEOMETRY.screen, x: 1920 };
 
@@ -149,8 +145,8 @@ describe("placementsOf", () => {
   });
 
   it("lays a floating group out inside its box, all at one depth", () => {
-    // `mod+a` then `mod+Shift+Tab` over a vertical split: the split floats
-    // whole, and is still a split.
+    // `mod+a` then `mod+Shift+Tab` over a vertical split floats the split
+    // whole.
     const state = reduce(
       desktop("kitty", "editor"),
       WindowAction.ContainerSplit(Axis.Vertical),
@@ -164,7 +160,7 @@ describe("placementsOf", () => {
     expect(editor?.depth).toBeGreaterThan(TILED);
     expect(mail?.depth).toBe(editor?.depth);
     expect(mail?.frame.x).toBe(editor?.frame.x);
-    // A gap between them, narrower than the tiling's.
+    // The floating gap is narrower than the tiling's.
     const gap =
       (mail?.frame.y ?? 0) -
       ((editor?.frame.y ?? 0) + (editor?.frame.height ?? 0));
@@ -201,12 +197,8 @@ describe("placementsOf", () => {
     });
   });
 
-  // AND LEAVES WHAT IT COVERS WHERE IT WAS. Taking the screen is one window
-  // growing over its neighbors, not the workspace emptying: a fullscreen that
-  // placed nothing else would blink every other window out in the frame before
-  // the growing one had moved at all, and put them back the frame after it had
-  // finished shrinking. What is under it is also what the screen goes back to,
-  // so it is the same arithmetic either way.
+  // Fullscreen leaves the other windows placed, so they stay drawn while it
+  // animates over them.
   it("leaves the rest of the workspace laid out under it", () => {
     const state = reduce(
       desktop("kitty", "editor"),
@@ -234,12 +226,8 @@ describe("placementsOf", () => {
     );
   });
 
-  // OVER EVERY WINDOW ON THE SCREEN, INCLUDING ONE ON ITS WAY OUT. `LEAVING`
-  // is the top of everything else the page draws — a window that has closed is
-  // raised there so the neighbors easing into the box it had cannot cover it —
-  // and a fullscreen window is over that too: it covers the space that window
-  // was in, so a departure drawn over it would be a window shrinking away
-  // across a screen that is no longer showing it.
+  // Fullscreen is above `LEAVING`, so a closing window does not animate over
+  // it.
   it("stacks a fullscreen window over everything it covers", () => {
     const state = reduce(
       desktop("kitty", "editor"),
@@ -268,15 +256,11 @@ describe("placementsOf", () => {
       WindowAction.LayoutSet(Layout.Tabbed),
     );
 
-    // One window tiled in a tabbed container of its own: its tab *is* its
-    // title bar, so there is nothing extra to draw.
+    // A lone window in a tabbed container: its tab is its title bar.
     expect(placementsOf(state, GEOMETRY).tabs).toEqual([]);
     expect(placementFor(state, "kitty")?.bar).toMatchObject({ y: 32 });
   });
-  // WHAT BOTH HALVES OF A WINDOW TURN ABOUT. A window is two elements — the
-  // bar and the contents under it — and a frame whose halves scaled about
-  // their own centers would come apart at the seam, so each of them is given
-  // the whole box to turn about instead.
+  // `frame` spans the bar and contents, so both scale about one center.
   it("gives every window the box its bar and its contents span together", () => {
     expect(placementFor(desktop("kitty"), "kitty")?.frame).toEqual({
       height: 1048,
@@ -287,8 +271,7 @@ describe("placementsOf", () => {
   });
 
   it("gives a window a tab is hiding the box of the tab alone", () => {
-    // There are no contents on screen to span: the tab is the whole of what
-    // the window has.
+    // A hidden tab has no contents on screen, so its frame is the tab.
     const state = reduce(
       desktop("kitty", "editor"),
       WindowAction.LayoutSet(Layout.Tabbed),
@@ -308,8 +291,8 @@ describe("placementsOf", () => {
     expect(placementFor(state, "kitty")?.tabbed).toBe(Layout.Tabbed);
   });
 
-  // Under the tab it shows rather than taken off the screen, so that it is
-  // already drawn when its tab is — see `Placement.behind`.
+  // A hidden tab is drawn under the shown one, so it is ready when switched
+  // to. See `Placement.behind`.
   it("draws a window a tab is hiding under the one it shows", () => {
     const state = reduce(
       desktop("kitty", "editor"),
@@ -327,10 +310,9 @@ describe("placementsOf", () => {
     });
   });
 
-  // A DEPTH BETWEEN THEM. A tab switch holds the window it hides there while
-  // the one it shows fades in over it (`windowConcealing`): at the depth every
-  // other hidden tab has, one of those could be drawn over it instead, and
-  // show through the fade.
+  // A tab switch holds the outgoing tab at -1 while the new one fades in
+  // (`windowConcealing`). At the hidden-tab depth, another hidden tab could
+  // draw over it and show through.
   it("leaves a depth free between the hidden tabs and the tiled windows", () => {
     const state = reduce(
       desktop("kitty", "editor"),

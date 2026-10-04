@@ -29,7 +29,6 @@ describe("browserCommandFor", () => {
     );
   });
 
-  // Shift turns the letter into a capital, and Chrome reloads either way.
   it("reloads on Ctrl+R, with Shift or without", () => {
     expect(browserCommandFor(press("r", { ctrlKey: true }))).toBe(
       BrowserCommand.Reload,
@@ -39,9 +38,8 @@ describe("browserCommandFor", () => {
     ).toBe(BrowserCommand.Reload);
   });
 
-  // BY THE CHARACTER, NOT THE KEY: plus is wherever the layout puts it, and on
-  // a US board it is Shift and the equals key — which Chrome takes unshifted
-  // too, so zooming in does not need Shift.
+  // Matches the character. On a US layout plus is Shift+equals, and Chrome
+  // also accepts unshifted equals.
   it("zooms in on Ctrl and plus, or the key plus is on", () => {
     expect(
       browserCommandFor(press("+", { ctrlKey: true, shiftKey: true })),
@@ -60,7 +58,7 @@ describe("browserCommandFor", () => {
     ).toBe(BrowserCommand.ZoomOut);
   });
 
-  // Shift either way, as a reload is: Chrome finds on Ctrl+F and Ctrl+Shift+F.
+  // Chrome finds on both Ctrl+F and Ctrl+Shift+F.
   it("finds in the page on Ctrl+F", () => {
     expect(browserCommandFor(press("f", { ctrlKey: true }))).toBe(
       BrowserCommand.Find,
@@ -76,9 +74,7 @@ describe("browserCommandFor", () => {
     );
   });
 
-  // A MODIFIER MORE IS A DIFFERENT CHORD, and the desktop's own are all on
-  // Meta: Meta+Ctrl+R reloading a page would be a desktop binding somebody
-  // pressed and a browser answering it.
+  // An extra modifier is a different chord, possibly a desktop binding.
   it("answers nothing with another modifier held", () => {
     expect(
       browserCommandFor(press("r", { ctrlKey: true, metaKey: true })),

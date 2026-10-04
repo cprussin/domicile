@@ -25,16 +25,15 @@ type Props = ExtendProps<
     align?: Alignment | undefined;
     children: ReactNode;
     /**
-     * Drop the panel's padding and width cap, for a body that is a surface of
-     * its own — a view of another page — which the padding would only frame.
+     * Drop the panel's padding and width cap, for content that is its own
+     * surface, such as an embedded page.
      */
     flush?: boolean | undefined;
     side?: Side | undefined;
     title?: ReactNode | undefined;
     /**
-     * `overPhoto` is a translucent pill lettered white, for a panel hanging off
-     * a bar drawn straight onto the wallpaper: it reads as part of the bar
-     * rather than as a card dropped onto it.
+     * `overPhoto` is a translucent pill with white text, for panels opened
+     * from a bar drawn over the wallpaper.
      */
     tone?: Tone | undefined;
     trigger?: ReactElement | undefined;
@@ -42,21 +41,12 @@ type Props = ExtendProps<
 >;
 
 /**
- * A panel anchored to the control that opened it, for detail the control has
- * no room for — what an indicator means, what a value is made of.
+ * A non-modal panel anchored to its trigger, for detail the trigger has no
+ * room for. Use `ModalDialog` when the user must respond first.
  *
- * No notch pointing back at the trigger. base-ui offers one, and what it buys
- * is a tie the eye already makes: the panel opens against the control, eight
- * pixels under it, while the control is still lit. Chromium's own site
- * information bubble has none, and neither does the `Select` popup here.
- *
- * Non-modal: the page behind it stays scrollable and clickable, and pressing
- * outside or Escape closes it — and so does focus moving anywhere outside it,
- * which is all this document hears of a press inside a frame of another
- * process. A `Select` or a menu in it is still in it, though its list is
- * drawn elsewhere. That is the difference between this and
- * `ModalDialog`, which is for something the user has to answer before carrying
- * on.
+ * Closes on an outside press, Escape, or focus leaving it. The focus check
+ * catches presses inside out-of-process frames, which the document can't
+ * see. Portaled content such as a `Select` list counts as inside.
  */
 const PopoverComponent = ({
   actionsRef,
@@ -117,8 +107,7 @@ const PopoverComponent = ({
 };
 
 /**
- * `Close` for a panel that needs a button to dismiss it. The panel closes on
- * an outside press and on Escape without one, so most do not.
+ * A close button, for panels that need one besides outside press and Escape.
  */
 export const Popover = Object.assign(PopoverComponent, {
   Close: BasePopover.Close,
@@ -136,26 +125,22 @@ const popupStyles = flex({
     transition:
       "opacity {durations.fast} {easings.in}, transform {durations.fast} {easings.in}",
   },
-  // Clipped, so the body's own corners follow the panel's.
+  // Clips content to the panel's rounded corners.
   "&[data-flush]": {
     maxInlineSize: "90vw",
     overflow: "hidden",
     paddingBlock: 0,
     paddingInline: 0,
   },
-  // `&[data-starting-style]` rather than Panda's `_starting`: base-ui sets and
-  // clears the attribute itself, and the browser's `@starting-style` does not
-  // reliably fire for an element that mounts inside a portal — which leaves
-  // the panel snapped into place with no animation. Same trade `Select` makes.
+  // base-ui's attribute instead of Panda's `_starting`: `@starting-style`
+  // does not reliably fire for elements mounted in a portal.
   "&[data-starting-style]": {
     opacity: 0,
     transform: "scale(0.96)",
   },
-  // A frosted pill lettered white over any photo: the bar's language rather
-  // than a card's, and the same in both themes, since the wallpaper does not
-  // flip with them. A pill while it is one row — the radius is half a row's
-  // height, as the bar's own chips are — and a rounded panel once its content
-  // is taller, rather than a stadium.
+  // The same in both themes, since the wallpaper doesn't change with them.
+  // The radius is half a row's height: a pill for one row, a rounded panel
+  // for more.
   "&[data-tone=overPhoto]": {
     backdropFilter: "blur({spacing.3})",
     backgroundColor: "panelOverPhoto",
@@ -212,13 +197,11 @@ const bodyStyles = cva({
 });
 
 /**
- * Close the open panel when focus lands outside it and its trigger. Mounted
- * inside the popup, so it listens only while the panel is open.
+ * Closes the panel when focus leaves it and its trigger. Mounted inside the
+ * popup, so it listens only while open.
  *
- * Focus in something the panel's content drew elsewhere — a `Select`'s list,
- * portaled to the body — is still the panel's. React says so: its focus
- * events follow the component tree through portals, and reach `within`
- * before the document hears the same event.
+ * Portaled content counts as inside: React focus events follow the component
+ * tree and reach `within` before the document sees them.
  */
 const CloseOnFocusOut = ({
   actions,

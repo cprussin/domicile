@@ -1,38 +1,32 @@
-//! Where the engine keeps its profile between desktops.
+//! Locates the engine's persistent profile.
 //!
-//! `$XDG_STATE_HOME/domicile/profile`, and `~/.local/state/domicile/profile`
-//! when nothing names a state home. **State, by the spec's own definition**:
-//! what a program would be sorry to lose but is not configuration — cookies,
-//! logins, site storage. Not the run's own directory, which is thrown away
-//! with the run and took every sign-in with it.
+//! `$XDG_STATE_HOME/domicile/profile`, falling back to
+//! `~/.local/state/domicile/profile`. Cookies and logins are state in the XDG
+//! sense: worth keeping, but not configuration.
 //!
-//! **The environment is read through an argument rather than from `std::env`**
-//! for the reason [`crate::config_path`] states: a path that is guessed should
-//! be guessed somewhere that can be asked why.
+//! The environment is passed in, as in [`crate::config_path`], so tests can
+//! supply it.
 
 use std::path::PathBuf;
 
-/// The directory under the state home that is ours.
+/// Our directory under the state home.
 const DIRECTORY: &str = "domicile";
 
-/// The profile itself, which Chromium is handed as `--user-data-dir`.
+/// The profile, passed to Chromium as `--user-data-dir`.
 const PROFILE: &str = "profile";
 
-/// Where this user's engine profile is, or `None` when the environment names
-/// nowhere.
+/// Returns the user's engine profile directory.
 ///
-/// `None` is a desktop with no `HOME` and no `XDG_STATE_HOME`, and inventing a
-/// path for it would be keeping a person's logins somewhere nobody named.
+/// `None` when neither `HOME` nor `XDG_STATE_HOME` is set. We don't invent a
+/// place to store logins.
 pub fn profile_directory(env: &dyn Fn(&str) -> Option<String>) -> Option<PathBuf> {
     state_home(env).map(|home| home.join(DIRECTORY).join(PROFILE))
 }
 
-/// Where this user's state is kept.
+/// Returns the user's state home.
 ///
-/// `XDG_STATE_HOME` when it is set to an absolute path, and `~/.local/state`
-/// otherwise — the spec's rule, for the reason `config_path` gives about the
-/// config home: a relative value resolves against wherever the desktop's
-/// launcher was standing.
+/// Per the XDG spec, a relative `XDG_STATE_HOME` is ignored, since it would
+/// resolve against the launcher's working directory.
 fn state_home(env: &dyn Fn(&str) -> Option<String>) -> Option<PathBuf> {
     let absolute = |value: String| {
         let path = PathBuf::from(value);

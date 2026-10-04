@@ -10,10 +10,8 @@ beforeEach(() => {
 
 describe("the theme this page paints in before the desk has said", () => {
   it("is nothing at all on a machine that has not seen one", () => {
-    // Not `dark`, which is what a page with no guess ends up painting: that
-    // decision belongs to whoever is applying a theme, and answering it here
-    // would make "the desk was last seen dark" and "I have never seen this
-    // desk" the same value.
+    // Not a default: the caller picks the fallback, and "never seen" must stay
+    // distinct from "last seen dark".
     expect(rememberedTheme()).toBeUndefined();
   });
 
@@ -23,9 +21,8 @@ describe("the theme this page paints in before the desk has said", () => {
   });
 
   it("ignores a value that is not a theme", () => {
-    // Anything at all can be under that key, including this shell's own
-    // `theme:v1`, whose values were a three-valued preference with `system` in
-    // it. A word this build cannot place is a guess it cannot make.
+    // Anything can be stored under the key, so an unknown value returns
+    // `undefined`.
     globalThis.localStorage.setItem(THEME_KEY, "system");
     expect(rememberedTheme()).toBeUndefined();
   });

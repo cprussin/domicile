@@ -1,14 +1,12 @@
 #!/usr/bin/env bash
-# Which end the content-script guard blames, and which answers it calls a pass.
+# Tests the verdict of `guard-webview-content-script.sh`: which readings pass
+# and which component a failure blames.
 #
-# The unit is the verdict block in `guard-webview-content-script.sh`, run out
-# of the real script rather than copied, as `test-webview-framing-guard.sh`
-# does. The case that matters most: a control whose first leg found nothing
-# must fail however right its second leg looks, because "no mark in the
-# <webview>" and "no extension at all" are the same picture.
+# Runs the verdict block from the real guard. Key case: a control whose first
+# leg found no mark fails regardless of the second leg, because "no mark in the
+# <webview>" and "no extension loaded" look the same.
 #
-# Plus one fact the guard cannot check at runtime: the color it looks for is
-# the one the fixture extension paints.
+# Also checks that the guard's color is the one the fixture extension paints.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -36,7 +34,7 @@ expect() {
   fi
 }
 
-# Pass or fail, not the sentence: the sentences will be reworded.
+# Prints pass, fail or neither. Sentences are not compared, since they change.
 verdict() { # $1 MEASURED
   (
     MEASURED="$1"
@@ -51,8 +49,7 @@ verdict() { # $1 MEASURED
   )
 }
 
-# Whether the failing sentence names `$2`, for where WHICH end it blames is
-# the point.
+# Whether the failure message contains `$2`, i.e. blames the right component.
 says() { # $1 MEASURED, $2 what the sentence must contain
   case "$(
     MEASURED="$1"
@@ -80,13 +77,13 @@ echo "the control — the extension top-level, then the <webview> without it"
 expect "marked top-level, unmarked without it, is the pass" "pass" \
   "$(verdict "control 0 1")"
 
-# INVERTED: the second leg finding the color is the failure.
+# Inverted: the second leg finding the color is the failure.
 expect "a mark with no extension loaded is a failure" "fail" \
   "$(verdict "control 0 0")"
 expect "and says the color is not the content script's" "yes" \
   "$(says "control 0 0" "not the content script")"
 
-# THE CASE THE ORDER IS FOR.
+# The case the check order exists for.
 expect "a first leg with no mark fails, however right the second looks" \
   "fail" "$(verdict "control 1 1")"
 expect "and names the extension's loading" "yes" \

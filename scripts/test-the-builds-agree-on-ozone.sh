@@ -1,26 +1,16 @@
 #!/usr/bin/env bash
-# Whether the two engine builds still name the same Ozone platforms, and still
-# leave the default platform alone.
+# Checks that both engine builds enable the same Ozone platforms and leave the
+# default platform unset.
 #
-# There are two `gn gen` argument blocks in this repository and they are copies
-# on purpose: `packages/domicile-engine/scripts/build.sh` is what every
-# measurement was taken under, `.github/scripts/engine-release-build.sh` is what
-# a person downloads, and the release script's own header says the ozone
-# arguments are duplicated "because they are the same for a reason that could
-# stop being true". Copies drift, and this one drifted before: the two `gn gen`
-# calls disagreed about whether to run unconditionally, and CI went green having
-# built with arguments nobody had edited.
+# `packages/domicile-engine/scripts/build.sh` (measurements) and
+# `.github/scripts/engine-release-build.sh` (releases) each carry their own
+# `gn gen` arguments, so they can drift.
 #
-# WHAT THE SECOND CHECK IS REALLY FOR. `ozone_platform_drm = true` is safe to
-# add only because it does not change which platform a run gets by default.
-# With `ozone_platform` unset, `generate_ozone_platform_list.py` never reorders
-# -- it moves a platform to the front only when `--default` names one in the
-# list -- so the order is `//ui/ozone/BUILD.gn`'s own, which appends headless
-# before drm before wayland. Headless stays first and stays the default.
-#
-# Setting `ozone_platform = "drm"` in either block would flip that for every
-# run on every machine, including the ones with no card node, and it would look
-# like a one-word tidy-up. So the absence of that line is asserted, not assumed.
+# Adding `ozone_platform_drm = true` is safe only because it does not change
+# the default. With `ozone_platform` unset, `generate_ozone_platform_list.py`
+# keeps `//ui/ozone/BUILD.gn`'s order, so headless stays first and stays the
+# default. Setting `ozone_platform = "drm"` would make DRM the default on every
+# machine, including those with no card node.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -34,7 +24,7 @@ fail() {
   FAILED=$((FAILED + 1))
 }
 
-# The positive first: an empty or renamed file must not pass vacuously.
+# An empty or renamed file must not pass vacuously.
 for build in $BUILDS; do
   [ -f "$build" ] || { echo "no build script at $build" >&2; exit 1; }
   grep -q "^  use_ozone = true$" "$build" || {
@@ -58,17 +48,10 @@ for platform in headless wayland drm; do
   fi
 done
 
-# A TOUCHPAD IS ONLY READ IN A BUILD THAT CARRIES libinput. Without this,
-# `CreateConverter` has no touchpad branch at all off ChromeOS -- the one it has
-# is `#if defined(USE_EVDEV_GESTURES)`, and `use_evdev_gestures` is
-# `is_chromeos_device` -- so a pad falls through to `EventConverterEvdevImpl`,
-# which has no `EV_ABS` case and drops every finger position on the floor. That
-# was a desktop with a pointer that nothing could move, and it was silent,
-# because nothing failed. See patch 0027.
-#
-# In BOTH blocks or the measurement build and the shipped build disagree about
-# whether the machine has a working trackpad, which is the drift this file
-# exists to catch.
+# Touchpads need libinput. Off ChromeOS, `CreateConverter` has no touchpad
+# branch (`use_evdev_gestures` is `is_chromeos_device`), so a touchpad falls
+# through to `EventConverterEvdevImpl`, which ignores `EV_ABS` and the pointer
+# never moves. See patch 0027. Both builds need it so they agree.
 for build in $BUILDS; do
   if grep -q "^  use_libinput = true$" "$build"; then
     ok "$(basename "$build") can read a trackpad"
@@ -78,8 +61,8 @@ for build in $BUILDS; do
   fi
 done
 
-# `ozone_auto_platforms = false` is what makes the list above exhaustive. With
-# it true, is_linux turns on x11 and wayland regardless of what is written here.
+# `ozone_auto_platforms = false` makes the list above exhaustive. When true,
+# is_linux enables x11 and wayland regardless.
 for build in $BUILDS; do
   if grep -q "^  ozone_auto_platforms = false$" "$build"; then
     ok "$(basename "$build") chooses its platforms by hand"

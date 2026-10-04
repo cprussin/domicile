@@ -1,65 +1,42 @@
 import type { Theme } from "./theme-core";
 
 /**
- * Where a {@link ThemeProvider} gets the theme from, and what it asks when the
- * toggle is clicked.
+ * How a {@link ThemeProvider} reads the theme and requests changes.
  *
- * **The theme is not this package's to own, and that is the whole shape of
- * this type.** A Domicile shell is the desktop's chrome, so the theme it
- * paints in is the *desktop's*: it comes out of `theme.mode` in the
- * compositor's config, it is the same value the compositor hands the settings
- * portal that GTK, Qt and Electron read, and a desk of three monitors is three
- * pages that have to move together. None of that is knowable from inside a
- * component library, so the library is handed a port instead.
+ * The compositor owns the theme (`theme.mode` in its config) and shares it
+ * with every monitor's page and the settings portal, so the library takes it
+ * through this interface.
  *
- * Three members, and the first two are {@link DisplaySource}'s for
- * {@link DisplaySource}'s reason: a provider does not necessarily mount in
- * time to hear the message it needs, so `theme` is what the host has already
- * said and `onTheme` is everything after that. They overlap rather than
- * partition — an adapter over a `DomicileClient` may call the handler
- * synchronously, inside registration, with the same theme `theme` just gave —
- * so a handler has to be safe to call with a theme it has already seen.
- *
- * `setTheme` is the third, and it is a *request*. Nothing is applied where it
- * is called: what follows is an `onTheme` carrying the answer, to this page
- * and to every other page on the desk. A source that applied it locally would
- * be the one monitor that had changed.
- *
- * **A source is the connection, so it has to be as stable as one.** The
- * provider registers on it whenever its identity changes, and
- * `DomicileClient.on` is a single slot — a source rebuilt every render would
- * re-register every render. Build it once, with `useMemo` or outside the
- * component.
+ * Keep a source stable (`useMemo` or module scope). The provider re-registers
+ * whenever its identity changes, and `DomicileClient.on` holds one handler.
  */
 export type ThemeSource = {
   /**
-   * The theme as the desk has stated it so far, or `undefined` until it has.
+   * The latest theme reported, or `undefined` before the first report.
    *
-   * `undefined` is a page that has not been told rather than a page with no
-   * theme: {@link DEFAULT_THEME} is what it paints in meanwhile, and being
-   * told is what animates.
+   * The page uses {@link DEFAULT_THEME} until then.
    */
   theme: Theme | undefined;
   /**
-   * Registers the one handler for what the desk says next, returning the
-   * teardown that stops it. May call `handler` before it returns — see above.
+   * Registers the handler for later theme changes and returns its teardown.
+   *
+   * May call `handler` synchronously with the current `theme`, so the handler
+   * must accept a theme it has already seen.
    */
   onTheme: (handler: (theme: Theme) => void) => () => void;
   /**
-   * Ask the desk to draw itself the other way round.
+   * Requests a theme change.
    *
-   * A request rather than a setter: what comes back is an `onTheme`.
+   * Applies nothing locally; the result arrives through `onTheme` on every
+   * page.
    */
   setTheme: (theme: Theme) => void;
   /**
-   * This page has captured the frame its wipe starts from, for `theme`: turn
-   * the desk's windows, and settle once they have repainted.
+   * Repaints the other windows in `theme` and settles once they have.
    *
-   * The windows are in that frame, so a window turned before it was captured
-   * is wiped over already turned, and one turned after the wipe starts pops
-   * over mid-wipe. {@link flipThemeWithAnimation} calls this from inside the
-   * wipe's update and holds the old frame until it settles, so the wipe
-   * passes across windows that turned behind it.
+   * {@link flipThemeWithAnimation} calls this after capturing the wipe's start
+   * frame and holds that frame until it settles. Otherwise windows would
+   * change before or during the wipe.
    */
   turnWindows: (theme: Theme) => Promise<void>;
 };

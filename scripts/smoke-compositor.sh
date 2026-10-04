@@ -1,25 +1,19 @@
 #!/usr/bin/env bash
-# Smoke test: boot the headless Domicile compositor and prove a real Wayland client
-# (wayland-info) connects and binds the globals we advertise, then exits.
+# Smoke test: boots the headless compositor and checks that wayland-info sees
+# the globals clients need.
 #
 # Run inside the full shell:  nix develop .#full -c ./scripts/smoke-compositor.sh
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BIN="$ROOT/target/debug/domicile-compositor"
-# Built here rather than merely checked for. A binary that exists but predates
-# the source is the worst of both: every check runs, and every check reports on
-# code that is not the code in the tree. Incremental and near-free when there is
-# nothing to do.
+# Always build: a stale binary would test code that is not in the tree.
 cargo build -p domicile-compositor >/dev/null 2>&1 || {
   echo "the compositor did not build; run: nix develop .#full -c cargo build -p domicile-compositor"
   exit 1
 }
 
-# `wayland-info` is the client this asks its one question through. Without it
-# every global reads as unadvertised, which is a verdict against the compositor
-# for a program that was never installed — so this says it did not run (77)
-# rather than that the compositor failed.
+# Skip (77) without wayland-info; otherwise every global would read as missing.
 command -v wayland-info >/dev/null 2>&1 || {
   echo "SKIP: no wayland-info, which is what asks the compositor what it advertises."
   exit 77
@@ -29,9 +23,7 @@ WORK="$(mktemp -d)"
 export XDG_RUNTIME_DIR="$WORK"; chmod 700 "$WORK"
 trap 'kill -9 "$COMP" 2>/dev/null; rm -rf "$WORK"' EXIT
 
-# No chrome: this asks one question — do our globals reach a real client — and
-# nothing here connects to the chrome socket. It is still named, because the
-# compositor names every path rather than guessing any.
+# Nothing connects to the chrome socket, but the compositor requires the path.
 SOCK="$WORK/chrome.sock"
 "$BIN" --chrome-socket "$SOCK" --session "$WORK/session.json" \
   > "$WORK/compositor.log" 2>&1 &
@@ -44,10 +36,9 @@ echo "$ADVERTISED" \
   | grep -oE "interface: '(wl_compositor|wl_shm|xdg_wm_base|wl_seat|wl_data_device_manager)'" \
   | sort -u
 
-# Each of these, by name. A global a toolkit expects and does not find is not an
-# error it reports — `wl_data_device_manager` was missing for months and showed
-# up as the chrome freezing whenever a tab was dragged, because the engine runs
-# a nested loop until a drag completes and nothing could complete it.
+# Clients do not report a missing global. Without `wl_data_device_manager`,
+# for example, the engine hangs on a tab drag: it runs a nested loop until the
+# drag completes, and nothing completes it.
 for global in wl_compositor wl_shm xdg_wm_base wl_seat wl_data_device_manager; do
   if ! echo "$ADVERTISED" | grep -q "interface: '$global'"; then
     echo "FAIL: $global is not advertised. A client that wants it will not say"
@@ -57,11 +48,9 @@ for global in wl_compositor wl_shm xdg_wm_base wl_seat wl_data_device_manager; d
 done
 echo "PASS: every global a desktop's clients expect is advertised"
 
-# And the ones on the way to delegated compositing. Chromium asks for these
-# before it will send its layer tree as a subsurface per quad, and says so in
-# its own log — `Server doesn't support <name>` — rather than failing. Losing
-# one here is losing that, silently and much later. See
-# `docs/architecture/WINDOW-COMPOSITING.md`.
+# Chromium needs these for delegated compositing (a subsurface per quad).
+# Without them it only logs `Server doesn't support <name>` and falls back.
+# See `docs/architecture/WINDOW-COMPOSITING.md`.
 for global in wp_viewporter wp_single_pixel_buffer_manager_v1 wp_content_type_manager_v1; do
   if ! echo "$ADVERTISED" | grep -q "interface: '$global'"; then
     echo "FAIL: $global is not advertised, so a chrome that wanted it has"

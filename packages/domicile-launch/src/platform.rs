@@ -1,33 +1,15 @@
-//! Which ozone platform the engine takes, and why a machine cannot have one.
+//! Picks the engine's ozone platform from the environment.
 //!
-//! WHERE IT WAS STARTED DECIDES WHAT IT IS, for the one case that is proven
-//! today: a desktop is a window inside an existing Wayland session.
+//! - `OZONE` overrides everything.
+//! - `WAYLAND_DISPLAY` means a window inside a Wayland session.
+//! - `XDG_VTNR` means a console session and the drm platform. It is set by
+//!   pam_systemd for a session that owns a VT, which is the same session
+//!   logind's `TakeControl` and `TakeDevice` need. `isatty` would be fooled by
+//!   a redirected descriptor.
 //!
-//! A TTY IS NOT REFUSED, and the error below says so rather than naming a
-//! blocker somebody already removed. The drm platform is in this binary --
-//! both `gn gen` blocks name `ozone_platform_drm`, and patches `0013`, `0015`
-//! and `0016` are the embedder behind it -- so `OZONE=drm` hands the engine
-//! `--ozone-platform=drm` outright and a screen lights on it, as of
-//! `engine-9dd6e30`. What had been missing last was DRM master: nothing in the
-//! fork ever asked the kernel for it, so the first modeset got `EACCES` and
-//! the first `drmSetMaster` a desktop ever ran was the one a console switch
-//! asked for. `DrmMaster::Add` takes it as a card arrives now.
-//!
-//! One item is open -- taking the card node from logind rather than opening it
-//! -- and `docs/architecture/A-DESKTOP-ON-A-TTY.md` carries it.
-//!
-//! WHAT IS ASKED IS `XDG_VTNR`, BECAUSE LOGIND IS WHAT ANSWERS IT. pam_systemd
-//! sets it for a session that owns a VT, and that is the same logind the
-//! engine then asks for `TakeControl` and `TakeDevice`. A session without one
-//! is a session those calls would fail on, so the variable that says "there is
-//! a VT here" is also the variable that says "the calls that need one will
-//! work" -- which is why this is not `isatty` on a descriptor somebody may
-//! have redirected.
-//!
-//! IT IS READ LAST OF THE THREE, and that ordering is the whole of the care
-//! here: a Wayland session has a VT too, and an X11 one does. Reading the VT
-//! first would take the console out from under the very session the desktop
-//! was supposed to be a window inside of.
+//! The VT is checked last because Wayland and X11 sessions have one too.
+//! Checking it first would take the console from the running session. See
+//! `docs/architecture/A-DESKTOP-ON-A-TTY.md` for the TTY design.
 
 /// A machine this engine cannot draw on, and what the person does about it.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -50,20 +32,10 @@ pub enum PlatformError {
     NoDisplayServer,
 }
 
-/// What the engine's `--ozone-platform` should be.
+/// Returns the engine's `--ozone-platform` value.
 ///
-/// `OZONE` wins outright, because `headless` is a real answer on a machine
-/// with no display and no environment variable says so.
-///
-/// `WAYLAND_DISPLAY` is the question for a window: it is what a Wayland client
-/// uses to find its compositor, so unset means there is nothing to be a window
-/// inside of. `XDG_VTNR` is the question for a console, and it is asked last,
-/// because a session has a VT as well as a display and the session is what the
-/// person is looking at.
-///
-/// Empty is unset throughout — `WAYLAND_DISPLAY=` is what a shell leaves
-/// behind when something cleared it badly, and taking it for a session starts
-/// an engine that cannot connect to anything.
+/// An empty variable counts as unset. A stray `WAYLAND_DISPLAY=` would
+/// otherwise start an engine with no compositor to connect to.
 pub fn platform(
     ozone: Option<&str>,
     wayland_display: Option<&str>,
@@ -79,8 +51,7 @@ pub fn platform(
     }
 }
 
-/// A variable somebody actually set. Empty is not a value here, for the same
-/// reason `[ -n "$VAR" ]` is what the shell asked.
+/// Returns the value only if it is non-empty.
 fn set(value: Option<&str>) -> Option<&str> {
     value.filter(|value| !value.is_empty())
 }

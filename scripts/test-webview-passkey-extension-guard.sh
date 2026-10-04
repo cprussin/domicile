@@ -1,17 +1,13 @@
 #!/usr/bin/env bash
-# Which end the passkey-extension guard blames, and which answers it calls a
-# pass.
+# Tests the verdict of `guard-webview-passkey-extension.sh`: which readings
+# pass and which component a failure blames.
 #
-# The unit is the verdict block in `guard-webview-passkey-extension.sh`, run
-# out of the real script rather than copied, as
-# `test-webview-content-script-guard.sh` does. The case that matters most: a
-# control whose page never painted a refusal must fail, because "no answer
-# without the extension" and "no PublicKeyCredential at all" are the same
-# absence of the color.
+# Runs the verdict block from the real guard. Key case: a control whose page
+# never painted a refusal fails, because "no answer without the extension"
+# and "no PublicKeyCredential at all" both leave the color absent.
 #
-# Plus what the guard cannot check at runtime: the color it looks for is the
-# one the page paints for an answer, and the answer the page knows is the one
-# the fixture gives.
+# Also checks that the guard's color is the one the page paints for an
+# answer, and that the page expects the answer the fixture gives.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -39,7 +35,7 @@ expect() {
   fi
 }
 
-# Pass or fail, not the sentence: the sentences will be reworded.
+# Prints pass, fail or neither. Sentences are not compared, since they change.
 verdict() { # $1 MEASURED
   (
     MEASURED="$1"
@@ -54,8 +50,7 @@ verdict() { # $1 MEASURED
   )
 }
 
-# Whether the failing sentence names `$2`, for where WHICH end it blames is
-# the point.
+# Whether the failure message contains `$2`, i.e. blames the right component.
 says() { # $1 MEASURED, $2 what the sentence must contain
   case "$(
     MEASURED="$1"
@@ -91,13 +86,13 @@ echo
 echo "the control — no extension, which must be refused"
 expect "refused and unanswered is the pass" "pass" "$(verdict "refused 1")"
 
-# INVERTED: the control finding the color is the failure.
+# Inverted: the control finding the color is the failure.
 expect "an answer with no extension is a failure" "fail" \
   "$(verdict "refused 0")"
 expect "and says the answer is not the fixture's" "yes" \
   "$(says "refused 0" "not the fixture's")"
 
-# THE CASE THE WITNESS IS FOR.
+# The case the refusal witness exists for.
 expect "no refusal painted is a failure, though the answer is absent too" \
   "fail" "$(verdict "refused 2")"
 expect "and names the missing API" "yes" \

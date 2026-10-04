@@ -1,21 +1,11 @@
-//! `libdomicile_engine.so` behind its C ABI: the seam to the forked engine.
+//! Bindings to `libdomicile_engine.so`, the forked engine's C ABI.
 //!
-//! The compositor submits a client's dmabuf to viz through this instead of
-//! reading it back and sending pixels to the chrome. See
-//! `docs/architecture/ENGINE-FORK.md#the-c-abi`, and `packages/domicile-engine`
-//! for the library itself.
+//! The compositor submits client dmabufs to viz through this. See
+//! `docs/architecture/ENGINE-FORK.md#the-c-abi` and `packages/domicile-engine`.
 //!
-//! **Loaded with `dlopen`, and that is a build decision rather than a runtime
-//! one.** The library is a GN artifact that exists only where Chromium is
-//! built, so linking it would make `cargo build` need a Chromium checkout —
-//! which CI does not have. Loading it by name keeps the build working
-//! everywhere.
-//!
-//! It is *not* a license to carry on without it. A caller that asked for the
-//! engine and cannot have it gets an error naming the library and why; nothing
-//! here degrades quietly, because a compositor that comes up and shows nothing
-//! is the defect `ERRORS.md` exists to prevent.
-//!
+//! The library is loaded with `dlopen` so `cargo build` does not need a
+//! Chromium build. A missing library is still an error, never a silent
+//! fallback.
 
 use std::cell::{Cell, RefCell};
 use std::ffi::{c_char, c_int, c_void, CString, NulError};
@@ -27,8 +17,7 @@ use domicile_config::{Desk, Transform};
 use libloading::{Library, Symbol};
 use thiserror::Error;
 
-/// The default name. Found on `LD_LIBRARY_PATH` like any other library, which
-/// is how a build of the engine is pointed at without a path being compiled in.
+/// The default library name, looked up on `LD_LIBRARY_PATH`.
 pub const LIBRARY: &str = "libdomicile_engine.so";
 
 /// A surface, as the engine names one. Never zero.
@@ -37,8 +26,8 @@ pub type SurfaceId = u32;
 /// An imported buffer, as the engine names one. Never zero.
 pub type BufferId = u64;
 
-/// What went wrong reaching the engine. Every variant names the library,
-/// because the commonest cause by far is that it was never built.
+/// Why the engine could not be reached. Messages name the library, because
+/// the usual cause is that it was never built.
 #[derive(Debug, Error)]
 pub enum EngineError {
     #[error("could not load {path} ({LIBRARY} for the forked engine): {source}. It is built by packages/domicile-engine/scripts/build.sh and is not on this machine unless that has been run")]
@@ -66,7 +55,7 @@ pub enum EngineError {
     Path(#[from] NulError),
 }
 
-/// One plane of a client's dmabuf, as `zwp_linux_buffer_params_v1.add` sent it.
+/// One plane of a client's dmabuf, from `zwp_linux_buffer_params_v1.add`.
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct Plane {
@@ -75,14 +64,12 @@ pub struct Plane {
     pub stride: u32,
 }
 
-/// The most planes the ABI carries. Four is what `zwp_linux_dmabuf_v1` allows
-/// and what `DomicileDmabuf` has room for.
+/// The most planes `zwp_linux_dmabuf_v1` and `DomicileDmabuf` allow.
 pub const MAX_PLANES: usize = 4;
 
-/// The DRM fourccs the engine imports: `FormatFromFourcc` in
-/// `packages/domicile-engine/src/components/domicile/browser/brokered_frame_sink.cc`,
-/// which refuses anything else. `scripts/test-the-engines-fourccs-agree.sh`
-/// keeps the two lists one list.
+/// The DRM fourccs the engine imports, matching `FormatFromFourcc` in
+/// `packages/domicile-engine/src/components/domicile/browser/brokered_frame_sink.cc`.
+/// `scripts/test-the-engines-fourccs-agree.sh` checks the two lists match.
 pub const FOURCCS: [u32; 4] = [
     0x3432_5241, // DRM_FORMAT_ARGB8888
     0x3432_5258, // DRM_FORMAT_XRGB8888
@@ -90,8 +77,7 @@ pub const FOURCCS: [u32; 4] = [
     0x3432_4258, // DRM_FORMAT_XBGR8888
 ];
 
-/// A client's buffer, as the ABI takes it. The fds are borrowed for the
-/// duration of the call.
+/// `DomicileDmabuf`: a client's buffer. The fds are borrowed for the call.
 #[repr(C)]
 pub struct Dmabuf {
     pub width: u32,
@@ -103,12 +89,10 @@ pub struct Dmabuf {
 }
 
 impl Dmabuf {
-    /// The same buffer the bridge describes, in the ABI's terms.
+    /// Converts a descriptor to the ABI struct.
     ///
-    /// `None` for a buffer with no planes or more than [`MAX_PLANES`] — the
-    /// first cannot be drawn and the second cannot be described, and silently
-    /// sending four planes of a five-plane buffer would put a corrupt window on
-    /// the screen rather than no window.
+    /// `None` for no planes or more than [`MAX_PLANES`]. Truncating the planes
+    /// would draw a corrupt window.
     pub fn from_descriptor(descriptor: &DmabufDescriptor) -> Option<Self> {
         if descriptor.planes.is_empty() || descriptor.planes.len() > MAX_PLANES {
             return None;
@@ -136,109 +120,62 @@ impl Dmabuf {
     }
 }
 
-/// One display the engine is scanning out on, as it reports it.
+/// A display the engine scans out on, as the engine reports it.
 ///
-/// The engine holds DRM master, so on a tty this is the only reading of the
-/// screens there is -- `docs/architecture/A-DESKTOP-ON-A-TTY.md`, *Outputs*.
-/// It comes off the same `DisplaySnapshot`s the modeset driver configures the
-/// CRTCs from, so the desktop advertised and the modes lit cannot disagree.
-///
-/// The millimeters and the rate are the panel's own, off the same snapshot,
-/// and either can be zero -- `wl_output`'s word for a screen with no such
-/// number. A connector reports no physical size (a projector, a virtual
-/// output) or no mode (connected but unreadable) often enough that this is an
-/// ordinary reading rather than a broken one, and the compositor advertises
-/// the zero rather than inventing something a client can divide by.
-///
-/// No scale yet: nothing on the DRM path sets a scale factor at all
-/// (`drm_screen.cc` says so where it declines to), and a field that is always
-/// 1 is not a reading. That is its own item on that document's checklist.
-// Not `Copy` any more: a display carries the panel's own name, which is a
-// `String`. Cloned where it used to be copied, on a list as long as the
-// machine has monitors and only on a hotplug.
+/// The engine holds DRM master, so on a tty this is the only source of display
+/// information. See `docs/architecture/A-DESKTOP-ON-A-TTY.md#outputs` and
+/// `docs/DISPLAYS.md`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Display {
-    /// What the engine calls this display, and what the `wl_output` is named
-    /// after. Derived from the EDID, so it survives a hotplug: an output whose
-    /// name is in both desktops keeps its global rather than being unplugged
-    /// and replaced (`Screens::rearranged_into`).
+    /// The engine's id, which the `wl_output` is named after. Derived from the
+    /// EDID, so it is stable across hotplugs (`Screens::rearranged_into`).
     pub id: i64,
-    /// The panel's own name -- `"<MAKE> <MODEL> <SERIAL>"` off its EDID -- or
-    /// empty for a monitor that states none of the three.
+    /// `"<MAKE> <MODEL> <SERIAL>"` from the EDID, or empty if it has none.
     ///
-    /// The id above is identity and this is a NAME, and the difference is the
-    /// point: an int64 ozone derived from an EDID cannot be guessed from
-    /// looking at a desk, so it is no use to somebody writing down which
-    /// monitor a layout means. This is what an `output.profiles` entry matches
-    /// on.
-    ///
-    /// MAKE is the three letters an EDID holds and nothing more -- `DEL`, not
-    /// `Dell Inc.` -- because that is all the firmware states. The vendor's
-    /// own name is hwdata's `pnp.ids`, which libdisplay-info carries and
-    /// Chromium does not, so the string kanshi and sway match is this one with
-    /// its first word spelled out. `crate::pnp_ids` is where this side reads
-    /// that table, and `Screens` is where it is applied: a `wl_output` states
-    /// the spelled-out name and a profile matches either spelling, so this
-    /// string goes on being one of the names a monitor answers to.
-    ///
-    /// Called a description rather than a name because that is what it becomes
-    /// one layer up: the `wl_output` keeps `drm-<id>` as its name, which is
-    /// short, always present, and what clients are already on.
+    /// `output.profiles` entries match on this. MAKE is the EDID's
+    /// three-letter PNP id (`DEL`); `Screens` expands it with
+    /// `crate::pnp_ids`. Becomes the `wl_output` description; the name stays
+    /// `drm-<id>`. See `docs/DISPLAYS.md#monitor-names`.
     pub description: String,
     /// Its top-left corner, in the desktop the engine laid out.
     pub position: (i32, i32),
     /// Its native mode, in physical pixels.
     pub size: (u32, u32),
-    /// The panel's own size, in millimeters, or `(0, 0)` for a display that
-    /// reports none.
+    /// The panel's size in millimeters, or `(0, 0)` if unreported.
     pub physical_mm: (i32, i32),
-    /// The rate the CRTC took, in mHz, or zero for a display that reports
-    /// none.
+    /// The CRTC's refresh rate in mHz, or zero if unreported.
     pub refresh_mhz: i32,
 }
 
-/// One display, as the compositor wants the connector behind it driven.
-///
-/// The other direction to [`Display`], and the other kind of fact. That one
-/// is the engine's reading of what is plugged in; this is the config's answer
-/// about what to do with it -- which connectors to light, and where each
-/// one's mode goes on the engine's own desktop.
-///
-/// By the engine's own id, which is the only name both sides have. The
-/// `wl_output` this compositor advertises is called `drm-<id>`, and that is a
-/// name it invented out of this number.
+/// How the compositor wants a connector driven: the config's answer to a
+/// [`Display`].
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Connector {
-    /// Which display, as [`Display::id`] named it.
+    /// The display, by [`Display::id`].
     pub id: i64,
     /// Whether to light it at all.
     pub enabled: bool,
-    /// Where this connector's mode goes on the engine's desktop, in physical
-    /// pixels -- stated for a dark connector too, because the engine's own
-    /// display list carries one whether or not it is lit.
+    /// The connector's position on the engine's desktop, in physical pixels.
+    /// Needed for dark connectors too, since the engine still places them.
     pub origin: (i32, i32),
-    /// Which way up the monitor is. The engine turns this connector's window
-    /// by it, so the page in it lays out upright.
+    /// The monitor's rotation. The engine rotates the window so the page lays
+    /// out upright.
     pub transform: Transform,
-    /// Device pixels per logical pixel. The engine draws this connector's
-    /// window at it, so the page in it lays out in logical pixels.
+    /// Device pixels per logical pixel, applied by the engine to the window.
     pub scale: f64,
-    /// Where the profile put this display on the desktop, or `None` for a
-    /// dark one. The engine carries a pointer between monitors by it.
+    /// The display's place on the logical desktop, or `None` if dark. The
+    /// engine moves the pointer between monitors by it.
     pub desk: Option<Desk>,
 }
 
-/// What the browser has to tell the compositor, and what each already is in
-/// Wayland terms.
+/// A message from the engine, and its Wayland equivalent.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Event {
     /// `xdg_toplevel.configure`: the page's layout box changed.
     ///
-    /// `width` and `height` are the box in the page's device pixels, and
-    /// `scale` is how many of them the page draws one of its CSS pixels with.
-    /// Per box rather than per desktop, because only the engine knows the
-    /// scale a box was laid out at. `None` from an engine older than the scale
-    /// crossing, which only ever said the box.
+    /// `width` and `height` are in device pixels; `scale` is device pixels per
+    /// CSS pixel. `scale` is `None` from an engine without
+    /// `configure_at`.
     Configure {
         surface: SurfaceId,
         width: u32,
@@ -250,50 +187,36 @@ pub enum Event {
         surface: SurfaceId,
         deadline_us: u64,
     },
-    /// `wl_buffer.release`: viz has stopped sampling that dmabuf, and not one
-    /// moment sooner may the client draw into it again.
+    /// `wl_buffer.release`: viz has stopped reading the dmabuf, so the client
+    /// may reuse it.
     Released {
         surface: SurfaceId,
         buffer: BufferId,
     },
-    /// A copy made in the browser, on its way to the seat.
+    /// A copy made in the browser, for the seat's clipboard.
     ///
-    /// **The engine is not a Wayland client of this compositor**, so a copy
-    /// made in a page or a browser window reaches no seat on its own: the
-    /// browser is started before the compositor and connects to whatever
-    /// display server it was launched under, which on a tty is none at all.
-    /// This is how it reaches one — and it is why the desktop has a single
-    /// clipboard rather than the browser having one and everything else
-    /// another.
+    /// The engine is not a Wayland client of this compositor, so this is how
+    /// its copies reach Wayland clients.
     Copied { clipboard: Clipboard, text: String },
 
-    /// `wl_output`: the whole display list, primary first.
+    /// The full display list, primary first, for `wl_output`.
     ///
-    /// Sent once when the engine has a screen and again on every hotplug, as
-    /// the whole list rather than a delta -- so what is absent from it has
-    /// been unplugged. There is no Wayland request this answers, because the
-    /// compositor is the one that would normally have read the hardware; here
-    /// the engine holds DRM master and this is how the reading crosses.
+    /// Sent at startup and on every hotplug. A display missing from the list
+    /// has been unplugged.
     Displays(Vec<Display>),
 }
 
-/// Which of the desktop's two clipboards a copy is on.
-///
-/// The pair every desktop has and neither of which is the other: one is what
-/// Ctrl-C puts somewhere and the other is what selecting a word does. They
-/// cross the ABI as the numbers [`Clipboard::as_raw`] gives, which is what the
-/// C header declares and what the engine reads.
+/// Which clipboard a copy is on. Crosses the ABI as [`Clipboard::as_raw`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Clipboard {
-    /// `wl_data_device`, which is Ctrl-C and Ctrl-V.
+    /// `wl_data_device`: Ctrl-C and Ctrl-V.
     Copy,
-    /// `zwp_primary_selection_device_v1`, which is selecting a word and the
-    /// middle button.
+    /// `zwp_primary_selection_device_v1`: select and middle-click.
     Primary,
 }
 
 impl Clipboard {
-    /// The number this crosses as. See `DomicileClipboard` in the C header.
+    /// The ABI value, as `DomicileClipboard` in the C header defines it.
     fn as_raw(self) -> u32 {
         match self {
             Clipboard::Copy => 0,
@@ -302,12 +225,10 @@ impl Clipboard {
     }
 }
 
-/// Which clipboard a number off the ABI names.
+/// The clipboard an ABI value names.
 ///
-/// Anything else is refused rather than folded onto the ordinary clipboard:
-/// the plausible guess is the one a person uses most, and a copy landing there
-/// because the engine learned a third would overwrite what they actually
-/// copied with something they only brushed past.
+/// Panics on an unknown value rather than guessing, which could overwrite the
+/// user's clipboard.
 fn clipboard_from(raw: u32) -> Clipboard {
     match raw {
         0 => Clipboard::Copy,
@@ -335,37 +256,28 @@ struct Handle {
 
 /// A loaded engine, connected to the browser.
 ///
-/// Callbacks fire only from inside [`Engine::dispatch`], on the thread that
-/// calls it, which is what lets this hand them back as a plain vector instead
-/// of asking the compositor to be thread-safe.
+/// Callbacks fire only inside [`Engine::dispatch`], on the calling thread, so
+/// events are returned as a plain vector.
 #[derive(Debug)]
 pub struct Engine {
     handle: *mut Handle,
     events: Box<RefCell<Vec<Event>>>,
     library: Library,
     path: PathBuf,
-    /// Whether the engine has been said to predate cropping — once, because
-    /// it is said from the submit path, which runs every frame.
+    /// Whether the missing-crop warning was logged. Logged once because
+    /// submit runs every frame.
     said_it_cannot_crop: Cell<bool>,
 }
 
-/// `DomicileDisplay`, exactly as the C header lays it out.
-///
-/// Flat scalars rather than the pairs [`Display`] carries, because C has no
-/// tuples and an array of these is what crosses the ABI. Not public:
-/// [`Display`] is what a caller wants.
-///
-/// One `int64_t`, one pointer and seven `int32_t`, which is 44 bytes in a
-/// struct that is 48 -- see the size test below, and the C header this
-/// mirrors.
-// `Default` for the tests' sake, and it is the right zero: a null name, which
-// is what `displays_from` refuses, and zeros everywhere else.
+/// `DomicileDisplay`, laid out as in the C header. 48 bytes, including 4 of
+/// tail padding.
+// `Default` is for tests. Its null name is refused by `displays_from`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[repr(C)]
 struct RawDisplay {
     id: i64,
-    /// The panel's own name, borrowed for the duration of the callback. Never
-    /// null, which [`displays_from`] checks rather than trusts.
+    /// The panel's name, borrowed for the callback. Never null; checked in
+    /// [`displays_from`].
     name: *const std::ffi::c_char,
     x: i32,
     y: i32,
@@ -376,39 +288,30 @@ struct RawDisplay {
     refresh_mhz: i32,
 }
 
-/// `DomicileDisplayLayout`, exactly as the C header lays it out.
-///
-/// Flat scalars and an `int32_t` for what is an `Option` on the safe side,
-/// because C has neither tuples nor sum types. One `int64_t`, three `int32_t`,
-/// a `uint32_t`, a `double` and four more `int32_t`, which is 48 bytes with no
-/// padding -- see the size test below, and the C header this mirrors. Not public: [`Connector`] is what a
-/// caller wants.
+/// `DomicileDisplayLayout`, laid out as in the C header. 48 bytes, no
+/// padding.
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[repr(C)]
 struct RawLayout {
     id: i64,
-    /// Nonzero to light this connector. Zero leaves it dark, and then the
-    /// corner below says nothing.
+    /// Nonzero to light this connector.
     enabled: i32,
     x: i32,
     y: i32,
     /// `DomicileDisplayTransform`: the `wl_output` order, normal first.
     transform: u32,
     scale: f64,
-    /// Where the profile put this display on the desktop, in logical pixels.
-    /// Zeros for a dark display, which has no place there.
+    /// The display's place on the logical desktop. Zeros for a dark display.
     desk_x: i32,
     desk_y: i32,
     desk_width: i32,
     desk_height: i32,
 }
 
-/// `DomicileSpikeCapture`, exactly as the C header lays it out.
+/// `DomicileSpikeCapture`, laid out as in the C header.
 ///
-/// Six `int32_t` in a struct rather than an array, because Chromium builds
-/// with `-Wunsafe-buffer-usage` and indexing a bare pointer is an error there.
-/// Not public: [`Capture`] is what a caller wants, and this shape only exists
-/// to be filled in across the ABI.
+/// A struct rather than an array because Chromium's `-Wunsafe-buffer-usage`
+/// forbids indexing a bare pointer.
 #[derive(Default)]
 #[repr(C)]
 struct RawCapture {
@@ -429,13 +332,11 @@ pub struct Bounds {
     pub height: i32,
 }
 
-/// THROWAWAY, with the rest of the spike. What one look at the browser's
-/// window found.
+/// Spike only. The result of searching the browser window for a color.
 ///
-/// `window` is the captured bitmap's size, which is not obliged to be the size
-/// the browser was asked for — and a probe that could not say so is what makes
-/// a coordinate bug look like a missing surface. `bounds` is the color's
-/// whole extent, or `None` if it is not in the window at all.
+/// `window` is the captured bitmap's size, which may differ from the
+/// requested size; reporting it exposes coordinate bugs. `bounds` is the
+/// color's extent, or `None` if absent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Capture {
     pub window: (i32, i32),
@@ -443,16 +344,13 @@ pub struct Capture {
 }
 
 impl Engine {
-    /// Loads the library and joins the browser's mojo graph over `socket`.
-    /// Surfaces come afterward, one per window, from [`Engine::create_surface`].
+    /// Loads the library and connects to the browser over `socket`.
     ///
-    /// `library` is a name or a path; a bare name is looked up the way `dlopen`
-    /// looks one up.
+    /// `library` is a name or a path, resolved as `dlopen` does.
     pub fn load(library: impl AsRef<Path>, socket: impl AsRef<Path>) -> Result<Self, EngineError> {
         let path = library.as_ref().to_path_buf();
-        // SAFETY: loading a library runs its initializers, which is why this is
-        // unsafe; there is no safe way to dlopen and the alternative is linking,
-        // which is the thing this exists to avoid.
+        // SAFETY: loading runs the library's initializers, and there is no
+        // safe way to `dlopen`.
         let library = unsafe { Library::new(&path) }.map_err(|source| EngineError::Library {
             path: path.clone(),
             source,
@@ -470,38 +368,18 @@ impl Engine {
         })
     }
 
-    /// Join the browser that replaced the one this was joined to, over a
-    /// socket the new one bound.
+    /// Connects to a replacement browser over the `socket` it bound.
     ///
-    /// **THE LIBRARY IS NOT LOADED AGAIN AND MUST NOT BE.**
-    /// `domicile_engine.cc` initializes mojo core and an `AtExitManager` once
-    /// per process on purpose — "Both are process-global and neither can be
-    /// torn down and re-created, which is why they outlive every engine rather
-    /// than belonging to one" — and guards it with a function-local static, so
-    /// a second `domicile_engine_connect` on the same loaded library is the
-    /// case that library was written for. Everything that is per-connection is
-    /// per-`DomicileEngine`: its own mojo thread, its own `ScopedIPCSupport`,
-    /// its own event queue and its own surfaces. A second `dlopen` would hand
-    /// back the same handle and the same statics anyway.
+    /// Reuses the loaded library: it initializes process-global mojo state
+    /// once, and supports several connections in one process. The old
+    /// connection is destroyed first, since two cannot share mojo core. Queued
+    /// events are discarded because they name the old connection's surfaces.
     ///
-    /// **THE OLD ONE GOES FIRST**, because `domicile_engine_destroy` is what
-    /// stops the thread that fires callbacks, and two engines in one process
-    /// would be two `ScopedIPCSupport`s over one mojo core.
+    /// On failure the handle is null, which every ABI entry point ignores and
+    /// [`Engine::fd`] reports as -1, so the caller can retry later.
     ///
-    /// The queue is the same allocation — the engine calls back through the
-    /// pointer handed to `domicile_engine_connect`, and a `Box` does not move
-    /// what it points at — but it is DRAINED first: whatever is in it names
-    /// surfaces and buffers of a mojo graph that no longer exists.
-    ///
-    /// **A failure leaves this inert rather than gone.** The handle is null,
-    /// which every entry point in `domicile_engine.h` answers by doing nothing
-    /// and which [`Engine::fd`] answers with -1, so the compositor can keep
-    /// the session and try again when the next page reaches it. Nothing about
-    /// that is quiet: the caller gets the error and says so.
-    ///
-    /// **NOTHING HERE IS EXERCISED BY ANY CHECK IN THIS REPOSITORY.** It needs
-    /// a built `libdomicile_engine.so` and a browser to dial, and no runner
-    /// has either. See `docs/HARDWARE-CHECKS.md#dead-engine-with-windows-open`.
+    /// No automated check covers this; see
+    /// `docs/HARDWARE-CHECKS.md#dead-engine-with-windows-open`.
     pub fn reconnect(&mut self, socket: &Path) -> Result<(), EngineError> {
         self.let_the_old_one_go();
         self.events.borrow_mut().clear();
@@ -509,12 +387,8 @@ impl Engine {
         Ok(())
     }
 
-    /// End the connection this holds, if it still holds one.
-    ///
-    /// Asked twice over on the way out of a reconnect that is then dropped,
-    /// which is why the null is checked rather than assumed away: a handle
-    /// this has already given up is the ordinary state of an engine whose
-    /// re-dial failed.
+    /// Destroys the connection, if any. The handle is null after a failed
+    /// reconnect.
     fn let_the_old_one_go(&mut self) {
         let handle = std::mem::replace(&mut self.handle, std::ptr::null_mut());
         if !handle.is_null() {
@@ -522,15 +396,14 @@ impl Engine {
                 b"domicile_engine_destroy\0",
                 "domicile_engine_destroy",
             ) {
-                // SAFETY: the handle is live until exactly here, and nothing
-                // uses it afterward — it has been replaced with null above.
+                // SAFETY: the handle is live, and was replaced with null so
+                // nothing uses it afterward.
                 unsafe { f(handle) };
             }
         }
     }
 
-    /// The fd to poll. Readable exactly when [`Engine::dispatch`] has something
-    /// to do, which is what makes it a `calloop` source and not a timer.
+    /// The fd to poll. Readable when [`Engine::dispatch`] has work.
     pub fn fd(&self) -> RawFd {
         let f: Symbol<unsafe extern "C" fn(*mut Handle) -> c_int> = self
             .symbol(b"domicile_engine_fd\0", "domicile_engine_fd")
@@ -539,7 +412,7 @@ impl Engine {
         unsafe { f(self.handle) }
     }
 
-    /// Runs the work the fd woke us for and returns what the browser said.
+    /// Runs pending work and returns the events the browser sent.
     pub fn dispatch(&self) -> Vec<Event> {
         let f: Symbol<unsafe extern "C" fn(*mut Handle)> = self
             .symbol(b"domicile_engine_dispatch\0", "domicile_engine_dispatch")
@@ -550,7 +423,7 @@ impl Engine {
         self.events.borrow_mut().drain(..).collect()
     }
 
-    /// Asks the browser to broker a frame sink. This is a window appearing.
+    /// Asks the browser to broker a frame sink for a new window.
     pub fn create_surface(&self, app_id: &str) -> Result<SurfaceId, EngineError> {
         let name = CString::new(app_id)?;
         let f: Symbol<unsafe extern "C" fn(*mut Handle, *const c_char) -> SurfaceId> =
@@ -565,8 +438,7 @@ impl Engine {
         Ok(surface)
     }
 
-    /// Drops the surface and the frame sink the browser brokered for it. This
-    /// is a window going away.
+    /// Destroys a window's surface and its frame sink.
     pub fn destroy_surface(&self, surface: SurfaceId) {
         let f: Symbol<unsafe extern "C" fn(*mut Handle, SurfaceId)> =
             match self.symbol(b"domicile_surface_destroy\0", "domicile_surface_destroy") {
@@ -577,10 +449,10 @@ impl Engine {
         unsafe { f(self.handle, surface) };
     }
 
-    /// Imports a client's dmabuf. `None` if the browser refused it — which on
-    /// an ozone platform without `CreateNativePixmapFromHandle` it always will.
+    /// Imports a client's dmabuf. `None` if the browser refused it, as it
+    /// always does on an ozone platform without `CreateNativePixmapFromHandle`.
     ///
-    /// The fds are borrowed: the caller keeps the client's `wl_buffer`.
+    /// The fds are borrowed; the caller keeps the client's `wl_buffer`.
     pub fn import(&self, surface: SurfaceId, dmabuf: &Dmabuf) -> Option<BufferId> {
         let f: Symbol<unsafe extern "C" fn(*mut Handle, SurfaceId, *const Dmabuf) -> BufferId> =
             self.symbol(b"domicile_surface_import\0", "domicile_surface_import")
@@ -590,20 +462,12 @@ impl Engine {
         (buffer != 0).then_some(buffer)
     }
 
-    /// Tells the browser what is on one of the desktop's two clipboards.
+    /// Tells the browser the contents of a clipboard.
     ///
-    /// **The browser is told rather than asked**, because the compositor
-    /// already has the bytes: a selection arriving on the seat is read out of
-    /// the client that offered it whether or not anybody pastes, so there is
-    /// nothing left to fetch and a page pasting answers out of memory.
-    ///
-    /// Empty is a clipboard with nothing on it, which is what a desktop that
-    /// has just started has, and is said rather than left unsaid: a browser
-    /// never told would go on offering whatever it was told last.
-    ///
-    /// **The bytes are length-carried**, because what a person copies may hold
-    /// a nul and a C string would cut it there. Borrowed for the call: the
-    /// browser copies before it returns.
+    /// The compositor reads every new selection eagerly, so the browser can
+    /// paste from memory. Send empty text for an empty clipboard, or the
+    /// browser keeps the old contents. Passed with a length because copied
+    /// text may contain a nul; the browser copies it before returning.
     pub fn set_clipboard(&self, clipboard: Clipboard, text: &str) {
         let f: Symbol<unsafe extern "C" fn(*mut Handle, u32, *const c_char, usize)> =
             match self.symbol(b"domicile_clipboard_set\0", "domicile_clipboard_set") {
@@ -622,10 +486,11 @@ impl Engine {
         };
     }
 
-    /// Submits a frame showing the `crop` of `buffer`. An empty crop means the
-    /// whole buffer and an empty damage rectangle the whole surface. This is
-    /// `wl_surface.commit`, with the window geometry a client that draws its
-    /// own shadow sets — see [`crate::window_geometry`].
+    /// Submits a frame showing the `crop` of `buffer` (`wl_surface.commit`).
+    ///
+    /// The crop is the window geometry, which excludes client-drawn shadows
+    /// (see [`crate::window_geometry`]). An empty crop means the whole buffer;
+    /// empty damage means the whole surface.
     pub fn submit(
         &self,
         surface: SurfaceId,
@@ -653,8 +518,8 @@ impl Engine {
             "domicile_surface_submit_crop",
         ) {
             Ok(symbol) => symbol,
-            // An engine older than this compositor: the window is drawn with
-            // its shadow rather than not drawn at all.
+            // An older engine without cropping: draw the whole buffer,
+            // shadow included.
             Err(why) => {
                 if !self.said_it_cannot_crop.replace(true) {
                     tracing::warn!(%why, "windows are drawn uncropped, shadows and all");
@@ -682,7 +547,7 @@ impl Engine {
         };
     }
 
-    /// `domicile_surface_submit`: the whole buffer, for an engine without
+    /// Submits the whole buffer, for an engine without
     /// `domicile_surface_submit_crop`.
     fn submit_uncropped(&self, surface: SurfaceId, buffer: BufferId, damage: (i32, i32, i32, i32)) {
         let f: Symbol<unsafe extern "C" fn(*mut Handle, SurfaceId, BufferId, i32, i32, i32, i32)> =
@@ -697,16 +562,9 @@ impl Engine {
 
     /// Tells the browser which connectors to light and where.
     ///
-    /// An empty list is not "light nothing": it is the compositor having no
-    /// opinion, which is what every desktop but a profile's has, and the
-    /// engine answers it by going back to lighting what the hardware reports.
-    /// That is the case that UNDOES a profile -- one that turned a panel off
-    /// stops matching the moment a monitor is unplugged.
-    ///
-    /// Nothing comes back. A modeset is committed on the browser's own DRM
-    /// thread and answered on a later task, so there is nothing to wait for
-    /// here that would not be a lie; what the compositor learns instead is
-    /// the display list the engine sends once the hardware has answered.
+    /// An empty list means no profile: the engine lights what the hardware
+    /// reports, undoing any earlier profile. The result arrives later as an
+    /// [`Event::Displays`].
     pub fn configure_displays(&self, connectors: &[Connector]) {
         let f: Symbol<unsafe extern "C" fn(*mut Handle, *const RawLayout, u32)> = match self.symbol(
             b"domicile_displays_configure\0",
@@ -716,14 +574,11 @@ impl Engine {
             Err(_) => return,
         };
         let raw = layouts_from(connectors);
-        // SAFETY: as above, and `raw` outlives the call -- the engine copies
-        // what it is given, which is the same contract the display list
-        // crossing the other way states.
+        // SAFETY: as above, and `raw` outlives the call; the engine copies it.
         unsafe { f(self.handle, raw.as_ptr(), raw.len() as u32) };
     }
 
-    /// Drops an imported buffer, when the client destroys the `wl_buffer`
-    /// behind it.
+    /// Releases an imported buffer after the client destroys its `wl_buffer`.
     pub fn forget(&self, surface: SurfaceId, buffer: BufferId) {
         let f: Symbol<unsafe extern "C" fn(*mut Handle, SurfaceId, BufferId)> =
             match self.symbol(b"domicile_buffer_destroy\0", "domicile_buffer_destroy") {
@@ -734,13 +589,10 @@ impl Engine {
         unsafe { f(self.handle, surface, buffer) };
     }
 
-    /// THROWAWAY, with the rest of the spike. What the display compositor drew
-    /// at the center of the browser's window, which is where every spike page
-    /// puts the `<app>`.
+    /// Spike only. The ARGB pixel at the center of the browser's window,
+    /// where spike pages put the `<app>`.
     ///
-    /// Here because only one process may hold the browser's invitation and the
-    /// compositor is now that process, so nothing else can ask. It goes when
-    /// the spike's pages do.
+    /// Lives here because only the compositor holds the browser's invitation.
     pub fn spike_window_center(&self) -> Option<u32> {
         let f: Symbol<unsafe extern "C" fn(*mut Handle, *mut u32) -> bool> = self
             .symbol(
@@ -749,23 +601,15 @@ impl Engine {
             )
             .ok()?;
         let mut argb = 0u32;
-        // SAFETY: as elsewhere — the handle is live, and `argb` outlives the
-        // call.
+        // SAFETY: the handle is live, and `argb` outlives the call.
         unsafe { f(self.handle, &mut argb) }.then_some(argb)
     }
 
-    /// THROWAWAY, with the rest of the spike. What the display compositor drew
-    /// at `x`, `y` in the browser's window.
-    ///
-    /// The center stops being enough the moment a page holds two `<app>`
-    /// elements: side by side, no pixel is inside both, and two windows on one
-    /// page is the claim the broker's unit tests cannot make for themselves.
+    /// Spike only. The ARGB pixel at `x`, `y` in the browser's window, for
+    /// pages with more than one `<app>`.
     pub fn spike_pixel(&self, x: i32, y: i32) -> Option<u32> {
-        // The two failures are told apart rather than merged into one `None`.
-        // A missing symbol means the library was built without this — an old
-        // out/ directory, or a build that did not include it — and a refused
-        // call means the point is outside the window. They have nothing in
-        // common and the first is invisible unless it is said.
+        // A missing symbol means a stale library build; log it, because it
+        // would otherwise look like a point outside the window.
         let f: Symbol<unsafe extern "C" fn(*mut Handle, i32, i32, *mut u32) -> bool> = match self
             .symbol(
                 b"domicile_engine_spike_sample_pixel\0",
@@ -784,19 +628,16 @@ impl Engine {
             }
         };
         let mut argb = 0u32;
-        // SAFETY: as elsewhere — the handle is live, and `argb` outlives the
-        // call.
+        // SAFETY: the handle is live, and `argb` outlives the call.
         unsafe { f(self.handle, x, y, &mut argb) }.then_some(argb)
     }
 
-    /// THROWAWAY, with the rest of the spike. Where `argb` is in the
-    /// browser's window, and how big that window is.
+    /// Spike only. Where `argb` is in the browser's window, and the window's
+    /// size.
     ///
-    /// `None` means nothing could be read — no window, nothing drawn, or no
-    /// probe. That is not the same as the color being absent, and a guard's
-    /// negative control turns on the difference: "the color is not there" is
-    /// the control passing and "nothing was read" is the control having
-    /// measured nothing while looking identical.
+    /// `None` means nothing could be read, which differs from the color being
+    /// absent (`bounds: None`); negative-control checks rely on the
+    /// difference.
     pub fn spike_find(&self, argb: u32) -> Option<Capture> {
         let f: Symbol<unsafe extern "C" fn(*mut Handle, u32, *mut RawCapture) -> i32> = match self
             .symbol(
@@ -814,12 +655,11 @@ impl Engine {
                 return None;
             }
         };
-        // Zeroed, so that a field the library does not write is read as 0
-        // rather than as whatever was on the stack — the contract says only
-        // the size is written on 0, and only the box as well on 1.
+        // Zeroed because the library writes only the size on status 0, and
+        // the box too on status 1.
         let mut out = RawCapture::default();
-        // SAFETY: as elsewhere — the handle is live, and `out` is the
-        // `DomicileSpikeCapture` the header documents and outlives the call.
+        // SAFETY: the handle is live, and `out` is a `DomicileSpikeCapture`
+        // that outlives the call.
         let status = unsafe { f(self.handle, argb, &mut out) };
         let window = (out.window_width, out.window_height);
         match status {
@@ -851,12 +691,10 @@ impl Drop for Engine {
     }
 }
 
-/// Join the browser listening at `socket`, with `events` the queue its
-/// callbacks push into.
+/// Connects to the browser at `socket`; callbacks push into `events`.
 ///
-/// A free function rather than a method because it is what builds an
-/// [`Engine`] as well as what re-dials one, and the first of those has no
-/// `self` to be a method on.
+/// A free function because [`Engine::load`] calls it before an `Engine`
+/// exists.
 fn join(
     library: &Library,
     path: &Path,
@@ -880,8 +718,8 @@ fn join(
         "domicile_engine_connect",
     )?;
     // SAFETY: the signature matches domicile_engine.h, the string is
-    // nul-terminated by CString, and `events` outlives the handle because both
-    // are owned by the Engine this is building or re-dialing.
+    // nul-terminated, and `events` outlives the handle because the same
+    // `Engine` owns both.
     let handle = unsafe { connect(socket_c.as_ptr(), callbacks) };
     match handle.is_null() {
         true => Err(EngineError::Connect {
@@ -897,8 +735,7 @@ fn symbol<'library, T>(
     name: &[u8],
     readable: &'static str,
 ) -> Result<Symbol<'library, T>, EngineError> {
-    // SAFETY: the caller states the signature, and every call site here states
-    // one that matches domicile_engine.h.
+    // SAFETY: every caller states a signature that matches domicile_engine.h.
     unsafe { library.get(name) }.map_err(|source| EngineError::Symbol {
         path: path.to_path_buf(),
         symbol: readable,
@@ -906,9 +743,7 @@ fn symbol<'library, T>(
     })
 }
 
-/// The four callbacks, which do nothing but queue: they fire inside
-/// `dispatch`, and what to do about them is the compositor's business rather
-/// than this module's.
+/// The callbacks only queue events; they fire inside `dispatch`.
 extern "C" fn on_configure(user_data: *mut c_void, surface: SurfaceId, width: u32, height: u32) {
     push(
         user_data,
@@ -953,27 +788,21 @@ extern "C" fn on_released(user_data: *mut c_void, surface: SurfaceId, buffer: Bu
     push(user_data, Event::Released { surface, buffer });
 }
 
-/// The only callback that carries an array, so the only one with a length to
-/// believe. An empty list is queued as one rather than dropped: `DrmScreen`
-/// answers with its displayless display instead of nothing, so zero displays
-/// is the engine breaking its own contract and `Screens::from_the_engine` is
-/// where that is refused -- silently dropping it here would leave the desktop
-/// on a stale list with nothing said.
+/// Queues the display list.
+///
+/// An empty list is queued, not dropped: the engine never sends one, so
+/// `Screens::from_the_engine` reports it as an error.
 extern "C" fn on_displays(user_data: *mut c_void, displays: *const RawDisplay, count: u32) {
-    // SAFETY: the ABI says `displays` points at `count` records, and the
-    // engine's own queue is what fills them in. Borrowed only for this call:
-    // `displays_from` copies, so nothing outlives the callback.
+    // SAFETY: the ABI says `displays` points at `count` records, valid for
+    // this call. `displays_from` copies them.
     let records = unsafe { std::slice::from_raw_parts(displays, count as usize) };
     push(user_data, Event::Displays(displays_from(records)));
 }
 
-/// A copy made in the browser, as the bytes it was made of.
+/// Queues a copy made in the browser.
 ///
-/// **Length-carried rather than nul-terminated**, which is the one place this
-/// ABI differs from the rest of itself, and for a reason that is about
-/// clipboards rather than taste: what a person copies is arbitrary bytes and
-/// may hold a nul, which a C string cannot say and would cut short. See
-/// `domicile_clipboard_set`, which crosses the other way on the same terms.
+/// The text has a length rather than a nul terminator, because copied text
+/// may contain a nul. `domicile_clipboard_set` works the same way.
 extern "C" fn on_copied(
     user_data: *mut c_void,
     clipboard: u32,
@@ -984,26 +813,21 @@ extern "C" fn on_copied(
         !text.is_null(),
         "the engine sends the bytes that were copied, even if it sends none"
     );
-    // SAFETY: the ABI says `text` points at `length` bytes, borrowed for the
-    // duration of this call; `String::from_utf8_lossy` copies before it
-    // returns, so nothing outlives the callback.
+    // SAFETY: the ABI says `text` points at `length` bytes, valid for this
+    // call. `String::from_utf8_lossy` copies them.
     let bytes = unsafe { std::slice::from_raw_parts(text.cast::<u8>(), length) };
     push(
         user_data,
         Event::Copied {
             clipboard: clipboard_from(clipboard),
-            // Lossy, like a panel's name, and for a reason that makes it
-            // unreachable rather than tolerated: the bytes arrive over a mojom
-            // `string`, which mojo itself validates as UTF-8 before the
-            // browser ever sees them. What lossy buys is that a validator
-            // changing its mind costs a replacement character somebody can see
-            // rather than the desktop.
+            // Mojo already validates the text as UTF-8; lossy conversion
+            // avoids a panic if that ever changes.
             text: String::from_utf8_lossy(bytes).into_owned(),
         },
     );
 }
 
-/// The ABI's flat records as the pairs the compositor lays out in.
+/// Converts the ABI's display records.
 fn displays_from(records: &[RawDisplay]) -> Vec<Display> {
     records
         .iter()
@@ -1018,10 +842,7 @@ fn displays_from(records: &[RawDisplay]) -> Vec<Display> {
         .collect()
 }
 
-/// The connectors as the flat records that cross the ABI.
-///
-/// The mirror of [`displays_from`], which does this for the list coming the
-/// other way.
+/// Converts connectors to the ABI's layout records.
 fn layouts_from(connectors: &[Connector]) -> Vec<RawLayout> {
     connectors
         .iter()
@@ -1045,44 +866,31 @@ fn layouts_from(connectors: &[Connector]) -> Vec<RawLayout> {
         .collect()
 }
 
-/// A logical size as the C header's `int32_t`. An assertion: a profile whose
-/// desktop does not fit an `int32_t` is refused where it is laid out.
+/// A logical size as an `int32_t`. Profiles that do not fit are refused
+/// earlier, so this cannot fail.
 fn logical(size: u32) -> i32 {
     i32::try_from(size).expect("a laid-out desktop fits an int32_t")
 }
 
-/// The panel's own name, copied out of the record's borrowed characters.
+/// Copies the panel's name out of the record.
 ///
-/// Null is refused rather than read. The C header states the pointer is never
-/// null, so one that is means the engine broke its own contract -- and the
-/// cost of trusting it is not a wrong answer but undefined behavior, because
-/// `CStr::from_ptr` reads through whatever it is given.
-///
-/// Lossy, on the other side, and deliberately: the characters are an EDID's,
-/// which the engine restricts to printable ASCII before sending, so invalid
-/// UTF-8 is a panel doing something no panel does. Replacing it is a name
-/// nobody will match and everybody can see, which beats taking the desktop
-/// down over a monitor's firmware.
+/// Panics on null, which the C header forbids, instead of reading it. Lossy
+/// because the engine already limits names to printable ASCII, and bad
+/// firmware should not crash the desktop.
 fn description_of(record: &RawDisplay) -> String {
     assert!(
         !record.name.is_null(),
         "the engine names every display, even if it names it nothing"
     );
-    // SAFETY: non-null by the assertion above, nul-terminated and valid for
-    // the duration of this call by the ABI -- the engine owns the characters
-    // and frees them when the callback returns, and this copies before then.
+    // SAFETY: non-null per the assertion; the ABI guarantees a nul-terminated
+    // string valid for this callback, and this copies it.
     unsafe { std::ffi::CStr::from_ptr(record.name) }
         .to_string_lossy()
         .into_owned()
 }
 
-/// A display's extent as the `u32` a size is here.
-///
-/// `int32_t` on the wire because a DRM mode is measured the same way a
-/// position is and the C header says so once; never negative, because a mode
-/// is a mode. Asserted rather than folded: a negative extent is an engine
-/// reporting something that is not a screen, and the plausible positive a
-/// cast would make is a desktop of the wrong size with nothing to say why.
+/// A display extent from the ABI's `int32_t`. Panics if negative rather
+/// than casting to a wrong size.
 fn as_extent(measure: i32) -> u32 {
     u32::try_from(measure).expect("a display's mode is never negative")
 }
@@ -1091,10 +899,9 @@ fn push(user_data: *mut c_void, event: Event) {
     if user_data.is_null() {
         return;
     }
-    // SAFETY: `user_data` is the pointer handed to domicile_engine_connect,
-    // which is the boxed queue owned by the Engine, and the engine only calls
-    // back from inside dispatch — so the box is alive and nothing else holds a
-    // borrow.
+    // SAFETY: `user_data` is the `Engine`'s boxed queue, passed to
+    // domicile_engine_connect. Callbacks fire only inside dispatch, so the box
+    // is alive and not borrowed elsewhere.
     let events = unsafe { &*(user_data as *const RefCell<Vec<Event>>) };
     events.borrow_mut().push(event);
 }
@@ -1104,14 +911,7 @@ mod tests {
     use super::*;
     use crate::dmabuf_descriptor::DmabufPlane as BridgePlane;
 
-    /// What the C header's `static_assert` cannot see: that this side still
-    /// has six fields. It catches a field added or dropped, which is the
-    /// mistake that reads the wrong half of a bounding box. It does not catch
-    /// a reorder or a signedness change — those keep the size and there is
-    /// nothing on this side that could notice them.
-    /// The two clipboards cross as numbers, and which number is which is as
-    /// much part of the ABI as any struct's size. Reversed, they would paste
-    /// what a person selected where they expected what they copied.
+    /// The clipboard numbers are part of the ABI.
     #[test]
     fn each_clipboard_crosses_as_the_number_the_c_header_gives_it() {
         assert_eq!(Clipboard::Copy.as_raw(), 0);
@@ -1120,17 +920,15 @@ mod tests {
         assert_eq!(clipboard_from(1), Clipboard::Primary);
     }
 
-    /// A number the header does not declare is an engine this compositor does
-    /// not understand. Refused rather than folded onto one of the two: the
-    /// plausible guess is the ordinary clipboard, and a copy landing on it
-    /// because a third one was added is a paste that silently overwrites what
-    /// the user actually copied.
+    /// An undeclared clipboard number panics rather than guessing.
     #[test]
     #[should_panic(expected = "clipboard")]
     fn a_clipboard_the_header_does_not_declare_is_refused() {
         clipboard_from(2);
     }
 
+    /// Struct size checks mirror the C header's `static_assert`s. They catch
+    /// added or dropped fields, not reorders.
     #[test]
     fn a_capture_is_the_six_int32_the_c_header_declares() {
         assert_eq!(
@@ -1139,43 +937,23 @@ mod tests {
         );
     }
 
-    /// The same guard as above, for the struct a display list is an array of.
-    /// A field added or dropped on one side of the ABI and not the other reads
-    /// every display after the first out of the middle of its neighbor.
-    ///
-    /// Spelled as a number rather than as a sum of its fields, because the
-    /// struct is no longer the sum of its fields: one `int64_t` and seven
-    /// `int32_t` is 36 bytes, and a struct aligned to its widest member rounds
-    /// that to 40. The four bytes of tail padding are as much part of the ABI
-    /// as the fields are -- both sides get them from the same rule -- and a
-    /// sum would have quietly asserted 36 and failed on a struct that is
-    /// correct.
     #[test]
     fn a_display_is_the_one_int64_the_pointer_and_seven_int32_the_c_header_declares() {
-        // 8 for the id, 8 for the name's pointer, 28 for the seven `int32_t`,
-        // and four bytes of tail padding to the struct's own alignment: 48.
-        // Asserted rather than summed for the reason the 40 before it was --
-        // the padding is as much part of the ABI as the fields, and a sum
-        // would assert 44 and fail on a struct that is correct.
+        // 8 (id) + 8 (name) + 28 (seven `int32_t`) + 4 tail padding. A
+        // literal, because padding is part of the ABI.
         assert_eq!(std::mem::size_of::<RawDisplay>(), 48);
     }
 
     #[test]
     fn a_connector_is_the_int64_four_int32s_double_and_desk_the_c_header_declares() {
-        // 8 for the id, 16 for the three `int32_t` and the `uint32_t`, 8 for
-        // the `double`, 16 for the desk's four `int32_t`: 48, with no padding
-        // anywhere because the double lands on its own alignment. Asserted
-        // rather than summed, for the reason the display's 48 is: the padding
-        // is as much part of the ABI as the fields are, and here there being
-        // none is the claim.
+        // 8 (id) + 16 (three `int32_t`, one `uint32_t`) + 8 (`double`) + 16
+        // (desk). No padding: the `double` is already aligned.
         assert_eq!(std::mem::size_of::<RawLayout>(), 48);
     }
 
     #[test]
     fn a_connector_crosses_with_the_turn_and_scale_its_window_is_drawn_at() {
-        // The engine draws the turn and the scale, so a page lays out in
-        // logical pixels the right way up. Numbered as the C header numbers
-        // `DomicileDisplayTransform`, which is the `wl_output` order.
+        // `DomicileDisplayTransform` uses the `wl_output` order.
         let turned = |transform| layouts_from(&[Connector { transform, ..LIT }])[0].transform;
         assert_eq!(
             [
@@ -1191,9 +969,7 @@ mod tests {
 
     #[test]
     fn a_configure_carries_the_scale_of_the_page_that_laid_it_out() {
-        // The box one `<app>` states in device pixels comes back down to
-        // logical ones by the scale it was laid out at -- which only the
-        // engine knows.
+        // Only the engine knows the scale a box was laid out at.
         let events = RefCell::new(Vec::new());
         let queue = (&events as *const RefCell<Vec<Event>>) as *mut c_void;
         on_configure_at(queue, 3, 1200, 900, 1.5);
@@ -1208,7 +984,7 @@ mod tests {
                     height: 900,
                     scale: Some(1.5),
                 },
-                // An engine from before the scale crossed says nothing.
+                // An engine without `configure_at` sends no scale.
                 Event::Configure {
                     surface: 4,
                     width: 800,
@@ -1219,7 +995,7 @@ mod tests {
         );
     }
 
-    /// A lit connector at a density and a turn, for the tests to vary.
+    /// A lit, scaled and rotated connector for tests to vary.
     const LIT: Connector = Connector {
         id: 7,
         enabled: true,
@@ -1255,10 +1031,8 @@ mod tests {
 
     #[test]
     fn a_dark_connector_crosses_as_a_no_and_a_corner_that_still_matters() {
-        // The corner is not a leftover. A dark connector is still one the
-        // engine's display list has to place, and one left where the card
-        // stacked it lands on top of a monitor that is on -- so the compositor
-        // gives it a corner of its own, out of the way.
+        // A dark connector still needs a position, or the engine places it
+        // over a lit monitor.
         let raw = layouts_from(&[Connector {
             id: 3,
             enabled: false,
@@ -1277,7 +1051,7 @@ mod tests {
                 y: 0,
                 transform: 0,
                 scale: 1.0,
-                // Nowhere on the desk, which the header spells as zeros.
+                // Not on the desk: zeros.
                 desk_x: 0,
                 desk_y: 0,
                 desk_width: 0,
@@ -1286,12 +1060,8 @@ mod tests {
         );
     }
 
-    /// A `RawDisplay` naming `name`, which the returned `CString` owns.
-    ///
-    /// Paired so the storage outlives the record: a bare `CString::new(..)
-    /// .as_ptr()` in an argument position is freed at the end of the
-    /// statement, and the pointer left behind is exactly the dangling read
-    /// this type exists to be careful about.
+    /// `record` with its name set to `name`. Keep the returned `CString`
+    /// alive while the record is used.
     fn named(record: RawDisplay, name: &str) -> (RawDisplay, std::ffi::CString) {
         let owned = std::ffi::CString::new(name).expect("a test name has no nul in it");
         (
@@ -1305,8 +1075,6 @@ mod tests {
 
     #[test]
     fn a_displays_name_crosses_as_the_panel_spelled_it() {
-        // What the whole EDID path is for: an int64 nobody can predict beside
-        // a string somebody can write down.
         let (record, _owned) = named(
             RawDisplay {
                 id: 7,
@@ -1325,9 +1093,7 @@ mod tests {
 
     #[test]
     fn a_display_that_names_itself_nothing_crosses_as_nothing() {
-        // A projector, a virtual output, a panel whose maker left the
-        // descriptors out. Empty is the reading, and the id still identifies
-        // it.
+        // E.g. a projector or virtual output. The id still identifies it.
         let (record, _owned) = named(RawDisplay::default(), "");
 
         assert_eq!(displays_from(&[record])[0].description, "");
@@ -1336,24 +1102,14 @@ mod tests {
     #[test]
     #[should_panic(expected = "the engine names every display")]
     fn a_null_name_is_refused_rather_than_read() {
-        // The header says the pointer is never null, and a null one is the
-        // engine breaking its own contract. Checked rather than trusted
-        // because the alternative is not a wrong answer but undefined
-        // behavior: `CStr::from_ptr` on null reads through it.
+        // Reading a null pointer would be undefined behavior.
         let _ = displays_from(&[RawDisplay::default()]);
     }
 
     #[test]
     fn a_display_list_crosses_the_abi_as_the_compositor_counts_them() {
-        // The ABI counts a corner and an extent separately because C has no
-        // tuples; the compositor pairs them because everything it lays out is
-        // a pair.
-        //
-        // The second display carries zeros for the panel, which is not a
-        // second display with a bug in it: a connector that reports no
-        // millimeters is ordinary -- a projector, a virtual output -- and zero
-        // is what `wl_output` states for one. A conversion that invented a
-        // size for it would be the fiction this whole path exists to remove.
+        // The projector reports no size or rate; zeros pass through as
+        // zeros, which is what `wl_output` expects.
         let (panel, _panel_name) = named(
             RawDisplay {
                 id: 7,
@@ -1446,9 +1202,7 @@ mod tests {
         }
     }
 
-    // Refused rather than truncated. A five-plane buffer sent as its first four
-    // is a window drawn from part of a buffer, which is worse than no window:
-    // it looks like a rendering bug rather than an unsupported format.
+    // Refused rather than truncated, which would draw a corrupt window.
     #[test]
     fn more_planes_than_the_abi_carries_are_refused() {
         assert!(Dmabuf::from_descriptor(&descriptor(MAX_PLANES + 1)).is_none());
@@ -1459,10 +1213,7 @@ mod tests {
         assert!(Dmabuf::from_descriptor(&descriptor(0)).is_none());
     }
 
-    // The error path is the whole of what can be tested without a Chromium
-    // build, and it is also the part that matters most: once phase 2 removes
-    // the copy path, this message is the only thing between a missing library
-    // and a compositor that comes up showing nothing.
+    // Only the error paths can be tested without a Chromium build.
 
     #[test]
     fn a_missing_library_names_itself_and_how_to_build_it() {
@@ -1484,9 +1235,7 @@ mod tests {
         );
     }
 
-    // A library that loads but is the wrong one fails differently, and says so
-    // differently: "you have a library, it is not this one" is a different
-    // afternoon from "you have no library".
+    // A wrong library gets a different error from a missing one.
     #[test]
     fn a_library_without_the_abi_says_it_is_the_wrong_one() {
         let error = Engine::load("libc.so.6", "/tmp/nowhere")

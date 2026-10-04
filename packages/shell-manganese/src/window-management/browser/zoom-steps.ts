@@ -1,9 +1,8 @@
-// How far a browser window's page zooms, a step at a time.
+// Browser page zoom levels.
 //
-// Chrome's own levels — `kPresetBrowserZoomFactors` in Blink's `page_zoom.cc`
-// — because they are the ones a user's hands already know: Ctrl+plus from
-// 100% is 110%, and five presses is 175%. The engine takes any factor between
-// the first and the last; which ones a press lands on is the shell's to say.
+// Uses Chrome's levels (`kPresetBrowserZoomFactors` in Blink's
+// `page_zoom.cc`) so zoom steps match what users expect. The engine accepts
+// any factor in range; the shell picks the steps.
 
 const ZOOM_FACTORS: readonly number[] = [
   0.25,
@@ -28,18 +27,15 @@ const ZOOM_FACTORS: readonly number[] = [
 const SMALLEST = 0.25;
 const LARGEST = 5;
 
-// Blink's `ZoomValuesEqual`. A factor the browser reports has been through a
-// logarithm and back, so a third set is not exactly a third read.
+// Matches Blink's `ZoomValuesEqual`. Reported factors pass through a
+// logarithm, so they are not exact.
 const EPSILON = 0.001;
 
-/**
- * The level above `factor`, or the last level when there is none — a press
- * past the end is still a press, and shows the user where the end is.
- */
+/** The level above `factor`, or the largest level at the top. */
 export const zoomedIn = (factor: number): number =>
   ZOOM_FACTORS.find((step) => step > factor + EPSILON) ?? LARGEST;
 
-/** The level below `factor`, or the first level when there is none. */
+/** The level below `factor`, or the smallest level at the bottom. */
 export const zoomedOut = (factor: number): number =>
   ZOOM_FACTORS.findLast((step) => step < factor - EPSILON) ?? SMALLEST;
 
@@ -52,6 +48,6 @@ export const isFullyZoomedOut = (factor: number): boolean =>
 export const isUnzoomed = (factor: number): boolean =>
   Math.abs(factor - 1) < EPSILON;
 
-/** A factor as the percentage a browser shows for it: `1.25` is `125%`. */
+/** A factor as a percentage: `1.25` is `125%`. */
 export const zoomPercent = (factor: number): string =>
   `${Math.round(factor * 100).toString()}%`;

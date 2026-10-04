@@ -1,18 +1,14 @@
 import { domicilePreset } from "@domicile-desktop/component-library/pandacss-preset";
 import { defineConfig } from "@pandacss/dev";
 
-// A float trading places with one it overlaps: it parts from the other,
-// trades depths with it at the furthest point, and comes back. See
-// `shuffledBy` for the custom properties, and `restacking.ts` for why a
-// shuffle.
+// A float swapping depth with one it overlaps: it moves apart, swaps depth at
+// the furthest point, and moves back. See `shuffledBy` and `restacking.ts`.
 //
-// The new depth is written at 51% as well as at the end, so it lands in the
-// frame after the furthest point: left to interpolate from 50% to 100%, a step
-// of one would round over three quarters of the way back, with the two windows
-// already on top of each other again.
+// The new depth is set at 51% so it lands right after the furthest point.
+// Interpolated from 50% to 100%, it would change too late, after the windows
+// overlap again.
 //
-// Above the config because it is used twice, under two names — see
-// `nextShuffle`.
+// Defined once and registered under two names; see `nextShuffle`.
 const RESTACKING = {
   "0%": {
     transform: "translate(0, 0)",
@@ -29,7 +25,7 @@ const RESTACKING = {
   },
 };
 
-// A head shaken: out to either side, less each time, and still.
+// A side-to-side shake that dies down.
 const LOCK_REFUSED = {
   "0%, 100%": { transform: "translateX(0)" },
   "15%": { transform: "translateX(calc(-1 * {spacing.3}))" },
@@ -40,47 +36,30 @@ const LOCK_REFUSED = {
 
 export default defineConfig({
   exclude: [],
-  // The page is the desktop and nothing in it scrolls: every window is placed
-  // at a rectangle worked out from the screen it is on. That has to be said on
-  // the elements React does not render.
-  //
-  // `clip` rather than `hidden`, and on the root rather than the body, because
-  // the desktop is not the viewport: it spans every display, so it is wider
-  // than a window showing one of them. A `hidden` viewport is still a scroll
-  // container — focusing something off to the right scrolls it, with no bar to
-  // show for it — and everything the shell places is placed from a
-  // `getBoundingClientRect`, which is viewport-relative and so is off by the
-  // scroll offset from then on. That puts every portal somewhere the user is
-  // not looking, and the chrome that placed it there looks correct. A clipped
-  // box is not a scroll container at all.
+  // The desktop never scrolls. It spans every display, so it is wider than the
+  // viewport. `overflow: hidden` would still be a scroll container: focusing
+  // something off screen would scroll it, and every position taken from
+  // `getBoundingClientRect` would be off by that offset. `clip` is not a
+  // scroll container.
   globalCss: {
     html: {
       overflow: "clip",
-      // And none of it is text to select: the shell is a desktop rather than
-      // a document, so a drag across the bar or a title that paints a
-      // selection is a drag that went wrong. Said once at the root rather than
-      // on each piece of chrome, so a piece added later is covered without
-      // anybody remembering. A window's page is its own document, so this
-      // does not reach it.
+      // Shell chrome is not selectable text. Set at the root so new chrome is
+      // covered too. Window pages are separate documents and are unaffected.
       userSelect: "none",
     },
     "html, body, #root": {
       blockSize: "100%",
     },
-    // A field is the exception: what is in it is what somebody typed, and
-    // selecting it is how it is edited.
+    // Fields stay selectable so they can be edited.
     "input, textarea": {
       userSelect: "text",
     },
   },
   hash: true,
-  // The shell is the composition root: it renders its own chrome and every
-  // component-library control that chrome uses, so the CSS rules for all of
-  // their `css`/recipe calls must be emitted here. Panda's `css()` only
-  // produces class names; the build that scans a call's source is what emits
-  // the matching rule. Hashing is deterministic for a given preset, so the
-  // class names the library's own `styled-system` produces at runtime line up
-  // with the rules generated here.
+  // The shell renders component-library controls, so it must scan their
+  // source to emit their CSS rules. Hashing is deterministic per preset, so the
+  // library's runtime class names match the rules generated here.
   include: [
     "./src/**/*.{ts,tsx}",
     "../../packages/component-library/src/**/*.{ts,tsx}",
@@ -92,10 +71,8 @@ export default defineConfig({
   theme: {
     extend: {
       keyframes: {
-        // The bar's bell when something arrives: a swing either way that
-        // dies down, hung from the top the way a bell is. Once per arrival,
-        // not on a loop — a bell that went on ringing would be the bar
-        // shouting about something already on the screen as a toast.
+        // The bar's bell on a new notification. Runs once per arrival, not
+        // on a loop, since the toast already shows the notification.
         bellRing: {
           "0%": { transform: "rotate(0)" },
           "15%": { transform: "rotate(14deg)" },
@@ -105,44 +82,31 @@ export default defineConfig({
           "75%": { transform: "rotate(2deg)" },
           "100%": { transform: "rotate(0)" },
         },
-        // The charge, once there is almost none: the readout is drawn at full
-        // strength twice a turn rather than dimmed throughout, which is the
-        // difference between this and the preset's `pulse`. `pulse` sits
-        // between a third and two thirds and says a control is busy; a battery
-        // with minutes left has to be *more* legible than the rest of the bar
-        // at the moment it is least ignorable, not less.
+        // A nearly empty battery. Unlike the preset's `pulse`, it returns to
+        // full opacity each cycle so the readout stays legible.
         //
-        // Opacity rather than a color, so the one decision about what red is
-        // stays the `danger` token's, and so the flash reaches the whole
-        // readout — the case, the fill, the bolt and the figures — which is
-        // four elements and one animation.
+        // Animates opacity, not color, so the `danger` token alone sets the
+        // color and one animation covers the whole readout.
         chargeFlashing: {
           "0%": { opacity: "1" },
           "50%": { opacity: "{opacity.pulseMin}" },
           "100%": { opacity: "1" },
         },
-        // A bar of the launcher's meter beside a song that is playing: up
-        // from its floor and back, each bar on an offset of its own.
+        // A bar of the launcher's now-playing meter. Each bar has its own
+        // offset.
         equalizer: {
           "0%": { transform: "scaleY(0.3)" },
           "100%": { transform: "scaleY(1)" },
         },
-        // A passphrase the desk turned down: the lock screen's pane shakes
-        // its head, hard and then less. Twice, under two names, so that a
-        // second refusal runs it again — see `shaken` in `lock/Lock.tsx`.
+        // The lock screen shakes on a rejected passphrase. Registered under
+        // two names so a second rejection restarts it; see `shaken` in
+        // `lock/Lock.tsx`.
         lockRefused: LOCK_REFUSED,
         lockRefusedAgain: LOCK_REFUSED,
-        // A workspace slides in from the side it was on, and it is the whole
-        // workspace that moves: every window on it goes the same distance, so
-        // they arrive together rather than scatter.
-        //
-        // A screen's width, which is `--workspace-width` — see `slidAcross`.
-        // The two workspaces are side by side in the row, so the one arriving
-        // starts exactly where the one leaving ends up: the screen is a window
-        // onto a strip that moves under it, and nothing needs to fade to hide
-        // the two drawn through each other, because they never are. What
-        // goes past the edge is off the page — every page on a tty is one
-        // screen.
+        // A workspace switch slides every window on the workspace by one
+        // screen width (`--workspace-width`; see `slidAcross`). The arriving
+        // workspace starts where the leaving one ends, so they never overlap
+        // and nothing needs to fade.
         windowArrivingFromEnd: {
           "0%": { transform: "translateX(var(--workspace-width))" },
           "100%": { transform: "translateX(0)" },
@@ -153,25 +117,17 @@ export default defineConfig({
           },
           "100%": { transform: "translateX(0)" },
         },
-        // A window leaving: the reverse of the arrival below, and the same
-        // length, so closing one reads as the undoing of opening it.
-        //
-        // It ends at the size it started arriving from rather than at nothing.
-        // A window that shrank to a point would spend most of the animation as
-        // a speck nobody is looking at; what says "gone" is the fade, and the
-        // scale is what makes the fade a movement rather than a dissolve.
+        // The reverse of `windowOpening`. It shrinks only to 0.85 rather than
+        // to nothing; the fade does most of the work.
         windowClosing: {
           "0%": { opacity: "1", transform: "scale(1)" },
           "100%": { opacity: "0", transform: "scale(0.85)" },
         },
-        // A tab closing: it closes up along the strip it was in while the tabs
-        // beside it grow over the gap — `--collapse-x` for a tabbed
-        // container's, `--collapse-y` for a stack's, see `collapsedAlong`.
+        // A closing tab collapses along its strip: `--collapse-x` in a tabbed
+        // container, `--collapse-y` in a stack; see `collapsedAlong`.
         //
-        // The contents of a tab that was shown are given neither, so they
-        // only fade: the tab taking its place is already drawn under them at
-        // the same box, and contents shrinking off it would show its edges
-        // coming out from behind them.
+        // A visible tab's contents get neither and only fade, since the next
+        // tab is already drawn underneath at the same box.
         windowClosingTab: {
           "0%": { opacity: "1", transform: "scale(1, 1)" },
           "100%": {
@@ -179,21 +135,17 @@ export default defineConfig({
             transform: "scale(var(--collapse-x, 1), var(--collapse-y, 1))",
           },
         },
-        // A tab switch, which is two windows in one box trading depths — see
-        // `tab-switch.ts`. The one revealed fades in over the one it hides.
+        // A tab switch: the revealed tab fades in over the hidden one; see
+        // `tab-switch.ts`.
         //
-        // Both hold a depth for the whole of it: `TILED` for the one fading in,
-        // and the one `COVERED` leaves free above the other hidden tabs for the
-        // one under it (see `placement.ts`). Left to `settlingStyles`, the
-        // depths would ease, and the two would not trade places until half way
-        // — the fade played out behind the window it is fading in over. A
-        // depth an animation holds is one a transition does not start on.
+        // Both hold a fixed depth throughout (see `placement.ts`). Otherwise
+        // `settlingStyles` would transition the depths and the swap would
+        // happen halfway, hiding the fade.
         windowConcealing: {
           "0%": { zIndex: "-1" },
           "100%": { zIndex: "-1" },
         },
-        // And the workspace being left goes the other way, a screen's width
-        // too, so it is pushed off by the one coming on.
+        // The workspace being left slides out by one screen width.
         windowLeavingToEnd: {
           "0%": { transform: "translateX(0)" },
           "100%": { transform: "translateX(var(--workspace-width))" },
@@ -204,22 +156,14 @@ export default defineConfig({
             transform: "translateX(calc(-1 * var(--workspace-width)))",
           },
         },
-        // A window arriving: up from nothing, and out to the box the layout
-        // has already given it.
+        // A window opening fades and scales up to its laid-out box.
         //
-        // A transform rather than the box itself, and that is the whole reason
-        // a window can be animated at all. The size of an `<app>` is the
-        // resolution its client is configured at — the SDK reports the box and
-        // the compositor sends the client a `configure` — so a window that
-        // grew by *laying out* smaller would make the client redraw on every
-        // frame of it. A transform leaves the box alone: the page's own
-        // compositor scales the layer the client's buffer is already in, which
-        // is what the engine fork bought.
+        // Uses a transform, not the box size: an `<app>`'s box sets its
+        // client's configured size, so resizing it would make the client
+        // redraw every frame.
         //
-        // About the middle of the window's whole frame, which is not a thing a
-        // keyframe can say: the bar and the contents are separate elements at
-        // different boxes, so the point they share is written on each of them
-        // as an inline `transform-origin`. See `scaledAbout`.
+        // The bar and contents are separate elements, so each gets an inline
+        // `transform-origin` at the frame's center; see `scaledAbout`.
         windowOpening: {
           "0%": { opacity: "0", transform: "scale(0.85)" },
           "100%": { opacity: "1", transform: "scale(1)" },
@@ -230,9 +174,8 @@ export default defineConfig({
           "0%": { opacity: "0", zIndex: "0" },
           "100%": { opacity: "1", zIndex: "0" },
         },
-        // A browser window's zoom, said for a moment and put away: in quickly
-        // enough to answer the key that asked, held long enough to be read,
-        // and out without anybody dismissing it.
+        // The zoom indicator: appears quickly, holds long enough to read, then
+        // fades out on its own.
         zoomAnnounced: {
           "0%": {
             opacity: "0",
@@ -245,17 +188,15 @@ export default defineConfig({
       },
       tokens: {
         durations: {
-          // How long a notice that nobody dismisses stays up — the zoom
-          // indicator's whole life. Far longer than the preset's scale, which
-          // measures how long a control takes to answer rather than how long
-          // a sentence takes to read.
+          // How long a self-dismissing notice stays up, such as the zoom
+          // indicator. Longer than the preset's durations, which are for
+          // control feedback, not reading.
           notice: { value: "1.5s" },
         },
         easings: {
-          // A long movement: eased into rather than started at full speed,
-          // then a long settle. `outQuart` starts at speed, which over a
-          // screen's width is a jump in the first frame rather than a slide —
-          // see the workspace switch in `movingStyles`.
+          // For long movements such as the workspace switch (see
+          // `movingStyles`). `outQuart` starts at full speed, which looks like
+          // a jump over a screen's width.
           emphasized: { value: "cubic-bezier(0.2, 0, 0, 1)" },
         },
       },
