@@ -197,6 +197,11 @@ The evidence for each of those is in the doc that made the claim —
    the shell's props; the `@domicile-desktop/*` packages go to npm. Not started.
    [COMPOSABLE-SHELLS.md](docs/architecture/COMPOSABLE-SHELLS.md).
 
+10. **`domicile load-shell` closes every browser window.** The shell's page
+    owns them, so the reload takes them. The engine should own them and the
+    shell should draw them with `<webview window>`. Not started.
+    [BROWSER-WINDOWS.md](docs/architecture/BROWSER-WINDOWS.md).
+
 ## In the engine fork — the agent on `crux`
 
 1. **The shm upload, on a GPU.** An shm client's frame is drawn into a GBM
@@ -566,8 +571,8 @@ costs nothing.
 - **Hot-swapping the chrome page is a page reload**, survivable only because
   `announce_open_apps` re-states the desktop to a page that has just loaded.
   `domicile load-shell` is what asks for one, so a shell that keeps state in
-  its page loses it on every swap; the windows do not go, because the
-  compositor never hears about any of this.
+  its page loses it on every swap. App windows survive because the compositor
+  never hears about any of this. Browser windows do not; see item 10 above.
 
 ---
 

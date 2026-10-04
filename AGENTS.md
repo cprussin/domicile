@@ -140,6 +140,7 @@ working in its area; it is context, not compliance.
 | [/docs/architecture/KEYBINDINGS.md](/docs/architecture/KEYBINDINGS.md) | A shell's keys as its props, sway-style chords resolved against the compositor's keyboard (`shell_config`'s `keys`) and dispatched by the SDK. The `domicile send-shell` verb is left. |
 | [/docs/architecture/COMPOSABLE-SHELLS.md](/docs/architecture/COMPOSABLE-SHELLS.md) | The config as a TypeScript, JavaScript or JSON module whose `Shell` export is the shell; `domicile` resolves, installs and builds it; manganese as a library; keybindings as shell props; the `@domicile-desktop/*` packages on npm. Phases 1 and 2 done; phase 3 under way. |
 | [/docs/architecture/WINDOW-DOMICILE.md](/docs/architecture/WINDOW-DOMICILE.md) | `window.domicile` as the whole shell API: state as attributes with change events, the engine reporting size and density, routing `<app>` input and resolving chords, and `DomicileClient` deleted. Not started. |
+| [/docs/architecture/BROWSER-WINDOWS.md](/docs/architecture/BROWSER-WINDOWS.md) | Browser windows owned by the engine: a shell opens one, draws it with `<webview window>`, and its live page survives `domicile load-shell`. Not started. |
 
 [`/ROADMAP.md`](/ROADMAP.md) is the open work and the known gaps, with each
 item pointing at the doc above that carries its detail. Read it before starting
