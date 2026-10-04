@@ -76,8 +76,9 @@ only while something listens, and a stale sample is worth nothing.
 
 ### Requests return promises
 
-`searchFiles`, `previewFile` and `searchApps` resolve with their answer instead
-of answering on a separate event (`files`, `filepreview`, `apps`). A newer call
+`searchFiles`, `previewFile` and `searchApps` resolve with their answer
+(`DomicileFileSearch`, `DomicileFilePreview`, `DomicileAppSearch`) instead of
+answering on a separate event (`files`, `filepreview`, `apps`). A newer call
 supersedes an older one, which rejects with `AbortError`.
 
 ### The engine reports size and density
@@ -155,7 +156,7 @@ Each step ships alone.
       (`guard-desk-state.sh`)
 - [x] the engine queues moment events until a listener exists
       (`guard-held-moments.sh`)
-- [ ] search and preview return promises
+- [x] search and preview return promises (`guard-asks-promise.sh`)
 - [ ] chords resolved by the engine; `shell_config` leaves the page; `bindKeys`
       becomes a pure helper over `grabShortcut` and `shortcut`
 - [ ] `<app>` routes its own input; `registerElements` and the routing modules go

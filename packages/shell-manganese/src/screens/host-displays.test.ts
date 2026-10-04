@@ -12,6 +12,8 @@ import { hostDisplays } from "./host-displays";
 
 /** What every call *out* to the compositor does here, which is nothing. */
 const ignored = (): undefined => undefined;
+/** An ask nobody answers. */
+const unanswered = (): Promise<never> => new Promise(() => undefined);
 
 /**
  * A compositor that only ever describes a desktop.
@@ -82,10 +84,10 @@ class Host implements DomicileHost {
   readonly pointerButton = ignored;
   readonly pointerLeave = ignored;
   readonly pointerMotion = ignored;
-  readonly previewFile = ignored;
+  readonly previewFile = unanswered;
   readonly moveAudioStream = ignored;
-  readonly searchFiles = ignored;
-  readonly searchApps = ignored;
+  readonly searchFiles = unanswered;
+  readonly searchApps = unanswered;
   readonly setAudioMuted = ignored;
   readonly setAudioPort = ignored;
   readonly setAudioProfile = ignored;

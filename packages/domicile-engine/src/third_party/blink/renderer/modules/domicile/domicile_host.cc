@@ -14,7 +14,10 @@
 #include "components/domicile/common/display_transform.h"
 #include "components/domicile/common/theme.h"
 #include "third_party/blink/renderer/bindings/core/v8/frozen_array.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_app_search.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_cursor_shape.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_file_preview.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_file_search.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_shortcut.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_theme.h"
 #include "third_party/blink/renderer/core/css/media_query_list.h"
@@ -384,28 +387,77 @@ void DomicileHost::focusApp(ScriptState*, const String& app_id,
   }
 }
 
-void DomicileHost::searchFiles(ScriptState*,
-                               const String& query,
-                               ExceptionState& exception_state) {
-  if (Ready(exception_state)) {
-    channel_->SearchFiles(query);
+namespace {
+
+// Make the resolver for a new ask and reject the one it supersedes.
+template <typename Answer>
+ScriptPromiseResolver<Answer>* Supersede(
+    Member<ScriptPromiseResolver<Answer>>& outstanding,
+    ScriptState* script_state,
+    ExceptionState& exception_state) {
+  if (outstanding) {
+    outstanding->RejectWithDOMException(DOMExceptionCode::kAbortError,
+                                        "A newer ask superseded this one.");
+  }
+  outstanding = MakeGarbageCollected<ScriptPromiseResolver<Answer>>(
+      script_state, exception_state.GetContext());
+  return outstanding.Get();
+}
+
+// Settle the outstanding ask with `answer` if `asked` is what it asked.
+template <typename Answer>
+void Settle(Member<ScriptPromiseResolver<Answer>>& outstanding,
+            const String& outstanding_asked,
+            const String& asked,
+            Answer* answer) {
+  if (outstanding && outstanding_asked == asked) {
+    outstanding->Resolve(answer);
+    outstanding = nullptr;
   }
 }
 
-void DomicileHost::previewFile(ScriptState*,
-                               const String& path,
-                               ExceptionState& exception_state) {
-  if (Ready(exception_state)) {
-    channel_->PreviewFile(path);
+}  // namespace
+
+ScriptPromise<DomicileFileSearch> DomicileHost::searchFiles(
+    ScriptState* script_state,
+    const String& query,
+    ExceptionState& exception_state) {
+  if (!Ready(exception_state)) {
+    return EmptyPromise();
   }
+  auto* resolver = Supersede(file_search_, script_state, exception_state);
+  file_search_query_ = query;
+  auto promise = resolver->Promise();
+  channel_->SearchFiles(query);
+  return promise;
 }
 
-void DomicileHost::searchApps(ScriptState*,
-                              const String& query,
-                              ExceptionState& exception_state) {
-  if (Ready(exception_state)) {
-    channel_->SearchApps(query);
+ScriptPromise<DomicileFilePreview> DomicileHost::previewFile(
+    ScriptState* script_state,
+    const String& path,
+    ExceptionState& exception_state) {
+  if (!Ready(exception_state)) {
+    return EmptyPromise();
   }
+  auto* resolver = Supersede(file_preview_, script_state, exception_state);
+  file_preview_path_ = path;
+  auto promise = resolver->Promise();
+  channel_->PreviewFile(path);
+  return promise;
+}
+
+ScriptPromise<DomicileAppSearch> DomicileHost::searchApps(
+    ScriptState* script_state,
+    const String& query,
+    ExceptionState& exception_state) {
+  if (!Ready(exception_state)) {
+    return EmptyPromise();
+  }
+  auto* resolver = Supersede(app_search_, script_state, exception_state);
+  app_search_query_ = query;
+  auto promise = resolver->Promise();
+  channel_->SearchApps(query);
+  return promise;
 }
 
 // The whole of what a page may do about the lock, and it is an offer rather
@@ -921,15 +973,18 @@ void DomicileHost::ExtensionsChanged(
   DispatchEvent(*Event::Create(domicile_event_names::Extensionschanged()));
 }
 
-// The one message on this channel that answers a question. It is an event
-// rather than a promise because the page reads every other one as an event --
-// and the query it carries is what lets `DomicileClient` settle the search
-// that asked it, which is where the promise a shell sees is made.
+// An answer to searchFiles(): it settles the promise that asked it, and is
+// also dispatched as a `files` event for the shells that still listen for one.
 void DomicileHost::Files(const String& query,
                          const Vector<String>& files,
                          uint32_t matched,
                          bool indexing,
                          base::TimeTicks arrival) {
+  auto* answer = DomicileFileSearch::Create();
+  answer->setFiles(files);
+  answer->setMatched(matched);
+  answer->setIndexing(indexing);
+  Settle(file_search_, file_search_query_, query, answer);
   DispatchEvent(*MakeGarbageCollected<DomicileFilesEvent>(
       domicile_event_names::Files(), query, files, matched, indexing,
       Arrival(arrival)));
@@ -947,6 +1002,16 @@ void DomicileHost::FilePreview(const String& path,
                                double duration,
                                const String& cover,
                                base::TimeTicks arrival) {
+  auto* answer = DomicileFilePreview::Create();
+  answer->setKind(kind);
+  answer->setText(text);
+  answer->setEntries(entries);
+  answer->setTitle(title);
+  answer->setArtist(artist);
+  answer->setAlbum(album);
+  answer->setDuration(duration);
+  answer->setCover(cover);
+  Settle(file_preview_, file_preview_path_, path, answer);
   DispatchEvent(*MakeGarbageCollected<DomicileFilePreviewEvent>(
       domicile_event_names::Filepreview(), path, kind, text, entries, title,
       artist, album, duration, cover, Arrival(arrival)));
@@ -972,6 +1037,10 @@ void DomicileHost::Apps(const String& query,
     marked.push_back(MakeGarbageCollected<DomicileBookmark>(
         bookmark->name, bookmark->url, bookmark->icon));
   }
+  auto* answer = DomicileAppSearch::Create();
+  answer->setApps(entries);
+  answer->setBookmarks(marked);
+  Settle(app_search_, app_search_query_, query, answer);
   DispatchEvent(*MakeGarbageCollected<DomicileAppsEvent>(
       domicile_event_names::Apps(), query, std::move(entries),
       std::move(marked), Arrival(arrival)));
@@ -1284,6 +1353,9 @@ void DomicileHost::Trace(Visitor* visitor) const {
   visitor->Trace(displays_);
   visitor->Trace(windows_);
   visitor->Trace(held_);
+  visitor->Trace(file_search_);
+  visitor->Trace(file_preview_);
+  visitor->Trace(app_search_);
   visitor->Trace(last_clipboard_);
   visitor->Trace(last_tray_items_);
   visitor->Trace(last_notifications_);

@@ -460,6 +460,28 @@ export type DomicileAppsEvent = Event & {
   readonly arrival: DOMHighResTimeStamp;
 };
 
+/** What {@link DomicileHost.searchFiles} resolves with; see {@link DomicileFilesEvent}. */
+export type DomicileFileSearch = Pick<
+  DomicileFilesEvent,
+  "files" | "matched" | "indexing"
+>;
+
+/** What {@link DomicileHost.previewFile} resolves with; see {@link DomicileFilePreviewEvent}. */
+export type DomicileFilePreview = Pick<
+  DomicileFilePreviewEvent,
+  | "kind"
+  | "text"
+  | "entries"
+  | "title"
+  | "artist"
+  | "album"
+  | "duration"
+  | "cover"
+>;
+
+/** What {@link DomicileHost.searchApps} resolves with; see {@link DomicileAppsEvent}. */
+export type DomicileAppSearch = Pick<DomicileAppsEvent, "apps" | "bookmarks">;
+
 /**
  * What matched a {@link DomicileHost.searchFiles}, answering it and nothing
  * else — the compositor's index of the home never crosses into the page.
@@ -1096,8 +1118,9 @@ export type DomicileHost = {
   spawn(command: readonly string[]): void;
 
   /**
-   * Ask what in the home matches `query`. Answered with a `files` event
-   * carrying the same query.
+   * Ask what in the home matches `query`. Resolves with the answer, which
+   * also arrives as a `files` event carrying the same query. A newer call
+   * supersedes this one, which rejects with an `AbortError`.
    *
    * **It takes no path, and that is the security property rather than an
    * oversight.** A shell is served over `domicile://` precisely so that it has
@@ -1111,27 +1134,29 @@ export type DomicileHost = {
    * page that was handed that list to filter was a desktop that took no input
    * while it arrived.
    */
-  searchFiles(query: string): void;
+  searchFiles(query: string): Promise<DomicileFileSearch>;
 
   /**
-   * Ask what `path` holds. Answered with a `filepreview` event carrying the
-   * same path.
+   * Ask what `path` holds. Resolves with the answer, which also arrives as a
+   * `filepreview` event carrying the same path. A newer call supersedes this
+   * one, as with {@link searchFiles}.
    *
    * **This one names a path**, and what keeps it from being a filesystem is
    * that the compositor answers only for a path its index of the home holds —
    * anything else is `unreadable`. So a page reads nothing a search could not
    * already have named. See `domicile_host::file_preview`.
    */
-  previewFile(path: string): void;
+  previewFile(path: string): Promise<DomicileFilePreview>;
 
   /**
-   * Ask which installed applications match `query`. Answered with an `apps`
-   * event carrying the same query.
+   * Ask which installed applications match `query`. Resolves with the
+   * answer, which also arrives as an `apps` event carrying the same query. A
+   * newer call supersedes this one, as with {@link searchFiles}.
    *
    * Words, like {@link searchFiles}: which directories hold the desktop
    * entries is the compositor's to read. See `domicile_host::desktop_entries`.
    */
-  searchApps(query: string): void;
+  searchApps(query: string): Promise<DomicileAppSearch>;
 
   /**
    * Put a row of the clipboard's history back on the clipboard.
