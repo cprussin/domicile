@@ -32,7 +32,7 @@
 // Everything is inside `Shell`, which the document Domicile writes calls once
 // the module has loaded.
 
-export const Shell = () => {
+export const Shell = (_root, desktop) => {
   /**
    * A query parameter this cannot run without. Missing means the guard invoked
    * this wrongly, and a default would turn that into a measurement of something
@@ -88,10 +88,10 @@ export const Shell = () => {
   // The address is logged on the same line, so a window at another page
   // cannot pass; the guard greps for the fixture's /opened. This page's own
   // <webview> is the shell's page, so it is in no list.
-  const host = navigator.domicile;
-  if (host === undefined) {
+  const host = desktop;
+  if (host === null || host === undefined) {
     throw new Error(
-      "guard-webview-routed-link: navigator.domicile is absent, so this" +
+      "guard-webview-routed-link: no desktop was handed to Shell, so this" +
         " document is not a shell the engine serves",
     );
   }

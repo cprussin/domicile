@@ -23,11 +23,11 @@
 // WHAT THIS PAGE SAYS, all of it to the console, which the engine writes to its
 // own log:
 //
-//   GUARD names missing=…        every event navigator.domicile names, fired
+//   GUARD names missing=…        every event the desktop names, fired
 //                                at an addEventListener listener and at its
 //                                on<name> handler; `none` or which did not
 //                                fire. THE CLAIM about the fork's own names
-//   GUARD listening              `navigator.domicile` exists and a listener is
+//   GUARD listening              the desktop was handed to Shell and a listener is
 //                                registered -- the harness working rather than
 //                                a finding, and what tells "nothing arrived"
 //                                apart from "this module never ran"
@@ -51,7 +51,7 @@
 // Everything is inside `Shell`, which the document Domicile writes calls once
 // the module has loaded.
 
-// THE NAMES. navigator.domicile's event names are the fork's own, in
+// THE NAMES. the desktop's event names are the fork's own, in
 // modules/domicile/domicile_event_names.h, rather than entries in Blink's
 // event_type_names.json5 -- which recompiled most of Blink for every name
 // added. This fires each at a listener and at its on<name> handler: the
@@ -105,18 +105,18 @@ const EVENT_NAMES = [
   "modifierschanged",
 ];
 
-export const Shell = () => {
+export const Shell = (_root, desktop) => {
   const say = (what) => {
     console.log(`GUARD ${what}`);
   };
 
-  const host = navigator.domicile;
+  const host = desktop;
   if (host === null || host === undefined) {
     // Loud rather than a page that quietly measures nothing: without the control
     // channel there is nothing to hear and every assertion below would be absent
     // for a reason that is not the one the guard is asking about.
     throw new Error(
-      "guard-control-arrival: navigator.domicile is absent, so this document" +
+      "guard-control-arrival: no desktop was handed to Shell, so this document" +
         " was not served by the forked engine",
     );
   }

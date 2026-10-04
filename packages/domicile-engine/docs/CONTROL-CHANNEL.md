@@ -2,14 +2,16 @@
 
 The engine has two channels to the rest of Domicile:
 
-- **Control channel** (`window.domicile`): the shell page and the compositor.
+- **Control channel** (`DomicileHost`): the shell page and the compositor.
 - **Command socket** (`--domicile-command-socket`): the supervisor and the
   engine.
 
 ## Control channel
 
-- `window.domicile` is the shell's API. `navigator.domicile` is the same
-  object.
+- `DomicileHost` is the shell's API. The engine answers `navigator.domicile`
+  once per document: the document Domicile writes reads it and passes it to
+  `Shell(root, domicile)`, and every later read is `null`. `window.domicile`
+  is the same object.
 - The browser process speaks the wire protocol (JSON lines to the
   compositor). The page sees typed WebIDL values, so it cannot send a
   malformed message.
@@ -74,7 +76,7 @@ The engine has two channels to the rest of Domicile:
     are clamped.
   - Logic and tests: `components/domicile/browser/pointer_warp.h`. Execution:
     `chrome/browser/domicile/domicile_pointer_warp.cc`.
-- **`displays`** is an attribute, `window.domicile.displays`, with a
+- **`displays`** is an attribute, `domicile.displays`, with a
   `displayschanged` event. A component that mounts late can read it.
   - `null`: the compositor has not described a desktop yet.
   - `[]`: the desktop has no screens.

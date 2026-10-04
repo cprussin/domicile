@@ -8,7 +8,7 @@
 // domicile:// document for two further reasons: the browser binds
 // WebViewGuestHost only for the shell's origin, so a <webview> anywhere else
 // cannot ask for a guest at all, and it binds the control channel the same way,
-// so `navigator.domicile` exists on no other page.
+// so the desktop is handed to no other page.
 //
 // ?kind= is the experiment, exactly as it is in guard-webview-framing.js.
 // `webview` puts a guest behind the element, which is what makes the browser
@@ -44,7 +44,7 @@
 // Everything is inside `Shell`, which the document Domicile writes calls once
 // the module has loaded.
 
-export const Shell = () => {
+export const Shell = (_root, desktop) => {
   /**
    * A query parameter this cannot run without. Missing means the guard invoked
    * this wrongly, and a default would turn that into a measurement of something
@@ -119,14 +119,14 @@ export const Shell = () => {
     shiftKey: false,
   };
 
-  const host = navigator.domicile;
+  const host = desktop;
   if (host === null || host === undefined) {
     // Loud rather than a page that quietly measures nothing: without the control
     // channel there is no claim to make and no leg for a press to come back on,
     // and every assertion below would be absent for a reason that is not the one
     // the guard is asking about.
     throw new Error(
-      "guard-webview-keyboard: navigator.domicile is absent, so this document" +
+      "guard-webview-keyboard: no desktop was handed to Shell, so this document" +
         " was not served by the forked engine",
     );
   }

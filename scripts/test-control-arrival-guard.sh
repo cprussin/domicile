@@ -148,7 +148,7 @@ expect "an empty log reads as no readings" \
   "listening=0 grab=0 zoom-out=0 pointr=0 finite=0 positive=0 ordered=0 names=0" \
   "$(printf '' | readings)"
 
-# The fork keeps navigator.domicile's event names in domicile_event_names.h.
+# The fork keeps DomicileHost's event names in domicile_event_names.h.
 # The page fires each at its listener and its on<name> handler; a lost name is
 # a message the shell never receives.
 expect "a name that did not fire is read as missing" \

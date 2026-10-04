@@ -1,4 +1,4 @@
-// The shell guard-windows-state.sh drives. It reads `window.domicile.windows`
+// The shell guard-windows-state.sh drives. It reads `domicile.windows`
 // once to bind the channel, then reads nothing until the compositor stand-in
 // has said everything -- a shell that listens late -- and reports what the
 // attributes hold:
@@ -10,11 +10,11 @@
 //                                  subscribing late: none are owed, and the
 //                                  attribute is what carries the state
 
-export const Shell = () => {
-  const host = window.domicile;
+export const Shell = (_root, desktop) => {
+  const host = desktop;
   if (host === null || host === undefined) {
     throw new Error(
-      "guard-windows-state: window.domicile is absent, so this document" +
+      "guard-windows-state: no desktop was handed to Shell, so this document" +
         " was not served by the forked engine",
     );
   }

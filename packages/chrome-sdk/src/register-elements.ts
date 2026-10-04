@@ -1,5 +1,5 @@
-// Connects the SDK to `window.domicile`: binds the element context and
-// installs the document-level input routing for `<app>` elements.
+// Connects the SDK to the desktop a shell is handed: binds the element context
+// and installs the document-level input routing for `<app>` elements.
 //
 // The engine defines `<app>` and `<webview>`, so no custom elements are
 // registered here.
@@ -18,7 +18,7 @@ export type RegisterOptions = {
 let inputInstalled = false;
 
 /**
- * Wire the SDK to `window.domicile`.
+ * Wire the SDK to the desktop a shell is handed.
  *
  * Safe to call again with a different host. Input listeners are installed
  * once and read the current context at dispatch.

@@ -71,15 +71,18 @@ in a terminal inside the desktop. Any shell works, and windows stay put
 ## The connection
 
 ```ts
-const domicile = window.domicile;
-if (domicile === null || domicile === undefined) {
-  return; // a plain browser: no desktop
-}
+export const Shell: ShellModule = (root, domicile) => {
+  // `domicile` is the desktop
+};
 ```
 
-- `window.domicile` is the control channel the engine adds to the page. Its
-  type is `DomicileHost`, from `@domicile-desktop/sdk/domicile-host`. There is
-  nothing to configure. `navigator.domicile` is the same object.
+- `domicile`, the second argument to `Shell`, is the control channel to the
+  compositor. Its type is `DomicileHost`, from
+  `@domicile-desktop/sdk/domicile-host`. There is nothing to configure.
+- It is the only copy. The engine hands it out once per document, to the
+  document Domicile writes, which passes it to `Shell`. There is no global:
+  keep it however you like (a React context, a variable) and pass it to what
+  needs it.
 - There is nothing to await and no version handshake. The browser process
   checks the protocol version and logs a mismatch. The first call binds the
   channel.
@@ -102,9 +105,8 @@ if (domicile === null || domicile === undefined) {
   effect misses none. `audiolevels` is not held.
 - `searchFiles`, `previewFile` and `searchApps` return promises. A newer call
   rejects the older with an `AbortError`.
-- A plain browser has no `window.domicile`, and `<app>` is an
-  `HTMLUnknownElement` there: it takes a box and shows nothing. Develop
-  against a real desktop.
+- Only Domicile calls a shell, so there is no plain-browser case to check
+  for. Develop against a real desktop.
 
 **Errors:** log to the console. Page logs reach the terminal Domicile started
 from. Invalid calls (an empty argv, a keycode of zero, a malformed chord)
@@ -114,14 +116,14 @@ throw, because they are bugs in the page.
 
 `@domicile-desktop/sdk`, on npm, provides:
 
-- `DomicileHost` (the type of `window.domicile`) and `Shell`
+- `DomicileHost` (the type of the desktop `Shell` is handed) and `Shell`
 - `registerElements` (input routing over your `<app>` elements)
 - `focusApp`, `focusChrome`, `bindKeys`
 - `windowOf`, `surfaceSizeOf` (questions about `domicile.windows`)
-- `FakeDomicileHost` (`./fake-host`), a `window.domicile` for your tests
+- `FakeDomicileHost` (`./fake-host`), a desktop for your tests
 - types and event names for `<app>` and `<webview>`
 
-`window.domicile` is the API; the SDK is its types plus helpers. The IDL is in
+The desktop `Shell` is handed is the API; the SDK is its types plus helpers. The IDL is in
 `packages/domicile-engine/src/third_party/blink/renderer/modules/domicile/`.
 `registerElements` is the one helper a shell needs: it forwards the pointer
 and keyboard to clients until the engine does.
@@ -140,11 +142,7 @@ system this repo's shells use. Shells do not need it.
 import { registerElements } from "@domicile-desktop/sdk/register-elements";
 import type { Shell as ShellModule } from "@domicile-desktop/sdk/shell";
 
-export const Shell: ShellModule = (root) => {
-  const domicile = window.domicile;
-  if (domicile === null || domicile === undefined) {
-    return;
-  }
+export const Shell: ShellModule = (root, domicile) => {
   registerElements(domicile);
 
   const mounted = new Map<string, HTMLElement>();
@@ -332,7 +330,7 @@ the old window is still under the pointer. Move the pointer with
 
 ### Window scale on several monitors
 
-Call `domicile.setAppBounds(appId, { x, y, width, height })` with each
+Call `domicile.setAppBounds(appId, x, y, width, height)` with each
 `<app>`'s box in page pixels whenever it moves or resizes. The client draws at
 the scale of the monitor holding most of the box. A window you never report
 draws for the densest monitor. `shell-manganese` reports from `AppWindow`.

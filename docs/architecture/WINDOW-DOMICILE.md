@@ -1,6 +1,7 @@
-# `window.domicile` is the API
+# The desktop a shell is handed is the API
 
-Proposal: a shell uses `window.domicile` directly, with no setup.
+Proposal: a shell uses the `domicile` handed to its `Shell` directly, with no
+setup.
 
 - The engine reports the desktop's size and density.
 - `<app>` routes its own input.
@@ -11,10 +12,7 @@ Proposal: a shell uses `window.domicile` directly, with no setup.
 ```ts
 import type { Shell } from "@domicile-desktop/sdk/shell";
 
-export const Shell: Shell = (root) => {
-  const domicile = window.domicile;
-  if (domicile == null) return; // a plain browser: no desktop
-
+export const Shell: Shell = (root, domicile) => {
   const show = () => {
     root.replaceChildren(
       ...domicile.windows.map(({ appId }) =>
@@ -107,7 +105,7 @@ domicile.addEventListener("shortcut", (event) => event.chord); // "Meta+Shift+l"
 
 | Module | Kind |
 |---|---|
-| `domicile-host` | types: `DomicileHost`, its events, `Window.domicile` |
+| `domicile-host` | types: `DomicileHost` and its events |
 | `shell` | type: `Shell` |
 | `app-element`, `webview-element` | types |
 | `bind-keys`, `key-action`, `own-keybindings` | helpers: chord grammar, modes |
@@ -135,11 +133,14 @@ domicile.addEventListener("shortcut", (event) => event.chord); // "Meta+Shift+l"
 - **The new surface lands beside the old, then one step moves every shell.**
   Each engine step adds attributes and events and keeps the ones they replace,
   so `DomicileClient` and the shells keep working untouched; the last step
-  rewrites the three shells onto `window.domicile` and deletes the old events
+  rewrites the three shells onto the new surface and deletes the old events
   and the client together. No compatibility layer outlives that step.
-- **The do-nothing stand-in goes.** `window.domicile` is optional in the
-  types, and a shell opened in a plain browser checks for it. Styling a shell
-  without a desktop is the dev server's concern.
+- **The desktop is handed to `Shell`, not found on a global.** The shell
+  keeps it however it likes (a React context, a variable). The engine answers
+  `navigator.domicile` once per document, to the document Domicile writes, so
+  the shell's copy is the only one.
+- **The do-nothing stand-in goes.** Only Domicile calls a shell, so there is
+  no plain-browser case and no null check.
 
 ## Plan
 
@@ -159,9 +160,11 @@ Each step ships alone.
 - [x] chords resolved by the engine: `grabShortcut(chord)` and
       `shortcut.chord` (`guard-shortcut-chords.sh`)
 - [x] the shells, `examples/minimal-shell`, WRITING-A-SHELL.md and the SDK
-      README move to `window.domicile`; `bindKeys` becomes a pure helper over
+      README use the engine's surface directly; `bindKeys` becomes a pure helper over
       `grabShortcut` and `shortcut`; `DomicileClient` and `connect-to-host`
       go; the wire modules move to `e2e-harness`
+- [x] `Shell(root, domicile)`: the document hands the desktop over; the engine
+      answers it once per document
 - [ ] the engine drops what nothing reads now: the events the attributes and
       promises replace (`appappeared` and the other seven `app*`,
       `focuschanged`, `files`, …) and `shellconfig`

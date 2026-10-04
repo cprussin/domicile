@@ -126,7 +126,7 @@ Evidence is in [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md),
 
    [COMPOSABLE-SHELLS.md](docs/architecture/COMPOSABLE-SHELLS.md).
 
-9. **`window.domicile` as the whole shell API.** The engine reports desktop
+9. **The desktop handed to `Shell` as the whole shell API.** The engine reports desktop
    size and density, state is attributes, and the shells use it directly.
    Left:
    - The engine drops the events the attributes and promises replace.

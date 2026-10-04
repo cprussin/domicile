@@ -8,7 +8,7 @@ import type { DomicileHost } from "./domicile-host";
 import type { Measure } from "./measure";
 import { defaultMeasure } from "./measure";
 
-/** What input routing uses of `window.domicile`. */
+/** What input routing uses of the desktop. */
 export type InputHost = Pick<
   DomicileHost,
   | "addEventListener"

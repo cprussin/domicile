@@ -32,6 +32,10 @@ DomicileHost* NavigatorDomicile::domicile(Navigator& navigator) {
     return nullptr;
   }
   NavigatorDomicile& self = From(navigator);
+  if (self.handed_) {
+    return nullptr;
+  }
+  self.handed_ = true;
   if (!self.host_) {
     self.host_ = MakeGarbageCollected<DomicileHost>(*window);
   }
