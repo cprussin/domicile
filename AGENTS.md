@@ -97,6 +97,7 @@ every TS file you write or modify.
 | [/docs/guidelines/CONTROL_FLOW.md](/docs/guidelines/CONTROL_FLOW.md) | `undefined` over `null`, explicit `undefined` checks, curly braces always, explicit control flow, ternaries, no unnecessary `let`, `switch` over `if`/`else if`. |
 | [/docs/guidelines/FUNCTIONS.md](/docs/guidelines/FUNCTIONS.md) | Functional/immutable/declarative defaults, arrow syntax, docstrings, manual loops over generators. |
 | [/docs/guidelines/FILES.md](/docs/guidelines/FILES.md) | File/directory organization: top-to-bottom reading order, import from defining modules, no grab-bag names, prefer module-scoped functions. |
+| [/docs/guidelines/WRITING.md](/docs/guidelines/WRITING.md) | How to write docs, READMEs, comments, Nix descriptions, commits and PRs: lead with the point, short direct sentences, bullets, no history or filler. |
 
 ## IF TOUCHED (load when your change touches the topic)
 
