@@ -73,6 +73,8 @@ blink_modules_sources("domicile") {
     "domicile_tray_event.h",
     "domicile_tray_item.cc",
     "domicile_tray_item.h",
+    "domicile_window.cc",
+    "domicile_window.h",
     "domicile_host.cc",
     "domicile_host.h",
     "navigator_domicile.cc",
