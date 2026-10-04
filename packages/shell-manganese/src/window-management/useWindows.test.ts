@@ -1,10 +1,11 @@
 import { describe, expect, it } from "bun:test";
 import type { Display } from "@domicile-desktop/component-library/display-source";
 import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import type { DomicileBrowserWindow } from "@domicile-desktop/sdk/domicile-host";
 import { act, renderHook } from "@testing-library/react";
 
 import { useWindows } from "./useWindows";
-import { appWindowId } from "./window";
+import { appWindowId, browserWindowId } from "./window";
 import { currentHere, WindowAction, workspaceOn } from "./window-state";
 import { windowsOn } from "./workspace";
 
@@ -25,13 +26,21 @@ const client = () => {
   const handlers = new Map<string, (message: never) => void>();
   const spawned: (readonly string[])[] = [];
   const locks: undefined[] = [];
+  const opened: string[] = [];
+  const closed: string[] = [];
   const domicile = {
     closeApp: () => undefined,
+    closeBrowserWindow: (id: string) => {
+      closed.push(id);
+    },
     lock: () => {
       locks.push(undefined);
     },
     on: (type: string, registered: (message: never) => void) => {
       handlers.set(type, registered);
+    },
+    openBrowserWindow: (url: string) => {
+      opened.push(url);
     },
     spawn: (command: readonly string[]) => {
       spawned.push(command);
@@ -48,14 +57,16 @@ const client = () => {
         } as never);
       });
     },
+    closed,
     domicile,
-    locks,
-    /** `domicile open-url`. */
-    opens: (url: string) => {
+    /** Sends the engine's list of the desk's browser windows. */
+    lists: (windows: readonly DomicileBrowserWindow[]) => {
       act(() => {
-        handlers.get("open_url")?.({ url } as never);
+        handlers.get("browser_windows")?.({ windows } as never);
       });
     },
+    locks,
+    opened,
     spawned,
   };
 };
@@ -89,15 +100,47 @@ describe("the desktop", () => {
   });
 });
 
-describe("an address somebody asked the desk to open", () => {
-  it("is a browser window", () => {
+describe("the desk's browser windows", () => {
+  const EXAMPLE: DomicileBrowserWindow = {
+    height: 0,
+    id: "1",
+    popupWindow: null,
+    title: "",
+    url: "https://example.com/",
+    width: 0,
+  };
+
+  it("are drawn as the engine lists them", () => {
+    // `domicile open-url`, a page's target="_blank" and the bar's `+` each
+    // reach the shell as a window the engine opened and listed.
     const { host, result } = desktop([LEFT, RIGHT]);
 
-    host.opens("https://example.com/");
+    host.lists([EXAMPLE]);
 
     expect(result.current.windows).toContainEqual(
-      expect.objectContaining({ src: "https://example.com/" }),
+      expect.objectContaining({ url: "https://example.com/" }),
     );
+  });
+
+  it("are asked for, because the engine opens them", () => {
+    const { host, result } = desktop([LEFT, RIGHT]);
+
+    act(() => {
+      result.current.act(WindowAction.BrowserOpened("https://example.com/"));
+    });
+
+    expect(host.opened).toEqual(["https://example.com/"]);
+  });
+
+  it("are asked to close, because the engine closes them", () => {
+    const { host, result } = desktop([LEFT, RIGHT]);
+    host.lists([EXAMPLE]);
+
+    act(() => {
+      result.current.act(WindowAction.WindowClosed(browserWindowId("1")));
+    });
+
+    expect(host.closed).toEqual(["1"]);
   });
 });
 

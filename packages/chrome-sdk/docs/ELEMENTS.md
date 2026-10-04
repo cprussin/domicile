@@ -32,21 +32,24 @@ Event names and full types are in `src/app-element.ts` and
 
 ## `<webview>`
 
-`<webview src="…">` embeds a web page. The SDK provides types only.
+`<webview src="…">` embeds a web page. `<webview window="id">` shows one of
+the desk's browser windows, which the engine owns; the engine reads `window`
+once, when the view connects. The SDK provides types only.
 
 - **Properties:** `src`, `goBack()`, `goForward()`, `stop()`, `reload()`,
   `canGoBack`, `canGoForward`, `loading`, `focus()`.
 - **Events** (selected; see `src/webview-element.ts` for all):
-  - `domicile-new-window`: a `target="_blank"` link, with `event.url`. The
-    engine opens no window itself; if the shell ignores it, the link does
-    nothing.
-  - `domicile-close`: the page called `window.close()`. The shell removes the
-    view.
+  - `domicile-close`: the page in a shell's own view (no `window`) called
+    `window.close()`. The shell removes the view. A browser window closes in
+    the browser.
   - `domicile-content-size-change`: `contentWidth` / `contentHeight` changed.
     Use it to size extension popups.
-  - `domicile-popup-window`: an extension called `chrome.windows.create` for a
-    popup, with `windowId`, `url`, `width`, `height` (0 if unset). Open a view
-    with `popupwindow="<windowId>"` set on first render.
+- **Browser windows:** `DomicileClient.on("browser_windows", …)` delivers the
+  desk's whole list. `openBrowserWindow(url)` and `closeBrowserWindow(id)` are
+  for the shell's own UI. A link with `target="_blank"`, `domicile open-url`
+  and an extension's `tabs.create` or `windows.create` open windows without
+  the shell. See
+  [SHELL-BROWSER-WINDOWS.md](/docs/SHELL-BROWSER-WINDOWS.md).
 - **Extension popups:** for a tray row with a `popup`, call
   `activateExtension(id)` (which grants `activeTab`), then open a
   `<webview extensionpopup>` at the popup address. Set `extensionpopup` on

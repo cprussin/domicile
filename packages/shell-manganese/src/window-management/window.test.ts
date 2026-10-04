@@ -1,6 +1,14 @@
 import { describe, expect, it } from "bun:test";
 
-import { appIdOf, ShellWindow, siteOf, WindowKind } from "./window";
+import {
+  appIdOf,
+  appWindowId,
+  browserIdOf,
+  browserWindowId,
+  ShellWindow,
+  siteOf,
+  WindowKind,
+} from "./window";
 
 describe("ShellWindow", () => {
   describe("App", () => {
@@ -23,21 +31,41 @@ describe("ShellWindow", () => {
       expect(appIdOf(ShellWindow.App("term", "Terminal").id)).toBe("term");
     });
 
-    it("has no client for a window the shell opened itself", () => {
-      expect(appIdOf(ShellWindow.Browser(1, "https://example.com").id)).toBe(
-        undefined,
-      );
+    it("has no client for a browser window", () => {
+      expect(
+        appIdOf(ShellWindow.Browser("1", "https://example.com", undefined).id),
+      ).toBe(undefined);
+    });
+  });
+
+  describe("browserIdOf", () => {
+    it("reads the engine's window back out of a window id", () => {
+      expect(browserIdOf(browserWindowId("4"))).toBe("4");
+    });
+
+    it("has no engine window for a client's", () => {
+      expect(browserIdOf(appWindowId("term"))).toBe(undefined);
     });
   });
 
   describe("Browser", () => {
-    it("titles the window with the site it is pointed at", () => {
-      expect(ShellWindow.Browser(2, "https://www.google.com/search")).toEqual({
-        id: "browser:2",
+    it("titles the window with the site its page is at", () => {
+      expect(
+        ShellWindow.Browser("2", "https://www.google.com/search", undefined),
+      ).toEqual({
+        id: browserWindowId("2"),
         kind: WindowKind.Browser,
         popupWindow: undefined,
-        src: "https://www.google.com/search",
         title: "www.google.com",
+        url: "https://www.google.com/search",
+      });
+    });
+
+    it("titles a window that has shown nothing yet as a blank page", () => {
+      // The engine lists a window before its page has an address. An empty
+      // name would leave an unlabeled tab.
+      expect(ShellWindow.Browser("2", "", undefined)).toMatchObject({
+        title: "about:blank",
       });
     });
   });

@@ -103,13 +103,13 @@ interface WebViewGuestHost {
   // lose it. It also costs a second round trip for a pipe the element always
   // wants.
   //
-  // `popup_window` IS THE ELEMENT'S `popupwindow` ATTRIBUTE: the chrome.windows
-  // id of a popup window an extension asked for, which a shell names on the
-  // <webview> it opens in answer to PopupWindowRequested. The guest is then
-  // that window's one tab rather than a tab of the desk's window. Null for
-  // every other <webview>. An id that names no popup window waiting for its
-  // tab is a guest the desk takes as its own; see
-  // //chrome/browser/domicile/domicile_desk.h.
+  // `window` is the element's `window` attribute: the id of a desk browser
+  // window (browser_windows.mojom). The browser attaches that window's
+  // existing page and does not send `src` on connect. A later `src` navigates
+  // the window, as an address bar does. Null for the shell's own page, which
+  // is created here and dies with the element. An unknown window, or one
+  // another element shows, is refused: the pipes drop and the browser logs
+  // why.
   //
   // `extension_popup` IS THE ELEMENT'S `extensionpopup` ATTRIBUTE: the
   // <webview> is an extension's action popup, which a shell opens from its
@@ -119,10 +119,11 @@ interface WebViewGuestHost {
   // "popup"})` finds it. An extension that lays itself out differently in a
   // tab -- Bitwarden's, which sizes its body only in a popup -- sees what it
   // sees in Chrome. See //chrome/browser/domicile/domicile_tab_helpers.h.
+  // Ignored with `window`: a browser window's page is a tab.
   CreateGuest(blink.mojom.LocalFrameToken placeholder_frame,
               pending_receiver<WebViewGuest> guest,
               pending_remote<WebViewGuestClient> client,
-              int32? popup_window,
+              string? window,
               bool extension_popup);
 };
 
@@ -171,40 +172,6 @@ interface WebViewGuestClient {
   // that has not heard from it -- so a guest's first message is its first
   // load beginning.
   LoadingChanged(bool is_loading);
-
-  // The page in the guest asked for a window of its own: a link with
-  // target="_blank" followed, a window.open, a form submitted at a target name
-  // that names no existing context.
-  //
-  // THE WINDOW IS NOT MADE, AND CANNOT BE HERE. A guest has no SiteInstance of
-  // its own -- see components/domicile/browser/web_view_guest.h for why that is
-  // a decision and not an omission -- and content CHECKs a guest's SiteInstance
-  // against its WebContents in WebContentsImpl::CreateNewWindow. So the browser
-  // refuses the window content would have made and sends this instead, and what
-  // opens a window is the shell: a second <webview>, in a second browser window
-  // it drew, pointed at this address. That is also the layering the rest of
-  // this desktop has -- where a window goes is the shell's answer, and a
-  // browser process that placed one would be placing it on a desktop it cannot
-  // see.
-  //
-  // WHAT IS LOST BY REFUSING AND REPORTING, which is worth stating where the
-  // decision is: the shell's window is a NAVIGATION to this address rather than
-  // the window the page asked for, so the opener relationship, the handle
-  // window.open returns, the target's name and a POST body do not survive. A
-  // link is the case that survives whole, and a link is what this was written
-  // for. Carrying the rest means handing the shell a window the browser made,
-  // which is the CHECK above and a guest SiteInstance in a StoragePartition of
-  // its own -- a browser window where the user is logged out of everything.
-  //
-  // ONE MESSAGE PER ASK, unlike the two above: this is an event rather than a
-  // state, so there is nothing to compare against what was last sent. Two
-  // links opened in a row are two windows.
-  //
-  // THE ADDRESS IS ALWAYS ONE, and that is what the browser side filters: a
-  // window.open() with no address at all asks for a handle to write a document
-  // into, which is exactly the part refusing does not carry, so it is refused
-  // and not reported. See WebViewGuest::CreateCustomWebContents.
-  NewWindowRequested(url.mojom.Url target_url);
 
   // WHERE THE PAGE ACTUALLY IS, AND WHAT THE BROWSER SAYS ABOUT GETTING THERE.
   //
@@ -325,21 +292,21 @@ interface WebViewGuestClient {
                        string home)
       => (array<string>? paths);
 
-  // The page called window.close(), and its renderer allowed it.
+  // The page called window.close() and its renderer allowed it, or an
+  // extension's tabs.remove named it.
   //
-  // THE BROWSER CLOSES NOTHING. A guest's WebContents is owned by the outer
-  // one it is attached to, and the <webview> is the shell's element: taking it
-  // out of the document is what ends the guest, and that is the shell's
-  // answer to give. An extension's popup closes itself this way, which is what
-  // a tray that opens one in a <webview> waits for.
+  // Sent only for the shell's own page, a <webview> with no `window`. The
+  // shell's document owns its guest, so removing the element ends it. An
+  // extension's popup closes itself this way. The browser closes browser
+  // windows itself; see browser_windows.mojom.
   //
   // WHICH CLOSES ARRIVE is the renderer's rule, not this one's: DOMWindow::Close
   // lets a page not opened by script close only while its history is one
   // entry long -- the HTML spec's "script-closable". A guest the user has
   // navigated in is refused there, and nothing is sent.
   //
-  // ONE MESSAGE PER CALL. An event, like NewWindowRequested, so nothing is
-  // compared against what was last sent.
+  // One message per call. An event, so nothing is compared against what was
+  // last sent.
   CloseRequested();
 
   // What a find in the page has found: how many matches, and which of them is
@@ -364,24 +331,6 @@ interface WebViewGuestClient {
   //
   // An event, like CloseRequested.
   FocusRequested();
-
-  // An extension asked for a popup window of its own at `url`:
-  // `chrome.windows.create({type: "popup", url})`, which is how Bitwarden asks
-  // to be signed in to. Sent to the active tab's element, as tabs.create's
-  // NewWindowRequested is, because a window is the shell's to draw and this is
-  // the element the user was last in.
-  //
-  // THE WINDOW EXISTS ALREADY, AND HAS NO TAB. `window_id` is the id
-  // chrome.windows knows it by, and the shell names it as the `popupwindow`
-  // attribute of the <webview> it opens -- which makes that <webview>'s guest
-  // the window's one tab. Until then windows.create has not answered.
-  //
-  // `width` and `height` are the size the extension asked for, in CSS pixels,
-  // or 0 where it asked for none. Where the window goes is the shell's.
-  //
-  // An event, like CloseRequested.
-  PopupWindowRequested(int32 window_id, url.mojom.Url url, int32 width,
-                       int32 height);
 
   // The size the page's content wants, in CSS pixels: its natural width
   // (max-content, patch 0082) and its document's height at the width it is

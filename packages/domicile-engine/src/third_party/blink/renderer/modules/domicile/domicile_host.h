@@ -7,6 +7,7 @@
 #include <optional>
 
 #include "base/time/time.h"
+#include "components/domicile/mojom/browser_windows.mojom-blink.h"
 #include "components/domicile/mojom/control_channel.mojom-blink.h"
 #include "components/domicile/mojom/extension_tray.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_theme.h"
@@ -30,6 +31,7 @@ namespace blink {
 template <typename IDLType>
 class FrozenArray;
 
+class DomicileBrowserWindow;
 class DomicileDisplay;
 class DomicileShortcut;
 class LocalDOMWindow;
@@ -51,7 +53,8 @@ class NativeEventListener;
 class MODULES_EXPORT DomicileHost final
     : public EventTarget,
       public domicile::mojom::blink::ControlChannelClient,
-      public domicile::mojom::blink::ExtensionTrayClient {
+      public domicile::mojom::blink::ExtensionTrayClient,
+      public domicile::mojom::blink::BrowserWindowsClient {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -194,6 +197,16 @@ class MODULES_EXPORT DomicileHost final
   // The screen's brightness, or null until the compositor has said one.
   std::optional<double> brightness() const { return brightness_; }
 
+  // The desk's browser windows, or null until the browser has listed them.
+  const FrozenArray<DomicileBrowserWindow>* browserWindows() const {
+    return browser_windows_.Get();
+  }
+
+  // Opens or closes a browser window. The next `browserwindowschanged`
+  // reflects it.
+  void openBrowserWindow(ScriptState*, const String& url, ExceptionState&);
+  void closeBrowserWindow(ScriptState*, const String& id, ExceptionState&);
+
   // EventTarget:
   const AtomicString& InterfaceName() const override;
   ExecutionContext* GetExecutionContext() const override;
@@ -290,15 +303,16 @@ class MODULES_EXPORT DomicileHost final
              base::TimeTicks arrival) override;
   void FocusChanged(const String& app_id, base::TimeTicks arrival) override;
   void FocusRequested(const String& app_id, base::TimeTicks arrival) override;
-  // The one without an `arrival`: it comes from the engine's command socket,
-  // not off the compositor's.
-  void OpenUrl(const String& url) override;
   void Displays(
       Vector<domicile::mojom::blink::DisplayInfoPtr> displays) override;
 
   // domicile::mojom::blink::ExtensionTrayClient:
   void ExtensionsChanged(
       Vector<domicile::mojom::blink::TrayExtensionPtr> extensions) override;
+
+  // domicile::mojom::blink::BrowserWindowsClient:
+  void WindowsChanged(
+      Vector<domicile::mojom::blink::BrowserWindowPtr> windows) override;
 
   void Trace(Visitor*) const override;
 
@@ -350,6 +364,8 @@ class MODULES_EXPORT DomicileHost final
   // sends the whole desktop each time, and a `FrozenArray` is frozen.
   Member<FrozenArray<DomicileDisplay>> displays_;
   std::optional<double> brightness_;
+  // Replaced wholesale, like `displays_`, and for its reason.
+  Member<FrozenArray<DomicileBrowserWindow>> browser_windows_;
   HeapMojoRemote<domicile::mojom::blink::ControlChannel> channel_;
   HeapMojoReceiver<domicile::mojom::blink::ControlChannelClient, DomicileHost>
       client_receiver_;
@@ -363,6 +379,10 @@ class MODULES_EXPORT DomicileHost final
   Member<NativeEventListener> resize_listener_;
   Member<MediaQueryList> density_query_;
   Member<MediaQueryListListener> density_listener_;
+  // The browser windows' pipe, also the browser's own, bound beside the tray.
+  HeapMojoRemote<domicile::mojom::blink::BrowserWindows> windows_;
+  HeapMojoReceiver<domicile::mojom::blink::BrowserWindowsClient, DomicileHost>
+      windows_receiver_;
 };
 
 }  // namespace blink

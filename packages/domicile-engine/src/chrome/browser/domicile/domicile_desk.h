@@ -26,8 +26,8 @@ namespace domicile {
 //               //components/domicile:desk_tabs for the rule
 //   Popup       a window an extension opened with windows.create, owned by
 //               the desk's: another DomicileWindowController, of type
-//               `popup`, whose one tab is the guest of the <webview> the
-//               shell opened for it -- the element names it in `popupwindow`
+//               `popup`, whose one tab is the browser window opened for it
+//               (domicile_browser_windows.h)
 //
 // HOW CHROME FINDS THEM. Its lookups walk browser windows' tab strips, which a
 // guest is in none of. Four of them ask this desk through

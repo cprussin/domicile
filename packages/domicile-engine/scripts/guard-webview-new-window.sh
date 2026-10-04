@@ -9,15 +9,12 @@
 # runs: nothing here is measured in pixels, so `--ozone-platform=headless` with
 # software compositing is the whole of the environment.
 #
-# WHY THIS EXISTS. Clicking such a link did nothing at all — no window, no
-# error, nothing in the page to notice. The page in a browser window is a guest
-# and a guest has no SiteInstance of its own, which is what keeps the user
-# logged in and what content CHECKs against the WebContents in
-# `WebContentsImpl::CreateNewWindow`; so `WebViewGuest` refuses the window
-# content would have made, and for as long as that refusal was silent a shell
-# had nothing to act on. It now reports the address, the element dispatches
-# `domicile-new-window` carrying it, and the shell opens a browser window of its
-# own — which is the layer that knows where a window goes.
+# Why: the page in a browser window is a guest with no SiteInstance of its
+# own. That keeps the user logged in, and content CHECKs it in
+# `WebContentsImpl::CreateNewWindow`, so `WebViewGuest` refuses the window
+# content would make. It opens a desk browser window at the address instead
+# (src/components/domicile/mojom/browser_windows.mojom). The shell sees it in
+# `browserwindowschanged` and draws it where its layout puts it.
 #
 # WHAT IT ASSERTS, in order, because each answer is only worth anything if the
 # one before it holds:
@@ -30,30 +27,28 @@
 #   the press landed in the guest    measured in the window's own page: the hit
 #                                     test crossed into it rather than stopping
 #                                     at the element
-#   the element asked for a window   THE CLAIM's first half: the browser's
-#                                     refusal reached the page as an event
+#   a window was opened              the claim's first half: the refusal
+#                                     opened a browser window that reached
+#                                     the shell
 #   at the address the link named    the address survived the trip, rather than
 #                                     an empty or a stale one arriving
 #   a second view was made           the shell acted on it — this guard's own
 #                                     page, and the step that separates "told"
-#                                     from "opened"
-#   the page it names then loaded    THE CLAIM's other half, and the one no
-#                                     earlier step can fake: a guest was
-#                                     created, attached and navigated for the
-#                                     second element, so the user is looking at
-#                                     the page the link named
+#                                     from "drawn"
+#   the page it names then loaded    the claim's other half, which no earlier
+#                                     step can fake: the window's page loaded
+#                                     and attached to the second element, so
+#                                     the user sees the linked page
 #
-# AN EVENT IS NOT A WINDOW, which is why the last two readings are here at all.
-# A guard that stopped at `new-window url=…` would pass over a desktop where
-# such a link still shows the user nothing — the event arriving and a second
-# page being on the screen are different claims, in different processes.
+# The last two readings exist because a listed window is not a window on
+# screen. A guard that stopped at `new-window url=…` would pass a desktop that
+# shows the user nothing. The list and the second page are different claims,
+# in different processes.
 #
-# A UNIT TEST CANNOT MAKE THIS CLAIM, and the shell's own tests say why by what
-# they can do: `BrowserWindow.test.tsx` dispatches the event itself and asserts
-# the desktop opens a window for it, which passes whether or not anything real
-# ever sends one. There is no guest in happy-dom and no browser process to
-# refuse a window. Only a real engine can be asked whether a `target="_blank"`
-# produces the event at all.
+# A unit test cannot make this claim. The shell's tests hand the desktop a list
+# and assert it draws each window, which passes whether or not anything real
+# sends one. happy-dom has no guest and no browser process to refuse a window.
+# Only a real engine shows whether `target="_blank"` opens a window.
 #
 # HOW IT CAN FAIL, which is the part a guard is worth nothing without.
 # NEGATIVE=1 clicks the OTHER half of the same page: an ordinary link, in the
@@ -248,8 +243,8 @@ python3 "$SCRIPTS/guard-webview-click-mouse.py" \
 
 # The press is answered before it is handled: `Input.dispatchMouseEvent` comes
 # back when the event has been forwarded, and what this reads is what the pages
-# logged afterward. Long enough for a whole second window: the event, the
-# element the shell makes, a guest for it, and an http page arriving in it.
+# logged afterward. Long enough for a whole second window: the open, the list,
+# the shell's element, the attach, and an http page arriving in it.
 #
 # A fixed wait rather than a poll on the line that must appear, because the
 # control's readings are ABSENCES, and an absence cannot be waited for — it can
@@ -265,12 +260,15 @@ SAW_PAGE=$(saw "GUARD opener-loaded")
 SAW_CHROME=$(saw "GUARD chrome-mousedown")
 SAW_GUEST=$(saw "GUARD guest-mousedown")
 SAW_ASKED=$(saw "GUARD new-window url=")
-# The address as well as the ask, and as one string: an event carrying the
-# wrong address opens a window at the wrong page, which is a defect that reads
+# The address and the ask as one string: a window at the wrong address shows
+# the wrong page, which is a defect that reads
 # like a pass everywhere else in this script.
 SAW_ADDRESS=$(saw "GUARD new-window url=$SITE/opened")
 SAW_SECOND=$(saw "GUARD second-view")
-SAW_OPENED=$(saw "GUARD opened-loaded")
+# Read the element, not the page: the window's page loads whether or not
+# anything draws it, so `opened-loaded` alone would pass an empty second view.
+# The element reports its page on attach.
+SAW_OPENED=$(saw "GUARD second-page url=$SITE/opened")
 # The control's own positive reading: the ordinary link was followed, in the
 # window it was clicked in. Read in the claim's run too, where it means the
 # press landed on the wrong link.
@@ -322,9 +320,9 @@ press has landed on one"
 elif [ "$NEGATIVE" = "1" ]; then
   if [ "$SAW_ASKED" = "1" ]; then
     FAILURE="the control asked for a window. An ordinary link — no target — \
-was clicked and the element announced a new window anyway, so what the \
-positive run reads is not the link's target: it is this element \
-announcing one for any click, any navigation, or the attach itself"
+was clicked and a browser window opened anyway, so what the positive run \
+reads is not the link's target: it is a window opened for any click, any \
+navigation, or the attach itself"
   elif [ "$SAW_STAYED" != "1" ]; then
     FAILURE="the control's press followed no link: the page in the window \
 never navigated to the address the ordinary link names. So the absence above \
@@ -344,11 +342,10 @@ press points and the fixture's halves are both derived from the window's size"
 elif [ "$SAW_ASKED" != "1" ] && [ "$SAW_REFUSED" = "1" ]; then
   FAILURE="THE BROWSER WAS ASKED AND THE PAGE WAS NOT TOLD: \
 WebViewGuest::CreateCustomWebContents ran — it refused the window, which it \
-must — and no event reached this document. So the crossing works and the \
-report does not: NewWindowRequested on WebViewGuestClient, the dispatch in \
-HTMLWebViewElement, or the name the engine dispatches against the one this \
-page listens for, of which WEBVIEW_NEW_WINDOW_EVENT in the SDK is the third \
-copy"
+must — and no window reached this document's list. So the crossing works and \
+the report does not: the browser window the host opened \
+(domicile_browser_windows.cc, which logs 'opened browser window'), the list \
+BrowserWindowsClient carries, or DomicileHost's browserwindowschanged"
 elif [ "$SAW_ASKED" != "1" ]; then
   FAILURE="THE BROWSER WAS NEVER ASKED: a press landed on the link and \
 WebContentsImpl::CreateNewWindow never reached this guest's delegate. So the \
@@ -357,28 +354,31 @@ the page, the navigation was swallowed before it became a window request, or \
 the press did not land on the anchor it looks like it did. The engine log is \
 where this starts, and the http log says which pages were asked for"
 elif [ "$SAW_ADDRESS" != "1" ]; then
-  FAILURE="THE WINDOW WAS ASKED FOR AT THE WRONG ADDRESS: an event arrived \
-and it does not carry the address the link names. A window opened at the wrong \
-page is worse than none — see the reported url above. The address is resolved \
-in the browser process and crosses as a url.mojom.Url, so an empty or relative \
-one arriving here is that crossing"
+  FAILURE="THE WINDOW WAS OPENED AT THE WRONG ADDRESS: a window arrived and \
+it is not at the address the link names. A window opened at the wrong page is \
+worse than none — see the reported url above. The address is the window's \
+visible entry, which a browser-initiated navigation shows from the start, and \
+it crosses as a url.mojom.Url, so an empty or relative one arriving here is \
+that crossing"
 elif [ "$SAW_SECOND" != "1" ]; then
-  FAILURE="the shell was told and opened nothing: this guard's own page heard \
-the event and made no second <webview>. That is this script's page rather than \
+  FAILURE="the shell was told and drew nothing: this guard's own page heard \
+the list and made no second <webview>. That is this script's page rather than \
 the engine — see guard-webview-new-window.js, which appends the element in the \
 handler"
 elif [ "$SAW_OPENED" != "1" ]; then
-  FAILURE="AN EVENT AND NO WINDOW, WHICH IS THE FAILURE THIS GUARD EXISTS TO \
-SEPARATE FROM A PASS: the element asked, the shell made a second <webview> at \
-the right address, and the page never arrived in it. So the second element got \
-no guest, or one that was never attached or never navigated — a user clicking \
-that link sees an empty window. The engine's own attach line and the http log's \
-record of whether /opened was ever requested are the two ends of it"
+  FAILURE="A WINDOW IN THE LIST AND NONE ON THE SCREEN, WHICH IS THE FAILURE \
+THIS GUARD EXISTS TO SEPARATE FROM A PASS: the window opened at the right \
+address, the shell made a second <webview> naming it, and the page never \
+arrived in it. So the window's page was never navigated, or never attached to \
+the element — a user clicking that link sees an empty window. The engine's \
+'attached browser window' line and the http log's record of whether /opened \
+was ever requested are the two ends of it"
 else
   PASSED="a link with target=\"_blank\", clicked inside a browser window, \
-reached the shell as domicile-new-window carrying the address it names — and \
-the second <webview> the shell opened for it loaded that page. Which is the \
-whole of what a user asking for a new window gets, measured end to end"
+opened a browser window at the address it names, the shell heard it in the \
+desk's list — and the second <webview> the shell drew it in showed that page. \
+Which is the whole of what a user asking for a new window gets, measured end \
+to end"
 fi
 
 if [ -n "$PASSED" ]; then

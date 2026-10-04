@@ -63,8 +63,9 @@ Headless.
 | `guard-webview-escape.sh` | Escape with an unfocused browser window does not crash the browser (patch 0037) |
 | `guard-webview-browser-page.sh` | `chrome://history` in a browser window is refused by `BrowserPageThrottle` (patch 0083) |
 | `guard-webview-click.sh` | a click in a browser window fires an event in the shell's document |
-| `guard-webview-routed-link.sh` | a middle click on a link asks for a new window through `OpenURLFromTab` |
-| `guard-webview-new-window.sh` | a `target="_blank"` link fires `domicile-new-window`, and the new `<webview>` loads it |
+| `guard-webview-routed-link.sh` | a middle click on a link opens a browser window through `OpenURLFromTab` |
+| `guard-webview-new-window.sh` | a `target="_blank"` link opens a browser window, and the shell's `<webview window>` shows it |
+| `guard-webview-survives-load-shell.sh` | a browser window's page keeps running across `load_shell`, and the new shell's `<webview window>` shows it |
 | `guard-webview-upload.sh` | `<input type="file">` asks the shell over `domicile-file-chooser`, and the page reads the chosen file (patch 0053) |
 | `guard-webview-download.sh` | a download asks the shell and lands at the chosen path (patch 0053) |
 | `guard-webview-save-picker.sh` | `showSaveFilePicker()` asks the shell (patch 0086) |
@@ -81,7 +82,7 @@ Headless.
 | `guard-extension-tray.sh` | the tray event, popup, content size and `window.close()` (patches 0056, 0080 to 0082) |
 | `guard-webview-tabs.sh` | `tabs.query` and `tabs.setZoom` target the focused `<webview>` (patch 0057) |
 | `guard-webview-active-tab.sh` | a tray click grants `activeTab` to the focused tab |
-| `guard-webview-popup-window.sh` | `windows.create({type: "popup"})` opens a shell window (patch 0078) |
+| `guard-webview-popup-window.sh` | `windows.create({type: "popup"})` opens a browser window the shell draws at the requested size |
 
 ## Spikes
 

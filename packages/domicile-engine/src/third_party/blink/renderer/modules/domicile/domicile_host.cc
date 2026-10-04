@@ -37,6 +37,7 @@
 #include "third_party/blink/renderer/modules/domicile/domicile_clipboard_entry.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_clipboard_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_desktop_entry.h"
+#include "third_party/blink/renderer/modules/domicile/domicile_browser_window.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_display.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_extension.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_extensions_event.h"
@@ -47,7 +48,6 @@
 #include "third_party/blink/renderer/modules/domicile/domicile_notification.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_notification_action.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_notifications_event.h"
-#include "third_party/blink/renderer/modules/domicile/domicile_open_url_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_shell_config_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_shortcut_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_theme_event.h"
@@ -56,6 +56,7 @@
 #include "third_party/blink/renderer/platform/bindings/exception_code.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/heap/persistent.h"
+#include "third_party/blink/renderer/platform/weborigin/kurl.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
 
@@ -102,7 +103,9 @@ DomicileHost::DomicileHost(LocalDOMWindow& window)
       channel_(&window),
       client_receiver_(this, &window),
       tray_(&window),
-      tray_receiver_(this, &window) {}
+      tray_receiver_(this, &window),
+      windows_(&window),
+      windows_receiver_(this, &window) {}
 
 DomicileHost::~DomicileHost() = default;
 
@@ -135,6 +138,13 @@ bool DomicileHost::EnsureBound() {
   tray_->SetClient(tray_receiver_.BindNewPipeAndPassRemote(task_runner));
 
   ReportGeometry();
+
+  // The browser windows, bound eagerly for the tray's reason. The list arrives
+  // as soon as this pipe carries its client; after `domicile load-shell` it
+  // holds every window the last shell had open. See browser_windows.mojom.
+  window_->GetBrowserInterfaceBroker().GetInterface(
+      windows_.BindNewPipeAndPassReceiver(task_runner));
+  windows_->SetClient(windows_receiver_.BindNewPipeAndPassRemote(task_runner));
   return true;
 }
 
@@ -1011,9 +1021,53 @@ void DomicileHost::FocusRequested(const String& app_id,
       std::nullopt, Arrival(arrival)));
 }
 
-void DomicileHost::OpenUrl(const String& url) {
-  DispatchEvent(*MakeGarbageCollected<DomicileOpenUrlEvent>(
-      domicile_event_names::Openurl(), url));
+// Uses the windows' pipe, not the channel's, as activateExtension uses the
+// tray's. EnsureBound binds them together.
+void DomicileHost::openBrowserWindow(ScriptState*,
+                                     const String& url,
+                                     ExceptionState& exception_state) {
+  // Resolved against this document, as a <webview src> is. An unresolvable
+  // address is a shell bug, so it throws a TypeError instead of opening an
+  // empty window.
+  const KURL resolved = window_->CompleteURL(url);
+  if (!resolved.IsValid()) {
+    exception_state.ThrowTypeError("url must be an address");
+    return;
+  }
+  if (Ready(exception_state)) {
+    windows_->Open(resolved);
+  }
+}
+
+void DomicileHost::closeBrowserWindow(ScriptState*,
+                                      const String& id,
+                                      ExceptionState& exception_state) {
+  if (id.empty()) {
+    exception_state.ThrowTypeError("id must be a browser window's id");
+    return;
+  }
+  if (Ready(exception_state)) {
+    windows_->Close(id);
+  }
+}
+
+// Stored, like Displays: the event signals a change and the attribute holds
+// the list, so a shell that mounts late can still read it.
+void DomicileHost::WindowsChanged(
+    Vector<domicile::mojom::blink::BrowserWindowPtr> windows) {
+  HeapVector<Member<DomicileBrowserWindow>> listed;
+  listed.reserve(windows.size());
+  for (const auto& window : windows) {
+    listed.push_back(MakeGarbageCollected<DomicileBrowserWindow>(
+        window->id, window->url.GetString(), window->title,
+        window->popup_window == 0 ? std::nullopt
+                                  : std::optional<int32_t>(window->popup_window),
+        window->width, window->height));
+  }
+  browser_windows_ = MakeGarbageCollected<FrozenArray<DomicileBrowserWindow>>(
+      std::move(listed));
+  DispatchEvent(
+      *Event::Create(domicile_event_names::Browserwindowschanged()));
 }
 
 void DomicileHost::AppTitled(const String& app_id, const String& title,
@@ -1057,6 +1111,7 @@ ExecutionContext* DomicileHost::GetExecutionContext() const {
 
 void DomicileHost::Trace(Visitor* visitor) const {
   visitor->Trace(displays_);
+  visitor->Trace(browser_windows_);
   visitor->Trace(window_);
   visitor->Trace(channel_);
   visitor->Trace(client_receiver_);
@@ -1065,6 +1120,8 @@ void DomicileHost::Trace(Visitor* visitor) const {
   visitor->Trace(resize_listener_);
   visitor->Trace(density_query_);
   visitor->Trace(density_listener_);
+  visitor->Trace(windows_);
+  visitor->Trace(windows_receiver_);
   EventTarget::Trace(visitor);
 }
 

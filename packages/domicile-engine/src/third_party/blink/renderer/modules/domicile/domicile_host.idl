@@ -429,7 +429,29 @@
   // yet cleared, whenever any of them changes and once more when this page
   // connects.
   attribute EventHandler onnotifications;
-  // An address to open, as a DomicileOpenUrlEvent: `domicile open-url`, which
-  // is what `BROWSER` runs for every app this desktop starts.
-  attribute EventHandler onopenurl;
+  // The desk's browser windows, oldest first. Null until the browser lists
+  // them, which it does as soon as this page listens. The browser holds each
+  // page; draw one with `<webview window="id">`. A shell loaded over this one
+  // gets the same windows and pages. See
+  // components/domicile/mojom/browser_windows.mojom.
+  //
+  // A window a program opens (`domicile open-url`, a page's target="_blank",
+  // an extension) appears here in the next `browserwindowschanged`. No
+  // [SameObject], for `displays`' reason.
+  readonly attribute FrozenArray<DomicileBrowserWindow>? browserWindows;
+
+  // Fires when a window opens, closes, navigates or changes title. Read
+  // `browserWindows` for the current list.
+  attribute EventHandler onbrowserwindowschanged;
+
+  // Opens a browser window at `url`, for the shell's own UI such as a `+`
+  // button or a launcher. It appears in the next `browserwindowschanged`. A
+  // domicile:// address shows blocked, as in a <webview>.
+  [CallWith=ScriptState, RaisesException] undefined openBrowserWindow(
+      USVString url);
+
+  // Closes window `id`; it leaves the next `browserwindowschanged`. An unknown
+  // id does nothing.
+  [CallWith=ScriptState, RaisesException] undefined closeBrowserWindow(
+      DOMString id);
 };

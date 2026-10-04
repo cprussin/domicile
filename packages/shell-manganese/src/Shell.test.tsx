@@ -2,17 +2,15 @@ import { beforeEach, describe, expect, it } from "bun:test";
 import { standaloneThemeSource } from "@domicile-desktop/component-library/standalone-theme-source";
 import { APP_TAG_NAME } from "@domicile-desktop/sdk/app-element";
 import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
-import type { DomicileDisplay } from "@domicile-desktop/sdk/domicile-host";
+import type {
+  DomicileBrowserWindow,
+  DomicileDisplay,
+} from "@domicile-desktop/sdk/domicile-host";
 import type { ShellConfigMessage } from "@domicile-desktop/sdk/host-message";
 import { KeyAction } from "@domicile-desktop/sdk/key-action";
 import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
 import { registerElements } from "@domicile-desktop/sdk/register-elements";
-import {
-  WEBVIEW_CLOSE_EVENT,
-  WEBVIEW_GUEST_FOCUS_EVENT,
-  WEBVIEW_NEW_WINDOW_EVENT,
-  WEBVIEW_POPUP_WINDOW_EVENT,
-} from "@domicile-desktop/sdk/webview-element";
+import { WEBVIEW_GUEST_FOCUS_EVENT } from "@domicile-desktop/sdk/webview-element";
 import {
   act,
   fireEvent,
@@ -88,6 +86,10 @@ class FakeDomicile {
   displays: readonly DomicileDisplay[] | undefined;
 
   readonly #handlers = new Map<string, (message: unknown) => void>();
+
+  /** The engine's browser windows, oldest first. */
+  #browsers: readonly DomicileBrowserWindow[] = [];
+  #browsersOpened = 0;
 
   /** The files the host's index holds, or `undefined` until a test sets it. */
   #home: readonly string[] | undefined;
@@ -196,6 +198,44 @@ class FakeDomicile {
   }
   activateExtension(id: string): void {
     this.calls.push(["activateExtension", id]);
+  }
+
+  // The engine's browser windows. Opening or closing one sends the whole list
+  // again, as the engine does.
+  openBrowserWindow(url: string): void {
+    this.calls.push(["openBrowserWindow", url]);
+    this.engineOpens(url);
+  }
+  closeBrowserWindow(id: string): void {
+    this.calls.push(["closeBrowserWindow", id]);
+    this.engineCloses(id);
+  }
+
+  /**
+   * Opens a browser window as the engine does unasked: for a page's
+   * target="_blank", `domicile open-url`, or, with `popupWindow`, an
+   * extension's popup window.
+   */
+  engineOpens(url: string, popupWindow: number | null = null): void {
+    this.#browsersOpened += 1;
+    this.#browsers = [
+      ...this.#browsers,
+      {
+        height: popupWindow === null ? 0 : 630,
+        id: this.#browsersOpened.toString(),
+        popupWindow,
+        title: "",
+        url,
+        width: popupWindow === null ? 0 : 380,
+      },
+    ];
+    this.emit("browser_windows", { windows: this.#browsers });
+  }
+
+  /** Closes one as the engine does: its page's window.close(), or an extension. */
+  engineCloses(id: string): void {
+    this.#browsers = this.#browsers.filter((window) => window.id !== id);
+    this.emit("browser_windows", { windows: this.#browsers });
   }
 
   activateTrayItem(id: string, action: string): void {
@@ -593,57 +633,6 @@ const appElement = (container: HTMLElement, appId: string): HTMLElement => {
     throw new Error(`test: no window for ${appId}`);
   } else {
     return element;
-  }
-};
-
-/**
- * The first browser window's page asks for a new window, as when a
- * `target="_blank"` link is followed. The desktop opens it.
- */
-const pageAsksForAWindow = (container: HTMLElement, url: string): void => {
-  const view = container.querySelector("webview");
-  if (view === null) {
-    throw new Error("test: no browser window for a page to ask from");
-  } else {
-    fireEvent(
-      view,
-      Object.assign(new Event(WEBVIEW_NEW_WINDOW_EVENT), { url }),
-    );
-  }
-};
-
-/**
- * An extension calls `chrome.windows.create` with a popup. The engine
- * dispatches it on the last used browser window, the first one here.
- */
-const extensionAsksForAWindow = (
-  container: HTMLElement,
-  url: string,
-  windowId: number,
-): void => {
-  const view = container.querySelector("webview");
-  if (view === null) {
-    throw new Error("test: no browser window for an extension to ask through");
-  } else {
-    fireEvent(
-      view,
-      Object.assign(new Event(WEBVIEW_POPUP_WINDOW_EVENT), {
-        height: 630,
-        url,
-        width: 380,
-        windowId,
-      }),
-    );
-  }
-};
-
-/** The first browser window's page asks to close. */
-const pageAsksToClose = (container: HTMLElement): void => {
-  const view = container.querySelector("webview");
-  if (view === null) {
-    throw new Error("test: no browser window for a page to ask from");
-  } else {
-    fireEvent(view, new Event(WEBVIEW_CLOSE_EVENT));
   }
 };
 
@@ -1515,24 +1504,38 @@ describe("Shell", () => {
       expect(moving(container)).toEqual([]);
     });
 
-    // `target="_blank"`, end to end: the guest page cannot open a window, so
-    // the engine reports the address and the desktop opens a browser window.
-    it("opens a second browser window when a page asks for one", async () => {
+    // `target="_blank"`, end to end: the engine opens and lists a browser
+    // window at the address, and the desktop draws it with an address bar.
+    it("draws a second browser window when the engine opens one", async () => {
       const { container } = renderShell();
       press("space");
       await userEvent
         .setup()
         .type(screen.getByRole("combobox"), "example.com{Enter}");
 
-      pageAsksForAWindow(container, "https://example.com/opened");
+      domicile.engineOpens("https://example.com/opened");
 
       expect(windowsOnScreen(container)).toEqual(["Browser", "Browser"]);
       expect(addressesShowing()).toContain("https://example.com/opened");
     });
 
-    // Bitwarden's "Unlock", end to end: `chrome.windows.create` gives the
-    // engine a window ID with nothing to show it; the desktop opens a browser
-    // window for it.
+    // The launcher asks the engine to open the window. The engine owns the
+    // page, so a shell loaded over this one draws the same window.
+    it("asks the engine for the browser window the launcher opens", async () => {
+      renderShell();
+      press("space");
+      await userEvent
+        .setup()
+        .type(screen.getByRole("combobox"), "example.com{Enter}");
+
+      expect(domicile.calls).toContainEqual([
+        "openBrowserWindow",
+        "https://example.com",
+      ]);
+    });
+
+    // Bitwarden's "Unlock", end to end: `chrome.windows.create` opens a browser
+    // window as that window's tab, and the desktop draws it.
     it("opens the window an extension asks for, as that window", async () => {
       const { container } = renderShell();
       press("space");
@@ -1540,29 +1543,22 @@ describe("Shell", () => {
         .setup()
         .type(screen.getByRole("combobox"), "example.com{Enter}");
 
-      extensionAsksForAWindow(
-        container,
-        "chrome-extension://vault/popup.html",
-        7,
-      );
+      domicile.engineOpens("chrome-extension://vault/popup.html", 7);
 
       expect(windowsOnScreen(container)).toEqual(["Browser", "Browser"]);
-      const popup = container.querySelector("webview[popupwindow='7']");
-      expect(popup?.getAttribute("src")).toBe(
-        "chrome-extension://vault/popup.html",
-      );
+      expect(container.querySelector("webview[window='2']")).not.toBeNull();
     });
 
-    // `window.close()` or `chrome.tabs.remove`: the engine asks instead of
-    // closing, and the window closes as its Close button would.
-    it("closes a browser window its page asks to close", async () => {
+    // `window.close()` or `chrome.tabs.remove`: the engine closes the window,
+    // and the desktop stops drawing it.
+    it("takes away a browser window the engine closes", async () => {
       const { container } = renderShell();
       press("space");
       await userEvent
         .setup()
         .type(screen.getByRole("combobox"), "example.com{Enter}");
 
-      pageAsksToClose(container);
+      domicile.engineCloses("1");
       motionsPlayOut(container);
 
       expect(windowsOnScreen(container)).toEqual([]);
@@ -2594,10 +2590,10 @@ describe("the launcher", () => {
     );
   };
 
-  /** Each browser window's URL. */
-  const browsing = (container: HTMLElement): string[] =>
-    [...container.querySelectorAll("webview")].map(
-      (view) => view.getAttribute("src") ?? "",
+  /** Each URL the desktop asked the engine to open. */
+  const browsing = (): string[] =>
+    domicile.calls.flatMap(([kind, url]) =>
+      kind === "openBrowserWindow" ? [String(url)] : [],
     );
 
   /** Sets the files the host's index holds. */
@@ -2683,24 +2679,24 @@ describe("the launcher", () => {
   });
 
   it("opens a typed URL in a browser window on the desktop", async () => {
-    const { container } = renderShell();
+    renderShell();
     press("space");
     await homeHolds("todo.txt");
 
     await typeIntoLauncher("example.com{Enter}");
 
-    expect(browsing(container)).toStrictEqual(["https://example.com"]);
+    expect(browsing()).toStrictEqual(["https://example.com"]);
     expect(launcherBox()).toBeNull();
   });
 
   it("searches for a query that is neither a file nor a URL", async () => {
-    const { container } = renderShell();
+    renderShell();
     press("space");
 
     await typeIntoLauncher("!wiki mesa{Enter}");
 
     // The URL shows the search engine and escaping used.
-    expect(browsing(container)).toStrictEqual([
+    expect(browsing()).toStrictEqual([
       "https://en.wikipedia.org/wiki/Special:Search?search=mesa",
     ]);
   });

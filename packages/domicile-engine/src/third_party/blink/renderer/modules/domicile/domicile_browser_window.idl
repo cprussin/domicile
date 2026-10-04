@@ -1,0 +1,33 @@
+// Copyright 2026 Connor Prussin
+// SPDX-License-Identifier: MIT
+
+// One of the desk's browser windows: a page the browser holds, drawn with
+// `<webview window="id">`. See components/domicile/mojom/browser_windows.mojom.
+//
+// An interface for DomicileDisplay's reason: these are read from
+// `navigator.domicile.browserWindows`, and WebIDL forbids a dictionary as an
+// attribute type.
+
+[
+    Exposed=Window,
+    RuntimeEnabled=DomicileControlChannel
+] interface DomicileBrowserWindow {
+  // The id `<webview window>` and closeBrowserWindow() use. Never reused while
+  // the browser runs.
+  readonly attribute DOMString id;
+
+  // The page's address. Empty before it has shown anything.
+  readonly attribute USVString url;
+
+  // The page's title. Empty when the page has none.
+  readonly attribute DOMString title;
+
+  // The extension popup window (chrome.windows) whose one tab this is. Null
+  // for a tab of the desk's own window.
+  readonly attribute long? popupWindow;
+
+  // The size the popup window asked for, in CSS pixels. 0 on an axis it left
+  // unset.
+  readonly attribute long width;
+  readonly attribute long height;
+};

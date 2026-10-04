@@ -8,6 +8,7 @@
 // `packages/shell-manganese/docs/WINDOW-MANAGEMENT.md`.
 
 import type { CursorShape } from "@domicile-desktop/sdk/cursor-shape";
+import type { DomicileBrowserWindow } from "@domicile-desktop/sdk/domicile-host";
 
 import type { PlacedScreen } from "../screens/screen-toward";
 import { screenToward } from "../screens/screen-toward";
@@ -18,13 +19,13 @@ import type { Popup } from "./popup";
 import type { Rect } from "./rect";
 import type { Layout } from "./tree/node";
 import { NodeKind } from "./tree/node";
-import type {
-  ClientWindow,
-  PopupWindowRequest,
-  ShellWindow,
-  SizeLimit,
+import type { ClientWindow, ShellWindow, SizeLimit } from "./window";
+import {
+  appWindowId,
+  browserWindowId,
+  ShellWindow as Window,
+  WindowKind,
 } from "./window";
-import { appWindowId, ShellWindow as Window, WindowKind } from "./window";
 import type { Workspace } from "./workspace";
 import {
   childFocused,
@@ -97,8 +98,6 @@ export type DeskScreen = PlacedScreen & {
 };
 
 export type WindowState = {
-  /** Count of browser windows ever opened; the id counter. */
-  browsersOpened: number;
   /**
    * The desk's screens, in order, and the workspace each shows. Never empty
    * (see {@link UNDESCRIBED_SCREEN}).
@@ -176,7 +175,6 @@ export type WindowState = {
 
 /** The initial state: no windows open. */
 export const NO_WINDOWS: WindowState = {
-  browsersOpened: 0,
   clipboardOpen: false,
   draggingId: undefined,
   focused: UNDESCRIBED_SCREEN,
@@ -276,6 +274,7 @@ export enum WindowActionKind {
   AppTitled,
   AppLaunched,
   BrowserOpened,
+  BrowserWindowsListed,
   ChildFocused,
   ClipboardDismissed,
   ClipboardToggled,
@@ -296,7 +295,6 @@ export enum WindowActionKind {
   ModeSwapped,
   ParentFocused,
   PopupPlaced,
-  PopupWindowOpened,
   ScratchpadShown,
   ScreenHovered,
   ScreensDescribed,
@@ -310,7 +308,6 @@ export enum WindowActionKind {
   WindowHovered,
   WindowKilled,
   WindowMoved,
-  WindowRenamed,
   WindowResized,
   WindowSelected,
   WindowSentToScratchpad,
@@ -376,10 +373,23 @@ export const WindowAction = {
     title,
   }),
 
-  /** The user opened a browser window at `src`. */
+  /**
+   * The user opened a browser window at `src`. `useWindows` asks the engine,
+   * and the window arrives in the next
+   * {@link WindowAction.BrowserWindowsListed}.
+   */
   BrowserOpened: (src: string) => ({
     kind: WindowActionKind.BrowserOpened as const,
     src,
+  }),
+
+  /**
+   * The engine sent the full browser window list. New windows open, missing
+   * ones close, and the rest take their page's address and title.
+   */
+  BrowserWindowsListed: (windows: readonly DomicileBrowserWindow[]) => ({
+    kind: WindowActionKind.BrowserWindowsListed as const,
+    windows,
   }),
 
   /** `focus child`. */
@@ -519,15 +529,6 @@ export const WindowAction = {
     popup,
   }),
 
-  /**
-   * An extension called `chrome.windows.create` for a popup, relayed by the
-   * focused browser window.
-   */
-  PopupWindowOpened: (request: PopupWindowRequest) => ({
-    kind: WindowActionKind.PopupWindowOpened as const,
-    request,
-  }),
-
   /** `scratchpad show`. */
   ScratchpadShown: () => ({ kind: WindowActionKind.ScratchpadShown as const }),
 
@@ -631,13 +632,6 @@ export const WindowAction = {
     kind: WindowActionKind.WindowMoved as const,
     x,
     y,
-  }),
-
-  /** A browser window navigated, changing its title. */
-  WindowRenamed: (id: string, title: string) => ({
-    id,
-    kind: WindowActionKind.WindowRenamed as const,
-    title,
   }),
 
   /**
@@ -747,7 +741,12 @@ const reduceAction = (
       );
     }
     case WindowActionKind.BrowserOpened: {
-      return openBrowser(state, action.src);
+      // Closes the launcher, since opening a URL is one of its results. The
+      // window itself arrives with the engine's next list.
+      return { ...state, launcherOpen: false };
+    }
+    case WindowActionKind.BrowserWindowsListed: {
+      return listBrowsers(state, action.windows);
     }
     case WindowActionKind.ChildFocused: {
       return onCurrent(state, childFocused);
@@ -825,9 +824,6 @@ const reduceAction = (
           : [...state.popups, placed],
       };
     }
-    case WindowActionKind.PopupWindowOpened: {
-      return openPopupWindow(state, action.request);
-    }
     case WindowActionKind.ParentFocused: {
       return onCurrent(state, parentFocused);
     }
@@ -845,8 +841,11 @@ const reduceAction = (
       // The compositor spawns it and the host announces the window it opens.
       return state;
     }
+    // A request only. A client may refuse, for example with unsaved work, and
+    // the engine closes a browser window. The window is removed on the next
+    // `app_closed` or `browser_windows`. `useWindows` sends the request.
     case WindowActionKind.WindowClosed: {
-      return killWindow(state, action.id);
+      return state;
     }
     case WindowActionKind.WindowDropped: {
       return { ...state, draggingId: undefined };
@@ -877,15 +876,12 @@ const reduceAction = (
     case WindowActionKind.WindowHovered: {
       return pointAtWindow(state, action.id);
     }
+    // A request only; see `WindowClosed`.
     case WindowActionKind.WindowKilled: {
-      const id = activeIdOf(state);
-      return id === undefined ? state : killWindow(state, id);
+      return state;
     }
     case WindowActionKind.WindowMoved: {
       return floatDragged(state, action.id, action.x, action.y);
-    }
-    case WindowActionKind.WindowRenamed: {
-      return renameWindow(state, action.id, action.title);
     }
     case WindowActionKind.WindowResized: {
       return onWorkspaceWith(state, action.id, (workspace) =>
@@ -988,52 +984,58 @@ const openApp = (
     : state;
 };
 
-// Also closes the launcher, since opening a URL is one of its results.
-const openBrowser = (state: WindowState, src: string): WindowState => {
-  const browsersOpened = state.browsersOpened + 1;
-  return openWindow(
-    { ...state, browsersOpened, launcherOpen: false },
-    Window.Browser(browsersOpened, src),
-  );
+// Applies the engine's list: closes windows it no longer lists, then opens or
+// updates each listed one. The list is in open order, so windows tile in that
+// order.
+const listBrowsers = (
+  state: WindowState,
+  listed: readonly DomicileBrowserWindow[],
+): WindowState => {
+  const ids = new Set(listed.map(({ id }) => browserWindowId(id)));
+  const kept = state.windows
+    .filter(({ id, kind }) => kind === WindowKind.Browser && !ids.has(id))
+    .reduce((left, { id }) => closeWindow(left, id), state);
+  return listed.reduce(takeUpBrowser, kept);
+};
+
+// Opens a listed window the shell does not have yet. Otherwise updates its
+// address and title.
+const takeUpBrowser = (
+  state: WindowState,
+  { height, id, popupWindow, url, width }: DomicileBrowserWindow,
+): WindowState => {
+  const window = Window.Browser(id, url, popupWindow ?? undefined);
+  if (windowOf(state, window.id) !== undefined) {
+    return {
+      ...state,
+      windows: state.windows.map((drawn) =>
+        drawn.id === window.id ? window : drawn,
+      ),
+    };
+  } else if (window.popupWindow === undefined) {
+    return openWindow(state, window);
+  } else {
+    return openPopupWindow(state, window, width, height);
+  }
 };
 
 // Extension popups float at their requested size, as sway floats dialogs; a
 // tile would ignore the size the page was designed for.
 const openPopupWindow = (
   state: WindowState,
-  request: PopupWindowRequest,
-): WindowState => {
-  const browsersOpened = state.browsersOpened + 1;
-  const window = Window.PopupWindow(browsersOpened, request);
-  return onCurrent(
-    { ...state, browsersOpened, windows: [...state.windows, window] },
-    (workspace) =>
-      openedFloating(
-        workspace,
-        window.id,
-        screenHere(state),
-        request.width,
-        request.height,
-      ),
+  window: ShellWindow,
+  width: number,
+  height: number,
+): WindowState =>
+  onCurrent({ ...state, windows: [...state.windows, window] }, (workspace) =>
+    openedFloating(workspace, window.id, screenHere(state), width, height),
   );
-};
 
 // New windows tile on the current workspace and take focus, as in sway.
 const openWindow = (state: WindowState, window: ShellWindow): WindowState =>
   onCurrent({ ...state, windows: [...state.windows, window] }, (workspace) =>
     opened(workspace, window.id),
   );
-
-/**
- * `kill` on one window: browser windows close at once; clients are asked.
- *
- * A client may refuse, for example with unsaved work, so its window stays
- * until `app_closed`. `useWindows` sends the request.
- */
-const killWindow = (state: WindowState, id: string): WindowState => {
-  const window = windowOf(state, id);
-  return window?.kind === WindowKind.Browser ? closeWindow(state, id) : state;
-};
 
 // Removes a window from the list, its workspace and the scratchpad. Unknown
 // ids are a no-op, since the host may drain events for a torn-down portal.

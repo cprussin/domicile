@@ -51,7 +51,7 @@
   X(shellconfig, Shellconfig)             \
   X(audio, Audio)                         \
   X(audiolevels, Audiolevels)             \
-  X(openurl, Openurl)
+  X(browserwindowschanged, Browserwindowschanged)
 
 namespace blink::domicile_event_names {
 

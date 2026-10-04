@@ -22,6 +22,7 @@ const ignored = (): undefined => undefined;
 class Host implements DomicileHost {
   displays: readonly DomicileDisplay[] | null = null;
   brightness: number | null = null;
+  browserWindows = null;
 
   readonly #listeners = new Map<string, (event: never) => void>();
 
@@ -43,6 +44,8 @@ class Host implements DomicileHost {
   // Every outgoing compositor call. The adapter makes none, so they share one
   // no-op.
   readonly activateExtension = ignored;
+  readonly closeBrowserWindow = ignored;
+  readonly openBrowserWindow = ignored;
   readonly activateTrayItem = ignored;
   readonly dismissNotifications = ignored;
   readonly invokeNotificationAction = ignored;

@@ -1,12 +1,9 @@
 import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
 import { focusChrome } from "@domicile-desktop/sdk/focus-chrome";
 import {
-  WEBVIEW_CLOSE_EVENT,
   WEBVIEW_FOCUS_REQUEST_EVENT,
   WEBVIEW_GUEST_FOCUS_EVENT,
   WEBVIEW_GUEST_KEYDOWN_EVENT,
-  WEBVIEW_NEW_WINDOW_EVENT,
-  WEBVIEW_POPUP_WINDOW_EVENT,
   WEBVIEW_ZOOM_IN_REQUEST_EVENT,
   WEBVIEW_ZOOM_OUT_REQUEST_EVENT,
 } from "@domicile-desktop/sdk/webview-element";
@@ -29,7 +26,6 @@ import { useLoading } from "./useLoading";
 import { useReclaimFocus } from "./useReclaimFocus";
 import { useShownPage } from "./useShownPage";
 import { useZoom } from "./useZoom";
-import type { PopupWindowRequest } from "./window";
 import type { WindowMotion } from "./window-motion";
 import { isLeaving } from "./window-motion";
 import {
@@ -79,30 +75,10 @@ type Props = {
    */
   motion: WindowMotion;
   /**
-   * Called when the page asks to close the window (`window.close()` or an
-   * extension's `chrome.tabs.remove`). The engine only reports the request;
-   * see `WEBVIEW_CLOSE_EVENT`.
-   */
-  onClose: () => void;
-  /**
    * Called when the motion's animation ends, so a closed window can be
    * removed. Uses the animation event so the duration lives only in CSS.
    */
   onMotionEnded: () => void;
-  /** Called with the page's URL each time the page reports a new one. */
-  onNavigate: (url: string) => void;
-  /**
-   * Called with a URL the page asked to open in a new window
-   * (`target="_blank"`, `window.open`). The engine opens nothing, so ignoring
-   * this makes such links do nothing.
-   */
-  onOpenWindow: (url: string) => void;
-  /**
-   * Called with an extension's `chrome.windows.create` popup request. The
-   * engine sends it to the last focused window. Ignoring it leaves the
-   * extension's `windows.create` call unanswered.
-   */
-  onOpenPopupWindow: (request: PopupWindowRequest) => void;
   /**
    * Called when the user moves focus into this window (page or address bar).
    * Fires for every click, since a click raises the window even when it is
@@ -115,10 +91,7 @@ type Props = {
   onReach: () => void;
   /**
    * The `chrome.windows` id for an extension popup window, or `undefined` for
-   * a normal browser window (see {@link Props.onOpenPopupWindow}). Popup
-   * windows have no address bar, as in Chrome.
-   *
-   * The engine reads it once when creating the guest, so it must not change.
+   * a normal browser window. Popup windows have no address bar, as in Chrome.
    */
   popupWindow?: number | undefined;
   /**
@@ -128,8 +101,18 @@ type Props = {
   rect: Rect | undefined;
   /** The restack shuffle in progress, if any. See `shuffledBy`. */
   restack?: Restack | undefined;
-  /** The initial URL. The view owns navigation after that. */
-  src: string;
+  /**
+   * The page's URL from the engine's last list. The bar shows it until the
+   * view reports one.
+   */
+  url: string;
+  /**
+   * The engine's browser window id, set as the view's `window` attribute.
+   *
+   * The engine reads it once when the view is inserted, so it must not change.
+   * A recreated view is refused while the first one holds the page.
+   */
+  window: string;
 };
 
 /**
@@ -147,16 +130,13 @@ export const BrowserWindow = ({
   frame,
   fullscreen,
   motion,
-  onClose,
   onMotionEnded,
-  onNavigate,
-  onOpenPopupWindow,
-  onOpenWindow,
   onReach,
   popupWindow,
   rect,
   restack,
-  src,
+  url,
+  window,
 }: Props) => {
   // A leaving window still draws as focused but stops taking the keyboard,
   // which has moved to the next window.
@@ -169,7 +149,7 @@ export const BrowserWindow = ({
   const element = useRef<HTMLElement>(null);
   // The URL the shell last navigated to. The bar shows it until the page
   // reports its own URL.
-  const [sent, setSent] = useState(src);
+  const [sent, setSent] = useState(url);
   // The page's actual URL and connection security, including navigations
   // the shell did not start (links, redirects, form posts).
   const shown = useShownPage(view);
@@ -233,54 +213,6 @@ export const BrowserWindow = ({
       };
     }
   }, [onReach, view]);
-
-  // See `onClose`.
-  useEffect(() => {
-    if (view === null) {
-      return undefined;
-    } else {
-      view.addEventListener(WEBVIEW_CLOSE_EVENT, onClose);
-      return () => {
-        view.removeEventListener(WEBVIEW_CLOSE_EVENT, onClose);
-      };
-    }
-  }, [onClose, view]);
-
-  // See `onOpenWindow` and `WEBVIEW_NEW_WINDOW_EVENT`.
-  useEffect(() => {
-    if (view === null) {
-      return undefined;
-    } else {
-      const asked = (event: DomicileNewWindowEvent) => {
-        onOpenWindow(event.url);
-      };
-      view.addEventListener(WEBVIEW_NEW_WINDOW_EVENT, asked);
-      return () => {
-        view.removeEventListener(WEBVIEW_NEW_WINDOW_EVENT, asked);
-      };
-    }
-  }, [onOpenWindow, view]);
-
-  // See `onOpenPopupWindow`. Copies the fields so the callback gets a plain
-  // object rather than the event.
-  useEffect(() => {
-    if (view === null) {
-      return undefined;
-    } else {
-      const asked = ({
-        height,
-        url,
-        width,
-        windowId,
-      }: DomicilePopupWindowEvent) => {
-        onOpenPopupWindow({ height, url, width, windowId });
-      };
-      view.addEventListener(WEBVIEW_POPUP_WINDOW_EVENT, asked);
-      return () => {
-        view.removeEventListener(WEBVIEW_POPUP_WINDOW_EVENT, asked);
-      };
-    }
-  }, [onOpenPopupWindow, view]);
 
   // Runs a browser command from a chord in the address bar, a chord the page
   // did not handle, or a button.
@@ -448,20 +380,6 @@ export const BrowserWindow = ({
     });
   };
 
-  // Reports the page's actual URL, so the window is named after the page
-  // shown. An effect because most navigations (links, redirects) do not go
-  // through `navigate`.
-  //
-  // The ref reports each URL once. `onNavigate` is a new function each
-  // render, and a repeat report would re-render and loop.
-  const reported = useRef("");
-  useEffect(() => {
-    if (shown.url !== "" && shown.url !== reported.current) {
-      reported.current = shown.url;
-      onNavigate(shown.url);
-    }
-  }, [onNavigate, shown.url]);
-
   return (
     // biome-ignore lint/a11y/noNoninteractiveElementInteractions: a window is not a control; focus raises the window, and keydown runs browser chords pressed in its chrome
     <section
@@ -557,11 +475,10 @@ export const BrowserWindow = ({
       <div className={pageStyles}>
         <webview
           className={viewStyles}
-          // React sets attributes before insertion, when the engine reads it.
-          // See `popupWindow`.
-          popupwindow={popupWindow?.toString()}
           ref={setView}
-          src={src}
+          // React sets attributes before insertion, when the engine reads it.
+          // See `window`.
+          window={window}
         />
         {finding && (
           <FindBar

@@ -304,22 +304,6 @@ class CORE_EXPORT HTMLWebViewElement final
   // one.
   void LoadingChanged(bool is_loading) override;
 
-  // And the browser saying the page inside asked for a window of its own -- a
-  // link with target="_blank" followed, a window.open.
-  //
-  // ONE MESSAGE PER ASK AND ONE EVENT PER MESSAGE, which is where this parts
-  // company with the two above: they report state, so they are filtered against
-  // what was last sent and this is not filtered at all. Two links opened in a
-  // row are two windows, and a shell that heard one of them would be a desktop
-  // that drops every second window.
-  //
-  // THE ONE EVENT THIS ELEMENT DISPATCHES WITH ANYTHING ON IT. There is no
-  // property behind it for the reason there is one behind `canGoBack`: an
-  // address nobody has opened yet is not state this element holds, and a
-  // property holding the last one asked for would be a lie between asks. See
-  // domicile_new_window_event.h.
-  void NewWindowRequested(const KURL& target_url) override;
-
   // And the browser saying where the page now is and what it says about the
   // connection behind it. It arrives when either CHANGES, so the event below is
   // never dispatched for a change that is not one.
@@ -364,8 +348,9 @@ class CORE_EXPORT HTMLWebViewElement final
 
   // And the browser saying the page inside called window.close(), which its
   // renderer allowed. Dispatched as `domicile-close`: the browser closes
-  // nothing, and removing this element is the shell's answer. An event, like
-  // NewWindowRequested, so nothing is stored.
+  // nothing, and the shell removes this element. Only for an element with no
+  // `window`; the browser closes browser windows. An event, so nothing is
+  // stored.
   void CloseRequested() override;
 
   // And an extension asking for this browser window to be the one in front.
@@ -373,18 +358,9 @@ class CORE_EXPORT HTMLWebViewElement final
   // shell's, so the browser raises nothing. An event, like CloseRequested.
   void FocusRequested() override;
 
-  // And an extension asking for a popup window of its own. Dispatched as
-  // `domicile-popup-window`, carrying the window: the browser has made the
-  // window and not its tab, which is the <webview> a shell opens for it with
-  // `popupwindow` naming `window_id`. An event, like NewWindowRequested.
-  void PopupWindowRequested(int32_t window_id,
-                            const KURL& url,
-                            int32_t width,
-                            int32_t height) override;
-
-  // The popup window this element's `popupwindow` names, for CreateGuest, or
-  // nothing: no attribute, or one that names no window id.
-  std::optional<int32_t> PopupWindow() const;
+  // The `window` attribute, for CreateGuest. A null String (mojom's absent
+  // `string?`) for an element showing its own page.
+  String BrowserWindow() const;
 
   // The pipe the guest was asked for on, kept for as long as this element
   // lives. Not a one-shot: the request can reach the browser before the

@@ -16,6 +16,8 @@
 # which is what has the tests.
 source_set("domicile") {
   sources = [
+    "domicile_browser_windows.cc",
+    "domicile_browser_windows.h",
     "domicile_command_socket.cc",
     "domicile_command_socket.h",
     "domicile_desk.cc",
@@ -49,7 +51,6 @@ source_set("domicile") {
     "//components/domicile:pointer_warp",
     "//components/domicile:shell_source",
     "//components/domicile:shell_windows",
-    "//components/domicile:url_registry",
     "//components/tabs:public",
     "//content/public/browser",
     "//net",

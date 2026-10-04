@@ -87,13 +87,14 @@ The active tab is the view that last took focus. So `view.focus()` sets what
 `tabs.query({active: true, currentWindow: true})` returns, and the tray shows
 that tab's state.
 
-Extension calls arrive as events on a `<webview>`:
+The browser carries out some extension calls. Others fire an event on a
+`<webview>`:
 
-| Extension call | Event on the `<webview>` |
+| Extension call | What happens |
 |---|---|
-| `tabs.create({url})` | `domicile-new-window`, on the active tab's view |
-| `windows.create({type: "popup", url})` | `domicile-popup-window`, on the active tab's view (below) |
-| `tabs.remove(id)` | `domicile-close`: close that window ([Close requests](SHELL-BROWSER-WINDOWS.md#close-requests)) |
+| `tabs.create({url})` | A browser window opens and appears in the next `browser_windows` |
+| `windows.create({type: "popup", url})` | A browser window opens as that popup window's tab (below) |
+| `tabs.remove(id)` | That browser window closes. A view of your own fires `domicile-close` ([Close requests](SHELL-BROWSER-WINDOWS.md#close-requests)) |
 | `tabs.update(id, {active: true})`, `windows.update(id, {focused: true})` | `domicile-focus-request` (`WEBVIEW_FOCUS_REQUEST_EVENT`): raise that window |
 | `tabs.setZoom(id, factor)` | `domicile-zoom-change`: already applied |
 
@@ -103,29 +104,12 @@ fail with `not supported on a Domicile desk`.
 ## Extension popup windows
 
 `chrome.windows.create({type: "popup", url})` (for example, Bitwarden's
-"Unlock") fires `domicile-popup-window` on the active tab's view with:
+"Unlock") opens an ordinary browser window
+([The engine owns browser windows](SHELL-BROWSER-WINDOWS.md#the-engine-owns-browser-windows)):
 
-- `windowId`: the window's `chrome.windows` id
-- `url`
-- `width`, `height`: the requested size, or 0. Placement is yours.
-
-Open a browser window whose `<webview>` has `popupwindow` set to `windowId`:
-
-```ts
-import { WEBVIEW_POPUP_WINDOW_EVENT } from "@domicile-desktop/sdk/webview-element";
-
-frame.addEventListener(WEBVIEW_POPUP_WINDOW_EVENT, (event) => {
-  const view = document.createElement("webview");
-  view.setAttribute("popupwindow", String(event.windowId)); // before append
-  view.setAttribute("src", event.url);
-  openPopupWindow(view, event.width, event.height);
-});
-```
-
-- **`popupwindow`:** set it before appending. The engine reads it once. In React,
-  setting it in JSX on first render works. Never remount that view; a remount
-  creates a second guest.
-- From then on, `windows.remove(windowId)` fires `domicile-close` on it and
-  `windows.update(windowId, {focused: true})` fires `domicile-focus-request`.
-- If you ignore the event, the window never opens and `windows.create` never
-  returns.
+- It is listed with `popupWindow` (its `chrome.windows` id) and the requested
+  `width` and `height` (0 if unset). Placement is yours.
+- It shows an extension's page, so draw it with no address bar, as Chrome does.
+- `windows.remove(popupWindow)` closes it.
+- `windows.update(popupWindow, {focused: true})` fires `domicile-focus-request`
+  on its view.

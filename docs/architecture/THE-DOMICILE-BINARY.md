@@ -121,10 +121,11 @@ domicile load-shell ./my-desktop/dist/shell.js
 
 - It replaces the running shell with any shell, so it also switches from
   `simple` to `manganese` without restarting.
-- Windows survive: the compositor never sees the change.
+- Windows survive: the compositor never sees the change, and the browser owns
+  browser windows' pages.
 - `load-shell` changes only the shell. It does not apply compositor config.
   On load, `announce_open_apps` sends the new page the desktop and its open
-  windows.
+  windows, and the browser sends its browser windows.
 - The desktop needs no dev mode.
 
 `scripts/dev-shell.sh` is the watch script built on it:
@@ -225,7 +226,7 @@ running one. The first argument decides which.
 ```
 domicile which-shell ─▶ $DOMICILE_SOCK ─▶ supervisor
 domicile load-shell  ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ engine ─▶ page
-domicile open-url    ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ engine ─▶ page
+domicile open-url    ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ engine
 ```
 
 Several desktops per session:
@@ -255,8 +256,8 @@ Several desktops per session:
   `XDG_DATA_DIRS` starts with that `share`. It applies only when
   `XDG_CURRENT_DESKTOP` is `domicile`, and nothing is written to the home
   directory.
-- The engine hands the URL to the newest shell page (`UrlRegistry`), so a
-  reloading page does not open it twice. The shell opens it.
+- The engine opens a browser window at the URL. The shell sees it in its
+  window list, so a shell mid-reload gets it with every other window.
 
 ### The engine command socket
 
