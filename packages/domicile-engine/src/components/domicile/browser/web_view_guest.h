@@ -421,6 +421,11 @@ class WebViewGuest : public mojom::WebViewGuest,
   // shell's document. See CloseRequested in the mojom.
   void CloseContents(content::WebContents* source) override;
 
+  // The page called `window.focus()` or `client.focus()`, which is how a site
+  // answers a click on its notification. The shell decides which window is in
+  // front, so this asks it, as RequestFocus does.
+  void ActivateContents(content::WebContents* contents) override;
+
   // Asks the guest's current page to report its content's size.
   void EnablePreferredSize();
 
