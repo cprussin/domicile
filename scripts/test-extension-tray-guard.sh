@@ -71,8 +71,8 @@ says() { # $1 MEASURED, $2 what the sentence must contain
 # whether the stand-in sent the list, whether the page heard any `extensions`
 # event, whether the fixture's row was in it (as expected, for the claim; at
 # all, for the control), whether the <webview> showed its page, whether the
-# popup's runtime.getContexts listed it as a TAB (any answer at all, for the
-# control), whether the <webview> dispatched `domicile-close` (after any
+# popup's runtime.getContexts listed it as a POPUP and tabs.getCurrent named
+# no tab (any answer at all, for the control), whether the <webview> dispatched `domicile-close` (after any
 # answer, for the claim), and whether it reported the popup's content size as
 # the fixture lays it out (that size at all, for the control).
 echo "the claim — the fixture in the tray, its popup opened, asked and closed"
@@ -96,11 +96,11 @@ expect "and blames the navigation" "yes" \
 expect "a popup that never answered is a failure" "fail" \
   "$(verdict "tray 1 1 1 1 0 0 1")"
 expect "and blames the guest's view type" "yes" \
-  "$(says "tray 1 1 1 1 0 0 1" "kTabContents")"
-expect "a popup that answered anything but TAB is a failure" "fail" \
-  "$(verdict "tray 1 1 1 1 0 1 1")"
-expect "and says what it was asked" "yes" \
-  "$(says "tray 1 1 1 1 0 1 1" "getContexts")"
+  "$(says "tray 1 1 1 1 0 0 1" "kExtensionPopup")"
+expect "a popup that answered anything but a POPUP in no tab is a failure" \
+  "fail" "$(verdict "tray 1 1 1 1 0 1 1")"
+expect "and names both things a tab would have" "yes yes" \
+  "$(says "tray 1 1 1 1 0 1 1" "kExtensionPopup") $(says "tray 1 1 1 1 0 1 1" "SessionTabHelper")"
 expect "a popup that never closed is a failure" "fail" \
   "$(verdict "tray 1 1 1 1 1 0 1")"
 expect "and blames the close" "yes" "$(says "tray 1 1 1 1 1 0 1" "CloseContents")"
@@ -173,8 +173,15 @@ expect "and lays its popup out fluid, at the size the guard reads" "2 1 0" \
 $(grep -cF "<body style=\"margin: 0\">" "$FIXTURE/popup.html") \
 $(grep -cF "width: ${WIDTH}px" "$FIXTURE/popup.html")"
 CONTEXT="$(sed -n 's/^readonly CONTEXT="\(.*\)"$/\1/p' "$GUARD")"
-expect "the guard expects the popup to be a TAB, as Chrome's tab is" "TAB" \
+expect "the guard expects the popup to be a POPUP, as Chrome's is" "POPUP" \
   "$CONTEXT"
+CURRENT_TAB="$(sed -n 's/^readonly CURRENT_TAB="\(.*\)"$/\1/p' "$GUARD")"
+expect "and in no tab, as Chrome's is" "none" "$CURRENT_TAB"
+expect "and its popup asks which tab it is in" "yes" \
+  "$(grep -qF 'tabs.getCurrent()' "$FIXTURE/popup.js" && echo yes || echo no)"
+expect "and the guard's shell marks the popup an extension popup" "yes" \
+  "$(grep -qF 'view.setAttribute("extensionpopup", "")' "$SCRIPTS/guard-extension-tray.js" &&
+    echo yes || echo no)"
 
 echo
 if [ "$FAILED" -eq 0 ]; then

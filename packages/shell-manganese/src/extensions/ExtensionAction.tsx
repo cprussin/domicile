@@ -143,6 +143,11 @@ const PopupView = ({ onClose, popup }: PopupViewProps) => {
   return (
     <webview
       className={viewStyles}
+      // An extension's action popup and not a tab, as Chrome's toolbar bubble
+      // is: an extension that lays itself out differently in a tab sees what
+      // it sees in Chrome. Read once as the view asks for its page, so it is
+      // here from the first render.
+      extensionpopup=""
       ref={setView}
       src={popup}
       // Inline because it is the page's runtime size, which Panda cannot read.

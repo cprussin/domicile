@@ -116,13 +116,15 @@ class WebViewGuest : public mojom::WebViewGuest,
   // Chrome, and for the same reason: a helper that keys on the tab's id has to
   // be there before the first navigation it would record.
   //
-  // `popup_window` is the element's, from CreateGuest: see popup_window().
+  // `popup_window` and `extension_popup` are the element's, from
+  // CreateGuest: see popup_window() and extension_popup().
   static void CreateAndAttach(
       content::RenderFrameHost& owner,
       content::RenderFrameHost& placeholder,
       mojo::PendingReceiver<mojom::WebViewGuest> receiver,
       mojo::PendingRemote<mojom::WebViewGuestClient> client,
       std::optional<int> popup_window,
+      bool extension_popup,
       const GuestCreatedCallback& created);
 
   WebViewGuest(const WebViewGuest&) = delete;
@@ -185,6 +187,12 @@ class WebViewGuest : public mojom::WebViewGuest,
   // `popupwindow` attribute -- or nothing for every other <webview>. Read by
   // the desk as the guest becomes a tab, which is before it is attached.
   std::optional<int> popup_window() const { return popup_window_; }
+
+  // Whether the element is an extension's action popup -- its
+  // `extensionpopup` attribute -- which a guest is in place of a tab: what
+  // Chrome's toolbar bubble is. Read as the guest is made, like
+  // popup_window(). See //chrome/browser/domicile/domicile_tab_helpers.h.
+  bool extension_popup() const { return extension_popup_; }
 
   // Hear the element take focus, for as long as the subscription is held.
   // What makes this guest the active tab.
@@ -470,7 +478,8 @@ class WebViewGuest : public mojom::WebViewGuest,
   WebViewGuest(content::RenderFrameHost& owner,
                mojo::PendingReceiver<mojom::WebViewGuest> receiver,
                mojo::PendingRemote<mojom::WebViewGuestClient> client,
-               std::optional<int> popup_window);
+               std::optional<int> popup_window,
+               bool extension_popup);
 
   // Tell the element a page asked for a window of its own, at `target_url`.
   //
@@ -565,6 +574,9 @@ class WebViewGuest : public mojom::WebViewGuest,
 
   // See popup_window().
   const std::optional<int> popup_window_;
+
+  // See extension_popup().
+  const bool extension_popup_;
 
   mojo::Receiver<mojom::WebViewGuest> receiver_;
   // How many of this guest's file choosers the shell has yet to answer, which
