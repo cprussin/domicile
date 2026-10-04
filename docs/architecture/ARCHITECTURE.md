@@ -1,75 +1,68 @@
 # Domicile architecture
 
-Domicile is a Wayland compositor whose **renderer is a web engine**. All user
-chrome — panels, launchers, window decorations, overlays, everything that is not
-an application window — is web content. An application window is a real Wayland
-client whose surface is composited *inside* the engine as an element, so it
-inherits the whole CSS pipeline: rounding, opacity, blur, transforms, z-index,
-exactly as a `<video>` does.
+Domicile is a Wayland compositor that uses a web engine as its renderer.
 
-## The core idea
+- All chrome (panels, launchers, decorations, overlays) is web content.
+- Each app window is a Wayland client surface drawn inside the engine as an
+  element. CSS applies to it like any other element: rounding, opacity, blur,
+  transforms, z-index.
 
-An engine already composites external GPU textures as elements — that is how
-`<video>`, `<canvas>`, WebGL and an out-of-process `<iframe>` work. An app
-window is another external-texture source fed into a pathway the engine has:
+## Elements
 
-- `<app app-id="…">` — a window belonging to a Wayland client, laid out by the
-  page. Its layout box is the client's `xdg_toplevel.configure`.
-- `<webview src="…">` — a nested browsing context.
+The engine already draws external GPU textures as elements (`<video>`,
+`<canvas>`, WebGL, out-of-process `<iframe>`). Domicile adds two:
 
-Both are elements the engine defines. A shell written against them does not run
-in stock Chrome, which is the accepted cost of the tag being `<app>`.
+- `<app app-id="…">`: a Wayland client's window. Its layout box sets the
+  client's `xdg_toplevel.configure` size.
+- `<webview src="…">`: a nested browsing context.
 
-## Decisions, and why
+A shell that uses these elements does not run in stock Chrome.
 
-### The engine is a fork, and `<app>` is a `cc::SurfaceLayer`
+## Key decisions
 
-The compositor submits a client's dmabuf into a viz surface; `<app>` embeds that
-surface with a `cc::SurfaceLayer`, which is a plain `cc::Layer` and goes into
-the page's property trees with every other layer. CSS is therefore *structural*
-rather than reimplemented: the page's own compositor applies z-index, transform,
-clip, opacity, filter and blend to a window because it applies them to a layer.
+### Forked engine; `<app>` is a `cc::SurfaceLayer`
 
-The alternative was to keep a prebuilt engine and reach the same effect from
-outside it, which is what this project tried first and what
-`STACKING-PARITY.md` measured: an unforked engine will not emit its layer tree,
-so the page arrives as one flat raster and a window can only be interleaved into
-it by splitting the chrome into bands — which imposes a `data-band` attribute on
-every painting element, and so fails the CSS-parity and shell-simplicity
-requirements the project exists for.
+- The compositor submits a client's dmabuf to a viz surface.
+- `<app>` embeds that surface with a `cc::SurfaceLayer`, an ordinary layer in
+  the page's property trees.
+- The page's compositor applies z-index, transform, clip, opacity, filter and
+  blend to the window the same way it does for any layer. Domicile does not
+  reimplement CSS.
 
-A fork costs rebases and a four-hour build. What makes it affordable is that it
-is mostly *new* files against a pinned revision, and new files do not conflict:
-the series carries 133 files of its own under `packages/domicile-engine/src`
-and edits 78 of Chromium's, 23 of those a `BUILD.gn`, a `.gni` or a `.json5`
-list that a new file has to be named in. Recount them rather than quoting this
-— the number grew with the Ozone DRM port and will grow again.
-[ENGINE-FORK.md](ENGINE-FORK.md) is the design, the series and the
-measurements.
+A fork over a stock engine because a stock engine does not expose its layer
+tree. Windows could then only be interleaved by splitting the chrome into
+bands, which needs a `data-band` attribute on every painting element. See
+[STACKING-PARITY.md](STACKING-PARITY.md).
 
-### Wayland host: Rust + Smithay
+Cost: rebases and a four-hour build. The series is mostly new files under
+`packages/domicile-engine/src`, which do not conflict on rebase. Edits to
+Chromium's own files are mostly build lists (`BUILD.gn`, `.gni`, `.json5`).
+See [ENGINE-FORK.md](ENGINE-FORK.md).
 
-The compositor is a Wayland server and nothing else draws for it. Smithay
-supplies the protocol machinery; the interesting half — scene, input routing,
-portal geometry, config — is pure logic that unit-tests without a GPU, an engine
-or a display, which is what makes test-first work here.
+### Rust and Smithay for the Wayland host
 
-### One page for the desk
+- Smithay provides the Wayland protocol handling.
+- Scene, input routing, portal geometry and config are pure logic. They
+  unit-test without a GPU, engine or display.
 
-The desktop is a list of displays — the config's, or the monitors DRM
-reports — one `wl_output` each. A shell is one page over the desk's bounding
-box, and a display is a *region* of it, which a shell addresses with
-`<Screen name="left">`. Nested, that page is a window; on a tty the engine shows
-it on every monitor at the monitor's own density and refresh rate —
-[ONE-PAGE-FOR-THE-DESK.md](ONE-PAGE-FOR-THE-DESK.md). The compositor's `Host`
-is one brain, and every chrome is told the same desk.
+### One page for the whole desktop
 
-### Dev environment: Nix flake
+- The desktop is a list of displays (from config or from DRM), one `wl_output`
+  each.
+- A shell is one page covering the desktop's bounding box. Each display is a
+  region of it, addressed with `<Screen name="left">`.
+- Nested, the page is a window. On a tty, the engine shows it on every monitor
+  at that monitor's density and refresh rate.
+- The compositor's `Host` sends the same desktop state to every chrome.
 
-Nothing is installed globally; Nix pins the toolchain. `nix develop` is the core
-Rust and Node shell; `nix develop .#full` adds Wayland, Mesa and the GL stack.
+See [ONE-PAGE-FOR-THE-DESK.md](ONE-PAGE-FOR-THE-DESK.md).
 
-## Shape
+### Nix flake for the dev environment
+
+- `nix develop`: Rust and Node toolchain.
+- `nix develop .#full`: adds Wayland, Mesa and the GL stack.
+
+## Data flow
 
 ```
   wayland client ──dmabuf──▶ domicile-compositor ──CompositorFrame──▶ viz ──┐
@@ -79,102 +72,82 @@ Rust and Node shell; `nix develop .#full` adds Wayland, Mesa and the GL stack.
   the shell's page: <app> ──SurfaceLayer(SurfaceId)──▶ cc layer tree ──▶ viz ┴─▶ display
 ```
 
-The page and the compositor meet at a `viz::SurfaceId` and nowhere else. The
-page never sees a pixel of the window; the compositor never sees the page's
-layout.
+- **Pixels:** the page and the compositor share only a `viz::SurfaceId`. The
+  page never sees window pixels. The compositor never sees page layout.
+- **Input:** the engine delivers pointer and keyboard events to the page. The
+  page reports what is under the pointer and which window has focus. The
+  compositor routes events to the client's seat.
+- **Control:** the page calls the compositor through `window.domicile`. The
+  fork binds it on the shell's origin and forwards calls to the compositor's
+  control socket. See [WINDOW-DOMICILE.md](WINDOW-DOMICILE.md).
+- **Serving:** the engine serves the shell over `domicile://`, so no port is
+  bound. See [DOMICILE-SCHEME.md](DOMICILE-SCHEME.md).
 
-Input runs the other way. The engine delivers pointer and keyboard events to the
-page; the page reports what is under a pointer and which window has focus; the
-compositor routes to the client's seat accordingly.
+## Startup
 
-The page reaches the compositor through `window.domicile`, which the fork
-binds on the shell's origin and the browser process carries to the compositor's
-control socket. The engine serves the shell over `domicile://`, so nothing has
-to be told where the session is and nothing binds a port.
+The `domicile` binary starts the engine, then the compositor:
 
-`domicile` is what starts the two, in the one order they can start in: the
-engine first, because it serves the shell and creates the broker socket; then
-the compositor, which connects to it as a producer. It builds neither — both
-ship beside it and it finds them from its own path. A shell handed to it as
-source goes to the builder beside them; see
+1. The engine serves the shell and creates the broker socket.
+2. The compositor connects to that socket as a producer.
+
+`domicile` builds neither; it finds both next to its own path. A shell given
+as source is built by `domicile-builder`. See
+[THE-DOMICILE-BINARY.md](THE-DOMICILE-BINARY.md) and
 [COMPOSABLE-SHELLS.md](COMPOSABLE-SHELLS.md).
 
 ## Crate layout
 
-Pure logic, in cargo's default set — `cargo test` builds and runs these without
-a GPU, an engine or Smithay:
+Pure logic, in cargo's default members. `cargo test` runs them without a GPU,
+engine or Smithay:
 
-- `domicile-config` — config schema, parsing, hot reload, shell resolution.
-- `domicile-scene` — portal registry, hit-testing, input routing, z-order.
-- `domicile-protocol` — the messages the page and the compositor exchange, and
-  version negotiation.
-- `domicile-host` — the orchestrator brain: where input goes and what the chrome
-  is told. No Wayland.
-- `domicile-launch` — `domicile` itself: which page to serve, which ozone
-  platform, where the two components are, and what each is started with. The
-  `[[bin]]` is only the part that reads the world and starts things; everything
-  with a decision in it is a module here, tested against strings and a temp
-  directory.
-- `domicile-test-chrome`, `domicile-test-client` — a chrome and a Wayland
-  client the integration tests drive, as libraries so their own behavior is
-  testable without Smithay.
+- `domicile-config`: config schema, parsing, hot reload, shell resolution.
+- `domicile-scene`: portal registry, hit-testing, input routing, z-order.
+- `domicile-protocol`: page-compositor messages and version negotiation.
+- `domicile-host`: decides where input goes and what the chrome is told. No
+  Wayland.
+- `domicile-launch`: the `domicile` binary. Decides which page to serve, which
+  Ozone platform to use, where the components are and how to start them. The
+  `[[bin]]` only does I/O; all decisions live in tested modules.
+- `domicile-test-chrome`, `domicile-test-client`: a chrome and a Wayland client
+  for integration tests.
 
-Outside the default set, because it pulls Smithay and the native Wayland
-libraries — build it in `nix develop .#full`:
+Outside the default members (needs Smithay and native Wayland; build in
+`nix develop .#full`):
 
-- `domicile-compositor` — the Wayland server itself, and the seam to the engine.
-  Inside it: `screens.rs` is what the desktop is made of; `dmabuf_import.rs` the
-  import; `engine.rs`, `engine_session.rs` and `engine_buffers.rs` the seam to
-  the fork and what it holds; `outbound.rs` the queue to the chrome; `scale.rs`,
-  `viewport.rs`, `coalesce.rs`, `timing_window.rs`, `modifiers.rs` and
-  `latency.rs` are each one small thing named after itself.
-
-  `appearance.rs` is the one thing in here that talks to something other than
-  the engine, the clients or the chrome: it answers
-  `org.freedesktop.impl.portal.Settings` on the session bus, which is where
-  every GTK, Qt, Electron and Firefox window on the desk reads its color
-  scheme. The chrome hears about a theme over the host protocol because it is a
-  page on the end of a socket this process already owns; every other window is
-  a Wayland client that has never heard of that socket, and there is no Wayland
-  protocol for which way round a desktop is drawn.
-
-  **Two rules the chrome queue is built around, both from freezes.** Never write
-  to a chrome from the Wayland loop — a chrome that reads slowly fills the socket
-  buffer and a blocking write stops frame callbacks for *every* client. Never
-  *wait* on one either: that stalls the thread that injects input, past the 200ms
-  repeat delay, so a key the user tapped starts repeating. `outbound.rs` is the
-  queue that keeps both, and `message()` never waits and never drops. It gives
-  frames no policy of their own, because no frame comes down it: a client's
-  buffer goes to the display compositor, so what is left is messages. The freeze
-  itself is written down in `tests/input.rs`, where a chrome that stopped
-  draining once cost the compositor twenty seconds.
+- `domicile-compositor`: the Wayland server and the bridge to the engine.
+  - `outbound.rs` queues messages to the chrome. The Wayland thread never
+    writes to or waits on a chrome socket; a slow chrome would otherwise stall
+    input and frame callbacks for every client.
+  - `appearance.rs` serves `org.freedesktop.impl.portal.Settings` on the
+    session bus, so GTK, Qt, Electron and Firefox apps follow the desktop's
+    color scheme.
 
 Web side:
 
-- `packages/chrome-sdk` — the shell-facing API: elements, the client for
-  `window.domicile`, measurement, input.
-- `packages/component-library` — the shared components and the Panda preset.
-- `packages/shell-manganese` — the reference desktop.
-- `packages/shell-simple` — a desktop with nothing in it but windows.
-  `examples/minimal-shell` is smaller still and is the worked example in
-  `docs/WRITING-A-SHELL.md`.
-- `packages/e2e-harness`, `packages/test-support` — the fixtures the end-to-end
-  scripts and the DOM suites run against.
+- `packages/chrome-sdk`: the shell API (elements, `window.domicile` client,
+  measurement, input).
+- `packages/component-library`: shared components and the Panda preset.
+- `packages/domicile-builder`: builds a shell from a user's TS/JS entry.
+- `packages/shell-manganese`: the reference desktop.
+- `packages/shell-simple`: a desktop with only windows.
+- `examples/minimal-shell`: the smallest shell; the worked example in
+  [WRITING-A-SHELL.md](../WRITING-A-SHELL.md).
+- `packages/e2e-harness`, `packages/test-support`: fixtures for the e2e scripts
+  and DOM tests.
 
-Neither, and in the tree all the same:
+Engine:
 
-- `packages/domicile-engine` — the fork. A Chromium pin, the patch series
-  applied on top of it, the guards and spikes that measure it, and the pin of
-  the published build the flake fetches. Nothing here builds from this
-  checkout; `README.md` there says how to get an engine without spending four
-  hours on one.
+- `packages/domicile-engine`: the fork. Holds the Chromium pin, the patch
+  series, the guards and spikes that measure it, and the pin of the published
+  build the flake fetches. Nothing builds from the checkout; its `README.md`
+  says how to get a prebuilt engine.
 
 ## Testing
 
-Value concentrates in the pure-logic core, so that is where tests lead: config
-parsing and the keep-last-good rule on a bad edit, hit-testing under transforms,
-routing between chrome and apps, protocol round-trips and version negotiation.
-
-Hardware-facing glue is kept thin and checked by the e2e scripts and the engine
-job on `crux`, which is the only thing that builds the fork and drives the pixel
-guards. `docs/guidelines/TESTING.md` is how to write them.
+- Tests focus on the pure-logic core: config parsing (including keeping the
+  last good config on a bad edit), hit-testing under transforms, routing
+  between chrome and apps, protocol round-trips and version negotiation.
+- Hardware-facing code stays thin. The e2e scripts and the engine job on
+  `crux` cover it. `crux` is the only machine that builds the fork and runs
+  the pixel guards.
+- See [TESTING.md](../guidelines/TESTING.md).

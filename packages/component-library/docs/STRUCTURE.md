@@ -2,38 +2,35 @@
 
 ## Component directory layout
 
-Every new component lives in a directory under `src/` named for the component,
-with at least these three files:
+Each component has a directory under `src/` with at least:
 
-- `./src/ComponentName/ComponentName.tsx` — the component entry point.
-- `./src/ComponentName/ComponentName.stories.tsx` — storybook stories.
-- `./src/ComponentName/ComponentName.test.tsx` — unit tests.
+- `src/ComponentName/ComponentName.tsx`: the component
+- `src/ComponentName/ComponentName.stories.tsx`: stories
+- `src/ComponentName/ComponentName.test.tsx`: tests
 
-Anything else the component needs goes beside them in its own focused file
-rather than into the entry point or a `utils.ts` — `Avatar/initials.ts` and
-`Avatar/gradient.ts`, `Screen/display-source.ts`, `ThemeSwitch/theme-core.ts`.
-That is [/docs/guidelines/FILES.md](/docs/guidelines/FILES.md)'s rule about
-grab-bag names, applied inside a component directory. A second component that
-only ever appears with the first lives there too (`Screen/DisplayProvider.tsx`,
-`ThemeSwitch/ThemeProvider.tsx`), with its own test beside it.
+Other rules:
 
-There are no `.module.scss`, `.css`, or other style files — styles live in
-the `.tsx` next to the component that uses them.
+- Put helpers in their own named files in the same directory, not in a
+  `utils.ts`. Examples: `Avatar/initials.ts`, `Screen/display-source.ts`. See
+  [/docs/guidelines/FILES.md](/docs/guidelines/FILES.md).
+- A component used only with another lives in that component's directory,
+  with its own test. Examples: `Screen/DisplayProvider.tsx`,
+  `ThemeSwitch/ThemeProvider.tsx`.
+- No style files (`.css`, `.module.scss`). Styles live in the component's
+  `.tsx`.
 
 ## File organization within a component file
 
-See `/docs/guidelines/FILES.md` for the general top-to-bottom reading rule. For
-component files specifically, the typical order is:
+Order a component file as follows (general rule in
+[/docs/guidelines/FILES.md](/docs/guidelines/FILES.md)):
 
-1. Imports (third-party first, then local).
-2. Re-exports (e.g. `export { SIZES, type Size } from "../control-sizes";`).
-3. Module-level constants that are simple values referenced by the component
-   (e.g. animation `Keyframe[]` arrays, duration constants).
-4. The `type Props` declaration.
-5. The component itself (`export const Foo = (...) => ...`).
-6. `cva` recipes used by the component.
-7. Helper functions used by the component.
+1. Imports: third-party, then local.
+2. Re-exports, such as `export { SIZES, type Size } from "../control-sizes";`.
+3. Simple constants the component uses, such as keyframes or durations.
+4. `type Props`.
+5. The component.
+6. `cva` recipes.
+7. Helper functions.
 
-See `Button.tsx` for the canonical layout: `tinted` / `ghost` (referenced
-inside the `styles` cva at module-load time) sit above `styles`, while
-runtime helpers sit at the file foot.
+`Button.tsx` is the reference. Values a `cva` reads at module load (`tinted`,
+`ghost`) go above that `cva`.

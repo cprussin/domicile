@@ -1,65 +1,21 @@
-# Routes that are closed
+# Stacking without a fork: closed routes
 
-Context, not a design: it exists so that nobody re-runs an experiment that has
-already been run. Each row is a measurement or a source reading rather than an
-opinion, and the design that came out of them is
-`docs/architecture/ENGINE-FORK.md`.
+Routes tried and ruled out for stacking a window among page elements without
+forking the engine. Don't rerun them. The resulting design is
+[ENGINE-FORK.md](ENGINE-FORK.md).
 
-The question all of them were asked in service of: **can a client's window be
-interleaved with the chrome by CSS `z-index`, without forking the engine?**
-The answer is no, and this is why.
+The question: can a client's window be stacked among chrome elements by CSS
+`z-index` without forking the engine? No. The premise was that Chromium already
+emits its layer tree as Wayland surfaces and only needs a compositor to accept
+it. That is false for the shipping engine.
 
 | Route | Verdict |
 |---|---|
-| Get a client dmabuf **into** the page as a texture | **No API.** CEF's dmabuf support runs page-out only — `OnAcceleratedPaint` / `cef_accelerated_paint_info_t` carries planes of a shared texture *out*; nothing takes one in |
-| `<video>` / Media Source as the import | Chromium's zero-copy video path wants frames made *inside its own GPU process* via `GpuMemoryBuffer` |
-| WebGPU `importExternalTexture()` | Takes an `HTMLVideoElement`, so it reduces to the row above |
-| `OnAcceleratedPaint` as the layer tree | Emits **one** composited texture — the page as a flat raster, however many layers it has |
-| Delegated compositing (`WaylandOverlayDelegation`) | **Measured, negative.** With every protocol the engine asks for implemented, a 600x400 page arrives as a single 632x442 buffer whether it has 1 or 8 composited layers, and `place_above`/`place_below` are never called. A delegated *root*, not a delegated tree |
-| Color management as the thing blocking promotion | **Exonerated.** With the engine's own `WaylandWpColorManagerV1` off, so `wp_color_management_surface_v1` is out of the question, the counts are unchanged |
-| `surface-augmenter` as the exo-shaped-compositor gate | **Declined.** Advertised, and the engine never binds it — a client binds what it wants at registry enumeration, before it renders. It is not looking for an augmenter |
-| Lift `components/exo` out of the tree | `assert(is_chromeos)` in its `BUILD.gn` is only the parse-time guard; the real gate is its dependency on `//ash`, `//ui/aura`, `//ui/views` and `//ui/wm`, reaching into `surface.cc` and `surface_tree_host.cc`. One `static_library("exo")` target, no core to split out. Worth taking: `buffer.cc`, whose only ChromeOS dependency is two calls to `aura::Env::GetInstance()->context_factory()` |
-
-The premise that made all of this worth trying — that Chromium already emits its
-layer tree as Wayland surfaces and only needs a compositor to accept it — is
-**false for the engine as it ships**. That is what decided the fork.
-
-## Reading Chromium source from this container
-
-`chromium.googlesource.com` and `source.chromium.org` are blocked by the egress
-proxy (403 on CONNECT). The GitHub mirror is served, and a blobless sparse clone
-is cheap — 154 MB for the directories that matter:
-
-```sh
-GIT_LFS_SKIP_SMUDGE=1 git clone --depth 1 --filter=blob:none --sparse \
-  https://github.com/chromium/chromium /home/user/chromium/chromium
-git -C /home/user/chromium/chromium sparse-checkout set \
-  components/exo cc/layers cc/trees components/viz services/viz \
-  content/browser/renderer_host ui/ozone/platform/wayland \
-  third_party/blink/renderer/core/frame \
-  third_party/blink/renderer/platform/graphics
-```
-
-A full `--depth 1` clone would not fit comfortably; `--filter=blob:none
---sparse` is what makes this affordable.
-
-**For one file, skip the clone.** `raw.githubusercontent.com` is served and
-takes the revision, so the pin in `packages/domicile-engine/CHROMIUM_PIN` reads
-a file directly:
-
-```sh
-curl "https://raw.githubusercontent.com/chromium/chromium/$(tail -1 \
-  packages/domicile-engine/CHROMIUM_PIN)/components/viz/service/display/overlay_candidate_factory.cc"
-```
-
-That is how the overlay-promotion question in `WINDOW-COMPOSITING.md` was
-settled, and it costs nothing. The sparse clone is still what you want for
-grepping across directories.
-
-## One trap worth keeping
-
-**Advertising a Wayland global is a promise to honor what clients say through
-it.** `wp_viewporter` advertised while the commit path ignored the destination
-made every surface twice its logical size at any scale above 1x — the desktop
-drawn at double, every portal and pointer coordinate out by the same factor. At
-1x the two forms coincide, which is why nothing headless caught it.
+| Import a client dmabuf into the page as a texture | **No API.** CEF's dmabuf support is output-only: `OnAcceleratedPaint` / `cef_accelerated_paint_info_t` exports a shared texture. Nothing imports one. |
+| `<video>` / Media Source as the import | Chromium's zero-copy video path needs frames created in its own GPU process via `GpuMemoryBuffer`. |
+| WebGPU `importExternalTexture()` | Takes an `HTMLVideoElement`, so same as the row above. |
+| `OnAcceleratedPaint` as the layer tree | Emits one composited texture: the page as a flat raster, however many layers it has. |
+| Delegated compositing (`WaylandOverlayDelegation`) | **Measured, no.** With every protocol the engine asks for implemented, a 600x400 page arrives as one 632x442 buffer with 1 or 8 composited layers. `place_above`/`place_below` are never called. Only the root is delegated. |
+| Color management blocking delegation of child surfaces | **Ruled out.** With `WaylandWpColorManagerV1` disabled, the counts are unchanged. |
+| `surface-augmenter` as what enables delegation | **Ruled out.** Advertised, but the engine never binds it. |
+| Lift `components/exo` out of the tree | **No.** It depends on `//ash`, `//ui/aura`, `//ui/views` and `//ui/wm` (in `surface.cc` and `surface_tree_host.cc`), and it is one `static_library("exo")` target. `buffer.cc` is reusable: its only ChromeOS dependency is two calls to `aura::Env::GetInstance()->context_factory()`. |

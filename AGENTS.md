@@ -117,46 +117,86 @@ every TS file you write or modify.
 | Doc | Covers |
 |---|---|
 | [/docs/guidelines/WORKSPACE.md](/docs/guidelines/WORKSPACE.md) | Tools (bun, turbo, biome), workspace layout across both languages, package READMEs, dependency policy, and the required-checks workflow you run before a PR. |
-| [/docs/DEVELOPING.md](/docs/DEVELOPING.md) | Running, testing and debugging out of a checkout: the commands, the compositor's frame report, and the gotchas — Nix, Smithay and the test clients — that have each cost a session. |
+| [/docs/DEVELOPING.md](/docs/DEVELOPING.md) | Running, testing and debugging from a checkout. Compositor debugging is in [COMPOSITOR-DEBUGGING.md](/docs/COMPOSITOR-DEBUGGING.md). |
 
 ## Architecture & design docs
 
-These live in [`/docs/architecture/`](/docs/architecture/) and are **not**
-guidelines — they carry no authority level and impose no rules. They describe
-how a part of the system is (or will be) built. Read the relevant one when
-working in its area; it is context, not compliance.
+These live in [`/docs/architecture/`](/docs/architecture/). They are context,
+not rules, and carry no authority level. Read the one for the area you work in.
 
 | Doc | Covers |
 |---|---|
-| [/docs/architecture/ARCHITECTURE.md](/docs/architecture/ARCHITECTURE.md) | Why Domicile is a compositor whose renderer is a web engine, the decisions that follow from it, and what each crate and package is for. Start here. |
-| [/docs/architecture/WINDOW-COMPOSITING.md](/docs/architecture/WINDOW-COMPOSITING.md) | How a window reaches the screen: the compositor submits the client's dmabuf into a viz surface and the page's `<app>` embeds it, so what CSS does to a window is what CSS does to a layer. What is still open is at the bottom. |
-| [/docs/architecture/STACKING-PARITY.md](/docs/architecture/STACKING-PARITY.md) | Why an unforked engine cannot do this, measured: every route to stacking parity that was tried and the evidence that closed it. The record behind the fork decision, not a design. |
-| [/docs/architecture/THE-DOMICILE-BINARY.md](/docs/architecture/THE-DOMICILE-BINARY.md) | `domicile` itself: how `domicile-launch` is split, why the flake only places files, the control socket a running desktop answers, and what is left before `domicile load-shell` works. |
-| [/docs/architecture/ENGINE-FORK.md](/docs/architecture/ENGINE-FORK.md) | The fork itself: the design, the C ABI between the compositor and the engine, the measurements, and the plan — phase 1 shipped, phases 2 and 3 have items left. |
-| [/docs/architecture/A-DESKTOP-ON-A-TTY.md](/docs/architecture/A-DESKTOP-ON-A-TTY.md) | A desktop draws on a bare tty, and this is how: the Ozone DRM embedder that had to be written, who opens the card and holds DRM master, where input comes from, and what a console switch does. Read it before touching the DRM platform, `platform.rs`, or anything that assumes a display server. |
-| [/docs/architecture/EXTENSIONS.md](/docs/architecture/EXTENSIONS.md) | Chrome extensions on a desk: installed from the config, their actions in the shell's tray, and every `<webview>` a tab to `chrome.tabs`. Every slice and follow-up done. |
-| [/docs/architecture/SYSTEM-TRAY.md](/docs/architecture/SYSTEM-TRAY.md) | Applications' tray icons: the compositor is the StatusNotifierItem host on the session bus, and manganese draws the icons in one reorderable row with the extensions'. Menus (dbusmenu) are left. |
-| [/docs/architecture/NOTIFICATIONS.md](/docs/architecture/NOTIFICATIONS.md) | Notifications on a desk: the compositor is the `org.freedesktop.Notifications` server for applications and, through Chrome's own bridge, for sites; manganese toasts them and keeps them in a drawer. Which monitor toasts is left. |
-| [/docs/architecture/ONE-PAGE-FOR-THE-DESK.md](/docs/architecture/ONE-PAGE-FOR-THE-DESK.md) | One shell page over the whole desk on a tty, shown on every monitor at its own density and refresh rate: presenters per CRTC, a cc tiling per display scale, and floats dragged across screens in `shell-manganese`. Phase 1 is the only model; native density per monitor is built and awaits a hardware check. |
-| [/docs/architecture/KEYBINDINGS.md](/docs/architecture/KEYBINDINGS.md) | A shell's keys as its props, sway-style chords resolved against the compositor's keyboard (`shell_config`'s `keys`) and dispatched by the SDK. The `domicile send-shell` verb is left. |
-| [/docs/architecture/COMPOSABLE-SHELLS.md](/docs/architecture/COMPOSABLE-SHELLS.md) | The config as a TypeScript, JavaScript or JSON module whose `Shell` export is the shell; `domicile` resolves, installs and builds it; manganese as a library; keybindings as shell props; the `@domicile-desktop/*` packages on npm. Phases 1, 2 and 4 done; phase 3 has two items left. |
-| [/docs/architecture/PORTALS.md](/docs/architecture/PORTALS.md) | Domicile as the desk's only `xdg-desktop-portal` backend: one request channel from the compositor to the shell's dialogs, every interface but `Secret` on it — file chooser to screen cast, remote desktop and global shortcuts — and gtk off the desk. Not started. |
-| [/docs/architecture/WINDOW-DOMICILE.md](/docs/architecture/WINDOW-DOMICILE.md) | `window.domicile` as the whole shell API: state as attributes with change events, the engine reporting size and density, routing `<app>` input and resolving chords, and `DomicileClient` deleted. Not started. |
-| [/docs/architecture/BROWSER-WINDOWS.md](/docs/architecture/BROWSER-WINDOWS.md) | Browser windows owned by the engine: a shell opens one, draws it with `<webview window>`, and its live page survives `domicile load-shell`. Not started. |
+| [/docs/architecture/ARCHITECTURE.md](/docs/architecture/ARCHITECTURE.md) | What Domicile is (a Wayland compositor whose renderer is a web engine), the decisions that follow, and what each crate and package is for. Start here. |
+| [/docs/architecture/WINDOW-COMPOSITING.md](/docs/architecture/WINDOW-COMPOSITING.md) | How a client's window reaches the screen: its dmabuf becomes a viz surface that the page's `<app>` embeds as a `cc::SurfaceLayer`. Open items at the bottom. |
+| [/docs/architecture/STACKING-PARITY.md](/docs/architecture/STACKING-PARITY.md) | Routes to stacking windows among page elements without a fork, and the evidence that ruled each out. |
+| [/docs/architecture/ENGINE-FORK.md](/docs/architecture/ENGINE-FORK.md) | The fork: `<app>` as a `SurfaceLayer`, the frame sink broker, the C ABI, buffer import, key decisions and the plan. |
+| [/docs/architecture/ENGINE-FORK-MEASUREMENTS.md](/docs/architecture/ENGINE-FORK-MEASUREMENTS.md) | Evidence for the fork: spike pixel proofs, CSS parity tables, `<app>` vs OOPIF, producer latency, keystroke to pixel, client window guard, dmabuf import, shortcut-inhibitor guards. |
+| [/docs/architecture/ENGINE-FORK-CHROMIUM-NOTES.md](/docs/architecture/ENGINE-FORK-CHROMIUM-NOTES.md) | Undocumented Chromium behavior: mojo invitations, Rust mojom crates vs cargo, Ozone platforms and dmabuf import, GPU library path on `crux`, `SurfaceLayerBridge` vs OOPIF. |
+| [/docs/architecture/ENGINE-BROWSER-BEHAVIOR.md](/docs/architecture/ENGINE-BROWSER-BEHAVIOR.md) | Keys, clicks and gestures go to the shell; no password manager, autofill or WebAuthn UI; the host shortcut inhibitor when nested; the guards for each. |
+| [/docs/architecture/DOMICILE-SCHEME.md](/docs/architecture/DOMICILE-SCHEME.md) | `domicile://shell/` and `domicile://home/`, the control-channel binding, and why there is no loopback port. |
+| [/docs/architecture/THE-DOMICILE-BINARY.md](/docs/architecture/THE-DOMICILE-BINARY.md) | The `domicile` binary: modules, the home-manager module, crash recovery, finding components, the control socket and the engine command socket. |
+| [/docs/architecture/A-DESKTOP-ON-A-TTY.md](/docs/architecture/A-DESKTOP-ON-A-TTY.md) | Running on a bare tty with Ozone DRM: building it, the embedder, DRM master, input, outputs, clipboard. Read before touching the DRM platform or `platform.rs`. |
+| [/docs/architecture/ONE-PAGE-FOR-THE-DESK.md](/docs/architecture/ONE-PAGE-FOR-THE-DESK.md) | One shell page spanning every monitor on a tty, each at its own scale and refresh rate: presenters per CRTC and floats dragged across screens. |
+| [/docs/architecture/DISPLAY-TILINGS.md](/docs/architecture/DISPLAY-TILINGS.md) | How cc keeps a tiling per monitor scale: regions, tilings, activation, raster order, draw, fallback, tile memory. |
+| [/docs/architecture/EXTENSIONS.md](/docs/architecture/EXTENSIONS.md) | Chrome extensions: installed from the config, actions in the shell's tray, every `<webview>` a tab to `chrome.tabs`. |
+| [/docs/architecture/SYSTEM-TRAY.md](/docs/architecture/SYSTEM-TRAY.md) | The compositor as StatusNotifierItem host; the shell draws the icons. Menus (dbusmenu) are left. |
+| [/docs/architecture/NOTIFICATIONS.md](/docs/architecture/NOTIFICATIONS.md) | The compositor as the `org.freedesktop.Notifications` server for apps and sites; the shell toasts them and keeps a drawer. |
+| [/docs/architecture/KEYBINDINGS.md](/docs/architecture/KEYBINDINGS.md) | A shell's keybindings as props: sway-style chords resolved against the compositor's keyboard layout and dispatched by the SDK. |
+| [/docs/architecture/COMPOSABLE-SHELLS.md](/docs/architecture/COMPOSABLE-SHELLS.md) | The config as a TS, JS or JSON module whose `Shell` export is the shell; `domicile` builds it; manganese as a library; packages on npm. |
+| [/docs/architecture/PORTALS.md](/docs/architecture/PORTALS.md) | Proposal: Domicile as the only `xdg-desktop-portal` backend, with the shell drawing every dialog. Not started. |
+| [/docs/architecture/WINDOW-DOMICILE.md](/docs/architecture/WINDOW-DOMICILE.md) | Proposal: `window.domicile` as the whole shell API, and `DomicileClient` deleted. Not started. |
+| [/docs/architecture/BROWSER-WINDOWS.md](/docs/architecture/BROWSER-WINDOWS.md) | Proposal: the engine owns browser windows, the shell draws them with `<webview window>`, and pages survive `domicile load-shell`. Not started. |
 
-[`/ROADMAP.md`](/ROADMAP.md) is the open work and the known gaps, with each
-item pointing at the doc above that carries its detail. Read it before starting
-anything substantial, and keep it honest: an item that shipped comes out.
+[`/ROADMAP.md`](/ROADMAP.md) lists open work and known gaps, each pointing at
+the doc with the detail. Read it before substantial work. Remove items when
+they ship.
 
 ## Guides
 
-Not guidelines either: these describe how to *use* Domicile rather than how to
-work on it, and carry no authority level.
+How to use, configure and debug Domicile. No authority level.
 
 | Doc | Covers |
 |---|---|
-| [/docs/RUNNING-A-DESKTOP.md](/docs/RUNNING-A-DESKTOP.md) | How to run one of the desktops the flake ships: a window inside a Wayland session or the screen on a bare tty, the engine the flake pins, launching a client into the desktop, and the home-manager module that describes a desk on NixOS. |
-| [/docs/WRITING-A-SHELL.md](/docs/WRITING-A-SHELL.md) | How to write a shell that lives outside this repo: that a shell is one built module `domicile` is pointed at, the document Domicile writes rather than the shell, the config a shell owns, why there is nothing to await, who gets the keyboard, the browser window `<webview>` makes and the keyboard it has to hand back, extensions' actions and their popups, and the bundling rules that fail quietly. Read it before changing anything a shell can see — the module's name, the document, the SDK's public surface — because it is the contract those changes break. Its worked example is `examples/minimal-shell`. |
+| [/docs/RUNNING-A-DESKTOP.md](/docs/RUNNING-A-DESKTOP.md) | Running a desktop nested or on a tty, the pinned engine, launching clients, and the home-manager module. |
+| [/docs/SHELL-CONFIG.md](/docs/SHELL-CONFIG.md) | The desk config: file location, config modules, the home-manager module, what reloads, and the keyboard, idle, lock, theme and display sections. |
+| [/docs/LAUNCHER.md](/docs/LAUNCHER.md) | Launcher config: `files.omit`, `applications.omit`, `X-Domicile-Preview`, bookmarks and their icons. |
+| [/docs/WRITING-A-SHELL.md](/docs/WRITING-A-SHELL.md) | Writing a shell outside this repo. Read before changing anything a shell can see (module name, document, SDK surface). Example: `examples/minimal-shell`. |
+| [/docs/SHELL-BROWSER-WINDOWS.md](/docs/SHELL-BROWSER-WINDOWS.md) | `<webview>` for shell authors: state properties and events, focus, keyboard, new windows, close requests, file pickers. |
+| [/docs/SHELL-EXTENSIONS.md](/docs/SHELL-EXTENSIONS.md) | Extensions for shell authors: the extensions list, `activateExtension`, popups, the tab/window mapping. |
+| [/docs/SHELL-DESKTOP-EVENTS.md](/docs/SHELL-DESKTOP-EVENTS.md) | Desktop events for shell authors: displays, theme, system tray, notifications. |
+| [/docs/SHELL-IDLE-AND-LOCK.md](/docs/SHELL-IDLE-AND-LOCK.md) | Idle and lock for shell authors: the idle message, what is blocked while locked, drawing a lock screen. |
+| [/docs/SHELL-PACKAGING.md](/docs/SHELL-PACKAGING.md) | Packaging a shell: required Vite settings, inlined CSS, avoiding a theme flash, distributing, building with `domicile`. |
+| [/docs/DISPLAYS.md](/docs/DISPLAYS.md) | Displays on a tty: display-list sources, profiles, which connectors light, pointer crossing, rotation, shell windows per CRTC, monitor names. |
+| [/docs/IDLE.md](/docs/IDLE.md) | Idle blanking, `HostMessage::Idle`, idle inhibitors, and log lines to check on hardware. |
+| [/docs/LOCK.md](/docs/LOCK.md) | The screen lock: where it is enforced, request categories, ordering, verifiers, passphrase checks, fail-closed PAM, log lines. |
+| [/docs/TTY-SESSION.md](/docs/TTY-SESSION.md) | DRM master, console switching through logind, suspend, and input from logind. |
+| [/docs/TTY-DEBUGGING.md](/docs/TTY-DEBUGGING.md) | Seeing a modeset in logs, black screens with a clean log, and hosts where scanout and render cards differ. |
+| [/docs/COMPOSITOR-DEBUGGING.md](/docs/COMPOSITOR-DEBUGGING.md) | The compositor's frame report and slow-launch logs; rendering, Smithay and test-client pitfalls. |
+| [/docs/HARDWARE-CHECKS.md](/docs/HARDWARE-CHECKS.md) | Steps and expected log lines for each check that needs a lit panel (suspend, console switch, crashes, idle, PAM lock, latency, several monitors). |
+
+## Package docs
+
+| Doc | Covers |
+|---|---|
+| [/packages/chrome-sdk/docs/ELEMENTS.md](/packages/chrome-sdk/docs/ELEMENTS.md) | SDK input routing for `<app>` and `<webview>`: sizing, pointer and keyboard forwarding, focus, context menu, popups, held modifiers. |
+| [/packages/domicile-engine/docs/BUILDING-CHROMIUM.md](/packages/domicile-engine/docs/BUILDING-CHROMIUM.md) | A Chromium checkout from scratch, the gn args, pitfalls, and rolling the pin. |
+| [/packages/domicile-engine/docs/BUILD-MACHINE.md](/packages/domicile-engine/docs/BUILD-MACHINE.md) | `crux`: the shared checkout and tree lock, the toolchain shell, moving the pin, the tree pool, build cost. |
+| [/packages/domicile-engine/docs/RELEASES.md](/packages/domicile-engine/docs/RELEASES.md) | The pinned engines, release names, the write-back flow, `DOMICILE_WRITEBACK_TOKEN`. |
+| [/packages/domicile-engine/docs/CONTROL-CHANNEL.md](/packages/domicile-engine/docs/CONTROL-CHANNEL.md) | `window.domicile` members, typed values, adding a message or event, the command socket and dev reload. |
+| [/packages/domicile-engine/docs/GUARDS.md](/packages/domicile-engine/docs/GUARDS.md) | One line per guard, helper and spike script in `scripts/`, by area. |
+| [/packages/domicile-engine/docs/SOURCE-MAP.md](/packages/domicile-engine/docs/SOURCE-MAP.md) | Where the surface-embedding code lives under `src/`. |
+| [/packages/domicile-engine/docs/TESTING.md](/packages/domicile-engine/docs/TESTING.md) | Engine unit test suites, their filters and minimum counts, and the command that runs what CI runs. |
+| [/packages/e2e-harness/docs/SCRIPT-VERDICTS.md](/packages/e2e-harness/docs/SCRIPT-VERDICTS.md) | Exit codes, `scripts/lib/harness.sh` helpers, required script structure, and the rules `src/verdicts.ts` enforces. |
+| [/packages/shell-manganese/docs/WINDOW-MANAGEMENT.md](/packages/shell-manganese/docs/WINDOW-MANAGEMENT.md) | Layout tree, screens and workspaces, focus, pointer warping, dragging, title bars, animations. |
+| [/packages/shell-manganese/docs/FOCUS-INTERNALS.md](/packages/shell-manganese/docs/FOCUS-INTERNALS.md) | How pointer warping, browser-window focus and modifier drags over clients work. |
+| [/packages/shell-manganese/docs/KEYS.md](/packages/shell-manganese/docs/KEYS.md) | Default bindings, resize mode, commands, keysym rules, a sample config, differences from sway. |
+| [/packages/shell-manganese/docs/TOP-BAR.md](/packages/shell-manganese/docs/TOP-BAR.md) | The `topBar` option and its items: workspaces, clock, battery, brightness, volume, notifications, tray. |
+| [/packages/shell-manganese/docs/HOST-READOUTS.md](/packages/shell-manganese/docs/HOST-READOUTS.md) | How the compositor reads battery, backlight and audio for the top bar. |
+| [/packages/shell-manganese/docs/CUSTOM-BAR-ITEMS.md](/packages/shell-manganese/docs/CUSTOM-BAR-ITEMS.md) | Using manganese's Panda CSS in custom bar items. |
+| [/packages/shell-manganese/docs/LAUNCHER.md](/packages/shell-manganese/docs/LAUNCHER.md) | Launcher row order, sources and previews. |
+| [/packages/shell-manganese/docs/CLIPBOARD.md](/packages/shell-manganese/docs/CLIPBOARD.md) | Clipboard history and the browser-window clipboard on tty vs nested. |
+| [/packages/shell-manganese/docs/WALLPAPER.md](/packages/shell-manganese/docs/WALLPAPER.md) | Wallpaper rotation, per-theme photos, crossfade, sources. |
+| [/packages/shell-manganese/docs/SOURCE.md](/packages/shell-manganese/docs/SOURCE.md) | Directory-level source map. |
 
 ## Checking your work
 

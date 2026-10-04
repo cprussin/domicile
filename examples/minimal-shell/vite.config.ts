@@ -3,7 +3,7 @@ import { defineConfig } from "vite";
 // The page, and the whole of this shell's build.
 //
 // Four things here are not vite's defaults, and Domicile needs all four —
-// /docs/WRITING-A-SHELL.md#bundling says why each one, and what fails quietly
+// /docs/SHELL-PACKAGING.md#bundling says why each one, and what fails quietly
 // without it:
 //
 //   the entry     a `.ts` file, not an HTML file. Domicile writes the

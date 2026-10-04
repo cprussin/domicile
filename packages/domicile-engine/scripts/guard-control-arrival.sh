@@ -5,16 +5,17 @@
 #   nix develop .#full --command \
 #     ./packages/domicile-engine/scripts/guard-control-arrival.sh /build/chromium/src
 #
-# WHY THIS EXISTS. `ENGINE-FORK.md`'s phase 2 asks for an arrival stamp on the
-# control channel's events, and the reason it asks is that the stage between the
-# compositor and a listener — a read in the browser process, a mojo message, the
-# hop into the renderer, the dispatch — was unmeasurable from a page. The
-# instrument that claimed to measure it was deleted because it always reported
-# zero: it subtracted `Event.timeStamp` from a clock, and `timeStamp` is when
-# the event was *constructed*, in the renderer, at dispatch. So the shell
-# printed `ipc_ms=0` every interval, which is a measurement to whoever read the
-# log. A stamp that exists and is never filled in fails exactly the same way,
-# which is why this guard reads its shape and not only its value.
+# WHY THIS EXISTS. The control channel's events carry an arrival stamp (see
+# `docs/architecture/ENGINE-FORK-MEASUREMENTS.md#keystroke-to-pixel`) because
+# the stage between the compositor and a listener — a read in the browser
+# process, a mojo message, the hop into the renderer, the dispatch — was
+# unmeasurable from a page. The instrument that claimed to measure it was
+# deleted because it always reported zero: it subtracted `Event.timeStamp` from
+# a clock, and `timeStamp` is when the event was *constructed*, in the renderer,
+# at dispatch. So the shell printed `ipc_ms=0` every interval, which is a
+# measurement to whoever read the log. A stamp that exists and is never filled
+# in fails exactly the same way, which is why this guard reads its shape and not
+# only its value.
 #
 # NO WAYLAND, NO CLIENT, NO GPU, NO WINDOW. Every other guard here needs a
 # compositor, a client drawing a color, or a browser window with a guest in it.

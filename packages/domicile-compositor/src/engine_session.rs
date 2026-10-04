@@ -192,7 +192,7 @@ impl EngineSession {
     ///
     /// **NOTHING HERE IS EXERCISED BY ANY CHECK IN THIS REPOSITORY.** It needs
     /// a built `libdomicile_engine.so`, a browser to dial and a client with a
-    /// dmabuf. See ROADMAP.md, *Needs a machine with a screen*.
+    /// dmabuf. See `docs/HARDWARE-CHECKS.md#dead-engine-with-windows-open`.
     pub fn reconnect(&mut self, describe: &Describe, now: Instant) -> Reconnected {
         let taken = self.held.take_all();
         let apps: HashMap<SurfaceId, String> = self

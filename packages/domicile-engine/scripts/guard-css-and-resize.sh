@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Step 4 of the spike in docs/architecture/ENGINE-FORK.md: the measurement.
+# The CSS parity measurement in docs/architecture/ENGINE-FORK-MEASUREMENTS.md#css-parity.
 #
 #   NIX_SHELL_RUN=".../scripts/guard-css-and-resize.sh /build/chromium/src" \
 #     nix-shell /build/chromium/src/tools/nix/shell.nix

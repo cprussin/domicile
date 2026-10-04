@@ -1,76 +1,63 @@
 # @domicile-desktop/component-library
 
-The shared React UI primitives every Domicile app builds on. Components wrap
-[`@base-ui/react`](https://base-ui.com) where a primitive exists — so focus
-management, keyboard navigation, portals, and validation come from base-ui —
-and add the project's styling and ergonomic API on top. This package also
-owns the design system: the Panda CSS preset (tokens, the shared `control`
-recipe) that every other package extends.
+Shared React UI components for every Domicile app, plus the Panda CSS preset
+the other packages extend.
 
-Apps MUST build on these primitives rather than rolling their own buttons,
-inputs, or dialogs from raw HTML. If a primitive is missing, add it here and
-consume it — don't fork. See [/docs/guidelines/STYLING.md](../../docs/guidelines/STYLING.md).
+- Components wrap [`@base-ui/react`](https://base-ui.com) where it has a
+  primitive. base-ui handles focus, keyboard navigation, portals and
+  validation. This package adds styling and a simpler API.
+- Apps use these components instead of raw HTML buttons, inputs or dialogs.
+  If one is missing, add it here. See
+  [/docs/guidelines/STYLING.md](../../docs/guidelines/STYLING.md).
 
 ## Exports
 
-| Export | What it is |
+Each export is `@domicile-desktop/component-library/<name>`.
+
+| Name | What it is |
 |---|---|
-| `@domicile-desktop/component-library/Button` | Polymorphic button (`<button>` / `<a>`), variants + sizes. |
-| `@domicile-desktop/component-library/Input` | Text input with prefix-icon / clearable / invalid states. |
-| `@domicile-desktop/component-library/Textarea` | Auto-sizing textarea with a resize handle. |
-| `@domicile-desktop/component-library/Field` | Label + control + validation-message wrapper (base-ui Field). |
-| `@domicile-desktop/component-library/Select` | Select / listbox (base-ui Select). |
-| `@domicile-desktop/component-library/Autocomplete` | Text field with a caller-supplied list of suggestions under it (base-ui Autocomplete). The caller does the matching, so the list can rank and can offer a line that matches nothing typed. |
-| `@domicile-desktop/component-library/Tabs` | Tabbed container (base-ui Tabs): config-driven `tabs` array, a sliding active underline, `size` variants, inset focus ring. |
-| `@domicile-desktop/component-library/TabRail` | Vertical rail of tabs with a brand slot, footer, and collapse. |
-| `@domicile-desktop/component-library/Card` | Elevated surface with optional title / footer. |
-| `@domicile-desktop/component-library/ModalDialog` | Modal dialog with flattened `title` / `footer` / `trigger` API. |
-| `@domicile-desktop/component-library/SlideOver` | Edge-anchored drawer (base-ui Dialog). |
-| `@domicile-desktop/component-library/Toaster` | Toasts as a deck in a box's top trailing corner — fans out on hover, swipes away, a countdown along each (base-ui Toast). The caller draws each card. |
-| `@domicile-desktop/component-library/Popover` | Non-modal panel anchored to the control that opened it (base-ui Popover), for detail a control has no room for. |
-| `@domicile-desktop/component-library/Avatar` | Avatar with initials / gradient fallback. |
-| `@domicile-desktop/component-library/Kbd` | Keyboard-shortcut key cap. |
-| `@domicile-desktop/component-library/Screen` | Lays its children over one of the desktop's displays, once per display it selects. |
-| `@domicile-desktop/component-library/DisplayProvider` | The desktop the host described, for the `<Screen>`s below it. |
-| `@domicile-desktop/component-library/display-source` | The `Display` / `DisplaySource` types a `DisplayProvider` is fed. |
-| `@domicile-desktop/component-library/Provider` | base-ui `DirectionProvider` wrapper every app roots its tree in. |
-| `@domicile-desktop/component-library/ThemeProvider` | Theme state (`light` / `dark` / `system`) and the `<html data-theme>` side effect. |
-| `@domicile-desktop/component-library/ThemeSwitch` | The toggle that cycles the theme preference. |
-| `@domicile-desktop/component-library/control-sizes` | The `Size` union / `SIZES` array the sized controls share. |
-| `@domicile-desktop/component-library/spacing` | The rem value of one step on the spacing scale, for runtime math. |
-| `@domicile-desktop/component-library/pandacss-preset` | The `domicilePreset` every package's `panda.config.ts` extends. |
-| `@domicile-desktop/component-library/vite-shell` | `shellBuild({ entry })` — the vite build a shell has to have for Domicile to serve it: a module entry rather than an HTML one, a fixed `shell.js` name, the entry's exports kept (`Shell` is what Domicile calls), and the stylesheet folded into the JavaScript. Each of the four fails quietly if you get it wrong. |
-
-Styling goes through the theme defined in the preset
-(`pandacss-preset.ts`) — `color`, `spacing`, `borderRadius`, etc. — with
-both dark (default) and light (`data-theme="light"`) values. Component
-variants are exposed as explicit props, never a `className` passthrough;
-`data-*` attributes communicate variant/state to CSS.
-
-## Conventions
-
-- Every component has a Storybook story (`*.stories.tsx`) with `argTypes` for
-  every prop.
-- Every component has tests (`*.test.tsx`) using `bun:test` +
-  `@testing-library/react`.
-- Icons come from `@phosphor-icons/react/dist/ssr/<IconName>` (the
-  `*Icon`-suffixed name), never the barrel — see
-  [/docs/guidelines/ICONS.md](../../docs/guidelines/ICONS.md).
-
-The rules for adding or changing a component (directory layout, base-ui
-wrapping, props typing, the `control` recipe, storybook categories, testing)
-live in [`docs/AGENTS.md`](./docs/AGENTS.md) and the topic docs it indexes.
+| `Accordion` | Stack of sections that open and close. |
+| `Autocomplete` | Text field with a suggestion list the caller supplies and ranks. |
+| `Avatar` | Avatar with an initials or gradient fallback. |
+| `Button` | Button or link, with variants and sizes. |
+| `Card` | Raised surface with optional title and footer. |
+| `Drilldown` | View that slides a second panel in from the side, with a back button. |
+| `Field` | Label, control and validation message. |
+| `Input` | Text input with prefix icon, clear button and invalid state. |
+| `Kbd` | Keyboard key cap. |
+| `ModalDialog` | Modal dialog with `title`, `footer` and `trigger` props. |
+| `Popover` | Non-modal panel anchored to the control that opened it. |
+| `Provider` | base-ui `DirectionProvider` wrapper. Every app roots its tree in it. |
+| `Screen` | Renders its children once per selected display. |
+| `DisplayProvider` | Supplies the host's displays to `Screen`. |
+| `display-source` | `Display` and `DisplaySource` types for `DisplayProvider`. |
+| `Select` | Select / listbox. |
+| `SlideOver` | Drawer anchored to a screen edge. |
+| `Slider` | Single-value range slider drawn in `currentcolor`. |
+| `Tabs` | Tab set built from a `tabs` array, with sizes. |
+| `TabRail` | Vertical tab rail with brand slot, footer and collapse. |
+| `Textarea` | Auto-sizing textarea with a resize handle. |
+| `Toaster` | Stack of toasts in a corner. The caller renders each card. |
+| `ThemeProvider` | Light/dark theme state. Sets `data-theme` on `<html>`. |
+| `ThemeSwitch` | Button that flips the theme. |
+| `theme-core`, `theme-source`, `standalone-theme-source` | Theme types and sources. Use the standalone source where there is no compositor, such as Storybook. |
+| `control-sizes` | `Size` type and `SIZES` array for sized controls. |
+| `spacing` | rem value of one spacing step, for runtime math. |
+| `pandacss-preset` | `domicilePreset`, extended by every package's `panda.config.ts`. |
+| `vite-shell` | `shellBuild({ entry })`: the Vite config a shell needs so Domicile can load it. See the comments in `src/vite-shell.ts`. |
 
 ## Scripts
 
 ```sh
-bun run start:dev        # Storybook dev server on port 4000
-bun run build:storybook  # build static Storybook into storybook-static/
+bun run start:dev        # Storybook on port 4000
+bun run build:storybook  # build Storybook into storybook-static/
 bun run start:prod       # serve that build on port 4000
-bun run prepare          # panda codegen (generates styled-system/)
+bun run prepare          # Panda codegen into styled-system/
 bun run test:unit        # bun:test + happy-dom
 bun run test:types       # tsc --noEmit
 ```
 
-From the repo root, `bun run turbo test --filter @domicile-desktop/component-library`
-runs the type check and the unit tests together.
+## More
+
+- [docs/AGENTS.md](./docs/AGENTS.md): rules for adding or changing a
+  component.
