@@ -16,8 +16,8 @@ type Props = {
  * says the two trade places. It eases between boxes as the pointer crosses
  * them rather than jumping.
  *
- * Drawn the way `SelectionRing` is and for its reasons — after every window, at
- * the tiling's depth, taking no pointer.
+ * Drawn the way `Scrim` is and for its reasons — after every window, at the
+ * tiling's depth, taking no pointer.
  */
 export const DropIndicator = ({ rect }: Props) => (
   <div

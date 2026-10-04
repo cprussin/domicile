@@ -198,22 +198,34 @@ describe("TitleBar", () => {
     expect(bar(own.container).className).not.toContain(lift);
   });
 
-  it("leaves the bar being worked in the resting edge while its window is all the screen shows", () => {
-    // Focused, but with nothing else on the screen to be picked out from.
-    const { container } = render(
-      <TitleBar {...barProps} alone focus="focused" />,
-    );
+  it("draws no bar's edge in the accent, whatever it says about the keyboard", () => {
+    // The window the keyboard is in is picked out by the others receding —
+    // see `Scrim` — rather than by a line around it.
+    for (const focus of ["focused", "leaf", "resting", "selected"] as const) {
+      const { container } = render(<TitleBar {...barProps} focus={focus} />);
+
+      expect(bar(container).className).toContain(
+        css({ borderColor: "borderStrong" }),
+      );
+    }
+  });
+
+  it("washes the keyboard's own bar in the accent inside a selected group", () => {
+    // Every bar of the group is raised to the card, so the card alone would
+    // not set this one apart.
+    const { container } = render(<TitleBar {...barProps} focus="leaf" />);
 
     expect(bar(container).className).toContain(
-      css({ borderColor: "borderStrong" }),
+      css({
+        backgroundColor:
+          "color-mix(in oklab, {colors.accent} 45%, {colors.card})",
+      }),
     );
-    expect(bar(container).className).not.toContain(
-      css({ borderColor: "accent" }),
-    );
+    expect(bar(container).className).toContain(css({ fontWeight: "medium" }));
   });
 
   // So the edge along the top of the window the strip opens onto runs under
-  // every tab, in the one color the open tab is drawn in.
+  // every tab.
   describe("the line under a tab its container is not showing", () => {
     const under = (props: Partial<Parameters<typeof TitleBar>[0]>) =>
       bar(
@@ -221,26 +233,13 @@ describe("TitleBar", () => {
           .container,
       );
 
-    it("is the accent while the open tab is being worked in", () => {
-      const tab = under({ openTab: "focused" });
+    it("is the resting edge", () => {
+      const tab = under({ besideOpenTab: true });
 
       expect(globalThis.getComputedStyle(tab).borderBlockEndWidth).toBe("1px");
-      expect(tab.className).toContain(css({ borderBlockEndColor: "accent" }));
-    });
-
-    it("is the resting edge while it is not, or is all the screen shows", () => {
-      for (const tab of [
-        under({ openTab: "selected" }),
-        under({ openTab: "resting" }),
-        under({ alone: true, openTab: "focused" }),
-      ]) {
-        expect(globalThis.getComputedStyle(tab).borderBlockEndWidth).toBe(
-          "1px",
-        );
-        expect(tab.className).toContain(
-          css({ borderBlockEndColor: "borderStrong" }),
-        );
-      }
+      expect(tab.className).toContain(
+        css({ borderBlockEndColor: "borderStrong" }),
+      );
     });
 
     // But it takes the same room there, so opening a tab does not move its

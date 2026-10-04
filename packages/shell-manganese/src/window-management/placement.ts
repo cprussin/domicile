@@ -48,6 +48,8 @@ export type Placement = {
   id: string;
   /** The window its container's open tab is named after — see `Frame.openTab`. */
   openTab: string | undefined;
+  /** Whether it is inside the container `focus parent` selected — see `Frame.selected`. */
+  selected: boolean;
   /**
    * Where its contents go, or `undefined` for a window a tabbed container is
    * not showing: the tab is on screen and the window behind it is not.
@@ -75,12 +77,6 @@ export type PlacedTab = Tab & { depth: number };
 /** Everything the screen shows: the windows, and the tabs of any container. */
 export type Screenful = {
   placements: readonly Placement[];
-  /**
-   * The container `focus parent` selected, and how it stacks — with the
-   * float it is in, if any — or `undefined` while the commands are pointed at
-   * a window. See `tree/frames.ts`.
-   */
-  selection: { depth: number; rect: Rect } | undefined;
   tabs: readonly PlacedTab[];
 };
 
@@ -157,7 +153,7 @@ export const placementsOf = (
   geometry: Geometry,
 ): Screenful => {
   const workspace = workspaceOn(state, geometry.name);
-  const { frames, selection, tabs } = framesOf(
+  const { frames, tabs } = framesOf(
     workspace.tiling,
     geometry.workspace,
     gapOf(workspace.tiling),
@@ -185,7 +181,6 @@ export const placementsOf = (
       : [...laidOut.filter(({ id }) => id !== full.id), full];
   return {
     placements,
-    selection: selectionIn(selection, floating),
     tabs: [
       ...tabs.map((tab) => ({ ...tab, depth: TILED })),
       ...floating.flatMap(({ depth, tabs: inFloat }) =>
@@ -231,6 +226,7 @@ const fullscreen = (
         behind: undefined,
         id: full.id,
         openTab: undefined,
+        selected: false,
         surface: surfaceOf(area),
         tabbed: undefined,
       },
@@ -247,7 +243,7 @@ const fullscreen = (
  * window reaches the screen.
  */
 const placed = (
-  { bar, behind, id, openTab, surface, tabbed }: Frame,
+  { bar, behind, id, openTab, selected, surface, tabbed }: Frame,
   depth: number,
 ): Placement => ({
   bar,
@@ -256,28 +252,10 @@ const placed = (
   frame: surface === undefined ? bar : spanning(bar, surface),
   id,
   openTab,
+  selected,
   surface,
   tabbed,
 });
-
-/**
- * The group `focus parent` selected, in the tiling or in a float: one of them
- * at most, since the keyboard leaving a layer takes its selection with it —
- * see `workspace.ts`.
- */
-const selectionIn = (
-  tiled: Rect | undefined,
-  floating: readonly { depth: number; selection: Rect | undefined }[],
-): Screenful["selection"] => {
-  const float = floating.find(({ selection }) => selection !== undefined);
-  if (tiled !== undefined) {
-    return { depth: TILED, rect: tiled };
-  } else if (float?.selection === undefined) {
-    return undefined;
-  } else {
-    return { depth: float.depth, rect: float.selection };
-  }
-};
 
 /** The smallest box holding both of them. */
 const spanning = (bar: Rect, surface: Rect): Rect => {

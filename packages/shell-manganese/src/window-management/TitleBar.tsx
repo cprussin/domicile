@@ -28,10 +28,11 @@ const MIDDLE_BUTTON = 1;
 
 type Props = {
   /**
-   * Whether the window this bar names is all the desk shows, alone or as a
-   * tab group — see `alone.ts`. Its edge is not drawn in the accent then.
+   * Whether this is a tab its tabbed container is not showing, which draws a
+   * line under it: the edge along the top of the window the strip opens onto,
+   * run under every tab.
    */
-  alone?: boolean;
+  besideOpenTab?: boolean;
   /** How it stacks: the depth of the window it names. */
   depth: number;
   /**
@@ -88,13 +89,6 @@ type Props = {
    * dragged by it, and the user reaching for the window a tab names.
    */
   onPointerDown?: ((event: ReactPointerEvent<HTMLElement>) => void) | undefined;
-  /**
-   * What the open tab of its tabbed container says about the keyboard, for a
-   * tab that is not the open one: a line is drawn under this one in that
-   * tab's edge color, so the edge along the top of the window the strip opens
-   * onto runs under every tab. `undefined` for every other bar.
-   */
-  openTab?: TitleFocus | undefined;
   rect: Rect;
   /**
    * The shuffle the window it names is playing while it trades places with another float in
@@ -131,7 +125,7 @@ type Props = {
  * why it sees corner radius, transforms and stacking.
  */
 export const TitleBar = ({
-  alone = false,
+  besideOpenTab = false,
   depth,
   dragging,
   focus,
@@ -144,7 +138,6 @@ export const TitleBar = ({
   onMiddleClick,
   onMotionEnded,
   onPointerDown,
-  openTab,
   rect,
   restack,
   tabbed,
@@ -156,9 +149,8 @@ export const TitleBar = ({
   <div
     className={cx(
       barStyles({
-        alone,
+        besideOpenTab,
         focus,
-        openTab: openTab ?? "none",
         tab: tabbed !== undefined,
       }),
       // Neither a line nor rounded corners around the screen's own edge.
@@ -236,22 +228,28 @@ export const TitleBar = ({
 );
 
 /**
- * sway's three client colors, in the one place a window says which it is.
+ * sway's three client colors, and the `leaf` this desktop adds, in the one
+ * place a window says which it is.
  *
- * **What finds the window at a glance is the ring around it** — see
- * `SelectionRing`. The bar only has to agree with it, and to go on saying
- * where the keyboard is once the ring has grown out to a group: the card
- * under an edge in the accent, and a heavier face. The card is the address
- * bar's ground, so the focused bar reads as the top of the window it names;
- * every other bar sinks below it to the page's own ground.
+ * **What finds the window at a glance is every other window receding** — see
+ * `Scrim`. The bar only has to agree with it, and to go on saying where the
+ * keyboard is once `focus parent` has raised a whole group: the card, and a
+ * heavier face. The card is the address bar's ground, so the focused bar reads
+ * as the top of the window it names; every other bar sinks below it to the
+ * page's own ground.
  *
- * Every state names every one of the four rather than overriding one of them.
- * Two rules setting `border-color` on one element are decided by the order
- * Panda happens to emit them in, which is not a thing to make a desktop's
- * focus indicator depend on.
+ * No state draws its edge in the accent. A line around the window the
+ * keyboard is in was the indicator before the scrim, and two indicators
+ * saying the same thing is one too many.
+ *
+ * Every state names every one of its colors rather than overriding one of
+ * them. Two rules setting `background-color` on one element are decided by the
+ * order Panda happens to emit them in, which is not a thing to make a
+ * desktop's focus indicator depend on.
  */
 const barStyles = cva({
   base: hstack.raw({
+    borderBlockEndWidth: "1px",
     gap: 1.5,
     justify: "space-between",
     overflow: "hidden",
@@ -261,19 +259,10 @@ const barStyles = cva({
     paddingInlineStart: 2,
     position: "absolute",
   }),
-  // A window alone on the desk has nothing to be picked out from, so its
-  // edge is the resting one, as the ring and its frame are — see `alone.ts`.
-  // `cva` merges this over the variant into one style before it makes a
-  // class, so the override is not left to the order Panda emits rules in.
+  // A tab whose window is hidden is a thing to click, so the pointer lifts it
+  // halfway to the card an open tab sits on — short of it, so it is not taken
+  // for the open one.
   compoundVariants: [
-    {
-      alone: true,
-      css: { borderColor: "borderStrong" },
-      focus: "focused",
-    },
-    // A tab whose window is hidden is a thing to click, so the pointer lifts it
-    // halfway to the card an open tab sits on — short of it, so it is not
-    // taken for the open one.
     {
       css: {
         _hover: {
@@ -285,67 +274,49 @@ const barStyles = cva({
       focus: "resting",
       tab: true,
     },
-    {
-      alone: true,
-      css: { borderBlockEndColor: "borderStrong" },
-      openTab: "focused",
-    },
   ],
   variants: {
-    alone: {
-      false: {},
-      true: {},
+    // The line under the bar, which only a tab its container is not showing
+    // has: there the strip meets the top of the window the open tab names.
+    // Every other bar has none — the frame's line is one line, the bar
+    // carrying the top and the sides down to where the window picks them up —
+    // but still takes its room, or opening a tab would move its contents down
+    // by it.
+    besideOpenTab: {
+      false: { borderBlockEndColor: "transparent" },
+      true: { borderBlockEndColor: "borderStrong" },
     },
     focus: {
       focused: {
         backgroundColor: "card",
-        borderColor: "accent",
         color: "foreground",
         // Set in a heavier face as well, which is the half of standing out
-        // that survives a user who cannot tell the accent from the card.
+        // that survives a user who cannot tell one ground from another.
+        fontWeight: "medium",
+      },
+      // The window the keyboard is in, while `focus parent` has the commands
+      // pointed at a group around it: every bar of the group is raised to the
+      // card, so this one is washed with the accent to stay apart from them.
+      leaf: {
+        backgroundColor:
+          "color-mix(in oklab, {colors.accent} 45%, {colors.card})",
+        color: "foreground",
         fontWeight: "medium",
       },
       // And every other bar recedes rather than competing: the window under it
       // is what the user is looking at.
       resting: {
         backgroundColor: "background",
-        borderColor: "borderStrong",
         color: "muted",
         fontWeight: "normal",
       },
-      // A container's open tab, with the keyboard somewhere else: raised to
-      // the card and set in the heavier face, but without the accent that
-      // would make it a second window claiming the keystrokes.
+      // A container's open tab with the keyboard somewhere else, or a bar of
+      // the group `focus parent` selected: raised to the card and set in the
+      // heavier face.
       selected: {
         backgroundColor: "card",
-        borderColor: "borderStrong",
         color: "foreground",
         fontWeight: "medium",
-      },
-    },
-    // The line under the bar, which only a tab its container is not showing
-    // has: there the strip meets the top of the window the open tab names,
-    // and the line is that edge, in the open tab's color — the accent while
-    // that window is being worked in, the resting edge otherwise. Every other
-    // bar has none: the frame's line is one line, the bar carrying the top and
-    // the sides down to where the window picks them up. It still takes the
-    // line's room, though, or opening a tab would move its contents down by it.
-    openTab: {
-      focused: {
-        borderBlockEndColor: "accent",
-        borderBlockEndWidth: "1px",
-      },
-      none: {
-        borderBlockEndColor: "transparent",
-        borderBlockEndWidth: "1px",
-      },
-      resting: {
-        borderBlockEndColor: "borderStrong",
-        borderBlockEndWidth: "1px",
-      },
-      selected: {
-        borderBlockEndColor: "borderStrong",
-        borderBlockEndWidth: "1px",
       },
     },
     // Whether this bar is a container's tab rather than a window's own.

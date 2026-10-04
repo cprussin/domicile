@@ -22,18 +22,15 @@ import type { Spot } from "./pointer-warp";
 import type { Popup } from "./popup";
 import { popupsOver } from "./popup";
 import type { Rect } from "./rect";
-import { SelectionRing } from "./SelectionRing";
-import { selectionOf } from "./selection";
+import { Scrim } from "./Scrim";
 import { TitleBar } from "./TitleBar";
 import type { Aim, Target } from "./tiled/aim";
 import { bordersOf } from "./tiled/borders";
 import { DropIndicator } from "./tiled/DropIndicator";
 import { TileBorder } from "./tiled/TileBorder";
 import { TileGrab } from "./tiled/TileGrab";
-import type { TitleFocus } from "./title-focus";
 import { titleFocus } from "./title-focus";
 import { focusedWindowIn } from "./tree/tiling";
-import type { DrawnWindow } from "./useWindowMotion";
 import { useWindowMotion } from "./useWindowMotion";
 import { WindowFrame } from "./WindowFrame";
 import { WindowTitleBar } from "./WindowTitleBar";
@@ -169,11 +166,9 @@ export const Stage = ({
   );
   // Every screen's floats at once: a window is on one screen at a time.
   const floats = screens.flatMap((screen) => screen.floats);
-  // Whether the whole desk shows one thing, which leaves it unringed and its
-  // frame the resting color — see `showsOneThing`.
+  // Whether the whole desk shows one thing, which leaves nothing sunk — see
+  // `showsOneThing`.
   const alone = showsOneThing(screens.map(({ screenful }) => screenful));
-  // The window being worked in as it is drawn, which is what the ring rings.
-  const active = motions.drawn.find(({ window }) => window.id === activeId);
   // Where a tiled window being moved would land, which is drawn over every
   // window rather than by the one being dragged — see `DropIndicator`.
   const [aim, setAim] = useState<Aim | undefined>(undefined);
@@ -235,11 +230,14 @@ export const Stage = ({
           const onMotionEnded = () => {
             motions.onPlayedOut(window.id, motion, screen);
           };
-          // A window's own bar has two states rather than three: the keyboard is
-          // in the window or it is not. The third belongs to a container's tab,
-          // below.
+          // A window's own bar is raised with the group `focus parent`
+          // selected — unless it is a tab its container is hiding, which
+          // raised would read as open beside the tab that is. Whether its
+          // container shows it is a container's tab's question, below.
           const focus = titleFocus({
             hasKeyboard: focused,
+            inSelection:
+              placement?.selected === true && placement.surface !== undefined,
             shownByContainer: false,
           });
           return (
@@ -255,7 +253,6 @@ export const Stage = ({
             >
               {window.kind === WindowKind.App ? (
                 <AppWindow
-                  alone={on !== undefined && alone}
                   appId={window.appId}
                   behindPanel={behindPanel}
                   clickThrough={clickThrough}
@@ -274,7 +271,6 @@ export const Stage = ({
                 />
               ) : (
                 <BrowserWindow
-                  alone={on !== undefined && alone}
                   clickThrough={clickThrough}
                   covered={placement?.behind !== undefined}
                   depth={depth}
@@ -311,7 +307,7 @@ export const Stage = ({
             */}
               {placement !== undefined && (
                 <WindowTitleBar
-                  alone={on !== undefined && alone}
+                  besideOpenTab={placement.openTab !== undefined}
                   depth={placement.depth}
                   dragging={window.id === draggingId}
                   float={floating}
@@ -337,7 +333,6 @@ export const Stage = ({
                   onMove={(x, y) => {
                     onMove(window.id, x, y);
                   }}
-                  openTab={openTabFocus(motions.drawn, placement.openTab)}
                   rect={placement.bar}
                   restack={restack}
                   tabbed={placement.tabbed}
@@ -495,7 +490,7 @@ export const Stage = ({
         return (
           <Sliding key={tab.id} on={on}>
             <TitleBar
-              alone={on !== undefined && alone}
+              besideOpenTab={tab.openTab !== undefined}
               // With the float it is in, if it is in one.
               depth={tab.depth}
               // Nothing drags a tab: it belongs to a container, which moves with
@@ -506,6 +501,7 @@ export const Stage = ({
               // claiming the keystrokes.
               focus={titleFocus({
                 hasKeyboard: focused,
+                inSelection: tab.selected && tab.active,
                 shownByContainer: tab.active,
               })}
               // A tab is the whole of what the window behind it has on screen, so
@@ -530,7 +526,6 @@ export const Stage = ({
               onPointerDown={() => {
                 onSelect(tab.id);
               }}
-              openTab={openTabFocus(motions.drawn, tab.openTab)}
               rect={tab.rect}
               title={titleOf(windows, tab.id)}
               window={tab.id}
@@ -539,36 +534,51 @@ export const Stage = ({
         );
       })}
       {/*
-        And over all of it, what the commands are pointed at — after the
-        windows and their bars, because it rings them: two elements at one
-        `z-index` are decided by the order they come in the document.
+        And over all of it, a scrim over every window and tab, which sinks the
+        ones the commands are not pointed at — after the windows and their bars,
+        because two elements at one `z-index` are decided by the order they
+        come in the document. Not over a window filling the screen, which
+        covers every other.
       */}
-      {screens.map((on) => {
-        const selection = selectionOf(
-          on.screenful,
-          alone,
-          activeId,
-          on.fullscreenId,
-          draggingId,
-        );
-        return (
-          selection !== undefined && (
-            <Sliding key={on.geometry.name} on={on}>
-              <SelectionRing
-                // Around the window being worked in, which is the one a raise
-                // shuffles over the others — so the ring shuffles with it.
-                motion={active?.motion}
-                restack={active?.restack}
-                selection={selection}
+      {motions.drawn.map(
+        ({ focused, motion, placement, restack, screen, window }) =>
+          placement === undefined ||
+          fillsScreen(screens, window.id) ? undefined : (
+            <Sliding key={window.id} on={screenNamed(screens, screen)}>
+              <Scrim
+                depth={placement.depth}
+                dimmed={sinks(alone, focused, placement.selected)}
+                dragging={window.id === draggingId}
+                frame={placement.frame}
+                // The bar's rather than the contents', which a tab switch fades
+                // while the tab stays put.
+                motion={barMotion(motion)}
+                rect={placement.frame}
+                restack={restack}
+                tab={placement.surface === undefined}
+                window={window.id}
               />
             </Sliding>
-          )
-        );
-      })}
+          ),
+      )}
+      {motions.tabs.map(({ focused, motion, screen, tab }) => (
+        <Sliding key={tab.id} on={screenNamed(screens, screen)}>
+          <Scrim
+            depth={tab.depth}
+            dimmed={sinks(alone, focused, tab.selected)}
+            dragging={false}
+            frame={tab.rect}
+            motion={motion}
+            rect={tab.rect}
+            tab
+            window={tab.id}
+          />
+        </Sliding>
+      ))}
       {aim !== undefined && <DropIndicator rect={aim.rect} />}
       {/*
         Last, so a popup wins the tie with everything at its window's depth —
-        the window, its bar and the ring — and stays under a window stacked
+        the window, its bar and its scrim — and stays under a window stacked
         above its own, as a menu of a window behind does.
       */}
       {popupsOver(
@@ -649,23 +659,12 @@ const tiledTargets = (placements: Screenful["placements"]): readonly Target[] =>
     .map(({ frame, id }) => ({ frame, id }));
 
 /**
- * What the open tab beside a tab says about the keyboard — see `TitleBar` —
- * or `undefined` for a bar that is not beside one. Read off the window that
- * tab is named after, which is drawn whether the tab is its own bar or stands
- * for a container holding it.
+ * Whether a window or tab is sunk under its scrim: one the keyboard is not in
+ * and `focus parent` has not selected the group of. Never while the desk shows
+ * one thing alone, which has nothing to be picked out from.
  */
-const openTabFocus = (
-  drawn: readonly DrawnWindow[],
-  openTab: string | undefined,
-): TitleFocus | undefined =>
-  openTab === undefined
-    ? undefined
-    : titleFocus({
-        hasKeyboard: drawn.some(
-          ({ focused, window }) => focused && window.id === openTab,
-        ),
-        shownByContainer: true,
-      });
+const sinks = (alone: boolean, focused: boolean, selected: boolean): boolean =>
+  !alone && !focused && !selected;
 
 /**
  * What a window is called.

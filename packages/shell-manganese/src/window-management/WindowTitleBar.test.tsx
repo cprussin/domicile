@@ -19,7 +19,7 @@ const nothing = () => undefined;
 
 /** A tab of a tabbed container; each case overrides the part it is about. */
 const tabProps = {
-  alone: false,
+  besideOpenTab: false,
   depth: 0,
   dragging: false,
   float: undefined,
@@ -35,7 +35,6 @@ const tabProps = {
   onGrab: nothing,
   onMotionEnded: nothing,
   onMove: nothing,
-  openTab: undefined,
   rect: TAB,
   tabbed: Layout.Tabbed,
   targets: [{ frame: FRAME, id: "a" }, OTHER],

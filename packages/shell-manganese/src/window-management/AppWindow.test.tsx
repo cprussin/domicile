@@ -6,6 +6,7 @@ import type { Measure } from "@domicile-desktop/sdk/measure";
 import { registerElements } from "@domicile-desktop/sdk/register-elements";
 import { fireEvent, render } from "@testing-library/react";
 
+import { css } from "../../styled-system/css";
 import { AppWindow } from "./AppWindow";
 
 // The SDK reports each window's size to a client, asks it for the keyboard when
@@ -118,6 +119,16 @@ beforeEach(() => {
 });
 
 describe("AppWindow", () => {
+  it("leaves its frame the resting color even while it is focused", () => {
+    // What picks out the window the keyboard is in is every other window
+    // receding — see `Scrim` — rather than a line around it.
+    const { container } = render(<AppWindow {...windowProps} focused />);
+
+    expect(portal(container).className).toContain(
+      css({ borderColor: "borderStrong" }),
+    );
+  });
+
   it("rounds its bottom corners, and leaves its top ones to the bar", () => {
     const { container } = render(<AppWindow {...windowProps} focused />);
     const style = globalThis.getComputedStyle(portal(container));

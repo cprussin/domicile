@@ -18,6 +18,7 @@ const placed = (id: string, frame: Rect, depth: number): Placement => ({
   frame,
   id,
   openTab: undefined,
+  selected: false,
   surface: { ...frame, height: frame.height - 30, y: frame.y + 30 },
   tabbed: undefined,
 });

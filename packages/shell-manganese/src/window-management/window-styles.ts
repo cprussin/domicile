@@ -76,10 +76,14 @@ export const draggingStyles = css({ opacity: 0.6 });
  * is drawn around the hole, which is the one part of a window's frame the
  * compositor does not have to be told about.
  *
- * The color is not here: it says which window the keyboard is in, so it comes
- * from {@link focusedEdgeStyles} or {@link restingEdgeStyles}.
+ * One color whichever window it is. Where the keyboard is is said by every
+ * other window receding — see `Scrim` — rather than by this line.
  */
+// Longhands rather than `border`, because the frame takes a side off — the
+// bar carries the top — and a shorthand and a longhand on one element are
+// decided by the order Panda emits them in.
 export const edgeStyles = css({
+  borderColor: "borderStrong",
   borderStyle: "solid",
   borderWidth: "1px",
 });
@@ -98,19 +102,6 @@ export const bottomCornerStyles = css({
   borderEndEndRadius: "lg",
   borderEndStartRadius: "lg",
 });
-
-/**
- * What color that line is, which is the window's share of saying where the
- * keyboard is: the accent for the window being worked in, and the resting
- * line for every other one.
- *
- * Two classes rather than one with an override, because two rules setting
- * `border-color` on one element are decided by the order Panda happens to
- * emit them in — so exactly one of these is ever applied.
- */
-export const focusedEdgeStyles = css({ borderColor: "accent" });
-
-export const restingEdgeStyles = css({ borderColor: "borderStrong" });
 
 /**
  * A window the pointer goes straight through.

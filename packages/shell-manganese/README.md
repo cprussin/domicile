@@ -78,7 +78,7 @@ the screen it is on.
 | **Mod+Shift+** the same | Move the window. Past its neighbor, *into* a neighbor that is a container rather than a window, out of the container it is in, or — pushed across the grain — into a new split of the workspace. |
 | **Mod+B / Mod+V** | `splith` / `splitv`: wrap the focus in a container of one, so the next window opens beside or below it. |
 | **Mod+W / Mod+S / Mod+E** | `layout tabbed` / `layout stacking` / `layout toggle split` on the container the focus is in. |
-| **Mod+A / Mod+Shift+A** | `focus parent` / `focus child`: point the commands at the container around the focus, or back at the window. The selected container is drawn with a dashed accent line around it, lit inside by a wash of the same accent — sway's indicator. |
+| **Mod+A / Mod+Shift+A** | `focus parent` / `focus child`: point the commands at the container around the focus, or back at the window. Every window of the selected container is lit together while every other one sinks. |
 | **Mod+F / Mod+Shift+F** | Fill the screen with the window being worked in, or every screen there is. The button on a window's own title bar is the first of the two, on the window whose bar it is. |
 | **Mod+Tab** | `focus mode_toggle`: swap the keyboard between the floating windows and the tiled ones. |
 | **Mod+Shift+Tab** | `floating toggle`: take the window (or the container Mod+a selected) out of the tiling, or put it back. |
@@ -91,8 +91,8 @@ the screen it is on.
 moved at that column from beside it goes *in* rather than trading places with
 it — beside the window the column last had the focus in, or at the near end of
 one that runs the way the window is moving. **Mod+A** then points the keys at
-the group rather than at the window in it, and says which group with a dashed
-line around it, lit inside by a wash of the accent: what splits, lays out,
+the group rather than at the window in it, and says which group by lighting
+every window of it while every other one sinks: what splits, lays out,
 moves and resizes from there is the whole container, and it stays the whole
 container across the keys that act on it. **Mod+Shift+A** points them back at
 the window, and so does the keyboard leaving the tiling for a floating window.
@@ -100,13 +100,16 @@ Reaching for a window is what else ends it — except for the window being
 worked in, which every press in a client is reported as and which is
 therefore no reach at all.
 
-The window being worked in is the one with a **rule of accent across the top
-of its frame**, over a title bar washed with enough of the same accent to find
-in the corner of your eye, and it is the one everything keyed acts on. Its
-frame is drawn in that color and its name is set in a heavier face, so the bar
-and the three edges below it say one thing. Every window eases between those
-colors rather than snapping between them: focus follows the cursor here, so
-they change every time the pointer crosses a window.
+The window being worked in is the one **every other window recedes from**, and
+it is the one everything keyed acts on. Each of the others sinks under a wash
+of the page's own ground — darker in the dark theme, paler in the light one —
+and the bar of the one being worked in is raised to the card, its name set in a
+heavier face. No line is drawn around it. With a group selected every window
+of it is lit and every bar of it raised, the keyboard's own washed in the
+accent to stay apart from the rest. Nothing sinks while the desk shows one
+thing alone. Every window eases in and out of the wash rather than snapping:
+focus follows the cursor here, so it changes every time the pointer crosses a
+window.
 
 **And the cursor follows the keyboard**, which is `mouse_warping container`
 from the config and is not decoration: a key that moves the focus leaves the
@@ -337,7 +340,7 @@ it is hit in are one fact rather than two that have to be kept in step.
 **Raising a float over one it overlaps is a shuffle**, not just a new
 `z-index`: the two part, trade depths at the furthest point apart, and come
 back together the other way up — so the one raised is seen to come out from
-under the other and go over it. Its bar, its shadow and the ring go with it.
+under the other and go over it. Its bar, its shadow and its scrim go with it.
 Only between floats that overlap — a raise nobody can see plays nothing — and
 never on a workspace switch or a fullscreen, which have movements of their
 own.
@@ -387,13 +390,15 @@ container is the same component at a different rectangle. A tab that stands
 for a whole container is named after the window that container last had the
 focus in.
 
-**Three states, which are sway's three client colors.** The window the
-keyboard is in has the accent rule and the wash under it; a container's open
-tab with the keyboard somewhere else is marked by its edge and its text alone
-(`focused_inactive`, and without it two bars on one screen would look like the
-focused window); every other bar recedes to a card fill and muted text,
-because the window under it is what the user is looking at. Which of the three
-a bar is, is on the element as `data-focus` as well as in its colors.
+**Four states: sway's three client colors, and one for a group.** The bar of
+the window the keyboard is in is raised to the card in a heavier face; so is a
+container's open tab with the keyboard somewhere else (`focused_inactive`),
+which the scrim over it keeps from reading as the focused window; every other
+bar recedes to the page's ground and muted text, because the window under it is
+what the user is looking at. With a group selected its bars are raised too, and
+the keyboard's own is washed in the accent (`leaf`) to stay apart from them.
+Which of the four a bar is, is on the element as `data-focus` as well as in its
+colors.
 
 ### Windows arrive, settle and leave
 
@@ -469,7 +474,7 @@ shell as well would be a second copy of it to keep in step.
 
 **The window under the pointer is the window the keyboard is in.** Move onto a
 window and it is the one you are typing into — a client's keystrokes to the
-host, a browser window's to its page — the one whose bar is accented, and the
+host, a browser window's to its page — the one every other window recedes from, and the
 one everything keyed acts on. No click anywhere. It is one arm of
 `reduceWindows`, because it is a policy rather than a mechanism: a shell that
 would rather the user clicked writes a different one and changes nothing else.
@@ -970,7 +975,8 @@ shell that wants its own pictures owns its own list.
 | `src/window-management/Stage.tsx` | The windows on every screen, once for the desk, each at the rectangle the layout gave it, and the ones still leaving. |
 | `src/window-management/TitleBar.tsx` | The bar every window has: what it is called, and the way out of it. |
 | `src/window-management/WindowTitleBar.tsx` | A window's own bar, tiled or floating: one component for both, so floating a window keeps its bar's element and the bar eases with the window. Draggable while it floats. |
-| `src/window-management/title-focus.ts` | Which of sway's three client colors a bar is drawn in, and why a tab needs the third. |
+| `src/window-management/title-focus.ts` | Which of sway's three client colors a bar is drawn in, why a tab needs the third, and the fourth a selected group needs. |
+| `src/window-management/Scrim.tsx` | The wash of the page's ground that sinks every window the commands are not pointed at. |
 | `src/window-management/pointer-warp.ts` | Where the pointer goes when the desktop moves the focus, the two questions that decide whether it goes anywhere at all, and a window's box in the page's own coordinates rather than the layout's. |
 | `src/window-management/usePointerWarp.ts` | The half of that a page has to do: which focus changes were the desktop's own — a keyed press, and a window that has only just opened — where the pointer is, and the render that is late enough to know the window's new box. |
 | `src/window-management/AppWindow.tsx` | A Wayland client's window: one `<app>` element. |

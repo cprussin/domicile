@@ -20,10 +20,8 @@ import {
   clickThroughStyles,
   draggingStyles,
   edgeStyles,
-  focusedEdgeStyles,
   movingStyles,
   placedAt,
-  restingEdgeStyles,
   scaledAbout,
   settlingStyles,
   shuffledBy,
@@ -31,12 +29,6 @@ import {
 } from "./window-styles";
 
 type Props = {
-  /**
-   * Whether it is all the desk shows, alone or as a tab group — see
-   * `showsOneThing` — which leaves its frame the resting color even while it
-   * is focused: there is nothing else for it to be picked out from.
-   */
-  alone?: boolean;
   /**
    * Whether a panel of the desktop's own is up over the windows.
    *
@@ -138,7 +130,6 @@ type Props = {
  * surface, with nowhere for the browser to put focus.
  */
 export const AppWindow = ({
-  alone = false,
   appId,
   behindPanel,
   clickThrough,
@@ -268,9 +259,6 @@ export const AppWindow = ({
         !fullscreen && edgeStyles,
         !fullscreen && bottomCornerStyles,
         movingStyles({ motion }),
-        // The frame says what the bar above it says: this is the window the
-        // keyboard is in.
-        focused && !alone ? focusedEdgeStyles : restingEdgeStyles,
         (clickThrough || leaving) && clickThroughStyles,
         // A dragged window is written at a new box on every pointer move, so
         // it takes the box it is given rather than easing towards it. Its

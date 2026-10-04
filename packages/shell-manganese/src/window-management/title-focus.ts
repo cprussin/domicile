@@ -10,14 +10,24 @@
 // `focused_inactive`, and without it two bars on one screen would look like
 // the focused window.
 //
+// And a fourth, `leaf`, which sway does not have: `focus parent` points the
+// commands at a whole group, every window of it is raised together, and the
+// one the keyboard is still in needs something more to stand apart from them.
+//
 // A string union rather than an enum because these are the keys of a Panda
 // `cva` variant, which is where they are read.
 
-export type TitleFocus = "focused" | "resting" | "selected";
+export type TitleFocus = "focused" | "leaf" | "resting" | "selected";
 
 type Marks = {
   /** Whether this is the window the user is working in. */
   hasKeyboard: boolean;
+  /**
+   * Whether it names a window on screen inside the container `focus parent`
+   * selected — which a tab its container is hiding does not, whatever group
+   * it is in.
+   */
+  inSelection: boolean;
   /**
    * Whether the container this bar belongs to is showing it — a tabbed or
    * stacking container's open tab. A window's own bar has no such question:
@@ -28,11 +38,12 @@ type Marks = {
 
 export const titleFocus = ({
   hasKeyboard,
+  inSelection,
   shownByContainer,
 }: Marks): TitleFocus => {
   if (hasKeyboard) {
-    return "focused";
-  } else if (shownByContainer) {
+    return inSelection ? "leaf" : "focused";
+  } else if (shownByContainer || inSelection) {
     return "selected";
   } else {
     return "resting";

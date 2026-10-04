@@ -693,31 +693,31 @@ const addressesShowing = (): string[] =>
     .map((field) => field.value);
 
 /**
- * The ring around what the commands are pointed at: the window being worked
- * in, or the container `focus parent` selected.
+ * The wash over the window or tab `id` that sinks it while the commands are
+ * pointed somewhere else — see `Scrim`.
  *
- * Throws where there is none: every case that asks has a window open.
+ * Throws where there is none: every case that asks has that window open.
  */
-const selectionRing = (container: HTMLElement): HTMLElement => {
-  const ring = container.querySelector<HTMLElement>("[data-selection]");
-  if (ring === null) {
-    throw new Error("test: nothing on screen marks out the selection");
+const scrimOver = (container: HTMLElement, id: string): HTMLElement => {
+  const scrim = container.querySelector<HTMLElement>(`[data-scrim="${id}"]`);
+  if (scrim === null) {
+    throw new Error(`test: no scrim over ${id}`);
   } else {
-    return ring;
+    return scrim;
   }
 };
 
-/** One of the pieces the selection ring is drawn in — see `SelectionRing`. */
-const ringPart = (container: HTMLElement, part: string): HTMLElement => {
-  const element = selectionRing(container).querySelector<HTMLElement>(
-    `[data-part="${part}"]`,
-  );
-  if (element === null) {
-    throw new Error(`test: the selection ring has no ${part}`);
-  } else {
-    return element;
-  }
-};
+/** Whether the window or tab `id` is washed into the background. */
+const dimmed = (container: HTMLElement, id: string): boolean =>
+  scrimOver(container, id).dataset.dimmed !== undefined;
+
+/**
+ * Whether `focus parent` has the commands pointed at a group: the bar of the
+ * window the keyboard is in says so, by setting itself apart from the rest of
+ * the group it raises.
+ */
+const pointedAtGroup = (container: HTMLElement): boolean =>
+  titleBars(container).some((bar) => bar.dataset.focus === "leaf");
 
 /** Where an element was placed, as the numbers the layout worked out. */
 const boxOf = (element: HTMLElement) => ({
@@ -1543,10 +1543,9 @@ describe("Shell", () => {
       expect(moving(container)).toContain("arriving-from-start");
     });
 
-    // The ring is where the keyboard is, and the keyboard arrived with the
-    // workspace: eased across from the window it last ringed, it crosses the
-    // screen on its own while the windows slide.
-    it("brings the ring on with the workspace rather than easing it across", () => {
+    // A scrim that stood still while its window slid in would be a gray box
+    // crossing nothing.
+    it("brings the scrims on with the workspace", () => {
       const { container } = renderShell();
       clientAppears("term");
       clientAppears("shell");
@@ -1556,11 +1555,8 @@ describe("Shell", () => {
 
       press("parenleft");
 
-      expect(selectionRing(container).className).toContain(
+      expect(scrimOver(container, "app:term").className).toContain(
         movingStyles({ motion: "arriving-from-start" }),
-      );
-      expect(selectionRing(container).className).toContain(
-        settlingStyles({ dragging: true }),
       );
     });
 
@@ -1723,50 +1719,34 @@ describe("Shell", () => {
       ]);
     });
 
-    it("draws the focused window's own frame in the accent as well", () => {
-      // The bar is one edge of the window; a frame that stayed the resting
-      // color would say something different from the bar above it.
+    it("sinks every window but the one being worked in, and rings none", () => {
       // Declarations rather than class names, because Panda hashes them.
       const { container } = renderShell();
       clientAppears("one");
       clientAppears("two");
       press("e");
 
-      expect(appElement(container, "two").className).toContain(
-        css({ borderColor: "accent" }),
-      );
-      expect(appElement(container, "one").className).toContain(
-        css({ borderColor: "borderStrong" }),
-      );
+      expect(dimmed(container, "app:one")).toBe(true);
+      expect(dimmed(container, "app:two")).toBe(false);
+      expect(container.querySelector("[data-selection]")).toBeNull();
+      for (const id of ["one", "two"]) {
+        expect(appElement(container, id).className).toContain(
+          css({ borderColor: "borderStrong" }),
+        );
+      }
     });
 
-    it("draws no frame in the accent around the desk's only tab group", () => {
-      // Nothing else on the desk for it to be picked out from.
+    it("sinks nothing while the desk shows one tab group alone", () => {
+      // Nothing else on the desk for the open tab to be picked out from.
       const { container } = renderShell();
       clientAppears("one");
       clientAppears("two");
 
-      expect(appElement(container, "two").className).toContain(
-        css({ borderColor: "borderStrong" }),
-      );
-      // Nor its focused tab's edge, which is the top of that frame.
-      expect(
-        titleBars(container).some((bar) =>
-          bar.className.includes(css({ borderColor: "accent" })),
-        ),
-      ).toBe(false);
+      expect(dimmed(container, "app:one")).toBe(false);
+      expect(dimmed(container, "app:two")).toBe(false);
     });
 
-    it("draws no edge in the accent on the desk's only window's bar", () => {
-      const { container } = renderShell();
-      clientAppears("one");
-
-      expect(barFor(container, "app:one").className).not.toContain(
-        css({ borderColor: "accent" }),
-      );
-    });
-
-    it("rings a screen's only window while another screen shows one too", () => {
+    it("sinks a screen's only window while another screen is worked in", () => {
       // Alone on its screen but not on the desk: the window on the next screen
       // is something else the commands could be pointed at.
       const { container } = renderShell([LEFT, RIGHT]);
@@ -1774,10 +1754,8 @@ describe("Shell", () => {
       clientAppears("two");
       press("parenright", true);
 
-      expect(selectionRing(container).dataset.selection).toBe("window");
-      expect(appElement(container, "one").className).toContain(
-        css({ borderColor: "accent" }),
-      );
+      expect(dimmed(container, "app:one")).toBe(false);
+      expect(dimmed(container, "app:two")).toBe(true);
     });
   });
 
@@ -1917,7 +1895,7 @@ describe("Shell", () => {
       );
     });
 
-    it("grows the ring out to the group `focus parent` selects, and back", () => {
+    it("lights the whole group `focus parent` selects, and back", () => {
       // The whole of what `mod+a` does on screen. What it points the commands
       // at is the container around the focus rather than the window in it, and
       // nothing else on the desktop says which container that is.
@@ -1925,52 +1903,23 @@ describe("Shell", () => {
       clientAppears("one");
       clientAppears("two");
       press("e");
-      const ring = selectionRing(container);
-      const around = boxOf(ring);
+      expect(dimmed(container, "app:one")).toBe(true);
 
-      expect(ring.dataset.selection).toBe("window");
       press("a");
 
-      // The same element, so it eases from one box to the other rather than
-      // one line vanishing as another appears. The container holding both
-      // windows is the whole workspace under the top bar.
-      expect(selectionRing(container)).toBe(ring);
-      expect(ring.dataset.selection).toBe("group");
-      expect(boxOf(ring)).toEqual({
-        height: `${(1080 - TOP_BAR).toString()}px`,
-        width: "1920px",
-        x: "0px",
-        y: `${TOP_BAR.toString()}px`,
-      });
+      // Every window of it comes up, and every bar of it is raised — the
+      // keyboard's own set apart from the rest.
+      expect(dimmed(container, "app:one")).toBe(false);
+      expect(barFor(container, "app:one").dataset.focus).toBe("selected");
+      expect(barFor(container, "app:two").dataset.focus).toBe("leaf");
       // And `mod+Shift+a` points them back at the window.
       press("a", true);
-      expect(selectionRing(container)).toBe(ring);
-      expect(boxOf(ring)).toEqual(around);
+      expect(dimmed(container, "app:one")).toBe(true);
+      expect(barFor(container, "app:two").dataset.focus).toBe("focused");
     });
 
-    it("rounds the ring at all four corners, as a window's frame is", () => {
-      const { container } = renderShell();
-      clientAppears("one");
-      clientAppears("two");
-      press("e");
-
-      for (const corner of [
-        css({ borderStartStartRadius: "lg" }),
-        css({ borderStartEndRadius: "lg" }),
-      ]) {
-        expect(ringPart(container, "tab").className).toContain(corner);
-      }
-      for (const corner of [
-        css({ borderEndStartRadius: "lg" }),
-        css({ borderEndEndRadius: "lg" }),
-      ]) {
-        expect(ringPart(container, "body").className).toContain(corner);
-      }
-    });
-
-    it("rises around the open tab alone, and runs under the ones beside it", () => {
-      // A ring around the whole of a tabbed container is drawn across every
-      // tab, and says nothing about which of them is open.
+    it("lights a selected tab group's hidden tabs without raising them", () => {
+      // Raised, a hidden tab would read as open beside the tab that is.
       // Beside a window of its own, or the tabs would be all the screen shows.
       const { container } = renderShell();
       clientAppears("one");
@@ -1978,20 +1927,14 @@ describe("Shell", () => {
       press("e");
       press("v");
       clientAppears("three");
-
       press("w");
 
-      // The second of two tabs, in the ring's own coordinates.
-      expect(boxOf(ringPart(container, "tab"))).toMatchObject({
-        width: "473px",
-        x: "477px",
-      });
-      expect(boxOf(ringPart(container, "before"))).toMatchObject({
-        width: "477px",
-      });
-      expect(boxOf(ringPart(container, "after"))).toMatchObject({
-        width: "0px",
-      });
+      press("a");
+
+      expect(dimmed(container, "app:one")).toBe(true);
+      expect(dimmed(container, "app:two")).toBe(false);
+      expect(barFor(container, "app:two").dataset.focus).toBe("resting");
+      expect(barFor(container, "app:three").dataset.focus).toBe("leaf");
     });
 
     it("runs the open tab's edge under the tabs beside it", () => {
@@ -2006,38 +1949,22 @@ describe("Shell", () => {
       press("w");
 
       expect(barFor(container, "app:two").className).toContain(
-        css({ borderBlockEndColor: "accent" }),
+        css({ borderBlockEndColor: "borderStrong" }),
       );
-      expect(barFor(container, "app:three").className).not.toContain(
-        css({ borderBlockEndColor: "accent" }),
+      expect(barFor(container, "app:three").className).toContain(
+        css({ borderBlockEndColor: "transparent" }),
       );
     });
 
-    it("slides the ring across to a window that has just opened", () => {
-      // The ring is where the keyboard is, and the eye follows it there from
-      // the last window rather than hunting for where it reappeared.
-      const { container } = renderShell();
-      clientAppears("one");
-      clientAppears("two");
-      press("e");
-      motionsPlayOut(container);
-      clientAppears("three");
-      const ring = selectionRing(container);
-
-      expect(ring.className).toContain(settlingStyles({ dragging: false }));
-      expect(ring.className).not.toContain(movingStyles({ motion: "opening" }));
-    });
-
-    it("grows the ring in with the window that brings it on", () => {
-      // A window alone on the screen has no ring, so there is no last one to
-      // slide across from, and a ring drawn at full size around a window still
-      // growing in is a line ahead of it.
+    it("grows each scrim in with the window it is over", () => {
+      // A wash drawn at full size over a window still growing in is a gray
+      // box out ahead of it.
       const { container } = renderShell();
       clientAppears("one");
       press("e");
       clientAppears("two");
 
-      expect(selectionRing(container).className).toContain(
+      expect(scrimOver(container, "app:two").className).toContain(
         movingStyles({ motion: "opening" }),
       );
     });
@@ -2059,7 +1986,7 @@ describe("Shell", () => {
       press("h", true);
 
       crossInto(appElement(container, "one"), 1440, 800);
-      expect(selectionRing(container).dataset.selection).toBe("group");
+      expect(pointedAtGroup(container)).toBe(true);
     });
 
     it("knows its own warp, at a place that is not a whole pixel", () => {
@@ -2091,7 +2018,7 @@ describe("Shell", () => {
       const [x, y] = warpedTo();
       crossInto(appElement(container, "two"), Math.round(x), Math.round(y));
 
-      expect(selectionRing(container).dataset.selection).toBe("group");
+      expect(pointedAtGroup(container)).toBe(true);
     });
 
     it("and hands it over to a pointer that really crossed into one", () => {
@@ -2114,7 +2041,7 @@ describe("Shell", () => {
 
       crossInto(appElement(container, "one"), 300, 500);
       expect(domicile.calls).toContainEqual(["focusApp", "one"]);
-      expect(selectionRing(container).dataset.selection).toBe("window");
+      expect(pointedAtGroup(container)).toBe(false);
     });
 
     it("fills the screen with the window being worked in", () => {
@@ -2340,9 +2267,8 @@ describe("Shell", () => {
       ).toBe(was + 40);
     });
 
-    it("keeps the ring on a float being dragged rather than easing after it", () => {
-      // The ring eases between boxes, which is right for `focus parent` and a
-      // retile — and a ring trailing every step of a drag behind the window.
+    it("keeps a float's scrim on it while it is dragged rather than easing after it", () => {
+      // A scrim easing after every step of a drag trails behind the window.
       const { container } = renderShell();
       clientAppears("shell");
       clientAppears("term");
@@ -2352,7 +2278,7 @@ describe("Shell", () => {
       fireEvent.pointerDown(bar, { clientX: 100, clientY: 100 });
       fireEvent.pointerMove(window, { clientX: 140, clientY: 100 });
 
-      expect(selectionRing(container).className).toContain(
+      expect(scrimOver(container, "app:term").className).toContain(
         settlingStyles({ dragging: true }),
       );
     });
@@ -2534,7 +2460,7 @@ describe("Shell", () => {
     });
     it("shuffles a float pressed on over the one covering it", () => {
       // The two part, trade depths while apart and come back together — every
-      // part of each window with it, and the ring around the one pressed on.
+      // part of each window with it, its scrim included.
       const { container } = renderShell();
       clientAppears("one");
       clientAppears("two");
@@ -2555,11 +2481,12 @@ describe("Shell", () => {
       const raised = [
         appElement(container, "two"),
         barFor(container, "app:two"),
-        selectionRing(container),
+        scrimOver(container, "app:two"),
       ];
       const covered = [
         appElement(container, "one"),
         barFor(container, "app:one"),
+        scrimOver(container, "app:one"),
       ];
       for (const element of [...raised, ...covered]) {
         expect(element.style.getPropertyValue("--restack-x")).not.toBe("");
@@ -2588,9 +2515,9 @@ describe("Shell", () => {
       ).not.toContain("");
     });
 
-    it("starts the ring's shuffle over with its window's", () => {
+    it("starts a scrim's shuffle over with its window's", () => {
       // Pressed back and forth faster than a shuffle takes: each press is a
-      // new animation, for the ring as much as for the window it rings.
+      // new animation, for the scrim as much as for the window under it.
       const { container } = renderShell();
       clientAppears("one");
       clientAppears("two");
@@ -2610,7 +2537,7 @@ describe("Shell", () => {
       expect(appElement(container, "one").dataset.motion).toBe(
         "restacking-again",
       );
-      expect(selectionRing(container).className).toContain(
+      expect(scrimOver(container, "app:one").className).toContain(
         movingStyles({ motion: "restacking-again" }),
       );
     });
