@@ -58,6 +58,9 @@ moving layer draws from its tilings.
 - Budget (`GetGpuMemoryPolicy`): 1152 MB scaled by the widget's initial screen
   area, at least 512 MB, at most a quarter of RAM.
   `--force-gpu-mem-available-mb` overrides it.
+- The shell's page is created before it learns it spans the desk, so that
+  initial screen is the host monitor alone. `domicile-launch` therefore passes
+  `--force-gpu-mem-available-mb=3072` (`DESK_TILE_MEMORY_MB` in `spawn.rs`).
 - A ~40 Mpx desk at S needs ~160 MB of tiles per full-desk layer. A monitor at
   ratio `r` adds `r²` of its share.
 - Over budget, required tiles are marked OOM and drawn as checkerboard. So
