@@ -35,9 +35,10 @@ expect "no patch adds to Blink's global event names" "" "$touching"
 
 # Except the platform's own events the fork LISTENS to, which are Blink's to
 # name and add nothing to its list: `resize` on the shell's window is how the
-# engine hears the desktop change size (DomicileHost::ReportGeometry). Named
+# engine hears the desktop change size (DomicileHost::ReportGeometry), and
+# `keydown` how it hears a chord grabbed by name (DomicileHost::PageKeyDown). Named
 # one by one, so a fork event dispatched through Blink's list still fails here.
-LISTENED_TO="kResize"
+LISTENED_TO="kResize kKeydown"
 global="$(grep -oE 'event_type_names::k[A-Za-z]+' "$DOMICILE"/* 2>/dev/null |
   grep -vE "::($(echo "$LISTENED_TO" | tr ' ' '|'))\$" |
   cut -d: -f1 | xargs -r -n1 basename | sort -u | tr '\n' ' ')"
