@@ -505,24 +505,15 @@ costs nothing.
   an `<app>` is embedded the same way, as a surface layer, and no pixel guard
   has yet put one under a transition. If it is not captured, a window shows
   through the wipe live and turns before it rather than behind it.
-- **The portal does not start in a desk, so neither its theme nor its links
-  reach one.** `xdg-desktop-portal.service` has
-  `Requisite=graphical-session.target`, and nothing in a desk starts that
-  target, so activation fails. Once it runs, a web link it opens for a
-  sandboxed app (Flatpak) starts `domicile-open-url` from the portal's own
-  environment, which needs this desk's `DOMICILE_SOCK` and
-  `domicile-mimeapps.list` there — handed over without capturing the links of
-  a session a nested desk sits in, and without a stale socket outliving the
-  desk that set it.
-- **A portal frontend already running under another desktop is not
-  re-routed.** `xdg-desktop-portal` reads which backend to use out of its
-  *own* `XDG_CURRENT_DESKTOP`, so the compositor puts the name into the D-Bus
-  and systemd activation environments at startup — which reaches a frontend
-  activated after that and not one already up. A desk started from inside a
-  sway session therefore keeps sway's portal routing until that frontend
-  exits. That is a nested developer run rather than a desk somebody uses: a
-  desktop started from a display manager has its session entry's
-  `DesktopNames=domicile` before anything in the session starts.
+- **The portal in a desk is only checked as far as evaluation.** A desk that
+  is the session tells the user manager so and starts `domicile-session.target`
+  (`domicile_launch::graphical_session`), which binds
+  `graphical-session.target` so the portal can start; a link it opens for a
+  sandboxed app (Flatpak) reaches the desk through `domicile-mimeapps.list` on
+  the system profile and `DOMICILE_SOCK`. Nothing here runs a user manager. A
+  desk that does not end cleanly leaves its variables behind until the next
+  one replaces them. A desk in a window says nothing, so its session keeps its
+  own portal.
 - **A domicile desk has no screenshot or screencast portal.**
   `xdg-desktop-portal-gtk` implements neither interface, and the backend that
   does on a wlroots desk — `xdg-desktop-portal-wlr` — screencopies through

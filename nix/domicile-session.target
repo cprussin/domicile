@@ -1,0 +1,15 @@
+# A Domicile desk that is the login session, for as long as it is.
+#
+# The launcher starts this once the desk is up and has told the user manager
+# which desktop it is; `domicile-session-shutdown.target` ends it when the run
+# does (`domicile_launch::graphical_session`). Binding `graphical-session.target` is
+# the point: the portal's unit has `Requisite=` on it, as does anything a home
+# binds to a graphical session, and nothing starts that target but a session
+# saying it is one.
+[Unit]
+Description=Domicile desk
+Documentation=https://github.com/cprussin/domicile/blob/main/docs/RUNNING-A-DESKTOP.md
+BindsTo=graphical-session.target
+Before=graphical-session.target
+Wants=graphical-session-pre.target
+After=graphical-session-pre.target

@@ -32,15 +32,15 @@
 //! session was started with. Setting the variable on the clients this
 //! compositor spawns does nothing for it. [`say_which_desktop`] is the other
 //! half, and it is what every Wayland compositor does at startup under the
-//! name `dbus-update-activation-environment --systemd`. On a tty it puts this
-//! desk's `WAYLAND_DISPLAY` there too, or an activated app opens on whichever
-//! other session said so last — see [`activation_environment`].
+//! name `dbus-update-activation-environment --systemd`. With it goes this
+//! desk's `WAYLAND_DISPLAY`, or an activated app opens on whichever other
+//! session said so last — see [`activation_environment`]. Only a desk that is
+//! the session says either: one in a window leaves its session's portal to
+//! that session.
 //!
 //! What that cannot do is re-route a frontend that is **already running**
 //! under another desktop's name: the environment reaches services activated
-//! after the call and nothing else. A desk started from inside a sway session
-//! therefore keeps sway's portal routing until that frontend exits, which is a
-//! developer's nested run rather than a desk somebody uses — see ROADMAP.md.
+//! after the call and nothing else.
 //!
 //! **Nothing here can take the desktop down.** A desk on a bare tty may have
 //! no session bus at all, and a desk started inside another session may find
@@ -250,24 +250,30 @@ fn answer(
 
 /// What [`say_which_desktop`] puts where activated services are started from.
 ///
-/// `XDG_CURRENT_DESKTOP` always, for the portal. `WAYLAND_DISPLAY` — `ours` —
+/// `XDG_CURRENT_DESKTOP`, for the portal, and `WAYLAND_DISPLAY` — `ours` —
 /// only when this desk is not a window inside a session (`nested_in`, the
 /// compositor's own `WAYLAND_DISPLAY`): the bus and the systemd user manager
 /// are one per *user*, not per session, so another session on another tty has
 /// put *its* display there, and an app they start — `gnome-terminal`'s
 /// server, anything D-Bus activated — would open on it. A desk in a window
-/// leaves the display alone, because the session it is inside is the one
-/// that owns those apps. Empty is unset, as `domicile_launch::platform` reads
+/// says neither, because the session it is inside is the one that owns those
+/// apps and whose portal routes by its desktop's name; saying `domicile`
+/// there would route that session's links here. The supervisor says the same
+/// and starts the graphical session once the desk is up
+/// (`domicile_launch::graphical_session`); this is the bus's half, and is said
+/// as early as the compositor can. Empty is unset, as `domicile_launch::platform` reads
 /// it.
 ///
 /// **The last session to start wins**, which is how every compositor that
 /// runs `dbus-update-activation-environment` already behaves: back on the
 /// other tty, its activated apps open here until it says so again.
 fn activation_environment(ours: &str, nested_in: Option<&OsStr>) -> Vec<(&'static str, String)> {
-    let desktop = ("XDG_CURRENT_DESKTOP", CURRENT_DESKTOP.to_string());
     match nested_in.filter(|display| !display.is_empty()) {
-        Some(_) => vec![desktop],
-        None => vec![desktop, ("WAYLAND_DISPLAY", ours.to_string())],
+        Some(_) => Vec::new(),
+        None => vec![
+            ("XDG_CURRENT_DESKTOP", CURRENT_DESKTOP.to_string()),
+            ("WAYLAND_DISPLAY", ours.to_string()),
+        ],
     }
 }
 
@@ -446,12 +452,14 @@ mod tests {
     }
 
     #[test]
-    fn a_desk_in_a_window_leaves_its_sessions_display_alone() {
+    fn a_desk_in_a_window_leaves_its_sessions_activation_environment_alone() {
         // The session this desk is a window inside of is the one the person
-        // started it from, and its activated apps belong on it.
+        // started it from: its activated apps belong on its display, and its
+        // portal routes by its desktop's name. Saying `domicile` there would
+        // route that session's portal -- its links among them -- here.
         assert_eq!(
             activation_environment("wayland-1", Some(OsStr::new("wayland-0"))),
-            [("XDG_CURRENT_DESKTOP", CURRENT_DESKTOP.to_string())]
+            []
         );
     }
 
