@@ -330,6 +330,7 @@ pub fn somebody_is_here(request: &ClientRequest) -> bool {
         | ClientRequest::SetBrightness { .. }
         // And so is a mixer's.
         | ClientRequest::Audio { .. }
+        | ClientRequest::WatchAudioLevels { .. }
         // And so is a lock asked for: the chord that asked landed on the
         // shell, and a lock that lit the screens is still a lock.
         | ClientRequest::Lock => false,

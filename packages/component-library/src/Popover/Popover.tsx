@@ -147,12 +147,14 @@ const popupStyles = flex({
   },
   // A frosted pill lettered white over any photo: the bar's language rather
   // than a card's, and the same in both themes, since the wallpaper does not
-  // flip with them.
+  // flip with them. A pill while it is one row — the radius is half a row's
+  // height, as the bar's own chips are — and a rounded panel once its content
+  // is taller, rather than a stadium.
   "&[data-tone=overPhoto]": {
     backdropFilter: "blur({spacing.3})",
     backgroundColor: "panelOverPhoto",
     border: "none",
-    borderRadius: "full",
+    borderRadius: "2xl",
     color: "onPhoto",
     paddingBlock: 1.5,
     paddingInline: 3,

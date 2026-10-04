@@ -135,6 +135,10 @@ class MODULES_EXPORT DomicileHost final
                        const String& card,
                        const String& profile,
                        ExceptionState&);
+  // A lease on these ids' meters. Answered with `audiolevels`.
+  void watchAudioLevels(ScriptState*,
+                        const Vector<String>& ids,
+                        ExceptionState&);
   // This page's old frame is held for `theme`: the desk's windows may turn.
   // Answered with a `windowstheme` event once they have.
   void themeCaptured(ScriptState*, V8DomicileTheme theme, ExceptionState&);
@@ -202,6 +206,8 @@ class MODULES_EXPORT DomicileHost final
   void AppTitled(const String& app_id,
                  const String& title,
                  base::TimeTicks arrival) override;
+  void AudioLevels(Vector<domicile::mojom::blink::AudioLevelPtr> levels,
+                   base::TimeTicks arrival) override;
   void AppAppeared(const String& app_id,
                    const String& title,
                    bool has_size,

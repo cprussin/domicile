@@ -88,6 +88,7 @@ import {
   appSizeLimit,
   appTitled,
   audio,
+  audioLevels,
   battery,
   clipboard,
   extensions,
@@ -345,6 +346,9 @@ export class DomicileClient {
     host.addEventListener("audio", (event) => {
       this.#deliver("audio", audio(event));
     });
+    host.addEventListener("audiolevels", (event) => {
+      this.#deliver("audio_levels", audioLevels(event));
+    });
     host.addEventListener("displayschanged", () => {
       // The event is bare and the desktop is on the attribute, which the
       // engine writes before it dispatches — so reading it here is reading
@@ -565,6 +569,14 @@ export class DomicileClient {
   /** Switch a sound card to one of its profiles; answered like a volume. */
   setAudioProfile(card: string, profile: string): void {
     this.#host.setAudioProfile(card, profile);
+  }
+
+  /**
+   * Meter these devices and streams; answered with `audio_levels`. A lease
+   * to renew every second — see {@link DomicileHost.watchAudioLevels}.
+   */
+  watchAudioLevels(ids: readonly string[]): void {
+    this.#host.watchAudioLevels(ids);
   }
 
   /**
