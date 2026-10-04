@@ -417,6 +417,45 @@
   // window opened now from one that was running.
   attribute EventHandler onfocusedwindowchanged;
 
+  // THE DESK'S STATE, AS ATTRIBUTES. Each is what the compositor last said,
+  // null until it has said anything, and a bare `<name>changed` event says it
+  // moved: a shell reads, then listens, and one that listens late misses
+  // nothing. The events that carry the same payloads still fire for now; see
+  // docs/architecture/WINDOW-DOMICILE.md.
+  readonly attribute FrozenArray<DomicileClipboardEntry>? clipboard;
+  attribute EventHandler onclipboardchanged;
+  readonly attribute FrozenArray<DomicileTrayItem>? tray;
+  attribute EventHandler ontraychanged;
+  readonly attribute FrozenArray<DomicileNotification>? notifications;
+  attribute EventHandler onnotificationschanged;
+  readonly attribute FrozenArray<DomicileExtension>? extensions;
+  attribute EventHandler onextensionschanged;
+  readonly attribute FrozenArray<DomicileAudioDevice>? audioOutputs;
+  readonly attribute FrozenArray<DomicileAudioDevice>? audioInputs;
+  readonly attribute FrozenArray<DomicileAudioStream>? audioPlayback;
+  readonly attribute FrozenArray<DomicileAudioStream>? audioRecording;
+  readonly attribute FrozenArray<DomicileAudioCard>? audioCards;
+  attribute EventHandler onaudiochanged;
+  readonly attribute double? batteryCharge;
+  readonly attribute boolean? batteryCharging;
+  attribute EventHandler onbatterychanged;
+  readonly attribute boolean? idle;
+  attribute EventHandler onidlechanged;
+  readonly attribute boolean? locked;
+  attribute EventHandler onlockedchanged;
+  readonly attribute DomicileTheme? theme;
+  attribute EventHandler onthemechanged;
+  readonly attribute DomicileTheme? windowsTheme;
+  attribute EventHandler onwindowsthemechanged;
+  // The compositor seat's modifiers -- only the keys forwarded to a client;
+  // see @domicile-desktop/sdk's README before trusting them over a page's
+  // own key events.
+  readonly attribute boolean? altKey;
+  readonly attribute boolean? ctrlKey;
+  readonly attribute boolean? shiftKey;
+  readonly attribute boolean? metaKey;
+  attribute EventHandler onmodifierschanged;
+
   // The extensions with an action, as a DomicileExtensionsEvent: the whole
   // tray, whenever any of it changes and once as soon as this page listens.
   //
