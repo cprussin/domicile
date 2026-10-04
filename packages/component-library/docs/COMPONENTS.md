@@ -2,9 +2,7 @@
 
 ## Props typing — use `ExtendProps`
 
-Components that wrap a base-ui or HTML element use `ExtendProps<T, U>`
-from `../extend-props` rather than manually
-`Omit<ComponentProps<T>, "className">`:
+Type a wrapper's props with `ExtendProps<T, U>` from `../extend-props`:
 
 ```ts
 import type { ExtendProps } from "../extend-props";
@@ -12,84 +10,61 @@ import type { ExtendProps } from "../extend-props";
 type Props = ExtendProps<typeof BaseInput, {
   clearable?: boolean | undefined;
   prefixIcon?: ReactNode | undefined;
-  // ...
 }>;
 ```
 
-`ExtendProps<T, U>` is
-`U & Omit<ComponentProps<T>, "className" | "style" | keyof U>` — it
-spreads the base component's props while:
-
-- Stripping `className` and `style` (which the wrapper owns).
-- Letting your own prop declarations override conflicting keys from the
-  base.
-
-Polymorphic components (e.g. `Button` rendering as either `<button>` or
-`<a>`) declare a union of `ExtendProps` instances. See `Button.tsx`.
+- It equals `U & Omit<ComponentProps<T>, "className" | "style" | keyof U>`.
+- It passes through the wrapped component's props, drops `className` and
+  `style`, and lets `U` override conflicting keys.
+- A polymorphic component declares a union of `ExtendProps` types. See
+  `Button.tsx`, which renders `<button>` or `<a>`.
 
 ## `className` is private
 
-**Do not expose a `className` prop on a component.** Variant/size/state
-choices are explicit props with union literal types or booleans. The
-component owns its className entirely; callers cannot leak arbitrary
-styles into it.
+- Components do not take a `className` prop.
+- Expose variants, sizes and states as explicit props: union literals or
+  booleans.
 
 ## Use base-ui where possible
 
-When a component mostly just wraps a `@base-ui/react` component, ensure
-the wrapper accepts and spreads all of the underlying base-ui
-component's props (this happens naturally via `ExtendProps`). The
-wrapper's job is styling + ergonomic API; it should not artificially
-restrict what callers can pass through.
-
-For interaction logic — focus management, keyboard nav, validation,
-positioning, transitions between open/closed states — defer to base-ui.
-Use its `render` prop to swap in custom presentational components (see
-how `ModalDialog.Close` uses `<Button>` as its render element).
+- Accept and spread all props of the wrapped base-ui component. Don't
+  restrict them.
+- Leave focus, keyboard navigation, validation, positioning and open/close
+  transitions to base-ui.
+- Use base-ui's `render` prop to swap in our components. Example:
+  `ModalDialog.Close` renders a `<Button>`.
 
 ## Refs
 
-When you need a ref to the wrapped element, use the shared
-`useStableRef` hook from `../_control/useStableRef`:
+Use `useStableRef` from `../_control/useStableRef`:
 
 ```ts
-import { useStableRef } from "../_control/useStableRef";
-
 const [elementRef, setElementRef] = useStableRef<HTMLInputElement>();
-
 // ... ref: setElementRef
 ```
 
-`useStableRef` returns a `[RefObject, RefCallback]` pair where the
-callback identity is stable across renders, so passing it to a child's
-`ref=` prop won't cause the child to re-attach. The underlying ref
-object types as `RefObject<E | null>` because React's ref API passes
-`null` on unmount; check `current !== null` before dereferencing.
+- It returns `[RefObject, RefCallback]`. The callback keeps the same
+  identity across renders, so the child does not re-attach.
+- `current` is `null` after unmount. Check it before use.
 
 ## Variants and sizes
 
-Per-prop choices use union literal types and are passed to a `cva`
-recipe:
+Use union literal types and pass them to a `cva` recipe:
 
 ```ts
 export const VARIANTS = ["primary", "outline", "ghost", ...] as const;
 export type Variant = (typeof VARIANTS)[number];
 
-type Props = ... & {
-  variant?: Variant | undefined;
-};
+type Props = ... & { variant?: Variant | undefined };
 
-// In the component:
 className={cx(control({ size }), styles({ variant, ... }))}
 ```
 
-Exporting the `VARIANTS` array (not just the type) is required —
-storybook `argTypes` uses it as the `options` for the control.
+Export the `VARIANTS` array. Stories use it as the control's `options`.
 
 ## Mutually exclusive props
 
-For mutually exclusive props (e.g. "either a string label or a render
-ReactNode"), use a discriminated union, not a runtime check:
+Use a discriminated union so TypeScript rejects invalid combinations:
 
 ```ts
 type Props = (
@@ -98,13 +73,9 @@ type Props = (
 );
 ```
 
-This lets TypeScript prevent the invalid combination at the call site.
-
 ## Composing components
 
-For components made of multiple parts (Dialog, etc.), attach the parts
-to the top-level component via `Object.assign` so callers see
-`ModalDialog.Close`, `ModalDialog.CloseButton`, etc.:
+Attach sub-parts with `Object.assign`, so callers write `ModalDialog.Close`:
 
 ```tsx
 const ModalDialogComponent = (...) => ...;
@@ -117,18 +88,14 @@ export const ModalDialog = Object.assign(ModalDialogComponent, {
 });
 ```
 
-For top-level components that wrap a full compound primitive (like
-`ModalDialog` wrapping base-ui's Dialog parts), prefer to flatten the
-API: expose props like `title`, `footer`, `trigger` that internally
-render the appropriate parts, rather than forcing callers to assemble
-the parts themselves. The parts can still be exposed (as in
-`ModalDialog.Close`) for escape hatches.
+When wrapping a compound base-ui primitive, flatten the API: take props like
+`title`, `footer` and `trigger` and render the parts internally. Still expose
+the parts for callers that need them.
 
 ## Imperative handles
 
-When base-ui exposes an imperative `createHandle()` API (Dialog,
-Popover, etc.), re-export it from your wrapper so callers don't need to
-import from two places:
+Re-export base-ui's `createHandle()` from the wrapper, so callers import from
+one place:
 
 ```ts
 export const { createHandle } = BaseDialog;
@@ -136,19 +103,14 @@ export const { createHandle } = BaseDialog;
 
 ## React + base-ui timing pitfall
 
-`useEffect` runs as a passive effect AFTER all layout effects (including
-those in child components — effects fire bottom-up). If a parent wrapper
-(e.g. a Storybook decorator that patches a global) needs to install
-something BEFORE a child's `useLayoutEffect` / `useIsoLayoutEffect`
-fires, you have two options:
+Effects run bottom-up, and `useEffect` runs after all layout effects. So a
+parent's `useEffect` runs after a child's `useLayoutEffect`. If the parent
+must set something up first (for example, a Storybook decorator that patches
+a global), either:
 
-1. **Install during render** via `useState` lazy init —
-   `useState(installX)`. The initializer runs once during the parent's
-   render, before any child renders or layout effects.
-2. **Gate the child render** behind a state flag the parent's
-   `useLayoutEffect` flips. The child doesn't mount until the second
-   render, which is triggered by `setReady(true)` inside the effect. The
-   empty first render is invisible because layout effects flush
-   synchronously before paint.
+1. **Install during render** with a lazy `useState(installX)`.
+2. **Gate the child** behind a flag that the parent's `useLayoutEffect` sets.
+   The empty first render never paints, because layout effects run before
+   paint.
 
-See `Avatar/slowImageDecorator.tsx` for the canonical (option 2) pattern.
+`Avatar/slowImageDecorator.tsx` shows option 2.

@@ -7,7 +7,7 @@
 //! page does not draw any more. They were kept and emptied against this, and
 //! are deleted now that this exists: an empty instrument that a shell still
 //! reads reports `rt_ms=0`, which is a measurement to whoever reads the log.
-//! See ENGINE-FORK.md, *rebuild the latency measurement*.
+//! See `docs/architecture/ENGINE-FORK-MEASUREMENTS.md#keystroke-to-pixel`.
 //!
 //! **The compositor is the only place it can be rebuilt.** It is the one
 //! process that both puts the key into the client's seat and holds the engine

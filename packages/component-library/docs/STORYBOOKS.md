@@ -1,66 +1,59 @@
 # Storybooks
 
-Every component MUST have a storybook. It's the live documentation surface
-and the primary place reviewers will look to verify the component.
+Every component has a story file. Reviewers use it to check the component.
 
 ## Required `meta` shape
 
-The `meta` block MUST set:
+`meta` sets:
 
 - `component`
-- `tags: ["autodocs"]` (showcases are the exception — see below)
-- `title` with one of the category prefixes below
-- `parameters.docs.description.component` — one short sentence describing
-  what the component does
-- `argTypes` for **every** prop the component accepts, with a sensible
-  `control` and `table.category`
+- `tags: ["autodocs"]` (except showcases)
+- `title`, starting with a category below
+- `parameters.docs.description.component`: one sentence on what the
+  component does
+- `argTypes` for every prop, with a `control` and a `table.category`
 
 ## Story `args` — be explicit
 
-Every story SHOULD declare explicit values for every boolean prop in its
-`args` (and for any other prop that has a meaningful default), so the
-controls panel always shows definite values regardless of which story the
-user visits first.
+Set every boolean prop, and every prop with a meaningful default, in each
+story's `args`. Otherwise the controls panel shows different values depending
+on which story you opened first.
 
-- Stories that exercise a specific feature (e.g. `Clearable`, `Disabled`,
-  `Rounded`) set that prop to `true` and leave the others as their normal
-  defaults — explicitly, not by omission.
-- Stories that intentionally omit a content prop (no `title`, no `footer`,
-  no `prefixIcon`, etc.) should set it to `undefined` explicitly. Otherwise
-  Storybook's text controls can populate it with an empty string, or a
-  value can persist from a previously-visited story, defeating the omission.
+- A feature story (`Clearable`, `Disabled`) sets that prop to `true` and the
+  others to their defaults.
+- A story without a content prop (`title`, `footer`, `prefixIcon`) sets it to
+  `undefined`. Otherwise Storybook may fill it with `""` or a value left over
+  from another story, which breaks `prop === undefined` checks.
 
 ## Variant matrices
 
-For components with variants/sizes, include a story (typically named
-`AllVariations`) that renders every combination using the shared
-`<Variants>` helper from `src/__test__/Variants.tsx`. See `Button`,
-`Input`, and `Textarea` for examples.
+A component with variants or sizes has an `AllVariations` story. It renders
+every combination with `<Variants>` from `src/__test__/Variants.tsx`. See
+`Button`, `Input` and `Textarea`.
 
 ## Field-aware components
 
-For components whose behavior depends on `Field` context (e.g. invalid
-state), include a `ToggleValidity` (or equivalent) story with an `invalid`
-boolean control and a `render` function that wraps the component in
-`<BaseField.Root invalid={invalid}>`. See `Input.stories.tsx` for the
-pattern.
+A component that reads `Field` context (such as invalid state) has a
+`ToggleValidity` story. It has an `invalid` boolean control and renders the
+component inside `<BaseField.Root invalid={invalid}>`. See
+`Input.stories.tsx`.
 
 ## Story categories
 
-The `title` MUST start with one of these prefixes (or live under
-`Showcase/` for cross-component compositions):
-
-| Category | Use for | Filed under it today |
+| Prefix | Use for | Examples |
 |---|---|---|
-| `Layout/` | Page structure and container components | Accordion, Card, Provider, Screen |
-| `Navigation/` | Components for navigating between views | Drilldown, TabRail, Tabs |
-| `Forms & Inputs/` | Interactive input and control components | Button, Field, Input, Select, Slider, Textarea |
-| `Data Display/` | Components for presenting data | Avatar, Kbd |
-| `Overlays/` | Components that render over other content | ModalDialog, SlideOver |
+| `Layout/` | Page structure and containers | Accordion, Card, Provider, Screen |
+| `Navigation/` | Moving between views | Drilldown, TabRail, Tabs |
+| `Forms & Inputs/` | Inputs and controls | Autocomplete, Button, Field, Input, Select, Slider, Textarea |
+| `Data Display/` | Presenting data | Avatar, Kbd |
+| `Overlays/` | Content drawn over other content | ModalDialog, Popover, SlideOver, Toaster |
 
 ## Showcases
 
-Showcase stories (e.g. `ControlSizes.stories.tsx`) live under
-`src/Showcase/`, use a top-level `title` with no category prefix, skip
-`tags: ["autodocs"]` (showcases are visual demos, not API docs), and set
-`parameters.options: { showPanel: false }` to hide the addon panel.
+Showcases demo several components together (for example
+`ControlSizes.stories.tsx`). They:
+
+- live in `src/Showcase/`
+- use a `title` with no category prefix
+- omit `tags: ["autodocs"]`
+- set `parameters.options: { showPanel: false }`

@@ -1,35 +1,30 @@
 # @domicile-desktop/test-support
 
-Shared bun test setup for packages whose tests need a DOM — the chrome SDK's
-custom elements and the shell's controller both mount into one. Every such
-package needs the same setup before its tests run; this package owns it in one
-place so it doesn't drift across the monorepo.
+Shared bun test setup for packages whose tests need a DOM.
 
-- `@domicile-desktop/test-support/preload` — the one setup module: registers
-  happy-dom's globals (giving the test a `document`/`window` to render into)
-  *before* extending bun's `expect` with jest-dom matchers
-  (`toBeInTheDocument`, …) and installing Testing Library's `cleanup` as an
-  `afterEach`, so a component test's tree never leaks into the next one. They
-  always go together, so they ship as a single preload. It also teaches bun's
-  inspector to print a DOM node as its markup — see `src/node-inspection.ts`
-  for why a failed matcher is unusable without that. It makes the test DOM the
-  engine's in the two ways a shell's tests reach: `<app>` is a known element
-  (see `src/app-element.ts`), and a frame is left at its `src` rather than
-  fetched, since a `domicile://` page is only the engine's to serve.
-- `matchers.d.ts` (the package's root `types` entry) — the ambient module
-  augmentation that teaches `bun:test`'s `expect` about those matchers, so the
-  type checker knows about them too.
+## Exports
+
+- **`@domicile-desktop/test-support/preload`**: the setup module. It:
+  - registers happy-dom's globals (`document`, `window`);
+  - adds jest-dom matchers (`toBeInTheDocument`, …) to bun's `expect`;
+  - runs Testing Library's `cleanup` after each test;
+  - prints DOM nodes as markup in failed matchers (`src/node-inspection.ts`);
+  - registers `<app>` as a known element (`src/app-element.ts`);
+  - leaves frames at their `src` without fetching, since only the engine serves
+    `domicile://` pages.
+- **`matchers.d.ts`** (the root `types` entry): types for the jest-dom matchers
+  on `bun:test`'s `expect`.
 
 ## Usage
 
-Preload the setup module from the consuming package's `bunfig.toml`:
+In the consuming package's `bunfig.toml`:
 
 ```toml
 [test]
 preload = ["@domicile-desktop/test-support/preload"]
 ```
 
-and pull the matcher types into that package's `tsconfig.json`:
+In its `tsconfig.json`:
 
 ```json
 { "compilerOptions": { "types": ["bun", "@domicile-desktop/test-support"] } }
@@ -37,6 +32,9 @@ and pull the matcher types into that package's `tsconfig.json`:
 
 ## Test
 
-`bun run --filter @domicile-desktop/test-support test:unit` and `… test:types`. The
-unit test covers the element inspection; the rest of the preload is exercised
-transitively by every consumer's suite.
+```sh
+bun run --filter @domicile-desktop/test-support test:unit
+bun run --filter @domicile-desktop/test-support test:types
+```
+
+Consumers' test suites also exercise the preload.

@@ -1,132 +1,128 @@
 # Portals
 
-Domicile becomes the desk's only `xdg-desktop-portal` backend: every
-interface a desktop can sensibly answer is answered by the compositor, every
-dialog is drawn by the shell, and `xdg-desktop-portal-gtk` leaves the desk.
+Make Domicile the session's only `xdg-desktop-portal` backend:
 
-Today the compositor answers `Settings` and routes everything else to gtk, so
-an Electron app's file dialog is a GTK window, and screen sharing, remote
-desktop and global shortcuts have no backend at all.
+- The compositor implements every portal interface except `Secret`.
+- The shell draws every portal dialog.
+- `xdg-desktop-portal-gtk` is removed from the session.
+
+Today the compositor implements only `Settings` and routes the rest to gtk.
+So an Electron app's file dialog is a GTK window, and screen sharing, remote
+desktop and global shortcuts have no backend.
 
 ## Design
 
 ```
 app ──org.freedesktop.portal.*──▶ xdg-desktop-portal ──impl.portal.*──▶ compositor
-                                                                         │ domicile_host::portals: the queue
+                                                                         │ domicile_host::portals (queue)
                                     HostMessage::PortalRequests { items } ▼
-                                         engine: `portalrequests` event (one patch, every kind)
+                                         engine: `portalrequests` event (one patch, all kinds)
                                                                          ▼
                         shell: DomicileClient.on("portal_requests") → <PortalDialogs>
                         ◀── answerPortalRequest(id, answer) ── engine ── compositor ──▶ Response
 ```
 
-One mechanism for all dialogs, then one backend per interface on top of it.
+One request channel carries all dialogs. Each interface's backend builds on it.
 
 | Piece | Where |
 |---|---|
-| Wire: `HostMessage::PortalRequests`, `ChromeMessage::AnswerPortalRequest`, `PortalRequest`, `PortalAnswer` | `packages/domicile-protocol` |
-| The queue: pending requests, their apps, their answers' validation | `packages/domicile-host/src/portals/` |
-| The bus: one name, one object, every interface; `Request`/`Session` objects | `packages/domicile-compositor/src/portals/` (`appearance.rs`'s `Settings` moves in) |
-| `portalrequests` event, `answerPortalRequest()`, `listDirectory()` | `control_channel.mojom`, `modules/domicile/`, one patch |
+| Wire types: `HostMessage::PortalRequests`, `ChromeMessage::AnswerPortalRequest`, `PortalRequest`, `PortalAnswer` | `packages/domicile-protocol` |
+| Queue: pending requests, their apps, answer validation | `packages/domicile-host/src/portals/` |
+| D-Bus service: one name, one object, all interfaces; `Request`/`Session` objects | `packages/domicile-compositor/src/portals/` (`Settings` moves here from `appearance.rs`) |
+| `portalrequests` event, `answerPortalRequest()`, `listDirectory()` | `control_channel.mojom`, `modules/domicile/`, one engine patch |
 | Request kinds, parsed with Zod | `@domicile-desktop/sdk/portal` |
-| Ready-made dialogs any shell mounts | `@domicile-desktop/component-library/PortalDialogs` |
-| `parent_window` → a window | `zxdg_exporter_v2` / `v1` in the compositor |
-| Which interfaces route here | `nix/domicile.portal`, `nix/domicile-portals.conf` |
+| Ready-made dialogs for any shell | `@domicile-desktop/component-library/PortalDialogs` |
+| `parent_window` to window lookup | `zxdg_exporter_v2` / `v1` in the compositor |
+| Interface routing | `nix/domicile.portal`, `nix/domicile-portals.conf` |
 
 ## Key decisions
 
-- **No gtk.** Nothing gtk's backend does needs gtk: every dialog is UI the
-  shell already draws better (manganese has a file picker, a launcher with the
-  desktop entries, a notification drawer). Falling back would mean two looks
-  and two keyboards on one desk. Gtk stays routed per interface only until
-  that interface lands here, then leaves the NixOS and home-manager modules.
-- **Secret is the one interface not ours.** It is the keyring's
-  (`gnome-keyring` or `oo7-portal`), not a desktop's: no UI, and the store
-  must outlive the desk. `domicile-portals.conf` names the keyring for it.
-- **A request is state, pushed whole.** `PortalRequests` carries every
-  unanswered request on every change and on connect, like notifications, so a
-  reload or a second monitor's page still sees a dialog the app is blocked on.
-  The first answer wins; the rest are refused.
-- **Request bodies cross the engine untyped; the SDK is the contract.** The
-  engine carries each request's body as a `base::Value` and the SDK parses it
-  with Zod. One engine patch serves every kind, so a new portal costs no
-  four-hour build. Over a typed mojom union per kind because the engine only
-  relays it, and the compositor and SDK already validate both ends.
-- **A shell that mounts no dialogs refuses.** An unanswered kind is refused
-  with response `2` once the dispatch finds no listener, as
-  `domicile-file-chooser` does for `<webview>`. `<PortalDialogs />` is one
-  element, so shell-simple and the example shell get every dialog for free.
-- **The dialog sits on its parent.** `parent_window` (`wayland:<handle>`)
-  resolves through our own `xdg_foreign` export to an app id; the shell draws
-  the dialog modal over that `<app>`. No handle, or an unknown one, is a
-  dialog over the focused screen.
-- **The app is named.** The frontend's `app_id` resolves through
-  `domicile_host::desktop_entries` to a name and icon for every dialog and
-  every grant ("Zoom wants to share your screen").
-- **Capture: the compositor owns PipeWire.** A window source is the client's
-  buffer, already in the compositor. A monitor source is the composited desk,
-  which only viz has: the engine runs a `FrameSinkVideoCapturer` on the
-  display's root frame sink and passes each frame's dmabuf over the broker
-  socket. One producer, one place for cursor modes and restore tokens, over
-  the engine running a PipeWire node of its own.
-- **Input: EIS.** RemoteDesktop and InputCapture hand out a libei socket
-  (`ConnectToEIS`) served by the compositor (`reis`). Emulated input enters
-  the same injection path the engine's input does, so the lock still refuses
-  it.
-- **Grants persist in the frontend's `PermissionStore`**, not here. Restore
-  tokens for ScreenCast and RemoteDesktop are ours, kept under
+- **No gtk fallback.** The shell already draws every dialog gtk would
+  (manganese has a file picker, a launcher with desktop entries, a
+  notification drawer). A fallback would give one session two looks and two
+  keyboard models. Gtk stays routed for each interface until that interface
+  lands here, then leaves the NixOS and home-manager modules.
+- **`Secret` goes to the keyring.** `gnome-keyring` or `oo7-portal` implements
+  it. It has no UI, and the store must outlive the session.
+  `domicile-portals.conf` routes it to the keyring.
+- **Requests are pushed whole.** `PortalRequests` carries every unanswered
+  request on each change and on connect, as notifications do. A reloaded page
+  or a second monitor's page still sees a pending dialog. The first answer
+  wins; later answers are refused.
+- **The engine relays request bodies untyped.** It carries each body as a
+  `base::Value`; the SDK parses it with Zod. One engine patch serves every
+  kind, so a new portal needs no four-hour engine build. A typed mojom union
+  per kind adds nothing: the compositor and SDK already validate both ends.
+- **No dialog listener means refusal.** If no listener takes a request, it is
+  refused with response `2`, as `domicile-file-chooser` does for `<webview>`.
+  `<PortalDialogs />` is one element, so shell-simple and the example shell
+  get every dialog by mounting it.
+- **Dialogs are modal over their parent.** `parent_window`
+  (`wayland:<handle>`) resolves through the compositor's `xdg_foreign` export
+  to an app id. The shell draws the dialog over that `<app>`. A missing or
+  unknown handle puts the dialog over the focused screen.
+- **Dialogs name the app.** The frontend's `app_id` resolves through
+  `domicile_host::desktop_entries` to a name and icon ("Zoom wants to share
+  your screen").
+- **The compositor owns PipeWire.** A window source is the client's buffer,
+  which the compositor already has. A monitor source is the composited
+  output, which only viz has: the engine runs a `FrameSinkVideoCapturer` on
+  the display's root frame sink and sends each frame's dmabuf over the broker
+  socket. One producer keeps cursor modes and restore tokens in one place.
+- **Input uses EIS.** RemoteDesktop and InputCapture hand out a libei socket
+  (`ConnectToEIS`) served by the compositor (`reis`). Emulated input takes the
+  engine's input injection path, so the lock screen still blocks it.
+- **Grants live in the frontend's `PermissionStore`.** Domicile stores only
+  ScreenCast and RemoteDesktop restore tokens, under
   `$XDG_STATE_HOME/domicile/`.
-- **A region across monitors is captured at the highest density it
-  touches.** Monitors may differ in density and a stream has one scale;
-  downscaling loses nothing a lower one could show.
-- **No print preview.** The portal hands over the document only after the
-  dialog closes, so there is nothing to preview; gtk's backend draws none
-  either.
-- **While something is shared, the shell shows it.** A `capturing` state rides
-  the same push (who, what, stop), so a shell can draw an indicator and end a
-  session.
+- **Multi-monitor regions use the highest density.** A stream has one scale,
+  so a region spanning monitors is captured at the highest density it
+  touches. Lower-density monitors lose nothing.
+- **No print preview.** The portal sends the document only after the dialog
+  closes, so there is nothing to preview. Gtk's backend has none either.
+- **The shell shows active sharing.** A `capturing` state in the same push
+  (who, what, stop) lets a shell draw an indicator and end the session.
 
 ## Interfaces
 
-| Interface | What the compositor does | What the shell draws | Phase |
+| Interface | Compositor | Shell UI | Phase |
 |---|---|---|---|
-| Settings | `color-scheme` today; add `accent-color`, `contrast`, `reduced-motion` from the shell's config | — | 1 |
+| Settings | `color-scheme` (exists); add `accent-color`, `contrast`, `reduced-motion` from shell config | — | 1 |
 | FileChooser | `OpenFile`, `SaveFile`, `SaveFiles`; filters, `current_folder`, `choices` | picker (manganese's `FilePicker`, moved to component-library) | 1 |
 | AppChooser | candidates from desktop entries and `mimeapps.list`; `UpdateChoices` | app list | 1 |
-| OpenURI | (frontend) | — via AppChooser | 1 |
+| OpenURI | (frontend) | via AppChooser | 1 |
 | Access | — | yes/no prompt with the app's name | 1 |
 | Account | user name, avatar from `AccountsService` | confirm | 1 |
-| Email | open the `mailto:` handler with the fields | — | 1 |
-| Notification | v2 straight into `domicile_host::notifications`; drops gtk's hop | the existing drawer | 1 |
-| Inhibit | idle inhibit through `idle.rs`; logout/suspend inhibitors recorded; `QueryEndResponse` when the desk gets a session end | "X is preventing logout" | 1 |
-| Lockdown | properties from the config | — | 1 |
-| ScreenCast | sources: windows, monitors, region; cursor embedded/metadata/hidden; PipeWire streams; restore tokens | source picker, sharing indicator | 2 |
+| Email | opens the `mailto:` handler with the fields | — | 1 |
+| Notification | v2, direct to `domicile_host::notifications` | existing drawer | 1 |
+| Inhibit | idle inhibit through `idle.rs`; records logout/suspend inhibitors; `QueryEndResponse` on session end | "X is preventing logout" | 1 |
+| Lockdown | properties from config | — | 1 |
+| ScreenCast | windows, monitors, region; cursor embedded/metadata/hidden; PipeWire streams; restore tokens | source picker, sharing indicator | 2 |
 | Screenshot | one frame from the same sources, PNG to `$XDG_PICTURES_DIR`; `PickColor` | region picker, color picker | 2 |
-| RemoteDesktop | EIS socket; legacy `Notify*` methods into the same path | device grant | 3 |
-| Clipboard | selection to and from a RemoteDesktop session through `clipboard.rs` | part of that grant | 3 |
+| RemoteDesktop | EIS socket; legacy `Notify*` methods use the same path | device grant | 3 |
+| Clipboard | selection to/from a RemoteDesktop session through `clipboard.rs` | part of that grant | 3 |
 | InputCapture | pointer barriers at screen edges; EIS | grant | 3 |
-| GlobalShortcuts | binds into the keymap the shell's own keys use; `Activated`/`Deactivated` | review and rebind | 4 |
-| Background | autostart entries; `GetAppState` from the compositor's clients | "X wants to run in the background" | 4 |
-| Wallpaper | forwards the image | the shell's wallpaper | 4 |
+| GlobalShortcuts | binds into the shell's keymap; `Activated`/`Deactivated` | review and rebind | 4 |
+| Background | autostart entries; `GetAppState` from compositor clients | "X wants to run in the background" | 4 |
+| Wallpaper | forwards the image | shell wallpaper | 4 |
 | DynamicLauncher | writes the `.desktop` file and icon | install confirm | 4 |
 | Usb | device list from udev | device grant | 4 |
-| Print | printers and options over IPP from CUPS; the job to CUPS | print dialog | 5 |
-| Secret | not ours: the keyring | — | — |
+| Print | printers and options from CUPS over IPP; sends the job to CUPS | print dialog | 5 |
+| Secret | keyring, not Domicile | — | — |
 
-Outside the portal, and part of the same pass because apps expect it:
-`ext-data-control-v1`, so clipboard managers and `wl-paste` work with no
-focused window.
+Also in scope, outside the portal: `ext-data-control-v1`, so clipboard
+managers and `wl-paste` work without a focused window.
 
 ## Plan
 
-Phase 0: the mechanism.
+Phase 0: request channel.
 
 - [ ] `PortalRequest`, `PortalAnswer`, the two messages; protocol round-trip tests
-- [ ] `domicile_host::portals`: the queue, first answer wins, refused on no taker
+- [ ] `domicile_host::portals`: queue, first answer wins, refuse when no listener
 - [ ] `src/portals/`: one name, `Request` and `Session` objects, `Settings` moved from `appearance.rs`
 - [ ] engine patch: `portalrequests`, `answerPortalRequest`, `listDirectory` (`file_choice.cc`'s `DirectoryEntries`); guard against a stand-in compositor
 - [ ] SDK: `portal_requests`, kinds parsed with Zod
-- [ ] `zxdg_exporter_v2` and `v1`; a handle resolves to an app id
+- [ ] `zxdg_exporter_v2` and `v1`; resolve a handle to an app id
 - [ ] `<PortalDialogs />` in component-library; mounted in manganese, shell-simple, `examples/minimal-shell`
 - [ ] `domicile.portal` lists each interface as it lands; the conf routes it here
 
@@ -145,7 +141,7 @@ Phase 2: capture.
 - [ ] engine: `FrameSinkVideoCapturer` per display, dmabufs over the broker socket
 - [ ] ScreenCast, with restore tokens and the sharing indicator
 - [ ] Screenshot and `PickColor`
-- [ ] ROADMAP's "no screenshot or screencast portal" comes out
+- [ ] Remove ROADMAP's "no screenshot or screencast portal" item
 
 Phase 3: input.
 
@@ -158,7 +154,7 @@ Phase 4: the rest.
 - [ ] GlobalShortcuts
 - [ ] Background, Wallpaper, DynamicLauncher, Usb
 
-Phase 5: printing, and gtk leaves.
+Phase 5: printing, and remove gtk.
 
 - [ ] Print over IPP
-- [ ] `xdg-desktop-portal-gtk` out of `nix/nixos.nix`, `nix/home-manager.nix` and the flake's checks; the conf names only domicile and the keyring
+- [ ] Remove `xdg-desktop-portal-gtk` from `nix/nixos.nix`, `nix/home-manager.nix` and the flake's checks; the conf names only domicile and the keyring

@@ -1,32 +1,25 @@
 # The wire
 
-One golden file, for the thing the compositor and the chrome SDK have to agree
-about without either being able to check the other at build time.
+`host-messages.jsonl` is the golden file for messages the compositor sends to
+the chrome SDK. Each line is one message, byte for byte as the compositor
+writes it.
 
-`host-messages.jsonl` is one JSON line per message, exactly as the compositor
-writes it, and it is read from both languages:
+Rust and TypeScript define these messages separately, by hand. Both sides test
+against this file so they can't drift apart. A mismatch would otherwise show
+up only at runtime: `chrome-socket.ts` silently drops any message its schema
+rejects.
 
-- `packages/domicile-protocol/tests/wire.rs` asserts Rust *writes* these bytes —
-  serializing each parsed line back and comparing. Byte-for-byte rather than
-  value-for-value, for what a round-trip through Rust's own types cannot see:
-  `800.0` where a hand-written fixture would say `800`, and an `Option` written
-  as `null` rather than left out — a size the client has not reported is
-  `"size":null`, not an absent key. Both are things the SDK has to be ready for.
-- `packages/chrome-sdk/src/wire-fixture.test.ts` asserts the SDK's Zod schemas
-  *read* them.
+## Tests
 
-Why a file rather than a test each: the two definitions are written by hand in
-two languages, so each side's own tests can pass against its own literals while
-the two disagree with each other. What that looks like at runtime is a chrome
-silently dropping a message — `chrome-socket.ts` discards whatever the schema
-rejects — which is indistinguishable from a compositor that never sent one.
+- **`packages/domicile-protocol/tests/wire.rs`**: checks that Rust writes each
+  line byte for byte. This catches details a value comparison misses, like
+  `800.0` vs `800`, or `"size":null` vs an absent key.
+- **`packages/chrome-sdk/src/wire-fixture.test.ts`**: checks that the SDK's Zod
+  schemas parse each line.
 
-A new `HostMessage` variant cannot skip this file: `wire.rs` asks `serde` which
-tags the enum has — by handing it one no variant answers to and reading the
-complaint — so a variant added and nothing else fails
-`the_fixture_covers_every_host_message`, naming its tag. Changing a field means
-editing the line, and both sides go red until it matches. `protocol_version` in
-the `welcome` line is pinned to `PROTOCOL_VERSION` too, so a bump cannot leave
-a stale number sitting in a file that claims to be the wire.
+## Rules the tests enforce
 
-That is the whole mechanism: neither language can move alone.
+- Every `HostMessage` variant has a line. A new variant without one fails
+  `the_fixture_covers_every_host_message`, which names the missing tag.
+- `protocol_version` in the `welcome` line equals `PROTOCOL_VERSION`.
+- Changing a field means editing its line. Both sides fail until they match.

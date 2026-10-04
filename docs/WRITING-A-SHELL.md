@@ -1,92 +1,74 @@
 # Writing a shell
 
-A **shell** is a Domicile desktop: the panels, the window decorations, the
-launcher, the wallpaper. Domicile ships two (`manganese` and `simple`), but
-neither is special. A shell is a built web page in its own repository, and this
-describes how to write one.
+A **shell** is a Domicile desktop's UI: panels, window decorations, launcher,
+wallpaper. It is a built web page. Domicile ships two shells (`manganese` and
+`simple`); neither is special. This guide covers writing one in its own
+repository.
 
-This is a guide, not a guideline: nothing here governs contributions to this
-repo. For that see [`/AGENTS.md`](/AGENTS.md).
+- [`examples/minimal-shell`](/examples/minimal-shell) is the worked example.
+  [`scripts/test-out-of-tree-shell.sh`](/scripts/test-out-of-tree-shell.sh)
+  builds it against the published SDK on every `./scripts/check.sh shell`. If
+  this guide and the example disagree, the example is right.
+- To contribute to Domicile itself, see [`/AGENTS.md`](/AGENTS.md).
 
-Everything below is worked end to end in
-[`examples/minimal-shell`](/examples/minimal-shell), which lives outside the
-bun workspace and is built against the *published* SDK by
-[`scripts/test-out-of-tree-shell.sh`](/scripts/test-out-of-tree-shell.sh) on
-every run of `./scripts/check.sh shell`. If this document and that example
-disagree, the example is right — it is the one that is checked.
+More:
+
+- [SHELL-CONFIG.md](SHELL-CONFIG.md): the config file that describes a
+  desktop.
+- [SHELL-BROWSER-WINDOWS.md](SHELL-BROWSER-WINDOWS.md): browser windows
+  (`<webview>`), and `open_url`.
+- [SHELL-EXTENSIONS.md](SHELL-EXTENSIONS.md): Chrome extensions' toolbar
+  buttons and popups.
+- [SHELL-DESKTOP-EVENTS.md](SHELL-DESKTOP-EVENTS.md): displays, theme, system
+  tray and notifications.
+- [SHELL-IDLE-AND-LOCK.md](SHELL-IDLE-AND-LOCK.md): blanking and the lock
+  screen.
+- [SHELL-PACKAGING.md](SHELL-PACKAGING.md): bundling and distributing a shell.
 
 ## What a shell is
 
-A built JavaScript module whose `Shell` export is a function. Domicile serves
-it, imports it into a page it writes, calls `Shell` with the element to draw in,
-and runs the compositor underneath; a Wayland client that maps a window becomes an `<app>`
-element in your page, and where you put that element is where the window is.
-Deciding that — and nothing else — is a shell's whole job. The compositor keeps
-the clients, the input, the outputs and the pixels.
+A JavaScript module whose `Shell` export is a function.
 
-`<app>` and `<webview>` are the **engine's own tags**, not the SDK's. Nothing
-registers them and nothing can: a custom element's name must contain a hyphen,
-per spec, which is exactly why the fork defines these two as real HTML elements.
-Write them as you write a `<div>`. `<app>` is a client's window and is most of
-what follows; `<webview>` is a page, and has
-[a section of its own](#a-browser-window).
+- Domicile serves the module, imports it into a page it writes, and calls
+  `Shell` with the element to draw in.
+- Each Wayland window becomes an `<app>` element in your page. Where you put
+  the element is where the window is. Placing windows is the shell's job.
+- The compositor handles clients, input, outputs and pixels.
 
-**And style them as you style a `<div>`**, which is the whole point of the
-thing. A window is a `cc::SurfaceLayer` in your page's own layer tree, so the
-page's compositor applies CSS to it because it applies CSS to a layer — not
-because anyone reimplemented a property. `z-index`, `transform`,
-`border-radius`, `opacity`, `filter: blur()` and `mix-blend-mode` are each
-measured bit-exact against an ordinary element laid out beside it, on a GPU,
-and a submitted frame reaches the screen in one display frame
-([the measurements](/docs/architecture/ENGINE-FORK.md)). Two things are not
-promised: a client that draws in shared memory rather than on the GPU gets a
-blank window, and a `backdrop-filter` over an `<app>` is asserted by a guard
-rather than reported as a number —
-[WINDOW-COMPOSITING.md](/docs/architecture/WINDOW-COMPOSITING.md) keeps that
-list.
+`<app>` and `<webview>` are tags built into the engine (Domicile's Chromium
+fork). Nothing registers them. Write them as you would a `<div>`. `<webview>`
+is a browser page; see [SHELL-BROWSER-WINDOWS.md](SHELL-BROWSER-WINDOWS.md).
 
-**One CSS construct is drawn right and clicked wrong: a perspective.** A window
-projected by a `perspective` above it — or by a `perspective()` in a transform
-over it — is painted exactly as the page asked, but the pointer position the
-client is handed comes from inverting an affine, and a projection is not one.
-The SDK detects that and says so on the console rather than guessing quietly;
-until it can be inverted, keep a `perspective` off the ancestors of an `<app>`
-you expect to be clickable. `zoom`, `rotate`, `scale` and 2D `transform`s on
-any ancestor are all carried, including a 3D rotation with no perspective over
-it, which CSS draws by dropping z and the SDK maps the same way.
+Style an `<app>` like a `<div>`. A window is a layer in your page's layer
+tree, so CSS applies to it directly. `z-index`, `transform`, `border-radius`,
+`opacity`, `filter: blur()` and `mix-blend-mode` render bit-exact against an
+ordinary element ([measurements](/docs/architecture/ENGINE-FORK-MEASUREMENTS.md)).
+Exceptions:
+
+- A client that draws in shared memory instead of on the GPU shows a blank
+  window.
+- `backdrop-filter` over an `<app>` renders but is not pixel-verified; see
+  [WINDOW-COMPOSITING.md](/docs/architecture/WINDOW-COMPOSITING.md).
+- **perspective:** clicks land in the wrong place on an `<app>` under
+  `perspective` or a `perspective()` transform. The SDK logs a warning. Other
+  transforms work.
+
+## Running it
 
 ```sh
 nix run github:cprussin/domicile/stable -- ./my-desktop/dist/shell.js
 ```
 
-That is the entire interface between a shell and Domicile: one built
-JavaScript module, named on the command line. Call it what you like — Domicile
-loads the file it was given, and the directory that file is in is what it
-serves. **Domicile writes the document** — you do not ship one, and there is
-no way to supply your own.
+- The module path is the whole interface. Name the file what you like.
+- Domicile serves the directory the module is in, over `domicile://`.
 
-Domicile owns the window, the socket and the process. What is left for a
-shell to be is the page.
-
-So there is no launcher to write, no `bin/` stub, no session to read out of the
-environment, and nothing to install. There are two processes at run time and
-neither of them is yours:
-
-| Process | What it does |
-|---|---|
-| the **engine** | the fork. It serves your page over `domicile://` and loads it, and it is the display compositor |
-| the **compositor** | a producer to the engine: it keeps the Wayland clients and hands their buffers over |
-
-The order is forced and Domicile forces it: the engine first, because the
-compositor connects to the socket it creates. Your page is served over
-`domicile://` rather than opened off disk because `file:` has no origin, and
-the channel to the compositor is `window.domicile` rather than a socket the
-page opens, because a page cannot open a Unix socket and nothing here binds a
-port.
+**Dev loop:** run `vite build --watch` next to `domicile ./dist/shell.js`.
+Nothing reloads automatically (the page runs under `--app`, with no reload
+button). To load a rebuilt bundle, run `domicile load-shell ./dist/shell.js`
+in a terminal inside the desktop. Any shell works, and windows stay put
+([THE-DOMICILE-BINARY.md](/docs/architecture/THE-DOMICILE-BINARY.md)).
 
 ## The connection
-
-One call, and it is the whole of the wiring:
 
 ```ts
 import { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
@@ -95,357 +77,44 @@ import { connectToHost } from "@domicile-desktop/sdk/connect-to-host";
 const domicile = new DomicileClient(connectToHost(window));
 ```
 
-`connectToHost` reads `window.domicile`, which is the control channel the
-engine puts on a document it served. There is nothing to configure and nothing
-to pass: it is a property of the page, so no query string carries a socket path
-and no two things can disagree about where the compositor is.
+- `connectToHost` reads `window.domicile`, the control channel the engine adds
+  to the page. There is nothing to configure. `navigator.domicile` is the same
+  object.
+- There is nothing to await and no version handshake. The browser process
+  checks the protocol version and logs a mismatch.
+- Do not call `addEventListener` on `window.domicile` yourself.
+  `DomicileClient` registers its listeners in its constructor and buffers
+  messages until your `on` handler exists. A listener added later misses every
+  window that was already open.
+- `domicile.displays` returns the current displays at any time.
+  `domicile.on("displays", …)` is for changes.
+- With no compositor, `connectToHost` returns a no-op stand-in and logs one
+  console warning. `<app>` is then an `HTMLUnknownElement`: it takes a box and
+  shows nothing. Use `hasHost(window)` to check. Develop against a real
+  desktop.
 
-`navigator.domicile` is the same object and keeps working — the engine hangs
-one host off the window and answers both spellings with it, so a listener bound
-through either is bound to the one channel. Write `window.domicile`: system
-state is reached at `window.domicile.<interface>` with nothing to register
-first, and that is the surface the rest of this guide names.
-
-A page with no compositor gets a stand-in that does nothing, so the layout
-still lays out, and `connectToHost` says once, on the console, that there was no
-compositor to find and so no window will ever appear. That one line covers the
-elements as well: the thing that defines `<app>` is the thing that binds
-`window.domicile`, so a page with an `<app>` that can never show a window is
-exactly the page this warned about. There an `<app>` is an
-`HTMLUnknownElement` — it takes a box and shows nothing, and the SDK routes
-pointers over it as usual. Ask `hasHost(window)` if you need the question
-answered in your own code; do not reconstruct it.
-
-Do not develop against that, though: it is the chrome with every window in it
-missing, and a desktop's interesting behavior is all on the other side of the
-channel. Point `domicile` at your shell's module and let your own bundler watch
-it — `vite build --watch` beside `domicile ./dist/shell.js` is the whole dev
-loop, and it is a real desktop rather than a page pretending to be one.
-**Nothing reloads it by itself**: a desktop runs under `--app`, where there is
-no reload to press. What puts a rebuilt bundle on a desktop that is already
-running is `domicile load-shell ./dist/shell.js`, typed in a terminal inside
-that desktop — any shell, not only a new build of the one it is on, and the
-windows stay where they are
-([why](/docs/architecture/THE-DOMICILE-BINARY.md)).
-
-## There is nothing to await
-
-**A shell does nothing about versions, and waits for nothing.** The channel is
-a typed surface rather than a message pipe: the compositor's protocol version
-is checked in the browser process, which logs a disagreement and carries on,
-and a page has no part in it. Say what you have to say as soon as you have a
-client, and the first call is what binds the channel.
-
-What a shell *does* have to think about is registration order, and
-`DomicileClient` is what handles it: it registers its own listeners in its
-constructor and holds anything that arrives before your `on` does. A React
-shell registers in its first effect flush, tens of milliseconds late, and every
-window already running is announced before then.
-
-**So never call `addEventListener` on `window.domicile` yourself.** It
-works, and it works for everything dispatched after your listener existed —
-which on a desktop with no clients open is everything, which is what makes the
-bug invisible until somebody reloads with a terminal running.
-
-The desktop is not an event at all: `domicile.displays` reads it whenever you
-ask, so a component that mounts long after the compositor described one still
-gets it. `domicile.on("displays", …)` is for reacting to a change, not for
-learning what is there.
-
-## Reporting a failure
-
-Say it on the console: what a page logs reaches the terminal Domicile was
-started from.
-
-There is no way for a page to stop the desktop, and it does not need one. What
-a shell can still get wrong is calling the compositor something it will not
-accept — an empty argv, a keycode of zero, a device pixel ratio that is not
-positive — and those *throw*, from the call, because they are bugs in the page
-rather than outcomes it has to handle.
-
-## The configuration
-
-**The shell owns whatever a user edits.** Domicile has no user-facing
-configuration beyond the one file below: your location, your schema, your
-names.
-
-The compositor takes a `--config` naming a JSON file that describes
-the desktop — the displays, their layout, the keyboard — and watches it for
-changes while it runs. **`domicile` passes one on:**
-
-```
-domicile --config ./desk.json ./my-desktop/dist/shell.js
-```
-
-**And finds one when you leave the flag off:**
-`$XDG_CONFIG_HOME/domicile/domicile.{ts,tsx,js,mjs,json}`, or the same
-under `~/.config` where that is unset; two of them is refused. A person who has written their monitors down should not
-have to type where — and a shell packaged as a wrapper script does not have to
-invent a location for a file that already has one.
-
-That is the one well-known path in the whole system, and it is the `domicile`
-binary's rather than the compositor's: `domicile-compositor` still takes every
-value on its command line and reads nothing from the environment, because it is
-started by a program. What is guessed here is guessed for a *person*, and the
-run says which of the four answers it got before it starts anything:
-
-```
-config: /home/you/.config/domicile/domicile.json, found where a config lives
-config: ./desk.json, because --config names it
-config: none -- no domicile.{ts,tsx,js,mjs,json} in /home/you/.config/domicile -- so the compositor's defaults
-```
-
-**A config can be a module.** Its `Shell` export is the shell `domicile` runs
-when it is given none, and every other export is a section of the schema, key
-for key — the builder evaluates it to the JSON the compositor reads:
-
-```tsx
-// ~/.config/domicile/domicile.tsx
-import { runManganese } from "@domicile-desktop/manganese";
-
-export const input = { keyboard: { xkb_variant: "dvp" } };
-export const Shell = runManganese();
-```
-
-Your own bar items style with manganese's Panda: `css` (and `jsx`,
-`patterns`, `tokens`) from `@domicile-desktop/manganese/css` and its siblings,
-the same design system manganese's items use. The builder scans your files
-beside manganese's, so every `css()` call you write has its rule:
-
-```tsx
-import { css } from "@domicile-desktop/manganese/css";
-
-const Mail = () => <span className={css({ color: "muted" })}>3/12</span>;
-```
-
-A JSON config names its shell as `"shell"`, relative to the config:
-`{ "shell": "@domicile-desktop/manganese" }`. See
-[COMPOSABLE-SHELLS.md](/docs/architecture/COMPOSABLE-SHELLS.md).
-
-**On NixOS, the home-manager module writes it for you.** `programs.domicile`
-declares an option for every field of that schema, so a desk is described
-where the rest of your environment is rather than in a file you keep by hand:
-
-```nix
-{
-  imports = [domicile.homeManagerModules.default];
-
-  programs.domicile = {
-    enable = true;
-    shell = "${domicile.packages.${system}.manganese}/shell.js";
-    settings.output.profiles = [{
-      name = "desk";
-      displays = [
-        {display = "DEL DELL U3219Q 2ZLS413"; scale = 1.2; transform = "rotate-270";}
-      ];
-    }];
-  };
-}
-```
-
-It writes the same file to the same path, puts `domicile` on `PATH` with your
-shell already baked in, and installs no session or unit — making domicile a
-machine's login session is a decision about how it boots rather than about
-where the monitors are, so it is the NixOS module's
-([RUNNING-A-DESKTOP.md](/docs/RUNNING-A-DESKTOP.md#the-machines-half)).
-`settings` is freeform, so a key newer than the module is written through
-rather than refused.
-
-The flag may come on either side of the shell, and no file at all is a real
-answer rather than a missing one — a desktop with no monitors written down
-runs a single output that follows the engine's own window, which is what a
-nested developer run wants. What is refused is the half-stated form: a
-`--config` with nothing behind it, or two of them, because the compositor
-runs its defaults on a missing file and refuses a path it cannot load, and
-guessing between those picks one for somebody who meant the other.
-
-**An edit to that file reaches the desk that is running it**, whichever field
-it touched: the compositor watches the config and takes up the whole of a
-reload, so a new `xkb_layout` retypes the desktop, a new `output.max_scale`
-re-advertises it, a new `idle.blank_after_seconds` restarts the clock its
-screens go dark on, a new `theme.mode` repaints the shell and every window that
-follows the portal, a new `files.omit` walks the home again for the launcher's
-index, a new `applications` changes which applications and bookmarks the next
-search offers, a new `extensions` list installs and uninstalls what it names (see
-[EXTENSIONS.md](/docs/architecture/EXTENSIONS.md)),
-a new `input.keyboard` moves the keys a shell bound (see
-[Keybindings](#keybindings)),
-and the display list and the profiles rearrange it. The windows stay open through all of it — and a desk edited while its screens were
-off gets them back, because the clock that knew they were off is the one the
-edit replaced. Two sections are read at startup and not on a reload:
-`lock`, because whether the desk is *locked* is not something that file says
-— see [A locked desk](#a-locked-desk) — and `startup`, because running its
-commands again would be a second copy of each.
-
-Two edits are refused rather than applied, and each says so in the log: a file
-that will not parse, which leaves the last one that did in place, and a keyboard
-xkb cannot compile, which leaves the desk typing on the layout it has.
-
-**The keyboard is one of the things a shell owns, and it is not optional in
-the way it looks.** `input.keyboard` takes the `xkb_*` fields sway names —
-`xkb_layout`, `xkb_variant`, `xkb_options` and the rest — and a config that
-says nothing about them gets a plain `us`: no variant, no remapped keys. That
-default is deliberately *nobody's* keyboard. It was one author's for a while
-(Programmer's Dvorak with Caps Lock and Escape swapped), which is a surprise
-nothing else in a desktop can produce — every key wrong, and no message
-anywhere saying why. So a shell whose users do not type US QWERTY has to carry
-their layout into this file; there is no layer below it that will.
-
-**A desktop that blanks says so, and one that says nothing does not.**
-`idle.blank_after_seconds` is how long a desk goes untouched before its screens
-go dark; they come back on the next key, click, scroll or pointer movement,
-and your shell hears both — see [When nobody is at the
-desk](#when-nobody-is-at-the-desk). Leaving it out is a desktop that never
-blanks, which is deliberate: nothing warns a moment *before* it, so a desk that
-went dark on a timeout its user never set is one that looks like it died. It is
-also what locks a desk that states what opens it under `lock`, as does your
-shell calling `lock()` — see [A locked desk](#a-locked-desk). `0` is refused rather than read as
-either answer. An app playing a film holds the screens on through the timeout —
-`zwp_idle_inhibit_manager_v1`, which is between that client and the compositor
-— so a desk that has not blanked is not necessarily one whose timeout is wrong,
-and there is nothing there for a shell to write either way.
-
-**The theme is the desktop's, and there are two of them.** `theme.mode` is
-`"dark"` or `"light"`, and it is where a desk states the one it comes up on.
-There is no `"system"` and there is not going to be one: every other desktop
-offers "follow the system" because it is a program running on one, and Domicile
-*is* the system — a `system` here would be the desk deferring to itself, so the
-word is refused by name rather than read as one of the two. `prefers-color-
-scheme` still answers inside the shell's page, as it answers in any browser,
-and a shell that read it would be asking the engine what the engine was told.
-
-```json
-{ "theme": { "mode": "light" } }
-```
-
-**What it changes is the whole desk, not the page.** The shell is told the
-theme with the handshake and again whenever it moves; the compositor hands the
-same value to the *settings portal* — `color-scheme` in the
-`org.freedesktop.appearance` namespace, which GTK4, Qt6, Electron and Firefox
-all read and follow while they run — and draws the sites in browser windows
-the same way. A desk with no session bus keeps its own theme working and says
-once in the log that its clients will not be following it.
-
-**The windows turn after the shell has captured its old frame.** A shell that
-animates the change — a view transition, say — captures the frame it leaves,
-and the windows are in it. So the compositor tells the chromes first and holds
-the windows until every chrome calls `domicile.themeCaptured(theme)`, then
-answers with a `windows_theme` message once they have repainted. Call it from
-inside the transition's update and return a promise that settles on that
-message: the old frame stays up until then, and the transition reveals windows
-already turned. A shell with no animation calls it as soon as it is told.
-One that never calls it gets its windows turned anyway, a second late.
-`ThemeProvider` in `@domicile-desktop/component-library` does all of this; a shell
-using it hands `turnWindows` on its `ThemeSource` to `themeCaptured`.
-
-**And it goes the other way.** `domicile.setTheme("light")` from a shell asks
-the compositor, which answers every chrome. Nothing is written back to this
-file: it is generated, a desktop that edited a build product would
-be a desk fighting its own configuration, and a toggle lasts as long as the
-desktop does. An edit to `theme` therefore overrules whatever the toggle last
-did, which is the honest reading of somebody restating what this desk is.
-
-Two of the things it can say about a desktop are different in kind, and which
-one a shell generates depends on whether there is hardware under it:
-
-- `output.displays` **states a desktop outright** — a name, a size, a position,
-  a scale per display. A nested run has no monitors to enumerate, so this is
-  the desktop, and nothing overrules it.
-- `output.profiles` **places the monitors that are actually plugged in**. Each
-  profile names exactly the displays it is for and says what to do with each
-  one (`enabled`, `position`, a fractional `scale`, a `transform`) and, if it
-  wants, the `mode` it was written for; the first
-  profile whose set is connected wins, and the match is made again on every
-  hotplug and every reload. A display may be named any of three ways: by its
-  `wl_output` name, which on a tty is `drm-<id>`; by its *description* —
-  `"<MAKE> <MODEL> <SERIAL>"` off the panel's EDID, `DEL DELL U3219Q 2ZLS413`;
-  or by that description with the maker spelled out of hwdata's `pnp.ids`,
-  `Dell Inc. DELL U3219Q 2ZLS413`, which is the string kanshi and sway match on
-  and what the `wl_output` states. All three match, so a profile written
-  against any of them applies. All survive being unplugged; the description is
-  empty for a monitor that states none of the three.
-
-```json
-{
-  "output": {
-    "profiles": [
-      {
-        "name": "desk",
-        "displays": [
-          { "display": "drm-1", "enabled": false },
-          {
-            "display": "DEL DELL U3219Q 2ZLS413",
-            "mode": [3840, 2160],
-            "position": [0, 0],
-            "scale": 1.2,
-            "transform": "rotate-270"
-          }
-        ]
-      },
-      { "name": "laptop-only", "displays": [{ "display": "drm-1", "scale": 1.5 }] }
-    ]
-  }
-}
-```
-
-**A profile's `mode` asserts, it does not ask.** Domicile does not modeset —
-the engine holds DRM master and lights every connector at its native mode — so
-a stated mode says which one that entry's positions were written against, and
-a monitor that comes up at another makes the profile inapplicable rather than
-approximately right. The desktop that is up stays up and the complaint names
-both modes, which is the same bargain a config that does not parse gets. Left
-out, nothing is checked and the monitor's own mode is used, which is what
-every profile did before the field existed. A size and not a rate: the hertz
-changes no arithmetic here, and a monitor that reports none is ordinary.
-
-**A monitor a profile turns or scales is drawn that way by the engine, and a
-shell does nothing about it.** Your shell is one page over the desk's bounding
-box, in logical pixels, and each display is a rectangle in it. On a tty the
-engine shows that page on every monitor, turned and scaled the way the monitor
-is: a pointer event is in the page's logical pixels wherever it lands, and a
-portal, a dialog or anything else outside a `<Screen>` comes out the right way
-up. The pointer's arrow and its travel turn with the monitor too.
-
-A display still says how it was drawn, for a shell that wants to show it:
-`mode` is the pixels the panel scans out (un-turned — a 4K panel on its side
-is a 3840×2160 mode and an 1800×3200 box) and `transform` which way up it is.
-Neither is an instruction.
-
-**`transform` is the `wl_output` value, which counts counterclockwise**, as the
-config file, kanshi and sway do: `rotate-90` turns the content a quarter
-counterclockwise, for an output bolted a quarter turn clockwise, and
-`rotate-270` the other way.
-
-`@domicile-desktop/sdk` does not parse that file. Its schema is the
-`domicile-config` crate's, and there is no published TypeScript parser for it
-today.
+**Errors:** log to the console. Page logs reach the terminal Domicile started
+from. Invalid calls (an empty argv, a keycode of zero, a non-positive device
+pixel ratio) throw, because they are bugs in the page.
 
 ## The SDK
 
-One package, published to npm and usable outside this repo:
+`@domicile-desktop/sdk`, on npm, provides:
 
-| Package | What |
-|---|---|
-| `@domicile-desktop/sdk` | `DomicileClient` (the control channel), `connectToHost` (finding it), `registerElements` (the input routing over your `<app>` elements), `focusApp` and `focusChrome`, and the pure helpers around them. `<app>` and `<webview>` are the engine's own tags: the SDK types them and names the events on them, and registers nothing. |
+- `DomicileClient` (the control channel) and `connectToHost` (finding it)
+- `registerElements` (input routing over your `<app>` elements)
+- `focusApp`, `focusChrome`, `bindKeys`
+- types and event names for `<app>` and `<webview>`
 
-It is not required. A shell may drive `window.domicile` itself — it is a
-typed surface rather than a wire, described in
-`@domicile-desktop/sdk/domicile-host` and, definitively, in the IDL under
+The SDK is optional. You can drive `window.domicile` directly; its types are
+in `@domicile-desktop/sdk/domicile-host` and its IDL in
 `packages/domicile-engine/src/third_party/blink/renderer/modules/domicile/`.
-Doing so means handling the registration order above yourself, along with the
-input mapping that `registerElements` does.
+You then handle registration order and input mapping yourself.
 
-`@domicile-desktop/component-library` is **not** part of the contract. It is the React
-and Panda CSS design system this repo's own shells are built from, and it exists
-to serve them. A shell outside this repo needs none of it — the example uses no
-React at all.
+`@domicile-desktop/component-library` is the React and Panda CSS design
+system this repo's shells use. Shells do not need it.
 
-## The smallest shell that works
-
-One source file and a build config. The full version, with the comments, is in
-[`examples/minimal-shell`](/examples/minimal-shell).
-
-**`src/index.ts`** — the page, and the whole of the shell's behavior:
+## The smallest shell
 
 ```ts
 import { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
@@ -473,116 +142,70 @@ export const Shell: ShellModule = (root) => {
 };
 ```
 
-**`Shell` is the whole contract.** Domicile imports the module and calls it
-once; every other export is ignored. Importing the module does nothing but
-install its stylesheet, so put everything else inside `Shell`. A module with no
-`Shell` export, or whose `Shell` throws, is reported on the screen.
+This is a working desktop: every window full-screen, newest on top.
 
-That is a working desktop: every window full-screen, newest on top. A real
-shell differs from it only in where it puts the elements.
+- Domicile imports the module and then calls `Shell` once. Do no work at
+  import time except CSS. Other exports are ignored. A missing or throwing
+  `Shell` is reported on screen.
+- Handle `app_closed`, or every closed window leaks an element. The example
+  throws on a close for an app it never mounted, since that means the page and
+  compositor disagree.
+- Events can arrive for windows you have already removed. Ignore them.
+- Domicile writes the document: a charset, a viewport, and a `<body>` with no
+  margin that fills the window. You cannot supply one.
+- `root` is the empty `<body>`. Create your own container in it and render
+  there. Errors are reported by appending to `root`, and a framework that owns
+  `root` would wipe them.
+- There is no `#root` element. `document.getElementById("root")` returns
+  `null`, and the only symptom is a white window.
+- Make the background transparent wherever a window should show. A background
+  painted over an `<app>` hides it.
+- Set `document.title` if you want a title other than Domicile's.
 
-**A window's menus are `<app>` elements too.** A client's popup — a menu, a
-tooltip — arrives as `popup_placed`: its own `app_id`, the `parent` it is over
-(a window, or another popup for a submenu), and a `position` and `size` in CSS
-pixels from the top-left of that parent's box. Mount an `<app>` for it there,
-above its window, and take it down on `app_closed` like any other. It is not a
-window: give it no frame, do not tile it, and draw it only where its window is
-drawn. The SDK already routes a click on one to its window's keyboard
-(`DomicileClient.windowOf`), and the compositor dismisses a menu when the
-keyboard leaves its window. The example does it in a dozen lines; a popup the
-compositor placed near a screen edge is not moved back onto the screen.
+### Popups
 
-`app_closed` is in there rather than left out because without it every window
-leaks an element. The example's `app_closed` also *throws* on an app it never
-mounted, because a close for something never announced means the page and the
-compositor disagree about what is on screen.
+A client's menus and tooltips arrive as `popup_placed`:
 
-There is nothing to report. The engine tells the compositor the page's size
-and density itself, as the channel binds and on every change.
+- `app_id`: the popup's own id
+- `parent`: the window or popup (for a submenu) it belongs to
+- `position` and `size`: CSS pixels from the top-left of the parent's box
 
-There is no document to write. **Domicile writes it**: a charset, a
-viewport, and a `<body>` that fills the window with no margin. That last one is
-not a nicety — eight pixels of default body margin is eight pixels the
-compositor believes it has and does not, and a client's window drawn eight
-pixels out looks like the seam rather than like a stylesheet.
+To show one:
 
-**Nothing else, and in particular no element to mount into.** `Shell` is
-handed the body, empty, so a shell that renders into a container makes its own
-— `root.append` on the first line. Render into a child rather than `root`
-itself: a failure is reported by appending to `root`, and a framework that
-owns it wipes the report. Stated this bluntly because the failure is silent: a shell
-that looks up a mount point gets `null` and throws before it renders anything,
-and under `--app` there is no console to read, so the whole failure is a white
-window. It has cost a desktop here once already.
+- Mount an `<app>` for it at that position, above its parent.
+- Give it no frame and do not tile it. Draw it only where its window is drawn.
+- Remove it on `app_closed`.
+- The SDK routes clicks on it to its window (`DomicileClient.windowOf`).
+- The compositor closes a menu when the keyboard leaves its window.
+- A popup placed near a screen edge is not moved back on screen.
 
-What is left to you is the background: make it transparent wherever an app
-shows through, because an `<app>` is a hole in your page and a background
-painted over it hides the very window it is meant to show.
+## Windows
 
-The title is Domicile's until you say otherwise with `document.title`. It does
-not guess — the directory a module came out of is as likely to be `dist` as
-anything a person would recognize.
-
-## What a window has to be told
-
-**One thing, and it is CSS.** A client can ask for a cursor to be shown while
-the pointer is over its window, and that reaches you as `app_cursor`:
-
-```ts
-domicile.on("app_cursor", ({ app_id, cursor }) => {
-  const element = mounted.get(app_id);
-  if (element !== undefined) {
-    element.style.cursor = cursor;
-  }
-});
-```
-
-A window that is not there is not a mistake here, unlike on `app_closed` above:
-the host drains what it was already sending for a client whose close you have
-acted on.
-
-That is all of it. The element is yours — you position it, size it, round it and
-blur it — and its cursor is the same kind of act. A React shell writes
-`<app style={{ cursor }}>` and is done.
-
-**Neither size is yours to carry.** How big to draw is not something a shell
-says at all: an `<app>`'s layout box *is* the client's
-`xdg_toplevel.configure`, and the engine states it off the layout it performed,
-so styling the element is the whole of resizing a window. And the size the
-client drew at comes back on its own. `app_resized` still arrives, and you are
-welcome to it — `shell-simple` uses it to take a "nothing here yet" placeholder
-down — but you do not have to route it anywhere: the SDK records it off the
-channel as the message goes past, because scaling a pointer position into the
-client's own pixels is the only use anyone has for it. A shell that holds that
-size is a courier.
-
-The element is the engine's, and it has no methods of its own for either of
-these: a cursor is a style and a size is something the SDK already has.
-
-**A client's limits are yours to keep, if you size windows.** `app_min_size`
-and `app_max_size` say the smallest and largest a client will draw, per axis,
-with `undefined` for no limit. A box outside them gets a frame that does not
-fill it: cut off at the box's edge where the client will not shrink, stretched
-where it will not grow. `shell-manganese` holds its floating windows inside
-them; a tiling layout that cannot is left with the cut-off edge.
-
-### A window on two monitors
-
-One page spans the desk, so a window over the edge between two monitors is
-one `<app>` placed across both, and a drag across that edge is one drag.
+- **Cursor:** `app_cursor` gives the CSS cursor a client wants over its
+  window. Set it with `element.style.cursor = cursor` (in React,
+  `<app style={{ cursor }}>`).
+- **Size:** the `<app>` element's layout box is the window size. The engine
+  sends it to the client. Resize a window by styling its element.
+- **Drawn size:** `app_resized` reports the size the client drew at. The SDK
+  already uses it for pointer mapping, so you only need it for your own UI
+  (`shell-simple` uses it to remove a placeholder).
+- **Limits:** `app_min_size` and `app_max_size` give the client's limits per
+  axis (`undefined` for none). Outside them, the client's frame is cut off or
+  stretched. `shell-manganese` keeps floating windows within them.
+- **Multiple monitors:** the page spans every monitor, so a window across two
+  monitors is one `<app>`, and dragging across the edge is one drag.
 
 ## Who gets the keyboard
 
-The compositor holds it — it is the only thing that can deliver a key — but
-every move of it starts with your shell. Two questions reach you, and a shell
-that answers neither is the desktop the smallest one above already is: a click
-focuses the window under it, and a client that asks for focus is ignored.
+The compositor delivers keys, but your shell decides where they go. With no
+handling, a click focuses the window under it and a client's focus request is
+ignored.
 
-**A click on a window** is the first. The SDK fires a cancelable
-`domicile-focus-requested` on the `<app>` that was clicked
-(`APP_FOCUS_REQUESTED_EVENT` from `@domicile-desktop/sdk/app-element`) and, left
-alone, focuses the client — which is what you want when your shell has no
-opinion. Call `preventDefault()` on it and nothing moves until you say so:
+### A click on a window
+
+The SDK fires a cancelable, bubbling `domicile-focus-requested`
+(`APP_FOCUS_REQUESTED_EVENT`) on the clicked `<app>`. Unhandled, it focuses
+that client. To apply your own policy:
 
 ```ts
 import type { AppFocusRequest } from "@domicile-desktop/sdk/app-element";
@@ -598,20 +221,15 @@ document.addEventListener(APP_FOCUS_REQUESTED_EVENT, (event) => {
 });
 ```
 
-It bubbles, so one listener covers every window.
+Use `focusApp(domicile, id)`, not `domicile.focusApp(id)`. Key events go to
+`document`, and the SDK forwards them to the focused client. `focusApp` tells
+both the compositor and the SDK. `domicile.focusApp` tells only the
+compositor, so keystrokes stay in the page.
 
-**`focusApp` rather than `domicile.focusApp`**, and the difference matters: the
-client's method asks the compositor and stops there, while this also tells the
-SDK where the page's keystrokes go. A key event is delivered to `document` and
-never to an element — a Wayland client is a surface, with nowhere for the browser
-to put focus — so both halves are needed, and calling only the first gives the
-window the seat while every keystroke stays in the page.
+### Taking the keyboard for your own UI
 
-It goes one way only. Which client holds the keyboard is one seat's answer and
-something is always in it, so "this window has it" is an instruction the
-compositor can carry out and "this window does not" is not one. The keyboard
-leaves a window when another takes it, when a click lands on the chrome, or
-when you say so:
+Something always holds the keyboard. It leaves a window when another window
+takes it, when a click lands on the shell's own UI, or when you call:
 
 ```ts
 import { focusChrome } from "@domicile-desktop/sdk/focus-chrome";
@@ -619,31 +237,19 @@ import { focusChrome } from "@domicile-desktop/sdk/focus-chrome";
 focusChrome(domicile);
 ```
 
-**Which is a thing to reach for exactly once: a panel your shell puts up over
-the windows.** A launcher, a switcher, a palette — something to type into that
-no click reached and no client knows about. The window under it is still
-holding the seat, so without this the compositor goes on delivering every
-keystroke to the client while the user types into a box on top of it: the box
-fills with nothing and the window underneath takes the letters.
+- Call it when you open a panel to type into (launcher, switcher, palette).
+  Otherwise the window underneath keeps receiving the keystrokes.
+- As with `focusApp`, use the SDK function, not `domicile.focusChrome()`.
+- Give focus back from whatever normally assigns it. In `shell-manganese`, an
+  effect in `AppWindow` asks for the keyboard whenever it is elsewhere, which
+  also restores it when a panel closes.
 
-`focusChrome` rather than `domicile.focusChrome()`, for the reason `focusApp`
-is not `domicile.focusApp` either — both halves, or the page forwards to a
-window it has left.
+### A click on your window decorations
 
-Putting it back is the job of whatever asks for the seat in the first place. In
-`shell-manganese` that is one effect in `AppWindow`: the window being worked in
-asks for the keyboard whenever the compositor says the keyboard is elsewhere,
-so taking it for a panel and giving it back when the panel goes down are the
-same rule with the panel in it, rather than a second rule fighting the first.
-
-**A click on chrome you drew for a window** is the same question the other way
-round, and it is the one a shell with window furniture has to answer. The SDK
-reads a press that lands off every `<app>` as the page asking for the keyboard
-back, which is right for a press on the desktop and wrong for a press on a
-window's own title bar — or on the sheet a meta-drag is caught on. Those land
-off every `<app>` too, and nothing in a press says which window a `<div>`
-belongs to. So it asks, with a cancelable `domicile-focus-release-requested` on
-the `<app>` that holds the keyboard:
+The SDK treats a press outside every `<app>` as the page taking the keyboard.
+That is wrong for a title bar or drag handle you drew for a window. Before
+taking it, the SDK fires a cancelable `domicile-focus-release-requested` on the
+`<app>` that holds the keyboard. Cancel it to keep focus on the window:
 
 ```ts
 import type { AppFocusReleaseRequest } from "@domicile-desktop/sdk/app-element";
@@ -658,55 +264,42 @@ document.addEventListener(APP_FOCUS_RELEASE_REQUESTED_EVENT, (event) => {
 });
 ```
 
-Left alone the keyboard goes back to the page, so a shell whose windows have no
-chrome of their own needs to know nothing about this. `shell-manganese` marks
-each float's bar and grab sheet with the window it belongs to and reads that
-back here, which is how dragging a window no longer takes the keyboard off it.
+`shell-manganese` tags each floating window's bar and drag sheet with its
+window and checks that here.
 
-**If you write JSX**, note that `<app>` has no hyphen in its name, so React
-treats the tag as an ordinary HTML element: it writes neither a property it does
-not recognize nor an `on…` prop for an event it has never heard of. Bind this
-event with `addEventListener` on a ref. `<webview>`'s four events are the same.
+**JSX:** `<app>` has no hyphen, so React treats it as a plain HTML element and
+ignores unknown `on…` props. Bind these events with `addEventListener` on a
+ref. The same applies to `<webview>` events.
 
-**A client asking for focus** is the second, and it arrives as a message rather
-than an event: `domicile.on("focus_requested", ({ app_id }) => …)`. This is
-`xdg-activation` — "open this link in the browser I already have running", and
-also the dialog that puts itself in front of what you were typing into. The
-compositor does not grant it and makes no attempt to tell those two apart; it
-passes the question on with the seat where it was. Answer with
-`domicile.focusApp(app_id)`, or do nothing, which is a desktop where a background
-window cannot take the keyboard.
+### A client asking for focus
 
-**Where it actually is** comes back on `focus_changed`, which reports the
-answer rather than asking anything. Your shell's idea of the active window and
-the compositor's seat are two different facts, and this is the one that says
-where the keys are going. It also arrives for the one move the compositor makes
-on its own: a focused client that crashes hands the keyboard back to the page,
-because a keyboard pointed at a surface that is gone is a desktop that has
-stopped listening. That is a fallback and not a decision — the `app_closed` for
-that window reaches you first, so a shell that would rather move to the next
-window says so and has the last word.
+`domicile.on("focus_requested", ({ app_id }) => …)` is `xdg-activation`: an app
+asking to come forward (for example, a browser asked to open a link). The
+compositor does not grant it. Call `focusApp(domicile, app_id)` to grant it, or
+ignore it.
 
-**If your focus follows the cursor, take the cursor with it.** A desktop where
-crossing a window focuses it is a desktop where a keyed focus change is handed
-straight back: the window the focus came from is still under the pointer, and
-the next pointer event over it — a window sliding into the space the layout
-just changed, without the user moving anything — focuses it again. sway answers
-this with `mouse_warping` and so does every other compositor, from the outside;
-here the shell is a page, and a page can read where the pointer is and cannot
-put it anywhere. So ask: `domicile.warpPointer([x, y])`, in your own page
-coordinates — the ones a `PointerEvent` reports as `clientX`/`clientY`, which
-are the ones you laid the window out in, on whichever monitor that is. A point
-outside your page is clamped into it, and where something else owns the
-pointer — a nested run inside another compositor — nothing moves.
-`shell-manganese` does this on every focus change of its own — a keyed one,
-and a window opening with the keyboard, which is the same problem with nobody
-pressing anything — and only when the pointer is not over the window already.
+### Where focus is
+
+`focus_changed` reports which client holds the keyboard. Use it, not your own
+idea of the active window, to know where keys go. If a focused client crashes,
+the compositor gives the keyboard to the page; you receive `app_closed` first
+and can focus another window.
+
+### Focus follows the mouse
+
+If focus follows the pointer, a keyboard focus change can be undone at once:
+the old window is still under the pointer. Move the pointer with
+`domicile.warpPointer([x, y])`, in page coordinates (`clientX`/`clientY`).
+
+- Points outside the page are clamped.
+- In a nested run inside another compositor, nothing moves.
+- `shell-manganese` warps on its own focus changes (keyboard-driven, or a new
+  window taking focus) when the pointer is not already over the window.
 
 ## Keybindings
 
-**A shell's keys are its own**, given as its props. Sway-style: a chord maps to
-an action — a command for your shell, or a binding mode.
+A shell's keys come from its own props. Each chord maps to a shell command or a
+binding mode, like sway:
 
 ```ts
 import { bindKeys } from "@domicile-desktop/sdk/bind-keys";
@@ -733,715 +326,28 @@ bindKeys(
 );
 ```
 
-A chord is modifiers (`Meta`, `Shift`, `Ctrl`, `Alt`) and an xkb keysym name,
-joined by `+`. The compositor says which key each keysym is on in the
-configured layout (`shell_config`), so `Meta+parenleft` is right on
-Programmer's Dvorak and on QWERTY alike, and moves when the layout does. A
-chord written wrong, or whose keysym the keyboard cannot type, throws.
-
-It claims every chord, matches a press whether it landed on the page or in a
-`<webview>`, runs `Mode` itself, and hands you every `SendShell`. What a
-command *means* is yours. Take the keys from whoever configures your shell —
-manganese's are `runManganese({ keybindings })`, with sway's as the default —
-and your README is where your vocabulary lives; manganese's is
-[here](/packages/shell-manganese/README.md).
-
-**A claim is never given back**, so a key a layout change moves off stays the
-desk's until restart. Why it is built this way:
-[KEYBINDINGS.md](/docs/architecture/KEYBINDINGS.md).
-
-## When nobody is at the desk
-
-A desk that has gone untouched for `idle.blank_after_seconds` turns its screens
-off, and your shell is told:
-
-```ts
-domicile.on("idle", ({ idle }) => {
-  // `true` is a desk nobody is at. `false` is somebody back at it.
-  document.body.classList.toggle("idle", idle);
-});
-```
-
-**You cannot work this out for yourself, and the web platform's own answers are
-worse than nothing here.** Your shell *is* the desktop, so its document stays
-visible while the glass is off — the compositor turns the connector off
-underneath the browser, which is told nothing about it. `visibilityState`, an
-idle detector and a timer of your own all say somebody is here on a desk nobody
-has been at for an hour. The compositor is what every key and every pointer
-movement on this desktop passes through, so counting hands is its job, and this
-message is that count.
-
-**It is the state, not the edge, and you are told it again when your page
-connects.** The compositor decides an edge — a dark desk must not ask for a
-modeset on every tick — but a page reloads, and a page that has just loaded has
-missed every edge there was. So a shell rebuilt while the desk was idle comes
-back knowing it is idle, the same way it comes back knowing which windows are
-open.
-
-**It does not lead the blanking. Do not draw as if it does.** The screens go
-dark in the same breath the message arrives: there is no warning here to fade
-on, count down with, or show a "locking in ten seconds" over. What *is* worth
-doing on the idle edge is arranging what will be true when the screens come
-**back** — because the other edge does lead. Relighting a CRTC takes tens of
-milliseconds and your repaint takes one, so a panel you close or a secret you
-put away on `idle: false` is already closed by the time there is light to read
-it by. A desk that warns before it goes dark wants a lead time nothing in the
-config states yet; [ROADMAP.md](/ROADMAP.md) carries that.
-
-**It is not the lock, and drawing on this message does not make one.** A dark
-screen is a screen, and anybody can still type at this desktop: the seat is the
-compositor's, so refusing to deliver what is typed is its decision rather than
-your page's. A shell that raised a lock screen on `idle: true` alone has drawn a
-picture of one. The real thing is a message of its own, and its own state in the
-compositor — see [A locked desk](#a-locked-desk).
-
-**A desktop that never blanks sends nothing at all** — not even `idle: false`.
-Leaving `idle.blank_after_seconds` out is a desk with no opinion about who is at
-it, so a shell that has never had one of these has no idle affordance to draw,
-which is a different thing from having been told somebody is here.
-
-## A locked desk
-
-A desk that has gone untouched for `idle.blank_after_seconds` **locks itself**,
-if its config states what opens it: `lock.pam_service`, which is the password of
-the user the desktop runs as, or `lock.passphrase`. Your shell is told, and what
-it draws is a lock screen:
-
-```ts
-domicile.on("locked", ({ locked }) => {
-  // `true` is a desk that delivers nothing to any client. `false` is one that
-  // does.
-  setLocked(locked);
-});
-
-// And the way out, which is an offer rather than a decision:
-domicile.unlock(typed);
-
-// Or lock it now, from a chord or a menu item. The lock screen goes up on the
-// `locked: true` that answers it, like any other:
-domicile.lock();
-```
-
-**The compositor holds the lock, and your page cannot open it by drawing.** This
-is the one piece of desktop state where that distinction is the whole feature.
-Input on this system does not originate in the compositor — your page owns it and
-forwards it, and the compositor injects it into a Wayland seat — so a locked desk
-is *that injection not happening*. While `locked` is `true`, no client on the
-desk is given a keystroke, a click, a scroll or a pointer movement, whatever your
-page forwards.
-
-**And nothing you ask done to the desktop is done.** `closeApp`, `spawn` and
-`copyClipboardEntry` at a locked desk close no window, start no program and put
-nothing on the clipboard, and the compositor logs a warning for each — a shell
-that asks has left a panel up over its own lock screen. So you do not have to
-hide your panels for the lock to hold, though a lock screen that covers them is
-still the one that reads as locked. There is no answer on the wire either way:
-the refusal is a line in the compositor's log, like a wrong passphrase.
-
-**And nothing is read out of the machine for you.** `searchFiles`,
-`previewFile` and `searchApps` at a locked desk never settle — the same nothing a desktop with no index
-answers, whatever the query or path, so it says nothing about what is on the
-disk. Ask again on `locked: false`. `setTheme` is still taken: it opens nothing
-and reads nothing.
-
-So the things that would defeat a lock a page held do not defeat this one. A
-reload does not open the desk. An engine that died and came back does not open
-it. A shell rebuilt from a different bundle does not open it, and neither does
-one edited in the devtools of the browser that is drawing it: there is no
-`locked` to set, only a compositor to be told by.
-
-**You keep your own keys throughout, and that is what makes a lock screen
-possible rather than a hole in one.** You are the thing forwarding, so you can
-hold the keyboard, take a passphrase into a field and show what you like — none
-of it arrives anywhere. `unlock` hands what was typed to the compositor, which
-checks it and, if it was right, sends `locked: false` to **every** chrome on
-the desk. Clear your lock screen on that message and never on your own submit: a
-page that believed its own keystrokes would be a lock anybody could open by
-editing the page, which is the same reason `setTheme` comes back as a `theme`
-event.
-
-**A wrong passphrase is answered with `locked: true` again.** Every check is
-answered to every chrome once it is over, and nothing else sends `locked: true`
-to a desk being checked — that desk is already shut — so a `true` while your
-page has a passphrase out is the refusal. Hold your field until then, and clear
-it on the refusal or the `false`. A verifier that could not check is answered
-the same way; the compositor tells the two apart only in its own log, without
-the passphrase in it. There is no count on this protocol yet;
-[ROADMAP.md](/ROADMAP.md) carries it.
-
-**A right one takes as long as PAM takes, and the desk stays shut until then.**
-The check runs beside the compositor rather than in it, so nothing on the desk
-stalls — but a key your page forwards before `locked: false` arrives still
-reaches no client, and a second `unlock` sent while the first is being checked
-is dropped. PAM also sleeps on a *wrong* password, a couple of seconds on most
-machines, so do not read a slow answer as no answer.
-
-**It is a state, and you are told it again when your page connects.** Which here
-is the point rather than a convenience: the edge that shut the desk went out
-before a reloaded page existed, and a shell that had missed it would draw an open
-desktop over a desktop that is listening to nothing — and take a password into a
-text field no client will ever read.
-
-**A desktop that states neither sends none of these**, not even a `false`.
-It cannot lock: a desk that locked with nothing to open it would be a desk nobody
-could get back into. So a shell that has never had one of these has no lock to
-draw, which is a different thing from having been told the desk is open.
-
-One thing this is not, and it is worth knowing before you build on it. A
-desk that states `lock.passphrase` rather than `lock.pam_service` is opened by a
-string in the compositor's config file, which on NixOS is generated into a
-world-readable store — that desk is locked against somebody walking up to it and
-against nobody who can read the machine's disk. Nothing on this protocol tells
-your shell which of the two a desk has, and nothing needs to: the lock screen
-is the same.
-
-[`lock/Lock.tsx`](/packages/shell-manganese/src/lock/Lock.tsx) is manganese's,
-and [`lock/useLocked.ts`](/packages/shell-manganese/src/lock/useLocked.ts) is the
-state it draws from.
-
-## A browser window
-
-`<webview src="…">` is the fork's other tag: a page in a browsing context of
-its own, with the chrome around it yours to draw. A browser window in a shell
-is an address bar over one of these, and that is all it is —
-[`BrowserWindow.tsx`](/packages/shell-manganese/src/window-management/BrowserWindow.tsx)
-is manganese's.
-
-```ts
-const view = document.createElement("webview");
-view.src = "https://example.com";
-document.body.append(view);
-
-back.addEventListener("click", () => {
-  view.goBack();
-});
-```
-
-`goBack`, `goForward`, `stop` and `reload` are the element's own methods, and
-so is `src` — reflected, so the attribute and the property are one value. Write
-the *attribute* when you navigate: on a browser without the fork the property
-is a value hung off an unknown element, and the DOM goes on reporting the
-address the window opened at.
-
-**It never shows `domicile://`.** A guest there would hold the shell's origin,
-and with it the compositor. Such an address — or a `blob:` the shell minted —
-shows `about:blank#blocked` instead.
-
-**Give it a size.** It is a replaced element with an intrinsic size, so a view
-left to itself is 300×150 inside however large a window you put it in.
-
-**It is a guest, not a frame.** The page inside has no ancestor, so a site
-sending `X-Frame-Options: DENY` or `frame-ancestors 'none'` loads in one where
-an `<iframe>` is refused. That boundary is also what the sections below are
-about: nothing inside a guest — not a pointer event, not the focus a click
-takes, not a keystroke — crosses back out into your page, so anything you want
-to know, the element has to say.
-
-### Back and forward
-
-The element is the state and `domicile-history-change` is only a nudge: it
-carries nothing, and what changed is `canGoBack` and `canGoForward` on the
-element.
-
-```ts
-import { WEBVIEW_HISTORY_CHANGE_EVENT } from "@domicile-desktop/sdk/webview-element";
-
-const readHistory = () => {
-  back.disabled = !view.canGoBack;
-  forward.disabled = !view.canGoForward;
-};
-
-readHistory();
-view.addEventListener(WEBVIEW_HISTORY_CHANGE_EVENT, readHistory);
-```
-
-Reading on mount is the half that cannot be dropped. A React shell registers
-its listeners in its first effect flush, tens of milliseconds after the guest's
-first commit, so an address bar that only ever listened grays out a live
-control until the user navigates again.
-
-**Where the page actually went is not yours to know.** The engine reports
-availability and nothing else, so a shell can show where it *sent* a window and
-not where a link or a redirect then took it. There is no navigate event to
-reach for — the SDK once synthesized one, it had fired for nothing since the
-fork landed, and it was deleted rather than left looking available.
-
-### Whether a page is still arriving
-
-The same shape again, and for a sharper reason: a load is a span rather than an
-instant, so a shell that mounts in the middle of one is the ordinary case.
-`loading` is on the element and `domicile-loading-change` only says to read it.
-
-```ts
-import { WEBVIEW_LOADING_CHANGE_EVENT } from "@domicile-desktop/sdk/webview-element";
-
-const readLoading = () => {
-  spinner.hidden = !view.loading;
-};
-
-readLoading();
-view.addEventListener(WEBVIEW_LOADING_CHANGE_EVENT, readLoading);
-```
-
-It is the browser's own throbber question rather than "is the WebContents
-busy": a same-document navigation — a fragment, a `pushState` — does not set
-it, because neither is a load a browser spins for. And it says nothing about
-*what* is arriving, for the reason above: where the guest went is not yours to
-know either.
-
-### A click in the page
-
-You never see the press. The guest has a browsing context of its own, so no
-pointer event crosses out of it. The focus it takes does: the `<webview>`
-becomes `document.activeElement` and gets a real `focus` and `focusin` — which
-upstream Blink holds back here, and the fork sends — so a popover's focus-out
-dismissal, a focus trap and React's `onFocus` all hear a click in a page as
-focus moving to the view. The element also says so in an event of its own,
-which is the one to raise windows on:
-
-```ts
-import { WEBVIEW_GUEST_FOCUS_EVENT } from "@domicile-desktop/sdk/webview-element";
-
-// The window this shell drew, not the view: the event bubbles.
-frame.addEventListener(WEBVIEW_GUEST_FOCUS_EVENT, () => {
-  raise(frame);
-});
-```
-
-Read it as "the user is working in this window now"; a shell without it is a
-desktop where clicking a site does not raise the window showing it. It is not
-the `focusin`: it also fires when the page gets focus back with your document,
-where `focusin` follows upstream's rules.
-
-### The keyboard, which is the part that bites
-
-There is one seat and something is always in it, and a browser window names no
-client — its page is inside your own. Three things follow, none optional:
-
-- **Say the page has the keyboard** with `domicile.focusChrome()` when a
-  browser window becomes the window being worked in. Without it the terminal
-  that was focused keeps the seat while the user types into a site, and every
-  key they press is delivered to a window they have switched away from.
-- **Give it back when they move on**, by blurring whatever in the window holds
-  the focus. The SDK forwards *this document's* keystrokes to whichever client
-  the shell named, and a key pressed while a guest holds the focus never
-  arrives in this document at all — so `focusApp` alone moves nothing, and a
-  browser window left holding the focus makes every other window deaf. Open
-  one, and every terminal after it stops taking keystrokes.
-- **Nothing else takes a key.** Chrome's own shortcuts — Ctrl+R, Alt+Left,
-  F11, Ctrl+W and the rest — are not bound, in the shell or in a browser
-  window, and neither is a right click: the page's `contextmenu` event is all
-  there is, so a menu is yours to draw. A swipe does not go back. The browser
-  offers no password saving, autofill, translation or passkeys either;
-  passkeys come from a password manager's extension, as on any browser.
-- **Bind a browser's keys yourself.** A chord the page left alone — Ctrl, Alt
-  or Meta held, and not `preventDefault`ed — comes back on the element as a
-  `KeyboardEvent` of type `domicile-guest-keydown`; a plain key never does.
-  Ctrl+wheel over the page arrives as `domicile-zoom-in-request` or
-  `domicile-zoom-out-request` and zooms nothing by itself. `view.setZoom(factor)`
-  zooms, and `view.zoom` with `domicile-zoom-change` says where it landed — the
-  site's zoom, keyed by host the way Chrome keys it. Find in page is yours to
-  draw too: `view.find(text, backward)` searches — the same text again is the
-  next match — `view.stopFinding()` ends it, and `view.findMatches` and
-  `view.findActiveMatch` with `domicile-find-change` say what it found, every
-  frame counted. A new page ends a find. Manganese's `BrowserWindow.tsx` binds
-  Chrome's defaults, Ctrl+F among them.
-- **The icon the page names** is `view.favicon`, announced in
-  `domicile-favicon-change`: the best of the icons it links, an SVG before the
-  biggest, as an absolute URL, or `""` for none. It is the page's own word,
-  signed in as the user is.
-- **Your desktop chords still reach you**, because `bindKeys` claims them —
-  see [Keybindings](#keybindings). The browser process is the only layer above
-  a focused guest: a key pressed on a site reaches neither this page nor the
-  compositor, so a claimed chord comes back as a `shortcut` message rather than
-  a DOM event. `domicile.grabShortcut` is the claim underneath, for a chord the
-  config does not name.
-
-Whether the window holds the keyboard at all is one question over both halves,
-and the fork makes it one test: a `<webview>` whose guest has the focus is your
-document's `activeElement`, the same as an address bar being typed into. So
-`frame.contains(document.activeElement)` answers for the page and the chrome
-together.
-
-**And the page is not where focus goes when the window already has it.** A
-press in the address bar is what made this the window being worked in, so a
-shell that focuses the page on becoming focused spends the user's own press:
-the caret lands in the bar and is pulled into the page a moment later, which is
-an address bar that cannot be typed into at all.
-
-### A window the page asks for
-
-A link with `target="_blank"`, a `window.open` — the one thing a page asks for
-that is a *window* rather than an answer, and the one your shell has to supply.
-The browser process opens none: a guest has no `SiteInstance` of its own, which
-is what keeps the user logged in, and content refuses to hand such a guest a
-window it made. So the address comes to you instead, and the window is yours to
-open — which is the same rule as everywhere else here, since where a window goes
-is a thing only your layout knows.
-
-```ts
-import { WEBVIEW_NEW_WINDOW_EVENT } from "@domicile-desktop/sdk/webview-element";
-
-// Bubbles, like the three above, so one listener on the window covers it.
-frame.addEventListener(WEBVIEW_NEW_WINDOW_EVENT, (event) => {
-  openBrowserWindow(event.url);
-});
-```
-
-The only one of the four events that carries anything, and it has to: there is
-no element showing that address yet, which is the whole of what is being asked
-for. **A shell that ignores it is a desktop where such a link does nothing at
-all** — no window, no error, nothing in the page to notice.
-
-**What the window you open is not** is the window the page asked for. It is a
-navigation to that address, so `window.open` hands the opener `null`, the
-opener relationship and the target's name are not carried, and a form POSTed at
-a new target arrives as a GET of its action. A link is the case that survives
-whole, and a link is what this is for.
-
-**An app opening a link asks the same thing, of the desktop rather than of a
-page.** Inside a desktop `BROWSER` is `domicile-open-url`, which is `domicile
-open-url <url>`: the address reaches your page as an `open_url` message, and
-the window is yours to open the same way.
-
-```ts
-domicile.on("open_url", ({ url }) => {
-  openBrowserWindow(url);
-});
-```
-
-**A middle click needs nothing from you beyond what you already wrote.** Middle-clicking a link asks for it in a second window, and a page cannot open one — the browser has to. Your `<webview>` announces it with the same `domicile-new-window` event a `target="_blank"` link fires, carrying the same `url`, so the handler you already have covers it. The guest does not navigate itself; opening the window is yours, exactly as it is for `_blank`.
-
-### A close the page asks for
-
-`window.close()` in the page, or an extension's `chrome.tabs.remove`, closes
-nothing: the element fires `domicile-close` and removing the window is yours.
-Close it the way your Close button does.
-
-```ts
-import { WEBVIEW_CLOSE_EVENT } from "@domicile-desktop/sdk/webview-element";
-
-frame.addEventListener(WEBVIEW_CLOSE_EVENT, () => {
-  closeBrowserWindow(frame);
-});
-```
-
-A shell that ignores it is a desktop where `window.close()` and
-`tabs.remove` do nothing. `window.close()` fires it only from a
-script-closable page: one whose history is a single entry.
-
-### A file the page asks for
-
-An `<input type="file">` clicked, a download that needs somewhere to go, a
-`showSaveFilePicker()`, the PDF viewer's save — each a file picker, and a
-picker is yours to draw: the browser opens no dialog of its own. The element asks with `domicile-file-chooser`, and you answer on
-the event.
-
-```ts
-import { WEBVIEW_FILE_CHOOSER_EVENT } from "@domicile-desktop/sdk/webview-element";
-
-frame.addEventListener(WEBVIEW_FILE_CHOOSER_EVENT, (event) => {
-  event.preventDefault(); // "I'm answering" — see below
-  showPicker(event.mode, event.accept, event.suggestedName).then(
-    (paths) => event.choose(paths),
-    () => event.cancel(),
-  );
-});
-```
-
-- **`preventDefault()` takes it.** One nobody takes is canceled when the
-  dispatch returns, so an upload is refused rather than left waiting.
-- **`event.home` is where to start**: the absolute home directory, which the
-  page has no other way to learn.
-- **`event.list(path)` walks the filesystem** while the chooser is unanswered:
-  the names in a directory, a directory's ending in `/`. It rejects for a path
-  that is not a readable directory.
-- **Paths are absolute**, or relative to the home (`""` is the home). `..` is
-  a `TypeError`.
-- **`mode`** is `open`, `open-multiple`, `open-folder` or `save`; `accept` is
-  extensions without the dot (empty is anything); `suggestedName` is a save's.
-- **Every download asks**, in `save` mode. Cancel it and nothing is saved.
-
-### What a guest still refuses
-
-Permissions and dialogs are answered by the default, which is no. Each is a
-piece of work rather than a limit of the design; [ROADMAP.md](/ROADMAP.md)
-keeps the list.
-
-## Extensions
-
-A desk's config names Chrome extensions, and the engine installs them into the
-profile browser windows use. Their content scripts and network rules need
-nothing from you. Their actions — Chrome's toolbar buttons — are yours to draw,
-in a tray.
-
-```json
-{
-  "extensions": {
-    "web_store": ["ddkjiahejlhfcafbddmgiahcphecmpfh"],
-    "unpacked": ["~/src/my-extension"]
-  }
-}
-```
-
-`web_store` is Web Store ids (this one is uBlock Origin Lite); `unpacked` is
-directories, absolute or under `~`.
-
-**The config is the consent.** There is no install prompt and no permission
-bubble: a named extension gets the permissions its manifest declares, and one
-dropped from the list is uninstalled on the reload.
-
-**What your shell sees** is `extensions`: the whole list on every change, and
-once when the page connects.
-
-```ts
-domicile.on("extensions", ({ extensions }) => {
-  drawTray(extensions.filter(({ enabled }) => enabled));
-});
-```
-
-| Field | What |
-|---|---|
-| `id` | What `activateExtension` takes |
-| `name` | The extension's name |
-| `title` | The action's tooltip, and the icon's accessible name |
-| `icon` | A `data:image/png` URL at the page's device pixel ratio |
-| `badgeText`, `badgeColor` | The badge. `badgeColor` is `#rrggbbaa`, transparent when unset |
-| `popup` | The popup's `chrome-extension://` URL, or `undefined` |
-| `enabled` | `false` after `action.disable()` |
-
-The row type is `Extension`, from `@domicile-desktop/sdk/extension`.
-
-**Every click is `domicile.activateExtension(id)`**, popup or not. It is
-Chrome's toolbar click: the extension gets `activeTab` on the focused browser
-window, so its `scripting.executeScript` and `tab.url` work there. A shell that
-opens a popup without it hands the popup a page it cannot touch. Then the row
-says what else:
-
-- **No `popup`:** nothing. The engine dispatches `action.onClicked`.
-- **A `popup`:** open a `<webview extensionpopup>` at it in a panel under the
-  icon. The page gets the extension API from its origin, not from the view.
-  Close the panel on a press outside it, on Escape, and on `domicile-close`,
-  which is the popup calling `window.close()`:
-
-```ts
-import { WEBVIEW_CLOSE_EVENT } from "@domicile-desktop/sdk/webview-element";
-
-const view = document.createElement("webview");
-view.setAttribute("extensionpopup", "");
-view.setAttribute("src", extension.popup);
-view.addEventListener(WEBVIEW_CLOSE_EVENT, closePanel);
-panel.append(view);
-```
-
-- **Mark it `extensionpopup`, before it is in the document.** The engine
-  reads it once, as the view asks for its page, and makes the page an
-  extension popup as Chrome's toolbar bubble is, rather than a tab: no tab id,
-  in no window. Without it the popup is a tab, and an extension that lays
-  itself out by where it is (Bitwarden's) lays itself out as a full page.
-- **Fit the view to the page.** Chrome fits its popup to the document. The
-  view reports it as `contentWidth` / `contentHeight` (0 until the page has
-  laid out), announced in `domicile-content-size-change`: size the view to
-  them, capped at the most the panel may take, and give it that box until
-  then. The width counts the gutter a classic vertical scrollbar takes.
-- **The panel is a thing to type into**, like a launcher: take the keyboard
-  for it with `focusChrome` and give it back when it closes (see
-  [Who gets the keyboard](#who-gets-the-keyboard)).
-- **Escape reaches your page only while your page has the focus.** A key
-  pressed in the popup's page never arrives
-  ([The keyboard](#the-keyboard-which-is-the-part-that-bites)), so Escape there
-  closes nothing. An outside press still does.
-
-**Every `<webview>` is a tab**, and the desktop is one `chrome.windows`
-window ([EXTENSIONS.md](/docs/architecture/EXTENSIONS.md)). The active tab is
-the view that last took focus, so `view.focus()` is also what a popup's
-`tabs.query({active: true, currentWindow: true})` answers with, and the tray's
-state is that tab's. What an extension asks of the desktop arrives on the
-element, as the page's own asks do:
-
-| Extension call | Event on the `<webview>` |
-|---|---|
-| `tabs.create({url})` | `domicile-new-window`, on the active tab's view |
-| `windows.create({type: "popup", url})` | `domicile-popup-window`, on the active tab's view: open a window for it (below) |
-| `tabs.remove(id)` | `domicile-close`: close that window ([A close the page asks for](#a-close-the-page-asks-for)) |
-| `tabs.update(id, {active: true})`, `windows.update(id, {focused: true})` | `domicile-focus-request`: raise that window (`WEBVIEW_FOCUS_REQUEST_EVENT`) |
-| `tabs.setZoom(id, factor)` | `domicile-zoom-change`: already zoomed, as `view.setZoom` would have |
-
-`tabs.move`, `tabs.group`, `tabs.discard` and the rest without a desktop
-meaning answer `not supported on a Domicile desk`.
-
-**A window an extension opens** — `chrome.windows.create({type: "popup",
-url})`, which is Bitwarden's "Unlock" — is yours to open too. The active tab's
-view fires `domicile-popup-window` with `windowId` (its id to
-`chrome.windows`), `url`, and the `width` and `height` asked for (0 where none
-was; where it goes is yours). Open a browser window whose `<webview>` carries
-`popupwindow` set to that id:
-
-```ts
-import { WEBVIEW_POPUP_WINDOW_EVENT } from "@domicile-desktop/sdk/webview-element";
-
-frame.addEventListener(WEBVIEW_POPUP_WINDOW_EVENT, (event) => {
-  const view = document.createElement("webview");
-  view.setAttribute("popupwindow", String(event.windowId)); // before append
-  view.setAttribute("src", event.url);
-  openPopupWindow(view, event.width, event.height);
-});
-```
-
-- **Set `popupwindow` before the view is in the document.** The engine reads
-  it once, as the view asks for its guest; set later, it does nothing. In
-  React, a JSX attribute on the first render is in time — but never remount
-  that view, which would be a second guest.
-- **It is that window from then on.** `windows.remove(windowId)` is
-  `domicile-close` on it and `windows.update(windowId, {focused: true})` is
-  `domicile-focus-request`, as for any view.
-- **Ignore it and the extension's window never opens**, and its
-  `windows.create` never answers.
-
-[`extensions/ExtensionAction.tsx`](/packages/shell-manganese/src/extensions/ExtensionAction.tsx)
-is manganese's.
-
-## The system tray
-
-Applications' tray icons — StatusNotifierItem, which the compositor hosts on
-the session bus — arrive as `tray`: the whole tray on every change, and once on
-connecting. A click goes back with the button it was.
-
-```ts
-domicile.on("tray", ({ items }) => {
-  drawTray(items); // { id, title, icon: a data: URL or undefined }
-});
-domicile.activateTrayItem(id, "primary"); // or "secondary", "context"
-```
-
-What a click does is the application's. There are no menus yet — see
-[SYSTEM-TRAY.md](/docs/architecture/SYSTEM-TRAY.md).
-[`tray/Tray.tsx`](/packages/shell-manganese/src/tray/Tray.tsx) is
-manganese's, drawing both kinds in one row the user can reorder.
-
-## Notifications
-
-Every application's notification — and every site's, because the browser hands
-a Web Notification to the same server — arrives as `notifications`: every one
-nobody has cleared, oldest first, on every change and once on connecting. Which
-are new is yours to tell; the first list is history.
-
-```ts
-domicile.on("notifications", ({ items }) => {
-  draw(items); // { id, appName, summary, body, icon, urgency, actions, clickable, timeoutMs, time }
-});
-domicile.invokeNotificationAction(id, "default"); // a press on it, if clickable; or an action's key
-domicile.dismissNotifications([id]); // cleared: its application is told
-```
-
-How long one stays up on screen is yours; it stays in the list until cleared.
-See [NOTIFICATIONS.md](/docs/architecture/NOTIFICATIONS.md).
-[`notifications/`](/packages/shell-manganese/src/notifications/) is manganese's:
-toasts, a bell and a drawer.
-
-## Bundling
-
-One build, from your module rather than from a document, emitting one file
-with a name Domicile can find:
-
-```ts
-// vite.config.ts
-export default defineConfig({
-  base: "./",
-  build: {
-    outDir: "dist",
-    rollupOptions: {
-      input: "src/index.ts",
-      output: { entryFileNames: "shell.js" },
-      preserveEntrySignatures: "exports-only",
-    },
-  },
-});
-```
-
-`outDir` is yours — Domicile is handed a module, not a directory it expects a
-name in, and the example uses a different one. Four things there are *not*
-vite's defaults, and each fails quietly:
-
-- **The entry is a `.ts` file**, so nothing emits a document for Domicile to
-  have to ignore.
-- **`entryFileNames` is fixed.** Vite hashes entry names by default, and the
-  module you hand `domicile` is a path — a hash in it changes every time your
-  shell does, so nothing could name the file: not you, not a package manager,
-  not a script.
-- **`preserveEntrySignatures` keeps the entry's exports.** An app build drops
-  them, and every line only they reached, so the module comes out with no
-  `Shell` and nothing in it.
-- **`base: "./"`** keeps the emitted URLs relative to the document Domicile
-  writes rather than to a server root.
-
-**Your CSS has to travel inside the bundle.** Vite pulls `import "./x.css"`
-out into a separate asset and expects a document to `<link>` it; Domicile's
-document has no link, so an extracted stylesheet is a file nobody fetches and
-your desktop comes up unstyled. Fold it back in with a plugin at
-`generateBundle` — this repo's own is
-[`@domicile-desktop/component-library/vite-shell`](/packages/component-library/src/vite-shell.ts),
-which is about thirty lines and worth reading rather than depending on.
-
-That constraint pays for itself. A `<link>` is render-blocking and a
-`type="module"` script is always deferred, so with one the browser paints
-*before* any of your code has run — which is exactly where a theme flash comes
-from. With no link there is nothing to paint yet, and your first line is early
-enough.
-
-Early enough for *what*, though, is worth being exact about, because the theme
-arrives with the handshake and the handshake is a few milliseconds after that
-first line. A shell has two honest answers and `manganese` takes the second:
-paint in the dark the tokens default to and let the first `theme` message wipe
-to light where it has to, or write down the theme the desk was last seen in and
-paint in that. The second is a *guess* rather than a setting — the desk may
-have been reconfigured, or this may be a different desk — and it is corrected
-by the first message like any other guess.
-
-There is no `node_modules` beside a shell and nothing resolves at run time, so
-everything the page needs has to be *in* the bundle. That is vite's default for
-a browser build and it is worth knowing you are relying on it.
-
-## Distributing and running one
-
-A shell is a directory with a module in it:
-
-```
-my-desktop/
-  dist/
-    shell.js
-```
-
-Nothing installs it, nothing registers it, and there is no shells directory.
-Ship that directory however you like — a tarball, a git checkout, a nix
-derivation — and point Domicile at it:
-
-```sh
-nix run github:cprussin/domicile/stable -- ./my-desktop/dist/shell.js
-```
-
-The module, not the directory holding it. Domicile serves that directory —
-whatever you put beside your entry is reachable and nothing above it is — but
-which file it loads is the one you named, and a directory is refused rather
-than searched. Nothing outside your build knows what your entry is called, so
-nothing outside your build gets to guess.
-
-**Or skip the build.** `domicile` builds a shell it is handed as source:
-
-```sh
-domicile ./my-desktop/src/index.ts       # an entry: its packages installed, bundled
-domicile my-cool-shell                   # an npm package
-domicile github:me/my-cool-shell         # a repository
-domicile @domicile-desktop/manganese             # Domicile's own, prebuilt
-```
-
-An entry's packages go in the `package.json` and `bun.lock` nearest above it,
-made beside it when there are none. `@domicile-desktop/*` and React always come from
-the Domicile running it, whatever those say. A package that ships a built
-module names it in its `package.json` as `"domicile": { "shell":
-"dist/shell.js" }` and is served as it is; one that does not is built from its
-entry. Builds are cached under `$XDG_CACHE_HOME/domicile/shells`.
-
-That is the whole interface. A user of your shell never runs
-`domicile-compositor`, never writes a Domicile config file, and does not need
-to know either exists.
+- A chord is modifiers (`Meta`, `Shift`, `Ctrl`, `Alt`) plus an xkb keysym
+  name, joined by `+`.
+- The compositor maps keysyms to keys in the configured layout
+  (`shell_config`), so `Meta+parenleft` works on any layout.
+- A malformed chord, or one the keyboard cannot type, throws.
+- `bindKeys` claims every chord, matches presses in the page and in
+  `<webview>`s, handles `Mode` itself, and passes every `SendShell` to
+  `onCommand`.
+- `domicile.grabShortcut` claims a chord that `bindKeys` does not.
+- Command meanings are yours. Document them in your README, as
+  [manganese does](/packages/shell-manganese/README.md). Manganese takes keys
+  from `runManganese({ keybindings })`, defaulting to sway's.
+- Claims are never released. A key moved off by a layout change stays claimed
+  until restart. Design: [KEYBINDINGS.md](/docs/architecture/KEYBINDINGS.md).
+
+## The configuration
+
+The user describes the desktop (displays, keyboard, idle, lock, theme,
+extensions) in one config file. The compositor reloads it on every change. See
+[SHELL-CONFIG.md](SHELL-CONFIG.md).
+
+- The shell owns any other user-facing settings: its own location, schema and
+  names.
+- `@domicile-desktop/sdk` does not parse the config. Its schema is the
+  `domicile-config` crate's, and there is no TypeScript parser for it.

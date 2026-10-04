@@ -1,398 +1,326 @@
-# `domicile` is a program, not a shell script
+# The `domicile` binary
 
-`domicile ./my-desktop/dist/shell.js` starts a desktop. One binary, no wrapper
-in the path, and nothing between the name a person types and the code that
-runs.
+`domicile ./my-desktop/dist/shell.js` starts a desktop. It is one Rust binary.
 
 ## Problem
 
-Starting a desktop is not shell-shaped work. It resolves a path against three
-rules, decides an ozone platform from four environment variables, starts two
-processes in a forced order, waits on a line of stdout and a socket, and cleans
-up. Every one of those is easier to state, and far easier to test, in the
-language the compositor is already written in.
+Starting a desktop means:
 
-It was ~500 lines of bash in three layers — a `writeShellApplication` in
-`flake.nix`, `run-engine.sh`, and `dev-shell.sh` — and ~470 more lines of bash
-testing them, each test `awk`ing a block out of a script and eval-ing it
-because a copy is a thing that passes while the script it stands for does not.
-That is a good technique and an expensive one, and the only thing that makes it
-necessary is logic sitting where nothing can call it. **That is the rule this
-doc is really about**: the scripts here arrange and observe, and decide
-nothing. `dev-shell.sh` is the one that came closest to deciding again, and
-what it does now is build, then call the binary.
+- resolving a shell path
+- picking an ozone platform from environment variables
+- starting the engine and the compositor in order
+- waiting on stdout and a socket
+- cleaning up
+
+This logic is easier to write and test in Rust than in bash. Scripts may
+build and start things. All launch logic lives in the binary.
+`scripts/dev-shell.sh` builds, then calls the binary.
 
 ## Design
 
-**`domicile` is a `[[bin]]` on `domicile-launch`**, which already calls itself
-"the boundary between a shell and the compositor it runs" and already owns both
-things that cross it — the compositor's command line and the session document
-it publishes. The supervisor is the third. It needs no GPU and no display, so
-the crate stays in `default-members` and its tests stay cheap.
+`domicile` is a `[[bin]]` on `domicile-launch`. That crate already owns the
+compositor's command line and the session document. The supervisor needs no
+GPU or display, so the crate stays in `default-members` and its tests are
+cheap.
 
 ```
-domicile <shell>                  # the built JavaScript module the shell is
-domicile --config <path> <shell>  # ...with the compositor's own file
-domicile <command>                # ...or a command for the desktop already running
-domicile load-shell <shell>       # ...one of which takes a shell of its own
-domicile open-url <url>           # ...and one an address, which is what BROWSER runs
+domicile <shell>                  # run a desktop with this shell
+domicile --config <path> <shell>  # ...with this compositor config
+domicile which-shell              # ask the running desktop which shell it serves
+domicile load-shell <shell>       # replace the running desktop's shell
+domicile open-url <url>           # open a URL in the running desktop (BROWSER)
 ```
 
-`--config` may come on either side of the shell, and leaving it off is an
-answer rather than a missing one: `$XDG_CONFIG_HOME/domicile/domicile.{ts,tsx,js,mjs,json}`
-(`~/.config/...` where that is unset), and the compositor's defaults where
-there is no such file — a single output that follows the engine's own window.
-What is refused is the half-stated form — the flag with nothing behind it, or
-twice — because the compositor runs its defaults on a missing file and refuses
-one it cannot load, and guessing between those picks one answer for somebody
-who meant the other. A verb takes what that verb takes and never `--config`:
-the desktop it is put to read its config when it started, so a flag there would
-be a file handed to a process that is not going to read one. `which-shell`
-takes nothing; `load-shell` takes the shell to serve from now on.
+Config file:
 
-**That default path is `domicile`'s, and deliberately not the compositor's.**
-`arguments` below states the compositor's rule — every value given, nothing
-read from the environment, nothing with a default location — and it is kept:
-`domicile` works out which file this run has and writes it onto the command
-line it builds. The compositor is still handed one path or none by a program
-that can be asked why. What pays for the guess is that the run prints which of
-the four answers it got, `--config` and found-by-looking included, before it
-starts anything.
+- `--config` may come before or after the shell.
+- Without it, `domicile` looks for
+  `$XDG_CONFIG_HOME/domicile/domicile.{ts,tsx,js,mjs,json}`
+  (`~/.config/...` when unset). No file means compositor defaults: one output
+  that follows the engine's window.
+- A missing file means defaults. A file that fails to load is an error, and
+  the compositor does not start.
+- `--config` with no value, or given twice, is refused. Guessing wrong would
+  silently run defaults or fail.
+- Verbs never take `--config`. The running desktop read its config at startup.
+- `domicile` resolves the default path. The compositor reads nothing from the
+  environment (see `arguments`).
+- `domicile` passes the chosen path on the compositor command line and prints
+  which case applied before starting.
 
-The modules, and the split is by what each needs to be tested:
+### Modules
+
+Logic lives in pure modules so it can be unit-tested against strings and a
+temp directory. The modules that spawn processes or bind sockets stay thin.
 
 | Module | Pure? | What |
 |---|---|---|
-| `cli` | yes | the arguments, and every refusal a bad one earns |
-| `components` | yes | the engine and the compositor, from the binary's own path or the environment; the builder and Domicile's own shells, when a shell needs them |
-| `shell_path` | yes | a name or a path to a module → the module to load, and the directory it is served out of |
-| `shell_source` | yes | what a shell argument is: a module, an entry to build, one of Domicile's own, or a package |
-| `build_progress` | yes | the builder's lines, read, and the bar a terminal shows |
-| `platform` | yes | `OZONE` / `WAYLAND_DISPLAY` / `DISPLAY` / `XDG_VTNR` → the ozone platform (a console login takes `drm` on its own), or the refusal that names what to do instead |
-| `control` | yes | what a running desktop can be asked, and what it answers — with the one command it routes rather than answers taking the dial as an argument |
-| `command` | yes | what the engine can be told about the shell it serves: the line, its version, and the reply |
-| `arguments` | yes | the compositor's command line, every value stated and nothing defaulted |
-| `config_path` | yes | which config file a run has: `--config`, the one where a config lives, or none — and which of those it was |
-| `xdg_open` | yes | `xdg-open` inside a desktop: an http(s) link goes to `open-url`, anything else to the next `xdg-open` on `PATH` |
-| `address` | yes | what `open-url` hands the engine: a URL as given, a path as a `file://` URL against where it was typed |
+| `cli` | yes | arguments, and the error for each bad one |
+| `components` | yes | finds the engine and compositor from the binary's path or the environment; the builder and bundled shells when needed |
+| `shell_path` | yes | name or path → module to load and the directory it is served from |
+| `shell_source` | yes | classifies a shell argument: module, entry to build, bundled shell, or package |
+| `build_progress` | yes | parses builder output into a terminal progress bar |
+| `platform` | yes | `OZONE` / `WAYLAND_DISPLAY` / `DISPLAY` / `XDG_VTNR` → ozone platform (a console login gets `drm`), or an error saying what to set |
+| `control` | yes | control socket requests and replies; takes the engine calls as parameters for the commands it routes |
+| `command` | yes | engine command wire: the line, its version, and the reply |
+| `arguments` | yes | the compositor's command line; every value explicit, no defaults |
+| `config_path` | yes | which config file a run uses: `--config`, the default location, or none, and which case it was |
+| `config_watch` | no | watches the config's directory and reports edits |
+| `xdg_open` | yes | `xdg-open` inside a desktop: http(s) goes to `open-url`, anything else to the next `xdg-open` on `PATH` |
+| `address` | yes | what `open-url` sends the engine: a URL as given, or a path as a `file://` URL relative to the caller's directory |
+| `spawn` | yes | the engine and compositor commands as data, so flag lists are testable |
+| `session` | yes | what the compositor publishes once up, and waiting for it |
+| `milestones` | yes | what a run must reach to be a desktop, and the message when it doesn't |
+| `handshake` | yes | whether a page reached the compositor, and the message when none did |
+| `heard` | yes | keeps each component's last output so the run can repeat it on failure |
+| `restart` | yes | whether a dead component restarts, which one, the delay, and when to give up |
+| `supervise` | no | temp dirs, starting both children in order, the broker socket, teardown |
+| `profile_claim` | no | which engine profile this desktop uses: `profile`, or `profile-2`, `profile-3`… when taken |
+| `profile_path` | yes | where the engine profile lives (`$XDG_STATE_HOME/domicile/profile`) |
+| `control_socket` | no | binds the control socket, replacing a stale one, and carries one line each way |
+| `command_socket` | no | dials the engine's command socket, one line each way |
+| `graphical_session` | no | tells the systemd user manager the desktop is the graphical session |
+| `notification` | no | sends desktop notifications for errors after startup, such as a broken config edit |
 
-**`nix/home-manager.nix` is that file's other end**, and the only part of this
-system that writes one rather than reading it: an option per field of the
-`domicile-config` schema, generated with `pkgs.formats.json` to the path
-`config_path` looks in. Two guards keep the two from drifting —
-`scripts/test-the-home-manager-module-agrees.sh` compares the option names to
-the Rust structs with no nix at all, and `nix flake check` evaluates the module
-and reads back the file it wrote. The first matters because every config struct
-is `deny_unknown_fields`: one key the module writes and the crate does not know
-refuses the whole file, so the desk comes up on its defaults.
-| `spawn` | yes | the commands the engine and the compositor are, built as data so a flag list is an assertion |
-| `session` | yes | what the compositor publishes once it is up, and the shell's wait for it |
-| `milestones` | yes | what a run has to reach before it is a desktop, and the sentence it prints when it does not |
-| `handshake` | yes | whether a page ever reached the compositor, and what to say when none did |
-| `restart` | yes | whether a component that died gets another one, which component that is, how long it waits, and when it stops getting them |
-| `supervise` | no | temp dirs, two children in order, the broker socket, letting go of one of them, teardown |
-| `profile_claim` | no | which profile this desktop holds: the kept one, or `profile-2`, `profile-3`… when another desktop has it |
-| `control_socket` | no | where a desktop answers, taking it from whatever is there, and carrying a line each way |
-| `command_socket` | no | where the engine answers, and carrying one line each way to it |
+### Home Manager module
 
-The pure ones are where the subtle rules are, and they become ordinary unit
-tests against strings and a temp directory. `supervise` is the part that
-genuinely spawns and `control_socket` the part that genuinely binds; both stay
-thin enough to read.
+`nix/home-manager.nix` writes the config file that `config_path` reads. It
+has one option per field of the `domicile-config` schema and generates JSON
+with `pkgs.formats.json`.
+
+Every config struct is `deny_unknown_fields`, so one unknown key rejects the
+whole file (see Config file). Two checks keep the module and the structs in
+sync:
+
+- `scripts/test-the-home-manager-module-agrees.sh` compares option names to
+  the Rust structs, without Nix.
+- `nix flake check` evaluates the module and reads back the file it writes.
 
 ## Key decisions
 
-- **`domicile` builds nothing of its own; a shell it is handed, it has
-  built.** Its components are required and the missing one is named — no
-  cargo, no turbo, no checkout. A shell is the exception, because a user's
-  shell is a file of theirs rather than a project: an entry (`./desk.tsx`, a
-  `.js` that imports a package) or a package (`my-shell`, `github:me/shell`)
-  goes to the builder beside it, `libexec/domicile/builder`, which says its
-  steps as JSON lines that `domicile` draws as a bar. A bundle, or one of
-  Domicile's own (`@domicile-desktop/manganese`, prebuilt under
-  `libexec/domicile/shells`), starts nothing. See
-  [COMPOSABLE-SHELLS.md](/docs/architecture/COMPOSABLE-SHELLS.md).
+### `domicile` builds shells, nothing else
 
-- **There is no watch mode.** A bundler in the supervisor is the same mistake
-  one level up. Instead the desktop takes commands, the way `swaymsg` sends
-  them to sway:
+- The engine and compositor are required. A missing one is named. `domicile`
+  never runs cargo or turbo and needs no checkout.
+- A shell entry (`./desk.tsx`, a `.js` that imports a package) or a package
+  (`my-shell`, `github:me/shell`) goes to `libexec/domicile/builder`. The
+  builder reports steps as JSON lines, which `domicile` draws as a progress
+  bar.
+- A built bundle, or a bundled shell (`@domicile-desktop/manganese`, prebuilt
+  under `libexec/domicile/shells`), needs no build.
+- See [COMPOSABLE-SHELLS.md](/docs/architecture/COMPOSABLE-SHELLS.md).
 
-  ```sh
-  domicile load-shell ./my-desktop/dist/shell.js
-  ```
+### No watch mode
 
-  which replaces the running shell with that one — **any** shell, not a fresh
-  copy of the one already running. A watch script is then one use of it and
-  lives entirely outside the runtime, but so is switching from `simple` to
-  `manganese` without stopping the desktop, and the windows survive either way
-  because the compositor never hears about it.
+The supervisor contains no bundler. Instead the running desktop takes
+commands, like `swaymsg` with sway:
 
-  **That watch script is `scripts/dev-shell.sh`**, and what it needed was two
-  facts rather than anything in the runtime. *Where the desktop answers*: it
-  starts the supervisor rather than being started by it, so it inherits no
-  `DOMICILE_SOCK` and reads the `DOMICILE_SOCK=<path>` line the supervisor
-  prints — kept until the same supervisor says it is up, because the socket is
-  bound before the engine exists and a shell loaded onto a desktop with no
-  engine is a refusal nobody caused. *When a build has finished*:
-  `scripts/dev-shell-reload.sh` waits for the bundle to stop moving —
-  `coalesce.rs`'s two bounds, a quiet run and a cap, in bash — because
-  `vite build --watch` writes one build many times and a reload at a
-  half-written file shows a shell nobody wrote. A shell the engine refuses
-  prints the engine's own `why` and the loop waits for the next build; the
-  desktop is still serving the shell it had.
+```sh
+domicile load-shell ./my-desktop/dist/shell.js
+```
 
-  **It is strictly less machinery than the dev reload it replaces**, which was
-  a token endpoint on the bridge plus a poller written into every served
-  document, asking twice a second, for the life of the desktop, whether the
-  bundle changed. All of it went with the bridge, and the C++ that writes the
-  document has nothing in its place — **and nothing in a served document ever
-  will have again**: a rebuilt shell is one `domicile load-shell` away, from a
-  watch script or from a person's own hands, and the desktop it reaches did
-  not have to be started in a dev mode to take it.
+- It replaces the running shell with any shell, so it also switches from
+  `simple` to `manganese` without restarting.
+- Windows survive: the compositor never sees the change.
+- `load-shell` changes only the shell. It does not apply compositor config.
+  On load, `announce_open_apps` sends the new page the desktop and its open
+  windows.
+- The desktop needs no dev mode.
 
-- **An engine that dies is replaced under the compositor; a compositor that
-  dies takes the desktop.** The asymmetry is the engine's, not the launcher's.
+`scripts/dev-shell.sh` is the watch script built on it:
 
-  ```
-  the engine exited (signal: 9 (SIGKILL))
-  starting the engine again in 1s — that is failure 1 of 5 in a row.
-  ```
+- The script starts the supervisor itself, so it reads the socket path from
+  the supervisor's `DOMICILE_SOCK=<path>` output line. It calls `load-shell`
+  only after the supervisor reports the desktop is up. Earlier calls are
+  refused because the socket exists before the engine does.
+- `scripts/dev-shell-reload.sh` waits for the bundle to stop changing (a quiet
+  period plus a cap, as in `coalesce.rs`). `vite build --watch` writes one
+  build in several steps, and reloading mid-write would load a broken shell.
+- If the engine refuses a shell, the script prints the engine's `why` and
+  waits for the next build. The desktop keeps the previous shell.
 
-  The broker socket is re-dialable: the launcher takes the dead engine's away
-  and the next engine creates its own at the same path, and
-  `EngineSession::reconnect` joins it and states this desktop to it again — a
-  frame sink per window, every client buffer imported again, and the frame each
-  window had on screen submitted again. **The clients never hear about it.**
-  They hold a `wl_display` the compositor still has, so their windows and their
-  state survive; a whole-desktop restart could not do that however quick it
-  was.
+### Engine crashes are recovered; compositor crashes restart the desktop
 
-  The page's side has no such seam. Its control channel "deletes itself when
-  either end goes away"
-  (`components/domicile/browser/control_channel.h:49`), whose only retry is a
-  bounded reach at startup, so a shell that outlived its compositor holds a
-  closed channel nothing here can reopen — a C++ change in the fork, not made.
-  So a compositor that dies takes the engine with it, `Running` is dropped,
-  and a whole desktop is started in its place with everything the last one
-  bound or published taken away first. Apps do not survive *that*.
+| Exits | Restarted | Survives |
+|---|---|---|
+| engine | the engine | every window, with its last frame |
+| compositor | the whole desktop | nothing |
 
-  | | what is started again | what survives |
-  |---|---|---|
-  | the engine exits | the engine | every window, with its last frame |
-  | the compositor exits | the whole desktop | nothing |
+```
+the engine exited (signal: 9 (SIGKILL))
+starting the engine again in 1s — that is failure 1 of 5 in a row.
+```
 
-  **The backoff doubles and the run gives up**: 1s, 2s, 4s, 8s, then five in a
-  row. One policy, a row per component — five engines under a compositor that
-  is still serving count as one failure of the desktop's row, and a whole new
-  desktop is what follows, a different thing to try rather than the same thing
-  again. Anything that lived a minute starts its count over.
+Engine restart:
 
-  **Which engine is at the other end is read off the page, because the C ABI
-  has no disconnect.** `domicile_engine.h` carries four callbacks and none of
-  them says the browser went. The control channel is dialed from the browser
-  process, so `SO_PEERCRED` on it names which browser this desktop is talking
-  to, and a `hello` from another pid is another engine
-  (`packages/domicile-compositor/src/which_engine.rs`). `domicile load-shell`
-  is the case that must not fire it: the same browser binds a new channel, and
-  the pid is the one it was.
+- The launcher removes the dead engine's broker socket. The new engine creates
+  one at the same path.
+- `EngineSession::reconnect` joins it and re-sends the desktop state: a frame
+  sink per window, every client buffer, and each window's last frame.
+- Clients keep their `wl_display` connection, so their windows and state
+  survive.
+- On a tty the screen is blank between engines, because the engine holds DRM
+  master. The new engine modesets from the same `DisplaySnapshot`s, and the
+  compositor re-sends its connectors once the engine joins.
 
-  **On a tty there is no screen between two engines**, because the engine holds
-  DRM master. Not fixed, and not a defect: the new engine modesets from the
-  same `DisplaySnapshot`s and the compositor states its connectors to it again
-  once it has joined.
+Compositor restart:
 
-- **The two components ship beside the binary and are found there.** Not
-  passed, and not wrapped in: `domicile` resolves them from its own location,
-  the way a multi-binary program like postfix does.
+- The page's control channel closes when either end exits
+  (`components/domicile/browser/control_channel.h`). It only retries at
+  startup, so a page cannot reconnect to a new compositor. Fixing that needs
+  a C++ change in the fork.
+- So the engine is stopped too, and a new desktop starts after everything the
+  old one bound or published is removed. Apps exit.
 
-  ```
-  <prefix>/bin/domicile
-  <prefix>/bin/domicile-compositor
-  <prefix>/libexec/domicile/engine/     the Chromium tree, `chrome` inside it
-  <prefix>/libexec/domicile/builder     builds a shell from an entry or a package
-  <prefix>/libexec/domicile/shells/     Domicile's own shells, prebuilt
-  ```
+Backoff:
 
-  `current_exe()` on Linux reads `/proc/self/exe`, which resolves symlinks —
-  so a `~/.nix-profile/bin/domicile` pointing into the store finds its siblings
-  in the same store output, which is exactly where they are. A distribution
-  packaging this into `/usr` gets the same answer for the same reason.
+- 1s, 2s, 4s, 8s; give up after five failures in a row.
+- Each component has its own failure counter. After five engine failures in
+  a row, the launcher counts one desktop failure and starts a new desktop.
+- A component that ran for a minute resets its counter.
 
-  `DOMICILE_ENGINE` and `DOMICILE_COMPOSITOR` still override, one each, for a
-  checkout pointing at things it just built. **That is the whole of the flake's
-  remaining job**: place two files and let the binary find them. No
-  `wrapProgram`, no exported paths, no `writeShellApplication`.
+Detecting a new engine:
 
-  `DOMICILE_ENGINE` names the directory holding `chrome`, with nothing appended
-  to it — not a Chromium checkout that the reader would have to know is
-  completed with `out/Domicile` or with nothing depending on how the engine was
-  obtained.
+- The C ABI (`domicile_engine.h`) has four callbacks and no disconnect.
+- The browser process dials the control channel, so `SO_PEERCRED` gives the
+  browser's pid. A `hello` from a new pid means a new engine
+  (`packages/domicile-compositor/src/which_engine.rs`).
+- `load-shell` binds a new channel from the same browser, so the pid matches
+  and no reconnect happens.
+
+### Components are found beside the binary
+
+```
+<prefix>/bin/domicile
+<prefix>/bin/domicile-compositor
+<prefix>/libexec/domicile/engine/     the Chromium tree, with `chrome` inside
+<prefix>/libexec/domicile/builder     builds a shell from an entry or a package
+<prefix>/libexec/domicile/shells/     bundled shells, prebuilt
+```
+
+- `current_exe()` reads `/proc/self/exe`, which resolves symlinks. A
+  `~/.nix-profile/bin/domicile` symlink finds its siblings in the same store
+  output. A `/usr` install works the same way.
+- `DOMICILE_ENGINE` and `DOMICILE_COMPOSITOR` override the lookup, for a
+  checkout using its own builds. `DOMICILE_ENGINE` is the directory that
+  contains `chrome`.
+- The flake installs files at these paths. The binary needs no wrapper
+  script or environment variables.
 
 ## The control socket
 
-`domicile <shell>` runs a desktop; `domicile <command>` sends that desktop a
-command. One binary, told apart by whether the first argument names a page or
-a verb — sway does the same thing with two names, and one is enough here
-because the desktop is the only thing either form talks about.
+`domicile <shell>` runs a desktop. `domicile <verb>` sends a command to the
+running one. The first argument decides which.
 
-The socket goes at `$XDG_RUNTIME_DIR/domicile-ipc.<pid>.sock`, named after the
-supervisor that owns it, and its path is exported as `DOMICILE_SOCK` onto the
-compositor — so every app the desktop spawns inherits the way back to the
-desktop it is running in. That is sway's arrangement (`SWAYSOCK`), and
-Hyprland's (`HYPRLAND_INSTANCE_SIGNATURE`), for the reason `WAYLAND_DISPLAY`
-itself is per-instance: a compositor is a thing you can run more than one of.
-One line of JSON in, one back, and the connection is over —
-`domicile_launch::control` is the wire and `domicile_launch::control_socket` is
-the socket.
-
-**The supervisor answers it, and routes.** `load-shell` is carried out by
-whatever serves the page, but the next commands are not: asking which windows
-are open is the compositor's. A socket owned by whichever process happens to
-answer the first command is a socket that moves when the second one lands.
+- Path: `$XDG_RUNTIME_DIR/domicile-ipc.<pid>.sock`, named after the
+  supervisor's pid.
+- The path is exported as `DOMICILE_SOCK` on the compositor, so every app the
+  desktop spawns inherits it.
+- One JSON line in, one back, then the connection closes.
+  `domicile_launch::control` is the wire; `domicile_launch::control_socket` is
+  the socket.
+- The supervisor answers and routes. `load-shell` and `open-url` go to the
+  engine; future commands, like listing windows, will go to the compositor.
 
 ```
-domicile which-shell ─▶ $DOMICILE_SOCK ─▶ the supervisor
-domicile load-shell  ─▶ $DOMICILE_SOCK ─▶ the supervisor ─▶ the engine ─▶ the page
-domicile open-url    ─▶ $DOMICILE_SOCK ─▶ the supervisor ─▶ the engine ─▶ the page
+domicile which-shell ─▶ $DOMICILE_SOCK ─▶ supervisor
+domicile load-shell  ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ engine ─▶ page
+domicile open-url    ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ engine ─▶ page
 ```
 
-**`BROWSER` is `domicile-open-url`**, set on the compositor beside
-`DOMICILE_SOCK` so every app inherits it: a link an app opens is a browser
-window of this desktop. A second `[[bin]]` that execs `domicile open-url`,
-because most of what reads `BROWSER` runs it as one word. **`xdg-open` is the
-desktop's too**: `PATH` on the compositor starts with a directory of the run's
-where `xdg-open` links to `domicile-xdg-open`, so a link opens here whatever
-`mimeapps.list` says, and anything else goes to the next `xdg-open` on `PATH`.
-An app whose own wrapper puts another `xdg-open` first (nixpkgs' wrappers often
-prefix `xdg-utils`) misses the shim and reads `mimeapps.list` instead, which is
-why the package ships `share/applications/domicile-mimeapps.list` and the
-compositor's `XDG_DATA_DIRS` starts with that `share`: read only where
-`XDG_CURRENT_DESKTOP` is `domicile`, so other sessions keep their browser, and
-nothing is written into the home. The engine hands the
-address to the newest shell page (`UrlRegistry`), so a page mid-reload does
-not open it twice, and the shell opens it.
+Several desktops per session:
 
-**A session holds as many desktops as it likes.** Each answers its own socket
-and each tells its own apps where that is, so a command reaches the desktop it
-was typed inside rather than whichever one started first.
+- Each has its own socket and tells its own apps, so a command reaches the
+  desktop it was typed in.
+- Each has its own engine profile. Chromium allows one browser per profile and
+  forwards a second launch to the first. The first takes `profile`, the next
+  `profile-2`, like `wayland-2`.
+- A client without `DOMICILE_SOCK` is refused with a message saying what to
+  set. It does not scan the runtime directory, because with several desktops
+  it would have to guess.
+- A socket whose desktop died refuses on connect and says so. A non-socket
+  file at the path is left alone.
 
-Each also holds an engine profile of its own, because Chromium runs one browser
-per profile and hands a second one's command line to the first. The first
-desktop takes `profile`; one started beside it takes `profile-2`, as a second
-compositor takes `wayland-2`.
+### Opening links
 
-A client with no `DOMICILE_SOCK` is refused, by name, and told what to set. It
-would be reachable to scan the runtime directory instead and it is deliberately
-not done: with several desktops per session a scan has to guess which one was
-meant, and a command that silently picks a desktop is worse than one that
-declines. A socket whose desktop was killed refuses on connect and says so;
-anything at that path that is not a socket is somebody else's file and is left
-alone.
+- `BROWSER` is `domicile-open-url`, set on the compositor next to
+  `DOMICILE_SOCK`. It is a separate `[[bin]]` that execs `domicile open-url`,
+  because most programs run `BROWSER` as a single word.
+- The compositor's `PATH` starts with a run directory where `xdg-open` links
+  to `domicile-xdg-open`. Links open in this desktop regardless of
+  `mimeapps.list`; other targets go to the next `xdg-open` on `PATH`.
+- Apps whose wrappers put another `xdg-open` first (nixpkgs wrappers often
+  prefix `xdg-utils`) read `mimeapps.list` instead. The package ships
+  `share/applications/domicile-mimeapps.list`, and the compositor's
+  `XDG_DATA_DIRS` starts with that `share`. It applies only when
+  `XDG_CURRENT_DESKTOP` is `domicile`, and nothing is written to the home
+  directory.
+- The engine hands the URL to the newest shell page (`UrlRegistry`), so a
+  reloading page does not open it twice. The shell opens it.
 
-### The command socket, both halves of it
+### The engine command socket
 
-The page is the engine's, so `load-shell` is an engine-side change too, and
-there were two shapes for it:
+`load-shell` needs the engine to change which shell it serves. The supervisor
+dials a command socket on the engine, passed as `--domicile-command-socket`.
 
-| | Route | What it does to the layering |
-|---|---|---|
-| **A** | the engine takes a `--domicile-command-socket` of its own and the supervisor dials it | a listener in the browser process, on a supervisor-to-engine link that already exists in another form; the arrow above is literal |
-| **B** | a new `HostMessage` the compositor sends down the channel the engine already reads | `PROTOCOL_VERSION`'s contract grows a message that is not the chrome's, and the compositor is put in a hop it has no business in |
+Why a separate socket instead of a new `HostMessage` forwarded by the compositor:
 
-**A, on the layering.** Which shell to serve is supervisor-to-engine
-information: the supervisor already says it once at launch, as
-`--domicile-shell-root` and `--domicile-shell-module`, and a command socket is
-that relationship still running. B widens the host↔chrome contract with a
-message the page neither sends nor reads, and makes the compositor carry mail
-it has no stake in. A also keeps the windows by construction rather than by
-care — the compositor is not in the path, so it never hears the shell change.
+- Which shell to serve is supervisor-to-engine information. The supervisor
+  already passes `--domicile-shell-root` and `--domicile-shell-module` at
+  launch.
+- A `HostMessage` would add a message to the host↔chrome contract that the
+  page never uses, and route it through the compositor.
+- The compositor stays out of the path, so windows are unaffected.
 
-The wire is one line each way:
+Wire, one line each way:
 
 ```
 {"type":"load_shell","version":1,"root":"/x/dist","module":"shell.js"}
 {"type":"loaded"}   |   {"type":"refused","why":"…"}
 ```
 
-**The version is in the request, and the refusal is the check.** This socket
-joins two *separately published* deploy units — `engine-release.nix` pins an
-engine built from an older commit than `main` — so
-[`DATA.md`](/docs/guidelines/DATA.md)'s versioning rule applies to it, unlike
-the control socket above, whose two ends are one binary. Path versioning does
-not fit a socket the supervisor names and the engine binds, and every
-connection is exactly one request, so there is no handshake to negotiate it in
-either.
+- The request carries a version, and the engine refuses one it does not
+  support. The engine and the supervisor ship separately (`engine-release.nix`
+  pins an older engine build), so [DATA.md](/docs/guidelines/DATA.md)'s
+  versioning rule applies. The control socket needs no version: both ends are
+  the same binary.
+- Each connection is one request, so there is no handshake to negotiate a
+  version in.
 
-| | |
+Engine side:
+
+| File | What |
 |---|---|
-| `components/domicile/browser/shell_source.{h,cc}` | which shell this process serves. Seeded from the two switches, replaceable after |
-| `components/domicile/browser/command_protocol.{h,cc}` | the wire: a line in, a line out, the applying injected. Where the tests are |
-| `chrome/browser/domicile/domicile_command_socket.{h,cc}` | the socket, and the shell's window. `//chrome` because reloading needs `GlobalBrowserCollection`, which a `//components/domicile` target may not depend on |
+| `components/domicile/browser/shell_source.{h,cc}` | which shell this process serves; seeded from the two switches, replaceable later |
+| `components/domicile/browser/command_protocol.{h,cc}` | the wire: line in, line out, with the action injected; has the tests |
+| `chrome/browser/domicile/domicile_command_socket.{h,cc}` | the socket and the shell's window; in `//chrome` because reloading needs `GlobalBrowserCollection`, which `//components/domicile` may not depend on |
 
-**The supervisor's half is in beside it**: `--domicile-command-socket` on the
-engine's command line in `spawn`, under the run's own directory because the
-supervisor is the only thing that dials it; a `load-shell` verb in `cli` and
-`control`, which is the first verb that takes an argument and the reason a
-verb's argument list is now a rule per verb; and `answer` taking the dial as a
-parameter rather than holding the answer itself, so the routing is still a
-string in and a string out under test.
+Supervisor side:
 
-**The path is resolved in the client, not in the desktop.** `domicile
-load-shell ./dist/shell.js` is typed in some terminal with a working directory
-and a `HOME` of its own, and neither the supervisor nor the engine shares
-either — so the same `shell_path` a run resolves its own shell with resolves
-this one, in front of the person who typed it, and what goes over both sockets
-is an absolute root and the module in it. A path that names nothing is refused
-at that terminal and no engine hears about it.
-
-**Which shell is served is kept by the supervisor and changes when one is
-loaded**, so `domicile which-shell` after a `load-shell` answers with the shell
-that was loaded. It is written only once the engine has answered `loaded`: an
-engine that refused is still serving what it was.
+- `spawn` adds `--domicile-command-socket`, under the run's directory.
+- `cli` and `control` add the `load-shell` verb. `cli` validates each verb's
+  arguments.
+- `control::answer` takes the engine calls (`load`, `open`) as parameters, so
+  routing stays string-in, string-out under test.
+- The client resolves the path with `shell_path`, using its own working
+  directory and `HOME`. Both sockets carry an absolute root and module. A path
+  that names nothing is refused in the client's terminal.
+- The supervisor records the served shell only after the engine replies
+  `loaded`, so `which-shell` reports the loaded shell, and a refused load
+  leaves it unchanged.
 
 ## Plan
 
-- [x] `shell_path` and `platform` in `domicile-launch` — the two with rules, as
-      unit tests against a string and an injected filesystem
-- [x] `cli`, `components`, `supervise`, and the `[[bin]]`. The argument parser
-      lands with the program that reads it rather than ahead of it: on its own
-      it is a parser nothing calls
-- [x] `flake.nix`: the three components go where the binary looks, and
-      `domicileCli` — the `writeShellApplication` — goes
-- [x] delete `run-engine.sh` and the three `test-run-engine-*.sh`
-- [x] the control socket: taken by the supervisor, answered on a thread of its
-      own, and `domicile which-shell` over it — the command whose whole answer
-      the supervisor holds, so the transport ships before anything has to route
-- [x] the engine's command socket: `--domicile-command-socket`, the
-      `load_shell` wire and its version, and the reload that carries it out.
-      The half that is a patch to the fork, and the half nothing in this
-      repository can build
-- [x] `domicile load-shell <path>` — the supervisor's half of it: the switch
-      on the engine's command line, the verb, and the dial. It is what a dev
-      reload would use
-- [ ] `guard-shell.sh` calls the binary rather than repeating the launch
+Done:
 
-## Open questions
+- [x] `shell_path`, `platform`, `cli`, `components`, `supervise` and the
+      `[[bin]]`
+- [x] `flake.nix` places the components beside the binary
+- [x] control socket and `domicile which-shell`
+- [x] engine command socket (fork patch) and `domicile load-shell`
 
-- **Whether `load-shell` restarts anything.** It switches the shell; the
-  desktop underneath it does not move. `announce_open_apps` already tells a
-  page that has just loaded the desktop and every window open on it, so
-  switching from `simple` to `manganese` keeps the windows. A shell that
-  changed the *compositor's* configuration is a different question and this
-  command does not pretend to answer it.
+Left:
 
-- **What becomes of the spikes.** Settled, and the rule has held as the set
-  grew. Anything `engine.yml` runs is a **guard**, named for what it gates —
-  `under-wayland.sh` and ten `guard-*.sh` now, where there were four. A check
-  that gates every engine change is not a spike. `spike-engine`,
-  `spike-dmabuf` and `spike-iframe` keep their names and stay: they are run by
-  hand rather than by CI, but ENGINE-FORK.md cites their results as evidence,
-  so deleting them would orphan the citations and lose the ability to
-  re-derive the numbers. `spike.sh` and its pages stay too —
-  `guard-css-and-resize.sh` runs the spike driver twice, which is what it is.
-
-- **Whether `guard-shell.sh` can use the binary at all.** It needs a long
-  `DOMICILE_REACH_MS` and its own log capture, and it runs on `crux` where the
-  engine job is the only thing that exercises it. Recommendation: convert it
-  last, behind the rest, so a mistake there cannot hold up the parts ordinary
-  CI covers.
+- [ ] `packages/domicile-engine/scripts/guard-shell.sh` launches through
+      `domicile`. Convert it last: it has its own log capture and runs only on
+      `crux` in the engine job, so a mistake there cannot block ordinary CI.

@@ -1,26 +1,31 @@
 # Chrome extensions on a desk
 
-A desk's config names Chrome extensions, and the engine installs them into the
-profile its browser windows already use. Each extension's action shows in the
-shell's tray and opens its popup in a `<webview>`. To `chrome.tabs`, every
-`<webview>` is a tab, and the whole desktop is one `chrome.windows` window —
-plus a `popup` window for each one an extension opens, which the shell draws.
+- The desk config lists Chrome extensions. The engine installs them into the
+  profile that browser windows use.
+- Each extension's action appears in the shell's tray. Its popup opens in a
+  `<webview>`.
+- To `chrome.tabs`, every `<webview>` is a tab, and the desktop is one
+  `chrome.windows` window. Extensions can also open `popup` windows, which the
+  shell draws.
+- Shell API: [SHELL-EXTENSIONS.md](/docs/SHELL-EXTENSIONS.md).
 
 ## Problem
 
-The engine is a `chrome/` build. The extension system — background service
-workers, content scripts, `declarativeNetRequest`, `chrome.storage` — is
-compiled in, and nothing turns it off. Three things are missing:
+The engine is a `chrome/` build, so the extension system (service workers,
+content scripts, `declarativeNetRequest`, `chrome.storage`) is already compiled
+in. Three things are missing:
 
-| Missing | Why |
-|---|---|
-| A way to install one | The Web Store's install button is `webstorePrivate` talking to a Chrome browser window; a desk has none. |
-| A place for the action | Chrome draws the icon and popup in its toolbar, which a desk has no room for, because the shell owns the whole screen. |
-| Tabs | `chrome.tabs` finds a tab through a browser window's tab strip. A `WebViewGuest` is in none, so `tabs.query` returns nothing, and most popups start with `tabs.query({active: true, currentWindow: true})`. |
+- **Install.** The Web Store install button needs a Chrome browser window. A
+  desk has none.
+- **Action UI.** Chrome draws the icon and popup in its toolbar. The shell owns
+  the whole screen, so there is no toolbar.
+- **Tabs.** `chrome.tabs` finds tabs through a browser window's tab strip. A
+  `WebViewGuest` is in none, so `tabs.query` returns nothing. Most popups start
+  with `tabs.query({active: true, currentWindow: true})`.
 
 ## Design
 
-### Installing: the config names them
+### Installing
 
 ```json
 {
@@ -31,39 +36,44 @@ compiled in, and nothing turns it off. Three things are missing:
 }
 ```
 
-`web_store` is Web Store ids (this one is uBlock Origin Lite); `unpacked` is
-directories, absolute or under `~`.
+- `web_store`: Web Store ids (this one is uBlock Origin Lite).
+- `unpacked`: directories, absolute or under `~`.
 
 | Step | Where |
 |---|---|
-| Parse `extensions`, expand a leading `~`, keep-last-good on a bad edit | `domicile-config`, `ExtensionsConfig` |
-| Send the list as a fact that rides the handshake, like `Keymap`, and again on reload | `domicile-protocol`, `HostMessage::Extensions { web_store, unpacked }` |
-| Intercept it in the browser process, as `Keymap` is | `components/domicile/browser/control_channel.cc` |
+| Parse, expand `~`, keep the last good config on a bad edit | `domicile-config`, `ExtensionsConfig` |
+| Send the list with the handshake and on reload | `domicile-protocol`, `HostMessage::Extensions { web_store, unpacked }` |
+| Receive it in the browser process | `components/domicile/browser/control_channel.cc` |
 | Decide what to add and remove | `components/domicile/browser/extension_installer.{h,cc}`, `ReconcileExtensions` |
-| Carry it out in the page's profile | `chrome/browser/domicile/domicile_extension_installer.{h,cc}`, bound by patch 0055 |
+| Install and uninstall in the profile | `chrome/browser/domicile/domicile_extension_installer.{h,cc}` (patch 0055) |
 
-Reconciling does three things, once `ExtensionSystem::ready()`:
+Once `ExtensionSystem::ready()`, reconciling:
 
-- A Web Store id not installed goes to `PendingExtensionManager::AddFromExternalUpdateUrl` with `extension_urls::GetWebstoreUpdateUrl()`, as `kExternalPrefDownload`, acknowledged. It installs from the Store and updates from it.
-- A directory not already loaded goes to `UnpackedInstaller::Load`, silent on failure (the error is logged). Directories are compared after `base::MakeAbsoluteFilePath`, as the installer records them.
-- An extension this installer added that the list no longer names is uninstalled with `UNINSTALL_REASON_ORPHANED_EXTERNAL_EXTENSION`, which neither asks policy nor marks it user-removed. What it added is the profile pref `domicile.extensions.added`. Anything else in the profile is left alone.
+- Adds a missing Web Store id via
+  `PendingExtensionManager::AddFromExternalUpdateUrl` with
+  `extension_urls::GetWebstoreUpdateUrl()`, as `kExternalPrefDownload`. It
+  installs and updates from the Store. It is marked acknowledged (Chromium
+  disables unacknowledged external extensions on Windows and macOS).
+- Loads a missing directory via `UnpackedInstaller::Load`. Failures are logged.
+  Paths are compared after `base::MakeAbsoluteFilePath`.
+- Uninstalls an extension it added that the list no longer names, with
+  `UNINSTALL_REASON_ORPHANED_EXTERNAL_EXTENSION`. The pref
+  `domicile.extensions.added` records what it added. It leaves other
+  extensions alone.
 
-Naming an extension in the config is the consent. There is no install prompt,
-and the manifest's permissions are granted as declared.
+Listing an extension is consent. There is no install prompt, and manifest
+permissions are granted as declared.
 
-Two things Chromium does to an extension installed this way, at the pin:
+Chromium disables unpacked extensions outside developer mode
+(`DISABLE_UNSUPPORTED_DEVELOPER_EXTENSION`). The installer sets
+`prefs::kExtensionsUIDeveloperMode` before loading a directory and leaves it
+on.
 
-| Chromium | On a desk |
-|---|---|
-| `ExtensionRegistrar` disables an unacknowledged external extension (`DISABLE_EXTERNAL_EXTENSION`) only where `FeatureSwitch::prompt_for_external_extensions` is on: Windows and macOS. | Never applies on Linux. The Web Store add passes `mark_acknowledged` anyway. |
-| `StandardManagementPolicyProvider` disables a `kUnpacked` extension in a profile not in developer mode (`DISABLE_UNSUPPORTED_DEVELOPER_EXTENSION`). | The installer sets `prefs::kExtensionsUIDeveloperMode` before loading a directory, and leaves it on. |
+### The tray
 
-### The tray: engine to page
-
-The action's state lives in the browser process, so a new mojo interface
-carries it. `components/domicile/mojom/extension_tray.mojom` is bound on the
-shell's origin only, exactly as the control channel is, and is surfaced on
-`window.domicile`:
+`components/domicile/mojom/extension_tray.mojom` carries action state from the
+browser process to the shell. It binds on the shell's origin only, like the
+control channel, and appears on `window.domicile`:
 
 ```ts
 // window.domicile
@@ -77,135 +87,185 @@ interface DomicileExtension {
   icon: string;               // data:image/png, rendered at the page's DPR
   badgeText: string;
   badgeColor: string;         // CSS color, #rrggbbaa
-  popup: string | null;       // chrome-extension://<id>/popup.html; the SDK says undefined
+  popup: string | null;       // chrome-extension://<id>/popup.html, or null (undefined in the SDK)
   enabled: boolean;
 }
 ```
 
-- **`extensions` is the whole list, on every change.** Like `Displays`, a page that reloads is told again rather than having had to be listening. The source is `ExtensionRegistryObserver` plus `ExtensionActionDispatcher::Observer::OnExtensionActionUpdated`.
-- **The icon is a data URL, not a `chrome-extension://` URL.** `action.setIcon({imageData})` sets an icon that has no URL.
-- **Action state is per tab**, so the list reports it for the active tab, and is sent again when the active tab changes. With no active tab it is the default state (tab `-1`).
-- **Every click is `activateExtension(id)`**, popup or not: what `ExtensionActionRunner::RunAction` does for a toolbar click, which the tray bypasses. It grants `activeTab` on the active tab (`ActiveTabPermissionGranter::GrantIfRequested`, on the guest's `extensions::TabHelper`), then dispatches `action.onClicked` with that tab only when the action has no popup. With no active tab, nothing is granted: the page clicked in is the shell's. The grant reaches the tab's renderer before `GrantIfRequested` returns (patch 0070); upstream sends it only after a network-service round trip, which an `onClicked` listener's `executeScript` could beat.
-- **A click with a popup** is then the shell opening `<webview extensionpopup src={popup}>` in a panel under the icon. A browser-initiated navigation to `chrome-extension://` is allowed, and the page gets the full extension API because of its origin, not because of the view it is in. The shell closes the panel on an outside press or Escape. When the popup calls `window.close()`, the new `WebViewGuestClient.CloseRequested()` makes the element dispatch `domicile-close`.
-- **The popup is a popup, not a tab**, as Chrome's toolbar bubble is an `ExtensionHost` in no tab strip. `extensionpopup` reaches the browser in `CreateGuest`, and `AttachTabHelpers` gives that guest view type `kExtensionPopup` and nothing else: no tab id, no desk window. So `runtime.getContexts` lists it as `POPUP`, `tabs.getCurrent()` answers nothing, and `tabs.query({active: true, currentWindow: true})` names the desk's active tab. Extensions that lay themselves out by where they are see Chrome's answer: Bitwarden sizes its body (380px) only when `tabs.getCurrent()` finds no tab, and otherwise fills whatever it is given.
-- **The panel fits the popup**, as Chrome's bubble does. The guest is put in preferred-size mode on each page (`WebViewGuest::PrimaryPageChanged`), and its content size — max-content width, document height — reaches the element as `contentWidth` / `contentHeight` and `domicile-content-size-change` (`WebViewGuestClient.ContentSizeChanged`). Content drops the report from any frame with an outer document, a guest's main frame included, until patch 0080; and Blink sends it only when a frame commits, which a popup's page may never do after it first lays out, until patch 0081. The width is max-content (patch 0082): a fluid page's min-content width is its longest word. The shell sizes the view to it, capped at its default box.
+- **`onextensions`** sends the full list on every change, so a reloaded page
+  gets it again. Sources: `ExtensionRegistryObserver` and
+  `ExtensionActionDispatcher::Observer::OnExtensionActionUpdated`.
+- **`icon`** is a data URL because `action.setIcon({imageData})` has no URL.
+- **Action state** is per tab. The list reports the active tab's state and is
+  resent when the active tab changes. With no active tab it reports the
+  default (tab `-1`).
+- **`activateExtension(id)`** handles every click, as
+  `ExtensionActionRunner::RunAction` does for a toolbar click:
+  - It grants `activeTab` on the active tab
+    (`ActiveTabPermissionGranter::GrantIfRequested`). With no active tab, it
+    grants nothing.
+  - It dispatches `action.onClicked` with that tab if the action has no popup.
+  - Patch 0070 sends the grant to the renderer before `GrantIfRequested`
+    returns. Upstream sends it after a network-service round trip, which an
+    `onClicked` listener's `executeScript` can beat.
+- **Popups.** If the action has a popup, the shell opens
+  `<webview extensionpopup src={popup}>` in a panel under the icon.
+  - The page gets the full extension API from its `chrome-extension://`
+    origin.
+  - The popup's `window.close()` fires `domicile-close` on the element
+    (`WebViewGuestClient.CloseRequested`).
+  - The guest has view type `kExtensionPopup`, no tab id and no desk window,
+    like Chrome's toolbar bubble. So `runtime.getContexts` lists it as
+    `POPUP`, `tabs.getCurrent()` returns nothing, and
+    `tabs.query({active: true, currentWindow: true})` returns the desk's
+    active tab. Some extensions depend on this: Bitwarden sets a 380px body
+    width only when `tabs.getCurrent()` finds no tab.
+- **Panel size** fits the popup's content, like Chrome's bubble. The guest
+  runs in preferred-size mode (`WebViewGuest::PrimaryPageChanged`) and reports
+  max-content width and document height as `contentWidth` / `contentHeight`
+  and `domicile-content-size-change` (`WebViewGuestClient.ContentSizeChanged`).
+  Patches:
+  - 0080: report size from a guest's main frame.
+  - 0081: report after any layout, not only on commit.
+  - 0082: use max-content width. Min-content width of a fluid page is its
+    longest word.
 
-The SDK side is the `window.domicile` client in `packages/chrome-sdk`, plus
-`packages/shell-manganese/src/extensions/` for the tray and the popup panel.
+SDK side: the `window.domicile` client in `packages/chrome-sdk`, and the tray
+and popup panel in `packages/shell-manganese/src/extensions/`.
 
-### Tabs: every `<webview>`, in one window
+### Tabs
 
-| Chrome's concept | On a desk |
+| Chrome | On a desk |
 |---|---|
-| Tab | A `WebViewGuest`, view type `kTabContents` as Chrome's tabs (`runtime.getContexts` NOTREACHEDs on none). It gets `SessionTabHelper` (the tab id, also what `declarativeNetRequest`'s `tabIds` and `webRequest` read) and `extensions::TabHelper` (`activeTab` grants, `scripting.executeScript`) when it is created. |
-| Window | One `DomicileWindowController : extensions::WindowController`, registered in `WindowControllerList`. Its tabs are the live guests, in creation order. |
-| Active tab | The guest whose element last took focus: the shell already moves focus with `view.focus()`. The browser has no notification for an inner `WebContents` gaining focus, so the element says so (`WebViewGuest.Focused`). An extension page never takes it: a popup window's page is in a `<webview>` too, and would name itself. An action popup is no tab at all. |
+| Tab | A `WebViewGuest` with view type `kTabContents` |
+| Window | One `DomicileWindowController : extensions::WindowController` in `WindowControllerList`. Its tabs are the live guests in creation order. |
+| Active tab | The guest whose element last took focus. Extension pages (popup windows, action popups) never become the active tab. |
 
-Lookups walk Chrome's browser windows. Four get one hook call each into
-`chrome/browser/extensions/domicile_desk_hooks.h` (patch 0057, 27 lines):
+Patch 0056 attaches two helpers to every tab guest on creation:
 
-| Lookup | The desk's answer |
+- `SessionTabHelper`: tab id, read by `declarativeNetRequest` `tabIds` and
+  `webRequest`.
+- `extensions::TabHelper`: `activeTab`, `scripting.executeScript`.
+
+The browser gets no focus notification for an inner `WebContents`, so the
+element reports it (`WebViewGuest.Focused`).
+
+Chrome's lookups walk browser windows. Patch 0057 adds one hook call to each
+of four lookups, declared in
+`chrome/browser/extensions/domicile_desk_hooks.h`:
+
+| Lookup | Desk answer |
 |---|---|
 | `ExtensionTabUtil::GetTabById` | the guest, the desk's controller, its index |
-| `ExtensionTabUtil::CreateTabObject` | its index and `active`, which no tab strip gives |
+| `ExtensionTabUtil::CreateTabObject` | its index and `active` |
 | `ExtensionTabUtil::ForEachTab` | every guest too |
-| `ChromeExtensionFunctionDetails::GetCurrentWindowController` | the desk: the shell's window is not one, and its active tab is the shell |
+| `ChromeExtensionFunctionDetails::GetCurrentWindowController` | the desk, since the shell's own window is not a desk window |
 
-`tabs.query` is not patched: it and every mutation below are the desk's own
-`ExtensionFunction`s, registered over Chrome's by name
-(`ExtensionFunctionRegistry::Register` replaces an entry). Tab events
-(`onCreated`, `onUpdated`, `onRemoved`, `onActivated`, `onZoomChange`) come
-from the guests' lifecycle, broadcast through the profile's `EventRouter` exactly as
-`TabsEventRouter` builds them; its dispatch is private, and its tab entries
-`CHECK` a `TabInterface` a guest does not have.
+- `tabs.query` and the mutations below are the desk's own
+  `ExtensionFunction`s. They replace Chrome's by name in
+  `ExtensionFunctionRegistry::Register`.
+- Tab events (`onCreated`, `onUpdated`, `onRemoved`, `onActivated`,
+  `onZoomChange`) come from the guests' lifecycle. They are built as
+  `TabsEventRouter` builds them and broadcast through the profile's
+  `EventRouter`. `TabsEventRouter` itself can't be used: its dispatch is
+  private and it `CHECK`s for a `TabInterface` that guests lack.
 
-Mutations go where the thing they change lives:
+Mutations:
 
-| Call | Goes to |
+| Call | Handled by |
 |---|---|
-| `tabs.create({url})` | The shell, as `domicile-new-window` on the active tab's element. Answered with the next tab the desk gains |
-| `tabs.update(id, {url})`, `{muted}` | The guest; the browser already holds its `WebContents` |
+| `tabs.create({url})` | The shell, as `domicile-new-window` on the active tab's element. Resolves with the next new tab. |
+| `tabs.update(id, {url})`, `{muted}` | The guest |
 | `tabs.update(id, {active: true})`, `windows.update(id, {focused: true})` | The shell, as `domicile-focus-request` on that element |
-| `tabs.remove(id)` | The shell, as `domicile-close` on that element. Answered once asked |
+| `tabs.remove(id)` | The shell, as `domicile-close` on that element. Resolves once sent. |
 | `windows.get`, `getCurrent`, `getLastFocused`, `getAll` | The desk |
-| `windows.create({type: "popup", url})` | A popup window; see below |
-| `windows.remove(id)` | A popup window's tab, as `tabs.remove`. The desk's own window is refused |
-| `tabs.move`, `group`, `ungroup`, `discard`, `duplicate`, `createSplit`, `unsplit`; `windows.create` of anything but a popup at one address; `tabs.update`'s `pinned`, `openerTabId`, `autoDiscardable`; `windows.update`'s bounds and state | An error: `not supported on a Domicile desk` |
-| `tabs.setZoom`, `getZoom` | The guest: `WebViewGuest::ZoomTo`, the element's own zoom path, per site through `HostZoomMap`. The element hears it as `domicile-zoom-change`. `0` is the default; outside blink's browser range is refused |
-| `tabs.getZoomSettings`, `setZoomSettings` | The desk: `automatic`, `per-origin`, the guest's one mode. Setting it is answered; any other is refused with the error above |
+| `windows.create({type: "popup", url})` | A popup window (below) |
+| `windows.remove(id)` | A popup window's tab, as `tabs.remove`. Refused for the desk window. |
+| `tabs.setZoom`, `getZoom` | The guest: `WebViewGuest::ZoomTo`, per site via `HostZoomMap`. The element gets `domicile-zoom-change`. `0` is the default. Values outside Blink's browser range are refused. |
+| `tabs.getZoomSettings`, `setZoomSettings` | The desk: `automatic`, `per-origin` only. Other settings are refused. |
+| `tabs.move`, `group`, `ungroup`, `discard`, `duplicate`, `createSplit`, `unsplit`; `tabs.update`'s `pinned`, `openerTabId`, `autoDiscardable`; `windows.update` bounds and state; any `windows.create` other than a `popup` with one `url` | Error: `not supported on a Domicile desk` |
 
-### Popup windows: the desk's, drawn by the shell
+### Popup windows
 
-Bitwarden's sign-in is `windows.create({type: "popup", url, width, height})`,
-closed with `windows.remove` once signed in. A popup window is a second
-`DomicileWindowController`, type `popup`, owned by the desk's:
+Bitwarden signs in with `windows.create({type: "popup", url, width, height})`
+and closes it with `windows.remove`. A popup window is a second
+`DomicileWindowController` of type `popup`, owned by the desk's controller
+(`domicile_window_controller.{h,cc}`):
 
-| Step | Where |
-|---|---|
-| `windows.create` makes the window, with no tab, and fires `windows.onCreated` | `DomicileWindowController::OpenPopup` |
-| The shell is asked for its tab on the active tab's element: `domicile-popup-window` with `windowId`, `url`, `width`, `height` (0 for none) | `WebViewGuestClient.PopupWindowRequested`, `DomicilePopupWindowEvent` (patch 0078) |
-| The shell opens `<webview popupwindow={windowId} src={url}>`; the element sends the id in `CreateGuest`, and its guest becomes the window's one tab | `HTMLWebViewElement::PopupWindow`, `AddToDesk` |
-| `windows.create` answers with the window, populated | `WhenNextTab` |
-| `windows.remove`, or the page's `window.close()`, is `domicile-close` on that element; the window goes with its tab, firing `windows.onRemoved` | `DeskWindowsRemoveFunction`, `PopupEmptied` |
-
-What the window answers to:
+1. `windows.create` makes an empty window and fires `windows.onCreated`
+   (`OpenPopup`).
+2. The engine fires `domicile-popup-window` on the active tab's element with
+   `windowId`, `url`, `width`, `height` (0 if unset)
+   (`WebViewGuestClient.PopupWindowRequested`, `DomicilePopupWindowEvent`,
+   patch 0078).
+3. The shell opens `<webview popupwindow={windowId} src={url}>`. The element
+   passes the id in `CreateGuest`, and the guest becomes the window's only tab
+   (`HTMLWebViewElement::PopupWindow`, `AddToDesk`).
+4. `windows.create` resolves with the populated window (`WhenNextTab`).
+5. `windows.remove` or the page's `window.close()` fires `domicile-close` on
+   the element. The window closes with its tab and fires `windows.onRemoved`
+   (`DeskWindowsRemoveFunction`, `PopupEmptied`).
 
 | Call | A popup window |
 |---|---|
-| `windows.getCurrent`, `tabs.query({currentWindow})` | from its own page, itself; from no tab (a service worker), the desk's |
-| `windows.getLastFocused`, `lastFocusedWindow` | itself once its tab took focus, until a desk tab does |
-| `windows.getAll`, `tabs.query({windowType})` | listed with the desk's, filtered by type |
+| `windows.getCurrent`, `tabs.query({currentWindow})` | Itself from its own page. The desk from a service worker. |
+| `windows.getLastFocused`, `lastFocusedWindow` | Itself after its tab takes focus, until a desk tab does |
+| `windows.getAll`, `tabs.query({windowType})` | Listed with the desk, filtered by type |
 | `windows.update(id, {focused: true})` | `domicile-focus-request` on its element |
 
-The desk's own window says `left: 0, top: 0`, the desktop's origin. Bitwarden
-places its popup from the window it came from, and without them asks
-`windows.create` for `NaN`.
+The desk window reports `left: 0, top: 0`. Bitwarden positions its popup
+relative to the source window and passes `NaN` without them.
 
 ## Key decisions
 
-- **Config over a store UI.** A desk is declarative (home-manager writes it), and the Store's own flow needs a browser window behind it.
-- **The compositor carries the list rather than the launcher adding `--load-extension`.** The launcher never reads the config, `--load-extension` is off by default in current Chromium (`DisableLoadExtensionCommandLineSwitch`), a switch cannot name a Web Store id, and it does not follow a reload.
-- **The default profile, not a partition of its own.** It is the partition browser windows use (see `web_view_guest.h`, *NO GUEST SiteInstance*), so content scripts and network rules see the pages the user actually browses.
-- **One window, not one per `<webview>`.** A shell's browser windows are what Chrome calls tabs, and extensions assume many tabs and one active tab per window.
-- **Refuse what has no desktop meaning; never fake it.** A `tabs.move` that answers success and does nothing is a bug the extension cannot see.
-- **A popup window is a window, not the tray's panel.** It has its own id, so `windows.remove` closes it and not the desk, and `tabs.query({windowType: "popup"})` finds it. The engine makes the window and the shell draws it; the attribute ties the two, because the browser cannot tell one `<webview>` from another.
-- **Only a popup.** A `normal` window is the shell's browser window, which `tabs.create` already asks for; a tab moved in, an opener, a second address or incognito have no desk meaning. A size is passed on; a position is the shell's, as on a Wayland desktop in Chrome itself.
-- **Passkeys come from an extension.** The browser draws no WebAuthn UI (patch `0048`), so a password manager's extension is where passkeys live: by a content script wrapping `navigator.credentials`, or by `chrome.webAuthenticationProxy`. `guard-webview-passkey-extension.sh` reads the second answering a page in a `<webview>`; its control, the same page refused with `PublicKeyCredential` present, is what the first needs. A site offers an extension's passkey at sign-in only through a conditional `get()`: the browser says conditional UI is available and holds that request until the site aborts it (patch `0084`). Bitwarden races its own answer against the browser's, so a refusal there left its autofill's passkey answering a page that had stopped listening.
-- **Manifest V3 only.** Chromium at the pin no longer loads MV2, so uBlock Origin will not run and uBlock Origin Lite will. That is upstream's decision, not the desk's.
+- **Config over a store UI.** Home-manager writes the config, and the Store
+  flow needs a browser window.
+- **Compositor sends the list; the launcher does not pass `--load-extension`.**
+  The launcher never reads the config, Chromium disables the switch by default
+  (`DisableLoadExtensionCommandLineSwitch`), it can't name a Web Store id, and
+  it doesn't follow a reload.
+- **Default profile.** Browser windows use it (see `web_view_guest.h`, *NO
+  GUEST SiteInstance*), so content scripts and network rules see the pages the
+  user browses.
+- **One window for all `<webview>`s.** Extensions expect many tabs and one
+  active tab per window.
+- **Refuse unsupported calls.** A no-op `tabs.move` that reports success is a
+  bug the extension can't detect.
+- **Popup windows are real windows.** They have their own id, so
+  `windows.remove` closes them and `tabs.query({windowType: "popup"})` finds
+  them. The engine owns the window and the shell draws it. The `popupwindow`
+  attribute links them, since the browser can't tell `<webview>`s apart.
+- **Only `popup` windows.** A `normal` window is a shell browser window, which
+  `tabs.create` already requests. Size is passed through. Position is the
+  shell's choice, as under Wayland in Chrome.
+- **Passkeys come from extensions.** The browser draws no WebAuthn UI (patch
+  0048), so a password manager extension provides passkeys, by wrapping
+  `navigator.credentials` in a content script or via
+  `chrome.webAuthenticationProxy`. For conditional `get()` the browser reports
+  conditional UI as available and holds the request until the site aborts it
+  (patch 0084). Bitwarden races its own answer against the browser's, so a
+  browser refusal left it answering a page that had stopped listening.
+  `guard-webview-passkey-extension.sh` checks that an extension answers a
+  page's WebAuthn request in a `<webview>`, by content script and by
+  `webAuthenticationProxy`.
+- **Manifest V3 only.** Chromium at the pin no longer loads MV2. uBlock Origin
+  Lite works; uBlock Origin does not.
 
 ## Not in scope
 
-- `chrome.contextMenus`: the desk turns the context menu off (#608).
-- `chrome.commands`: a chord belongs to the shell. The route, if one is wanted, is `grabShortcut`.
-- Install, permission and "extension added" bubbles: the config is the consent.
+- `chrome.contextMenus`: the desk disables the context menu (#608).
+- `chrome.commands`: shortcuts belong to the shell. Use `grabShortcut` if
+  needed.
+- Install, permission and "extension added" bubbles (see Installing).
 
-## Plan
+## Tests
 
-Slice 1: extensions run, and show in a tray.
+Engine guards in `packages/domicile-engine/scripts/`:
 
-- [x] `guard-webview-content-script.sh`: an unpacked extension whose content script marks the page, loaded by hand (`--load-extension` plus the feature disabled), with the mark read from inside a `<webview>`. This proves the assumption everything else rests on, first.
-- [x] `extensions` in `domicile-config`
-- [x] `HostMessage::Extensions` in `domicile-protocol`, sent by the compositor with the handshake and on reload
-- [x] `extension_installer` in the fork, and the control channel handing it the list. `guard-extension-installer.sh` loads the content-script fixture from the list alone.
-- [x] `SessionTabHelper` and `extensions::TabHelper` on every `WebViewGuest`: `chrome/browser/domicile/domicile_tab_helpers.h`, handed to `BindWebViewGuestHost` by patch 0056 because the guest's target cannot depend on `//chrome`
-- [x] `WebViewGuestClient.CloseRequested` and `domicile-close`
-- [x] `ExtensionTray` mojo, `onextensions`, `activateExtension`. `guard-extension-tray.sh` reads a fixture's title, badge and popup off the event, opens the popup in a `<webview>`, reads its `runtime.getContexts` as a `POPUP`, `tabs.getCurrent()` as no tab, and its content size, and hears its `window.close()` as `domicile-close`. Until slice 2, `action.onClicked` names the shell's own page as its tab
-- [x] the chrome-sdk client: `DomicileClient.on("extensions")`, `activateExtension`, `WEBVIEW_CLOSE_EVENT`
-- [x] manganese's tray and popup panel
-- [x] *Extensions* in `docs/WRITING-A-SHELL.md`
-
-Slice 2: tabs.
-
-- [x] `DomicileWindowController` and the lookup hooks: patch 0057, `chrome/browser/domicile/domicile_desk.h`
-- [x] tab events from `WebViewGuest`'s lifecycle
-- [x] the mutations table, each to where it goes. `domicile-focus-request` is the element's new event, and manganese raises the window on it
-- [x] manganese closes a browser window on `domicile-close`, as its Close button does
-- [x] per-tab action state in `onextensions`, and `action.onClicked` naming the active tab
-- [x] a guard: `guard-webview-tabs.sh`, a popup's `tabs.query({active: true, currentWindow: true})` names the focused `<webview>`; its control focuses the other one
-- [x] tabs' zoom: the zoom four and `onZoomChange`, through the guest's own zoom. `guard-webview-tabs.sh`'s popup zooms the tab it named, and only that window's element hears it; its control zooms the other
-
-Follow-ups:
-
-- [x] `activeTab` granted on a tray click, popup or not: `ExtensionTray::Activate`. `guard-webview-active-tab.sh`: a fixture with `activeTab` and no host paints the focused `<webview>` with `scripting.executeScript` from its `onClicked`; its control does not click
-- [x] popup windows: `windows.create({type: "popup"})`, `windows.remove`, and every window read across the desk's and its popups'. `guard-webview-popup-window.sh`: the fixture's window page finds itself a `popup` and removes itself; its control opens the same `<webview>` without `popupwindow`
-- [x] manganese draws a popup window floating, at the size asked for
+- `guard-extension-installer.sh`
+- `guard-extension-tray.sh`
+- `guard-webview-content-script.sh`
+- `guard-webview-tabs.sh`
+- `guard-webview-active-tab.sh`
+- `guard-webview-popup-window.sh`
+- `guard-webview-passkey-extension.sh`
