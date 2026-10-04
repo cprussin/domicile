@@ -1,19 +1,24 @@
 # One page for the desk
 
-A shell is one page whose viewport is the desk's bounding box in logical
-pixels, and `navigator.domicile.displays` says where each monitor sits in it.
-The engine shows that page on every monitor at the monitor's own density and
-refresh rate: one layout, one frame, and tiles rastered per monitor at that
-monitor's scale. A shell never sees rotation, density or a second page.
+On a tty, the shell is one page that spans every monitor.
+
+- The page's viewport is the desk's bounding box, in logical pixels.
+- `navigator.domicile.displays` gives each monitor's rectangle in that box.
+- The engine shows the page on every monitor at that monitor's scale and
+  refresh rate.
+- The shell sees one layout and one frame. It never sees rotation, density or
+  a second page.
 
 ## Why one page
 
-On a tty a window is bound to a CRTC only if it is exactly that CRTC's
-rectangle (`ScreenManager::FindWindowAt`), so the engine needs a window per
-monitor. A page per window cost every shell: N copies of its state kept in
-step, a window that could not be on two monitors, a drag that could not leave
-its page, and nothing animating across a seam. So the windows only present;
-the shell is one page, as it already was nested (`Screens::described`).
+- On a tty, Chromium binds a window to a CRTC only if the window matches the
+  CRTC's rectangle (`ScreenManager::FindWindowAt`). So the engine needs one
+  window per monitor.
+- A page per window would force every shell to sync N copies of its state.
+  A window could not span two monitors, a drag could not cross pages, and
+  nothing could animate across a seam.
+- So the per-CRTC windows only present. The shell is one page, the same as when
+  nested (`Screens::described`).
 
 ## Design
 
@@ -35,174 +40,131 @@ the shell is one page, as it already was nested (`Screens::described`).
 | `devicePixelRatio` | `S`, the largest scale on the desk |
 | pages | 1 |
 
-A gap between monitors is part of the box and never shown; the pointer never
-enters one (the crossing already follows `desk`).
+Gaps between monitors are part of the box but never shown. The pointer never
+enters a gap, because pointer crossing follows `desk`.
 
 ### Browser: one page, N presenters
 
-- `ShellWindows` (`domicile_shell_windows.cc`) keeps one window per CRTC, since
-  `ScreenManager::FindWindowAt` needs a window the size of its CRTC. Only one
-  loads the shell: the **host**, the window on the fastest display.
+- `ShellWindows` (`domicile_shell_windows.cc`) keeps one window per CRTC.
+- The **host** is the only window that loads the shell. It sits on the fastest
+  display (see [Key decisions](#key-decisions)).
 - The host's `WebContents` view is sized to the desk box and offset by the
-  host's `desk` origin, so the host shows its own slice by clipping.
-- Every other window is a `DeskPresenter`: a widget with no `WebContents` whose
-  root `ui::Layer` shows the page's `SurfaceId` (`SetShowSurface`, as
-  `DelegatedFrameHost` does) at the same offset, plus `AddChildFrameSink`.
-  `SurfaceAggregator::EmitSurfaceContent` already scales a child frame by
-  `parent_dsf / frame_dsf`, so a presenter at 1.2 draws the page's S frame at
-  1.2/S. Rotation is the window's, as today.
-- The page's `ScreenInfos` carry every display; `current()` is the desk box at
+  host's `desk` origin. The window clips it to the host's own slice.
+- Every other window is a `DeskPresenter`: a widget with no `WebContents`.
+  - Its root `ui::Layer` shows the page's `SurfaceId` at the same offset
+    (`SetShowSurface`, as in `DelegatedFrameHost`, plus `AddChildFrameSink`).
+  - `SurfaceAggregator::EmitSurfaceContent` scales a child frame by
+    `parent_dsf / frame_dsf`. So a presenter at 1.2 draws the page's frame at
+    1.2/S.
+  - The window handles rotation.
+- The page's `ScreenInfos` list every display. `current()` is the desk box at
   S (`WidgetBase::UpdateSurfaceAndScreenInfo`).
 
 ### Input
 
 - `DrmWindowHost` sends every pointer, scroll and key event to the host window
-  (`OzonePlatform::SetDomicileDeskHost`), at its `desk` position
-  (`PointerInWindow`). One window gets everything, so X's implicit grab is
-  Chromium's own.
-- A position on another monitor is past the host window's edge. aura explores a
-  window only where its bounds reach, so the host's root targets the page for
-  anything it would otherwise keep (`aura::TargetDeskPage`). Capture and a
-  pressed button's window still come first.
-- A warp is asked for in the host's pixels and lands on the monitor holding
-  that place on the desk (`DrmCursor::MoveCursorTo` through
-  `PointerCrossingFor`). Its arrow is then drawn for that monitor's turn and
-  density, not the host's (`WarpLandsOn`).
-- The cursor stays per CRTC (`DrmCursor`); the host sets its shape on every
-  monitor.
+  at its `desk` position (`OzonePlatform::SetDomicileDeskHost`,
+  `PointerInWindow`). One window gets all input, so Chromium's own implicit
+  grab applies.
+- A position on another monitor lies outside the host window's bounds. aura
+  only hit-tests inside a window's bounds, so the host's root sends such events
+  to the page (`aura::TargetDeskPage`). Capture and the pressed button's window
+  still take priority.
+- A warp is requested in host pixels. It lands on the monitor that holds that
+  desk position (`DrmCursor::MoveCursorTo` via `PointerCrossingFor`). The
+  cursor is then drawn with that monitor's rotation and density (`WarpLandsOn`).
+- Each CRTC keeps its own cursor (`DrmCursor`). The host sets the cursor shape
+  on every monitor.
 
 ### Raster: one tiling per display scale
 
-cc keeps one HIGH_RES tiling per layer, at S. A layer a less dense monitor
-shows also keeps a tiling at that monitor's scale (patch 0072,
-`cc/domicile/display_regions.h`):
+- Each layer keeps a tiling at each lower monitor scale it appears on, plus
+  the usual high-res tiling at S. Each monitor gets tiles rastered 1:1 for its
+  pixels (patches 0072, 0079).
+- Layers under filters, masks or opacity groups, rotated layers and directly
+  composited images fall back to S. Viz resamples them.
+- Cost: more raster work, activation latency and tile memory per
+  lower-density monitor.
 
-- The browser lists every lit monitor among the page's screens
-  (`DeskScreenInfos`), labeled `cc::kDomicileDisplayLabel`, placed where the
-  page is on the engine's screen (`DomicileDeskScreenInfosFor`).
-- `WidgetBase` turns those into regions of its own viewport, in device pixels,
-  each with the ratio `s_i/S` (`DomicileDisplayRegionsOf`), and hands them to
-  `LayerTreeHost::SetDomicileDisplayRegions`. A `<webview>` finds its regions
-  by its own screen rect, so it is native too.
-- On both trees, `PictureLayerImpl::UpdateDomicileDisplayTilings` keeps a
-  tiling at the high-res scale times each ratio the layer meets (at most
-  three), found through its screen space transform. Its priority rects are
-  clipped to that monitor's region, so a gap or another monitor is never
-  rastered at that scale. It is NON_IDEAL but still makes tiles, and
-  `CleanUpTilingsOnActiveLayer` skips it while the monitor shows the layer.
-- The pending tree's is a twin of the active one (patch 0079): it rasters
-  what a commit invalidated, and activation waits on those tiles as on high
-  res (`IsTileRequiredForActivation`, `TilingSetRasterQueueRequired`). A
-  monitor never shows high res, shrunk, where its own tiles were.
-- `TilingSetRasterQueueAll` rasters them, each after the high-res tiling in
-  every bin.
-- `TileBasedLayerImpl::AppendQuads` covers each region from that tiling
-  (`DomicileCoverage`), falling back to high res where a tile is not ready —
-  only a tiling's first raster, or eviction.
-
-A tile rastered at `s_i` lands 1:1 on display `i`'s pixels after viz's
-`s_i/S`.
-
-The high-res tiling still covers the whole layer. So a lower-density monitor
-costs extra raster and activation latency, not less.
-
-**Falls back to S:** layers under a non-root render surface (filters, blur,
-masks, opacity groups — a window dragged at an opacity), turned layers, and
-directly composited images. viz renders those at the frame's scale, so they
-are resampled on a lower-density display. A layer under a surface keeps its
-tilings rastered (`DomicileKeepsDisplayTilings`), so leaving the surface is
-one switch, not a rebuild. A moving layer draws from its tilings.
-
-**Tile memory.** The budget is `GetGpuMemoryPolicy`'s: 1152 MB scaled by the
-widget's initial screen area, floored at 512 MB, capped at a quarter of RAM;
-`--force-gpu-mem-available-mb` overrides it. A desk of ~40 Mpx at S is
-~160 MB of tiles per full-desk layer, and a monitor at ratio `r` adds `r²` of
-its own share. Out of budget, required tiles are marked OOM and drawn as
-checkerboard, so a monitor's tiling there costs more than a resample.
+Details: [DISPLAY-TILINGS.md](DISPLAY-TILINGS.md).
 
 ### Frames
 
-- The page's frame sink hangs off the host, so it takes the fastest display's
-  `BeginFrameSource`. Registration makes that explicit, not first-come
-  (`FrameSinkManagerImpl::RecursivelyAttachBeginFrameSource`).
+- The page's frame sink hangs off the host, so it uses the host display's
+  `BeginFrameSource`. `FrameSinkManagerImpl::RecursivelyAttachBeginFrameSource`
+  attaches the host's source explicitly, so it does not depend on registration
+  order.
 - A slower display draws the latest surface at its own vsync. A slide across a
   seam is one animation on one clock, sampled by two vsyncs.
 
 ### Client windows
 
-An `<app>` is one element wherever it is. `OnSurfaceEmbedded`'s scale (the
-buffer scale the client is configured at) is that of the display under the
-`<app>`'s center; the other monitor resamples the client's buffer, as every
-compositor does.
+An `<app>` is one element wherever it is. Its buffer scale
+(`OnSurfaceEmbedded`) is the scale of the display under the `<app>`'s center.
+Other monitors resample the client's buffer, like any compositor.
 
 ### Floats across screens (manganese)
 
-- A `Float`'s `x`/`y` are in the pixels of the screen showing its workspace; a
-  drag (`WindowMoved`) is in page pixels. `floatDragged` converts by the home
-  screen's box, and when the float's **center** lands on another screen it
-  moves to the workspace that screen shows, with the keyboard (sway's
+- A `Float`'s `x`/`y` are in the pixels of the screen showing its workspace. A
+  drag (`WindowMoved`) is in page pixels. `floatDragged` converts using the
+  home screen's box.
+- When the float's **center** lands on another screen, the float and keyboard
+  focus move to the workspace that screen shows (as sway's
   `floating_fix_coordinates`). A center in a gap stays put.
-- Until then it is drawn once, at its page position, over both screens: windows
-  are `position: fixed` in page pixels, and nothing clips a `<Screen>`.
-- Every window is drawn once for the desk: one `Stage` after every monitor's
-  bar, keyed by window id, so a float that changes screens keeps its element
-  and a browser window's `<webview>` does not reload. A workspace switch still
-  slides only its own screen, by that screen's width.
+- Until then, the float draws once at its page position, across both screens.
+  Windows are `position: fixed` in page pixels and nothing clips a `<Screen>`.
+- One `Stage`, after every monitor's bar, draws every window once for the
+  desk, keyed by window id. A float that changes screens keeps its element, so
+  a browser window's `<webview>` does not reload.
+- A workspace switch slides only its own screen, by that screen's width.
 
 ## Key decisions
 
-- **One frame with per-region tilings, over one commit to N `LayerTreeHostImpl`s
-  or N frames per draw.** N impls split scroll, animations and input across
-  copies. N frames means N-way scheduling and the same tiling work anyway. One
-  frame keeps viz and the browser nearly upstream, and the cost lands in one
-  place: the tiling set.
-- **S is the largest scale.** Layout snapped at S puts an edge on a fractional
-  pixel on a lower-density display: a hairline there is antialiased, text and
-  images are not. Snapping at the smaller scale would soften the denser
-  display, which has more to lose.
-- **The host is the fastest display.** It drives BeginFrames, and a 144 Hz
-  panel sampling a 60 Hz page would stutter.
-- **Center over pointer** for which screen owns a float. It matches sway, and
-  a window dragged by its far edge does not change owner the moment the hand
-  crosses.
-- **Presenters instead of one window over every CRTC.** `FindWindowAt`, per-CRTC
-  page flips and rotation all assume a window per CRTC, and stay upstream.
+- **One frame with per-region tilings** over one commit to N
+  `LayerTreeHostImpl`s or N frames per draw.
+  - N impls split scroll, animations and input across copies.
+  - N frames means N-way scheduling and the same tiling work.
+  - One frame keeps viz and the browser close to upstream. The cost stays in
+    the tiling set.
+- **S is the largest scale.** Layout snapped at S puts edges on fractional
+  pixels on a lower-density display. Hairlines there get antialiased; text and
+  images do not. Snapping at a smaller scale would soften the denser display,
+  which loses more.
+- **The host is the fastest display.** It drives BeginFrames. A 144 Hz panel
+  sampling a 60 Hz page would stutter.
+- **A float's center decides its screen,** not the pointer. This matches sway,
+  and a window dragged by its far edge doesn't switch screens the moment the
+  pointer crosses.
+- **Presenters per CRTC** over one window spanning every CRTC. Besides
+  `FindWindowAt` (see [Why one page](#why-one-page)), per-CRTC page flips and
+  rotation assume a window per CRTC and stay upstream.
 
 ## Plan
 
-Phase 1: one page, raster at S. Done, and the only model.
+Done:
 
-- [x] `ShellWindows`: one host, `DeskPresenters` for the rest
-- [x] The host's view sized to the desk box and offset; page `ScreenInfos` from the profile
-- [x] Pointer, scroll, keys and warps through the host at `desk` positions
-- [x] The N-page model removed: `set_screen`, `fills_the_window`, `<app mirror>`, the pointer holder, manganese's desk channel and overhangs
-- [x] Hardware check on `home-office-right-two`: geometry, input, floats across screens
+- [x] Phase 1, one page at S: host and `DeskPresenter`s, desk-sized host view,
+  page `ScreenInfos` from the profile, input and warps through the host,
+  hardware check on `home-office-right-two`
+- [x] Phase 2, native density: display regions, per-scale tilings, raster
+  queue and cleanup, per-region `AppendQuads`, fallback under render surfaces,
+  activation waits on display tilings (0079)
+- [x] Phase 3: floats drawn once at desk level; browser windows cross screens
+  without reloading
 
-Phase 2: native density.
+Left:
 
-- [x] Every lit monitor in the page's `ScreenInfos`; `WidgetBase` makes regions
-- [x] `LayerTreeHost`/`LayerTreeImpl::SetDomicileDisplayRegions`
-- [x] A tiling per lower display scale, prioritized over its region
-- [x] Raster queue and cleanup keep it
-- [x] `AppendQuads` per region
-- [x] Fall back to S under non-root render surfaces
-- [x] Activation waits on the monitors' tilings; kept through surfaces (0079)
 - [ ] Hardware check: text on the lower-density monitor is crisp
 - [ ] `<app>` scale from the display under its center
 
-Phase 3: floats drawn once at desk level.
-
-- [x] Floats drawn once at desk level
-- [x] Browser windows cross screens without reloading
-
 ## Open questions
 
-- **Popups** (`<select>`, context menus, extension popups). They are their own
-  widgets, kept inside their window (patch 0051). Recommend: open on the
-  presenter under their anchor, kept inside that CRTC.
-- **Filter quality on the lower-density display.** If a blurred bar or shadow
-  there looks soft, per-display render passes (N frames per draw) are the next
-  step. Recommend: measure after phase 2 before building it.
-- **Testing more than one display.** Headless has one screen, and no guard runs
-  two CRTCs. Recommend: cc and `ShellWindows` gtests carry the logic, and the
-  hardware check carries the rest.
+- **Popups** (`<select>`, context menus, extension popups). Each is its own
+  widget, kept inside its window (patch 0051). Recommend: open on the
+  presenter under the anchor, kept inside that CRTC.
+- **Filter quality on lower-density displays.** If a blurred bar or shadow
+  looks soft there, the next step is per-display render passes (N frames per
+  draw). Recommend: measure after the phase 2 hardware check first.
+- **Testing multiple displays.** Headless has one screen, and no guard runs
+  two CRTCs. Recommend: cc and `ShellWindows` gtests cover the logic; the
+  hardware check covers the rest.

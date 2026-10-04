@@ -1,60 +1,38 @@
 # minimal-shell
 
-The worked example from [/docs/WRITING-A-SHELL.md](/docs/WRITING-A-SHELL.md): a
-Domicile shell with no dependency on this repository.
+The smallest working Domicile shell: every window full-screen, newest on top.
+It is the worked example from [WRITING-A-SHELL.md](/docs/WRITING-A-SHELL.md).
 
-Every window full-screen, newest on top. That is the least a shell can do and
-still be one — a real shell differs from it only in where it puts the elements
-and what it draws around them.
+- `src/index.ts` exports `Shell`, which mounts an `<app>` for each announced
+  app. That file is the whole shell.
+- For fuller shells, see
+  [`@domicile-desktop/shell-simple`](/packages/shell-simple/README.md) (drag,
+  resize, terminal shortcut) and
+  [`@domicile-desktop/manganese`](/packages/shell-manganese/README.md) (the
+  bundled chrome).
 
-It is the floor, and the two shells shipped in `packages/` are what gets built
-on it: [`@domicile-desktop/shell-simple`](/packages/shell-simple/README.md) adds drag,
-resize and a terminal shortcut without adding any widgets, and
-[`@domicile-desktop/manganese`](/packages/shell-manganese/README.md) is the
-bundled reference chrome. Neither can stand in for this one, for the reason
-below.
-
-## Why it is here and not in `packages/`
-
-`packages/` is the bun workspace. Inside it `@domicile-desktop/sdk` resolves to a
-symlinked directory of TypeScript source, `catalog:` and `workspace:*` mean
-something, and every package shares one `node_modules` — so a shell in there
-builds whether or not the SDK is consumable anywhere else. This one is outside
-the workspace and depends on the SDK by published version, exactly as a shell in
-someone else's repository would.
-
-[`/scripts/test-out-of-tree-shell.sh`](/scripts/test-out-of-tree-shell.sh)
-packs the SDK, copies this directory somewhere outside the repo, installs the
-tarball, and builds it there. It runs in `./scripts/check.sh shell`.
-
-So this is not decoration: it is the only thing standing between the SDK and an
-`exports` entry pointing at a file `files` does not ship, a type that will not
-emit to `.d.ts`, or a `catalog:` that survived into a published manifest.
-
-## Layout
-
-| File | What |
-|---|---|
-| `src/index.ts` | `Shell`: mount an `<app>` per announced app. The whole of this shell's behavior — and the whole shell. |
-
-One file, and that is the point. The engine is the display compositor,
-Domicile starts it and writes the document, so a shell is a module whose
-`Shell` export Domicile calls.
-
-## Building and running it
+## Build and run
 
 ```sh
 bun install
 bun run build
-```
-
-emits `.vite/renderer/main_window/shell.js`, which is the whole build. Point
-Domicile at it:
-
-```sh
 nix run github:cprussin/domicile/stable -- ./.vite/renderer/main_window/shell.js
 ```
 
-which serves the directory that module is in, starts the engine on it and the
-compositor underneath. There is nothing to install and no `bin/` entry: which desktop you
-get is which page Domicile was pointed at.
+The build emits one file, `.vite/renderer/main_window/shell.js`. Domicile
+serves its directory, then starts the compositor and the engine on it.
+
+## Why it lives outside `packages/`
+
+This shell tests that the SDK works as a published package. Inside the bun
+workspace, the SDK resolves to TypeScript source and `catalog:` /
+`workspace:*` work, so a broken package would still build there. This
+directory depends on the SDK by version, like a shell in another repo.
+
+[`/scripts/test-out-of-tree-shell.sh`](/scripts/test-out-of-tree-shell.sh)
+packs the SDK, copies this directory out of the repo, installs the tarball and
+builds. It runs in `./scripts/check.sh shell`. It catches:
+
+- an `exports` entry pointing at a file `files` doesn't ship;
+- a type that won't emit to `.d.ts`;
+- a `catalog:` left in a published manifest.

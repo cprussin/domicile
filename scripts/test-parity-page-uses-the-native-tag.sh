@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Whether the pages behind ENGINE-FORK.md's parity table embed a window the way
-# a shell does.
+# Whether the pages behind ENGINE-FORK-MEASUREMENTS.md#css-parity embed a
+# window the way a shell does.
 #
 # The table answers "does CSS treat an <app> like a <div>", and for that answer
 # to be about anything the shells run, the element under test has to be the

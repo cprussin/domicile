@@ -2,8 +2,8 @@
 //!
 //! The compositor submits a client's dmabuf to viz through this instead of
 //! reading it back and sending pixels to the chrome. See
-//! `docs/architecture/ENGINE-FORK.md`, "The seam: a C ABI, and what crosses
-//! it", and `packages/domicile-engine` for the library itself.
+//! `docs/architecture/ENGINE-FORK.md#the-c-abi`, and `packages/domicile-engine`
+//! for the library itself.
 //!
 //! **Loaded with `dlopen`, and that is a build decision rather than a runtime
 //! one.** The library is a GN artifact that exists only where Chromium is
@@ -501,7 +501,7 @@ impl Engine {
     ///
     /// **NOTHING HERE IS EXERCISED BY ANY CHECK IN THIS REPOSITORY.** It needs
     /// a built `libdomicile_engine.so` and a browser to dial, and no runner
-    /// has either. See ROADMAP.md, *Needs a machine with a screen*.
+    /// has either. See `docs/HARDWARE-CHECKS.md#dead-engine-with-windows-open`.
     pub fn reconnect(&mut self, socket: &Path) -> Result<(), EngineError> {
         self.let_the_old_one_go();
         self.events.borrow_mut().clear();

@@ -1,63 +1,70 @@
 # Notifications
 
-Applications' and sites' notifications on a desk: the compositor is the
-`org.freedesktop.Notifications` server, and the shell toasts them and keeps
-them in a drawer.
+The compositor is the `org.freedesktop.Notifications` server for both Wayland
+applications and web pages. The shell shows each notification as a toast and
+keeps a history in a drawer.
 
 ## Design
 
 ```
-application ──Notify / CloseNotification──▶ compositor (org.freedesktop.Notifications)
-page in a <webview> ─ new Notification() ─▶ engine (Chrome's Linux bridge) ─Notify─▶ │
-            ◀──ActionInvoked, NotificationClosed────                                 │  HostMessage::Notifications { items }
-                                                                                     ▼
-                                                        engine: `notifications` event
-                                                                                     ▼
-                                         shell: DomicileClient.on("notifications") → toasts, bell, drawer
+application ─────── Notify / CloseNotification ──────▶ compositor
+page: new Notification() ─▶ engine (Chrome's Linux bridge) ─Notify─▶ │
+            ◀── ActionInvoked, NotificationClosed ──                  │ HostMessage::Notifications { items }
+                                                                      ▼
+                                                     engine: `notifications` event
+                                                                      ▼
+                         shell: DomicileClient.on("notifications") → toasts, bell, drawer
 shell ─ dismissNotifications(ids) / invokeNotificationAction(id, key) ─▶ engine ─▶ compositor
 ```
 
 | Piece | Where |
 |---|---|
-| Wire: `HostMessage::Notifications`, `ChromeMessage::DismissNotifications`, `InvokeNotificationAction`, `Notification`, `Urgency` | `packages/domicile-protocol` |
-| The history; what a `Notify` is shown as (pictures, actions, urgency, a page's origin) | `packages/domicile-host/src/notifications.rs` |
-| The bus: the name, `Notify`, the signals | `packages/domicile-compositor/src/notifications.rs` |
+| Wire types: `HostMessage::Notifications`, `ChromeMessage::DismissNotifications`, `InvokeNotificationAction`, `Notification`, `Urgency` | `packages/domicile-protocol` |
+| History; mapping a `Notify` call to a notification (images, actions, urgency, page origin) | `packages/domicile-host/src/notifications.rs` |
+| D-Bus: the name, `Notify`, the signals | `packages/domicile-compositor/src/notifications.rs` |
 | `notifications` event, `dismissNotifications()`, `invokeNotificationAction()` | `control_channel.mojom`, `modules/domicile/domicile_notification*`, patch 0067 |
-| Web Notifications allowed without a prompt | patch 0068, `guard-webview-notifications.sh`; the shell's own page, `guard-shell-web-apis.sh` |
-| `Notification`, `DomicileClient.dismissNotifications`, `invokeNotificationAction` | `@domicile-desktop/sdk/notification`, `domicile-client` |
-| `Toaster`: the deck of toasts | `@domicile-desktop/component-library/Toaster` |
-| Toasts, the bell, the drawer | `packages/shell-manganese/src/notifications/` |
+| Web Notifications allowed without a prompt | patch 0068, `guard-webview-notifications.sh`; for the shell page, `guard-shell-web-apis.sh` |
+| SDK: `Notification`, `DomicileClient.dismissNotifications`, `invokeNotificationAction` | `@domicile-desktop/sdk/notification`, `domicile-client` |
+| `Toaster` component | `@domicile-desktop/component-library/Toaster` |
+| Manganese toasts, bell and drawer | `packages/shell-manganese/src/notifications/` |
 
 ## Key decisions
 
-- **One server for both kinds.** Chrome on Linux shows a Web Notification by
-  calling `org.freedesktop.Notifications`, so a site's and a Wayland client's
-  arrive the same way. The engine only grants the permission: Chrome's prompt
-  is a bubble a desk has nowhere to draw, so the profile defaults to allow.
-- **The history is the compositor's.** Pushed whole on every change and on
-  connect, like the tray, so a reload keeps it and every monitor's page has the
-  same one. Kept until cleared or closed by its application, capped at 100;
-  expiring is the toast's, not the notification's.
-- **News is the shell's to tell.** A new id, or a replaced one (its `time`
-  moved), is a toast; the first list a page hears is history and toasts nothing.
-- **No `body-markup`.** Bodies are text; senders told so send none.
-- **`x-kde-origin-name`.** Advertised so Chrome sends a page's origin as a hint;
-  it becomes the notification's source, and Chrome's own `settings` button on
-  it is dropped.
-- **A press takes the action and closes the notification**, unless it is
-  `resident`. Dismissing a toast only hides it; clearing tells the application
-  (`NotificationClosed`, reason 2).
-- **Locked: no toasts, no drawer**, and both requests are refused as commands.
-- **Critical** stays up until dismissed and is drawn in `danger`.
+- **One server for apps and pages.** Chrome on Linux sends Web Notifications
+  over `org.freedesktop.Notifications`, so both arrive the same way.
+- **Pages get notification permission by default.** Chrome's permission prompt
+  is a bubble the shell has no place to draw, so the profile allows it.
+- **The compositor keeps the history.**
+  - It sends the full list on every change and on connect, so a reload keeps
+    it and every monitor's page sees the same list.
+  - It keeps a notification until the user clears it or its application closes
+    it, up to 100.
+  - Only toasts expire; notifications do not.
+- **The shell decides what to toast.** A new id, or a replaced one (its `time`
+  changed), shows a toast. The first list a page receives is history and shows
+  no toasts.
+- **No `body-markup`.** Bodies are plain text. The server does not advertise
+  markup, so senders send none.
+- **`x-kde-origin-name` is advertised** so Chrome sends the page's origin as a
+  hint. The origin becomes the notification's source, and Chrome's `settings`
+  action is dropped.
+- **Clicking an action** runs it and closes the notification, unless the
+  notification is `resident`.
+- **Dismissing a toast** only hides the toast. **Clearing** a notification
+  sends `NotificationClosed` (reason 2) to the application.
+- **When locked,** the shell shows no toasts and no drawer, and the compositor
+  refuses dismiss and action requests.
+- **Critical** notifications stay up until dismissed and use the `danger`
+  color.
 
 ## Open questions
 
-- **Which monitor toasts.** One page over the desk toasts in its top-right
-  corner, which is the rightmost screen's. Recommendation: the focused screen's,
-  once a toast can be placed by display.
-- **The bridge's start-up race.** Chrome looks for the server once, when its
-  bridge starts; the compositor takes the name long before the engine starts,
-  but a desk whose bus is slow could leave Chrome on its own popups.
-  Recommendation: watch for it before acting.
-- **Inline reply** (`inline-reply`) is not offered. Recommendation: add it with
-  a text field on the card when an application wants it.
+- **Which monitor shows toasts.** The shell page spans all monitors and toasts
+  in its top-right corner, which is on the rightmost monitor. Recommendation:
+  toast on the focused monitor once a toast can be placed per display.
+- **Startup race with Chrome's bridge.** Chrome checks for the server once,
+  when its bridge starts. The compositor takes the name long before the engine
+  starts, but a slow bus could leave Chrome using its own popups.
+  Recommendation: wait until it is seen in practice.
+- **Inline reply** (`inline-reply`) is not supported. Recommendation: add it,
+  with a text field on the card, when an application needs it.

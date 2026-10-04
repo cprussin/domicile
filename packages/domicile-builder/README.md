@@ -1,37 +1,47 @@
 # @domicile-desktop/builder
 
-Builds a shell module out of a user's own TypeScript or JavaScript entry, so a
-desktop can be configured with a file rather than a project and a build step.
-See [COMPOSABLE-SHELLS.md](../../docs/architecture/COMPOSABLE-SHELLS.md).
+Builds a shell module from a user's TypeScript or JavaScript file, so a desktop
+can be configured without a project or build step. See
+[COMPOSABLE-SHELLS.md](../../docs/architecture/COMPOSABLE-SHELLS.md).
+
+## Usage
 
 ```sh
-domicile-builder --entry ~/.config/domicile/domicile.tsx \
-  --domicile <Domicile's install> --cache ~/.cache/domicile/shells
+domicile-builder (--entry <file> | --package <spec> | --evaluate <config>) \
+  --domicile <install> --cache <dir>
 ```
 
-Each step is one JSON line on stdout; anything else there is the tools' own
-log:
+- **`--entry`**: build a local file, such as `~/.config/domicile/domicile.tsx`.
+- **`--package`**: install an npm or `github:` package into its own project
+  under the cache. Use the module its `package.json` names in
+  `"domicile": { "shell": "…" }`, or build its entry.
+- **`--evaluate`**: run a config module and write every export except `Shell`
+  as the compositor's JSON config.
+- **`--domicile`**: Domicile's install, laid out like this repo:
+  `packages/shell-manganese` with its `node_modules` and `styled-system`.
+
+## Output
+
+Each step is one JSON line on stdout. Other stdout lines are tool logs.
 
 ```json
 {"step":"resolving"}
 {"packages":["date-fns"],"step":"installing"}
 {"step":"bundling"}
 {"cached":false,"module":"shell.js","root":"<cache>/<key>","step":"built"}
+{"cached":false,"config":"<cache>/configs/<key>.json","step":"evaluated"}
 ```
 
-`{"step":"failed","why":"…"}` and a non-zero exit on a failure.
+On failure it prints `{"step":"failed","why":"…"}` and exits non-zero.
 
-## What a build does
+## Build steps
 
 | Step | Module |
 |---|---|
-| Read every local file the entry reaches, and every package it imports | `src/graph.ts` |
-| Find the project — the nearest `package.json` above the entry, or the entry's own directory — and `bun add --ignore-scripts` what it imports and does not list. `package.json` and `bun.lock` are written there | `src/project.ts`, `src/main.ts` |
-| Key the build on those files, the lockfile and the install it is built against; a hit is done in well under a second | `src/project.ts` |
-| Bundle with vite, as `shellBuild` does: `Shell` kept, CSS inside. `@domicile-desktop/*` and React resolve from Domicile's install, as manganese resolves them; Panda runs over manganese's own config | `src/bundle.ts` |
-
-`--domicile` is laid out as this repository is: `packages/shell-manganese`
-with its `node_modules` and `styled-system`.
+| Read every local file and package the entry imports | `src/graph.ts` |
+| Find the project (nearest `package.json` above the entry, else the entry's directory). `bun add --ignore-scripts` imports it doesn't list | `src/project.ts`, `src/main.ts` |
+| Key the cache on the files, lockfile and Domicile install. A cache hit takes under a second | `src/project.ts` |
+| Bundle with vite, CSS included. `@domicile-desktop/*` and React resolve from Domicile's install. Panda uses manganese's config | `src/bundle.ts` |
 
 ## Test
 

@@ -1,8 +1,7 @@
 # Composable shells
 
-A user customizes their desktop by composing web modules. The config is a
-TypeScript (or JavaScript, or JSON) file; the shell is one export of it, built
-by `domicile` with no build step of the user's own.
+Users build their desktop by composing web modules in one config file.
+`domicile` builds the shell from that file. The user runs no build of their own.
 
 ```tsx
 // ~/.config/domicile/domicile.tsx
@@ -31,7 +30,7 @@ export const Shell = runManganese({
 });
 ```
 
-The same thing with the shell as shipped needs no JavaScript:
+The stock shell needs no JavaScript:
 
 ```json
 {
@@ -43,101 +42,102 @@ The same thing with the shell as shipped needs no JavaScript:
 
 ## Problem
 
-- Changing anything about manganese beyond its keys means writing a shell:
-  a package, a vite config, a Panda setup, and a build to rerun.
-- The config was TOML, and what it said to a shell was
-  `[shells.<name>.options]`: untyped JSON.
+- Customizing manganese beyond its keys requires writing a whole shell: a
+  package, a vite config, a Panda setup and a build.
+- Shell options in the config are untyped JSON.
 
 ## Design
 
 ### The `Shell` contract
 
-A shell module is any module with a `Shell` export:
+A shell module is any module that exports `Shell`:
 
 ```ts
 // @domicile-desktop/sdk/shell
 export type Shell = (root: HTMLElement) => void;
 ```
 
-| Rule | Why |
-|---|---|
-| Only `Shell` is read; every other export is ignored | One file is both the config and a shell, and `load-shell` of it must not reconfigure the compositor |
-| Importing the module does nothing but install its stylesheet; `Shell(root)` does everything | The supervisor evaluates the config's other exports under Bun, with no DOM |
-| Framework-agnostic | `runManganese` is React's adapter, not the contract |
+- Only `Shell` is read. Other exports are ignored, so `load-shell` of a config
+  file does not reconfigure the compositor.
+- Importing the module must do nothing except install its stylesheet. The
+  supervisor imports the config under Bun, which has no DOM. `Shell(root)` does
+  all DOM work.
+- The contract is framework-agnostic. `runManganese` is the React adapter.
 
-The document the engine writes imports the module (`await import("./shell.js")`)
-and calls `Shell(document.body)`, reporting on the screen a module that does not
-load, has no `Shell`, or whose `Shell` throws.
+The engine's shell document runs `await import("./shell.js")` and calls
+`Shell(document.body)`. It shows an error on screen if the module fails to
+load, has no `Shell`, or `Shell` throws.
 
-### What `domicile load-shell` takes
+### Shell specifiers
 
-The same specifiers serve `domicile <shell>`, `domicile load-shell <shell>`
-and the JSON config's `shell`:
+`domicile <shell>`, `domicile load-shell <shell>` and the JSON config's `shell`
+accept the same specifiers:
 
-| Specifier | Example | What happens |
+| Specifier | Example | Result |
 |---|---|---|
-| a bundle | `/path/to/bundle.js` | served as-is: a `.js` whose import graph has no bare specifiers (`Bun.Transpiler.scanImports`) |
-| an entry | `./entry.ts`, `./entry.js` | built |
-| a package of Domicile's | `@domicile-desktop/manganese` | the prebuilt bundle in Domicile's own install. No subprocess, no network |
-| an npm package | `my-cool-shell` | installed into the cache; served as-is if its `package.json` names a prebuilt bundle (`"domicile": { "shell": "dist/shell.js" }`), built otherwise |
-| a GitHub repo | `github:cprussin/my-cool-shell#v1` | as an npm package |
+| bundle | `/path/to/bundle.js` | Served as-is. A bundle is a `.js` with no bare imports (`Bun.Transpiler.scanImports`) |
+| entry | `./entry.ts`, `./entry.js` | Built |
+| Domicile package | `@domicile-desktop/manganese` | The prebuilt bundle from Domicile's install. No subprocess or network |
+| npm package | `my-cool-shell` | Installed into the cache. Served as-is if `package.json` has `"domicile": { "shell": "dist/shell.js" }`, else built |
+| GitHub repo | `github:cprussin/my-cool-shell#v1` | Same as an npm package |
 
-A relative path is relative to where it was typed, or to the config file.
-Resolving and building happen in the client, before the command socket
-(THE-DOMICILE-BINARY.md's rule); `load_shell`'s `root` and `module` are the
-build's output. The wire does not change.
+- Relative paths resolve from the working directory, or from the config file.
+- The client resolves and builds before using the command socket (per
+  THE-DOMICILE-BINARY.md). `load_shell`'s `root` and `module` point at the
+  build output. The wire protocol is unchanged.
 
-### The build
+### The builder
 
-`packages/domicile-builder`: a Bun program shipped in Domicile's closure,
-spawned by `domicile`. The supervisor stays the one that decides; the builder
-only builds.
+`packages/domicile-builder` is a Bun program in Domicile's closure. `domicile`
+spawns it. The supervisor makes decisions; the builder only builds.
 
 | Step | Does |
 |---|---|
-| resolve | the nearest `package.json` above the entry owns its dependencies. With none, one is created beside the entry. A bare import not in it is added (`bun add`) |
+| resolve | Uses the nearest `package.json` above the entry, or creates one beside it. Adds missing bare imports (`bun add`) |
 | install | `bun install --ignore-scripts`, writing `bun.lock` beside that `package.json`. Frozen when nothing was added |
-| alias | `@domicile-desktop/*`, and their peers `react` and `react-dom`, resolve to Domicile's install, whatever `package.json` says |
-| style | Panda over manganese's own config plus the user's files, so manganese, the component library and the user's own `css()` are styled. One stylesheet, inlined into the bundle as `vite-shell` does |
-| bundle | vite, as `shellBuild` → `$XDG_CACHE_HOME/domicile/shells/<hash>/shell.js` |
+| alias | Resolves `@domicile-desktop/*`, `react` and `react-dom` to Domicile's install, whatever `package.json` says |
+| style | Runs Panda over manganese's config plus the user's files, so user `css()` calls work. Inlines one stylesheet into the bundle |
+| bundle | vite via `shellBuild`, to `$XDG_CACHE_HOME/domicile/shells/<hash>/shell.js` |
 
-- **The cache key** is the hash of the entry's local import graph, the lockfile
-  and Domicile's version. A hit spawns nothing beyond the hash.
-- **Progress** is JSON lines from the builder (`{"step":"install","done":12,"total":40}`),
-  drawn by `domicile` as a progress bar on a TTY and as plain lines elsewhere.
-  The first build blocks startup. Nothing falls back to a built-in shell.
-- **A failed build** prints the builder's error and exits on first start. On a
-  running desktop the last good build stays loaded, and the error is posted to
-  the compositor's own notification server.
+- **Cache key:** hash of the entry's local import graph, the lockfile and
+  Domicile's version. A cache hit spawns nothing.
+- **Progress:** the builder prints JSON lines
+  (`{"step":"install","done":12,"total":40}`). `domicile` draws a progress bar
+  on a TTY and plain lines elsewhere. The first build blocks startup, with no
+  fallback shell.
+- **Failure:** on first start, `domicile` prints the error and exits. On a
+  running desktop, the last good build stays loaded and the error is posted as
+  a notification.
 
 ### The config
 
-`$XDG_CONFIG_HOME/domicile/domicile.{ts,tsx,js,json}`. Two of them are refused.
+`$XDG_CONFIG_HOME/domicile/domicile.{ts,tsx,js,mjs,json}`. More than one is an
+error.
 
 | Export (TS) / key (JSON) | Read by |
 |---|---|
-| `output`, `extensions`, `input`, `idle`, `lock`, `theme`, `applications`, `files`, `startup` | compositor, engine: `domicile-config`'s schema |
-| `Shell` (TS) / `shell` (JSON) | `domicile`, when it is given no shell; a JSON `shell` is relative to the config |
-| *(gone)* `keybindings`, `modes`, `shells` | a config that has them is refused: they are props of the shell |
+| `output`, `extensions`, `input`, `idle`, `lock`, `theme`, `applications`, `files`, `startup` | Compositor and engine, per `domicile-config`'s schema |
+| `Shell` (TS) / `shell` (JSON) | `domicile`, when not given a shell. A JSON `shell` is relative to the config |
+| `keybindings`, `modes`, `shells` | Rejected. These are shell props |
 
-- **TS is evaluated to JSON by the builder** (`--evaluate`): bundled for Bun
-  with `@domicile-desktop/*` and React from the install and stylesheets stubbed,
-  imported, every export but `Shell` written to
-  `$XDG_CACHE_HOME/domicile/shells/configs/<key>.json`, which is the path the
-  compositor is handed. The compositor parses JSON (`domicile-config`). It
-  never runs JavaScript.
-- **Types come from the Rust schema**: `schemars` emits a JSON Schema, published
-  for the JSON config's `$schema`, and the TS types in `@domicile-desktop/sdk/config`
+- **TS evaluation:** the builder (`--evaluate`) bundles the config for Bun,
+  with `@domicile-desktop/*` and React from the install and stylesheets
+  stubbed. It imports it and writes every export but `Shell` to
+  `$XDG_CACHE_HOME/domicile/shells/configs/<key>.json`. `domicile` copies that
+  file to `<runtime>/config.json`, the path the compositor is given and
+  watches. The compositor only parses JSON (`domicile-config`). It never runs
+  JavaScript.
+- **Types:** `schemars` emits a JSON Schema from the Rust types. It serves as
+  the JSON config's `$schema`, and the `@domicile-desktop/sdk/config` TS types
   are generated from it.
-- **`domicile` watches a module config** and everything in its directory but
-  `node_modules` and dot directories: an edit is evaluated again into
-  `<runtime>/config.json` — the stable path the compositor was handed, and
-  watches as it watches any config — and, where the config is the shell, built
-  again and loaded. A failure is said on stderr and as a critical notification
-  (`notification.rs`: a `Notify` to the compositor on the session bus, given up
-  on after two seconds), and the desk stays as it was.
+- **Reload:** `domicile` watches a module config's directory.
+  - It skips `node_modules` and dot directories.
+  - On an edit, it re-evaluates the config into `<runtime>/config.json`.
+  - If the config is also the shell, it rebuilds and reloads the shell.
+  - On failure, it logs to stderr, sends a critical notification and leaves
+    the desktop unchanged.
 
-### Keybindings are the shell's
+### Keybindings belong to the shell
 
 ```ts
 runManganese({
@@ -148,119 +148,78 @@ runManganese({
 });
 ```
 
-- A binding maps a chord to a typed command from the shell's own package
-  (`focus("right")`, `workspace("3")`), not a `send-shell` string.
-- `shell_config` carries `keys`: every keysym the keyboard can type and the
-  evdev key it is on (`Keyboard::keys`, the same rule as `key_for`). `bindKeys`
-  resolves the shell's chords against it as each config arrives, so a layout
-  change moves them. No new message, and no engine change: `shell_config`
-  crosses the engine as a string.
-- Manganese ships sway's keys on Meta (`DEFAULT_KEYBINDINGS`, `DEFAULT_MODES`),
-  so the JSON config has keys.
+- A binding maps a chord to a typed command from the shell's package
+  (`focus("right")`, `workspace("3")`).
+- `shell_config` carries `keys`: each keysym the keyboard can type and its
+  evdev key (`Keyboard::keys`, same rule as `key_for`). `bindKeys` resolves the
+  shell's chords against it on each config, so layout changes move them. This
+  needs no new message and no engine change, since `shell_config` crosses the
+  engine as a string.
+- Manganese ships sway's bindings on Meta (`DEFAULT_KEYBINDINGS`,
+  `DEFAULT_MODES`), so the JSON config has keys.
 
 ### `@domicile-desktop/manganese` is a library
 
-| Export | Is |
+| Export | Purpose |
 |---|---|
-| `runManganese(options): Shell` | mounts manganese into `root` |
-| `Launcher`, `Tray`, `WorkspaceSwitcher`, `Clock`, `Mode`, `ThemeSelector`, `Volume`, `Brightness`, `Battery`, `Notifications` | the bar's items, each reading the bar it is on from context |
-| `DEFAULT_TOP_BAR`, `TopBarLayout` | manganese's own bar, and its shape |
-| `focus`, `move`, `workspace`, `grow`, `mode`, `exec`, … | the commands a binding names |
-| `DEFAULT_KEYBINDINGS`, `DEFAULT_MODES` | sway's keys on Meta, what a desktop gets unasked |
-| `Shell` | `runManganese({})`: what `"shell": "@domicile-desktop/manganese"` loads |
+| `runManganese(options): Shell` | Mounts manganese into `root` |
+| `Launcher`, `Tray`, `WorkspaceSwitcher`, `Clock`, `Mode`, `ThemeSelector`, `Volume`, `Brightness`, `Battery`, `Notifications` | Bar items. Each reads its bar from context |
+| `DEFAULT_TOP_BAR`, `TopBarLayout` | The default bar and its type |
+| `focus`, `move`, `workspace`, `grow`, `mode`, `exec`, … | Commands for bindings |
+| `DEFAULT_KEYBINDINGS`, `DEFAULT_MODES` | Sway's bindings on Meta, the default |
+| `Shell` | `runManganese({})`, loaded by `"shell": "@domicile-desktop/manganese"` |
 
-A widget of the user's own styles itself with `@domicile-desktop/component-library`
-and notifies with `new Notification()`. Web Notifications already reach the
-compositor's notification server, which manganese shows as toasts.
+User widgets style themselves with `@domicile-desktop/component-library`. They
+can call Panda `css()` from `@domicile-desktop/manganese/css` (also `/jsx`,
+`/patterns`, `/tokens`). They notify with `new Notification()`. Web Notifications reach the compositor's
+notification server, and manganese shows them as toasts.
 
 ### Published packages
 
-`@domicile-desktop/sdk`, `@domicile-desktop/component-library` and `@domicile-desktop/manganese`, on
-npm. Every merge to main publishes `0.0.0-alpha-<sha>` as `latest`
-(`publish-packages.yml`), through npm's trusted publishing: no token,
-provenance attached. `latest` rather than a tag of its own, because setting a
-tag as a version is published needs no permission beyond publishing. No semver until there is a release to version. The
-published copies are for editors and third-party shells. A build always aliases
-them to the running Domicile's.
+- `@domicile-desktop/sdk`, `@domicile-desktop/component-library` and
+  `@domicile-desktop/manganese` are on npm.
+- Each merge to main publishes `0.0.0-alpha-<sha>` as `latest`
+  (`publish-packages.yml`) via npm trusted publishing: no token, with
+  provenance. Alphas publish as `latest` so `npm install @domicile-desktop/sdk`
+  gets the newest build.
+- No semver until there is a release.
+- The published copies serve editors and third-party shells. A build always
+  aliases them to the running Domicile's copies.
 
 ## Key decisions
 
-- **One file, two consumers, over a shell that carries the compositor's
-  settings.** Displays and extensions apply before any page exists, and a broken
-  shell must not lose the monitors.
-- **Keybindings in the shell, over the config.** They mean the shell's
-  commands, and in TypeScript they are typed. The cost: a shell that fails to
-  load has no keys. Recover with `domicile load-shell` from a terminal reached
-  some other way, such as another VT or ssh.
-- **Domicile builds, over the user building.** This reverses
-  THE-DOMICILE-BINARY.md's "`domicile` builds nothing" and "no watch mode".
-  Those decisions kept a developer's convenience out of every user's entry
-  point. Here the build *is* the user's entry point. The supervisor still only
-  spawns: the bundler is the builder's.
-- **Bun installs and runs; vite bundles.** Bun writes the lockfile, installs
-  and runs the builder and the TS config. The bundle is vite's, because
-  `shellBuild` and Panda's postcss plugin already make a shell module with its
-  CSS inside, and the build a user gets is then the one manganese ships.
-- **`@domicile-desktop/*` and React from the install, over the lockfile.** Two Reacts
-  break hooks across the boundary, and an SDK older or newer than the
-  compositor speaks a different protocol. A user's `package.json` cannot pick
-  another React version.
-- **No fallback during the first build.** A desktop that comes up on a shell
-  the user did not configure is a wrong answer that looks right. A progress bar
-  is an honest one.
+- **Compositor settings stay outside the shell.** Displays and extensions
+  apply before any page exists, and a broken shell must not lose the monitors.
+  One file holds both, and each consumer reads its own exports.
+- **Keybindings in the shell, not the config.** They name the shell's
+  commands, and TypeScript types them. Cost: a shell that fails to load has no
+  keys. Recover with `domicile load-shell` from another VT or ssh.
+- **Domicile builds the shell.** Users should not need a build toolchain. The
+  supervisor only spawns the builder; the builder owns the bundler.
+- **Bun installs and runs; vite bundles.** Bun writes the lockfile, installs,
+  and runs the builder and the TS config. vite bundles because `shellBuild` and
+  Panda's postcss plugin already produce a shell module with its CSS inlined,
+  so users get the same build manganese ships.
+- **`@domicile-desktop/*` and React come from the install.** Two copies of
+  React break hooks, and a mismatched SDK speaks a different protocol. A
+  user's `package.json` cannot choose another React version.
+- **No fallback shell during the first build.** A desktop running a shell the
+  user did not configure looks correct but is wrong. Startup shows a progress bar instead.
 - **home-manager builds a TS config with `bun2nix`.** The module takes a
-  directory holding the config and its `bun.lock`; JSON stays its default.
-- **No TOML converter.** TOML is deleted outright.
-- **"Desk" is not a user-facing name.** Nothing exported, no config key and no
-  CLI word says it.
+  directory holding the config and its `bun.lock`. JSON stays the default.
+- **"Desk" is not a user-facing name.** No export, config key or CLI word uses
+  it.
 
 ## Plan
 
-Phase 1: the contract, by hand.
+Done:
 
-- [x] `Shell` in `@domicile-desktop/sdk/shell`. The engine's document imports it and
-      calls it, and the reporter refuses a module without one
-- [x] manganese, `shell-simple`, `examples/minimal-shell` and the guards'
-      fixtures export `Shell` with no import-time effects
-- [x] `@domicile-desktop/manganese`: `runManganese` and the bar items exported, the
-      bar's layout a prop. The commands land with keybindings
-- [x] keybindings as props: `keys` in `shell_config`, `bindKeys` resolving the
-      shell's own chords, manganese's commands and default bindings
-- [x] check, in a guard: the shell page may show a Web Notification and reads
-      a cross-origin answer from `domicile://` (`guard-shell-web-apis.sh`)
+- [x] Phase 1: `Shell` contract and keybindings as props
+- [x] Phase 2: `domicile` builds shells (`packages/domicile-builder`)
+- [x] Phase 3: JSON and TS config, config watch and reload
+- [x] Phase 4: packages published to npm
 
-Phase 2: `domicile` builds.
-
-- [x] `packages/domicile-builder`: resolve, install, alias, style, bundle,
-      cache, progress lines
-- [x] a user's own Panda `css()`: `@domicile-desktop/manganese/{css,jsx,patterns,tokens}`
-      export manganese's `styled-system`, and the builder adds the user's files
-      to the build's `include`
-- [x] `shell_source` resolves every specifier above. `@domicile-desktop/*` resolves in
-      Rust with no subprocess
-- [x] the progress bar in `domicile`. Startup blocks on the first build
-- [x] the builder and Domicile's prebuilt shells in the flake's install
-      (`libexec/domicile/{builder,shells}`, `.#builder`)
-
-Phase 3: the config.
+Open:
 
 - [ ] `schemars` schema and generated `@domicile-desktop/sdk/config` types
-- [x] `domicile-config` parses JSON; `domicile` finds
-      `domicile.{ts,tsx,js,mjs,json}` and runs the config's shell when
-      given none
-- [x] `keybindings`, `modes` and `shells` go from the config
-- [x] the TS config evaluated to JSON by the builder
-- [x] `domicile` watches a module config and reloads both halves
-      (`config_watch`, `test-a-config-module-reloads.sh`)
-- [x] a failed reload as a notification, not only a line on stderr
-      (`notification.rs`)
-- [x] `nix/home-manager.nix` writes `domicile.json`
 - [ ] `nix/home-manager.nix` builds a TS config directory with `bun2nix`
-- [x] TOML deleted. KEYBINDINGS.md, THE-DOMICILE-BINARY.md, WRITING-A-SHELL.md
-      and RUNNING-A-DESKTOP.md describe what replaced it
-
-Phase 4: published.
-
-- [x] the renames (`@domicile-desktop/sdk`, `@domicile-desktop/manganese`), `publishConfig`,
-      and `publish-packages.yml`: an alpha of every merge, trusted publishing
-      (`test-publish-packages.sh`)

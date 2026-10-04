@@ -1,15 +1,16 @@
-# Upstream bug report — ready to file, NOT filed
+# Upstream bug: WebAuthn proxy DCHECK on opaque origin (unfiled)
 
-**Still unfiled**, for the reason `browser-plugin-embedder-null-guest-manager.md`
-gives. Patch 0069 carries the fix; `scripts/guard-webview-passkey-extension.sh`
-asks the question that reached it.
+Not filed: issues.chromium.org needs a Google account, so a person must file it.
 
-**Live:** a site's fraud-detection script (ThreatMetrix) asked from a sandboxed
-frame, and the checked engine aborted and took the desktop with it.
+- **Impact here:** a site's fraud-detection script (ThreatMetrix) called this
+  from a sandboxed frame. The DCHECK engine aborted and the desktop went down.
+- **Our fix:** patch 0069.
+- **Guard:** `scripts/guard-webview-passkey-extension.sh`.
+- **Status:** read at `cffcd2bf5a88`. At `5fb9edc0544d` the `DCHECK` is gone,
+  with no opaque check in its place. Re-read at trunk before filing; drop this
+  if it no longer applies.
 
-Read at `cffcd2bf5a88`. **Possibly fixed upstream:** at `5fb9edc0544d` the
-`DCHECK` is gone, with no opaque check in its place. Patch 0069 still answers
-none for an opaque origin. Re-read at trunk before filing, or drop this.
+The report below is ready to paste.
 
 ---
 
@@ -31,14 +32,15 @@ AuthenticatorCommonImpl::GetWebAuthnRequestProxyIfActive(
   DCHECK(!caller_origin.opaque());
 ```
 
-`IsUvpaaAvailableInternal` calls it first thing, with the frame's origin and no
-check, and so does `GetClientCapabilities` through it. Blink's
-`isUserVerifyingPlatformAuthenticatorAvailable` checks nothing either.
-`MakeCredential` and `GetCredential` validate the origin before they reach it.
+- `IsUvpaaAvailableInternal` calls it first, with the frame's origin and no
+  check. `GetClientCapabilities` reaches it the same way.
+- Blink's `isUserVerifyingPlatformAuthenticatorAvailable` does not check the
+  origin either.
+- `MakeCredential` and `GetCredential` validate the origin before calling it.
 
 ## Repro
 
-A DCHECK build; a secure page with:
+In a DCHECK build, load a secure page with:
 
 ```html
 <iframe sandbox="allow-scripts" srcdoc="<script>
@@ -46,12 +48,12 @@ A DCHECK build; a secure page with:
 </script>"></iframe>
 ```
 
-The browser process aborts. A release build answers `false`.
+The browser process aborts. A release build returns `false`.
 
 ## Fix
 
-An opaque origin cannot have a `webAuthenticationProxy` — an extension takes
-requests per origin — so answer none rather than DCHECK:
+An extension registers a `webAuthenticationProxy` per origin, so an opaque
+origin cannot have one. Return none:
 
 ```cpp
   if (caller_origin.opaque()) {
