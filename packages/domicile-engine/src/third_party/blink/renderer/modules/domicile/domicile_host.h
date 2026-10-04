@@ -10,6 +10,8 @@
 #include "components/domicile/mojom/browser_windows.mojom-blink.h"
 #include "components/domicile/mojom/control_channel.mojom-blink.h"
 #include "components/domicile/mojom/extension_tray.mojom-blink.h"
+#include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
+#include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_theme.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_tray_action.h"
 #include "third_party/blink/renderer/core/dom/dom_high_res_time_stamp.h"
@@ -52,6 +54,9 @@ class DomicileAudioDevice;
 class DomicileAudioStream;
 class DomicileAudioCard;
 class DomicileWindow;
+class DomicileAppSearch;
+class DomicileFilePreview;
+class DomicileFileSearch;
 struct DomicileWindowState;
 class LocalDOMWindow;
 class MediaQueryList;
@@ -85,17 +90,24 @@ class MODULES_EXPORT DomicileHost final
   // Throws on an empty argv. The browser refuses it too -- this check is a
   // better error message, not the enforcement.
   void spawn(ScriptState*, const Vector<String>& command, ExceptionState&);
-  // Ask what in the home matches `query`; the answer arrives as a `files`
+  // Ask what in the home matches `query`; the promise settles with the answer,
+  // which also arrives as a `files`
   // event. Names no path -- see the IDL, where that is written down as a
   // property rather than a convenience.
-  void searchFiles(ScriptState*, const String& query, ExceptionState&);
+  ScriptPromise<DomicileFileSearch> searchFiles(ScriptState*,
+                                                const String& query,
+                                                ExceptionState&);
   // Ask what is in one file; the answer arrives as a `filepreview` event.
   // The path is one a `files` event named -- see the IDL for why that is the
   // whole of what it may name.
-  void previewFile(ScriptState*, const String& path, ExceptionState&);
+  ScriptPromise<DomicileFilePreview> previewFile(ScriptState*,
+                                                 const String& path,
+                                                 ExceptionState&);
   // Ask which installed applications match `query`; the answer arrives as an
   // `apps` event.
-  void searchApps(ScriptState*, const String& query, ExceptionState&);
+  ScriptPromise<DomicileAppSearch> searchApps(ScriptState*,
+                                              const String& query,
+                                              ExceptionState&);
   void copyClipboardEntry(ScriptState*, uint32_t entry, ExceptionState&);
   void activateTrayItem(ScriptState*,
                         const String& id,
@@ -433,6 +445,15 @@ class MODULES_EXPORT DomicileHost final
   String focused_window_;
   // Moments that arrived before anything listened -- see DispatchOrHold.
   HeapVector<Member<Event>> held_;
+  // The one outstanding ask of each kind, and what it asked: an answer settles
+  // it only if it answers that. A newer ask rejects the older -- see
+  // searchFiles() in the IDL.
+  Member<ScriptPromiseResolver<DomicileFileSearch>> file_search_;
+  String file_search_query_;
+  Member<ScriptPromiseResolver<DomicileFilePreview>> file_preview_;
+  String file_preview_path_;
+  Member<ScriptPromiseResolver<DomicileAppSearch>> app_search_;
+  String app_search_query_;
   // The last of each stateful event, which its attributes read from.
   Member<DomicileClipboardEvent> last_clipboard_;
   Member<DomicileTrayEvent> last_tray_items_;

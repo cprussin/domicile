@@ -272,6 +272,28 @@ export type DomicileAppsEvent = Event & {
   readonly arrival: DOMHighResTimeStamp;
 };
 
+/** What {@link DomicileHost.searchFiles} resolves with; see {@link DomicileFilesEvent}. */
+export type DomicileFileSearch = Pick<
+  DomicileFilesEvent,
+  "files" | "matched" | "indexing"
+>;
+
+/** What {@link DomicileHost.previewFile} resolves with; see {@link DomicileFilePreviewEvent}. */
+export type DomicileFilePreview = Pick<
+  DomicileFilePreviewEvent,
+  | "kind"
+  | "text"
+  | "entries"
+  | "title"
+  | "artist"
+  | "album"
+  | "duration"
+  | "cover"
+>;
+
+/** What {@link DomicileHost.searchApps} resolves with; see {@link DomicileAppsEvent}. */
+export type DomicileAppSearch = Pick<DomicileAppsEvent, "apps" | "bookmarks">;
+
 /**
  * The answer to {@link DomicileHost.searchFiles}.
  *
@@ -758,27 +780,32 @@ export type DomicileHost = {
   spawn(command: readonly string[]): void;
 
   /**
-   * Search the home directory for `query`. Answered with a `files` event.
+   * Search the home directory for `query`. Resolves with the result, which
+   * also arrives as a `files` event. A newer call rejects this one with an
+   * `AbortError`.
    *
    * It takes no path on purpose, so pages cannot browse the filesystem. The
    * compositor matches against its index and sends only the matches. See
    * `domicile_host::file_search`.
    */
-  searchFiles(query: string): void;
+  searchFiles(query: string): Promise<DomicileFileSearch>;
 
   /**
-   * Preview `path`. Answered with a `filepreview` event.
+   * Preview `path`. Resolves with the result, which also arrives as a
+   * `filepreview` event. A newer call rejects this one, as with
+   * {@link searchFiles}.
    *
    * Paths outside the compositor's home index are `unreadable`, so a page can
    * only read what a search could return. See `domicile_host::file_preview`.
    */
-  previewFile(path: string): void;
+  previewFile(path: string): Promise<DomicileFilePreview>;
 
   /**
-   * Search installed applications and bookmarks for `query`. Answered with an
-   * `apps` event. See `domicile_host::desktop_entries`.
+   * Search installed applications and bookmarks for `query`. Resolves with
+   * the result, which also arrives as an `apps` event. A newer call rejects
+   * this one, as with {@link searchFiles}. See `domicile_host::desktop_entries`.
    */
-  searchApps(query: string): void;
+  searchApps(query: string): Promise<DomicileAppSearch>;
 
   /**
    * Put a clipboard history entry back on the clipboard.
