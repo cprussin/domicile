@@ -61,7 +61,7 @@ namespace domicile {
 // mailbox and minting one needs a GPU channel it deliberately does not have —
 // so it passes neither, the browser holds the sink and viz's client end, and
 // ImportBuffer/SubmitBuffer are how frames get made. See
-// docs/architecture/ENGINE-FORK.md, "Settled: broker the import".
+// docs/architecture/ENGINE-FORK.md#buffer-import.
 class BrokeredFrameSink : public viz::HostFrameSinkClient,
                           public viz::mojom::CompositorFrameSinkClient {
  public:
@@ -131,8 +131,7 @@ class BrokeredFrameSink : public viz::HostFrameSinkClient,
   // never has to see.
   // `exported` is filled with something another client can name the same
   // SharedImage by, so that a producer holding its own sink can submit its own
-  // frames. See ENGINE-FORK.md, "Whether the producer can submit its own
-  // frames".
+  // frames. See docs/architecture/ENGINE-FORK.md#buffer-import.
   uint64_t ImportBuffer(gfx::GpuMemoryBufferHandle handle,
                         const gfx::Size& size,
                         uint32_t fourcc,

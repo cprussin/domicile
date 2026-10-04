@@ -12,8 +12,8 @@ import "mojo/public/mojom/base/time.mojom";
 // server with a socket beside it -- it was the desktop's control plane, and
 // `Spawn` on it is arbitrary commands on the machine running the desktop. A
 // loopback port is reachable by every process on the box and no header can fix
-// that; what fixes it is not having a port. See docs/architecture/
-// ENGINE-FORK.md, "The page is served over a TCP port, and it should not be".
+// that; what fixes it is not having a port. See
+// docs/architecture/DOMICILE-SCHEME.md.
 //
 // The browser already holds a unix socket to the compositor. This interface is
 // how the page reaches it without opening one of its own.
@@ -28,7 +28,7 @@ import "mojo/public/mojom/base/time.mojom";
 // The members the fork keeps. The bands and copy-path protocol -- place_portal,
 // remove_portal, declare_bands, render_band, claim_pointer, app_composited --
 // is absent on purpose: layout positions the layer now and the page has stopped
-// reporting where its own boxes are. See docs/architecture/ENGINE-FORK.md.
+// reporting where its own boxes are.
 //
 // Adding a member costs a near-full Blink rebuild, so they are added in
 // batches rather than one at a time.
@@ -530,7 +530,7 @@ interface ControlChannel {
 // `ControlChannel::OnRead`, the moment the browser process had the bytes, and
 // Blink turns it into a `DOMHighResTimeStamp` on the same clock as
 // `performance.now()` -- so `event.timeStamp - event.arrival` is the stage.
-// See docs/architecture/ENGINE-FORK.md, phase 2.
+// See docs/architecture/ENGINE-FORK-MEASUREMENTS.md#keystroke-to-pixel.
 //
 // `Displays` is the one method without one, because there is nothing to put it
 // on: it dispatches a bare `Event` and the desktop is read off

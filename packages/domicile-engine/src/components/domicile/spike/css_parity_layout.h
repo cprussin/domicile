@@ -77,7 +77,7 @@ inline constexpr Cell kCells[] = {
 // The iframe-parity check, which is spike-iframe-page.html rather than
 // spike-css-page.html and reuses the same cell geometry.
 //
-// ENGINE-FORK.md argued that an <app> under `transform` differs from a <div>
+// The fork's design argued that an <app> under `transform` differs from a <div>
 // only the way any surface-backed element does, an out-of-process <iframe>
 // included, and that argument was read off child_frame_compositing_helper.cc
 // rather than measured. Measuring it found something better and stranger than

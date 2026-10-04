@@ -1,8 +1,8 @@
 // Copyright 2026 Connor Prussin
 // SPDX-License-Identifier: MIT
 
-// THROWAWAY. Step 4 of the spike in docs/architecture/ENGINE-FORK.md: the
-// measurement the whole fork exists to justify.
+// THROWAWAY. The CSS parity measurement in
+// docs/architecture/ENGINE-FORK-MEASUREMENTS.md#css-parity.
 //
 // Steps 1 to 3 were plumbing that either worked or named a blocker. This asks
 // the question the design is for: does CSS treat an <app> — a <canvas> showing
@@ -487,7 +487,7 @@ class Measurement {
     Finish(css_passed_);
   }
 
-  // The part of ENGINE-FORK.md's CSS claim that was argued rather than
+  // The part of the CSS parity claim that was argued rather than
   // measured: whether an <app> differs from a <div> the way a surface-backed
   // element must. Three pairs — the requirement, a reference point, and the
   // control that keeps the comparison honest.

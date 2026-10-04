@@ -23,8 +23,9 @@
 # `CopyOutputRequest` that forces the draw it then reads, so every reading is at
 # least one display frame and is quantized to it. So the assertion is that it is
 # within a small number of display frames — this design must not add a stage of
-# its own — which is also the claim ENGINE-FORK.md makes for the producer's
-# half, in the same words, from the same shape of measurement.
+# its own — which is also the claim
+# ENGINE-FORK-MEASUREMENTS.md#producer-latency makes for the producer's half,
+# in the same words, from the same shape of measurement.
 #
 # It does not assert a millisecond figure. A threshold in milliseconds is a
 # threshold on whatever else the runner was doing.

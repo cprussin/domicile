@@ -330,7 +330,7 @@ class DomicileBrowserService {
     // A real invitation, not mojo::IsolatedConnection: the broker's whole job
     // is forwarding the producer's CompositorFrameSink receiver on to the viz
     // process, and an isolated connection cannot carry a handle that far. See
-    // ENGINE-FORK.md, "How the producer reaches the broker".
+    // ENGINE-FORK.md#how-the-producer-reaches-the-broker.
     //
     // The producer is not a child process, so there is no process handle to
     // give. On POSIX that costs nothing.

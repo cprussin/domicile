@@ -47,8 +47,8 @@ struct EngineDisplay {
 // eventfd in between is what makes the compositor's poll wake up.
 //
 // The shape is wl_display_get_fd and wl_display_dispatch, which is the loop the
-// compositor already runs. See docs/architecture/ENGINE-FORK.md in the Domicile
-// repository, "The seam: a C ABI, and what crosses it".
+// compositor already runs. See
+// docs/architecture/ENGINE-FORK.md#the-c-abi in the Domicile repository.
 struct EngineEvent {
   enum class Type {
     // xdg_toplevel.configure: the page's layout box changed, so the producer

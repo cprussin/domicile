@@ -92,11 +92,10 @@ void EnsureMojoInitialized() {
 // it is a push onto the EngineEventQueue, which is what the compositor polls.
 //
 // It holds its own CompositorFrameSink and assembles its own frames, which is
-// the thing ENGINE-FORK.md's "Whether the producer can submit its own frames"
-// asks about. It still mints no mailbox and holds no GPU channel: the browser
-// imports the dmabuf and hands back a gpu::ExportedSharedImage — a mailbox and
-// a verified sync token, bytes once verified — and naming one is not authority
-// to make one.
+// what ENGINE-FORK.md#buffer-import decides. It still mints no mailbox and
+// holds no GPU channel: the browser imports the dmabuf and hands back a
+// gpu::ExportedSharedImage — a mailbox and a verified sync token, bytes once
+// verified — and naming one is not authority to make one.
 class Surface : public mojom::SurfaceObserver,
                 public viz::mojom::CompositorFrameSinkClient {
  public:
@@ -675,7 +674,7 @@ struct DomicileEngine {
     // mojo::IsolatedConnection, and that is forced rather than chosen: the
     // broker forwards our CompositorFrameSink receiver on to the viz process,
     // and an isolated connection cannot carry a handle that far. See
-    // ENGINE-FORK.md, "How the producer reaches the broker".
+    // ENGINE-FORK.md#how-the-producer-reaches-the-broker.
     mojo::IncomingInvitation invitation =
         mojo::IncomingInvitation::Accept(std::move(endpoint));
     if (!invitation.is_valid()) {

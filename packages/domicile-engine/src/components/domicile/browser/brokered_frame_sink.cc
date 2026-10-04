@@ -194,7 +194,7 @@ uint64_t BrokeredFrameSink::ImportBuffer(
   next_resource_id_ = viz::ResourceId(next_resource_id_.GetUnsafeValue() + 1);
 
   // Whether anything outside the browser can name this SharedImage is the
-  // question "Whether the producer can submit its own frames" asks. Exported
+  // question ENGINE-FORK.md#buffer-import answers. Exported
   // unconditionally, because the answer is the same either way and the cost is
   // a mailbox and a sync token.
   *exported = shared_image->Export();

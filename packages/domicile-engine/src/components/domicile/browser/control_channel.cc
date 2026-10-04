@@ -1410,10 +1410,9 @@ void ControlChannel::DispatchLine(const std::string& line,
   }
 
   // What is left is the bands and copy-path protocol -- place_portal,
-  // render_band, app_composited and their kin. Deliberately not implemented:
-  // docs/architecture/ENGINE-FORK.md lists them under what the fork scraps,
-  // because layout positions the layer now and the page has stopped reporting
-  // where its own boxes are. Cementing them here would make a dying protocol
+  // render_band, app_composited and their kin. Not implemented, because layout
+  // positions the layer now and the page has stopped reporting where its own
+  // boxes are. Cementing them here would make a dying protocol
   // cost an engine release to remove.
 }
 

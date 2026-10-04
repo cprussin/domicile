@@ -13,8 +13,7 @@ namespace domicile {
 // it needs a URL with one -- file: has none, so no WebSocket and a restricted
 // fetch. The answer had been an HTTP server on a loopback port, and a loopback
 // port is reachable by every process on the machine. See
-// docs/architecture/ENGINE-FORK.md, "The page is served over a TCP port, and it
-// should not be".
+// docs/architecture/DOMICILE-SCHEME.md.
 //
 // Registered as a *standard* scheme, so it has an origin, and deliberately
 // neither web-safe nor CORS-enabled, so ordinary web content can neither

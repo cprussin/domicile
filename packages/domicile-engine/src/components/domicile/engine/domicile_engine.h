@@ -13,8 +13,8 @@
 // behind this header is C++ built by GN — the invitation, the FrameSinkBroker
 // pipe, and in time the SharedImage import and CompositorFrame assembly. None
 // of it reaches cargo and none of it needs to. See
-// docs/architecture/ENGINE-FORK.md in the Domicile repository, "The seam: a C
-// ABI, and what crosses it", which is the design this implements.
+// docs/architecture/ENGINE-FORK.md#the-c-abi in the Domicile repository, which
+// is the design this implements.
 //
 // IT DOES NOT OWN THE THREAD. domicile-compositor runs Smithay's calloop and
 // mojo wants a task runner of its own, so the library keeps mojo on a thread of
@@ -31,7 +31,7 @@
 // the socket already held and the browser imports it, because the browser is
 // the process with an aura::Env to reach a SharedImageInterface through — which
 // is where components/exo/buffer.cc already lives. What comes back is an opaque
-// BufferId. See ENGINE-FORK.md, "Settled: broker the import".
+// BufferId. See docs/architecture/ENGINE-FORK.md#buffer-import.
 
 // Chromium builds with -fvisibility=hidden, so every entry point says so.
 #define DOMICILE_ENGINE_EXPORT __attribute__((visibility("default")))

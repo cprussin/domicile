@@ -5,8 +5,8 @@
 #
 # Step 2 established that a mojom-generated Rust crate cannot reach a cargo
 # build, and that the bridge is therefore a GN-built library behind a C ABI.
-# This is that library. See docs/architecture/ENGINE-FORK.md in the Domicile
-# repository, "The seam: a C ABI, and what crosses it".
+# This is that library. See docs/architecture/ENGINE-FORK.md#the-c-abi in the
+# Domicile repository.
 #
 # Nothing in `chrome` depends on it; build it by name:
 #

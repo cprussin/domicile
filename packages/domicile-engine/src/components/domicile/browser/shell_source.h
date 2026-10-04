@@ -23,7 +23,7 @@ namespace domicile {
 // they cannot be is *changed*: a process's command line is fixed from outside
 // it, so an engine told once at launch could never be told again, and
 // `domicile load-shell <path>` had nowhere to land. See
-// docs/architecture/THE-DOMICILE-BINARY.md, "The engine's half, which is in".
+// docs/architecture/THE-DOMICILE-BINARY.md#the-engine-command-socket.
 //
 // RESTARTING THE ENGINE IS NOT THE ALTERNATIVE IT LOOKS LIKE. The browser
 // process holds the broker socket the compositor produces its windows into, so

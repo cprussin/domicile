@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# The iframe-parity cell of step 4's measurement: is an <app> the same thing as
-# an out-of-process <iframe>?
+# The iframe-parity cell of the CSS parity measurement: is an <app> the same
+# thing as an out-of-process <iframe>? Results:
+# docs/architecture/ENGINE-FORK-MEASUREMENTS.md#app-compared-to-an-out-of-process-iframe.
 #
 #   NIX_SHELL_RUN=".../scripts/spike-iframe.sh /build/chromium/src" \
 #     nix-shell /build/chromium/src/tools/nix/shell.nix

@@ -1,7 +1,8 @@
 // Copyright 2026 Connor Prussin
 // SPDX-License-Identifier: MIT
 
-// THROWAWAY. Steps 2 and 3 of the spike in docs/architecture/ENGINE-FORK.md.
+// THROWAWAY. The spike in
+// docs/architecture/ENGINE-FORK-MEASUREMENTS.md#getting-a-surface-on-screen.
 //
 // Runs a domicile::spike::SurfaceProducer — a viz client in a process the
 // browser did not launch — and then asks the browser what color it actually

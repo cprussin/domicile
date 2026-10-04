@@ -16,8 +16,9 @@ namespace domicile::spike {
 namespace {
 
 // Step 4's verdicts are this code's opinion, so these are tests of the opinion
-// rather than of the picture. See docs/architecture/ENGINE-FORK.md in the
-// Domicile repository, "What CSS does to an <app>".
+// rather than of the picture. See
+// docs/architecture/ENGINE-FORK-MEASUREMENTS.md#css-parity in the Domicile
+// repository.
 
 constexpr SkColor kBackground = SkColorSetARGB(0xFF, 0x10, 0x14, 0x18);
 constexpr SkColor kApp = SkColorSetARGB(0xFF, 0x00, 0xC8, 0x53);

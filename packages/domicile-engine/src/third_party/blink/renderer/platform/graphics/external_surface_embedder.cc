@@ -49,7 +49,7 @@ namespace {
 // while this map still holds the old app's token — which is the same refusal
 // as above, permanently, for as long as the page lives. Nothing today notices
 // a producer going away on this side of the seam. It wants the browser to say
-// so; see the open questions in docs/architecture/ENGINE-FORK.md.
+// so; see docs/architecture/ENGINE-FORK.md#open-questions.
 //
 // `std::map` rather than the `base::flat_map` the rest of this fork uses, and
 // the difference is load-bearing: this hands back a reference into the

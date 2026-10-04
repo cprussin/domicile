@@ -22,8 +22,8 @@
 #
 # The first two used to be a bridge process serving the page and a session on
 # one TCP port, with the SDK reaching it over a WebSocket. Both are gone -- see
-# `ENGINE-FORK.md`, "The page is served over a TCP port, and it should not be"
-# -- and this guard held the last reference to them.
+# `docs/architecture/DOMICILE-SCHEME.md` -- and this guard held the last
+# reference to them.
 #
 # WHAT IT ASSERTS, AND WHY NOT A PIXEL. The shell decides where its windows go.
 # A guard that named a coordinate would be asserting shell-simple's CSS, and

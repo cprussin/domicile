@@ -3,10 +3,11 @@
 #
 # Cheap, and deliberately: no Wayland, no client, no GPU and no window — a
 # socket with a stand-in on the far end and a document that listens. What it
-# measures is the stage ENGINE-FORK.md phase 2 asked for a stamp for, and it
-# reads the stamp's SHAPE as well as its value, because an attribute that is
-# never filled in reports a plausible hop and the instrument this replaces was
-# deleted for exactly that.
+# measures is the arrival stamp
+# (ENGINE-FORK-MEASUREMENTS.md#keystroke-to-pixel), and it reads the stamp's
+# SHAPE as well as its value, because an attribute that is never filled in
+# reports a plausible hop and the instrument this replaces was deleted for
+# exactly that.
 #
 # NO CONTROL RUN, because its control is inside the run. The stand-in sends a
 # cursor the engine knows, one it does not, and another it does, in that order:

@@ -17,7 +17,7 @@ namespace domicile::spike {
 // THROWAWAY, with the rest of the spike. The rule that turns a picture of the
 // browser's window into step 4's verdicts, separated from the process that
 // takes the picture so that the rule itself can be tested — every "pass" in
-// ENGINE-FORK.md's measurement is this code's opinion.
+// ENGINE-FORK-MEASUREMENTS.md#css-parity is this code's opinion.
 
 // The browser's window as viz drew it: row-major SkColor (ARGB).
 class WindowCapture {

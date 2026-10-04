@@ -18,15 +18,16 @@
 #
 # Headless and software-composited, which is `spike.sh`'s default and needs no
 # nested compositor: what it compares is what the display compositor drew for
-# two elements on one page, and neither needs a GPU to be laid out.
-# ENGINE-FORK.md's `--disable-gpu` table is the one this reproduces — six cells
-# bit-exact, `transform` differing on 285 edge pixels and 0 interior ones,
-# which is two software raster passes disagreeing in the last bit. The verdict
-# is on interior pixels for exactly that reason, so those 285 are a pass here
-# and every cell is 0 on the GPU. Which is what makes a failure the seam rather
-# than the hardware, and the only reading that makes this worth having — and
-# why the filtered run's filter is a per-pixel one rather than a blur, which
-# would carry those 285 edge pixels into the interior the verdict is read from.
+# two elements on one page, and neither needs a GPU to be laid out. The
+# `--disable-gpu` table in ENGINE-FORK-MEASUREMENTS.md#css-parity is the one
+# this reproduces — six cells bit-exact, `transform` differing on 285 edge
+# pixels and 0 interior ones, which is two software raster passes disagreeing in
+# the last bit. The verdict is on interior pixels for exactly that reason, so
+# those 285 are a pass here and every cell is 0 on the GPU. Which is what makes
+# a failure the seam rather than the hardware, and the only reading that makes
+# this worth having — and why the filtered run's filter is a per-pixel one
+# rather than a blur, which would carry those 285 edge pixels into the interior
+# the verdict is read from.
 #
 # NO CONTROL RUN: the comparison is the control. Every cell is measured against
 # an ordinary <div> under the same properties in the same document, so a run

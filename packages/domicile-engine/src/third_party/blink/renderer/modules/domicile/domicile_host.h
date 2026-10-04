@@ -73,8 +73,7 @@ class NativeEventListener;
 // importantly -- that the channel is reachable by origin rather than by
 // whoever can open a TCP connection to a loopback port.
 //
-// See docs/architecture/ENGINE-FORK.md, "The page is served over a TCP port,
-// and it should not be".
+// See docs/architecture/DOMICILE-SCHEME.md.
 class MODULES_EXPORT DomicileHost final
     : public EventTarget,
       public domicile::mojom::blink::ControlChannelClient,

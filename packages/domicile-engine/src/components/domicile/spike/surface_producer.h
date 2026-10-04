@@ -73,8 +73,8 @@ class SurfaceProducer : public viz::mojom::CompositorFrameSinkClient,
   // mojo::IsolatedConnection, and that is forced rather than chosen: the broker
   // forwards our CompositorFrameSink receiver on to the viz process, and an
   // isolated connection's own header says a handle it carries "cannot [be
-  // passed] to yet another process". See ENGINE-FORK.md, "How the producer
-  // reaches the broker".
+  // passed] to yet another process". See
+  // ENGINE-FORK.md#how-the-producer-reaches-the-broker.
   bool Connect(const mojo::NamedPlatformChannel::ServerName& socket);
 
   // Asks the broker for a frame sink and runs `on_brokered` with the id it
