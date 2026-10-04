@@ -1,4 +1,4 @@
-//! The command line a shell starts the compositor with.
+//! Tests for parsing the compositor command line.
 
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
@@ -27,8 +27,7 @@ fn the_two_paths_the_shell_names_are_read_back() {
     assert_eq!(parsed.session, PathBuf::from("/run/session.json"));
 }
 
-/// Nothing else is defaulted from the environment, so a run with only the two
-/// required paths is a complete description of what the compositor will do.
+/// Nothing is defaulted from the environment.
 #[test]
 fn without_the_rest_there_is_no_config() {
     let parsed = parse(the_required_two()).expect("both are there");
@@ -51,9 +50,7 @@ fn a_config_is_read_when_given() {
     assert_eq!(parsed.config, Some(PathBuf::from("/run/config.json")));
 }
 
-/// `--flag=value` as well as `--flag value`: a wrapper writing the command line
-/// picks whichever reads better, and having one of them mean something else is
-/// a trap rather than a rule.
+/// `--flag=value` and `--flag value` mean the same.
 #[test]
 fn a_value_may_be_joined_to_its_flag() {
     let parsed = parse([
@@ -100,8 +97,8 @@ fn a_flag_with_nothing_after_it_is_refused() {
     );
 }
 
-/// An empty value is a typo that reaches much further than the command line: a
-/// socket bound at `""` fails somewhere else entirely.
+/// An empty value would fail later and far from the typo, such as binding a
+/// socket at `""`.
 #[test]
 fn an_empty_value_is_refused() {
     let err = parse(["--chrome-socket=", "--session", "/run/session.json"])
@@ -115,8 +112,7 @@ fn an_empty_value_is_refused() {
     );
 }
 
-/// Not ignored: an argument nothing reads is a request that silently did not
-/// happen, and the compositor's whole command line comes from a program.
+/// Unknown arguments are refused so a request cannot silently do nothing.
 #[test]
 fn an_argument_nothing_reads_is_refused() {
     let err = parse([
@@ -135,8 +131,7 @@ fn an_argument_nothing_reads_is_refused() {
     );
 }
 
-/// The same rule from the other side: a program that wrote a flag twice meant
-/// one of them, and nothing here can tell which.
+/// A repeated flag is ambiguous.
 #[test]
 fn a_flag_given_twice_is_refused() {
     let err = parse([
@@ -159,8 +154,7 @@ fn a_flag_given_twice_is_refused() {
     );
 }
 
-/// `--experiment-augmenter` went with the vendored exo protocols, so it is now
-/// an unknown argument like any other — refused rather than ignored.
+/// `--experiment-augmenter` is an unknown argument.
 #[test]
 fn the_augmenter_experiment_is_gone() {
     let err = parse([
@@ -180,7 +174,7 @@ fn the_augmenter_experiment_is_gone() {
     );
 }
 
-/// The engine path is opt-in, and off is the shape every existing shell writes.
+/// The engine socket is optional.
 #[test]
 fn the_engine_socket_is_absent_unless_asked_for() {
     let parsed = parse([
@@ -194,8 +188,7 @@ fn the_engine_socket_is_absent_unless_asked_for() {
     assert_eq!(parsed.engine_socket, None);
 }
 
-/// Where the forked engine is listening. A path like every other, so it takes
-/// a value the same way and refuses an empty one the same way.
+/// The engine socket is parsed like the other paths.
 #[test]
 fn the_engine_socket_is_read_as_a_path() {
     let parsed = parse([
@@ -214,9 +207,7 @@ fn the_engine_socket_is_read_as_a_path() {
     );
 }
 
-/// A compositor that is loading a shell is the ordinary case, and a page
-/// arriving on the control socket is what it is waiting for. So the watchdog
-/// in `domicile_launch::handshake` is on unless a command line says otherwise.
+/// The page watchdog in `domicile_launch::handshake` is on by default.
 #[test]
 fn a_page_is_expected_unless_the_command_line_says_otherwise() {
     let parsed = parse(the_required_two()).expect("both are there");
@@ -224,9 +215,7 @@ fn a_page_is_expected_unless_the_command_line_says_otherwise() {
     assert_eq!(parsed.expect_a_page, Expected::APage);
 }
 
-/// And the case it exists for: the engine spike's harnesses start chrome on a
-/// broker socket with no control socket, so nothing can dial the compositor's
-/// — and it complained about that on every passing run until it could be told.
+/// Engine test harnesses run with no control socket, so no page will connect.
 #[test]
 fn a_harness_with_no_shell_in_it_can_say_no_page_is_coming() {
     let parsed = parse([
@@ -242,8 +231,7 @@ fn a_harness_with_no_shell_in_it_can_say_no_page_is_coming() {
     assert_eq!(parsed.expect_a_page, Expected::NoPage);
 }
 
-/// Both words, because a flag that only has one is a flag without a value
-/// wearing one: a shell that means the default and says so must be able to.
+/// The default can be stated explicitly.
 #[test]
 fn saying_a_page_is_coming_is_the_same_as_not_saying() {
     let parsed = parse([
@@ -258,10 +246,8 @@ fn saying_a_page_is_coming_is_the_same_as_not_saying() {
     assert_eq!(parsed.expect_a_page, Expected::APage);
 }
 
-/// Not "anything that is not `no` means yes". A value this does not understand
-/// is a request that would silently not happen, which is what every other
-/// refusal on this command line is about — and the one it would silently not
-/// do is turn a watchdog off.
+/// Only `yes` and `no` are accepted, so a typo cannot silently leave the
+/// watchdog on.
 #[test]
 fn a_word_that_is_neither_is_refused() {
     let err = parse([

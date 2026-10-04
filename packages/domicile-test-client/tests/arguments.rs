@@ -1,24 +1,20 @@
-//! What the client will and will not be told to open.
+//! Command-line parsing for the test client.
 //!
-//! The window itself needs a compositor to be tested against, and the checks
-//! in `scripts/` are what do that. This is the half that does not: every
-//! refusal here is one a caller would otherwise meet as a window that is
-//! missing, or named something it did not choose.
+//! The window itself is tested against a compositor by the checks in
+//! `scripts/`.
 
 use std::ffi::OsString;
 
 use domicile_test_client::arguments::{arguments, ArgumentError, Arguments, HoldTheScreensOn};
 
-/// A command line, as the shell hands one over.
+/// Parse a command line given as strings.
 fn given(args: &[&str]) -> Result<Arguments, ArgumentError> {
     arguments(args.iter().map(OsString::from))
 }
 
 #[test]
 fn a_client_told_nothing_still_opens_a_window() {
-    // The common case in `scripts/`: a check needs *a* window and asserts on
-    // what the compositor did with it, so the title is the only thing it ever
-    // has to say.
+    // Most checks pass no arguments, so every default must be a plain window.
     let asked = given(&[]).expect("nothing is a valid thing to say");
 
     assert_eq!(asked.title, "domicile-test-client");
@@ -59,10 +55,6 @@ fn a_client_told_nothing_still_opens_a_window() {
 
 #[test]
 fn a_client_can_be_asked_to_hold_the_screens_on() {
-    // `zwp_idle_inhibit_manager_v1`, which is how a film says a desk nobody is
-    // touching is not idle. Nothing else in this client takes an inhibitor, so
-    // a check about a desktop that will not blank has no other way to make
-    // one.
     let asked = given(&["--hold-the-screens-on"]).expect("a client that keeps a desk awake");
 
     assert_eq!(
@@ -74,9 +66,8 @@ fn a_client_can_be_asked_to_hold_the_screens_on() {
 
 #[test]
 fn a_client_can_take_its_inhibitor_before_it_has_a_window() {
-    // The case a desktop must not honor: the protocol lets a client inhibit on
-    // any surface it owns, including one that is not a window, and nothing
-    // else here produces a request in that order.
+    // The protocol allows an inhibitor on a surface with no role, but a
+    // desktop must not honor it.
     let asked = given(&["--hold-the-screens-on-before-it-has-a-window"])
         .expect("a client that asks before it shows anything");
 
@@ -88,9 +79,7 @@ fn a_client_can_take_its_inhibitor_before_it_has_a_window() {
 
 #[test]
 fn a_client_cannot_take_its_inhibitor_at_both_moments() {
-    // One inhibitor at one moment, and the two flags are two answers to the
-    // same question — so asking for both is the repeat every other flag
-    // refuses, rather than a client that takes two.
+    // Both flags set the same option, so the second is a repeat.
     assert_eq!(
         given(&[
             "--hold-the-screens-on",
@@ -104,8 +93,6 @@ fn a_client_cannot_take_its_inhibitor_at_both_moments() {
 
 #[test]
 fn a_client_can_be_asked_to_outlive_its_window() {
-    // A window closed on a client that keeps running, which is the one way to
-    // tell a window going away apart from the client that had it going away.
     let asked = given(&["--outlive-its-window"]).expect("a client that stays when its window goes");
 
     assert!(asked.outlive_its_window);
@@ -124,11 +111,7 @@ fn outliving_a_window_twice_is_refused_like_any_other_repeat() {
 
 #[test]
 fn a_chrome_is_the_client_that_takes_the_size_it_is_given() {
-    // The one client Domicile sizes rather than the other way round. Off by
-    // default and asserted on both sides, because the default is what almost
-    // every check in `scripts/` depends on: they state a size and want that
-    // size, and a client that quietly grew to whatever a configure said would
-    // make them about the compositor's arithmetic instead of their subject.
+    // Off by default because most checks rely on a fixed window size.
     let asked = given(&["--follow-configure"]).expect("a chrome-shaped client");
 
     assert!(asked.follow_configure);
@@ -138,8 +121,6 @@ fn a_chrome_is_the_client_that_takes_the_size_it_is_given() {
 
 #[test]
 fn following_a_configure_twice_is_refused() {
-    // Like every other flag: a repeated one is a caller who thinks they said
-    // two things and will be obeyed on one of them.
     assert_eq!(
         given(&["--follow-configure", "--follow-configure"]),
         Err(ArgumentError::Repeated {
@@ -157,9 +138,7 @@ fn a_title_is_what_a_check_tells_two_windows_apart_by() {
 
 #[test]
 fn a_flag_with_nothing_after_it_is_refused() {
-    // Rather than defaulted: `--title $NAME` with `NAME` unset is a caller
-    // that meant to name a window, and one named after the next flag along is
-    // worse than being told.
+    // `--title $NAME` with `NAME` unset ends up here.
     assert_eq!(
         given(&["--title"]),
         Err(ArgumentError::NeedsValue {
@@ -170,9 +149,7 @@ fn a_flag_with_nothing_after_it_is_refused() {
 
 #[test]
 fn an_empty_value_is_refused_rather_than_used() {
-    // The shape an unset shell variable actually takes: the flag is there and
-    // its value is the empty string. A window with no name is exactly what a
-    // check looking for one by name cannot find.
+    // `--title "$NAME"` with `NAME` unset ends up here.
     assert_eq!(
         given(&["--title", ""]),
         Err(ArgumentError::EmptyValue {
@@ -193,9 +170,6 @@ fn a_flag_given_twice_is_refused_rather_than_one_of_them_obeyed() {
 
 #[test]
 fn a_client_can_be_asked_to_report_what_it_sees() {
-    // What the checks that assert on the protocol rather than on the picture
-    // read, in place of the `WAYLAND_DEBUG` log they used to need one of
-    // weston's clients for.
     let asked = given(&["--trace"]).expect("a request to report");
 
     assert!(asked.trace);
@@ -203,8 +177,6 @@ fn a_client_can_be_asked_to_report_what_it_sees() {
 
 #[test]
 fn asking_to_report_twice_is_refused_like_any_other_repeat() {
-    // A flag with no value still means a caller that thinks it said two
-    // things, and this one is a plausible thing to append twice by mistake.
     assert_eq!(
         given(&["--trace", "--trace"]),
         Err(ArgumentError::Repeated {
@@ -215,11 +187,6 @@ fn asking_to_report_twice_is_refused_like_any_other_repeat() {
 
 #[test]
 fn a_client_can_be_asked_for_a_window_that_is_not_opaque() {
-    // What `e2e-window-shows-through.sh` needed. A headless compositor copies
-    // every window into the page rather than drawing it itself, so the chrome
-    // legitimately paints the client's own pixels where the window is — and
-    // with an opaque client that is indistinguishable from a background
-    // painted over it. A half-opaque window tells the two apart.
     let asked = given(&["--translucent"]).expect("a request for a see-through window");
 
     assert!(asked.translucent);
@@ -237,9 +204,6 @@ fn asking_for_a_see_through_window_twice_is_refused_like_any_other_repeat() {
 
 #[test]
 fn a_client_can_be_asked_to_ask_for_the_keyboard() {
-    // `xdg-activation`, which is how a client says it wants focus — the
-    // request a shell is free to refuse. Nothing else in this client sends it,
-    // so a check about focus policy has no other way to produce one.
     let asked = given(&["--ask-for-focus"]).expect("a client that wants the keyboard");
 
     assert!(asked.ask_for_focus);
@@ -258,9 +222,6 @@ fn asking_for_the_keyboard_twice_is_refused_like_any_other_repeat() {
 
 #[test]
 fn a_client_can_be_given_something_to_copy() {
-    // The half of a clipboard check that a compositor cannot play: a
-    // selection has to be *offered* by a client, and the bytes served when
-    // somebody pastes come from that client rather than from the compositor.
     let asked = given(&["--copy", "hello"]).expect("a client with something to copy");
 
     assert_eq!(asked.copy, Some("hello".to_string()));
@@ -272,9 +233,6 @@ fn a_client_can_be_given_something_to_copy() {
 
 #[test]
 fn the_middle_click_selection_is_a_separate_thing_to_copy_to() {
-    // Two clipboards, as on every other Wayland desktop: `--copy` is what
-    // Ctrl-C puts somewhere and this is what selecting a word does. A client
-    // that could only reach one of them could not show that they are separate.
     let asked = given(&["--copy-primary", "brushed past"]).expect("a client selecting a word");
 
     assert_eq!(asked.copy_primary, Some("brushed past".to_string()));
@@ -283,10 +241,8 @@ fn the_middle_click_selection_is_a_separate_thing_to_copy_to() {
 
 #[test]
 fn a_client_can_be_asked_to_read_what_is_offered() {
-    // Both selections rather than one: what a paste check needs to be able to
-    // fail on is a compositor that offers the clipboard's bytes on the
-    // primary selection, and a client that only read the one it was asked
-    // about would pass that.
+    // One flag reads both selections, so a check can catch a compositor that
+    // offers clipboard data on the primary selection.
     let asked = given(&["--paste"]).expect("a client that pastes");
 
     assert!(asked.paste);
@@ -295,16 +251,13 @@ fn a_client_can_be_asked_to_read_what_is_offered() {
 
 #[test]
 fn a_client_can_be_asked_to_open_a_menu_over_its_window() {
-    // An `xdg_popup`, which is what a menu bar's menu is on Wayland — and
-    // none unless asked, because most checks want a window and nothing else.
     assert!(given(&["--popup"]).expect("a client with a menu").popup);
     assert!(!given(&[]).unwrap().popup);
 }
 
 #[test]
 fn a_menu_can_be_asked_to_take_the_keyboard_and_pointer() {
-    // A grab, which is what a menu opened from a menu bar asks for — and a
-    // grabbing popup is still a popup.
+    // `--popup-grab` implies `--popup`.
     let asked = given(&["--popup-grab"]).expect("a client with a grabbing menu");
     assert!(asked.popup && asked.popup_grab);
     assert!(!given(&["--popup"]).unwrap().popup_grab);
@@ -312,8 +265,8 @@ fn a_menu_can_be_asked_to_take_the_keyboard_and_pointer() {
 
 #[test]
 fn a_client_can_be_given_limits_on_its_size() {
-    // What Electron says for an app with a minimum window size — Bitwarden's,
-    // here — and what a shell has to hear to stop squeezing it.
+    // Limits an Electron app with a minimum window size sends (these are
+    // Bitwarden's).
     let asked = given(&["--min-size", "680x500", "--max-size", "1920x0"])
         .expect("a client that will only be so small or so big");
 
@@ -335,9 +288,7 @@ fn a_size_that_is_not_two_numbers_is_refused() {
 
 #[test]
 fn an_argument_this_does_not_know_is_named_rather_than_ignored() {
-    // An argument that goes nowhere is a request that silently did not
-    // happen, which is the failure the compositor's own command line refuses
-    // for the same reason.
+    // An ignored argument would be a request that silently did not happen.
     assert_eq!(
         given(&["--fullscreen"]),
         Err(ArgumentError::Unknown {

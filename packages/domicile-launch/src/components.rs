@@ -1,8 +1,4 @@
-//! The two programs a desktop is, found beside the one the user ran.
-//!
-//! `domicile` is one of three things that ship together, the way a
-//! multi-binary program like postfix does, and it finds the other two from its
-//! own path rather than being handed them:
+//! Finds the compositor and engine next to the `domicile` binary.
 //!
 //! ```text
 //! <prefix>/bin/domicile
@@ -10,14 +6,12 @@
 //! <prefix>/libexec/domicile/engine     the Chromium tree, `chrome` inside it
 //! ```
 //!
-//! On Linux `current_exe` reads `/proc/self/exe`, which resolves symlinks — so
-//! a `~/.nix-profile/bin/domicile` arrives here already pointing into the
-//! store, where its siblings are, in the same output. A package installed into
-//! `/usr` answers the same way for the same reason.
+//! `current_exe` resolves symlinks, so a binary run from `~/.nix-profile`
+//! finds its siblings in the store.
 
 use std::path::{Path, PathBuf};
 
-/// A component that is neither beside the binary nor named in the environment.
+/// A component missing next to the binary and not set in the environment.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error(
     "no {what} at {}, and {variable} is not set. The components ship beside \
@@ -30,7 +24,7 @@ pub struct Missing {
     pub variable: &'static str,
 }
 
-/// Where each of the two is.
+/// Paths to the engine and compositor.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Components {
     /// The directory holding `chrome`.
@@ -38,12 +32,10 @@ pub struct Components {
     pub compositor: PathBuf,
 }
 
-/// Resolve both from the running binary's own path.
+/// Resolves both components from the running binary's path.
 ///
-/// `exists` is asked only about the siblings. A path somebody named in the
-/// environment is taken as given: they meant it, and checking would refuse a
-/// component a build is about to produce — while the failure to run one says
-/// so with the reason attached, which a check here could not.
+/// Paths from the environment are not checked: a build may not have produced
+/// them yet, and a failure to run them reports a better error.
 pub fn components(
     binary: &Path,
     env: &dyn Fn(&str) -> Option<String>,
@@ -73,13 +65,9 @@ pub fn components(
     })
 }
 
-/// The environment's answer, or the sibling, or what to do about neither.
-/// The program that builds a shell out of an entry or a package —
-/// `libexec/domicile/builder` beside `domicile`, or `DOMICILE_BUILDER`.
+/// The shell builder: `DOMICILE_BUILDER`, or `libexec/domicile/builder`.
 ///
-/// Apart from [`components`] because a desktop on a prebuilt shell never runs
-/// it, and a run that refused to start for want of a builder it was never
-/// going to use would be refusing over nothing.
+/// Separate from [`components`] so a prebuilt shell can run without one.
 pub fn builder(
     binary: &Path,
     env: &dyn Fn(&str) -> Option<String>,
@@ -94,8 +82,8 @@ pub fn builder(
     )
 }
 
-/// Domicile's own prebuilt shell `name`: `libexec/domicile/shells/<name>`
-/// beside `domicile`, or under `DOMICILE_SHELLS`, holding its `shell.js`.
+/// The directory of Domicile's prebuilt shell `name`, under
+/// `DOMICILE_SHELLS` or `libexec/domicile/shells`.
 pub fn our_shell(
     binary: &Path,
     name: &str,
@@ -117,7 +105,7 @@ pub fn our_shell(
     }
 }
 
-/// `libexec/domicile`, beside the `bin` `binary` is in.
+/// The `libexec/domicile` directory next to `binary`'s `bin`.
 fn libexec(binary: &Path) -> PathBuf {
     binary
         .parent()
@@ -127,6 +115,7 @@ fn libexec(binary: &Path) -> PathBuf {
         .join("domicile")
 }
 
+/// The path from `variable`, or `beside` if it exists.
 fn one(
     what: &'static str,
     variable: &'static str,

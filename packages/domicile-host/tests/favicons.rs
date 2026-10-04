@@ -1,11 +1,11 @@
-//! The icon a bookmark's site names for itself, as a launcher draws it.
+//! Finding a bookmarked site's icon for the launcher.
 
 use std::collections::HashMap;
 
 use domicile_host::favicons::{favicon, Page};
 
-/// A web of `pages` by URL: each a final URL (where redirects ended), a type and
-/// a body. Anything else is not there.
+/// A fake web of `pages` by URL, each with a final URL (after redirects), a
+/// type and a body. Other URLs are missing.
 fn web(pages: &[(&str, &str, &str, &[u8])]) -> impl Fn(&str) -> Option<Page> {
     let pages: HashMap<String, Page> = pages
         .iter()
@@ -114,7 +114,7 @@ fn the_biggest_icon_linked_wins_and_a_drawing_beats_them_all() {
             b"svg",
         ),
     ]);
-    // A touch icon is 180 pixels when it does not say.
+    // A touch icon without `sizes` counts as 180 pixels.
     assert_eq!(
         favicon("https://a.example/", &fetch).as_deref(),
         Some("data:image/png;base64,dHQ=")
@@ -161,8 +161,8 @@ fn a_site_that_links_none_is_asked_for_its_favicon_ico() {
 
 #[test]
 fn a_page_that_sent_it_elsewhere_is_not_where_its_icon_is() {
-    // Signed out, a Google app's page is the sign-in page, whose icon is
-    // Google's rather than the app's: its own host's favicon.ico is the app's.
+    // A signed-out Google app redirects to the sign-in page, whose icon is
+    // Google's. The app's own host's favicon.ico is the right one.
     let fetch = web(&[
         (
             "https://mail.example/",
@@ -192,7 +192,7 @@ fn a_page_that_sent_it_elsewhere_is_not_where_its_icon_is() {
 
 #[test]
 fn what_is_not_a_picture_is_no_icon() {
-    // A missing favicon.ico is, on many servers, the app's page again.
+    // Many servers answer a missing favicon.ico with the app's page.
     let fetch = web(&[
         (
             "https://d.example/",
@@ -219,7 +219,7 @@ fn a_site_that_cannot_be_reached_is_no_icon() {
 #[test]
 fn a_redirect_within_the_site_keeps_its_links() {
     // `example.com` to `www.example.com` is the same site, and its page's
-    // links are better than a 16-pixel favicon.ico.
+    // links beat a 16-pixel favicon.ico.
     let fetch = web(&[
         (
             "https://f.example/",
@@ -243,8 +243,8 @@ fn a_redirect_within_the_site_keeps_its_links() {
 
 #[test]
 fn a_page_is_read_as_html_rather_than_as_text() {
-    // An entity in a link is the character; a `>` in a quoted value does not
-    // end the tag; a link in a comment is not there; a type is any case.
+    // Entities are decoded, a quoted `>` does not end the tag, commented-out
+    // links are ignored, and types are case-insensitive.
     let page = br#"
         <!-- <link rel="icon" href="/commented.png"> -->
         <link rel="icon" sizes="16x16" title="a > b" href="/i.png?a=1&amp;b=2">
@@ -263,7 +263,7 @@ fn a_page_is_read_as_html_rather_than_as_text() {
             "image/svg+xml",
             b"svg",
         ),
-        // Found first, were the drawing not seen as one.
+        // Would win if the SVG type were not recognized.
         (
             "https://g.example/i.png?a=1&b=2",
             "https://g.example/i.png?a=1&b=2",
@@ -343,8 +343,8 @@ fn an_icon_sent_as_bytes_is_known_by_what_it_starts_with() {
 
 #[test]
 fn a_quote_inside_a_bare_value_is_a_character() {
-    // `Bob's` opens no quoted value, so it does not hide the tags after it;
-    // neither does a tag that only starts like `<link`.
+    // `Bob's` does not open a quoted value, so later tags still parse, and
+    // a tag that only starts like `<link` is not one.
     let fetch = web(&[
         (
             "https://k.example/",

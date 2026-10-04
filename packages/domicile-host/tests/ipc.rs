@@ -1,9 +1,7 @@
-//! Tests for the host<->chrome IPC seam, written before the implementation.
+//! Tests for the host-chrome IPC `Session`.
 //!
-//! Messages are newline-delimited JSON. A `Session` wraps the host: it performs
-//! the version handshake and, once ready, feeds chrome messages into the host
-//! brain. The final test drives a real `UnixStream` to prove the framing works
-//! over an actual socket.
+//! Messages are newline-delimited JSON. A `Session` performs the version
+//! handshake, then passes chrome messages to the `Host`.
 
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::UnixStream;
@@ -17,12 +15,8 @@ use domicile_protocol::{
 
 #[test]
 fn hello_completes_the_handshake_with_a_welcome_and_the_desktop() {
-    // Three messages, in this order. The desktop rides with the handshake
-    // because a chrome has no other way to learn what it is laying out
-    // against — and it comes second, after the version it is written in has
-    // been agreed. The theme rides for the same reason one layer up: it is
-    // what the page paints in, and a page told it late paints once in the
-    // wrong one.
+    // The chrome needs the displays to lay out, and the theme to avoid a
+    // first paint in the wrong one. Both follow the agreed version.
     let mut session = Session::new();
     assert!(!session.is_ready());
 
@@ -45,11 +39,9 @@ fn hello_completes_the_handshake_with_a_welcome_and_the_desktop() {
 
 #[test]
 fn version_mismatch_is_refused_out_loud() {
-    // Refused — `ready` stays false and no desktop follows — but answered.
-    // The chrome's own version-mismatch failure names both halves, and the
-    // only thing that can trigger it is being told what this half speaks.
-    // Answering with nothing leaves the page waiting on a `welcome` that is
-    // never coming: a desktop that does not start and does not say why.
+    // The session stays not ready but still sends a `Welcome` with its own
+    // version. The chrome needs it to report the mismatch; without a reply
+    // it would wait forever and fail silently.
     let mut session = Session::new();
 
     let out = session.ingest(&to_line(&ChromeMessage::Hello {
@@ -68,12 +60,9 @@ fn version_mismatch_is_refused_out_loud() {
 
 #[test]
 fn a_version_refused_after_one_was_agreed_takes_the_handshake_back() {
-    // A flag that only ever goes up says "some hello here was accepted", and
-    // the compositor reads it as "this connection is a peer" — it is what
-    // decides who gets broadcast to. A page that agreed a version and then
-    // announced one this build cannot speak has stopped being a peer, so
-    // leaving it up hands protocol it cannot read to a page that has just
-    // said so.
+    // The compositor broadcasts only to ready sessions. A page that later
+    // sends an unsupported version cannot read those broadcasts, so `ready`
+    // must go back to false.
     let mut session = Session::new();
     session.ingest(&to_line(&ChromeMessage::Hello {
         protocol_version: PROTOCOL_VERSION,
@@ -96,8 +85,7 @@ fn a_version_refused_after_one_was_agreed_takes_the_handshake_back() {
 
 #[test]
 fn messages_before_the_handshake_are_ignored() {
-    // The vehicle is a focus rather than a placement now, but the rule is the
-    // same one: nothing a page says counts until it has said hello.
+    // No message takes effect before `Hello`.
     let mut session = Session::new();
     let (id, _) = session.host_mut().app_appeared(None, Some((100.0, 100.0)));
     let _ = session.ingest(&to_line(&ChromeMessage::FocusApp { app_id: id.clone() }));
@@ -152,7 +140,6 @@ fn line_codec_round_trips() {
 fn handshake_works_over_a_real_unix_socket() {
     let (client, server) = UnixStream::pair().unwrap();
 
-    // Server side: read one line, run the session, write any responses back.
     let server_thread = thread::spawn(move || {
         let mut writer = server.try_clone().unwrap();
         let mut reader = BufReader::new(server);
@@ -166,7 +153,6 @@ fn handshake_works_over_a_real_unix_socket() {
         session.is_ready()
     });
 
-    // Client side: send hello, read welcome.
     let mut client_writer = client.try_clone().unwrap();
     client_writer
         .write_all(
@@ -196,14 +182,10 @@ fn handshake_works_over_a_real_unix_socket() {
 
 #[test]
 fn a_keymap_the_compositor_compiled_rides_with_the_handshake() {
-    // THE BROWSER PROCESS IS THE READER OF THIS ONE, not the page. Its
-    // KeyboardLayoutEngine is a `XkbKeyboardLayoutEngine` with no keymap in
-    // it — off ChromeOS nothing sets one, and it answers every printable key
-    // with `No current XKB state` and an unidentified DomKey — so a desktop on
-    // a tty types nothing until it is handed the keymap the compositor
-    // compiled. Like the desktop above it is a fact rather than a stream, so
-    // it rides with the handshake: a reload opens a new channel, and a channel
-    // with no keymap on it is a keyboard that stopped working.
+    // The browser process reads this, not the page. Outside ChromeOS its
+    // `XkbKeyboardLayoutEngine` has no keymap and resolves no printable keys,
+    // so on a tty typing fails until it gets the compositor's keymap. A
+    // reload opens a new channel, so the handshake must resend it.
     let mut session = Session::new();
     session.host_mut().set_keymap(KEYMAP.into());
 
@@ -230,9 +212,8 @@ fn a_keymap_the_compositor_compiled_rides_with_the_handshake() {
 
 #[test]
 fn the_extensions_the_config_names_ride_with_the_handshake() {
-    // The browser process installs these, and one whose page reloaded has a
-    // new control channel -- so, like the keymap, the list is told again
-    // rather than having had to be heard the first time.
+    // The browser process installs these. A reload opens a new channel, so
+    // the handshake resends the list, like the keymap.
     let mut session = Session::new();
     session.host_mut().set_keymap(KEYMAP.into());
     session.host_mut().set_extensions(
@@ -256,9 +237,8 @@ fn the_extensions_the_config_names_ride_with_the_handshake() {
 
 #[test]
 fn the_keyboard_rides_with_the_handshake() {
-    // A shell that reloads has a new page with no keys resolved in it, and
-    // the keyboard is not going to change again to tell it. Right after the
-    // keymap, which is what the table was read off.
+    // A reloaded page has no resolved keys, so the handshake resends them.
+    // They follow the keymap they were resolved against.
     let mut session = Session::new();
     session.host_mut().set_keymap(KEYMAP.into());
     session
@@ -283,8 +263,8 @@ fn the_keyboard_rides_with_the_handshake() {
 
 #[test]
 fn the_tray_rides_with_the_handshake() {
-    // A page that reloads has missed every icon that arrived before it, and
-    // nothing re-sends one that has not changed.
+    // A reloaded page missed earlier icons, and unchanged icons are not
+    // resent.
     let mut session = Session::new();
     let icon = TrayItem {
         id: ":1.42/StatusNotifierItem".into(),
@@ -308,9 +288,8 @@ fn the_tray_rides_with_the_handshake() {
 
 #[test]
 fn a_tray_that_did_not_change_says_nothing() {
-    // An item's signals fire for all sorts of reasons -- a tooltip that
-    // said the same thing again -- and a broadcast for each would redraw
-    // every bar on the desk over nothing.
+    // Items emit signals without real changes, such as an unchanged tooltip.
+    // Broadcasting each would redraw every bar for nothing.
     let mut session = Session::new();
     session.host_mut().set_tray(vec![]);
 
@@ -319,8 +298,8 @@ fn a_tray_that_did_not_change_says_nothing() {
 
 #[test]
 fn a_host_nobody_gave_a_tray_says_nothing_about_one() {
-    // The `domicile` daemon serves this protocol with no bus behind it, and
-    // an empty tray from it would be a claim rather than a silence.
+    // The `domicile` daemon has no D-Bus connection, so it must not report
+    // an empty tray.
     let mut session = Session::new();
 
     let out = session.ingest(&to_line(&ChromeMessage::Hello {
@@ -334,8 +313,8 @@ fn a_host_nobody_gave_a_tray_says_nothing_about_one() {
 
 #[test]
 fn the_notifications_ride_with_the_handshake() {
-    // Last, after the tray: a page that reloads keeps the desk's history,
-    // which is the compositor's and not the page's.
+    // The compositor owns notification history, so a reloaded page gets it
+    // back. Sent after the tray.
     let mut session = Session::new();
     let notification = Notification {
         id: 7,
@@ -382,7 +361,7 @@ fn notifications_that_did_not_change_say_nothing() {
 
 #[test]
 fn a_host_nobody_gave_notifications_says_nothing_about_them() {
-    // The tray's reason: the `domicile` daemon has no bus to hear them on.
+    // Same as the tray: the `domicile` daemon has no D-Bus connection.
     let mut session = Session::new();
 
     let out = session.ingest(&to_line(&ChromeMessage::Hello {
@@ -407,8 +386,8 @@ fn quiet_desk() -> Audio {
 
 #[test]
 fn the_audio_rides_with_the_handshake() {
-    // Last, after the notifications: a mixer that has not moved is never
-    // told again, so a page that reloads would draw none until it did.
+    // Unchanged audio state is not resent, so a reloaded page needs it here.
+    // Sent after the notifications.
     let mut session = Session::new();
     let told = session.host_mut().set_audio(quiet_desk());
     assert_eq!(told, Some(quiet_desk().message()));
@@ -442,6 +421,6 @@ fn a_host_with_no_sound_server_says_nothing_about_one() {
         .any(|message| matches!(message, HostMessage::Audio { .. })));
 }
 
-/// Standing in for the real thing, which is some 40 kilobytes of
-/// `xkb_keymap { ... }`. What crosses is text and nothing here compiles it.
+/// A stand-in keymap. The host passes it through as text without compiling
+/// it.
 const KEYMAP: &str = "xkb_keymap { /* the compositor's */ };";

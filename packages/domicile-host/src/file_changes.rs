@@ -1,42 +1,30 @@
-//! What a filesystem event does to the index.
+//! Maps filesystem events from [`crate::home_watch`] to file index changes.
+//! Kept separate from the watch so it can be tested without a disk.
 //!
-//! An index built once at boot is yesterday's by the afternoon, so the home is
-//! watched and this is the reading of what comes back. The watch itself is
-//! four lines of OS glue in [`crate::home_watch`]; the decision is here, where
-//! it can be tested against an event rather than against a disk.
-//!
-//! # Most of what a home reports is not a change to what there is to open
-//!
-//! That is the whole shape of this module. An editor saving a file is a burst
-//! of `Modify(Data)` events about a path that was already offered; a build is
-//! thousands of them under a `.git` nobody opens by name. The index is a set
-//! of *paths*, so only the events that add or remove one mean anything, and
-//! everything else has to be dropped here rather than turned into a broadcast
-//! of the whole home at somebody who is typing.
+//! The index is a set of paths, so only events that add or remove a path
+//! matter. Content writes and events under omitted directories are dropped.
 
 use std::path::Path;
 
 use notify::event::{EventKind, ModifyKind, RenameMode};
 use notify::Event;
 
-/// What one event asks of the index.
+/// One change to the index.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Change {
-    /// A path that is there now, named relative to the home directory.
+    /// A path that now exists, relative to the home directory.
     Appeared(String),
-    /// A path that is not, and with it everything that was under it.
+    /// A path that no longer exists, along with everything under it.
     Vanished(String),
 }
 
-/// What `event` does to an index of `home`, which is usually nothing.
+/// The index changes `event` causes under `home`, usually none.
 ///
-/// `omitted` is the walk's question — see [`crate::home_walk`] — and a path
-/// it says yes to, or that is under one it says yes to, is not offered.
+/// Paths that `omitted` matches, or that sit under one it matches, are
+/// skipped (see [`crate::home_walk`]).
 ///
-/// A list rather than one, because a rename the kernel paired up is both a
-/// departure and an arrival — and in that order, which is the contract: a file
-/// renamed over itself would otherwise have the arrival removed by the
-/// departure that followed it.
+/// A paired rename yields `Vanished` then `Appeared`. Callers must apply them
+/// in order, or a file renamed onto itself would end up removed.
 pub fn changes(event: &Event, home: &Path, omitted: &impl Fn(&str) -> bool) -> Vec<Change> {
     match event.kind {
         EventKind::Create(_) => offerable(&event.paths, home, omitted)
@@ -45,8 +33,7 @@ pub fn changes(event: &Event, home: &Path, omitted: &impl Fn(&str) -> bool) -> V
         EventKind::Remove(_) => offerable(&event.paths, home, omitted)
             .map(Change::Vanished)
             .collect(),
-        // A rename the kernel paired up, which `notify` reports as the two
-        // paths of one event: what was there, then what is there now.
+        // A paired rename: old path, then new path.
         EventKind::Modify(ModifyKind::Name(RenameMode::Both)) => {
             let mut named = offerable(&event.paths, home, omitted);
             named
@@ -56,8 +43,7 @@ pub fn changes(event: &Event, home: &Path, omitted: &impl Fn(&str) -> bool) -> V
                 .chain(named.next().map(Change::Appeared))
                 .collect()
         }
-        // And the halves of one it could not: a `mv` out of the home has no
-        // arrival to pair with, because the other end is not watched.
+        // Unpaired halves, such as a `mv` out of the watched home.
         EventKind::Modify(ModifyKind::Name(RenameMode::From)) => {
             offerable(&event.paths, home, omitted)
                 .map(Change::Vanished)
@@ -68,30 +54,18 @@ pub fn changes(event: &Event, home: &Path, omitted: &impl Fn(&str) -> bool) -> V
                 .map(Change::Appeared)
                 .collect()
         }
-        // `Any` is a name that changed without saying which way, which neither
-        // half can be worked out from: reading it as an arrival would offer a
-        // path that may have just gone, and as a departure would drop one that
-        // may have just arrived. Everything else — a write into a file, a read
-        // of one, an attribute — is about a path the index already has an
-        // answer for.
+        // `RenameMode::Any` does not say which side the path is, so it is
+        // ignored. Writes, reads and attribute changes do not change paths.
         _ => Vec::new(),
     }
 }
 
-/// The paths of an event, as rows a launcher could draw.
+/// An event's paths relative to `home`, minus the home itself, paths outside
+/// it, and omitted paths.
 ///
-/// Three things are dropped, and the first is the only one that should ever
-/// arrive: the home directory itself, which names every row and so names
-/// itself as the empty string. A path outside the home has no name relative to
-/// it, and an omitted one is held out for the reason the walk holds it out — a
-/// `git commit` is hundreds of events under a `.git`, and an index that took
-/// them would grow a copy of every checkout's object store that the next boot
-/// walk would then throw away.
-///
-/// **EVERY ANCESTOR IS ASKED, NOT ONLY THE PATH.** The walk never reaches what
-/// is under an omitted directory, so it only ever asks of the directory; the
-/// watch is on the whole tree and reports `src/target/debug/build.log` with
-/// nothing to say it is under `src/target`.
+/// Checks every ancestor against `omitted`, not just the path. The walk never
+/// descends into an omitted directory, but the watch reports deep paths such
+/// as `src/target/debug/build.log` directly.
 fn offerable<'a, O: Fn(&str) -> bool>(
     paths: &'a [std::path::PathBuf],
     home: &'a Path,
@@ -104,7 +78,7 @@ fn offerable<'a, O: Fn(&str) -> bool>(
     })
 }
 
-/// `path` and every directory above it, shallowest first: `a`, `a/b`, `a/b/c`.
+/// `path` and its ancestors, shallowest first: `a`, `a/b`, `a/b/c`.
 fn ancestry(path: &str) -> impl Iterator<Item = &str> {
     path.match_indices('/')
         .map(|(at, _)| &path[..at])

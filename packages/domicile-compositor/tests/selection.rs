@@ -1,18 +1,12 @@
-//! The two clipboards, and that they are two.
+//! The clipboard and the primary selection, and that they are separate.
 //!
-//! Every desktop this one means to replace has a pair: what an explicit copy
-//! puts somewhere, and what selecting a word puts somewhere else for the
-//! middle button to paste. They are separate protocols — `wl_data_device` and
-//! `zwp_primary_selection_device_v1` — with separate contents, and a desktop
-//! carrying one of them is a desktop where half of copy and paste does
-//! nothing.
+//! An explicit copy fills the clipboard (`wl_data_device`); selecting text
+//! fills the primary selection (`zwp_primary_selection_device_v1`) for
+//! middle-click paste. Each has its own contents.
 //!
-//! Nothing but real clients can show this. A selection is an *offer*: the
-//! client names the mime types it can serve and every paste is that client
-//! writing into a descriptor the pasting client reads, so both ends of the
-//! claim are processes the compositor does not contain. What the compositor
-//! does on its own — what it records, what it hands back — is covered where
-//! it lives, in `domicile_host::clipboard` and `crate::clipboard`.
+//! A paste is the source client writing into a pipe the pasting client reads,
+//! so this needs real clients. The compositor's own state is unit-tested in
+//! `domicile_host::clipboard` and `crate::clipboard`.
 
 mod running;
 
@@ -24,17 +18,16 @@ const ONE_DISPLAY: &str = r#"
 { "output": { "displays": [{ "name": "left", "size": [1920, 1080] }] } }
 "#;
 
-/// What Ctrl-C copied and what the pointer brushed past are different bytes,
-/// and a client that asks for one of them gets that one.
+/// The clipboard and the primary selection hold different bytes, and a client
+/// gets the one it asks for.
 ///
-/// Both clipboards in one check rather than two, because the claim is that
-/// they are separate: a compositor serving the clipboard's bytes on the
-/// primary selection would pass either half on its own.
+/// One check, because a compositor serving the clipboard on the primary
+/// selection would pass either half alone.
 #[test]
 fn the_middle_click_selection_and_the_clipboard_are_two_clipboards() {
     let compositor = Compositor::started_with(ONE_DISPLAY);
-    // Connected before either client, so the announcements are heard live
-    // rather than through the replay a late chrome gets.
+    // Connected before the clients, so it hears the announcements live rather
+    // than as a replay.
     let mut chrome = compositor.chrome();
 
     let mut copier = compositor.client_with(
@@ -48,12 +41,8 @@ fn the_middle_click_selection_and_the_clipboard_are_two_clipboards() {
     );
     let mut pasting = compositor.client_with("pasting", &["--paste"]);
 
-    // A COPY IS SOMETHING A FOCUSED WINDOW DOES, which is the protocol's rule
-    // and not this check's arrangement: `set_selection` from a client that
-    // does not hold the keyboard is denied, so a desktop where nothing ever
-    // holds it has no clipboard to test. The keyboard therefore goes to the
-    // copier first and to the pasting client second — which is also what
-    // copying out of one window and pasting into another *is*.
+    // The protocol denies `set_selection` from a client without the keyboard,
+    // so focus the copying client first, then the pasting one.
     focus(&mut chrome, "copier");
     assert!(
         copier.wait_for_trace("set_selection", 2),
@@ -76,9 +65,8 @@ fn the_middle_click_selection_and_the_clipboard_are_two_clipboards() {
 
 /// Give the keyboard to the window with this title, and wait until it has it.
 ///
-/// Waited for rather than assumed: a selection is offered to the client that
-/// holds the keyboard, so every claim below the move is about a seat that has
-/// already moved.
+/// Selections are offered to the client with the keyboard, so the move must
+/// be complete first.
 fn focus(chrome: &mut domicile_test_chrome::Chrome, title: &str) {
     let named = chrome
         .wait_for(|message| {

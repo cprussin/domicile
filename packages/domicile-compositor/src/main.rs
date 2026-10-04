@@ -1,20 +1,13 @@
-//! `domicile-compositor` — the Smithay Wayland-server backend for Domicile.
+//! `domicile-compositor`: the Wayland server for Domicile.
 //!
-//! Architectural note: in Domicile the **web engine is the renderer**, so this
-//! backend does NOT use Smithay's GL renderer, winit, or DRM. Smithay's role is
-//! the Wayland protocol frontend and surface/buffer management. This binary
-//! stands up the protocol globals a client needs (compositor, shm, xdg-shell),
-//! accepts clients on a Wayland socket, and — the whole point — drives the
-//! tested [`domicile_host::Host`] brain: when a client maps a toplevel we call
-//! [`Host::app_appeared`]; when it goes away we call [`Host::app_closed`].
+//! The web engine renders the desktop, so this binary does no drawing of its
+//! own. It serves the Wayland globals clients need, manages their surfaces and
+//! buffers, and drives [`domicile_host::Host`]: a mapped toplevel calls
+//! [`Host::app_appeared`] and a closed one calls [`Host::app_closed`].
 //!
-//! GPU clients get a `zwp_linux_dmabuf_v1` global. Their buffer is submitted
-//! to the engine as a viz surface, which the page embeds in its `<app>`
-//! element — see `engine_session`. A `wl_shm` client's frame is drawn into a
-//! GPU buffer of the compositor's and submitted in its place — see `uploads`.
-//!
-//! What is intentionally missing here (it needs a GPU and a display): anything
-//! about what the engine draws.
+//! Client buffers reach the engine as viz surfaces (see `engine_session`).
+//! `wl_shm` frames are first copied into a GPU buffer (see `uploads`). Design:
+//! `docs/architecture/WINDOW-COMPOSITING.md`.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::ffi::{OsStr, OsString};
@@ -195,111 +188,53 @@ use domicile_protocol::{
 use smithay::backend::renderer::gles::GlesRenderer;
 use smithay::backend::renderer::ImportMemWl as _;
 
-/// The log messages *this change's* scripts and tests grep for, pinned to them.
+/// Log messages that tests and operators search for by text.
 ///
-/// Each is the only trace some code path leaves, so a script asserts on the
-/// *spelling*. Renaming one in place leaves the script passing on the arms a
-/// clean run takes and lying on the arm it does not — a verdict against the
-/// compositor for a string that moved.
-///
-/// `the_grepped_log_messages_are_what_the_scripts_expect` reads the scripts
-/// themselves, so a rename here fails against the file that has to agree with
-/// it rather than against a second copy in this one, which would rename along
-/// with the first. `tests/desktop.rs` spells one of these out too, and is not
-/// read by that test — but it lives in another file, so no rename catches both
-/// at once and the disagreement still surfaces as a failure.
-///
-/// Three of at least nine: `e2e-dmabuf.sh` greps for `toplevel mapped`,
-/// `broadcast app frame`, `chrome client connected` and more, none of them
-/// named or pinned, and so do several `tests/` files. Those predate this
-/// change; these three are the ones it introduced or newly depended on.
+/// Renaming one means updating the tests named on it. Not a complete list:
+/// `scripts/e2e-dmabuf.sh` and `tests/` also match unnamed messages such as
+/// `toplevel mapped`.
 mod grepped {
-    /// Told a message it could not read.
-    ///
-    /// No script greps this any more — `e2e-hidpi.sh` was the last, and it is
-    /// gone. **Nothing pins it at all**, which is a third shape: neither a row
-    /// in `the_grepped_log_messages_are_what_the_scripts_expect`, nor
-    /// [`DENSITY_REFUSED`]'s weaker arrangement of a Rust test that spells the
-    /// string. There is nothing for either to hold, because the check that
-    /// replaced that script speaks the protocol as types and a harness and a
-    /// host cannot disagree about a wire they both derive. Kept because the
-    /// compositor still logs it and an operator still reads it.
+    /// A chrome message that failed to parse.
     pub const UNPARSEABLE: &str = "unparseable chrome message";
-    /// `tests/desktop.rs::a_described_desktop_refuses_a_chromes_density`: the
-    /// guarded return in `set_output_scale`.
+    /// `set_output_scale` ignored a chrome's density on a described desktop.
     ///
-    /// No script greps this any more — `e2e-two-displays.sh` was the last, and
-    /// it is gone. What pins it now is a Rust test that spells the string,
-    /// which is a weaker arrangement in one specific way: a rename here and in
-    /// that test together are one edit a reviewer sees whole, where a script
-    /// was a second file that had to be remembered. Kept a constant because
-    /// the wait is still a wait on a string, and a string with a name is
-    /// easier to find than one written twice.
+    /// Waited on by `tests/desktop.rs`.
     pub const DENSITY_REFUSED: &str = "a described desktop keeps its own scale";
-    /// `tests/desktop.rs::a_described_desktop_refuses_a_chromes_size`: the
-    /// guarded return in `set_output_size`, and the same arrangement as
-    /// [`DENSITY_REFUSED`] above for the same reason — a Rust test spelling
-    /// the string, since no script greps it.
+    /// `set_output_size` ignored a chrome's size on a described desktop.
+    ///
+    /// Waited on by `tests/desktop.rs`.
     pub const SIZE_REFUSED: &str = "a described desktop keeps its own size";
-    /// `e2e-chrome-fills-a-window.sh`: the logical size and density an output
-    /// was advertised at.
+    /// The logical size and density an output was advertised at.
     ///
-    /// **Nothing pins it any more**, which is [`UNPARSEABLE`]'s shape rather
-    /// than [`DENSITY_REFUSED`]'s. The two scripts that grepped it —
-    /// `e2e-chrome-fills-a-window.sh` and `e2e-a-dense-display.sh` — went with
-    /// the presented path they were written for, and the pairing test that
-    /// held them to this constant went with them, having no rows left.
-    ///
-    /// Kept because it is the line that says what size and density the desktop
-    /// came up at, which is the first thing to read when a chrome is laid out
-    /// for the wrong screen.
+    /// Read this first when a chrome is laid out for the wrong screen.
     pub const ADVERTISING: &str = "advertising output scale";
-    /// `tests/apps.rs::a_spawn_says_which_process_it_started`: the fork in
-    /// `spawn_client`, and the first of the two lines a slow launch is read
-    /// from.
+    /// `spawn_client` forked a program. With [`ARRIVED`], it times a launch.
     ///
-    /// [`DENSITY_REFUSED`]'s arrangement — a Rust test that spells the string
-    /// — rather than [`UNPARSEABLE`]'s nothing, because the test waits on it
-    /// by text and a rename here would leave that wait timing out with a
-    /// verdict against the compositor for a string that moved.
+    /// Waited on by `tests/apps.rs`.
     pub const SPAWNING: &str = "spawning client";
-    /// `tests/apps.rs::a_client_that_reaches_the_socket_is_said_to_have_arrived`:
-    /// the accept callback in `run`, and the second of the two. Pinned the
-    /// same way and for the same reason as [`SPAWNING`] above.
+    /// An app client connected to the socket.
+    ///
+    /// Waited on by `tests/apps.rs`.
     pub const ARRIVED: &str = "app client connected";
-    /// `tests/input.rs::a_keymap_the_reload_cannot_compile_leaves_the_desktop_typing`:
-    /// the refusing arm of
-    /// [`retype_the_desktop`](crate::DomicileCompositor::retype_the_desktop).
+    /// [`retype_the_desktop`](crate::DomicileCompositor::retype_the_desktop)
+    /// kept the old keymap because the new one did not compile.
     ///
-    /// [`DENSITY_REFUSED`]'s arrangement — a Rust test that spells the string
-    /// — and load-bearing for the same reason: a reload that refuses a keymap
-    /// sends no message, so this line is the only thing that distinguishes a
-    /// desk that kept its layout deliberately from one where the save never
-    /// arrived.
+    /// A refused reload sends no message, so this line is the only sign of it.
+    /// Waited on by `tests/input.rs`.
     pub const KEYMAP_REFUSED: &str = "keeping the keymap the desktop is typing on";
-    /// The refusing arm of
-    /// [`rebind_the_keys`](crate::DomicileCompositor::rebind_the_keys): a
-    /// keyboard that will not compile, which leaves the shells the table they
-    /// were last told.
+    /// [`rebind_the_keys`](crate::DomicileCompositor::rebind_the_keys) kept
+    /// the old keybindings because the new keyboard did not compile.
     ///
-    /// [`KEYMAP_REFUSED`]'s arrangement and its reason: a reload that refuses
-    /// the keys sends no message, so this line is all that tells a desk that
-    /// kept its keys deliberately from one where the save never arrived.
+    /// A refused reload sends no message, so this line is the only sign of it.
     pub const KEYS_REFUSED: &str = "keeping the keys the shells were last told";
 }
 
-/// The renderer client buffers are imported on.
-///
-/// One renderer, and no longer a choice of where it lives: `--present` put it
-/// in a winit window and drew there, and that path went with the flag. What is
-/// left imports client dmabufs and reads shm buffers back so the frames can
-/// reach the chrome — and, under the fork, so the engine can be handed the
-/// client's own buffer.
+/// The renderer that imports client dmabufs and reads back shm buffers.
 struct Gpu {
     renderer: Box<GlesRenderer>,
     importer: DmabufImporter,
-    /// Where the buffers shm frames are copied into come from. `None` is a
-    /// desktop whose shm clients are blank, which startup says once.
+    /// Allocates the buffers shm frames are copied into. `None` leaves shm
+    /// clients blank; startup logs this once.
     gbm: Option<Gbm>,
 }
 
@@ -309,21 +244,20 @@ impl Gpu {
     }
 }
 
-/// Data threaded through the calloop event loop. The `Display` lives here (not
-/// inside the wayland source) so we can flush queued events after handling input
-/// that originated off the Wayland thread.
+/// State threaded through the calloop event loop.
+///
+/// Holds the `Display` (not the Wayland source) so events queued by input
+/// from other threads can be flushed.
 struct CalloopData {
     display: Display<DomicileCompositor>,
     state: DomicileCompositor,
 }
 
-/// Something the chrome asked us to do to a client — inject an input event,
-/// reconfigure its toplevel, or start one. Sent over a calloop channel so it is handled on
-/// the Wayland thread (where the seat and surfaces live).
+/// A chrome request that must run on the Wayland thread, where the seat and
+/// surfaces live.
 enum ClientRequest {
-    /// Every chrome has been told a theme: turn the windows once they have
-    /// captured. `chromes` names the ones that were told -- see
-    /// [`chrome_key`].
+    /// Every chrome in `chromes` was told `theme`. Switch the windows once
+    /// they have captured. See [`chrome_key`].
     TurnTheWindows {
         theme: Theme,
         chromes: Vec<usize>,
@@ -358,124 +292,102 @@ enum ClientRequest {
     },
     /// The chrome reported its `devicePixelRatio`.
     ///
-    /// Both halves of it, because they answer different questions. `scale` is
-    /// what the output advertises, which Wayland can only say as an integer —
-    /// see [`crate::scale::output_scale`]. `ratio` is the fraction it was
-    /// rounded from, and the compositor keeps it because the *engine* states
-    /// an `<app>`'s box in device pixels: converting one back into the logical
-    /// units a configure is in needs the ratio and not the rounding of it.
+    /// `scale` is the integer the output advertises (see
+    /// [`crate::scale::output_scale`]). `ratio` is the exact value, needed to
+    /// convert the engine's device-pixel `<app>` bounds to logical units.
     SetOutputScale {
         ratio: f64,
         scale: i32,
     },
-    /// The chrome's viewport changed; re-advertise the output at that size so
-    /// a client asking how big the screen is gets the window the user has.
+    /// The chrome's viewport changed. Re-advertise the output at that size.
     SetOutputSize {
         logical: (i32, i32),
     },
-    /// The chrome asked a client to close the window `app_id`.
-    ///
-    /// A request the client answers, so it goes to the Wayland thread where
-    /// its toplevel is rather than to the brain, which has nothing that ends a
-    /// client.
+    /// The chrome asked the client of `app_id` to close its window.
     CloseApp {
         app_id: String,
     },
-    /// The chrome asked for a program to be started on this desktop.
+    /// The chrome asked to start a program.
     ///
-    /// Here rather than started on the connection that read it, which is where
-    /// it used to be, because the lock is here: a spawn is the desktop acting
-    /// for whoever is at it, and a locked desk is one that does not. See
-    /// [`crate::lock::refused`].
+    /// Handled here because the lock state lives here, and a locked desktop
+    /// refuses spawns. See [`crate::lock::refused`].
     Spawn {
         command: Vec<String>,
     },
-    /// A chrome's page said `hello`. Whatever it is, it holds no pixels yet.
+    /// A chrome's page said `hello`. It holds no pixels yet.
     ///
-    /// `served_by` is the process on the other end of the connection the hello
-    /// came in on, as the kernel stamped it — the browser process, because the
-    /// fork's `ControlChannel` lives there. It is how this compositor tells a
-    /// page its own engine reloaded from a page a NEW engine is serving, which
-    /// is the only notice it gets that the engine was replaced. See
+    /// `served_by` is the peer process of the connection, which is the browser
+    /// process. A new pid means the engine was replaced, not just reloaded. See
     /// [`crate::which_engine`].
     ChromeHello {
         served_by: Option<i32>,
     },
-    /// A client handed over what it had copied, read off the pipe it was given.
+    /// A client's copied text, read from its pipe.
     ///
-    /// Comes from the thread that did the reading rather than from a chrome —
-    /// the one variant here that does — because a client's write is a
-    /// stranger's work on a deadline and nothing on the Wayland thread may
-    /// wait for it. See [`DomicileCompositor::read_what_was_copied`].
+    /// Sent by the reader thread, not a chrome, because a client may write
+    /// slowly and the Wayland thread must not wait. See
+    /// [`DomicileCompositor::read_what_was_copied`].
     ClipboardCopied {
         clipboard: Clipboard,
         text: String,
     },
-    /// The shell picked something out of the clipboard's history; put it back
-    /// on the seat's clipboard.
+    /// The shell picked a clipboard history entry. Make it the seat's
+    /// selection.
     ///
-    /// The selection this sets is the compositor's own, which is what makes a
-    /// manager a manager: the entry outlives the client that first copied it,
-    /// so a terminal closed an hour ago is still something this can paste.
+    /// The compositor owns this selection, so the entry stays pasteable after
+    /// its original client exits.
     CopyClipboardEntry {
         entry: u32,
     },
-    /// The shell clicked a tray icon: call it on the item. Through this
-    /// thread rather than straight to the tray's worker so that a locked desk
-    /// refuses it, as it refuses a spawn — see [`crate::lock::refused`].
+    /// The shell clicked a tray icon. Routed through this thread so a locked
+    /// desktop can refuse it. See [`crate::lock::refused`].
     ActivateTrayItem {
         id: String,
         action: TrayAction,
     },
-    /// The shell cleared notifications: the server lets them go and tells
-    /// their applications. Through this thread for `ActivateTrayItem`'s
-    /// reason — a locked desk refuses it.
+    /// The shell dismissed notifications. Routed here so a locked desktop can
+    /// refuse it.
     DismissNotifications {
         ids: Vec<u32>,
     },
-    /// The shell pressed one of a notification's actions: the server tells
-    /// its application. Through this thread for the same reason.
+    /// The shell invoked a notification action. Routed here so a locked desktop
+    /// can refuse it.
     InvokeNotificationAction {
         id: u32,
         action: String,
     },
-    /// Somebody typed a passphrase at the shell's lock screen.
+    /// A passphrase typed at the lock screen.
     ///
-    /// Here rather than in the brain because the lock is the *seat's*: what
-    /// being locked means is that nothing this compositor is handed is put into
-    /// the seat, and the seat lives on this thread. See [`crate::lock`].
+    /// Handled here because locking blocks input to the seat, and the seat
+    /// lives on this thread. See [`crate::lock`].
     Unlock {
         passphrase: Passphrase,
     },
-    /// The shell asked for the desk to be locked now. See
-    /// [`DomicileCompositor::shut_the_desk`].
+    /// The shell asked to lock now. See [`DomicileCompositor::shut_the_desk`].
     Lock,
     /// Set the screen's backlight to a fraction 0.0 through 1.0.
     SetBrightness {
         level: f64,
     },
-    /// The shell's mixer asked the sound server for something: a volume, a
-    /// mute, a default, a port. Through this thread for `ActivateTrayItem`'s
-    /// reason — a locked desk refuses it.
+    /// A mixer request for the sound server. Routed here so a locked desktop
+    /// can refuse it.
     Audio {
         request: domicile_host::audio::Request,
     },
-    /// A chrome's mixer wants these ids metered — a lease it renews. Through
-    /// this thread for `Audio`'s reason: metering a microphone records it,
-    /// and a locked desk records nothing for anybody.
+    /// A chrome's mixer asked to meter these ids, as a renewable lease. Routed
+    /// here so a locked desktop can refuse it, since metering a microphone
+    /// records it.
     WatchAudioLevels {
         chrome: usize,
         ids: Vec<String>,
     },
 }
 
-/// Something a chrome asked that the connection it arrived on answers itself,
-/// off the Wayland thread, out of the desk rather than out of the brain.
+/// A chrome request answered on its own connection thread.
 ///
-/// The other half of [`ClientRequest`], for the lock's sake: what a locked desk
-/// refuses is one list over both — see [`crate::lock::Asked`]. Each is here
-/// rather than there because its answer must not wait for a frame; see
-/// [`answer_on_the_connection`].
+/// These answers must not wait for a frame on the Wayland thread. See
+/// [`answer_on_the_connection`]. The lock refuses requests from both this and
+/// [`ClientRequest`]; see [`crate::lock::Asked`].
 enum ConnectionRequest {
     SearchFiles { query: String },
     PreviewFile { path: String },
@@ -488,95 +400,69 @@ struct Chrome {
     writer: Arc<Mutex<UnixStream>>,
 }
 
-/// Shared between the Wayland thread (calloop) and the chrome-connection threads.
-///
-/// Holds the single [`Host`] brain both sides drive, the write-halves of
-/// connected chrome sockets (to broadcast app lifecycle), and senders to push
-/// forwarded input onto the Wayland thread and pixels onto the writer thread.
+/// State shared by the Wayland thread and the chrome connection threads.
 struct ChromeHub {
     host: Mutex<Host>,
     chromes: Mutex<Vec<Chrome>>,
     request_tx: Mutex<Sender<ClientRequest>>,
     outbound: OutboundSender,
     timings: Mutex<FrameTimings>,
-    /// The highest output scale to advertise, whatever the chrome reports.
+    /// The highest output scale to advertise.
     ///
-    /// Held here because it is the chrome connections that receive the density
-    /// and have to bound it — and atomic because a reload changes it. The
-    /// Wayland thread writes it while a connection thread reads it, and there
-    /// is nothing for the two to agree about beyond the number itself: a
-    /// density that crossed the wire before the edit landed is a density
-    /// reported against the cap that was live when it was sent.
+    /// Atomic because a config reload changes it on the Wayland thread while
+    /// connection threads read it.
     max_scale: AtomicU32,
-    /// The name of *our* Wayland socket, which is what a client we spawn must
-    /// connect to.
+    /// Our Wayland socket name, which spawned clients connect to.
     wayland_display: OsString,
-    /// What a launcher's search is answered from, as the indexing thread last
-    /// worked it out.
+    /// The latest file index snapshot, for answering `search_files`.
     ///
-    /// **Here rather than on the Wayland thread because this is what reads
-    /// it**: `search_files` is answered on the connection it arrived on, and
-    /// the answer must not wait for a disk or for a compositor mid-frame. The
-    /// index itself never leaves the indexing thread — see
-    /// [`crate::file_indexing`] — so what is behind this lock is a value that
-    /// a connection takes a handle on and lets go of, searching after the
-    /// lock is released.
+    /// Lives here because connection threads answer searches without waiting
+    /// for the Wayland thread. Readers clone the `Arc` and search after
+    /// releasing the lock. See [`crate::file_indexing`].
     ///
-    /// `None` is a desktop with no index: no `HOME`, or a home directory that
-    /// could not be read. `search_files` then answers nothing at all, which is
-    /// what it has always done on a broken desktop — a launcher told "you have
-    /// no files" would draw that breakage as an ordinary empty home.
+    /// `None` means no index (no `HOME`, or it was unreadable). `search_files`
+    /// then answers nothing, so a launcher does not show a broken desktop as an
+    /// empty home.
     offered: Mutex<Option<Arc<Offered>>>,
-    /// The home `offered` is an index of, which is what a preview reads under.
-    /// Set once, before the indexing thread publishes anything.
+    /// The home directory `offered` indexes; previews read under it. Set once,
+    /// before the first index is published.
     home: OnceLock<std::path::PathBuf>,
-    /// Whether the desk is locked, for what a connection answers itself — see
-    /// [`answer_on_the_connection`]. The lock's own state, set once at startup
-    /// on a desk that can lock and never on one that cannot.
+    /// The lock state, for [`answer_on_the_connection`]. Set once at startup,
+    /// only if the desktop can lock.
     lock: OnceLock<Seen>,
-    /// What a launcher is offered: `applications`, as the config last said
-    /// it. Set at startup and on every reload that moves it, and read by every
-    /// connection that answers a search.
+    /// The `applications` config that launcher searches offer. Updated on
+    /// reload.
     applications: Mutex<ApplicationsConfig>,
-    /// The icons a launcher's applications are drawn with, found once each.
-    /// Behind a lock of its own because every connection answers searches.
+    /// Cached application icons for launcher results.
     app_icons: Mutex<AppIcons>,
-    /// The icons the bookmarks' sites name, found in the background.
+    /// Bookmark favicons, fetched in the background.
     favicons: favicons::Favicons,
-    /// How the desk's *clients* are told the theme, which is the other half of
-    /// broadcasting one.
+    /// Tells clients the theme.
     ///
-    /// Told by the Wayland thread's theme turnover rather than beside the
-    /// broadcast: the windows turn once every chrome has captured the frame
-    /// its wipe starts from. See [`crate::appearance`], which is also where
-    /// the answer to "what if there is no bus" is.
+    /// Driven by the Wayland thread's theme turnover, not the broadcast:
+    /// clients switch only after every chrome has captured its starting frame.
+    /// See [`crate::appearance`].
     appearance: Appearance,
-    /// Where a click on a tray icon goes: the watcher's worker, which calls
-    /// it on the item. Set once, just after the hub exists, because the
-    /// watcher publishes the tray *through* the hub — see [`crate::tray`].
-    /// Unset in the unit tests, which have no bus, and a click there is
-    /// nobody's.
+    /// The tray worker that activates items.
+    ///
+    /// Set once after the hub exists, because the tray publishes through the
+    /// hub. See [`crate::tray`]. Unset in unit tests, which have no bus.
     tray: OnceLock<tray::Tray>,
-    /// Where the shell's dismissals and presses of a notification go: the
-    /// server's worker, which tells the application. Set once, for `tray`'s
-    /// reason — see [`crate::notifications`].
+    /// The notification server's worker. Set once, like `tray`. See
+    /// [`crate::notifications`].
     notifications: OnceLock<notifications::NotificationServer>,
-    /// Where the shell's mixer asks the sound server: the runner of its
-    /// requests. Set once, for `tray`'s reason — see [`crate::audio`].
+    /// The sound server request runner. Set once, like `tray`. See
+    /// [`crate::audio`].
     audio: OnceLock<audio::AudioServer>,
-    /// The mixer's level meters, which the sound server's readings tell what
-    /// each id is metered off. Set once, for `tray`'s reason — see
-    /// [`crate::meters`].
+    /// The mixer's level meters. Set once, like `tray`. See [`crate::meters`].
     meters: OnceLock<meters::Meters>,
 }
 
 impl ChromeHub {
-    /// Take up `applications`: which desktop entries and bookmarks the next
-    /// search offers. Nothing is told — a launcher asks on every keystroke, so
-    /// the next one is answered under it.
+    /// Use `applications` for later launcher searches.
     ///
-    /// The icons of bookmarks it has not seen are looked for now, in the
-    /// background, so a search a moment later has them.
+    /// Nothing is broadcast: launchers query on every keystroke. Missing
+    /// bookmark favicons are fetched in the background.
     fn offer_the_applications(&self, applications: &ApplicationsConfig) {
         *self.applications.lock().unwrap() = applications.clone();
         self.favicons.look_for(
@@ -621,28 +507,21 @@ impl ChromeHub {
         (hub, outbound_rx)
     }
 
-    /// Take up a theme: remember it, tell every chrome, and start turning the
-    /// desk's windows.
+    /// Set the theme, tell every chrome, and start switching the windows.
     ///
-    /// **One function because there is one theme.** Two things change it — a
-    /// reload whose `theme` moved, and a click on the shell's toggle
-    /// arriving as [`ChromeMessage::SetTheme`] — and both have to do all of
-    /// this. The windows are not told here: they turn once every chrome told
-    /// has captured the frame its wipe starts from, which is the Wayland
-    /// thread's to wait for — see `domicile_host::theme_turnover`.
+    /// Both a config reload and [`ChromeMessage::SetTheme`] call this. Windows
+    /// switch later, once every chrome has captured its starting frame; see
+    /// `domicile_host::theme_turnover`.
     ///
-    /// Says nothing where nothing moved, which is the ordinary case rather
-    /// than the odd one: a config file is rewritten for all sorts of reasons,
-    /// and a restatement would run the theme wipe on every page on the desk
-    /// over a theme that did not change. See `Host::set_theme`.
+    /// Does nothing if the theme is unchanged, so rewriting the config does not
+    /// replay the theme transition. See `Host::set_theme`.
     fn take_up_the_theme(&self, theme: Theme) {
         let told = self.host.lock().unwrap().set_theme(theme);
         if let Some(message) = told {
             self.broadcast(message);
-            // Read after the broadcast, so a chrome that joins between the two
-            // is waited on for a theme it was told in its handshake instead of
-            // one it will never capture for -- which costs a deadline, and
-            // nothing worse.
+            // Read after the broadcast. A chrome that joins in between is then
+            // waited on for a theme it already got in its handshake, which at
+            // worst costs a deadline.
             let chromes = self
                 .chromes
                 .lock()
@@ -654,11 +533,9 @@ impl ChromeHub {
         }
     }
 
-    /// Whether the desk is locked, asked from a chrome connection.
+    /// Whether the desktop is locked, for chrome connection threads.
     ///
-    /// A desk that cannot lock is not locked, the reading
-    /// `DomicileCompositor::the_desk_is_locked` gives `None` on the Wayland
-    /// thread.
+    /// A desktop that cannot lock is never locked.
     fn the_desk_is_locked(&self) -> bool {
         self.lock.get().is_some_and(Seen::locked)
     }
@@ -674,16 +551,10 @@ impl ChromeHub {
     }
 }
 
-/// Apply a focus decision the *compositor* made, and tell every chrome.
+/// Apply a focus change made by the compositor and tell every chrome.
 ///
-/// Broadcast rather than sent to one page: focus is the desktop's, and
-/// [`Host::focus_change`] reports a change *once*, so a chrome that was not
-/// told has missed it for good — it would go on marking the wrong window
-/// active until some other page happened to connect.
-///
-/// A free function taking the hub, like [`announce_open_apps`], because the
-/// alternative is wiring only a running compositor can reach — and this is
-/// the wiring the whole change is about.
+/// Broadcast because [`Host::focus_change`] reports each change once, and a
+/// chrome that misses it shows the wrong window as active.
 fn broadcast_focus_decision(hub: &ChromeHub, decision: ChromeMessage) {
     let moved = {
         let mut host = hub.host.lock().unwrap();
@@ -696,18 +567,12 @@ fn broadcast_focus_decision(hub: &ChromeHub, decision: ChromeMessage) {
     }
 }
 
-/// Tell every chrome that a client asked for the keyboard, and move nothing.
+/// Tell every chrome that a client asked for keyboard focus, without granting
+/// it.
 ///
-/// The asymmetry with [`broadcast_focus_decision`] is the whole point: that
-/// one applies a decision and reports where the seat went, this one reports a
-/// question and leaves the seat alone. What answers it is a shell sending
-/// `focus_app` back, or no shell answering at all — which is the desktop where
-/// a window cannot interrupt what its user is typing into, and a policy no
-/// shell could have written while the compositor granted these itself.
-///
-/// Broadcast for [`broadcast_focus_decision`]'s reason: a request reaches the
-/// chrome that is showing the desktop, and the compositor does not know which
-/// of the connected pages that is.
+/// A shell grants it by sending `focus_app` back. A shell can refuse, so
+/// windows cannot steal focus from what the user is typing in. Broadcast
+/// because the compositor does not know which chrome shows the desktop.
 fn broadcast_focus_request(hub: &ChromeHub, app_id: &str) {
     let asked = hub.host.lock().unwrap().focus_requested(app_id);
     if let Some(message) = asked {
@@ -715,24 +580,16 @@ fn broadcast_focus_request(hub: &ChromeHub, app_id: &str) {
     }
 }
 
-/// Forget a client that went away, and tell every chrome what that changed.
+/// Forget a closed client and tell every chrome.
 ///
-/// Two things, in this order: that the app is gone, and — if it was the one
-/// being typed into — that the keyboard came back. A chrome told only the
-/// first would go on marking a window that no longer exists as active.
-///
-/// The order is also what lets a shell get in front of the second. Handing the
-/// keyboard to the chrome is a fallback rather than a decision — the shell
-/// usually asks for it back, but it does not have to, and a client that
-/// crashed never got the chance — so a shell that would rather move to the
-/// next window has already been told which window went by the time the
-/// fallback arrives, and its answer is the last word.
+/// Sends the close first, then any focus change it caused. The fallback hands
+/// focus to the chrome, so a shell that wants to focus another window can
+/// answer after it and have the last word.
 fn broadcast_closed(hub: &ChromeHub, app_id: &str) {
     let (closed, focus) = {
         let mut host = hub.host.lock().unwrap();
         let closed = host.app_closed(app_id);
-        // Asked after the close, because the window going away is what hands
-        // the keyboard back.
+        // After the close, because closing the focused window moves focus.
         (closed, host.focus_change())
     };
     for message in closed.into_iter().chain(focus) {
@@ -740,23 +597,14 @@ fn broadcast_closed(hub: &ChromeHub, app_id: &str) {
     }
 }
 
-/// Tell every connected chrome what is already running.
+/// Tell every chrome which apps are already open.
 ///
-/// `app_appeared` goes out once, when the client maps, and a page that was not
-/// listening then never hears it — there is nothing to ask and nothing that
-/// repeats. That loses a live, drawing client its window for good, and it
-/// happens two ways: a client that maps in the milliseconds between the page's
-/// handshake and its first React commit, and every reload.
+/// `app_appeared` is sent once, so a page that loads or reloads after a client
+/// maps would never learn of it. Broadcast because shells ignore apps they
+/// already know.
 ///
-/// Broadcast rather than sent to the one page that asked. The writer is
-/// reachable from the `hello` arm, but a chrome that already holds the window
-/// ignores a second announcement — the shell keys its windows by app id — so
-/// singling one out buys nothing and would need the hub to grow a
-/// send-to-one path.
-///
-/// A free function, and the guard is dropped before the first broadcast:
-/// holding `host` across a loop that writes to `outbound` puts a lock the
-/// Wayland thread needs underneath a queue a chrome could be slow to drain.
+/// Releases the `host` lock before broadcasting, so a slow chrome cannot block
+/// the Wayland thread.
 fn announce_open_apps(hub: &ChromeHub) {
     let announcements = hub.host.lock().unwrap().open_apps();
     for announcement in announcements {
@@ -764,34 +612,21 @@ fn announce_open_apps(hub: &ChromeHub) {
     }
 }
 
-/// Writes one message's answers to the connection that asked, in order.
+/// Write a message's responses to the connection that asked, in order.
 ///
-/// False if the socket is gone, which ends the connection.
-///
-/// A function rather than a loop inside `read_chrome_messages` so that the
-/// [`freshened`] call has a seam: the answers and the desktop they were built
-/// against are handed in separately here, which *is* the interleaving, with no
-/// threads and no timing.
+/// Returns false if the socket is gone, which ends the connection. Separate
+/// from `read_chrome_messages` so tests can exercise [`freshened`] directly.
 fn write_responses(
     hub: &ChromeHub,
     writer: &Arc<Mutex<UnixStream>>,
     responses: Vec<HostMessage>,
 ) -> bool {
-    // Before the lock, and not a fast path for its own sake. This runs at the
-    // end of *every* iteration of the read loop, and the whole high-volume
-    // input path — `Key`, `PointerMotion`, `PointerButton`, `PointerAxis`,
-    // `CloseApp` — answers with nothing. Taking the writer lock to write zero
-    // bytes parks the reader behind `serve_outbound`, which is blocked in
-    // `write_all` to a chrome that is not reading; the compositor then stops
-    // reading *that chrome* and everything it says afterward is dropped on
-    // the floor. A chrome that only says things is the ordinary case, so this
-    // was the ordinary case too.
-    //
-    // Guarded by `an_answer_with_nothing_in_it_does_not_wait_for_the_writer`
-    // below, which says the invariant directly. `tests/stuck_keys.rs` also
-    // fails without this, twelve runs of twelve — that is the evidence the bug
-    // was real rather than the guard, since it needs a socket to fill up under
-    // parallel load to say so.
+    // Return before taking the writer lock. Most input messages have no
+    // response, and taking the lock would block this reader behind
+    // `serve_outbound` when a chrome is not reading. The compositor would then
+    // drop everything that chrome sends. Tested by
+    // `an_answer_with_nothing_in_it_does_not_wait_for_the_writer` and
+    // `tests/stuck_keys.rs`.
     if responses.is_empty() {
         return true;
     }
@@ -806,44 +641,29 @@ fn write_responses(
     true
 }
 
-/// The desktop as it is *now*, for a `displays` about to go on the wire.
+/// Replace a `displays` response with the current desktop.
 ///
-/// `responses` is built under the `host` lock and written later under the
-/// writer lock, and `set_output` can land in between: it describes a new
-/// desktop and broadcasts it, and the broadcast goes out on the writer thread.
-/// Writing the handshake's own copy afterward would put the desktop that is
-/// gone last on the socket, where latest-wins leaves it — and on a desktop
-/// nobody is resizing again there is no next message to correct it.
+/// Responses are built under the `host` lock and written later. If `set_output`
+/// broadcasts a new desktop in between, the stale handshake copy would arrive
+/// last and nothing would correct it.
 ///
-/// What makes the last `displays` on a socket the last one described is not
-/// this function alone. It is that [`DomicileCompositor::set_output`] describes
-/// and then broadcasts *that* desktop, on the one Wayland thread, into a queue
-/// one writer thread drains in order — so a line carrying a desktop that has
-/// since been replaced always has the newer one queued behind it. A broadcast
-/// is serialized before the writer lock is taken, so the writer lock is not
-/// what orders those; the FIFO is.
+/// Broadcasts are ordered by the outbound queue:
+/// [`DomicileCompositor::set_output`] describes and broadcasts on the Wayland
+/// thread, so a stale `displays` always has a newer one queued behind it. This
+/// function covers the one gap, a response written by another thread. Every
+/// describe must be followed by a broadcast; the startup describe in `main` is
+/// the only exception, and it runs before any connection thread exists.
 ///
-/// Re-reading here closes the one case the FIFO does not: the answer, written
-/// by a different thread, landing last with nothing queued after it.
-///
-/// That leaves a describe without a broadcast as the way to break this, and
-/// there is one — the startup describe in `main`, safe only because no socket
-/// thread exists yet. A second would reintroduce exactly the bug this closes.
-///
-/// Any other message passes through: this is the only one whose content is a
-/// fact about the world rather than an answer to what was asked.
+/// Other messages pass through unchanged.
 fn freshened(hub: &ChromeHub, message: HostMessage) -> HostMessage {
     if !matches!(message, HostMessage::Displays { .. }) {
         return message;
     }
     let fresh = hub.host.lock().unwrap().describe_desktop();
-    // Said out loud because a chrome that lays its windows out on a screen
-    // draws nothing at all until it has been given one, and "the page was told
-    // about a client and embedded nothing" reads identically whether the page
-    // ignored the host or simply had nowhere to put a window. This side is the
-    // only one that can tell those apart, and a guard that cannot blames the
-    // wrong end. The count is in the text so a reader — and `guard-shell.sh` —
-    // can tell an empty desktop from a described one.
+    // Logged because a chrome draws no windows until it knows the displays, and
+    // only this side can tell that apart from a chrome ignoring the host. The
+    // count lets readers, including `guard-shell.sh`, tell an empty desktop
+    // from a described one.
     let HostMessage::Displays { displays } = fresh else {
         unreachable!("describe_desktop returns Displays and nothing else");
     };
@@ -851,26 +671,21 @@ fn freshened(hub: &ChromeHub, message: HostMessage) -> HostMessage {
     HostMessage::Displays { displays }
 }
 
-/// Encode and write everything bound for the chrome, off the Wayland thread.
+/// Write everything bound for the chromes, off the Wayland thread.
 ///
-/// This is the only place that blocks on a chrome socket. Before it existed a
-/// slow chrome blocked `commit()`, which stopped frame callbacks, which stopped
-/// every client on the compositor.
+/// The only place that blocks on a chrome socket, so a slow chrome cannot stall
+/// `commit()` and every client with it.
 fn serve_outbound(hub: Arc<ChromeHub>, outbound: OutboundReceiver) {
     let mut window = FrameWindow::default();
-    // On a timeout as well as on traffic: the report is on a schedule, and the
-    // compositing path produces no outbound items at all — waiting for one
-    // would leave it silent however hard it was working.
+    // Wake on a timeout too: compositing sends nothing outbound, so the report
+    // would otherwise never run.
     while let Some(next) = outbound.recv_until(REPORT_EVERY) {
         let Some(item) = next else {
             report(&mut window, &hub);
             continue;
         };
-        // Every item is one line now. Pixels used to follow a frame's header
-        // as raw bytes; a client's buffer goes to the display compositor
-        // instead and nothing on this socket is larger than its JSON.
         let Outbound::Message(message) = item;
-        // Encoded once for everyone: every chrome gets the same thing.
+        // Encoded once; every chrome gets the same line.
         let line = to_line(&message);
         let mut chromes = hub.chromes.lock().unwrap();
         chromes.retain(|chrome| {
@@ -907,47 +722,34 @@ fn report(window: &mut FrameWindow, hub: &Arc<ChromeHub>) {
     );
 }
 
-/// The Wayland thread's half of the frame path, recorded there and read by the
-/// writer thread when it reports.
+/// Frame timings recorded on the Wayland thread, reported by the writer thread.
 ///
-/// The writer thread already knows its own half — how many frames it sent and
-/// how long the socket took — and that half alone cannot say why the rate is
-/// what it is. A compositor spending every millisecond handling commits and
-/// one sitting idle between a client's commits look identical from there.
+/// Shows whether a low frame rate comes from the compositor working or from
+/// waiting on clients.
 #[derive(Default)]
 struct FrameTimings {
     /// Time handling one commit end to end, on the Wayland thread.
     commit: TimingWindow,
-    /// Time between one commit finishing and the next arriving: the client's
-    /// half, and the throttle's. Large here means we are waiting, not working.
+    /// Time between one commit finishing and the next arriving. Large means we
+    /// are waiting on the client or the throttle.
     idle: TimingWindow,
-    /// Time from injecting a keystroke into a client to that client's next
-    /// commit — the client's own think-and-redraw, isolated.
+    /// Time from injecting a keystroke into a client to its next commit.
     ///
-    /// This is the piece the chrome's round trip cannot separate: subtract
-    /// this and the stages either side of it from `rt_ms` and what remains is
-    /// how long the keystroke took to *reach* the client, which is entirely
-    /// ours. Measured the same way as the chrome's, from the oldest keystroke
-    /// still unanswered, so the two numbers compare.
+    /// Subtract this from the chrome's `rt_ms` to get the time a keystroke
+    /// takes to reach the client. Measured from the oldest unanswered
+    /// keystroke, as the chrome does, so the two compare.
     response: TimingWindow,
-    /// The drawing: the scene read, the hand-over and the draw calls, stopping
-    /// before the submit. Not the client-buffer import, which is on the commit
-    /// path — the only import inside this is the hand-over's.
+    /// Drawing time, up to but not including the submit. Excludes the
+    /// client-buffer import, which is on the commit path.
     composite: TimingWindow,
-    /// The submit alone. What the two mean and how to read them together is
-    /// the legend in `docs/DEVELOPING.md`; `record_present` is what keeps them
-    /// apart.
+    /// The submit alone. See `docs/COMPOSITOR-DEBUGGING.md` for reading it with
+    /// `composite`.
     submit: TimingWindow,
-    /// How many of them there were.
+    /// Frames composited in this window.
     composited: usize,
 }
 
 /// When the writer thread last reported.
-///
-/// It used to carry a half of the numbers as well — frames sent, bytes
-/// written, time in the sockets — because the frame path ran through it. No
-/// pixels cross that socket now, so what it knows is the schedule and
-/// [`FrameTimings`] has the rest.
 #[derive(Default)]
 struct FrameWindow {
     since: Option<Instant>,
@@ -962,9 +764,7 @@ struct FrameReport {
     idle_ms: u32,
     response_ms: u32,
     response_worst_ms: u32,
-    /// Importing a client's buffer and drawing every layer, up to but not
-    /// including the submit — see `submit_ms`, and the legend in
-    /// `docs/DEVELOPING.md` for how to read the two together.
+    /// Drawing time, excluding the submit. See `docs/COMPOSITOR-DEBUGGING.md`.
     composite_ms: u32,
     composite_worst_ms: u32,
     /// The submit, which on a nested window blocks for a frame callback.
@@ -972,31 +772,20 @@ struct FrameReport {
     submit_worst_ms: u32,
 }
 
-/// How often the battery is read when nothing has said it changed.
+/// How often the battery is read without a change event.
 ///
-/// A BACKSTOP RATHER THAN THE MECHANISM, which is the whole difference from
-/// the ten-second poll this replaced. The kernel announces a charge that moves
-/// — see `uevents.rs` — so a lead going in reaches the bar in the time it
-/// takes to read four small files. What this covers is a driver that does not
-/// call `power_supply_changed()` on every capacity step, which some do not:
-/// without it the figure on the bar could sit still for an afternoon while the
-/// battery drained under it. Two minutes because a percent takes minutes to
-/// move even on a machine running flat, so anything shorter would be the poll
-/// again under another name.
+/// A fallback: the kernel announces charge changes (see `uevents.rs`), but some
+/// drivers skip capacity steps. A percent takes minutes to move, so polling
+/// faster gains nothing.
 const BATTERY_BACKSTOP: Duration = Duration::from_secs(120);
 
-/// How many of what a search matched are sent back.
-///
-/// A panel's worth and then some: nobody reads the two-hundred-and-first row
-/// of a launcher, they type another letter, and `matched` still says how many
-/// there were in all.
+/// Maximum file search results sent. `matched` still reports the full count.
 const FOUND: usize = 200;
 
-/// The desk's bookmarks a search matched, as a launcher is told them.
+/// Bookmarks matching `query`, with any known favicons.
 ///
-/// Each with the icon its site was found to name, if it has been. One whose
-/// site had none, or did not answer, is asked again now if it is due — see
-/// [`favicons::Favicons::look_for`] — and has it on a later search.
+/// Missing favicons are fetched in the background for a later search. See
+/// [`favicons::Favicons::look_for`].
 fn offered_bookmarks(
     bookmarks: &[domicile_config::Bookmark],
     favicons: &favicons::Favicons,
@@ -1011,7 +800,7 @@ fn offered_bookmarks(
         })
         .collect();
     favicons.look_for(bookmarks.iter().map(|bookmark| bookmark.url.clone()));
-    // Matched first, so only what is sent is given its icon.
+    // Match first, so only sent results get icons.
     find_bookmarks(&bookmarks, query, FOUND_APPS)
         .into_iter()
         .map(|bookmark| Bookmark {
@@ -1021,12 +810,11 @@ fn offered_bookmarks(
         .collect()
 }
 
-/// How many applications a search sends. Fewer than files, because each
-/// carries its icon and every one of them crosses on every keystroke.
+/// Maximum application search results sent. Lower than [`FOUND`] because each
+/// result carries an icon.
 const FOUND_APPS: usize = 50;
 
-/// How often the writer thread reports. Long enough that the line is not noise,
-/// short enough to watch while typing.
+/// How often the writer thread reports frame timings.
 const REPORT_EVERY: Duration = Duration::from_secs(5);
 
 impl FrameWindow {
@@ -1037,12 +825,11 @@ impl FrameWindow {
             None
         } else {
             let mut timings = hub.timings.lock().unwrap();
-            // Nothing to say when nothing is being composited; an idle desktop
-            // should not fill the log.
+            // Stay quiet when nothing was composited, so an idle desktop does
+            // not fill the log.
             let composited = std::mem::take(&mut timings.composited);
             let report = (composited > 0).then(|| {
-                // A path that recorded nothing reads as zero: "did not run" and
-                // "took no time" are the same claim in a log line.
+                // A stage that recorded nothing reports zero.
                 let (commit, idle, response, composite) = (
                     timings.commit.take().unwrap_or_default(),
                     timings.idle.take().unwrap_or_default(),
@@ -1072,28 +859,11 @@ impl FrameWindow {
     }
 }
 
-/// Serve the chrome protocol on a Unix socket: one thread per connection, all
-/// sharing the same [`Host`] via the hub. Runs on its own thread so it never
-/// blocks the Wayland event loop.
 /// Bind the chrome protocol socket.
 ///
-/// Separate from serving it, and called on the main thread, because that is
-/// what makes a failed bind fatal. The race it was originally moved here to
-/// close — a shell this compositor started arriving before the listener
-/// existed — cannot happen any more: the shell picks this path itself and does
-/// not start its chrome until the session is published, which is the last
-/// thing `main` does.
-///
-/// Being here is what made it fatal, which it was not when it lived in the
-/// thread — a failed bind used to log and leave the thread, and the compositor
-/// carried on with no socket for any chrome to arrive on. That is the right way
-/// round: the chrome protocol is not an optional extra.
-///
-/// The path is carried in the error rather than only in the success line. It is
-/// what the commonest failure is *about* — `sun_path` caps a Unix socket near
-/// 108 bytes, so a deep `XDG_RUNTIME_DIR` fails here and nowhere else — and
-/// this error propagates out of `main`, where a bare `Os { code: 2 }` names
-/// nothing at all.
+/// Called on the main thread so a failed bind is fatal: the chrome protocol is
+/// required. The error names the path because the common failure is a deep
+/// `XDG_RUNTIME_DIR` exceeding the ~108-byte `sun_path` limit.
 fn bind_chrome_socket(path: &std::path::Path) -> Result<UnixListener, Box<dyn std::error::Error>> {
     let _ = std::fs::remove_file(path);
     let listener = UnixListener::bind(path).map_err(|err| {
@@ -1106,16 +876,15 @@ fn bind_chrome_socket(path: &std::path::Path) -> Result<UnixListener, Box<dyn st
     Ok(listener)
 }
 
+/// Accept chrome connections, one thread each, all sharing the hub's [`Host`].
 fn serve_chrome(hub: Arc<ChromeHub>, listener: UnixListener, handshake: Arc<Handshake>) {
     for stream in listener.incoming().flatten() {
         let writer = Arc::new(Mutex::new(match stream.try_clone() {
             Ok(w) => w,
             Err(_) => continue,
         }));
-        // Connected, but not yet a broadcast target: what arrives on this
-        // socket next is a `hello` naming a protocol version, and until that
-        // is agreed there is no version to write to it in. `read_chrome_messages`
-        // adds it once there is.
+        // Not a broadcast target until its `hello` agrees a protocol version.
+        // `read_chrome_messages` adds it then.
         debug!("chrome client connected");
         handshake.connected();
         let hub = hub.clone();
@@ -1124,14 +893,11 @@ fn serve_chrome(hub: Arc<ChromeHub>, listener: UnixListener, handshake: Arc<Hand
     }
 }
 
-/// One chrome connection, from accept to EOF, and then forgotten.
+/// Serve one chrome connection until EOF, then drop its writer.
 ///
-/// Forgetting it here rather than leaving it to the next failed broadcast:
-/// `chromes` is only pruned when a write to a dead socket fails, and on an
-/// idle desktop there is no write. A shell whose page reloads opens a new
-/// connection each time, so without this the list grows one dead writer per
-/// reload — every one of them held open, and counted in the `chromes=` field
-/// of the frame line.
+/// Dead writers are otherwise pruned only by a failed broadcast, which an idle
+/// desktop never sends. Each page reload opens a new connection, so they would
+/// accumulate.
 fn chrome_connection(
     hub: Arc<ChromeHub>,
     stream: UnixStream,
@@ -1152,69 +918,42 @@ fn read_chrome_messages(
     writer: &Arc<Mutex<UnixStream>>,
     handshake: &Arc<Handshake>,
 ) {
-    // BEFORE THE STREAM GOES INTO THE READER, which takes it. Read once per
-    // connection rather than per hello: `SO_PEERCRED` is stamped at
-    // `connect(2)` and cannot change under a connection, and the answer is
-    // what says whether a later hello is a new engine's — see
+    // Read before the reader takes the stream. `SO_PEERCRED` is fixed at
+    // `connect(2)`, so once per connection is enough. See
     // [`crate::which_engine`].
     let served_by = peer_pid(&stream);
     let reader = BufReader::new(stream);
     let mut ready = false;
-    // Whether this connection is in the hub's broadcast list. Separate from
-    // `ready` only because a `hello` can arrive twice on one socket, and the
-    // list must not gain a second copy of the same writer.
+    // Whether this connection is in the broadcast list. Separate from `ready`
+    // because a socket can send `hello` twice, and the writer must not be added
+    // twice.
     let mut joined = false;
     for line in reader.lines() {
         let Ok(line) = line else { break };
         let said = parse_chrome(line.trim());
-        // EVERY FRAME VERBATIM, EXCEPT THE ONE THAT CARRIES A SECRET. This line
-        // is what makes a drift between the two halves of the protocol readable
-        // — the bytes a page actually sent, beside the `Err` arm below that says
-        // what became of them — and it is also the line that would put this
-        // desk's passphrase in the journal. So an `unlock` is logged as the
-        // parsed message instead, whose `Debug` redacts the field by
-        // construction (`domicile_protocol::Passphrase`), and every other
-        // message keeps its bytes.
+        // Log every frame verbatim, except `unlock`, which carries the
+        // passphrase. That one is logged parsed, and its `Debug` redacts the
+        // passphrase (`domicile_protocol::Passphrase`).
         //
-        // Parsed first for that reason alone. A frame that does not parse is
-        // still logged verbatim, which is the one gap and a narrow one: serde
-        // ignores fields it does not know, so a passphrase reaches that arm only
-        // in a frame that misspelled `unlock` itself or sent something that is
-        // not a string.
+        // A frame that fails to parse is still logged verbatim. A passphrase
+        // only reaches that path if `unlock` itself is misspelled or malformed.
         if matches!(said, Ok(ChromeMessage::Unlock { .. })) {
             tracing::trace!("chrome -> host chrome_msg=an unlock, whose passphrase is not printed");
         } else {
             tracing::trace!(chrome_msg = %line.trim(), "chrome -> host");
         }
         let responses = match said {
-            // Compositor-level side effects: intercept before the (pure) brain.
-            // Compositor-level, before the brain: a claim on the keyboard is
-            // the compositor's to keep, since it is the only thing that sees a
-            // key before its client does.
-            // A page that has just started has no canvas for anything, and
-            // the canvases belong to the *page* rather than to this socket.
-            // `hello` is the one message that says a page has started — it is
-            // sent by the page's own bundle, so it arrives again after a
-            // reload or a crash-and-recreate whatever the socket did — so it
-            // is what the record of what the chrome holds is cleared on. A
-            // stale entry is a window drawn as a patch onto a blank canvas,
-            // and for a client that then goes idle, a hole that stays until it
-            // is resized.
+            // `hello` means a page started (including after a reload or crash),
+            // so it resets what the compositor records the chrome as holding. A
+            // stale record would leave a hole in the page where an idle
+            // client's window should be.
             Ok(ChromeMessage::Hello { protocol_version }) => {
-                // Scoped so the `host` guard is dropped before `chromes` is
-                // taken below, and that is a deadlock and not a tidiness
-                // preference: `serve_outbound` takes `chromes` then a
-                // `writer`, and `write_responses` takes a `writer` then
-                // `host`, through `freshened`. Widening this block over the
-                // join — the obvious "why is this scoped?" simplification —
-                // closes that into `host` -> `chromes` -> `writer` -> `host`.
-                // Three threads, so it takes two chromes: this one's reader,
-                // `serve_outbound`, and a second connection's reader sitting
-                // in `write_responses`. Nothing drives that interleaving
-                // deterministically. The scoping is what prevents it, not a
-                // check — which is why widening it has to stay a deliberate
-                // decision rather than a tidy-up.
-                // The same holds for the `chromes` lock in the `else` arm.
+                // Scoped so the `host` guard drops before `chromes` is locked
+                // below. Otherwise this can deadlock: `serve_outbound` locks
+                // `chromes` then a `writer`, and `write_responses` locks a
+                // `writer` then `host` (via `freshened`). Needs two chromes to
+                // trigger, so no test catches it. The same applies to the
+                // `chromes` lock in the `else` arm.
                 let responses = {
                     let mut host = hub.host.lock().unwrap();
                     apply_chrome_message(
@@ -1224,19 +963,12 @@ fn read_chrome_messages(
                     )
                 };
                 if ready {
-                    // The one moment that says this compositor has a desktop
-                    // rather than a socket: a page connected and agreed the
-                    // protocol. Counted so that the thread watching for the
-                    // absence of this can tell "no page came" from "a page
-                    // came and we refused its version".
+                    // Counted so the handshake watchdog can tell "no page came"
+                    // from "a page came and its version was refused".
                     handshake.agreed();
-                    // Joined here rather than at accept. A broadcast is
-                    // written in *this* build's protocol, so sending one to a
-                    // page that has not said it speaks that is a guess — and
-                    // sending one to a page that has just been told it does
-                    // not is worse. A refused chrome gets its `welcome`
-                    // naming the disagreement, on its own socket, and nothing
-                    // else.
+                    // Join only after the version is agreed: broadcasts use
+                    // this build's protocol. A refused chrome gets only its
+                    // `welcome`.
                     if !joined {
                         hub.chromes.lock().unwrap().push(Chrome {
                             writer: writer.clone(),
@@ -1244,30 +976,17 @@ fn read_chrome_messages(
                         joined = true;
                         debug!("chrome agreed the protocol; it now gets the desktop");
                     }
-                    // *Then* the announcement, in that order: this is what has
-                    // the Wayland thread describe the windows already open,
-                    // and it describes them by broadcast — so a chrome not yet
-                    // in the list would miss exactly the windows it connected
-                    // too late to see map.
-                    //
-                    // Measured, with the caveat that matters: swapping these
-                    // two makes
+                    // Announce after joining. The Wayland thread announces open
+                    // windows by broadcast, so a chrome not yet in the list
+                    // would miss them. Tested by
                     // `a_chrome_that_connects_late_is_told_about_a_window_already_open`
-                    // (`tests/apps.rs`) fail — but only once a delay is
-                    // inserted between them to widen the window. The
-                    // unmodified swap still passed 3 runs of
-                    // 3. So a reader who swaps them, sees green and concludes
-                    // this comment is stale has reproduced nothing; the race
-                    // is narrow, not absent.
+                    // in `tests/apps.rs`, though the race is narrow and the
+                    // test needs an added delay to catch a swap.
                     hub.send_request(ClientRequest::ChromeHello { served_by });
                 } else if joined {
-                    // Taken back out. This connection agreed a version earlier
-                    // and has now named one this build cannot speak, so it has
-                    // stopped being a peer — and a list that only ever grew
-                    // would go on writing this build's protocol to it, which
-                    // is the whole thing this arm exists to prevent. The same
-                    // `retain` `chrome_connection` uses on disconnect, so a
-                    // later good `hello` re-joins it without duplicating.
+                    // This connection agreed a version earlier and has now
+                    // named one this build cannot speak. Stop broadcasting to
+                    // it. A later good `hello` rejoins it.
                     hub.chromes
                         .lock()
                         .unwrap()
@@ -1279,8 +998,7 @@ fn read_chrome_messages(
                 }
                 responses
             }
-            // To the Wayland thread, where the lock is, rather than started
-            // here: a locked desk starts nothing a shell asks for.
+            // Sent to the Wayland thread so a locked desktop can refuse it.
             Ok(ChromeMessage::Spawn { command }) => {
                 hub.send_request(ClientRequest::Spawn { command });
                 Vec::new()
@@ -1288,9 +1006,8 @@ fn read_chrome_messages(
             Ok(ChromeMessage::SetTheme { theme }) => {
                 answer_on_the_connection(hub, ConnectionRequest::SetTheme { theme })
             }
-            // Handed to the Wayland thread, which holds the turnover: that is
-            // where the windows are, and where the timer that stops a chrome
-            // that never captures from holding them runs.
+            // The Wayland thread runs the theme turnover and its deadline
+            // timer.
             Ok(ChromeMessage::ThemeCaptured { theme }) => {
                 hub.send_request(ClientRequest::ThemeCaptured {
                     chrome: chrome_key(writer),
@@ -1298,24 +1015,21 @@ fn read_chrome_messages(
                 });
                 Vec::new()
             }
-            // Compositor-level, like the spawn above: the clipboard is the
-            // seat's and the history is the compositor's, so the brain has
-            // nothing to say about either. Answered with nothing — what a
-            // shell sees of this is the `clipboard` broadcast that the next
-            // copy produces, and the paste it can now make.
+            // Handled by the compositor, which owns the seat's clipboard and
+            // the history. No response; the shell sees the next `clipboard`
+            // broadcast.
             Ok(ChromeMessage::CopyClipboardEntry { entry }) => {
                 hub.send_request(ClientRequest::CopyClipboardEntry { entry });
                 Vec::new()
             }
-            // To the Wayland thread, where the lock is, like a spawn: a locked
-            // desk raises no application's window.
+            // Sent to the Wayland thread so a locked desktop can refuse it.
             Ok(ChromeMessage::ActivateTrayItem { id, action }) => {
                 hub.send_request(ClientRequest::ActivateTrayItem { id, action });
                 Vec::new()
             }
-            // To the Wayland thread too: a press on a notification is how an
-            // application's window is raised, and a locked desk raises none.
-            // What a shell sees of either is the next `notifications`.
+            // Sent to the Wayland thread so a locked desktop can refuse it,
+            // since an action can raise a window. The shell sees the result in
+            // the next `notifications`.
             Ok(ChromeMessage::DismissNotifications { ids }) => {
                 hub.send_request(ClientRequest::DismissNotifications { ids });
                 Vec::new()
@@ -1368,32 +1082,29 @@ fn read_chrome_messages(
                 hub.send_request(ClientRequest::Key { keycode, pressed });
                 Vec::new()
             }
-            // Answered with nothing on this socket, and that is not silence:
-            // what a correct passphrase produces is `locked: false` to every
-            // chrome, from the Wayland thread that holds the lock. A desk of
-            // three monitors is three of these connections and one lock, so a
-            // reply here would be the one page that believed its own
-            // keystrokes. A refusal is a line in the compositor's log, without
-            // the passphrase in it — see `crate::lock`.
+            // No response here. A correct passphrase broadcasts `locked: false`
+            // to every chrome from the Wayland thread, so all monitors unlock
+            // together. A refusal is logged without the passphrase; see
+            // `crate::lock`.
             Ok(ChromeMessage::Unlock { passphrase }) => {
                 hub.send_request(ClientRequest::Unlock { passphrase });
                 Vec::new()
             }
-            // To the Wayland thread, where the lock is, like an unlock; the
-            // answer is the same `locked` broadcast the idle edge sends.
+            // Handled on the Wayland thread, which holds the lock. The response
+            // is the `locked` broadcast.
             Ok(ChromeMessage::Lock) => {
                 hub.send_request(ClientRequest::Lock);
                 Vec::new()
             }
-            // To the Wayland thread, which reads the backlight it is setting;
-            // the answer is the `brightness` broadcast its uevent produces.
+            // Handled on the Wayland thread, which reads the backlight it sets.
+            // The response is the `brightness` broadcast from the resulting
+            // uevent.
             Ok(ChromeMessage::SetBrightness { level }) => {
                 hub.send_request(ClientRequest::SetBrightness { level });
                 Vec::new()
             }
-            // To the Wayland thread, where the lock is, like a tray click;
-            // the answer is the next `audio`, once the sound server says the
-            // thing moved.
+            // Sent to the Wayland thread so a locked desktop can refuse it. The
+            // response is the next `audio` broadcast.
             Ok(ChromeMessage::SetAudioVolume { id, volume }) => {
                 hub.send_request(ClientRequest::Audio {
                     request: AudioRequest::Volume { id, volume },
@@ -1437,9 +1148,8 @@ fn read_chrome_messages(
                 });
                 Vec::new()
             }
-            // Compositor-level: the chrome's pixel density is the output's
-            // scale, which is Wayland state rather than anything the brain
-            // models — the scene is described in logical units either way.
+            // The chrome's density sets the output scale, which is Wayland
+            // state, not something `Host` models.
             Ok(ChromeMessage::SetDevicePixelRatio { ratio }) => {
                 hub.send_request(ClientRequest::SetOutputScale {
                     ratio,
@@ -1447,35 +1157,16 @@ fn read_chrome_messages(
                 });
                 Vec::new()
             }
-            // THE DESKTOP IS THE CHROME'S WINDOW, and the compositor has no
-            // other way to learn its size: the window belongs to the browser
-            // and is never seen from here. Without this the desktop sits at the
-            // compositor's startup placeholder — a chrome laid out for 1280x800
-            // in the corner of whatever the user actually opened.
-            //
-            // Both this and the density above were guarded on `presenting`,
-            // for the case where the window was the compositor's own and the
-            // chrome would only be reporting back what it had been given.
-            // There is no such window any more.
+            // The desktop is the chrome's browser window, which the compositor
+            // cannot see. This message is its only source for the desktop size.
             Ok(ChromeMessage::SetDesktopSize { size }) => {
                 hub.send_request(ClientRequest::SetOutputSize {
                     logical: (size[0].round() as i32, size[1].round() as i32),
                 });
                 Vec::new()
             }
-            // THE BRAIN DECIDES AND THE SEAT FOLLOWS, in that order, and the
-            // disagreement it settled is gone rather than fixed. The seat
-            // looked for a *surface* and the scene for a *portal*, so a window
-            // that had mapped but that the page had not placed had the first
-            // and not the second: the keyboard went there while
-            // `keyboard_target` still named the chrome, and the page drew that
-            // window inactive while every key went into it.
-            //
-            // There is no placement now, so there is no second answer to
-            // disagree with. `Host` refuses an app it does not know and
-            // accepts every one it does, and the seat still follows what came
-            // back — which is what `ClientRequest::KeyboardFocus` wants, and
-            // is still the right shape if a second opinion ever returns.
+            // `Host` decides focus and the seat follows its answer, so the
+            // keyboard and the page always agree on the focused window.
             Ok(ChromeMessage::FocusApp { app_id }) => {
                 let (out, holder) = {
                     let mut host = hub.host.lock().unwrap();
@@ -1494,9 +1185,8 @@ fn read_chrome_messages(
                 hub.send_request(ClientRequest::KeyboardFocus { app_id: holder });
                 out
             }
-            // Compositor-level, and nothing the brain models: only the
-            // client's own toplevel can end it, and the window leaves the
-            // scene when it goes away and `app_closed` says so.
+            // Only the client's toplevel can close it. `app_closed` removes the
+            // window once it goes away.
             Ok(ChromeMessage::CloseApp { app_id }) => {
                 hub.send_request(ClientRequest::CloseApp { app_id });
                 Vec::new()
@@ -1506,43 +1196,25 @@ fn read_chrome_messages(
                 let mut host = hub.host.lock().unwrap();
                 apply_chrome_message(&mut host, &mut ready, ChromeMessage::FocusChrome)
             }
-            // No catch-all: every message is named above, so a new one is a
-            // compile error here rather than a silent trip to the brain that
-            // skips whatever compositor-level effect it also wanted.
+            // No catch-all, so a new message type is a compile error here.
             //
-            // A message that will not parse is dropped — there is nothing else
-            // to do with it, and a chrome one version out of step must not
-            // take the compositor down — but it is said out loud. Silently is
-            // how it was, and a chrome whose message the compositor could not
-            // read is indistinguishable from one that never sent it: the frame
-            // is logged above, before this, so the log shows the message
-            // arriving and nothing showing what became of it.
+            // An unparseable message is dropped, so a chrome one version out of
+            // step cannot crash the compositor, but it is logged.
             Err(err) => {
-                // The error names the field, which is what identifies the
-                // drift. The frame itself is *not* repeated here: it is
-                // already logged at debug a few lines up, and a `ChromeMessage`
-                // carries `Key`'s keycodes and `Spawn`'s argv — a chrome one
-                // version out of step is exactly when this fires, so at a level
-                // the default subscriber shows, that would put every forwarded
-                // keystroke in the log. It would also be one line per frame:
-                // `pointer_motion` drifting is 60 a second.
+                // Log the error, which names the field, but not the frame. The
+                // frame may hold keycodes or argv, and drifting
+                // `pointer_motion` would log 60 lines a second. The frame is
+                // already logged at trace above.
                 warn!(%err, "{}", grepped::UNPARSEABLE);
                 Vec::new()
             }
         };
-        // Whatever that message did, it may have moved the keyboard — a focus
-        // message obviously, a placement less so, since hiding the focused
-        // window's portal hands the keyboard back. Asked once here rather than
-        // per message type, because a list of "the messages that can move
-        // focus" is a list to keep in step with the protocol.
+        // Any message may have moved focus, so check once here instead of
+        // keeping a per-message list in sync with the protocol.
         //
-        // Broadcast, not returned: `responses` goes to the one connection that
-        // asked, and focus is the whole desktop's. `Host::focus_change`
-        // reports a change *once*, so a second chrome that was not told has
-        // missed it for good — it would mark the wrong window active until
-        // some other page happened to connect. The guard is dropped before the
-        // broadcast rather than held across it, since the Wayland thread wants
-        // that lock too.
+        // Broadcast, because focus belongs to the whole desktop and
+        // [`Host::focus_change`] reports each change once. Drop the guard
+        // before broadcasting; the Wayland thread needs the lock.
         let moved = hub.host.lock().unwrap().focus_change();
         if let Some(message) = moved {
             hub.broadcast(message);
@@ -1553,17 +1225,15 @@ fn read_chrome_messages(
     }
 }
 
-/// Answer what a chrome asked of its own connection, unless the desk is locked.
+/// Answer a connection request, unless the desktop is locked.
 ///
-/// **THE LOCK, ASKED WHERE THE ANSWER IS MADE.** These are answered here, off
-/// the Wayland thread, so that a search per keystroke never waits on a frame —
-/// and the lock lives on the Wayland thread. So the connection asks the same
-/// [`crate::lock::refused`] that `handle_client_request` does, of the lock's
-/// own state through [`Seen`]: one list, asked in two places.
+/// These are answered off the Wayland thread so a per-keystroke search never
+/// waits on a frame. The lock lives on the Wayland thread, so this checks it
+/// through [`Seen`] with the same [`crate::lock::refused`] that
+/// `handle_client_request` uses.
 ///
-/// A refused one is answered with nothing, which says nothing about the query
-/// or the path — not even whether the path exists — and is what a desktop with
-/// no index already answers, so the protocol has no new case in it.
+/// A refusal gets no response, which reveals nothing about the query or path
+/// and matches a desktop with no index.
 fn answer_on_the_connection(hub: &ChromeHub, request: ConnectionRequest) -> Vec<HostMessage> {
     let refusal = if hub.the_desk_is_locked() {
         crate::lock::refused(Asked::OnTheConnection(&request))
@@ -1579,40 +1249,27 @@ fn answer_on_the_connection(hub: &ChromeHub, request: ConnectionRequest) -> Vec<
     }
 }
 
-/// What a chrome asked of its own connection, answered.
+/// Answer a connection request.
 fn answered_on_the_connection(hub: &ChromeHub, request: ConnectionRequest) -> Vec<HostMessage> {
     match request {
-        // The one message from a chrome that says what the desktop IS
-        // rather than asking it for something -- and the reason it comes
-        // here at all rather than staying in the page is the second half
-        // of what this does: the desk's Wayland clients hear about a theme
-        // through the settings portal, which is this process's to answer.
+        // Handled here because Wayland clients learn the theme through the
+        // settings portal, which this process serves.
         //
-        // Answered with nothing, and that is not silence. What the page
-        // gets back is the `theme` broadcast `take_up_the_theme` makes,
-        // which reaches every chrome on the desk including this one -- so
-        // a desk of three monitors turns over together, and a page renders
-        // from being told rather than from its own click.
+        // No direct response. Every chrome, this one included, gets the `theme`
+        // broadcast from `take_up_the_theme`, so all monitors switch together.
         ConnectionRequest::SetTheme { theme } => {
             hub.take_up_the_theme(theme);
             Vec::new()
         }
-        // The one message here the compositor answers rather than acts
-        // on, and it is answered out of memory. A shell's launcher is a
-        // page and a page has no filesystem, so the reading is the
-        // compositor's -- and it can be, safely, because `search_files`
-        // names no path: what is read is decided here and nowhere a
-        // document can reach.
+        // A page has no filesystem, so the compositor searches for it. Safe
+        // because `search_files` names no path; this side decides what is read.
         //
-        // ONLY WHAT MATCHED IS SENT. The index is the whole home, and it
-        // used to cross into every page whole -- on every change, and
-        // twice a second through the startup walk -- so that the page
-        // could filter it. On half a million paths each crossing was tens
-        // of megabytes through the engine's control channel and a desktop
-        // that took no input until it was over.
+        // Only matches are sent. Sending a large home's whole index to every
+        // page would cost tens of megabytes per change through the engine's
+        // control channel.
         ConnectionRequest::SearchFiles { query } => {
-            // Out of the lock before the search: a walk publishing the
-            // next index must not wait on a scan of the last one.
+            // Release the lock before searching, so publishing the next index
+            // does not wait on this search.
             let offered = hub.offered.lock().unwrap().clone();
             offered
                 .map(|offered| {
@@ -1625,22 +1282,15 @@ fn answered_on_the_connection(hub: &ChromeHub, request: ConnectionRequest) -> Ve
                         indexing: offered.indexing,
                     }
                 })
-                // Answered with nothing rather than with an empty list,
-                // which is what a desktop with no index has to say -- no
-                // HOME, or a home directory that would not open. "You have
-                // no files" is that breakage wearing the face of an
-                // ordinary answer: a shell told it would draw an empty
-                // launcher and nobody would ever find the line that
-                // explains it. Left unanswered, the panel still opens and
-                // still takes a path, a URL or a query; what it has not
-                // got is a list.
+                // No index (no `HOME`, or it would not open) gets no response
+                // rather than an empty list. An empty list would show a broken
+                // desktop as an empty home. The launcher still works for paths,
+                // URLs and queries.
                 .into_iter()
                 .collect()
         }
-        // Answered out of the same index the search is, and only for a
-        // path it holds -- see `domicile_host::file_preview`. A page names
-        // this path, so the index is what keeps the naming from being a
-        // way to read the disk.
+        // Only paths in the index can be previewed, so a page cannot use this
+        // to read arbitrary files. See `domicile_host::file_preview`.
         ConnectionRequest::PreviewFile { path } => {
             let offered = hub.offered.lock().unwrap().clone();
             offered
@@ -1651,27 +1301,24 @@ fn answered_on_the_connection(hub: &ChromeHub, request: ConnectionRequest) -> Ve
                         path,
                     }
                 })
-                // Nothing, for the reason a search on a desktop with no
-                // index is answered with nothing above.
+                // No index gets no response, as with search.
                 .into_iter()
                 .collect()
         }
-        // Read from the disk on every ask rather than indexed: a machine's
-        // desktop entries are hundreds of small files, and an application
-        // installed a moment ago is offered on the next keystroke. Answered
-        // even when nothing matched, because no application is an ordinary
-        // answer where no home is not.
+        // Read from disk on every search, so a just-installed application shows
+        // up immediately. There are only hundreds of entries. An empty result
+        // is still sent, unlike a missing file index.
         //
-        // Each carries its icon, drawn out of a cache that lives as long as
-        // the compositor -- see `domicile_host::app_icons`.
+        // Icons come from a cache that lives as long as the compositor. See
+        // `domicile_host::app_icons`.
         ConnectionRequest::SearchApps { query } => {
             let dirs = application_dirs(
                 std::env::var_os("XDG_DATA_HOME"),
                 std::env::var_os("XDG_DATA_DIRS"),
                 home_directory().as_deref(),
             );
-            // Out of the lock before the search, like the file index: a reload
-            // replacing the rule must not wait on a disk.
+            // Release the lock before reading the disk, so a reload is not
+            // blocked.
             let offered = hub.applications.lock().unwrap().clone();
             let installed: Vec<_> = installed(&dirs)
                 .into_iter()
@@ -1696,13 +1343,11 @@ fn answered_on_the_connection(hub: &ChromeHub, request: ConnectionRequest) -> Ve
     }
 }
 
-/// Say that a locked desk refused something, in the register its kind wants.
+/// Log a request the lock refused.
 ///
-/// **TWO REGISTERS.** A hand at a locked desk is ordinary — it is how somebody
-/// wakes one — so dropping it is a debug line; a shell asking a locked desk to
-/// close a window, start a program or read the home has drawn a panel over its
-/// own lock screen, and that is worth a warning. Neither line says what was
-/// asked for.
+/// Input at a locked desktop is normal (it wakes the screen), so that is debug.
+/// A shell sending commands while locked has a bug, so that is a warning.
+/// Neither line says what was asked.
 fn say_what_the_lock_refused(refusal: Refusal) {
     match refusal {
         Refusal::Hand => {
@@ -1714,15 +1359,15 @@ fn say_what_the_lock_refused(refusal: Refusal) {
     }
 }
 
-/// The compositor state: Wayland protocol globals + the host brain.
+/// The compositor state: Wayland protocol globals and the shared hub.
 struct DomicileCompositor {
     compositor_state: CompositorState,
     xdg_shell_state: XdgShellState,
-    // The global a client asks for the keyboard through. Held rather than
-    // acted on: see `XdgActivationHandler` below.
+    // Clients request focus through this. Not acted on directly; see
+    // `XdgActivationHandler` below.
     xdg_activation_state: XdgActivationState,
-    // The two globals a client asks who draws its frame through. The answer is
-    // always the shell: see `XdgDecorationHandler` below.
+    // Decoration negotiation. The shell always draws decorations; see
+    // `XdgDecorationHandler` below.
     _xdg_decoration_state: XdgDecorationState,
     kde_decoration_state: KdeDecorationState,
     shm_state: ShmState,
@@ -1731,148 +1376,88 @@ struct DomicileCompositor {
     /// Kept alive so the xdg-output manager global persists.
     #[allow(dead_code)]
     output_manager_state: OutputManagerState,
-    /// Every advertised output, in the order [`Screens`] lists them.
+    /// Every advertised output, in the same order as [`Screens`].
     ///
-    /// **In that order, and one for one.** Built from `screens.outputs()` at
-    /// startup. Two things change it afterward and neither can break the
-    /// pairing: `set_output` restates the one output it is asserted to have,
-    /// in place, so the length cannot move; and
-    /// [`adopt_the_desktop`](DomicileCompositor::adopt_the_desktop) rebuilds
-    /// this list and `screens` from one `Rearrangement`, so they are replaced
-    /// together or not at all. That is what lets [`Screens::entered_by`]'s
-    /// answer be zipped against this: it is one decision per output,
-    /// positional, with nothing naming which is which.
+    /// The order must match one to one, because [`Screens::entered_by`] returns
+    /// a positional list zipped against this. `set_output` updates in place,
+    /// and [`adopt_the_desktop`](DomicileCompositor::adopt_the_desktop)
+    /// replaces both lists together.
     ///
-    /// Which of them a surface enters is [`Screens::entered_by`]: the outputs
-    /// its portal reaches, and every one of them for a surface that has no
-    /// portal or reaches none. See
+    /// See
     /// [`enter_the_displays_each_window_is_on`](DomicileCompositor::enter_the_displays_each_window_is_on).
     outputs: Vec<LiveOutput>,
-    /// The live config, and the last edit that would not parse.
+    /// The live config, and the last edit that failed to parse.
     ///
-    /// A store rather than a `Config`, because the file is watched: an edit
-    /// that does not parse leaves the live one in place and is remembered,
-    /// which is the guarantee `ConfigStore` makes and this type would have to
-    /// reimplement.
+    /// A [`ConfigStore`] keeps the live config when an edit fails to parse. A
+    /// reload applies every field, through
+    /// [`adopt_the_desktop`](DomicileCompositor::adopt_the_desktop) and
+    /// [`adopt_the_rest_of_the_config`](DomicileCompositor::adopt_the_rest_of_the_config),
+    /// so this is the config actually running. See [`crate::restatement`].
     ///
-    /// Live in both directions: what is read back off this is the config the
-    /// desktop is actually running, because a reload acts on every field —
-    /// the display list through
-    /// [`adopt_the_desktop`](DomicileCompositor::adopt_the_desktop) and the
-    /// rest through
-    /// [`adopt_the_rest_of_the_config`](DomicileCompositor::adopt_the_rest_of_the_config).
-    /// [`crate::restatement`] is the field-by-field account.
-    ///
-    /// Note what this does *not* cover: a save caught half-written parses
-    /// perfectly, it just says less. Keeping that from reaching the desktop is
-    /// the coalescing on the watcher thread, not the store.
+    /// A half-written save still parses. The watcher thread's coalescing
+    /// handles that.
     config: ConfigStore,
-    /// What the outputs above are, and who gets to change them.
+    /// The outputs' layout, and whether the config or the chrome controls it.
     screens: Screens,
-    /// The engine's last reading of the monitors, empty until it sends one.
+    /// The engine's last report of the monitors. Empty until it sends one.
     ///
-    /// Empty forever on a nested run, because a nested engine is not asked to
-    /// watch displays at all -- its screens are the *host's* monitors, and a
-    /// desktop built from those would be taken away from the window that
-    /// defines it.
+    /// Always empty when nested: the engine does not watch displays then, since
+    /// they would be the host's monitors.
     ///
-    /// Held rather than consumed because two things are matched against it and
-    /// only one of them is the event that brings it: a hotplug is the
-    /// monitors changing under one config, and a reload is the config changing
-    /// over one set of monitors. Without this the second could not be
-    /// answered, and a profile would take effect only when a monitor was next
-    /// unplugged.
+    /// Kept so a config reload can be matched against the current monitors, not
+    /// only a hotplug.
     engine_displays: Vec<engine::Display>,
-    /// hwdata's `pnp.ids`, which is what turns the three letters an EDID names
-    /// a maker with into the vendor's own name.
+    /// hwdata's `pnp.ids`, mapping EDID vendor codes to vendor names.
     ///
-    /// Read once, at startup, because it is a file the machine ships rather
-    /// than anything about this desk: it cannot change between hotplugs, and
-    /// re-reading it per monitor would be two and a half thousand lines parsed
-    /// every time somebody plugged a cable in. Empty on a machine that has no
-    /// copy, which [`pnp_ids::read_the_table`]'s caller says out loud.
+    /// Read once at startup; it cannot change between hotplugs. Empty if the
+    /// machine has no copy, which is logged.
     vendors: pnp_ids::Vendors,
-    /// The chrome's `devicePixelRatio`, as it last reported it.
+    /// The chrome's last reported `devicePixelRatio`.
     ///
-    /// Only one thing reads it, and it is not the output's density: Blink lays
-    /// out in device pixels, so the box the engine states for an `<app>` is
-    /// this many times the CSS box the page drew. A configure is in logical
-    /// units, so it has to come back down — see [`crate::scale::logical_box`].
-    ///
-    /// 1.0 until a chrome says otherwise, which is the display that needs no
-    /// conversion and the answer a desktop with no chrome yet would want.
+    /// Used to convert the engine's device-pixel `<app>` bounds to logical
+    /// units for a configure. See [`crate::scale::logical_box`]. Defaults to
+    /// 1.0.
     device_pixel_ratio: f64,
     /// Drag-and-drop and the clipboard.
     ///
-    /// Advertised because a desktop without it is not one — but the reason it
-    /// went in when it did is that its *absence* freezes a chrome. A page that
-    /// starts an HTML5 drag has the engine start a Wayland one, and the engine
-    /// runs a nested loop until the drag completes. With no
-    /// `wl_data_device_manager` there is nothing to complete it, so the chrome
-    /// stops answering anything while every other client carries on — which
-    /// reads as the compositor having crashed, and does not look like a missing
-    /// global at all.
+    /// Required: without `wl_data_device_manager`, an HTML5 drag in a page
+    /// starts a Wayland drag that never completes, and the engine's nested loop
+    /// freezes the chrome.
     data_device_state: DataDeviceState,
-    /// The middle-click clipboard.
+    /// The primary selection (middle-click clipboard).
     ///
-    /// **A second clipboard, not a second name for the first.** Selecting a
-    /// word fills this one and the middle button pastes out of it, while
-    /// Ctrl-C and Ctrl-V go through `wl_data_device` above — which is why
-    /// `zwp_primary_selection_device_manager_v1` is its own global with its
-    /// own device, and why a desktop can carry one of the two and not the
-    /// other. This one is passed between clients and never read here: it
-    /// changes on every drag over a word, so a history of it would be a
-    /// history of what the pointer brushed past.
+    /// Separate from `wl_data_device`. Passed between clients and never read
+    /// here, since it changes on every text selection and its history would be
+    /// noise.
     primary_selection_state: PrimarySelectionState,
-    /// What has been copied on this desktop, newest first.
+    /// Clipboard history, newest first.
     ///
-    /// **A Wayland clipboard is the client that offered it**, so closing the
-    /// terminal you copied out of empties it. This is the desktop's own hold
-    /// on what crossed the clipboard, and the compositor is where it has to
-    /// live because `set_selection` arrives here and nowhere else.
-    /// `domicile_host::clipboard` is the whole of the policy.
+    /// A Wayland clipboard disappears with the client that offered it. This
+    /// history keeps copies after the client exits. The compositor holds it
+    /// because `set_selection` arrives only here. Policy lives in
+    /// `domicile_host::clipboard`.
     clipboard: History,
-    /// The mime type to ask the new selection for, on the turn after a client
-    /// set one.
+    /// The mime type to read from a new selection, one per clipboard.
     ///
-    /// **A turn late, and it has to be.** Smithay calls `new_selection` before
-    /// it stores the selection on the seat, so a read taken there would be a
-    /// read of the copy *before* this one. What is kept is the spelling to ask
-    /// for — `None` for a selection with no text in it, which is not recorded
-    /// at all — and [`DomicileCompositor::read_what_was_copied`] spends it at
-    /// the end of the dispatch, before the flush that carries the request to
-    /// the client.
+    /// Read one dispatch later because Smithay calls `new_selection` before
+    /// storing the selection on the seat.
+    /// [`DomicileCompositor::read_what_was_copied`] uses it at the end of the
+    /// dispatch, before the flush. `None` means no text, which is not recorded.
     ///
-    /// One slot per clipboard, because a client can fill both in one turn:
-    /// selecting a word in a terminal and pressing Ctrl-C arrive as two
-    /// `set_selection` requests, and a single slot would read one of them
-    /// twice.
+    /// One slot per clipboard because a client can set both in one dispatch.
     copying: [Option<String>; 2],
-    /// What is on each clipboard, as text, whatever put it there.
+    /// The current text on each clipboard, whoever set it.
     ///
-    /// **Not the history, and the two answer different questions.** The
-    /// history is what a person may go back to; this is what a paste right now
-    /// would produce — which after a shell picks an old row is that row rather
-    /// than the newest, and which for the middle-click clipboard has no
-    /// history behind it at all.
+    /// Differs from the history: this is what a paste would produce now,
+    /// including an old history entry the shell restored.
     ///
-    /// **Held for the browser's sake.** Nothing on the Wayland side needs it:
-    /// a client pasting what another client copied is served by that client.
-    /// But the browser is not a Wayland client of this compositor and cannot
-    /// be served that way, so what it may paste has to be in this process to
-    /// be handed over — and once it is here, it is also what serves a Wayland
-    /// client pasting something the *browser* copied. See [`Clipboard`], which
-    /// is this compositor's selection user data for exactly that reason.
+    /// Needed for the browser, which is not a Wayland client here and cannot be
+    /// served by another client directly. It also serves Wayland clients
+    /// pasting what the browser copied. See [`Clipboard`].
     holding: [Option<String>; 2],
-    /// The display, for the two paths that have to reach clients from
-    /// somewhere other than a request of their own: handing the clipboard's
-    /// focus to whoever has the keyboard, and putting an entry from the
-    /// history back on the seat.
-    ///
-    /// Every other path is handed a `&DisplayHandle` by its caller, because
-    /// every other path starts at the event loop, which has the `Display`
-    /// itself. These two start at a `SeatHandler` callback and at a message
-    /// from a chrome thread, and neither carries one.
+    /// The display handle, for paths that do not start at the event loop:
+    /// moving clipboard focus with the keyboard (a `SeatHandler` callback) and
+    /// restoring a history entry (a chrome request).
     display_handle: DisplayHandle,
     /// Kept alive so the wp_cursor_shape_v1 global persists.
     #[allow(dead_code)]
@@ -1882,37 +1467,30 @@ struct DomicileCompositor {
     /// gave us no renderer, in which case the global was never advertised.
     #[allow(dead_code)]
     dmabuf_global: Option<DmabufGlobal>,
-    /// Where client buffers are imported and, when presenting, drawn.
+    /// The renderer client buffers are imported on.
     ///
-    /// One renderer, not two: a texture belongs to the EGL context that made
-    /// it, so importing on one context and drawing on another would not work.
     /// Present exactly when the dmabuf global is, so a committed dmabuf always
     /// has somewhere to go.
     gpu: Option<Gpu>,
 
-    /// Shared brain + connected chrome clients.
+    /// State shared with the chrome connection threads.
     hub: Arc<ChromeHub>,
-    /// How many times each surface has committed, keyed as [`painted_key`].
+    /// Commit count per surface, keyed as [`painted_key`].
     ///
-    /// Not the pixels, and it does not need to be: this is what tells a window
-    /// that redrew in place from one that merely stayed there, which nothing
-    /// about its geometry says. It is not the *only* thing that can differ
-    /// between two frames of a window that has not moved — `Look` and the draw
-    /// order are the others, and they are compared beside it.
-    /// A counter that wrapped would report a redraw as no change once in
-    /// 2^64 commits, which is not a number of frames anything here will see.
+    /// Tells a window that redrew in place from one that did not change. `Look`
+    /// and the draw order are compared alongside it.
     content: HashMap<String, u64>,
     /// Mapped toplevels, paired with the host-assigned app id (Wayland-thread only).
     toplevels: Vec<(String, ToplevelSurface)>,
-    /// Every popup a window has open — its menus — by the id the host gave
-    /// it. An app of its own to the engine and the page, placed rather than
-    /// laid out: see `HostMessage::PopupPlaced`. Only those announced, which
-    /// is once one has a buffer.
+    /// Every announced popup (menus), by its host-assigned id.
+    ///
+    /// The engine treats each as its own app, placed rather than laid out; see
+    /// `HostMessage::PopupPlaced`. Announced once it has a buffer.
     popups: Vec<(String, PopupSurface)>,
-    /// The popups holding a grab — a menu, and the submenus opened from it —
-    /// outermost first. They have the keyboard while they are open, and the
-    /// keyboard going anywhere but their window dismisses every one of them:
-    /// see `ClientRequest::KeyboardFocus`.
+    /// Popups holding a grab, outermost first.
+    ///
+    /// They have the keyboard while open. Focus moving anywhere but their
+    /// window dismisses them all; see `ClientRequest::KeyboardFocus`.
     grabbing: Vec<PopupSurface>,
     /// The app the pointer is currently over, so a `set_cursor` request can be
     /// attributed to the element the chrome should restyle.
@@ -1921,201 +1499,145 @@ struct DomicileCompositor {
     start: Instant,
     /// Last time a frame was broadcast per app, to throttle to ~30fps.
     last_frame: HashMap<String, Instant>,
-    /// When the last buffer commit finished, so the gap to the next one can be
-    /// timed. Not per-app: what it measures is whether *this thread* was busy.
+    /// When the last buffer commit finished, to time the gap to the next. Not
+    /// per app: it measures whether this thread was busy.
     last_commit: Option<Instant>,
-    /// When the oldest keystroke no client has answered yet was injected.
-    /// Only the oldest is kept, for the reason the chrome keeps the oldest: a
-    /// burst answered by one frame is felt as how long its first key waited.
+    /// When the oldest unanswered keystroke was injected. Only the oldest is
+    /// kept, matching the chrome: a burst answered by one frame feels as slow
+    /// as its first key.
     pending_key: Option<Instant>,
-    /// The keystroke-to-pixel run, once an app has committed something to
-    /// measure. `None` when `DOMICILE_SPIKE_LATENCY` names no point, which is
-    /// every run that is not the measurement.
+    /// The keystroke-to-pixel measurement. `None` unless
+    /// `DOMICILE_SPIKE_LATENCY` names a point.
     latency: Option<Latency>,
-    /// Which app the run is watching. The first to commit, and then that one
-    /// for the whole run.
+    /// The app being measured: the first to commit.
     latency_app: Option<String>,
-    /// Whether the report has been said. It is said once: the driver keeps
-    /// being called for as long as the client keeps drawing.
+    /// Whether the latency report was logged. Logged once, though the client
+    /// keeps drawing.
     latency_reported: bool,
-    /// The chrome's own toplevel, when it is a client of ours. Kept apart from
-    /// `toplevels` because it is not an app: it is never announced and never
-    /// placed by a portal. It is the window the desktop is, and the keyboard
-    /// falls back to it.
+    /// The chrome's own toplevel, if it is our client.
+    ///
+    /// Kept apart from `toplevels` because it is the desktop, not an app: never
+    /// announced, and the keyboard falls back to it.
     chrome_toplevel: Option<ToplevelSurface>,
-    /// Clients whose shm frame could not be copied, already said. A client commits
-    /// at its frame rate and the refusal does not change, so it is said once
-    /// each rather than once a frame.
+    /// Clients whose shm frame could not be copied, already logged. Logged once
+    /// per client, not per frame.
     shm_refused: HashSet<String>,
-    /// The GPU buffers shm clients' frames are copied into, so the engine has
-    /// a dmabuf to take — see [`crate::uploads`].
+    /// GPU buffers that shm frames are copied into, so the engine gets a
+    /// dmabuf. See [`crate::uploads`].
     uploads: Uploads<Dmabuf>,
 
-    /// Apps whose first frame the engine has taken. A window that maps, is
-    /// brokered a sink and is configured has still shown nothing until it
-    /// commits a buffer the engine accepts, and those are three different
-    /// facts. Said once per app rather than once a frame, so a two-window run
-    /// says which of its windows ever drew.
+    /// Apps whose first frame the engine accepted, logged once each.
+    ///
+    /// Mapping, getting a sink and being configured do not mean a window drew
+    /// anything.
     first_frame_logged: HashSet<String>,
 
-    /// THROWAWAY, with the rest of the spike. When the pixel probe last ran.
+    /// Temporary, part of the pixel probe. When the probe last ran.
     ///
-    /// The probe forces a CopyOutputRequest and blocks this thread until viz
-    /// answers, so running it per submit costs a full readback per client per
-    /// frame. One client absorbed that; two did not — buffers stopped being
-    /// released at all, because this thread was inside the probe instead of
-    /// draining the engine's events. The guards poll for tens of seconds, so
-    /// four times a second is plenty and the cost is bounded whatever the
-    /// clients' frame rate.
+    /// The probe blocks this thread on a viz readback. Running it per submit
+    /// with two clients would starve the event loop and stop buffer releases.
+    /// Guards poll for tens of seconds, so four runs a second is enough.
     last_probe: Option<Instant>,
 
-    /// THROWAWAY. Points the probe has already refused, so that saying so
-    /// costs one line rather than one per submit.
+    /// Temporary. Points the probe refused, logged once each.
     probe_refused: HashSet<(i32, i32)>,
 
-    /// THROWAWAY. Colors already reported absent, so a guard that polls for
-    /// ninety seconds gets one line rather than three hundred.
+    /// Temporary. Colors already reported absent, logged once each.
     probe_missing: HashSet<u32>,
 
-    /// THROWAWAY. Colors the probe could not answer for at all. Separate from
-    /// `probe_missing` because "not on screen" and "nothing was read" are the
-    /// two answers the search exists to tell apart, and one set would let
-    /// either silence the other.
+    /// Temporary. Colors the probe could not read at all.
+    ///
+    /// Separate from `probe_missing` so "not on screen" and "nothing was read"
+    /// do not hide each other.
     probe_unreadable: HashSet<u32>,
 
-    /// THROWAWAY. When the color search last ran. Its own clock, because it
-    /// captures the whole window rather than a pixel and is throttled harder
-    /// than the point probe beside it.
+    /// Temporary. When the color search last ran. Throttled harder than the
+    /// point probe because it reads back the whole window.
     last_find: Option<Instant>,
 
-    /// THROWAWAY. When the color search first ran, which is what its budget
-    /// is measured from. Set on the first search rather than at startup: a
-    /// desktop with no client yet is not searching for anything, and starting
-    /// the clock then would spend the budget waiting.
+    /// Temporary. When the color search first ran; its budget counts from here.
+    /// Not from startup, so waiting for a client does not spend the budget.
     find_since: Option<Instant>,
 
-    /// THROWAWAY. The last box logged for each color, so a box is written
-    /// down when it moves rather than once when it first appears. A window
-    /// still painting is smaller than it will be, and how much of the page
-    /// each one covers is what the two-window guard asserts — which is also
-    /// why the guard waits for two consecutive readings that agree.
+    /// Temporary. The last box logged for each color, so a box is logged
+    /// whenever it moves. A window still painting is smaller than it will be.
     ///
-    /// Presence is what "found" means; a color that goes absent is removed.
+    /// A color is present only while found.
     probe_boxes: HashMap<u32, Bounds>,
 
-    /// THROWAWAY. Whether the search is over — every color found and none of
-    /// them moving, or the budget spent. A whole-window readback is a blocking
-    /// one, so a finished search stops paying for them.
+    /// Temporary. Whether the search is done: every color found and stable, or
+    /// the budget spent. Stops the blocking readbacks.
     find_settled: bool,
-    /// What the chrome's last frame looked like, so the line describing it is
-    /// printed when it changes rather than sixty times a second.
+    /// The chrome's last frame shape, so its log line is printed only on
+    /// change.
     chrome_frame_shape: Option<((f64, f64), bool, bool)>,
     /// Which modifiers the chrome was last told are held.
     modifiers: Held,
     /// What the chromes were last told about the battery.
     ///
-    /// Polled rather than delivered: nothing signals a percent, so the timer
-    /// below reads `/sys/class/power_supply` and this is what decides which of
-    /// those readings is news. See `domicile_host::battery`, and the message's
-    /// own docs in `domicile_protocol` for why the page cannot read it itself.
+    /// Polled: a timer reads `/sys/class/power_supply` and this decides which
+    /// readings are news. See `domicile_host::battery`.
     charge: Charge,
     /// What the chromes were last told about the brightness, and the writer
     /// that sets it. See `domicile_host::backlight`.
     brightness: Brightness,
     backlight: backlight::Backlight,
-    /// Whether anything has changed since the last frame was drawn.
-    ///
-    /// Compositing does not happen where the change is noticed. Submitting a
-    /// frame blocks until the display will take it, so drawing once per client
-    /// commit means blocking the Wayland thread once per client commit — and a
-    /// client that commits faster than the display refreshes stops the
-    /// compositor from serving anything at all. Every other client freezes, the
-    /// chrome included, which is what it looks like from outside.
-    ///
-    /// So commits mark the desktop dirty and the event loop draws at most once
-    /// per pass, coalescing however many arrived.
-    /// Set when the window is closed, which is the user closing the desktop.
-    /// Read by the event loop, which is the only thing that can act on it.
+    /// Set when the user closes the desktop window. The event loop reads it and
+    /// stops.
     stop: Arc<AtomicBool>,
-    /// The forked engine, when `--engine-socket` asked for one.
+    /// The forked engine, when `--engine-socket` is given.
     ///
-    /// `None` is a compositor with no path to a window at all — said at
-    /// startup rather than left to be discovered. `Some` submits the client's
-    /// own dmabuf to viz, and with it takes on holding `wl_buffer.release` until
-    /// viz is done sampling — see [`engine_session::EngineSession`].
+    /// `None` leaves no way to show windows, which startup logs. `Some` submits
+    /// client dmabufs to viz and holds `wl_buffer.release` until viz is done;
+    /// see [`engine_session::EngineSession`].
     engine: Option<EngineSession>,
-    /// The registration the engine's fd is watched under.
+    /// The registration watching the engine's fd.
     ///
-    /// Held so that an engine which replaced another can be watched instead:
-    /// the fd belongs to the `DomicileEngine` whose queue it is, and a source
-    /// left on the old one is a source on a descriptor the library closed. A
-    /// calloop source is removed by the registration it was inserted under and
-    /// by nothing else, which is the same reason `idle_clock` is kept below.
+    /// Kept so a replacement engine can be watched instead. The old fd is
+    /// closed by the library, and a calloop source can only be removed by its
+    /// token.
     engine_source: Option<RegistrationToken>,
-    /// The process serving the last page that said hello, which is the browser
-    /// this desktop is drawing through.
+    /// The browser process serving the last page that said hello.
     ///
-    /// `None` until one has: the first page of a run is served by the engine
-    /// this compositor dialed at startup, so there is nothing to compare it
-    /// against and nothing to rejoin. See [`crate::which_engine`].
+    /// `None` until the first hello, which is always the engine dialed at
+    /// startup. See [`crate::which_engine`].
     engine_process: Option<i32>,
-    /// Whether anybody is at this desktop, for a desktop that blanks.
+    /// Idle tracking, for a desktop that blanks.
     ///
-    /// `None` is one that never does, which is what a config saying nothing
-    /// about idle means — and then nothing here has a timer either. Replaced
-    /// when a reload changes `idle`, which is
-    /// [`reset_the_idle_clock`](DomicileCompositor::reset_the_idle_clock).
+    /// `None` if the config sets no idle timeout. Replaced by
+    /// [`reset_the_idle_clock`](DomicileCompositor::reset_the_idle_clock) when
+    /// a reload changes `idle`.
     ///
-    /// What it holds its inhibitors as is the surface each was taken on, which
-    /// is what `zwp_idle_inhibit_manager_v1` hands over in both directions —
-    /// and what both halves of `crate::idle`'s answer are asked about: whether
-    /// it is [`StillThere`], because a surface of a client that is gone is not
-    /// alive, and whether it is one of
-    /// [`surfaces_on_the_desktop`](DomicileCompositor::surfaces_on_the_desktop),
-    /// because a surface this desktop has no window for is one nobody can
-    /// see.
+    /// Inhibitors are held as their surfaces. An inhibitor counts only if its
+    /// surface is [`StillThere`] and among
+    /// [`surfaces_on_the_desktop`](DomicileCompositor::surfaces_on_the_desktop).
     idle: Option<Idle<WlSurface>>,
-    /// How a reload reaches the thread keeping the file index, or `None` on a
-    /// desktop with no home to index.
+    /// Sends reloads to the file index thread. `None` without a home to index.
     ///
-    /// Only a new `files.omit` goes this way — see
+    /// Only `files.omit` changes go here. See
     /// [`omit_from_the_index`](DomicileCompositor::omit_from_the_index).
     index: Option<mpsc::Sender<Heard>>,
-    /// The timer that asks the clock, where there is a clock to ask.
+    /// The idle timer, if any.
     ///
-    /// Held so a reload can take it away again: a desk whose timeout is
-    /// removed must stop waking for it, and one whose timeout changed wants
-    /// the new duration rather than whatever the old source was counting
-    /// down. Without the token neither is reachable — a calloop source is
-    /// removed by the registration it was inserted under, and by nothing
-    /// else.
+    /// Kept so a reload can remove or replace it; a calloop source can only be
+    /// removed by its token.
     idle_clock: Option<RegistrationToken>,
-    /// Whether this desk is locked, for a desktop that can lock.
+    /// The lock, for a desktop that can lock.
     ///
-    /// `None` is one that cannot, which is what a config stating neither
-    /// `lock.passphrase` nor `lock.pam_service` means — see
-    /// [`crate::lock::chosen`] for why that is a desk with no lock rather than
-    /// a lock nothing opens.
+    /// `None` if the config sets neither `lock.passphrase` nor
+    /// `lock.pam_service`. See [`crate::lock::chosen`].
     ///
-    /// **NOT REPLACED BY A RELOAD, which `idle` above is.** Whether this desk is
-    /// locked is not something the config says — the config says only whether it
-    /// *can* lock — and rebuilding this from an edited file would be one of two
-    /// bad things: a desk unlocked by editing a file, or a locked desk whose
-    /// verifier has been taken out from under it and which nothing can now
-    /// open. So a verifier added, changed or removed is the verifier of the
-    /// next run. `ROADMAP.md` carries what a reload ought to do instead.
+    /// Not replaced on reload, unlike `idle`. Rebuilding it could unlock the
+    /// desktop, or leave a locked one with no verifier. Verifier changes apply
+    /// on the next run. See `ROADMAP.md`.
     lock: Option<Lock>,
-    /// The theme change the desk's windows are part way through, if any, and
-    /// the deadline armed for its current phase.
+    /// The theme change in progress, if any, and its current phase's deadline.
     turnover: Option<Turnover<usize>>,
     turnover_deadline: Option<RegistrationToken>,
-    /// The loop this compositor is dispatched by, so that it can arm a source
-    /// of its own after startup.
+    /// The event loop handle, for adding sources after startup.
     ///
-    /// Only one thing does: the idle clock, which a reload may have to insert
-    /// where the startup config stated no timeout and so left no timer at
-    /// all. Everything else this compositor listens to is known when `run`
-    /// builds the loop.
+    /// Only the idle timer needs it: a reload may add a timeout the startup
+    /// config did not have.
     loop_handle: LoopHandle<'static, CalloopData>,
 }
 
@@ -2123,13 +1645,11 @@ struct DomicileCompositor {
 #[derive(Default)]
 struct ClientState {
     compositor_state: CompositorClientState,
-    /// Whether this client arrived on the chrome's own socket, and so is the
-    /// engine drawing the desktop rather than an app running on it.
+    /// Whether this client connected on the chrome's socket, making it the
+    /// engine rather than an app.
     ///
-    /// The socket is the discriminator because it is the one thing we control
-    /// and a client cannot spoof: an `xdg_toplevel` app id is set by the
-    /// client, and arrives whenever the client feels like sending it — which
-    /// is not necessarily before the toplevel it names.
+    /// The socket identifies it because clients cannot spoof it. An
+    /// `xdg_toplevel` app id is client-set and may arrive after the toplevel.
     is_chrome: bool,
 }
 
@@ -2181,9 +1701,8 @@ impl DomicileCompositor {
         self.start.elapsed().as_millis() as u32
     }
 
-    /// Who committed `surface`, and the role it committed in — every role
-    /// shares every step of a commit except what becomes of the buffer and
-    /// how big it was asked to be.
+    /// Who committed `surface`, and in which role. Roles differ only in where
+    /// the buffer goes and the requested size.
     fn committer(&self, surface: &WlSurface) -> Option<(Committer, Role)> {
         if let Some(chrome) = &self.chrome_toplevel {
             if chrome.wl_surface() == surface {
@@ -2209,12 +1728,10 @@ impl DomicileCompositor {
             })
     }
 
-    /// Announce a window's popup, the first time it commits a buffer.
+    /// Announce a window's popup on its first buffer commit.
     ///
-    /// Not when the client makes it: a popup is configured before it draws,
-    /// and one that never draws is a menu nobody asked the shell to place.
-    /// A popup over the chrome's own window is the engine's and not a
-    /// window's — it has no app to be placed over — and is left alone.
+    /// A popup that never draws needs no placement. Popups over the chrome's
+    /// own window belong to the engine and are ignored.
     fn announce_a_new_popup(&mut self, surface: &WlSurface) {
         if self
             .popups
@@ -2262,12 +1779,10 @@ impl DomicileCompositor {
         }
     }
 
-    /// Say what shape the chrome's frame is, when it changes.
+    /// Log the chrome frame's shape when it changes.
     ///
-    /// The compositor does not draw it — the engine does — so nothing is kept.
-    /// What this is for is the one line that says what the desktop is made of:
-    /// which kind of buffer, at what size, and which way up.
-    /// `e2e-chrome-fills-the-desktop.sh` reads the size out of it.
+    /// The engine draws it, so nothing is kept.
+    /// `e2e-chrome-fills-the-desktop.sh` reads the size from this line.
     fn publish_chrome_frame(
         &mut self,
         buffer: &wl_buffer::WlBuffer,
@@ -2276,11 +1791,8 @@ impl DomicileCompositor {
     ) {
         let texture = committed_buffer(buffer)
             .and_then(|committed| self.texture_from(committed, buffer_scale, viewport));
-        // Once, and again whenever what arrives changes shape. This is the one
-        // line that says what the desktop is actually made of — which kind of
-        // buffer, at what size, and which way up — and a picture that is the
-        // wrong size or upside down is answered here rather than by guessing
-        // from what it looks like.
+        // Log on change. The buffer type, size and orientation explain a frame
+        // that is the wrong size or upside down.
         let shape = texture.as_ref().map(|surface| {
             (
                 surface.logical_size,
@@ -2304,10 +1816,10 @@ impl DomicileCompositor {
         }
     }
 
-    /// Tell the chromes how small and how big a window will draw, if that
-    /// changed. Read at every commit because xdg-shell double-buffers both:
-    /// they take effect on the commit that carries them, which is usually the
-    /// first and has no buffer.
+    /// Tell the chromes a window's size limits, if they changed.
+    ///
+    /// Checked on every commit because xdg-shell double-buffers them; they
+    /// usually arrive on the first, bufferless commit.
     fn tell_the_size_limits(&mut self, app_id: &str, surface: &WlSurface) {
         let (min, max) = with_states(surface, |states| {
             let mut cached = states.cached_state.get::<SurfaceCachedState>();
@@ -2317,8 +1829,8 @@ impl DomicileCompositor {
                 (f64::from(state.max_size.w), f64::from(state.max_size.h)),
             )
         });
-        // Bound by `let` statements, so the host is unlocked for the
-        // broadcasts — see `title_changed`.
+        // Separate `let`s so the host is unlocked before broadcasting. See
+        // `title_changed`.
         let smallest = self.hub.host.lock().unwrap().app_min_size(app_id, min);
         let largest = self.hub.host.lock().unwrap().app_max_size(app_id, max);
         for told in smallest.into_iter().chain(largest) {
@@ -2326,11 +1838,7 @@ impl DomicileCompositor {
         }
     }
 
-    /// A committed buffer as a texture to draw, whichever kind it is.
-    ///
-    /// A dmabuf costs nothing — it *is* the client's buffer. Shared memory
-    /// costs an upload, which is still the cheap half of what the copy path
-    /// does, and is what a software-rendering client commits.
+    /// Describe a committed buffer, dmabuf or shm.
     fn texture_from(
         &mut self,
         committed: CommittedBuffer,
@@ -2338,10 +1846,9 @@ impl DomicileCompositor {
         viewport: Viewport,
     ) -> Option<SurfaceTexture> {
         let (width, height) = committed.size();
-        // The buffer's own logical size, which is what a source rectangle is
-        // stated against — *not* the surface's, which a destination replaces.
-        // Cropping against the destination would read the wrong part of the
-        // buffer by exactly the ratio between them.
+        // The buffer's logical size, which a viewport source rectangle is
+        // relative to. Not the surface size, which a viewport destination
+        // replaces.
         let (buffer_width, buffer_height) = logical_size((width, height), buffer_scale);
         let _buffer_logical = (f64::from(buffer_width), f64::from(buffer_height));
         let (logical_width, logical_height) =
@@ -2350,76 +1857,48 @@ impl DomicileCompositor {
         match committed {
             CommittedBuffer::Gpu(dmabuf) => Some(SurfaceTexture {
                 from_dmabuf: true,
-                // A client that renders with GL hands the buffer over the way
-                // GL made it, and says so on the buffer.
+                // GL clients flag a flipped buffer on the dmabuf.
                 y_inverted: dmabuf.y_inverted(),
                 logical_size,
             }),
             CommittedBuffer::Pixels { .. } => Some(SurfaceTexture {
                 from_dmabuf: false,
-                // Shared memory is described the way it is laid out.
+                // Shm is laid out top-down.
                 y_inverted: false,
                 logical_size,
             }),
         }
     }
 
-    /// Tell every client which displays its surfaces are on, and which they
-    /// are not — every window, and every menu over one.
+    /// Tell every client which displays its windows and popups are on.
     ///
-    /// Run whenever a placement changes rather than only when a window maps,
-    /// because a window moves: the chrome drags an `<app>` element across the
-    /// page and the display under it changes with no Wayland event of its own.
-    /// [`Screens::entered_by`] is the rule and this is only its application —
-    /// every output, every window, enter or leave, so a window that left a
-    /// screen is told that too.
+    /// Runs on every placement change, since the chrome can move an `<app>`
+    /// across displays without a Wayland event. [`Screens::entered_by`]
+    /// decides; this applies it. Smithay only sends `enter`/`leave` when the
+    /// set changes, so repeating it is cheap.
     ///
-    /// Both halves are idempotent in Smithay: an output keeps the set of
-    /// surfaces on it and sends `wl_surface.enter`/`leave` only when that set
-    /// changes. So this can run on every placement without the compositor
-    /// keeping a second copy of the same bookkeeping, and without a client
-    /// seeing an `enter` for a screen it is already on.
-    ///
-    /// The chrome's own toplevel is not here. It is the desktop rather than a
-    /// window on it, so it belongs on every output rather than on the ones some
-    /// portal reaches. `new_toplevel` puts it on the outputs there are when it
-    /// maps, and
-    /// [`adopt_the_desktop`](DomicileCompositor::adopt_the_desktop) puts it on
-    /// the ones a reload adds — which is why that is not "once and for all",
-    /// as this said while the display list could not change.
+    /// The chrome's own toplevel is excluded: it belongs on every output.
+    /// `new_toplevel` and
+    /// [`adopt_the_desktop`](DomicileCompositor::adopt_the_desktop) handle it.
     fn enter_the_displays_each_window_is_on(&self) {
-        // EVERY DISPLAY, FOR EVERY WINDOW, and that is a known gap rather than
-        // a simplification. This asked the scene for a window's box and
-        // narrowed the entered outputs to the displays it overlapped. The page
-        // reported that box; it does not any more, because CSS positions the
-        // layer and nothing else on this side needed the geometry — so the
-        // narrowing has no input left and every surface takes the fallback.
-        //
-        // It costs nothing on a desktop with one output, which is what a run
-        // with no `--config` still is: a single output following the browser
-        // window. `domicile --config` can now hand one over, so a desk that
-        // writes its monitors down is no longer that -- and this is the gap
-        // that widens when it does. On a two-screen desktop a
-        // client would be told it is on both and would draw at the larger
-        // scale of the two. Wiring that back wants the shell naming a screen
-        // — `<Screen name="left">`, which ARCHITECTURE.md already calls the
-        // seam — rather than this side inferring one from a rectangle.
+        // Known gap: every surface enters every display, because the page does
+        // not report window boxes. Harmless with one output. With several, a
+        // client draws at the largest scale. The fix is for the shell to name a
+        // screen (`<Screen name="left">`; see
+        // `docs/architecture/ARCHITECTURE.md`), not for this side to infer one.
         for (_, toplevel) in &self.toplevels {
             self.enter_only(toplevel.wl_surface(), None);
         }
-        // A popup goes with its window, and that is the same answer now:
-        // with no geometry on this side there is nothing to narrow either to.
+        // Popups too, for the same reason.
         for popup in self.xdg_shell_state.popup_surfaces() {
             self.enter_only(popup.wl_surface(), None);
         }
     }
 
-    /// Put `surface` on the displays `bounds` reaches, and take it off the
-    /// rest.
+    /// Enter `surface` on the displays `bounds` reaches and leave the rest.
     ///
-    /// Zipped, because `self.outputs` is built from `self.screens` in order
-    /// and [`Screens::entered_by`]'s answer is one decision per output — see
-    /// the `outputs` field, which says what keeps the two in step.
+    /// Zips outputs positionally with [`Screens::entered_by`]; see the
+    /// `outputs` field for why that is safe.
     fn enter_only(&self, surface: &WlSurface, bounds: Option<domicile_scene::Bounds>) {
         for (live, entered) in self.outputs.iter().zip(self.screens.entered_by(bounds)) {
             let output = &live.output;
@@ -2445,12 +1924,11 @@ impl DomicileCompositor {
             })
     }
 
-    /// Everything held for an app — a window or a popup — let go of, and the
-    /// chromes told it is gone.
+    /// Release everything held for an app (window or popup) and tell the
+    /// chromes it is gone.
     fn forget(&mut self, app_id: &str) {
-        // Anything the engine was holding for this window comes back now.
-        // No release will ever arrive for a surface that is gone, and the
-        // client may still be running.
+        // Take back the engine's held buffers now. No release will come for a
+        // gone surface, and the client may still be running.
         let abandoned = self
             .engine
             .as_mut()
@@ -2459,18 +1937,13 @@ impl DomicileCompositor {
         for release in abandoned {
             self.returned(release.buffer);
         }
-        // Its buffers go too. Every one viz had came back just above, and
-        // the session dropped their imports with the surface.
+        // All of viz's buffers came back above, so the uploads can go.
         self.uploads.forget(app_id);
         self.last_frame.remove(app_id);
-        // The commit counter too, which was the one sibling map this
-        // forgot. A stale entry could never be *read* — host ids are
-        // monotonic, so no later window takes this name — but it would sit
-        // there for the life of the process.
+        // Host ids are never reused, so a stale entry would only leak.
         self.content.remove(app_id);
-        // And nothing is owed to a canvas that no longer exists.
-        // An app id can come back — a client that reconnects, a portal
-        // re-created — and the window it names then is a different one.
+        // An app id can return (a reconnecting client), but it then names a
+        // different window.
         if self.pointer_app.as_deref() == Some(app_id) {
             self.pointer_app = None;
         }
@@ -2510,41 +1983,30 @@ impl DomicileCompositor {
         }
     }
 
-    /// Turn a client's newly-attached buffer into pixels for the chrome,
-    /// throttled to ~30fps per app.
-    /// Runs the engine's pending work and acts on what it said.
+    /// Run the engine's pending work and act on its events.
     ///
-    /// Called from the engine's calloop source and nowhere else: the ABI's
-    /// callbacks fire inside `dispatch`, so this is the one place they land.
-    ///
-    /// `dh` is here for one of those events: a display list rearranges the
-    /// desktop, and creating a `wl_output` needs the display to create it on.
+    /// Called only from the engine's calloop source, because the ABI's
+    /// callbacks fire inside `dispatch`. `dh` is needed to create `wl_output`s
+    /// when a display list rearranges the desktop.
     fn pump_the_engine(&mut self, dh: &DisplayHandle) {
         let Some(session) = self.engine.as_mut() else {
             return;
         };
         let (events, releases) = session.dispatch();
-        // Buffers viz has sat on past the deadline, taken back so the client
-        // can draw. A single-buffered client with its one buffer outstanding
-        // cannot draw at all, and a compositor that quietly stops a client is
-        // worse than one that tears once and says why.
+        // Take back buffers viz held past the deadline. A single-buffered
+        // client cannot draw otherwise; tearing once and logging it is better
+        // than freezing it.
         let overdue = session.overdue(Instant::now());
 
         for release in releases.into_iter().chain(overdue) {
             match release.why {
                 Returned::Released => {}
-                // With the app id: "a buffer was never released" is a
-                // different fact about one window of two than about both, and
-                // a surface viz is not drawing at all is exactly the case
-                // where only one window's holds expire.
+                // Include the app id: if only one window's buffers expire, viz
+                // is probably not drawing that surface.
                 Returned::Expired => {
-                    // Two messages rather than one with a made-up app id in
-                    // it: every other `app_id` field in this binary carries an
-                    // app id, the diagnostics grep these lines, and a sentence
-                    // sitting in that field reads as an app literally called
-                    // that. `window_gone` abandons every hold it had in the
-                    // same call it forgets the app, so an expiry for a surface
-                    // nothing claims really does mean the window went first.
+                    // Separate messages so `app_id` only ever holds an app id.
+                    // `window_gone` drops all holds when it forgets an app, so
+                    // an unclaimed expiry means the window went first.
                     match self
                         .engine
                         .as_ref()
@@ -2571,8 +2033,8 @@ impl DomicileCompositor {
 
         for event in events {
             match event {
-                // xdg_toplevel.configure: the page's layout box changed, so the
-                // client is told to draw at the new size.
+                // The page's layout box changed. Send `xdg_toplevel.configure`
+                // with the new size.
                 engine::Event::Configure {
                     surface,
                     width,
@@ -2587,8 +2049,8 @@ impl DomicileCompositor {
                     let Some(app_id) = app_id else {
                         continue;
                     };
-                    // A page embedded it, so a frame committed before that has
-                    // somewhere to go — a popup's only frame, often.
+                    // Now embedded, so a frame committed earlier can be shown.
+                    // Often a popup's only frame.
                     let waited = self
                         .engine
                         .as_mut()
@@ -2601,7 +2063,7 @@ impl DomicileCompositor {
                         }
                         Some(Ok(false)) | None => {}
                     }
-                    // A popup's size is its positioner's, not the page's box.
+                    // A popup's size comes from its positioner, not the page.
                     if self.popups.iter().any(|(id, _)| *id == app_id) {
                         continue;
                     }
@@ -2609,14 +2071,12 @@ impl DomicileCompositor {
                         tracing::debug!(%app_id, "the engine configured an app with no toplevel");
                         continue;
                     };
-                    // THE ENGINE COUNTS IN DEVICE PIXELS AND A CONFIGURE IS
-                    // IN LOGICAL ONES. Sent as it arrives, a window on a 1.2x
-                    // display is told to lay out 1.2x the content its box
-                    // holds and draws every bit of it 1.2x too small.
+                    // The engine sends device pixels; a configure is logical.
+                    // Unconverted, a window on a 1.2x display draws 1.2x too
+                    // small.
                     //
-                    // By the scale the box was laid out at, which the engine
-                    // says with it. The reported ratio is only for an engine
-                    // too old to say.
+                    // Use the scale the engine sends with the box. The reported
+                    // ratio is a fallback for older engines.
                     let (width, height) = crate::scale::logical_box(
                         (width, height),
                         scale.unwrap_or(self.device_pixel_ratio),
@@ -2625,31 +2085,24 @@ impl DomicileCompositor {
                     toplevel.with_pending_state(|state| {
                         state.size = Some((width as i32, height as i32).into());
                     });
-                    // Only sends when the size differs from the last configure
-                    // the client acknowledged.
+                    // Sends only if the size differs from the last acknowledged
+                    // configure.
                     toplevel.send_pending_configure();
                 }
-                // wl_surface.frame is still sent at commit, as it always has
-                // been. Driving it from viz instead changes how often every
-                // client draws, which is not this change's to decide.
+                // `wl_surface.frame` is sent at commit. Driving it from viz
+                // would change every client's frame rate.
                 engine::Event::Frame { .. } => {}
-                // Handled above, where the buffer is.
+                // Handled above, with the buffers.
                 engine::Event::Released { .. } => {}
-                // A copy made in a page or a browser window. THE BROWSER IS
-                // NOT A WAYLAND CLIENT OF THIS COMPOSITOR, so this is the only
-                // way one reaches the seat -- and putting it there is what
-                // makes the desktop have one clipboard rather than the browser
-                // having its own.
+                // A copy in a page or browser window. The browser is not our
+                // Wayland client, so this is how its copies reach the seat and
+                // the desktop has one clipboard.
                 //
-                // The engine is not told back. It is where this came from, and
-                // a compositor that answered every copy with the same copy
-                // would be a round trip per keystroke of Ctrl-C.
+                // The engine is not told back; it already has the copy.
                 engine::Event::Copied { clipboard, text } => {
                     self.took_a_copy(clipboard, text);
-                    // Set rather than merely recorded, because nothing else
-                    // will: a Wayland client pasting asks the seat, and what
-                    // the seat holds until this line is whatever some other
-                    // client copied.
+                    // Set the seat's selection, so Wayland clients can paste
+                    // it.
                     match clipboard {
                         Clipboard::Copy => set_data_device_selection(
                             &self.display_handle,
@@ -2665,47 +2118,38 @@ impl DomicileCompositor {
                         ),
                     }
                 }
-                // The engine holds DRM master, so on a tty its reading of the
-                // screens is the only one there is. `replugged_into` is what
-                // decides whether this desktop is the engine's to define, and
-                // `adopt_the_desktop` is a no-op for a list that says what the
-                // last one said -- which is what a hotplug the modeset driver
-                // caused reports.
+                // The engine holds DRM master, so on a tty this is the only
+                // monitor report. `replugged_into` decides whether the engine
+                // defines the desktop. `adopt_the_desktop` does nothing for an
+                // unchanged list, which a modeset-triggered hotplug reports.
                 engine::Event::Displays(displays) => {
-                    // Kept, because a config reload has to be matched against
-                    // the monitors that are plugged in and the event carrying
-                    // them is long gone by then. The whole list every time,
-                    // which is what the engine sends: what is absent from it
-                    // has been unplugged.
+                    // Kept so a config reload can match against the plugged-in
+                    // monitors. Always the full list; anything absent is
+                    // unplugged.
                     self.engine_displays = displays.clone();
                     match self.screens.replugged_into(
                         &displays,
                         &self.config.current().output,
                         &self.vendors,
                     ) {
-                        // A desktop the config describes outright, which DRM
-                        // does not overrule -- but a monitor that arrives
-                        // while the screens are dark arrives LIT, and this is
-                        // the arm where nothing else would say otherwise.
+                        // The config describes the desktop and DRM does not
+                        // override it. A monitor that arrives while the screens
+                        // are dark comes up lit, so darken it again.
                         Ok(None) => self.keep_the_screens_dark(),
-                        // `adopt_the_desktop` states the connectors itself,
+                        // `adopt_the_desktop` sets every connector's power,
                         // dark ones included.
                         Ok(Some(screens)) => self.adopt_the_desktop(dh, screens),
-                        // A profile that matched these monitors and cannot be
-                        // applied to them. The desktop that is up keeps
-                        // working -- the same bargain `ConfigStore` makes for
-                        // an edit that does not parse -- and the complaint
-                        // names what is wrong with the config, which is the
-                        // only place this can be fixed.
+                        // A matching profile cannot be applied. Keep the
+                        // current desktop, as `ConfigStore` does for an
+                        // unparseable edit, and name the config problem.
                         Err(err) => {
                             tracing::warn!(
                                 %err,
                                 "the profile these monitors matched cannot be applied to them; \
                                  keeping the desktop that is up"
                             );
-                            // And keeping it dark, if it was: the monitor that
-                            // could not be placed is still a monitor that came
-                            // up lit.
+                            // Keep it dark too; the unplaced monitor came up
+                            // lit.
                             self.keep_the_screens_dark();
                         }
                     }
@@ -2714,11 +2158,10 @@ impl DomicileCompositor {
         }
     }
 
-    /// Put one key into the seat, and let the focus it already has deliver it.
+    /// Send one key through the seat to the focused client.
     ///
-    /// Shared by the chrome's keys and the latency run's, because a
-    /// measurement that went in by a different door would be measuring a
-    /// different door.
+    /// Shared by chrome keys and the latency run, so the measurement uses the
+    /// real input path.
     fn inject_key(&mut self, keycode: u32, pressed: bool) {
         let keyboard = self.seat.get_keyboard().unwrap();
         let (serial, time) = (SERIAL_COUNTER.next_serial(), self.now_ms());
@@ -2729,11 +2172,9 @@ impl DomicileCompositor {
         };
         // wl keymaps use X keycodes (evdev + 8); callers speak evdev.
         let key: Keycode = (keycode + 8).into();
-        // A release for a key the seat does not hold is not the window's. On a
-        // desk of several monitors the page that hears a release is the one
-        // under the pointer, not the one that sent the press, so every page
-        // sends every release it hears — and the seat is what knows which of
-        // them were ever down here.
+        // Drop releases for keys the seat does not hold. With several monitors,
+        // every page forwards every release it hears, since the release may
+        // reach a different page than the press.
         if !pressed && !keyboard.pressed_keys().contains(&key) {
             return;
         }
@@ -2742,103 +2183,52 @@ impl DomicileCompositor {
         });
     }
 
-    /// Drive the keystroke-to-pixel run, if one is going, on this app's frame.
+    /// Record a commit for the keystroke-to-pixel run, if one is going.
     ///
-    /// **On the commit path, and that is the only place it can be.** A round
-    /// is bounded by two things this compositor sees and nothing else does:
-    /// the client's answering commit, which arrives here, and what the engine
-    /// then draws, which only `EngineSession` can be asked. See `latency.rs`
-    /// for what the numbers are and why they are three.
-    ///
-    /// THIS BLOCKS THE WAYLAND THREAD, and the worst case is worth knowing
-    /// before turning it on. `spike_pixel` is a `CopyOutputRequest` that waits
-    /// for the browser to answer, and the loop below spends one per ask.
-    ///
-    /// One invocation is either a whole floor or at most one round — the
-    /// `Press` arm breaks. A settling floor is `Budget::floor_samples` asks
-    /// plus the priming one that is not timed, about **1.0 s** at 60Hz. A
-    /// floor that keeps being restarted is `Budget::max_floor_asks`, about
-    /// **6.7 s**, and a round the client never answers is `Budget::max_polls`,
-    /// about **3.3 s**. For every one of
-    /// those there is no client dispatch and no frame callbacks: nothing on
-    /// this desktop is served. It is a spike instrument, off unless
-    /// `DOMICILE_SPIKE_LATENCY` names a point, and that is the trade.
-    ///
-    /// **The screen at that point has to hold still, and providing that is the
-    /// caller's job.** A client repainting on its own — a terminal blinking
-    /// its cursor over the probe point — restarts the floor faster than the
-    /// floor completes, so the run spends its whole budget and reports
-    /// `NeverSettled` having measured nothing. That is a legible failure
-    /// rather than a hang, which is what the budgets buy, but it is still a
-    /// run wasted: a guard driving this wants a client whose cursor does not
-    /// blink.
-    ///
-    /// It does not deadlock against the engine: `SamplePixel` parks on a
-    /// `WaitableEvent` while the engine's own thread runs a nested run loop,
-    /// so the reply does not need this thread back.
+    /// Called on the commit path because a round ends with the client's
+    /// answering commit, which only arrives here. See `latency.rs` for the
+    /// measurements. Off unless `DOMICILE_SPIKE_LATENCY` is set.
     fn drive_latency(&mut self, app_id: &str, committed: Instant, held: bool) {
         let (Some(_), Some(budget)) = (spike_latency_point(), spike_latency_budget()) else {
             return;
         };
-        // Only a frame the engine took can answer a keystroke, and waiting for
-        // one is also what keeps the run from starting before there is
-        // anything to read. Started on the client's first commit instead, the
-        // probe refuses — no engine yet, or a browser window that has not
-        // painted — and a refusal costs no time at all, so the floor spends
-        // its whole run of them inside that one callback and the run is over
-        // as `ProbeWentDark` before the desktop has finished starting.
+        // Start only once the engine has taken a frame. Before that the probe
+        // refuses instantly, and the floor would spend its budget in one
+        // callback and end as `ProbeWentDark`.
         if !held {
             return;
         }
-        // The first app to commit is the one measured, and it keeps the run
-        // for the whole of it: a second window appearing partway would
-        // otherwise contribute commits to rounds its keys never caused.
+        // Measure only the first app to commit, so a second window does not add
+        // commits to rounds its keys did not cause.
         if self.latency_app.get_or_insert_with(|| app_id.to_string()) != app_id {
             return;
         }
-        // Taken out and put back, because a run dropped here starts over from
-        // an empty floor on the next commit.
+        // Taken out and put back; a dropped run restarts from an empty floor.
         let frame = self.display_interval();
         let mut run = self
             .latency
             .take()
             .unwrap_or_else(|| Latency::new(budget, frame));
-        // The caller's stamp, from before `publish_frame` ran. The import and
-        // the submit are this design's cost and belong in `commit_to_pixel`;
-        // stamping here would have put them in the client's half instead.
+        // Use the caller's timestamp from before `publish_frame`, so the import
+        // and submit count in `commit_to_pixel`, not the client's time.
         run.committed(committed);
         self.latency = Some(run);
-        // AND NOTHING ELSE. This used to drive the whole run from here, in a
-        // loop that sampled until the color changed. See `step_the_latency`.
+        // Sampling happens in `step_the_latency`, not here.
     }
 
-    /// One step of the latency run, and then back to the event loop.
+    /// Run one step of the latency run, then return to the event loop.
     ///
-    /// **One.** This was a loop, and the loop is the bug it exists to not be.
+    /// Must not loop. Everything runs on one calloop thread, so a polling loop
+    /// here would block engine releases and frame callbacks, and a client that
+    /// needs a second commit could never answer. The round would be wrongly
+    /// blamed on the client. A timer in `main` calls this again.
     ///
-    /// Everything in this compositor runs on one calloop thread: the clients'
-    /// fd, the engine's fd, and the commit callback this used to be driven
-    /// from. A poll loop inside that callback holds the thread, so for as long
-    /// as it spins, `pump_the_engine` cannot run and no `wl_buffer.release`
-    /// reaches anybody, and `dispatch_clients` cannot run and no frame
-    /// callback is flushed. The client is frozen.
+    /// Each `Sample` step blocks this thread for one `CopyOutputRequest`
+    /// readback. It cannot deadlock: `SamplePixel` waits while the engine's
+    /// thread runs a nested loop.
     ///
-    /// Which makes the wait unwinnable whenever the color needs a *second*
-    /// commit — a toolkit that renders on `wl_surface.frame`, or one that
-    /// needs its buffer back first, which is most of them. The run spent its
-    /// whole poll budget and recorded the round as "abandoned by the client".
-    /// The client had done nothing wrong: it was starved by the compositor
-    /// waiting on it, and the accusation was backward.
-    ///
-    /// Four of sixty rounds on the run that found this, and two before #246 —
-    /// which made it worse exactly as this predicts, by making a release
-    /// something the client has to be handed rather than something it got
-    /// early from a bug. `key_to_commit` had all sixty samples and
-    /// `commit_to_pixel` fifty-six: every round got its *first* commit, which
-    /// is the one that arrives while the thread is still free.
-    ///
-    /// So: one step, then return, and let the loop serve the client in
-    /// between. The timer in `main` is what brings us back.
+    /// The probe point must not repaint by itself (e.g. a blinking cursor), or
+    /// the floor never settles and the run ends `NeverSettled`.
     ///
     /// Returns whether the run wants another step immediately.
     fn step_the_latency(&mut self) -> bool {
@@ -2861,9 +2251,7 @@ impl DomicileCompositor {
                 true
             }
             LatencyStep::Press => {
-                // Focused every round rather than once: the keyboard is one
-                // seat's and anything else that moved it would send the rest
-                // of the run somewhere the probe is not looking.
+                // Focus every round, in case something else moved the keyboard.
                 match app_id
                     .as_deref()
                     .and_then(|app_id| self.surface_for(app_id))
@@ -2875,13 +2263,9 @@ impl DomicileCompositor {
                         self.inject_key(LATENCY_KEY, true);
                         self.inject_key(LATENCY_KEY, false);
                     }
-                    // Never silently, and never merely logged: `next` has
-                    // already started this round, and the only way out of a
-                    // started round is a commit answering the key we just
-                    // failed to send. A client that does not redraw on its own
-                    // would leave the run there for ever with no report —
-                    // which is the shape of every other bug in this file. The
-                    // round is given up instead.
+                    // `next` already started this round, and only a commit
+                    // answering the key can end it. Give the round up instead
+                    // of waiting forever with no report.
                     None => {
                         warn!(
                             ?app_id,
@@ -2891,8 +2275,7 @@ impl DomicileCompositor {
                         run.press_went_nowhere();
                     }
                 }
-                // The client has to redraw before there is anything to look
-                // at, and it cannot do that while we are here.
+                // Return so the client can redraw.
                 false
             }
             LatencyStep::Wait => false,
@@ -2902,20 +2285,15 @@ impl DomicileCompositor {
         wants_more
     }
 
-    /// One display frame, as the latency run assumes it.
+    /// The display frame interval the latency run assumes.
     ///
-    /// **Assumed, not viz's own.** The number the latency run is divided by
-    /// ought to be the browser's display-frame interval, and nothing here can
-    /// ask viz for it — `css_parity.cc` can, because it runs inside the
-    /// browser, and reads it off `BeginFrameArgs`. 60Hz on the one machine
-    /// this runs on, and the floor is reported beside every other number so a
-    /// reader can calibrate against what the probe actually cost rather than
-    /// trusting this.
+    /// Assumed 60Hz; viz's real interval is not reachable from here. The
+    /// measured floor is reported alongside, for calibration.
     fn display_interval(&self) -> Duration {
         Duration::from_secs_f64(1000.0 / f64::from(SPIKE_REFRESH_MHZ))
     }
 
-    /// Say what the run measured, once, in the shape the guard reads.
+    /// Log the run's results once, in the format the guard reads.
     fn report_latency(&mut self) {
         if self.latency_reported {
             return;
@@ -2925,15 +2303,15 @@ impl DomicileCompositor {
         };
         self.latency_reported = true;
         let interval = self.display_interval();
-        // The text is `Spread::line`'s and is tested there, because the guard
-        // greps it.
+        // Text comes from `Spread::line`, tested there because the guard greps
+        // it.
         let say = |what: &str, spread: Option<&latency::Spread>| match spread {
             Some(spread) => tracing::info!(
                 target: "domicile::engine::spike",
                 "{}", spread.line(what, interval)
             ),
-            // Named rather than skipped: a missing line and a fast one must
-            // not look alike to whoever reads this log.
+            // Log missing data explicitly, so it cannot be mistaken for a fast
+            // result.
             None => tracing::info!(
                 target: "domicile::engine::spike",
                 "latency {what}: nothing measured"
@@ -2948,58 +2326,46 @@ impl DomicileCompositor {
         say("key to commit", report.key_to_commit.as_ref());
         say("commit to pixel", report.commit_to_pixel.as_ref());
         say("key to pixel", report.key_to_pixel.as_ref());
-        // How it ended and what the client did are two different accusations,
-        // so they are two lines. A run that never settled has no floor and no
-        // rounds, and "0 abandoned" on its own would read like a clean sheet.
+        // Separate from how the run ended: a run that never settled has no
+        // rounds, and "0 abandoned" alone would look clean.
         tracing::info!(
             target: "domicile::engine::spike",
             "latency: {} round(s) abandoned by the client",
             report.abandoned
         );
-        // The third thing a round can be, and the one the client is blameless
-        // for: the probe point changed color while the key was still on its
-        // way to being answered, so a frame from before the press reached the
-        // screen and the round is not a measurement. Said always, because a
-        // run that gave up rounds this way reports a median over the ones it
-        // did not.
+        // Rounds discarded because the probe pixel changed before the client
+        // answered: an older frame reached the screen. Always logged, since the
+        // median excludes them.
         tracing::info!(
             target: "domicile::engine::spike",
             "latency: {} round(s) whose pixel moved before the client answered",
             report.moved_before_commit
         );
-        // The fourth, and the one that reads as a measurement right up until
-        // you look at the size of it: the client committed, in order, and the
-        // pixel followed — just far too long after the key for the key to have
-        // caused it. Said always, for the reason the one above is.
+        // Rounds where the commit came too long after the key to be its answer.
+        // Always logged.
         tracing::info!(
             target: "domicile::engine::spike",
             "latency: {} round(s) whose commit came too late to be the key's answer",
             report.answered_too_late
         );
-        // The near end of that same wait, and not a round given up: a commit
-        // 0.82 ms after the key is a frame the client already had in flight,
-        // and the round waits on past it for the key's answer. So it is
-        // counted in commits. Said always, for the reason the one above is.
+        // Commits too soon after the key to answer it (a frame already in
+        // flight). The round keeps waiting, so these count commits, not rounds.
+        // Always logged.
         tracing::info!(
             target: "domicile::engine::spike",
             "latency: {} commit(s) passed over for coming too soon to be the key's answer",
             report.answered_too_soon
         );
-        // What the client did with the key, as opposed to whether it answered
-        // at all. A round counted here answered with more than one frame, and
-        // its `commit to pixel` is timed from the first of them — so a run
-        // with a high count here is reporting some of the client's own second
-        // draw as ours. Said always, so that qualification is never missing
-        // from a number somebody is about to compare against a floor.
+        // Rounds the client answered with more than one frame. `commit to
+        // pixel` is timed from the first, so a high count means some of the
+        // client's own redraw is counted as ours. Always logged.
         tracing::info!(
             target: "domicile::engine::spike",
             "latency: {} round(s) where the client drew again while polling",
             report.redrew_while_polling
         );
-        // Said always, and separately from the line above. A key we never
-        // delivered is this compositor's failure and not the client's, and
-        // folding the two together is the wrong-end report this instrument has
-        // had to be talked out of three times.
+        // Keys we failed to deliver. Kept separate from client failures so the
+        // fault is attributed correctly.
         tracing::info!(
             target: "domicile::engine::spike",
             "latency: {} round(s) whose key was never delivered",
@@ -3022,15 +2388,13 @@ impl DomicileCompositor {
         }
     }
 
-    /// Show this app's frame, and say what became of the client's buffer.
+    /// Show this app's frame and report what happened to the client's buffer.
     ///
     /// [`Published::Held`] means viz is sampling the client's dmabuf and the
-    /// caller must not release it — see the commit path, which is the only
-    /// caller. Every other answer leaves the buffer the caller's to release.
+    /// caller must not release it. Otherwise the caller releases it.
     ///
-    /// One path: whatever the client drew reaches the engine as a dmabuf, or
-    /// the window does not draw. An shm frame is copied into one of the
-    /// compositor's own first — see [`crate::uploads`].
+    /// Every frame reaches the engine as a dmabuf; shm frames are copied first
+    /// (see [`crate::uploads`]).
     fn publish_frame(
         &mut self,
         app_id: &str,
@@ -3059,8 +2423,8 @@ impl DomicileCompositor {
         published
     }
 
-    /// Hand `submitted` to the engine as `app_id`'s window: `shown` if it
-    /// took it, [`Published::NotShown`] if it did not.
+    /// Submit `submitted` as `app_id`'s frame. Returns `shown` if the engine
+    /// took it, [`Published::NotShown`] if not.
     fn submit_to_the_engine(
         &mut self,
         app_id: &str,
@@ -3072,9 +2436,8 @@ impl DomicileCompositor {
         let Some(session) = self.engine.as_mut() else {
             return Published::NotShown;
         };
-        // Whole-surface damage. The engine takes a rectangle and the client
-        // reports one, but mapping between them is its own correctness question
-        // — a wrong rectangle leaves stale pixels on screen.
+        // Whole-surface damage. Mapping client damage to the engine's rectangle
+        // is its own correctness problem, and a wrong one leaves stale pixels.
         match session.submit(
             app_id,
             submitted,
@@ -3096,14 +2459,11 @@ impl DomicileCompositor {
         }
     }
 
-    /// An shm client's frame, copied into a buffer of the compositor's and
-    /// submitted in its place.
+    /// Copy an shm client's frame into a compositor buffer and submit that.
     ///
-    /// The client's buffer is free the moment the copy lands, so the answer
-    /// is never [`Published::Held`]. A frame that cannot be copied is said
-    /// once per client with why, because a blank window with nothing in the
-    /// log is the defect ERRORS.md is about and a client commits at its frame
-    /// rate.
+    /// Never [`Published::Held`]: the client's buffer is free once copied. A
+    /// failed copy is logged once per client, so a blank window always has an
+    /// explanation.
     fn publish_shm_frame(
         &mut self,
         app_id: &str,
@@ -3176,25 +2536,21 @@ impl DomicileCompositor {
         }
     }
 
-    /// What follows the engine taking a frame: the first-frame line, and the
-    /// spikes' probes, which ask what viz drew.
+    /// Run after the engine takes a frame: log the first frame, and run the
+    /// spike probes.
     fn frame_shown(&mut self, app_id: &str) {
-        // Tested before inserting: this is the submit path, at the client's
-        // frame rate, and `insert` would allocate a String for every frame of
-        // every window to answer a question it has already answered.
+        // Check before inserting, to avoid allocating a `String` every frame.
         if !self.first_frame_logged.contains(app_id) {
             self.first_frame_logged.insert(app_id.to_string());
             debug!(app_id, "the engine took this app's first frame");
         }
-        // THROWAWAY. The spike's assertion, and the only place it can be made:
-        // the compositor holds the browser's invitation, so nothing else can
-        // ask what viz drew. Logged rather than returned because the thing that
-        // checks it is a shell script.
-        // Throttled, and checked before the session is borrowed so that
-        // updating it does not fight the borrow.
+        // Temporary spike probes. Only the compositor can ask viz what it drew.
+        // Results are logged because shell scripts check them.
+        //
+        // Throttled, and checked before borrowing the session.
         const PROBE_EVERY: Duration = Duration::from_millis(250);
-        // `match` rather than `is_none_or`, which is stable later than this
-        // crate's MSRV, or `map_or(true, ..)`, which clippy rewrites into it.
+        // `match` rather than `is_none_or`, which is newer than this crate's
+        // MSRV, or `map_or(true, ..)`, which clippy rewrites into it.
         let due = match self.last_probe {
             None => true,
             Some(at) => at.elapsed() >= PROBE_EVERY,
@@ -3206,45 +2562,31 @@ impl DomicileCompositor {
         let Some(session) = self.engine.as_ref() else {
             return;
         };
-        // Colors to find anywhere in the window, for a guard that cannot name
-        // a point because the shell decides where its windows go — and, as it
-        // turned out, because the coordinate space a named point is in is not
-        // the one the browser was asked for.
+        // Find colors anywhere in the window, for guards that cannot name a
+        // point because the shell places windows.
         //
-        // Searched until every wanted color has been found AND none of their
-        // boxes moved between two rounds. A box logged at first sight is a box
-        // measured mid-paint: a window that is still filling in is smaller
-        // than it will be, and the guard's assertion is about how much of the
-        // page each window covers. Settling also means the two boxes agree
-        // about one moment rather than being snapshots of different frames.
+        // Search until every color is found and no box moved between two
+        // rounds. A window still painting is smaller than it will be, and the
+        // guard measures coverage.
         //
-        // Then it stops. The search captures the whole window and costs ~3 MB
-        // and a blocking readback a time, and `HeldBuffers`' deadline is
-        // 500ms — a search that runs forever is the compositor manufacturing
-        // the "never released" errors the log is being read for.
+        // Then stop. Each search is a ~3 MB blocking readback, longer than
+        // `HeldBuffers`' 500ms deadline, so searching forever would expire
+        // held buffers.
         const FIND_EVERY: Duration = Duration::from_secs(2);
-        // A wall clock, not a count of rounds. The guards' poll begins after
-        // waiting for a broker socket, a compositor, a handshake and a client
-        // to map, so no number of rounds here can be matched to it. Five
-        // minutes is longer than any guard's whole run and still finite.
+        // Wall-clock budget, since guards start polling after an unpredictable
+        // setup. Longer than any guard's run.
         const FIND_FOR: Duration = Duration::from_secs(300);
         let find_due = match self.last_find {
             None => true,
             Some(at) => at.elapsed() >= FIND_EVERY,
         };
         if find_due && !spike_find_colors().is_empty() && !self.find_settled {
-            // The first search, which is the first frame a client committed
-            // and the engine took: this whole block runs on the submit path.
-            // So a desktop with no client yet is not searching for anything
-            // and is not spending the budget waiting for one.
+            // Starts at the first search, which is the first engine-accepted
+            // client frame. Waiting for a client does not spend the budget.
             let since = *self.find_since.get_or_insert_with(Instant::now);
             if since.elapsed() >= FIND_FOR {
-                // Once, on its own flag. Firing it from the loop condition
-                // meant it could only be said on a round that happened to
-                // straddle the budget, which is a few milliseconds out of
-                // every two seconds — so it was never said, and a guard
-                // reading "not found" could not tell that from "not
-                // looked for".
+                // Logged once, so a guard can tell "not found" from "stopped
+                // looking".
                 self.find_settled = true;
                 warn!(
                     target: "domicile::engine::spike",
@@ -3262,9 +2604,8 @@ impl DomicileCompositor {
                             window: (w, h),
                             bounds: Some(bounds),
                         }) => {
-                            // Logged when it changes, so a page that has
-                            // settled says its geometry once and a page still
-                            // painting says it as often as it moves.
+                            // Logged when it changes, so a still-painting page
+                            // logs each move.
                             if self.probe_boxes.insert(argb, bounds) != Some(bounds) {
                                 nothing_moved = false;
                                 let Bounds {
@@ -3280,19 +2621,15 @@ impl DomicileCompositor {
                                 );
                             }
                         }
-                        // Once, and only the first time. The guard polls, so
-                        // this is the state for most of a run and saying it
-                        // every tick would bury the line that matters.
+                        // Logged once; this is the usual state for most of a
+                        // run.
                         Some(Capture {
                             window: (w, h),
                             bounds: None,
                         }) => {
                             every_color_found = false;
-                            // Forgotten, not kept. A color that is found,
-                            // then absent, then found again would otherwise
-                            // settle by matching a box measured two rounds
-                            // earlier — which is not two consecutive readings
-                            // of the same thing, which is the whole point.
+                            // Forget the box, so found-absent-found cannot
+                            // settle against a reading two rounds old.
                             self.probe_boxes.remove(&argb);
                             if self.probe_missing.insert(argb) {
                                 tracing::info!(
@@ -3302,13 +2639,9 @@ impl DomicileCompositor {
                                 );
                             }
                         }
-                        // Its own set, not `probe_missing`. Sharing one would
-                        // let a single transient unreadable capture silence
-                        // the real "has not drawn" measurement for the rest of
-                        // the run — and that line is what the negative
-                        // controls grep for, so the two answers this split
-                        // exists to separate would be merged again by the
-                        // thing meant to keep them apart.
+                        // Separate from `probe_missing`, so a transient
+                        // unreadable capture cannot silence the "has not drawn"
+                        // line that negative controls grep for.
                         None => {
                             every_color_found = false;
                             self.probe_boxes.remove(&argb);
@@ -3323,13 +2656,8 @@ impl DomicileCompositor {
                         }
                     }
                 }
-                // Said out loud, because the guards need it and cannot
-                // derive it. A box is logged only when it *moves*, so "the
-                // last line has not changed" is true whether the search ran
-                // or not — a script watching the log is watching the log's
-                // quiescence, not the page's. This is the compositor saying
-                // it looked again and nothing had moved, which is the claim
-                // a guard actually wants before it measures a width.
+                // Logged because guards cannot infer it: boxes are logged only
+                // when they move, so a quiet log does not prove the search ran.
                 if every_color_found && nothing_moved {
                     self.find_settled = true;
                     tracing::info!(
@@ -3338,19 +2666,14 @@ impl DomicileCompositor {
                     );
                 }
             }
-            // Stamped after the captures, not before: the interval is meant to
-            // be a gap between readbacks, and a capture longer than it would
-            // otherwise run back to back with no gap at all.
+            // Stamp after capturing, so the interval is a gap between readbacks
+            // even when a capture is slow.
             self.last_find = Some(Instant::now());
         }
 
-        // Not while a latency run is going, and this is not tidiness. This
-        // capture is a `CopyOutputRequest` that forces a draw and waits, and it
-        // runs on the submit path — inside the window `commit_to_pixel` is
-        // timed over, which starts before `publish_frame`. The floor is one
-        // capture and this would make every round two, so the ratio the guard
-        // asserts would sit on its own threshold and fail, blaming the product
-        // for the instrument's own readback.
+        // Skipped during a latency run. This capture forces a draw and waits on
+        // the submit path, inside the `commit_to_pixel` window. It would double
+        // each round's cost and fail the guard's ratio.
         if spike_center_probe()
             && spike_probe_points().is_empty()
             && spike_find_colors().is_empty()
@@ -3369,24 +2692,16 @@ impl DomicileCompositor {
                         target: "domicile::engine::spike",
                         "engine drew #{drawn:08X} at ({x},{y}) of the browser's window"
                     ),
-                    // Said, not skipped, and this is the point. A probe that
-                    // answers nothing and logs nothing is indistinguishable
-                    // from a page that drew nothing, and the two have entirely
-                    // different causes: the first is the symbol missing from
-                    // the library or the point outside the window, the second
-                    // is the seam. Once per point, because this is on the
-                    // submit path.
+                    // Logged once per point. A silent probe looks the same as a
+                    // page that drew nothing, but the causes differ (missing
+                    // symbol or out-of-window point, versus the seam).
                     None => {
                         if self.probe_refused.insert((x, y)) {
-                            // Two things left, and the center tells them
-                            // apart. SamplePixel refuses both a point outside
-                            // the window and a window that has not been drawn
-                            // — the second returns an empty bitmap, which is
-                            // "the browser is not compositing at all" and is a
-                            // completely different problem. The center is
-                            // always inside a window that exists, so an answer
-                            // from it means the bitmap is fine and this point
-                            // is not, and no answer means there is no bitmap.
+                            // Probe the center to tell the causes apart.
+                            // `SamplePixel` refuses both a point outside the
+                            // window and an undrawn window (empty bitmap). The
+                            // center is always inside, so an answer there means
+                            // the point is out of bounds.
                             match session.spike_window_center() {
                                 Some(center) => warn!(
                                     x,
@@ -3412,24 +2727,15 @@ impl DomicileCompositor {
         }
     }
 
-    /// Advertise a new output scale, so clients redraw at the resolution the
-    /// screen actually has.
+    /// Advertise a new output scale, so clients redraw at the screen's
+    /// resolution.
     ///
-    /// Two things ask for this and they do not agree on who knows best. The
-    /// chrome reports its own density, which is the answer where Domicile has
-    /// no window of its own — but where it does, that density is a number
-    /// *we* gave the chrome, so believing it back would pin the scale at
-    /// whatever it started as. The window's is the one that comes from outside.
+    /// Applies only to a window-following desktop; a described desktop sets its
+    /// own scale.
     fn set_output_scale(&mut self, scale: i32) {
-        // As above: a described display states its own scale, and the chrome's
-        // reported density is not a thing to weigh against it.
         if !self.screens.follows_the_window() {
-            // Logged because refusing is otherwise invisible: someone who
-            // sets a `devicePixelRatio` and sees nothing happen has no way to
-            // tell a config that overrode them from a message that never
-            // arrived. It is also the only trace this path leaves for a test,
-            // which cannot otherwise distinguish "the density was refused"
-            // from "no chrome ever spoke".
+            // Logged because the refusal is otherwise invisible, to users and
+            // to tests.
             debug!(scale, "{}", grepped::DENSITY_REFUSED);
             return;
         }
@@ -3437,18 +2743,11 @@ impl DomicileCompositor {
         self.set_output(logical, scale);
     }
 
-    /// Advertise a new desktop size, because the chrome's window is the
-    /// desktop and the chrome is the only thing that can see it.
+    /// Advertise a new desktop size reported by the chrome.
     ///
-    /// The mirror of `set_output_scale` above, and guarded the same way: a
-    /// described desktop is the config's statement about the user's real
-    /// screens, so dragging Domicile's window shows more or less of it rather
-    /// than resizing it. Logged when refused for the reason that one is —
-    /// otherwise "the desktop did not resize" and "the message never arrived"
-    /// look identical from outside.
-    ///
-    /// The scale is carried through rather than recomputed: a mode is a size
-    /// and a density together, and this half is not the one that moved.
+    /// Like `set_output_scale`, refused (and logged) on a described desktop:
+    /// resizing Domicile's window then shows more or less of the configured
+    /// screens. The scale is kept.
     fn set_output_size(&mut self, logical: (i32, i32)) {
         if !self.screens.follows_the_window() {
             debug!(
@@ -3468,23 +2767,17 @@ impl DomicileCompositor {
         self.set_output(logical, scale);
     }
 
-    /// Advertise the desktop's size and density together, because a mode is
-    /// both and neither can be changed without restating the other.
+    /// Advertise the desktop's size and scale together, since a mode is both.
     ///
-    /// Only for a window-following desktop. Everything below assumes one
-    /// output, and on a described desktop it would rewrite `self.screens` to a
-    /// single `Advertised` while `self.outputs` kept the rest — a desktop and
-    /// its outputs disagreeing, with nothing to say so. The callers guard, and
-    /// this asserts it: the `expect`s further down only find the list
-    /// non-empty, which a described desktop is too.
+    /// Only for a window-following desktop, which has one output. On a
+    /// described desktop it would leave `self.screens` and `self.outputs`
+    /// disagreeing. Callers guard this and it is asserted.
     fn set_output(&mut self, logical: (i32, i32), scale: i32) {
         assert!(
             self.screens.follows_the_window(),
             "a described desktop is the config's, not this function's to replace"
         );
-        // Both halves from `Screens`, which carries them together. Reading the
-        // scale off the Smithay `Output` instead would be one fact from two
-        // places, and it is what made this need a borrow it could not have.
+        // Read both from `Screens`, the single source for size and scale.
         let advertised = self
             .screens
             .outputs()
@@ -3501,11 +2794,8 @@ impl DomicileCompositor {
             grepped::ADVERTISING
         );
         self.screens = Screens::following_the_window(logical, scale);
-        // The mode is physical pixels, so it grows with the scale to
-        // hold the logical size still: a denser display is a sharper
-        // desktop, not a smaller one. Read back off the *new* `Screens`, not
-        // the one the staleness check above looked at, which is the desktop
-        // this call is replacing.
+        // The mode is in physical pixels, so it grows with the scale to keep
+        // the logical size. Read from the new `Screens`.
         let mode = current_mode(
             self.screens
                 .outputs()
@@ -3519,33 +2809,24 @@ impl DomicileCompositor {
             .output;
         output.change_current_state(Some(mode), None, Some(Scale::Integer(scale)), None);
         output.set_preferred(mode);
-        // A client only redraws at the new scale once something
-        // asks it to, and its own size is unchanged — so re-send
-        // the configure it already has to prompt one.
+        // Re-send the existing configure to prompt clients to redraw at the new
+        // scale.
         for (_, toplevel) in &self.toplevels {
             toplevel.send_configure();
         }
-        // The chrome covers the desktop, so its size *is* the desktop's and it
-        // has to be told when that changes — nothing else will tell it.
+        // The chrome covers the desktop, so it must be resized with it.
         if let Some(chrome) = self.chrome_toplevel.clone() {
             chrome.with_pending_state(|state| {
                 state.size = Some(logical.into());
             });
             chrome.send_configure();
         }
-        // And the desktop the chrome *lays out* against, which is a different
-        // fact from the size of its own surface: `<Screen>` positions come
-        // from the display list. This path is the one where that changes at
-        // runtime — a window resized, or a density adopted — so it does both
-        // halves. The retained answer, so the next chrome to connect is told
-        // the current desktop rather than the one Domicile started on; and a
-        // message now, so the pages already connected are not left laying out
-        // against a desktop that is gone.
+        // Update the display list the chrome lays out against (`<Screen>`
+        // positions). Store it for chromes that connect later and broadcast it
+        // to connected ones.
         //
-        // Describe and then broadcast *that* desktop, in that order and on this
-        // one thread. Both halves are load-bearing and `freshened` explains
-        // why: they are what puts a newer line behind every stale one on every
-        // socket, and a describe without a broadcast breaks it.
+        // Describe then broadcast, on this thread. [`freshened`] relies on that
+        // order.
         let desktop = {
             let mut host = self.hub.host.lock().unwrap();
             host.describe_displays(self.screens.outputs().map(Advertised::described).collect());
@@ -3554,28 +2835,18 @@ impl DomicileCompositor {
         self.hub.broadcast(desktop);
     }
 
-    /// Take up a desktop the config now describes, keeping the displays that
-    /// stayed.
+    /// Apply a desktop the config now describes, keeping displays that stayed.
     ///
-    /// The counterpart to [`set_output`](DomicileCompositor::set_output),
-    /// which is the *window*-following desktop changing under its own steam.
-    /// This is the described one changing because the file did, so it is the
-    /// only path that can add or remove a display rather than restate the one
-    /// there is — and unlike `set_output` it holds for either kind of desktop,
-    /// including a config that stopped describing one at all.
+    /// The only path that can add or remove displays. Works for either kind of
+    /// desktop, including a config that stopped describing one.
     ///
-    /// Nothing happens when the desktop did not change. A config file is
-    /// rewritten for all sorts of reasons — a chrome package, a keymap, a
-    /// stray newline — and an editor's atomic-rename save produces several
-    /// events for one edit. Re-advertising the same displays each time would
-    /// have every client redraw for nothing.
+    /// Does nothing if the desktop is unchanged, since config files are
+    /// rewritten often and editors' atomic saves fire several events.
     ///
-    /// The display list is the only thing *this* acts on, and no longer the
-    /// only thing a reload does: the rest of the file is
-    /// [`adopt_the_rest_of_the_config`](DomicileCompositor::adopt_the_rest_of_the_config)'s,
-    /// which the same callback calls straight after this.
-    /// [`crate::restatement`] carries the table of which field takes which
-    /// path, and is the one place to read — or to add to.
+    /// Only handles displays.
+    /// [`adopt_the_rest_of_the_config`](DomicileCompositor::adopt_the_rest_of_the_config)
+    /// runs right after for the rest; [`crate::restatement`] lists which field
+    /// takes which path.
     fn adopt_the_desktop(&mut self, dh: &DisplayHandle, screens: Screens) {
         if screens == self.screens {
             return;
@@ -3586,10 +2857,8 @@ impl DomicileCompositor {
             retired = plan.retired.len(),
             "taking up a reloaded desktop"
         );
-        // Every old output moved out first, so the new list can take the ones
-        // it keeps and what is left is exactly what nothing kept. Taking them
-        // in place instead would need the old list borrowed while the new one
-        // is built out of it.
+        // Move all old outputs out first; the new list takes those it keeps,
+        // and the rest are retired.
         let mut had: Vec<Option<LiveOutput>> = self.outputs.drain(..).map(Some).collect();
         let outputs: Vec<LiveOutput> = plan
             .slots
@@ -3597,13 +2866,10 @@ impl DomicileCompositor {
             .zip(screens.outputs())
             .map(|(slot, advertised)| match slot {
                 Slot::Kept(index) => {
-                    // Unreachable: `OutputConfig::validate` rejects two
-                    // displays with one name and `Screens`' fields are
-                    // private, so no public path builds one with duplicates —
-                    // and `rearranged_into` matches on the name, so each index
-                    // is kept at most once. Asserted rather than coped with
-                    // because the alternative is advertising one `wl_output`
-                    // as two displays, silently.
+                    // Unreachable: display names are unique
+                    // (`OutputConfig::validate`), and `rearranged_into` matches
+                    // by name. Asserted so one `wl_output` is never advertised
+                    // as two displays.
                     let live = had[*index]
                         .take()
                         .expect("no two displays share one output");
@@ -3613,72 +2879,48 @@ impl DomicileCompositor {
                 Slot::New => advertise_output(dh, advertised),
             })
             .collect();
-        // `retired` is exactly the indices no slot kept, by construction, so
-        // this cannot reach an output the list above is using and the order of
-        // the two loops does not matter. Written after it for reading rather
-        // than for safety: what is destroyed is easier to check against a list
-        // that is already built.
+        // `retired` holds exactly the indices no slot kept, so loop order does
+        // not matter.
         for retired in plan.retired {
             let live = had[retired]
                 .take()
                 .expect("a retired output is one no slot kept");
-            // The global rather than the `Output`. Dropping the `Output` frees
-            // our own record and leaves the global bound, so the display stays
-            // advertised to every client for the rest of the run — a monitor
-            // that was unplugged and that nothing can be told about.
+            // Remove the global. Dropping only the `Output` would leave it
+            // advertised for the rest of the run.
             dh.remove_global::<DomicileCompositor>(live.global);
         }
         self.outputs = outputs;
         self.screens = screens;
-        // WHAT THE CONNECTORS BEHIND THOSE OUTPUTS HAVE TO BE DOING, which is
-        // the engine's to do because the engine is the process holding DRM
-        // master. Everything above is the desktop this compositor advertises;
-        // this is the glass, and a profile that turns a panel off is not a
-        // desktop with one fewer display on it unless something turns the
-        // panel off.
+        // Tell the engine, which holds DRM master, which connectors to light. A
+        // profile that turns a panel off needs the panel actually turned off.
         //
-        // Sent on every adoption, empty list included, for the reason
-        // `Screens::scanout` gives: an empty one is what undoes a profile
-        // whose displays are no longer plugged in.
+        // Sent on every adoption, even an empty list, which undoes a profile
+        // whose displays are unplugged (see `Screens::scanout`).
         //
-        // Through `state_the_connectors` rather than straight at the session,
-        // because a desktop that is blanked has to stay blanked through a
-        // reload and a hotplug: stating the desktop's own list here would
-        // light the screens back up behind the idle clock's back, and the
-        // person who walked away would come back to a lit desk because a
-        // monitor was plugged in.
+        // Through `state_the_connectors` so a blanked desktop stays blanked
+        // through reloads and hotplugs.
         self.state_the_connectors();
-        // The chrome is on every display, because it *is* the desktop — so a
-        // display that just appeared is one it has to be told it is on, and a
-        // toolkit picks its density from exactly this.
+        // The chrome is on every display, so tell it about new ones. Toolkits
+        // pick their density from this.
         if let Some(chrome) = self.chrome_toplevel.clone() {
             for live in &self.outputs {
                 live.output.enter(chrome.wl_surface());
             }
-            // And it covers the new desktop. Sent unconditionally rather
-            // than on a size change, because the desktop can differ without
-            // its *size* differing at all: a display renamed, or one whose
-            // scale alone moved, leaves the logical bounding box byte for
-            // byte the same. The early return above compares whole `Screens`,
-            // not sizes. A configure the chrome already has is a no-op to it.
+            // Resize it to the new desktop. Always sent, because the desktop
+            // can change (a rename, a scale) without its bounding box changing.
+            // A repeated configure is a no-op.
             chrome.with_pending_state(|state| {
                 state.size = Some(self.screens.size().into());
             });
             chrome.send_configure();
         }
-        // Every window re-narrowed to the displays it is now over. A window
-        // that did not move can still be on a different set of them: the
-        // displays moved under it.
+        // Displays may have moved under windows that did not.
         self.enter_the_displays_each_window_is_on();
-        // A client redraws at a new scale only when something asks it to, and
-        // its own size has not changed.
+        // Prompt clients to redraw at any new scale.
         for (_, toplevel) in &self.toplevels {
             toplevel.send_configure();
         }
-        // And the desktop the chrome lays `<Screen>` out against. Described
-        // and then broadcast, in that order and on this one thread, for the
-        // reason `set_output` gives: that is what puts a newer line behind
-        // every stale one on every socket.
+        // Describe then broadcast on this thread, as in `set_output`.
         let desktop = {
             let mut host = self.hub.host.lock().unwrap();
             host.describe_displays(self.screens.outputs().map(Advertised::described).collect());
@@ -3687,33 +2929,23 @@ impl DomicileCompositor {
         self.hub.broadcast(desktop);
     }
 
-    /// Join the engine that replaced the one this compositor was submitting
-    /// to, and put back everything the old one knew.
+    /// Join an engine that replaced the current one, and restore what the old
+    /// one knew.
     ///
-    /// **THE COMPOSITOR OUTLIVES ITS ENGINE, and this is the whole of why it
-    /// can.** `domicile-launch` starts another engine under a compositor that
-    /// is still serving (`domicile_launch::restart`), so the clients on this
-    /// desktop keep the `wl_display` they are connected to and their windows
-    /// are still theirs. What they cannot keep is anything the old browser
-    /// minted: [`EngineSession::reconnect`] says which of it there is and what
-    /// is done with each piece.
+    /// The compositor outlives its engine: `domicile-launch` can start a new
+    /// engine under a running compositor (`domicile_launch::restart`), and
+    /// clients keep their connection and windows. [`EngineSession::reconnect`]
+    /// handles what the old browser created.
     ///
-    /// Nothing happens for a page that is the engine already joined reloading
-    /// — a `domicile load-shell` — which is what
-    /// [`EngineSession::another_engine_is_there`] is for.
+    /// Does nothing when the same engine's page reloads (`domicile
+    /// load-shell`); see [`another_engine`].
     ///
-    /// **A DIAL THAT FAILS IS SAID AND THE SESSION IS KEPT.** The buffers
-    /// still come back either way, because a client owed a release that cannot
-    /// arrive has stopped drawing forever, and the next page to reach this
-    /// compositor asks again. What is not done is carrying on quietly: a
-    /// desktop whose windows have gone blank has to say why.
+    /// If the dial fails, it is logged and the session is kept. Held buffers
+    /// are returned either way, and the next page hello retries.
     fn rejoin_the_engine(&mut self, served_by: Option<i32>) {
         let replaced = another_engine(self.engine_process, served_by);
-        // Whether or not anything is rejoined: this is now the process serving
-        // this desktop's pages, and the one a later hello is compared against.
-        // `or` rather than an assignment, because a credential the kernel
-        // would not give is an attribution lost rather than an engine that
-        // has stopped existing.
+        // Record the serving process for later hellos. Keep the old one if the
+        // kernel gave no credential.
         self.engine_process = served_by.or(self.engine_process);
         if !replaced || self.engine.is_none() {
             return;
@@ -3726,13 +2958,9 @@ impl DomicileCompositor {
             .engine
             .as_mut()
             .expect("a desktop with no engine has nothing to rejoin, and said so above");
-        // The fds are the `wl_buffer`'s rather than this clone's: a Smithay
-        // `Dmabuf` is reference-counted and the client's buffer holds the
-        // original, which the session holds for as long as it holds the
-        // buffer. Same reading `publish_frame` takes of the same buffer.
-        //
-        // An shm window's frame is in one of the compositor's own buffers,
-        // which is as good as it was, so it goes back up the same way.
+        // The dmabuf is reference-counted, and the session holds the client's
+        // buffer, so its fds are still valid. shm windows resubmit their
+        // compositor-owned copy.
         let uploads = &self.uploads;
         let rejoined = session.reconnect(
             &|submitted| match submitted {
@@ -3747,17 +2975,12 @@ impl DomicileCompositor {
         match &rejoined.dialed {
             Ok(()) => {
                 self.watch_the_engines_fd();
-                // The new engine read the hardware for itself and will send
-                // its own display list, but it has no memory of a profile:
-                // `Screens::replugged_into` answers a list that says what the
-                // last one said with "nothing to do", so a connector this
-                // desktop's config turned off would come back lit.
+                // The new engine does not know the profile, and
+                // `Screens::replugged_into` ignores an unchanged list, so
+                // restate the connectors or disabled ones come back lit.
                 self.state_the_connectors();
-                // And the clipboards, for the same kind of reason and one
-                // more: a new browser has an empty one of its own, so a person
-                // who copied something before it restarted would find their
-                // paste gone from every window the browser draws and still
-                // there in every other.
+                // The new browser starts with empty clipboards, so restore
+                // them.
                 self.tell_the_engine_the_copies();
                 info!(
                     shown = rejoined.shown.len(),
@@ -3780,21 +3003,17 @@ impl DomicileCompositor {
                  on the page with nothing in it until its client draws again"
             );
         }
-        // Every buffer the old engine was holding, whether or not the new one
-        // was joined. A release that cannot arrive is a client that never
-        // draws again.
+        // Return every buffer the old engine held, joined or not. A client owed
+        // a release never draws again.
         for release in rejoined.releases {
             self.returned(release.buffer);
         }
     }
 
-    /// Watch the fd of whichever engine is joined now, and stop watching the
-    /// one before it.
+    /// Watch the current engine's fd, and stop watching the previous one.
     ///
-    /// A source on an old engine's fd is a source on a descriptor the library
-    /// closed with it, so the removal is not tidying — it is the difference
-    /// between a loop that wakes for this engine and one that spins on a
-    /// closed fd.
+    /// The old fd is closed with its engine, and a source left on it would
+    /// spin.
     fn watch_the_engines_fd(&mut self) {
         if let Some(watching) = self.engine_source.take() {
             self.loop_handle.remove(watching);
@@ -3804,15 +3023,9 @@ impl DomicileCompositor {
         };
         match poll_the_engine(&self.loop_handle, session.fd()) {
             Ok(watching) => self.engine_source = Some(watching),
-            // Nothing arrives from an engine nothing is polling: no configure,
-            // no release, no display list. The desktop is up and deaf, which
-            // is not a state to discover from the symptoms.
-            //
-            // SAID RATHER THAN FATAL, and that is the recovery: a descriptor
-            // that could not be duplicated is not a reason to end every client
-            // on this desktop, which is the one thing the compositor
-            // outliving its engine exists to prevent. The run this leaves is
-            // one a person can stop, and it has the reason on the terminal.
+            // Logged, not fatal. Without the watch nothing from the engine is
+            // heard, but ending every client over it would defeat the
+            // compositor outliving its engine.
             Err(err) => error!(
                 %err,
                 "the engine's fd could not be watched, so nothing it says will be heard; \
@@ -3821,18 +3034,12 @@ impl DomicileCompositor {
         }
     }
 
-    /// Tell the engine what the connectors have to be doing, now.
+    /// Tell the engine which connectors to light.
     ///
-    /// Two answers and one place that gives them, because they are the same
-    /// sentence: a desktop somebody is at wants the list it has always
-    /// wanted — [`Screens::scanout`], which is a profile's connectors or the
-    /// empty "no opinion" every other desktop has — and a desktop nobody is at
-    /// wants none of them lit.
-    ///
-    /// Blanking is NOT that empty list, which would light everything: it is
-    /// every connector the engine reported, turned off. See
-    /// [`crate::idle::darkened`], including why an empty answer from it is one
-    /// this must not send.
+    /// Awake: [`Screens::scanout`] (a profile's connectors, or empty for no
+    /// opinion). Dark: every reported connector, turned off. An empty list
+    /// would light everything, so an empty [`crate::idle::darkened`] is not
+    /// sent.
     fn state_the_connectors(&self) {
         let Some(session) = self.engine.as_ref() else {
             return;
@@ -3852,134 +3059,93 @@ impl DomicileCompositor {
         self.idle.as_ref().is_some_and(Idle::dark)
     }
 
-    /// Tell every chrome whether anybody is at this desktop.
+    /// Tell every chrome whether the desktop is idle.
     ///
-    /// **BEFORE THE CONNECTORS ARE STATED, wherever both happen.** Neither
-    /// order buys a shell a warning — a modeset is the next thing that occurs
-    /// either way, and [`HostMessage::Idle`] says in as many words that
-    /// nothing here leads the blanking. What this order does buy is the
-    /// *other* edge: relighting a CRTC takes tens of milliseconds and a page
-    /// repaints in one, so a shell told first has its lock up, its panel
-    /// closed and its secret away by the time there is light to read them by.
-    /// The dark edge is ordered the same way for no better reason than that
-    /// two edges written differently are two things to reason about.
+    /// Call before setting the connectors. Relighting takes tens of
+    /// milliseconds and a page repaints in one, so the shell can hide sensitive
+    /// content before the screen is visible. See [`HostMessage::Idle`].
     ///
     /// Unguarded, unlike
     /// [`tell_a_new_chrome_whether_anybody_is_here`](DomicileCompositor::tell_a_new_chrome_whether_anybody_is_here):
-    /// every caller is an edge, and a desk that has stopped being dark has to
-    /// say so whether or not it still has a clock. A reload that takes the
-    /// timeout away while the screens are off is exactly that — the state is
-    /// read back off this compositor rather than from the `Idle` that knew it,
-    /// which by then may be gone.
+    /// every caller is a state change, including a reload that removes the
+    /// timeout while the screens are dark.
     fn tell_the_chromes_whether_anybody_is_here(&self) {
         self.hub.broadcast(announced(self.the_screens_are_dark()));
     }
 
-    /// Tell a chrome that has just said hello where this desk stands.
+    /// Tell a new chrome whether the desktop is idle.
     ///
-    /// Silent on a desktop that never blanks, which is the difference from the
-    /// edges above: no timeout is no clock, and a `false` from a desk with no
-    /// opinion about who is at it would be a shell drawing an idle affordance
-    /// that can never come on. A desk that does blank answers even when nobody
-    /// has walked away from it yet, because `false` from one of those is the
-    /// two facts a shell needs — somebody is here, and this desk is one that
-    /// will say when they are not.
+    /// Silent if the desktop never blanks, so the shell does not show idle UI
+    /// that can never trigger. A blanking desktop sends `false` even when
+    /// active.
     fn tell_a_new_chrome_whether_anybody_is_here(&self) {
         if self.idle.is_some() {
             self.tell_the_chromes_whether_anybody_is_here();
         }
     }
 
-    /// Whether this desk is locked, which is the question
-    /// [`handle_client_request`](DomicileCompositor::handle_client_request) asks
-    /// before it puts anything into the seat.
+    /// Whether the desktop is locked. Checked by
+    /// [`handle_client_request`](DomicileCompositor::handle_client_request)
+    /// before input reaches the seat.
     ///
-    /// A desk that cannot lock is not locked, which is the reading `None` has
-    /// to have: it is a desktop that stated no passphrase.
+    /// A desktop that cannot lock is never locked.
     fn the_desk_is_locked(&self) -> bool {
         self.lock.as_ref().is_some_and(Lock::locked)
     }
 
-    /// Tell every chrome whether this desk is locked.
+    /// Tell every chrome whether the desktop is locked.
     ///
-    /// The state rather than the edge, though every caller is an edge — see
-    /// [`crate::lock::announced`]. Read back off this compositor rather than
-    /// taken from the [`Unlocking`] that reached it, so there is one answer
-    /// rather than two that have to agree.
+    /// Sends the current state, read from this compositor. See
+    /// [`crate::lock::announced`].
     fn tell_the_chromes_whether_the_desk_is_locked(&self) {
         self.hub
             .broadcast(crate::lock::announced(self.the_desk_is_locked()));
     }
 
-    /// Tell a chrome that has just said hello whether this desk is locked.
+    /// Tell a new chrome whether the desktop is locked.
     ///
-    /// **THE CALL THE WHOLE DESIGN IS FOR.** A page reload is a new page saying
-    /// hello, and the edge that raised its lock screen went out before it
-    /// existed — so without this a shell reloaded over a locked desk comes back
-    /// drawing an open desktop over a desk that has stopped listening, which is
-    /// the most convincing wrong picture this protocol could paint.
+    /// Essential: a reloaded page missed the original lock broadcast and would
+    /// otherwise show an unlocked desktop.
     ///
-    /// Silent on a desktop that cannot lock, which is the difference from the
-    /// edges above and the same difference
-    /// [`tell_a_new_chrome_whether_anybody_is_here`](DomicileCompositor::tell_a_new_chrome_whether_anybody_is_here)
-    /// draws: no passphrase is no lock, and a `false` from a desk that can never
-    /// shut would be a shell holding a lock screen it can never be asked for.
+    /// Silent if the desktop cannot lock, like
+    /// [`tell_a_new_chrome_whether_anybody_is_here`](DomicileCompositor::tell_a_new_chrome_whether_anybody_is_here).
     fn tell_a_new_chrome_whether_the_desk_is_locked(&self) {
         if self.lock.is_some() {
             self.tell_the_chromes_whether_the_desk_is_locked();
         }
     }
 
-    /// Lock this desk: nobody is at it, or the shell asked. `why` is what the
-    /// log says.
+    /// Lock the desktop, logging `why`.
     ///
-    /// The idle edge the screens go dark on and `ClientRequest::Lock` are the
-    /// two things that lock a desk; there is no separate clock for it.
-    ///
-    /// Only on the edge into a locked desk. A desk nobody has opened blanks
-    /// again and again — dark, a hand, dark — and a second `locked: true` would
-    /// be a shell told to raise a lock screen it already has up, over a
-    /// passphrase somebody may be halfway through typing.
+    /// Called when the screens go idle or on `ClientRequest::Lock`. Announces
+    /// only on the transition to locked, so a repeat does not reset a lock
+    /// screen mid-passphrase.
     fn shut_the_desk(&mut self, why: &str) {
         let Some(lock) = self.lock.as_mut() else {
             return;
         };
         if lock.shut() {
             debug!("{why}");
-            // AND THE SEAT LETS GO OF WHAT IT IS HOLDING, which is the one
-            // thing the refusal at the injection cannot do for itself. What it
-            // drops from here on is an event that never happened as far as a
-            // client is concerned — except a *release*, which is the end of one
-            // that did. A key pressed before the lock and released after it
-            // would be a key down in this seat for good, and on a keymap that
-            // puts `Caps_Lock` on it, xkb clears the lock only on the release
-            // of the press that set it. `release_pressed_keys` is the same
-            // answer `ChromeHello` gives a reloaded page, for the same reason.
-            //
-            // A modifier is how this arrives without contrivance: an ordinary
-            // key repeats, so holding one goes on stirring the desk, where a
-            // Shift held while somebody reads the screen sends nothing at all
-            // for the whole timeout.
+            // Release held keys. Input is dropped while locked, including
+            // releases, so a key pressed before locking would stay down. With
+            // `Caps_Lock`, xkb clears the lock only on that release. Held
+            // modifiers are the common case: they do not repeat, so they do not
+            // wake the desktop.
             self.release_pressed_keys();
             self.tell_the_chromes_whether_the_desk_is_locked();
         }
     }
 
-    /// Somebody typed a passphrase at the shell's lock screen.
+    /// A passphrase typed at the lock screen.
     ///
-    /// **CHECKED OFF THIS THREAD, AND ANSWERED IN
-    /// [`heard_the_verdict`](DomicileCompositor::heard_the_verdict).** This is
-    /// the Wayland thread, and PAM sleeps on a wrong password on purpose — a
-    /// check here would be every client's frame held while somebody's typo is
-    /// punished. See [`Lock::offered`].
+    /// Checked off this thread, because PAM deliberately sleeps on a wrong
+    /// password. The answer arrives in
+    /// [`heard_the_verdict`](DomicileCompositor::heard_the_verdict). See
+    /// [`Lock::offered`].
     ///
-    /// **NOTHING GOES BACK TO THE PAGE THAT ASKED ALONE, AND THAT IS
-    /// DELIBERATE.** What a verdict produces is [`HostMessage::Locked`] to
-    /// *every* chrome, so a shell clears its lock screen because the desk
-    /// opened rather than because it believed its own keystrokes. The
-    /// same one-path-that-decides arrangement `SetTheme` has, for a harder
-    /// reason: a page that cleared its own lock would be a lock anybody with the
-    /// devtools could open.
+    /// The result goes to every chrome as [`HostMessage::Locked`], never only
+    /// to the page that asked. A page that unlocked itself could be opened from
+    /// devtools.
     fn offered_the_passphrase(&mut self, passphrase: &Passphrase) {
         let Some(lock) = self.lock.as_mut() else {
             warn!("a chrome offered a passphrase to a desktop that has no lock");
@@ -3997,19 +3163,13 @@ impl DomicileCompositor {
         }
     }
 
-    /// The verifier has said what the passphrase it was handed does.
+    /// Handle the verifier's result for a passphrase.
     ///
-    /// **EVERY VERDICT IS TOLD, AND A REFUSAL IS `locked: true` AGAIN.** A shell
-    /// holds what was typed until it hears, and the page waiting on a check has
-    /// nothing else to hear: nothing else sends `locked: true` to a desk being
-    /// checked, because that desk is already shut. So the state, said again,
-    /// is the answer — and it needs nothing from the engine that carries it.
+    /// Every result is broadcast. A refusal re-sends `locked: true`, which is
+    /// how the waiting shell learns of it.
     ///
-    /// A refusal is also a line in the log, and so is a verifier that could not
-    /// check — louder, because that one is a desk nobody can open until the
-    /// machine changes. Each says what happened and never what was typed: there
-    /// is nothing in [`Unlocking`] to print, which is what makes that
-    /// structural rather than a rule to remember.
+    /// Refusals and verifier failures are logged without the passphrase;
+    /// [`Unlocking`] does not hold it.
     fn heard_the_verdict(&mut self, verdict: Verdict) {
         let lock = self
             .lock
@@ -4028,30 +3188,21 @@ impl DomicileCompositor {
         self.tell_the_chromes_whether_the_desk_is_locked();
     }
 
-    /// Keep a blanked desktop blanked through something that lit it.
+    /// Keep a blanked desktop dark after a hotplug.
     ///
-    /// A hotplug is the one event that hands this compositor glass it never
-    /// turned off: the monitor arrives lit, off the engine's own modeset. On
-    /// a desktop the config describes outright — or one whose reloaded profile
-    /// cannot be applied — nothing else states the connectors at all, so
-    /// without this a monitor plugged in beside a dark desk lights it.
-    ///
-    /// Only the dark case. An awake desktop wants exactly what the engine has
-    /// just done on its own, and restating it would be a modeset per hotplug
-    /// for nothing.
+    /// A hotplugged monitor arrives lit, and on a described desktop (or an
+    /// unappliable profile) nothing else sets the connectors. Only acts when
+    /// dark, to avoid a needless modeset.
     fn keep_the_screens_dark(&self) {
         if self.the_screens_are_dark() {
             self.state_the_connectors();
         }
     }
 
-    /// Note a request that is a person, and light the screens back up if they
-    /// had gone dark.
+    /// Record user activity, and wake the screens if they were dark.
     ///
-    /// The page owns the input on this system and forwards it, so every hand
-    /// on this desktop arrives here — which is what makes one honest answer
-    /// possible. Which requests are a person is
-    /// [`crate::idle::somebody_is_here`].
+    /// All input passes through the page and arrives here.
+    /// [`crate::idle::somebody_is_here`] decides which requests count.
     fn keep_the_desktop_awake(&mut self, request: &ClientRequest) {
         if !somebody_is_here(request) {
             return;
@@ -4066,11 +3217,9 @@ impl DomicileCompositor {
         }
     }
 
-    /// A client asked that this desktop stay awake for as long as it holds an
-    /// inhibitor.
+    /// A client took an idle inhibitor for `surface`.
     ///
-    /// A desk that states no timeout has no clock to veto, so there is nothing
-    /// here to keep: it never blanks, which is what the client was asking for.
+    /// Without a timeout there is nothing to inhibit.
     fn hold_the_screens_on(&mut self, surface: WlSurface) {
         let on_the_desktop = self.surfaces_on_the_desktop();
         let Some(idle) = self.idle.as_mut() else {
@@ -4080,7 +3229,7 @@ impl DomicileCompositor {
         self.the_inhibitors_changed(edge, "a client is holding this desktop awake");
     }
 
-    /// A client let one go, which is the only half of this that a client says.
+    /// A client released an idle inhibitor.
     fn let_the_screens_go(&mut self, surface: &WlSurface) {
         let on_the_desktop = self.surfaces_on_the_desktop();
         let Some(idle) = self.idle.as_mut() else {
@@ -4090,33 +3239,17 @@ impl DomicileCompositor {
         self.the_inhibitors_changed(edge, "nothing is holding this desktop awake now");
     }
 
-    /// Let go of the inhibitors of clients that are gone.
+    /// Release inhibitors held by dead clients.
     ///
-    /// **A CLIENT THAT DIED SAYS NOTHING**, so this is asked after every turn
-    /// of the clients rather than waited for: the destroy that would have
-    /// released an inhibitor is the one request a crash does not send, and an
-    /// inhibitor nobody is left to hold is a desktop that never blanks again
-    /// with nothing anywhere saying why.
+    /// A crashed client sends no destroy, so this runs after every client
+    /// dispatch. Otherwise its inhibitor would keep the desktop awake forever.
+    /// Smithay only exposes the inhibitor's surface on the request, so there is
+    /// no `destroyed` hook to use. Cheap: it checks a handful of inhibitors and
+    /// acts only on a change.
     ///
-    /// Here rather than on a `destroyed` hook because smithay's own object
-    /// data is what carries the surface an inhibitor was taken on, and it
-    /// hands that back on the request alone. Cheap enough to ask every time:
-    /// it is a liveness check over the handful of things holding this desktop
-    /// awake, and it states the connectors only when the answer *changed* —
-    /// which, for every client that was holding nothing, it did not.
-    ///
-    /// The clock is the backstop rather than the mechanism. It would find the
-    /// same dead inhibitor the next time it came round, but "the next time"
-    /// is a whole timeout, which on the desk this is for is ten minutes of
-    /// glass lit for a player that is not running.
-    ///
-    /// Rarely the one that reports the edge any more, because a client that
-    /// dies takes its `xdg_toplevel` with it and
-    /// [`the_windows_changed`](DomicileCompositor::the_windows_changed) has
-    /// already said the desk belongs dark by the time this is asked. What it
-    /// still owes either way is letting go: an inhibitor a dead client took on
-    /// a surface that was never a window holds nothing and is on no list the
-    /// window path keeps, so nothing else would ever drop it.
+    /// Usually [`the_windows_changed`](DomicileCompositor::the_windows_changed)
+    /// has already handled the dead client's window. This still releases
+    /// inhibitors on surfaces that were never windows.
     fn let_go_of_what_the_dead_were_holding(&mut self) {
         let on_the_desktop = self.surfaces_on_the_desktop();
         let Some(idle) = self.idle.as_mut() else {
@@ -4126,16 +3259,10 @@ impl DomicileCompositor {
         self.the_inhibitors_changed(edge, "the client holding this desktop awake is gone");
     }
 
-    /// The windows on this desktop changed, so what its inhibitors are worth
-    /// may have changed with them.
+    /// Re-evaluate inhibitors after the windows changed.
     ///
-    /// **A WINDOW IS NOT A REQUEST**, which is why this exists at all: an
-    /// inhibitor holds only while the surface it was taken on is a window on
-    /// this desktop, and a window appearing or going away is something no
-    /// client sends `zwp_idle_inhibitor_v1` a word about. Both directions are
-    /// real — a client that takes its inhibitor before it maps starts holding
-    /// when the window arrives, and one whose window closes while it keeps
-    /// running stops holding then rather than a timeout later.
+    /// An inhibitor holds only while its surface is a window on the desktop,
+    /// and clients send no inhibitor request when a window maps or closes.
     fn the_windows_changed(&mut self, why: &str) {
         let on_the_desktop = self.surfaces_on_the_desktop();
         let Some(idle) = self.idle.as_mut() else {
@@ -4145,12 +3272,9 @@ impl DomicileCompositor {
         self.the_inhibitors_changed(edge, why);
     }
 
-    /// Act on an answer that the inhibitors changed, saying why.
+    /// Act on an inhibitor state change, logging `why`.
     ///
-    /// One place for all three, because they are one sentence with a different
-    /// reason in front of it — and because the edge is the whole rule: a
-    /// desktop states its connectors when the answer *changed* and at no other
-    /// time, whether what changed it was a hand, a clock or a film.
+    /// Sets the connectors only when the state changed.
     fn the_inhibitors_changed(&mut self, edge: Option<Blanking>, why: &str) {
         let Some(edge) = edge else {
             return;
@@ -4162,11 +3286,8 @@ impl DomicileCompositor {
         self.state_the_connectors();
     }
 
-    /// The idle clock came round. Answers with when to ask again.
-    ///
-    /// A timer rather than a thread, and one whose next wake this decides:
-    /// an untouched desktop is asked once at the moment it would blank, and a
-    /// blanked one once a timeout after that — see [`Idle::next_check`].
+    /// Handle the idle timer. Returns when to fire next; see
+    /// [`Idle::next_check`].
     fn the_idle_clock_came_round(&mut self) -> Duration {
         let now = Instant::now();
         let on_the_desktop = self.surfaces_on_the_desktop();
@@ -4175,8 +3296,7 @@ impl DomicileCompositor {
             .as_mut()
             .expect("the idle clock is armed only where a timeout was stated");
         let going_dark = idle.elapsed(now, &on_the_desktop);
-        // Before the edge is acted on, because acting on it borrows the rest
-        // of this compositor.
+        // Before acting on the change, which borrows `self`.
         let next = idle.next_check(now);
         if going_dark == Some(Blanking::GoDark) {
             debug!(
@@ -4184,31 +3304,21 @@ impl DomicileCompositor {
                 "nobody is at this desktop; its screens go dark"
             );
             self.tell_the_chromes_whether_anybody_is_here();
-            // AND THE DESK SHUTS, on the same edge and before the modeset for
-            // the same reason the idle message goes out before it: a relight
-            // costs tens of milliseconds and a repaint costs one, so a shell
-            // told now has its lock screen up before there is light to read the
-            // desktop behind it by. The hand that brings the screens back does
-            // not open the desk — only the passphrase does — so what a person
-            // returning sees is a lit lock screen rather than the work they
-            // left.
+            // Lock too, before the modeset, so the lock screen is up before the
+            // screen lights. Input wakes the screens but only the passphrase
+            // unlocks.
             self.shut_the_desk("nobody is at this desktop; it locks itself");
             self.state_the_connectors();
         }
         next
     }
 
-    /// Every surface this desktop has a window for.
+    /// Every toplevel surface on the desktop, the same list
+    /// [`app_id_of`](Self::app_id_of) reads.
     ///
-    /// The window path's own answer and not a second one: it is the list
-    /// `new_toplevel` announced as an `<app>` and `toplevel_destroyed` takes
-    /// back out, which is the same list [`app_id_of`](Self::app_id_of) reads.
-    /// The idle clock is handed it on every question it answers, because an
-    /// inhibitor on a surface that is not among them holds nothing.
-    ///
-    /// Cloned rather than borrowed because the clock is a field of this same
-    /// struct and answering takes it mutably. A `WlSurface` is a handle, so a
-    /// clone of one is a reference count.
+    /// The idle clock needs it because an inhibitor on any other surface holds
+    /// nothing. Cloned (a refcount) because the clock is borrowed mutably
+    /// alongside.
     fn surfaces_on_the_desktop(&self) -> Vec<WlSurface> {
         self.toplevels
             .iter()
@@ -4216,24 +3326,17 @@ impl DomicileCompositor {
             .collect()
     }
 
-    /// Take up everything in a reloaded config that is not the display list.
+    /// Apply everything in a reloaded config except the display list.
     ///
-    /// The other half of a reload, beside
-    /// [`adopt_the_desktop`](DomicileCompositor::adopt_the_desktop): that one
-    /// is the desktop the file describes, this is the rest of what the file
-    /// says. What has to move is decided before anything moves — see
-    /// [`Restatement`] — so the question "what did this edit change" is
-    /// answered by arithmetic over two configs rather than by this function
-    /// restating everything and hoping the ends below it deduplicate.
-    ///
-    /// That matters for the same reason `adopt_the_desktop`'s early return
-    /// does: a config file is rewritten for all sorts of reasons, and an edit
-    /// to the display list must not hand every client a keymap it already has.
+    /// [`Restatement`] computes what changed beforehand, so an unrelated edit
+    /// does not resend the keymap to every client. See
+    /// [`adopt_the_desktop`](DomicileCompositor::adopt_the_desktop) for
+    /// displays.
     fn adopt_the_rest_of_the_config(&mut self, restated: &Restatement) {
         if let Some(keyboard) = &restated.keyboard {
             self.retype_the_desktop(keyboard);
         }
-        // After the keyboard, whose layout every chord is resolved on.
+        // After the keyboard, whose layout chords are resolved on.
         if restated.shell_config {
             self.rebind_the_keys();
         }
@@ -4250,9 +3353,8 @@ impl DomicileCompositor {
             self.hub.offer_the_applications(applications);
         }
         if let Some(extensions) = &restated.extensions {
-            // Retained and then broadcast, in that order, for the reason
-            // `retype_the_desktop` gives about the keymap: the chrome that
-            // connects next has to be told the list this desk names now.
+            // Store then broadcast, so the next chrome to connect gets the new
+            // list.
             let told = {
                 let mut host = self.hub.host.lock().unwrap();
                 hand_over_the_extensions(&mut host, extensions);
@@ -4263,30 +3365,24 @@ impl DomicileCompositor {
             );
         }
         if let Some(theme) = restated.theme {
-            // THE FILE OVERRULES THE TOGGLE, deliberately. A click on the
-            // shell's bar changes the live theme and writes nothing back --
-            // this file is generated, and a desktop editing a build product
-            // would be a desk that fought its own configuration. So an edit
-            // that moves `theme` is a shell (or home-manager) restating what
-            // this desk is, and what it states is what the desk becomes.
+            // The config overrides the shell's toggle. The toggle writes
+            // nothing back because the config is generated, so a `theme` edit
+            // is the source of truth.
             self.hub.take_up_the_theme(theme_on_the_wire(theme));
         }
     }
 
-    /// Take up a new `files.omit`: what the file index leaves out of the
-    /// home.
+    /// Apply a new `files.omit`.
     ///
-    /// Handed to the index's own thread, which walks the home again under it
-    /// — the one way to both drop what is newly left out and find what is
-    /// newly let in, which no walk ever read. The launcher keeps the list it
-    /// has until the walk corrects it, as it does after a lost watch.
+    /// The index thread re-walks the home, which both drops newly omitted paths
+    /// and finds newly included ones. The launcher keeps its results until
+    /// then.
     fn omit_from_the_index(&self, omit: &Omit) {
         match &self.index {
             Some(index) => {
                 if index.send(Heard::Omitting(omit.clone())).is_err() {
-                    // The thread has returned, which it does only after
-                    // logging why: an unreadable home, or a watch that would
-                    // not start. Either way nothing is keeping the index.
+                    // The thread has exited, after logging why (unreadable
+                    // home, or a watch failed to start).
                     warn!(
                         "the file index is no longer kept, so `files.omit` \
                          reaches it at the next start"
@@ -4297,28 +3393,17 @@ impl DomicileCompositor {
         }
     }
 
-    /// Take up a new `idle`: when a desktop nobody is at turns its screens
-    /// off.
+    /// Apply a new `idle` timeout.
     ///
-    /// The clock starts again from now rather than carrying the old one's
-    /// count: a config written is not a hand on the desk, but it is the moment
-    /// this desktop's answer changed, and counting a new timeout from an
-    /// instant that belonged to the old one is arithmetic nobody asked for.
+    /// The clock restarts from now.
     ///
-    /// **A DARK DESKTOP COMES BACK ON.** The clock is replaced, and the one
-    /// being replaced is the only thing that knew the screens were off —
-    /// [`Idle::after`] builds a desk that has just been stirred, so a
-    /// compositor keeping the old `dark` would be one believing the screens
-    /// are on while they are off. Nothing would then relight them: a hand on
-    /// the desk asks [`Idle::stirred`], which answers
-    /// [`Blanking::ComeBack`] only on the edge out of dark, and this clock has
-    /// no such edge left to give. So the glass is put back where the state
-    /// says it is, and the desk blanks again a fresh timeout later.
+    /// A dark desktop is woken. The new clock starts awake ([`Idle::after`]),
+    /// so it can never report [`Blanking::ComeBack`] for screens the old clock
+    /// turned off. Relight them now; the desktop blanks again after the new
+    /// timeout.
     fn reset_the_idle_clock(&mut self, idle: &IdleConfig) {
         let was_dark = self.the_screens_are_dark();
-        // Carrying over whatever is holding the screens on, which is the one
-        // thing here that is the clients' rather than the config's — see
-        // [`Idle::takes_over_from`].
+        // Keep client inhibitors; see [`Idle::takes_over_from`].
         self.idle = match (
             Idle::after(idle.blank_after(), Instant::now()),
             self.idle.as_mut(),
@@ -4326,12 +3411,8 @@ impl DomicileCompositor {
             (Some(clock), Some(previous)) => Some(clock.takes_over_from(previous)),
             (clock, _) => clock,
         };
-        // A failed insert is not fatal here, which is the difference between
-        // this and the same call at startup. What is lost is the blanking —
-        // the desk runs on, lit, exactly as one that never stated a timeout —
-        // and a reload that took the desktop down to report a timer is the
-        // trade `retype_the_desktop` refuses for the keymap, for the same
-        // reason. The line names what was lost so it is not a silence.
+        // Not fatal on reload, unlike at startup: the desktop just stops
+        // blanking. Logged so it is not silent.
         if let Err(why) = self.arm_the_idle_clock(idle.blank_after()) {
             error!(
                 %why,
@@ -4341,14 +3422,10 @@ impl DomicileCompositor {
         }
         if was_dark {
             debug!("the idle timeout changed while the screens were off; they come back on");
-            // AND THE SHELL HEARS IT, which is the one thing a reload could
-            // silently lose: the page was told the desk was idle, the clock
-            // that knew it has just been thrown away, and no hand is coming to
-            // produce the edge that would release it. A shell that locked on
-            // the dark edge would otherwise stay locked over a lit desktop
-            // until somebody typed at it — including where the edit took the
-            // timeout out altogether, which is why this is the unguarded
-            // call and not the one a new chrome gets.
+            // Tell the shells. They were told the desktop is idle, and the
+            // clock that would announce waking is gone. A shell would otherwise
+            // stay in its idle state over a lit desktop. Unguarded, so this
+            // works even if the timeout was removed.
             self.tell_the_chromes_whether_anybody_is_here();
             self.state_the_connectors();
         }
@@ -4404,23 +3481,16 @@ impl DomicileCompositor {
                     TimeoutAction::Drop
                 },
             )
-            // A timer is kept on the loop's own wheel and registers nothing
-            // with the kernel, so there is nothing here that can refuse one.
+            // Timers register nothing with the kernel, so inserting cannot
+            // fail.
             .expect("the compositor's own loop takes a timer");
         self.turnover_deadline = Some(armed);
     }
 
-    /// Arm the timer that asks the idle clock, replacing whatever was armed.
+    /// Arm the idle timer, replacing any existing one.
     ///
-    /// `None` is a desktop that never blanks, and it leaves no timer at all —
-    /// the rule `run` states when it arms this the first time, kept here
-    /// because a reload can turn a blanking desktop back into one. A timer
-    /// that fires for a clock that is gone would find `the_idle_clock_came_round`
-    /// with nothing to ask.
-    ///
-    /// The old registration is removed rather than left beside the new one:
-    /// two timers for one clock is two wakes per timeout, and every reload
-    /// would add another.
+    /// `None` (never blank) leaves no timer. Removing the old one keeps reloads
+    /// from piling up timers.
     fn arm_the_idle_clock(&mut self, after: Option<Duration>) -> Result<(), InsertError<Timer>> {
         if let Some(armed) = self.idle_clock.take() {
             self.loop_handle.remove(armed);
@@ -4436,49 +3506,29 @@ impl DomicileCompositor {
         Ok(())
     }
 
-    /// Take up a new `output.max_scale`: the cap on how dense a display the
-    /// desktop will be advertised at.
+    /// Apply a new `output.max_scale`.
     ///
-    /// Two ends, because the cap is applied in two places and an edit that
-    /// reached one of them would be half a reload. The hub's copy is what
-    /// bounds the *next* density a chrome reports, on the connection thread
-    /// that receives it; the restatement below is the desktop that is already
-    /// up, which nothing else would revisit — a person who turns scaling down
-    /// does it because the desk in front of them is too slow now.
+    /// Updates the hub's copy, which bounds future chrome densities, and
+    /// re-applies the cap to the current desktop using the chrome's last
+    /// reported ratio.
     ///
-    /// The density is the chrome's last reported one rather than the advertised
-    /// scale, because the cap and the ratio are different facts and only the
-    /// cap moved: a desk capped back up to 2 in front of a 2x window goes back
-    /// to 2, and one whose window was never dense stays where it is.
-    ///
-    /// Nothing happens where the cap does not change any output's scale, and
-    /// that is [`set_output`](DomicileCompositor::set_output)'s own staleness
-    /// check rather than a second one here — a described desktop refuses this
-    /// outright, for the reason
-    /// [`set_output_scale`](DomicileCompositor::set_output_scale) gives.
+    /// [`set_output`](DomicileCompositor::set_output) skips unchanged outputs,
+    /// and a described desktop refuses this (see
+    /// [`set_output_scale`](DomicileCompositor::set_output_scale)).
     fn cap_the_scale_at(&mut self, max_scale: u32) {
         self.hub.max_scale.store(max_scale, Ordering::Relaxed);
         self.set_output_scale(output_scale(self.device_pixel_ratio, max_scale));
     }
 
-    /// Compile the config's keyboard and give it to everything that types.
+    /// Compile the config's keymap and send it to every consumer.
     ///
-    /// Three ends and one compilation, which is the point: the seat hands
-    /// every Wayland client a `wl_keyboard.keymap` fd, the browser process
-    /// drawing the desktop is handed the same text over the chrome socket
-    /// because it has no fd to take, and a chrome connecting later is handed
-    /// the retained copy. Two compilations would be two readings of one file
-    /// with nothing comparing them — see [`crate::keymap`].
+    /// One compilation feeds the seat (each client's `wl_keyboard.keymap`), the
+    /// browser process (over the chrome socket), and later chromes (stored
+    /// copy). See [`crate::keymap`].
     ///
-    /// **A KEYMAP THAT WILL NOT COMPILE IS REFUSED, NOT FATAL.** At startup it
-    /// is fatal: `run` takes the `?`, because a desktop that came up on
-    /// whatever libxkbcommon fell back to would be typing in a layout nobody
-    /// chose and nothing would say so. Here there is a desktop already, with
-    /// windows on it, and taking it down over a typo in a file somebody is
-    /// editing costs them everything that was open to fix nothing. So the live
-    /// keymap stays live — which is the last one that compiled, never xkb's
-    /// own fallback — and the refusal is said out loud, because the alternative
-    /// is a save that looks applied and a keyboard that did not change.
+    /// A keymap that fails to compile is refused and logged, not fatal. At
+    /// startup it is fatal so the desktop never runs on xkb's fallback. On
+    /// reload the last good keymap stays.
     fn retype_the_desktop(&mut self, keyboard: &KeyboardConfig) {
         match compiled_keymap(keyboard) {
             Err(why) => warn!(%why, "{}", grepped::KEYMAP_REFUSED),
@@ -4488,15 +3538,11 @@ impl DomicileCompositor {
                     variant = %keyboard.xkb_variant,
                     "the desktop types on the keyboard the config now names"
                 );
-                // The seat first, which is every Wayland client: Smithay
-                // writes the text into the keymap file behind the handle and
-                // sends the new fd to each bound `wl_keyboard`, so the clients
-                // are restated by this one call.
+                // The seat first: Smithay writes the keymap and sends the new
+                // fd to each bound `wl_keyboard`.
                 //
-                // From the text rather than from the `XkbConfig`, so the seat
-                // and the chrome are handed the same bytes. `set_xkb_config`
-                // would compile the names a second time, and a second
-                // compilation is the thing `keymap`'s own doc comment is about.
+                // From the text, not `XkbConfig`, so the seat and the chrome
+                // get the same bytes from one compilation.
                 let typing = self
                     .seat
                     .get_keyboard()
@@ -4504,10 +3550,8 @@ impl DomicileCompositor {
                 typing
                     .set_keymap_from_string(self, keymap.clone())
                     .expect("xkb reads back the keymap text it has just written");
-                // And the browser process. Retained and then broadcast, in
-                // that order, for the reason `set_output` gives about the
-                // desktop: the chrome that connects next has to be told the
-                // keymap this desk types on rather than the one it started on.
+                // Then the browser process. Store then broadcast, so the next
+                // chrome to connect gets the new keymap.
                 let told = {
                     let mut host = self.hub.host.lock().unwrap();
                     host.set_keymap(keymap);
@@ -4520,25 +3564,19 @@ impl DomicileCompositor {
         }
     }
 
-    /// Resolve the reloaded config's keys on its keyboard, and tell every
-    /// chrome them and the shells' settings.
+    /// Resolve the reloaded config's keybindings and send them and the shell
+    /// settings to every chrome.
     ///
-    /// **A KEYSYM THE KEYBOARD CANNOT TYPE IS REFUSED, NOT FATAL** — at
-    /// startup it is fatal, and here it is [`retype_the_desktop`]'s trade for
-    /// the same reason: the desk is running, and a typo in a file somebody is
-    /// editing is not worth every binding its shells have. So nothing is sent,
-    /// the host keeps the last keys that resolved for the next chrome to
-    /// connect, and the refusal is said out loud. So is a keyboard xkb cannot
-    /// compile, which has no keymap to resolve anything on and is refused
-    /// twice over: once here, and once by `retype_the_desktop` beside it.
+    /// A keysym the keymap cannot type is refused and logged, not fatal, as in
+    /// [`retype_the_desktop`]. The host keeps the last good keys for new
+    /// chromes. A keymap that does not compile is refused here too.
     ///
     /// [`retype_the_desktop`]: DomicileCompositor::retype_the_desktop
     fn rebind_the_keys(&mut self) {
         match shell_config::keys(self.config.current()) {
             Err(why) => warn!(%why, "{}", grepped::KEYS_REFUSED),
             Ok(resolved) => {
-                // Retained and then broadcast, in that order, for the reason
-                // `retype_the_desktop` gives about the keymap.
+                // Store then broadcast, as in `retype_the_desktop`.
                 let told = {
                     let mut host = self.hub.host.lock().unwrap();
                     hand_over_the_keys(&mut host, resolved);
@@ -4551,19 +3589,15 @@ impl DomicileCompositor {
         }
     }
 
-    /// Give the chrome the keyboard.
+    /// Give the chrome keyboard focus.
     ///
-    /// There is one seat, and the chrome and the apps take turns on it: the
-    /// chrome holds the keyboard until it says a window has been focused, and
-    /// gets it back when it says one has not. A second seat for the chrome
-    /// would let both hold a focus at once, but a client does not have to bind
-    /// more than one — GTK asserts on a second — so the desktop cannot depend
-    /// on it.
+    /// There is one seat, shared by turns: the chrome holds the keyboard until
+    /// it focuses a window. A second seat is not an option because clients need
+    /// not bind more than one (GTK asserts on a second).
     ///
-    /// Called again when the window is focused as well as when the chrome maps,
-    /// because a client that had not bound its keyboard by the time the first
-    /// one happened would have missed the enter — and a desktop that ignores
-    /// the keyboard looks like one that has hung.
+    /// Also called when the window is focused, not only when the chrome maps,
+    /// in case the client had not bound its keyboard the first time and missed
+    /// the enter.
     fn focus_chrome(&mut self) {
         let Some(surface) = self
             .chrome_toplevel
@@ -4579,25 +3613,17 @@ impl DomicileCompositor {
         debug!("the chrome has the window's keyboard");
         let serial = SERIAL_COUNTER.next_serial();
         keyboard.set_focus(self, Some(surface), serial);
-        // The brain as well as the seat. Every route through *this* function —
-        // the chrome's own window mapping, a window going away, alt-tabbing
-        // into Domicile — and moving the seat without telling the brain leaves
-        // `keyboard_target` naming a window the compositor is no longer typing
-        // into, with the chrome still marking it active.
-        //
-        // Not a click on the desktop, which this said for a while: that is
-        // `focus_pointed_at`, which broadcasts the same decision from its own
-        // arm and never comes through here.
+        // Update `Host` too, or `keyboard_target` would name a window that no
+        // longer has the keyboard. Clicks on the desktop go through
+        // `focus_pointed_at`, not here.
         broadcast_focus_decision(&self.hub, ChromeMessage::FocusChrome);
     }
 
-    /// Tell every chrome which modifiers are held, when that has changed.
+    /// Tell every chrome which modifiers are held, if that changed.
     ///
-    /// The seat is asked rather than the filter answering, because a key
-    /// reaches the seat from three places and only one of them runs a filter
-    /// worth reading: the desktop's own keyboard, the keys a chrome injects
-    /// into a window, and the releases a dead chrome's held keys are let go
-    /// with. All three move the modifiers, so all three end here.
+    /// Reads the seat because keys reach it three ways (the desktop keyboard,
+    /// keys injected by a chrome, and releases for a dead chrome's keys), and
+    /// only one runs a filter.
     fn tell_the_chromes_the_modifiers(&mut self) {
         let state = self.seat.get_keyboard().unwrap().modifier_state();
         let now = Modifiers {
@@ -4616,14 +3642,11 @@ impl DomicileCompositor {
         }
     }
 
-    /// Tell every chrome the charge, when it has moved far enough to draw.
+    /// Tell every chrome the battery charge, if it changed enough to show.
     ///
-    /// The one broadcast on a clock rather than on an event, because a battery
-    /// has no event: the kernel publishes files and nothing knocks. Read here
-    /// and not in the page — `navigator.getBattery` answers through UPower
-    /// over D-Bus, which a desktop on a bare tty has not got, and Chromium
-    /// then resolves with a default of *charging, and full* that no page can
-    /// tell from the truth. `domicile_host::battery` says the rest.
+    /// Read here, not in the page: `navigator.getBattery` needs UPower over
+    /// D-Bus, which a bare tty lacks, and Chromium then reports "charging,
+    /// full". See `domicile_host::battery`.
     fn tell_the_chromes_the_charge(&mut self) {
         if let Some(read) = self.charge.moved_to(reading(&RealPowerSupplies)) {
             self.hub.broadcast(HostMessage::Battery {
@@ -4633,11 +3656,8 @@ impl DomicileCompositor {
         }
     }
 
-    /// The charge again, for a chrome that has only just connected.
-    ///
-    /// Not a change, so it cannot go through the teller above: on a settled
-    /// machine the next change is minutes away, and a page that has just
-    /// reloaded would carry a gap where the meter goes for all of it.
+    /// Send the current charge to a newly connected chrome, which would
+    /// otherwise wait minutes for the next change.
     fn tell_a_new_chrome_the_charge(&self) {
         if let Some(read) = self.charge.again() {
             self.hub.broadcast(HostMessage::Battery {
@@ -4647,7 +3667,7 @@ impl DomicileCompositor {
         }
     }
 
-    /// Tell every chrome the brightness, when it has moved far enough to draw.
+    /// Tell every chrome the brightness, if it changed enough to show.
     fn tell_the_chromes_the_brightness(&mut self) {
         let now = backlight_reading(&RealBacklights).map(|read| read.level());
         if let Some(level) = self.brightness.moved_to(now) {
@@ -4655,7 +3675,7 @@ impl DomicileCompositor {
         }
     }
 
-    /// The brightness again, for a chrome that has only just connected.
+    /// Send the current brightness to a newly connected chrome.
     fn tell_a_new_chrome_the_brightness(&self) {
         if let Some(level) = self.brightness.again() {
             self.hub.broadcast(HostMessage::Brightness { level });
@@ -4664,8 +3684,8 @@ impl DomicileCompositor {
 
     /// Ask logind to set the backlight to `level`.
     ///
-    /// Read fresh rather than from what the chromes were told: the raw value
-    /// is the device's, and a backlight that went away since says so here.
+    /// Reads the device fresh, since the raw scale is the device's and it may
+    /// have gone away.
     fn set_the_brightness(&self, level: f64) {
         let Some(backlight) = backlight_reading(&RealBacklights) else {
             warn!("a chrome asked to set the brightness of a desktop with no backlight");
@@ -4683,33 +3703,24 @@ impl DomicileCompositor {
         }
     }
 
-    /// Tell every chrome what is on the clipboard.
+    /// Send every chrome the clipboard history.
     ///
-    /// The whole list every time rather than the row that changed: a copy
-    /// re-orders the history as often as it adds to it, and a page
-    /// reconciling deltas could be wrong about the order forever after
-    /// missing one. Thirty-two previews is a small message.
-    ///
-    /// The same call catches a chrome up on connecting, unlike the battery's
-    /// pair — an empty clipboard is a real answer here, so there is no reading
-    /// that has to exist before this can be said.
+    /// The whole list each time, since copies reorder it and a page applying
+    /// deltas could drift. Also used to catch up a new chrome; an empty history
+    /// is a valid answer.
     fn tell_the_chromes_the_clipboard(&self) {
         self.hub.broadcast(HostMessage::Clipboard {
             entries: self.clipboard.entries(),
         });
     }
 
-    /// Take what was copied, wherever it was copied.
+    /// Record a copy from a Wayland client or the browser.
     ///
-    /// The one place a copy lands, so that a Wayland client's and the
-    /// browser's are the same event by the time anything acts on it. What
-    /// differs between the two is what has to happen *around* this — the
-    /// browser's has to be put on the seat, a client's is already there — and
-    /// each caller does that itself.
+    /// Callers handle the difference: a browser copy must be put on the seat, a
+    /// client's is already there.
     ///
-    /// The history is the ordinary clipboard's alone. The middle-click one
-    /// changes on every drag over a word, so a history of it would be a
-    /// history of what the pointer brushed past.
+    /// Only the regular clipboard has history. The primary selection changes on
+    /// every text selection.
     fn took_a_copy(&mut self, clipboard: Clipboard, text: String) {
         if clipboard == Clipboard::Copy && self.clipboard.record(text.clone()) {
             self.tell_the_chromes_the_clipboard();
@@ -4719,13 +3730,10 @@ impl DomicileCompositor {
 
     /// Tell the browser what is on one clipboard.
     ///
-    /// Nothing to do without an engine, which is a desktop whose browser has
-    /// not turned up or has just gone: the next one is told both clipboards
-    /// when it connects, by [`DomicileCompositor::tell_the_engine_the_copies`].
-    ///
-    /// A clipboard nothing has been copied to crosses as the empty string
-    /// rather than as nothing at all, because that is what it is: a browser
-    /// never told would go on offering whatever it was told last.
+    /// Without an engine, nothing to do: a new one gets both clipboards via
+    /// [`DomicileCompositor::tell_the_engine_the_copies`]. An empty clipboard
+    /// is sent as an empty string, so the browser does not keep offering an old
+    /// value.
     fn tell_the_engine_a_clipboard(&self, clipboard: Clipboard) {
         if let Some(session) = self.engine.as_ref() {
             session.set_clipboard(
@@ -4735,29 +3743,22 @@ impl DomicileCompositor {
         }
     }
 
-    /// Tell a browser that has just connected what is on both clipboards.
-    ///
-    /// The clipboard's half of what `announce_open_apps` does for windows: an
-    /// engine that started after a copy was made has heard nothing about it,
-    /// and a person who copied before opening a browser window is exactly the
-    /// person about to paste into one.
+    /// Tell a newly connected browser what is on both clipboards, so earlier
+    /// copies can be pasted into it.
     fn tell_the_engine_the_copies(&self) {
         for clipboard in BOTH {
             self.tell_the_engine_a_clipboard(clipboard);
         }
     }
 
-    /// Read what a client copied, now that the seat is holding its selection.
+    /// Read what a client copied, now that the seat holds the selection.
     ///
-    /// **At the end of the dispatch, and both halves of that matter.** After,
-    /// because Smithay calls `new_selection` before it stores the selection —
-    /// so this is the first moment the seat can be asked. Before the flush,
-    /// because asking is a `wl_data_source.send` event, and the client cannot
-    /// write into the pipe until that event reaches it.
+    /// Runs at the end of the dispatch: after, because Smithay calls
+    /// `new_selection` before storing the selection; before the flush, because
+    /// the client cannot write until it receives `wl_data_source.send`.
     ///
-    /// The reading itself is a thread's: what it waits for is a stranger's
-    /// `write`, and nothing the desktop's every window is behind may wait for
-    /// that. It comes back as [`ClientRequest::ClipboardCopied`].
+    /// Reading happens on a thread, since a client may write slowly. The result
+    /// arrives as [`ClientRequest::ClipboardCopied`].
     fn read_what_was_copied(&mut self) {
         for clipboard in BOTH {
             let Some(mime) = self.copying[at(clipboard)].take() else {
@@ -4767,11 +3768,7 @@ impl DomicileCompositor {
         }
     }
 
-    /// Ask whoever holds one clipboard for the bytes on it.
-    ///
-    /// Split from the loop above so that "which clipboard" is stated once per
-    /// request rather than threaded through a body that would otherwise say it
-    /// four times.
+    /// Ask the client holding one clipboard for its contents.
     fn read_one_clipboard(&mut self, clipboard: Clipboard, mime: String) {
         let (ours, theirs) = match clipboard::pipe() {
             Ok(ends) => ends,
@@ -4780,14 +3777,11 @@ impl DomicileCompositor {
                 return;
             }
         };
-        // The compositor's own selection answers this with
-        // `ServerSideSelection`, which is the right answer and not a failure:
-        // it is what a client copying is not, and what is on the clipboard
-        // then is something this process already holds.
-        // Two errors of the same name from two of Smithay's modules, said out
-        // rather than joined: they carry the same three cases and neither is
-        // the other's, so the one thing a caller can do with either is read
-        // it.
+        // `ServerSideSelection` is expected when the compositor owns the
+        // selection; this process already has the text.
+        //
+        // The two Smithay modules have separate error types with the same
+        // cases, so both are converted to strings.
         let asked = match clipboard {
             Clipboard::Copy => {
                 request_data_device_client_selection(&self.seat, mime.clone(), theirs)
@@ -4808,10 +3802,9 @@ impl DomicileCompositor {
                         Ok(text) => {
                             hub.send_request(ClientRequest::ClipboardCopied { clipboard, text });
                         }
-                        // A client that offered `text/plain;charset=utf-8` and
-                        // wrote something else. Said rather than repaired:
-                        // what a repair would put in the history is not what
-                        // was copied, and pasting it back would corrupt it.
+                        // The client offered UTF-8 text and sent something
+                        // else. Logged, not repaired: a repaired copy would
+                        // differ from what was copied.
                         Err(err) => {
                             warn!(%err, "a client offered text that is not UTF-8, so it is not a row")
                         }
@@ -4824,21 +3817,16 @@ impl DomicileCompositor {
         }
     }
 
-    /// Inject a forwarded input event into the appropriate client via the seat.
+    /// Handle a request from a chrome on the Wayland thread.
     fn handle_client_request(&mut self, event: ClientRequest) {
-        // First, and for every request: this is the whole of what the
-        // compositor knows about somebody being at the desk.
+        // First, for every request: this is how the compositor knows someone is
+        // present.
         self.keep_the_desktop_awake(&event);
-        // AFTER THE HAND IS COUNTED AND BEFORE ANY OF IT REACHES THE SEAT. The
-        // order is the whole arrangement: a hand on the keyboard of a locked
-        // desk still lights its screens — otherwise there is nothing to read
-        // the lock screen by — and still reaches no client. What stops is the
-        // injection, which is the only place it can stop: the page owns the
-        // input on this system, so a lock that refused at the socket would take
-        // the shell's own keys with it and there would be nothing left to type
-        // a passphrase into. Which requests are refused is
-        // [`crate::lock::refused`]: every hand, and everything a shell can ask
-        // done to the desktop on somebody's behalf.
+        // After counting activity, before anything reaches the seat. Input to a
+        // locked desktop still wakes the screens but reaches no client. The
+        // lock must act here, not at the socket, because the shell's own lock
+        // screen needs its keys. [`crate::lock::refused`] lists what is
+        // refused.
         let refusal = if self.the_desk_is_locked() {
             crate::lock::refused(Asked::OnTheWaylandThread(&event))
         } else {
@@ -4855,7 +3843,7 @@ impl DomicileCompositor {
                     return;
                 };
                 // The chrome's box is the window geometry, not the surface, so
-                // a client with a shadow is offset by it.
+                // offset for client-side shadows.
                 let (x, y) = crate::window_geometry::surface_point(
                     with_states(&surface, window_geometry),
                     (x, y),
@@ -4931,13 +3919,11 @@ impl DomicileCompositor {
                 pointer.frame(self);
             }
             ClientRequest::Key { keycode, pressed } => {
-                // Started here rather than where the key arrived off the socket:
-                // what this isolates is the client's think-and-redraw, so the
-                // clock starts the moment the client can possibly know.
+                // Start timing here, the moment the client can know about the
+                // key.
                 //
-                // Presses only, for the reason the chrome counts presses only:
-                // a release changes nothing on screen, so it would time to some
-                // unrelated redraw — a blinking cursor, half a second later.
+                // Presses only, as the chrome does: a release changes nothing
+                // on screen and would time some unrelated redraw.
                 if pressed {
                     self.pending_key.get_or_insert_with(Instant::now);
                 }
@@ -4945,10 +3931,8 @@ impl DomicileCompositor {
                 self.tell_the_chromes_the_modifiers();
             }
             ClientRequest::KeyboardFocus { app_id } => {
-                // A menu open over the window the keyboard is going to keeps
-                // it: a press on the menu reaches a shell as a press on that
-                // window. Anywhere else and the menu is dismissed, as a click
-                // elsewhere does on any desktop.
+                // A menu over the target window keeps the keyboard. Focus
+                // anywhere else dismisses it, like a click elsewhere.
                 if let Some(menu) = self.grabbing.last().cloned() {
                     if app_id.is_some() && app_id == self.window_under(&menu) {
                         let keyboard = self.seat.get_keyboard().unwrap();
@@ -4966,17 +3950,13 @@ impl DomicileCompositor {
                     if requested.is_some() {
                         debug!(app_id = %id, "keyboard focus -> client");
                     } else {
-                        // The chrome asked for a window that has no surface —
-                        // one that closed while the message was in flight, or
-                        // has not mapped yet. Handing the keyboard to nothing
-                        // here is what makes a desktop go permanently deaf,
-                        // because nothing afterward takes it back.
+                        // The window closed or has not mapped yet. Focusing
+                        // nothing would leave the desktop deaf, since nothing
+                        // would take focus back.
                         debug!(app_id = %id, "keyboard focus -> a window with no surface; the chrome keeps it");
                     }
                 }
-                // The chrome is the fallback for every case: no window asked
-                // for, or one that cannot have it. The keyboard belongs
-                // somewhere as long as there is a desktop to hold it.
+                // Fall back to the chrome, so the keyboard always has a holder.
                 let surface = requested.or_else(|| {
                     self.chrome_toplevel
                         .as_ref()
@@ -4990,18 +3970,13 @@ impl DomicileCompositor {
                 self.took_a_copy(clipboard, text);
                 self.tell_the_engine_a_clipboard(clipboard);
             }
-            // The one thing a shell can do to the clipboard, and it names a
-            // row rather than carrying text: a page that could put arbitrary
-            // bytes on the seat would be writing the desktop's clipboard
-            // rather than choosing among what is already on it.
-            // On to the tray's worker, which calls it on the item: the session
-            // bus is nothing this thread has to do with.
+            // Forward to the tray worker, which talks to the session bus.
             ClientRequest::ActivateTrayItem { id, action } => {
                 if let Some(tray) = self.hub.tray.get() {
                     tray.activate(id, action);
                 }
             }
-            // On to the notification server's worker, for the tray's reason.
+            // Forward to the notification server's worker.
             ClientRequest::DismissNotifications { ids } => {
                 if let Some(server) = self.hub.notifications.get() {
                     server.dismiss(ids);
@@ -5014,10 +3989,8 @@ impl DomicileCompositor {
             }
             ClientRequest::CopyClipboardEntry { entry } => match self.clipboard.text(entry) {
                 Some(text) => {
-                    // The row becomes what a paste produces, which is not the
-                    // newest row any more -- see
-                    // [`DomicileCompositor::holding`], which is why what is on
-                    // the clipboard is kept apart from what is in the history.
+                    // Paste now yields this entry, not the newest. See
+                    // [`DomicileCompositor::holding`].
                     self.holding[at(Clipboard::Copy)] = Some(text.to_owned());
                     set_data_device_selection(
                         &self.display_handle,
@@ -5027,11 +4000,8 @@ impl DomicileCompositor {
                     );
                     self.tell_the_engine_a_clipboard(Clipboard::Copy);
                 }
-                // An id the shell was told about and the history has since
-                // dropped, which is the one way one goes stale. Nothing is
-                // set: putting the newest entry on the clipboard instead
-                // would be this desktop deciding a person meant something
-                // else by what they clicked.
+                // The history dropped this entry. Set nothing rather than
+                // substitute another entry for what the user picked.
                 None => warn!(
                     entry,
                     "the shell asked for a clipboard entry this desktop no longer holds"
@@ -5046,7 +4016,7 @@ impl DomicileCompositor {
                 }
             }
             ClientRequest::SetBrightness { level } => self.set_the_brightness(level),
-            // On to the mixer's runner, for the tray's reason.
+            // Forward to the sound server's runner.
             ClientRequest::Audio { request } => {
                 if let Some(server) = self.hub.audio.get() {
                     server.ask(request);
@@ -5058,8 +4028,8 @@ impl DomicileCompositor {
                 }
             }
             ClientRequest::TurnTheWindows { theme, chromes } => {
-                // A turnover already under way is replaced rather than
-                // finished: its windows are about to be told a newer theme.
+                // Replace any turnover in progress; its windows are about to
+                // get a newer theme.
                 let (turnover, step) = Turnover::begin(theme, chromes);
                 self.turnover = Some(turnover);
                 self.arm_the_turnover_deadline(CAPTURE_WITHIN, Turnover::capture_deadline);
@@ -5072,61 +4042,35 @@ impl DomicileCompositor {
                 }
             }
             ClientRequest::ChromeHello { served_by } => {
-                // A page has started, and whatever the page before it was
-                // holding down is gone along with it: nothing will ever send
-                // those releases, and the seat keeps a key down until
-                // something does.
+                // A page started, so any keys the previous page held will never
+                // be released. Release them.
                 //
-                // `hello` is the signal there is rather than the one to want.
-                // Every new connection sends one, so on a two-chrome desktop a
-                // page starting anywhere drops the keys a user is holding
-                // through another — and a chrome that dies and never comes
-                // back leaves them down until some page connects. `held` is
-                // cleared here on the same terms and for the same reason.
+                // Every new connection sends `hello`, so on a two-chrome
+                // desktop one page starting releases keys held through another.
+                // `held` is cleared on the same terms.
                 self.release_pressed_keys();
-                // A PAGE SAYING HELLO IS HOW THIS COMPOSITOR HEARS THAT THE
-                // ENGINE WAS REPLACED. Nothing in the C ABI says a browser
-                // went away — `crate::broker_socket` holds why, and why the
-                // socket's own inode is what tells a new engine from the same
-                // engine reloading its page. Before the announcement below,
-                // so that by the time the page is told which windows are open
-                // each of them has a frame sink again.
+                // A hello is the only sign the engine was replaced; see
+                // [`crate::which_engine`]. Rejoin before announcing windows, so
+                // each has a frame sink again.
                 self.rejoin_the_engine(served_by);
-                // Nothing is held and nothing is owed. The windows a chrome
-                // needs are re-supplied by the hand-over pass in `present`,
+                // Catch up the new page on state it would otherwise only learn
+                // on the next change.
                 announce_open_apps(&self.hub);
-                // And the charge, which no pass re-supplies: it is broadcast
-                // when it moves, and a page that connected between two moves
-                // has never been told one.
                 self.tell_a_new_chrome_the_charge();
-                // And the brightness, for the charge's reason.
                 self.tell_a_new_chrome_the_brightness();
-                // The clipboard for the same reason, and with no second
-                // method for it: a history of nothing is a message this one
-                // can send, where a battery that has not been read is not.
+                // Unlike battery, an empty clipboard is a valid message, so the
+                // normal broadcast works.
                 self.tell_the_chromes_the_clipboard();
-                // And whether anybody is at the desk, which is the one of
-                // these a page can be told *wrong* by silence rather than
-                // merely late: a shell that reloaded while the screens were
-                // dark would come back drawing a desktop somebody is at, and
-                // the edge that would have said otherwise went out before the
-                // page existed.
+                // A shell that reloaded while the screens were dark would
+                // otherwise assume someone is present.
                 self.tell_a_new_chrome_whether_anybody_is_here();
-                // And whether the desk is locked, which is the one of these a
-                // page can be told wrong by silence *and* where being told
-                // wrong is the failure the lock exists to prevent: a shell that
-                // reloaded — or an engine that died and came back — would
-                // otherwise draw an open desktop over a desk that has stopped
-                // listening, and the edge that would have said so went out
-                // before this page existed.
+                // A shell that reloaded, or an engine that restarted, would
+                // otherwise show an unlocked desktop.
                 self.tell_a_new_chrome_whether_the_desk_is_locked();
             }
             ClientRequest::SetOutputScale { ratio, scale } => {
-                // Kept whether or not the scale below is taken up. A described
-                // desktop refuses the chrome's density — that is the config's
-                // statement about the user's screens — but the ratio is a fact
-                // about the *page's* coordinate system, which the engine
-                // reports boxes in either way.
+                // Keep the ratio even if the scale is refused: the engine
+                // reports boxes in the page's device pixels regardless.
                 self.device_pixel_ratio = ratio;
                 self.set_output_scale(scale);
             }
@@ -5137,45 +4081,33 @@ impl DomicileCompositor {
                     debug!(%app_id, "close -> client");
                     toplevel.send_close();
                 }
-                // A popup is dismissed rather than closed, which is how a
-                // shell takes a menu down when a press lands elsewhere. The
-                // client destroys it in answer, and that is `popup_destroyed`.
+                // Dismiss a popup instead; the client then destroys it
+                // (`popup_destroyed`).
                 None => match self.popups.iter().find(|(id, _)| *id == app_id) {
                     Some((_, popup)) => {
                         debug!(%app_id, "dismiss -> client");
                         popup.send_popup_done();
                     }
-                    // The window went away while the message was in flight,
-                    // which is the outcome that was asked for. Still said,
-                    // because the other way to reach this line is an id the
-                    // chrome invented.
+                    // Usually the window closed while the message was in
+                    // flight. Logged in case the chrome sent a bogus id.
                     None => debug!(%app_id, "close: a window with no toplevel"),
                 },
             },
         }
     }
 
-    /// Every key the seat still has down, released.
+    /// Release every key the seat still has down.
     ///
-    /// A key only comes up because something says so, and the two things that
-    /// can say so both go away mid-press: the page that forwarded the press
-    /// (a reload or a crash delivers no `keyup` for it, and a crash delivers
-    /// nothing at all) and the window the compositor reads its own keys from.
-    /// The seat outlives both, so the key stays down in it for the rest of the
+    /// A key comes up only when told. A reloaded or crashed page sends no
+    /// `keyup`, but the seat outlives it, so the key stays down for the
     /// session.
     ///
-    /// For an ordinary key that is a modifier nobody can let go of. For a lock
-    /// key it cannot be recovered from at all: xkb unlocks one only on the
-    /// release of the press it saw lock it, so while that press is unfinished
-    /// every later press of the key is a refcount on the filter already
-    /// holding the lock rather than a new toggle. `caps:swapescape` — the
-    /// desktop's own default — puts `Caps_Lock` on the physical Escape key, so
-    /// one lost release is every window typing in capitals, including the
-    /// windows opened afterward, until Domicile is restarted.
+    /// For a lock key this is unrecoverable: xkb unlocks only on the release of
+    /// the press that locked it. The default `caps:swapescape` puts `Caps_Lock`
+    /// on Escape, so one lost release means typing in capitals until restart.
     ///
-    /// Releasing a key the user is still physically holding costs that key's
-    /// repeat and nothing else: the release that eventually arrives finds
-    /// nothing down and changes no state.
+    /// Releasing a key the user still holds only costs its repeat; the real
+    /// release later finds nothing down.
     fn release_pressed_keys(&mut self) {
         let keyboard = self.seat.get_keyboard().unwrap();
         let pressed = keyboard.pressed_keys();
@@ -5194,13 +4126,8 @@ impl DomicileCompositor {
                 KeyState::Released,
                 serial,
                 time,
-                // Always forwarded. The compositor used to take a claimed
-                // chord's keys out of the stream, which it could do because it
-                // owned the input: `--present` gave it a window and the window
-                // gave it the keyboard. It has neither now — the chrome holds
-                // the keyboard and forwards each key here — so it sees every
-                // key *after* the chrome has already had the chance to match
-                // its own chords, and there is nothing left to intercept.
+                // Always forwarded. The chrome matches its own chords before
+                // forwarding keys, so there is nothing to intercept here.
                 |_, _, _| FilterResult::<()>::Forward,
             );
         }
@@ -5210,34 +4137,25 @@ impl DomicileCompositor {
 
 // ---- compositor + shm + dmabuf --------------------------------------------
 
-/// What a client just attached: pixels we can already read (`wl_shm`), or a
-/// GPU buffer that has to go through the renderer first (`zwp_linux_dmabuf`).
-/// What a client's latest commit *is*, as far as the compositor needs to know:
-/// where it came from, which way up, and how big. Not its pixels — those go to
-/// the engine untouched.
+/// What the compositor needs to know about a client's latest commit: source,
+/// orientation and size. The pixels go to the engine untouched.
 struct SurfaceTexture {
-    /// Whether the client handed over a GPU buffer or shared memory. Recorded
-    /// for the log: it is the difference between a frame that cost nothing and
-    /// one that cost an upload, and it is not visible in the picture.
+    /// Whether the buffer was a dmabuf or shm. Logged, since an shm frame costs
+    /// an upload.
     from_dmabuf: bool,
-    /// A client that renders with GL hands the buffer over the way GL made it
-    /// and says so on the buffer. Kept from where it said so.
+    /// Whether the buffer is flipped, as GL clients flag on the dmabuf.
     y_inverted: bool,
-    /// The surface's own size in logical units. Not the output's: a client that has not answered a configure yet
-    /// is still its old size, and stretching it to the output would hide that
-    /// rather than show it.
+    /// The surface's own logical size, or its `wp_viewport` destination if set.
     ///
-    /// A `wp_viewport`'s destination is this, when it set one: a destination
-    /// *is* the logical size, which is the whole point of sending it.
+    /// Not the output's: a client that has not answered a configure is still
+    /// its old size, and stretching it would hide that.
     logical_size: (f64, f64),
 }
 
-/// What a surface is called in [`DomicileCompositor::content`] and in the
-/// painted frame.
+/// A surface's key in [`DomicileCompositor::content`] and the painted frame.
 ///
-/// The chrome is not an app and has no `app_id`, but it is a layer like any
-/// other and has to be diffed like one. A name no host-assigned id can collide
-/// with, because the two share one map: ids are `app-N`.
+/// The chrome has no `app_id` but is diffed like any layer. Its key cannot
+/// collide with host ids, which are `app-N`.
 fn painted_key(committer: &Committer) -> String {
     match committer {
         Committer::App(app_id) => app_id.clone(),
@@ -5248,9 +4166,8 @@ fn painted_key(committer: &Committer) -> String {
 /// See [`painted_key`].
 const CHROME_LAYER: &str = "<the chrome>";
 
-/// What names a connected chrome to a theme turnover: the address of its
-/// socket's writer, which is what `ChromeHub::chromes` already tells chromes
-/// apart by. Only compared, never followed.
+/// Identifies a chrome in a theme turnover: the address of its writer, as
+/// `ChromeHub::chromes` uses. Only compared, never dereferenced.
 fn chrome_key(writer: &Arc<Mutex<UnixStream>>) -> usize {
     Arc::as_ptr(writer) as usize
 }
@@ -5291,47 +4208,31 @@ impl Region {
     }
 }
 
-/// The bounds of what a client damaged since the last commit, leaving nothing
-/// behind.
+/// The bounds of a client's damage since the last commit, clearing it.
 ///
-/// Taken, not read. Smithay aggregates damage in the current state until the
-/// compositor clears it — `Cacheable for SurfaceAttributes` does
-/// `into.damage.extend(self.damage)` — so borrowing it gives every rectangle
-/// the surface has ever reported: a vector growing for the life of the window,
-/// walked on every commit by the Wayland thread, and a box that only ever
-/// widens until it is the whole window and none of this saves anything.
-///
-/// What is owed *across dropped frames* is `pending_damage`'s job, where it is
-/// bounded and cleared where it is paid.
+/// Must take, not borrow: Smithay accumulates damage in the current state until
+/// cleared, so reading it would return every rectangle ever reported and the
+/// box would grow to the whole window. `pending_damage` tracks damage owed
+/// across dropped frames.
 fn take_damage(damage: &mut Vec<Damage>, buffer_scale: i32) -> Option<Region> {
     damage_bounds(&std::mem::take(damage), buffer_scale)
 }
 
-/// The one rectangle covering everything a client said it changed.
+/// The bounding box of a client's damage.
 ///
-/// A bounding box rather than the rectangles themselves: the win is not paying
-/// for a whole window when a cursor cell moved, and a box captures that. Two
-/// far-apart edits fall back to most of the window, which is the honest answer
-/// for a single blit anyway.
+/// A box is enough to avoid redrawing a whole window for a cursor blink.
 ///
-/// `Surface` damage is in logical units and `Buffer` damage is already in
-/// buffer pixels, so the first is scaled and the second is not — mixing them up
-/// silently under-damages a HiDPI window, which draws as a stale band down the
-/// right and bottom of whatever changed.
+/// `Surface` damage is logical and is scaled; `Buffer` damage is already in
+/// buffer pixels. Mixing them up leaves stale bands on a HiDPI window.
 fn damage_bounds(damage: &[Damage], buffer_scale: i32) -> Option<Region> {
     let scale = buffer_scale.max(1);
     damage
         .iter()
         .map(|reported| match reported {
-            // Saturating throughout: `wl_surface.damage` takes four `i32`s a
-            // client picks, and "everything changed" is conventionally
-            // `(0, 0, i32::MAX, i32::MAX)`. Multiplied by a scale that
-            // overflows, a debug build panics on the Wayland thread — taking
-            // the compositor and every client on it — and a release build
-            // wraps negative, which the positive filter below then drops, so
-            // the client's claim that all of it changed disappears. The result
-            // is clamped to the buffer a moment later, so a saturated value
-            // costs nothing.
+            // Saturate: clients often send `(0, 0, i32::MAX, i32::MAX)` for
+            // "everything". Overflow would panic the Wayland thread in debug
+            // builds, or wrap negative and be dropped in release. The result is
+            // clamped to the buffer later.
             Damage::Surface(rect) => (
                 rect.loc.x.saturating_mul(scale),
                 rect.loc.y.saturating_mul(scale),
@@ -5346,8 +4247,7 @@ fn damage_bounds(damage: &[Damage], buffer_scale: i32) -> Option<Region> {
             (ax.min(bx), ay.min(by), ar.max(br), ab.max(bb))
         })
         .map(|(x, y, right, bottom)| {
-            // A client may damage at a negative offset; the part off the top
-            // or left of the buffer is not ours to draw.
+            // Clip negative offsets; that part is off the buffer.
             let (x, y) = (x.max(0), y.max(0));
             Region::new(
                 x as u32,
@@ -5380,11 +4280,8 @@ mod damage_tests {
 
     #[test]
     fn taking_the_damage_leaves_none_for_the_next_commit() {
-        // Smithay aggregates damage from commit to commit until it is cleared,
-        // so reading it without taking gives every rectangle the surface has
-        // ever reported. The box then only widens, converges on the whole
-        // window, and a blinking cursor costs a whole frame again — which is
-        // the thing this all exists to stop.
+        // Smithay accumulates damage until cleared. Without taking it, the box
+        // only grows to the whole window.
         let mut damage = vec![surface(1, 1, 2, 2)];
 
         let first = take_damage(&mut damage, 1);
@@ -5409,10 +4306,8 @@ mod damage_tests {
 
     #[test]
     fn surface_damage_scales_to_buffer_pixels() {
-        // The half a HiDPI window gets wrong if this is skipped: the client
-        // damages in logical units and the buffer is twice that, so an
-        // unscaled box leaves a stale band down the right and bottom of
-        // whatever changed.
+        // Surface damage is logical; unscaled, a HiDPI window keeps a stale
+        // band at the right and bottom.
         assert_eq!(
             damage_bounds(&[surface(3, 4, 5, 6)], 2),
             Some(Region::new(6, 8, 10, 12))
@@ -5421,18 +4316,13 @@ mod damage_tests {
 
     #[test]
     fn a_client_claiming_everything_is_not_multiplied_into_nothing() {
-        // `(0, 0, i32::MAX, i32::MAX)` is how a client conventionally says all
-        // of it changed. Multiplied by a scale it overflows: a debug build
-        // panics on the Wayland thread, taking the compositor and every client
-        // on it, and a release build wraps negative — which the positive
-        // filter drops, so the loudest claim a client can make becomes no
-        // claim at all.
+        // `(0, 0, i32::MAX, i32::MAX)` means "everything changed". Scaling it
+        // must not overflow: debug builds would panic, release builds would
+        // wrap negative and drop it.
         let bounds = damage_bounds(&[surface(0, 0, i32::MAX, i32::MAX)], 2);
 
-        // Saturating at `i32::MAX` rather than wrapping: the arithmetic is in
-        // the type the client's numbers arrive in. Clamped to the buffer a
-        // moment later, so the exact ceiling does not matter — that it is a
-        // ceiling rather than a negative number does.
+        // Saturates at `i32::MAX`. The exact value does not matter; it is
+        // clamped to the buffer later.
         assert_eq!(
             bounds,
             Some(Region::new(0, 0, i32::MAX as u32, i32::MAX as u32))
@@ -5452,15 +4342,11 @@ mod damage_tests {
 
     #[test]
     fn a_damage_offset_past_the_scale_saturates_rather_than_folding_back() {
-        // The location is scaled too, and it is the term the two tests above
-        // miss between them: the far-edge case runs at scale 1, where nothing
-        // is multiplied, and the `i32::MAX` case starts at the origin, where
-        // the multiply is zero.
+        // Covers the scaled location, which the two tests above do not (one is
+        // at scale 1, the other at the origin).
         //
-        // A near rectangle and an absurd one. Wrapping puts the far one at
-        // -294967296, which is *behind* the near one — so the box that should
-        // cover both stops at the near one's edge, and every pixel past it is
-        // left holding whatever the last frame put there.
+        // Wrapping would put the far rectangle behind the near one, so the box
+        // would stop short and leave stale pixels.
         let bounds = damage_bounds(&[surface(0, 0, 4, 4), surface(2_000_000_000, 0, 8, 8)], 2);
 
         assert_eq!(bounds, Some(Region::new(0, 0, i32::MAX as u32, 16)));
@@ -5468,10 +4354,8 @@ mod damage_tests {
 
     #[test]
     fn buffer_damage_is_already_in_buffer_pixels() {
-        // The arm most clients take: `damage_buffer` has been the preferred
-        // request since `wl_compositor` v4. Scaling it the way surface damage
-        // is scaled would over-damage a HiDPI window by the scale factor —
-        // the mirror of the bug the test below guards.
+        // Most clients use `damage_buffer` (preferred since `wl_compositor`
+        // v4). Scaling it would over-damage HiDPI windows.
         assert_eq!(
             damage_bounds(&[buffer(3, 4, 5, 6)], 2),
             Some(Region::new(3, 4, 5, 6))
@@ -5487,13 +4371,10 @@ mod damage_tests {
     }
 }
 
-/// Whether this commit can be the answer to a keystroke we forwarded.
+/// Whether this commit can answer a forwarded keystroke.
 ///
-/// Only a window can: a keystroke goes to the focused *client*, and the frame
-/// that answers it is that client's. The chrome repaints constantly and for
-/// reasons of its own — a clock ticking is enough — so letting its commits
-/// consume the pending keystroke would report the clock's interval as the time
-/// the user waited, and the real answer would go uncounted.
+/// Only app windows can. The chrome repaints for its own reasons (a ticking
+/// clock), and counting those would misreport the wait.
 fn answers_keystroke(committer: &Committer) -> bool {
     match committer {
         Committer::App(_) => true,
@@ -5510,16 +4391,15 @@ enum CommittedBuffer {
 /// [`DomicileCompositor::publish_frame`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Published {
-    /// The engine did not take it; the window shows what it showed before.
+    /// The engine did not take it; the window keeps its previous frame.
     NotShown,
-    /// The engine is sampling the client's own dmabuf, so the client's buffer
-    /// is viz's until viz releases it.
+    /// The engine samples the client's dmabuf directly, so viz owns it until
+    /// released.
     Held,
-    /// The engine took a copy, so the client's buffer is free already.
+    /// The engine took a copy, so the client's buffer is already free.
     Copied,
-    /// No page has embedded the window yet, so the frame waits to go up when
-    /// one does — see `engine_waiting`. `held` as in [`Published::Held`]: the
-    /// client's own buffer is the one waiting.
+    /// No page has embedded the window yet; the frame waits (see
+    /// `engine_waiting`). `held` is as in [`Published::Held`].
     Waiting { held: bool },
 }
 
@@ -5529,8 +4409,7 @@ struct CopiedFrame {
     descriptor: DmabufDescriptor,
 }
 
-/// Why an shm client's frame could not be shown. Each is said once per
-/// client, and says what would fix it.
+/// Why an shm client's frame could not be shown. Logged once per client.
 #[derive(Debug, thiserror::Error)]
 enum ShmRefused {
     #[error(
@@ -5555,8 +4434,7 @@ enum ShmRefused {
 }
 
 impl CommittedBuffer {
-    /// The client's content size, known before any pixels are read — which is
-    /// what lets the frame throttle run ahead of the GPU import.
+    /// The buffer's size, known without reading pixels.
     fn size(&self) -> (u32, u32) {
         match self {
             CommittedBuffer::Pixels { width, height, .. } => (*width, *height),
@@ -5579,17 +4457,13 @@ impl CompositorHandler for DomicileCompositor {
         let Some((committer, role)) = self.committer(surface) else {
             return;
         };
-        // Before anything below can return early, which is deliberately the
-        // *over*-reporting choice: a commit that attaches no buffer, or one
-        // whose buffer we cannot use, moves this counter without changing a
-        // drawn pixel, and the frame after it damages this window for nothing.
-        // Bumping where the texture is actually replaced would be exact — and
-        // would have to be right in three places instead of one, with a stale
-        // pixel as the price of missing any of them.
+        // Count before any early return. This over-reports (a bufferless commit
+        // marks the window changed), but one place is safer than three where a
+        // miss leaves stale pixels.
         *self.content.entry(painted_key(&committer)).or_default() += 1;
 
-        // Send the initial configure once, so the client can map its buffer.
-        // A popup's went out when it was made — see `new_popup`.
+        // Send the initial configure once, so the client can map. A popup's was
+        // sent in `new_popup`.
         if let Role::Toplevel(toplevel) = &role {
             let initial_configure_sent = with_states(surface, |states| {
                 states
@@ -5609,15 +4483,13 @@ impl CompositorHandler for DomicileCompositor {
             self.tell_the_size_limits(app_id, surface);
         }
 
-        // Take the newly-attached buffer and drain the frame callbacks. Taking
-        // it (rather than borrowing) hands us the release: Smithay would
-        // otherwise hold it until the *next* buffer arrives, which is a buffer
-        // the client cannot draw without the release it is waiting for.
+        // Take the new buffer and the frame callbacks. Taking the buffer gives
+        // us its release; otherwise Smithay holds it until the next buffer,
+        // which the client may need the release to draw.
         let (attached, callbacks, buffer_scale, viewport, geometry) =
             with_states(surface, |states| {
-                // Beside the buffer and in the same borrow, because a viewport is
-                // double-buffered too: what it says applies to the buffer it was
-                // committed with, and reading it later reads the next frame's.
+                // Read with the buffer: the viewport is double-buffered and
+                // applies to this commit.
                 let viewport = {
                     let mut cached = states.cached_state.get::<ViewportCachedState>();
                     let state = cached.current();
@@ -5635,29 +4507,15 @@ impl CompositorHandler for DomicileCompositor {
                     Some(BufferAssignment::Removed) | None => None,
                 };
                 let callbacks = std::mem::take(&mut attrs.frame_callbacks);
-                // Taken, not read. Smithay aggregates damage from commit to commit
-                // until the compositor clears it — `Cacheable for
-                // SurfaceAttributes` does `into.damage.extend(self.damage)` — so
-                // borrowing it gives every rectangle the surface has ever
-                // reported. That is a vector growing for the life of the window,
-                // walked on every commit by the Wayland thread, and a bounding box
-                // that only ever widens until it is the whole window and this
-                // stops saving anything.
-                //
-                // Nothing reads it any more — the engine takes whole-surface
-                // damage — but the call stays, because clearing that vector is
-                // what it was always for and dropping it would leak a rectangle
-                // per commit for the life of every window.
+                // Clear the accumulated damage, or it grows by a rectangle per
+                // commit for the window's life. The engine uses whole-surface
+                // damage, so the result is unused.
                 take_damage(&mut attrs.damage, attrs.buffer_scale);
-                // How many buffer pixels the client drew per logical unit. Taken
-                // here with the buffer rather than looked up later: it is the
-                // scale *this* buffer was drawn at, and a client that is mid-way
-                // through answering a scale change will commit the next one at a
-                // different number.
+                // The scale this buffer was drawn at. Read now; a client
+                // mid-scale-change may commit the next one differently.
                 let scale = attrs.buffer_scale;
                 drop(guard);
-                // Double-buffered like the rest, so read beside the buffer it
-                // describes — see `crate::window_geometry`.
+                // Double-buffered too; see `crate::window_geometry`.
                 (
                     attached,
                     callbacks,
@@ -5673,9 +4531,7 @@ impl CompositorHandler for DomicileCompositor {
             callback.done(time);
         }
 
-        // A window's new frame, which is what a theme turnover waits for:
-        // once every window has drawn one since it was told, the wipe can
-        // pass across windows already turned.
+        // A theme turnover waits for each window to draw a new frame.
         if let (Some(_), Committer::App(app_id), Some(turnover)) =
             (&attached, &committer, &mut self.turnover)
         {
@@ -5684,19 +4540,17 @@ impl CompositorHandler for DomicileCompositor {
         }
 
         if let Some(buffer) = attached {
-            // The gap since the last buffer commit is time the compositor was
-            // not composing: a client drawing, or the throttle holding it back.
+            // The gap since the last commit is time spent waiting on clients or
+            // the throttle.
             let started = Instant::now();
             {
                 let mut timings = self.hub.timings.lock().unwrap();
                 if let Some(waited) = self.last_commit.map(|done| started.duration_since(done)) {
                     timings.idle.record(waited);
                 }
-                // A commit with no keystroke behind it is not a response to
-                // one — a terminal redraws its blinking cursor unprompted, and
-                // counting that would report the blink interval as think time.
-                // Nor is a commit by the chrome, which repaints on its own and
-                // is not where the keystroke went.
+                // Only app commits after a keystroke count as responses.
+                // Unprompted redraws (a blinking cursor) and chrome commits
+                // would skew it.
                 if answers_keystroke(&committer) {
                     if let Some(keyed) = self.pending_key.take() {
                         timings.response.record(started.duration_since(keyed));
@@ -5705,13 +4559,12 @@ impl CompositorHandler for DomicileCompositor {
             }
             let engine_holds = match &committer {
                 Committer::App(app_id) => {
-                    // The size the page's box last asked for, which a
-                    // client need not have drawn at — see `crop`.
+                    // The size the page's box last requested; the client may
+                    // not have drawn at it. See `crop`.
                     let configured = match &role {
                         Role::Toplevel(toplevel) => toplevel
                             .with_pending_state(|state| state.size.map(|size| (size.w, size.h))),
-                        // Its positioner's size, which is the box the shell
-                        // is told to place.
+                        // The positioner's size, which the shell places.
                         Role::Popup(popup) => popup.with_pending_state(|state| {
                             Some((state.geometry.size.w, state.geometry.size.h))
                         }),
@@ -5727,10 +4580,9 @@ impl CompositorHandler for DomicileCompositor {
                         )
                     });
                     let published = self.publish_frame(app_id, &buffer, crop);
-                    // Driven after the submit, because the polling needs
-                    // something submitted to find — but timed from `started`,
-                    // which is before it. The import and the submit are ours,
-                    // and a round's second half is meant to contain them.
+                    // After the submit, so there is something to sample, but
+                    // timed from `started` so the import and submit count as
+                    // ours.
                     self.drive_latency(
                         app_id,
                         started,
@@ -5746,18 +4598,13 @@ impl CompositorHandler for DomicileCompositor {
                     false
                 }
             };
-            // The client may redraw into this buffer the instant it is
-            // released, so the release comes after the pixels are out of it —
-            // and it happens even for a frame the throttle dropped, or a
-            // single-buffered client never draws again.
+            // Release after the pixels are out, since the client may redraw
+            // into it immediately. Always release, or a single-buffered client
+            // stops drawing.
             //
-            // The one exception is a buffer the engine took: viz is sampling
-            // that dmabuf directly, so releasing it here is the tear this path
-            // exists to avoid. It comes back through the engine's own release
-            // instead, and if that never arrives `EngineSession::overdue` takes
-            // it back rather than leaving the client stopped. Everything else
-            // still releases here — the chrome, a frame the throttle dropped,
-            // and any app frame the engine would not take.
+            // Except a buffer the engine holds: viz samples it directly, so
+            // releasing it would tear. The engine releases it, or
+            // `EngineSession::overdue` takes it back.
             if !engine_holds {
                 buffer.release();
                 tracing::trace!(?committer, "buffer released");
@@ -5775,9 +4622,8 @@ impl CompositorHandler for DomicileCompositor {
 }
 
 impl BufferHandler for DomicileCompositor {
-    /// The client threw the buffer away. Drops the import behind it, so the
-    /// browser lets go of its fds, and forgets any hold — no release will
-    /// arrive for a buffer whose object is gone.
+    /// The client destroyed a buffer. Drop its import so the browser releases
+    /// the fds, and forget any hold.
     fn buffer_destroyed(&mut self, buffer: &wl_buffer::WlBuffer) {
         if let Some(session) = self.engine.as_mut() {
             if session.buffer_destroyed(buffer).is_some() {
@@ -5798,9 +4644,8 @@ impl DmabufHandler for DomicileCompositor {
         &mut self.dmabuf_state
     }
 
-    // A client is asking whether we can use the GPU buffer it just allocated.
-    // Answering by actually importing it is the only honest answer — and it
-    // warms the renderer's cache, so the commit that follows is a lookup.
+    // Validate a client's dmabuf by importing it. This also warms the
+    // renderer's cache for the following commit.
     fn dmabuf_imported(
         &mut self,
         _global: &DmabufGlobal,
@@ -5831,15 +4676,12 @@ delegate_dmabuf!(DomicileCompositor);
 
 // ---- idle inhibit ---------------------------------------------------------
 
-/// A client's `zwp_idle_inhibitor_v1`, reaching the clock that would blank the
-/// screens.
+/// Routes `zwp_idle_inhibitor_v1` requests to the idle clock.
 ///
-/// Smithay hands over the surface in both directions and nothing else, which
-/// is why that is what `Idle` holds. `uninhibit` is the client saying so —
-/// and only that; the inhibitors of clients that never will are let go of by
-/// [`DomicileCompositor::let_go_of_what_the_dead_were_holding`], and what an
-/// inhibitor on a surface this desktop shows no window for is worth is decided
-/// without asking the client at all — see
+/// Smithay passes only the surface, so `Idle` stores surfaces. Dead clients'
+/// inhibitors are released by
+/// [`DomicileCompositor::let_go_of_what_the_dead_were_holding`]; inhibitors on
+/// surfaces with no window are handled by
 /// [`DomicileCompositor::the_windows_changed`].
 impl IdleInhibitHandler for DomicileCompositor {
     fn inhibit(&mut self, surface: WlSurface) {
@@ -5853,14 +4695,10 @@ impl IdleInhibitHandler for DomicileCompositor {
 
 delegate_idle_inhibit!(DomicileCompositor);
 
-/// An inhibitor is held for exactly as long as the surface it was taken on
-/// exists.
+/// An inhibitor holds only while its surface is alive.
 ///
-/// Which is the answer to the client that died holding one: every object of a
-/// gone client stops being alive when this compositor finishes with its
-/// connection, so the inhibitor it never destroyed holds nothing from that
-/// moment on — see [`StillThere`], which says why waiting for the destroy is
-/// not an option.
+/// A dead client's objects stop being alive when its connection is cleaned up,
+/// so its inhibitor stops holding without a destroy. See [`StillThere`].
 impl StillThere for WlSurface {
     fn still_there(&self) -> bool {
         self.is_alive()
@@ -5878,20 +4716,16 @@ impl SeatHandler for DomicileCompositor {
         &mut self.seat_state
     }
 
-    // A client asking for a cursor is really asking the *chrome* for one: the
-    // pointer the user sees belongs to the web engine, so the request is
-    // forwarded as a CSS cursor for the element the pointer is over.
+    // The web engine draws the pointer, so forward a client's cursor request to
+    // the chrome as a CSS cursor for the element under the pointer.
     fn cursor_image(&mut self, _seat: &Seat<Self>, image: CursorImageStatus) {
-        // The chrome draws the pointer itself: a client of ours asking for a
-        // cursor is really asking the *chrome* for one, because the pointer the
-        // user sees belongs to the web engine.
         if let Some(app_id) = self.pointer_app.clone() {
             let cursor = match image {
                 CursorImageStatus::Hidden => CursorShape::None,
                 CursorImageStatus::Named(icon) => cursor_shape(icon),
-                // The client drew its own cursor into a surface. Mirroring
-                // those pixels needs native compositing (see WINDOW-COMPOSITING.md), so
-                // until then the pointer keeps its ordinary arrow.
+                // A client-drawn cursor surface needs native compositing (see
+                // `docs/architecture/WINDOW-COMPOSITING.md`). Use the default
+                // arrow until then.
                 CursorImageStatus::Surface(_) => CursorShape::Default,
             };
             self.hub
@@ -5899,43 +4733,31 @@ impl SeatHandler for DomicileCompositor {
         }
     }
 
-    /// Both clipboards go where the keyboard goes.
+    /// Both clipboards follow keyboard focus.
     ///
-    /// **Without this nothing can paste.** A selection is offered to the
-    /// client holding the data device's focus and to no other, so a
-    /// compositor that never sets one has a clipboard every client can write
-    /// and none can read. It is set from the keyboard's own focus because
-    /// that is the rule `wl_data_device` is written around — a client may set
-    /// the selection only while it is being typed into, and it is offered the
-    /// selection on the same terms.
+    /// Required for pasting: a selection is offered only to the client with
+    /// data device focus. `wl_data_device` ties that to keyboard focus.
     ///
-    /// `None` is the seat between windows rather than the chrome: the chrome
-    /// is a client with a surface of its own and holds the keyboard as one,
-    /// so it is offered the clipboard through this like anything else.
+    /// `None` means no surface is focused. The chrome is an ordinary client
+    /// here and gets the clipboard the same way.
     fn focus_changed(&mut self, seat: &Seat<Self>, focused: Option<&WlSurface>) {
         let client = focused.and_then(|on| on.client());
         set_data_device_focus(&self.display_handle, seat, client.clone());
-        // Both, and on the same terms. The middle-click selection is offered
-        // to whoever holds the keyboard exactly as the clipboard is — a client
-        // that was given one and not the other would be one where half of
-        // paste does nothing, which is what this desktop had before it had a
-        // primary selection at all.
+        // The primary selection follows the same rule, so both pastes work in
+        // the same client.
         set_primary_focus(&self.display_handle, seat, client);
         self.activate(focused);
     }
 }
 
 impl DomicileCompositor {
-    /// The window holding the keyboard is the activated one, and no other is.
+    /// Mark the window with keyboard focus as activated, and no other.
     ///
-    /// **Chromium reads `activated` as whether its page has focus.** Never
-    /// sent, an Electron window takes characters — the editable field inserts
-    /// them itself — and ignores Backspace and every shortcut, which a page
-    /// handles only while it thinks it is focused.
+    /// Chromium treats `activated` as page focus. Without it, Electron windows
+    /// accept typed characters but ignore Backspace and shortcuts.
     ///
-    /// A menu holding the keyboard activates its window: the window is still
-    /// the one being used, and a toolkit closes its menus when its window
-    /// stops being active.
+    /// A menu with the keyboard activates its window; toolkits close menus when
+    /// their window deactivates.
     fn activate(&self, focused: Option<&WlSurface>) {
         let window = focused.map(|on| self.window_under_menus(on));
         for (_, toplevel) in &self.toplevels {
@@ -5947,18 +4769,18 @@ impl DomicileCompositor {
                     state.states.unset(xdg_toplevel::State::Activated);
                 }
             });
-            // Before its first configure, that configure carries it.
+            // Before the first configure, that configure carries it.
             if toplevel.is_initial_configure_sent() {
                 toplevel.send_pending_configure();
             }
         }
     }
 
-    /// The surface a menu — or a menu of a menu — was opened over, or
-    /// `surface` itself when it is no menu.
+    /// The window a menu (or nested menu) was opened over, or `surface` itself
+    /// if it is not a menu.
     ///
-    /// Asked of the shell rather than of `popups`, which holds a menu only
-    /// once it has drawn — and a menu grabs the keyboard before that.
+    /// Asks the shell, not `popups`, because a menu grabs the keyboard before
+    /// it has drawn.
     fn window_under_menus(&self, surface: &WlSurface) -> WlSurface {
         self.xdg_shell_state
             .popup_surfaces()
@@ -5981,10 +4803,8 @@ delegate_cursor_shape!(DomicileCompositor);
 
 /// The desktop a config describes, at startup.
 ///
-/// Startup only. A *reload* asks a different question — see
-/// [`Screens::reloaded_into`], which is allowed to answer "leave it alone":
-/// nothing has negotiated with the host yet when this runs, so there is
-/// nothing here for a config to overwrite.
+/// Reloads use [`Screens::reloaded_into`], which may keep the current desktop.
+/// At startup nothing has been negotiated yet.
 fn screens_at_startup(config: &Config) -> Screens {
     match config.output.desktop() {
         Some(desktop) => Screens::described(&desktop),
@@ -5992,13 +4812,11 @@ fn screens_at_startup(config: &Config) -> Screens {
     }
 }
 
-/// One advertised `wl_output`, and the global clients see it through.
+/// An advertised `wl_output` and its global.
 ///
-/// The global's id is kept because a desktop can stop describing a display.
-/// Destroying the global is how a client learns the monitor is gone, and
-/// `DisplayHandle::remove_global` is the only thing that does it — dropping
-/// the `Output` alone leaves the global bound and the display advertised for
-/// the rest of the run.
+/// The global id is kept for removal: `DisplayHandle::remove_global` is how
+/// clients learn a display is gone. Dropping the `Output` alone leaves it
+/// advertised.
 struct LiveOutput {
     output: Output,
     global: smithay::reexports::wayland_server::backend::GlobalId,
@@ -6006,43 +4824,26 @@ struct LiveOutput {
 
 /// Advertise `advertised` as a new `wl_output`.
 ///
-/// The one place an output is created, so startup and a config reload cannot
-/// advertise two different things from the same description.
+/// The only place outputs are created, so startup and reload advertise the same
+/// thing.
 fn advertise_output(dh: &DisplayHandle, advertised: &Advertised) -> LiveOutput {
     let output = Output::new(
         advertised.name.clone(),
         PhysicalProperties {
-            // The panel's own millimeters on a tty, and
-            // `screens::UNKNOWN_PHYSICAL_MM` — zero, which is `wl_output`'s
-            // word for a screen with no such number — everywhere else. A described desktop is a config's
-            // arithmetic and a nested one is a window, and neither is
-            // millimeters of glass; the engine's displays are monitors it read
-            // off their EDID while holding DRM master, which this process has
-            // no card node to do for itself.
-            //
-            // Never recomputed here, and that is the point: `Advertised`
-            // carries what the display said, so the one output that has a real
-            // size gets it and the ones that do not get zero rather than a
-            // number invented on their behalf. This said `(300, 200)` on every
-            // display, whatever the config described, which made a 3840x2160
-            // screen 325 DPI and a 1280x800 one 108 — neither a fact about
-            // anything, and both something a toolkit would scale and size
-            // fonts from.
+            // Real millimeters on a tty, from the engine's EDID read. Otherwise
+            // `screens::UNKNOWN_PHYSICAL_MM` (zero, `wl_output`'s "unknown"): a
+            // described desktop or nested window has no physical size. Not
+            // invented here, because toolkits size fonts from it.
             size: advertised.physical_mm.into(),
             subpixel: Subpixel::Unknown,
             make: "Domicile".into(),
-            // THE PANEL'S OWN NAME, where there is one. `wl_output.geometry`
-            // carries a make and a model as strings for exactly this, and it
-            // is what a client showing "which monitor is this" reads.
+            // The panel's name, if known. Clients read it to identify monitors.
             //
-            // It reaches `xdg_output.description` too, and only this way:
-            // Smithay builds that once, as "{make} - {model} - {name}", and
-            // offers no setter for it (`output.rs:264`). So the model is where
-            // a description goes on this version.
+            // It also reaches `xdg_output.description`: Smithay builds that
+            // once as "{make} - {model} - {name}" with no setter
+            // (`output.rs:264`).
             //
-            // "Virtual" for the desktops that are not panels -- a config's
-            // arithmetic, a host's window -- which is what every output here
-            // used to say.
+            // "Virtual" for outputs that are not panels.
             model: if advertised.description.is_empty() {
                 "Virtual".into()
             } else {
@@ -6055,41 +4856,31 @@ fn advertise_output(dh: &DisplayHandle, advertised: &Advertised) -> LiveOutput {
     LiveOutput { output, global }
 }
 
-/// Restate an existing output's mode, scale and position.
+/// Update an existing output's mode, transform, scale and position.
 ///
-/// Apart from creating one because a display that only changed shape keeps the
-/// `wl_output` it had — see [`Slot::Kept`], which says what destroying it
-/// instead would tell a client.
+/// A display that only changed shape keeps its `wl_output`; see [`Slot::Kept`].
 ///
-/// Not the physical size, which `Output` fixes at construction and which a
-/// kept output cannot have changed: [`Slot::Kept`] matches on the name, an
-/// engine display's name is its EDID-derived id, and the millimeters are a
-/// property of the panel that id names. An output whose name did not survive
-/// is a new one and goes through [`advertise_output`] instead.
+/// Physical size is fixed at construction and cannot change for a kept output:
+/// it is matched by name, which comes from the EDID. A renamed output goes
+/// through [`advertise_output`].
 fn restate_output(output: &Output, advertised: &Advertised) {
     let mode = current_mode(advertised);
     output.change_current_state(
         Some(mode),
         Some(as_wl_transform(advertised.transform)),
-        // Fractional, so `xdg_output` reports the logical size the density
-        // actually makes: Smithay divides the mode by this and rounds the
-        // `wl_output.scale` it sends clients *up* from it, which is the split
-        // a 1.2 display needs. `Scale::Integer` here advertised a 3200-wide
-        // monitor as 3840 logical and laid the chrome out against a desktop
-        // nothing was the size of.
+        // Fractional, so `xdg_output` reports the true logical size. Smithay
+        // rounds the `wl_output.scale` it sends up from this, which a 1.2x
+        // display needs.
         Some(Scale::Fractional(advertised.scale)),
         Some(advertised.position.into()),
     );
     output.set_preferred(mode);
 }
 
-/// The one mode a display is on, in the shape `wl_output` states it.
+/// A display's current mode as a `wl_output` mode.
 ///
-/// One function rather than a construction at each of the two places that
-/// restate a mode — here and `set_output`, the window-following desktop's own
-/// path — because the two differ only in where the `Advertised` comes from,
-/// and a client told one thing on startup and another on a density change is a
-/// screen that appears to have changed hardware.
+/// Shared by startup and `set_output`, so a density change does not look like
+/// new hardware.
 fn current_mode(advertised: &Advertised) -> OutputMode {
     OutputMode {
         size: advertised.mode.into(),
@@ -6097,12 +4888,10 @@ fn current_mode(advertised: &Advertised) -> OutputMode {
     }
 }
 
-/// A configured transform as the `wl_output` one Smithay states.
+/// Convert a config transform to Smithay's.
 ///
-/// Two spellings of one thing, and neither package is going to adopt the
-/// other's: `screens.rs` is kept clear of Smithay so that it can be tested
-/// without a `wl_display`, and `domicile-config` is pure logic with serde and
-/// nothing else. Rotations only, because that is all a profile can ask for.
+/// `screens.rs` avoids Smithay for testability and `domicile-config` has no
+/// Smithay dependency, so the conversion lives here. Rotations only.
 fn as_wl_transform(transform: domicile_config::Transform) -> Transform {
     match transform {
         domicile_config::Transform::Normal => Transform::Normal,
@@ -6115,7 +4904,7 @@ fn as_wl_transform(transform: domicile_config::Transform) -> Transform {
 impl OutputHandler for DomicileCompositor {}
 delegate_output!(DomicileCompositor);
 
-// ---- xdg-shell: the seam into the host brain ------------------------------
+// ---- xdg-shell: windows reported to the host ------------------------------
 
 impl XdgShellHandler for DomicileCompositor {
     fn xdg_shell_state(&mut self) -> &mut XdgShellState {
@@ -6123,17 +4912,15 @@ impl XdgShellHandler for DomicileCompositor {
     }
 
     fn new_toplevel(&mut self, surface: ToplevelSurface) {
-        // The chrome's own window is not a window *on* the desktop, so none of
-        // the below applies to it: announcing it would have the chrome mount an
-        // <app> element for itself, inside itself.
+        // The chrome's own window is the desktop, not a window on it.
+        // Announcing it would make the chrome embed itself.
         if is_chrome_surface(surface.wl_surface()) {
             debug!("the chrome mapped its toplevel -> compositing it over the apps");
             for live in &self.outputs {
                 live.output.enter(surface.wl_surface());
             }
-            // It covers the desktop, because it *is* the desktop. A size it did
-            // not ask for is exactly what a compositor gives a fullscreen
-            // window, and the portals it reports back are in these units.
+            // Size it to the desktop, as a compositor does for a fullscreen
+            // window.
             surface.with_pending_state(|state| {
                 state.size = Some(self.screens.size().into());
             });
@@ -6142,35 +4929,19 @@ impl XdgShellHandler for DomicileCompositor {
             return;
         }
 
-        // A client mapped a window. Register it with the shared brain (which
-        // assigns an app id) and announce it to every connected chrome so it can
-        // mount an <app> element.
+        // Register a new window with `Host` (which assigns an app id) and
+        // announce it to every chrome.
         //
-        // With no size, because the client has not committed a buffer and so
-        // has not said one — how big it wants to be is something a Wayland
-        // client says by drawing. It arrives on the `app_resized` that follows
-        // its first commit. This used to announce `(0.0, 0.0)`, which reads as
-        // a size rather than as the absence of one, and a chrome that believed
-        // it opened a window with no box at all.
-        //
-        // With no title, for the same reason: a client names its window with
-        // `set_title`, which it sends after creating the toplevel this is
-        // announcing. That arrives at `title_changed`, which is also where a
-        // rename does.
+        // No size yet: a client states its size by drawing, which arrives as
+        // `app_resized` after its first commit. No title yet: `set_title` comes
+        // after the toplevel, in `title_changed`.
         let announce = {
             let mut host = self.hub.host.lock().unwrap();
             let (app_id, announce) = host.app_appeared(None, None);
             debug!(%app_id, "toplevel mapped -> Host::app_appeared");
-            // Tell the client which outputs it is on — every one of them, at
-            // this point: the chrome has not placed the window yet, so there
-            // is no portal to say where it is. Toolkits that scale their
-            // content (GLFW, and so kitty) wait for this before drawing their
-            // first frame, so without it the window maps and stays blank, and
-            // "none of them" is not an answer either.
-            //
-            // Narrowed to the displays it is actually over by
-            // `enter_the_displays_each_window_is_on`, on the first placement
-            // and every one after it.
+            // Enter every output for now; the chrome has not placed the window.
+            // Some toolkits (GLFW, kitty) wait for this before drawing.
+            // `enter_the_displays_each_window_is_on` updates it on placement.
             for live in &self.outputs {
                 live.output.enter(surface.wl_surface());
             }
@@ -6178,26 +4949,17 @@ impl XdgShellHandler for DomicileCompositor {
             announce
         };
         self.hub.broadcast(announce);
-        // A client is free to take its idle inhibitor before it maps anything,
-        // and one that did was holding nothing until this moment — see
-        // `crate::idle::holds`. On a desk that had gone dark in the meantime
-        // this is the edge that brings it back.
+        // An inhibitor taken before the window mapped starts holding now (see
+        // `crate::idle::holds`), which may wake a dark desktop.
         self.the_windows_changed("a window appeared under an inhibitor");
     }
 
-    /// A client named its window, or renamed it.
+    /// A client set or changed its window title.
     ///
-    /// Where the name has to come from: the announcement goes out when the
-    /// client *creates* the toplevel, and `set_title` is a request it makes
-    /// afterward, so there is never a name to announce. A terminal renames
-    /// itself on every command it runs, so this is not a once-per-window
-    /// event either.
-    ///
-    /// Smithay drops a `set_title` that does not change the title before
-    /// calling this, so what arrives here is already a change.
+    /// Titles arrive after the window is announced, and terminals rename
+    /// constantly. Smithay filters unchanged titles before calling this.
     fn title_changed(&mut self, surface: ToplevelSurface) {
-        // `None` for a toplevel the host never announced — the chrome's own
-        // window, which names itself and is not a window *on* the desktop.
+        // `None` for the chrome's own window, which is never announced.
         let Some(app_id) = self.app_id_of(surface.wl_surface()) else {
             return;
         };
@@ -6211,10 +4973,8 @@ impl XdgShellHandler for DomicileCompositor {
                 .title
                 .clone()
         });
-        // Bound by a `let` statement rather than asked for inside the `if let`:
-        // the guard is a temporary of the statement, so it is dropped at the
-        // `;` and the broadcast below runs with the host unlocked. Folded into
-        // an `if let` it would be held across the whole body.
+        // Separate `let` so the host guard drops at the `;`, before the
+        // broadcast. Inside the `if let` it would be held for the whole body.
         let titled = self.hub.host.lock().unwrap().app_titled(&app_id, title);
         if let Some(titled) = titled {
             self.hub.broadcast(titled);
@@ -6241,22 +5001,17 @@ impl XdgShellHandler for DomicileCompositor {
         {
             let (app_id, _) = self.toplevels.remove(pos);
             self.forget(&app_id);
-            // The window that had the keyboard has gone, and a keyboard with
-            // nowhere to go is a desktop that has stopped listening. The chrome
-            // will usually ask for it back — but it does not have to, and a
-            // client that crashed rather than closed never got the chance, so
-            // the compositor is the one that has to guarantee this.
+            // Return the keyboard to the chrome. The shell usually refocuses
+            // something, but a crashed client gives it no chance, so the
+            // compositor must guarantee a holder.
             self.focus_chrome();
-            // And an inhibitor taken on that window's surface is holding
-            // nothing from here on: the client may still be running, but there
-            // is no longer anything on this desktop for a person to be
-            // watching.
+            // An inhibitor on the closed window's surface stops holding, even
+            // if the client still runs.
             self.the_windows_changed("the window holding this desktop awake is gone");
         }
     }
 
-    /// A popup went: the client destroyed it, usually because it was
-    /// dismissed. The keyboard stays where it is — on the window it was over.
+    /// The client destroyed a popup, usually after a dismissal.
     fn popup_destroyed(&mut self, surface: PopupSurface) {
         if let Some(pos) = self
             .popups
@@ -6267,8 +5022,8 @@ impl XdgShellHandler for DomicileCompositor {
             debug!(%app_id, "popup destroyed -> Host::app_closed");
             self.forget(&app_id);
         }
-        // A menu that had the keyboard hands it down: to the menu it was
-        // opened from, or to its window once the last one is gone.
+        // A grabbing menu hands the keyboard to its parent menu, or to its
+        // window after the last one.
         if let Some(at) = self.grabbing.iter().position(|popup| *popup == surface) {
             let root = self.window_under(&surface);
             self.grabbing.remove(at);
@@ -6284,15 +5039,11 @@ impl XdgShellHandler for DomicileCompositor {
     }
 
     fn new_popup(&mut self, surface: PopupSurface, positioner: PositionerState) {
-        // A popup cannot attach a buffer until it has been configured, so a
-        // compositor that ignores one leaves the client waiting — and a client
-        // waiting on its own menu is a client that has stopped answering
-        // anything. The same shape of hang as the missing data device, and just
-        // as invisible: nothing errors, it simply never appears.
+        // Configure immediately: a popup cannot attach a buffer until
+        // configured, and an unconfigured menu hangs the client silently.
         //
-        // The positioner's own geometry is taken as given. Constraining a popup
-        // to the output is what the flags are for and is not done here; the
-        // menus that exist are small and near where they were asked for.
+        // The positioner's geometry is used as given, without constraining it
+        // to the output.
         surface.with_pending_state(|state| {
             state.geometry = positioner.get_geometry();
             state.positioner = positioner;
@@ -6300,19 +5051,8 @@ impl XdgShellHandler for DomicileCompositor {
         if let Err(err) = surface.send_configure() {
             tracing::warn!(%err, "could not configure a popup");
         }
-        // A popup has no portal of its own — it is the client's own menu,
-        // positioned against its parent rather than laid out in the page — but
-        // it is drawn over that parent, so the screen the window is on is the
-        // screen the menu is on. Entering every display instead would tell a
-        // menu whose window is on the 1x screen that it is also on the 2x one,
-        // and a toolkit takes the largest scale it was entered onto: a menu
-        // drawn for the wrong density over a correctly-scaled window, on the
-        // desktop this whole rule is for.
-        //
-        // The whole pass rather than this one surface: smithay pushes a popup
-        // onto `popup_surfaces` before dispatching this, so it is already in
-        // there, and one rule applied in one place is what stops the answer a
-        // popup gets here drifting from the one a later placement gives it.
+        // Enter displays by the same rule as windows. Smithay adds the popup to
+        // `popup_surfaces` before calling this, so the pass covers it.
         self.enter_the_displays_each_window_is_on();
     }
 
@@ -6341,11 +5081,10 @@ impl XdgShellHandler for DomicileCompositor {
     ) {
     }
 
-    /// A menu asking for the keyboard and for every press, until it goes.
+    /// A menu grabbing the keyboard and pointer until dismissed.
     ///
-    /// The serial is not checked against the press that opened it: the only
-    /// presses are the ones the chrome forwards, and a menu refused over a
-    /// serial would be one that never opened, with nothing to say why.
+    /// The serial is not checked: all presses come from the chrome, and a
+    /// refused grab would be a menu that silently never opens.
     fn grab(&mut self, surface: PopupSurface, _seat: wl_seat::WlSeat, _serial: Serial) {
         if !self.grabbing.contains(&surface) {
             self.grabbing.push(surface.clone());
@@ -6365,29 +5104,22 @@ impl XdgActivationHandler for DomicileCompositor {
         &mut self.xdg_activation_state
     }
 
-    /// A client asked for a window to be activated. Nothing here activates it.
+    /// A client asked for a window to be activated. Forwarded, not granted.
     ///
-    /// This is the request every desktop calls "focus stealing" when it goes
-    /// wrong and "open the link in the browser I already have running" when it
-    /// goes right, and which of those it is depends entirely on what the user
-    /// was doing — which the compositor does not know and the shell does. So
-    /// it is forwarded as `focus_requested` and the seat stays where it is; a
-    /// shell that decided to grant it says so with `focus_app`, exactly as it
-    /// would for a click.
+    /// Whether this is focus stealing or a welcome request depends on what the
+    /// user is doing, which the shell knows. It is broadcast as
+    /// `focus_requested`; a shell grants it with `focus_app`.
     ///
-    /// Deliberately without the checks a compositor usually makes here — how
-    /// old the token is, whether the client that asked is the one the user was
-    /// last in — because each of those is the policy this hands over. A shell
-    /// that wants them writes them.
+    /// The usual checks (token age, requesting client) are also left to the
+    /// shell.
     fn request_activation(
         &mut self,
         token: XdgActivationToken,
         _token_data: XdgActivationTokenData,
         surface: WlSurface,
     ) {
-        // Spent either way. The pool is keyed by token and nothing else prunes
-        // it, so a token left in it after the request it was minted for is a
-        // client's way of growing this process without bound.
+        // Always remove the token; nothing else prunes the pool, so clients
+        // could grow it without bound.
         self.xdg_activation_state.remove_token(&token);
         if let Some(app_id) = self.app_id_of(&surface) {
             broadcast_focus_request(&self.hub, &app_id);
@@ -6397,13 +5129,9 @@ impl XdgActivationHandler for DomicileCompositor {
 
 delegate_xdg_activation!(DomicileCompositor);
 
-// ---- decorations: the shell draws every window's frame ---------------------
-//
-// A shell puts a title bar over every window, so a client drawing its own
-// frame — and a shadow around it — draws a second one inside the first. Both
-// protocols a client asks through are answered "server side" whatever it
-// asked; a client is free to draw one anyway (GTK4 does), which is what
-// `window_geometry.rs` is for.
+// The shell draws every window's frame, so both decoration protocols always
+// answer "server side". Clients may still draw their own (GTK4 does); see
+// `window_geometry.rs`.
 
 impl XdgDecorationHandler for DomicileCompositor {
     fn new_decoration(&mut self, toplevel: ToplevelSurface) {
@@ -6422,9 +5150,8 @@ delegate_xdg_decoration!(DomicileCompositor);
 
 /// Tell `toplevel` the shell draws its frame.
 ///
-/// Sent now only once the window has had its first configure: before that,
-/// the answer rides the initial configure `commit` sends, which is the one the
-/// protocol says a decoration mode belongs in.
+/// Before the first configure, the mode rides on the initial configure from
+/// `commit`, as the protocol requires.
 fn shell_draws_the_frame(toplevel: &ToplevelSurface) {
     toplevel.with_pending_state(|state| {
         state.decoration_mode = Some(XdgDecorationMode::ServerSide);
@@ -6452,30 +5179,19 @@ delegate_kde_decoration!(DomicileCompositor);
 
 // ---- data device: drag-and-drop, and the clipboard ------------------------
 
-/// The mime types this compositor offers a selection of its own under.
+/// The mime types offered for compositor-owned selections.
 ///
-/// The whole of [`TEXT_MIMES`], because what is asked for is the asking
-/// client's to decide: a GTK program wants `text/plain;charset=utf-8` and an
-/// X11 bridge wants `STRING`, and a selection that offered one spelling would
-/// be unpasteable in half the programs on the desktop.
+/// All of [`TEXT_MIMES`], since clients differ: GTK asks for
+/// `text/plain;charset=utf-8`, X11 bridges for `STRING`.
 fn text_mimes() -> Vec<String> {
     TEXT_MIMES.iter().map(|mime| (*mime).to_string()).collect()
 }
 
-/// Both of the desktop's clipboards, in the order their slots are in.
-///
-/// A list rather than two calls at every site that has to do something to each
-/// of them: what the compositor does to one it does to the other, and the one
-/// place they differ — that a row of the history is kept for one and not the
-/// other — says so itself.
+/// Both clipboards, in slot order.
 const BOTH: [Clipboard; 2] = [Clipboard::Copy, Clipboard::Primary];
 
-/// Which of the two a Smithay selection target is.
-///
-/// The compositor holds two vocabularies for one pair: Smithay's on the
-/// Wayland side, and the engine's on the browser's. This is the join, and it
-/// is a function so that it has a test — swapped, a Ctrl-C would reach the
-/// browser as something the pointer brushed past.
+/// Map a Smithay selection target to the engine's clipboard type. A function so
+/// it can be tested; swapped, Ctrl-C would land on the primary selection.
 fn clipboard_of(target: SelectionTarget) -> Clipboard {
     match target {
         SelectionTarget::Clipboard => Clipboard::Copy,
@@ -6483,7 +5199,7 @@ fn clipboard_of(target: SelectionTarget) -> Clipboard {
     }
 }
 
-/// Which slot of a per-clipboard pair one is kept in.
+/// The slot index for `clipboard` in per-clipboard arrays.
 fn at(clipboard: Clipboard) -> usize {
     match clipboard {
         Clipboard::Copy => 0,
@@ -6492,52 +5208,38 @@ fn at(clipboard: Clipboard) -> usize {
 }
 
 impl SelectionHandler for DomicileCompositor {
-    /// Which clipboard a selection the *compositor* set is on.
+    /// Which clipboard a compositor-owned selection is on.
     ///
-    /// **A selection the compositor owns rather than a client.** Most
-    /// selections on this desktop belong to the client that copied, and
-    /// Smithay hands a paste straight to it; two do not — a row a shell picked
-    /// out of the history, and anything copied in the browser, which is not a
-    /// Wayland client of this compositor at all. Both are served out of
-    /// [`DomicileCompositor::holding`], so which clipboard it is on is the
-    /// whole of what has to be carried.
+    /// The compositor owns two kinds of selection: a restored history entry,
+    /// and anything copied in the browser (not our Wayland client). Both are
+    /// served from [`DomicileCompositor::holding`].
     type SelectionUserData = Clipboard;
 
-    /// A client copied something. Nothing is read here — see
-    /// [`DomicileCompositor::copying`] for why this can only write down what
-    /// to ask for.
+    /// A client set a selection. Only records the mime type to read; see
+    /// [`DomicileCompositor::copying`].
     ///
-    /// **Both clipboards are read, and the middle-click one only for the
-    /// browser.** Nothing on the Wayland side needs its bytes — a client
-    /// pasting it is served by the client that selected — but the browser is
-    /// not a Wayland client of this compositor, so what it may paste has to be
-    /// in this process to be handed over. What is still not kept is a
-    /// *history* of it: it changes on every drag over a word.
+    /// Both clipboards are read; the primary only so the browser can paste it.
+    /// It gets no history.
     fn new_selection(
         &mut self,
         target: SelectionTarget,
         source: Option<SelectionSource>,
         _seat: Seat<Self>,
     ) {
-        // `None` is a selection being cleared, and a selection whose mime
-        // types hold no text is an image or a file drag. Neither is anything
-        // to read, and both leave whatever was copied before where it is.
+        // A cleared selection (`None`) or one with no text (an image, a file)
+        // is not read; the previous copy stays.
         self.copying[at(clipboard_of(target))] = source
             .as_ref()
             .and_then(|offered| text_mime(&offered.mime_types()));
     }
 
-    /// A client is pasting something this compositor put on the clipboard.
+    /// A client is pasting a compositor-owned selection.
     ///
-    /// **On a thread, because the client sets the pace.** A paste is this
-    /// process writing into a pipe the client reads, and a client that asks
-    /// for the selection and then stops reading would otherwise park the
-    /// Wayland thread — which is every window on the desktop — for as long as
-    /// it liked. The deadline in `crate::clipboard` bounds the thread instead.
+    /// Written on a thread, since a client that stops reading would otherwise
+    /// block the Wayland thread. The deadline in `crate::clipboard` bounds the
+    /// thread.
     ///
-    /// Nothing held is a client pasting a selection the compositor no longer
-    /// has: the fd is dropped, the client reads end-of-file and pastes
-    /// nothing.
+    /// If nothing is held, the fd is dropped and the client reads EOF.
     fn send_selection(
         &mut self,
         _target: SelectionTarget,
@@ -6586,10 +5288,10 @@ delegate_data_device!(DomicileCompositor);
 
 // ---- boot -----------------------------------------------------------------
 
-/// The display name the chrome connects on, given ours.
+/// The chrome's Wayland display name, derived from ours.
 ///
-/// A separate socket rather than a flag, so that "this client is the chrome" is
-/// something the compositor knows rather than something a client claims.
+/// A separate socket, so the compositor knows which client is the chrome rather
+/// than trusting a claim.
 fn chrome_display(socket_name: &OsStr) -> String {
     format!("{}-chrome", socket_name.to_string_lossy())
 }
@@ -6607,12 +5309,8 @@ fn spawn_client(command: &[String], wayland_display: &OsStr) {
     };
     match child.spawn() {
         Ok(mut child) => {
-            // After the fork rather than before it, because the line carries
-            // the pid and there is none until then. That pid is the whole
-            // reason the line moved: it is what an `app client connected`
-            // says back, and without it a launcher opening three windows
-            // produces three spawns and three arrivals that cannot be paired.
-            // See `peer_process` for what the pair is for.
+            // Logged after the fork for the pid, which pairs this line with
+            // `app client connected`. See `peer_process`.
             debug!(
                 pid = child.id(),
                 ?command,
@@ -6628,15 +5326,11 @@ fn spawn_client(command: &[String], wayland_display: &OsStr) {
     }
 }
 
-/// A theme as the config file spells it, as the wire spells it.
+/// Convert a config theme to the protocol's.
 ///
-/// Two enumerations of one closed set, mapped here rather than shared, which
-/// is the arrangement `domicile_protocol::DisplayTransform` and
-/// `domicile_config::Transform` are already in and for the same reason:
-/// `domicile-protocol` carries serde and nothing else, and a config crate in
-/// its dependency list would be the protocol crate stopping being a portable
-/// description of the protocol. `scripts/test-themes-agree.sh` is what keeps
-/// the two lists honest.
+/// Kept as two enums because `domicile-protocol` depends only on serde, like
+/// `DisplayTransform` and `domicile_config::Transform`.
+/// `scripts/test-themes-agree.sh` keeps them in sync.
 fn theme_on_the_wire(mode: ThemeMode) -> Theme {
     match mode {
         ThemeMode::Dark => Theme::Dark,
@@ -6644,11 +5338,9 @@ fn theme_on_the_wire(mode: ThemeMode) -> Theme {
     }
 }
 
-/// Give the host the `extensions` a config names, for every chrome that
-/// connects after.
+/// Give the host the config's `extensions`, for chromes that connect later.
 ///
-/// A path goes as its text: one read out of JSON is UTF-8, so `display` loses
-/// nothing.
+/// Paths came from JSON, so they are UTF-8 and `display` is lossless.
 fn hand_over_the_extensions(host: &mut Host, extensions: &ExtensionsConfig) {
     host.set_extensions(
         extensions.web_store.clone(),
@@ -6660,53 +5352,33 @@ fn hand_over_the_extensions(host: &mut Host, extensions: &ExtensionsConfig) {
     );
 }
 
-/// Give the host the keyboard a shell's keys are resolved on, for every chrome
-/// that connects after.
+/// Give the host the resolved shell keybindings, for chromes that connect
+/// later.
 fn hand_over_the_keys(host: &mut Host, keys: BTreeMap<String, u32>) {
     host.set_shell_config(keys);
 }
 
-/// The home directory whose files a launcher is offered.
+/// The user's home directory, which the file index covers.
 ///
-/// **One of the few things this compositor reads from its environment that
-/// are not instrumentation** — the others are its own `WAYLAND_DISPLAY`, which
-/// says whether it is a window inside a session (see
-/// `appearance::activation_environment`), and the `LD_LIBRARY_PATH` its
-/// clients inherit less the engine (see [`without_the_engine`]). Everything a
-/// desktop is *configured* with arrives on the command line, because a program
-/// writes it; a home directory is not a
-/// setting but a fact about the user this process is running as, and it is the
-/// same one [`spawn_client`] hands every client it starts. Taking it on a flag
-/// would be asking the supervisor to tell us which user we are.
-///
-/// `domicile_config` reads the same `HOME`, for the same reason, to expand a
-/// `~` in `extensions.unpacked`.
+/// Read from the environment because it is a fact about the running user, not a
+/// setting; configuration arrives on the command line. Spawned clients inherit
+/// the same `HOME`, and `domicile_config` uses it to expand `~`.
 fn home_directory() -> Option<std::path::PathBuf> {
     std::env::var_os("HOME").map(std::path::PathBuf::from)
 }
 
-/// The command a spawned client runs under.
+/// Build the command for a spawned client.
 ///
-/// `WAYLAND_DISPLAY` is set on the child rather than left to the compositor's
-/// own environment. When Domicile presents to a window it is itself a client of
-/// the session it was started from, so it must keep that session's
-/// `WAYLAND_DISPLAY` to reach it — and a client that inherited it would open on
-/// the host desktop instead of on Domicile. `DISPLAY` is removed so a toolkit
-/// with both backends prefers Wayland over any outer X server.
+/// - `WAYLAND_DISPLAY` is set to ours. Our own may be the host session's, and a
+///   client inheriting it would open there.
+/// - `DISPLAY` is removed so dual-backend toolkits choose Wayland.
+/// - There is no Xwayland, so X11-only defaults would fail;
+///   [`WAYLAND_PREFERENCE`] overrides them.
+/// - `LD_LIBRARY_PATH` loses the engine's directory; see
+///   [`without_the_engine`].
 ///
-/// **There is no Xwayland**, so a toolkit that still defaults to X11 does not
-/// fall back to Wayland but fails to start. [`WAYLAND_PREFERENCE`] tells each
-/// in the variable it reads, overriding any it inherited from an X session.
-///
-/// `DOMICILE_SOCK` is the other way round and is deliberately *not* named
-/// here: the launcher puts this desktop's control socket in the compositor's
-/// environment (`domicile_launch::spawn::compositor`), which is the desktop
-/// the compositor belongs to, so inheriting it is inheriting the right one. It
-/// is `WAYLAND_DISPLAY` that is the special case — the compositor's own is the
-/// host's rather than this desktop's.
-///
-/// `LD_LIBRARY_PATH` is the other: `library_path` is the compositor's own, and
-/// a client gets it less the engine's directory; see [`without_the_engine`].
+/// `DOMICILE_SOCK` is inherited unchanged: the launcher sets it to this
+/// desktop's control socket.
 fn client_command(
     command: &[String],
     wayland_display: &OsStr,
@@ -6717,10 +5389,9 @@ fn client_command(
     child
         .args(args)
         .env("WAYLAND_DISPLAY", wayland_display)
-        // Which desktop this is, for a `.desktop` file's `OnlyShowIn` and
-        // for any toolkit that reads it. NOT what routes the portal: that is
-        // matched against the *frontend's* own environment, which
-        // `appearance::say_which_desktop` is what reaches.
+        // For `OnlyShowIn` in `.desktop` files and for toolkits. Portal routing
+        // uses the frontend's environment instead; see
+        // `appearance::say_which_desktop`.
         .env("XDG_CURRENT_DESKTOP", CURRENT_DESKTOP)
         .envs(WAYLAND_PREFERENCE)
         .env_remove("DISPLAY");
@@ -6731,20 +5402,16 @@ fn client_command(
     Some(child)
 }
 
-/// A library path with every directory that holds the engine taken out, or
-/// `None` when nothing is left.
+/// `path` without any directory containing the engine, or `None` if nothing is
+/// left.
 ///
-/// The launcher puts the engine's directory on the compositor's
-/// `LD_LIBRARY_PATH` so that [`engine::LIBRARY`] is found, and that directory
-/// is Chromium's: it carries Chromium's own `libvulkan.so.1`, built without
-/// Xlib surfaces. A client that inherited it loaded that loader rather than
-/// its own, and GTK 4 died on the first symbol it lacked:
+/// The engine's directory is Chromium's and holds its own `libvulkan.so.1`,
+/// built without Xlib surfaces. A client that loads it fails, for example:
 ///
 ///   libgtk-4.so.1: undefined symbol: vkCreateXlibSurfaceKHR
 ///
-/// Found by what is in a directory rather than by a flag naming it, so a
-/// compositor started by hand with a Chromium `out` directory on its path is
-/// covered too.
+/// Detected by contents rather than a flag, so a hand-started compositor with a
+/// Chromium `out` directory on its path is covered.
 fn without_the_engine(path: &OsStr) -> Option<OsString> {
     let kept: Vec<_> = std::env::split_paths(path)
         .filter(|directory| !directory.join(engine::LIBRARY).exists())
@@ -6758,7 +5425,7 @@ fn without_the_engine(path: &OsStr) -> Option<OsString> {
 /// - `XDG_SESSION_TYPE`: what `--ozone-platform=auto` (Electron 38 and later,
 ///   and Chromium), Qt and GLFW look at when nothing more specific is set.
 /// - `ELECTRON_OZONE_PLATFORM_HINT`: Electron 28 through 37, which otherwise
-///   default to X11 — `element-desktop`, VS Code, Slack.
+///   default to X11 (`element-desktop`, VS Code, Slack).
 /// - `NIXOS_OZONE_WL`: nixpkgs' Electron and Chromium wrappers, which add the
 ///   Wayland flags only when it is set.
 /// - `QT_QPA_PLATFORM`, `SDL_VIDEODRIVER`: Qt5 and SDL2, both X11 by default.
@@ -6772,14 +5439,11 @@ const WAYLAND_PREFERENCE: [(&str, &str); 6] = [
     ("MOZ_ENABLE_WAYLAND", "1"),
 ];
 
-/// Advertise `zwp_linux_dmabuf_v1`, with feedback whenever we can name the DRM
-/// node we import on.
+/// Advertise `zwp_linux_dmabuf_v1`, with feedback when the DRM node is known.
 ///
-/// The feedback (protocol v4) is what tells a client *which* device to allocate
-/// on. Mesa has no other source for that here — Domicile advertises no
-/// `wl_drm` — so against a v3-only global it sees a format list, cannot resolve
-/// a GPU, and never allocates a buffer at all. v3 remains the fallback for a
-/// software renderer, which has no DRM node to name.
+/// Feedback (v4) tells clients which device to allocate on. Without `wl_drm`,
+/// Mesa has no other source and never allocates against a v3 global. v3 remains
+/// for software rendering, which has no node.
 fn advertise_dmabuf(
     state: &mut DmabufState,
     display: &DisplayHandle,
@@ -6808,25 +5472,20 @@ fn advertise_dmabuf(
     }
 }
 
-/// Classify a newly-attached buffer. A dmabuf carries its `Dmabuf` as the
-/// `wl_buffer`'s user data, which is what tells the two kinds apart.
-/// Put the engine's fd in the loop, so that [`DomicileCompositor::pump_the_engine`]
-/// runs when the engine has something to say and at no other time.
+/// Watch the engine's fd, so [`DomicileCompositor::pump_the_engine`] runs when
+/// the engine has events.
 ///
-/// Here rather than inline because an engine that replaced another brings a
-/// new one: the fd is its event queue's, and the queue belongs to the
-/// `DomicileEngine` that made it. A source still watching the old fd is a
-/// source watching a descriptor the library closed.
+/// Separate because a replacement engine brings a new fd.
 fn poll_the_engine(
     handle: &LoopHandle<'static, CalloopData>,
     fd: std::os::fd::RawFd,
 ) -> Result<RegistrationToken, Box<dyn std::error::Error>> {
-    // Duplicated rather than borrowed: the source outlives this call, and the
-    // engine owns the original and closes it when it is dropped.
+    // Duplicate the fd: the source outlives this call, and the engine closes
+    // the original when dropped.
     //
-    // SAFETY: the fd is the live engine's, which the caller has just asked for
-    // and which is valid until that engine is destroyed; it is duplicated
-    // before this returns and never used as a borrow afterward.
+    // SAFETY: the fd belongs to the live engine and is valid until it is
+    // destroyed. It is duplicated before this returns and never used as a
+    // borrow afterward.
     let owned = unsafe { std::os::fd::BorrowedFd::borrow_raw(fd) }.try_clone_to_owned()?;
     Ok(handle.insert_source(
         Generic::new(owned, Interest::READ, Mode::Level),
@@ -6838,11 +5497,9 @@ fn poll_the_engine(
     )?)
 }
 
-/// The libgbm device shm clients' frames are copied onto, on the GPU the
-/// renderer draws with.
+/// The libgbm device on the renderer's GPU, for copying shm frames.
 ///
-/// `None` is said here, once, rather than per client: every shm window on the
-/// desktop will be blank, and the reason is a fact about the machine.
+/// `None` is logged once here, since it blanks every shm window.
 fn shm_allocator(importer: &DmabufImporter) -> Option<Gbm> {
     let Some(node) = importer.node() else {
         warn!(
@@ -6860,8 +5517,8 @@ fn shm_allocator(importer: &DmabufImporter) -> Option<Gbm> {
     }
 }
 
-/// The window geometry a surface last committed, as `(x, y, width, height)`
-/// in its logical units — `xdg_surface.set_window_geometry`.
+/// The surface's committed `xdg_surface.set_window_geometry`, as `(x, y, width,
+/// height)` in logical units.
 fn window_geometry(states: &SurfaceData) -> Option<(i32, i32, i32, i32)> {
     states
         .cached_state
@@ -6871,6 +5528,8 @@ fn window_geometry(states: &SurfaceData) -> Option<(i32, i32, i32, i32)> {
         .map(|rect| (rect.loc.x, rect.loc.y, rect.size.w, rect.size.h))
 }
 
+/// Classify a committed buffer: a dmabuf if one is attached as user data,
+/// otherwise shm.
 fn committed_buffer(buffer: &wl_buffer::WlBuffer) -> Option<CommittedBuffer> {
     match get_dmabuf(buffer) {
         Ok(dmabuf) => Some(CommittedBuffer::Gpu(dmabuf.clone())),
@@ -6880,11 +5539,7 @@ fn committed_buffer(buffer: &wl_buffer::WlBuffer) -> Option<CommittedBuffer> {
     }
 }
 
-/// How big a `wl_shm` buffer says it is.
-///
-/// The size and nothing else: the engine takes a dmabuf, and an shm client's
-/// window is refused rather than drawn — see `publish_frame`. What this
-/// answers is which kind of buffer arrived, so that the refusal can say so.
+/// The size of a `wl_shm` buffer.
 fn shm_buffer_size(buffer: &wl_buffer::WlBuffer) -> Option<(u32, u32)> {
     with_buffer_contents(buffer, |_ptr, _len, data| {
         Some((data.width.max(0) as u32, data.height.max(0) as u32))
@@ -6893,13 +5548,11 @@ fn shm_buffer_size(buffer: &wl_buffer::WlBuffer) -> Option<(u32, u32)> {
     .flatten()
 }
 
-/// Translate a client's requested cursor into the CSS keyword the chrome
-/// assigns to its `<app>` element.
+/// Map a client's cursor request to the CSS keyword the chrome sets on its
+/// `<app>` element.
 ///
-/// `wp_cursor_shape_v1` is modeled on the CSS cursor keywords, so almost every
-/// shape maps across by name. The two that predate that alignment — and any
-/// shape a future revision of the protocol adds — resolve to the nearest
-/// keyword rather than something the chrome cannot use.
+/// `wp_cursor_shape_v1` mirrors the CSS keywords, so most map by name. Others,
+/// including future additions, fall back to the nearest keyword.
 fn cursor_shape(icon: CursorIcon) -> CursorShape {
     match icon {
         CursorIcon::Default => CursorShape::Default,
@@ -6940,20 +5593,12 @@ fn cursor_shape(icon: CursorIcon) -> CursorShape {
     }
 }
 
-/// Run one compositor, and say in a sentence why if it will not start.
+/// Run the compositor, printing a readable error if it fails to start.
 ///
-/// NOT `main() -> Result<_, _>`, WHICH IS WHAT THIS WAS. Rust's own
-/// `Termination` prints that error with `Debug`, and a startup failure here is
-/// the only thing a desk that will not come up has to go on: `domicile` starts
-/// a desktop five times and says each time that the compositor "said why
-/// above". What was above, for a config with a section one release too old,
-/// was `Error: Parse("...")` — the variant name wrapped around it and every
-/// newline the parser's message carried escaped into one unreadable line, in
-/// the middle of Chromium's startup log.
-///
-/// `Display` is what every error this can return is written for, so printing
-/// it is the whole of the fix. `bin/domicile.rs` has done it this way all
-/// along; this is the other half of the same terminal.
+/// Not `main() -> Result`, because `Termination` prints errors with `Debug`,
+/// which escapes newlines and wraps the variant name. Startup errors are what a
+/// user reads when the desktop will not come up, so print them with `Display`,
+/// as `bin/domicile.rs` does.
 fn main() -> ExitCode {
     match run() {
         Ok(()) => ExitCode::SUCCESS,
@@ -6965,13 +5610,8 @@ fn main() -> ExitCode {
 }
 
 fn run() -> Result<(), Box<dyn std::error::Error>> {
-    // Color only on a terminal. A desktop is nearly always started with its
-    // output going to a file — that is how anybody gets a log to read
-    // afterward — and `tracing_subscriber` colors regardless of where it is
-    // writing, so what lands there is a field name wrapped in escapes on
-    // every line. `grep pid=1234` finds nothing in it, which is the one thing
-    // a person reading a slow launch wants to do. Interactively nothing
-    // changes.
+    // Color only on a terminal. Logs usually go to a file, where escape codes
+    // break searches like `grep pid=1234`.
     let colored = std::io::IsTerminal::is_terminal(&std::io::stdout());
     match tracing_subscriber::EnvFilter::try_from_default_env() {
         Ok(filter) => tracing_subscriber::fmt()
@@ -6981,17 +5621,12 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         Err(_) => tracing_subscriber::fmt().with_ansi(colored).init(),
     }
 
-    // The whole command line, read before anything is bound: it is written by
-    // the shell that started us, so a mistake in it is a bug in a program
-    // rather than a typo at a prompt, and reporting it after the sockets are
-    // up buries it under a compositor's startup log.
+    // Parse arguments before binding anything. Another program writes them, so
+    // an error is a bug and should not be buried in the startup log.
     let arguments = arguments(std::env::args_os().skip(1))?;
 
-    // A config that will not load is fatal, not a warning. The old fallback to
-    // defaults made sense while a person wrote this file by hand and might be
-    // mid-edit; a shell generates it now, so an unreadable one means the shell
-    // is broken — and coming up wearing settings nobody chose hides that
-    // behind a desktop that merely looks wrong.
+    // A config that will not load is fatal. Shells generate it, so a bad one
+    // means a broken shell, and falling back to defaults would hide that.
     let config = match &arguments.config {
         Some(path) => Config::load(path)?,
         None => Config::default(),
@@ -7000,44 +5635,29 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let mut event_loop: EventLoop<CalloopData> = EventLoop::try_new()?;
     let display: Display<DomicileCompositor> = Display::new()?;
     let dh = display.handle();
-    // Delegated compositing: Chromium sends its layer tree as one subsurface
-    // per quad, but only to a compositor that advertises what it asks for.
-    // `wl_subcompositor` comes with `CompositorState`; these are the rest that
-    // are standard. See `docs/architecture/WINDOW-COMPOSITING.md`.
-    // Back, and only because it is honored now. A global is a promise to
-    // act on what a client then says through it, and Chromium reads this one
-    // as permission to stop calling `wl_surface.set_buffer_scale` and to put
-    // its logical size in `wp_viewport.set_destination` instead. Advertising
-    // it while the commit path read the buffer and its scale and nothing else
-    // made every surface on a dense display twice its true size, and every
-    // portal and pointer coordinate with it. See `viewport`, which answers
-    // the destination that sizes a surface and the source that crops it where
-    // the compositor draws, and `e2e-a-dense-display.sh`, which is what says
-    // so: with the destination ignored the chrome's surface reads 2560x1600
-    // against a desktop of 1280x800, and that check goes red. Measured.
+    // Delegated compositing: Chromium sends one subsurface per quad, but only
+    // to a compositor that advertises these. `wl_subcompositor` comes with
+    // `CompositorState`. See `docs/architecture/WINDOW-COMPOSITING.md`.
+    //
+    // Advertising `wp_viewporter` commits to honoring it: Chromium then sets
+    // its logical size through `wp_viewport.set_destination` instead of a
+    // buffer scale. If ignored, every surface on a dense display is twice its
+    // size. See `viewport`.
     ViewporterState::new::<DomicileCompositor>(&dh);
     SinglePixelBufferState::new::<DomicileCompositor>(&dh);
     ContentTypeState::new::<DomicileCompositor>(&dh);
-    // Advertised on every desktop, including one that states no timeout and so
-    // never blanks: a client asking that desk to stay awake is asking for
-    // something already true, and a global that came and went with a reloaded
-    // config would be one a running player had bound and lost.
+    // Always advertised, even without an idle timeout, so a reload never
+    // removes a global a client has bound.
     IdleInhibitManagerState::new::<DomicileCompositor>(&dh);
 
     let mut seat_state = SeatState::new();
     let data_device_state = DataDeviceState::new::<DomicileCompositor>(&dh);
     let primary_selection_state = PrimarySelectionState::new::<DomicileCompositor>(&dh);
-    // Advertise a keyboard and pointer; a real compositor would track hotplug.
+    // Advertise a keyboard and pointer.
     let mut seat: Seat<DomicileCompositor> = seat_state.new_wl_seat(&dh, "domicile");
-    // The keymap the seat compiles is what every Wayland client is handed, so
-    // the config's keyboard section lands here and nowhere else. A keymap xkb
-    // cannot compile (a layout or variant that does not exist) fails the boot
-    // rather than silently handing clients a keymap they did not ask for.
-    //
-    // At boot, which is the whole of the difference between this and a
-    // reload: there is no desktop to lose yet, so the strict answer costs
-    // nothing. `retype_the_desktop` refuses the same keymap instead, because
-    // by then there are windows open on the layout that did compile.
+    // The seat's keymap is what every client receives. A keymap xkb cannot
+    // compile is fatal at startup rather than silently replaced. On reload,
+    // `retype_the_desktop` refuses it instead, since windows are open.
     let keyboard = &config.input.keyboard;
     seat.add_keyboard(
         XkbConfig {
@@ -7050,23 +5670,20 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         200,
         25,
     )?;
-    // The same keymap as text, for the chrome's browser process, which has a
-    // keyboard layout engine of its own and no fd to hand it. Compiled here
-    // rather than read back off the seat because Smithay only lends the
-    // keymap through the compositor state, and that value does not exist until
-    // long after the chrome socket is accepting connections. See `keymap`.
+    // The same keymap as text, for the browser process, which has its own
+    // layout engine and no fd. Compiled here because Smithay only exposes the
+    // seat's keymap later, after the chrome socket accepts connections. See
+    // `keymap`.
     let keymap = compiled_keymap(keyboard)?;
-    // And every chord resolved on it, which is as fatal as the keymap and for
-    // its reason: a desk that came up with a binding on no key would be a
-    // shell whose key does nothing, and nothing would say why. On a reload it
-    // is refused instead — see `rebind_the_keys`.
+    // Resolve keybindings on it. Fatal at startup like the keymap, so no
+    // binding silently does nothing. A reload refuses instead; see
+    // `rebind_the_keys`.
     let keys = shell_config::keys(&config)?;
     seat.add_pointer();
 
-    // Advertise an output per described display, or the one that follows
-    // Domicile's own window where nothing described any. Many clients (e.g.
-    // weston-terminal) wait for a wl_output before they will map a toplevel,
-    // so this happens before there is a socket for anything to arrive on.
+    // Advertise an output per described display, or one following Domicile's
+    // window. Some clients (e.g. weston-terminal) wait for a `wl_output` before
+    // mapping, so do this before opening the socket.
     let output_manager_state = OutputManagerState::new_with_xdg_output::<DomicileCompositor>(&dh);
     let screens = screens_at_startup(&config);
     let outputs: Vec<LiveOutput> = screens
@@ -7074,22 +5691,16 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         .map(|advertised| advertise_output(&dh, advertised))
         .collect();
 
-    // Bind the Wayland socket before anything can ask us to put a client on
-    // it. A chrome that connects the moment its own socket appears may send a
-    // `spawn` straight away, and a client spawned with no display of ours to
-    // name would land on whichever session we inherited. Inserting the source
-    // into the event loop happens later; binding is what reserves the name.
+    // Bind the Wayland socket before anything can spawn a client. A chrome may
+    // send `spawn` as soon as it connects, and the client needs our display
+    // name. The event loop source is added later.
     let source = ListeningSocketSource::new_auto()?;
     let socket_name = source.socket_name().to_os_string();
-    // A second socket, for the chrome alone. Which socket a client arrived on
-    // is how the compositor knows the engine drawing the desktop from an app
-    // running on it — see `ClientState::is_chrome`. Naming it after the first
-    // means one lookup gives both.
+    // A second socket for the chrome, which identifies it; see
+    // `ClientState::is_chrome`.
     let chrome_socket_name = chrome_display(&socket_name);
     let chrome_source = ListeningSocketSource::with_name(&chrome_socket_name)?;
-    // One line each, and each naming only its own display: a script reading
-    // these back has to be able to tell them apart, and two values on one line
-    // are two values a pattern for either can match.
+    // One line each, so scripts can match each display separately.
     info!(
         display = ?socket_name,
         "domicile-compositor: apps connect here (WAYLAND_DISPLAY)"
@@ -7099,58 +5710,46 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         "domicile-compositor: the chrome connects here (WAYLAND_DISPLAY)"
     );
 
-    // Forward input from the chrome onto the Wayland thread via a channel.
+    // Chrome requests to the Wayland thread.
     let (request_tx, request_rx) = channel::<ClientRequest>();
-    // And what a passphrase did back onto it, from the thread that checked it.
+    // Passphrase verdicts from the checking thread.
     let (verdicts, heard_verdicts) = channel::<Verdict>();
 
-    // Shared brain, driven by both the Wayland side and chrome connections.
+    // State shared by the Wayland thread and chrome connections.
     let (hub, outbound_rx) = ChromeHub::new(
         request_tx,
         config.output.max_scale,
         socket_name.clone(),
-        // Started before the hub rather than lazily, because the name has
-        // to be taken before the first client is spawned: an app that
-        // asked the frontend for a color scheme while this was still
-        // starting would be answered by whatever other backend the desk
-        // has, and would not be asked again.
+        // Start before any client is spawned: an app asking for a color scheme
+        // before the bus name is taken would get another backend's answer and
+        // never ask again.
         appearance::serve(
             theme_on_the_wire(config.theme.mode),
             &socket_name.to_string_lossy(),
             std::env::var_os("WAYLAND_DISPLAY").as_deref(),
         ),
     );
-    // Before any chrome can connect, so the first search a launcher makes is
-    // already answered under the desk's rule.
+    // Before any chrome connects, so the first search uses the config.
     hub.offer_the_applications(&config.applications);
-    // Before any chrome can connect: the desktop rides with the handshake, so
-    // a page that arrives in the same millisecond as the socket still gets it.
+    // Before any chrome connects, so the handshake carries the desktop.
     {
         let mut host = hub.host.lock().unwrap();
         host.describe_displays(screens.outputs().map(Advertised::described).collect());
-        // And the keymap, which rides with the same handshake for the same
-        // reason one layer down: the browser process reading that socket
-        // decodes every key the shell is typed with, and off ChromeOS nothing
-        // else in Chromium ever hands its layout engine one. See `keymap`.
+        // The keymap, for the browser process to decode keys. Outside ChromeOS
+        // nothing else gives Chromium's layout engine one. See `keymap`.
         host.set_keymap(keymap);
-        // And the keys resolved on it, for the keymap's reason: a page that
-        // reloads has no bindings until it is told them again.
+        // Keybindings, so a reloaded page gets them again.
         hand_over_the_keys(&mut host, keys);
-        // And the extensions, which the same browser process installs and a
-        // page that reloads has to be told again. See `EXTENSIONS.md`.
+        // Extensions, which the browser process installs. See
+        // `docs/architecture/EXTENSIONS.md`.
         hand_over_the_extensions(&mut host, &config.extensions);
-        // And the theme, for the handshake's reason one more time: it is what
-        // the page paints in, and a page told late paints once in the wrong
-        // one. Set rather than taken up -- `take_up_the_theme` broadcasts, and
-        // there is nobody connected to broadcast to yet.
+        // The theme, so the page paints correctly the first time. Set, not
+        // `take_up_the_theme`, since there is nobody to broadcast to yet.
         host.set_theme(theme_on_the_wire(config.theme.mode));
         host.set_windows_theme(theme_on_the_wire(config.theme.mode));
     }
-    // The system tray, published through the hub: every change is taken up
-    // by the host, which says nothing where nothing moved, and broadcast. An
-    // empty tray first, so a desk with no session bus -- whose watcher never
-    // starts -- still tells a page there is nothing in it rather than nothing
-    // at all. See `tray`.
+    // The system tray, published through the hub. Start with an empty tray so a
+    // desktop without a session bus still reports one. See `tray`.
     hub.host.lock().unwrap().set_tray(Vec::new());
     let publishing = Arc::clone(&hub);
     let _ = hub.tray.set(tray::serve(
@@ -7160,15 +5759,15 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             home_directory().as_deref(),
         ),
         move |items| {
-            // Scoped, so the host is let go of before the broadcast queues.
+            // Release the host before broadcasting.
             let told = publishing.host.lock().unwrap().set_tray(items);
             if let Some(message) = told {
                 publishing.broadcast(message);
             }
         },
     ));
-    // The notifications, published through the hub for the tray's reasons,
-    // and none first for its reason too. See `notifications`.
+    // Notifications, published like the tray, starting empty. See
+    // `notifications`.
     hub.host.lock().unwrap().set_notifications(Vec::new());
     let publishing = Arc::clone(&hub);
     let _ = hub.notifications.set(notifications::serve(
@@ -7184,13 +5783,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
         },
     ));
-    // The sound, published through the hub for the tray's reasons. Nothing
-    // first, unlike the tray: a desk with no sound server has no mixer to
-    // draw, where a desk with no bus has a tray with nothing in it. See
-    // `audio`.
-    // And the meters, which broadcast straight to the chromes: a level is
-    // news twenty times a second, and nothing a page that connects later
-    // needs told again.
+    // Sound, published like the tray but not pre-set: without a sound server
+    // there is no mixer to show. See `audio`.
+    //
+    // Meters broadcast directly: levels change twenty times a second and new
+    // chromes need no catch-up.
     let publishing = Arc::clone(&hub);
     let _ = hub.meters.set(meters::serve(move |levels| {
         publishing.broadcast(HostMessage::AudioLevels { levels });
@@ -7205,25 +5802,15 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             publishing.broadcast(message);
         }
     }));
-    // Bound here rather than in the serving thread, so that a socket that
-    // cannot be bound ends the run rather than a thread. The shell is waiting
-    // on the session document, which is published long after this — so nothing
-    // can arrive before the listener exists, whatever order the rest takes.
+    // Bind here so a failure ends the run. Nothing can connect yet: the shell
+    // waits for the session document, published much later.
     let chrome_listener = bind_chrome_socket(&arguments.chrome_socket)?;
-    // NOTHING HERE WAITS FOR A PAGE, AND UNTIL THIS EXISTED NOTHING SAID SO.
-    // A compositor with no chrome on it is a running desktop nobody can see:
-    // the window is blank, every log line here is about a socket that is fine,
-    // and the engine has nothing to report because from its side nothing
-    // failed. This end is the only one that can tell the difference between a
-    // page that has not arrived yet and one that is never coming, so it is the
-    // end that says it. See `domicile_launch::handshake`.
+    // Warn if no page connects. Otherwise a desktop with no chrome is just a
+    // blank window with healthy-looking logs. Only this side can tell "not yet"
+    // from "never". See `domicile_launch::handshake`.
     //
-    // AND IT IS ONLY A WATCHDOG WHERE A PAGE IS DUE, which is what
-    // `--expect-a-page` says. The engine spike's harnesses run this compositor
-    // as a producer for a browser that has its own file:// page, so nothing
-    // can dial this socket and the sentence below was printed on every one of
-    // their runs, green ones included. See `domicile_launch::handshake`'s
-    // `Expected`.
+    // Only when `--expect-a-page` is set. Engine spike harnesses use their own
+    // `file://` page and never connect here.
     let handshake = Arc::new(Handshake::new());
     {
         let handshake = handshake.clone();
@@ -7247,19 +5834,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         thread::spawn(move || serve_outbound(hub, outbound_rx));
     }
 
-    // GPU clients need somewhere for their buffers to land. Where EGL gives us
-    // nothing to render on — a container, a machine with no DRM device — the
-    // global is simply not advertised, and clients fall back to wl_shm rather
-    // than allocating buffers we would then have to reject.
-    // HEADLESS, ALWAYS. `--present` opened a winit window and composited into
-    // it with Smithay's GL renderer; it went because nothing ran it. It was
-    // never reachable from `domicile` or the flake — only from three e2e
-    // scripts, whose whole subject was that path — so what it had was tests
-    // and no users.
+    // Without an EGL renderer (a container, no DRM device), the dmabuf global
+    // is not advertised and clients fall back to `wl_shm`.
     //
-    // The renderer that stays is what imports client dmabufs and reads shm
-    // buffers back for the chrome, which is how a client's frames reach the
-    // engine at all.
+    // The renderer imports client dmabufs and reads back shm buffers, which is
+    // how client frames reach the engine.
     let mut gpu = match headless_renderer() {
         Ok((renderer, importer)) => Some(Gpu {
             gbm: shm_allocator(&importer),
@@ -7281,20 +5860,13 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         advertise_dmabuf(&mut dmabuf_state, &dh, importer_device, formats)
     });
 
-    // The engine, when the shell asked for one. Loudly or not at all: a
-    // compositor told to use the engine and unable to load it must say which
-    // library and why, because the alternative is a desktop that comes up with
-    // no windows on it and no reason given. `dlopen` is build hygiene — it
-    // keeps `cargo build` from needing a Chromium checkout — and not a license
-    // to carry on without the library.
+    // Load the engine if asked. Failure is fatal and names the library:
+    // `dlopen` only keeps `cargo build` from needing Chromium, not a license to
+    // run without it.
     //
-    // **Without the flag there is no path to a window at all**, now that the
-    // copy path is gone. That is a running configuration rather than a
-    // mistake — every check in `scripts/` drives the chrome, input and
-    // displays, none of which need a client's pixels, and none of them has a
-    // Chromium build to point at. So it is allowed and it is *said*: a
-    // compositor that shows no window has to give the reason, whether the
-    // reason is a failure or a choice.
+    // Without `--engine-socket` no client window can be shown. That is valid
+    // (the `scripts/` checks drive the chrome, input and displays without a
+    // Chromium build), but it is logged.
     let engine = match arguments.engine_socket.as_deref() {
         Some(socket) => Some(EngineSession::load(socket)?),
         None => {
@@ -7307,12 +5879,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    // The table a monitor's maker is spelled out of. A machine without one
-    // names its monitors the way their firmware does, which is what every
-    // desktop here did before this table was read at all and is a perfectly
-    // usable desk — but it is also invisible from the outside, so the reason
-    // is said once, here, rather than left to be noticed by somebody wondering
-    // why their monitor is called `DEL`.
+    // Vendor names for monitors. Without the table, monitors use their EDID
+    // codes (`DEL`), which works but is logged once so the short names are
+    // explained.
     let vendors = match pnp_ids::read_the_table() {
         Ok(vendors) => vendors,
         Err(why) => {
@@ -7328,13 +5897,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    // A desk that asked for PAM and cannot have it stops here, with the
-    // service it named and what to declare: coming up with no lock, or with
-    // some other one, would be a desk that is not what its config says. See
-    // `crate::lock::chosen`.
+    // If the config asks for PAM and it is unavailable, fail with the service
+    // name. Running without the configured lock would contradict the config.
+    // See `crate::lock::chosen`.
     //
-    // Each verdict is handed back on this loop, from the thread that reached
-    // it — see `heard_the_verdict`, and the source below.
+    // Verdicts come back to this loop; see `heard_the_verdict`.
     let lock = lock::chosen(config.lock.verifier(), Path::new(pam::SERVICES))?.map(|verifier| {
         Lock::held_by(verifier, move |verdict| {
             verdicts
@@ -7342,10 +5909,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 .expect("the loop that hears a verdict outlives the lock that asked for one")
         })
     });
-    // THE LOCK, WHERE A CHROME CONNECTION CAN SEE IT — see
-    // `answer_on_the_connection`. Connections are already being served by now,
-    // and that is safe: a desk comes up open, and nothing can shut it until the
-    // event loop runs.
+    // Give chrome connections the lock state (see `answer_on_the_connection`).
+    // Safe to set after connections start: the desktop starts unlocked, and
+    // nothing can lock it before the event loop runs.
     if let Some(lock) = &lock {
         hub.lock
             .set(lock.seen())
@@ -7375,8 +5941,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         config: ConfigStore::new(config.clone()),
         engine_displays: Vec::new(),
         vendors,
-        // Modern toolkits ask for cursors by name through this global, which
-        // maps straight onto CSS cursor keywords.
+        // Toolkits request cursors by name here, which map onto CSS cursor
+        // keywords.
         cursor_shape_state: CursorShapeManagerState::new::<DomicileCompositor>(&dh),
         dmabuf_state,
         dmabuf_global,
@@ -7415,21 +5981,16 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         backlight: backlight::serve(),
         stop: Arc::new(AtomicBool::new(false)),
         engine,
-        // Armed below rather than here, and re-armed on every engine that
-        // replaces another — see `rejoin_the_engine`.
+        // Armed below, and re-armed by `rejoin_the_engine`.
         engine_source: None,
-        // Learned from the first page that says hello, which is the first
-        // moment anything on this side knows which process is serving one.
+        // Set by the first page hello.
         engine_process: None,
         idle: Idle::after(config.idle.blank_after(), Instant::now()),
-        // Started below, once the event loop's own sources are in.
+        // Started below, after the event loop's sources.
         index: None,
-        // Armed below rather than here, through the one path a reload uses
-        // too — see `arm_the_idle_clock`.
+        // Armed below by `arm_the_idle_clock`, the same path a reload uses.
         idle_clock: None,
-        // Open, on a desk that can lock at all: a desktop comes up with
-        // somebody at it, and what shuts it is nobody being at it. Built once
-        // and never from a reload — see the field, and `lock` above.
+        // Starts unlocked. Built once, never on reload; see the field.
         lock,
         turnover: None,
         turnover_deadline: None,
@@ -7438,12 +5999,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut data = CalloopData { display, state };
 
-    // Start accepting on the sockets bound above.
+    // Accept on the sockets bound above.
     let handle = event_loop.handle();
     handle.insert_source(source, move |stream, _, data: &mut CalloopData| {
-        // The answer to `spawning client`, and the only line between a spawn
-        // and the `toplevel mapped` seconds later that says which of the two
-        // the wait was. Before `insert_client`, which takes the stream.
+        // Pairs with `spawning client` to time a launch. Before
+        // `insert_client`, which takes the stream.
         debug!(pid = ?peer_pid(&stream), "{}", grepped::ARRIVED);
         data.display
             .handle()
@@ -7457,48 +6017,36 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             .expect("failed to insert the chrome");
     })?;
 
-    // Drive wayland-server dispatch from the event loop, flushing replies after.
+    // Dispatch Wayland clients from the event loop, then flush.
     let poll_fd = data.display.backend().poll_fd().try_clone_to_owned()?;
     handle.insert_source(
         Generic::new(poll_fd, Interest::READ, Mode::Level),
         |_, _, data: &mut CalloopData| {
             data.display.dispatch_clients(&mut data.state).unwrap();
-            // After the dispatch, because that is when a client that went away
-            // stops being alive — and an inhibitor it never destroyed stops
-            // holding the screens on. See
-            // `let_go_of_what_the_dead_were_holding`.
+            // After the dispatch, when dead clients' objects stop being alive.
+            // See `let_go_of_what_the_dead_were_holding`.
             data.state.let_go_of_what_the_dead_were_holding();
             data.display.flush_clients().unwrap();
             Ok(PostAction::Continue)
         },
     )?;
 
-    // The engine's own fd, in the same loop as everything else. This is the
-    // whole of why the ABI hands one out: mojo wants a task runner and the
-    // compositor already has one, so the library does its work when told and
-    // never on a thread this does not know about.
+    // The engine's fd, in this loop: the library does its work when dispatched,
+    // never on its own threads.
     if let Some(session) = data.state.engine.as_ref() {
         data.state.engine_source = Some(poll_the_engine(&handle, session.fd())?);
     }
 
-    // The latency run's own turn of the loop.
+    // The latency run's timer.
     //
-    // A source rather than a loop inside the commit callback, and that is the
-    // whole point: see `step_the_latency`. Sampling from the callback held
-    // this thread, so the client whose redraw the run was waiting for could
-    // be handed neither a buffer release nor a frame callback, and the run
-    // blamed it for not answering.
-    //
-    // Only when a run is asked for. `--domicile-latency-*` is the guard's, and
-    // a desktop nobody is measuring should not have a timer at all.
+    // A loop source, not a loop in the commit callback, so clients get releases
+    // and frame callbacks between steps. See `step_the_latency`. Only installed
+    // when a run is configured.
     if spike_latency_point().is_some() {
         handle.insert_source(Timer::immediate(), |_, _, data: &mut CalloopData| {
-            // Immediate again while the run has work: calloop dispatches every
-            // ready source each turn, so an immediate re-arm still gives the
-            // clients' fd and the engine's their turn — which is exactly what
-            // was missing. Idling at a millisecond rather than immediately
-            // when it has none, so a compositor between rounds is not a
-            // spinning one.
+            // Re-arm immediately while there is work; calloop still dispatches
+            // the other ready sources each turn. Otherwise wait 1 ms to avoid
+            // spinning.
             if data.state.step_the_latency() {
                 TimeoutAction::ToInstant(Instant::now())
             } else {
@@ -7507,25 +6055,14 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         })?;
     }
 
-    // The battery, off the kernel's own announcement of it.
+    // Battery and backlight changes, from kernel uevents
+    // (`power_supply_changed()` sends one immediately).
     //
-    // THE CHARGE WAS POLLED AND SHOULD NOT HAVE BEEN. Everything else a chrome
-    // is told arrives from somewhere — a client maps, a key goes down, a
-    // monitor is plugged in — and so does this: `power_supply_changed()` in a
-    // driver is a uevent, sent the moment the lead moves. A ten-second timer
-    // in its place bought a bolt that lit up to ten seconds late and a CPU
-    // woken six times a minute to learn nothing.
+    // Level-triggered and drained each turn, since one plug event produces two
+    // uevents (charger and battery).
     //
-    // Level-triggered and drained on each turn, because one lead moving is
-    // two events — the charger and the battery — and a source that took one
-    // datagram per turn would read `/sys` twice for it.
-    //
-    // A FAILED SUBSCRIBE IS NOT FATAL, which is a departure from how this
-    // compositor treats the console it cannot take. What is lost is the
-    // promptness and not the reading: the backstop below still runs, so the
-    // bar is a couple of minutes stale rather than absent, and a desktop that
-    // refused to start over its own battery meter would be the worse answer.
-    // The line names what was lost so it is not a silence.
+    // A failed subscribe is not fatal: the backstop poll still runs, so
+    // readings are at worst a few minutes stale. Logged.
     match uevents::subscribe() {
         Ok(socket) => {
             handle.insert_source(
@@ -7540,8 +6077,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                     if charge {
                         data.state.tell_the_chromes_the_charge();
                     }
-                    // A brightness key, another program, or logind writing
-                    // what the slider asked for: all a `SOURCE=` uevent.
+                    // A brightness key, another program, or logind all produce
+                    // a `SOURCE=` uevent.
                     if brightness {
                         data.state.tell_the_chromes_the_brightness();
                     }
@@ -7556,33 +6093,22 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         ),
     }
 
-    // And the backstop, which is also what takes the first reading.
+    // The backstop poll, which also takes the first reading.
     //
-    // Armed on every desktop rather than only on a laptop: a machine with no
-    // battery reads `/sys/class/power_supply`, finds no cell, and says
-    // nothing — see `domicile_host::battery::reading` — and a desktop that
-    // decided at startup would be wrong about a battery plugged in later.
+    // Armed everywhere: a machine without a battery reads nothing and says
+    // nothing (see `domicile_host::battery::reading`), and a battery may appear
+    // later.
     handle.insert_source(Timer::immediate(), |_, _, data: &mut CalloopData| {
         data.state.tell_the_chromes_the_charge();
-        // And the first reading of the brightness, which a firmware hotkey
-        // that sends no uevent is also caught up by.
+        // Also catches firmware brightness keys that send no uevent.
         data.state.tell_the_chromes_the_brightness();
         TimeoutAction::ToDuration(BATTERY_BACKSTOP)
     })?;
 
-    // The file index, built from the home directory and then kept by a watch.
+    // Build the file index from the home directory on a thread at startup, then
+    // keep it updated by a watch.
     //
-    // AT STARTUP RATHER THAN WHEN A LAUNCHER OPENS, which is the whole of the
-    // change: the panel used to wait on a `find` of the home and so could only
-    // be offered a shallow slice of it. Walking once into an index buys the
-    // whole home at every depth, at the cost of a walk that has to happen
-    // somewhere — and the somewhere is here, on a thread, finishing while the
-    // desk is still being looked at for the first time.
-    //
-    // A desktop with no `HOME` has nothing to index. It is the one thing this
-    // compositor reads from its environment that is not instrumentation --
-    // see `home_directory` -- and without it `search_files` goes on answering
-    // nothing, which is what it did before this existed.
+    // Without `HOME`, `search_files` answers nothing.
     match home_directory() {
         Some(home) => {
             let hub = data.state.hub.clone();
@@ -7594,9 +6120,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             data.state.index = Some(told.clone());
             thread::spawn(move || {
                 keep_the_index(home, kept_at(), omit, (told, heard), |offered| {
-                    // Published for `search_files` to answer from, and
-                    // nothing else: no page is told the index, only what its
-                    // own query found in it.
+                    // Published only for `search_files`; pages get query
+                    // results, never the index.
                     *hub.offered.lock().unwrap() = Some(Arc::new(offered));
                 });
             });
@@ -7604,101 +6129,67 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         None => error!("no HOME in the environment, so there is no home to index"),
     }
 
-    // A desktop nobody is at, and the one thing this can already do about it:
-    // turn the screens off, and turn them back on at the next input.
-    //
-    // Only where a timeout was stated. A desktop that never blanks should not
-    // have a timer at all — the same rule the latency run's source follows
-    // above — and `Idle::after` and this are two readings of one `Option`, so
-    // a compositor with a clock always has something for it to ask.
-    //
-    // The re-arm is the clock's own answer rather than a fixed tick: see
-    // `Idle::next_check`.
-    //
-    // Through the compositor rather than on `handle` directly, because a
-    // reload arms exactly this and there should be one place that knows how.
-    // A failure here is still fatal, which is what startup and a reload
-    // differ on: nothing is running yet to lose.
+    // The idle timer, only if a timeout is configured. The re-arm interval
+    // comes from `Idle::next_check`. Shares `arm_the_idle_clock` with reloads,
+    // but a failure here is fatal since nothing is running yet.
     data.state.arm_the_idle_clock(config.idle.blank_after())?;
 
-    // Inject forwarded input (from chrome threads) on the Wayland thread.
+    // Chrome requests, handled on the Wayland thread.
     handle.insert_source(request_rx, |event, _, data: &mut CalloopData| {
         if let ChannelEvent::Msg(input) = event {
             data.state.handle_client_request(input);
         }
     })?;
 
-    // And what a passphrase did, from the thread that checked it, on the
-    // thread the seat is on — which is where the lock can open.
+    // Passphrase verdicts, handled on the seat's thread where the lock can
+    // open.
     handle.insert_source(heard_verdicts, |event, _, data: &mut CalloopData| {
         if let ChannelEvent::Msg(verdict) = event {
             data.state.heard_the_verdict(verdict);
         }
     })?;
 
-    // How long the config file has to stop changing before a reload is taken
-    // as final. Long enough to cover a save's own writes, short enough that a
-    // deliberate edit feels immediate.
+    // How long the config must stay unchanged before a reload applies. Covers a
+    // save's own writes while feeling immediate.
     const SETTLE: Duration = Duration::from_millis(150);
-    // And how long a burst may go on being coalesced regardless. Without it a
-    // directory written to faster than `SETTLE` never settles, and the reload
-    // is not late but lost.
+    // The longest a burst is coalesced. Without it, a directory written faster
+    // than `SETTLE` would never reload.
     const BURST: Duration = Duration::from_secs(2);
 
-    // The config file, so a display list is not fixed for the run.
+    // Watch the config file for reloads.
     //
-    // Two hops rather than one. `domicile_config::watch` hands back an
-    // `std::sync::mpsc::Receiver` fed by the notify thread, and the desktop can
-    // only be changed where the outputs and surfaces are — this thread. So a
-    // forwarding thread moves each parse onto a calloop channel, which is the
-    // same shape `request_rx` uses and for the same reason.
+    // `domicile_config::watch` delivers on a std `mpsc` channel from the notify
+    // thread; a forwarding thread moves results onto a calloop channel, since
+    // the desktop can only change on this thread.
     //
-    // A watcher that cannot start is logged and left: it means the displays
-    // stay as they are, which is exactly the behavior this replaces, and it is
-    // not a reason to refuse to run a desktop. A run with no config file has
-    // nothing to watch at all, and says so rather than reporting a failure.
+    // A watcher that fails to start is logged and the config stays fixed. No
+    // config file means nothing to watch.
     match arguments.config.as_ref() {
         None => debug!("no config file, so the desktop is fixed for this run"),
         Some(path) => match domicile_config::watch(path) {
             Ok(watcher) => {
                 let (reload_tx, reload_rx) = channel::<Result<Config, ConfigError>>();
                 thread::spawn(move || {
-                    // The whole watcher, named so it is captured whole. A `move`
-                    // closure in edition 2021 captures the *fields* it mentions,
-                    // so writing only `watcher.rx` below takes the receiver and
-                    // leaves the OS watcher behind to be dropped at the end of the
-                    // enclosing scope — which closes the channel, so the first
-                    // `recv` returns `Err`, this thread ends before anything is
-                    // ever edited, and the config appears simply not to be
-                    // watched. It cost an afternoon; seven checks catch it coming
-                    // back now, `tests/desktop.rs`'s reload and `tests/outputs.rs`'s
-                    // among them — measured, by reproducing the capture.
+                    // Bind the whole watcher so the closure captures it.
+                    // Edition 2021 closures capture only the fields used, so
+                    // naming just `watcher.rx` would drop the OS watcher, close
+                    // the channel and silently stop reloads. Tested by
+                    // `tests/desktop.rs` and `tests/outputs.rs`, among others.
                     let watcher = watcher;
-                    // Ends when the watcher is dropped with this thread, or when
-                    // the event loop has gone and nothing is listening.
+                    // Ends when the watcher is dropped or the event loop is
+                    // gone.
                     while let Ok(first) = watcher.rx.recv() {
-                        // One save is several events, and the ones in the middle
-                        // are of a file that is halfway written. `ConfigStore`
-                        // does not catch that: a truncated config *parses*, it
-                        // just describes no displays — which is a legal desktop
-                        // meaning "follow Domicile's window". So a plain
-                        // write-then-write save was taking the whole desktop down
-                        // to `domicile-0` and putting it back a moment later, and
-                        // every client on it was told its monitor had gone and
-                        // come back.
+                        // One save is several events, and mid-save the file may
+                        // be truncated. A truncated config still parses (no
+                        // displays means "follow the window"), so every client
+                        // would see its monitor vanish and return. Take only
+                        // the last parse of a burst.
                         //
-                        // So: take the last parse of a burst rather than each one.
-                        //
-                        // Bounded by a deadline on the whole burst, not only by the
-                        // quiet between events. `recv_timeout(SETTLE)` alone starts
-                        // its budget again on every event, so a config in a
-                        // directory that is written to more often than that defers
-                        // the reload for as long as the writing goes on. Not late:
-                        // never. And the directory is not hypothetical — the watch
-                        // is on it rather than on the file because that is how an
-                        // atomic rename is caught, and a shell puts the config in
-                        // the run directory beside the chrome socket and the
-                        // session document published into it.
+                        // Bounded by a deadline on the whole burst:
+                        // `recv_timeout(SETTLE)` alone restarts on every event,
+                        // and the watch is on the config's directory (to catch
+                        // atomic renames), which also holds the chrome socket
+                        // and session document.
                         let latest = last_of_burst(&watcher.rx, first, SETTLE, BURST);
                         if reload_tx.send(latest).is_err() {
                             return;
@@ -7709,16 +6200,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                     let ChannelEvent::Msg(parsed) = event else {
                         return;
                     };
-                    // The config that is about to stop being live, kept so the
-                    // edit can be read as a difference rather than as a file.
-                    // Everything but the display list is restated only where
-                    // it moved — see `Restatement` — and this is the only
-                    // moment the old values still exist to compare against.
+                    // The outgoing config, to compute what changed; see
+                    // `Restatement`.
                     let was = data.state.config.current().clone();
-                    // Through the store, which is what keeps a half-written save
-                    // from taking the desktop down: a config that does not parse
-                    // leaves the live one in place and is remembered as the last
-                    // error rather than applied.
+                    // A config that fails to parse keeps the live one and is
+                    // recorded as the last error.
                     if let Err(err) = data.state.config.apply_watch(parsed) {
                         tracing::warn!(%err, "keeping the last config that parsed");
                         return;
@@ -7730,33 +6216,26 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                         &data.state.vendors,
                     );
                     match rebuilt {
-                        // Nothing to say about the desktop: an undescribed
-                        // config with no monitors read, where the window is
-                        // the authority and rebuilding from the file would
-                        // undo the density it negotiated.
+                        // No change: an undescribed config with no monitors
+                        // read. The window controls the desktop, and rebuilding
+                        // would undo its negotiated density.
                         Ok(None) => {}
                         Ok(Some(screens)) => {
                             let dh = data.display.handle();
                             data.state.adopt_the_desktop(&dh, screens);
                         }
-                        // An edit whose profile matches the monitors that are
-                        // plugged in and cannot be applied to them. It parsed,
-                        // so the store has taken it; what it cannot do is
-                        // describe a desktop, and the one that is up keeps
-                        // working while the user fixes it.
+                        // A profile matches the plugged-in monitors but cannot
+                        // be applied. The config is accepted; the current
+                        // desktop stays.
                         Err(err) => tracing::warn!(
                             %err,
                             "keeping the desktop that is up; the reloaded profile does not \
                              describe one these monitors can make"
                         ),
                     }
-                    // And the rest of the file, whatever the display list did.
-                    // After the desktop rather than before it, because a
-                    // window-following desktop's scale is advertised against
-                    // the outputs the lines above have just settled — and
-                    // unconditionally, because a profile that describes no
-                    // desktop these monitors can make is still an edit that
-                    // may have changed the keyboard.
+                    // Then the rest of the config, after the desktop so scale
+                    // is advertised against the settled outputs. Always runs:
+                    // even a failed profile may come with keyboard changes.
                     data.state.adopt_the_rest_of_the_config(&restated);
                 })?;
             }
@@ -7766,26 +6245,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         },
     }
 
-    // The window's own events: what the user does to Domicile rather than what
-    // a chrome asked us to do. Without this the window is a picture — it draws
-    // and it never hears anything, which looks exactly like a compositor that
-    // has frozen.
-    // The window's density before anything is drawn, so the chrome is told the
-    // truth on its very first frame rather than after the first resize.
-    // Last of all, and that placement is the whole point.
+    // Publish the session document last. The shell waits for it and treats it
+    // as "everything is live", so nothing that can fail may come after it.
     //
-    // The shell that started us is blocked on this file appearing, and takes
-    // its appearance as "everything named in it is live". So nothing that can
-    // fail may come after it: a window that would not open, a shader that
-    // would not compile, an event source that would not insert would each
-    // return from `main` — and a shell that had already read the document
-    // would be connecting to a compositor on its way out, with no reason
-    // given. Every one of those is behind us here, and the only `?` left is
-    // this call's own.
-    //
-    // The sockets themselves were bound far above, which is a separate
-    // ordering and still necessary: the chrome connects the moment it is told
-    // where to, and there has to be something listening when it does.
+    // The sockets were bound earlier, so they are listening when the chrome
+    // connects.
     publish(
         &Session {
             protocol: domicile_protocol::PROTOCOL_VERSION,
@@ -7795,21 +6259,19 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         },
         &arguments.session,
     )?;
-    // What the desk starts with, once it is live. Only here, and so not on a
-    // reload: see `StartupConfig`.
+    // Startup commands, once the desktop is live. Not run on reload; see
+    // `StartupConfig`.
     for command in &config.startup.commands {
         spawn_client(command, &socket_name);
     }
 
     // Flush after every loop iteration so events queued while handling input
-    // (which arrives off the wayland fd) reach clients promptly.
+    // reach clients promptly.
     let stop = data.state.stop.clone();
     let signal = event_loop.get_signal();
     event_loop.run(None, &mut data, move |data| {
-        // Before the flush, because asking a client for what it copied is an
-        // event that has to reach it — see `read_what_was_copied`, which is
-        // also why this is here rather than in the handler that hears about
-        // the copy.
+        // Before the flush, which delivers the request to the copying client.
+        // See `read_what_was_copied`.
         data.state.read_what_was_copied();
         let _ = data.display.flush_clients();
         if stop.load(Ordering::SeqCst) {
@@ -7819,39 +6281,27 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// What the latency run takes a display frame to be, in mHz.
+/// The display refresh rate the latency run assumes, in mHz.
 ///
-/// The divisor that turns the run's milliseconds into frames, and an
-/// assumption rather than a reading: nothing here can ask viz what its display
-/// interval is — `css_parity.cc` can, because it runs inside the browser, and
-/// reads it off `BeginFrameArgs`. Not what `wl_output` says, which is the
-/// display's own rate where the engine read one and
-/// [`UNKNOWN_REFRESH_MHZ`](crate::screens::UNKNOWN_REFRESH_MHZ) where nobody
-/// did: a number a client must not act on is not a number a measurement may
-/// quietly act on either, so the assumption is named here where the report
-/// that rests on it is.
+/// An assumption: viz's real interval is not reachable from here. `wl_output`'s
+/// rate is not used, since it may be
+/// [`UNKNOWN_REFRESH_MHZ`](crate::screens::UNKNOWN_REFRESH_MHZ).
 const SPIKE_REFRESH_MHZ: i32 = 60_000;
 
-/// THROWAWAY, with the rest of the spike. Which key the latency run presses.
+/// Temporary, part of the spike. The key the latency run presses.
 ///
-/// Enter, because what has to happen is that the client draws something
-/// different, and a line-buffered program on the other end of a terminal is
-/// the least exotic way to make one do that on demand.
+/// Enter, since a line-buffered program in a terminal reliably redraws on it.
 const LATENCY_KEY: u32 = 28;
 
-/// THROWAWAY, with the rest of the spike. Where the latency run watches for
-/// the client's answer, from `DOMICILE_SPIKE_LATENCY`.
+/// Temporary, part of the spike. Where the latency run watches for the client's
+/// answer, from `DOMICILE_SPIKE_LATENCY`.
 ///
-/// `center` — the browser window's middle, which is what a guard wants: a page
-/// with one `<app>` on it has the client's window under the center, so nothing
-/// has to name a coordinate that would go stale the moment the page's CSS
-/// changed. `guard-client-window.sh` reads the drawn color the same way and
-/// for the same reason.
+/// - `center`: the middle of the browser window, over the client on a
+///   one-`<app>` page, so guards need no coordinates. `guard-client-window.sh`
+///   does the same.
+/// - `x,y`: a point, when the center is not over the client.
 ///
-/// `x,y` — a point, for a page where the center is not over the client.
-///
-/// Unset means no run, which is every guard but one: the measurement presses
-/// keys into whatever has focus and would be a strange thing to do by default.
+/// Unset means no run. The run presses keys into whatever has focus.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum LatencyPoint {
     Center,
@@ -7879,21 +6329,15 @@ fn spike_latency_point() -> Option<LatencyPoint> {
     })
 }
 
-/// THROWAWAY, with the rest of the spike. What a latency run may spend, from
+/// Temporary, part of the spike. The latency run's budget, from
 /// `DOMICILE_SPIKE_LATENCY_BUDGET` as `rounds,floor_samples,max_polls`.
 ///
-/// Unset is the real measurement's sixty and sixty. A guard's negative control
-/// sets it small, because what a control proves — that a client answering no
-/// keys makes the guard fail — needs three rounds rather than sixty, and each
-/// abandoning round spends its whole poll budget a display frame at a time.
+/// Unset uses the real measurement's defaults. Negative controls set it small,
+/// since each abandoned round spends its whole poll budget. Clients stay served
+/// throughout; see `step_the_latency`.
 ///
-/// It is minutes of a *slow* control now rather than minutes of a blocked
-/// desktop: the run steps from a timer and gives the loop its turn between
-/// samples, so the clients keep being served throughout. See
-/// `step_the_latency`.
-///
-/// A value the run could not use is refused with a warning and no run, rather
-/// than clamped: see `Budget::parse`.
+/// An unusable value logs a warning and disables the run instead of clamping;
+/// see `Budget::parse`.
 fn spike_latency_budget() -> Option<latency::Budget> {
     static BUDGET: std::sync::OnceLock<Option<latency::Budget>> = std::sync::OnceLock::new();
     *BUDGET.get_or_init(|| {
@@ -7912,37 +6356,29 @@ fn spike_latency_budget() -> Option<latency::Budget> {
     })
 }
 
-/// `x,y`, and nothing else. Shared with `DOMICILE_SPIKE_PROBE`'s parse so the
-/// two knobs cannot drift into spelling a point differently.
+/// Parse `x,y`. Shared by the latency and probe settings so they agree.
 fn parse_point(entry: &str) -> Option<(i32, i32)> {
     let (x, y) = entry.split_once(',')?;
     Some((x.trim().parse().ok()?, y.trim().parse().ok()?))
 }
 
-/// THROWAWAY, with the rest of the spike. Whether to ask what viz drew at the
-/// center of the browser's window, which is where a one-`<app>` page puts its
-/// canvas. Set by `DOMICILE_SPIKE_CENTER`, to anything.
+/// Temporary, part of the spike. Whether to sample what viz drew at the browser
+/// window's center. Set by `DOMICILE_SPIKE_CENTER`.
 ///
-/// Opt-in because the readback is a `CopyOutputRequest` that forces a draw and
-/// waits, on the submit path. On by default, every desktop paid for one each
-/// `PROBE_EVERY` a client drew, and logged it at `INFO`.
+/// Opt-in because each readback forces a draw and blocks the submit path.
 fn spike_center_probe() -> bool {
     static CENTER: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     *CENTER.get_or_init(|| std::env::var_os("DOMICILE_SPIKE_CENTER").is_some())
 }
 
-/// THROWAWAY, with the rest of the spike. Where in the browser's window to
-/// ask what viz drew, from `DOMICILE_SPIKE_PROBE` as `x,y;x,y`.
+/// Temporary, part of the spike. Points in the browser window to sample, from
+/// `DOMICILE_SPIKE_PROBE` as `x,y;x,y`.
 ///
-/// Empty -- the ordinary case -- means no point. A page with two `<app>`s has
-/// no pixel inside both, so the two-window guard names one point per canvas.
-/// Parsed once: this is called from the submit path, at the client's frame
-/// rate.
+/// Empty by default. The two-window guard names one point per canvas. Parsed
+/// once, since it is read at the client's frame rate.
 ///
-/// A malformed entry is dropped with a warning rather than failing the run.
-/// The guard checks for the colors it expects and reports their absence, so
-/// a probe that silently sampled nothing still fails -- loudly, and in the
-/// place that knows what it was looking for.
+/// Malformed entries are dropped with a warning; the guard still fails on
+/// missing colors.
 fn spike_probe_points() -> &'static [(i32, i32)] {
     static POINTS: std::sync::OnceLock<Vec<(i32, i32)>> = std::sync::OnceLock::new();
     POINTS.get_or_init(|| {
@@ -7962,18 +6398,11 @@ fn spike_probe_points() -> &'static [(i32, i32)] {
     })
 }
 
-/// THROWAWAY, with the rest of the spike. Colors to look for anywhere in the
-/// browser's window, from `DOMICILE_SPIKE_FIND` as `RRGGBB;RRGGBB` or
-/// `AARRGGBB;AARRGGBB`.
+/// Temporary, part of the spike. Colors to find anywhere in the browser window,
+/// from `DOMICILE_SPIKE_FIND` as `RRGGBB;RRGGBB` or `AARRGGBB;AARRGGBB`.
 ///
-/// The shell guard's question rather than the spike pages'. Those pages put
-/// their canvases where the harness can compute a point; a shell puts its
-/// windows where its own layout decides, so a guard that named a pixel would
-/// be asserting the shell's CSS. "This client's window is on the screen
-/// somewhere" is the claim that survives the shell being rewritten.
-///
-/// Six hex digits are taken as fully opaque, because that is what a color
-/// written down in a guard means and `FF` in front of it is noise.
+/// For shell guards, which cannot name a pixel because the shell lays out
+/// windows. Six digits mean fully opaque.
 fn spike_find_colors() -> &'static [u32] {
     static COLORS: std::sync::OnceLock<Vec<u32>> = std::sync::OnceLock::new();
     COLORS.get_or_init(|| {
@@ -7984,14 +6413,11 @@ fn spike_find_colors() -> &'static [u32] {
     })
 }
 
-/// The parse [`spike_find_colors`] does, without the environment around it —
-/// which is what makes it testable at all, since the variable is read once per
-/// process.
+/// Parse a [`spike_find_colors`] value. Separate from the env read so it can be
+/// tested.
 ///
-/// A malformed entry is dropped with a warning rather than failing the run, on
-/// the same reasoning as `DOMICILE_SPIKE_PROBE`: the guard checks for the
-/// color it expects and reports its absence, so a search that quietly looked
-/// for nothing still fails, loudly, where it is known what was wanted.
+/// Malformed entries are dropped with a warning; the guard still fails on
+/// missing colors.
 fn parse_find_colors(raw: &str) -> Vec<u32> {
     raw.split(';')
         .map(str::trim)
@@ -7999,10 +6425,8 @@ fn parse_find_colors(raw: &str) -> Vec<u32> {
         .filter_map(|entry| {
             let digits = entry.strip_prefix('#').unwrap_or(entry);
             match (digits.len(), u32::from_str_radix(digits, 16)) {
-                // Six digits are fully opaque, because that is what a color
-                // written down in a guard means and `FF` in front of it is
-                // noise. The window's pixels are opaque, so a color with no
-                // alpha would match nothing at all.
+                // Six digits are fully opaque. Window pixels are opaque, so a
+                // zero alpha would match nothing.
                 (6, Ok(rgb)) => Some(0xFF00_0000 | rgb),
                 (8, Ok(argb)) => Some(argb),
                 _ => {
@@ -8046,14 +6470,10 @@ mod tests {
 
     #[test]
     fn a_chrome_that_goes_away_is_forgotten() {
-        // `chromes` is otherwise pruned only by a broadcast that fails to
-        // write, and an idle desktop never broadcasts — so a shell whose page
-        // reloads left one dead writer per reload, held open and counted in
-        // the `chromes=` field of the frame line.
+        // Otherwise only a failed broadcast prunes `chromes`, which an idle
+        // desktop never sends, so each reload would leak a writer.
         //
-        // A real socket pair and a real EOF, because that is what the
-        // connection thread is waiting on: nothing short of the peer going
-        // away ends the loop this asserts the far side of.
+        // Uses a real socket pair, since only EOF ends the connection loop.
         let (request_tx, _requests) = channel::<ClientRequest>();
         let (hub, _outbound) = ChromeHub::new(
             request_tx,
@@ -8086,14 +6506,9 @@ mod tests {
 
     #[test]
     fn a_socket_that_has_gone_away_ends_the_connection() {
-        // The `false` is what stops `read_chrome_messages` reading on from a
-        // peer that is not there. Written as a return value when the loop moved
-        // out of that function, and this is the callee half of it. The caller's
-        // `if !write_responses(…) { return; }` is not pinned by anything and
-        // deliberately so: it is the bare `return` the extraction moved, was
-        // equally unpinned before, and is close to inert — a peer that closed
-        // both ends gives the read loop EOF on the next pass regardless, so
-        // only a half-close makes it observable.
+        // `false` stops `read_chrome_messages` from reading a peer that is
+        // gone. The caller's early return is not tested; a full close gives EOF
+        // on the next read anyway.
         let (request_tx, _requests) = channel::<ClientRequest>();
         let (hub, _outbound) = ChromeHub::new(
             request_tx,
@@ -8121,14 +6536,12 @@ mod tests {
 
     #[test]
     fn a_search_asked_while_a_passphrase_is_being_checked_is_answered_with_nothing() {
-        // THE LONGEST WINDOW THE LOCK HAS. PAM sleeps on a wrong password on
-        // purpose, so a desk can sit with a passphrase out being checked for
-        // seconds -- shut, and with a launcher that may still be up over the
-        // lock screen. A connection that asked only "is it shut" would answer
-        // that launcher out of the home for as long as the check took.
+        // PAM deliberately delays on a wrong password, so the desktop can be
+        // locked with a check pending for seconds. Searches must be refused
+        // throughout.
         //
-        // Held there without a sleep: a desk leaves `Checking` only when the
-        // verdict is handed back, which is this test's to do.
+        // No sleep needed: the desktop stays `Checking` until the test hands
+        // back the verdict.
         let (request_tx, _requests) = channel::<ClientRequest>();
         let (hub, _outbound) = ChromeHub::new(
             request_tx,
@@ -8176,16 +6589,9 @@ mod tests {
 
     #[test]
     fn an_answer_with_nothing_in_it_does_not_wait_for_the_writer() {
-        // The read loop calls this at the end of every iteration, and every
-        // chrome message but `hello` answers with nothing — so waiting here
-        // for a writer `serve_outbound` is holding stops the compositor
-        // reading that chrome at all, and everything it says afterward is
-        // dropped. That was a real flake before the early return: one run in
-        // twenty-four of the whole workspace.
-        //
-        // A unit test rather than the integration one that found it: the
-        // behavior is one sentence about this function, and the integration
-        // failure needs a socket to fill up under parallel load to say it.
+        // Most messages have no response. Waiting here for a writer
+        // `serve_outbound` holds would stop reading that chrome and drop its
+        // messages.
         let (request_tx, _requests) = channel::<ClientRequest>();
         let (hub, _outbound) = ChromeHub::new(
             request_tx,
@@ -8198,14 +6604,11 @@ mod tests {
             compositor.try_clone().expect("the stream clones"),
         ));
 
-        // `serve_outbound`, mid-`write_all` to a chrome that is not reading.
+        // Simulates `serve_outbound` blocked writing to a chrome that is not
+        // reading.
         //
-        // Handshaked rather than slept past. A settle of "long enough, surely"
-        // fails in the direction that hides the bug: if the main thread wins
-        // the lock, the call it is timing never waits and a *mutated* build
-        // passes. Waiting for the holder to say it has the lock removes the
-        // race rather than making it unlikely — and lets the hold be a second
-        // rather than two, since none of it is spent settling.
+        // Wait for the holder to confirm it has the lock. A sleep could let the
+        // main thread win, and a broken build would pass.
         let (took_it, holds) = channel();
         let held = writer.clone();
         let holder = thread::spawn(move || {
@@ -8232,10 +6635,8 @@ mod tests {
 
     #[test]
     fn the_answer_on_the_wire_carries_the_desktop_as_of_when_it_was_written() {
-        // The whole point of `freshened`, at the seam where it is called. The
-        // answers are built under `host` and written later under the writer
-        // lock, so handing in answers built against an older desktop is the
-        // interleaving — without having to win a race to produce it.
+        // Tests `freshened` through its caller. Building the answers before
+        // changing the desktop reproduces the race without timing.
         let (request_tx, _requests) = channel::<ClientRequest>();
         let (hub, _outbound) = ChromeHub::new(
             request_tx,
@@ -8257,8 +6658,8 @@ mod tests {
             hub.host.lock().unwrap().describe_desktop(),
         ];
 
-        // And now the desktop changes, after the answers were built and before
-        // they are written — which is `set_output` landing in the gap.
+        // The desktop changes between building and writing, as when
+        // `set_output` lands in the gap.
         let now = vec![window_following("domicile-0", [1280, 800], 2)];
         hub.host.lock().unwrap().describe_displays(now.clone());
 
@@ -8269,8 +6670,7 @@ mod tests {
         drop(writer);
         drop(compositor);
 
-        // Compared as the bytes that went out, through the same encoder the
-        // caller uses: this is about what a chrome reads off the socket.
+        // Compare the bytes a chrome reads, using the caller's encoder.
         let written: Vec<String> = BufReader::new(page)
             .lines()
             .map(|line| line.expect("a line"))
@@ -8292,11 +6692,9 @@ mod tests {
 
     #[test]
     fn a_stale_desktop_in_a_handshake_answer_is_replaced_before_it_is_written() {
-        // The answer is built under the `host` lock and written later under the
-        // writer lock, and `set_output` can land in between — describing a new
-        // desktop and broadcasting it on the writer thread. Written as built,
-        // the answer's own copy lands last on the socket, and latest-wins
-        // leaves the chrome on the desktop that is gone.
+        // `set_output` can broadcast a new desktop between building and writing
+        // the answer. Unfixed, the stale copy arrives last and the chrome keeps
+        // it.
         let (request_tx, _requests) = channel::<ClientRequest>();
         let (hub, _outbound) = ChromeHub::new(
             request_tx,
@@ -8325,9 +6723,8 @@ mod tests {
 
     #[test]
     fn the_rest_of_a_handshake_answer_is_written_as_it_was_built() {
-        // Only `displays` is a fact about the world. `welcome` is an answer to
-        // what this chrome asked, and a version re-derived at write time would
-        // be a different chrome's answer on this chrome's socket.
+        // Only `displays` is refreshed. `welcome` answers this chrome's request
+        // and must not be re-derived.
         let (request_tx, _requests) = channel::<ClientRequest>();
         let (hub, _outbound) = ChromeHub::new(
             request_tx,
@@ -8346,9 +6743,8 @@ mod tests {
         );
     }
 
-    /// The one display a desktop that follows Domicile's own window has: its
-    /// logical size is the window's, so the mode is that size and nothing is
-    /// turned.
+    /// The single display of a window-following desktop: mode equals logical
+    /// size, no transform.
     fn window_following(name: &str, size: [u32; 2], scale: u32) -> domicile_protocol::DisplayInfo {
         domicile_protocol::DisplayInfo {
             name: name.to_string(),
@@ -8362,10 +6758,8 @@ mod tests {
 
     #[test]
     fn a_theme_the_shell_picked_reaches_every_page_on_the_desk() {
-        // A click lands on one monitor's page and the desk has three. What
-        // makes them move together is that the compositor answers rather than
-        // the page applying: this is that answer, and it goes out to every
-        // chrome including the one that asked.
+        // A click on one monitor's page must switch every page. The compositor
+        // broadcasts the answer to all chromes, including the sender.
         let (request_tx, _requests) = channel::<ClientRequest>();
         let (hub, outbound) = ChromeHub::new(
             request_tx,
@@ -8396,10 +6790,8 @@ mod tests {
 
     #[test]
     fn a_theme_that_is_already_the_desks_is_not_restated() {
-        // The ordinary case rather than the odd one: a config file is
-        // rewritten for all sorts of reasons and a reload takes up the theme
-        // it names. A broadcast for one that did not move would run the wipe
-        // animation on every page on the desk over nothing.
+        // Reloads re-apply the theme often. Broadcasting an unchanged theme
+        // would replay the transition on every page.
         let (request_tx, _requests) = channel::<ClientRequest>();
         let (hub, outbound) = ChromeHub::new(
             request_tx,
@@ -8418,9 +6810,8 @@ mod tests {
 
     #[test]
     fn a_page_that_says_hello_is_told_what_is_already_running() {
-        // Nothing else ever re-sends `app_appeared`. Without this the desktop
-        // is only ever built up by live ones, so a page that reloads comes back
-        // to a compositor full of running clients and an empty screen.
+        // Nothing else re-sends `app_appeared`, so a reloaded page would see an
+        // empty screen.
         let (request_tx, _requests) = channel::<ClientRequest>();
         let (hub, outbound) = ChromeHub::new(
             request_tx,
@@ -8441,19 +6832,16 @@ mod tests {
 
         announce_open_apps(&hub);
 
-        // Four reads for two windows and a focus message: everything was
-        // queued before the first read, so the last is what says nothing
-        // followed them.
+        // Two windows plus a focus message, then one read that confirms nothing
+        // followed.
         let mut announced = Vec::new();
         for _ in 0..4 {
             match outbound.recv_until(Duration::from_millis(100)) {
                 Some(Some(Outbound::Message(HostMessage::AppAppeared { app_id, .. }))) => {
                     announced.push(app_id);
                 }
-                // Who holds the keyboard rides along with the windows, so a
-                // page that has just loaded knows without having to ask. Not
-                // what this test is about — `domicile-host` pins its content —
-                // but it is on the wire and has to be read past.
+                // Focus is sent with the windows; tested in `domicile-host`,
+                // skipped here.
                 Some(Some(Outbound::Message(HostMessage::FocusChanged { .. }))) => {}
                 Some(Some(_)) => panic!("something other than an announcement was queued"),
                 Some(None) => break,
@@ -8470,49 +6858,18 @@ mod tests {
 
     #[test]
     fn a_chrome_asking_for_focus_is_answered_to_every_chrome() {
-        // The line the whole change turned on. `chrome_connection` asks the
-        // brain what moved *after* the message rather than taking a delta back
-        // from it — so the answer is the desktop's and goes to everyone, and a
-        // second chrome is not left marking the wrong window active. Returning
-        // it from the message's own handling is what put it on one socket, and
-        // only a real connection reaches that line.
+        // `chrome_connection` asks `Host` what changed after each message and
+        // broadcasts it, so focus reaches every chrome, not only the sender.
+        // Only a real connection reaches that code.
         //
-        // One chrome is enough *here* because the queue is the seam: a focus
-        // written back to the asker never reaches it, whatever is connected.
-        // What one chrome cannot show is the other end — `serve_outbound`
-        // writing each queued message to every entry in `chromes` rather than
-        // to the first. `tests/desktop.rs` pins that in
-        // `a_density_one_chrome_reports_is_described_to_the_others`, with two
-        // chromes on the fan-out; its third is a latecomer, and a latecomer is
-        // answered by `write_responses` rather than by the fan-out at all.
+        // One chrome suffices: a focus written back only to the sender would
+        // never reach the queue. Fan-out to every chrome is tested in
+        // `tests/desktop.rs`
+        // (`a_density_one_chrome_reports_is_described_to_the_others`).
         //
-        // `e2e-two-chromes.sh` existed to cover the pair at once and was
-        // deleted for covering neither alone. A port of it was written and
-        // both halves were mutated — `serve_outbound`'s `chromes.retain`
-        // writing to the first chrome only, and `read_chrome_messages`'
-        // `hub.broadcast(message)` after a chrome message written back to the
-        // asking connection instead — and each was already killed there or
-        // here. Named by statement rather than by line: both sites moved
-        // within the change that wrote this comment.
-        //
-        // What went with the script is the *composition*, and it is worth
-        // being plain about rather than implying it followed: the two halves
-        // are pinned separately, and nothing now drives a `focus_changed`
-        // over the fan-out to *two connected chromes*. The qualifier is the
-        // claim: `tests/input.rs`'s
-        // `a_focus_the_chrome_asked_for_comes_back_over_the_socket` does
-        // assert a compositor's `focus_changed` reaching a real socket, with
-        // one chrome — it took that over from `e2e-input.sh`, which is gone.
-        // No check runs two chromes at once, so a first-chrome-only
-        // fan-out would still write to the one that connected first.
-        // Measured: every check that turns on a message reaching a chrome
-        // *other than the first* is a `Displays` check.
-        //
-        // And a fan-out made type-aware — every message to everyone,
-        // `FocusChanged` to the first chrome only — passes the Rust suite
-        // (`cargo test --workspace`; the shell scripts were not run under it).
-        // That is not a regression anyone writes by accident, which is why the
-        // script still went; it is the shape of what nothing would now catch.
+        // Gap: no test drives `focus_changed` to two connected chromes at once.
+        // A fan-out that sent `FocusChanged` only to the first chrome would
+        // pass.
         let (hub, outbound, app_id) = hub_with_an_app();
         let (page, compositor) = UnixStream::pair().expect("a socket pair");
         let writer = Arc::new(Mutex::new(
@@ -8539,10 +6896,9 @@ mod tests {
                 writeln!(writing, "{message}").expect("the page can write");
             }
         }
-        // Drained before the page goes away, not after: the handshake's
-        // `Welcome` is written back to this socket, and closing the reading
-        // end first breaks that write — which ends the connection thread
-        // before it ever reads the second line.
+        // Drain before closing the page: the handshake's `Welcome` is written
+        // to this socket, and a closed reader would end the connection before
+        // it reads the second line.
         let seen = queued(&outbound);
         drop(page);
         serving.join().expect("the connection thread ends at EOF");
@@ -8557,9 +6913,8 @@ mod tests {
 
     #[test]
     fn a_chrome_closing_a_window_asks_the_client_rather_than_the_brain() {
-        // The X button on a native window's tab. Nothing in the scene ends a
-        // client — only its own toplevel can — so the message has to leave the
-        // chrome thread for the Wayland one, where the toplevel is.
+        // Closing a window must go to the Wayland thread, where its toplevel
+        // is; only the client can end itself.
         let (request_tx, requests) = channel::<ClientRequest>();
         let (hub, _outbound) = ChromeHub::new(
             request_tx,
@@ -8582,8 +6937,7 @@ mod tests {
             use std::io::Write as _;
             let version = domicile_protocol::PROTOCOL_VERSION;
             let mut writing = &page;
-            // The handshake first, so this drives the connection the product
-            // reaches rather than one that skipped it.
+            // Handshake first, as a real page does.
             for message in [
                 format!("{{\"type\":\"hello\",\"protocol_version\":{version}}}"),
                 "{\"type\":\"close_app\",\"app_id\":\"term\"}".to_string(),
@@ -8591,11 +6945,8 @@ mod tests {
                 writeln!(writing, "{message}").expect("the page can write");
             }
         }
-        // Collected before the page goes away, not after: the handshake's
-        // `welcome` is written back to this socket, and closing the reading end
-        // first breaks that write — which ends the connection thread before it
-        // ever reads the second line. Waited for rather than read once, because
-        // the thread that sends these is not the one asserting on them.
+        // Collect before closing the page (see above). Poll, since another
+        // thread sends these.
         let mut asked = Vec::new();
         for _ in 0..200 {
             while let Ok(request) = requests.try_recv() {
@@ -8621,12 +6972,10 @@ mod tests {
         );
     }
 
-    /// Drain what the hub has queued for the chromes, in order.
+    /// Drain the hub's queued messages, in order.
     ///
-    /// Reads until one comes back empty, so it works whether everything was
-    /// queued before the first read or is still arriving from a connection
-    /// thread. A caller that knows how many to expect should assert on the
-    /// length rather than trusting the drain to have caught up.
+    /// Reads until a read times out. Callers that know the expected count
+    /// should assert the length.
     fn queued(outbound: &crate::outbound::OutboundReceiver) -> Vec<HostMessage> {
         let mut seen = Vec::new();
         while let Some(Some(item)) = outbound.recv_until(Duration::from_millis(100)) {
@@ -8636,12 +6985,7 @@ mod tests {
         seen
     }
 
-    /// A hub with one app on it, ready to be focused.
-    ///
-    /// Appearing is the whole setup now. `focus_app` used to refuse an app the
-    /// chrome had not placed, so this had to place one; the gate is the host's
-    /// own map of apps since placement went, and appearing is what puts an app
-    /// in it.
+    /// A hub with one app, ready to be focused.
     fn hub_with_an_app() -> (Arc<ChromeHub>, crate::outbound::OutboundReceiver, String) {
         let (request_tx, _requests) = channel::<ClientRequest>();
         let (hub, outbound) = ChromeHub::new(
@@ -8660,10 +7004,8 @@ mod tests {
 
     #[test]
     fn a_focus_the_compositor_decided_reaches_every_chrome() {
-        // The click that focuses a window happens inside the compositor, so it
-        // is the one move the chrome cannot work out for itself — and
-        // `focus_change` reports a change once, so a page not told has missed
-        // it for good.
+        // Focus decided by the compositor is invisible to the chrome otherwise,
+        // and `focus_change` reports it once.
         let (hub, outbound, app_id) = hub_with_an_app();
 
         broadcast_focus_decision(
@@ -8683,9 +7025,8 @@ mod tests {
 
     #[test]
     fn a_click_on_the_desktop_says_the_keyboard_came_back() {
-        // The mirror, and the one that was silent: the seat moved to the page
-        // while the brain still named the window, so the marker stayed on a
-        // window the compositor was no longer typing into.
+        // Focus returning to the chrome must be announced, or the window stays
+        // marked active.
         let (hub, outbound, app_id) = hub_with_an_app();
         broadcast_focus_decision(&hub, ChromeMessage::FocusApp { app_id });
         let _ = queued(&outbound);
@@ -8700,11 +7041,8 @@ mod tests {
 
     #[test]
     fn a_client_asking_for_the_keyboard_reaches_every_chrome_and_moves_nothing() {
-        // `xdg-activation` is a client saying it wants the keyboard, and the
-        // compositor honoring that itself would be deciding a policy that
-        // belongs to the shell — there would be no way to write a desktop
-        // where a background window cannot take what its user is typing into.
-        // So it is broadcast as a question and the seat stays where it is.
+        // Granting `xdg-activation` here would take the policy from the shell.
+        // It is broadcast as a question and focus does not move.
         let (hub, outbound, app_id) = hub_with_an_app();
         broadcast_focus_decision(&hub, ChromeMessage::FocusChrome);
         let _ = queued(&outbound);
@@ -8727,7 +7065,7 @@ mod tests {
 
     #[test]
     fn a_request_from_a_window_this_compositor_never_announced_goes_nowhere() {
-        // A shell has no element for it and could not answer if it wanted to.
+        // A shell has no element for it and could not answer.
         let (hub, outbound, _) = hub_with_an_app();
 
         broadcast_focus_request(&hub, "app-404");
@@ -8737,9 +7075,8 @@ mod tests {
 
     #[test]
     fn a_focused_window_closing_says_both_things_in_order() {
-        // The app is gone *and* the keyboard came back. A chrome told only the
-        // first would go on marking a window that no longer exists as active,
-        // and the order is what lets it act on them in one pass.
+        // Both the close and the focus return, in that order, or the chrome
+        // marks a closed window active.
         let (hub, outbound, app_id) = hub_with_an_app();
         broadcast_focus_decision(
             &hub,
@@ -8762,14 +7099,13 @@ mod tests {
         );
     }
 
-    /// What a spawned client would find in its environment for `name`, where
-    /// `None` is the variable being cleared rather than left alone.
+    /// The value `client_command` sets for `name`; `None` means cleared.
     fn child_env(command: &[String], display: &str, name: &str) -> Option<OsString> {
         child_env_from(command, display, None, name)
     }
 
-    /// [`child_env`], for a compositor started with `library_path` as its
-    /// own `LD_LIBRARY_PATH`.
+    /// [`child_env`], for a compositor with `library_path` as its
+    /// `LD_LIBRARY_PATH`.
     fn child_env_from(
         command: &[String],
         display: &str,
@@ -8790,10 +7126,8 @@ mod tests {
 
     #[test]
     fn a_spawned_client_is_pointed_at_our_display_not_the_one_we_inherited() {
-        // The compositor keeps the session's own WAYLAND_DISPLAY, because
-        // presenting to a window means being a client of it. A child left to
-        // inherit that opens on the host desktop rather than on Domicile,
-        // which looks like a compositor that is not compositing.
+        // The compositor's own `WAYLAND_DISPLAY` may be the host's. A child
+        // inheriting it would open on the host desktop.
         assert_eq!(
             child_env(&kitty(), "wayland-7", "WAYLAND_DISPLAY"),
             Some(OsString::from("wayland-7")),
@@ -8807,10 +7141,8 @@ mod tests {
 
     #[test]
     fn a_spawned_client_is_told_to_speak_wayland() {
-        // There is no Xwayland here, so a toolkit that defaults to X11 --
-        // Electron above all, and SDL2 -- does not fall back but fails to
-        // start. Each is told Wayland in the variable it reads, and one the
-        // compositor inherited from an X session is overridden.
+        // No Xwayland, so X11-default toolkits (Electron, SDL2) would fail to
+        // start. Inherited X settings are overridden.
         for (name, value) in [
             ("XDG_SESSION_TYPE", "wayland"),
             ("ELECTRON_OZONE_PLATFORM_HINT", "wayland"),
@@ -8829,20 +7161,16 @@ mod tests {
 
     #[test]
     fn a_spawned_client_is_told_which_desktop_it_is_on() {
-        // A routing key rather than a label: `xdg-desktop-portal` matches
-        // this against the `UseIn=` in the `.portal` files it finds, which is
-        // what sends a client's question about the color scheme to this
-        // compositor's own settings backend rather than to whichever other
-        // one is installed. A desk that said nothing would have its clients
-        // answered by a backend that has never heard of its theme.
+        // `xdg-desktop-portal` matches this against `UseIn=` in `.portal`
+        // files, routing color scheme queries to our settings backend.
         assert_eq!(
             child_env(&kitty(), "wayland-7", "XDG_CURRENT_DESKTOP"),
             Some(OsString::from("domicile")),
         );
     }
 
-    /// A directory holding a stand-in for the engine, as the launcher puts
-    /// the real one on the compositor's `LD_LIBRARY_PATH`.
+    /// A directory with a stand-in engine library, as the launcher puts on
+    /// `LD_LIBRARY_PATH`.
     fn engine_directory() -> tempfile::TempDir {
         let directory = tempfile::tempdir().expect("a temporary directory");
         std::fs::write(directory.path().join(crate::engine::LIBRARY), b"")
@@ -8852,9 +7180,8 @@ mod tests {
 
     #[test]
     fn a_spawned_client_does_not_load_the_engines_libraries() {
-        // The engine's directory is Chromium's, and it carries Chromium's own
-        // `libvulkan.so.1`, built without Xlib surfaces. GTK 4 links the
-        // loader, found that one first, and died on a symbol it lacks:
+        // The engine's directory holds Chromium's `libvulkan.so.1`, built
+        // without Xlib surfaces. GTK 4 loaded it and failed:
         //
         //   libgtk-4.so.1: undefined symbol: vkCreateXlibSurfaceKHR
         let engine = engine_directory();
@@ -8887,10 +7214,8 @@ mod tests {
 
     #[test]
     fn the_chromes_own_repaint_is_not_an_answer_to_a_keystroke() {
-        // The chrome repaints on its own — a clock ticking is enough — and it
-        // is not where a forwarded keystroke went. Counting its commits would
-        // report the clock's interval as the time the user waited, and leave
-        // the real answer uncounted.
+        // The chrome repaints for its own reasons; counting those would
+        // misreport the wait.
         assert!(!answers_keystroke(&Committer::Chrome));
     }
 
@@ -8912,14 +7237,14 @@ mod tests {
 
     #[test]
     fn cursor_icons_without_a_css_keyword_fall_back() {
-        // `wp_cursor_shape_v1` carries two shapes CSS has no keyword for; they
-        // must still resolve to something the chrome can assign.
+        // Shapes with no CSS keyword must still map to something the chrome can
+        // use.
         assert_eq!(cursor_shape(CursorIcon::DndAsk), CursorShape::Default);
         assert_eq!(cursor_shape(CursorIcon::AllResize), CursorShape::Move);
     }
 
-    /// Six digits mean opaque, because the window's pixels are and a color
-    /// with no alpha would match none of them.
+    /// Six digits mean opaque; window pixels are opaque, so no alpha would
+    /// match nothing.
     #[test]
     fn a_color_with_no_alpha_is_opaque() {
         assert_eq!(parse_find_colors("19B36B"), vec![0xFF19_B36B]);
@@ -8930,8 +7255,7 @@ mod tests {
         assert_eq!(parse_find_colors("8019B36B"), vec![0x8019_B36B]);
     }
 
-    /// A guard writes colors the way CSS does, and the harness that passes
-    /// them along should not have to strip anything.
+    /// Guards write colors CSS-style, so `#` and spaces are accepted.
     #[test]
     fn a_leading_hash_and_the_spaces_around_an_entry_are_not_part_of_the_color() {
         assert_eq!(
@@ -8940,8 +7264,7 @@ mod tests {
         );
     }
 
-    /// The run continues on a malformed entry, so a typo costs the color that
-    /// was mistyped and not the ones beside it.
+    /// A typo drops only the mistyped color.
     #[test]
     fn an_entry_that_is_not_a_color_is_dropped_and_the_rest_are_kept() {
         assert_eq!(
@@ -8956,22 +7279,16 @@ mod tests {
         assert!(parse_find_colors(";  ;").is_empty());
     }
 
-    /// Which clipboard a selection is on, in the two vocabularies this
-    /// compositor has to hold at once: Smithay's, on the Wayland side, and the
-    /// engine's, on the browser's.
-    ///
-    /// Worth a test for the one mistake it can make, which is silent: swapped,
-    /// a Ctrl-C would arrive in the browser as something the pointer brushed
-    /// past, and a paste would hand back the wrong one of two strings that are
-    /// both plausible.
+    /// Smithay's selection targets map to the matching engine clipboards. A
+    /// swap would be silent: Ctrl-C would land on the primary selection.
     #[test]
     fn each_clipboard_is_the_same_clipboard_in_both_vocabularies() {
         assert_eq!(clipboard_of(SelectionTarget::Clipboard), Clipboard::Copy);
         assert_eq!(clipboard_of(SelectionTarget::Primary), Clipboard::Primary);
     }
 
-    /// And the two slots are two. The same swap, one layer down: a mime type
-    /// written to the wrong slot is a read of the wrong clipboard.
+    /// Each clipboard has its own slot; a shared slot would read the wrong
+    /// clipboard.
     #[test]
     fn the_two_clipboards_have_a_slot_each() {
         assert_ne!(at(Clipboard::Copy), at(Clipboard::Primary));

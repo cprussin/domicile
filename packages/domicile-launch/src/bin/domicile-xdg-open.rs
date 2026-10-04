@@ -1,9 +1,8 @@
-//! `xdg-open`, inside a desktop: a link is `domicile open-url`, and anything
-//! else is the `xdg-open` this one stands in front of.
+//! The desktop's `xdg-open`: opens links with `domicile open-url` and passes
+//! anything else to the next `xdg-open` on `PATH`.
 //!
-//! The desktop links this into a directory first on every app's `PATH` — see
-//! `domicile_launch::spawn` — and the decisions are
-//! `domicile_launch::xdg_open`'s.
+//! `domicile_launch::spawn` puts this first on every app's `PATH`. The logic is
+//! in `domicile_launch::xdg_open`.
 
 use std::os::unix::process::CommandExt as _;
 use std::process::{Command, ExitCode};
@@ -26,8 +25,8 @@ fn main() -> ExitCode {
             (domicile, why)
         }
         None => {
-            // `current_exe` resolves the link this was run through, so this
-            // program is recognized by where it really is.
+            // `current_exe` resolves symlinks, so compare canonical paths to
+            // skip this program.
             let found = underlying(std::env::var("PATH").ok().as_deref(), &|candidate| {
                 candidate
                     .canonicalize()

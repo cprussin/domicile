@@ -1,15 +1,10 @@
-//! Which device a client may allocate on, and whether a buffer it sent can be
-//! imported at all.
+//! Picks the render device for `zwp_linux_dmabuf_v1` and checks that a
+//! client's dmabuf imports.
 //!
-//! The compositor draws nothing: a client's dmabuf goes to the engine, which
-//! composites it. What is needed here is the part that has to happen before
-//! that — advertising `zwp_linux_dmabuf_v1` against a real render node, so a
-//! client knows which GPU to allocate on, and answering whether a buffer it
-//! committed is one EGL can take.
-//!
-//! Everything but the device policy is glue over EGL/GLES that cannot run
-//! without a GPU, so it is deliberately thin: the buffer bookkeeping lives in
-//! `dmabuf_descriptor`, where it is tested.
+//! The engine composites client buffers; the compositor only tells clients
+//! which GPU and formats to use and rejects buffers EGL cannot import. This is
+//! thin glue over EGL and GLES, which cannot run without a GPU; the testable
+//! conversion lives in `dmabuf_descriptor`.
 
 use smithay::backend::allocator::dmabuf::Dmabuf;
 use smithay::backend::allocator::format::FormatSet;
@@ -21,23 +16,21 @@ use smithay::backend::renderer::ImportDma as _;
 use std::os::unix::fs::MetadataExt as _;
 use std::path::{Path, PathBuf};
 
-/// The EGL entry point Smithay itself loads. Probing it first is what turns
-/// "this machine has no GPU stack" from a crash into an answer.
+/// The EGL library Smithay loads. Probed first so a missing GPU stack is an
+/// error instead of a crash.
 const EGL_LIBRARY: &str = "libEGL.so.1";
 
-/// The renderer, and the DRM node whoever created it is on.
+/// The DRM node of the renderer that imports client buffers.
 ///
-/// The renderer is not owned here. A texture belongs to the EGL context that
-/// made it, so the compositor must import client buffers on the *same*
-/// renderer it draws with — which, once it presents, is the one the window
-/// owns. Keeping these as operations over a borrowed renderer is what lets the
-/// same code serve a headless compositor and a presenting one.
+/// Does not own the renderer: a texture belongs to the EGL context that made
+/// it, so imports must use the renderer the compositor draws with. Taking it
+/// by reference lets headless and presenting compositors share this code.
 pub struct DmabufImporter {
     main_device: Option<u64>,
     node: Option<PathBuf>,
 }
 
-/// Why the GPU path is unavailable, or why a particular frame could not be read.
+/// Why the GPU path is unavailable, or why a buffer could not be imported.
 #[derive(Debug, thiserror::Error)]
 pub enum ImportError {
     #[error("{EGL_LIBRARY} is not loadable")]
@@ -50,17 +43,15 @@ pub enum ImportError {
     Gles(#[from] smithay::backend::renderer::gles::GlesError),
 }
 
-/// Bring up an offscreen GLES renderer on the best device EGL offers, for a
+/// Creates an offscreen GLES renderer on the best EGL device, for a
 /// compositor that is not presenting.
 ///
-/// Fails on a machine with no working EGL at all; the compositor treats that
-/// as "no dmabuf global", so `wl_shm` clients keep working.
+/// Fails without a working EGL; the compositor then advertises no dmabuf
+/// global and `wl_shm` clients keep working.
 pub fn headless_renderer() -> Result<(GlesRenderer, DmabufImporter), ImportError> {
-    // Smithay dlopens EGL lazily and treats a missing library as fatal, so
-    // the load has to be attempted here — where it is an error value —
-    // before any Smithay EGL call can panic on it.
-    // SAFETY: this opens the very library Smithay opens a moment later,
-    // running the same initializers it would have run itself.
+    // Smithay panics if EGL is missing, so try loading it first.
+    // SAFETY: this opens the same library Smithay opens next, running the
+    // same initializers.
     unsafe { libloading::Library::new(EGL_LIBRARY) }?;
     let devices = EGLDevice::enumerate()?;
     let device = preferred_device(devices, EGLDevice::is_software).ok_or(ImportError::NoDevice)?;
@@ -70,8 +61,8 @@ pub fn headless_renderer() -> Result<(GlesRenderer, DmabufImporter), ImportError
         .or_else(|_| device.drm_device_path())
         .ok();
     tracing::debug!(device = ?node, main_device, "dmabuf import device");
-    // SAFETY: the device handle comes straight out of EGL's own enumeration
-    // and outlives the display, which owns it from here on.
+    // SAFETY: the device comes from EGL's own enumeration, and the display
+    // takes ownership of it.
     let display = unsafe { EGLDisplay::new(device) }?;
     let context = EGLContext::new(&display)?;
     // SAFETY: the renderer is created, used and dropped on the Wayland
@@ -81,38 +72,35 @@ pub fn headless_renderer() -> Result<(GlesRenderer, DmabufImporter), ImportError
 }
 
 impl DmabufImporter {
-    /// The DRM node clients should allocate on, if this renderer has one.
+    /// The `dev_t` of the DRM node clients should allocate on, if any.
     ///
-    /// `zwp_linux_dmabuf_v1` feedback carries this, and it is the only way a
-    /// Mesa client learns which GPU the compositor imports on — Domicile
-    /// advertises no `wl_drm`, so without feedback the client sees a format
-    /// list it cannot act on.
+    /// Sent in `zwp_linux_dmabuf_v1` feedback. Domicile advertises no
+    /// `wl_drm`, so feedback is the only way Mesa clients learn the device.
     pub fn main_device(&self) -> Option<u64> {
         self.main_device
     }
 
-    /// The DRM node's path, where the compositor allocates GPU buffers of its
-    /// own. `None` for a software rasterizer, which has none.
+    /// The DRM node's path, for the compositor's own GPU buffers. `None` for
+    /// a software rasterizer.
     pub fn node(&self) -> Option<&Path> {
         self.node.as_deref()
     }
 
-    /// The formats to advertise on `zwp_linux_dmabuf_v1` — the ones this
-    /// renderer can turn into a texture AND the engine imports, so a client
-    /// never allocates a buffer one of them would reject.
+    /// The formats to advertise on `zwp_linux_dmabuf_v1`: those both this
+    /// renderer and the engine can import.
     pub fn formats(renderer: &GlesRenderer) -> FormatSet {
         advertisable(renderer.dmabuf_formats())
     }
 
-    /// Whether a client's buffer really imports, answering the protocol's
-    /// import notifier before the client can commit it.
+    /// Whether a client's buffer imports. Answers the protocol's import
+    /// notifier before the client can commit the buffer.
     pub fn accepts(renderer: &mut GlesRenderer, dmabuf: &Dmabuf) -> bool {
         renderer.import_dmabuf(dmabuf, None).is_ok()
     }
 }
 
-/// The `dev_t` of the DRM node a device renders on. A software rasterizer has
-/// none, which is the only reason this is optional.
+/// The `dev_t` of the DRM node a device renders on. `None` for a software
+/// rasterizer.
 fn drm_node(device: &EGLDevice) -> Option<u64> {
     match device
         .render_device_path()
@@ -129,10 +117,10 @@ fn drm_node(device: &EGLDevice) -> Option<u64> {
     }
 }
 
-/// The formats of `imported` the engine can take too.
+/// The formats in `imported` that the engine also accepts.
 ///
-/// A client picks from what is advertised, so a format the renderer imports
-/// and the engine refuses is a window whose every frame is refused.
+/// Advertising a format the engine refuses would let a client pick it and
+/// then have every frame rejected.
 fn advertisable(imported: impl IntoIterator<Item = Format>) -> FormatSet {
     imported
         .into_iter()
@@ -140,12 +128,10 @@ fn advertisable(imported: impl IntoIterator<Item = Format>) -> FormatSet {
         .collect()
 }
 
-/// Pick the device to render on: real hardware when there is any, otherwise
-/// whatever software rasterizer EGL offers.
+/// Picks the first hardware device, or else a software rasterizer.
 ///
-/// A software device is a poor compositor but a complete one, and it is what
-/// makes the dmabuf path exercisable on a machine with no GPU at all, so it is
-/// a fallback rather than a failure.
+/// The software fallback keeps the dmabuf path working, and testable, on
+/// machines without a GPU.
 fn preferred_device<D>(
     devices: impl Iterator<Item = D>,
     is_software: impl Fn(&D) -> bool,
@@ -170,9 +156,8 @@ mod tests {
         }
     }
 
-    // A client picks its format from what is advertised, and a 10-bit one the
-    // renderer imports but the engine does not is a window that never draws:
-    // imv chose XR30 and every frame it committed was refused.
+    // A format the renderer imports but the engine refuses must not be
+    // advertised: imv picked XR30 and none of its frames were drawn.
     #[test]
     fn only_what_the_engine_imports_is_advertised() {
         let renderer_imports = [

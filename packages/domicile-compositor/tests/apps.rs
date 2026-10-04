@@ -1,12 +1,8 @@
-//! What a chrome can do to the things running on the desktop.
+//! Tests for chrome requests that act on clients and processes.
 //!
-//! A chrome asks for a window to be closed and for a program to be started,
-//! and neither request finishes inside the compositor: the close has to reach
-//! a real client's `xdg_toplevel`, and the spawn has to reach a real process
-//! with a real environment. Unit tests reach as far as the request landing on
-//! the Wayland thread, which is the near side of both.
-//!
-//! So these start a real client and a real process, and ask the far side.
+//! Closing a window and spawning a program both finish outside the compositor,
+//! so these tests use a real client and a real process. Unit tests stop at the
+//! request reaching the Wayland thread.
 
 mod running;
 
@@ -18,24 +14,17 @@ const ONE_DISPLAY: &str = r#"
 { "output": { "displays": [{ "name": "left", "size": [1920, 1080] }] } }
 "#;
 
-/// A chrome's `close_app` reaches the client's toplevel, and the client goes.
+/// A chrome's `close_app` closes the client and the chrome hears `app_closed`.
 ///
-/// Ported from `e2e-close.sh`, and asserts something stricter than it did.
-/// That script read `WAYLAND_DEBUG` for the string `xdg_toplevel@N.close`,
-/// which says the event was *sent*; this waits for the client process to
-/// exit, which says it was received and acted on. `domicile-test-client`
-/// exits zero on `xdg_toplevel::Event::Close` for exactly this purpose.
-///
-/// Both halves are asserted, because they fail apart: a close that reaches the
-/// client but produces no `app_closed` leaves the window on the chrome's rail
-/// for ever, pointing at a client that is gone.
+/// Waiting for the client to exit shows the close was received, not only sent.
+/// `domicile-test-client` exits zero on `xdg_toplevel::Event::Close`. Both
+/// halves are checked because they fail independently.
 #[test]
 fn a_close_from_the_chrome_reaches_the_client_and_comes_back() {
     let compositor = Compositor::started_with(ONE_DISPLAY);
 
-    // Connected before the client starts, so the announcement is heard live
-    // rather than through the replay a late chrome gets on `hello`. One less
-    // moving part between the close and the assertion.
+    // Connect before the client so the announcement arrives live, not through
+    // the `hello` replay.
     let mut chrome = compositor.chrome();
     let mut client = compositor.client("closer");
 
@@ -63,41 +52,25 @@ fn a_close_from_the_chrome_reaches_the_client_and_comes_back() {
         .expect("the chrome is told the window it closed is gone");
 }
 
-/// A chrome that connects after a client mapped still comes up to that window.
+/// A chrome that connects after a client mapped is told about that window.
 ///
-/// Ported from `e2e-late-chrome.sh`, which drove a real Electron and asserted
-/// on `place_portal` — the shell's page saying it had mounted the element a
-/// window hangs off (`<domicile-app>` then; the fork's own `<app>` now). That is the page's half; what the compositor owes is the
-/// announcement the page mounts *from*, and this asks for that directly.
+/// `app_appeared` is sent once, at map time, so a chrome that connects later
+/// (for example after a page reload) relies on `announce_open_apps` on `hello`.
+/// The client must be mapped before the chrome connects, or the announcement
+/// arrives live and the test checks nothing.
 ///
-/// The ordering is the whole test. `app_appeared` goes out once, when the
-/// client maps, and a chrome that was not connected then never hears it —
-/// there is nothing to ask for and nothing that repeats. `announce_open_apps`
-/// is what closes that, on `hello`, and without it a live drawing client loses
-/// its window for good. It happens two ways in practice, and neither is rare:
-/// every page reload, and a client that maps in the milliseconds between the
-/// page's handshake and its first commit.
-///
-/// So the client is started first and waited for at the compositor's own log —
-/// not merely spawned, because a chrome that connected while the client was
-/// still binding globals would hear the announcement live and this would be
-/// the easy half wearing the hard half's name.
-///
-/// A unit test covers `announce_open_apps` against a hand-made `Host`
-/// (`a_page_that_says_hello_is_told_what_is_already_running`). What that
-/// cannot reach is the client: whether a real `xdg_toplevel`, mapped with
-/// nobody listening, is in `open_apps` by the time a chrome says hello.
+/// The unit test `a_page_that_says_hello_is_told_what_is_already_running`
+/// covers the replay against a hand-made `Host`; this checks a real mapped
+/// `xdg_toplevel` is in `open_apps`.
 #[test]
 fn a_chrome_that_connects_late_is_told_about_a_window_already_open() {
     let compositor = Compositor::started_with(ONE_DISPLAY);
 
     let client = compositor.client("early");
-    // Mapped, not started. This is the premise rather than a nicety: until the
-    // toplevel maps there is no window for a late chrome to be late *for*.
+    // Wait for the map, not the start: until then there is no window to replay.
     compositor.wait_for_log("toplevel mapped");
 
-    // And only now. `Compositor::chrome` connects and completes the handshake,
-    // which is the `hello` this is about.
+    // `Compositor::chrome` completes the handshake, which sends `hello`.
     let mut chrome = compositor.chrome();
 
     let appeared = chrome
@@ -111,14 +84,8 @@ fn a_chrome_that_connects_late_is_told_about_a_window_already_open() {
             )
         });
 
-    // The window is not named, and it has no size. Both are limits of what a
-    // map-time announcement carries rather than of the replay: the compositor
-    // calls `app_appeared(None, None)` when a toplevel maps, and the title and
-    // the geometry follow as messages of their own. A chrome connected live
-    // gets exactly the same `app_appeared`, which is what makes replaying it
-    // the right catch-up. So what is asserted is that it names *a* window —
-    // this compositor has one client, so an announcement is that client's or
-    // it is an invention.
+    // A map-time `app_appeared` carries no title or size; those follow as
+    // separate messages. With one client, any non-empty id is that client's.
     let HostMessage::AppAppeared { app_id, .. } = appeared else {
         unreachable!("the wait matched on this variant")
     };
@@ -128,51 +95,23 @@ fn a_chrome_that_connects_late_is_told_about_a_window_already_open() {
          nothing can be said about afterward"
     );
 
-    // And who holds the keyboard, which `open_apps` chains after the windows
-    // and a page that has just loaded has no other way to learn. Asserted
-    // because it is the half of the catch-up that is *not* a repeat of a live
-    // message: a chrome that came up knowing about every window and nothing
-    // about focus draws a desktop where no window is the active one.
+    // The replay also sends `focus_changed`, which a new page cannot learn any
+    // other way.
     chrome
         .wait_for(|message| matches!(message, HostMessage::FocusChanged { .. }))
         .expect("the catch-up names who has the keyboard, after the windows");
 }
 
-/// A client that names its window has the chrome told the name.
+/// A client's `set_title` reaches the chrome as `app_titled`.
 ///
-/// Ported from `e2e-chrome.sh`, and the only part of it that was not already
-/// covered — see that change's description for the other three, each of which
-/// was mutated to check.
-///
-/// `title_changed` is the compositor's whole answer to a window being named,
-/// and nothing below the e2e level reaches it: it needs a real client making a
-/// real `set_title`, on a real toplevel the host has already announced. Cutting
-/// the function to a bare `return` passed the entire Rust suite before this
-/// test existed.
-///
-/// The name arrives *after* the announcement rather than with it — a client
-/// creates its toplevel and names it in the next request — which is why this
-/// is a message of its own rather than a field of `app_appeared`, and why a
-/// chrome that ignored it would show every window unnamed.
-///
-/// *Renames* are out of scope here and it is worth saying so rather than
-/// leaving it to be discovered: a terminal renames itself on every command it
-/// runs, but a compositor that forwards only the first `set_title` of the
-/// process and goes deaf afterward passes this test and the whole suite —
-/// measured. `e2e-chrome.sh` did not cover that either (it grepped once for
-/// `app_titled`), so nothing was lost in the move; covering it needs
-/// `domicile-test-client` to be able to rename, which it cannot today.
+/// Only a real client exercises `title_changed`. Renames are not covered:
+/// `domicile-test-client` cannot rename its window.
 #[test]
 fn a_client_that_names_its_window_has_the_chrome_told() {
     let compositor = Compositor::started_with(ONE_DISPLAY);
 
-    // Before the client, because the name has to be heard live. The catch-up
-    // a late chrome gets on `hello` is `Host::open_apps`, which replays
-    // `app_appeared` — carrying whatever the title is by then — and then
-    // `focus_changed`, and never sends `app_titled` at all. So a chrome that
-    // connected after the `set_title` would wait here for a message that is
-    // not coming: the ordering is load-bearing, but it earns a *failure*
-    // against a correct compositor rather than a pass against a broken one.
+    // Connect before the client: the `hello` replay never sends `app_titled`,
+    // so a late chrome would wait for it forever.
     let mut chrome = compositor.chrome();
     let _client = compositor.client("a named window");
 
@@ -183,9 +122,7 @@ fn a_client_that_names_its_window_has_the_chrome_told() {
         unreachable!("the wait matched on this variant")
     };
 
-    // The name itself, not merely that something was sent: a compositor that
-    // forwards the event with an empty title leaves the chrome showing a
-    // window with no name, which is the failure this is about.
+    // Check the title itself, not only that a message was sent.
     assert_eq!(
         title.as_deref(),
         Some("a named window"),
@@ -193,18 +130,10 @@ fn a_client_that_names_its_window_has_the_chrome_told() {
     );
 }
 
-/// A chrome's `spawn` starts a process, aimed at Domicile rather than at
-/// whatever session the compositor is itself presenting into.
+/// A chrome's `spawn` starts a process on this compositor's display.
 ///
-/// Ported from `e2e-spawn.sh`. That script proved the aim by `sed`-ing a
-/// display name out of a log line and comparing it to a file the spawned
-/// program wrote; this asks the spawned program directly and compares against
-/// the display the compositor *published*, which is the same value a shell
-/// would have read.
-///
-/// The aim is the whole point rather than a detail: a client that inherits the
-/// compositor's own `WAYLAND_DISPLAY` opens on the host desktop the compositor
-/// is presenting into, which looks like nothing happening at all.
+/// A process that inherits the compositor's own `WAYLAND_DISPLAY` opens on the
+/// host desktop instead, which looks like nothing happened.
 #[test]
 fn a_spawned_program_is_pointed_at_this_compositor() {
     let compositor = Compositor::started_with(ONE_DISPLAY);
@@ -216,11 +145,8 @@ fn a_spawned_program_is_pointed_at_this_compositor() {
             command: vec![
                 "sh".to_string(),
                 "-c".to_string(),
-                // Written by rename, for the reason the compositor publishes
-                // its own session that way: the reader below polls for the
-                // file, and a plain redirect is observable while it is still
-                // empty. That is a race this test would lose intermittently
-                // and blame on the spawn.
+                // Write by rename: `await_file` polls, and a plain redirect
+                // can be read while still empty.
                 format!(
                     "printf '%s' \"$WAYLAND_DISPLAY\" > {0}.new && mv {0}.new {0}",
                     reported.display()
@@ -239,10 +165,7 @@ fn a_spawned_program_is_pointed_at_this_compositor() {
     );
 }
 
-/// A desk's startup commands run once it is up, on its display.
-///
-/// The display for the reason above; and without a chrome, because what a
-/// desk starts with is the desk's to say, not a page's.
+/// A desk's startup commands run on this compositor's display, with no chrome.
 #[test]
 fn a_startup_command_runs_on_this_compositor() {
     let directory = tempfile::tempdir().expect("a directory to report into");
@@ -263,27 +186,12 @@ fn a_startup_command_runs_on_this_compositor() {
     );
 }
 
-/// A spawn with nothing to run does not stop the compositor listening to the
-/// chrome that sent it.
+/// An empty spawn does not stop the compositor reading that chrome.
 ///
-/// The refusal itself is unit-tested (`an_empty_command_spawns_nothing`), so
-/// what this adds is the part no unit test can see: that the connection which
-/// sent it is still being *read* afterward. An empty command is what a chrome
-/// sends when someone presses enter on an empty box, and the failure it guards
-/// is an index into an empty argument list — which panics the thread serving
-/// that one socket while the compositor stays up.
-///
-/// The follow-up is a second spawn, and it has to be: two weaker versions of
-/// this test both passed with the panic in place.
-///
-///   - Opening a *fresh* chrome proves nothing — a new connection handshakes
-///     perfectly against a compositor whose other reader thread has died.
-///   - Waiting for a broadcast on the same chrome proves nothing either. The
-///     writer stays in the hub's list when its reader dies, so the desktop
-///     still arrives down a socket nobody is listening to. That is the shape
-///     of the bug, not evidence against it.
-///
-/// Only something the compositor has to *read* and act on distinguishes them.
+/// `an_empty_command_spawns_nothing` unit-tests the refusal. This checks the
+/// connection's reader thread survives, since indexing an empty command would
+/// panic it. The follow-up must be a second request on the same chrome: a new
+/// connection, or a broadcast to this one, still works after the reader dies.
 #[test]
 fn a_spawn_with_no_command_does_not_stop_the_compositor_listening() {
     let compositor = Compositor::started_with(ONE_DISPLAY);
@@ -311,25 +219,12 @@ fn a_spawn_with_no_command_does_not_stop_the_compositor_listening() {
     );
 }
 
-/// A launched app can be followed from the spawn to the socket it arrives on.
+/// A spawn logs the pid of the process it started.
 ///
-/// **The two lines this pins are the ones that were not there when a `kitty`
-/// took 3.6s to appear.** A launched client used to leave `spawning client`
-/// and then, seconds later, `toplevel mapped`, and the gap between them is
-/// two things stacked: the app starting up, and the app talking to us. With
-/// nothing in between, a compositor that was up and idle four seconds before
-/// the spawn was as good a suspect as the terminal, and neither could be
-/// ruled out from a log.
-///
-/// The pid is what makes the pair readable rather than merely present:
-/// somebody who presses the launcher key again because nothing happened has
-/// several spawns in flight, and arrivals in no particular order. `$$` is the
-/// shell's own pid, which is the process the compositor started.
-///
-/// An e2e-level test because both halves are a real process: the spawn's is
-/// one the compositor forked, and the arrival's is what the *kernel* says
-/// about a connected socket. `peer_pid` is unit-tested against a socket pair,
-/// and a pair cannot show that the fd reaching this callback is the client's.
+/// With the arrival log below, this splits a slow launch into app startup and
+/// time to connect. The pid matches the two lines when several spawns are in
+/// flight. `$$` is the shell's pid, which is the process the compositor
+/// started.
 #[test]
 fn a_spawn_says_which_process_it_started() {
     let compositor = Compositor::started_with(ONE_DISPLAY);
@@ -341,8 +236,7 @@ fn a_spawn_says_which_process_it_started() {
             command: vec![
                 "sh".to_string(),
                 "-c".to_string(),
-                // By rename, for the reason the test above says: a plain
-                // redirect is observable while the file is still empty.
+                // Write by rename, as above.
                 format!(
                     "printf '%s' $$ > {0}.new && mv {0}.new {0}",
                     reported.display()
@@ -356,14 +250,10 @@ fn a_spawn_says_which_process_it_started() {
     compositor.wait_for_log(&format!("spawning client pid={pid}"));
 }
 
-/// A client that reaches the socket is said to have reached it, and named.
+/// A client that connects is logged with its pid.
 ///
-/// The other half of the pair above, and the half that says where a slow
-/// start went: an arrival logged late is an app that was slow to *start*, and
-/// one logged at once followed by a late `toplevel mapped` is an app that
-/// reached us quickly and then took its time — which is the compositor's
-/// business rather than the app's. The line cannot tell them apart; it is
-/// what lets a reader do so.
+/// The pid comes from the kernel's peer credentials, which a unit test on a
+/// socket pair cannot show belong to the real client.
 #[test]
 fn a_client_that_reaches_the_socket_is_said_to_have_arrived() {
     let compositor = Compositor::started_with(ONE_DISPLAY);
@@ -373,12 +263,10 @@ fn a_client_that_reaches_the_socket_is_said_to_have_arrived() {
     compositor.wait_for_log(&format!("app client connected pid=Some({})", client.pid()));
 }
 
-/// A client that will only be so small or so big has the chrome told.
+/// A client's minimum and maximum sizes reach the chrome.
 ///
-/// Electron says both for any app with a minimum window size, and a shell that
-/// never hears it opens Bitwarden in a box it will not draw at. Both limits,
-/// because they are read by separate lines and a compositor that forwarded one
-/// would pass a test of the other.
+/// Electron apps set a minimum size and do not draw below it. Both limits are
+/// checked because separate code forwards each.
 #[test]
 fn a_client_that_limits_its_size_has_the_chrome_told() {
     let compositor = Compositor::started_with(ONE_DISPLAY);
@@ -402,13 +290,12 @@ fn a_client_that_limits_its_size_has_the_chrome_told() {
     let HostMessage::AppMaxSize { size, .. } = largest else {
         unreachable!("the wait matched on this variant")
     };
-    // A `0` is no limit on that axis, and is passed on as one.
+    // `0` means no limit on that axis.
     assert_eq!(size, [1920.0, 0.0]);
 }
 
-/// A launcher's search for applications reads the desktop entries under the
-/// home's data directory, and answers with the command each one runs and the
-/// icon and preview it names.
+/// An app search finds desktop entries in the home, with command, icon and
+/// preview.
 #[test]
 fn a_search_for_applications_finds_a_desktop_entry_in_the_home() {
     let home = tempfile::tempdir().expect("a home to lay out");
@@ -530,8 +417,8 @@ fn a_search_for_applications_offers_the_bookmarks_it_matches() {
     );
 }
 
-/// A bookmark is offered with the icon its site's page links, which the
-/// compositor fetches itself rather than leaving a page to guess at.
+/// A bookmark's icon is the one its site's page links, fetched by the
+/// compositor.
 #[test]
 fn a_search_offers_a_bookmark_with_the_icon_its_page_links() {
     let site = std::net::TcpListener::bind("127.0.0.1:0").expect("a port for the site");
@@ -564,8 +451,7 @@ fn a_search_offers_a_bookmark_with_the_icon_its_page_links() {
 
     let compositor = Compositor::started_with(&config);
     let mut chrome = compositor.chrome();
-    // Found in the background, so a search before it is done has none: asked
-    // until one has it.
+    // The icon is fetched in the background, so search until it appears.
     let until = std::time::Instant::now() + std::time::Duration::from_secs(10);
     let icon = loop {
         chrome

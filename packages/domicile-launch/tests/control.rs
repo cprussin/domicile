@@ -1,4 +1,4 @@
-//! What a running desktop can be asked, and what it answers.
+//! Tests for the control socket protocol.
 
 use std::cell::Cell;
 use std::path::{Path, PathBuf};
@@ -7,9 +7,8 @@ use domicile_launch::control::{answer, parse_response, LoadShell, OpenUrl, Respo
 
 #[test]
 fn a_desktop_says_which_shell_it_is_running() {
-    // The line spelled out rather than encoded from `Request::WhichShell`,
-    // which would be the same `serde` deriving both halves of its own
-    // agreement. What a client puts on the wire is a fact about the wire.
+    // Written out rather than serialized from `Request::WhichShell`, so the
+    // test checks the wire format rather than `serde` against itself.
     assert_eq!(
         answered(
             "{\"type\":\"which_shell\"}",
@@ -24,10 +23,8 @@ fn a_desktop_says_which_shell_it_is_running() {
 
 #[test]
 fn a_desktop_told_to_load_a_shell_tells_the_engine_and_says_what_it_serves() {
-    // THE SUPERVISOR ROUTES THIS ONE RATHER THAN ANSWERING IT. Which shell is
-    // served is the engine's, so the dial is what carries the command out —
-    // injected here, because a test that had to start an engine would not be
-    // a test of this line.
+    // The supervisor forwards this to the engine. The dial is injected so no
+    // engine is needed.
     let told = Cell::new(None);
     let answered = answered(
         "{\"type\":\"load_shell\",\"root\":\"/desktops/other\",\"module\":\"shell.js\"}",
@@ -42,8 +39,7 @@ fn a_desktop_told_to_load_a_shell_tells_the_engine_and_says_what_it_serves() {
         told.take(),
         Some((PathBuf::from("/desktops/other"), PathBuf::from("shell.js")))
     );
-    // The shell it is serving now, which is what `which-shell` answers with:
-    // one question, one answer, whether it was asked or brought about.
+    // Replies with the new shell, as `which-shell` would.
     assert_eq!(
         answered,
         Response::Shell {
@@ -54,10 +50,8 @@ fn a_desktop_told_to_load_a_shell_tells_the_engine_and_says_what_it_serves() {
 
 #[test]
 fn an_engine_that_refused_the_shell_is_quoted_to_whoever_typed_the_command() {
-    // The engine's own sentence, unedited. It is the half that knows why —
-    // a version it does not speak, no window to load a shell into — and the
-    // person who typed the command is in another terminal entirely, where the
-    // engine's log is not.
+    // Pass the engine's reason through verbatim; the user cannot see the
+    // engine's log.
     let Response::Refused { why } = answered(
         "{\"type\":\"load_shell\",\"root\":\"/desktops/other\",\"module\":\"shell.js\"}",
         Path::new("/desktops/mine/shell.js"),
@@ -73,9 +67,7 @@ fn an_engine_that_refused_the_shell_is_quoted_to_whoever_typed_the_command() {
 
 #[test]
 fn a_line_that_is_not_a_request_is_refused_and_quoted_back() {
-    // Whoever is on the other end of this socket said something, and a refusal
-    // that does not say what was refused leaves them with a desktop that
-    // answered "no" to a question they cannot see.
+    // The refusal quotes the line so the client sees what was rejected.
     let Response::Refused { why } =
         answered("{\"type\":\"reboot\"}", Path::new("/shell.js"), &|_, _| {
             panic!("a line that is not a request reaches no engine")
@@ -91,8 +83,7 @@ fn a_line_that_is_not_a_request_is_refused_and_quoted_back() {
 
 #[test]
 fn a_desktop_told_to_open_an_address_tells_the_engine() {
-    // Routed, like `load_shell`: the windows are the page's, and the page is
-    // the engine's.
+    // Forwarded to the engine, like `load_shell`.
     let told = Cell::new(None);
     let answered = answered_opening(
         "{\"type\":\"open_url\",\"url\":\"https://example.com/\"}",
@@ -120,7 +111,7 @@ fn an_engine_that_would_not_open_the_address_is_quoted() {
     );
 }
 
-/// One line in, one line out — which is the whole of a connection.
+/// Sends one request line and parses the one reply line.
 fn answered(line: &str, module: &Path, load: LoadShell) -> Response {
     parse_response(
         answer(line, module, load, &|_| {
@@ -131,7 +122,7 @@ fn answered(line: &str, module: &Path, load: LoadShell) -> Response {
     .expect("a desktop answers with a response")
 }
 
-/// [`answered`], for the one request that opens an address.
+/// [`answered`], for `open_url`.
 fn answered_opening(line: &str, open: OpenUrl) -> Response {
     parse_response(
         answer(

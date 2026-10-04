@@ -1,4 +1,4 @@
-//! The picture a launcher draws beside an application.
+//! Application icon lookup for the launcher.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -52,8 +52,7 @@ fn an_earlier_data_directory_wins_and_pixmaps_are_the_last_resort() {
     let user = data_dir(&[("pixmaps/term.png", b"pix")]);
     let system = data_dir(&[("icons/hicolor/32x32/apps/term.png", b"thm")]);
 
-    // The theme is looked through in every directory before any pixmaps: a
-    // pixmap is the old place an icon went, not a preferred one.
+    // Every directory's theme is searched before any `pixmaps` directory.
     assert_eq!(
         icons_in(&[user.path(), system.path()]).icon("term"),
         Some("data:image/png;base64,dGht".into())

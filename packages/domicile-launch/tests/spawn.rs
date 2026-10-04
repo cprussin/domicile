@@ -1,14 +1,15 @@
-//! What each of the three is actually started with.
+//! The command lines and environments the launcher starts each component with.
 
 use std::path::{Path, PathBuf};
 
 use domicile_launch::shell_path::Shell;
 use domicile_launch::spawn::{compositor, engine, Runtime};
 
-/// A built shell, split the way `shell_path` hands it over: the directory the
-/// engine serves and the module in it the generated document loads. The module
-/// is deliberately not called `shell.js` — that name is a build convention
-/// `flake.nix` asserts, and nothing from here down is allowed to know it.
+/// A built shell, split as `shell_path` returns it: the directory the engine
+/// serves and the module the generated document loads.
+///
+/// The module is `main.js` so nothing here relies on the `shell.js` build
+/// convention.
 fn shell() -> Shell {
     Shell {
         root: PathBuf::from("/d/dist"),
@@ -16,11 +17,8 @@ fn shell() -> Shell {
     }
 }
 
-/// The session document is deliberately not `chrome.sock.session` here. It was
-/// derived from the socket inside `compositor`, which made it a path the
-/// launcher could not name — and the launcher is the one that has to wait for
-/// it, because a compositor that never publishes one is a desktop that never
-/// comes up.
+/// The session path is passed explicitly, not derived from the chrome socket,
+/// because the launcher waits for the compositor to publish it.
 fn runtime() -> Runtime {
     Runtime {
         broker: PathBuf::from("/run/d/broker"),
@@ -51,10 +49,8 @@ fn args_of(spawn: &domicile_launch::spawn::Spawn) -> Vec<String> {
 
 #[test]
 fn the_engine_is_a_desktop_rather_than_a_browser() {
-    // `--app` because a desktop is not a browser looking at a page: without it
-    // the window carries a tab strip, an address bar and a bookmarks row above
-    // the shell's own chrome, and the browser's own keyboard shortcuts stay
-    // bound where a shell wants to bind them.
+    // `--app` removes the tab strip, address bar and bookmarks row, and frees
+    // the browser's keyboard shortcuts for the shell.
     let spawned = engine(
         Path::new("/l/engine"),
         &shell(),
@@ -64,13 +60,9 @@ fn the_engine_is_a_desktop_rather_than_a_browser() {
     );
     assert_eq!(spawned.program, PathBuf::from("/l/engine/chrome"));
     let args = args_of(&spawned);
-    // THE BARE ROOT. The engine writes the document rather than reading one
-    // off disk, and `CreateLoaderAndStart` answers a path of `/` itself; every
-    // other path goes to the file resolver. `index.html` went there, looked
-    // for a file of that name under the shell root, and found none — a built
-    // shell is `shell.js` and nothing else — so the desktop came up on an
-    // empty window with nothing said anywhere. Pinned as a whole string, not
-    // a prefix, because a trailing path is exactly what breaks it.
+    // The whole string, with no trailing path. `CreateLoaderAndStart` serves
+    // the generated document only for `/`; any other path goes to the file
+    // resolver, finds nothing and leaves an empty window.
     assert!(
         args.contains(&"--app=domicile://shell/".to_string()),
         "{args:?}"
@@ -91,14 +83,11 @@ fn the_engine_is_a_desktop_rather_than_a_browser() {
 
 #[test]
 fn the_engine_takes_commands_on_a_socket_of_this_runs_own() {
-    // WITHOUT THIS SWITCH `domicile load-shell` HAS NOWHERE TO GO. The engine
-    // binds this path and answers `load_shell` on it; an engine that was not
-    // given one binds nothing, and a desktop running that engine is one whose
-    // shell cannot be replaced.
+    // Without this switch `domicile load-shell` has nowhere to send
+    // `load_shell`, and the shell cannot be replaced.
     //
-    // Under the run's own directory rather than where `control_socket::address`
-    // puts the control socket: this one is dialed by the supervisor that named
-    // it, the way the broker and chrome sockets are, and nobody types its path.
+    // The socket is in the run directory, not at `control_socket::address`,
+    // because only the supervisor dials it, like the broker and chrome sockets.
     let args = args_of(&engine(
         Path::new("/l/engine"),
         &shell(),
@@ -114,13 +103,10 @@ fn the_engine_takes_commands_on_a_socket_of_this_runs_own() {
 
 #[test]
 fn a_tty_desktop_asks_for_the_whole_screen() {
-    // WITHOUT THIS THE SCREEN STAYS BLACK, and nothing says so. ozone/drm
-    // binds a window to a display controller only when the window's rectangle
-    // is EXACTLY the CRTC's -- `ScreenManager::FindWindowAt` compares whole
-    // rects -- and Chromium's default window is `kWindowMaxDefaultWidth` wide
-    // inset by ten pixels, which on a 2880x1920 panel is 1050x1900 at (10,10).
-    // No match means no controller, and every page flip is dropped before it
-    // reaches the kernel.
+    // Without this the screen stays black with no error. ozone/drm binds a
+    // window to a CRTC only when their rects match exactly
+    // (`ScreenManager::FindWindowAt`). Chromium's default window is inset and
+    // narrower, so no controller is bound and every page flip is dropped.
     let args = args_of(&engine(
         Path::new("/l/engine"),
         &shell(),
@@ -157,10 +143,8 @@ fn the_desk_is_given_tile_memory_for_every_monitor() {
 
 #[test]
 fn a_nested_desktop_does_not_take_over_the_screen() {
-    // The other half, and the reason this is not passed unconditionally: a
-    // nested run is a window inside somebody else's session, and a desktop
-    // that goes fullscreen the moment it starts is one a developer has to
-    // fight to get out of.
+    // A nested run is a window in someone else's session, so it must not go
+    // fullscreen.
     for platform in ["wayland", "headless"] {
         let args = args_of(&engine(
             Path::new("/l/engine"),
@@ -178,13 +162,10 @@ fn a_nested_desktop_does_not_take_over_the_screen() {
 
 #[test]
 fn a_nested_desktop_asks_the_host_compositor_to_stop_reading_the_keyboard() {
-    // WITHOUT THIS A NESTED DESKTOP HAS NO META KEY. The shell's bindings are
-    // all Meta chords, and a host compositor takes those for its own bindings
-    // before the engine's window is ever told a key was pressed -- sway's
-    // default is `shortcuts_inhibitor enable`, which means it honors a client
-    // that asks it to stop, and nothing in the fork was asking. So every
-    // binding the shell claims through `grabShortcut` was untestable in the
-    // one configuration a developer actually runs.
+    // Without this a nested desktop gets no Meta chords, because the host
+    // compositor takes them first. sway stops when a client asks
+    // (`shortcuts_inhibitor enable`), so the engine asks. Otherwise
+    // `grabShortcut` bindings cannot be tested nested.
     let args = args_of(&engine(
         Path::new("/l/engine"),
         &shell(),
@@ -200,11 +181,8 @@ fn a_nested_desktop_asks_the_host_compositor_to_stop_reading_the_keyboard() {
 
 #[test]
 fn a_desktop_with_no_host_compositor_has_nothing_to_inhibit() {
-    // The other half, and the reason this is a switch rather than something
-    // the engine decides for itself. On `drm` there is no host compositor --
-    // the desktop IS the compositor -- and on `headless` there is no session
-    // to be a window inside of. Asking either to stop reading the keyboard is
-    // asking nobody.
+    // On `drm` the desktop is the compositor, and on `headless` there is no
+    // host session, so there is nobody to ask.
     for platform in ["drm", "headless"] {
         let args = args_of(&engine(
             Path::new("/l/engine"),
@@ -222,11 +200,9 @@ fn a_desktop_with_no_host_compositor_has_nothing_to_inhibit() {
 
 #[test]
 fn the_engine_is_told_where_the_shell_is_and_where_the_compositor_is() {
-    // THE THREE THAT REPLACED THE BRIDGE. The page was served over a loopback
-    // HTTP port and reached the compositor through a WebSocket on it; now the
-    // engine reads the files itself and dials the compositor's own socket. A
-    // launcher that forgets any of the three gets a desktop that starts and
-    // shows nothing, so each is asserted by name.
+    // The engine reads the shell's files itself and dials the compositor's
+    // socket. Missing any of these three flags starts a desktop that shows
+    // nothing, so each is asserted.
     let args = args_of(&engine(
         Path::new("/l/engine"),
         &shell(),
@@ -238,13 +214,10 @@ fn the_engine_is_told_where_the_shell_is_and_where_the_compositor_is() {
         args.contains(&"--domicile-shell-root=/d/dist".to_string()),
         "{args:?}"
     );
-    // Relative, not absolute: it goes into the generated document as
-    // `<script src>`, resolved against `domicile://shell/`. An absolute path
-    // there would be a URL path off the shell root and would not resolve.
+    // Relative: it becomes a `<script src>` resolved against
+    // `domicile://shell/`, where an absolute path would not resolve.
     //
-    // And whatever the user called the file: the launcher held a `shell.js`
-    // constant and put *that* here, so a desktop started on `main.js` asked
-    // the engine for a `shell.js` it had never been shown.
+    // It is the module the user named, not a fixed `shell.js`.
     assert!(
         args.contains(&"--domicile-shell-module=main.js".to_string()),
         "{args:?}"
@@ -257,9 +230,8 @@ fn the_engine_is_told_where_the_shell_is_and_where_the_compositor_is() {
 
 #[test]
 fn no_page_is_served_over_a_port() {
-    // The whole point of the change. A flag naming a URL with a host and a
-    // port is the bridge coming back, and it would be reachable by every
-    // process on the machine.
+    // A page served on a host and port would be reachable by every process on
+    // the machine.
     let args = args_of(&engine(
         Path::new("/l/engine"),
         &shell(),
@@ -277,10 +249,9 @@ fn no_page_is_served_over_a_port() {
 
 #[test]
 fn the_sandbox_stays_on() {
-    // It was `--no-sandbox` unconditionally, and that was wrong twice: it
-    // turns off what stands between a page and the machine, and Chromium says
-    // so in a yellow bar across the top of the desktop, which a user
-    // reasonably reads as broken. A container that needs it says so itself.
+    // `--no-sandbox` removes the isolation between a page and the machine, and
+    // Chromium shows a warning bar for it. A container that needs it adds it as
+    // an extra flag.
     let args = args_of(&engine(
         Path::new("/l/engine"),
         &shell(),
@@ -300,9 +271,8 @@ fn the_sandbox_stays_on() {
 
 #[test]
 fn a_machine_that_needs_more_flags_adds_its_own() {
-    // Word-split, which is what an argument list in an environment variable
-    // is for. Whatever a given machine needs is its business, and a list it
-    // can extend is smaller than a flag per problem.
+    // Extra flags come from an environment variable, split on whitespace, so a
+    // machine can add what it needs without a flag per problem.
     let args = args_of(&engine(
         Path::new("/l/engine"),
         &shell(),
@@ -349,14 +319,12 @@ fn the_compositor_is_a_producer_to_the_engine() {
 
 #[test]
 fn the_compositor_carries_this_desktops_control_socket_to_everything_it_starts() {
-    // How a terminal opened inside this desktop finds *this* desktop. The
-    // compositor spawns every app a shell asks for, and a child inherits its
-    // environment — so putting the path here is putting it in front of every
-    // `domicile which-shell` anybody types inside the desktop.
+    // A terminal opened inside this desktop finds it through this variable,
+    // since every app inherits the compositor's environment.
     //
-    // Set on the compositor rather than exported from the supervisor's own
-    // process, because a supervisor started from inside another desktop has
-    // that desktop's socket in its environment and would otherwise hand it on.
+    // It is set on the compositor, not exported by the supervisor, because a
+    // supervisor started inside another desktop would pass on that desktop's
+    // socket.
     let spawned = compositor(
         Path::new("/b/domicile-compositor"),
         Path::new("/l/engine"),
@@ -374,10 +342,8 @@ fn the_compositor_carries_this_desktops_control_socket_to_everything_it_starts()
 
 #[test]
 fn a_link_an_app_opens_opens_in_this_desktop() {
-    // `BROWSER` is what a program that opens a link runs, and the compositor
-    // starts every program a shell asks for. So a link opened in a terminal
-    // inside this desktop is a browser window of this desktop, rather than a
-    // browser of some other program's on top of it.
+    // Programs run `BROWSER` to open a link, and every app inherits the
+    // compositor's environment, so links open in this desktop.
     let spawned = compositor(
         Path::new("/b/domicile-compositor"),
         Path::new("/l/engine"),
@@ -392,9 +358,9 @@ fn a_link_an_app_opens_opens_in_this_desktop() {
 
 #[test]
 fn xdg_open_is_this_desktops_for_every_app_it_starts() {
-    // In front of the machine's own, so a link an app hands `xdg-open` opens
-    // in this desktop whatever `mimeapps.list` says. Prepended: everything
-    // else on the path is still found.
+    // The shim directory goes first on `PATH`, so `xdg-open` opens links in
+    // this desktop whatever `mimeapps.list` says. The rest of the path still
+    // resolves.
     let inherited = |name: &str| (name == "PATH").then(|| "/usr/bin:/bin".to_string());
     let spawned = compositor(
         Path::new("/b/domicile-compositor"),
@@ -413,11 +379,10 @@ fn xdg_open_is_this_desktops_for_every_app_it_starts() {
 
 #[test]
 fn a_link_an_app_opens_through_gio_or_a_portal_opens_in_this_desktop_too() {
-    // Not every program runs `xdg-open`: GIO and the portal read
-    // `domicile-mimeapps.list` out of the data directories themselves, where
-    // `XDG_CURRENT_DESKTOP` is `domicile`. The desktop's own `share` carries
-    // that file and the `domicile-open-url` entry it names, so it goes in
-    // front of every app's data directories -- with no file in anybody's home.
+    // GIO and the portal skip `xdg-open` and read `domicile-mimeapps.list` from
+    // the data directories, since `XDG_CURRENT_DESKTOP` is `domicile`. The
+    // desktop's `share` holds that file and its `domicile-open-url` entry, so
+    // it goes first, with no file in the user's home.
     let inherited = |name: &str| (name == "XDG_DATA_DIRS").then(|| "/run/sw/share".to_string());
     let spawned = compositor(
         Path::new("/b/domicile-compositor"),
@@ -436,8 +401,8 @@ fn a_link_an_app_opens_through_gio_or_a_portal_opens_in_this_desktop_too() {
 
 #[test]
 fn a_machine_with_no_data_directories_keeps_the_defaults_behind_this_desktops() {
-    // Unset means `/usr/local/share:/usr/share` to everything that reads it,
-    // and a variable holding only this desktop's would take those away.
+    // Unset means `/usr/local/share:/usr/share`, so those defaults stay after
+    // this desktop's directory.
     let spawned = compositor(
         Path::new("/b/domicile-compositor"),
         Path::new("/l/engine"),
@@ -455,9 +420,8 @@ fn a_machine_with_no_data_directories_keeps_the_defaults_behind_this_desktops() 
 
 #[test]
 fn the_engines_libraries_go_in_front_of_whatever_was_there() {
-    // Prepended rather than replacing: a machine with its own
-    // `LD_LIBRARY_PATH` set is telling the compositor where to find something,
-    // and dropping it swaps one missing library for another.
+    // Prepended: an existing `LD_LIBRARY_PATH` points at libraries the machine
+    // needs.
     let inherited = |name: &str| (name == "LD_LIBRARY_PATH").then(|| "/opt/lib".to_string());
     let spawned = compositor(
         Path::new("/b/domicile-compositor"),
@@ -476,10 +440,8 @@ fn the_engines_libraries_go_in_front_of_whatever_was_there() {
 
 #[test]
 fn the_compositor_is_quiet_unless_asked_otherwise() {
-    // A desktop's default log is warnings, plus the few `INFO` lines the
-    // compositor keeps for things a person acts on; the rest is at `DEBUG`,
-    // and dependencies say nothing below a warning. An explicit `RUST_LOG`
-    // wins: somebody who set it is asking for something else.
+    // The default shows warnings plus the compositor's few `INFO` lines a
+    // person acts on. An explicit `RUST_LOG` wins.
     let quiet = compositor(
         Path::new("/b/c"),
         Path::new("/l/engine"),
@@ -509,17 +471,12 @@ fn the_compositor_is_quiet_unless_asked_otherwise() {
 
 #[test]
 fn the_engine_is_asked_to_say_what_it_did_about_input() {
-    // THE LOG WAS QUIET BECAUSE OF A THRESHOLD, NOT BECAUSE OF SILENCE.
-    // `base/logging.cc` prints to stderr when `LOG_TO_STDERR` is set or when
-    // the message is at least `kAlwaysPrintErrorLevel` (`LOGGING_ERROR`), and
-    // a release build with no `--enable-logging` has the flag clear. The
-    // fork's account of a desktop that came up deaf -- a device handed over
-    // revoked, a force pause, a console taken back -- was written at WARNING,
-    // so a run with no keyboard produced a log with nothing about input in
-    // it. It is ERROR now, and ERROR is the floor: WARNING is where upstream
-    // Chromium says what a nested run's host compositor lacks, a dozen lines
-    // a start that is not news. Asked for on every platform: a nested
-    // developer run has the same engine and the same account.
+    // A release build without `--enable-logging` prints only ERROR and above to
+    // stderr (`base/logging.cc`). The fork logs input failures, such as a
+    // revoked device or a console taken back, at ERROR, so these flags make
+    // them visible. The level stays at ERROR because upstream logs a dozen
+    // routine WARNINGs on a nested run. Nested runs use the same engine, so
+    // they get the same flags.
     for platform in ["drm", "wayland", "headless"] {
         let args = args_of(&engine(
             Path::new("/l/engine"),
@@ -541,11 +498,9 @@ fn the_engine_is_asked_to_say_what_it_did_about_input() {
 
 #[test]
 fn a_run_that_wants_more_than_errors_can_ask_for_them() {
-    // The default is a floor rather than a ceiling. `extra` is appended after
-    // the built list, and `CommandLine::AppendSwitchNative` overwrites the
-    // value of a switch it has already seen -- so the last `--log-level` on
-    // the line is the one the engine reads, and a run that wants INFO gets it
-    // without the launcher knowing anything about it.
+    // The default is a floor. `extra` comes after the built list, and
+    // `CommandLine::AppendSwitchNative` keeps the last value of a switch, so a
+    // run can ask for INFO through `extra`.
     let args = args_of(&engine(
         Path::new("/l/engine"),
         &shell(),
@@ -562,23 +517,17 @@ fn a_run_that_wants_more_than_errors_can_ask_for_them() {
 
 #[test]
 fn the_engine_is_told_a_touchpad_is_libinputs() {
-    // WITHOUT THIS THE POINTER DRAWS AND NOTHING MOVES IT. `CreateConverter`
-    // has exactly one touchpad branch and it is `#if defined(USE_EVDEV_
-    // GESTURES)`, whose gn flag is `is_chromeos_device`; a pad that misses it
-    // is not a touchscreen either, so it falls through to
-    // `EventConverterEvdevImpl`, which handles `EV_REL` and has no `EV_ABS`
-    // case at all. Every finger position is read off the descriptor and
-    // dropped, and `cursor_->MoveCursor` is never reached. Nothing logs,
-    // because nothing failed.
+    // Without this the pointer draws but a touchpad never moves it.
+    // `CreateConverter` has a touchpad branch only under `USE_EVDEV_GESTURES`
+    // (ChromeOS devices). Other pads fall through to `EventConverterEvdevImpl`,
+    // which ignores `EV_ABS`, so every finger position is dropped silently.
     //
-    // `EventDeviceInfo::UseLibinput` takes an OVERRIDDEN
-    // `kLibinputHandleTouchpad` over its own heuristics, and the feature is
-    // `FEATURE_DISABLED_BY_DEFAULT`, so the override is the whole mechanism.
-    // Patch 0027 is what then lets libinput read a descriptor it is forbidden
-    // to open for itself.
+    // `EventDeviceInfo::UseLibinput` honors an overridden
+    // `kLibinputHandleTouchpad`, which is disabled by default, so the override
+    // is required. Patch 0027 lets libinput read a descriptor it cannot open
+    // itself.
     //
-    // On every platform, not just the console: the nested runs share this
-    // engine, and a developer's pad should behave the same way in both.
+    // Set on every platform so a developer's touchpad behaves the same nested.
     for platform in ["drm", "wayland", "headless"] {
         let args = args_of(&engine(
             Path::new("/l/engine"),
@@ -596,11 +545,9 @@ fn the_engine_is_told_a_touchpad_is_libinputs() {
 
 #[test]
 fn the_engine_is_told_a_mouse_is_libinputs() {
-    // A MOUSE LEFT TO `EventConverterEvdevImpl` IS RAW. It reads `REL_X` and
-    // `REL_Y` one count to one pixel, with no acceleration, and has no
-    // `REL_WHEEL` case at all: a sluggish pointer and a wheel that does
-    // nothing. `kLibinputHandleMouse` is patch 0059's, and like the touchpad's
-    // it is off unless overridden.
+    // `EventConverterEvdevImpl` reads mouse motion raw, with no acceleration,
+    // and ignores `REL_WHEEL`. `kLibinputHandleMouse` (patch 0059) is off
+    // unless overridden.
     for platform in ["drm", "wayland", "headless"] {
         let args = args_of(&engine(
             Path::new("/l/engine"),
@@ -616,8 +563,8 @@ fn the_engine_is_told_a_mouse_is_libinputs() {
     }
 }
 
-/// The features the one `--enable-features` names. One, because a second
-/// replaces the first rather than adding to it.
+/// The features in the single `--enable-features` flag. A second flag would
+/// replace the first.
 fn features_of(args: &[String]) -> Vec<&str> {
     let lists: Vec<&str> = args
         .iter()
@@ -629,11 +576,8 @@ fn features_of(args: &[String]) -> Vec<&str> {
 
 #[test]
 fn the_compositor_is_given_the_config_it_was_started_with() {
-    // The whole point of the flag: the monitors, their scales and their turns
-    // are in that file, and the compositor is the process that reads it. It
-    // had no way to arrive — `--config` was parsed by this launcher and then
-    // never handed on — so a desk written down was a desk the compositor
-    // never saw.
+    // The monitors, their scales and rotations are in this file, and the
+    // compositor is the process that reads it.
     let spawned = compositor(
         Path::new("/b/domicile-compositor"),
         Path::new("/l/engine"),
@@ -661,9 +605,8 @@ fn the_compositor_is_given_the_config_it_was_started_with() {
 
 #[test]
 fn a_desktop_with_no_config_is_given_no_flag_rather_than_an_empty_one() {
-    // `Config::load` on a path that will not open is fatal, deliberately, so
-    // an empty `--config` would turn "this desktop writes no monitors down"
-    // into a compositor that refuses to start.
+    // `Config::load` fails on a path it cannot open, so an empty `--config`
+    // would stop the compositor from starting.
     let args = args_of(&compositor(
         Path::new("/b/domicile-compositor"),
         Path::new("/l/engine"),

@@ -1,20 +1,9 @@
-//! Keystroke to pixel: the one number this fork answers to.
+//! Measures keystroke-to-pixel latency for a client's window.
 //!
-//! Requirement 1 is that a client's window costs the user nothing a plain
-//! Wayland compositor would not have cost them. Nothing measured it. The two
-//! instruments that used to — the chrome SDK's `roundTrip` and the shell's
-//! `drawTiming` — could only do it because the page drew the frame, and the
-//! page does not draw any more. They were kept and emptied against this, and
-//! are deleted now that this exists: an empty instrument that a shell still
-//! reads reports `rt_ms=0`, which is a measurement to whoever reads the log.
-//! See `docs/architecture/ENGINE-FORK-MEASUREMENTS.md#keystroke-to-pixel`.
+//! The compositor is the only process that both injects the key into the
+//! client's seat and can ask the engine what the display compositor drew.
 //!
-//! **The compositor is the only place it can be rebuilt.** It is the one
-//! process that both puts the key into the client's seat and holds the engine
-//! connection that can be asked what the display compositor actually drew. A
-//! page cannot see the first and a producer cannot see the second.
-//!
-//! WHAT A ROUND MEASURES, and why it is three numbers rather than one:
+//! A round has two parts:
 //!
 //! ```text
 //!   press ──────────► the client commits ──────────► the pixel is drawn
@@ -23,88 +12,47 @@
 //!          think-and-redraw)            submit, viz aggregation)
 //! ```
 //!
-//! Only the second is this design's to answer for, and it is the one kept
-//! clean: the import and the submit are inside it because they are ours. The
-//! first is *mostly* the client's — whatever toolkit it is built on, which
-//! would cost the same under any compositor — and not purely, because the
-//! clock starts before the key is delivered, so this compositor's own
-//! key-delivery and the commit callback's first few lines are in there too.
-//! Small, and named rather than hidden. Folding the two together would let a
-//! slow client hide a regression in ours, or report one that is not.
+//! They are reported separately so a slow client cannot hide a regression in
+//! the compositor. Each probe costs a display frame, so the run first measures
+//! the probe alone (the floor) and reports it beside the results, as
+//! `css_parity.cc` does.
 //!
-//! THE WAIT IS WATCHED, WHICH IS WHAT MAKES THE SECOND NUMBER A KEYSTROKE'S.
-//! The probe is asked through the first bucket as well as the second, because
-//! a color change arriving before the client's commit cannot be that commit's:
-//! nothing the client draws in answer reaches the screen before the frame it
-//! commits, so a change there is a frame from *before* the key, landing late.
-//! A round that sees one is given up — see [`Report::moved_before_commit`].
-//! Left unwatched, the first poll after the commit found a color that had
-//! already changed and priced it as this design's half, which is how a client
-//! answering no keys produced a `commit to pixel` figure at all.
+//! Rules that tie a round to its keystroke:
 //!
-//! It is not free: each of those asks is a probe round trip, and the thread is
-//! in one when the client's commit arrives, so `key_to_commit` carries up to
-//! one more display frame than it did. That bucket already says it is not
-//! purely the client's. A number that is a keystroke's and slightly generous
-//! beats one that is neither.
+//! - The probe point is watched while waiting for the commit. A change there
+//!   came from an earlier frame, so the round is dropped
+//!   ([`Report::moved_before_commit`]).
+//! - A commit later than [`MAX_WAIT_FRAMES`] frames after the key is dropped
+//!   ([`Report::answered_too_late`]). One sooner than
+//!   `frame / `[`MIN_WAIT_FRAME_SHARE`] is skipped and the round keeps waiting
+//!   ([`Report::answered_too_soon`]). These bounds narrow, but do not remove,
+//!   the chance of crediting an unrelated redraw.
 //!
-//! AND THE WAIT IS BRACKETED, WHICH NARROWS WHAT THE COMMIT CAN BE. Watching
-//! the wait catches a pixel that moved before the commit; it says nothing
-//! about a commit that arrives in the right order and at an implausible
-//! distance from the key. A client that redraws on its own eventually commits
-//! whatever it is doing, and that commit lands on a round that is still
-//! waiting. So a round gives up on any commit later than
-//! [`MAX_WAIT_FRAMES`] display frames after the press — see
-//! [`Report::answered_too_late`] — and passes over any commit sooner after it
-//! than one display frame over [`MIN_WAIT_FRAME_SHARE`], which is the same
-//! stray arriving with the key instead of long after it, and waits on for the
-//! key's answer — see [`Report::answered_too_soon`].
-//!
-//! **This brackets the wait; it does not separate the populations.** Commits
-//! that no key caused have been accepted at 0.9, 1.0 and 2.5 frames, which is
-//! where real answers live. [`MAX_WAIT_FRAMES`] carries the readings. What
-//! rests on this is therefore a matter of how often, not of whether.
-//!
-//! Frames rather than milliseconds, because that is the unit everything else
-//! here is read in and a desktop at another refresh moves the bound with it.
-//!
-//! THE FLOOR IS NOT OPTIONAL. Asking what color a pixel is costs a
-//! `CopyOutputRequest`, which forces the draw it then reads, so a round trip
-//! that changed nothing still takes a display frame. Every number here is at
-//! least that, and a reading with no floor beside it cannot be told from one.
-//! So the run prices the probe first, against the same probe, and reports them
-//! together — which is what `css_parity.cc` does for the producer's half, so
-//! the two are read the same way.
-//!
-//! Pure, and driven by [`Latency::next`] plus the events below, because the
-//! alternative is a measurement that can only be exercised on the one machine
-//! that has a GPU.
+//! This module is pure state driven by [`Latency::next`] and the event methods,
+//! so it can be tested without a GPU. See
+//! `docs/architecture/ENGINE-FORK-MEASUREMENTS.md#keystroke-to-pixel`.
 
 use std::time::{Duration, Instant};
 
 /// What the driver should do next.
 ///
 /// The driver answers [`Step::Sample`] with [`Latency::sampled`] or
-/// [`Latency::unreadable`], and [`Step::Press`] by actually pressing. Nothing
-/// here advances on its own, so a driver that stops answering stops the run
-/// rather than filling it with samples it never took.
+/// [`Latency::unreadable`], and [`Step::Press`] by pressing a key. Nothing
+/// advances on its own, so a stalled driver stalls the run.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Step {
     /// Nothing this tick.
     Wait,
     /// Give the client the keyboard and press a key into it.
     ///
-    /// **The round's clock has already started when this is returned.** So
-    /// the driver's focus change and key injection are inside `key_to_commit`
-    /// — see there — rather than outside every number. Starting it after
-    /// delivery would drop that work out of the measurement altogether, which
-    /// is worse than having it in a bucket that says so.
+    /// The round's clock has already started, so the driver's focus change and
+    /// key injection count toward `key_to_commit`.
     Press,
     /// Ask the engine what color is at the probe point.
     Sample,
 }
 
-/// A run of samples, and the three numbers worth reading off one.
+/// The min, median and max of a set of samples.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Spread {
     pub count: usize,
@@ -114,9 +62,7 @@ pub struct Spread {
 }
 
 impl Spread {
-    /// `None` for an empty run: no samples is not a measurement of zero, and
-    /// reporting it as one is how a run that never happened reads as a fast
-    /// one.
+    /// `None` for no samples, so an empty run cannot read as a fast one.
     fn of(samples: &[Duration]) -> Option<Self> {
         if samples.is_empty() {
             return None;
@@ -126,30 +72,25 @@ impl Spread {
         Some(Self {
             count: sorted.len(),
             min: sorted[0],
-            // The upper middle for an even count, as `css_parity.cc` takes it
-            // (`sorted[size / 2]`). Which of the two is arbitrary; the numbers
-            // only compare if both sides pick the same one.
+            // The upper middle for an even count, matching `css_parity.cc`
+            // (`sorted[size / 2]`) so the two medians compare.
             median: sorted[sorted.len() / 2],
             max: sorted[sorted.len() - 1],
         })
     }
 
-    /// The median in display frames, which is the unit that makes any of this
-    /// mean something: every number here is a wait for a compositor to draw.
+    /// The median in display frames.
     ///
-    /// `None` for an interval of zero rather than an infinity, because that is
-    /// a display whose refresh nobody reported and not a run that took no
-    /// time.
+    /// `None` when `interval` is zero, which means no refresh rate was
+    /// reported.
     pub fn median_frames(&self, interval: Duration) -> Option<f64> {
         (!interval.is_zero()).then(|| self.median.as_secs_f64() / interval.as_secs_f64())
     }
 
-    /// The line a run reports this spread on.
+    /// The log line for this spread.
     ///
-    /// Here, and tested, because something reads it: `lib-latency.sh` greps
-    /// this shape and `scripts/test-latency-report.sh` pins it from that side,
-    /// so the contract holds from both ends. A format string nobody checks is
-    /// one a rewording breaks silently.
+    /// `lib-latency.sh` parses this format, and
+    /// `scripts/test-latency-report.sh` tests it from that side.
     pub fn line(&self, what: &str, interval: Duration) -> String {
         let frames = self
             .median_frames(interval)
@@ -164,203 +105,112 @@ impl Spread {
     }
 }
 
-/// What a finished run measured.
+/// The results of a finished run.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Report {
-    /// A probe round trip with nothing changing. The floor under everything
-    /// else here.
+    /// A probe round trip with nothing changing. Every other number includes
+    /// at least this.
     pub floor: Option<Spread>,
     /// Press to the client's answering commit.
     ///
-    /// Mostly the client's own think-and-redraw, and **not purely** — the
-    /// compositor's own work of putting the key into the seat is in here too,
-    /// because the clock starts before the key is delivered. Small, and named
-    /// rather than hidden: the alternative was starting it after delivery,
-    /// which drops that work out of every number instead of putting it in a
-    /// declared one.
-    ///
-    /// **And the probe is in here too, for up to one round trip.** The wait is
-    /// watched rather than idled through — see the module docs — and the
-    /// thread is inside an ask when the commit arrives, so this reads about a
-    /// display frame higher than it did when nothing watched. That is the
-    /// price of `commit_to_pixel` being a keystroke's, and it is paid by the
-    /// bucket that was already declared impure rather than by the one this
-    /// design answers for.
+    /// Mostly client time, but also includes the compositor's key delivery
+    /// and up to one probe round trip in progress when the commit arrives.
     pub key_to_commit: Option<Spread>,
-    /// That commit to the new color being in the display compositor's
-    /// output. **This is the number this design is answerable for.**
+    /// That commit to the new color reaching the display compositor's output.
+    /// This is the number the compositor is responsible for.
     ///
-    /// **Quantized to the floor, and it cannot not be.** The probe is only
-    /// asked after the commit and each ask costs a display frame, so this is
-    /// the true value rounded up to the next probe boundary and is never below
-    /// one floor even when the pixel was already on screen. Over sixty rounds
-    /// this one's min, median and max collapse onto multiples of the floor —
-    /// only this one: `key_to_commit` is timed to the real commit callback and
-    /// `key_to_pixel` is that added to this, so neither lands on a multiple.
-    ///
-    /// That is what makes
-    /// "indistinguishable from the floor" the result rather than a hedge — and
-    /// it is also the instrument's resolution: a regression in this half
-    /// smaller than one probe round trip does not show up here.
+    /// Rounded up to a multiple of the floor, since the probe is only asked
+    /// after the commit and each ask costs a frame. A regression smaller than
+    /// one probe round trip does not show here.
     pub commit_to_pixel: Option<Spread>,
-    /// The whole of it. Not what a user feels: it has the probe's round trip
-    /// in it, and a user waits for no `CopyOutputRequest`.
+    /// The sum of the two. Includes the probe's round trip, which a user does
+    /// not wait for.
     pub key_to_pixel: Option<Spread>,
-    /// Rounds that ran out of polls rather than seeing the color change.
-    ///
-    /// The client was asked and did not answer — which is what a run against a
-    /// client that ignores the keyboard looks like, and is the whole of what a
-    /// negative control asserts.
+    /// Rounds where the color never changed within the poll budget: the client
+    /// did not answer. This is what the negative control asserts.
     pub abandoned: usize,
-    /// Rounds given up because the probe point changed color before the
-    /// client answered the key.
+    /// Rounds dropped because the probe point changed before the client
+    /// committed.
     ///
-    /// **Its own count, and not `abandoned`.** The client was asked, and what
-    /// happened is neither its answer nor its silence: a frame it committed
-    /// before the key went in reached the screen during the wait. Nothing the
-    /// client draws in answer can get there before the commit the round is
-    /// waiting for, so a change here is by construction not the keystroke's.
-    ///
-    /// Counted rather than dropped, because a run that gave up half its
-    /// rounds this way reports a median over the other half, and because it
-    /// is the number that says the probe point is not as still as the floor
-    /// found it. It is what a client answering no keys produces instead of a
-    /// commit-to-pixel figure — see the negative control in
-    /// `guard-latency.sh`, which caught this by failing.
+    /// The change came from a frame committed before the key. Counted
+    /// separately from `abandoned` because the client did not fail to answer,
+    /// and a high count means the probe point is not still.
     pub moved_before_commit: usize,
-    /// Rounds given up because the client's commit arrived too long after the
-    /// key to be an answer to it.
-    ///
-    /// **Its own count again, and not `abandoned`.** The client committed, in
-    /// the right order, and the pixel followed — every number the round would
-    /// have reported is positive and none of them is a keystroke's. What
-    /// happened is that a client redrawing on its own committed whatever it
-    /// was doing, and the round that was still waiting took it for an answer.
-    ///
-    /// The bound is [`MAX_WAIT_FRAMES`] display frames, and it does **not**
-    /// separate the two populations — the readings that say so are there.
+    /// Rounds dropped because the commit came more than [`MAX_WAIT_FRAMES`]
+    /// after the key: a self-redrawing client's unrelated commit.
     pub answered_too_late: usize,
-    /// Commits passed over because they arrived too soon after the key to be
-    /// an answer to it.
+    /// Commits skipped because they came less than
+    /// `frame / `[`MIN_WAIT_FRAME_SHARE`] after the key.
     ///
-    /// **Commits, not rounds given up.** A commit 0.82 ms after the key is a
-    /// frame the client already had in flight, and the key it did not answer
-    /// is still on its way to being answered, so the round waits on for that.
-    /// Ending the round instead pressed the next key while this one was
-    /// unanswered; a client drawing both keys in one frame drew no change, and
-    /// the next round was reported abandoned. The bound is
-    /// [`MIN_WAIT_FRAME_SHARE`].
+    /// The round keeps waiting, since the key's answer is still coming. Ending
+    /// the round would press the next key early; a client that draws both keys
+    /// in one frame shows no change and the next round is abandoned.
     pub answered_too_soon: usize,
-    /// Rounds whose key was never delivered, because there was no surface to
-    /// deliver it to.
+    /// Rounds whose key had no surface to go to.
     ///
-    /// **Its own count, not `abandoned`.** The client was never asked, so
-    /// counting it against the client would be the wrong-end report this whole
-    /// instrument keeps having to fix. Nothing here is the client's fault and
-    /// nothing here is a measurement; it is this compositor failing to do the
-    /// one thing a round starts with.
+    /// A compositor failure, not the client's, so not counted in `abandoned`.
     pub undelivered: usize,
-    /// Rounds where the client committed *again* while we were polling.
+    /// Rounds where the client committed again while the run was polling.
     ///
-    /// Not a fault, and not counted against anybody. It is the number that
-    /// says which of two stories a round is: the client answered a key with
-    /// one frame, or it answered with more than one — a toolkit rendering on
-    /// `wl_surface.frame`, or one whose first commit was already in flight
-    /// when the key landed.
+    /// Not a fault. It shows whether the client answered with one frame or
+    /// several (for example, a toolkit that renders on `wl_surface.frame`).
+    /// The run must not block the compositor's thread while polling, or these
+    /// commits cannot arrive (see `step_the_latency`).
     ///
-    /// It exists because it used to be unobservable, and its being
-    /// unobservable was a bug. The run sampled in a loop inside the commit
-    /// callback, holding the compositor's one thread, so a client could not
-    /// commit a second time even when that was the only way the color was
-    /// ever going to change: no buffer release reached it and no frame
-    /// callback was flushed. Those rounds spent their whole poll budget and
-    /// were reported as the client not answering. See `step_the_latency`.
-    ///
-    /// So this is also the discriminator. A round that would have been
-    /// abandoned before and completes now shows up here. One still abandoned
-    /// with nothing here is a frame that genuinely never reached the screen,
-    /// which is a different bug in a different place.
-    ///
-    /// **It qualifies `commit_to_pixel`.** That is timed from the *first*
-    /// commit after the key, so for a round counted here it has some of the
-    /// client's own second think-and-draw in it and overstates what this
-    /// design costs. Reported rather than corrected: timing from the last
-    /// commit instead understates it by exactly as much, since a commit that
-    /// changed nothing would reset the clock, and there is no way from here to
-    /// tell which commit the pixel came from. A number beside it is honest;
-    /// silently picking one end is not.
+    /// For these rounds `commit_to_pixel` is timed from the first commit, so it
+    /// includes some client time and overstates the compositor's cost. Timing
+    /// from the last commit would understate it, and there is no way to tell
+    /// which commit produced the pixel, so the count is reported instead.
     pub redrew_while_polling: usize,
-    /// Why the run stopped, when it was not by running out of rounds.
+    /// Why the run stopped.
     ///
-    /// Separate from `abandoned` because they are different accusations: an
-    /// abandoned round is the *client* not answering, and every one of these
-    /// is the *probe* or the screen. Reporting them as one number sent whoever
-    /// read it to the wrong end.
+    /// Separate from `abandoned`: these are probe or screen failures, not the
+    /// client's.
     pub ended: Ended,
 }
 
 /// How a run finished.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Ended {
-    /// Every round it set out to do.
+    /// Every round ran.
     Completed,
-    /// The screen never held still long enough to price the probe against it.
-    /// A client repainting on its own — a blinking cursor over the probe point
-    /// — looks exactly like this, and so does a page that never settles.
+    /// The screen never held still long enough to measure the floor, such as
+    /// a blinking cursor over the probe point or a page that never settles.
     NeverSettled,
-    /// The probe stopped answering, or never started. Distinct from the screen
-    /// moving: this is no reading at all rather than a different one.
+    /// The probe stopped answering, or never started.
     ProbeWentDark,
 }
 
-/// Where a run has got to.
+/// Where a run is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Phase {
-    /// Sampling with nothing changing, to price the probe itself — and, on
-    /// the way, to wait out a page that is still painting itself.
+    /// Sampling an unchanging screen to measure the probe's cost.
     ///
-    /// `holding` is what nothing-changing means. `None` is the very first
-    /// sample, which sets it and is timed as nothing: there is no earlier
-    /// answer to have timed it from.
-    ///
-    /// **It is enforced, and that is what makes this one phase rather than
-    /// two.** A screen that moves partway through throws away everything timed
-    /// so far and starts the floor again, so a completed floor is by
-    /// construction a run of consecutive answers that all agreed. That is
-    /// strictly more than "it settled" — which is why there is no separate
-    /// settling phase to get out of step with this one — and it is what lets
-    /// the first round trust the color it is watching for a change from.
+    /// `holding` is the color every sample must match. The first sample sets
+    /// it and is not timed. A change restarts the floor, so a completed floor
+    /// is a run of consecutive matching answers. That also waits out a page
+    /// that is still painting and gives the first round a stable color.
     Floor {
         taken: usize,
         since: Option<Instant>,
         holding: Option<u32>,
         /// Every answer this floor has been given, restarts included.
         ///
-        /// **The floor has to be able to give up, and for the same reason the
-        /// poll does.** A screen that never holds still — a terminal blinking
-        /// its cursor over the probe point is the obvious one — leaves the
-        /// floor asking for ever, and the driver asking for ever is a
-        /// compositor that has stopped serving clients. Bounded, so that case
-        /// reports itself as [`Ended::NeverSettled`] rather than hanging the
-        /// desktop.
+        /// Bounds the floor, since the driver blocks the Wayland thread on each
+        /// ask. A screen that never holds still ends as
+        /// [`Ended::NeverSettled`].
         asked: usize,
         /// Refusals in a row, reset by any answer.
         ///
-        /// Its own counter, and that is the whole of what makes the two
-        /// give-up reasons mean what they say. Sharing one budget let the
-        /// label be decided by whichever kind of ask happened to spend the
-        /// last of it — seven moving answers and then a single refusal
-        /// reported a dark probe — which is a report that sends the reader to
-        /// the wrong end. A probe is dark when it refuses repeatedly; a screen
-        /// never settles when the whole budget goes without one holding still.
+        /// Kept apart from `asked` so the end reason is accurate: a probe is
+        /// dark when it refuses repeatedly, and a screen never settles when
+        /// the whole budget passes without holding still.
         refused: usize,
     },
-    /// Between rounds: the next thing to do is press a key.
+    /// Between rounds; the next step is a key press.
     Ready,
-    /// A key has gone in; waiting for the client to commit, and watching the
-    /// probe point while it does — a change before that commit is a frame from
-    /// before the key, and the round it would otherwise be credited to is
-    /// given up instead.
+    /// A key was pressed. Waiting for the client to commit while watching the
+    /// probe point: a change now came from a frame before the key.
     Pressed { at: Instant, before: u32 },
     /// The client committed; polling for the color to reach the screen.
     Polling {
@@ -369,47 +219,37 @@ enum Phase {
         before: u32,
         polls: u32,
     },
-    /// Over. Nothing moves out of this.
+    /// Finished.
     Done(Ended),
 }
 
-/// How many rounds a run measures, and how many samples price the probe.
+/// Rounds per run, and samples for the floor.
 ///
-/// Sixty of each, which is what `css_parity.cc` takes, so a median here is over
-/// the same size of run as the producer-side one it is read beside.
+/// 60 each, matching `css_parity.cc`, so the medians cover the same run size.
 const ROUNDS: usize = 60;
 const FLOOR_SAMPLES: usize = 60;
 
 /// How many answers the floor asks for before giving up on ever settling.
 ///
-/// Generous against `FLOOR_SAMPLES`, because a restart is normal — a page
-/// finishing its first paint costs one — and stingy against for ever, because
-/// the driver blocks on every one of these.
+/// Leaves room for restarts (a page's first paint causes one) while bounding
+/// how long the driver blocks.
 const MAX_FLOOR_ASKS: usize = 400;
 
 /// How many refusals in a row mean the probe is not coming back.
 ///
-/// Small, because the survivable case is narrow: the window not being
-/// composited yet, which resolves within a frame or two of the page drawing.
-/// A missing symbol or a point outside the window refuses every time and
-/// should be reported in a moment rather than after the whole floor budget.
+/// Small, because the only recoverable cause (the window not composited yet)
+/// clears within a frame or two. Other causes refuse every time.
 const MAX_REFUSALS_RUNNING: usize = 8;
 
-/// How many display frames after the key a commit may arrive and still be
-/// read as the answer to it.
+/// How many display frames after the key a commit may arrive and still count
+/// as the answer to it.
 ///
-/// **A bound on the wait, not a timeout on the run.** A round is only ever
-/// started by a commit, and a client that redraws on its own commits for
-/// reasons the key had nothing to do with; without this, the round still
-/// waiting takes that commit for its answer and times a pixel to it. The order
-/// is right and every number is positive, which is why nothing else here
-/// catches it.
+/// A self-redrawing client commits for its own reasons. Without this bound, a
+/// waiting round would take such a commit as its answer, and every number
+/// would look valid.
 ///
-/// **IT IS NOT A DISCRIMINATOR, AND WAS WRITTEN AS ONE.** Eight was chosen
-/// from two readings that were nowhere near each other — a worst real round of
-/// 2.6 frames and a stray at 55 — on the assumption that nothing lands
-/// between. Six `Engine` runs say otherwise. Every figure below is a commit
-/// this bound *accepted* as a key's answer, in display frames:
+/// This bound does not fully separate real answers from strays. Commits it
+/// accepted in six `Engine` runs, in display frames:
 ///
 /// ```text
 ///   a client that answers keys, 180 rounds over three jobs
@@ -418,65 +258,40 @@ const MAX_REFUSALS_RUNNING: usize = 8;
 ///     0.05, 0.92, 0.97, 2.48, 7.31   (0.82, 15.38, 16.16, 41.38, 121.95 ms)
 /// ```
 ///
-/// The two overlap: 0.92, 0.97 and 2.48 frames are strays sitting inside the
-/// range real answers occupy. No value of this separates them, so it does not
-/// decide whether a round is a measurement — it only trims the part of the
-/// stray population that is implausible as a keystroke's answer, which
-/// narrows the window a stray has to land in from two thirds of the control
-/// client's 200 ms redraw period to a half. What the negative control asserts
-/// is therefore still statistical, and what would make it deterministic is
-/// somewhere else: see `guard-latency.sh`.
-///
-/// Six, then, rather than eight, and the trade is stated rather than implied.
-/// It is 100.00 ms against a worst real round of 44.76 ms over 180 — 2.2
-/// times, down from the 3 times eight left — and it catches the 7.31-frame
-/// stray above with 22% to spare. Both margins are thinner than the numbers
-/// they replaced, and the offender they are fitted to is one sample.
+/// Strays at 0.92 to 2.48 frames overlap real answers, so the negative
+/// control is still statistical (see `guard-latency.sh`). Six frames
+/// (100 ms) is 2.2 times the worst real round and rejects the 7.31-frame
+/// stray.
 const MAX_WAIT_FRAMES: u32 = 6;
 
-/// The share of one display frame a commit must be at least this long after
-/// the key to be read as the answer to it: a commit sooner than
-/// `frame / MIN_WAIT_FRAME_SHARE` arrived with the key rather than because of
-/// it.
+/// A commit sooner than `frame / MIN_WAIT_FRAME_SHARE` after the key is not
+/// its answer.
 ///
-/// The near end of [`MAX_WAIT_FRAMES`]' wait, and the same accusation from the
-/// other side. The clock starts before the key is delivered, so a round has to
-/// contain this compositor's dispatch, the client waking, a repaint and a
-/// commit; the same control that produced the 7.31-frame stray also produced
-/// one at 0.82 ms, which is none of that happening. A stray landing this close
-/// to the key is the more dangerous end, because the figure it produces reads
-/// as fast rather than as absurd.
-///
-/// An eighth, which on a 16.67 ms frame is 2.08 ms. In frames because every
-/// bound here is — a millisecond threshold would be one on whatever else the
-/// runner was doing — and generous because the cost of being wrong is a real
-/// answer passed over, whose pixel then gives its round up as
-/// [`Report::moved_before_commit`] and fails the guard: the fastest press-to-commit ever measured against a
-/// client that answers keys is 15.93 ms, 7.6 times this.
+/// The clock starts before key delivery, so a real answer includes dispatch,
+/// the client waking, a repaint and a commit. The control produced a stray at
+/// 0.82 ms. One eighth of a 16.67 ms frame is 2.08 ms; the fastest real
+/// answer measured is 15.93 ms, 7.6 times that. Measured in frames so the
+/// bound follows the refresh rate.
 const MIN_WAIT_FRAME_SHARE: u32 = 8;
 
 /// How many probe answers a round waits through before giving up on it.
 ///
-/// A round that is going to finish finishes in one or two, since each poll is
-/// itself a display frame. This is not a timeout in disguise — it is the point
-/// past which the client has plainly stopped drawing, and a run that waited
-/// for ever would hang the guard rather than report it.
+/// A round normally finishes in one or two polls. This bound stops a client
+/// that has stopped drawing from hanging the guard.
 const MAX_POLLS: u32 = 200;
 
-/// What a run is allowed to spend.
+/// Limits on what a run may spend.
 ///
-/// A struct rather than five arguments, because five of the same type in a row
-/// is a call nobody can read and a swap the compiler cannot catch. Every one is
-/// a bound on how long the Wayland thread blocks, which is why they are all
-/// here together and none of them is optional.
+/// Each field bounds how long the Wayland thread blocks. A struct, since five
+/// same-typed arguments are easy to swap.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Budget {
     /// Rounds to measure.
     pub rounds: usize,
-    /// Timed probe answers to price the probe with.
+    /// Timed probe answers for the floor.
     pub floor_samples: usize,
-    /// Answers the floor may spend before giving up on the screen ever
-    /// holding still.
+    /// Answers the floor may spend before giving up on the screen holding
+    /// still.
     pub max_floor_asks: usize,
     /// Refusals in a row before giving up on the probe.
     pub max_refusals_running: usize,
@@ -485,19 +300,15 @@ pub struct Budget {
 }
 
 impl Budget {
-    /// A budget from `rounds,floor_samples,max_polls`, the three a caller has
-    /// any reason to change.
+    /// Parses `rounds,floor_samples,max_polls`.
     ///
-    /// The other two are bounds on hanging rather than on measuring, and are
-    /// left at their defaults so a short run cannot accidentally remove the
-    /// protection: `max_floor_asks` scales with the floor so a smaller floor
-    /// still gets room to restart, and `max_refusals_running` stays below it,
-    /// which is what keeps the two give-up reasons apart.
+    /// The other two fields are derived so a short run keeps its hang
+    /// protection: `max_floor_asks` scales with the floor, and
+    /// `max_refusals_running` stays below it so the two end reasons stay
+    /// distinct.
     ///
-    /// `None` for anything `Latency::new` would refuse, rather than a clamp
-    /// or a default: a caller who asked for a run of no rounds asked for
-    /// something, and quietly giving them sixty is how a control that was
-    /// meant to be short becomes a four-minute one nobody notices.
+    /// Returns `None` for a budget [`Latency::new`] would reject, instead of
+    /// silently substituting defaults.
     pub fn parse(raw: &str) -> Option<Self> {
         let mut parts = raw.split(',');
         let mut number = || parts.next()?.trim().parse::<usize>().ok();
@@ -505,40 +316,30 @@ impl Budget {
         if parts.next().is_some() {
             return None;
         }
-        // Room for the floor to restart several times over, scaled to the
-        // floor asked for: a short control that never settles should say so in
-        // about a second rather than block a desktop for the default's six and
-        // three quarters. Never below the floor it has to contain, never above
-        // the default. Computed once, because the refusal cap below is derived
-        // from it and two copies of this arithmetic could drift into breaking
-        // the invariant between them with nothing to catch it.
+        // Room for several floor restarts, so a short run that never settles
+        // ends quickly. Clamped between 24 and the default. The refusal cap
+        // below is derived from this.
         let max_floor_asks = floor_samples.saturating_mul(8).clamp(24, MAX_FLOOR_ASKS);
         let budget = Self {
             rounds,
             floor_samples,
             max_floor_asks,
-            // Kept under `max_floor_asks`, which is the condition that lets a
-            // probe refusing from the first ask reach its own cap first and so
-            // be reported as the probe. The `- 1` cannot underflow: the clamp
-            // above has a floor of 24.
+            // Below `max_floor_asks`, so a probe refusing from the start hits
+            // its own cap first. Cannot underflow: the clamp above is >= 24.
             max_refusals_running: MAX_REFUSALS_RUNNING.min(max_floor_asks - 1),
             max_polls: u32::try_from(max_polls).ok()?,
         };
         budget.usable().then_some(budget)
     }
 
-    /// Whether a run built on this could measure anything.
+    /// Whether a run with this budget can measure anything.
     ///
-    /// Each condition is one that silently disabled something when it did not
-    /// hold: a floor of one sample prices the probe against nothing; a floor
-    /// budget no larger than the floor cannot let one complete; a refusal cap
-    /// at or above the floor's budget means a probe refusing from the first
-    /// ask is reported as a screen that would not hold still; and no rounds or
-    /// no polls measure nothing at all.
+    /// Requires at least one round and poll, a floor of at least two samples,
+    /// a floor budget larger than the floor, and a refusal cap below the floor
+    /// budget (so a dead probe is reported as such).
     ///
-    /// A question rather than an assertion so a caller reading an environment
-    /// can refuse a run instead of panicking a desktop. [`Latency::new`] is
-    /// the one that panics, because by then it is a bug rather than a typo.
+    /// A check rather than an assertion so a caller parsing the environment
+    /// can reject a run. [`Latency::new`] panics instead.
     fn usable(&self) -> bool {
         self.rounds > 0
             && self.floor_samples > 1
@@ -550,9 +351,7 @@ impl Budget {
 }
 
 impl Default for Budget {
-    /// What a real run takes. Sixty of each, which is what `css_parity.cc`
-    /// takes, so a median here is over the same size of run as the
-    /// producer-side one it is read beside.
+    /// The budget for a real run.
     fn default() -> Self {
         Self {
             rounds: ROUNDS,
@@ -568,19 +367,13 @@ impl Default for Budget {
 #[derive(Debug)]
 pub struct Latency {
     budget: Budget,
-    /// One display frame, which is the unit [`MAX_WAIT_FRAMES`] is counted in.
+    /// One display frame, the unit for [`MAX_WAIT_FRAMES`].
     ///
-    /// Taken rather than assumed here, because what a display frame is belongs
-    /// to whoever is driving the display: the compositor advertises it and
-    /// divides every reported spread by it, and a bound expressed in frames
-    /// that used a different frame from the report beside it would be a
-    /// millisecond threshold wearing the word.
+    /// Passed in so the bound uses the same frame the report divides by.
     frame: Duration,
     phase: Phase,
     round: usize,
-    /// The last color the probe answered with, which is what the next round
-    /// watches for a change from. Read rather than assumed: what the client
-    /// draws between rounds is the client's business.
+    /// The probe's last color, which the next round watches for a change from.
     last: Option<u32>,
     floor: Vec<Duration>,
     key_to_commit: Vec<Duration>,
@@ -597,10 +390,7 @@ pub struct Latency {
 impl Latency {
     /// # Panics
     ///
-    /// On a budget [`Budget::usable`] rejects, which is a caller's mistake
-    /// rather than a run's outcome and is therefore loud. Asked there rather
-    /// than repeated here, because two copies of the same conditions are two
-    /// copies to drift apart.
+    /// If [`Budget::usable`] rejects `budget`.
     pub fn new(budget: Budget, frame: Duration) -> Self {
         assert!(
             budget.usable(),
@@ -633,8 +423,7 @@ impl Latency {
 
     /// What to do now.
     ///
-    /// Takes `now` because this is where the floor's clock starts: the round
-    /// trip being priced is from asking to being answered, and asking is here.
+    /// Takes `now` because the floor's round trip is timed from this ask.
     pub fn next(&mut self, now: Instant) -> Step {
         match self.phase {
             Phase::Polling { .. } => Step::Sample,
@@ -657,23 +446,14 @@ impl Latency {
             Phase::Ready => {
                 self.phase = Phase::Pressed {
                     at: now,
-                    // A completed floor is a run of answers that all agreed,
-                    // so this is a color the probe really did report and one
-                    // that was holding still when it did.
-                    // `expect` rather than a fallback: `Ready` is only ever
-                    // entered out of a completed floor, and a completed floor
-                    // has answered. A default here would be a silent one, and
-                    // the round would watch for a change from a color nobody
-                    // reported.
+                    // `Ready` is only entered from a completed floor, which has
+                    // answered with a stable color.
                     before: self.last.expect("a completed floor has answered"),
                 };
                 Step::Press
             }
-            // Watched, not waited out. A color change arriving here was
-            // caused by a frame committed before the key — nothing the client
-            // draws in answer can reach the screen before the commit this is
-            // waiting for — so the run has to see it happen, or it will credit
-            // it to whichever commit comes next. See `sampled`.
+            // Watch the probe point while waiting for the commit. A change
+            // here came from an earlier frame. See `sampled`.
             Phase::Pressed { .. } => Step::Sample,
             Phase::Done(_) => Step::Wait,
         }
@@ -691,32 +471,22 @@ impl Latency {
                 ..
             } => {
                 let asked = asked + 1;
-                // The budget is spent first, before anything can advance past
-                // it, and unconditionally. Checked after the still-arm, a run
-                // of agreeing answers could carry `taken` up regardless and the
-                // real bound became `max_floor_asks + floor_samples`. Guarded
-                // by "unless this ask would complete the floor", it was dead
-                // whenever `floor_samples <= 1` — `taken + 1 >= 1` always — and
-                // a moving screen could then ask for ever, which is the hang
-                // these budgets exist to stop. A floor that would have settled
-                // on its very last permitted ask gives up instead; that costs
-                // one run in four hundred asks and buys a bound that is simply
-                // `max_floor_asks`.
+                // Spend the budget first, unconditionally, so the bound is
+                // exactly `max_floor_asks` even with `floor_samples <= 1`.
+                // A floor that would settle on its last ask gives up instead.
                 self.phase = if asked >= self.budget.max_floor_asks {
                     Phase::Done(Ended::NeverSettled)
                 } else {
                     match (holding, since) {
-                        // The screen held still, and there is an earlier answer
-                        // to have timed this one from.
+                        // The screen held still, and an earlier answer exists
+                        // to time this one from.
                         (Some(held), Some(at)) if held == argb => {
                             self.floor.push(now.saturating_duration_since(at));
                             let taken = taken + 1;
                             if taken >= self.budget.floor_samples {
                                 Phase::Ready
                             } else {
-                                // `since` is not written here: `next` sets it
-                                // when it asks, which is the moment being timed
-                                // from.
+                                // `next` sets `since` when it asks.
                                 Phase::Floor {
                                     taken,
                                     since,
@@ -726,10 +496,9 @@ impl Latency {
                                 }
                             }
                         }
-                        // Either the first answer of all, or the screen moved.
-                        // Both start the floor from here: what was timed before
-                        // a move was timed across one, and a floor is the
-                        // probe's cost and nothing else's.
+                        // The first answer, or the screen moved. Either way,
+                        // restart: a sample timed across a move is not the
+                        // probe's cost.
                         _ => {
                             self.floor.clear();
                             Phase::Floor {
@@ -743,14 +512,11 @@ impl Latency {
                     }
                 };
             }
-            // A sample answered outside a round says nothing about one.
+            // A sample outside a round means nothing.
             Phase::Ready | Phase::Done(_) => {}
-            // The screen moved before the client answered the key, so the key
-            // is not what moved it: the only way a pixel changes here is a
-            // frame committed before the press, arriving now. The round is
-            // given up rather than left to be timed from whichever commit
-            // comes next — which is how a client that answers no keys
-            // produced a commit-to-pixel figure.
+            // The screen changed before the client answered, so the change
+            // came from an earlier frame. Drop the round instead of timing it
+            // from the next commit.
             Phase::Pressed { before, .. } => {
                 if argb != before {
                     self.moved_before_commit += 1;
@@ -787,28 +553,23 @@ impl Latency {
 
     /// The client this run is watching committed a frame.
     ///
-    /// Ignored outside a round, which is most commits: a client redraws
-    /// unprompted and the floor must not be interrupted by one. (What a
-    /// self-repainting client *does* interrupt is the floor's stillness, which
-    /// is `Ended::NeverSettled`'s job and not this one's.)
+    /// Ignored outside a round: a client redraws unprompted, and the floor
+    /// handles a self-repainting screen ([`Ended::NeverSettled`]).
     pub fn committed(&mut self, now: Instant) {
         match self.phase {
             Phase::Pressed { at, before } => {
                 let waited = now.saturating_duration_since(at);
-                // Tested where the commit arrives rather than at a deadline
-                // the wait crosses, so the round that was offered this commit
-                // is the one that gives it up: given up at a deadline instead,
-                // the commit would arrive on the *next* round, early enough to
-                // look like its answer.
+                // Checked when the commit arrives, not at a deadline. Otherwise
+                // the late commit would land in the next round looking like
+                // its answer.
                 if waited > self.frame * MAX_WAIT_FRAMES {
                     self.answered_too_late += 1;
                     self.end_round();
                 } else if waited < self.frame / MIN_WAIT_FRAME_SHARE {
-                    // Passed over, and the round stays open: the key went in,
-                    // so its answer is still coming. Ending the round here
-                    // pressed the next key while this one was unanswered, and
-                    // a client drawing both at once drew no change at all —
-                    // the next round was then reported abandoned.
+                    // Skip it and keep the round open: the key's answer is
+                    // still coming. Ending the round would press the next key
+                    // early, and a client that draws both in one frame shows no
+                    // change.
                     self.answered_too_soon += 1;
                 } else {
                     self.key_to_commit.push(waited);
@@ -820,35 +581,24 @@ impl Latency {
                     };
                 }
             }
-            // A second frame for the same key. Counted, not acted on: see
-            // `Report::redrew_while_polling` for why the clock is not moved to
-            // it. Reachable only since the run stopped holding the thread it
-            // would have to arrive on.
+            // A second frame for the same key. Counted only; see
+            // `Report::redrew_while_polling`.
             Phase::Polling { .. } => self.redrew_while_polling += 1,
             Phase::Floor { .. } | Phase::Ready | Phase::Done(_) => {}
         }
     }
 
-    /// The probe could not read the window at all.
+    /// The probe could not read the window.
     ///
-    /// Distinct from "the color has not changed": that is a reading, this is
-    /// the absence of one. `spike_pixel` answers `None` for a missing symbol,
-    /// a point outside the window, and a window the browser has not
-    /// composited yet — and the driver funnels a browser it has no connection
-    /// to into here as well. **Nothing here can tell them apart**, so the
-    /// floor survives all four for a bounded run of them and then calls it:
-    /// only the third resolves on its own, and it resolves within a frame or
-    /// two of the page drawing, so a probe still refusing after
-    /// `max_refusals_running` in a row is one of the three that never will.
+    /// `spike_pixel` returns `None` for a missing symbol, a point outside the
+    /// window, or a window not composited yet; the driver also reports a
+    /// missing engine connection here. Only the third clears on its own,
+    /// within a frame or two, so the floor tolerates `max_refusals_running`
+    /// refusals in a row.
     ///
-    /// It restarts the floor rather than merely spending an ask, because the
-    /// floor's whole claim is a run of consecutive answers that all agreed,
-    /// and a refusal punches a hole in exactly that. Once rounds are running
-    /// there is nothing to wait for: every number is a difference between two
-    /// probe answers, and one with a hole in it measures the hole.
-    ///
-    /// Either way this is the *probe's* failure, never the client's, so it
-    /// lands in `ended` and not in `abandoned`.
+    /// A refusal restarts the floor, which must be consecutive matching
+    /// answers. During a round it ends the run. Either way it is the probe's
+    /// failure, so it goes in `ended`, not `abandoned`.
     pub fn unreadable(&mut self) {
         self.phase = match self.phase {
             Phase::Floor {
@@ -857,25 +607,18 @@ impl Latency {
                 refused,
                 ..
             } => {
-                // Which budget ran out is which end failed, and the two are
-                // counted separately for exactly that reason. The floor's own
-                // budget is asked first, so a refusal that happens to spend the
-                // last of it is the screen — what that budget measures is a
-                // floor that never completed, whatever the last ask was. Only a
-                // run of refusals with the floor's budget still in hand is the
-                // probe, and `Budget` requires `max_refusals_running` to be the
-                // smaller of the two so that a probe refusing from the start
-                // always reaches its own cap first.
+                // The floor budget is checked first: if a refusal spends it,
+                // the floor never completed, so the screen is reported.
+                // `Budget` keeps `max_refusals_running` smaller, so a probe
+                // refusing from the start hits its own cap first.
                 if asked + 1 >= self.budget.max_floor_asks {
                     Phase::Done(Ended::NeverSettled)
                 } else if refused + 1 >= self.budget.max_refusals_running {
                     Phase::Done(Ended::ProbeWentDark)
                 } else {
-                    // Cleared, as the moved-screen restart clears: a refusal is
-                    // not an answer, so what was timed before it is a run of
-                    // answers with a hole in it. Left populated, a run that
-                    // ends in refusals reports a real-looking floor over one or
-                    // two samples, and `lib-latency.sh` reads it as the floor.
+                    // Clear the samples, as for a moved screen. Otherwise a
+                    // run ending in refusals reports a floor of one or two
+                    // samples, and `lib-latency.sh` reads it as real.
                     self.floor.clear();
                     Phase::Floor {
                         taken: 0,
@@ -890,26 +633,18 @@ impl Latency {
         };
     }
 
-    /// A round's key could not be delivered, because the client has no surface
-    /// to deliver it to.
+    /// Gives up a round whose key had no surface to go to.
     ///
-    /// **Called, rather than left to time out, because nothing would.** `next`
-    /// has already moved the run into `Pressed`, and the only way out of
-    /// `Pressed` is a commit — which is what the key was for. A client that
-    /// does not redraw on its own would leave the run there for ever and no
-    /// report would ever be printed, which is the shape of the bug this whole
-    /// file has been fixing.
-    ///
-    /// Counted as `undelivered` rather than `abandoned`: the client was never
-    /// asked. Only ever called out of the `Press` arm, so the phase is
-    /// `Pressed` and there is nothing to check for.
+    /// Without this the run would stay in `Pressed` forever, since only a
+    /// commit leaves it. Counted as `undelivered`, not `abandoned`. Called only
+    /// after `Step::Press`.
     pub fn press_went_nowhere(&mut self) {
         self.undelivered += 1;
         self.end_round();
     }
 
-    /// The run's numbers, and how it ended. `None` while it is still running:
-    /// a median over a third of a run is a number somebody will quote.
+    /// The run's results, or `None` while it is still running, so a partial
+    /// median is never reported.
     pub fn report(&self) -> Option<Report> {
         let Phase::Done(ended) = self.phase else {
             return None;
@@ -949,8 +684,8 @@ mod tests {
         Duration::from_millis(count)
     }
 
-    /// Drives a run the way the compositor does: ask, answer, ask again. The
-    /// clock is ours, so every number below is exact rather than approximate.
+    /// Drives a run like the compositor does, on a controlled clock so every
+    /// number is exact.
     struct Driver {
         latency: Latency,
         now: Instant,
@@ -989,14 +724,12 @@ mod tests {
             self.latency.sampled(self.now, color);
         }
 
-        /// Take a whole floor at one color, leaving the run one tick away
-        /// from its first press. Every test below starts from here because
-        /// every real run does.
+        /// Takes a whole floor at one color, leaving the run one tick from its
+        /// first press.
         ///
-        /// A fixed count rather than a loop on `Step::Press`, because `next`
-        /// *is* the press: a helper that looked for one would consume the
-        /// round it was setting up. One priming answer, which has no earlier
-        /// answer to be timed from, then the floor itself.
+        /// Counts samples instead of looping until `Step::Press`, because
+        /// `next` returning `Press` starts the round. One untimed priming
+        /// answer, then the floor.
         fn reach_first_press(&mut self, floor_cost: Duration) {
             for _ in 0..=self.floor_samples {
                 assert_eq!(self.tick(ms(0)), Step::Sample);
@@ -1004,7 +737,7 @@ mod tests {
             }
         }
 
-        /// One whole round: press, the client answers after `think`, the pixel
+        /// One round: press, the client commits after `think`, the pixel
         /// changes after `draw`.
         fn round(&mut self, think: Duration, draw: Duration) {
             assert_eq!(self.tick(ms(0)), Step::Press);
@@ -1018,24 +751,21 @@ mod tests {
         }
     }
 
-    /// The three a caller changes, and nothing else. A short control is the
-    /// only reason this exists, so the cases that matter are a short one being
-    /// accepted and a useless one being refused rather than quietly replaced.
+    /// Only the three caller-facing numbers are parsed.
     #[test]
     fn a_budget_is_three_numbers_and_the_rest_is_not_a_callers_business() {
         let short = Budget::parse("3,4,5").unwrap();
         assert_eq!(short.rounds, 3);
         assert_eq!(short.floor_samples, 4);
         assert_eq!(short.max_polls, 5);
-        // Scaled to the floor, and still large enough to contain it.
+        // Scaled to the floor, and still larger than it.
         assert!(short.max_floor_asks > short.floor_samples);
         assert!(short.max_refusals_running < short.max_floor_asks);
         assert!(short.usable());
     }
 
-    /// Refused rather than clamped or defaulted: a caller who asked for a run
-    /// of no rounds asked for something, and quietly handing them sixty is how
-    /// a control meant to be short becomes a four-minute one nobody notices.
+    /// Rejected, not clamped, so a short control is never silently replaced
+    /// by a 60-round run.
     #[test]
     fn a_budget_that_could_not_measure_anything_is_refused() {
         for raw in [
@@ -1066,9 +796,8 @@ mod tests {
         assert_eq!(spread.max, ms(40));
     }
 
-    /// `lib-latency.sh` greps this. Asserted whole rather than by substring,
-    /// for the reason `test-annotate.sh` asserts whole lines: a rewording that
-    /// keeps the words but moves them is exactly what breaks a grep.
+    /// `lib-latency.sh` parses this. Asserted as a whole line, since a
+    /// reworded line breaks the parser.
     #[test]
     fn a_spread_reports_itself_in_the_shape_the_guard_reads() {
         let spread = Spread::of(&[ms(16), ms(17), ms(50)]).unwrap();
@@ -1082,8 +811,8 @@ mod tests {
         );
     }
 
-    /// A display nobody reported a refresh for gets a `?` rather than a
-    /// number, because "0.0 frames" would read as a measurement.
+    /// No refresh rate gives `?`, since "0.0 frames" would read as a
+    /// measurement.
     #[test]
     fn a_spread_with_no_interval_says_so_rather_than_reporting_zero() {
         let spread = Spread::of(&[ms(16)]).unwrap();
@@ -1098,18 +827,16 @@ mod tests {
         assert!((frames - 1.98).abs() < 0.01, "{frames}");
     }
 
-    /// A display nobody reported a refresh for is not a run that took no time.
+    /// No refresh rate gives no frame count.
     #[test]
     fn frames_over_no_interval_are_not_reported() {
         let spread = Spread::of(&[ms(16)]).unwrap();
         assert_eq!(spread.median_frames(Duration::ZERO), None);
     }
 
-    /// The floor waits out a page that is still painting itself, because it
-    /// refuses to complete until its whole run of answers agreed. Without
-    /// that, round one would take its "before" color from a screen that was
-    /// going to change on its own — and would report the page's own settling
-    /// as a keystroke's answer, fast and in the flattering direction.
+    /// The floor waits for a page that is still painting. Otherwise round one
+    /// would take its starting color from a changing screen and report the
+    /// page's own repaint as a fast answer.
     #[test]
     fn a_page_still_painting_itself_is_waited_out_rather_than_measured() {
         let mut driver = Driver::of(Budget {
@@ -1131,7 +858,7 @@ mod tests {
             "it must still be flooring"
         );
         assert_eq!(driver.latency.report(), None);
-        // And then it settles, and the floor is the settled screen's.
+        // Then it settles, and the floor uses the settled screen.
         driver.color = 0xFF77_7777;
         driver.reach_first_press(ms(17));
         driver.round(ms(5), ms(16));
@@ -1140,10 +867,8 @@ mod tests {
         assert_eq!(report.floor.unwrap().max, ms(17));
     }
 
-    /// A screen that NEVER holds still has to end the run, because the driver
-    /// blocks the Wayland thread on every ask. Without a budget here the
-    /// desktop stops serving clients for as long as a cursor keeps blinking
-    /// over the probe point — which is the client this instrument expects.
+    /// A screen that never holds still must end the run, since the driver
+    /// blocks the Wayland thread on every ask.
     #[test]
     fn a_screen_that_never_settles_gives_up_instead_of_asking_for_ever() {
         let mut driver = Driver::of(Budget {
@@ -1168,9 +893,8 @@ mod tests {
         assert_eq!(report.abandoned, 0, "the client is not what failed here");
     }
 
-    /// The first commit is exactly when the page may not have drawn the <app>
-    /// yet, so one refusal during the floor must not end the run — it would
-    /// end most runs before they started.
+    /// The page may not have drawn the `<app>` yet at the first commit, so one
+    /// refusal during the floor must not end the run.
     #[test]
     fn a_probe_that_refuses_during_the_floor_is_waited_through() {
         let mut driver = Driver::new(1, 3, 10);
@@ -1185,9 +909,8 @@ mod tests {
         assert_eq!(report.commit_to_pixel.unwrap().median, ms(16));
     }
 
-    /// A probe that refuses for ever is the floor's other way to hang the
-    /// desktop: `sampled` is never reached, so the budget has to be spent from
-    /// here too or nothing ever ends the run.
+    /// A probe that always refuses never reaches `sampled`, so `unreadable`
+    /// must spend the budget too.
     #[test]
     fn a_probe_that_refuses_for_ever_gives_up_rather_than_asking_for_ever() {
         let mut driver = Driver::of(Budget {
@@ -1207,9 +930,8 @@ mod tests {
         assert_eq!(report.floor, None);
     }
 
-    /// Once rounds are running there is nothing to wait for: every number is a
-    /// difference between two probe answers. This is the arm the driver
-    /// actually hits, since `unreadable` is called from inside the poll loop.
+    /// During a round, a refusal ends the run. This is the common case, since
+    /// the driver calls `unreadable` from the poll loop.
     #[test]
     fn a_probe_that_goes_dark_mid_poll_ends_the_run_as_the_probes_fault() {
         let mut driver = Driver::new(10, 3, 10);
@@ -1226,17 +948,14 @@ mod tests {
         assert_eq!(report.commit_to_pixel, None);
     }
 
-    /// Every round watches for a change from what the probe last answered, so
-    /// the last answer has to be kept in every phase. Kept only during the
-    /// floor, round two would watch for a change from a stale color and
-    /// complete on its first poll — a fabricated fast number.
+    /// The last color is kept across rounds. Otherwise round two would compare
+    /// against a stale color and finish on its first poll.
     #[test]
     fn each_round_watches_for_a_change_from_the_previous_rounds_color() {
         let mut driver = Driver::new(2, 3, 10);
         driver.reach_first_press(ms(17));
         driver.round(ms(5), ms(16));
-        // Round two's press, then a poll answering round one's color: that is
-        // no change, and must be waited through rather than counted.
+        // Round two's poll returns round one's color: no change yet.
         assert_eq!(driver.tick(ms(0)), Step::Press);
         driver.now += ms(5);
         driver.latency.committed(driver.now);
@@ -1252,33 +971,23 @@ mod tests {
         assert_eq!(report.commit_to_pixel.unwrap().max, ms(33));
     }
 
-    /// THE NEGATIVE CONTROL'S FAILURE, and the defect behind it. A round is
-    /// started by the client's next commit, and a client that answers no keys
-    /// still commits — the control's prints a dot every fifth of a second. So
-    /// the wait between the press and that commit can be long, and a color
-    /// change that arrives during it was caused by a frame the key had
-    /// nothing to do with: it was committed before the key went in.
+    /// A color change before the commit is not the keystroke's answer.
     ///
-    /// Nothing watched the probe point through that wait, so the first poll
-    /// after the commit found a color that had already changed and credited
-    /// it to the keystroke. That is a commit-to-pixel figure out of a client
-    /// that answered nothing — which is what the control saw, and it was
-    /// right to.
+    /// The control's client answers no keys but commits every 200 ms. A change
+    /// during the wait came from a frame committed before the key.
     #[test]
     fn a_color_that_changed_before_the_commit_is_not_the_keystrokes_answer() {
         let mut driver = Driver::new(1, 3, 10);
         driver.reach_first_press(ms(17));
         assert_eq!(driver.tick(ms(0)), Step::Press);
 
-        // A frame the key did not cause reaches the screen while the run is
-        // still waiting for the client to answer.
+        // A frame the key did not cause reaches the screen during the wait.
         assert_eq!(driver.tick(ms(1)), Step::Sample, "the wait is watched");
         driver.color = 0xFF44_4444;
         driver.answer(ms(17));
 
-        // The client commits much later, for its own reasons, and the run
-        // keeps being driven: the first poll would find the color it was
-        // already showing, and price the whole of that wait as a keystroke.
+        // The client commits much later. The first poll would see the changed
+        // color and time the whole wait as the answer.
         driver.now += ms(1180);
         driver.latency.committed(driver.now);
         driver.tick(ms(0));
@@ -1300,9 +1009,10 @@ mod tests {
         assert_eq!(report.abandoned, 0, "the client was not what failed here");
     }
 
-    /// THE NEGATIVE CONTROL'S SECOND FAILURE, and the hole the check above
-    /// does not cover. Engine run 35670079403, the control's round that
-    /// produced a figure out of a client answering nothing:
+    /// A commit 55 frames after the key is not its answer.
+    ///
+    /// From `Engine` run 35670079403, where the control's client (which
+    /// answers no keys) produced:
     ///
     /// ```text
     ///   key to commit    max 914.87 ms
@@ -1311,13 +1021,9 @@ mod tests {
     ///   0 moved before the client answered
     /// ```
     ///
-    /// The probe point held still through the whole wait, so nothing moved
-    /// before the commit and the check above never fired. What arrived was one
-    /// of the control client's periodic dots, committing 914.87 ms — 55
-    /// display frames — after the key, with its pixels a frame behind it. The
-    /// order is `key -> commit -> pixel` and every number is positive; the
-    /// only thing wrong with the round is that no client answers a keystroke
-    /// 55 frames later. The positive guard's worst round over sixty was 2.6.
+    /// The probe point held still, so the check above did not fire. The order
+    /// and every number look valid; only the delay shows it is a periodic
+    /// redraw.
     #[test]
     fn a_commit_tens_of_frames_after_the_key_is_not_its_answer() {
         let mut driver = Driver::new(1, 3, 10);
@@ -1325,15 +1031,15 @@ mod tests {
         assert_eq!(driver.tick(ms(0)), Step::Press);
         let keyed = driver.now;
 
-        // The wait is watched and the probe point holds still through it: the
-        // control's dots go to the top-left and the probe watches the center.
+        // The probe point holds still: the control draws at the top left and
+        // the probe watches the center.
         for _ in 0..8 {
             assert_eq!(driver.tick(ms(0)), Step::Sample);
             driver.answer(ms(17));
         }
 
-        // A dot commits, most of a second after the key, and its pixels reach
-        // the screen one display frame behind it.
+        // A redraw commits most of a second after the key, and its pixels
+        // follow one frame later.
         driver.now = keyed + ms(915);
         driver.latency.committed(driver.now);
         driver.tick(ms(0));
@@ -1364,13 +1070,8 @@ mod tests {
         assert_eq!(report.abandoned, 0, "the round never got as far as polling");
     }
 
-    /// The other side of the bound, and what stops it being a tighter guard
-    /// than the thing it guards. The worst press-to-commit measured against a
-    /// client that answers keys is 44.76 ms over 180 rounds — 2.69 frames
-    /// against a 16.67 ms frame — so a round that slow is a real client
-    /// thinking and must still be measured. This is the whole of the headroom
-    /// [`MAX_WAIT_FRAMES`] leaves, and the reason it cannot be tightened
-    /// further to chase the strays that sit under it.
+    /// The worst real answer measured (44.76 ms, 2.69 frames) must still be
+    /// accepted. This is the headroom [`MAX_WAIT_FRAMES`] leaves.
     #[test]
     fn a_commit_a_few_frames_after_the_key_is_still_its_answer() {
         let worst = Duration::from_micros(44_760);
@@ -1387,11 +1088,9 @@ mod tests {
         );
     }
 
-    /// Engine run 35681982140, on `main` at `a00aa00`, and the reason the
-    /// bound above is not the separator it was written as. The control's
-    /// client answers no keys and redraws on its own; one of those redraws
-    /// committed 121.95 ms after a key — 7.3 display frames, inside a bound of
-    /// eight — and its pixels followed 38.02 ms later:
+    /// A commit 7.3 frames after the key is not its answer.
+    ///
+    /// From `Engine` run 35681982140, where the control's client produced:
     ///
     /// ```text
     ///   key to commit    min 0.82, median 121.95, max 121.95 ms over 2
@@ -1399,10 +1098,6 @@ mod tests {
     ///   key to pixel        159.97 ms over 1  (9.6 frames)
     ///   0 answered too late
     /// ```
-    ///
-    /// Every number is positive and in the right order, so nothing else here
-    /// catches it, and the control was handed a commit-to-pixel figure out of
-    /// a client that answered nothing.
     #[test]
     fn a_commit_seven_frames_after_the_key_is_not_its_answer() {
         let mut driver = Driver::new(1, 3, 10);
@@ -1410,8 +1105,8 @@ mod tests {
         assert_eq!(driver.tick(ms(0)), Step::Press);
         let keyed = driver.now;
 
-        // The probe point holds still through the wait, as it did there: the
-        // control's dots go to the top-left and the probe watches the center.
+        // The probe point holds still: the control draws at the top left and
+        // the probe watches the center.
         for _ in 0..6 {
             assert_eq!(driver.tick(ms(0)), Step::Sample);
             driver.answer(ms(17));
@@ -1438,18 +1133,13 @@ mod tests {
         );
     }
 
-    /// The near end of the same wait, from the same run's report: a commit
-    /// 0.82 ms after the key. The clock starts before the key is delivered, so
-    /// a commit this fast is the compositor's own dispatch, the client waking,
-    /// a repaint and a commit inside one millisecond — which no toolkit does.
-    /// The fastest press-to-commit ever measured against a client that *does*
-    /// answer is 15.93 ms.
+    /// A commit 0.82 ms after the key is skipped, and the round waits for the
+    /// real answer.
     ///
-    /// **Passed over, and the round keeps waiting for the key's answer.** The
-    /// key went in, so its answer is still coming. Engine run 36758359911
-    /// ended the round here instead and pressed the next key before kitty had
-    /// drawn this one: both flips landed in one frame, the color came back
-    /// where it started, and the next round was reported abandoned.
+    /// No client can wake, repaint and commit in under a millisecond; the
+    /// fastest real answer is 15.93 ms. Ending the round instead (as in
+    /// `Engine` run 36758359911) pressed the next key early; both changes
+    /// landed in one frame and the next round was reported abandoned:
     ///
     /// ```text
     ///   key to commit    over 59
@@ -1520,8 +1210,8 @@ mod tests {
         assert_eq!(report.commit_to_pixel.unwrap().count, 3);
     }
 
-    /// The color not having changed yet is the normal answer for a poll or
-    /// two — each one is a display frame — so it must not end the round.
+    /// An unchanged color is normal for a poll or two, so it does not end the
+    /// round.
     #[test]
     fn a_color_that_has_not_changed_yet_is_waited_through() {
         let mut driver = Driver::new(1, 3, 10);
@@ -1543,15 +1233,8 @@ mod tests {
         assert_eq!(report.abandoned, 0);
     }
 
-    /// A client that stops drawing must end the run with the round counted,
-    /// not leave the guard polling for ever.
-    /// A second frame for one key is counted, and does not disturb the round.
-    ///
-    /// It was unreachable until the run stopped holding the compositor's one
-    /// thread: the commit could not arrive, because the loop waiting for its
-    /// pixels was the reason nothing was serving the client. Now that it can,
-    /// what it must not do is restart anything — the round is already timed,
-    /// and a second `key_to_commit` sample would price one keystroke twice.
+    /// A second frame for one key is counted and does not restart the round,
+    /// which would sample one keystroke twice.
     #[test]
     fn a_second_frame_for_one_key_is_counted_and_changes_nothing_else() {
         let mut driver = Driver::new(1, 3, 8);
@@ -1592,10 +1275,8 @@ mod tests {
         );
     }
 
-    /// A run nobody redrew during reports zero rather than nothing.
-    ///
-    /// The count qualifies `commit to pixel`, so its absence must never be
-    /// readable as its being fine.
+    /// A run with no redraws reports zero, not nothing, since the count
+    /// qualifies `commit to pixel`.
     #[test]
     fn a_run_the_client_answered_in_one_frame_says_so() {
         let mut driver = Driver::new(1, 3, 8);
@@ -1628,9 +1309,8 @@ mod tests {
         assert_eq!(report.key_to_commit.unwrap().count, 1);
     }
 
-    /// The two give-up reasons blame opposite ends, so neither may be decided
-    /// by whichever kind of ask happened to spend the last of a shared budget.
-    /// A screen that moves and then one refusal is a moving screen.
+    /// The end reason must not depend on which kind of ask spent a shared
+    /// budget. A moving screen followed by one refusal is a moving screen.
     #[test]
     fn a_moving_screen_with_one_refusal_in_it_is_still_a_moving_screen() {
         let mut driver = Driver::of(Budget {
@@ -1652,10 +1332,8 @@ mod tests {
         assert_eq!(report.ended, Ended::NeverSettled);
     }
 
-    /// The refusal counter is a run of them, so an answer clears it. Without
-    /// that, a screen that moves with the odd refusal in it accumulates
-    /// refusals across the whole floor and is reported as a dark probe — which
-    /// is the wrong-end report this counter was split out to prevent.
+    /// An answer resets the refusal count. Otherwise scattered refusals on a
+    /// moving screen would add up and report a dark probe.
     #[test]
     fn an_answer_clears_the_refusals_before_it() {
         let mut driver = Driver::of(Budget {
@@ -1665,8 +1343,8 @@ mod tests {
             max_refusals_running: 3,
             max_polls: 10,
         });
-        // Two refusals, an answer, two more, an answer — six refusals in all,
-        // twice the cap, and never three running.
+        // Two refusals, an answer, repeated: six refusals in all, twice the
+        // cap, never three in a row.
         for _ in 0..4 {
             for _ in 0..2 {
                 assert_eq!(driver.tick(ms(0)), Step::Sample);
@@ -1676,8 +1354,8 @@ mod tests {
             driver.answer(ms(17));
             assert_eq!(driver.latency.report(), None, "no run of three refusals");
         }
-        // The last answer above already primed the floor, so three timed ones
-        // complete it rather than the four `reach_first_press` spends.
+        // The last answer above primed the floor, so three timed answers
+        // complete it.
         for _ in 0..3 {
             assert_eq!(driver.tick(ms(0)), Step::Sample);
             driver.answer(ms(17));
@@ -1686,9 +1364,8 @@ mod tests {
         assert_eq!(driver.latency.report().unwrap().ended, Ended::Completed);
     }
 
-    /// When both caps land on the same refusal the floor's is the answer, for
-    /// the reason the floor's budget exists: what it measures is a floor that
-    /// never completed, whatever the last ask happened to be.
+    /// When both caps are reached on the same refusal, the floor's wins: the
+    /// floor never completed.
     #[test]
     fn a_refusal_that_spends_the_floors_budget_is_the_screen_not_the_probe() {
         let mut driver = Driver::of(Budget {
@@ -1699,7 +1376,7 @@ mod tests {
             max_polls: 10,
         });
         // Four refusals: the fourth is both the fourth in a row and the fifth
-        // ask of five, since one answer went before them.
+        // ask of five, after one answer.
         assert_eq!(driver.tick(ms(0)), Step::Sample);
         driver.answer(ms(17));
         for _ in 0..4 {
@@ -1709,9 +1386,8 @@ mod tests {
         assert_eq!(driver.latency.report().unwrap().ended, Ended::NeverSettled);
     }
 
-    /// A run that ends in refusals must not report the samples it took before
-    /// them as a floor: nothing completed, and `lib-latency.sh` would read a
-    /// one-sample "floor" as the number every threshold is against.
+    /// A run ending in refusals reports no floor. `lib-latency.sh` would read
+    /// a partial floor as real.
     #[test]
     fn a_run_that_ends_in_refusals_reports_no_floor_at_all() {
         let mut driver = Driver::of(Budget {
@@ -1734,8 +1410,8 @@ mod tests {
         assert_eq!(report.floor, None, "two timed samples are not a floor");
     }
 
-    /// A refusal is not an answer, so it cannot sit in the middle of the run
-    /// of agreeing answers the floor's whole claim rests on. It restarts it.
+    /// A refusal restarts the floor, which must be consecutive matching
+    /// answers.
     #[test]
     fn a_refusal_restarts_the_floor_rather_than_leaving_a_hole_in_it() {
         let mut driver = Driver::new(1, 3, 10);
@@ -1743,13 +1419,12 @@ mod tests {
             assert_eq!(driver.tick(ms(0)), Step::Sample);
             driver.answer(ms(17));
         }
-        // Two of the three floor samples are in. A refusal now, and the floor
-        // owes a whole fresh run rather than one more sample.
+        // Two of three floor samples are in, then a refusal.
         assert_eq!(driver.tick(ms(0)), Step::Sample);
         driver.latency.unreadable();
 
-        // A whole fresh floor is owed — a priming answer and three timed ones,
-        // which is what `reach_first_press` spends — not one more sample.
+        // A whole fresh floor is needed: a priming answer and three timed ones,
+        // as `reach_first_press` does.
         driver.reach_first_press(ms(17));
         driver.round(ms(5), ms(16));
         let report = driver.latency.report().unwrap();
@@ -1757,9 +1432,7 @@ mod tests {
         assert_eq!(report.floor.unwrap().count, 3);
     }
 
-    /// A key that could not be delivered leaves the round started and nothing
-    /// able to finish it: the only way out is a commit answering the key. The
-    /// round is given up rather than waited on for ever.
+    /// An undelivered key ends its round, since no commit will.
     #[test]
     fn a_press_that_went_nowhere_gives_the_round_up() {
         let mut driver = Driver::new(2, 3, 10);
@@ -1767,7 +1440,7 @@ mod tests {
         assert_eq!(driver.tick(ms(0)), Step::Press);
         driver.latency.press_went_nowhere();
 
-        // Straight on to the next round rather than stuck.
+        // On to the next round.
         assert_eq!(driver.tick(ms(0)), Step::Press);
         driver.latency.press_went_nowhere();
 
@@ -1778,8 +1451,8 @@ mod tests {
         assert_eq!(report.commit_to_pixel, None);
     }
 
-    /// A commit with no key behind it is a blinking cursor, and timing to one
-    /// would report the blink interval as the client's think time.
+    /// A commit with no key behind it, such as a blinking cursor, is not
+    /// timed.
     #[test]
     fn a_commit_outside_a_round_is_not_an_answer_to_anything() {
         let mut driver = Driver::new(1, 3, 10);
@@ -1794,13 +1467,11 @@ mod tests {
         assert_eq!(report.key_to_commit.unwrap().median, ms(5));
     }
 
-    /// The floor is the probe's cost and nothing else's, so a screen that
-    /// moves partway through invalidates what was timed rather than being
-    /// averaged into it.
+    /// A screen that moves during the floor discards the samples taken so far.
     #[test]
     fn a_screen_that_moves_during_the_floor_throws_the_floor_away() {
         let mut driver = Driver::new(1, 3, 10);
-        // Prime, then two good samples, then one timed across a move.
+        // Prime, two good samples, then one timed across a move.
         for _ in 0..3 {
             assert_eq!(driver.tick(ms(0)), Step::Sample);
             driver.answer(ms(17));
@@ -1811,8 +1482,8 @@ mod tests {
         let moved = driver.color;
         driver.latency.sampled(driver.now, moved);
 
-        // That move re-primed the floor, so a whole clean one is still owed —
-        // and the 99 is not in it.
+        // The move re-primed the floor, so a whole new one is needed, without
+        // the 99 ms sample.
         for _ in 0..3 {
             assert_eq!(driver.tick(ms(0)), Step::Sample);
             driver.answer(ms(17));
@@ -1823,13 +1494,10 @@ mod tests {
         assert_eq!(floor.max, ms(17), "the sample across the move survived");
     }
 
-    /// Nothing advances without the driver, so a driver that stops answering
-    /// stops the run rather than filling it with samples nobody took.
+    /// A press with no commit leaves the run waiting.
     ///
-    /// What it asks for while it waits is the probe point — a change there
-    /// before the client's answer is not the client's — and an answer that
-    /// agrees with the color the round is watching for is not a change. It
-    /// must leave the round exactly where it was rather than spend it.
+    /// Samples during the wait that match the starting color do not change
+    /// the round's state.
     #[test]
     fn a_press_that_is_never_answered_leaves_the_run_waiting() {
         let mut driver = Driver::new(1, 3, 10);

@@ -1,22 +1,14 @@
-//! The desk's sound: this compositor reads the sound server for the shell's
-//! mixer and asks it what the mixer asks.
+//! Reads the sound server for the shell's mixer and runs the mixer's requests.
 //!
-//! **`pactl`, in a process.** What it says and how it is asked are
-//! `domicile_host::audio`, which is pure and tested there; this is running it.
-//! Linking libpulse would break the promise in this crate's `Cargo.toml`, and
-//! `pactl` speaks to PulseAudio and to PipeWire's `pipewire-pulse` alike.
-//! `DOMICILE_PACTL` names it — the flake's wrapper points it at a `pactl` of
-//! its own — and `pactl` on the `PATH` otherwise.
+//! Runs `pactl` as a subprocess instead of linking libpulse, so the binary
+//! links nothing extra; `pactl` works with PulseAudio and `pipewire-pulse`.
+//! `DOMICILE_PACTL` overrides the binary. Parsing and request building live in
+//! `domicile_host::audio`.
 //!
-//! **Two threads.** One holds `pactl -f json subscribe` open and reads the
-//! server again each time it says something a mixer draws moved, waiting for a
-//! burst to settle first: a slider dragged is a volume event per step. A
-//! subscription that ends — the server restarted — is opened again. The other
-//! runs the mixer's requests in turn, dropping the volumes a drag overtook.
-//!
-//! **Nothing here can take the desktop down**, for [`crate::tray`]'s reason: a
-//! desk with no sound server, or no `pactl`, has no mixer, and the log says why
-//! once.
+//! One thread holds `pactl subscribe` open and rereads the server after each
+//! burst of changes settles, reopening the subscription if it ends. Another
+//! runs requests, dropping volume changes a later one supersedes. Without a
+//! sound server the mixer is empty and the log says why once.
 
 use std::ffi::OsString;
 use std::io::{BufRead, BufReader};
@@ -28,14 +20,14 @@ use std::time::Duration;
 use domicile_host::audio::{announces_a_change, coalesce, reading, Audio, Request};
 use tracing::{debug, warn};
 
-/// How long the server has to be quiet before it is read again.
+/// How long the server must be quiet before it is reread.
 const SETTLE: Duration = Duration::from_millis(30);
 
-/// How long to wait before opening a subscription that ended again.
+/// Delay before reopening a subscription that ended.
 const REOPEN: Duration = Duration::from_secs(5);
 
-/// A handle on the mixer's requests. Dropping the last one ends the thread
-/// that runs them.
+/// Handle for sending mixer requests. Dropping the last one ends the request
+/// thread.
 #[derive(Debug, Clone)]
 pub struct AudioServer {
     told: Sender<Request>,
@@ -43,14 +35,12 @@ pub struct AudioServer {
 
 impl AudioServer {
     pub fn ask(&self, request: Request) {
-        // A closed channel is a runner that has stopped, which it does only
-        // when the compositor has gone.
+        // The runner stops only when the compositor exits.
         let _ = self.told.send(request);
     }
 }
 
-/// Start reading the sound server, calling `publish` with what it says
-/// whenever that moves, and running what the mixer asks of it.
+/// Starts the reader and request threads. `publish` receives each new reading.
 pub fn serve(publish: impl Fn(Audio) + Send + 'static) -> AudioServer {
     let pactl = std::env::var_os("DOMICILE_PACTL").unwrap_or_else(|| "pactl".into());
     let (told, requests) = channel();
@@ -60,7 +50,7 @@ pub fn serve(publish: impl Fn(Audio) + Send + 'static) -> AudioServer {
     AudioServer { told }
 }
 
-/// Run each request, newest volumes only, until the compositor has gone.
+/// Runs requests, coalescing volume changes, until every handle is dropped.
 fn run(pactl: &OsString, requests: &Receiver<Request>) {
     while let Ok(first) = requests.recv() {
         let waiting = std::iter::once(first).chain(requests.try_iter()).collect();
@@ -77,7 +67,7 @@ fn run(pactl: &OsString, requests: &Receiver<Request>) {
     }
 }
 
-/// Hold a subscription open for as long as the compositor runs.
+/// Keeps a subscription open, reopening it when it ends.
 fn listen(pactl: &OsString, publish: &impl Fn(Audio)) {
     let mut said = false;
     loop {
@@ -93,8 +83,8 @@ fn listen(pactl: &OsString, publish: &impl Fn(Audio)) {
     }
 }
 
-/// One subscription: read the server, then again after every settled burst of
-/// news, until `pactl` exits.
+/// Runs one subscription: reads the server, then rereads after each settled
+/// burst of events, until `pactl` exits.
 fn subscribe(pactl: &OsString, publish: &impl Fn(Audio)) -> Result<(), String> {
     let mut child = pactl_command(pactl)
         .args(["-f", "json", "subscribe"])
@@ -112,7 +102,7 @@ fn subscribe(pactl: &OsString, publish: &impl Fn(Audio)) -> Result<(), String> {
             }
         }
     });
-    // Read after subscribing, so that nothing that moves in between is missed.
+    // Read after subscribing so no change in between is missed.
     let first = read(pactl, publish);
     while settled(&doorbell) {
         if let Err(why) = read(pactl, publish) {
@@ -123,7 +113,8 @@ fn subscribe(pactl: &OsString, publish: &impl Fn(Audio)) -> Result<(), String> {
     first
 }
 
-/// Wait for news and then for quiet. `false` once the subscription is gone.
+/// Waits for an event, then for quiet. Returns `false` once the subscription
+/// ends.
 fn settled(doorbell: &Receiver<()>) -> bool {
     let rang = doorbell.recv().is_ok();
     if rang {
@@ -140,7 +131,7 @@ fn read(pactl: &OsString, publish: &impl Fn(Audio)) -> Result<(), String> {
     Ok(())
 }
 
-/// What `pactl args` printed, or why it failed.
+/// Runs `pactl args` and returns its stdout, or its stderr as the error.
 fn pactl_output(pactl: &OsString, args: &[impl AsRef<std::ffi::OsStr>]) -> Result<String, String> {
     let output = pactl_command(pactl)
         .args(args)
@@ -154,7 +145,8 @@ fn pactl_output(pactl: &OsString, args: &[impl AsRef<std::ffi::OsStr>]) -> Resul
     }
 }
 
-/// `pactl`, untranslated: some of what its JSON says is read as words.
+/// A `pactl` command in the C locale, because some JSON values are parsed as
+/// English words.
 fn pactl_command(pactl: &OsString) -> Command {
     let mut command = Command::new(pactl);
     command.env("LC_ALL", "C");

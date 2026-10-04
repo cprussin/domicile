@@ -1,44 +1,31 @@
-//! Where the compositor's config file is, when the command line did not say.
+//! Finds the compositor's config file when `--config` is not given.
 //!
-//! `~/.config/domicile/domicile.{ts,tsx,js,mjs,json}`, and
-//! `$XDG_CONFIG_HOME/domicile/` when that is set. A person types `domicile <shell>` and their monitors are
-//! already written down; nothing has to be typed twice for a desk that is
-//! configured once.
+//! Looks for `domicile.{ts,tsx,js,mjs,json}` in `$XDG_CONFIG_HOME/domicile/`
+//! or `~/.config/domicile/`.
 //!
-//! **THIS IS THE ONLY PLACE A PATH IS GUESSED, AND IT IS DELIBERATELY NOT THE
-//! COMPOSITOR.** `arguments.rs` states the rule the compositor keeps: every
-//! value is given, nothing is read from the environment, nothing has a default
-//! location — because the compositor is started by a *program*, and a program
-//! that meant to say something can say it. That rule is untouched. What runs
-//! the compositor is `domicile`, which is started by a *person*, and the
-//! answer worked out here is written onto the command line it builds. So the
-//! compositor is still handed one path or none, chosen by something that can
-//! be asked why.
-//!
-//! The cost of a default is that a desk can come up wearing a file nobody
-//! meant, and that is paid for by [`ConfigFile`] naming which of the four
-//! answers it is — including the two that are no file, one of which names the
-//! path it did not find. A run says it out loud before it starts anything.
+//! The compositor itself has no default paths (see [`crate::arguments`]).
+//! `domicile` resolves the default here and passes it explicitly.
+//! [`ConfigFile`] records how the path was chosen so the run can print it.
 
 use std::path::{Path, PathBuf};
 
-/// Which config file a run has, and how it got it.
+/// The config file for a run, and how it was chosen.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ConfigFile {
-    /// `--config` named it. Handed on without being looked for.
+    /// Given by `--config`. Not checked for existence.
     Named(PathBuf),
-    /// Nobody named one and there is a file where a config lives.
+    /// Found in the config directory.
     Found(PathBuf),
-    /// Nobody named one and there is none in the directory that was looked in.
+    /// None in this config directory.
     Absent(PathBuf),
-    /// Nobody named one and there is more than one where a config lives.
+    /// More than one in the config directory.
     Several(Vec<PathBuf>),
-    /// Nobody named one and there is no home directory to look under.
+    /// No config home to search.
     Nowhere,
 }
 
 impl ConfigFile {
-    /// The path to hand the compositor, or nothing for the defaults.
+    /// The path for the compositor, or `None` for its defaults.
     pub fn path(&self) -> Option<&Path> {
         match self {
             Self::Named(path) | Self::Found(path) => Some(path),
@@ -48,8 +35,7 @@ impl ConfigFile {
 }
 
 impl std::fmt::Display for ConfigFile {
-    /// What the run prints about its own config, in the middle of the sentence
-    /// `config: {}`.
+    /// Formats the value printed after `config: `.
     fn fmt(&self, out: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Named(path) => write!(out, "{}, because --config names it", path.display()),
@@ -78,15 +64,10 @@ impl std::fmt::Display for ConfigFile {
     }
 }
 
-/// Work out which config file this run has.
+/// Resolves the config file for this run.
 ///
-/// `flag` is `--config`, and it wins without being looked for: a path somebody
-/// typed is one they meant, and the compositor's complaint about a file it
-/// could not read names that file — where a check here would only say the same
-/// thing earlier and from a process that is not the one reading it.
-///
-/// `exists` is asked only about the defaults, one per extension, because those
-/// are the paths nobody typed.
+/// `flag` (`--config`) wins and is not checked; the compositor reports an
+/// unreadable file. `exists` is only called for the default paths.
 pub fn config_file(
     flag: Option<&Path>,
     env: &dyn Fn(&str) -> Option<String>,
@@ -113,18 +94,16 @@ pub fn config_file(
     }
 }
 
-/// The directory a config lives in, under the config home.
+/// The config directory under the config home.
 const DIRECTORY: &str = "domicile";
 
-/// The file itself, without the extension that says what it is written in.
+/// The config file name without its extension.
 const FILE: &str = "domicile";
 
-/// What a config may be written as, in the order they are listed: a module,
-/// which is evaluated, or the JSON the compositor reads.
+/// Config file extensions: modules to evaluate, or JSON.
 const EXTENSIONS: [&str; 5] = ["ts", "tsx", "js", "mjs", "json"];
 
-/// Whether the config at `path` is a module to evaluate rather than a file
-/// the compositor reads.
+/// Whether the config at `path` is a module to evaluate rather than JSON.
 pub fn is_module(path: &Path) -> bool {
     matches!(
         path.extension().and_then(|extension| extension.to_str()),
@@ -132,13 +111,9 @@ pub fn is_module(path: &Path) -> bool {
     )
 }
 
-/// Where this user's configuration is kept.
+/// The user's config home: `XDG_CONFIG_HOME`, or `~/.config`.
 ///
-/// `XDG_CONFIG_HOME` when it is set to an absolute path, and `~/.config`
-/// otherwise — which is the spec's own rule rather than a kindness. A relative
-/// value resolves against whatever directory the desktop happened to be
-/// started from, so honoring one would make the config a desk reads depend on
-/// where its launcher was standing.
+/// Relative values are ignored, as the XDG spec requires.
 fn config_home(env: &dyn Fn(&str) -> Option<String>) -> Option<PathBuf> {
     let absolute = |value: String| {
         let path = PathBuf::from(value);

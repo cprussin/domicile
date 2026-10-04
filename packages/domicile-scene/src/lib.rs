@@ -1,17 +1,10 @@
-//! Domicile scene model: where app windows live on screen and how input is routed.
+//! Scene geometry and keyboard focus for the host.
 //!
-//! An app window (`<app>`) is a full CSS element, so its placement is an affine
-//! [`Transform`] from the app's local pixel space to screen space, plus a
-//! stacking order. The host keeps a [`Scene`] of [`Portal`]s and uses it to:
+//! - [`Transform`] and [`Bounds`] place app windows and displays in screen
+//!   space.
+//! - [`Scene`] tracks which app has the keyboard.
 //!
-//! - **hit-test** a screen point to the topmost app under it, recovering the
-//!   app-local coordinate (via the inverse transform) to forward to the client;
-//! - **route** pointer/keyboard input between the chrome and the apps.
-//!
-//! This is pure geometry/logic with no engine or GPU dependency, and is the
-//! host-side counterpart to the web engine's own hit-testing (which additionally
-//! accounts for chrome elements layered over apps, alpha, and rounded corners —
-//! refinements layered on top of this rectangular model later).
+//! The page hit-tests pointer input in the DOM, so pointer routing is not here.
 
 /// A 2D point.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -87,7 +80,7 @@ impl Transform {
         }
     }
 
-    /// Apply `self` first, then `next` — i.e. `next ∘ self`.
+    /// Applies `self` first, then `next` (`next ∘ self`).
     pub fn then(self, next: Transform) -> Transform {
         Transform {
             a: next.a * self.a + next.c * self.b,
@@ -129,14 +122,11 @@ impl Transform {
     }
 }
 
-/// The rectangle a portal reaches on screen, as its two extreme corners.
+/// An axis-aligned screen rectangle, as its min and max corners.
 ///
-/// Axis-aligned, which for a rotated window is larger than the window: the
-/// corners are transformed and the box is drawn around them. That is the
-/// deliberate answer where this is used to decide which outputs a window is
-/// on — a window said to be on a screen it only reaches the corner of costs
-/// that screen a redraw it did not need, and one *not* said to be on a screen
-/// it covers costs the client the scale it should have drawn at.
+/// For a rotated window the box encloses the transformed corners, so it is
+/// larger than the window. Deciding which outputs a window is on errs toward
+/// "on": an extra redraw is cheaper than a client drawing at the wrong scale.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Bounds {
     pub min: Point,
@@ -146,10 +136,8 @@ pub struct Bounds {
 impl Bounds {
     /// Whether this box and `other` share any area.
     ///
-    /// Touching edges do not count. Two displays laid out side by side abut
-    /// exactly, so a window ending on the seam is on the screen it is *in*
-    /// rather than on both — and a zero-width overlap is not somewhere a
-    /// window can be seen.
+    /// Touching edges do not count. Adjacent displays share an edge, so a
+    /// window ending on that edge is on one display, not both.
     pub fn overlaps(&self, other: &Bounds) -> bool {
         self.min.x < other.max.x
             && other.min.x < self.max.x
@@ -166,11 +154,6 @@ pub enum KeyboardTarget {
 }
 
 /// Which app has the keyboard.
-///
-/// It held the placed portals too, until the fork made an `<app>` a
-/// `cc::SurfaceLayer`: CSS positions the layer, the page hit-tests in the DOM,
-/// and nothing on this side needed to know where a window was any more. What
-/// is left is the one fact the seat cannot answer for itself.
 #[derive(Debug, Default)]
 pub struct Scene {
     focus: Option<String>,
@@ -181,27 +164,21 @@ impl Scene {
         Scene::default()
     }
 
-    /// Give the keyboard to `app_id`.
+    /// Gives the keyboard to `app_id`.
     ///
-    /// Ungated here on purpose. It used to refuse an app with no portal, which
-    /// was arbitrating between two sources of truth — the seat saw a surface,
-    /// the scene saw a placement, and a window that had mapped but not yet
-    /// been placed had the first and not the second. The page then drew that
-    /// window inactive while every key went into it. There is no second source
-    /// now: whether the window exists is the caller's to know, and `Host` asks
-    /// its own map before calling.
+    /// Does not check that the window exists. The caller (`Host`) owns that
+    /// fact and checks before calling.
     pub fn focus_app(&mut self, app_id: &str) {
         self.focus = Some(app_id.to_string());
     }
 
-    /// Return keyboard focus to the chrome.
+    /// Returns keyboard focus to the chrome.
     pub fn focus_chrome(&mut self) {
         self.focus = None;
     }
 
-    /// A window went away. The keyboard goes back to the chrome if it was
-    /// there — nothing else will say so, and a focus naming a window that has
-    /// gone is a keyboard pointed at nothing.
+    /// Records that a window closed. Returns focus to the chrome if the window
+    /// had it, so focus never names a missing window.
     pub fn window_gone(&mut self, app_id: &str) {
         if self.focus.as_deref() == Some(app_id) {
             self.focus = None;

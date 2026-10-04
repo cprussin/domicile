@@ -1,16 +1,8 @@
-//! What a compositor started on a config it cannot read says before it stops.
+//! Tests for the error the compositor binary prints when its config fails.
 //!
-//! IT IS THE ONLY THING A DESK THAT WILL NOT COME UP HAS TO GO ON. `domicile`
-//! starts a desktop five times and says each time that the compositor "said
-//! why above", so what is above had better be a sentence. It was not: `main`
-//! handed the error back to Rust's own `Termination`, which prints it with
-//! `Debug` — the variant name wrapped around it and every newline of the
-//! message escaped to a `\n`, one unreadable line in the middle of Chromium's
-//! startup log, not naming the file it was about.
-//!
-//! The binary rather than a function, because that print is what `Debug` got
-//! wrong and nothing under `main` can see it. `domicile-config` owns the
-//! sentence itself.
+//! `domicile` points users at this message when a desk fails to start, so it
+//! must be readable and name the file. These run the binary because only
+//! `main` decides how the error is printed. `domicile-config` owns the text.
 
 use std::path::Path;
 use std::process::Command;
@@ -19,8 +11,7 @@ use std::process::Command;
 fn a_config_that_will_not_load_is_a_sentence_that_names_its_file() {
     let directory = tempfile::tempdir().expect("a directory");
     let config = directory.path().join("domicile.json");
-    // The shape that sent a real desk into the restart loop: a section that
-    // was a setting one release ago, which `deny_unknown_fields` refuses.
+    // An unknown section, which `deny_unknown_fields` refuses.
     std::fs::write(
         &config,
         r#"{ "compositor": { "nested_size": [800, 600] } }"#,
@@ -47,14 +38,12 @@ fn a_config_that_will_not_load_is_a_sentence_that_names_its_file() {
     );
 }
 
-/// A desk whose lock is a PAM service the machine does not have is a desk that
-/// does not come up, and the sentence says what the machine has to declare.
+/// A lock PAM service missing from the machine is fatal, and the error says
+/// what to declare.
 ///
-/// **THE SAME FILE PARSES, AND THAT IS WHY THIS IS HERE.** Nothing about the
-/// config is wrong; what is missing is the machine's half, which a home-manager
-/// module cannot declare. Coming up anyway would be one of two quiet failures —
-/// a desk with no lock, or one behind PAM's `other` stack — so it stops, on the
-/// real `/etc/pam.d`, which no machine fills with this name.
+/// The config parses; the machine lacks the service. Starting anyway would
+/// leave the desk unlocked or behind PAM's `other` stack. This reads the real
+/// `/etc/pam.d`, which has no service by this name.
 #[test]
 fn a_desk_whose_pam_service_the_machine_lacks_says_what_to_declare() {
     let directory = tempfile::tempdir().expect("a directory");
@@ -78,9 +67,8 @@ fn a_desk_whose_pam_service_the_machine_lacks_says_what_to_declare() {
     );
 }
 
-/// A desk that still binds keys in its config does not come up, and says
-/// which table: keys are a shell's props now, and a table read for keys
-/// nothing answers would be a desk whose keys silently do nothing.
+/// A `keybindings` table is refused by name, since shells own key bindings
+/// and the keys would otherwise do nothing.
 #[test]
 fn a_table_of_keys_is_a_sentence_that_names_it() {
     let directory = tempfile::tempdir().expect("a directory");
@@ -99,12 +87,10 @@ fn a_table_of_keys_is_a_sentence_that_names_it() {
     );
 }
 
-/// Start a compositor on `config`, and take what it said before it stopped.
+/// Runs the compositor on `config` and returns its stderr.
 ///
-/// The other two flags are required and are not what is under test; they name
-/// paths in the same directory so nothing is left behind when it does not get
-/// far enough to bind them. Nothing here waits: the config is read before any
-/// socket is bound, so a compositor given a bad one exits on its own.
+/// The config is read before any socket is bound, so the process exits on
+/// its own.
 fn refusal(config: &Path) -> String {
     let directory = config.parent().expect("the config is in a directory");
     let ran = Command::new(env!("CARGO_BIN_EXE_domicile-compositor"))
@@ -114,7 +100,7 @@ fn refusal(config: &Path) -> String {
         .arg(directory.join("session.json"))
         .arg("--config")
         .arg(config)
-        // Its own, so nothing this reaches for is the runner's own session.
+        // Isolate from the test runner's session.
         .env("XDG_RUNTIME_DIR", directory)
         .output()
         .expect("the compositor runs");

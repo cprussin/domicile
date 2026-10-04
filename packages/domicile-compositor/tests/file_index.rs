@@ -1,12 +1,8 @@
-//! The file index, from a real home directory to a real chrome socket.
+//! Tests for the file index against a real home directory and chrome socket.
 //!
-//! What the pieces do on their own is covered where they live —
-//! `domicile_host::home_walk` walks a table, `domicile_host::file_index` holds
-//! a set, `domicile_host::file_changes` reads an event. None of that can show
-//! the thing this change is: a walk that runs on a thread at startup, an
-//! answer published where a chrome connection can read it without waiting for
-//! a disk, a watch on a real kernel, and a cache file the next run starts
-//! from. Those are four processes' worth of arrangement and one compositor.
+//! `domicile_host::home_walk`, `file_index` and `file_changes` are unit-tested.
+//! These check the startup walk, the published answer, the inotify watch and
+//! the cache file together.
 
 mod running;
 
@@ -22,25 +18,20 @@ const ONE_DISPLAY: &str = r#"
 { "output": { "displays": [{ "name": "left", "size": [1920, 1080] }] } }
 "#;
 
-/// What the compositor says once its index thread has published an answer.
+/// The log line the compositor writes once the index has an answer.
 ///
-/// Waited for before the first search — see [`asked_until_settled`], which is
-/// where the reason is written down.
+/// See [`asked_until_settled`] for why tests wait for it.
 const HAS_AN_ANSWER: &str = "the home directory is indexed";
 
 #[test]
 fn a_search_finds_what_is_anywhere_in_the_home_and_nothing_else() {
-    // THE POINT OF THE INDEX, END TO END. `Notes/2026/april/plan.org` is four
-    // levels down; the walk this replaced stopped at two and only for two
-    // hand-named directories, so a person who typed `plan` was told they had
-    // no such file. Nothing here names a directory — what is read is the
-    // compositor's decision, and `search_files` carries no path.
+    // The index covers the whole home at any depth. `search_files` carries no
+    // path, so the compositor decides what is read.
     let home = tempfile::tempdir().expect("a home to lay out");
     write(home.path(), "todo.txt");
     write(home.path(), "Notes/2026/april/plan.org");
     write(home.path(), "src/domicile/README.md");
-    // And the rule that survived from the old walk: a dot is not offered, and
-    // nothing under it is walked.
+    // Dot entries are skipped, along with everything under them.
     write(home.path(), ".config/domicile/domicile.json");
     write(home.path(), "src/.git/HEAD");
 
@@ -62,8 +53,7 @@ fn a_search_finds_what_is_anywhere_in_the_home_and_nothing_else() {
             "todo.txt",
         ],
     );
-    // Only what matched crosses into the page: the index is the whole home,
-    // and on a real one that is tens of megabytes a page has no use for.
+    // Only matches are sent; a real home's index is tens of megabytes.
     settles_on(
         &compositor,
         &mut chrome,
@@ -74,9 +64,8 @@ fn a_search_finds_what_is_anywhere_in_the_home_and_nothing_else() {
 
 #[test]
 fn a_preview_reads_what_the_index_holds_and_nothing_else() {
-    // The page names the path here, so the index is what decides whether it
-    // is read: a dotfile the walk skipped is as unreadable as one that does
-    // not exist.
+    // The page names the path, so only indexed paths may be read. A skipped
+    // dotfile is unreadable.
     let home = tempfile::tempdir().expect("a home to lay out");
     fs::create_dir_all(home.path().join("Notes")).expect("the directory");
     fs::write(home.path().join("Notes/today.org"), "* today\n").expect("the file");
@@ -100,10 +89,8 @@ fn a_preview_reads_what_the_index_holds_and_nothing_else() {
 
 #[test]
 fn a_file_written_afterward_is_found_by_the_next_search() {
-    // THE SUBSCRIPTION, AND THE ONLY PLACE IT CAN BE SHOWN. A file created in
-    // a terminal is not an event any other part of this desktop sees; what
-    // makes the index stay true is a real inotify watch on a real home, which
-    // is a kernel and two processes rather than anything a unit test holds.
+    // Only a real inotify watch on a real home can show the index follows
+    // files created elsewhere.
     let home = tempfile::tempdir().expect("a home to lay out");
     write(home.path(), "Notes/today.org");
 
@@ -133,17 +120,14 @@ fn a_file_written_afterward_is_found_by_the_next_search() {
 
 #[test]
 fn what_the_walk_found_is_written_down_for_the_next_run() {
-    // So the first launcher of the next session has a list before its walk has
-    // found anything. The file's own format and every way it can be wrong are
-    // `domicile_host::index_file`'s; what is asserted here is that a running
-    // compositor puts one where the next one will look for it.
+    // The next session's first search reads this cache before its walk ends.
+    // `domicile_host::index_file` tests the format; this checks the location.
     let home = tempfile::tempdir().expect("a home to lay out");
     write(home.path(), "todo.txt");
 
     let compositor = Compositor::started_in_a_home(ONE_DISPLAY, Some(home.path()));
     let mut chrome = compositor.chrome();
-    // The file is written when the walk ends, and a settled answer is how a
-    // test knows it has.
+    // The cache is written when the walk ends, which a settled answer shows.
     settles_on(&compositor, &mut chrome, "", &["todo.txt"]);
 
     let written = compositor.await_file(&compositor.cache_home().join("domicile/file-index"));
@@ -153,9 +137,8 @@ fn what_the_walk_found_is_written_down_for_the_next_run() {
 
 #[test]
 fn a_reload_that_moves_what_is_omitted_walks_the_home_again_under_it() {
-    // Both halves of a new rule: what it takes back was never read, and what
-    // it now leaves out is already in the index. A watch sees neither, since
-    // nothing on the disk moved — so the index thread is told, and walks.
+    // A new `omit` both adds unread paths and removes indexed ones. Nothing on
+    // disk changed, so the watch sees neither and the reload must rewalk.
     let home = tempfile::tempdir().expect("a home to lay out");
     write(home.path(), ".config/domicile.json");
     write(home.path(), "src/main.rs");
@@ -188,43 +171,23 @@ fn a_reload_that_moves_what_is_omitted_walks_the_home_again_under_it() {
     );
 }
 
-/// How long a search is asked again before the index is reported wrong.
+/// How long to keep searching before the index is reported wrong.
 ///
-/// Not `running::PATIENCE`, which is how long the *compositor* has to answer
-/// one search at all. What is waited on here is a walk of a real disk, a
-/// kernel's watch, and the quarter second `file_indexing::SETTLE` gathers a
-/// burst of writes for — on a machine that may be running every other check in
-/// this repo at the same time. Measured on an idle one, the longest of these
-/// waits is answered in about half a second, so this is twenty times what it
-/// costs: a compositor that is going to answer has answered, and the deadline
-/// firing is a finding rather than a loaded machine.
+/// Separate from `running::PATIENCE`, which bounds one reply. An idle machine
+/// settles in about half a second; this allows twenty times that for a loaded
+/// one.
 const SETTLES_WITHIN: Duration = Duration::from_secs(10);
 
-/// How long a turn leaves the compositor alone before asking again.
+/// The pause between searches.
 ///
-/// **Longer than `file_indexing::SETTLE`, and that is the whole constraint.**
-/// The index gathers filesystem events until a quarter of a second passes with
-/// none and announces the result once, so a check that wrote every fiftieth of
-/// a second handed the burst something new before it could ever settle and the
-/// answer a search got never moved — which is a check that hangs for its whole
-/// patience over an index that is right. Twice that quarter second, so one
-/// write is one burst.
+/// Must exceed `file_indexing::SETTLE`: the index publishes only after a quiet
+/// period, so rewriting faster would keep it from ever settling.
 const BETWEEN_ASKS: Duration = Duration::from_millis(500);
 
-/// A search for `query`, asked until the whole of `expected` is its answer.
+/// Searches for `query` until the whole answer equals `expected`.
 ///
-/// **The whole answer rather than one row of it, because every one of these
-/// waits is on an index that is still being made.** A search taken during a
-/// walk — the one at startup, or the one a reload's new `omit` sets off — is
-/// answered from what a disk had got to by then, and one taken between two
-/// bursts of filesystem events is answered from the half of a change that had
-/// arrived. So a check that waited for the row it named and then compared the
-/// rest is comparing against an index a burst behind the one it waited for,
-/// which is exactly the failure this was: `Notes/2026/plan.org` had landed and
-/// the `Notes/2026/` it is in had not.
-///
-/// Which makes the assertion the wait: what a settled answer must be is stated
-/// once, and being told it in time is not a separate claim.
+/// Compare the full answer, not one row: a search during a walk or between
+/// event bursts sees a partial index.
 fn settles_on(
     compositor: &Compositor,
     chrome: &mut domicile_test_chrome::Chrome,
@@ -234,19 +197,10 @@ fn settles_on(
     asked_until_settled(compositor, chrome, query, expected, || {});
 }
 
-/// The same, for a `path` this writes into `home` itself.
+/// Like [`settles_on`], rewriting `path` under `home` before every search.
 ///
-/// **AND IT WRITES IT AGAIN ON EVERY TURN, WHICH IS THE POINT.** A write is a
-/// stimulus that can be *lost* rather than merely be late: the index hears
-/// about it once, from the kernel, and an index that was not listening when it
-/// landed is one no amount of waiting corrects. Being up to hear it is what
-/// `file_indexing::keep_the_index` watching the home before it walks it buys,
-/// and this does not take that on trust — a write per turn is the right wait
-/// whether or not the first of them was heard.
-///
-/// Measured rather than reasoned: with the watch established after the walk, as
-/// it once was, a 400ms sleep in front of it failed this check every run while
-/// the write was made once, and passed it every run while it was made per turn.
+/// The kernel reports a write once, so a write made before the watch exists is
+/// lost for good. Rewriting each turn avoids depending on the watch being up.
 fn settles_on_once_written(
     compositor: &Compositor,
     chrome: &mut domicile_test_chrome::Chrome,
@@ -260,30 +214,12 @@ fn settles_on_once_written(
     });
 }
 
-/// Ask `query` until a settled answer is `expected`, arranging `again` first.
+/// Searches for `query` until the settled answer is `expected`, running
+/// `again` before each search.
 ///
-/// `again` runs before every ask rather than once before the first, which is
-/// for a stimulus that can be *lost* rather than merely be late — see
-/// [`settles_on_once_written`]. It is nothing at all for a wait on something
-/// the compositor is already doing.
-///
-/// # Asking early is not the same as being answered late
-///
-/// The loop below is built to ask again, and every deadline in it assumes it
-/// will get the chance. One question takes that chance away: a `search_files`
-/// that lands before the index thread has published anything is answered with
-/// **nothing at all** — deliberately, so that an empty list is never said on a
-/// desktop that has no index to search; see the `SearchFiles` arm in the
-/// compositor. There is no reply to read, so `Chrome::wait_for` sits out its
-/// whole patience and the check dies inside the *first* turn of a loop whose
-/// own deadline was never so much as read.
-///
-/// That is not a slow compositor, and it does not want a longer deadline: it
-/// wants the question asked once there is somebody to answer it. So this waits
-/// for the compositor to say the walk published an answer, which it does after
-/// the first announcement and every one after. It costs nothing on a machine
-/// that was going to win the race anyway, and it is what a loaded one was
-/// losing: twenty seconds, and a report that the compositor had gone quiet.
+/// Waits for [`HAS_AN_ANSWER`] first. The compositor does not reply to
+/// `search_files` before the index has an answer (see the `SearchFiles` arm),
+/// so an early search would time out in `Chrome::wait_for`.
 fn asked_until_settled(
     compositor: &Compositor,
     chrome: &mut domicile_test_chrome::Chrome,
@@ -347,24 +283,18 @@ fn previewed(chrome: &mut domicile_test_chrome::Chrome, path: &str) -> FilePrevi
     }
 }
 
-/// A file at `path` under `home`, with whatever directories it needs.
+/// Creates an empty file at `path` under `home`, with its directories.
 fn write(home: &Path, path: &str) {
     let file = home.join(path);
     fs::create_dir_all(file.parent().expect("a file has a parent")).expect("the directories");
     fs::write(&file, "").expect("the file is written");
 }
 
-/// The same, from nothing, however much of it is already there.
+/// Deletes `path`'s parent directory, then calls [`write`].
 ///
-/// Two things make this more than a second [`write`], and both are what the
-/// index is told rather than what the disk holds. A write into a path the index
-/// already has is not a change `domicile_host::file_changes` reads — only a
-/// path arriving or leaving is — so the file has to go before it can arrive
-/// again. And the directory holding it is a row of its own that nothing
-/// synthesizes from the file's name, so it has to arrive again too.
-///
-/// **The directory is this check's to lose, then**: whatever else is in it goes
-/// with it. Every caller writes into one it introduced itself.
+/// `domicile_host::file_changes` sees only paths appearing or disappearing, and
+/// the directory is its own index row, so both must be recreated. Everything
+/// else in that directory is deleted, so callers use a directory of their own.
 fn made_again(home: &Path, path: &str) {
     let directory = home
         .join(path)

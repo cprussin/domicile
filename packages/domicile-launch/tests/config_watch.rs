@@ -1,5 +1,5 @@
-//! A config module and the files beside it, watched: one call per burst of
-//! edits, none for what a build writes.
+//! Tests for the config watcher: one call per burst of edits, none for
+//! installs.
 
 use std::path::Path;
 use std::sync::mpsc;
@@ -10,7 +10,7 @@ use domicile_launch::config_watch::{matters, watch};
 /// Long enough for an editor's save, short enough that a test is quick.
 const QUIET: Duration = Duration::from_millis(150);
 
-/// How long a change gets to be heard before the test calls it unheard.
+/// How long to wait for a change before failing.
 const PATIENCE: Duration = Duration::from_secs(5);
 
 #[test]

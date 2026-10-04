@@ -1,15 +1,14 @@
-//! The picture a launcher draws beside an application, as a `data:` URL — and
-//! the one its `X-Domicile-Preview` names for the preview, found the same way.
+//! Resolves desktop-entry icon names to `data:` URLs for the launcher, along
+//! with the image an entry's `X-Domicile-Preview` names.
 //!
-//! A desktop entry names its icon, and the icon theme spec says where a name
-//! is: `icons/<theme>/<size>/apps/<name>.<ext>` under each data directory, then
-//! `pixmaps/<name>.<ext>`. Only `hicolor` is looked in — it is the theme every
-//! application installs into and every other theme inherits, and this desktop
-//! has no notion of another one yet.
+//! Follows the icon theme spec: `icons/hicolor/<size>/apps/<name>.<ext>` under
+//! each data directory, then `pixmaps/<name>.<ext>`. Only `hicolor` is
+//! searched, since every application installs into it and every theme
+//! inherits it.
 //!
-//! **Cached, and never forgotten.** A search answers for every application it
-//! matched, and a name resolves by trying every size in every directory, so
-//! each is looked up once for the life of the compositor — a miss included.
+//! Each name is resolved once, misses included, and cached for the life of the
+//! compositor. A lookup probes every size in every directory, and a search
+//! asks for every matched application's icon.
 
 use std::collections::HashMap;
 use std::fs;
@@ -17,28 +16,28 @@ use std::path::{Path, PathBuf};
 
 use crate::data_url::data_url;
 
-/// The sizes looked through, the one wanted first: big enough for a row on a
-/// dense screen and for the preview, and small enough to send on a keystroke.
+/// Icon sizes to try, most preferred first. The first few are large enough
+/// for the preview and small enough to send on each keystroke.
 const SIZES: &[&str] = &[
     "48x48", "64x64", "32x32", "96x96", "128x128", "scalable", "256x256", "24x24", "22x22",
     "16x16", "512x512",
 ];
 
-/// What a page can draw, and the type it is sent as.
+/// Supported extensions and their MIME types.
 pub(crate) const KINDS: &[(&str, &str)] = &[("png", "image/png"), ("svg", "image/svg+xml")];
 
-/// The biggest file sent. Every icon a search matched crosses on every
-/// keystroke, so an icon past this is none rather than a stalled launcher.
+/// Largest icon file sent. Matched icons are sent on each keystroke, so a
+/// larger file is dropped to keep the launcher responsive.
 const LARGEST: u64 = 128 * 1024;
 
-/// Icons by name, out of the data directories they were looked for in.
+/// Cached icon lookup over a list of data directories.
 pub struct AppIcons {
     data_dirs: Vec<PathBuf>,
     found: HashMap<String, Option<String>>,
 }
 
 impl AppIcons {
-    /// Icons under `data_dirs`, the one that wins first.
+    /// Searches `data_dirs` in priority order, highest first.
     pub fn new(data_dirs: Vec<PathBuf>) -> Self {
         AppIcons {
             data_dirs,
@@ -46,9 +45,9 @@ impl AppIcons {
         }
     }
 
-    /// The icon `name` is, as a `data:` URL, or nothing a page could draw.
+    /// Returns the icon `name` as a `data:` URL, or `None` if none is usable.
     ///
-    /// An absolute `name` is that file, which the spec allows an entry to say.
+    /// An absolute `name` is read as a file path, as the spec allows.
     pub fn icon(&mut self, name: &str) -> Option<String> {
         if let Some(found) = self.found.get(name) {
             return found.clone();
@@ -76,9 +75,8 @@ impl AppIcons {
     }
 }
 
-/// `path` as a `data:` URL, if it is a kind a page draws and small enough to
-/// send. A file that is not there is the ordinary answer to most of the paths
-/// a lookup tries.
+/// Reads `path` as a `data:` URL. Returns `None` for a missing, oversized or
+/// unsupported file.
 pub(crate) fn read(path: &Path) -> Option<String> {
     let ext = path.extension()?.to_str()?;
     let (_, mime) = KINDS.iter().find(|(kind, _)| *kind == ext)?;

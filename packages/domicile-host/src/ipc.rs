@@ -1,36 +1,29 @@
-//! The host <-> chrome IPC seam: newline-delimited JSON over a byte stream.
+//! Host-chrome IPC: newline-delimited JSON, one message per line.
 //!
-//! In the running compositor the byte stream is whatever channel the engine
-//! exposes to the page (a pipe/socket). This module is transport-agnostic: it
-//! defines the framing (one JSON message per line) and a [`Session`] that
-//! performs the version handshake and forwards chrome messages into the
-//! [`Host`] brain. Keeping it stream-agnostic lets it be tested over an
-//! in-memory string or a real `UnixStream` alike.
+//! Transport-agnostic, so tests can use in-memory strings. [`Session`] runs
+//! the version handshake and forwards chrome messages to [`Host`].
 
 use domicile_protocol::{negotiate, ChromeMessage, HostMessage, PROTOCOL_VERSION};
 use serde::Serialize;
 
 use crate::Host;
 
-/// Encode a message as a single newline-terminated JSON line.
+/// Encodes a message as one newline-terminated JSON line.
 pub fn to_line<T: Serialize>(message: &T) -> String {
     let mut line = serde_json::to_string(message).expect("protocol messages always serialize");
     line.push('\n');
     line
 }
 
-/// Parse one chrome message from a JSON line (without the trailing newline).
+/// Parses one chrome message from a JSON line without its newline.
 pub fn parse_chrome(line: &str) -> Result<ChromeMessage, serde_json::Error> {
     serde_json::from_str(line)
 }
 
-/// A single chrome connection: owns a [`Host`] and drives the handshake.
+/// One chrome connection that owns a [`Host`] and runs the handshake.
 ///
-/// Feed inbound lines to [`ingest`](Session::ingest); it returns any messages
-/// to send back to the chrome — the handshake `Welcome`, the `Displays`
-/// describing the desktop that follows it, and the `Keymap` after that where
-/// something has set one. App lifecycle events originate on the Wayland side
-/// via [`Session::host_mut`].
+/// [`ingest`](Session::ingest) takes inbound lines and returns replies.
+/// Wayland-side events go through [`Session::host_mut`].
 #[derive(Debug, Default)]
 pub struct Session {
     host: Host,
@@ -47,40 +40,37 @@ impl Session {
         self.ready
     }
 
-    /// Mutable access to the host brain (for Wayland-side events + inspection).
+    /// The host, for Wayland-side events and inspection.
     pub fn host_mut(&mut self) -> &mut Host {
         &mut self.host
     }
 
-    /// Process one inbound line from the chrome. Returns messages to send back.
+    /// Handles one inbound line and returns the replies.
     pub fn ingest(&mut self, line: &str) -> Vec<HostMessage> {
         handle_chrome_line(&mut self.host, &mut self.ready, line)
     }
 }
 
-/// Apply one inbound chrome line to a (possibly shared) [`Host`], driving the
-/// handshake via the caller-owned `ready` flag. Returns messages to send back.
+/// Applies one inbound line to a possibly shared [`Host`] and returns the
+/// replies. The caller owns the handshake's `ready` flag.
 ///
-/// This is the reusable core behind [`Session::ingest`]. The compositor uses it
-/// directly so a single shared `Host` can be driven by both the Wayland side
-/// and any number of chrome connections. Before the handshake only `Hello` is
-/// honored; a malformed line is ignored rather than tearing anything down, and
-/// a version mismatch is refused *out loud* — see [`apply_chrome_message`].
+/// The compositor calls this directly so one `Host` serves many chromes.
+/// Malformed lines are ignored. See [`apply_chrome_message`] for the
+/// handshake.
 pub fn handle_chrome_line(host: &mut Host, ready: &mut bool, line: &str) -> Vec<HostMessage> {
     match parse_chrome(line.trim()) {
         Ok(message) => apply_chrome_message(host, ready, message),
-        // Dropped, because a chrome one version out of step must not take the
-        // host down. The compositor says so out loud where it does the same
-        // thing; this crate has no logging dependency at all, and adding one
-        // is its own change rather than a rider on the one that noticed.
+        // A chrome on another version must not take the host down. This crate
+        // has no logger; the compositor logs the same case.
         Err(_) => Vec::new(),
     }
 }
 
-/// Apply an already-parsed chrome message to the host, driving the handshake.
+/// Applies a parsed chrome message and returns the replies.
 ///
-/// Split out so callers that must peek at the message first (e.g. the compositor
-/// intercepting `Spawn`) can parse once and dispatch the rest here.
+/// Before the handshake, only `Hello` is handled. Separate from
+/// [`handle_chrome_line`] so the compositor can intercept messages such as
+/// `Spawn` first.
 pub fn apply_chrome_message(
     host: &mut Host,
     ready: &mut bool,
@@ -90,77 +80,36 @@ pub fn apply_chrome_message(
         ChromeMessage::Hello { protocol_version } => match negotiate(protocol_version) {
             Ok(agreed) => {
                 *ready = true;
-                // The desktop rides with the handshake, after the `Welcome`
-                // that agreed the version it is written in. A chrome has no
-                // other way to learn what it is laying out against, and one
-                // that reloads has to be told again — so it cannot be a change
-                // the chrome might have missed.
-                //
-                // And the keymap behind it, for the same reason and one layer
-                // lower: the browser process reading this socket decodes every
-                // key the desktop is typed with, and off ChromeOS nothing but
-                // this ever gives its layout engine a keymap. Absent from a
-                // host nobody has handed one, which is every `Session` with no
-                // compositor behind it.
+                // Send the current state after `Welcome`. State messages are
+                // only sent on change, so a reloaded chrome has nothing until
+                // it gets these. The keymap is the browser's only source of a
+                // layout off ChromeOS; it is absent when none was set.
                 [
                     HostMessage::Welcome {
                         protocol_version: agreed,
                     },
                     host.describe_desktop(),
-                    // And the theme, which is neither of those: it is not the
-                    // geometry a page lays out against or the layout it is
-                    // typed in, but the one fact it needs before it paints at
-                    // all. A chrome told it late paints the desk in the wrong
-                    // theme and then flips, which is the flash the shell's
-                    // pre-paint apply exists to end.
+                    // Needed before first paint, or the shell flashes the
+                    // wrong theme.
                     host.describe_theme(),
-                    // And the windows', which the browser process reading
-                    // this socket draws its own pages in.
+                    // The theme the browser draws its own pages in.
                     host.describe_windows_theme(),
                 ]
                 .into_iter()
                 .chain(host.describe_keymap())
-                // And the keys the config binds, which were resolved against
-                // that keymap, for its reason: a page that reloads has no
-                // bindings until it is told them again.
                 .chain(host.describe_shell_config())
-                // And the extensions the config names, which the browser
-                // process also reads rather than the page, and which a page
-                // that reloads has to be told again for the keymap's reason.
                 .chain(host.describe_extensions())
-                // And the tray, which is the page's rather than the browser's
-                // and rides for the clipboard's reason: an icon that has not
-                // changed is never sent again, so a page that reloaded would
-                // otherwise draw an empty tray until one did.
                 .chain(host.describe_tray())
-                // And the notifications, for the tray's reason: the history
-                // is the desk's, and a page that reloaded has missed it.
                 .chain(host.describe_notifications())
-                // And the sound, for the tray's reason: a volume that has not
-                // moved is never sent again.
                 .chain(host.describe_audio())
                 .collect()
             }
-            // Answered, and with *this* build's version rather than nothing.
-            // The chrome has a version-mismatch failure it can report — it
-            // names both halves — and the only thing that can trigger it is
-            // being told what the other half speaks. Silence leaves the page
-            // waiting on a `welcome` that is never coming, so the one message
-            // written for this case can never be printed: a desktop that does
-            // not start and does not say why.
+            // Reply with this build's version so the chrome can report the
+            // mismatch instead of waiting forever. `Welcome` is readable at
+            // any version.
             //
-            // `ready` is *cleared*, so this is a refusal and not a handshake.
-            // Cleared rather than merely left alone: a connection that agreed
-            // a version earlier and then names one this build cannot speak
-            // has stopped being a peer, and a flag that only ever went up
-            // would say it was still one. The compositor reads this flag to
-            // decide who it broadcasts to, so "some hello on this socket was
-            // accepted" is the wrong question — the right one is whether the
-            // last thing said was agreement.
-            //
-            // A `Welcome` is safe to send to a peer of any version: it is the
-            // message whose whole job is carrying the number they disagree
-            // about.
+            // Clear `ready` even if an earlier `Hello` succeeded: the
+            // compositor broadcasts only to ready connections.
             Err(_) => {
                 *ready = false;
                 vec![HostMessage::Welcome {
@@ -171,13 +120,9 @@ pub fn apply_chrome_message(
         other if *ready => {
             // Placement/focus errors (e.g. an unknown app) are non-fatal.
             let _ = host.handle_chrome_message(other);
-            // Who holds the keyboard is *not* returned here. What this
-            // function returns is written back to the one connection that
-            // asked, and focus is the whole desktop's business: a second
-            // chrome told nothing would believe the wrong window was active
-            // for as long as it stayed connected, because the change is a
-            // delta and a delta is only reported once. The compositor asks
-            // `Host::focus_change` and broadcasts it instead.
+            // Focus changes are not returned: replies go only to this
+            // chrome, but every chrome needs them. The compositor broadcasts
+            // `Host::focus_change` instead.
             Vec::new()
         }
         _ => Vec::new(),

@@ -1,4 +1,4 @@
-//! The half of the protocol a chrome speaks, checked without a compositor.
+//! Tests for the chrome handshake and reading, using in-memory buffers.
 
 use std::io::{BufReader, Cursor, Read};
 use std::time::Duration;
@@ -6,7 +6,7 @@ use std::time::Duration;
 use domicile_protocol::{HostMessage, PROTOCOL_VERSION};
 use domicile_test_chrome::{greet, hear, ChromeError};
 
-/// What a host says back, as a line on the wire.
+/// A host's welcome as a wire line.
 fn welcome(version: u32) -> String {
     format!("{{\"type\":\"welcome\",\"protocol_version\":{version}}}\n")
 }
@@ -36,9 +36,7 @@ fn a_host_that_agrees_is_a_chrome_that_can_go_on() {
     assert_eq!(greeting.early, vec![], "nothing came before it here");
 }
 
-/// The failure a version bump produces, and the one a test must not mistake
-/// for a compositor that is simply slow: the host answered, and its answer is
-/// the refusal.
+/// A version mismatch is an error naming both versions, not a timeout.
 #[test]
 fn a_host_speaking_another_version_is_refused_here() {
     let mut said = Vec::new();
@@ -56,9 +54,8 @@ fn a_host_speaking_another_version_is_refused_here() {
     );
 }
 
-/// A host that closes without answering. Distinct from one that answered
-/// wrongly, because the two mean different things: this is a compositor that
-/// died, and the message has to say so rather than blame the version.
+/// A host that closes without answering is reported as closed, not as a
+/// version mismatch.
 #[test]
 fn a_host_that_says_nothing_is_not_a_version_problem() {
     let mut said = Vec::new();
@@ -69,13 +66,9 @@ fn a_host_that_says_nothing_is_not_a_version_problem() {
     assert_eq!(err, ChromeError::Closed);
 }
 
-/// The welcome is waited for by type, not by position.
+/// The welcome is matched by type, not position.
 ///
-/// Not a hypothetical: the compositor adds a chrome to its broadcast list when
-/// it *connects*, not when it handshakes, so anything broadcast in between
-/// reaches the socket ahead of the reply. A stand-in that insisted the first
-/// line be the welcome failed a test about the desktop with a complaint about
-/// a greeting, one run in three under `--test-threads=8`.
+/// A broadcast can reach the socket before the welcome.
 #[test]
 fn a_message_that_arrives_before_the_welcome_is_kept_rather_than_refused() {
     let mut said = Vec::new();
@@ -102,9 +95,7 @@ fn a_message_that_arrives_before_the_welcome_is_kept_rather_than_refused() {
     );
 }
 
-/// Everything the host sends after the handshake, in order. A test asserts on
-/// what a compositor *said*, so the reading has to keep them rather than match
-/// one and drop the rest.
+/// Messages after the handshake are read back in order.
 #[test]
 fn what_the_host_says_next_is_read_back_in_order() {
     let mut said = Vec::new();
@@ -137,11 +128,10 @@ fn what_the_host_says_next_is_read_back_in_order() {
     );
 }
 
-/// A host that is talking but never welcoming.
+/// A host that keeps talking without a welcome hits the deadline.
 ///
-/// The failure the deadline exists for, and one no read timeout catches: every
-/// read succeeds, so a socket deadline never fires — only the clock does. Left
-/// unbounded this is a hang, and a hang has no message at all.
+/// Every read succeeds, so only the overall deadline, not a read timeout, can
+/// stop it.
 #[test]
 fn a_host_that_talks_without_welcoming_gives_up_and_says_what_it_heard() {
     let mut said = Vec::new();
@@ -159,11 +149,7 @@ fn a_host_that_talks_without_welcoming_gives_up_and_says_what_it_heard() {
     );
 }
 
-/// A host that says nothing at all, on a socket that gives up waiting.
-///
-/// The read timeout arriving instead of the clock. It means the same thing, and
-/// has to read the same way: what came, rather than a complaint about a socket
-/// doing exactly what it was asked to.
+/// A read timeout is reported the same way as the deadline.
 #[test]
 fn a_read_that_runs_out_of_time_is_the_same_answer_as_the_deadline() {
     let mut said = Vec::new();
@@ -179,7 +165,7 @@ fn a_read_that_runs_out_of_time_is_the_same_answer_as_the_deadline() {
     );
 }
 
-/// A host with plenty to say and no welcome in it.
+/// A reader that repeats one message forever and never welcomes.
 struct Chatty;
 
 impl Read for Chatty {
@@ -191,7 +177,7 @@ impl Read for Chatty {
     }
 }
 
-/// A socket whose read timeout has expired.
+/// A reader whose every read times out.
 struct Mute;
 
 impl Read for Mute {

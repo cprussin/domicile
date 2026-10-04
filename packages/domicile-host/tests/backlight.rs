@@ -1,12 +1,11 @@
-//! The screen's brightness, read off `/sys/class/backlight` and turned into
-//! the raw value logind is asked to write.
+//! Reading brightness from `/sys/class/backlight` and converting a level to the
+//! raw value logind writes.
 
 use std::collections::BTreeMap;
 
 use domicile_host::backlight::{announces_a_backlight, reading, Backlight, Backlights, Brightness};
 
-/// The `/sys/class/backlight` of a machine that is not this one, keyed by the
-/// device's directory name and the file in it.
+/// A fake `/sys/class/backlight`, keyed by device directory and file name.
 struct Sysfs(BTreeMap<(String, String), String>);
 
 fn sysfs(entries: &[(&str, &[(&str, &str)])]) -> Sysfs {
@@ -55,8 +54,8 @@ fn reads_the_level_off_the_backlight() {
     assert!((read.level() - 0.42).abs() < 1e-9);
 }
 
-/// systemd's order, and for its reason: a firmware interface knows the panel's
-/// curve, and a raw one beside it is the same panel driven around it.
+/// systemd's order: a firmware interface knows the panel's curve, and a raw
+/// one beside it drives the same panel.
 #[test]
 fn prefers_firmware_over_platform_over_raw() {
     let machine = sysfs(&[
@@ -74,8 +73,7 @@ fn prefers_firmware_over_platform_over_raw() {
     assert_eq!(reading(&without_firmware).unwrap().device, "b_platform");
 }
 
-/// A desktop on an external monitor has no backlight, which is no reading
-/// rather than a dark one — and so is a device too broken to read.
+/// A missing or unreadable backlight gives no reading, not zero.
 #[test]
 fn no_backlight_is_no_reading() {
     assert_eq!(reading(&sysfs(&[])), None);
@@ -100,8 +98,8 @@ fn the_raw_value_for_a_level_is_rounded() {
     assert_eq!(backlight.raw_for(1.0), Some(1000));
 }
 
-/// Zero is a screen that is off on most panels, and a slider dragged to its
-/// end must not leave a desk nobody can see to drag it back.
+/// Zero turns most panels off, which would leave the user unable to see the
+/// slider to undo it.
 #[test]
 fn a_level_never_turns_the_screen_off_or_overshoots() {
     let backlight = Backlight {
@@ -138,7 +136,7 @@ fn a_backlight_uevent_is_a_doorbell_and_nothing_else_is() {
     assert!(!announces_a_backlight(b"add@/x\0SUBSYSTEM=backlight_ish"));
 }
 
-/// News is a whole percent, which is what the slider's figures show.
+/// Only whole-percent changes are reported, matching the slider's display.
 #[test]
 fn only_a_move_the_figures_would_show_is_news() {
     let mut brightness = Brightness::default();
@@ -149,7 +147,7 @@ fn only_a_move_the_figures_would_show_is_news() {
     assert_eq!(brightness.again(), Some(0.43));
 }
 
-/// A backlight that went away says nothing, and one that comes back is news.
+/// A vanished backlight reports nothing; its return is a change.
 #[test]
 fn a_backlight_that_comes_back_is_news() {
     let mut brightness = Brightness::default();

@@ -1,21 +1,15 @@
-//! The desk's sound, read off the sound server and asked of it.
+//! Parses `pactl -f json` output into mixer state and builds `pactl`
+//! commands for mixer requests. The compositor's `audio` module runs them.
 //!
-//! **`pactl`, not libpulse.** The compositor links nothing it does not have to
-//! (see its `Cargo.toml`), and `pactl -f json` already says everything a mixer
-//! draws, in a shape PulseAudio and PipeWire's `pipewire-pulse` both answer.
-//! So the sound server is read as two lines of JSON — `pactl -f json info` and
-//! `pactl -f json list` — and asked with `pactl`'s own subcommands. This is
-//! that reading and those subcommands, and nothing that runs a process: the
-//! compositor's `audio` does that.
+//! - `pactl` avoids linking libpulse, and works with both PulseAudio and
+//!   `pipewire-pulse`.
+//! - Run `pactl` under `LC_ALL=C`: it translates some JSON values, such as a
+//!   port's availability, that this module matches as words.
+//! - Ids are opaque to a chrome. A device id is `output:` or `input:` plus the
+//!   device name, which survives a server restart. A stream id is `playback:`
+//!   or `recording:` plus the stream index, which lasts as long as the stream.
 //!
-//! **Run under `LC_ALL=C`.** `pactl` translates some of what its JSON says —
-//! a port's availability, a subscription's facility — and these are read as
-//! words.
-//!
-//! **The ids are this module's**, opaque to a chrome: `output:` or `input:`
-//! and the device's name, which is stable across a restart of the server, or
-//! `playback:` or `recording:` and the stream's index, which lasts as long as
-//! the stream does.
+//! See `packages/shell-manganese/docs/HOST-READOUTS.md`.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::time::{Duration, Instant};
@@ -24,15 +18,15 @@ use domicile_protocol::{AudioCard, AudioChoice, AudioDevice, AudioStream, HostMe
 use serde::Deserialize;
 use serde_json::Value;
 
-/// The server's 100%, which `pactl` reports volumes against.
+/// The raw volume `pactl` reports for 100%.
 const NORMAL: f64 = 65536.0;
 
-/// The loudest a mixer may turn anything: pavucontrol's ceiling, 150%.
+/// Maximum volume a mixer may set: 150%, matching pavucontrol.
 const CEILING: f64 = 1.5;
 
-/// What `pactl subscribe` reports that a mixer draws. A client or a module
-/// coming and going is not among them — and `pactl list` is itself a client,
-/// so re-reading on that would be re-reading forever.
+/// `pactl subscribe` facilities that change mixer state. Client events are
+/// excluded: `pactl list` is itself a client, so re-reading on them would
+/// loop forever.
 const NEWS: &[&str] = &[
     "sink",
     "source",
@@ -42,19 +36,19 @@ const NEWS: &[&str] = &[
     "server",
 ];
 
-/// What this desk's own meters call themselves, so that they are hidden with
-/// every other mixer's.
+/// Application id of this compositor's level meters, so they are hidden like
+/// other mixers' meters.
 const METER: &str = "org.domicile.meter";
 
-/// The property PipeWire ties a filter's device and its stream together by.
+/// PipeWire property shared by a filter's device and its stream.
 const LINK_GROUP: &str = "node.link-group";
 
-/// How many samples a second a meter records: enough to catch a transient a
-/// meter would show, few enough that one per device is nothing.
+/// Meter sample rate. High enough to catch transients, low enough to run one
+/// per device cheaply.
 const METER_RATE: u32 = 1000;
 
-/// Applications whose streams are a mixer's own level meters, which every
-/// mixer hides — pavucontrol's list.
+/// Applications whose streams are level meters and are hidden. Matches
+/// pavucontrol's list.
 const MIXERS: &[&str] = &[
     METER,
     "org.PulseAudio.pavucontrol",
@@ -62,7 +56,7 @@ const MIXERS: &[&str] = &[
     "org.kde.kmixd",
 ];
 
-/// The desk's sound, as every chrome is told it. See [`HostMessage::Audio`].
+/// Mixer state sent to every chrome. See [`HostMessage::Audio`].
 #[derive(Debug, Clone, PartialEq)]
 pub struct Audio {
     pub outputs: Vec<AudioDevice>,
@@ -70,9 +64,8 @@ pub struct Audio {
     pub playback: Vec<AudioStream>,
     pub recording: Vec<AudioStream>,
     pub cards: Vec<AudioCard>,
-    /// What each id is metered off, for those that can be — kept here rather
-    /// than on the wire: a chrome asks for a meter by id, and only the
-    /// compositor records.
+    /// Meter source for each meterable id. Not sent to chromes: they request
+    /// meters by id and only the compositor records.
     pub meters: BTreeMap<String, Meter>,
 }
 
@@ -86,8 +79,8 @@ pub enum Meter {
 }
 
 impl Meter {
-    /// The arguments to give `parec` to record this meter's samples: mono
-    /// floats, tagged so the mixer does not list them as a recording.
+    /// `parec` arguments to record this meter as mono floats. The application
+    /// id tag keeps the meter out of the recording list.
     pub fn argv(&self) -> Vec<String> {
         let what = match self {
             Meter::Source(name) => format!("--device={name}"),
@@ -105,8 +98,8 @@ impl Meter {
     }
 }
 
-/// The loudest of `samples`, little-endian floats as a meter records them,
-/// clipped to full scale. A trailing partial sample is not a sample.
+/// Peak of little-endian `f32` `samples`, clipped to 1.0. Ignores a trailing
+/// partial sample.
 pub fn peak(samples: &[u8]) -> f64 {
     samples
         .as_chunks::<4>()
@@ -117,7 +110,7 @@ pub fn peak(samples: &[u8]) -> f64 {
         .min(1.0)
 }
 
-/// What every chrome asked to be metered, each a lease — see
+/// Meter leases per chrome. See
 /// [`domicile_protocol::ChromeMessage::WatchAudioLevels`].
 #[derive(Debug, Default)]
 pub struct LevelWatches {
@@ -125,10 +118,10 @@ pub struct LevelWatches {
 }
 
 impl LevelWatches {
-    /// How long a watch lasts unrenewed. A mixer renews every second.
+    /// How long a watch lasts without renewal. A mixer renews every second.
     pub const LEASE: Duration = Duration::from_secs(3);
 
-    /// `chrome` wants `ids` metered, and nothing else it asked for before.
+    /// Replaces `chrome`'s watched ids with `ids`.
     pub fn watch(&mut self, chrome: usize, ids: Vec<String>, now: Instant) {
         if ids.is_empty() {
             self.by_chrome.remove(&chrome);
@@ -138,7 +131,7 @@ impl LevelWatches {
         }
     }
 
-    /// Everything to meter at `now`, the lapsed leases let go of.
+    /// Drops expired leases and returns every id still watched at `now`.
     pub fn watched(&mut self, now: Instant) -> BTreeSet<String> {
         self.by_chrome
             .retain(|_, (since, _)| now.duration_since(*since) <= Self::LEASE);
@@ -161,7 +154,7 @@ impl Audio {
     }
 }
 
-/// A request a chrome made that names nothing it could have been given.
+/// An audio request with an invalid id or value.
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
 pub enum AudioError {
     #[error("a volume that is not a number")]
@@ -174,8 +167,8 @@ pub enum AudioError {
     UnknownId(String),
 }
 
-/// What a chrome asked of the sound server — each of
-/// [`domicile_protocol::ChromeMessage`]'s audio requests.
+/// An audio request from a chrome. Mirrors the audio variants of
+/// [`domicile_protocol::ChromeMessage`].
 #[derive(Debug, Clone, PartialEq)]
 pub enum Request {
     Volume { id: String, volume: f64 },
@@ -187,8 +180,8 @@ pub enum Request {
 }
 
 impl Request {
-    /// The arguments to give `pactl`, after `--` so that nothing a name says
-    /// is read as an option.
+    /// `pactl` arguments for this request. They start with `--` so a name
+    /// cannot be read as an option.
     pub fn argv(&self) -> Result<Vec<String>, AudioError> {
         let words: Vec<String> = match self {
             Request::Volume { id, volume } => {
@@ -242,7 +235,7 @@ impl Request {
         Ok(std::iter::once("--".to_string()).chain(words).collect())
     }
 
-    /// What the request is about, for [`coalesce`].
+    /// The id or card this request targets, for [`coalesce`].
     fn subject(&self) -> &str {
         match self {
             Request::Volume { id, .. }
@@ -255,9 +248,9 @@ impl Request {
     }
 }
 
-/// `requests` without the volumes a later one overtook: a volume is dropped
-/// when the next request about the same thing is a volume too. A slider being
-/// dragged asks many times a second, and only where it ends up matters.
+/// Drops each volume request whose next request for the same target is also
+/// a volume. A dragged slider sends many requests a second; only the last
+/// matters.
 pub fn coalesce(requests: Vec<Request>) -> Vec<Request> {
     let overtaken: Vec<bool> = requests
         .iter()
@@ -279,14 +272,13 @@ pub fn coalesce(requests: Vec<Request>) -> Vec<Request> {
         .collect()
 }
 
-/// Whether a line of `pactl -f json subscribe` says something a mixer draws
-/// moved. A doorbell, like the backlight's uevent: what it means is "read the
-/// server again".
+/// Whether a `pactl -f json subscribe` line means mixer state changed and the
+/// server should be read again.
 pub fn announces_a_change(line: &str) -> bool {
     serde_json::from_str::<Subscription>(line).is_ok_and(|event| NEWS.contains(&event.on.as_str()))
 }
 
-/// The desk's sound, out of `pactl -f json info` and `pactl -f json list`.
+/// Parses `pactl -f json info` and `pactl -f json list` into [`Audio`].
 pub fn reading(info: &str, list: &str) -> Result<Audio, serde_json::Error> {
     let info: Info = serde_json::from_str(info)?;
     let list: List = serde_json::from_str(list)?;
@@ -337,12 +329,14 @@ pub fn reading(info: &str, list: &str) -> Result<Audio, serde_json::Error> {
     })
 }
 
-/// The device to call the default: the server's, or the filter in front of
-/// it. A laptop's speaker correction is a sink whose stream plays into the
-/// speakers, and the session manager sends what plays on the default through
-/// it while the speakers stay the server's default — so the filter is what is
-/// heard, and what its volume turns. Filters in front of filters are followed
-/// to the front; a loop of them stops where it started.
+/// The device to report as default: the server's default, or the filter in
+/// front of it.
+///
+/// A filter such as a laptop's speaker correction is a sink whose stream plays
+/// into the speakers. The session manager routes the default through it while
+/// the speakers stay the server's default, so the filter's volume is the one
+/// that matters. Chained filters are followed to the front; a loop stops after
+/// one pass.
 fn in_front(
     default: String,
     devices: &[Device],
@@ -371,11 +365,12 @@ fn in_front(
     name
 }
 
-/// The link groups of the devices that are a filter's — PipeWire's
-/// filter-chains, a laptop's speaker correction or a noise canceller: a
-/// device to play to or record from on one side, and a stream on the other
-/// that carries it to the hardware. The stream shares the device's link group,
-/// and is the filter's plumbing rather than something playing.
+/// Link groups of filter devices, such as PipeWire filter-chains for speaker
+/// correction or noise canceling.
+///
+/// A filter is a device plus a stream that carries its audio to the hardware.
+/// The stream shares the device's link group and is hidden from the stream
+/// lists.
 fn plumbing(list: &List) -> BTreeSet<String> {
     list.sinks
         .iter()
@@ -384,9 +379,8 @@ fn plumbing(list: &List) -> BTreeSet<String> {
         .collect()
 }
 
-/// What each device and playback stream is metered off: an output off its
-/// monitor, where the server named one, an input off itself, a stream off the
-/// stream.
+/// Meter source per id: an output's monitor source (if any), an input
+/// itself, or a playback stream.
 fn meters(list: &List) -> BTreeMap<String, Meter> {
     let outputs = list.sinks.iter().filter_map(|sink| {
         let monitor = sink.monitor_source.clone()?;
@@ -407,7 +401,7 @@ fn meters(list: &List) -> BTreeMap<String, Meter> {
     outputs.chain(inputs).chain(playback).collect()
 }
 
-/// The four kinds of thing a volume belongs to, as an id names them.
+/// The kinds of object an id can name.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Target {
     Output,
@@ -433,7 +427,7 @@ impl Target {
         }
     }
 
-    /// What `pactl` calls it.
+    /// The `pactl` name for this kind.
     fn noun(self) -> &'static str {
         match self {
             Target::Output => "sink",
@@ -447,8 +441,8 @@ impl Target {
         format!("{}:{key}", self.prefix())
     }
 
-    /// The kind an id names and the name or index after it. A stream's must
-    /// be a number: anything else would be a name `pactl` looks up.
+    /// Splits an id into its kind and key. A stream key must be numeric, or
+    /// `pactl` would look it up as a name.
     fn parse(id: &str) -> Result<(Target, &str), AudioError> {
         let unknown = || AudioError::UnknownId(id.to_string());
         let (prefix, key) = id.split_once(':').ok_or_else(unknown)?;
@@ -465,7 +459,7 @@ impl Target {
     }
 }
 
-/// An id that names a device, and the device's name.
+/// Parses an id that must name a device.
 fn device(id: &str) -> Result<(Target, &str), AudioError> {
     match Target::parse(id)? {
         found @ (Target::Output | Target::Input, _) => Ok(found),
@@ -481,8 +475,8 @@ fn raw_volume(volume: f64) -> Result<u32, AudioError> {
     }
 }
 
-/// The loudest channel of a `pactl` volume, as a fraction; silence for one
-/// the server calls invalid, which it reports as `{"error": ...}`.
+/// The loudest channel of a `pactl` volume as a fraction. An invalid volume,
+/// reported as `{"error": ...}`, reads as 0.
 fn loudest(volume: &BTreeMap<String, Value>) -> f64 {
     volume
         .values()
@@ -520,7 +514,7 @@ struct List {
 struct Device {
     index: u32,
     name: String,
-    /// `null` from a server that has none to give, and named by its name.
+    /// `null` when the server has none; the name is used instead.
     description: Option<String>,
     mute: bool,
     volume: BTreeMap<String, Value>,
@@ -535,9 +529,9 @@ struct Device {
 }
 
 impl Device {
-    /// A monitor names the sink it is the monitor of. Not every `pactl` says
-    /// "none" as `null`: some say it as `""` or as `"n/a"`, as its text does.
-    /// The device's class says so too, where the server gives one.
+    /// Whether this source monitors a sink. Uses `device.class` when the
+    /// server sets it, else whether `monitor_source` names a sink. Some
+    /// `pactl` versions write "none" there as `""` or `"n/a"`, not `null`.
     fn is_a_monitor(&self) -> bool {
         let names_a_sink = self
             .monitor_source
@@ -599,15 +593,15 @@ impl Stream {
             .is_some_and(|id| MIXERS.contains(&id.as_str()))
     }
 
-    /// Whether it is the far side of a filter's device: see [`plumbing`].
+    /// Whether this is a filter's stream to the hardware. See [`plumbing`].
     fn is_plumbing(&self, plumbing: &BTreeSet<String>) -> bool {
         self.properties
             .get(LINK_GROUP)
             .is_some_and(|group| plumbing.contains(group))
     }
 
-    /// The application's name, and the media's as its title — or the media's
-    /// as the name, once, where the application gave none.
+    /// Uses the application name with the media name as title. Without an
+    /// application name, the media name becomes the name and there is no title.
     fn stream(&self, target: Target, on: u32, devices: &BTreeMap<u32, String>) -> AudioStream {
         let media = self.properties.get("media.name").cloned();
         let (application, title) = match self.properties.get("application.name") {

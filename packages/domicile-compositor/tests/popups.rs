@@ -1,10 +1,8 @@
-//! A client's popups — its menus — reaching the chrome.
+//! A client's popups (its menus) reaching the chrome.
 //!
-//! A popup is an `<app>` of its own that the shell places over its window, so
-//! everything here is about what the chrome is told and what the client is
-//! told back: that the popup exists and where, that it is gone, and that a
-//! chrome dismissing it reaches the client. What it looks like needs an
-//! engine, and is the pixel guard's.
+//! A popup is its own `<app>`, placed by the shell over its window. These
+//! tests cover the messages both ways: the popup appearing and where, going
+//! away, and a chrome dismissing it. Rendering is covered by the pixel tests.
 
 mod running;
 
@@ -36,9 +34,8 @@ fn popup_of(chrome: &mut Chrome) -> HostMessage {
         .expect("a client's popup is announced")
 }
 
-/// A menu is announced over the window it belongs to, where its positioner
-/// put it — which, placed against the window's own box, is where the shell has
-/// to draw it.
+/// A menu is announced over its window, where its positioner put it relative
+/// to the window's box. That is where the shell draws it.
 #[test]
 fn a_clients_popup_is_announced_over_its_window() {
     let compositor = Compositor::started_with(ONE_DISPLAY);
@@ -65,9 +62,9 @@ fn a_clients_popup_is_announced_over_its_window() {
     assert!(!grab, "this client never asked for a grab");
 }
 
-/// A chrome closing a popup dismisses it, which is how a shell takes a menu
-/// down when a press lands outside it — and the client destroying it, as a
-/// toolkit does on `popup_done`, is what the chrome hears back.
+/// A chrome closing a popup dismisses it, as a shell does on a press outside
+/// the menu. The client then destroys it, as a toolkit does on `popup_done`,
+/// and the chrome is told.
 #[test]
 fn a_popup_the_chrome_closes_is_dismissed_and_goes() {
     let compositor = Compositor::started_with(ONE_DISPLAY);
@@ -104,8 +101,8 @@ fn a_popup_the_chrome_closes_is_dismissed_and_goes() {
 }
 
 /// A pointer over a popup's `<app>` is over the popup's surface. The chrome
-/// names the popup by its own id, and the point is the popup's own, which is
-/// what a menu needs to highlight the item under it.
+/// names the popup by its own id and gives popup-local coordinates, so the
+/// menu can highlight the item under the pointer.
 #[test]
 fn a_pointer_over_a_popup_is_over_the_popups_surface() {
     let compositor = Compositor::started_with(ONE_DISPLAY);
@@ -150,8 +147,8 @@ fn popup_surface(client: &mut running::Client) -> String {
         .to_string()
 }
 
-/// A menu that grabs is announced as one, and has the keyboard — which is
-/// what lets the arrow keys walk it.
+/// A grabbing menu is announced as one and gets the keyboard, so arrow keys
+/// work in it.
 #[test]
 fn a_grabbing_popup_is_said_to_grab_and_takes_the_keyboard() {
     let compositor = Compositor::started_with(ONE_DISPLAY);
@@ -171,9 +168,8 @@ fn a_grabbing_popup_is_said_to_grab_and_takes_the_keyboard() {
     );
 }
 
-/// A menu with the keyboard leaves its window the activated one: the window
-/// is still what is being used, and a toolkit closes its menus when its window
-/// stops being active.
+/// A menu with the keyboard keeps its window activated: toolkits close menus
+/// when their window is deactivated.
 #[test]
 fn a_grabbing_popup_keeps_its_window_activated() {
     let compositor = Compositor::started_with(ONE_DISPLAY);
@@ -187,10 +183,9 @@ fn a_grabbing_popup_keeps_its_window_activated() {
     );
 }
 
-/// The keyboard moving anywhere but the menu's own window dismisses the menu,
-/// as a click elsewhere does on any desktop. Moving it to that window does
-/// not: a press on the menu is a press on its window to a shell, and a menu
-/// that closed whenever it was clicked could not be used.
+/// Moving the keyboard anywhere but the menu's own window dismisses the menu,
+/// like a click elsewhere. Moving it to that window does not, because a shell
+/// treats a press on the menu as a press on its window.
 #[test]
 fn a_grabbing_popup_goes_when_the_keyboard_leaves_its_window() {
     let compositor = Compositor::started_with(ONE_DISPLAY);
@@ -205,8 +200,8 @@ fn a_grabbing_popup_goes_when_the_keyboard_leaves_its_window() {
     chrome
         .say(&ChromeMessage::FocusApp { app_id: window })
         .expect("the chrome can move the keyboard");
-    // Something the compositor answers after the focus, so the focus has been
-    // handled by the time it is heard: the pointer entering the menu.
+    // The pointer entering the menu is answered after the focus, so the focus
+    // has been handled once it arrives.
     chrome
         .say(&ChromeMessage::PointerMotion {
             app_id: popup,

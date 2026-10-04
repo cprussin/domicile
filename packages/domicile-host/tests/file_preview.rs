@@ -1,4 +1,4 @@
-//! What a launcher is shown of the row it has reached.
+//! Previews of the launcher's selected row.
 
 use std::fs;
 
@@ -10,17 +10,16 @@ use lofty::picture::{MimeType, Picture, PictureType};
 use lofty::prelude::*;
 use lofty::tag::{Tag, TagType};
 
-/// How much of a file a preview is sent, as `file_preview` says.
+/// How much of a file a preview sends; matches `file_preview`.
 const PREVIEW_BYTES: usize = 8 * 1024;
 
-/// How many of a directory's entries a preview is sent.
+/// How many directory entries a preview sends.
 const PREVIEW_ENTRIES: usize = 200;
 
-/// The largest cover a song is sent with, as `file_preview` says.
+/// The largest cover art sent; matches `file_preview`.
 const COVER_BYTES: usize = 1024 * 1024;
 
-/// A home holding `paths`, written to disk, and the index a walk would make of
-/// it.
+/// A home holding `paths` on disk, and the index a walk would build of it.
 fn home(paths: &[&str]) -> (tempfile::TempDir, FileSearch) {
     let home = tempfile::tempdir().expect("a directory to write in");
     for path in paths {
@@ -53,7 +52,7 @@ fn a_text_file_is_shown_as_its_text() {
 
 #[test]
 fn only_the_front_of_a_long_file_is_read() {
-    // A preview is a pane, and a log of a gigabyte is not a thing to send it.
+    // A preview pane does not need a gigabyte log.
     let (dir, search) = home(&["long.txt"]);
     fs::write(dir.path().join("long.txt"), "a".repeat(PREVIEW_BYTES * 2)).unwrap();
 
@@ -118,9 +117,9 @@ fn only_the_front_of_a_big_directory_is_listed() {
 
 #[test]
 fn a_path_the_index_does_not_hold_is_not_read() {
-    // THE SECURITY PROPERTY. A page names the path, so what keeps this from
-    // being a `readdir` on the page is that the compositor answers only for a
-    // path a search could already have named.
+    // Security: the page names the path, so the compositor only previews
+    // paths a search could already return. Otherwise this would be `readdir`
+    // for pages.
     let (dir, search) = home(&["Notes/today.org"]);
     fs::write(dir.path().join("secret"), "hidden").unwrap();
 
@@ -145,7 +144,7 @@ fn a_file_gone_since_the_walk_is_unreadable() {
     );
 }
 
-/// One second of silence as a WAV: 8 kHz, mono, eight bits a sample.
+/// One second of silence as a WAV: 8 kHz, mono, 8-bit.
 fn silence() -> Vec<u8> {
     let samples = vec![0x80u8; 8000];
     let mut wav = Vec::new();
@@ -158,7 +157,7 @@ fn silence() -> Vec<u8> {
     wav.extend(8000u32.to_le_bytes()); // sample rate
     wav.extend(8000u32.to_le_bytes()); // byte rate
     wav.extend(1u16.to_le_bytes()); // block align
-    wav.extend(8u16.to_le_bytes()); // bits a sample
+    wav.extend(8u16.to_le_bytes()); // bits per sample
     wav.extend(b"data");
     wav.extend((samples.len() as u32).to_le_bytes());
     wav.extend(samples);
@@ -238,8 +237,8 @@ fn a_song_with_no_tags_is_still_a_song() {
 
 #[test]
 fn a_file_named_like_a_song_that_is_not_one_is_read_as_what_it_is() {
-    // An extension is a guess, and the preview of a guess that was wrong is
-    // the file's own front rather than nothing.
+    // The extension is only a guess; a wrong one falls back to the file's
+    // text.
     let (dir, search) = home(&["Music/notes.mp3"]);
 
     assert_eq!(

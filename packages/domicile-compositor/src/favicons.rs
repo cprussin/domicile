@@ -1,10 +1,9 @@
-//! The icons the desk's bookmarks' sites name for themselves, found off the
-//! Wayland thread and kept for as long as the compositor runs.
+//! Fetches bookmark favicons on a background thread and caches them for the
+//! compositor's lifetime.
 //!
-//! Glue: which icon a site names is [`domicile_host::favicons`]. This is the
-//! network under it and the thread it runs on, because a site can take seconds
-//! to answer and a search must not wait for one — it sends what has been found
-//! so far, and a bookmark whose icon is still on its way is drawn with none.
+//! [`domicile_host::favicons`] picks the icon; this module does the network
+//! I/O. A site can take seconds to answer, so a search sends the icons found so
+//! far and draws pending bookmarks without one.
 
 use std::collections::HashMap;
 use std::io::Read;
@@ -15,36 +14,35 @@ use domicile_host::favicons::{favicon, Page};
 use ureq::tls::{RootCerts, TlsConfig};
 use ureq::ResponseExt;
 
-/// How long a site has to answer one request. A page or an icon, not a site
-/// that is down: the next one in the list is waiting on it.
+/// Timeout for one request. Lookups are sequential, so a slow site delays the
+/// rest.
 const PATIENCE: Duration = Duration::from_secs(10);
 
-/// The most of a page or an icon read. A page's `<head>` is near its start,
-/// and an icon past `domicile_host::favicons`'s limit is not sent anyway.
+/// Maximum bytes read from a page or icon. A page's `<head>` is near its start,
+/// and `domicile_host::favicons` drops larger icons anyway.
 const READ_AT_MOST: u64 = 1024 * 1024;
 
-/// What a browser says it is, because some sites answer anything else with a
-/// page that is not the one a person sees.
+/// A browser's user agent, since some sites serve a different page to other
+/// clients.
 const USER_AGENT: &str = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36";
 
-/// How long a site that had no icon waits before it is asked again: a desk
-/// comes up before its network does, and a home server can be down for a
-/// minute, but a site with none is not asked on every keystroke.
+/// How long to wait before retrying a site that gave no icon. The network may
+/// come up after the compositor, but retrying on every keystroke is wasteful.
 const RETRY_AFTER: Duration = Duration::from_secs(60);
 
-/// What is known of one bookmark URL's icon.
+/// The lookup state of one bookmark URL's icon.
 enum Looked {
-    /// A thread is asking its site now.
+    /// A lookup is running.
     InFlight,
     Found(String),
-    /// Its site gave none, or did not answer, at this moment.
+    /// The site gave no icon or did not answer at this time.
     Missed(Instant),
 }
 
-/// How a URL's icon is found: [`favicon`] over the network, in the compositor.
+/// Finds a URL's icon. The compositor uses [`favicon`] over the network.
 type Resolve = dyn Fn(&str) -> Option<String> + Send + Sync;
 
-/// Icons by the bookmark URL they were found for.
+/// Icons keyed by bookmark URL.
 #[derive(Clone)]
 pub struct Favicons {
     looked: Arc<Mutex<HashMap<String, Looked>>>,
@@ -53,7 +51,7 @@ pub struct Favicons {
 }
 
 impl Default for Favicons {
-    /// Found over the network, as a browser would.
+    /// Fetches icons over the network.
     fn default() -> Self {
         let agent = agent();
         Favicons::new(RETRY_AFTER, move |url| {
@@ -63,7 +61,7 @@ impl Default for Favicons {
 }
 
 impl Favicons {
-    /// Icons `resolve` finds, a miss asked again once `retry_after` has passed.
+    /// Icons found by `resolve`, retrying a miss after `retry_after`.
     pub fn new(
         retry_after: Duration,
         resolve: impl Fn(&str) -> Option<String> + Send + Sync + 'static,
@@ -83,9 +81,8 @@ impl Favicons {
         }
     }
 
-    /// Look for the icons of whichever of `urls` are due — never looked for, or
-    /// missed long enough ago — on a thread of their own, one after another.
-    /// One already being looked for is left to the thread doing it.
+    /// Looks up, on a new thread, each of `urls` that is new or whose miss is
+    /// due for a retry. URLs already in flight are skipped.
     pub fn look_for(&self, urls: impl IntoIterator<Item = String>) {
         let wanted: Vec<String> = {
             let mut looked = self.looked.lock().unwrap();
@@ -127,8 +124,8 @@ impl Favicons {
     }
 }
 
-/// How every request is made: a browser's name, a deadline, and the
-/// machine's own certificates, which is where a home server's CA is.
+/// The HTTP agent. It uses the platform certificate store so a home server's
+/// local CA is trusted.
 fn agent() -> ureq::Agent {
     ureq::Agent::config_builder()
         .timeout_global(Some(PATIENCE))
@@ -142,9 +139,8 @@ fn agent() -> ureq::Agent {
         .into()
 }
 
-/// `url`, after any redirects, or nothing for a site that did not answer with
-/// it. An unreachable site, a refusal and an error page are all the same here:
-/// a bookmark with no icon, which is drawn with a glyph.
+/// Fetches `url`, following redirects. Returns `None` on any failure; the
+/// bookmark is then drawn with a glyph.
 fn fetch(agent: &ureq::Agent, url: &str) -> Option<Page> {
     let mut response = agent
         .get(url)
@@ -178,7 +174,7 @@ mod tests {
 
     use super::*;
 
-    /// Wait for `done`, which a lookup thread makes true.
+    /// Waits for a lookup thread to make `done` true.
     fn until(done: impl Fn() -> bool) {
         let deadline = Instant::now() + Duration::from_secs(5);
         while !done() {
@@ -189,8 +185,7 @@ mod tests {
 
     #[test]
     fn a_site_that_had_no_icon_is_asked_again_once_it_is_due() {
-        // A desk comes up before its network does: a miss then is not a miss
-        // for good.
+        // The network may come up after the compositor.
         let asked = Arc::new(AtomicUsize::new(0));
         let counted = asked.clone();
         let favicons = Favicons::new(Duration::ZERO, move |_: &str| {

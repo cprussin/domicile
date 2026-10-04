@@ -5,7 +5,7 @@ use domicile_launch::profile_claim::claim;
 #[test]
 fn the_first_desktop_takes_the_kept_profile() {
     let state = tempfile::tempdir().expect("a directory");
-    // Under a state home nothing has made yet, as on a first run.
+    // The state home does not exist yet, as on a first run.
     let kept = state.path().join("domicile").join("profile");
 
     assert_eq!(claim(&kept).expect("it is claimed").path, kept);

@@ -1,23 +1,14 @@
-//! Which profile this desktop takes, when others may be running.
+//! Picks a profile directory no other running desktop is using.
 //!
-//! **Chromium runs one browser per profile.** A second engine handed a
-//! `--user-data-dir` another is running on does not start: it passes its
-//! command line to the first over the profile's `SingletonSocket` and exits.
-//! A second desktop on the kept profile is therefore an engine that never
-//! reaches its compositor, and a window of the second shell opened on the
-//! first desktop.
+//! Chromium allows one browser per profile. A second engine on a busy
+//! `--user-data-dir` forwards its command line to the first and exits. So each
+//! desktop locks its profile, and one that finds it locked tries `profile-2`,
+//! `profile-3` and so on. Numbered profiles persist between runs.
 //!
-//! So each running desktop holds its profile, and one that finds it held takes
-//! the next: `profile`, then `profile-2`, `profile-3` — the way a second
-//! compositor takes `wayland-2`. Kept between runs like the first, so a desktop
-//! that is always run beside another keeps its sign-ins too.
-//!
-//! **Held with `flock` on a file beside the profile**, not inside it and not by
-//! reading Chromium's `SingletonLock`: the kernel lets go of a `flock` when the
-//! process holding it dies, however it dies, so a desktop that was killed
-//! leaves nothing that has to be judged stale. The supervisor holds it rather
-//! than the engine because the engine is started again under it, and a profile
-//! that was free between two engines would be one another desktop could take.
+//! The lock is a `flock` on a file beside the profile. The kernel releases it
+//! when the process dies, so a killed desktop leaves no stale lock. The
+//! supervisor holds it, not the engine, so the profile stays locked across
+//! engine restarts.
 
 use std::fs::{File, OpenOptions};
 use std::io;
@@ -28,14 +19,13 @@ use std::path::{Path, PathBuf};
 pub struct Claimed {
     /// The directory the engine is handed as `--user-data-dir`.
     pub path: PathBuf,
-    /// The lock. Never read: dropping it closes the file, which is what lets
-    /// the profile go.
+    /// The lock. Dropping it closes the file and releases the profile.
     _held: File,
 }
 
-/// The first of `kept`, `kept-2`, `kept-3`… that no other desktop holds.
+/// Locks the first of `kept`, `kept-2`, `kept-3`… that no other desktop holds.
 ///
-/// Makes the directory `kept` is in, which on a first run nothing has yet.
+/// Creates the parent directory of `kept` if needed.
 pub fn claim(kept: &Path) -> io::Result<Claimed> {
     let parent = kept
         .parent()
@@ -51,7 +41,7 @@ pub fn claim(kept: &Path) -> io::Result<Claimed> {
     }
 }
 
-/// `kept` for the first, and `kept-<number>` after it.
+/// Returns `kept` for 1 and `kept-<number>` after it.
 fn numbered(kept: &Path, number: u32) -> PathBuf {
     match number {
         1 => kept.to_path_buf(),
@@ -63,7 +53,7 @@ fn numbered(kept: &Path, number: u32) -> PathBuf {
     }
 }
 
-/// The lock on `profile`, or `None` when another desktop has it.
+/// Locks `profile`, or returns `None` when another desktop holds it.
 fn hold(profile: &Path) -> io::Result<Option<File>> {
     let mut name = profile.as_os_str().to_os_string();
     name.push(".lock");

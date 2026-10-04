@@ -1,4 +1,5 @@
-//! What a StatusNotifierItem's properties become in the tray.
+//! Tests for turning StatusNotifierItem registrations and properties into
+//! tray items.
 
 use std::fs;
 use std::path::Path;
@@ -6,7 +7,7 @@ use std::path::Path;
 use domicile_host::tray::{address, item, method, Pixmap, Properties, Registry, Status, TrayIcons};
 use domicile_protocol::{TrayAction, TrayItem};
 
-/// A data directory holding `files`, each a relative path and its bytes.
+/// A temporary data directory holding `files` as (relative path, bytes).
 fn data_dir(files: &[(&str, &[u8])]) -> tempfile::TempDir {
     let dir = tempfile::tempdir().expect("a directory to write in");
     for (path, bytes) in files {
@@ -35,7 +36,8 @@ fn properties() -> Properties {
     }
 }
 
-/// One opaque red pixel, as StatusNotifierItem sends it: ARGB, big-endian.
+/// An opaque red square pixmap in StatusNotifierItem format (big-endian
+/// ARGB).
 fn red_pixel(size: i32) -> Pixmap {
     Pixmap {
         width: size,
@@ -49,8 +51,8 @@ mod addresses {
 
     #[test]
     fn a_bus_name_is_answered_at_the_specs_path() {
-        // KDE's registration: the item's own well-known name, and the path the
-        // spec says every item is at.
+        // KDE registers a well-known name; the item is at the spec's default
+        // path.
         assert_eq!(
             address("org.kde.StatusNotifierItem-4071-1", ":1.9"),
             (
@@ -62,8 +64,7 @@ mod addresses {
 
     #[test]
     fn a_path_is_answered_by_whoever_registered_it() {
-        // libappindicator's: a path of its own choosing, on the connection
-        // that made the call.
+        // libappindicator registers a path on the calling connection.
         assert_eq!(
             address("/org/ayatana/NotificationItem/nm_applet", ":1.42"),
             (
@@ -87,8 +88,7 @@ mod items {
 
     #[test]
     fn a_passive_item_is_not_in_the_tray() {
-        // The spec's word for an icon with nothing to say right now, which
-        // every tray hides.
+        // Trays hide passive items.
         let dir = data_dir(&[]);
         let passive = Properties {
             status: Status::Passive,
@@ -132,8 +132,8 @@ mod items {
 
     #[test]
     fn an_item_that_names_itself_nothing_is_titled_by_its_id() {
-        // The one label that is always there, so a shell never draws an
-        // unlabeled button.
+        // The id is always present, so a shell never draws an unlabeled
+        // button.
         let dir = data_dir(&[]);
         let nameless = Properties {
             id: String::new(),
@@ -153,8 +153,8 @@ mod items {
 
     #[test]
     fn a_named_icon_is_found_where_status_icons_are() {
-        // nm-applet's icons are `status` icons, not `apps` ones, which is the
-        // one directory a launcher never looks in.
+        // nm-applet's icons are in `status`, which the launcher's lookup
+        // skips.
         let dir = data_dir(&[("icons/hicolor/22x22/status/nm-signal-75.png", b"wifi")]);
         let named = Properties {
             icon_name: "nm-signal-75".into(),
@@ -173,7 +173,7 @@ mod items {
 
     #[test]
     fn the_items_own_theme_path_is_looked_in_first() {
-        // Where an application that ships its icons privately says they are.
+        // Apps that ship private icons point to them with `IconThemePath`.
         let dir = data_dir(&[("icons/hicolor/22x22/status/sync.png", b"system")]);
         let own = data_dir(&[("hicolor/22x22/status/sync.png", b"own")]);
         let named = Properties {
@@ -203,7 +203,7 @@ mod items {
         assert!(icon.starts_with("data:image/png;base64,iVBORw0KGgo"));
     }
 
-    /// The picture an item sending `pixmaps` is drawn with.
+    /// The icon an item with `pixmaps` gets.
     fn drawn(pixmaps: Vec<Pixmap>) -> Option<String> {
         let dir = data_dir(&[]);
         let pictured = Properties {
@@ -215,7 +215,7 @@ mod items {
 
     #[test]
     fn the_smallest_pixmap_big_enough_is_drawn() {
-        // Scaled down rather than up, and not further down than it has to be.
+        // Prefer downscaling to upscaling, by as little as possible.
         assert_eq!(
             drawn(vec![red_pixel(16), red_pixel(64), red_pixel(48)]),
             drawn(vec![red_pixel(48)])
@@ -280,7 +280,7 @@ mod items {
 
     #[test]
     fn an_item_with_no_picture_is_still_in_the_tray() {
-        // A shell can still label it, and click it.
+        // A shell can still show its label and click it.
         let dir = data_dir(&[]);
 
         assert_eq!(
@@ -306,8 +306,7 @@ mod statuses {
 
     #[test]
     fn a_word_the_spec_does_not_have_is_shown() {
-        // An item that misspells its status still asked to be in a tray, and
-        // hiding it would be the one reading that loses an icon.
+        // Showing an unknown status is safer than hiding the icon.
         assert_eq!(Status::from_wire("active"), Status::Active);
     }
 }
@@ -323,8 +322,8 @@ mod registry {
         }
     }
 
-    /// A registry holding the two items every test below starts from: one
-    /// registered by well-known name and one by path.
+    /// A registry with two items: one registered by well-known name and one
+    /// by path.
     fn two() -> Registry {
         let mut registry = Registry::default();
         registry.register("org.kde.SNI-1", ":1.9", "/StatusNotifierItem");
@@ -344,8 +343,8 @@ mod registry {
 
     #[test]
     fn an_item_registered_twice_is_one_item() {
-        // An application that restarts its tray code registers again on the
-        // same connection, and two icons for it would be one too many.
+        // An app that restarts its tray code registers again on the same
+        // connection; it must not get a second icon.
         let mut registry = two();
 
         assert_eq!(registry.register(":1.42", ":1.42", "/org/ayatana/nm"), None);
@@ -353,7 +352,7 @@ mod registry {
 
     #[test]
     fn nothing_is_shown_until_it_has_been_read() {
-        // Registered is not drawable: the properties come after.
+        // Properties arrive after registration.
         assert_eq!(two().items(), vec![]);
     }
 
@@ -380,8 +379,8 @@ mod registry {
 
     #[test]
     fn a_signal_is_matched_by_the_connection_that_sent_it() {
-        // A signal names its sender by unique name, which is not the name an
-        // item registered by well-known name is known by.
+        // Signals carry the sender's unique name, not the well-known name the
+        // item registered with.
         let registry = two();
 
         assert_eq!(
@@ -416,8 +415,8 @@ mod registry {
 
     #[test]
     fn a_well_known_name_that_changes_hands_is_heard_from_its_new_owner() {
-        // The item's signals arrive from whichever connection holds its name
-        // now, and matching the old one would freeze its icon.
+        // Signals come from the name's current owner. Matching the old owner
+        // would freeze the icon.
         let mut registry = two();
 
         registry.moved("org.kde.SNI-1", ":1.77");
@@ -434,10 +433,8 @@ mod registry {
 
     #[test]
     fn an_item_is_named_to_a_shell_by_what_it_calls_itself() {
-        // Its `Id`, which the spec says stays the same between runs, where its
-        // bus name is a new one each time: a shell keeps an icon's place by
-        // this name, so an application closed and opened again comes back
-        // where the user put it.
+        // `Id` is stable across runs; the bus name is not. A shell keys icon
+        // placement on this name, so a restarted app keeps its position.
         let mut registry = two();
         assert_eq!(
             registry.named(":1.42/org/ayatana/nm", "nm-applet"),

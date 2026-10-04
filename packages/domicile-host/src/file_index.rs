@@ -1,92 +1,55 @@
-//! What there is to open, held between a walk that finds it and a page that
-//! draws it.
+//! In-memory set of home paths the launcher offers.
 //!
-//! The launcher used to be answered by walking the home as the panel opened,
-//! which is why it was answered with so little of one — see
-//! [`crate::home_walk`] for the budget that bought. This is the other design:
-//! the home is walked once at boot into here, a watcher keeps it, and the
-//! panel is answered out of memory.
-//!
-//! # It is read while it is being written
-//!
-//! Everything awkward about this type comes from that. A boot walk of a real
-//! home takes seconds; a launcher opened in the middle of one is offered
-//! whatever has been found so far, and is told so — [`FileIndex::indexing`] is
-//! what the page draws its "still building" line from, so that an incomplete
-//! answer is never mistaken for the whole of a home.
-//!
-//! # Where the list it starts with comes from
-//!
-//! The compositor seeds it with what the last run wrote down (see
-//! [`crate::index_file`]), so the first launcher of a session has a list
-//! before the walk has found anything. That list is a week stale in the small
-//! ways a week changes a home, which is what [`FileIndex::built`] is for: the
-//! walk is the truth as of its run, so anything the seed held that the walk
-//! did not find is gone by the time the walk ends.
+//! - [`crate::home_walk`] fills it at boot and [`crate::file_changes`] keeps
+//!   it current.
+//! - It is read while the walk runs. [`FileIndex::indexing`] tells the
+//!   launcher the list is incomplete.
+//! - It starts from the last run's list ([`crate::index_file`]).
+//!   [`FileIndex::built`] drops seeded paths the walk did not find.
 
 use std::collections::BTreeSet;
 
-/// Everything a launcher may be offered, and whether that is all of it yet.
+/// The paths a launcher may offer, and whether indexing is complete.
 ///
-/// A `BTreeSet` because three things want it: a launcher wants one row per
-/// path, it wants them in byte order however they arrived, and a directory
-/// that went away wants everything under it gone with it — which is a range
-/// over a prefix rather than a scan.
+/// A `BTreeSet` keeps paths unique and in byte order, and lets a removed
+/// directory's contents be dropped with a prefix range.
 #[derive(Debug, Default)]
 pub struct FileIndex {
     offered: BTreeSet<String>,
-    /// What the seed held and the walk has not confirmed, emptied as it is.
-    ///
-    /// The sweep half of a mark and sweep, and it is over the *seed* rather
-    /// than over the index: a file created while the walk is still running was
-    /// never in last run's list, so it is not in here and the walk ending does
-    /// not take it.
+    /// Seeded paths the walk has not yet found. [`FileIndex::built`] removes
+    /// them. Files created during the walk are never in here, so they stay.
     unconfirmed: BTreeSet<String>,
     indexing: bool,
-    /// Whether anything a chrome would draw has moved since it was last asked.
-    ///
-    /// Held rather than worked out, because the alternative is keeping a copy
-    /// of the whole list to compare against — and the whole list is the size
-    /// of a home directory.
+    /// Whether anything changed since [`FileIndex::changed`] was last called.
+    /// Tracked as a flag to avoid keeping a copy of the list to compare.
     news: bool,
 }
 
 impl FileIndex {
-    /// An index of what the last run wrote down, with a walk still to come.
+    /// An index seeded with the last run's list, awaiting a walk.
     pub fn building(seed: impl IntoIterator<Item = String>) -> Self {
         let offered: BTreeSet<String> = seed.into_iter().collect();
         FileIndex {
             unconfirmed: offered.clone(),
             offered,
             indexing: true,
-            // A seeded index has its whole list to say and an empty one has
-            // the fact that it is building, so either way the chromes are owed
-            // something before anything else happens.
+            // Chromes need the seed, or the fact that indexing has started.
             news: true,
         }
     }
 
-    /// Start the walk again over what is in the index now.
+    /// Starts a new walk, treating the current paths as the seed.
     ///
-    /// **For a watch that lost events, which is a thing a kernel does.** An
-    /// inotify queue has a bound and a `git clone` into a watched home
-    /// out-runs it; `notify` says so by flagging a rescan, and what was lost is
-    /// unknowable. So the home is walked again and the launcher is told the
-    /// list it has is not complete — which is exactly the state a boot is in,
-    /// and is why this is the same pair of calls rather than a second path
-    /// through the index.
-    ///
-    /// Nothing is dropped. What is here is still the best answer there is
-    /// until the second walk contradicts it, and a launcher blanked for the
-    /// length of one would be a desktop punishing somebody for a burst of file
-    /// writes.
+    /// For when the watch lost events, such as an inotify queue overflow that
+    /// `notify` reports as a rescan. Current paths stay offered until the walk
+    /// finishes, so the launcher does not go blank.
     pub fn rebuilding(&mut self) {
         self.unconfirmed = self.offered.clone();
         self.indexing = true;
         self.news = true;
     }
 
-    /// Take in what the walk has found so far.
+    /// Adds paths the walk has found.
     pub fn found(&mut self, paths: impl IntoIterator<Item = String>) {
         for path in paths {
             self.unconfirmed.remove(&path);
@@ -94,13 +57,9 @@ impl FileIndex {
         }
     }
 
-    /// The walk is over: what it did not find is not there any more.
+    /// Ends the walk and drops seeded paths it did not find.
     ///
-    /// Always news, even when the sweep drops nothing and the walk found
-    /// nothing new, because `indexing` is half of what the chromes are told
-    /// and it is the half that just changed. A launcher left saying "still
-    /// building" over a complete list would go on saying it until somebody
-    /// saved a file.
+    /// Always marks a change, since `indexing` flips even if no path did.
     pub fn built(&mut self) {
         for path in std::mem::take(&mut self.unconfirmed) {
             self.offered.remove(&path);
@@ -109,19 +68,16 @@ impl FileIndex {
         self.news = true;
     }
 
-    /// A path that has turned up on disk.
+    /// Adds a path that appeared on disk.
     pub fn appeared(&mut self, path: String) {
         self.unconfirmed.remove(&path);
         self.news |= self.offered.insert(path);
     }
 
-    /// A path that has gone, and everything that was under it.
+    /// Removes `path` and everything under it.
     ///
-    /// One event is all the kernel gives for a `rm -r`: a watch on a tree
-    /// reports the directory going, not each of the thousand paths that went
-    /// with it. The range is over `path/` rather than over `path`, so a
-    /// sibling whose name merely starts the same way — `Notes-elsewhere.txt`
-    /// beside `Notes` — stays where it is.
+    /// A `rm -r` reports only the directory, so its contents go too. The range
+    /// is over `path/`, so a sibling such as `Notes-old` beside `Notes` stays.
     pub fn vanished(&mut self, path: &str) {
         let under = format!("{path}/");
         let gone: Vec<String> = self
@@ -137,28 +93,20 @@ impl FileIndex {
         }
     }
 
-    /// What a launcher is offered, in the order it goes on screen.
-    ///
-    /// Byte order rather than the user's collation: the same home has to
-    /// produce the same list on every machine, and `LC_COLLATE` is not a thing
-    /// a desktop should be able to reorder a launcher with.
+    /// Every path, in byte order so the list does not depend on `LC_COLLATE`.
     pub fn files(&self) -> Vec<String> {
         self.offered.iter().cloned().collect()
     }
 
-    /// Whether the first full walk is still running, which is what a page
-    /// draws its "still building" line from.
+    /// Whether a walk is still running, so the list may be incomplete.
     pub fn indexing(&self) -> bool {
         self.indexing
     }
 
-    /// Whether there is a broadcast to make, asked once per answer.
+    /// Returns and clears whether the index changed and needs a broadcast.
     ///
-    /// The index is told about every filesystem event under a home and most of
-    /// them change nothing a launcher draws — a write into a file that already
-    /// exists, a path that was already known, a removal of one that was not.
-    /// Sending the whole list to every chrome for one of those is a megabyte
-    /// of JSON saying what the page already had.
+    /// Most filesystem events change nothing here, and each broadcast can be
+    /// megabytes.
     pub fn changed(&mut self) -> bool {
         std::mem::replace(&mut self.news, false)
     }

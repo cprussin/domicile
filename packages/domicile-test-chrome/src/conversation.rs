@@ -1,4 +1,4 @@
-//! What a chrome says and hears, over anything that can be read and written.
+//! The chrome side of the protocol, over any reader and writer.
 
 use std::io::{BufRead, Write};
 use std::time::{Duration, Instant};
@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 use domicile_host::ipc::to_line;
 use domicile_protocol::{ChromeMessage, HostMessage, PROTOCOL_VERSION};
 
-/// What can go wrong being a chrome.
+/// Errors from talking to a host.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ChromeError {
     #[error("the host went away before it said anything")]
@@ -38,21 +38,9 @@ pub enum ChromeError {
 /// Say hello and wait for the welcome, returning the version agreed on and
 /// anything the host said before it.
 ///
-/// The welcome is waited for by *type* rather than by position, because the
-/// host is not obliged to send it first and observably does not. A chrome now
-/// joins the compositor's broadcast list at the handshake rather than at the
-/// socket — so the window is narrower than it was — but it is not closed: the
-/// join happens inside the `hello` arm and the `welcome` is written after that
-/// arm returns, so a broadcast the handshake itself set off can still reach
-/// the socket ahead of the reply. `@domicile-desktop/sdk` dispatches on type
-/// and holds what arrives early for the page; this does the same, and a
-/// stand-in that insisted on position would fail a test about the desktop with
-/// a complaint about a greeting.
-///
-/// The refusal is a value rather than a panic: a version mismatch is the
-/// failure a protocol bump produces, and a test that hits it should report
-/// which two numbers disagreed rather than time out looking like a compositor
-/// that never came up.
+/// Matches the welcome by type, not position: a broadcast triggered by the
+/// handshake can reach the socket before the welcome. `@domicile-desktop/sdk`
+/// does the same.
 pub fn greet(
     heard: &mut impl BufRead,
     said: &mut impl Write,
@@ -67,20 +55,15 @@ pub fn greet(
     let mut early = Vec::new();
     let until = Instant::now() + patience;
     loop {
-        // Deadlined, because a *successful* read advances nothing: a host that
-        // talks and never welcomes — one broadcasting frames while its `hello`
-        // handler is broken — would otherwise be waited on forever, and a hang
-        // has no message at all. A read timeout bounds each read, not the loop.
+        // The read timeout bounds each read, not the loop. A host that keeps
+        // talking without a welcome would otherwise hang the test.
         if Instant::now() >= until {
             return Err(ChromeError::NeverCame {
                 heard: transcript(&early),
             });
         }
         let message = match hear(heard) {
-            // A read that ran out of time is this deadline arriving through
-            // the socket rather than through the clock, and it says the same
-            // thing: what did come, instead of blaming a socket that behaved
-            // exactly as it was asked to.
+            // A read timeout is the same deadline; report it the same way.
             Err(ChromeError::Io(std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut)) => {
                 return Err(ChromeError::NeverCame {
                     heard: transcript(&early),
@@ -109,7 +92,7 @@ pub fn greet(
     }
 }
 
-/// What a host said, as the lines it said them on.
+/// Format messages for an error, one wire line each.
 pub(crate) fn transcript(said: &[HostMessage]) -> String {
     if said.is_empty() {
         return "nothing at all".to_string();
@@ -120,11 +103,8 @@ pub(crate) fn transcript(said: &[HostMessage]) -> String {
         .join("\n")
 }
 
-/// A completed handshake: the version, and whatever arrived ahead of it.
-///
-/// The early messages are kept rather than dropped — they are things the host
-/// said to this chrome, and a test asking what a compositor said should not
-/// have a hole in the answer where the greeting was.
+/// A completed handshake: the agreed version and any messages that arrived
+/// before the welcome.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Greeting {
     pub agreed: u32,
@@ -140,23 +120,8 @@ pub fn say(said: &mut impl Write, message: &ChromeMessage) -> Result<(), ChromeE
 
 /// Read the next message the host sent, or `None` once it has closed.
 ///
-/// A closed connection is the end rather than a failure: a compositor that
-/// stopped is something a test asserts on, and the caller has the context to
-/// say whether it was expected.
-///
-/// # Frames
-///
-/// [`HostMessage::AppFrame`] is a header line followed by that many bytes of
-/// pixels on the same socket, so reading it as a line and stopping would leave
-/// the reader pointing into the middle of an image — where the next `\n` is
-/// whatever byte of RGBA happens to be `0x0a`, and every message after it is
-/// garbage attributed to the compositor. The payload is therefore consumed
-/// here, as part of reading the header that measures it.
-///
-/// The pixels are dropped rather than returned. No test has yet asked what a
-/// frame *contained* — the questions are about which app drew, at what size
-/// and how often, and all of those are in the header. A test that needs the
-/// image should have them handed back rather than read the socket itself.
+/// A closed connection is not an error; the caller decides whether it was
+/// expected.
 pub fn hear(heard: &mut impl BufRead) -> Result<Option<HostMessage>, ChromeError> {
     let mut line = String::new();
     let read = heard

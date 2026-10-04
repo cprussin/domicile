@@ -1,16 +1,12 @@
-//! What is left running when a desktop ends.
+//! Checks that no process outlives a desktop.
 //!
-//! THE ENGINE IS NOT ONE PROCESS. Chromium forks a GPU process, a zygote and
-//! whatever else it needs, and `Child::kill` reaches exactly one of them. On
-//! 2026-09-15 the browser took SIGSEGV two hundred milliseconds into a tty run
-//! and a sibling was still logging eight seconds later -- with DRM master on
-//! the card, which is a console nobody can get back.
+//! Chromium forks GPU, zygote and other processes, and `Child::kill` reaches
+//! only one. A surviving GPU process can keep DRM master and leave the console
+//! unrecoverable. So each component runs in its own process group, and the
+//! whole group is signaled.
 //!
-//! So each component is started in a process group of its own and the group is
-//! what gets signaled. These tests are the only place that is asserted: it
-//! cannot be read off a `Command`, because std exposes no getter for it, and a
-//! unit test over the decision would be a test that we wrote the line we wrote.
-//! A grandchild that really outlives its parent is the thing being prevented.
+//! These tests are the only check: std has no getter for a `Command`'s process
+//! group, so only a real grandchild can show it.
 
 use std::path::Path;
 use std::time::{Duration, Instant};
@@ -18,15 +14,14 @@ use std::time::{Duration, Instant};
 use domicile_launch::spawn::Spawn;
 use domicile_launch::supervise::Running;
 
-/// Whether the kernel still knows about this pid. Signal 0 checks permission
-/// and existence without delivering anything, which is exactly the question.
+/// Whether the pid still exists. Signal 0 checks without delivering anything.
 fn alive(pid: i32) -> bool {
     unsafe { libc::kill(pid, 0) == 0 }
 }
 
-/// A shell that starts a long sleep, writes the sleeper's pid where the test
-/// can read it, and then waits -- so the group has two members and the one the
-/// supervisor holds is not the one that has to die.
+/// A shell that starts a long sleep, writes the sleeper's pid to `pidfile`,
+/// then waits. The supervisor holds the shell, so only the group signal can
+/// reach the sleeper.
 fn parent_of_a_sleeper(pidfile: &Path) -> Spawn {
     Spawn {
         program: "/bin/sh".into(),
@@ -58,8 +53,8 @@ fn sleeper(pidfile: &Path) -> i32 {
     panic!("the test child never reported a grandchild; it did not start");
 }
 
-/// The kernel does not free a pid the instant it is signaled, so a single
-/// read after `drop` is a race the test would lose about as often as it won.
+/// Polls until `pid` is gone. The kernel does not free a pid the instant it is
+/// signaled, so a single check would be flaky.
 fn gone_within(pid: i32, patience: Duration) -> bool {
     let deadline = Instant::now() + patience;
     while Instant::now() < deadline {
@@ -94,10 +89,9 @@ fn a_grandchild_does_not_outlive_the_run() {
 
 #[test]
 fn a_component_that_goes_quietly_is_not_waited_out() {
-    // The other half of `LAST_WORDS`, and the regression it invites: a grace
-    // period that is always spent is three seconds on the end of every run,
-    // including the ordinary Ctrl-C. The engine is asked to stop and given
-    // time; a component that takes it should cost nothing.
+    // The `LAST_WORDS` grace period must only be spent on a component that
+    // ignores SIGTERM. Otherwise every run, including Ctrl-C, ends three
+    // seconds late.
     let dir = tempfile::tempdir().expect("a temp dir");
     let pidfile = dir.path().join("sleeper.pid");
 

@@ -1,21 +1,13 @@
-//! The desk's notifications, as `org.freedesktop.Notifications` is told them
-//! and as a shell is told them back.
+//! Notification state for the `org.freedesktop.Notifications` server.
 //!
-//! The D-Bus half — owning the name, answering `Notify`, saying
-//! `NotificationClosed` and `ActionInvoked` — is `crate::notifications` in
-//! `domicile-compositor`, because a bus is not something this crate can have.
-//! What it hears is handed here as a [`Notify`], and what comes back is the
-//! [`Notification`] a shell draws and what the application has to be told.
+//! The D-Bus side lives in `domicile-compositor`'s `notifications` module. It
+//! passes each call here as a [`Notify`] and sends shells the resulting
+//! [`Notification`]s. See `docs/architecture/NOTIFICATIONS.md`.
 //!
-//! **A history, not a screen.** A server normally takes a notification down
-//! when it expires and says so. Here a notification stays until the user clears
-//! it or its application closes it, because the shell keeps a drawer of the
-//! recent ones: how long one stays *up* is the shell's, and expiring is not
-//! closing.
-//!
-//! **A picture a page can draw without reading a file**, as the tray's: the
-//! spec's image hints, the file a path names, or an icon by name, all become a
-//! `data:` URL here.
+//! - Notifications stay until the user clears them or the application closes
+//!   them, because the shell keeps a drawer of recent ones. Expiry only hides
+//!   the toast.
+//! - Every picture becomes a `data:` URL so a page can draw it.
 
 use std::fs;
 use std::path::Path;
@@ -26,33 +18,31 @@ use crate::data_url::data_url;
 use crate::png::png;
 use crate::tray::TrayIcons;
 
-/// How many are kept. The oldest goes when one more arrives: the drawer is of
-/// the *recent* ones, and every change sends the whole list to every page.
+/// How many notifications are kept. Every change sends the whole list to every
+/// page, so the oldest is dropped past this.
 pub const HISTORY: usize = 100;
 
 /// The action key the spec reserves for a press on the notification itself.
 pub const DEFAULT_ACTION: &str = "default";
 
-/// The key the browser gives the button it adds to every Web Notification,
-/// which opens its own settings page — a window a desk has no place for. Left
-/// out of one the browser sent for a page, and only that: another program may
-/// call a button what it likes.
+/// The key of the button the browser adds to every Web Notification. It opens
+/// the browser's settings page, which the desktop has no window for, so it is
+/// dropped from page notifications only.
 const BROWSER_SETTINGS_ACTION: &str = "settings";
 
-/// The longest side of a picture sent. A notification's image is drawn at a
-/// few dozen pixels, and one arriving as raw pixels is encoded with no
-/// compression at all — see [`crate::png`] — so a photograph is shrunk first.
+/// The longest side of a picture sent. Images are drawn small and raw pixels
+/// are encoded uncompressed (see [`crate::png`]), so large ones are shrunk.
 const LARGEST_SIDE: i32 = 128;
 
-/// The biggest file read for a picture, for [`LARGEST_SIDE`]'s reason: every
-/// change sends every notification's picture to every page.
+/// The biggest picture file read. Every change sends every picture to every
+/// page.
 const LARGEST_FILE: u64 = 256 * 1024;
 
 /// A `Notify` call, as the compositor heard it.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Notify {
     pub app_name: String,
-    /// The id of a notification this one takes the place of, or `0`.
+    /// The id of the notification this one replaces, or `0`.
     pub replaces_id: u32,
     /// A file, a `file://` URI or an icon's name; or empty.
     pub app_icon: String,
@@ -65,21 +55,18 @@ pub struct Notify {
     pub expire_timeout: i32,
 }
 
-/// The hints a shell has a use for. Every other one is dropped by the
-/// compositor as it reads them.
+/// The hints a shell uses. The compositor drops the rest.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Hints {
     /// `0`, `1` or `2`: low, normal, critical.
     pub urgency: Option<u8>,
-    /// `image-data`, or one of its two older spellings.
+    /// `image-data`, or one of its two deprecated names.
     pub image_data: Option<Image>,
     /// `image-path`: a file, a `file://` URI or an icon's name.
     pub image_path: Option<String>,
-    /// `resident`: kept after one of its actions is taken.
+    /// `resident`: kept after an action is invoked.
     pub resident: bool,
-    /// `x-kde-origin-name`: where a notification came from, past the program
-    /// that sent it — the site, for a page's Web Notification, which the
-    /// browser sends instead of writing it into the body.
+    /// `x-kde-origin-name`: the site that sent a Web Notification.
     pub origin_name: Option<String>,
 }
 
@@ -101,7 +88,7 @@ pub struct Image {
 pub struct Notified {
     /// The id to answer `Notify` with.
     pub id: u32,
-    /// One let go of to make room, which its application is told has
+    /// A notification dropped to make room. Its application is told it
     /// expired.
     pub evicted: Option<u32>,
 }
@@ -109,8 +96,8 @@ pub struct Notified {
 /// Every notification not yet cleared, oldest first.
 pub struct Notifications {
     entries: Vec<Entry>,
-    /// The id the next new notification is given. Never `0`, which the spec
-    /// keeps for "replaces nothing".
+    /// The next new id. Never `0`, which the spec reserves for "replaces
+    /// nothing".
     next: u32,
     icons: TrayIcons,
 }
@@ -121,7 +108,7 @@ struct Entry {
 }
 
 impl Notifications {
-    /// No notifications yet, their icons looked for in `icons`.
+    /// An empty list that looks up icons in `icons`.
     pub fn new(icons: TrayIcons) -> Self {
         Notifications {
             entries: Vec::new(),
@@ -130,11 +117,11 @@ impl Notifications {
         }
     }
 
-    /// Take up `notify`, arrived at `now` (milliseconds since the epoch).
+    /// Add `notify`, received at `now` (milliseconds since the epoch).
     ///
-    /// One that replaces a notification still held keeps its id and moves to
-    /// the newest end, because it is news again. One that replaces nothing
-    /// held — cleared, or never sent — is a new one, as the spec says.
+    /// A replacement for a held notification keeps its id and moves to the
+    /// newest end. A replacement for an unknown id gets a new id, per the
+    /// spec.
     pub fn notify(&mut self, notify: Notify, now: u64) -> Notified {
         let replaced = (notify.replaces_id != 0)
             .then(|| {
@@ -154,12 +141,14 @@ impl Notifications {
         Notified { id, evicted }
     }
 
-    /// The application closed `id`. Whether it was held.
+    /// Remove `id` because its application closed it. Returns whether it was
+    /// held.
     pub fn close(&mut self, id: u32) -> bool {
         !self.dismiss(&[id]).is_empty()
     }
 
-    /// The user cleared `ids`. The ones that were held, in the order asked.
+    /// Remove `ids` because the user cleared them. Returns the held ones, in
+    /// the order given.
     pub fn dismiss(&mut self, ids: &[u32]) -> Vec<u32> {
         let held: Vec<u32> = ids
             .iter()
@@ -170,9 +159,8 @@ impl Notifications {
         held
     }
 
-    /// The user pressed `action` on `id`: `Some(closed)` where it offered
-    /// that action, `closed` being whether it is let go of as a result — every
-    /// one is, but a `resident` one.
+    /// Invoke `action` on `id`. Returns `None` if it does not offer that
+    /// action, else whether it was removed (all but `resident` ones are).
     pub fn invoke(&mut self, id: u32, action: &str) -> Option<bool> {
         let entry = self.entries.iter().find(|entry| entry.shown.id == id)?;
         let offered = if action == DEFAULT_ACTION {
@@ -193,7 +181,7 @@ impl Notifications {
         })
     }
 
-    /// What a shell is told.
+    /// The notifications to send a shell, oldest first.
     pub fn items(&self) -> Vec<Notification> {
         self.entries
             .iter()
@@ -201,14 +189,14 @@ impl Notifications {
             .collect()
     }
 
-    /// An id no notification held has, wrapping past `u32::MAX` to `1`.
+    /// The next id, wrapping past `u32::MAX` to `1`.
     fn fresh_id(&mut self) -> u32 {
         let id = self.next;
         self.next = self.next.checked_add(1).unwrap_or(1);
         id
     }
 
-    /// What `notify` is shown as, called `id`.
+    /// `notify` as a shell draws it, with id `id`.
     fn shown(&mut self, id: u32, notify: Notify, now: u64) -> Notification {
         let from_a_page = notify.hints.origin_name.is_some();
         let pairs: Vec<NotificationAction> = notify
@@ -228,8 +216,7 @@ impl Notifications {
         Notification {
             id,
             icon: self.picture(&notify),
-            // A page's notification is from the site, not from the browser
-            // that showed it.
+            // Name a page's notification after the site, not the browser.
             app_name: notify.hints.origin_name.unwrap_or(notify.app_name),
             summary: notify.summary,
             body: notify.body,
@@ -245,9 +232,8 @@ impl Notifications {
         }
     }
 
-    /// The picture `notify` is drawn with, in the spec's order: its pixels,
-    /// its `image-path`, then its application's icon. One that cannot be
-    /// drawn is passed over for the next.
+    /// The first usable picture, in the spec's order: `image-data`,
+    /// `image-path`, then the application's icon.
     fn picture(&mut self, notify: &Notify) -> Option<String> {
         notify
             .hints
@@ -275,9 +261,8 @@ impl Notifications {
     }
 }
 
-/// `image` as a PNG `data:` URL, shrunk to [`LARGEST_SIDE`] — or `None` for
-/// pixels that are not eight-bit RGB or RGBA, or that do not add up to their
-/// size.
+/// `image` as a PNG `data:` URL, shrunk to [`LARGEST_SIDE`]. `None` unless it
+/// is 8-bit RGB or RGBA with enough data for its size.
 fn pixels(image: &Image) -> Option<String> {
     let channels = usize::try_from(image.channels).ok()?;
     let (width, height, rowstride) = (
@@ -302,8 +287,7 @@ fn pixels(image: &Image) -> Option<String> {
         } else {
             (width, height)
         };
-        // Nearest neighbor: a picture drawn a few dozen pixels across has no
-        // use for a better filter, and this crate has none.
+        // Nearest neighbor is enough for an image drawn this small.
         let argb: Vec<u8> = (0..to_height)
             .flat_map(|row| {
                 let from_row = row * height / to_height;
@@ -319,9 +303,11 @@ fn pixels(image: &Image) -> Option<String> {
     })
 }
 
-/// The file at `path` as a `data:` URL, typed by what is in it — the browser
-/// writes a page's icon to a temporary file with no extension. `None` for a
-/// file that is not there, is too big to send, or is not a picture.
+/// The file at `path` as a `data:` URL, or `None` if missing, too big or not a
+/// picture.
+///
+/// The type comes from the content because the browser writes page icons to
+/// temporary files with no extension.
 fn file(path: &Path) -> Option<String> {
     if fs::metadata(path).ok()?.len() > LARGEST_FILE {
         return None;
@@ -330,7 +316,7 @@ fn file(path: &Path) -> Option<String> {
     sniffed(&bytes).map(|mime| data_url(mime, &bytes))
 }
 
-/// The type of picture `bytes` are, by their first few.
+/// The image MIME type of `bytes`, from their magic number.
 fn sniffed(bytes: &[u8]) -> Option<&'static str> {
     let text = String::from_utf8_lossy(&bytes[..bytes.len().min(256)]);
     if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
@@ -462,8 +448,7 @@ mod tests {
 
         #[test]
         fn a_replacement_keeps_its_id_and_is_news_again() {
-            // A download's progress, or a chat's unread count: one
-            // notification said over, rather than one more each time.
+            // For example, download progress updating one notification.
             let mut notifications = held(Vec::new());
             notifications.notify(notify("Downloading"), 10);
             notifications.notify(notify("Other"), 20);
@@ -538,8 +523,7 @@ mod tests {
 
             let shown = &notifications.items()[0];
             assert!(shown.clickable);
-            // A key with no label after it is a list cut short, and a button
-            // with nothing on it is not drawn.
+            // A trailing key with no label is dropped.
             assert_eq!(
                 shown.actions,
                 [NotificationAction {
@@ -571,8 +555,8 @@ mod tests {
                 .into_iter()
                 .map(|shown| (shown.urgency, shown.timeout_ms))
                 .collect();
-            // An urgency the spec has no word for is the ordinary one, and a
-            // timeout below `-1` is the server's choice, as `-1` is.
+            // An unknown urgency is normal, and any negative timeout is the
+            // server's choice.
             assert_eq!(
                 read,
                 [
@@ -615,8 +599,7 @@ mod tests {
 
         #[test]
         fn the_browsers_own_settings_button_is_left_out() {
-            // It opens the browser's settings page, which a desk has no
-            // window for.
+            // It opens the browser's settings page, which has no window here.
             let mut notifications = held(Vec::new());
 
             notifications.notify(from_the_browser(), 0);
@@ -850,9 +833,7 @@ mod tests {
 
         #[test]
         fn an_action_it_never_offered_is_nothing() {
-            // Pressing a notification that offered no `default` is a press
-            // on a picture, and an application must not hear a key it never
-            // sent.
+            // An application must not receive an action key it never sent.
             let mut notifications = held(Vec::new());
             notifications.notify(notify("Plain"), 0);
 

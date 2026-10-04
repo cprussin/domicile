@@ -1,13 +1,8 @@
-//! Who draws a window's frame: the shell, whatever the client asks for.
+//! Tests that both decoration protocols answer "server side".
 //!
-//! A shell draws a title bar over every window, so a client drawing its own —
-//! and a shadow around it — draws a second frame inside the first. The two
-//! protocols a client asks through are answered "server side" whatever it
-//! asked. A client that asks neither, or ignores the answer (GTK4 does), still
-//! draws one; `window_geometry.rs` is what keeps that from costing the pointer.
-//!
-//! The test client asks for client-side decorations on both, which is the
-//! request whose answer is in question.
+//! The shell draws every window's frame, so a client-drawn frame would be a
+//! second one. The test client asks for client-side decorations. Clients that
+//! draw their own anyway (GTK4) are handled by `window_geometry.rs`.
 
 mod running;
 
@@ -28,7 +23,7 @@ fn a_window_asking_to_draw_its_own_frame_is_told_the_shell_draws_it() {
     );
 }
 
-/// `org_kde_kwin_server_decoration`, which is what GTK3 asks through.
+/// `org_kde_kwin_server_decoration`, which GTK3 asks through.
 #[test]
 fn a_gtk3_window_asking_to_draw_its_own_frame_is_told_the_shell_draws_it() {
     let compositor = Compositor::started_with("{}");

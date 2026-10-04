@@ -1,25 +1,20 @@
-//! The order a desk turns its theme over in.
+//! The order of steps in a theme change.
 //!
-//! A shell animates a theme change by capturing the frame it is leaving and
-//! wiping the new one in across it. The windows on the desk are in that frame,
-//! so they must still be drawn the old way when it is captured and the new way
-//! when the wipe starts -- otherwise the wipe passes over windows that had
-//! already turned. So a turnover runs in three steps:
+//! A shell animates a theme change by capturing the old frame and wiping the
+//! new one in over it. Client windows are in that frame, so they must switch
+//! after the capture and before the wipe:
 //!
-//! 1. Every chrome is told the theme, and paints its own wipe.
-//! 2. Once every chrome has captured ([`Turnover::captured`]), the desk's
-//!    windows are told: the settings portal for Wayland clients.
-//! 3. Once every mapped window has committed a frame since
-//!    ([`Turnover::repainted`]), the chromes are told the windows have turned,
-//!    and the browser draws its own pages the new way.
+//! 1. Every chrome gets the theme and starts its wipe.
+//! 2. Once every chrome has captured ([`Turnover::captured`]), the settings
+//!    portal tells Wayland clients.
+//! 3. Once every mapped window has committed a frame
+//!    ([`Turnover::repainted`]), the chromes are told the windows switched.
 //!
-//! Neither wait is allowed to hold the desk up for long. A shell that never
-//! captures -- an old one, or a page with no wipe -- and a window that never
-//! repaints are both ordinary, so each phase has a deadline, after which the
-//! desk turns anyway: late and unanimated rather than never.
+//! Each phase has a deadline, because some shells never capture and some
+//! windows never repaint. Past it, the theme switches without animation.
 //!
-//! Pure, and generic over what names a chrome, so the compositor's threads
-//! and sockets stay out of it: it is told events and answers what to do next.
+//! This type is pure and generic over the chrome's id. It takes events and
+//! returns the next [`Step`].
 
 use std::collections::HashSet;
 use std::hash::Hash;
@@ -29,17 +24,15 @@ use domicile_protocol::Theme;
 
 /// How long the windows wait for every chrome to capture.
 ///
-/// A shell captures after its toggle's 150ms set phase and one frame, so this
-/// is several times what a working one takes. What it is sized against is
-/// Chromium's four-second limit on a view transition's update callback: this,
-/// [`REPAINT_WITHIN`] and the shell's own settle all happen inside it.
+/// A shell captures after about 150ms. The bound that matters is Chromium's
+/// four-second limit on a view transition's update callback, which must cover
+/// this, [`REPAINT_WITHIN`] and the shell's own work.
 pub const CAPTURE_WITHIN: Duration = Duration::from_millis(1000);
 
-/// How long the desk waits for its windows to repaint once they are told.
+/// How long to wait for windows to repaint after the portal signal.
 ///
-/// A toolkit repaints a theme change in a frame or two after the portal's
-/// signal reaches it; a window that has not by this point is either hung or
-/// not listening, and the wipe goes ahead over it.
+/// Toolkits repaint within a frame or two. A window that has not by then is
+/// hung or ignoring the signal.
 pub const REPAINT_WITHIN: Duration = Duration::from_millis(300);
 
 /// What the caller does next.
@@ -47,14 +40,13 @@ pub const REPAINT_WITHIN: Duration = Duration::from_millis(300);
 pub enum Step {
     /// Nothing yet.
     Wait,
-    /// Tell the windows, then hand [`Turnover::announced`] the ones mapped.
+    /// Tell the windows, then pass the mapped ones to [`Turnover::announced`].
     Announce,
-    /// The windows have turned: tell every chrome, and forget this turnover.
+    /// The windows switched: tell every chrome and drop this turnover.
     Turned,
 }
 
-/// One theme change, from the chromes being told to the windows having
-/// turned.
+/// One theme change, from telling the chromes to the windows switching.
 #[derive(Debug)]
 pub struct Turnover<C> {
     theme: Theme,
@@ -70,8 +62,7 @@ enum Phase<C> {
 }
 
 impl<C: Eq + Hash> Turnover<C> {
-    /// Start turning the desk to `theme`, waiting on `chromes` -- the ones
-    /// that were told it. A desk with none has nothing to wait for.
+    /// Start a change to `theme`, waiting on the `chromes` that were told.
     pub fn begin(theme: Theme, chromes: impl IntoIterator<Item = C>) -> (Self, Step) {
         let awaiting: HashSet<C> = chromes.into_iter().collect();
         let mut turnover = Turnover {
@@ -82,7 +73,7 @@ impl<C: Eq + Hash> Turnover<C> {
         (turnover, step)
     }
 
-    /// The theme this turnover is to.
+    /// The target theme.
     pub fn theme(&self) -> Theme {
         self.theme
     }
@@ -98,7 +89,7 @@ impl<C: Eq + Hash> Turnover<C> {
         }
     }
 
-    /// The chromes have had long enough.
+    /// The capture deadline passed.
     pub fn capture_deadline(&mut self) -> Step {
         match self.phase {
             Phase::Capturing(_) => {
@@ -109,8 +100,7 @@ impl<C: Eq + Hash> Turnover<C> {
         }
     }
 
-    /// The windows have been told; `windows` are the ones mapped, each of
-    /// which is waited on for a frame.
+    /// The windows were told. Waits for a frame from each of `windows`.
     pub fn announced(&mut self, windows: impl IntoIterator<Item = String>) -> Step {
         let awaiting: HashSet<String> = windows.into_iter().collect();
         self.phase = Phase::Repainting(awaiting);
@@ -128,7 +118,7 @@ impl<C: Eq + Hash> Turnover<C> {
         }
     }
 
-    /// The windows have had long enough.
+    /// The repaint deadline passed.
     pub fn repaint_deadline(&mut self) -> Step {
         match self.phase {
             Phase::Repainting(_) => {

@@ -1,27 +1,21 @@
-//! The verifier behind `crate::lock::Verifier`: PAM, as the desk's own user.
+//! The PAM `crate::lock::Verifier`, for the user this process runs as.
 //!
-//! `pam_authenticate` against the user this process runs as, through the
-//! service `lock.pam_service` names — which is what every other lock screen on
-//! Linux does, and what makes the lock a secret rather than a string in a
-//! world-readable file.
+//! Runs `pam_authenticate` through the service `lock.pam_service` names, as
+//! other Linux lock screens do. See `docs/LOCK.md`.
 //!
-//! **THE SERVICE IS THE MACHINE'S.** A lock screen gets a PAM service of its
-//! own that the *system* declares — swaylock's `security.pam.services.swaylock`
-//! is the pattern — and a home-manager module cannot declare one. So a desk
-//! that names a service `/etc/pam.d` does not have does not come up: Linux-PAM
-//! would answer it with the `other` stack, which is a deny on NixOS and the
-//! ordinary login stack on Debian, and neither is what the config asked for.
-//! The file is looked for again on every attempt, for the same reason.
+//! The system must declare the service (as with swaylock's
+//! `security.pam.services.swaylock`); a home-manager module cannot. A desk
+//! naming a service missing from `/etc/pam.d` fails at startup, because
+//! Linux-PAM would fall back to the `other` stack: a deny on NixOS, the login
+//! stack on Debian. The file is checked on every attempt for the same reason.
 //!
-//! **LOADED, NOT LINKED**, the way libEGL and the engine are: a desk that does
-//! not use PAM needs no libpam, and a desk that does learns at startup that it
-//! has none, by name. The flake puts `pam` on the compositor's runpath.
+//! libpam is loaded at run time rather than linked, so a desk without PAM
+//! needs no libpam, and a desk with PAM reports a missing one by name at
+//! startup. The flake puts `pam` on the compositor's runpath.
 //!
-//! **WHAT IS NOT DONE.** Only `pam_authenticate`: no `pam_acct_mgmt`, no
-//! `pam_setcred` — swaylock's set, minus its credential refresh. And every
-//! prompt a module sends is answered with the one passphrase the page offered,
-//! so a stack that asks two questions (a password and then a one-time code)
-//! gets the same answer twice and refuses it; the protocol carries one.
+//! Only `pam_authenticate` runs: no `pam_acct_mgmt` or `pam_setcred`. Every
+//! prompt is answered with the one passphrase the page sent, so a stack that
+//! asks two questions (a password, then a one-time code) fails.
 
 use std::ffi::{c_char, c_int, c_void, CStr, CString};
 use std::path::{Path, PathBuf};
@@ -34,17 +28,16 @@ use tracing::{info, warn};
 
 use crate::lock::{CouldNotCheck, Verdict, Verifier};
 
-/// Where Linux-PAM reads a service from. Handed to `pam_start_confdir`
-/// explicitly rather than left to its default, so the directory this module
-/// checks and the one PAM reads are the same one — the default would also try
-/// `/etc/pam.conf` and a vendor directory this never looked in.
+/// Where Linux-PAM reads services from. Passed to `pam_start_confdir` so PAM
+/// reads the directory this module checks; the default also tries
+/// `/etc/pam.conf` and a vendor directory.
 pub const SERVICES: &str = "/etc/pam.d";
 
 /// Linux-PAM's soname. `pam_start_confdir` is 1.4 (2020) and later.
 const LIBRARY: &str = "libpam.so.0";
 
-// `security/_pam_types.h`, which is not on every machine this builds on — the
-// numbers are Linux-PAM's ABI and have not moved.
+// From `security/_pam_types.h`, which not every build machine has. These are
+// Linux-PAM's stable ABI values.
 const PAM_SUCCESS: c_int = 0;
 const PAM_BUF_ERR: c_int = 5;
 const PAM_AUTH_ERR: c_int = 7;
@@ -99,21 +92,20 @@ pub enum NoPam {
 pub struct Pam {
     libpam: Libpam,
     service: CString,
-    /// The service's file, looked for before every attempt — see this module's
-    /// note.
+    /// The service's file, checked before every attempt (see the module
+    /// docs).
     file: PathBuf,
     confdir: CString,
     user: CString,
 }
 
 impl Pam {
-    /// PAM through `service`, read from `confdir` — [`SERVICES`] on a real
-    /// desk — for the user this process runs as.
+    /// PAM through `service`, read from `confdir` ([`SERVICES`] on a real
+    /// desk), for the user this process runs as.
     ///
-    /// **THE USER IS THE PROCESS'S**, from `getuid` and the password database,
-    /// and never `$USER`: an environment is something whoever started this
-    /// process chose, and a lock that authenticated the user it was told to
-    /// would open to anybody who could start it with their own name.
+    /// The user comes from `getuid` and the password database, never `$USER`.
+    /// Whoever starts the process controls its environment, so trusting
+    /// `$USER` would let them unlock with their own password.
     pub fn for_this_user(service: &str, confdir: &Path) -> Result<Pam, NoPam> {
         let file = service_file(service, confdir)?;
         // SAFETY: `getuid` cannot fail and touches nothing.
@@ -131,22 +123,20 @@ impl Pam {
 }
 
 impl Verifier for Pam {
-    /// `pam_authenticate`, on the thread `crate::lock` checks on — it may sleep
-    /// a couple of seconds on a wrong password, which is PAM's to decide.
+    /// Run `pam_authenticate` on the thread `crate::lock` checks on. PAM may
+    /// sleep a few seconds after a wrong password.
     ///
-    /// **ONLY `PAM_AUTH_ERR` IS A REFUSAL.** Every other failure — a module
-    /// missing, a helper that would not run, a user PAM does not know — is a
-    /// desk that cannot be opened, which is an error and not a person who
-    /// mistyped.
+    /// Only `PAM_AUTH_ERR` is a refusal. Any other failure (a missing module,
+    /// a helper that would not run, an unknown user) is an error, not a
+    /// mistyped passphrase.
     ///
-    /// **THE PASSPHRASE IS COPIED ONCE**, into the `malloc` each prompt's
-    /// answer is: PAM owns that copy, and Linux-PAM overwrites a password it
-    /// is handed before it frees it. Nothing on this side makes another.
+    /// The passphrase is copied only once, into the `malloc`ed prompt answer.
+    /// PAM owns that copy, and Linux-PAM overwrites it before freeing.
     fn opens_the_desk(&self, passphrase: &Passphrase) -> Verdict {
         let typed = passphrase.as_str();
         if typed.contains('\0') {
-            // What C would see is the part before the NUL, which is a second
-            // passphrase that opens the desk. No password has a NUL in it.
+            // C reads only up to the NUL, so the prefix would also open the
+            // desk. No real password contains a NUL.
             Ok(false)
         } else if !self.file.exists() {
             Err(CouldNotCheck(format!(
@@ -160,8 +150,8 @@ impl Verifier for Pam {
     }
 }
 
-/// The four entry points of libpam this uses, and the library that keeps them
-/// valid.
+/// The libpam entry points used here, and the library that keeps them
+/// mapped.
 struct Libpam {
     start: PamStartConfdir,
     authenticate: PamAuthenticate,
@@ -184,8 +174,8 @@ type PamStrerror = unsafe extern "C" fn(handle: *mut c_void, status: c_int) -> *
 
 impl Libpam {
     fn load(library: &str) -> Result<Libpam, NoPam> {
-        // SAFETY: loading a library runs its initializers; libpam's are
-        // Linux-PAM's own and this is the library every lock screen links.
+        // SAFETY: loading runs libpam's initializers, which are Linux-PAM's
+        // own and run by every lock screen that links it.
         let loaded = unsafe { Library::new(library) }.map_err(|source| NoPam::Library {
             library: library.to_string(),
             source,
@@ -268,8 +258,7 @@ unsafe fn symbol<T: Copy>(loaded: &Library, library: &str, name: &'static str) -
         })
 }
 
-/// The file `service` is read from, or why a desk that named it does not come
-/// up.
+/// The file `service` is read from, or why the desk cannot start with it.
 fn service_file(service: &str, confdir: &Path) -> Result<PathBuf, NoPam> {
     let file = confdir.join(service);
     if file.exists() {
@@ -331,17 +320,15 @@ struct PamResponse {
     resp_retcode: c_int,
 }
 
-/// The conversation: what PAM asks the person at the desk, answered with what
-/// they typed.
+/// The PAM conversation: answers PAM's prompts with the typed passphrase.
 ///
-/// Every prompt, echoed or not, gets the passphrase. A message — an error or a
-/// notice from a module, `"Your password expires in 3 days"` — gets no answer
-/// and goes in the log, where somebody locked out of their desk will look. A
-/// style this does not know ends the conversation before anything is
-/// allocated, so there is nothing to hand back half-built.
+/// Every prompt, echoed or not, gets the passphrase. Messages (module errors
+/// and notices such as `"Your password expires in 3 days"`) get no answer and
+/// are logged, where a locked-out user will look. An unknown style ends the
+/// conversation before anything is allocated, so nothing is returned
+/// half-built.
 ///
-/// `appdata` is a `&&str`: the passphrase, borrowed for as long as the handle
-/// it was started with lives.
+/// `appdata` is a `&&str`: the passphrase, borrowed for the handle's lifetime.
 extern "C" fn converse(
     count: c_int,
     messages: *mut *const PamMessage,
@@ -422,30 +409,28 @@ mod tests {
     };
     use crate::lock::{CouldNotCheck, Verifier};
 
-    /// The one service every test here reads: its own, in a directory of its
-    /// own, so nothing depends on what the machine's `/etc/pam.d` says.
+    /// The service every test reads, from its own directory, so tests do not
+    /// depend on the machine's `/etc/pam.d`.
     const SERVICE: &str = "domicile-test";
 
-    /// A PAM service that takes one word, from this process's own user, and
-    /// refuses everything else.
+    /// A PAM service that accepts one word from this process's user and
+    /// refuses anything else.
     ///
-    /// **REAL PAM, WITH THE PASSWORD CHECK SWAPPED FOR A SCRIPT.** `pam_unix`
-    /// would need a real user's real password, which no runner has; `pam_exec`
-    /// with `expose_authtok` is the stock module that asks the conversation for
-    /// a password exactly the way `pam_unix` does and hands it to a program.
-    /// So what is proven here is everything but `pam_unix` itself: libpam
-    /// loaded, the service read out of the directory given, the user this
-    /// process is, the conversation answering the prompt with what was typed,
-    /// and the verdict read back off `pam_authenticate`.
+    /// Real PAM, with the password check replaced by a script. `pam_unix`
+    /// needs a real user's password, which no runner has. `pam_exec` with
+    /// `expose_authtok` asks the conversation for a password the same way and
+    /// passes it to a program. This covers everything except `pam_unix`:
+    /// loading libpam, reading the service, the user, the conversation and
+    /// the verdict.
     ///
-    /// The stack is Debian's `common-auth` in miniature: the script succeeding
-    /// skips the deny, and anything else falls on it.
+    /// The stack mirrors Debian's `common-auth`: the script succeeding skips
+    /// the deny.
     fn a_service_that_takes(word: &str) -> (TempDir, Pam) {
         let confdir = tempfile::tempdir().expect("a directory");
         let script = confdir.path().join("check");
-        // Builtins only: `pam_exec` runs this with no `PATH`. `read` sets the
-        // variable and fails at an end with no newline, which is what
-        // `pam_exec` sends, so its status is not the verdict -- the tests are.
+        // Builtins only: `pam_exec` runs this with no `PATH`. `read` fails
+        // on input with no trailing newline, which `pam_exec` sends, so the
+        // comparisons give the verdict.
         std::fs::write(
             &script,
             format!(
@@ -470,8 +455,7 @@ mod tests {
         (confdir, pam)
     }
 
-    /// Who this process runs as, asked of something other than the code under
-    /// test.
+    /// Who this process runs as, found independently of the code under test.
     fn this_user_says_id() -> String {
         let ran = Command::new("id").arg("-un").output().expect("`id` runs");
         String::from_utf8(ran.stdout)
@@ -489,10 +473,9 @@ mod tests {
 
     #[test]
     fn a_passphrase_with_a_nul_in_it_is_not_the_one_before_the_nul() {
-        // PAM's side is C, so a passphrase reaches it as far as its first NUL.
-        // Handed over as it is, `friend\0anything` would be `friend` -- a
-        // second passphrase that opens the desk. No password has a NUL in it,
-        // so one that does is not the password.
+        // PAM is C, so `friend\0anything` would reach it as `friend`, a
+        // second passphrase that opens the desk. No real password contains a
+        // NUL.
         let (_confdir, pam) = a_service_that_takes("friend");
         assert_eq!(
             pam.opens_the_desk(&Passphrase::from("friend\0anything")),
@@ -502,9 +485,8 @@ mod tests {
 
     #[test]
     fn a_stack_pam_cannot_run_is_an_error_and_not_a_refusal() {
-        // A module that is not there is a desk nobody can open, which is not
-        // the same thing as somebody who mistyped -- and the difference is the
-        // line in the log that says which.
+        // A missing module means nobody can open the desk. That differs from
+        // a mistyped passphrase, and the log must say which.
         let confdir = tempfile::tempdir().expect("a directory");
         std::fs::write(
             confdir.path().join(SERVICE),
@@ -524,10 +506,9 @@ mod tests {
 
     #[test]
     fn a_service_removed_under_a_running_desk_is_an_error_and_not_pam_s_other() {
-        // PAM READS THE SERVICE ON EVERY ATTEMPT, and one it cannot find is
-        // answered with the `other` stack -- on NixOS a deny, which would be
-        // reported here as a wrong passphrase to somebody who typed the right
-        // one. So the file is looked for every time, and its absence is said.
+        // PAM reads the service on every attempt and falls back to `other`
+        // if it is missing. On NixOS that denies, which would look like a
+        // wrong passphrase. So the file is checked every time.
         let (confdir, pam) = a_service_that_takes("friend");
         std::fs::remove_file(confdir.path().join(SERVICE)).expect("the service goes");
         std::fs::write(
@@ -566,9 +547,8 @@ mod tests {
 
     #[test]
     fn a_uid_with_no_user_is_said_rather_than_guessed() {
-        // THE USER IS THE PROCESS'S, and never an environment variable a
-        // caller could set -- so one the password database does not know is a
-        // desk with nobody to authenticate, not a desk that asks for `$USER`.
+        // The user comes from the process, never from `$USER`, so an unknown
+        // uid is an error rather than a fallback.
         let nobody_has_this = 0xFFFF_FFF0;
         let Err(NoPam::User { uid }) = user_named_by(nobody_has_this) else {
             panic!("a uid with no entry has no name");
@@ -585,10 +565,8 @@ mod tests {
 
     #[test]
     fn a_prompt_is_answered_with_what_was_typed_and_a_message_is_not() {
-        // Echoed or not, a prompt gets the passphrase -- `pam_exec` above asks
-        // with echo off, and a module that asks with it on is asking the same
-        // person the same question. A message is something to say, not a
-        // question, and PAM wants no answer to it.
+        // Every prompt gets the passphrase whether or not it echoes. A
+        // message is not a question and gets no answer.
         let typed = "friend";
         let messages = [
             message(super::PAM_PROMPT_ECHO_OFF, text(b"Password: \0")),
@@ -606,8 +584,7 @@ mod tests {
 
     #[test]
     fn a_question_this_cannot_answer_ends_the_conversation() {
-        // `PAM_BINARY_PROMPT` is Linux-PAM's style for a module speaking to a
-        // client-side agent, and there is none here to answer it.
+        // `PAM_BINARY_PROMPT` is for a client-side agent, and there is none.
         const PAM_BINARY_PROMPT: c_int = 7;
         let messages = [
             message(super::PAM_PROMPT_ECHO_OFF, text(b"Password: \0")),

@@ -1,24 +1,14 @@
-//! What `domicile` was asked to do.
+//! Parses the `domicile` command line.
 //!
-//! Two things, told apart by the first argument: `domicile <shell>` runs a
-//! desktop, and `domicile <verb>` sends a command to one that is already
-//! running. One binary either way, the way `sway` and `swaymsg` are two names
-//! for one — and one name is enough here because the desktop is the only thing
-//! either form talks about.
-//!
-//! A run may also carry `--config`, which is the compositor's own file: the
-//! monitors, their scales, their turns and the profiles that choose between
-//! them. Optional twice over — a desktop with no monitors written down is the
-//! defaults and that is a desktop, and a desktop whose monitors are written
-//! down in the usual place does not need telling. `config_path.rs` is where
-//! the usual place is and why the guess is made there and not in the
-//! compositor, which still has no default location for anything.
+//! `domicile <shell>` runs a desktop. `domicile <verb>` sends a command to a
+//! running one. `--config` is optional; [`crate::config_path`] finds the
+//! default.
 
 use std::path::PathBuf;
 
 use crate::control::Request;
 
-/// A command line `domicile` will not run.
+/// An invalid `domicile` command line.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum CliError {
     #[error(
@@ -76,69 +66,40 @@ pub enum CliError {
     TwoConfigs { second: String },
 }
 
-/// What to do.
+/// A parsed `domicile` command line.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Invocation {
     /// Run a desktop on this shell, with the compositor reading `config`.
     ///
-    /// `None` is nobody having named one, which `config_path` turns into the
-    /// file where a config lives or into the compositor's defaults. Not itself
-    /// "the defaults" any more: this is what the command line said, and where
-    /// else to look is a question about the machine rather than about the
-    /// words somebody typed.
+    /// A `None` config means none was given; `config_path` resolves it.
     Run {
         /// The shell, or `None` for the one the config names.
         shell: Option<String>,
         config: Option<PathBuf>,
     },
-    /// Ask the desktop that is already running.
+    /// Query the running desktop.
     Ask { request: Request },
-    /// Tell the desktop that is already running to serve this shell instead.
+    /// Tell the running desktop to serve this shell instead.
     ///
-    /// The word as it was typed, and the one verb that carries one. What file
-    /// it names is a question about the directory it was typed in and the home
-    /// directory of whoever typed it — `shell_path` has those rules and an
-    /// injected filesystem to ask them against, and this module has neither.
+    /// Kept as typed; `shell_path` resolves it against the filesystem.
     Load { shell: String },
-    /// Tell the desktop that is already running to open this in a browser
-    /// window of its own.
+    /// Tell the running desktop to open this in a new browser window.
     ///
-    /// As typed, for [`Invocation::Load`]'s reason: a path is relative to the
-    /// directory it was typed in, and [`crate::address`] is what makes it a
-    /// URL.
+    /// Kept as typed; [`crate::address`] makes it a URL.
     Open { target: String },
 }
 
-/// Read the command line, or refuse it and say what to type instead.
+/// Parses the command line.
 ///
-/// Refused rather than defaulted, both ways. There is no shell a bare
-/// `domicile` could mean, and a second argument is somebody saying two things:
-/// quietly dropping the word they typed is how a run serves one page while
-/// they read another on their own command line.
-///
-/// A VERB WINS OVER A SHELL OF THE SAME NAME, and the set of them is closed so
-/// that it can. `shell_path` reads a bare word as a path when there is
-/// something on disk by that name, which is what makes `domicile shell.js`
-/// work from inside a build — so leaving the two readings to compete would
-/// mean `domicile which-shell` starting a desktop for anyone who happened to
-/// have a file called that beside them. A shell named after a verb is run the
-/// way every path is: `domicile ./which-shell`.
-///
-/// **A VERB TAKES WHAT THAT VERB TAKES, AND NEVER A FLAG.** `which-shell`
-/// takes nothing: it is a question a desktop answers out of what it already
-/// knows. `load-shell` takes one word, the shell to serve from now on, and is
-/// the reason this is a rule per verb rather than the blanket "a verb takes
-/// nothing" it used to be. What neither takes is `--config`: the desktop being
-/// spoken to read its config when it started, so a flag here would be a config
-/// handed to a process that is not going to read one, which is worse than
-/// refused because it looks like it worked. `load-shell --config x.json
-/// ./shell.js` is refused by [`CliError::ExtraToLoad`] for that reason and not
-/// by accident — a verb's argument list is closed the same way the set of
-/// verbs is.
-///
-/// The flag may come on either side of the shell. A run is two values and
-/// neither is positional against the other, so the order somebody types them
-/// in is not a thing to be right about.
+/// - A bare `domicile` runs the shell the config names. Extra arguments are
+///   rejected rather than dropped.
+/// - Verbs take precedence over a shell of the same name, because
+///   `shell_path` treats a bare word as a path when such a file exists. Use
+///   `./which-shell` to run a shell with a verb's name.
+/// - Each verb has a closed argument list and takes no flags. The running
+///   desktop already read its config, so a `--config` would be silently
+///   ignored.
+/// - `--config` may come before or after the shell.
 pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, CliError> {
     let mut args = args.into_iter();
     let Some(first) = args.next() else {
@@ -170,11 +131,8 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
     let mut word = Some(first);
     while let Some(said) = word {
         if said == CONFIG {
-            // The path is read before the duplicate is refused, because the
-            // message names it and there is nothing to name until it has
-            // been. So `--config a --config` is the empty flag rather than
-            // the doubled one — which is also true of it, and is the half a
-            // person can act on without first deleting something.
+            // Read the path before checking for a duplicate, because the
+            // error names it. `--config a --config` reports a missing path.
             if let Some(second) = args.next() {
                 if config.is_some() {
                     return Err(CliError::TwoConfigs { second });
@@ -193,32 +151,26 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
     Ok(Invocation::Run { shell, config })
 }
 
-/// The flag that names the compositor's config file. The same spelling the
-/// compositor's own `arguments.rs` reads, because this is the flag that is
-/// handed on rather than a second name for it.
+/// The config file flag. Matches the compositor's flag in `arguments.rs`,
+/// which receives it.
 const CONFIG: &str = "--config";
 
-/// A verb, and what it goes on to take.
+/// A verb, and what it takes.
 ///
-/// The distinction is the whole of why this type exists: a request that is
-/// complete as soon as its word is read can be built here, and one that is not
-/// cannot. There is no `Verb::Loading(Request)` to build, because the
-/// [`Request::LoadShell`] that word leads to carries the resolved shell and
-/// resolving it is a question about a filesystem this module does not have.
+/// Only argument-free verbs carry a [`Request`]. [`Request::LoadShell`] needs
+/// a resolved shell, which needs the filesystem.
 enum Verb {
-    /// A question a desktop answers out of what it already knows.
+    /// A query that takes no arguments.
     Asking(Request),
-    /// `load-shell`: the word, with the shell still to come.
+    /// `load-shell`, which takes a shell.
     Loading,
-    /// `open-url`: the word, with the address still to come.
+    /// `open-url`, which takes an address.
     Opening,
 }
 
-/// The verb a word names, if it names one.
+/// The verb `word` names, if any.
 ///
-/// The other spelling of [`Request`]: every verb here leads to a variant
-/// there, and a variant no verb leads to is a question a desktop can answer
-/// that nobody can ask.
+/// Every [`Request`] variant needs a verb here, or nobody can send it.
 fn verb(word: &str) -> Option<Verb> {
     match word {
         "which-shell" => Some(Verb::Asking(Request::WhichShell)),

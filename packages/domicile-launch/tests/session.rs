@@ -1,5 +1,5 @@
-//! What the compositor publishes once it is up, and the shell that started it
-//! reads back.
+//! The session document the compositor publishes once it is up, for the shell
+//! to read.
 
 use std::collections::BTreeSet;
 use std::path::Path;
@@ -40,8 +40,7 @@ fn a_published_session_reads_back_as_it_was_written() {
     assert_eq!(read, a_session());
 }
 
-/// The reader is a TypeScript program, so the *spelling* of every key is the
-/// contract rather than an implementation detail of the Rust struct.
+/// The reader is TypeScript, so the key spelling is part of the contract.
 #[test]
 fn the_keys_are_the_ones_the_shell_reads() {
     let directory = tempfile::tempdir().expect("a temp dir");
@@ -68,8 +67,8 @@ fn the_keys_are_the_ones_the_shell_reads() {
     );
 }
 
-/// Published by rename, so a shell polling for the file never opens a half
-/// written one — and the temp it was renamed from does not outlive the call.
+/// Publishing renames a temp file, so a polling shell never reads a partial
+/// document. The temp file must not outlive the call.
 #[test]
 fn publishing_leaves_nothing_beside_the_session() {
     let directory = tempfile::tempdir().expect("a temp dir");
@@ -83,8 +82,7 @@ fn publishing_leaves_nothing_beside_the_session() {
     );
 }
 
-/// A compositor restarted into the same session path replaces the document
-/// rather than failing on a file its predecessor left behind.
+/// A restarted compositor replaces the document its predecessor left.
 #[test]
 fn publishing_over_an_earlier_session_replaces_it() {
     let directory = tempfile::tempdir().expect("a temp dir");
@@ -121,8 +119,7 @@ fn publishing_somewhere_unwritable_says_where() {
     );
 }
 
-/// A path with no file name is not a place a document can be written, and the
-/// crate that refuses an empty flag value must not answer this one for itself.
+/// A path with no file name cannot hold a document, so `publish` refuses it.
 #[test]
 fn publishing_to_a_path_that_names_no_file_is_refused() {
     let err = publish(&a_session(), Path::new("/")).expect_err("that is a directory");
@@ -136,9 +133,8 @@ fn publishing_to_a_path_that_names_no_file_is_refused() {
     );
 }
 
-/// A failed rename must not leave the half-written document beside the place
-/// it was going: a shell polling the directory would find a file named almost
-/// right, and the next run would inherit it.
+/// A failed rename must not leave the temp document behind: a polling shell
+/// could find it, and the next run would inherit it.
 #[test]
 fn a_publish_that_could_not_finish_leaves_nothing_behind() {
     let directory = tempfile::tempdir().expect("a temp dir");

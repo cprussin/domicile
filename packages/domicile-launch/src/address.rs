@@ -1,18 +1,17 @@
-//! What `domicile open-url` hands the engine, from the word it was given.
+//! Turns the argument to `domicile open-url` into a URL.
 //!
-//! `BROWSER` is handed a URL by most programs and a path by some —
-//! `cargo doc --open` is one — and a path is relative to a working directory
-//! the engine does not share. So it is made a `file://` URL here, in front of
-//! whoever typed it, the way [`crate::shell_path`] resolves `load-shell`'s.
+//! Some programs (e.g. `cargo doc --open`) pass `BROWSER` a path instead of a
+//! URL. The engine does not share the caller's working directory, so relative
+//! paths become `file://` URLs here, as [`crate::shell_path`] does for
+//! `load-shell`.
 
 use std::path::Path;
 
-/// `target` as a URL: itself where it already is one, and the file it names
-/// from `here` where it is not.
+/// Returns `target` if it is a URL, or else a `file://` URL for it relative to
+/// `here`.
 ///
-/// A URL is a word that starts with a scheme (RFC 3986: a letter, then
-/// letters, digits, `+`, `-` or `.`, then `:`). Nothing else is checked: the
-/// engine is what parses it, and one it cannot is refused there, by name.
+/// Only the scheme (RFC 3986) is checked. The engine parses and rejects
+/// invalid URLs.
 pub fn url_for(target: &str, here: &Path) -> String {
     match has_scheme(target) {
         true => target.to_string(),
@@ -34,8 +33,7 @@ fn has_scheme(word: &str) -> bool {
     }
 }
 
-/// A path, percent-encoded to go after `file://`: every byte but the
-/// unreserved ones and `/`.
+/// Percent-encodes every byte of `path` except unreserved ones and `/`.
 fn escaped(path: &str) -> String {
     path.bytes()
         .map(|byte| match byte {

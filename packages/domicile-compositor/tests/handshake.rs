@@ -1,18 +1,8 @@
-//! Who the compositor talks to, and from when.
+//! Tests that broadcasts reach only chromes that agreed a protocol version.
 //!
-//! A chrome arrives on a socket and *then* says what version it speaks. Those
-//! are two moments, and everything the compositor broadcasts in between — or
-//! after refusing the version — goes to a page that has not agreed to the
-//! protocol it is written in.
-//!
-//! Unit tests cover the refusal itself: `negotiate` rejects the number and
-//! `apply_chrome_message` answers with a `welcome` rather than silence, which
-//! is what lets a page report the mismatch instead of hanging. What none of
-//! them can show is who *else* the compositor was talking to at the time,
-//! because that is the hub's business rather than the brain's.
-//!
-//! No display and no Wayland client: reconfiguring the desktop is a broadcast
-//! with nothing else moving.
+//! Unit tests cover the version refusal in `negotiate` and
+//! `apply_chrome_message`. Broadcast membership is the hub's, so it needs a
+//! running compositor. A reconfigure supplies the broadcast.
 
 mod running;
 
@@ -42,35 +32,18 @@ const TWO_DISPLAYS: &str = r#"
 
 /// How long to wait for a message that should not come.
 ///
-/// Short on purpose, and it is the whole cost of the assertion. It does not
-/// have to outlast the broadcast: the accepted chrome below is waited on
-/// *first*, so by the time this is spent the desktop has already gone out to
-/// everyone the compositor meant to send it to.
+/// Short because tests first wait for an accepted chrome to receive the
+/// broadcast, so it has already gone out.
 const LONG_ENOUGH_TO_HAVE_ARRIVED: Duration = Duration::from_secs(2);
 
-/// How long a message that *is* coming is waited for.
+/// How long to wait for a message that should come.
 ///
-/// The other question entirely, and it must not be answered with the number
-/// above. A reconfigure reaches the chromes through the config watcher, which
-/// coalesces a burst before it acts on it and gives up coalescing after two
-/// seconds — and the run directory this fixture writes the config into is
-/// also where the session document, the chrome socket and the cache live, so
-/// it never goes quiet and the reload rides that cap every time. Measured on
-/// an idle machine, the desktop arrives 1.94s to 1.99s after the rename, in
-/// sixty-eight runs out of sixty-eight.
-///
-/// So a wait of two seconds for it is not a wait at all: it is one
-/// two-second window against another, decided by whichever timer the kernel
-/// serves first. Generous here instead, because this one only ever costs
-/// anything when the test is failing anyway.
+/// The config watcher coalesces events for up to two seconds, and the run
+/// directory is never quiet, so a reload takes about two seconds. This must
+/// be well above that; it only costs time when the test fails.
 const AS_LONG_AS_THE_COMPOSITOR_TAKES: Duration = Duration::from_secs(20);
 
-/// A chrome that speaks a version this build does not is answered, and then
-/// left out of the desktop's conversation.
-///
-/// The refusal is not the subject — that is unit-tested. The subject is that
-/// being refused keeps it out of the broadcast list, so it is never sent a
-/// message in the protocol it has just been told it cannot read.
+/// A chrome whose version was refused gets a `welcome` but no broadcasts.
 #[test]
 fn a_chrome_whose_version_was_refused_is_not_broadcast_to() {
     let compositor = Compositor::started_with(ONE_DISPLAY);
@@ -78,8 +51,7 @@ fn a_chrome_whose_version_was_refused_is_not_broadcast_to() {
     let mut refused = Raw::connected(&compositor);
     refused.say_hello(PROTOCOL_VERSION + 1);
 
-    // Answered, which is the part that is already right: silence here is a
-    // page waiting forever on a welcome, unable to report the mismatch.
+    // The `welcome` lets the page report the mismatch instead of hanging.
     let answer = refused
         .next_message()
         .expect("a refused chrome is still told what this build speaks");
@@ -88,9 +60,7 @@ fn a_chrome_whose_version_was_refused_is_not_broadcast_to() {
         "the refusal is a welcome carrying this build's version, got {answer:?}"
     );
 
-    // A chrome that *did* agree, so the broadcast below is known to have
-    // happened. Without it a compositor that broadcast nothing at all would
-    // pass this test.
+    // An accepted chrome proves the broadcast happened.
     let mut accepted = compositor.chrome();
     accepted
         .wait_for(|message| matches!(message, HostMessage::Displays { .. }))
@@ -110,7 +80,6 @@ fn a_chrome_whose_version_was_refused_is_not_broadcast_to() {
         "the reconfigure is what is being broadcast"
     );
 
-    // And the refused one heard none of it.
     let overheard = refused.next_message();
     assert!(
         overheard.is_none(),
@@ -118,15 +87,12 @@ fn a_chrome_whose_version_was_refused_is_not_broadcast_to() {
     );
 }
 
-/// A chrome that has connected but not yet said hello is in the same position:
-/// the socket is up, no version has been agreed, and anything sent to it is
-/// sent on a guess.
+/// A chrome that has not said `hello` gets no broadcasts.
 #[test]
 fn a_chrome_that_has_not_said_hello_is_not_broadcast_to() {
     let compositor = Compositor::started_with(ONE_DISPLAY);
 
-    // Connected and silent. A real page does this for as long as its bundle
-    // takes to load.
+    // A real page is silent like this while its bundle loads.
     let mut silent = Raw::connected(&compositor);
 
     let mut accepted = compositor.chrome();
@@ -146,13 +112,11 @@ fn a_chrome_that_has_not_said_hello_is_not_broadcast_to() {
     );
 }
 
-/// A second `hello` on one socket does not put that chrome in the list twice.
+/// A second `hello` on one socket does not add the chrome to the broadcast
+/// list twice.
 ///
-/// The list is walked per broadcast and written to per entry, so a duplicate
-/// makes the compositor send every message down that socket twice — including
-/// `app_frame`, which is the largest thing it sends. A page reloading its own
-/// bundle without dropping the socket is all it takes, and the in-page client
-/// used to send a `hello` on connect with nothing forbidding a second call.
+/// A duplicate entry sends every broadcast twice. A page that reloads its
+/// bundle without closing the socket sends a second `hello`.
 #[test]
 fn a_chrome_that_says_hello_twice_is_only_in_the_list_once() {
     let compositor = Compositor::started_with(ONE_DISPLAY);
@@ -160,30 +124,18 @@ fn a_chrome_that_says_hello_twice_is_only_in_the_list_once() {
     let mut twice = Raw::connected(&compositor);
     twice.say_hello(PROTOCOL_VERSION);
     twice.say_hello(PROTOCOL_VERSION);
-    // Both handshakes answered, and both answers discarded: what is counted
-    // below is what the *broadcast* sent, and a `welcome` and its `displays`
-    // go to the connection that asked whether or not it is in the list.
+    // Discard the handshake replies, which are sent regardless of the list.
     twice.drain();
 
     compositor.reconfigure(TWO_DISPLAYS);
 
-    // THE FIRST ONE IS WAITED FOR, NOT TIMED, and it is the only test here
-    // that has to say so: the other four keep an accepted chrome alongside
-    // and wait on *that* before they count, so the broadcast has demonstrably
-    // happened by the time their `count` starts. This one counts what arrived
-    // on its own socket — see the note on the demoted chrome below — so
-    // counting straight from the reconfigure was a two-second timeout racing
-    // the compositor's own two-second coalescing cap, and a machine with
-    // anything else running on it decided that race the other way: naught
-    // descriptions, reported as a compositor that never described the desktop
-    // at all.
+    // Wait for the first description rather than timing it: this test has no
+    // accepted chrome to wait on, and the short read timeout would race the
+    // config watcher's two-second coalescing.
     twice.await_message(|message| matches!(message, HostMessage::Displays { .. }));
 
-    // And now the duplicate, which is the thing this test is actually about.
-    // A timeout is the right instrument for *this* half and the wrong one for
-    // the half above, because a second description is what must not come —
-    // and it would ride the same walk of the broadcast list as the first, so
-    // by now it is either already on the socket or was never written.
+    // A duplicate would be sent in the same broadcast as the first, so a
+    // short timeout is enough here.
     let described_again = twice.count(|message| matches!(message, HostMessage::Displays { .. }));
     assert_eq!(
         described_again,
@@ -193,14 +145,8 @@ fn a_chrome_that_says_hello_twice_is_only_in_the_list_once() {
     );
 }
 
-/// A chrome that agreed a version and then names one this build cannot speak
-/// is taken back out of the list.
-///
-/// The refusal is not only about the first `hello`. A page that agreed v17 and
-/// then announces v18 has stopped being a peer just as surely as one that
-/// opened with v18 — and a list that only ever grew would go on writing v17 at
-/// it. `ready` going back down is what the host reports; this is the
-/// compositor acting on it.
+/// A chrome that agrees a version and then sends an unsupported one is
+/// removed from the broadcast list.
 #[test]
 fn a_chrome_that_takes_its_agreement_back_stops_getting_the_desktop() {
     let compositor = Compositor::started_with(ONE_DISPLAY);
@@ -210,10 +156,7 @@ fn a_chrome_that_takes_its_agreement_back_stops_getting_the_desktop() {
     demoted.say_hello(PROTOCOL_VERSION + 1);
     demoted.drain();
 
-    // A chrome that stayed agreed, so a compositor that broadcast nothing at
-    // all cannot pass this. Four of the five tests here carry one; the
-    // exception is the double-`hello` test, which counts what arrived on its
-    // own socket and would fail at naught if nothing had.
+    // An accepted chrome proves the broadcast happened.
     let mut accepted = compositor.chrome();
     accepted
         .wait_for(|message| matches!(message, HostMessage::Displays { .. }))
@@ -231,14 +174,10 @@ fn a_chrome_that_takes_its_agreement_back_stops_getting_the_desktop() {
     );
 }
 
-/// A chrome that agrees again after being refused is let back in — once.
+/// A chrome that agrees again after a refusal rejoins the list exactly once.
 ///
-/// The third state the two flags can reach, and the one where getting either
-/// wrong is silent: `joined` must come back down on the refusal or the
-/// `!joined` guard keeps a re-agreeing chrome out of the list for good, and a
-/// page that recovers would sit there drawing a desktop nobody is describing
-/// to it. "Once" is the other half — coming back in twice is the duplicate
-/// this suite already refuses.
+/// The refusal must clear `joined`, or the `!joined` guard keeps the chrome
+/// out for good.
 #[test]
 fn a_chrome_that_agrees_again_after_a_refusal_is_let_back_in_once() {
     let compositor = Compositor::started_with(ONE_DISPLAY);
@@ -266,8 +205,7 @@ fn a_chrome_that_agrees_again_after_a_refusal_is_let_back_in_once() {
     );
 }
 
-/// A chrome socket the test drives itself, because the subject is a handshake
-/// that does not happen and `Chrome` always completes one.
+/// A raw chrome socket, since `Chrome` always completes the handshake.
 struct Raw {
     reader: BufReader<UnixStream>,
     writer: UnixStream,
@@ -292,28 +230,15 @@ impl Raw {
             .expect("the socket takes a hello");
     }
 
-    /// The next message, or `None` once the socket has gone quiet.
+    /// The next message, or `None` on timeout, end of stream or reset.
     ///
-    /// A read that timed out and a socket that ended are both `None`, and the
-    /// difference does not matter to any caller here: each asks either in the
-    /// expectation of silence or in a loop that ends on it. A reset is an
-    /// ending too — a peer that went away is not a peer that spoke — and is
-    /// swallowed rather than reported, which is where this parts company with
-    /// `Chrome::wait_for`: that classifies a reset the same way and then
-    /// surfaces it, because its callers are waiting *for* something. Here a
-    /// dead compositor is caught by the chrome kept alongside, which fails
-    /// loudly and says so.
-    ///
-    /// A line that *arrived* and would not parse is not silence, though, and
-    /// neither is a genuine I/O fault. Folding those into `None` would let
-    /// "nothing was sent" pass on the strength of something being sent, which
-    /// is the one thing these tests exist to tell apart, so they are a panic
-    /// naming what came instead.
+    /// A dead compositor is caught by the accepted chrome each test keeps.
+    /// Unparsable lines and other I/O errors panic, since treating them as
+    /// silence would hide a message that was sent.
     fn next_message(&mut self) -> Option<HostMessage> {
         match hear(&mut self.reader) {
             Ok(message) => message,
-            // No `BrokenPipe`: that is what a *write* to a dead peer gets, and
-            // this only reads. It would be an arm nothing can reach.
+            // No `BrokenPipe`: only writes get it.
             Err(ChromeError::Io(
                 std::io::ErrorKind::WouldBlock
                 | std::io::ErrorKind::TimedOut
@@ -323,22 +248,16 @@ impl Raw {
         }
     }
 
-    /// Read until the socket goes quiet, discarding everything.
-    ///
-    /// Costs one read timeout, which is the only way to know a stream has
-    /// stopped rather than paused.
+    /// Reads and discards until the socket goes quiet, which costs one read
+    /// timeout.
     fn drain(&mut self) {
         while self.next_message().is_some() {}
     }
 
-    /// The next message `wanted` accepts, however long the compositor takes.
+    /// Reads until `wanted` accepts a message, discarding the rest.
     ///
-    /// Reads past the short timeout rather than raising it: that timeout is
-    /// the only thing that lets [`Raw::count`] and [`Raw::drain`] stop at all,
-    /// and this is the opposite question — a message that is coming, on a
-    /// machine that may be slow to send it. Everything read on the way is
-    /// discarded, which is what every caller of this wants: the counting
-    /// starts afterward.
+    /// Retries across short read timeouts instead of raising the timeout,
+    /// which [`Raw::count`] and [`Raw::drain`] rely on to stop.
     fn await_message(&mut self, wanted: impl Fn(&HostMessage) -> bool) {
         let until = Instant::now() + AS_LONG_AS_THE_COMPOSITOR_TAKES;
         loop {

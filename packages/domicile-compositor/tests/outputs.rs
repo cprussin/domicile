@@ -1,90 +1,17 @@
 //! What a real Wayland client is told the screens are.
 //!
-//! Ported from three scripts, each deleted in the change that added the check
-//! replacing it: `e2e-two-displays.sh` (this file's first two),
-//! `e2e-one-window-per-display.sh`, and the client half of
-//! `e2e-reload-displays.sh` (the third).
+//! `desktop.rs` covers what the chrome is told. A compositor can describe two
+//! displays to the chrome while advertising one `wl_output`, or update the
+//! chrome on reload while leaving open windows on the old displays. These
+//! checks catch that.
 //!
-//! `desktop.rs` is the other half of the same question — what a *chrome* is
-//! told over the host socket — and neither substitutes for the other: a
-//! compositor can describe two displays to a chrome and advertise one
-//! `wl_output`, and it can take a reloaded desktop up for the chrome while
-//! leaving every window already open on the displays there used to be.
+//! Every window enters every display, because the shell's layout positions
+//! windows and the compositor does not know where they are. The reload check
+//! also reads `wl_surface.leave`, so it can tell a compositor that updates a
+//! window's displays from one that never does.
 //!
-//! Both halves are unit-tested already: the config normalizes the positions
-//! and `Screens` decides what to advertise. Neither says a compositor *started
-//! on a two-display config* advertises two outputs to a client that connects.
-//!
-//! `e2e-two-displays.sh` argued that by claiming a swap of
-//! `Screens::described` for `following_the_window` passes everything else, and
-//! that is not true here: two checks in `desktop.rs` catch it, one of them the
-//! density guard that swap flips. Turning the feature off is caught. What is
-//! not caught without this file is the narrower failure below — the feature on,
-//! the chrome told correctly, and the client told something else.
-//!
-//! # What is here and what is not
-//!
-//! Three checks, chosen by mutation rather than by which phases the scripts
-//! had. The question for each was whether it kills something no other test in
-//! the workspace does, so the last column is every other test there is — run
-//! with `--no-fail-fast`, since a run that stops at the first failing target
-//! says nothing about the targets after it:
-//!
-//! | mutation | advertised | enters both | reload | elsewhere |
-//! |---|---|---|---|---|
-//! | the client-visible scale forced to 1 | fails | ok | ok | **ok** |
-//! | `restate_output`'s `set_preferred` deleted | fails | ok | ok | **ok** |
-//! | `new_toplevel`'s enter loop stops after one screen | ok | fails | fails | **ok** |
-//! | `adopt_the_desktop`'s re-narrow deleted | ok | ok | fails | **ok** |
-//!
-//! Line numbers are left out on purpose: they move — every one quoted in this
-//! change's own description went stale within a day — and each site is named
-//! by its enclosing function instead.
-//!
-//! # A window is on every display, and that is the whole rule now
-//!
-//! There was a fourth check here, and a narrowing for it to check: the chrome
-//! reported where it had put each window, `Screens::entered_by` worked out
-//! which outputs that rectangle touched, and the client was told the one
-//! screen it was on. Three of the mutations above existed for it.
-//!
-//! Placement is gone — the page has stopped reporting where its own boxes are,
-//! because layout positions the layer — so there is nothing left to narrow by
-//! and every surface enters every display. That is not a gap this file papers
-//! over; it is what the compositor does, and `enter_the_displays_each_window_is_on`
-//! in `main.rs` names `<Screen name="left">` as the way a shell will say which
-//! display it means. When that exists, the check comes back with it.
-//!
-//! The remaining two checks that touch enters read `wl_surface.leave` as well,
-//! and still should: the reload check turns on a window entering a display
-//! that arrived after it mapped, and a reading blind to leaves cannot tell a
-//! compositor that re-narrows from one that never did.
-//!
-//! That is the reason this file exists: a compositor can tell a chrome scale 2
-//! and advertise scale 1 to a client, leave a mode marked current but not
-//! preferred, or take up a new display for the desktop and not for the windows
-//! already on it — and every other check in this repo passes.
-//!
-//! Three others were written and dropped for killing nothing new: a
-//! chrome's density leaving a described desktop alone (every mutation that
-//! killed it killed `desktop.rs`'s own version, including deleting the guard);
-//! the chrome and the client agreeing on how many screens there are (killed
-//! only by a mutation that kills four other checks at once); and the
-//! undescribed desktop being the startup placeholder — its size half is
-//! caught by two checks in `desktop.rs`, its name half by a unit test in
-//! `screens.rs`, and even advertising *no* output on that path is caught by
-//! `desktop.rs`. The chrome's view and the client's are coupled closely enough
-//! there that nothing was left uncovered.
-//!
-//! # Why this no longer needs `wayland-info`
-//!
-//! `e2e-two-displays.sh` asked the compositor what it advertised by running
-//! `wayland-info`, and skipped when that was missing. CI installs
-//! `wayland-utils`, so it ran there; what it skipped on was every machine
-//! without it, where a check that never executed reported a pass.
-//! `domicile-test-client --trace` reports the same events, so the client the
-//! test already starts is the thing that answers, and there is nothing left to
-//! be missing.
+//! The client's own trace reports the outputs, so no `wayland-info` is
+//! needed.
 
 mod running;
 
@@ -93,9 +20,8 @@ use crate::running::Compositor;
 /// The left display at the origin and the right one beside it, at twice the
 /// density.
 ///
-/// Every field has to survive the trip: the position is where the screen sits
-/// on the desktop, the size is what a client filling it gets, and the scale is
-/// what it draws at.
+/// Every field matters: the position places the screen on the desktop, the
+/// size is what a filling client gets, and the scale is what it draws at.
 const TWO_DISPLAYS: &str = r#"
 {
   "output": {
@@ -114,23 +40,12 @@ const TWO_DISPLAYS: &str = r#"
 
 /// What a client should be told those two displays are.
 ///
-/// The right screen's mode is `5120x2880` rather than its configured
-/// `2560x1440` because a mode is physical pixels: the logical size times the
-/// scale. A compositor reporting the logical size in the mode would have every
-/// scaling toolkit draw at a quarter of the area.
+/// The right screen's mode is `5120x2880`, not `2560x1440`, because a mode is
+/// in physical pixels: logical size times scale.
 ///
-/// `0mHz` and `0x0mm` are the protocol's own word for "this output has no such
-/// number", and both are the truth here: nothing tells this compositor how
-/// many millimeters a configured display is or how fast a panel it never
-/// opened refreshes. A screen described as `300x200mm` at `60000mHz` — which
-/// is what was advertised, for every display and whatever the config said — is
-/// a DPI a client can compute and act on, and it is wrong.
-///
-/// A *described* desktop, which is what this config makes, keeps saying so
-/// even now that the engine's own displays carry a real panel: a config is
-/// arithmetic, not millimeters of glass. The zeros here are the evidence that
-/// the plumbing did not start filling them in for outputs that have nothing to
-/// fill them with.
+/// `0mHz` and `0x0mm` mean "unknown" in the protocol. A config gives no
+/// physical size or refresh rate, and inventing them would give clients a
+/// wrong DPI.
 const AS_TOLD: [&str; 2] = [
     "left@0,0@1=1920x1080(current preferred) 0mHz 0x0mm",
     "right@1920,0@2=5120x2880(current preferred) 0mHz 0x0mm",
@@ -156,16 +71,13 @@ fn both_configured_displays_are_advertised_to_a_client() {
     );
 }
 
-/// Advertising two outputs is not putting a window on them.
+/// A window on a two-display desktop enters both outputs.
 ///
-/// A toolkit that scales its content reads `wl_surface.enter` to decide what
-/// density to draw at, so a surface entered onto only the first screen is
-/// drawn for the wrong one — and nothing in the globals says so. The check
-/// above cannot see this: it reads what was advertised, and a compositor that
-/// advertises both and enters one passes it.
+/// A toolkit reads `wl_surface.enter` to pick its density, so a surface
+/// entered on only one screen draws wrongly on the other. The check above
+/// reads only what was advertised.
 ///
-/// Distinct outputs rather than two events, because entering the same screen
-/// twice is not two screens and a count alone cannot tell them apart.
+/// Counts distinct outputs, so two `enter`s for the same screen fail.
 #[test]
 fn a_window_enters_both_screens_rather_than_the_first() {
     let compositor = Compositor::started_with(TWO_DISPLAYS);
@@ -202,22 +114,12 @@ const ONE_DISPLAY: &str = r#"
 
 /// A window already open when a display appears is told it is on it.
 ///
-/// The compositor takes up an edited config while it runs, and `desktop.rs`
-/// covers what the *chrome* is told about that. This is the other end: a
-/// client that mapped against the old desktop and is still running. Nothing
-/// else will tell it — a toolkit that scales its content picks its density
-/// from `wl_surface.enter`, so a window that never entered the screen that
-/// arrived goes on drawing for the old one on it.
+/// `desktop.rs` covers what the chrome is told about a config change. This
+/// covers a client mapped before the change: without `wl_surface.enter` for
+/// the new display it keeps drawing at the old density there.
 ///
-/// It was uncovered: deleting `adopt_the_desktop`'s re-narrow passes the whole
-/// workspace, `desktop.rs` included, because the chrome is told the new
-/// desktop by a different line further down the same function.
-///
-/// The client is started and waited for *before* the edit, so this is a window
-/// the reload finds rather than one that mapped onto the finished desktop and
-/// would have entered both anyway. Two is the answer because a window belongs
-/// on every display; what this turns on is that the display which arrived is
-/// one of them.
+/// The client is started before the edit, so its window exists before the
+/// new display does. It should end up on both.
 #[test]
 fn a_window_open_across_a_reload_is_told_about_the_display_that_arrived() {
     let compositor = Compositor::started_with(ONE_DISPLAY);

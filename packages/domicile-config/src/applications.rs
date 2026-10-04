@@ -1,12 +1,9 @@
-//! Which of the machine's applications a launcher is offered.
+//! Which installed applications and bookmarks a launcher offers.
 //!
-//! Every desktop entry the XDG data directories hold is an application, which
-//! on a real machine is every package's idea of what belongs in a menu. So
-//! what is offered is the desk's to say, here, as globs over desktop file IDs
-//! — the entry's path under `applications/`, a `/` read as `-`.
-//!
-//! A bookmark is the other thing a launcher offers beside them: a name and a
-//! URL the desk opens itself, rather than a program handing it to a browser.
+//! Every desktop entry in the XDG data directories is an application. The
+//! config filters them with globs over desktop file IDs: the entry's path
+//! under `applications/`, with `/` read as `-`. A bookmark is a name and a URL
+//! the desk opens itself. See `docs/LAUNCHER.md`.
 
 use serde::{Deserialize, Deserializer};
 
@@ -14,19 +11,18 @@ use crate::files::Omit;
 
 /// What a launcher's applications are chosen from.
 ///
-/// Compared, like [`crate::FilesConfig`]: a reload asks what moved.
+/// `PartialEq` lets a reload detect a change, as for [`crate::FilesConfig`].
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct ApplicationsConfig {
-    /// The desktop file IDs left out, by `files.omit`'s rules: a pattern that
-    /// starts with `!` takes an ID back, and the last pattern to match one
-    /// decides it. So `["*", "!launcher-*"]` is a desk that offers only its
-    /// own.
+    /// Desktop file IDs to leave out, with `files.omit`'s rules: a pattern
+    /// starting with `!` takes an ID back, and the last matching pattern wins.
+    /// `["*", "!launcher-*"]` offers only IDs starting with `launcher-`.
     ///
-    /// **SAYING NOTHING OMITS NOTHING**, unlike `files.omit`: an entry is
-    /// already something its package meant to be launched.
+    /// The default omits nothing, unlike `files.omit`: a package installs an
+    /// entry so that it can be launched.
     pub omit: Omit,
-    /// The URLs a launcher offers by name, matched like an application.
+    /// URLs a launcher offers by name, matched like an application.
     pub bookmarks: Vec<Bookmark>,
 }
 
@@ -34,16 +30,17 @@ pub struct ApplicationsConfig {
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Bookmark {
-    /// What a launcher's row says, and what a query is matched against.
+    /// The launcher row's label, which queries match against.
     pub name: String,
-    /// What choosing it opens: an `http` or `https` URL.
+    /// The page to open: an `http` or `https` URL.
     #[serde(deserialize_with = "web_url")]
     pub url: String,
 }
 
-/// A URL a launcher can open as a page and draw a site's icon from, which is
-/// one with a scheme it browses: `calendar.google.com` alone is refused here
-/// rather than crashing the page that draws it.
+/// Accepts only `http` and `https` URLs.
+///
+/// The launcher opens the URL as a page and loads the site's icon from it. A
+/// bare `calendar.google.com` would crash the page that draws it.
 fn web_url<'de, D: Deserializer<'de>>(deserializer: D) -> Result<String, D::Error> {
     let url = String::deserialize(deserializer)?;
     let lower = url.to_lowercase();

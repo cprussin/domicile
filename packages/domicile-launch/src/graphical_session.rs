@@ -1,42 +1,34 @@
-//! A desk that is the login session, said to the systemd user manager.
+//! Registers a desktop as the graphical session with the systemd user manager.
 //!
-//! The portal's unit has `Requisite=graphical-session.target`, as does any
-//! service a home binds to a graphical session, and nothing starts that target
-//! but a session saying it is one. [`TARGET`] binds it, so starting it is the
-//! desk saying so; starting [`SHUTDOWN`] is the desk saying it has gone.
+//! Services such as the portal require `graphical-session.target`, which
+//! only a session can start. [`begin`] exports the desktop's environment and
+//! then starts [`TARGET`], so services started by it inherit that environment.
+//! [`end`] stops the session and unsets the environment, so later services do
+//! not find a dead socket or display.
 //!
-//! Every such service takes the user manager's environment as it starts, so
-//! [`begin`] says the desk before it starts anything: which desktop this is,
-//! the display its apps open on, and the control socket the `domicile-open-url`
-//! a portal starts finds this desk by. [`end`] takes all of that back, so a
-//! service started after the desk has gone finds neither a dead socket nor a
-//! display nobody is serving.
-//!
-//! ONLY A DESK THAT IS THE SESSION. One in a window inside another session
-//! says nothing here: the session it is inside owns the user manager's
-//! graphical session, and its links and its portal.
+//! Only a desktop running as the login session does this. A nested desktop
+//! leaves the session to its host.
 
 use std::path::Path;
 
 use crate::control_socket::VARIABLE;
 
-/// The unit a desk starts while it is the session. Shipped with Domicile:
+/// The unit started while the desktop is the session. It has
 /// `BindsTo=graphical-session.target`.
 pub const TARGET: &str = "domicile-session.target";
 
-/// The unit that ends it. Stopping [`TARGET`] is not enough: a running
-/// portal's `Requisite=` pins `graphical-session.target` up, and the portal
-/// with it. This one `Conflicts=` the graphical session, so starting it takes
-/// both down whatever holds them -- niri's `niri-shutdown.target`, for the same
-/// reason.
+/// The unit that ends the session.
+///
+/// Stopping [`TARGET`] is not enough: a running portal's `Requisite=` keeps
+/// `graphical-session.target` up. This unit `Conflicts=` the graphical session,
+/// like niri's `niri-shutdown.target`.
 pub const SHUTDOWN: &str = "domicile-session-shutdown.target";
 
-/// What `XDG_CURRENT_DESKTOP` is in a desk -- the compositor's own
-/// `CURRENT_DESKTOP`, which is what `domicile-mimeapps.list` and
-/// `domicile-portals.conf` are named for.
+/// `XDG_CURRENT_DESKTOP` for a desktop. Matches the names of
+/// `domicile-mimeapps.list` and `domicile-portals.conf`.
 const CURRENT_DESKTOP: &str = "domicile";
 
-/// What [`begin`] says and [`end`] takes back, in that order.
+/// Variables [`begin`] sets and [`end`] unsets.
 const VARIABLES: [&str; 4] = [
     "XDG_CURRENT_DESKTOP",
     "WAYLAND_DISPLAY",
@@ -44,7 +36,7 @@ const VARIABLES: [&str; 4] = [
     "XDG_SESSION_TYPE",
 ];
 
-/// Say this desk to the user manager on `manager`, then start [`TARGET`].
+/// Exports the desktop's environment to `manager`, then starts [`TARGET`].
 pub fn begin(
     manager: &zbus::blocking::Connection,
     wayland_display: &str,
@@ -65,10 +57,10 @@ pub fn begin(
     call(manager, "StartUnit", &(TARGET, "replace"))
 }
 
-/// Start [`SHUTDOWN`], then take back what [`begin`] said.
+/// Starts [`SHUTDOWN`], then unsets the environment from [`begin`].
 ///
-/// `replace-irreversibly`, as niri does: nothing queued after it can cancel
-/// the graphical session going down.
+/// Uses `replace-irreversibly`, as niri does, so no later job can cancel the
+/// shutdown.
 pub fn end(manager: &zbus::blocking::Connection) -> Result<(), zbus::Error> {
     call(manager, "StartUnit", &(SHUTDOWN, "replace-irreversibly"))?;
     call(manager, "UnsetEnvironment", &(VARIABLES.to_vec(),))

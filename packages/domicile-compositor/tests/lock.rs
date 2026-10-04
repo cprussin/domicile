@@ -1,27 +1,12 @@
-//! A locked desk does not put what the shell forwards into the seat, nor read
-//! the home for it.
+//! While the desktop is locked, keys and requests from the chrome do not reach
+//! clients or the home directory.
 //!
-//! `crate::lock` decides what a locked desk refuses and what opens it, and its
-//! unit tests own both. What they cannot reach is the thing the lock is *for*:
-//! a real Wayland client, on a real seat, not being given a keystroke a real
-//! chrome forwarded. That is three processes and Smithay in the middle, so it
-//! is a claim about a running compositor and nothing smaller — the same reason
-//! `tests/input.rs` exists, which is this file's mirror image: over there the
-//! forward reaches the client, and every assertion here is that the same
-//! forward does not.
+//! `crate::lock`'s unit tests cover what the lock refuses and what unlocks it.
+//! These tests check the end-to-end effect on a real client and seat. They
+//! mirror `tests/input.rs`, which checks that the same keys do arrive.
 //!
-//! The lock is also the one piece of state in this compositor whose whole point
-//! is what it survives. A page reload is a second `hello` on a second socket
-//! (`Compositor::chrome` says so), so "a shell that reloaded over a locked desk
-//! comes back knowing" is a thing a test can actually ask, and it is asked
-//! below.
-//!
-//! What locks a desk is nobody being at it, so every test here arrives at a
-//! locked desk through `crate::idle`'s dark edge. The clock is added and then
-//! taken away again rather than left running, because a desk that can blank can
-//! blank *twice*: a second one a beat after the unlock would re-lock the desk
-//! under the assertion that the keys come back, and the test would fail as a
-//! timing accident rather than a finding.
+//! Each test locks the desktop through the idle timeout, then removes the
+//! timeout so the desktop cannot lock a second time during the assertions.
 
 mod running;
 
@@ -29,24 +14,20 @@ use domicile_protocol::{ChromeMessage, FilePreview, HostMessage, Passphrase};
 
 use crate::running::Compositor;
 
-/// `a`, in evdev codes — what a chrome forwards. `tests/input.rs` uses the same
-/// key, and for the same reason: the client traces `key(serial, time, code,
-/// state)`, so the tail of that line names which key and which half of it.
+/// `a`, in evdev codes. The client traces `key(serial, time, code, state)`, so
+/// the end of that line identifies the key and whether it was pressed.
 const EVDEV_KEY_A: u32 = 30;
 
-/// What the client's trace says when it was given a press of that key.
+/// The client's trace line for a press of that key.
 const A_PRESS_OF_IT: &str = ", 30, 1)";
 
-/// And the release of it.
+/// The client's trace line for a release of that key.
 const A_RELEASE_OF_IT: &str = ", 30, 0)";
 
-/// The passphrase these desks state, and the one the tests type.
+/// The passphrase these configs set, and the one the tests type.
 const THE_PASSPHRASE: &str = "open sesame";
 
-/// A desk that can lock and has no clock to lock it.
-///
-/// The starting point for every test here: the lock exists, so the compositor
-/// sends `locked` at all, and nothing has shut it yet.
+/// A desktop that can lock but has no idle timeout.
 const A_DESK_THAT_CAN_LOCK: &str = r#"
 {
   "output": { "displays": [{ "name": "left", "size": [1920, 1080] }] },
@@ -54,10 +35,9 @@ const A_DESK_THAT_CAN_LOCK: &str = r#"
 }
 "#;
 
-/// The same desk, with the shortest clock its own config will accept.
+/// The same desktop, with the shortest idle timeout the config accepts.
 ///
-/// A second because a check should not wait longer than it has to, and
-/// `IdleConfig` refuses zero.
+/// One second, because `IdleConfig` refuses zero.
 const A_DESK_THAT_LOCKS_IN_A_SECOND: &str = r#"
 {
   "output": { "displays": [{ "name": "left", "size": [1920, 1080] }] },
@@ -66,28 +46,15 @@ const A_DESK_THAT_LOCKS_IN_A_SECOND: &str = r#"
 }
 "#;
 
-/// Bring a desk that can lock to a desk that is locked.
+/// Lock the desktop through the idle timeout, then remove the timeout.
 ///
-/// Through the clock, because that is the only thing that locks a desk today —
-/// and then the clock is taken away again, so that the desk under the
-/// assertions cannot blank a second time. The wait in between is the compositor
-/// saying the state it is in rather than a sleep: `wait_for` consumes the
-/// message, so a `locked` from the catch-up on connecting cannot answer for the
-/// edge.
-///
-/// **It takes the caller's chrome rather than opening one.** A second
-/// connection is a second `hello`, and a `hello` makes this compositor let go of
-/// every key the seat has down — which is exactly what one of the tests below
-/// is about. A helper that opened its own would answer that test's question
-/// before it was asked.
+/// Takes the caller's chrome rather than connecting one: a new connection
+/// sends `hello`, which releases every held key and would interfere with the
+/// held-key test.
 fn lock_the_desk(compositor: &Compositor, chrome: &mut domicile_test_chrome::Chrome) {
-    // THE `false` THIS CHROME WAS TOLD ON SAYING HELLO, taken out of the way
-    // first. `wait_for` leaves what it did not match waitable, so without this
-    // a later wait for the desk opening is answered by the desk as it was
-    // before it ever shut -- which a test only got away with while a
-    // passphrase was checked in line with the keys behind it. It is checked
-    // off the loop now, so a key sent on that stale answer lands on a desk
-    // still being checked, and is refused.
+    // Consume the `locked: false` sent on `hello`. Otherwise a later wait for
+    // the unlock would match this stale message, and keys sent then would
+    // arrive while the passphrase is still being checked and be refused.
     chrome
         .wait_for(|message| matches!(message, HostMessage::Locked { locked: false }))
         .expect("a desk that can lock tells a page that says hello it is open");
@@ -96,8 +63,8 @@ fn lock_the_desk(compositor: &Compositor, chrome: &mut domicile_test_chrome::Chr
         .wait_for(|message| matches!(message, HostMessage::Locked { locked: true }))
         .expect("a desk nobody is at locks itself and says so");
 
-    // And the clock goes away, which also brings the screens back: the desk
-    // under every assertion below is lit, locked, and unable to lock again.
+    // Removing the timeout also turns the screens back on, so the desktop is
+    // lit, locked, and cannot lock again.
     compositor.reconfigure(A_DESK_THAT_CAN_LOCK);
     compositor.wait_for_log("the idle timeout changed while the screens were off");
 }
@@ -109,7 +76,7 @@ fn press_a(chrome: &mut domicile_test_chrome::Chrome, app_id: &str) {
     }
 }
 
-/// One half of that keystroke, for the test that never sends the other.
+/// One half of that keystroke, for the test that never releases.
 fn say_a(chrome: &mut domicile_test_chrome::Chrome, app_id: &str, pressed: bool) {
     chrome
         .say(&ChromeMessage::Key {
@@ -122,11 +89,8 @@ fn say_a(chrome: &mut domicile_test_chrome::Chrome, app_id: &str, pressed: bool)
 
 /// Connect a chrome, start a client and give its window the keyboard.
 ///
-/// The wait is on the compositor saying the keyboard reached a client rather
-/// than on a clock: `Scene::focus_app` refuses a window with no surface, and a
-/// silent no-op there would make every key below vanish for the fixture's reason
-/// rather than the lock's. The compositor distinguishes the two out loud, and
-/// `tests/input.rs` says so at length.
+/// Waits for the compositor's log, so a lost key is the lock's doing and not a
+/// focus that never landed.
 fn a_client_being_typed_at(
     compositor: &Compositor,
 ) -> (domicile_test_chrome::Chrome, crate::running::Client, String) {
@@ -150,20 +114,14 @@ fn a_client_being_typed_at(
     (chrome, client, app_id)
 }
 
-/// A key forwarded at a locked desk reaches no client, and the passphrase
-/// brings it back.
+/// A key sent while locked reaches no client, and the passphrase restores
+/// input.
 ///
-/// **BOTH HALVES IN ONE TEST, AND THE COUNT IS WHY.** A test can only prove
-/// "the client was never given this" by waiting for an absence, which is a
-/// sleep or a lie. So the *same key* is forwarded twice — once at a locked desk
-/// and once at the desk the passphrase opened — and the client is required to
-/// have been given exactly one of them. The socket is ordered, so a press the
-/// lock had let through would have been traced before the one that follows the
-/// unlock: seeing the second and counting one is exact rather than hopeful.
-///
-/// It is also the only arrangement that can fail for the right reason in both
-/// directions. A lock that refused nothing traces two, and a lock nothing opens
-/// traces none.
+/// Both halves are in one test so the check counts instead of waiting for an
+/// absence. The same key is sent while locked and after unlocking, and the
+/// client must see exactly one. The socket is ordered, so a key the lock let
+/// through would be traced before the second one. A lock that refuses nothing
+/// gives two; a lock that never opens gives none.
 #[test]
 fn a_locked_desk_refuses_the_keys_and_the_passphrase_starts_them_again() {
     let compositor = Compositor::started_with(A_DESK_THAT_CAN_LOCK);
@@ -197,14 +155,12 @@ fn a_locked_desk_refuses_the_keys_and_the_passphrase_starts_them_again() {
     );
 }
 
-/// A page that connects over a locked desk is told the desk is locked.
+/// A chrome that connects while the desktop is locked is told it is locked.
 ///
-/// **THE PROPERTY THE WHOLE DESIGN IS FOR.** A reload is a new page on a new
-/// socket saying `hello`, which is what a second chrome here is — so this is
-/// the test that a shell rebuilt, reloaded, or served by an engine that died
-/// and came back does not come up drawing an open desktop over a desk that has
-/// stopped listening. The edge that raised its lock screen went out before the
-/// page existed.
+/// A page reload is a new connection that sends `hello`. This is the main
+/// property of the lock: a reloaded or restarted shell must not show an
+/// unlocked desktop. The event that locked it happened before the page
+/// existed.
 #[test]
 fn a_page_that_connects_over_a_locked_desk_is_told_so() {
     let compositor = Compositor::started_with(A_DESK_THAT_CAN_LOCK);
@@ -217,21 +173,15 @@ fn a_page_that_connects_over_a_locked_desk_is_told_so() {
         .expect("a page that has only just connected is told where the desk stands");
 }
 
-/// A passphrase the desk refuses leaves it shut, the page is told so, and it
-/// does not turn up in the log.
+/// A wrong passphrase keeps the desktop locked, tells the page, and is not
+/// logged.
 ///
-/// **THE PAGE IS TOLD BY BEING TOLD THE DESK IS LOCKED, AGAIN.** `locked: true`
-/// to the chrome that already knows it is the answer to the check it is
-/// waiting on: nothing else sends one to a desk being checked, because a desk
-/// being checked is already shut. Without it a shell has nothing to clear its
-/// field on and nothing to say "wrong" on.
+/// The page learns of the refusal from a repeated `locked: true`. Nothing
+/// else sends it while a passphrase is being checked, so the shell can clear
+/// its field and show an error.
 ///
-/// The last half is not decoration. The compositor says out loud that it
-/// refused something — a lock that said nothing would be a desk somebody is
-/// guessing at with no trace of it anywhere — and the obvious way to write that
-/// line is with the thing it refused in it, which would put the guess, and
-/// sooner or later the real passphrase, in the journal. Both spellings are
-/// checked: the one that was typed, and the one that would have worked.
+/// The compositor logs the refusal, which must not include the passphrase.
+/// Both the typed and the correct passphrase are checked against the log.
 #[test]
 fn a_passphrase_the_desk_refuses_leaves_it_shut_says_so_and_stays_out_of_the_log() {
     let compositor = Compositor::started_with(A_DESK_THAT_CAN_LOCK);
@@ -260,31 +210,22 @@ fn a_passphrase_the_desk_refuses_leaves_it_shut_says_so_and_stays_out_of_the_log
     );
 }
 
-/// A key held down when the desk locks is let go of for the client.
+/// A key held down when the desktop locks is released for the client.
 ///
-/// **THE RELEASE IS THE ONE THING A LOCK CANNOT SIMPLY REFUSE.** Everything else
-/// it drops is an event that never happened as far as a client is concerned; a
-/// release is the end of one that did. The seat's keyboard state is one seat's
-/// and outlives every page, so a press that is delivered and a release that is
-/// not leaves that key down in it for good — and on a desk whose keymap puts
-/// `Caps_Lock` on a key somebody might hold, xkb unlocks one only on the release
-/// of the press that locked it. `tests/stuck_keys.rs` is the same failure
-/// reached through a reload, and says at length what it costs.
+/// The lock cannot just drop a release: the press was delivered, and the seat
+/// outlives every page, so the key would stay down for good. If the held key
+/// is `Caps_Lock`, Caps Lock would stay on, because xkb unlocks it only on the
+/// release of the press that locked it. `tests/stuck_keys.rs` covers the same
+/// failure through a reload.
 ///
-/// A modifier is how this happens without contrivance: a browser repeats an
-/// ordinary keydown, so holding `a` goes on stirring the desk, where a Shift
-/// held while somebody reads the screen sends nothing at all for the whole
-/// timeout.
-///
-/// So the desk lets go of what it is holding on the turn it shuts, and this is
-/// the client's side of that: the press goes in, nothing releases it, and the
-/// release the client is given comes from the lock.
+/// A held modifier is the realistic case: browsers repeat ordinary keys, which
+/// resets the idle timer, but a held Shift sends nothing.
 #[test]
 fn a_key_held_when_the_desk_locks_is_let_go_of_for_the_client() {
     let compositor = Compositor::started_with(A_DESK_THAT_CAN_LOCK);
     let (mut chrome, mut client, app_id) = a_client_being_typed_at(&compositor);
 
-    // Down, and never let go of.
+    // Pressed and never released.
     say_a(&mut chrome, &app_id, true);
     assert!(
         client.wait_for_trace(A_PRESS_OF_IT, 1),
@@ -303,20 +244,15 @@ fn a_key_held_when_the_desk_locks_is_let_go_of_for_the_client() {
     );
 }
 
-/// A program the shell asks to start at a locked desk is not started, and the
-/// same ask at the desk the passphrase opened is.
+/// A spawn requested while locked does not run; the same request after
+/// unlocking does.
 ///
-/// **A SPAWN BECAUSE IT IS THE ONE A TEST CAN SEE FROM OUTSIDE.** Closing a
-/// window and putting a clipboard row back are refused on the same terms, and
-/// `crate::lock`'s own tests hold the whole list; what this adds is that the
-/// list is asked on the path a shell's `spawn` actually takes.
+/// Spawn is used because a test can observe it from outside. `crate::lock`'s
+/// tests cover the full list of refused requests.
 ///
-/// Counted rather than waited out, for the reason the key test above counts:
-/// "it never ran" is an absence, and an absence is a sleep or a lie. The one
-/// the open desk started says its own pid, and its `spawning client` line is
-/// waited for by that pid — so every line the compositor wrote before it is in
-/// the log, including the one a spawn the lock had let through would have
-/// written, and a count of one is exact.
+/// The check counts instead of waiting for an absence. The unlocked spawn's
+/// `spawning client` line is awaited by its pid, so any earlier spawn would
+/// already be in the log, and a count of one is exact.
 #[test]
 fn a_locked_desk_starts_no_program_and_the_passphrase_lets_the_next_one_run() {
     let compositor = Compositor::started_with(A_DESK_THAT_CAN_LOCK);
@@ -356,8 +292,8 @@ fn a_locked_desk_starts_no_program_and_the_passphrase_lets_the_next_one_run() {
 
 /// Ask for a program that writes its own pid to `reported`.
 ///
-/// By rename, for the reason `tests/apps.rs` gives: a plain redirect is
-/// observable while the file is still empty.
+/// It writes by rename, because a plain redirect creates the file before
+/// writing to it.
 fn say_start(chrome: &mut domicile_test_chrome::Chrome, reported: &std::path::Path) {
     chrome
         .say(&ChromeMessage::Spawn {
@@ -373,20 +309,15 @@ fn say_start(chrome: &mut domicile_test_chrome::Chrome, reported: &std::path::Pa
         .expect("the chrome socket takes a spawn");
 }
 
-/// A launcher left up over a locked desk is told nothing out of the home, and
-/// the same search at the desk the passphrase opened finds the file.
+/// A launcher search while locked returns nothing from the home directory;
+/// the same search after unlocking finds the file.
 ///
-/// **THE UNLOCK IS THE FENCE, AND THE SOCKET'S ORDER IS WHAT MAKES IT ONE.** A
-/// search is answered on the connection that read it, before that connection
-/// reads the next line, so an answer the lock had let through would be on the
-/// socket ahead of the `locked: false` the unlock after it produces. Waiting for
-/// whichever of the two comes first is exact rather than a wait for an
-/// absence, and fails for the right reason: a desk that answered hands back the
-/// file list.
+/// A search is answered before the connection reads its next message, so an
+/// answer the lock let through would arrive before the unlock's
+/// `locked: false`. Waiting for whichever comes first is exact.
 ///
-/// The index is waited for before the desk locks, so "answered with nothing"
-/// cannot be a desktop with nothing yet to answer from — which is a nothing
-/// this compositor already says, for a different reason.
+/// The index is ready before locking, so an empty answer cannot mean the
+/// index was not built yet.
 #[test]
 fn a_locked_desk_answers_no_search_and_the_passphrase_lets_the_next_one_find_the_file() {
     let home = tempfile::tempdir().expect("a home to lay out");
@@ -417,12 +348,11 @@ fn a_locked_desk_answers_no_search_and_the_passphrase_lets_the_next_one_find_the
     );
 }
 
-/// A preview asked of a locked desk is not read, and the same preview at the
-/// desk the passphrase opened is.
+/// A file preview while locked is not read; the same preview after unlocking
+/// is.
 ///
-/// The page names the path here, so this is the one that reads a file's
-/// contents rather than its name — fenced by the unlock for the reason the
-/// search above is.
+/// This reads a file's contents, not just its name. The unlock orders it as in
+/// the search test above.
 #[test]
 fn a_locked_desk_reads_no_preview_and_the_passphrase_lets_the_next_one_read() {
     let home = tempfile::tempdir().expect("a home to lay out");
@@ -452,11 +382,10 @@ fn a_locked_desk_reads_no_preview_and_the_passphrase_lets_the_next_one_read() {
     );
 }
 
-/// A shell that asks for the lock gets it, with nobody having walked away.
+/// A shell can request the lock directly, without the idle timeout.
 ///
-/// No clock on this desk at all, so the only thing that can shut it is the
-/// message; and a key sent after it is refused, so it is the lock that shut
-/// rather than a `locked` said about a desk still listening.
+/// The desktop has no timeout, so only the message can lock it. A key sent
+/// afterward is refused, which shows the lock took effect.
 #[test]
 fn a_shell_can_lock_the_desk_on_purpose() {
     let compositor = Compositor::started_with(A_DESK_THAT_CAN_LOCK);
@@ -476,7 +405,7 @@ fn a_shell_can_lock_the_desk_on_purpose() {
     compositor.wait_for_log("this desktop is locked");
 }
 
-/// A chrome on a desk whose home is indexed, and then locked.
+/// A chrome on a desktop whose home is indexed, then locked.
 fn an_indexed_desk_locked(compositor: &Compositor) -> domicile_test_chrome::Chrome {
     let mut chrome = compositor.chrome();
     compositor.wait_for_log("the home directory is indexed");
@@ -484,8 +413,8 @@ fn an_indexed_desk_locked(compositor: &Compositor) -> domicile_test_chrome::Chro
     chrome
 }
 
-/// Type the passphrase, and hand back whichever came first: the desk saying it
-/// opened, or an answer out of the home.
+/// Type the passphrase and return the first of: the unlock message, or a
+/// result from the home directory.
 fn opened_or_answered(chrome: &mut domicile_test_chrome::Chrome) -> HostMessage {
     chrome
         .say(&ChromeMessage::Unlock {

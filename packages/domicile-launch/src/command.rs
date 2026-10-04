@@ -1,9 +1,7 @@
-//! What the engine can be told about the shell it serves, and what it answers.
+//! The protocol the supervisor uses to send `load-shell` and `open-url` to
+//! the engine.
 //!
-//! The engine's socket, not this desktop's: [`crate::control`] is the wire a
-//! person's `domicile <command>` arrives on, and this is the one the supervisor
-//! turns a `load-shell` or an `open-url` into. One JSON object per line each way, and the
-//! connection is over.
+//! One JSON line each way per connection:
 //!
 //! ```text
 //! {"type":"load_shell","version":1,"root":"/x/dist","module":"shell.js"}
@@ -13,51 +11,40 @@
 //! {"type":"opened"}   |   {"type":"refused","why":"…"}
 //! ```
 //!
-//! THE OTHER END OF THIS IS C++ AND IS PUBLISHED SEPARATELY, which is the whole
-//! reason this module is not part of [`crate::control`]:
-//! `components/domicile/browser/command_protocol.cc` in the fork holds the
-//! engine's half, `command_protocol_unittest.cc` holds its tests, and
-//! `packages/domicile-engine/engine-release.nix` pins which build of it a
-//! desktop runs. Nothing derives both halves of this agreement, so what is
-//! asserted here is the bytes.
+//! The engine side is C++ in the fork
+//! (`components/domicile/browser/command_protocol.cc`, tested in
+//! `command_protocol_unittest.cc`) and is released separately
+//! (`packages/domicile-engine/engine-release.nix`). Nothing shares code
+//! between the two, so the tests here assert the exact bytes.
 
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-/// The version of this contract the supervisor writes and the engine checks.
+/// The protocol version the supervisor sends and the engine checks.
 ///
-/// [`DATA.md`](/docs/guidelines/DATA.md) says to version a contract when
-/// producer and consumer can be on different releases at once, and this is the
-/// one in this system that can: the engine is pinned by
-/// `engine-release.nix` and is routinely built from an older commit than the
-/// `domicile` beside it. The refusal is the check — an engine that does not
-/// speak the version it was sent says so, by name, on this socket — so there
-/// is nothing to do here but say which one this is.
-///
-/// Bump it when the request's shape changes in a way an older engine would
-/// read wrongly; a new engine that must still answer an old supervisor keeps
-/// reading the version it shipped with.
+/// Versioned per [`DATA.md`](/docs/guidelines/DATA.md) because the pinned
+/// engine is often older than `domicile`. The engine refuses versions it does
+/// not support. Bump this when a request changes in a way an older engine
+/// would misread.
 const VERSION: u32 = 1;
 
-/// What the engine answered.
+/// The engine's reply.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Reply {
-    /// It is serving that shell now.
+    /// The engine is serving the shell.
     Loaded,
-    /// It handed that address to the shell.
+    /// The engine passed the address to the shell.
     Opened,
-    /// It is not, and this is the engine's own sentence about why.
+    /// The engine refused, with its reason.
     Refused { why: String },
 }
 
-/// The line that tells an engine to serve the shell `module` out of `root`.
+/// The request to serve the shell `module` from `root`.
 ///
-/// Absolute `root`, and the engine refuses one that is not: it resolves the
-/// path in its own process, whose working directory nobody else knows.
-/// Resolving what a person typed is [`crate::shell_path`]'s, and it happens in
-/// front of them rather than here.
+/// `root` must be absolute; the engine refuses relative paths. Resolve user
+/// input with [`crate::shell_path`] first.
 pub fn load_shell_line(root: &Path, module: &Path) -> String {
     let mut line = serde_json::to_string(&Command::LoadShell {
         module,
@@ -69,9 +56,7 @@ pub fn load_shell_line(root: &Path, module: &Path) -> String {
     line
 }
 
-/// The line that tells an engine to hand `url` to the shell to open.
-///
-/// Not parsed here: the engine parses it, and refuses one it cannot.
+/// The request to open `url` in the shell. The engine validates `url`.
 pub fn open_url_line(url: &str) -> String {
     let mut line = serde_json::to_string(&Command::OpenUrl {
         url,
@@ -82,26 +67,18 @@ pub fn open_url_line(url: &str) -> String {
     line
 }
 
-/// Read one reply from a line (without the trailing newline).
+/// Parses one reply line, without its trailing newline.
 ///
-/// AN UNREADABLE ANSWER IS NOT A REFUSAL. An engine old enough not to have
-/// this socket at all, or new enough to answer something this build has no
-/// name for, has not refused anything — and telling whoever typed the command
-/// that it did would be this program inventing the engine's half of the
-/// conversation.
+/// An unparseable reply is an error, not a [`Reply::Refused`]: it comes from
+/// an incompatible engine, which did not refuse anything.
 pub fn reply(line: &str) -> Result<Reply, serde_json::Error> {
     serde_json::from_str(line)
 }
 
-/// What the supervisor can tell the engine.
+/// A request to the engine.
 ///
-/// Named fields rather than a `json!` so the line comes out in the order this
-/// contract is written down in everywhere else — the fork's own header, this
-/// module's, and the two design docs. JSON does not care about the order of an
-/// object's keys and a reader comparing a live line against a doc does.
-///
-/// Not public, and there is no caller that would want it: each command has a
-/// function of its own above, which is the whole of what a caller has to know.
+/// Field order matches the documented key order, so live lines are easy to
+/// compare against the docs.
 #[derive(Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 enum Command<'a> {
