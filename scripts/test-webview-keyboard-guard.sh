@@ -1,33 +1,19 @@
 #!/usr/bin/env bash
-# Which end the keyboard guard blames, and which answers it calls a pass.
+# Tests the verdict of `guard-webview-keyboard.sh`: which readings pass and
+# which component a failure blames.
 #
-# The unit is the verdict block in `guard-webview-keyboard.sh` — the `if` chain
-# that turns nine readings and the run's mode into either a pass or one
-# sentence naming an end. The readings are not independent: a run that never
-# claimed a chord has established nothing about what fires, and a run where the
-# browser window never took the keyboard is not a run about browser windows at
-# all. So the chain is ordered, and an ordered chain is a thing that can be got
-# wrong in a way no failing engine would ever reveal — the wrong arm answers,
-# with a true-sounding sentence about the wrong layer, and the next person
-# spends a CI cycle on it.
+# The checks are ordered: with no chord claimed, or the browser window never
+# focused, nothing else means anything. Easy to get backward:
 #
-# It matters most for the three readings a verdict written by symmetry gets
-# backward:
+#   - In the negative run, the chord firing is the failure.
+#   - The shell's document seeing an ungrabbed key fails, because it
+#     contradicts the comment in `WebViewGuest::PreHandleKeyboardEvent`.
+#   - The shell's document seeing no key before focus moved still passes and
+#     reports the missing reading. The claims are measured in the browser
+#     process; a browser with no display to activate may deliver no DOM
+#     events at all.
 #
-#   in the negative run, the chord FIRING is the failure
-#   the shell's document seeing an ungrabbed key is a failure even though
-#     nothing about the desktop's own chords broke — the answer recorded in
-#     `WebViewGuest::PreHandleKeyboardEvent`'s own comment would be wrong, and
-#     a guard that passed would leave it wrong
-#   the shell's document seeing NO key at all, before focus ever moved, is a
-#     PASS — one reading short and saying so. Everything the guard claims is
-#     measured in the browser process; whether a page then receives a DOM event
-#     is a layer below, and a browser with no display for its window to be
-#     activated on may deliver none to anybody
-#
-# The block is run out of the real script rather than copied, so a rewrite that
-# moves it fails here loudly instead of leaving this passing against a version
-# nobody ships.
+# Runs the verdict block from the real guard, so moving it fails here.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -37,10 +23,8 @@ GUARD="$ROOT/packages/domicile-engine/scripts/guard-webview-keyboard.sh"
   exit 1
 }
 
-# From `FAILURE=""` to the `fi` that closes the decision. Both ends are whole
-# lines at column zero, so this cannot half-match: the nested `fi` in the
-# negative arm is indented, and the block stops before the `if [ -n "$PASSED" ]`
-# below it — a verdict is a value here, not a status.
+# From `FAILURE=""` to the column-zero `fi` that ends the decision. The nested
+# `fi` is indented, so the match cannot stop early.
 BLOCK="$(awk '/^FAILURE=""$/,/^fi$/' "$GUARD")"
 [ -n "$BLOCK" ] || {
   echo "no verdict block in $GUARD — its markers moved. Fix this test with it." >&2
@@ -58,10 +42,8 @@ expect() {
   fi
 }
 
-# A run in which everything the guard wants is true; each case below changes one
-# reading. Written as a baseline plus overrides rather than nine positional
-# arguments, because a case that says `SAW_MODIFIERS=0` says what it is testing
-# and a case that says `1 1 0 1 0 0 1 0 0` does not.
+# A run where every reading has its passing value; each case overrides one by
+# name, which reads better than positional arguments.
 verdict() { # $1 NEGATIVE, then NAME=value overrides
   (
     SAW_CLAIM=1
@@ -94,9 +76,8 @@ verdict() { # $1 NEGATIVE, then NAME=value overrides
   )
 }
 
-# The failing sentence, for the cases where WHICH end it names is the point. Not
-# the whole wording: sentences are prose and will be reworded, and a test that
-# pinned them would fail for edits that changed no behavior.
+# The failure message, for cases that check which component it blames. Tests
+# match a keyword, not the whole sentence.
 reason() { # $1 NEGATIVE, then NAME=value overrides
   (
     SAW_CLAIM=1
@@ -135,9 +116,8 @@ blames() { # $1 word, then the args verdict takes
 echo "a run that never got as far as measuring anything"
 expect "no claim is a failure in the positive run" "fail" \
   "$(verdict 0 SAW_CLAIM=0)"
-# AND IN THE NEGATIVE RUN, which is the arm a verdict written as "the control
-# passes when nothing fires" gets wrong: with no claim made, nothing firing is
-# what a broken harness looks like too.
+# The negative run must fail too: with no claim, nothing firing is also what a
+# broken harness looks like.
 expect "no claim is a failure in the negative run" "fail" \
   "$(verdict 1 SAW_CLAIM=0)"
 expect "no claim blames the harness" "yes" \
@@ -159,9 +139,8 @@ expect "a relayed claim names the socket" "yes" \
 echo
 echo "the positive run — a <webview>, over which the chord must reach the shell"
 expect "everything arriving is the pass" "pass" "$(verdict 0)"
-# An empty window is a guest that was never made, which is PR #257's half
-# rather than this one's — and it is asked ONLY of the positive run, because a
-# control's <iframe> does not load the page at all and does not need to.
+# An empty window means the guest was never created. Only the positive run
+# checks this; the control's <iframe> does not load the page.
 expect "an empty window is a failure" "fail" "$(verdict 0 SAW_PAGE=0)"
 expect "an empty window names the guest" "yes" \
   "$(blames "the guest" 0 SAW_PAGE=0)"
@@ -176,17 +155,15 @@ expect "a key that never reached the guest's hook is a failure" "fail" \
   "$(verdict 0 SAW_HOOK=0)"
 expect "a key that never reached the guest's hook decides nothing" "yes" \
   "$(blames "not decided" 0 SAW_HOOK=0)"
-# THE INVERTED ONE. Both seeing it is not a regression in anything this change
-# built — it would mean the shell's own keys still work over a browser window —
-# and it still has to fail, because the answer written down would be wrong.
+# Inverted: both seeing the key means the shell's keys work over a browser
+# window, but it still fails because the documented behavior would be wrong.
 expect "a key that reached both is a failure" "fail" \
   "$(verdict 0 SAW_DOCUMENT_KEY=1)"
 expect "a key that reached both points at where the answer is written down" \
   "yes" "$(blames "in its own comment" 0 SAW_DOCUMENT_KEY=1)"
-# THE OTHER ONE. A harness that delivered no key to the shell's document before
-# focus moved has not measured the absence after it — and every other claim
-# still stands, so this is a pass that says what it is missing rather than a
-# failure about a layer the guard does not touch.
+# A harness that delivered no key to the shell's document before focus moved
+# cannot measure the absence after it. The other claims still hold, so this
+# passes and reports the missing reading.
 expect "no key before focus is still a pass" "pass" \
   "$(verdict 0 SAW_SHELL_KEY=0)"
 expect "no key before focus is checked after the readings it cannot excuse" \
@@ -198,8 +175,8 @@ expect "a chord never handed back is a failure" "fail" \
   "$(verdict 0 SAW_GUEST_CHORD=0)"
 expect "a chord never handed back blames the guest's delegate" "yes" \
   "$(blames "HandleKeyboardEvent" 0 SAW_GUEST_CHORD=0)"
-# THE PRIVACY HALF. A plain key handed back is every keystroke the page is
-# typed — a password's included — copied into the shell's document.
+# Privacy: handing back plain keys would copy every keystroke, passwords
+# included, into the shell's document.
 expect "a plain key handed back is a failure" "fail" \
   "$(verdict 0 SAW_PLAIN_CHORD=1)"
 expect "a plain key handed back names what it copies" "yes" \
@@ -210,8 +187,8 @@ echo "the zoom the first handed-back chord asks for"
 expect "no zoom reported is a failure" "fail" "$(verdict 0 SAW_ZOOM=0)"
 expect "no zoom reported blames the report" "yes" \
   "$(blames "ReportZoom" 0 SAW_ZOOM=0)"
-# A zoom the element reports and the page never draws is HostZoomMap holding a
-# level the guest's widget did not pick up: a number, not a zoom.
+# The element reports a zoom the page never draws: HostZoomMap holds a level
+# the guest's widget did not apply.
 expect "a zoom the page never drew is a failure" "fail" \
   "$(verdict 0 SAW_ZOOM_DRAWN=0)"
 expect "a zoom the page never drew names the widget" "yes" \
@@ -225,9 +202,8 @@ expect "no chord is the pass" "pass" "$(verdict 1 SAW_SHORTCUT=0)"
 expect "a chord is the failure" "fail" "$(verdict 1)"
 expect "a chord says there is no guest to have matched it" "yes" \
   "$(blames "no guest" 1)"
-# The control is a control whatever the rest of the readings say: an <iframe> is
-# given every key it is sent, so what is a failure in the positive run is the
-# ordinary case here and must not be read as anything.
+# An <iframe> receives every key, so the positive run's failures are normal in
+# the control.
 expect "an empty window is not the control's business" "pass" \
   "$(verdict 1 SAW_SHORTCUT=0 SAW_PAGE=0)"
 expect "the modifiers are not the control's business" "pass" \

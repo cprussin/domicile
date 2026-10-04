@@ -1,30 +1,16 @@
 #!/usr/bin/env bash
-# Which end the framing guard blames, and which answers it calls a pass.
+# Tests the verdict of `guard-webview-framing.sh`: which readings pass and
+# which component a failure blames.
 #
-# The unit is the verdict block in `guard-webview-framing.sh` — the `case` that
-# turns what a run measured into either a pass or one sentence naming an end.
-# Eleven answers come out of it and most are failures that read alike: "the
-# <webview> showed nothing", "the page never drew", "the probe never ran".
-# Naming one of those as another is the same class of defect as a guard that
-# measures the wrong pixel, and it costs a CI cycle each time.
+# Many failure messages sound alike ("the <webview> showed nothing", "the page
+# never drew", "the probe never ran"), so each case checks the right one.
 #
-# It matters most in the control, where the probe FINDING the framed color is
-# the failure and NOT finding it is the pass — so a verdict written by symmetry
-# with the positive run passes the control on a broken engine and fails it on a
-# working one.
+# The control has two legs: an <iframe> on an http page frames a page that
+# permits it, then one that refuses. In the second leg, finding the color is
+# the failure. The first leg proves the harness can draw a framed page, so if
+# it found nothing the control fails regardless of the second leg.
 #
-# AND IT MATTERS MOST OF ALL FOR THE CONTROL'S FIRST LEG. The control is two
-# runs: an <iframe> on an ordinary http page framing a page that permits it,
-# then the same frame on the same page framing the one that refuses. Only the
-# second is the claim; the first is what makes it a claim, because an empty
-# frame and a harness that cannot draw are the same picture. A control whose
-# first leg found nothing must fail no matter how right its second leg looks —
-# that is the case this guard shipped wrong once already, when the frame was on
-# a domicile:// document that could not load the page in either leg.
-#
-# The block is run out of the real script rather than copied, so a rewrite that
-# moves it fails here loudly instead of leaving this passing against a version
-# nobody ships.
+# Runs the verdict block from the real guard, so moving it fails here.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -34,9 +20,8 @@ GUARD="$ROOT/packages/domicile-engine/scripts/guard-webview-framing.sh"
   exit 1
 }
 
-# From `FAILURE=""` to the `esac` that closes the decision. Both ends are whole
-# lines, so this cannot half-match, and the block stops before the two `exit`
-# lines below it — a verdict is a value here, not a status.
+# From `FAILURE=""` to the `esac` that ends the decision, stopping before the
+# guard's `exit` lines.
 BLOCK="$(awk '/^FAILURE=""$/,/^esac$/' "$GUARD")"
 [ -n "$BLOCK" ] || {
   echo "no verdict block in $GUARD — its markers moved. Fix this test with it." >&2
@@ -54,16 +39,11 @@ expect() {
   fi
 }
 
-# Runs the real block against one run's measurement, and says which of the two
-# outcomes it chose. Not the sentence: the sentences are prose and will be
-# reworded, and a test that pinned them would fail for edits that changed no
-# behavior. Which end is blamed is asserted separately, by the word that names
-# it.
+# Prints pass, fail or neither for one measurement. Sentences are not
+# compared, since they change; blame is checked by keyword.
 #
-# `MEASURED` is what a run comes to: the mode, and then a probe status for each
-# leg it ran. One string rather than three variables because it is one decision
-# — the control's second leg means nothing without its first, and a `case` over
-# the pair says that where two nested `if`s would only imply it.
+# `MEASURED` is the mode followed by a probe status per leg. It is one string
+# because the control's second leg means nothing without its first.
 verdict() { # $1 MEASURED
   (
     MEASURED="$1"
@@ -78,7 +58,7 @@ verdict() { # $1 MEASURED
   )
 }
 
-# The failing sentence, for the cases where WHICH end it names is the point.
+# The failure message, for cases that check which component it blames.
 reason() { # $1 MEASURED
   (
     MEASURED="$1"
@@ -87,7 +67,7 @@ reason() { # $1 MEASURED
   )
 }
 
-# And the passing one, for the same reason in the other direction.
+# The pass message, for cases that check what it claims.
 claim() { # $1 MEASURED
   (
     MEASURED="$1"
@@ -104,42 +84,37 @@ says() { # $1 MEASURED, $2 what the sentence must contain
 }
 
 echo "the positive run — a <webview>, which must show the refused site"
-# 0: the framed page's color is on screen. That is the whole claim.
+# 0: the framed page's color is on screen.
 expect "found is a pass" "pass" "$(verdict "webview 0")"
-# 1: the page drew, the framed color did not. The guest is what failed.
+# 1: the page drew but the framed color did not; the guest failed.
 expect "absent is a failure" "fail" "$(verdict "webview 1")"
 expect "absent blames the element, not the harness" "yes" \
   "$(says "webview 1" "<webview> showed nothing")"
-# 2: not even the page's own background. Nothing was measured.
+# 2: not even the page's own background; nothing was measured.
 expect "nothing measured is a failure" "fail" "$(verdict "webview 2")"
 expect "nothing measured blames the harness" "yes" \
   "$(says "webview 2" "harness")"
-# The probe's own usage/connect failure, which is 3, and anything else a
-# process can exit with — a signal, say.
+# 3 is the probe's usage or connect failure; anything else (e.g. a signal)
+# also fails.
 expect "an unusable probe fails" "fail" "$(verdict "webview 3")"
 expect "and a killed one does not pass either" "fail" "$(verdict "webview 137")"
 
 echo
 echo "the control — one <iframe>, framing the page that permits it and then the one that does not"
-# THE PAIR THE CONTROL IS. The first leg says this harness can see a framed
-# page here; the second says this page is not one it can see. Only both
-# together are a reading of the headers.
+# The first leg shows the harness can see a framed page; the second shows
+# this page is refused. Only together do they test the headers.
 expect "framed then refused is the pass" "pass" "$(verdict "control 0 1")"
 expect "and says what the difference between the two legs was" "yes" \
   "$(case "$(claim "control 0 1")" in *"header"*) echo yes ;; *) echo no ;; esac)"
 
-# THE INVERTED ONE. A verdict written by symmetry with the positive run gets
-# this backward.
+# Inverted relative to the positive run.
 expect "a refusing page that renders anyway is a failure" "fail" \
   "$(verdict "control 0 0")"
 expect "and says the site is not refusing anything" "yes" \
   "$(says "control 0 0" "X-Frame-Options")"
 
-# THE CASE THIS GUARD WAS REWRITTEN FOR. The second leg reads exactly like a
-# pass — the refusing page is absent — and it means nothing, because the leg
-# that was supposed to establish the harness can draw a framed page at all
-# found nothing either. The old control was permanently in this state and
-# reported the pass.
+# The second leg looks like a pass (the refusing page is absent) but means
+# nothing when the first leg also found nothing.
 expect "a first leg that saw nothing fails, however right the second looks" \
   "fail" "$(verdict "control 1 1")"
 expect "and says the harness could not show a framed page at all" "yes" \
@@ -147,8 +122,7 @@ expect "and says the harness could not show a framed page at all" "yes" \
 expect "and it fails the same way when the second leg found the page" "fail" \
   "$(verdict "control 1 0")"
 
-# Not inverted, and that is the point of asserting it: a leg that cannot see
-# the page it is on has established nothing, in either position.
+# Not inverted: a leg that measured nothing fails in either position.
 expect "a first leg that measured nothing is a failure" "fail" \
   "$(verdict "control 2 1")"
 expect "a second leg that measured nothing is a failure" "fail" \
@@ -158,8 +132,7 @@ expect "an unusable probe fails the second leg" "fail" "$(verdict "control 0 3")
 
 echo
 echo "a run that measured nothing at all"
-# Neither mode, or a mode with no legs in it: a verdict block that fell through
-# to a pass would be the worst failure available to this file.
+# No mode, or a mode with no legs, must not fall through to a pass.
 expect "an empty measurement is a failure" "fail" "$(verdict "")"
 expect "and so is a mode nobody runs" "fail" "$(verdict "elephant 0")"
 

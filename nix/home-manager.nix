@@ -1,29 +1,14 @@
-# Domicile as a home-manager module.
+# Home-manager module for Domicile.
 #
-# Writes `~/.config/domicile/domicile.json` -- which is where `domicile`
-# looks when nothing passes it a `--config` -- and puts a `domicile` on PATH
-# that already knows which shell to run.
+# Writes `~/.config/domicile/domicile.json` and installs a `domicile` that runs
+# the configured shell by default. `settings` mirrors the `domicile-config`
+# crate's schema; `scripts/test-the-home-manager-module-agrees.sh` checks that
+# they match. `settings` is freeform so a newer domicile works with an older
+# module.
 #
-# TWO HALVES, AND ONLY ONE OF THEM IS THIS MODULE'S IDEA. The file's schema
-# belongs to the `domicile-config` crate; everything under `settings` is that
-# schema spelled in Nix, and `scripts/test-the-home-manager-module-agrees.sh`
-# compares the two without building anything. What this module decides is the
-# rest: where the file goes, which package provides `domicile`, and that a
-# shell named here is baked into the command rather than typed every time.
+# The login session belongs to the NixOS module (`nix/nixos.nix`).
 #
-# `settings` HAS A FREEFORM TYPE for that reason. A key this module has not
-# caught up with is passed through rather than refused, so a newer domicile is
-# usable from an older module -- and the declared options below are there for
-# the documentation, the type checking and the defaults, not as a gate.
-#
-# NO SESSION, NO UNIT. Making domicile a login session is a NixOS-level
-# decision about how a machine boots, and a home-manager module is the wrong
-# place to make it: `nix/nixos.nix` is.
-#
-# CURRIED, because half of what this needs is fixed when the flake exposes it
-# and half arrives from the configuration importing it: `domicilePackages` is
-# this flake's own, for the default `package`, and the rest is the ordinary
-# module argument set.
+# Curried so `domicilePackages` can supply this flake's package defaults.
 {domicilePackages}: {
   lib,
   pkgs,
@@ -34,8 +19,7 @@
 
   json = pkgs.formats.json {};
 
-  # A width and a height, or an x and a y. Two-element lists because that is
-  # what the config file takes: `"size": [1920, 1080]`.
+  # A two-element list, as the config file takes it: `"size": [1920, 1080]`.
   pairOf = element: lib.types.addCheck (lib.types.listOf element) (xs: lib.length xs == 2);
 
   pair = element: description:
@@ -44,16 +28,11 @@
       type = pairOf element;
     };
 
-  # Every null dropped, through lists as well as attrsets.
+  # Drops nulls recursively, through attrsets and lists.
   #
-  # A null is not an absence to `domicile`, which reads several keys' ABSENCE
-  # as a real answer -- `idle.blank_after_seconds` absent is a desktop whose
-  # screens never blank, `lock` with neither verifier is one that never locks, a
-  # placement's `mode` absent is whatever the monitor comes up at -- so leaving
-  # the key out is exactly what an unset option means, where a `null` written
-  # through is a value the schema refuses for most of them. Through lists
-  # because `output.profiles` is one, and the nullable option inside it is in
-  # a submodule two lists deep.
+  # `domicile` reads an absent key as a setting (no `idle.blank_after_seconds`
+  # means never blank) and rejects `null` for most keys. Recurses into lists
+  # because `output.profiles` contains nullable options.
   withoutNulls = value:
     if lib.isAttrs value
     then lib.mapAttrs (_: withoutNulls) (lib.filterAttrs (_: each: each != null) value)
@@ -61,24 +40,22 @@
     then map withoutNulls value
     else value;
 
-  # The four `wl_output` rotations, which count counterclockwise the way kanshi
-  # and sway do -- `rotate-270` turns the content a quarter clockwise, for a
-  # panel standing on its left side. Spelled the way the file spells them,
-  # which is not serde's kebab-case of the Rust variant.
+  # `wl_output` rotations, counterclockwise as in kanshi and sway: `rotate-270`
+  # suits a panel standing on its left side. The strings match the config
+  # file, not the Rust variant names.
   transform = lib.types.enum ["normal" "rotate-90" "rotate-180" "rotate-270"];
 
-  # One monitor of a desktop stated outright, which is the nested case: no
-  # hardware is consulted, so a display states its own size.
+  # A display for a nested run, which has no hardware to report its size.
   display = lib.types.submodule {
     options = {
       name = lib.mkOption {
-        description = "How the chrome and the compositor name this display to each other. Matched exactly.";
+        description = "The display's name, shared by the chrome and the compositor. Matched exactly.";
         type = lib.types.str;
       };
       position =
-        (pair lib.types.int "The top-left corner, in the config's own coordinate space. Negative is fine.")
+        (pair lib.types.int "The top-left corner, in the config's coordinate space. May be negative.")
         // {default = [0 0];};
-      size = pair lib.types.ints.positive "Width and height in logical units. A `wl_output` mode is this times `scale`.";
+      size = pair lib.types.ints.positive "Width and height in logical units. The `wl_output` mode is this times `scale`.";
       scale = lib.mkOption {
         description = "The `wl_output` scale advertised to clients on this display.";
         type = lib.types.ints.positive;
@@ -87,37 +64,31 @@
     };
   };
 
-  # Where one monitor of a profile goes. The monitor states its own mode, so
-  # this states a placement and not a size.
+  # One monitor's placement in a profile. The monitor reports its own mode, so
+  # there is no size.
   placement = lib.types.submodule {
     options = {
       display = lib.mkOption {
         description = ''
-          Which monitor this places: the output's name (`drm-<id>`), the
-          panel's own `"<MAKE> <MODEL> <SERIAL>"` off its EDID
-          (`DEL DELL U3219Q 2ZLS413`), or that name with the maker spelled
-          out of hwdata's `pnp.ids` (`Dell Inc. DELL U3219Q 2ZLS413`), which
-          is the string kanshi and sway match on. All three match, so a
-          profile written against any of them applies.
+          The monitor to place. Matches the output name (`drm-<id>`), the EDID's
+          `"<MAKE> <MODEL> <SERIAL>"` (`DEL DELL U3219Q 2ZLS413`), or the same
+          with the maker's name from hwdata's `pnp.ids` (`Dell Inc. DELL U3219Q
+          2ZLS413`), as kanshi and sway use.
         '';
         type = lib.types.str;
       };
       enabled = lib.mkOption {
-        description = "Whether to light this monitor at all. A profile still has to name one it turns off.";
+        description = "Whether to turn this monitor on. A profile must still list the monitors it turns off.";
         type = lib.types.bool;
         default = true;
       };
       mode = lib.mkOption {
         description = ''
-          The mode the rest of this entry was written for, in physical
-          pixels. An assertion about the monitor rather than a request to it:
-          nothing here sets a mode -- the engine holds DRM master and lights
-          every connector at its native one -- so a monitor that comes up at
-          some other mode leaves the desktop that is up alone and says which
-          two modes disagree. A size and not a rate, which is the other half
-          of what kanshi's `mode` carries: a rate changes no arithmetic here
-          and cannot be chosen either. Left out is whatever the monitor comes
-          up at, which is what every profile said before this existed.
+          The mode this entry expects, in physical pixels. Domicile does not set
+          modes: the engine lights each connector at its native mode. If the
+          monitor comes up at a different mode, the running desktop is left as
+          is and the mismatch is reported. Size only; the refresh rate cannot be
+          chosen. `null` accepts any mode.
         '';
         type = lib.types.nullOr (pairOf lib.types.ints.positive);
         default = null;
@@ -127,49 +98,44 @@
         // {default = [0 0];};
       scale = lib.mkOption {
         description = ''
-          Device pixels per logical pixel: the mode the connector scans out
-          over the size the desktop is laid out at. Fractional, because the
-          scales a desk is used at are -- 1.5 on a 2880x1920 panel is the
-          1920x1280 desktop it is readable at.
+          Device pixels per logical pixel. May be fractional: 1.5 on a 2880x1920
+          panel gives a 1920x1280 desktop.
         '';
         type = lib.types.numbers.positive;
         default = 1.0;
       };
       transform = lib.mkOption {
-        description = "Which way up the monitor is.";
+        description = "The monitor's rotation.";
         type = transform;
         default = "normal";
       };
     };
   };
 
-  # One arrangement, chosen by which monitors are plugged in. The first
-  # profile whose exact set is connected wins, and it is re-matched on every
-  # hotplug.
+  # A monitor arrangement, chosen by which monitors are connected. The first
+  # profile whose exact set is connected wins, rechecked on every hotplug.
   profile = lib.types.submodule {
     options = {
       name = lib.mkOption {
-        description = "What this arrangement is called. Unique, and for the log rather than for matching.";
+        description = "The profile's name, used in logs. Must be unique.";
         type = lib.types.str;
       };
       displays = lib.mkOption {
-        description = "Every monitor this profile is for. A profile applies only to the exact set it names.";
+        description = "The monitors this profile places. It applies only when exactly this set is connected.";
         type = lib.types.listOf placement;
       };
     };
   };
 
-  # `domicile` with the configured shell supplied when the command line has not
-  # already said what to run. Three invocations have to keep working and only
-  # one of them wants a shell added:
+  # Runs `domicile`, appending the configured shell unless the command line
+  # already names what to run:
   #
-  #   domicile                       -- the configured shell, the whole point
-  #   domicile which-shell           -- the verb, handed over untouched
-  #   domicile load-shell ./other.js -- and the verb that takes one
-  #   domicile ./other.js            -- what was typed beats what was configured
+  #   domicile                       -- runs the configured shell
+  #   domicile which-shell           -- passed through
+  #   domicile load-shell ./other.js -- passed through
+  #   domicile ./other.js            -- the typed shell wins
   #
-  # `--config PATH` is the one flag that eats the word after it, so the scan
-  # steps over that word rather than reading a path as a shell.
+  # The scan skips the argument after `--config`.
   launcher = pkgs.writeShellScript "domicile" ''
     for word in "$@"; do
       if [ -n "''${skip-}" ]; then
@@ -221,15 +187,14 @@ in {
 
     shell = lib.mkOption {
       description = ''
-        The built JavaScript module your desktop is, baked into the `domicile`
-        on PATH so it does not have to be typed.
+        The built JavaScript module for your desktop, baked into the `domicile`
+        on PATH.
 
-        THE MODULE, NOT THE DIRECTORY HOLDING IT. `domicile` refuses a
-        directory and says so, because naming one meant guessing which file
-        inside it was the shell.
+        Must be the module file, not its directory; `domicile` refuses a
+        directory.
 
-        `null` leaves `domicile` taking the shell as an argument, which is
-        what you want if you switch between desktops.
+        `null` leaves `domicile` taking the shell as an argument, for switching
+        between desktops.
       '';
       type = lib.types.nullOr lib.types.path;
       default = null;
@@ -238,17 +203,15 @@ in {
 
     settings = lib.mkOption {
       description = ''
-        The compositor's own configuration, written to
-        `''${config.xdg.configHome}/domicile/domicile.json` -- which is where
-        `domicile` looks when nothing hands it a `--config`.
+        The compositor configuration, written to
+        `''${config.xdg.configHome}/domicile/domicile.json`, the default
+        `--config` path.
 
-        Re-read while it runs, so a rebuild reaches a desk that is already
-        up -- every field of it, the keyboard and the scale as well as the
-        displays, with the windows left open.
+        `domicile` re-reads it while running, so a rebuild applies to a running
+        desk without closing windows. Options read only at startup say so.
 
-        This is the `domicile-config` schema in Nix, and it is freeform: a key
-        this module has not caught up with is written through rather than
-        refused.
+        This mirrors the `domicile-config` schema. It is freeform: unknown keys
+        are written through.
       '';
       default = {};
       type = lib.types.submodule {
@@ -256,14 +219,13 @@ in {
         options = {
           applications.omit = lib.mkOption {
             description = ''
-              Which applications the launcher leaves out, as globs over desktop
-              file IDs (`firefox.desktop`; an entry under a subdirectory of
-              `applications/` has its `/` read as `-`), by `files.omit`'s
-              rules: a pattern starting with `!` takes an ID back, and the
-              last pattern to match one decides it. So `["*" "!launcher-*"]`
-              offers only the entries whose IDs start `launcher-`.
+              Desktop file IDs the launcher hides, as globs (`firefox.desktop`;
+              a `/` in a subdirectory path reads as `-`). Uses `files.omit`'s
+              rules: a leading `!` re-includes, and the last matching pattern
+              wins. So `["*" "!launcher-*"]` shows only IDs starting with
+              `launcher-`.
 
-              The default offers every entry. Followed on a reload.
+              Applied on reload.
             '';
             type = lib.types.listOf lib.types.str;
             default = [];
@@ -272,18 +234,18 @@ in {
 
           applications.bookmarks = lib.mkOption {
             description = ''
-              URLs the launcher offers by name, beside the applications, each
-              drawn with the icon its site names. The shell opens one itself
-              rather than handing it to a browser. Followed on a reload.
+              URLs the launcher lists by name alongside applications, each with
+              its site's icon. The shell opens them itself instead of using a
+              browser. Applied on reload.
             '';
             type = lib.types.listOf (lib.types.submodule {
               options = {
                 name = lib.mkOption {
-                  description = "What the launcher's row says, and what a search matches.";
+                  description = "The launcher row's label, also matched by search.";
                   type = lib.types.str;
                 };
                 url = lib.mkOption {
-                  description = "What choosing it opens: an `http` or `https` URL.";
+                  description = "The `http` or `https` URL to open.";
                   type = lib.types.str;
                 };
               };
@@ -304,10 +266,9 @@ in {
           extensions = {
             web_store = lib.mkOption {
               description = ''
-                Chrome Web Store ids of extensions this desk runs: installed
-                from the Store and updated from it. Naming one is the consent
-                -- there is no install prompt -- and one the list stops naming
-                is uninstalled. Manifest V3 only.
+                Chrome Web Store IDs of extensions to install and keep updated.
+                Listing one installs it without a prompt; removing it uninstalls
+                it. Manifest V3 only.
               '';
               type = lib.types.listOf lib.types.str;
               default = [];
@@ -315,9 +276,9 @@ in {
             };
             unpacked = lib.mkOption {
               description = ''
-                Directories holding an unpacked extension, loaded as they are.
-                Absolute, or under `~` (`~` or `~/...`), which is expanded to
-                the home the desk runs in. `~user` is refused.
+                Directories of unpacked extensions to load. Absolute, or
+                starting with `~` (`~` or `~/...`), expanded to the desk's home.
+                `~user` is refused.
               '';
               type = lib.types.listOf lib.types.str;
               default = [];
@@ -327,19 +288,16 @@ in {
 
           files.omit = lib.mkOption {
             description = ''
-              What the launcher's file index leaves out of the home, as globs
-              over paths relative to it -- gitignore's rules: a `*` stops at a
-              `/` and a `**` does not, a pattern starting with `!` takes a
-              path back, and the last pattern to match a path decides it. An
-              omitted directory is not walked, so nothing under it can be
-              taken back.
+              Paths the launcher's file index skips, as gitignore-style globs
+              relative to the home: `*` stops at `/`, `**` does not, a leading
+              `!` re-includes, and the last matching pattern wins. Skipped
+              directories are not walked, so nothing under them can be
+              re-included.
 
-              The default leaves out whatever is hidden, at any depth. A list
-              that is set replaces it rather than adding to it, so a desk can
-              offer its dotfiles.
+              The default skips hidden files at any depth. Setting a list
+              replaces it.
 
-              Followed on a reload: the home is walked again under the new
-              rule.
+              Applied on reload; the home is re-indexed.
             '';
             type = lib.types.listOf lib.types.str;
             default = ["**/.*"];
@@ -349,23 +307,17 @@ in {
           idle = {
             blank_after_seconds = lib.mkOption {
               description = ''
-                How long a desktop goes untouched before its screens go dark.
-                They come back on the next key, click, scroll or movement of
-                the pointer.
+                Seconds without input before the screens blank. Any key, click,
+                scroll or pointer movement wakes them.
 
-                `null` -- the default -- is a desktop that never blanks.
-                Nothing warns the shell a moment before, so this is opt-in: a
-                desk that says nothing keeps its screens on.
+                `null`, the default, never blanks. The shell gets no warning
+                before blanking, so this is opt-in.
 
-                It is also what locks a desk that states a verifier under `lock`,
-                because the dark edge is the only thing that locks one by
-                itself. A desk with no timeout here locks only when its shell
-                asks.
+                Blanking also locks a desk that sets a `lock` verifier. Without
+                a timeout, the desk locks only when its shell asks.
 
-                Followed on a reload, from either direction: a rebuild can
-                give a running desk a timeout it never had, or take one away.
-                A desk whose screens were off when this changed gets them
-                back.
+                Applied on reload, including adding or removing the timeout.
+                Blanked screens turn back on when this changes.
               '';
               type = lib.types.nullOr lib.types.ints.positive;
               default = null;
@@ -376,41 +328,27 @@ in {
           lock = {
             pam_service = lib.mkOption {
               description = ''
-                The PAM service that opens this desk once nobody being at it
-                has locked it: the password of the user the desktop runs as,
-                checked the way every other lock screen on Linux checks it.
+                The PAM service that unlocks the desk with the user's password.
 
-                THIS MODULE CANNOT DECLARE THE SERVICE, because a PAM service
-                is the machine's and home-manager configures a home. The
-                flake's NixOS module declares it, or the system does itself:
+                Home-manager cannot declare a PAM service. The flake's NixOS
+                module declares one, or declare it yourself:
 
                     security.pam.services.domicile = {};
 
-                and this names it: `"domicile"`. A desk that names a service
-                the machine does not have does not come up. It says which file
-                it looked for and what to declare, rather than locking against
-                whatever PAM's `other` service happens to say.
+                and set this to `"domicile"`. If the service is missing, the
+                desk fails to start and says what to declare, instead of falling
+                back to PAM's `other` service.
 
-                `null` -- the default -- with no `passphrase` either is a
-                desktop that never locks. That is not merely the conservative
-                reading: a desk that locked with nothing to open it is a desk
-                nobody can get back into, and the way out would be another tty.
-                Setting both is refused: neither is a fallback for the other.
+                With this and `passphrase` both `null` (the default), the desk
+                never locks, since nothing could unlock it. Setting both is
+                refused.
 
-                What a locked desk does is refuse to deliver a keystroke or a
-                click to any client: input on this system is forwarded by the
-                shell's page and injected into a Wayland seat by the
-                compositor, and while the desk is locked that injection does
-                not happen. So a shell reloading does not open the desk, and
-                neither does an engine that died and came back.
+                The compositor delivers no input to clients while locked, so the
+                lock holds across a shell reload or an engine restart.
 
-                A desk locks when `idle.blank_after_seconds` says nobody is at
-                it, or when its shell asks. Read on
-                startup and not on a reload: whether this desk is locked is not
-                something this file says, and rebuilding the verifier under a
-                locked desk would be either an unlock by file edit or a lock
-                with nothing left to open it. A verifier added, changed or
-                removed is the verifier of the next run.
+                The desk locks when `idle.blank_after_seconds` elapses or when
+                its shell asks. Read at startup only, so editing the file cannot
+                unlock a locked desk; changes apply on the next run.
               '';
               type = lib.types.nullOr lib.types.str;
               default = null;
@@ -419,18 +357,15 @@ in {
 
             passphrase = lib.mkOption {
               description = ''
-                A passphrase that opens this desk, for a machine with no PAM
-                service for it -- `pam_service` above is the one to reach for.
+                A passphrase that unlocks the desk, for machines without a PAM
+                service. Prefer `pam_service`.
 
-                THIS IS A MECHANISM AND NOT A SECRET. This file is generated
-                into the Nix store, which is world-readable, so a passphrase
-                written here can be read by every process of every user on the
-                machine. It locks this desk against somebody walking up to it
-                and against nobody who can read the disk.
+                This is not secret: the file is in the world-readable Nix store,
+                so any user on the machine can read it. It only stops someone at
+                the keyboard.
 
-                Everything `pam_service` says about what a locked desk does,
-                when it locks and when this is read holds here too, and so does
-                the rule that a desk states one of the two.
+                `pam_service`'s notes on locking apply here too, including that
+                only one of the two may be set.
               '';
               type = lib.types.nullOr lib.types.str;
               default = null;
@@ -440,10 +375,9 @@ in {
 
           startup.commands = lib.mkOption {
             description = ''
-              What the desk runs as it comes up, each an argv — the program,
-              then its arguments, with no shell between. They run on the
-              desk's own display, once, when it starts: a reload does not run
-              them again.
+              Commands the desk runs once at startup, each an argv with no
+              shell. They run on the desk's display. A reload does not rerun
+              them.
             '';
             type = lib.types.listOf (lib.types.nonEmptyListOf lib.types.str);
             default = [];
@@ -452,28 +386,17 @@ in {
 
           theme.mode = lib.mkOption {
             description = ''
-              Which way round the desktop is drawn: light text on a dark
-              ground, or the other way about.
+              Whether the desktop is drawn dark or light.
 
-              THERE IS NO `"system"`, and its absence is the design rather
-              than a gap. Every other desktop's theme setting has a third
-              value because it is a program running *on* a system with a
-              preference to follow; Domicile is the system, so `"system"`
-              here would be the desk deferring to itself. It is refused by
-              name rather than read as one of the two.
+              There is no `"system"` value, because Domicile is the system and
+              has no preference to follow. `"system"` is refused.
 
-              What follows it is the whole desk: the shell paints in it, and
-              the compositor hands the same value to the settings portal that
-              this desktop's GTK, Qt, Electron and Firefox windows read their
-              color scheme from -- so the windows turn over with the panels.
+              The shell draws with it, and the compositor passes it to the
+              settings portal, which GTK, Qt, Electron and Firefox windows read.
 
-              THIS IS WHAT THE DESK COMES UP ON, not what it is stuck with.
-              The shell's own toggle changes the live theme without writing
-              anything back here, because this file is generated and a
-              desktop editing a build product would be a desk fighting its
-              own configuration. A rebuild that moves this line overrules
-              whatever the toggle last did, which is the honest reading of
-              somebody restating what this desk is.
+              This is the startup theme. The shell's toggle changes the live
+              theme without writing this file, since the file is generated. A
+              rebuild that changes this value overrides the toggle.
             '';
             type = lib.types.enum ["dark" "light"];
             default = "dark";
@@ -482,33 +405,31 @@ in {
 
           input.keyboard = {
             xkb_rules = lib.mkOption {
-              description = "Handed to xkb verbatim. Empty means whatever libxkbcommon defaults to.";
+              description = "Passed to xkb as is. Empty uses the libxkbcommon default.";
               type = lib.types.str;
               default = "";
             };
             xkb_model = lib.mkOption {
-              description = "Handed to xkb verbatim. Empty means whatever libxkbcommon defaults to.";
+              description = "Passed to xkb as is. Empty uses the libxkbcommon default.";
               type = lib.types.str;
               default = "";
             };
             xkb_layout = lib.mkOption {
               description = ''
-                The layout, in sway's spelling -- so the comma-separated
-                multi-layout form (`"us,de"`) works here too.
+                The layout, in sway's format, including comma-separated multiple
+                layouts (`"us,de"`).
               '';
               type = lib.types.str;
               default = "us";
             };
             xkb_variant = lib.mkOption {
-              description = "The variant, e.g. `dvp`. Empty is the layout's own.";
+              description = "The variant, e.g. `dvp`. Empty uses the layout's default.";
               type = lib.types.str;
               default = "";
             };
             xkb_options = lib.mkOption {
               description = ''
-                A list rather than the comma-separated line sway wants,
-                because the xkb format has one and this is the reader that
-                can take it.
+                xkb options, as a list instead of sway's comma-separated string.
               '';
               type = lib.types.listOf lib.types.str;
               default = [];
@@ -519,33 +440,31 @@ in {
           output = {
             displays = lib.mkOption {
               description = ''
-                A desktop stated outright, for a nested run with no monitors
-                to enumerate. Empty is the single output that follows
-                Domicile's own window.
+                Explicit displays for a nested run, which has no monitors to
+                enumerate. Empty gives a single output that follows Domicile's
+                window.
               '';
               type = lib.types.listOf display;
               default = [];
             };
             max_scale = lib.mkOption {
               description = ''
-                The highest `wl_output` scale to advertise. A cost dial rather
-                than a preference: a client asked for scale N draws N² times
-                the pixels. `1` turns scaling off.
+                The highest `wl_output` scale to advertise. Limits cost: a
+                client at scale N draws N² times the pixels. `1` disables
+                scaling.
 
-                Governs only the output that follows Domicile's own window --
-                a described display states its own scale.
+                Applies only to the output that follows Domicile's window; a
+                listed display sets its own scale.
 
-                Followed on a reload: turning it down on a desk that is up
-                re-advertises that desk at the new cap.
+                Applied on reload.
               '';
               type = lib.types.ints.positive;
               default = 2;
             };
             profiles = lib.mkOption {
               description = ''
-                Arrangements of real monitors, kanshi's model: the first
-                profile whose exact set is plugged in wins, and it is matched
-                again on every hotplug.
+                Monitor arrangements, as in kanshi: the first profile whose
+                exact set is connected wins, rechecked on every hotplug.
               '';
               type = lib.types.listOf profile;
               default = [];
@@ -556,7 +475,7 @@ in {
     };
 
     finalPackage = lib.mkOption {
-      description = "The package this module actually installs: `package`, wrapped if a `shell` was named.";
+      description = "The installed package: `package`, wrapped if `shell` is set.";
       type = lib.types.package;
       readOnly = true;
       visible = false;
@@ -564,15 +483,13 @@ in {
   };
 
   config = lib.mkIf cfg.enable {
-    # The config's own shell as well, so a `domicile` started without the
-    # wrapper below -- the `domicile` login session the NixOS module offers --
-    # runs the same one. A default, so `settings.shell` stated outright wins.
+    # Also set the config's `shell`, so a `domicile` started without the
+    # wrapper (such as the NixOS login session) runs the same one. A default,
+    # so an explicit `settings.shell` wins.
     programs.domicile.settings.shell =
       lib.mkIf (cfg.shell != null) (lib.mkDefault (toString cfg.shell));
 
-    # Wrapped only when there is something to bake in, so a configuration that
-    # names no shell installs the package itself rather than a wrapper around
-    # it that adds nothing.
+    # Wrap only when there is a shell to add.
     programs.domicile.finalPackage =
       if cfg.shell == null
       then cfg.package
@@ -580,18 +497,10 @@ in {
         pkgs.symlinkJoin {
           name = "domicile-with-a-shell";
           paths = [cfg.package];
-          # SUPPLIED, NOT PREPENDED, and that distinction is the whole reason
-          # this is a script rather than `wrapProgram --add-flags`.
-          #
-          # `domicile` reads a verb only as the first word -- `which-shell` is
-          # a question put to a desktop that is already running, and
-          # `load-shell` tells one which shell to serve from now on. A flag
-          # added in front makes the shell path the first word, so `domicile
-          # which-shell` comes back `too many arguments: which-shell` and the
-          # commands this module cannot break are broken by installing it.
-          #
-          # So the shell goes on the end, and only when the command line has
-          # not already named one.
+          # A script instead of `wrapProgram --add-flags`: `domicile` reads a
+          # verb only as the first argument, so prepending the shell path
+          # would break `domicile which-shell`. The script appends the shell,
+          # and only when the command line names none.
           postBuild = ''
             rm "$out/bin/domicile"
             ln -s ${launcher} "$out/bin/domicile"
@@ -601,19 +510,15 @@ in {
 
     home.packages = [cfg.finalPackage];
 
-    # Offered, not turned on: with `xdg.portal.enable`, Domicile answers
-    # `Settings` and its `domicile-portals.conf` routes the rest to gtk, which
-    # comes with it so that conf names a backend that is there.
+    # Takes effect only when `xdg.portal.enable` is set. gtk is included
+    # because `domicile-portals.conf` routes unhandled interfaces to it.
     xdg.portal = {
       extraPortals = [cfg.finalPackage pkgs.xdg-desktop-portal-gtk];
       configPackages = [cfg.finalPackage];
     };
 
-    # THE PATH IS THE INTERFACE: this is where `domicile` looks with no
-    # `--config`, so it is not a location this module gets to pick.
-    #
-    # NULLS ARE LEFT OUT RATHER THAN WRITTEN: `withoutNulls` above says why,
-    # and why it walks lists as well as attrsets.
+    # `domicile` reads this path when no `--config` is given. Nulls are
+    # dropped; see `withoutNulls`.
     xdg.configFile."domicile/domicile.json".source =
       json.generate "domicile.json" (withoutNulls cfg.settings);
   };

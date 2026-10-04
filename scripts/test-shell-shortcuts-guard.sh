@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Which end the shell-shortcuts guard blames, and which answers it calls a pass.
+# Tests the verdict block of `guard-shell-shortcuts.sh`: which side it blames
+# and what it passes.
 #
-# The unit is the verdict block in `guard-shell-shortcuts.sh`. The claim is an
-# absence -- no reload, no navigation, no resize, no closed window -- which is
-# also what a run that pressed nothing looks like, so the order of the gates is
-# what separates the two. Run out of the real script rather than copied.
+# The guard checks for an absence (no reload, navigation, resize or closed
+# window), which a run that pressed nothing also shows. The order of the
+# checks tells them apart. The block is read from the real script.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -31,7 +31,7 @@ expect() {
   fi
 }
 
-# A run in which everything the guard wants is true; each case changes one.
+# A passing run; each case changes one value.
 readings() { # $1 NEGATIVE, then NAME=value overrides
   CHORDS=(a b c)
   SAW_LOADED=1
@@ -88,8 +88,8 @@ expect "a popstate or resize is a failure" "fail" "$(verdict 0 MOVED=1)"
 expect "a popstate or resize names Alt+Left" "yes" "$(blames "Alt+Left" 0 MOVED=1)"
 expect "a browser gone after the chords is a failure" "fail" \
   "$(verdict 0 PRESSED_AFTER=0)"
-# BEFORE THE HEARING: Ctrl+W and Ctrl+Shift+Q are pressed last, so a browser
-# they took leaves chords unheard too, and that is not the harness.
+# Ctrl+W and Ctrl+Shift+Q are pressed last, so a browser they closed also
+# leaves chords unheard. Blame the chord, not the harness.
 expect "a browser gone names Ctrl+W before the harness" "yes" \
   "$(blames "Ctrl+W" 0 PRESSED_AFTER=0 HEARD=2 HEARD_ALL=0)"
 
@@ -104,9 +104,8 @@ expect "a control whose browser stopped answering is a failure" "fail" \
 
 echo
 echo "what counts as moved — read off the engine log by the guard's own line"
-# A headless window settles its viewport once as the shell loads, before any
-# key: engine run 36366384052 read that `resized` as Ctrl+= and failed a
-# shell nothing had touched. Only what follows the first key is the keys'.
+# A headless window resizes its viewport once while the shell loads, before
+# any key. Only events after the first key count.
 MOVED_LINE="$(grep -E '^MOVED=' "$GUARD")"
 [ -n "$MOVED_LINE" ] || {
   echo "no MOVED= line in $GUARD — its reading moved. Fix this test with it." >&2

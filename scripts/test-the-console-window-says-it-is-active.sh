@@ -1,23 +1,18 @@
 #!/usr/bin/env bash
-# Whether the window on a console tells views it is the active one.
+# Tests that the window on a console tells views it is active.
 #
-# ACTIVATION IS A FACT THE PLATFORM REPORTS UPWARD. `WaylandWindow` reports it
-# from `xdg_toplevel.configure`'s activated state; `X11Window` reports it from
-# `WM_TAKE_FOCUS`. Upstream's `DrmWindowHost` reports it never: `Show()` sets
-# no activation and `Activate()` is `NOTIMPLEMENTED_LOG_ONCE()`, which in a
-# release build is silence. Ash is ozone/drm's only upstream consumer and ash
-# decides activation itself, so nothing there ever noticed.
+# The platform window reports activation: `WaylandWindow` from
+# `xdg_toplevel.configure`, `X11Window` from `WM_TAKE_FOCUS`. Upstream's
+# `DrmWindowHost` never does; `Activate()` is `NOTIMPLEMENTED_LOG_ONCE()`. Ash
+# decides activation itself, so it does not need this.
 #
-# A views browser is not ash. `DesktopWindowTreeHostPlatform::is_active_`
-# starts false and only `OnActivationChanged` moves it; that call is what
-# reaches `DesktopNativeWidgetAura::HandleActivationChanged` and so
-# `FocusManager::RestoreFocusedView`. Without it no view in the widget holds
-# focus and every key event dispatched into the tree is dropped -- a desktop
-# that draws, follows the pointer, and answers no key. That failure is silent
-# in every log, which is why it is worth a guard rather than a comment.
+# In views, `DesktopWindowTreeHostPlatform::is_active_` changes only through
+# `OnActivationChanged`, which leads to `FocusManager::RestoreFocusedView`.
+# Without it no view holds focus and every key event is dropped, with nothing
+# in the logs.
 #
-# NO CHROMIUM TREE. The series is the source of truth, so this reads
-# `patches/` and runs in the shell group on every push.
+# Needs no Chromium tree: it reads `patches/`, so it runs in the shell group on
+# every push.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -28,12 +23,11 @@ FAILED=0
 ok()   { printf '  ok    %s\n' "$1"; }
 fail() { printf '  FAIL  %s\n    %s\n' "$1" "$2"; FAILED=$((FAILED + 1)); }
 
-# Added lines only (`^+`), so a patch that merely quotes upstream in context
-# cannot satisfy any of this.
+# Added lines only (`^+`), so upstream code quoted as context does not count.
 added="$(cat "$PATCHES"/*.patch 2>/dev/null | grep -a '^+' || true)"
 in_patches() { case "$added" in (*"$1"*) return 0 ;; (*) return 1 ;; esac }
 
-# The call itself. Nothing else in the tree can make a views widget active.
+# Only this call can make a views widget active.
 if in_patches "delegate_->OnActivationChanged("; then
   ok "the window tells its delegate about activation"
 else
@@ -41,10 +35,8 @@ else
     "no patch calls PlatformWindowDelegate::OnActivationChanged, so is_active_ stays false and no view is ever focused"
 fi
 
-# It is reached from every place views drives activation from: showing the
-# window at startup (`Show`), asking for it later (`Activate`), and both ways
-# of withdrawing it (`Hide`, `Deactivate`). One helper carries all four, so
-# asserting it exists and that both answers are asked for covers them.
+# `Show`, `Activate`, `Hide` and `Deactivate` all go through one helper, so
+# checking the helper and each argument covers all four.
 if in_patches "void DrmWindowHost::SetActive(bool active) {"; then
   ok "one helper decides activation"
 else
@@ -61,10 +53,9 @@ for answer in "SetActive(true);" "SetActive(false);" "SetActive(!inactive);"; do
   fi
 done
 
-# `NOTIMPLEMENTED_LOG_ONCE()` compiles to nothing in the shipped engine
-# (`is_debug = false` takes `DLOG` out), so an `Activate` that ends in one is
-# a desktop that cannot be typed into and does not say so. Both of upstream's
-# have to go: `Deactivate`'s silence is how a window keeps focus it has lost.
+# `NOTIMPLEMENTED_LOG_ONCE()` compiles to nothing in a release build, so both
+# upstream bodies must go. A silent `Deactivate` leaves focus on a window that
+# lost it.
 removed="$(cat "$PATCHES"/*.patch 2>/dev/null | grep -ac '^-  NOTIMPLEMENTED_LOG_ONCE();' || true)"
 if [ "${removed:-0}" -ge 2 ]; then
   ok "neither Activate nor Deactivate is a compiled-out log"
@@ -73,11 +64,8 @@ else
     "expected both NOTIMPLEMENTED_LOG_ONCE() bodies removed, found ${removed:-0}"
 fi
 
-# THE LOG SAYS WHETHER EVENTS ARRIVE AT ALL. Everything below `DispatchEvent`
-# is silent on success, so a converter that read nothing and one that read
-# everything look identical -- and reading that silence as dead descriptors is
-# what cost two wrong diagnoses. These two lines are the difference between
-# "nothing is being read" and "it arrives and something above drops it".
+# Everything below `DispatchEvent` is silent on success. These log lines tell
+# "nothing is read" apart from "events arrive and something above drops them".
 for said in "the first key event reached the window" \
             "the first pointer event a hand caused"; do
   if in_patches "$said"; then
@@ -88,15 +76,10 @@ for said in "the first key event reached the window" \
   fi
 done
 
-# AND A SYNTHESIZED EVENT MUST NOT SATISFY THE POINTER ONE. `SetFullscreen`
-# reaches `SynthesizeMouseMove`, which posts a `kMouseMoved` carrying
-# `EF_IS_SYNTHESIZED` about 200ms into every startup, from inside
-# `CommitBoundsChange` -- the one instant when the cursor's rect and `bounds_`
-# are equal by construction, so it always passes the bounds test. Gated on
-# `IsLocatedEvent()` alone the one-shot is spent before a hand touches
-# anything, which is exactly how patch 0026's message came to say "the
-# trackpad works and always did" about a trackpad nothing was reading. The
-# guard is here because that is not a mistake anybody makes once.
+# `SetFullscreen` reaches `SynthesizeMouseMove`, which posts a synthesized
+# `kMouseMoved` about 200ms into startup, when the cursor is always in bounds.
+# If the one-shot pointer log accepted it, it would fire before any real input
+# and report a working pointer that is not.
 if in_patches "EF_IS_SYNTHESIZED"; then
   ok "the startup's own synthesized move cannot spend the pointer log"
 else
@@ -104,10 +87,9 @@ else
     "the one-shot is gated on IsLocatedEvent alone again, so it fires 200ms in and answers nothing"
 fi
 
-# A PRESS AND A MOVE FAIL SEPARATELY, so they are asked about separately: a
-# move can reach the page while a press is swallowed by a non-client hit test,
-# and a drawn cursor is evidence for neither -- that is the cursor plane, moved
-# from the evdev thread, which never reaches a renderer.
+# A move can reach the page while a press is swallowed by a non-client hit
+# test, so each is logged separately. A drawn cursor proves neither: the
+# cursor plane moves from the evdev thread and never reaches a renderer.
 if in_patches "the first mouse press reached the window"; then
   ok "a press is reported apart from a move"
 else
@@ -115,10 +97,8 @@ else
     "only motion is reported, so a click that never arrives and one that arrives unwanted look the same"
 fi
 
-# AND WHAT VIEWS SAID ABOUT IT. `DispatchEventFromNativeUiEvent` returns an
-# `EventResult` and the call used to drop it on the floor, which made "the
-# click arrived" and "the click arrived and nothing wanted it" the same
-# observation from outside the process. They have different fixes.
+# The `EventResult` from `DispatchEventFromNativeUiEvent` separates "the click
+# arrived" from "it arrived and nothing handled it". They have different fixes.
 if in_patches "const EventResult result = DispatchEventFromNativeUiEvent"; then
   ok "the answer views gives is read rather than discarded"
 else
@@ -126,9 +106,8 @@ else
     "the EventResult is thrown away again, so ER_UNHANDLED cannot be told from never arriving"
 fi
 
-# A REFUSAL IS THE OTHER HALF. `CanDispatchEvent`'s located branch is a bare
-# `bounds_.Contains(...)` whose false costs the event with no trace, and the
-# `TODO(spang): For non-ash builds` three lines below says whose policy it is.
+# `CanDispatchEvent` drops out-of-bounds located events without a trace. The
+# `TODO(spang): For non-ash builds` below it marks that policy as ash's.
 if in_patches "so it was refused"; then
   ok "a pointer event dropped for being out of bounds says so"
 else

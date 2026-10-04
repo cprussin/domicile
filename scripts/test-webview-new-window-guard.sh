@@ -1,32 +1,20 @@
 #!/usr/bin/env bash
-# Which end the new-window guard blames, and which answers it calls a pass.
+# Tests the verdict of `guard-webview-new-window.sh`: which readings pass and
+# which component a failure blames.
 #
-# The unit is the verdict block in `guard-webview-new-window.sh` — the `if`
-# chain that turns ten readings and the run's mode into either a pass or one
-# sentence naming an end. The readings are not independent: a run where the
-# shell page never ran has established nothing, a run where no press reached
-# that document is not a run about a link, and "the link asked for no window"
-# is only a finding once a press has landed on a link. So the chain is ordered,
-# and an ordered chain is a thing that can be got wrong in a way no failing
-# engine would ever reveal — the wrong arm answers, with a true-sounding
-# sentence about the wrong layer, and the next person spends a CI cycle on it.
+# The checks are ordered: "the link asked for no window" only means something
+# once a press landed on the link. Easy to get backward:
 #
-# It matters most for the readings a verdict written by symmetry gets backward:
+#   - In the control, the element asking for a window is the failure, and so
+#     is a press that followed no link.
+#   - In the positive run, a press on the ordinary link blames geometry, not
+#     the defect.
+#   - A request with no page in the new window fails: an event is not a
+#     window.
+#   - When nothing was requested, a browser log line decides which process is
+#     blamed.
 #
-#   in the control run, the element ASKING for a window is the failure, and so
-#     is a press that followed no link at all — its absence of a window means
-#     nothing if nothing was clicked
-#   a press that landed on the ordinary link in the POSITIVE run is geometry
-#     rather than the defect: what that run measures was never clicked
-#   an ask with no page at the far end is a failure, not a pass — an event is
-#     not a window, and a desktop that dispatches one and shows nothing is
-#     exactly what this guard exists to fail
-#   which process to blame when nothing was asked for depends on a line the
-#     browser writes, not on anything the page can see
-#
-# The block is run out of the real script rather than copied, so a rewrite that
-# moves it fails here loudly instead of leaving this passing against a version
-# nobody ships.
+# Runs the verdict block from the real guard, so moving it fails here.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -36,10 +24,8 @@ GUARD="$ROOT/packages/domicile-engine/scripts/guard-webview-new-window.sh"
   exit 1
 }
 
-# From `FAILURE=""` to the `fi` that closes the decision. Both ends are whole
-# lines at column zero, so this cannot half-match: the nested `fi` in the
-# control's arm is indented, and the block stops before the `if [ -n "$PASSED" ]`
-# below it — a verdict is a value here, not a status.
+# From `FAILURE=""` to the column-zero `fi` that ends the decision. The nested
+# `fi` is indented, so the match cannot stop early.
 BLOCK="$(awk '/^FAILURE=""$/,/^fi$/' "$GUARD")"
 [ -n "$BLOCK" ] || {
   echo "no verdict block in $GUARD — its markers moved. Fix this test with it." >&2
@@ -57,14 +43,11 @@ expect() {
   fi
 }
 
-# A run in which everything the guard wants is true; each case below changes one
-# reading. Written as a baseline plus overrides rather than ten positional
-# arguments, because a case that says `SAW_ASKED=0` says what it is testing and
-# a case that says `1 1 1 1 0 1` does not.
+# A run where every reading has its passing value; each case overrides one by
+# name, which reads better than positional arguments.
 #
-# `SAW_STAYED=0` in the baseline, because the claim's run clicks the other link:
-# the page staying put is the CONTROL's positive reading, and a claim run that
-# had it clicked the wrong half.
+# `SAW_STAYED=0` because the positive run clicks the target=_blank link; the
+# page staying put is the control's passing reading.
 verdict() { # $1 NEGATIVE, then NAME=value overrides
   (
     SAW_SHELL=1
@@ -93,9 +76,8 @@ verdict() { # $1 NEGATIVE, then NAME=value overrides
   )
 }
 
-# The failing sentence, for the cases where WHICH end it names is the point. Not
-# the whole wording: sentences are prose and will be reworded, and a test that
-# pinned them would fail for edits that changed no behavior.
+# The failure message, for cases that check which component it blames. Tests
+# match a keyword, not the whole sentence.
 reason() { # $1 NEGATIVE, then NAME=value overrides
   (
     SAW_SHELL=1
@@ -127,8 +109,8 @@ blames() { # $1 word, then the args verdict takes
   esac
 }
 
-# The control's own shape: it clicks the ordinary link, so it asks for no
-# window, opens nothing, and the page it clicked in navigates.
+# The control's readings: it clicks the ordinary link, so it requests no
+# window and its page navigates.
 control() { # the overrides a case adds
   verdict 1 SAW_ASKED=0 SAW_ADDRESS=0 SAW_SECOND=0 SAW_OPENED=0 SAW_STAYED=1 \
     SAW_REFUSED=0 "$@"
@@ -142,9 +124,8 @@ controlBlames() { # $1 word, then overrides
 echo "a run that never got as far as measuring anything"
 expect "a shell that never ran is a failure in the positive run" "fail" \
   "$(verdict 0 SAW_SHELL=0)"
-# AND IN THE CONTROL RUN, which is the arm a verdict written as "the control
-# passes when nothing is asked for" gets wrong: with no page at all, nothing
-# being asked for is what a broken harness looks like too.
+# The control must fail too: with no page, no request is also what a broken
+# harness looks like.
 expect "a shell that never ran is a failure in the control run" "fail" \
   "$(control SAW_SHELL=0)"
 expect "a shell that never ran blames the harness" "yes" \
@@ -155,9 +136,8 @@ expect "no press in the shell's document is a failure in the control too" \
   "fail" "$(control SAW_CHROME=0)"
 expect "no press in the shell's document blames the harness" "yes" \
   "$(blames "harness" 0 SAW_CHROME=0)"
-# AN EMPTY WINDOW IS BOTH RUNS' PROBLEM HERE, unlike the click guard's control,
-# which never clicks into the window at all: both of these clicks land on a
-# link in the page, so neither run means anything without one.
+# Unlike the click guard's control, both runs click a link in the page, so an
+# empty window fails both.
 expect "an empty window is a failure in the positive run" "fail" \
   "$(verdict 0 SAW_PAGE=0)"
 expect "an empty window is a failure in the control run" "fail" \
@@ -172,18 +152,16 @@ expect "a press that never reached the guest blames the hit test" "yes" \
 echo
 echo "the positive run — a target=_blank link, and the window it must produce"
 expect "everything arriving is the pass" "pass" "$(verdict 0)"
-# THE ONE THAT READS LIKE THE DEFECT AND IS NOT: the press landed on the
-# control's link, so the run measured the wrong half of the page.
+# Looks like the defect but is not: the press hit the control's link.
 expect "a press on the ordinary link is a failure" "fail" \
   "$(verdict 0 SAW_ASKED=0 SAW_ADDRESS=0 SAW_SECOND=0 SAW_OPENED=0 \
     SAW_STAYED=1 SAW_REFUSED=0)"
 expect "a press on the ordinary link blames the geometry" "yes" \
   "$(blames "geometry" 0 SAW_ASKED=0 SAW_ADDRESS=0 SAW_SECOND=0 SAW_OPENED=0 \
     SAW_STAYED=1 SAW_REFUSED=0)"
-# WHICH PROCESS TO LOOK IN, and the only reading that can say. The browser's
-# own line means the renderer DID ask and the refusal never came back to the
-# page; its absence means nothing ever asked, and no patch in the page's layer
-# can be the fix.
+# The browser's log line says which process to look in. With it, the renderer
+# asked and the refusal never reached the page. Without it, nothing asked, so
+# no fix in the page's layer applies.
 expect "an ask the browser refused and never reported is a failure" "fail" \
   "$(verdict 0 SAW_ASKED=0 SAW_ADDRESS=0 SAW_SECOND=0 SAW_OPENED=0)"
 expect "an ask the browser refused and never reported blames the report" \
@@ -195,10 +173,8 @@ expect "no ask at the browser at all blames the renderer's request" "yes" \
 expect "no ask at the browser at all does not blame the report" "no" \
   "$(blames "THE PAGE WAS NOT TOLD" 0 SAW_ASKED=0 SAW_ADDRESS=0 \
     SAW_SECOND=0 SAW_OPENED=0 SAW_REFUSED=0)"
-# AND THE ORDER, which is why the wrong-link arm is asked first: a run that
-# clicked the ordinary link has both of the readings above missing too, and
-# naming the crossing there would send the next person into two processes over
-# a press that landed two hundred pixels off.
+# The wrong-link arm is checked first: a press on the ordinary link also lacks
+# both readings above.
 expect "the wrong link outranks the process the ask stopped in" "no" \
   "$(blames "NEVER ASKED" 0 SAW_ASKED=0 SAW_ADDRESS=0 SAW_SECOND=0 \
     SAW_OPENED=0 SAW_STAYED=1 SAW_REFUSED=0)"
@@ -213,8 +189,8 @@ expect "a shell that was told and opened nothing is a failure" "fail" \
   "$(verdict 0 SAW_SECOND=0 SAW_OPENED=0)"
 expect "a shell that was told and opened nothing blames this guard's page" \
   "yes" "$(blames "guard-webview-new-window.js" 0 SAW_SECOND=0 SAW_OPENED=0)"
-# THE ARM THIS WHOLE GUARD EXISTS FOR. Everything an event-only guard would
-# assert is true here and the user is looking at an empty window.
+# The case this guard exists for: an event fired, but the user sees an empty
+# window.
 expect "a second view with no page in it is a failure" "fail" \
   "$(verdict 0 SAW_OPENED=0)"
 expect "a second view with no page in it names the second guest" "yes" \
@@ -226,14 +202,12 @@ expect "asking for nothing and navigating is the pass" "pass" "$(control)"
 expect "an ask is the failure" "fail" "$(control SAW_ASKED=1)"
 expect "an ask says the positive run would be measuring the element" "yes" \
   "$(controlBlames "any click" SAW_ASKED=1)"
-# AND THE READING THAT MAKES THE ABSENCE A MEASUREMENT: a press that followed
-# no link tells nobody anything about links.
+# A press that followed no link says nothing about links.
 expect "a press that followed no link is the control's failure" "fail" \
   "$(control SAW_STAYED=0)"
 expect "a press that followed no link blames the geometry" "yes" \
   "$(controlBlames "geometry" SAW_STAYED=0)"
-# The control is a control whatever the claim's own readings say: it is not
-# about the second window, so a run with none of that is still its pass.
+# The control is not about the second window.
 expect "the second window is not the control's business" "pass" \
   "$(control SAW_SECOND=0 SAW_OPENED=0 SAW_ADDRESS=0)"
 

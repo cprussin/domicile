@@ -3,23 +3,15 @@
 #
 #   .github/scripts/apt-install.sh libxkbcommon-dev libwayland-dev
 #
-# Retried because `apt-get update` against Azure's mirrors fails and hangs often
-# enough to be the most common red run in this repository that says nothing
-# about the code. Three attempts with a `timeout` on each, because a hang is the
-# failure mode that costs the most: without the timeout a stuck mirror holds the
-# job until GitHub kills it twenty minutes later.
-#
-# A warning rather than an error on an attempt that fails, so a run that
-# succeeds on the second try is green with the first one visible. Only the third
-# failure is this script's own.
-#
-# `--no-install-recommends`, because what a job needs it names, and weston's
-# recommends alone pull ffmpeg's tree -- a 27 MB speech model among it -- which
-# is the download a slow mirror timed out on, three attempts running.
-#
-# `declare -f` to carry the function into the `timeout` subshell: `timeout` takes
-# a command and not a shell function, and `bash -c` gets a fresh shell that has
-# never seen it.
+# - Retries: `apt-get update` against Azure's mirrors often fails or hangs.
+# - A `timeout` on each attempt: a stuck mirror otherwise holds the job until
+#   GitHub kills it.
+# - Failed attempts before the last are warnings, so a run that succeeds on a
+#   retry stays green.
+# - `--no-install-recommends`: recommends pull in large packages (weston's pull
+#   in ffmpeg) that slow mirrors time out on.
+# - `declare -f` carries the function into `bash -c`, because `timeout` cannot
+#   run a shell function.
 set -euo pipefail
 
 [ "$#" -gt 0 ] || {

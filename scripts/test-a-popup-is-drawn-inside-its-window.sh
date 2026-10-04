@@ -1,26 +1,16 @@
 #!/usr/bin/env bash
-# Whether a popup -- a `<select>`'s list, a date picker, a context menu -- is
-# drawn inside the window it opened over, on a platform that presents only one
-# window per display.
+# Checks popups (a `<select>` list, a date picker, a context menu, a tooltip)
+# are drawn inside their parent window on platforms that present one window
+# per display.
 #
-# NOTHING OPENED. Clicking a `<select>` on a tty did nothing visible. The list
-# is a page popup: `RenderWidgetHostViewAura::InitAsPopup` makes an aura window
-# of `WINDOW_TYPE_MENU` and hands it to `ParentWindowWithContext`, and
-# `DesktopNativeWidgetAuraWindowParentingClient::GetDefaultParent` answers a
-# menu with a top-level widget of its own. A views menu goes the same way from
-# the other end: `GetNativeWidgetTypeForInitParams` in
-# `chrome_views_delegate_linux.cc` answers `TYPE_MENU` and `TYPE_TOOLTIP` with
-# `kDesktopNativeWidgetAura` even when they have a parent. On ozone/drm a second
-# top-level window binds to no CRTC -- patch 0023 says why -- so every frame it
-# submits is dropped, and the popup is open, focused and invisible.
+# Upstream gives page popups and views menus their own top-level window
+# (`DesktopNativeWidgetAuraWindowParentingClient::GetDefaultParent` and
+# `GetNativeWidgetTypeForInitParams` in `chrome_views_delegate_linux.cc`). On
+# ozone/drm a second top-level window has no CRTC, so the popup is open but
+# never drawn. The patches check `presents_every_window` in both places and,
+# when it is false, make the popup a child of its window, as ash does.
 #
-# ChromeOS never meets this because ash keeps menus inside the root window.
-# That is what the fix does, on the platforms that say they need it: both
-# places ask `presents_every_window`, and where the answer is no a menu becomes
-# a child of the window it belongs to and is drawn in that window's frame.
-#
-# NO CHROMIUM TREE. Like test-the-fullscreen-bubble-does-not-undo-fullscreen.sh,
-# this reads the series rather than a build, so it runs on every push.
+# Reads the patches, not a Chromium tree, so it runs in the shell group.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -29,7 +19,7 @@ PATCHES="$ROOT/packages/domicile-engine/patches"
 
 failed=0
 
-# The lines the series adds to one file, and nothing from any other.
+# Prints the lines the series adds to files matching $2.
 added_in() {
   awk -v want="$2" '
     /^diff --git a\// { in_file = ($0 ~ want) }
@@ -52,7 +42,7 @@ case "$parenting" in
     failed=$((failed + 1)) ;;
 esac
 
-# Asking is not enough: the answer has to keep the menu in the root window.
+# The check must also return the root window.
 case "$parenting" in
   (*"return root_window_;"*)
     echo '  ok    where it cannot have one, the popup stays in its root window' ;;
@@ -76,10 +66,10 @@ case "$delegate" in
     failed=$((failed + 1)) ;;
 esac
 
-# A tooltip has no parent, only a context: `TooltipAura::CreateTooltipWidget`
-# sets `params.context` and `force_software_compositing`. Asking for a parent
-# alone gave it a top-level window of its own, whose software compositor
-# aborts the GPU process on ozone/drm in `GbmSurfaceFactory::CreateCanvasForWidget`.
+# A tooltip has only a context, not a parent (`TooltipAura::CreateTooltipWidget`
+# sets `params.context` and `force_software_compositing`). As a top-level
+# window its software compositor aborts the GPU process on ozone/drm in
+# `GbmSurfaceFactory::CreateCanvasForWidget`.
 case "$delegate" in
   (*params.context*presents_every_window*)
     echo '  ok    a tooltip, which has only a context, is drawn in its window' ;;

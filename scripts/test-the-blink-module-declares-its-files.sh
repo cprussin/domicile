@@ -1,31 +1,16 @@
 #!/usr/bin/env bash
-# Whether every file in the fork's Blink module is declared where the build
-# looks for it.
+# Checks that every file in the fork's Blink directories is registered where
+# the build looks for it.
 #
-# The module at `src/third_party/blink/renderer/modules/domicile/` is the whole
-# of the page's surface, and nothing in it is compiled because it is there. A
-# `.cc` or `.h` is built only if the module's own `BUILD.gn` lists it, and an
-# `.idl` generates bindings only if `bindings/idl_in_modules.gni` names it --
-# and that file is Chromium's, so it is carried by the patch series rather than
-# by `src/`. Two registries, in two different places, one of which is a diff.
+# - `modules/domicile/`: a `.cc` or `.h` builds only if the module's `BUILD.gn`
+#   lists it, and an `.idl` generates bindings only if a patch adds it to
+#   `bindings/idl_in_modules.gni`.
+# - `core/html/domicile/`: core has no BUILD.gn of its own, so patches must add
+#   sources to `core/html/build.gni` and idls to `bindings/idl_in_core.gni`.
 #
-# AND THE FORK'S OTHER BLINK DIRECTORY, `core/html/domicile/`, where BOTH
-# registries are diffs: the elements and the event beside them live in core,
-# which has no BUILD.gn of its own to add a file to -- core's source list is
-# `core/html/build.gni` and its idl list is `bindings/idl_in_core.gni`, and
-# both are Chromium's. So a file there is compiled only because a patch says
-# so, twice over, and the same green build with nothing in the page is what an
-# omission looks like.
-#
-# Neither omission is a compile error. A `.cc` nobody lists just is not built,
-# and an `.idl` nobody registers just generates nothing: the interface is
-# absent from the page at runtime and the build is green. The cost of finding
-# that out is an engine release -- about four hours cold, twenty-six minutes on
-# CI -- because this repo cannot build Chromium at all, which is exactly why
-# the check has to be readable off the series instead.
-#
-# So: read the module's directory, and require each file to appear in the
-# registry that governs its kind.
+# A missing entry is not a build error. The file is skipped, the build is
+# green, and the interface is missing at runtime. This repo cannot build
+# Chromium, so the check reads `src/` and the patch series.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -45,10 +30,9 @@ fail() {
   FAILED=$((FAILED + 1))
 }
 
-# Every `.idl` the series adds to `idl_in_modules.gni`, read out of that file's
-# own hunks. Scoped to it: the same path appears in `BUILD.gn` and in
-# `generated_in_modules.gni` under a different spelling, and reading every diff
-# at once would credit a registration that never happened.
+# Every `.idl` the series adds to `idl_in_modules.gni`, read from that file's
+# hunks only. The same path appears in other files, which would credit a
+# missing registration.
 registered_idls() {
   awk '
     /^diff --git a\// { in_gni = ($0 ~ /idl_in_modules\.gni$/) }
@@ -60,9 +44,8 @@ registered_idls() {
   ' "$SERIES"/patches/*.patch | sort -u
 }
 
-# The same reading for core, against `idl_in_core.gni`. A separate function
-# rather than a parameter, because the two lists are separate registries and a
-# reader that took either would credit a file registered in the wrong one.
+# The same for core, against `idl_in_core.gni`. Kept separate so a file
+# registered in the wrong list is not credited.
 core_registered_idls() {
   awk '
     /^diff --git a\// { in_gni = ($0 ~ /idl_in_core\.gni$/) }
@@ -74,10 +57,8 @@ core_registered_idls() {
   ' "$SERIES"/patches/*.patch | sort -u
 }
 
-# And what core compiles, which is a diff rather than a file in `src/`: the
-# names as `core/html/build.gni` carries them, relative to that file's own
-# directory -- `domicile/html_web_view_element.cc` -- with the directory
-# dropped so they can be compared against the module's own listing.
+# Sources a patch adds to `core/html/build.gni`, with the `domicile/` prefix
+# dropped to compare against the directory listing.
 core_declared_sources() {
   awk '
     /^diff --git a\// { in_gni = ($0 ~ /core\/html\/build\.gni$/) }
@@ -89,8 +70,8 @@ core_declared_sources() {
   ' "$SERIES"/patches/*.patch | sort -u
 }
 
-# The `sources` list of the module's `blink_modules_sources` target: from
-# `sources = [` to the `]` that closes it, one quoted name per line.
+# The `sources = [ ... ]` list of the module's `blink_modules_sources` target,
+# one quoted name per line.
 declared_sources() {
   awk '
     /^[[:space:]]*sources = \[/ { inside = 1; next }
@@ -101,10 +82,8 @@ declared_sources() {
   ' "$BUILD_GN" | sort -u
 }
 
-# THE POSITIVE FIRST, twice over: an empty registry passes every name below
-# vacuously, and so does an empty module. A renamed patch, a reformatted gni
-# block or a moved directory would each turn this into a green no-op, which is
-# the same silence the omission it guards against arrives in.
+# An empty registry or empty module would pass vacuously, as a renamed patch,
+# reformatted gni or moved directory would cause.
 REGISTERED="$(registered_idls)"
 DECLARED="$(declared_sources)"
 IDLS="$(cd "$MODULE" && ls ./*.idl 2>/dev/null | sed 's|^\./||')"
@@ -149,9 +128,7 @@ CORE_DECLARED="$(core_declared_sources)"
 CORE_IDLS="$(cd "$CORE" && ls ./*.idl 2>/dev/null | sed 's|^\./||')"
 CORE_SOURCES="$(cd "$CORE" && ls ./*.cc ./*.h 2>/dev/null | sed 's|^\./||')"
 
-# THE POSITIVE FIRST HERE TOO, and it earns it more than above: both of these
-# read patch hunks, so a renamed patch or a reformatted list turns the whole
-# section into a green no-op with nothing said.
+# Both of these read patch hunks, so check they are non-empty too.
 if [ -z "$CORE_REGISTERED" ]; then
   echo "no domicile idls found in the series' idl_in_core.gni hunks" >&2
   echo "either nothing is registered, or this script has stopped reading them" >&2

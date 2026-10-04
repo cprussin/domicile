@@ -1,24 +1,15 @@
 #!/usr/bin/env bash
-# The commit that replaces the second pull request, and where it lands.
+# Asserts where `engine-release-repin.sh` commits the regenerated
+# `engine-release.nix`.
 #
-# An engine change used to be two pull requests: one that moved the fork, and
-# one that moved `engine-release.nix` onto the tarball a manually dispatched
-# release produced. The second is the one that got skipped, so changes needing
-# a release shipped without one. `engine.yml` publishes the release from the
-# branch head now and pushes the regenerated file back onto that branch, so
-# merging the first pull request is sufficient.
+# `engine.yml` publishes a release from the branch head and pushes the
+# regenerated file back onto the branch. A `pull_request` run is checked out at
+# `refs/pull/N/merge`, which includes main. Pushing that commit would merge main
+# into the author's branch without showing in the diff, so the script must
+# commit on the fetched branch tip.
 #
-# WHAT THIS IS ABOUT IS WHICH COMMIT THAT PUSH IS BUILT ON. A `pull_request`
-# run is checked out at `refs/pull/N/merge` — the head merged into main as main
-# was when the event fired. Pushing THAT to the branch quietly merges main into
-# somebody else's branch, which is not a thing CI may do to a person's work and
-# is invisible in the pull request's own diff. So the branch tip is fetched and
-# the generated file put on it, and that is the case with the most cost and the
-# least chance of anybody noticing it went wrong.
-#
-# `git` and the generator are both faked. What is under test is the decision
-# about where the commit goes and whether one is made at all — not `nix store
-# prefetch-file`, and not GitHub.
+# The generator is faked and pushes go to a local bare remote; the commit's
+# placement is under test.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -49,11 +40,9 @@ contains() {
   esac
 }
 
-# A repository shaped like this one, with a remote to push to and a branch that
-# has moved on since the merge ref was computed. Given an argument, main's
-# later commit repins as well, so `engine-release.nix` holds different bytes on
-# the merge ref than on the branch tip — which is the case the checkout refuses
-# to walk over, below.
+# A repository like this one, with a remote and a branch that main has moved
+# past. With an argument, main also repins, so `engine-release.nix` differs
+# between the merge ref and the branch tip.
 setup() {
   local main_repins="${1:-}"
   rm -rf "$WORK/remote" "$WORK/repo"
@@ -62,11 +51,9 @@ setup() {
   git init -q -b main "$WORK/repo"
   git -C "$WORK/repo" config user.email ci@domicile.invalid
   git -C "$WORK/repo" config user.name "domicile CI"
-  # Off, because it is not off by default everywhere and against a local bare
-  # repository some git versions print `fatal: expected 'acknowledgments'` and
-  # then push anyway. AGENTS.md is explicit that a noisy line reads as a
-  # failure; a warning this test produces about its own fixture is worse than
-  # one about the thing under test.
+  # Some git versions print `fatal: expected 'acknowledgments'` against a local
+  # bare remote and push anyway. Disable negotiation so the test output stays
+  # clean.
   git -C "$WORK/repo" config push.negotiate false
   mkdir -p "$WORK/repo/.github/scripts" "$WORK/repo/scripts" \
            "$WORK/repo/packages/domicile-engine"
@@ -78,8 +65,7 @@ setup() {
   git -C "$WORK/repo" remote add origin "$WORK/remote"
   git -C "$WORK/repo" push -q origin main
 
-  # The branch, with a commit main does not have. This is what the push must
-  # land on top of.
+  # A branch commit main does not have. The push must land on top of it.
   git -C "$WORK/repo" checkout -qb feature
   echo "the branch's own work" >"$WORK/repo/branch-only"
   git -C "$WORK/repo" add -A
@@ -87,8 +73,7 @@ setup() {
   git -C "$WORK/repo" push -q origin feature
   BRANCH_TIP="$(git -C "$WORK/repo" rev-parse feature)"
 
-  # And the merge ref the job is actually standing on: the branch merged into
-  # main. Detached, as `actions/checkout` leaves it.
+  # The merge ref the job runs on, detached as `actions/checkout` leaves it.
   git -C "$WORK/repo" checkout -q main
   echo "main moved" >"$WORK/repo/marker"
   [ -z "$main_repins" ] ||
@@ -99,8 +84,7 @@ setup() {
   git -C "$WORK/repo" merge -q --no-edit feature
   MERGE_REF="$(git -C "$WORK/repo" rev-parse HEAD)"
 
-  # The generator, faked: the real one downloads a tarball and hashes it, and
-  # what this file is about is what happens to the file afterward.
+  # Fake generator: the real one downloads and hashes a tarball.
   mkdir -p "$WORK/repo/scripts"
   cat > "$WORK/repo/scripts/update-engine-release.sh" <<'GEN'
 #!/usr/bin/env bash
@@ -130,9 +114,8 @@ setup
 out="$(repin)"
 expect "the repin succeeds" ok "$(status "$out")"
 
-# THE ASSERTION THIS FILE EXISTS FOR. `feature` on the remote must be one
-# commit on top of where it was — not the merge, and not anything containing
-# main's later work.
+# The remote branch must be one commit past its old tip: not the merge, and
+# without main's later work.
 tip="$(pushed feature)"
 expect "the branch moved by exactly one commit" "$BRANCH_TIP" \
   "$(git -C "$WORK/repo" rev-parse "$tip^" 2>/dev/null || echo "not a child of the tip")"
@@ -141,8 +124,7 @@ expect "and it is not the merge ref" ok \
 expect "so main's later work did not arrive on the branch" ok \
   "$(git -C "$WORK/repo" show "$tip:marker" 2>/dev/null | grep -qx main && echo ok || echo "main moved into the branch")"
 
-# And it carries only the generated file, because anything else in that commit
-# is CI editing somebody's branch.
+# The commit changes only the generated file.
 expect "the commit touches one file" \
   "packages/domicile-engine/engine-release.nix" \
   "$(git -C "$WORK/repo" diff --name-only "$tip^" "$tip")"
@@ -153,15 +135,10 @@ contains "the message says what it is" "engine-sabc123456789" \
 echo
 echo "== a repin main got to first does not block the checkout =="
 
-# THE GENERATOR RUNS AT THE MERGE REF AND THE COMMIT GOES ONTO THE TIP, so
-# between the two there is a working tree holding a modified file the checkout
-# is about to change. Git refuses that outright — `Your local changes to the
-# following files would be overwritten by checkout` — whenever
-# `engine-release.nix` differs between the merge ref and the tip, which is what
-# a pull request that main has repinned since looks like. It is the most
-# expensive way this job can fail: the Chromium build and the publish have both
-# already succeeded by the time this runs, so a refusal here throws away an
-# hour of work that cannot be reused.
+# The generator runs at the merge ref and the commit goes on the tip. If
+# `engine-release.nix` differs between them, a plain checkout refuses to
+# overwrite the modified file. This runs after the build and publish, so a
+# failure here wastes an hour of work.
 setup main-repins-too
 out="$(repin)"
 expect "the repin succeeds" ok "$(status "$out")"
@@ -173,10 +150,8 @@ expect "and the branch holds what the generator wrote" \
 echo
 echo "== it does nothing when there is nothing to do =="
 
-# THE IDEMPOTENT CASE, AND IT IS NOT RARE. A re-run of a green job, or a job
-# whose generator produces the file that is already there. An empty commit
-# pushed to somebody's branch on every re-run would be noise at best, and at
-# worst it re-triggers every check on the pull request for no change.
+# A re-run, or a generator that writes the existing file, must not push an
+# empty commit: it would re-trigger every check on the pull request.
 setup
 repin >/dev/null
 first="$(pushed feature)"
@@ -188,10 +163,8 @@ contains "and says why" "already" "$out"
 echo
 echo "== what it refuses to do =="
 
-# A generator that cannot find the release must not produce an empty commit or
-# a half-written file. This runs after the publish step, so a failure here
-# means the release and the repin disagree — which is worth the job going red
-# rather than a branch that looks repinned and is not.
+# A generator that cannot find the release must fail the job and push nothing,
+# since the release and the pin would disagree.
 setup
 out="$(repin GENERATOR_FAILS=1)"
 expect "a generator that fails fails the step" refused "$(status "$out")"
@@ -200,9 +173,9 @@ expect "and nothing is pushed" "$BRANCH_TIP" "$(pushed feature)"
 echo
 echo "== the push that makes CI run =="
 
-# A push with the workflow's own token starts runs that wait for a person. Given
-# DOMICILE_WRITEBACK_TOKEN, the push authenticates with it instead, and only the
-# push: a git on PATH records what the push was given.
+# A push with the workflow's own token starts runs that need approval. With
+# DOMICILE_WRITEBACK_TOKEN set, the push uses that token. A `git` wrapper on
+# PATH records the push arguments.
 REAL_GIT="$(command -v git)"
 mkdir -p "$WORK/bin"
 cat >"$WORK/bin/git" <<WRAP

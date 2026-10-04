@@ -1,20 +1,13 @@
 #!/usr/bin/env bash
-# Whether the engine can call the compositor back in an official build.
+# Checks every engine callback into the compositor is exempt from CFI.
 #
-# `libdomicile_engine.so` is loaded by the compositor, which hands it a struct
-# of function pointers -- `configure`, `frame`, `released` and the rest of
-# `DomicileEngineCallbacks` -- written in Rust. An official build has CFI on,
-# and `cfi-icall` checks every indirect call against a jump table of the
-# functions the build itself compiled with that type. A Rust function is in no
-# such table, so the first callback the engine makes is `ud2`: the compositor
-# dies of "Illegal instruction" the moment a client's window is brokered.
-# Production run 36349359457 did exactly that, eight hours into its build.
+# The compositor passes the engine `DomicileEngineCallbacks`, a struct of Rust
+# function pointers. Official builds enable `cfi-icall`, which traps (`ud2`)
+# on an indirect call to a function the build did not compile, so the first
+# callback kills the compositor. Every call through the struct must therefore
+# be inside `Dispatch()`, which is marked `DISABLE_CFI_ICALL`.
 #
-# So the one function that makes those calls is `DISABLE_CFI_ICALL`, and every
-# call through the struct has to be in it: a callback made from anywhere else
-# is the same trap, one refactor later.
-#
-# NO CHROMIUM TREE: this reads the fork's own source, which is laid down as-is.
+# Reads the fork's source; needs no Chromium tree.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -35,8 +28,8 @@ else
     "no 'DISABLE_CFI_ICALL void Dispatch()' in domicile_engine.cc"
 fi
 
-# Every call through the callbacks struct, and whether it is inside Dispatch:
-# from its signature to the next member function at the class's indentation.
+# Find calls through `callbacks_` outside `Dispatch()`, which runs from its
+# signature to the next member function at the class's indentation.
 outside="$(awk '
   /^  (DISABLE_CFI_ICALL )?void Dispatch\(\)/ { inside = 1; next }
   inside && /^  [A-Za-z~].*\(.*\) *(const )?\{$/ { inside = 0 }

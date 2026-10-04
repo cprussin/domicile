@@ -1,35 +1,16 @@
 #!/usr/bin/env bash
-# That the one check which enters Chromium's own shell does not carry
-# domicile's library path into it.
+# Checks that `scripts/engine-guard-css-and-resize.sh` enters Chromium's
+# toolchain shell without domicile's loader path.
 #
-# TWO SHELLS, AND THE SECOND ONE IS ENTERED FROM INSIDE THE FIRST. The whole
-# `engine` group runs in one `nix develop .#full`, which is what turns thirty
-# shell startups into one. `scripts/engine-guard-css-and-resize.sh` then enters
-# Chromium's own toolchain shell, because a component build links against that
-# shell's glibc and `spike.sh` says so.
+# The `engine` group runs inside `nix develop .#full`, which exports
+# `LD_LIBRARY_PATH` (the compositor `dlopen`s libEGL). Chromium's shell is a
+# buildFHSEnv with its own glibc, so inherited nixpkgs libraries fail to load:
 #
-# `.#full` EXPORTS `LD_LIBRARY_PATH`, and that is the collision. flake.nix sets
-# it to `/run/opengl-driver/lib` plus the GL stack plus `engineRuntimeLibs`,
-# because the compositor `dlopen`s libEGL and `mkShell` only wires build-time
-# linkage. Chromium's shell is a buildFHSEnv whose `/lib/libc.so.6` is the FHS
-# glibc, so a nixpkgs library inherited through the loader path is one built
-# against a glibc that is not the one resolving it:
-#
-#   out/Domicile/chrome: /lib/libc.so.6: version `GLIBC_ABI_GNU2_TLS' not found
-#     (required by /nix/store/...-systemd-261.2/lib/libudev.so.1)
 #   out/Domicile/chrome: /lib/libc.so.6: version `GLIBC_2.42' not found
 #     (required by /nix/store/...-ncurses-6.6/lib/libncursesw.so.6)
 #
-# chrome never started, `spike.sh` reported `the page never asked to embed`
-# after its sixty looks, and the guard's own verdict was the catch-all — "the
-# CSS half, neither a cell nor the probe". Engine run 35678987261 attempt 2, on
-# the fourteen checks before it passing.
-#
-# WHAT THIS ASSERTS IS THE FIX RATHER THAN THE SYMPTOM, because the symptom
-# needs a Chromium build and this runs anywhere. The check has to hand
-# Chromium's shell an environment with no loader path of domicile's in it —
-# which is exactly the environment `engine.yml` used to hand it, back when that
-# shell was entered from a workflow step rather than from inside `.#full`.
+# This asserts the environment handed to the shell, since the symptom needs a
+# Chromium build.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -46,17 +27,14 @@ fail() {
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-# A tree with an out directory in it, which is all `require_engine_out` looks
-# for: this test is about the environment the check builds, not about a build.
+# `require_engine_out` only looks for an out directory.
 TREE="$WORK/chromium/src"
 mkdir -p "$TREE/out/Domicile" "$TREE/tools/nix"
 : >"$TREE/tools/nix/shell.nix"
 
-# Stand-ins for the two nix commands the check runs, on PATH ahead of anything
-# real. `nix-shell` writes down the environment it was handed and then fails,
-# because what it would have run needs a Chromium build; the check's sentinel
-# is what turns that into a loud failure, which is the behavior under test in
-# `scripts/test-a-check-that-cannot-run-says-so.sh` rather than here.
+# Stubs for the two nix commands the check runs. `nix-shell` records its
+# environment and fails; the check's sentinel turns that into a failure, which
+# `scripts/test-a-check-that-cannot-run-says-so.sh` covers.
 BIN="$WORK/bin"
 mkdir -p "$BIN"
 RECORD="$WORK/handed-to-chromiums-shell"
@@ -76,8 +54,7 @@ STUB
 
 chmod +x "$BIN/nix" "$BIN/nix-shell"
 
-# The loader path `.#full` would have exported, in the shape flake.nix builds:
-# the driver directory first, then nixpkgs copies.
+# The loader path `.#full` exports: the driver directory, then nixpkgs copies.
 OUTER_LIBS="/run/opengl-driver/lib:/nix/store/1111-libGL/lib:/nix/store/2222-systemd/lib"
 
 PATH="$BIN:$PATH" \
@@ -87,9 +64,7 @@ PATH="$BIN:$PATH" \
   "$CHECK" >"$WORK/out" 2>&1
 status=$?
 
-# THE POSITIVE FIRST. A test whose stand-in was never reached passes every
-# assertion below it while establishing nothing, and this file's whole subject
-# is one invocation's environment.
+# Without this, a stub that was never reached would pass every assertion below.
 if [ -f "$RECORD" ] && grep -q "^shell.nix was $TREE/tools/nix/shell.nix$" "$RECORD"; then
   ok "the check entered Chromium's shell for this tree"
 else
@@ -99,9 +74,8 @@ else
   exit 1
 fi
 
-# The two the loader reads. Everything else `.#full` sets is about compiling,
-# and nothing inside that shell compiles: `spike.sh` runs `out/Domicile/chrome`
-# and the producer beside it, both already linked.
+# Only the loader variables matter: nothing in Chromium's shell compiles, and
+# `spike.sh` runs prebuilt binaries.
 for var in LD_LIBRARY_PATH LD_PRELOAD; do
   if grep -q "^$var=" "$RECORD"; then
     fail "Chromium's shell is handed no $var" \
@@ -111,9 +85,8 @@ for var in LD_LIBRARY_PATH LD_PRELOAD; do
   fi
 done
 
-# And the check still fails loudly, because the stand-in shell ran nothing: the
-# sentinel is the only evidence this check trusts, and a shell that exits over
-# a guard that never ran has done it before.
+# The stub ran nothing, so the check must still fail: it trusts only the
+# sentinel.
 if [ "$status" -ne 0 ]; then
   ok "a shell that ran nothing is still a failure ($status)"
 else

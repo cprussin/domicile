@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
-# The engine group runs the headless webview guards concurrently. They share
-# no broker, profile or log, and take free ports rather than fixed ones
-# (`test-the-webview-guards-take-free-ports.sh`), and serially they were most
-# of the group's wall time. Everything else stays serial and the group still stops at the
-# first failure.
+# Tests that the engine group runs the headless webview guards concurrently.
+# They share no broker, profile or log, and take free ports
+# (`test-the-webview-guards-take-free-ports.sh`). Other checks stay serial, and
+# the group still stops at the first failure.
 #
-# And every check but latency runs as noise when the job names itself
-# (`CARD_OWNER`), so another run's latency guard waits it out -- and latency
-# runs as none, or it would wait out its own run.
+# When the job sets `CARD_OWNER`, every check but latency runs as noise, so
+# another run's latency guard waits for it. Latency runs as none, or it would
+# wait for its own run.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -24,8 +23,8 @@ TOGETHER="webview-framing shell-local-network webview-content-script extension-i
   webview-download webview-save-picker webview-tabs webview-active-tab webview-passkey-extension
   webview-popup-window control-arrival webview-notifications"
 
-# A repository holding check.sh and a stand-in for every engine check: each
-# writes when it started and ended. `bun` is stubbed because the group installs.
+# A repository with check.sh and a stand-in for every engine check that
+# records its start and end. `bun` is stubbed because the group installs.
 mkdir -p "$WORK/repo/scripts" "$WORK/repo/.github/scripts" "$WORK/bin"
 cp "$ROOT/scripts/check.sh" "$WORK/repo/scripts/"
 cp "$ROOT/.github/scripts/engine-render-node-lock.sh" "$WORK/repo/.github/scripts/"
@@ -53,8 +52,8 @@ check() { # FAIL=<check to fail>
 
 check
 
-# Every name above is a check that exists and ran: a name with no script is a
-# guard that quietly never joined the batch, and the timing below cannot see it.
+# Every name above must exist and run. A missing script would silently skip
+# the batch, and the timing check below would not notice.
 absent=""
 for g in $TOGETHER; do
   [ -e "$WORK/engine-guard-$g.start" ] || absent="$absent $g"

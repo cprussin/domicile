@@ -1,21 +1,17 @@
 #!/usr/bin/env bash
-# The compile slot is held for the compile and nothing after it.
+# Tests that the compile slot is held for the compile and nothing after it.
 #
 # `crux` and `crux-two` share one machine and one compile slot
-# (.github/scripts/engine-compile-slot.sh): 62G and no swap holds one Chromium
-# link. engine.yml used to hold it from the take to the end of the job, over
-# the checks, packaging, the packaged guard, publishing, the write-back and the
-# proof -- none of which compiles Chromium. Over 24h the slot was busy 97% of
-# the day, ~3.5h of it on checks, while the other runner's compile waited.
+# (.github/scripts/engine-compile-slot.sh): 62G and no swap fits one Chromium
+# link. Holding the slot over checks and packaging makes the other runner's
+# compile wait.
 #
-# So each workflow drops it the step after its build, and keeps the `always()`
-# drop at the end for the runs that fail before getting there. `drop` is
-# idempotent and leaves another run's slot alone
-# (scripts/test-engine-compile-slot.sh), so dropping twice is safe.
+# Each workflow drops the slot in the step after its build, and again in a
+# final `always()` step for runs that fail earlier. `drop` is idempotent and
+# leaves another run's slot alone (scripts/test-engine-compile-slot.sh).
 #
-# What stops a compile on the other runner from spoiling this run's latency
-# guard is not this slot but the render node lock: a compile runs `noisy` and
-# the latency guard waits for `quiet` (scripts/test-engine-render-node-lock.sh).
+# The render node lock, not this slot, keeps the other runner's compile from
+# disturbing the latency guard (scripts/test-engine-render-node-lock.sh).
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -66,10 +62,9 @@ job_of() { # workflow, job
     inside { print }' "$1"
 }
 
-# workflow, the job that compiles, the step the compile ends with, and the
-# first step that must not hold it -- empty when that is another job's, which
-# is engine.yml's: its checks are a job of their own, and the slot's drop has
-# to come before the build job ends.
+# workflow, the job that compiles, the step that ends the compile, and the
+# first step that must not hold the slot. The last is empty for engine.yml,
+# whose checks run in a separate job.
 check() {
   local flow="$1" built="$3" next="$4" file="$WORK/$1.$2" body early final
   job_of "$WORKFLOWS/$flow" "$2" >"$file"
@@ -103,8 +98,7 @@ check() {
     fail "and that step is the slot's own drop" "it runs: $body"
   fi
 
-  # Nothing after the drop may compile Chromium: that would be a compile
-  # outside the slot, which is the OOM it exists to prevent.
+  # A compile after the drop would run outside the slot and risk an OOM.
   if [ -n "$early" ] && steps "$file" | tail -n +"$((early + 1))" | cut -f2 |
     while IFS= read -r name; do step_body "$file" "$name"; done |
     grep -v '^[[:space:]]*#' |

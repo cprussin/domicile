@@ -1,23 +1,12 @@
 #!/usr/bin/env bash
-# A check that passes says, in `check.sh`'s own output, what it established.
+# Checks `check.sh` prints a passing check's `PASS:` lines under its `ok`.
 #
-# `check.sh` keeps a check's log only when it fails, so until this a pass was
-# one word: `engine-guard-css-and-resize ok`. PR #586 added a third run to that
-# guard — a `backdrop-filter` over an `<app>` against the same filter over a
-# `<div>` — and its engine job went green with no line anywhere saying that run
-# happened. Establishing it meant reading the guard's source, not the run, in a
-# repository whose guards are built so they cannot pass vacuously.
+# `check.sh` keeps a check's log only on failure, so without this a pass gives
+# no evidence of what it measured. Also checks that a failure keeps its whole
+# log, a skip reads as a skip, and the tally format is unchanged.
 #
-# So a passing check's `PASS:` lines — the convention the guards already use
-# for the sentence stating what they measured — are printed under its `ok`,
-# and nothing else of its log is. Everything around that is pinned here too,
-# because it is what the change sits next to: a failure keeps its whole log, a
-# skip reads as a skip, and the tally keeps the format tooling reads.
-#
-# Two halves. `check.sh` itself, driven against stand-in checks in a
-# repository of its own; and the css-and-resize check, whose guard runs inside
-# Chromium's shell and is quoted back behind `  | `, so its `PASS:` lines only
-# reach `check.sh` if the check relays them.
+# Two parts: `check.sh` against stub checks, and the css-and-resize check,
+# whose guard output is quoted behind `  | ` and must relay its `PASS:` lines.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -37,9 +26,8 @@ expect() { # what, want, got
 
 echo "check.sh, reporting a group"
 
-# The `nix` group because it is the one that globs its scripts and installs
-# nothing, so no `bun` has to be stubbed. `verdict` is one function for every
-# group, including the engine group's `run_together`.
+# Use the `nix` group: it globs its scripts and installs nothing, so `bun`
+# needs no stub. `verdict` is shared by every group.
 REPO="$WORK/repo"
 mkdir -p "$REPO/scripts"
 cp "$ROOT/scripts/check.sh" "$REPO/scripts/"
@@ -49,44 +37,39 @@ standin() { # name, body
   chmod +x "$REPO/scripts/$1.sh"
 }
 
-# A guard and its control: two runs, two verdicts, and chatter around them. The
-# second `PASS:` is indented, which is how a guard quoting a run's output would
-# print it and how `SKIP:` is already read.
+# A guard and its control, with noise around them. The second `PASS:` is
+# indented, as when a guard quotes a run's output.
 standin nix-1-says-what-it-established '
 echo "starting the engine"
 echo "PASS: the positive run found the window"
 echo "a thousand lines of Chromium startup"
 echo "  PASS: the control found nothing, as it must"'
 
-# Most checks: a table of their own `ok` lines and nothing called PASS.
+# A typical check with `ok` lines and no `PASS:`.
 standin nix-2-says-nothing '
 echo "  ok    something this check asserts"
 echo "all ok"'
 
-# Longer than the hundred lines the failure summary shows, so the kept log is
-# the only place its first line is. And a `PASS:` in it, which is a run that
-# went well before one that did not — not a verdict on the check.
+# Longer than the 100-line failure summary, so only the kept log has its first
+# line. Its `PASS:` must not be printed as a verdict.
 standin nix-3-fails '
 echo "PASS: an early run"
 for n in $(seq 1 150); do echo "line $n"; done
 exit 1'
 
-# A skip that got as far as a `PASS:` before finding it could not go on. It
-# did not run, so nothing it said may read as a pass.
+# A skip after a `PASS:` line. Nothing it said may read as a pass.
 standin nix-4-cannot-run '
 echo "PASS: a step before the one that needed a card"
 echo "  SKIP: no card here"
 exit 77'
 
-# The workflows export DOMICILE_CHECK_STRICT, so the run that means to be lax
-# has to say so, or a skip reads as a failure there and nowhere else.
+# Unset DOMICILE_CHECK_STRICT, which CI exports, so skips stay skips.
 check() { # env assignments...
   env -u DOMICILE_CHECK_STRICT "$@" DOMICILE_CHECK_LOG_DIR="$WORK/logs" \
     "$REPO/scripts/check.sh" nix >"$WORK/out" 2>&1
 }
 
-# The lines a check's verdict line is followed by, up to the next line that is
-# not indented under it.
+# Prints the indented lines under a check's verdict line.
 under() { # check name
   awk -v name="$1" '
     found && !/^    / { exit }
@@ -134,9 +117,8 @@ expect "under DOMICILE_CHECK_STRICT a skip is still a failure" "yes" \
 
 echo "the css-and-resize check relays its guard's verdicts"
 
-# A repository holding the real check and its library, with a stand-in guard
-# where Chromium's would be, and a `nix-shell` that runs what it is handed —
-# which is the real check's own script around the guard, sentinel and all.
+# A repo with the real check and its library, a stub guard, and a stub
+# `nix-shell` that runs the script it is given.
 CSS="$WORK/css"
 mkdir -p "$CSS/scripts/lib" "$CSS/packages/domicile-engine/scripts" \
   "$CSS/tree/out/Domicile" "$CSS/tree/tools/nix" "$CSS/bin"
@@ -146,8 +128,8 @@ cp "$ROOT/packages/domicile-engine/scripts/lib-annotate.sh" \
   "$CSS/packages/domicile-engine/scripts/"
 : >"$CSS/tree/tools/nix/shell.nix"
 
-# Its verdicts first and four hundred lines after them, which is past the
-# three hundred the check quotes: a relay that only quoted would lose them.
+# Verdicts followed by 400 lines, more than the 300 the check quotes, so
+# quoting alone would lose them.
 cat >"$CSS/packages/domicile-engine/scripts/guard-css-and-resize.sh" <<'GUARD'
 #!/usr/bin/env bash
 echo "PASS: css — the first run"
@@ -170,8 +152,7 @@ expect "each of the guard's verdicts reaches check.sh unquoted" \
   "$(printf 'PASS: css — the first run\nPASS: backdrop-filter — the run nobody could see\nPASS: resize — the last run')" \
   "$(grep '^ *PASS: ' "$WORK/css-out")"
 
-# And a guard that exits 0 having said nothing is not a pass: nobody reading
-# the job could tell it from one that measured nothing.
+# A guard that exits 0 with no `PASS:` line fails the check.
 printf '#!/usr/bin/env bash\nseq 1 400\n' \
   >"$CSS/packages/domicile-engine/scripts/guard-css-and-resize.sh"
 PATH="$CSS/bin:$PATH" DOMICILE_CHROMIUM="$CSS/tree" \

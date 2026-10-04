@@ -1,11 +1,12 @@
-# Ends a Domicile desk's graphical session, whatever is holding it up.
+# Ends a Domicile desk's graphical session.
 #
-# Stopping `domicile-session.target` is not enough: a running portal's
-# `Requisite=graphical-session.target` pins that target, and the portal with
-# it, past the desk. Starting this one conflicts both down; the launcher
-# starts it with `replace-irreversibly` as the desk ends
-# (`domicile_launch::graphical_session`). niri's `niri-shutdown.target`, for
-# the same reason.
+# Stopping `domicile-session.target` is not enough: a running portal has
+# `Requisite=graphical-session.target`, which keeps that target up. This target
+# has `Conflicts=graphical-session.target`, so starting it stops that target and
+# the portal. The launcher starts it with
+# `replace-irreversibly` when the desk exits
+# (`domicile_launch::graphical_session`). niri's `niri-shutdown.target` does
+# the same.
 [Unit]
 Description=Domicile desk has ended
 DefaultDependencies=no

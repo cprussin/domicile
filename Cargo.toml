@@ -11,9 +11,9 @@ members = [
     "packages/domicile-compositor",
 ]
 
-# domicile-compositor pulls Smithay + native Wayland libs, so it is excluded from the
-# default set: plain `cargo test` (core shell) stays fast and Smithay-free.
-# Build it explicitly in the full shell: `nix develop .#full -c cargo build -p domicile-compositor`.
+# domicile-compositor needs Smithay and native Wayland libraries, so plain
+# `cargo test` in the core shell skips it. Build it in the full shell:
+# `nix develop .#full -c cargo build -p domicile-compositor`.
 default-members = [
     "packages/domicile-config",
     "packages/domicile-scene",
@@ -24,33 +24,30 @@ default-members = [
     "packages/domicile-test-client",
 ]
 
-# domicile-host's default build (the orchestrator) is pure logic and lives in the
-# core shell. Its Smithay Wayland-server backend sits behind the
-# `smithay-backend` feature.
+# domicile-host's Smithay backend is behind the `smithay-backend` feature, so
+# its default build needs only the core shell.
 
 [workspace.package]
 version = "0.0.0"
 edition = "2021"
 license = "MIT"
-# The oldest rustc the locked dependencies build with: zbus 5 wants 1.87 and
-# lofty 1.89.
+# The oldest rustc the locked dependencies build with (lofty needs 1.89).
 rust-version = "1.89"
 
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
-# A release candidate, pinned exactly, for `Config::with_event_kinds`: 8 asks the
-# kernel for every open under a watched tree, which overflows its queue on any
-# real home — see `domicile_host::home_watch`. Move to 9.0.0 when it is out.
+# Pinned release candidate for `Config::with_event_kinds`. Version 8 watches
+# every file open, which overflows the kernel queue on a real home (see
+# `domicile_host::home_watch`). Move to 9.0.0 when it is released.
 notify = "=9.0.0-rc.5"
-# `[files] omit` in the compositor's config: gitignore-shaped globs over paths.
+# Matches the gitignore-style globs in the config's `[files] omit`.
 globset = { version = "0.4", default-features = false }
-# A launcher's preview of a song: the tags and the picture a file carries of
-# itself, which a page cannot read — the shell is served on another origin than
-# the home it would be reading.
+# Reads audio tags and cover art for launcher previews. The shell page cannot
+# read them because it is served from another origin.
 lofty = "0.25"
-# A bookmark's icon: the links its page names, read against the page's URL.
+# Resolves a bookmark page's icon links against the page URL.
 url = "2"
 tempfile = "3"
 libc = "0.2"

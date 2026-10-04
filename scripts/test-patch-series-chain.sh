@@ -1,35 +1,20 @@
 #!/usr/bin/env bash
-# Whether each patch in the engine series was made against the series, or
-# against the bare pin.
+# Checks that each patch in the engine series was made against the series,
+# not the bare pin.
 #
-# `apply.sh` runs `git am` over `patches/*.patch` in order, onto a checkout at
-# CHROMIUM_PIN. So the tree patch 0011 lands on is not the pin: it is the pin
-# plus 0001..0010. A patch regenerated in a scratch tree holding only the
-# pinned file therefore has the right CONTENT and the wrong CONTEXT, and
-# `git apply --check` against that same scratch tree says it is fine. It is
-# not: on the runner it fails with "patch does not apply", after the tree lock,
-# the reset and the whole series ahead of it — which is an hour of a shared
-# machine to learn something a string comparison knows.
+# `apply.sh` runs `git am` over `patches/*.patch` in order, so patch N applies
+# on the pin plus patches 1..N-1. A patch regenerated against the pin alone has
+# the right content and the wrong context, and fails with "patch does not
+# apply" on the runner after a long setup.
 #
-# That is not hypothetical. Patch 0010 turns `DidNotifySubtreeInsertionsToDocument`
-# from `final` into `override` in html_frame_element_base.h, four lines of
-# comment and all; 0011 edits the same header a few lines away. Regenerated
-# against the pin, 0011's context still said `final` and still sat at the pin's
-# line numbers, and engine run 191 died on it.
+# Each `diff --git` carries `index <pre>..<post>`. For a file two patches
+# touch, the later patch's <pre> must equal the earlier one's <post>.
 #
-# WHAT SAYS SO WITHOUT A CHROMIUM TREE. Every `diff --git` in a `git
-# format-patch` file carries `index <pre>..<post>`: the blob the patch expects
-# to find, and the blob it leaves. For a file two patches both touch, the later
-# patch's <pre> must be the earlier one's <post>. When a patch is regenerated
-# against the wrong base that chain breaks, and the break names both ends.
+# Hashes are abbreviated to 7 or 13 characters, so compare the shorter prefix.
+# A prefix mismatch is also a full-length mismatch, so there are no false
+# alarms.
 #
-# Hashes are abbreviated to whatever length the generating git chose, and the
-# series has both 7 and 13 character forms in it, so they are compared on the
-# shorter of the two prefixes. That cannot produce a false alarm: a prefix
-# mismatch is a mismatch at full length too.
-#
-# A file only ONE patch touches has nothing to chain and is not checked here;
-# its base is the pin, which is what it was made against.
+# Files touched by only one patch have nothing to chain and are skipped.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -39,9 +24,8 @@ PATCHES="$ROOT/packages/domicile-engine/patches"
   exit 1
 }
 
-# Every (patch, file, pre, post), in series order. `index` is the line after
-# the `diff --git` that names the file, so the two are read as a pair rather
-# than matched up afterward.
+# Every (patch, file, pre, post), in series order. `index` follows the
+# `diff --git` line that names the file.
 READINGS="$(
   for patch in "$PATCHES"/*.patch; do
     awk -v name="$(basename "$patch")" '
@@ -52,10 +36,8 @@ READINGS="$(
       }
       /^index [0-9a-f]+\.\.[0-9a-f]+/ {
         if (file != "") {
-          # A regex, not a literal: awk treats a multi-character separator
-          # as one, and an unescaped `..` matches ANY two characters -- which
-          # splits the pair at every second column and quietly compares
-          # rubbish that always agrees.
+          # A regex, not a string: awk treats an unescaped `..` as any two
+          # characters, which splits the pair wrongly and always agrees.
           split($2, blobs, /\.\./)
           print name, file, blobs[1], blobs[2]
           file = ""
@@ -93,9 +75,8 @@ while read -r patch file pre post; do
   LEFT_AT["$file"]="$patch"
 done <<<"$READINGS"
 
-# A series where no file is touched twice has nothing to say, and would pass
-# this silently forever while the check rotted. There are such handoffs today,
-# so a count of zero is the test having stopped testing.
+# The series has files touched twice, so zero handoffs means the check
+# stopped reading them.
 [ "$CHAINED" -gt 0 ] || {
   echo "no file in the series is touched by two patches, so nothing was checked." >&2
   echo "Either the series was flattened or the index lines stopped being read." >&2

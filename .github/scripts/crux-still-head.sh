@@ -1,15 +1,14 @@
 #!/usr/bin/env bash
-# Whether a run's commit is still what its branch points at on origin.
+# Whether a run's commit is still its branch's head on origin.
 #
 #   crux-still-head.sh <branch> <sha>   0 yes, 1 no (moved on or deleted),
 #                                       3 could not ask
 #
-# engine.yml asks this while a run waits for the compile slot. That wait can
-# outlast a cold repin, and a run whose branch has moved on holds a `crux`
-# runner the whole time for a result nobody will read.
+# engine.yml asks this while a run waits for the compile slot. The wait can
+# outlast a cold repin, and a run for a replaced commit holds a `crux` runner
+# for a result nobody reads.
 #
-# Not named `engine-*.sh`, for crux-stale-runs.sh's reason: engine.yml runs on
-# changes to those, and a change to this is not a change to the build.
+# Not named `engine-*.sh`; see crux-stale-runs.sh.
 set -u
 
 [ $# -eq 2 ] || { echo "usage: $(basename "$0") <branch> <sha>" >&2; exit 2; }

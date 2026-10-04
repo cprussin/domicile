@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Which end the download guard blames, and which answers it calls a pass.
+# Tests the verdict of `guard-webview-download.sh`: which readings pass and
+# which component a failure blames.
 #
-# The unit is the verdict block in `guard-webview-download.sh`, run out of the
-# real script rather than copied, so a rewrite that moves it fails here.
+# Runs the verdict block from the real guard, so moving it fails here.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -17,7 +17,7 @@ BLOCK="$(awk '/^FAILURE=""$/,/^fi$/' "$GUARD")"
   echo "no verdict block in $GUARD — its markers moved. Fix this test with it." >&2
   exit 1
 }
-# The names the failing sentences interpolate.
+# Names the failure messages interpolate.
 NAME="guard-download.txt"
 PICK="saved/renamed-by-the-shell.txt"
 
@@ -32,7 +32,7 @@ expect() {
   fi
 }
 
-# A positive run in which everything is true; each case changes one reading.
+# Runs the verdict with every reading true; each case overrides one.
 run_block() { # $1 NEGATIVE, then NAME=value overrides
   SAW_SHELL=1
   SAW_PAGE=1
@@ -75,7 +75,7 @@ blames() { # $1 word, then the args verdict takes
   esac
 }
 
-# The control's own shape: the shell canceled, so nothing on the disk.
+# The control's readings: the shell canceled, so nothing was saved.
 CONTROL="SAVED=0 SAVED_ANYWHERE=0"
 
 echo "a run that never got as far as measuring anything"

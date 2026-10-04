@@ -1,25 +1,15 @@
 #!/usr/bin/env bash
-# Does the framing guard's fixture actually refuse framing?
+# Asserts the framing guard's fixture serves the pages the guard assumes.
 #
-# `guard-webview-framing.sh` rests on one premise: that the page it serves is a
-# page a frame owner cannot show. Its negative control establishes that
-# something stops an <iframe> — but a 404, a page served on the wrong path, or
-# a body that is not the color the probe looks for all stop an <iframe> too,
-# and every one of them would leave the control green while the positive run's
-# claim rested on nothing. The engine guard cannot tell those apart, and it
-# costs thirty minutes on a shared tree to ask.
+# `guard-webview-framing.sh` assumes its page refuses framing. A 404, a wrong
+# path or a wrong color would also block the probe, so its negative control
+# would pass for the wrong reason. The engine guard cannot tell these apart,
+# and running it costs thirty minutes on a shared tree, so the fixture is
+# checked here: both framing headers, and the exact color.
 #
-# So the fixture is asserted here, where it is free: the headers by name,
-# because a page carrying one of them is half a fixture, and the color,
-# because the whole assertion downstream is an exact match on it.
-#
-# AND THE OTHER TWO PAGES, which are what make the control a control. The
-# guard's negative run frames `/permits` and then frames `/refuses`, and reads
-# the difference between them as the framing headers -- so it is those two
-# being identical in every other respect that the reading rests on, and this is
-# where that is checked. A `/permits` that carried a framing header, or that
-# was some other color, would turn "the harness can see a framed page here"
-# into a run that proves nothing and cannot say so.
+# The guard's control frames `/permits` and then `/refuses` and attributes the
+# difference to the framing headers. So `/permits` must match `/refuses` in
+# every other respect: same color, no framing headers.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -41,9 +31,9 @@ command -v curl >/dev/null || {
 }
 
 COLOR="D81B60"
-# The framer's own background, which is what the probe looks for to know it
-# measured anything at all. Not the color: a page that painted the subject's
-# color itself would answer the question the iframe is there to answer.
+# The framer's own background, which tells the probe it measured anything.
+# It differs from COLOR so the framer cannot pass by painting the subject's
+# color itself.
 WITNESS="20304A"
 
 LOG="$(mktemp)"
@@ -64,8 +54,7 @@ grep -q "serving" "$LOG" 2>/dev/null || {
   cat "$LOG" >&2
   exit 1
 }
-# The port it took, which is the one it says: asked for none in particular, it
-# must name the one it got.
+# The server picks a free port and must print it.
 PORT="$(served_port "$LOG")" || {
   echo "the fixture never said which port it took. It said:" >&2
   cat "$LOG" >&2
@@ -83,69 +72,61 @@ expect() {
   fi
 }
 
-# One request, kept: headers and body both come out of it, and asking twice
-# would let the two assertions be about two different answers.
+# One request for both headers and body, so both assertions see the same
+# response.
 RESPONSE="$(curl -sS -i "http://127.0.0.1:$PORT/refuses" || echo "curl failed")"
 
 expect "the page is served" "yes" \
   "$(case "$RESPONSE" in *"200 OK"*) echo yes ;; *) echo no ;; esac)"
-# DENY, not SAMEORIGIN: the guard's shell page is served from domicile:// and
-# the fixture from loopback, but a header that allowed same-origin framing
-# would make the refusal depend on where the guard happened to serve things.
+# DENY, not SAMEORIGIN, so the refusal does not depend on which origins serve
+# the shell page and the fixture.
 expect "X-Frame-Options refuses every ancestor" "yes" \
   "$(case "$RESPONSE" in *[Xx]-[Ff]rame-[Oo]ptions:*DENY*) echo yes ;; *) echo no ;; esac)"
-# The second mechanism, and the one that actually decides: ancestor_throttle.cc
-# skips X-Frame-Options entirely when the response also carries a
-# frame-ancestors directive, which is the spec's precedence rule. A fixture
-# with only the header would be refused by the weaker of the two.
+# The CSP frame-ancestors directive is the one that decides: per the spec,
+# ancestor_throttle.cc ignores X-Frame-Options when frame-ancestors is present.
 expect "CSP forbids all frame-ancestors" "yes" \
   "$(case "$RESPONSE" in *"frame-ancestors 'none'"*) echo yes ;; *) echo no ;; esac)"
-# What the probe matches, exactly. A fixture whose body is some other color is
-# a positive run that can never pass.
+# The probe matches this color exactly; any other color fails every positive
+# run.
 expect "the body is the color the probe looks for" "yes" \
   "$(case "$RESPONSE" in *"#$COLOR"*) echo yes ;; *) echo no ;; esac)"
-# One page and no more: a server that answered everything would answer a
-# mistyped path too, and the guard would never learn it had mistyped one.
+# Only known paths are served, so a mistyped path in the guard fails.
 expect "anything else is a 404" "yes" \
   "$(case "$(curl -sS -o /dev/null -w '%{http_code}' "http://127.0.0.1:$PORT/")" in
      404) echo yes ;; *) echo no ;; esac)"
 
 # --- the pages the control is a comparison between ---
 
-# The same page, in the same color, without the two headers. It is the leg
-# that establishes an <iframe> in this position can show a page at all, so
-# everything the control concludes rests on it being reachable.
+# The same page and color without the two headers. It shows that an <iframe>
+# in this position can display a page at all.
 PERMITS="$(curl -sS -i "http://127.0.0.1:$PORT/permits" || echo "curl failed")"
 
 expect "the framable page is served too" "yes" \
   "$(case "$PERMITS" in *"200 OK"*) echo yes ;; *) echo no ;; esac)"
 expect "and is the same color as the one that refuses" "yes" \
   "$(case "$PERMITS" in *"#$COLOR"*) echo yes ;; *) echo no ;; esac)"
-# THE COMPARISON IS ONLY WORTH ANYTHING IF THIS HOLDS. The control reads the
-# difference between the two pages as the framing headers; a `/permits` that
-# carried one would be a leg that fails for the reason the other one is
-# supposed to.
+# A framing header on `/permits` would make it fail for the same reason as
+# `/refuses`, and the comparison would prove nothing.
 expect "and carries no X-Frame-Options" "yes" \
   "$(case "$PERMITS" in *[Xx]-[Ff]rame-[Oo]ptions:*) echo no ;; *) echo yes ;; esac)"
 expect "and no frame-ancestors directive" "yes" \
   "$(case "$PERMITS" in *"frame-ancestors"*) echo no ;; *) echo yes ;; esac)"
 
-# The page that does the framing: an ordinary http document, so that the frame
-# under test has an ancestor a header can be checked against. The guard's own
-# shell page cannot be it -- an <iframe> on a domicile:// document does not
-# load an http page at all, which is the defect this control was rebuilt for.
+# The framing page: an ordinary http document, so the frame has an ancestor
+# for the headers to check. The guard's domicile:// shell page cannot frame
+# it, because an <iframe> in a domicile:// document does not load http pages.
 FRAMES="$(curl -sS -i "http://127.0.0.1:$PORT/frames?src=/permits" || echo "curl failed")"
 
 expect "the framing page is served" "yes" \
   "$(case "$FRAMES" in *"200 OK"*) echo yes ;; *) echo no ;; esac)"
 expect "and frames what it was asked to" "yes" \
   "$(case "$FRAMES" in *"<iframe"*"src=\"/permits\""*) echo yes ;; *) echo no ;; esac)"
-# So a run that finds neither color can say the browser drew nothing, rather
-# than reporting an absence it has no standing to report.
+# If neither color appears, the witness shows whether the browser drew
+# anything.
 expect "and paints the witness around it" "yes" \
   "$(case "$FRAMES" in *"#$WITNESS"*) echo yes ;; *) echo no ;; esac)"
-# A framer with nothing to frame would render an empty box, which is exactly
-# what a refused frame renders. It must be an error rather than a page.
+# With nothing to frame, the page would render an empty box, the same as a
+# refused frame. It must return an error instead.
 expect "a framing page with nothing to frame is refused" "yes" \
   "$(case "$(curl -sS -o /dev/null -w '%{http_code}' "http://127.0.0.1:$PORT/frames")" in
      400) echo yes ;; *) echo no ;; esac)"

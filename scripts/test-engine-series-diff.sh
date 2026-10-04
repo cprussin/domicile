@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
-# Which files this repository's series would change in a tree carrying another.
+# Asserts which files this repository's series would change in a tree that
+# carries another series.
 #
-# engine.yml's plan guesses how big a run's compile is before it queues, so a
-# cold compile does not hold the queue a warm one waits in. That guess needs
-# the files the compile would see change: those, and not the patches, decide
-# what is rebuilt. A rebased series rewrites every patch and changes no file.
+# engine.yml's plan estimates a compile's size before queueing, so a cold
+# compile does not block warm ones. Changed files decide what is rebuilt, not
+# patches: a rebased series rewrites every patch and changes no file.
 #
-# A wrong answer costs a run a slower queue and nothing else, so the cases are
-# the ways a file can change and the one way it can look changed and not be.
+# A wrong answer only puts a run in the slower queue.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -29,7 +28,7 @@ expect() { # what, want, got
   fi
 }
 
-# A repository shaped like this one: the script where its `../..` is the root.
+# A repository like this one, with the script where its `../..` is the root.
 FAKE="$WORK/repo"
 PACKAGE="$FAKE/packages/domicile-engine"
 mkdir -p "$FAKE/.github/scripts" "$PACKAGE/patches" "$PACKAGE/src/components/domicile"
@@ -49,7 +48,7 @@ git -C "$TREE" commit -qm upstream
 PIN="$(git -C "$TREE" rev-parse HEAD)"
 { echo "# what the series is against"; echo "$PIN"; } >"$PACKAGE/CHROMIUM_PIN"
 
-# A series of one commit per file named, each appending <text>, over the pin.
+# A series over the pin: one commit per named file, each appending <text>.
 series() { # text, file...
   local text="$1" file
   shift
@@ -59,7 +58,7 @@ series() { # text, file...
     git -C "$TREE" commit -qam "domicile: $file"
   done
 }
-# This repository's series: the commits `series` made, as `patches/`.
+# Writes the commits `series` made to `patches/`.
 publish() { # text, file...
   series "$@"
   rm -f "$PACKAGE/patches/"*

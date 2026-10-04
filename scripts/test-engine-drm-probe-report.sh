@@ -1,24 +1,13 @@
 #!/usr/bin/env bash
-# The DRM probe's one job is to say WHY, and this is what checks that it does.
+# Tests `engine-drm-probe-report.sh`, which pulls the reason for a DRM probe
+# failure out of its build log.
 #
-# The probe exists because a static read of ui/ozone/platform/drm cannot see a
-# header that is is_chromeos-conditional three targets down, or a `visibility`
-# refusal, or a symbol that only fails at link. Every one of those is a
-# sentence in a log. A probe run that ends `Process completed with exit code 1`
-# has spent a slot on the single-writer Chromium tree — hours of queue behind
-# whatever else holds it — and brought back nothing, which is worse than not
-# running it, because it looks like an answer.
+# A probe run takes hours on the Chromium tree, and a bare exit code wastes it.
+# A plain tail is not enough: siso prints its spinner and resource table after
+# the compiler error.
 #
-# So the reporting is the part with a test. It is also the part that is easy to
-# get wrong in the direction that hurts: `tail -25` was measured catching the
-# tail of siso's progress spinner and its resource table, with the compiler
-# error a hundred lines above it. See the Build step in .github/workflows/engine.yml,
-# which carries the same scar.
-#
-# Synthetic logs, because the real ones cost four hours and a runner with a 97G
-# checkout. What is synthesized here is only the SHAPE — gn's `ERROR at` block,
-# siso's `stderr:` block, ninja's `FAILED:` line — and the shape is the whole of
-# what the script keys on.
+# The logs are synthetic. They reproduce only the shapes the script keys on:
+# gn's `ERROR at` block, siso's `stderr:` block and ninja's `FAILED:` line.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -64,10 +53,8 @@ noise() { # how many lines of the progress spinner and the resource table
 
 # ---- gn refused the arguments ---------------------------------------------
 #
-# The first thing that can go wrong and the cheapest: `gn gen` stops on an
-# assert before a single translation unit is compiled. What a reader needs is
-# the file and line of the assert and the message inside it — the three lines
-# gn prints and nothing else in the log has.
+# `gn gen` stops on an assert. The report needs the assert's file, line and
+# message.
 GN="$WORK/gn.log"
 {
   echo "Generating files..."
@@ -87,10 +74,8 @@ expect_within "and it is at the top, not behind the noise" 25 \
 
 # ---- siso stopped on a compiler error --------------------------------------
 #
-# THE CASE THIS SCRIPT EXISTS FOR. siso prints the compiler's own words in a
-# `stderr:` block, and then carries on printing the steps that were already in
-# flight, its summary and its resource table — so the diagnostic ends up about
-# a hundred lines above the end of a log that is otherwise all progress.
+# siso prints the compiler's message in a `stderr:` block, then about a
+# hundred more lines of progress.
 SISO="$WORK/siso.log"
 {
   noise 120
@@ -113,23 +98,17 @@ contains "with the file and line it was about" \
   "ui/ozone/platform/drm/gpu/page_flip_watchdog.cc:9:10" "$out"
 contains "and the object that failed to build" \
   "FAILED: obj/ui/ozone/platform/drm/gbm/page_flip_watchdog.o" "$out"
-# A hundred lines of spinner sit between the diagnostic and the end of that
-# log. If the report only tails, the answer is not in it — and the whole point
-# of the probe is that the answer comes back without a second fetch.
+# The probe should return the answer without a second log fetch, so the
+# diagnostic must lead the report.
 expect_within "the diagnostic is at the top of the report, not a tail away" 25 \
   "fatal error: 'ash/constants/ash_switches.h' file not found" "$out"
-# And the tail comes too. This script's header has always said the windows go
-# first and the tail follows "for context rather than instead of them"; the
-# gate that withheld it from every real run contradicted that, so the rule is
-# asserted here rather than left to the comment.
+# The tail follows the windows for context.
 contains "and the tail follows it for context" "-- the last of" "$out"
 
 # ---- a link failure, which has no `stderr:` block at all --------------------
 #
-# A `visibility` refusal and an undefined symbol both arrive as a FAILED: line
-# and lld's own words, with no compiler diagnostic anywhere. A report keyed
-# only on `error:` would come back empty from the two failures this probe is
-# most likely to find.
+# A `visibility` refusal or undefined symbol is a FAILED: line plus lld's
+# message. A report keyed only on compiler `error:` would miss both.
 LINK="$WORK/link.log"
 {
   noise 60
@@ -147,17 +126,12 @@ expect_within "and that too is at the top" 25 \
 
 # ---- the script never ran at all -------------------------------------------
 #
-# The shell around the build has swallowed a command's output before in this
-# repository — twice, in engine.yml's own history — and a report that prints
-# nothing when it recognizes nothing is indistinguishable from a build that
-# passed. It has to say so in its own words and show the log's last lines.
+# A report that prints nothing looks like a passing build. It must say it found
+# nothing and show the last lines.
 #
-# THIS FIXTURE IS THE ONE SHAPE WITH NO `drm probe:` LINE IN IT, and that is
-# the whole of what it stands for: engine-drm-probe.sh prints `configuring
-# out/DrmProbe` before anything can go wrong, so a log without that line is a
-# log whose script never ran. It is NOT the shape of a probe that ran and
-# failed — see the next case, which is, and which this fixture was once
-# mistaken for.
+# This fixture has no `drm probe:` line. engine-drm-probe.sh prints one before
+# anything can fail, so its absence means the script never ran. The next case
+# covers a probe that ran.
 QUIET="$WORK/quiet.log"
 { echo "entering environment"; noise 30; } >"$QUIET"
 out="$("$REPORT" "$QUIET" 2>&1)"
@@ -167,18 +141,10 @@ contains "and shows the last thing that was said" "filler_30.o" "$out"
 
 # ---- a probe that ran, failed, and used none of the markers -----------------
 #
-# THE CASE THE `[ -z "$verdict" ]` GATE MADE UNREACHABLE. Every branch of
-# engine-drm-probe.sh that can fail has already printed `drm probe:
-# configuring out/DrmProbe` by the time it does, so on any run that started at
-# all the verdict is non-empty — and the tail that is supposed to catch a
-# failure none of the markers recognize sat behind exactly that test. The
-# result was a report that brought back neither the error nor a tail nor an
-# alarm, which is the one thing its own header says it exists to prevent.
-#
-# A python action that died is the realistic shape: `gcc_solink_wrapper.py`
-# raising MemoryError writes no `FAILED:`, no `ERROR at `, no `stderr:` and
-# not even an `error:` — `MemoryError` carries no colon. The probe still says
-# it could not build, but what it could not say is why.
+# Once the probe starts, its `drm probe:` lines are always present, so the tail
+# must not depend on their absence. A python action that died (here
+# `gcc_solink_wrapper.py` raising MemoryError) prints no `FAILED:`, `ERROR at`,
+# `stderr:` or `error:`.
 RAW="$WORK/raw.log"
 {
   echo "depot_tools: /build/depot_tools"
@@ -199,23 +165,18 @@ contains "an unrecognized failure comes back in the tail" "MemoryError" "$out"
 contains "with the action that raised it" "gcc_solink_wrapper.py" "$out"
 contains "and the probe's own account of how far it got" \
   "drm probe: building ui/ozone" "$out"
-# The probe ran and said so. Telling a reader the shell never ran the build
-# would send them to the wrong machine — that alarm belongs to the case above
-# and to nothing else.
+# The probe ran, so the report must not say the shell never ran the build.
 lacks "and it does not blame the shell for a probe that plainly ran" \
   "so the shell around it did not run the build" "$out"
 
-# A log that does not exist is not the same as one with nothing in it: the
-# first means the step before never ran, and guessing between them is how a
-# run reports on the previous run's file.
+# A missing log means the previous step never ran; do not treat it as empty.
 out="$("$REPORT" "$WORK/absent.log" 2>&1)"
 contains "a missing log is named as missing" "$WORK/absent.log" "$out"
 
 # ---- bounded ---------------------------------------------------------------
 #
-# A real probe log is hundreds of thousands of lines. A report that prints the
-# whole thing is the same failure as one that prints none of it: the answer is
-# in there and nobody will find it.
+# A real log has hundreds of thousands of lines, so the report must be
+# bounded.
 BIG="$WORK/big.log"
 { noise 20000; echo "ninja: build stopped: subcommand failed."; } >"$BIG"
 lines="$("$REPORT" "$BIG" 2>&1 | wc -l)"
@@ -228,12 +189,8 @@ fi
 
 # ---- a stage after ui/ozone fails -------------------------------------------
 #
-# The tail used to be withheld by `drm probe: ui/ozone built`, which was the
-# last thing the probe did. It is not any more: the probe builds
-# `ozone_unittests` after it, so a log can carry that line and still be a
-# failure. Gated on the old sentinel, this shape came back with its windows and
-# no tail -- and for the MemoryError class of failure, which has no windows at
-# all, with nothing whatsoever.
+# The probe builds `ozone_unittests` after `ui/ozone built`, so that line does
+# not mean success.
 STAGE="$WORK/stage.log"
 {
   echo "drm probe: configuring out/DrmProbe"
@@ -255,8 +212,7 @@ contains "and is not treated as a success because ui/ozone built" \
   "-- the last of" "$out"
 contains "and says how far the probe got" "drm probe: building ozone_unittests" "$out"
 
-# The same shape with nothing the windows can key on, which is where the old
-# gate did the real damage: no `FAILED:`, no `error:`, no `stderr:`.
+# The same, with nothing for the windows to match.
 QUIET="$WORK/quiet-stage.log"
 {
   echo "drm probe: configuring out/DrmProbe"
@@ -271,9 +227,7 @@ contains "a quiet failure after ui/ozone still comes back in the tail" \
 
 # ---- a clean log ------------------------------------------------------------
 #
-# The probe's own verdict line, which is the answer when it works. The report
-# runs on success too — a green run that says nothing about what it configured
-# is a green run nobody can cite.
+# The report runs on success too, so a green run can be cited.
 OK="$WORK/ok.log"
 {
   noise 50
@@ -286,8 +240,7 @@ contains "a clean log reports the verdict line" "drm probe: ui/ozone built" "$ou
 contains "and the last one, which is what says it finished" \
   "drm probe: ozone_unittests built" "$out"
 lacks "and invents no failure" "nothing in the log looks like a failure" "$out"
-# The other direction of the fix above: a tail printed under a success reads
-# as one, so widening the tail must not widen it onto a green run.
+# A tail under a success would read as a failure.
 lacks "and a run that got there needs no tail" "-- the last of" "$out"
 
 if [ "$FAILED" -gt 0 ]; then

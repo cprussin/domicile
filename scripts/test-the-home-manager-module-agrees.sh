@@ -1,36 +1,18 @@
 #!/usr/bin/env bash
-# The config schema, written down twice, compared.
+# Tests that `nix/home-manager.nix` declares the same config fields that
+# `packages/domicile-config/src/` parses.
 #
-# `nix/home-manager.nix` declares an option for every field of the config file
-# so that a desk can be described in Nix with documentation and type checking.
-# `packages/domicile-config/src/` is what actually parses that file. They are
-# two spellings of one schema and nothing but this compares them.
+# Drift in each direction costs differently:
 #
-# WHAT DRIFT COSTS, and it is not symmetrical.
+# - A field Rust parses but the module lacks still passes through the freeform
+#   `settings`, but without docs, types or the module's default.
+# - A field the module writes but Rust lacks breaks the whole file: every
+#   config struct is `deny_unknown_fields`, so domicile rejects the config and
+#   starts on defaults.
 #
-#   A FIELD THE RUST HAS AND THE MODULE DOES NOT is the mild direction:
-#   `settings` is freeform, so it still passes through -- undocumented,
-#   untyped, and with the module's own default silently absent. Worth
-#   catching, not worth panicking about.
-#
-#   A FIELD THE MODULE HAS AND THE RUST DOES NOT is the bad one. Every struct
-#   in that crate is `deny_unknown_fields`, so a key this module writes and
-#   domicile does not know REFUSES THE WHOLE FILE -- every profile, the
-#   keyboard, all of it -- and the desk comes up on the defaults. One renamed
-#   field on either side does that, and the person who renamed it is not the
-#   person whose desk stops working.
-#
-# So this compares the sets both ways and says which direction it found.
-#
-# BUILDLESS ON PURPOSE, like its two siblings over the cursor shapes and the
-# display transforms. There is no nix in a Claude web session and the module
-# is not built by `cargo test` or `turbo test`; without this the first thing
-# to notice a rename is somebody's `home-manager switch`.
-#
-# It compares NAMES AND NOT TYPES. A field that stayed and changed shape --
-# `scale` going from an integer to a float, a pair becoming a struct -- passes
-# here and is caught by `nix flake check`, which evaluates the module against
-# a real configuration. This is the half that needs no nix, not the whole job.
+# Needs no Nix, like the cursor shape and display transform checks, so it runs
+# where `nix` is unavailable. It compares names only; `nix flake check` catches
+# type changes.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -46,8 +28,7 @@ WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
 # The `pub` fields of one `#[serde]` struct, which are the keys it accepts.
-# Sorted, because neither side's order is meaningful here -- unlike the
-# transform lists next door, where the mojom numbers by position.
+# Sorted, because order does not matter here.
 rust_fields() { # file, struct name
   awk -v want="pub struct $2 {" '
     index($0, want) { inside = 1; next }
@@ -60,12 +41,11 @@ rust_fields() { # file, struct name
 
 # The options declared directly inside one block of the module.
 #
-# The block opens at a line the caller names and ends at the first line that
-# closes back to that line's own indent, which is what keeps `input.keyboard`
-# from running on into `output` beside it. `indent` says how deep this block's
-# own options sit -- one level in for a plain attrset, two for a submodule,
-# whose options are inside an `options = {` of their own. Anything deeper
-# belongs to a nested submodule and is that block's business.
+# The block starts at the line matching the pattern and ends at the first line
+# that closes back to its indent, so `input.keyboard` does not run into
+# `output`. `indent` is the depth of the block's options: one level for a plain
+# attrset, two for a submodule's `options = {`. Deeper options belong to a
+# nested submodule.
 nix_options() { # opening line pattern, indent of the options
   awk -v open="$1" -v ind="$2" '
     !inside && $0 ~ open {
@@ -86,9 +66,8 @@ compare() { # what, rust file, rust struct, nix open pattern, nix indent
   rust_fields "$2" "$3" >"$WORK/rust"
   nix_options "$4" "$5" >"$WORK/nix"
 
-  # A pattern that stopped matching reads as an empty set, and two empty sets
-  # compare equal -- this script failing open, which is the shape of bug it
-  # exists to catch one level up. So both sides are counted first.
+  # A pattern that stops matching gives an empty set, and two empty sets
+  # compare equal. So both sides must be non-empty.
   for side in rust nix; do
     n="$(wc -l <"$WORK/$side" | tr -d ' ')"
     if [ "$n" -lt 1 ]; then
@@ -117,9 +96,9 @@ compare() { # what, rust file, rust struct, nix open pattern, nix indent
   FAILED=$((FAILED + 1))
 }
 
-# `input.keyboard` and `output` are plain attrsets in the settings tree, so
-# their options are one level in. The three submodules bound in the `let` hold
-# theirs inside an `options = {`, which is one level deeper again.
+# `input.keyboard` and `output` are plain attrsets, so their options are one
+# level in. The three submodules in the `let` hold theirs in an
+# `options = {`, one level deeper.
 compare "extensions" "$LIB" ExtensionsConfig '^          extensions = \{$' '            '
 compare "idle" "$LIB" IdleConfig '^          idle = \{$' '            '
 compare "lock" "$LIB" LockConfig '^          lock = \{$' '            '
@@ -129,10 +108,8 @@ compare "output.displays[]" "$LIB" DisplayConfig '^  display = lib\.types\.submo
 compare "output.profiles[]" "$PROFILE" Profile '^  profile = lib\.types\.submodule \{$' '      '
 compare "output.profiles[].displays[]" "$PROFILE" DisplayPlacement '^  placement = lib\.types\.submodule \{$' '      '
 
-# `compositor` is gone from the schema -- its one field was a startup
-# placeholder rather than a setting -- so the agreement to check is the
-# absence. A module that declares one again writes a section `Config` denies,
-# and every desk built from it would fail to parse at startup rather than here.
+# The schema has no `compositor` section. A module that declares one would
+# write a section `Config` rejects, failing every desk at startup.
 if grep -q '^          compositor\.' "$MODULE"; then
   printf '  FAIL  compositor: the module declares a section the schema dropped\n'
   FAILED=$((FAILED + 1))

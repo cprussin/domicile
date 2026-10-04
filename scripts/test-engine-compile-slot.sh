@@ -1,13 +1,10 @@
 #!/usr/bin/env bash
-# The compile slot's one job: two Chromium compiles never run at once.
+# Tests `engine-compile-slot.sh`, which keeps two Chromium compiles from
+# running at once on `crux` (62G, no swap).
 #
-# The pool lets two runs hold two trees, which is the point of it. What it does
-# not give them is a second machine: `crux` has 62G and no swap, and two cold
-# Chromium builds in it is an OOM on the machine that serves the house its DNS.
-#
-# So the parts worth a test are the ones that make it a queue rather than a
-# crash: whether a second taker is refused, and whether the unconditional
-# `drop` at the end of a job can release somebody else's.
+# The tree pool allows two runs two trees, but two cold builds run out of
+# memory. The slot must queue a second taker, and the unconditional `drop` at
+# the end of a job must not release another run's slot.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -19,8 +16,8 @@ trap 'rm -rf "$WORK"' EXIT
 export DOMICILE_COMPILE_SLOT="$WORK/slot"
 # No waiting unless a case asks for it.
 export DOMICILE_COMPILE_SLOT_WAIT=0 DOMICILE_COMPILE_SLOT_POLL=0.1 DOMICILE_COMPILE_SLOT_RECHECK=0
-# A person's build unless a case says otherwise: on a runner every taker would
-# be that runner, and the cases below are about two different holders.
+# Cases act as a person's build unless they set RUNNER_NAME, since every taker
+# on one runner would share a name.
 unset RUNNER_NAME
 
 FAILED=0
@@ -50,9 +47,8 @@ slot() { # subcommand, owner
   fi
 }
 status() { printf '%s\n' "$1" | head -1; }
-# A waiter runs in the background, and a busy runner can take longer than any
-# fixed sleep to start it. So ask until it says it is waiting, for no longer
-# than the waiter itself waits.
+# A background waiter may start slowly on a busy runner, so poll until it is
+# waiting, bounded by the waiter's own timeout.
 until_wanted() { # holder; says what the last `wanted` said
   local out tries=0
   until out="$(slot wanted "$1")"; [ "$(status "$out")" = ok ] || [ "$tries" -ge 20 ]; do
@@ -73,10 +69,8 @@ contains "the refusal says to re-run" "re-run" "$held"
 contains "the refusal prints the command that clears a stale slot" \
   "rm -rf $WORK/slot" "$held"
 
-# THE CASE THAT MAKES `drop` A CHECK RATHER THAN AN `rm`. The drop step is
-# `if: always()`, so it also runs on the path where TAKING the slot is what
-# failed -- and an unconditional remove there lets a third run start compiling
-# beside the holder, which is the OOM this exists to prevent.
+# The drop step runs under `if: always()`, including when taking the slot
+# failed. A plain `rm` there would let a third run compile beside the holder.
 slot drop bob >/dev/null
 expect "a run that does not hold it cannot drop it" ok "$(status "$(slot who)")"
 contains "and it is still alice's" "'alice'" "$(slot who)"
@@ -85,21 +79,20 @@ expect "the holder can drop it" ok "$(status "$(slot drop alice)")"
 contains "and then nothing holds it" "nobody is compiling" "$(slot who)"
 expect "the slot can be taken again" ok "$(status "$(slot take carol)")"
 
-# Dropping nothing is not a failure: the `always()` step also runs on the path
-# where the job failed before the slot was ever taken, and on every warm run,
-# which never takes it at all.
+# The `always()` step also runs when the slot was never taken: an early failure
+# or any warm run.
 slot drop carol >/dev/null
 expect "dropping a free slot is a no-op, not an error" ok \
   "$(status "$(slot drop carol)")"
 
-# AGE, IN THE UNITS THAT DECIDE. Four hours is a build; fourteen is a run that
-# died and left this behind.
+# Age is shown in hours and minutes so a person can tell a build (4h) from a
+# dead run (14h).
 slot take dave >/dev/null
 echo "$(( $(date +%s) - 40200 ))" >"$WORK/slot/since"
 contains "an old slot reads in hours and minutes" "held for 11h 10m" "$(slot who)"
 
-# NOTHING STEALS IT ON A GUESS. A confident wrong age invites clearing a slot
-# whose holder is still linking, so an unreadable timestamp says so instead.
+# A wrong age invites clearing a slot whose holder is still linking, so an
+# unreadable timestamp reports "unknown age".
 echo "not a number" >"$WORK/slot/since"
 contains "a corrupt timestamp is unknown, not nonsense" "unknown age" "$(slot who)"
 rm -f "$WORK/slot/since"
@@ -114,8 +107,7 @@ contains "a slot with no name in it still refuses a taker" \
 slot drop "" >/dev/null 2>&1
 contains "and an empty owner cannot claim it" "is being compiled here by" "$(slot who)"
 
-# IT WAITS FOR A HOLDER THAT FINISHES, now that a cached compile is minutes:
-# refusing turned every overlap of two engine PRs into a red job to re-run.
+# A taker waits for the holder to finish, since a cached compile takes minutes.
 rm -rf "$WORK/slot"
 slot take frank >/dev/null
 ( sleep 0.5; slot drop frank >/dev/null ) &
@@ -129,13 +121,11 @@ expect "and still refuses one that outlasts the wait" refused "$(status "$waited
 contains "saying how long it waited" "waited 1s" "$waited"
 slot drop heidi >/dev/null
 
-# A WAIT THAT CAN OUTLAST A COLD REPIN is hours of one log line, so it says
-# when the slot changes hands: a holder that finished and another run that got
-# there first reads differently from one holder that never moves.
+# A wait can last hours, so it logs each change of holder.
 rm -rf "$WORK/slot"
 slot take judy >/dev/null
-# Handed straight to mallory rather than dropped and retaken: between a drop and
-# a take the slot is free, and a busy runner gives niaj's poll time to take it.
+# Hand the slot directly to mallory: a drop then take leaves a gap that niaj
+# could fill.
 ( sleep 0.5; echo mallory >"$WORK/slot/owner.new"
   mv "$WORK/slot/owner.new" "$WORK/slot/owner"
   sleep 0.5; slot drop mallory >/dev/null ) &
@@ -146,10 +136,9 @@ contains "and says it was waiting on the first" "'judy'" "$waited"
 contains "and on the second" "'mallory'" "$waited"
 slot drop niaj >/dev/null
 
-# A WAITER WHOSE COMMIT HAS BEEN REPLACED STOPS WAITING. The wait can outlast a
-# cold repin, and a run for a commit its branch has moved past holds a `crux`
-# runner that whole time for a result nobody will read. The workflow says what
-# "still wanted" means; this only asks it while waiting.
+# A waiter whose commit was replaced stops waiting, so it does not hold a
+# `crux` runner for nothing. The workflow defines "still wanted"; this only
+# asks.
 rm -rf "$WORK/slot"
 slot take oscar >/dev/null
 : >"$WORK/output"
@@ -162,16 +151,14 @@ expect "before its wait runs out" early "$r"
 expect "and tells the workflow it was superseded" "superseded=true" "$(cat "$WORK/output")"
 contains "without touching the holder's slot" "'oscar'" "$(slot who)"
 
-# A check that cannot answer is not a verdict: a flaky network must not end a
-# wanted run's wait. It keeps waiting and asks again.
+# A check that cannot answer (exit 3) does not end the wait.
 kept="$(DOMICILE_COMPILE_SLOT_WAIT=1 \
   DOMICILE_COMPILE_SLOT_STILL_WANTED='echo "no route to origin"; exit 3' slot take quentin)"
 contains "a check that errors does not end the wait" "waited 1s" "$kept"
 contains "but says it could not ask" "no route to origin" "$kept"
 
-# AND ONCE BEFORE TAKING A FREE SLOT. engine.yml queues a compiling run on
-# GitHub rather than here, so the long wait can end with the slot free and the
-# commit replaced; the question is asked where that wait ends.
+# engine.yml queues compiling runs on GitHub, so the commit may be replaced by
+# the time the slot is free. The check also runs before taking a free slot.
 free="$WORK/free-slot"
 : >"$WORK/output"
 gone="$(DOMICILE_COMPILE_SLOT="$free" GITHUB_OUTPUT="$WORK/output" \
@@ -190,11 +177,8 @@ expect "a waiter that is still wanted takes the slot when it frees" ok \
 wait
 slot drop rupert >/dev/null
 
-# A HOLDER WHOSE RUN IS OVER IS NOT HOLDING ANYTHING. A runner that was shut
-# down mid-build never runs its drop, and until today only that same runner
-# could clear what it left: run 36923792412's slot, left on crux-two at 13:55
-# PT, held crux's next build in its wait for hours while crux-two sat free.
-# The workflow says how to ask whether the holder's run is over; HOLDER names it.
+# A runner shut down mid-build never runs its drop. A waiter clears the slot
+# when the workflow's check (given HOLDER) says the holder's run is over.
 rm -rf "$WORK/slot" "$WORK/slot.waiting"
 slot take 'engine.yml run 111 attempt 1' >/dev/null
 took="$(DOMICILE_COMPILE_SLOT_WAIT=30 \
@@ -204,9 +188,8 @@ expect "a waiter takes the slot from a holder whose run is over" ok "$(status "$
 contains "saying whose and why" "run 111 is completed" "$took"
 slot drop 'engine.yml run 222 attempt 1' >/dev/null
 
-# Only on a yes. A run still in progress may be linking, and clearing the slot
-# under it is the OOM this exists to prevent; an answer that is not a yes is
-# not a no either, and leaves the holder alone.
+# Only on a yes: a running holder may be linking. Any other answer leaves the
+# holder alone.
 slot take 'engine.yml run 333 attempt 1' >/dev/null
 for verdict in 'exit 1' 'echo "no route"; exit 3'; do
   out="$(DOMICILE_COMPILE_SLOT_WAIT=1 DOMICILE_COMPILE_SLOT_HOLDER_DONE="$verdict" \
@@ -216,10 +199,8 @@ done
 contains "and still holds it" "run 333" "$(slot who)"
 slot drop 'engine.yml run 333 attempt 1' >/dev/null
 
-# A HOLDER CAN SEE SOMEBODY WAITING, AND STEP ASIDE FOR THEM. The production
-# build holds the slot for hours; a pull request's minute-long compile should
-# not queue behind it. So a waiter says it is waiting, and a holder that is
-# willing to be interrupted asks.
+# A waiter announces itself, and a holder willing to be interrupted can yield.
+# A pull request's short compile then need not wait behind a production build.
 rm -rf "$WORK/slot" "$WORK/slot.waiting"
 slot take victor >/dev/null
 expect "nobody waiting is not wanted" refused "$(status "$(slot wanted victor)")"
@@ -231,18 +212,16 @@ wait
 expect "a waiter that gave up no longer wants it" refused \
   "$(status "$(slot wanted victor)")"
 
-# A WAITER THAT DIED leaves its note behind, and a holder that yields to a
-# ghost yields for ever. Only a note refreshed recently counts.
+# A dead waiter leaves its note behind. Only a recently refreshed note counts.
 mkdir -p "$WORK/slot.waiting"
 echo "a run that was killed" >"$WORK/slot.waiting/ghost"
 touch -d '10 minutes ago' "$WORK/slot.waiting/ghost"
 expect "a waiter that stopped refreshing is not wanted" refused \
   "$(status "$(slot wanted victor)")"
 
-# A NOTE IS NEVER READ HALF-WRITTEN. A waiter rewrites it every poll, and a
-# holder that read a name with no rank under it would yield to a waiter it
-# outranks; one that read nothing would miss it. So read it while it is
-# rewritten as fast as it can be, then free the slot to end the wait.
+# A waiter rewrites its note every poll. A partial read would make a holder
+# yield to a waiter it outranks, or miss it. Read it repeatedly while it is
+# rewritten as fast as possible, then free the slot to end the wait.
 ( DOMICILE_COMPILE_SLOT_RANK=1 DOMICILE_COMPILE_SLOT_WAIT=5 DOMICILE_COMPILE_SLOT_POLL=0 \
     slot take tom >/dev/null ) &
 tom="$WORK/slot.waiting/$(printf tom | sha256sum | cut -d' ' -f1)"
@@ -258,13 +237,13 @@ slot drop victor >/dev/null
 wait
 slot drop tom >/dev/null
 slot take victor >/dev/null
-# Nor is the one being written beside it until it is renamed over it.
+# A note is not read until it is renamed into place.
 printf 'tom\n' >"$tom.tmp"
 expect "a note still being written is not a waiter" refused \
   "$(status "$(slot wanted victor)")"
 rm -f "$tom.tmp"
 
-# Yielding hands the slot to the waiter rather than racing it for the slot.
+# Yielding hands the slot to the waiter instead of racing it.
 ( DOMICILE_COMPILE_SLOT_WAIT=5 slot take wendy >/dev/null; sleep 1 ) &
 until_wanted victor >/dev/null
 expect "the holder yields" ok "$(status "$(slot yield victor)")"
@@ -277,14 +256,12 @@ expect "a yield with nobody waiting just drops" ok \
 contains "and leaves it free" "nobody is compiling" "$(slot who)"
 expect "only the holder can yield" refused "$(status "$(slot yield xavier)")"
 
-# A HOLDER WITH A RANK YIELDS ONLY TO A HIGHER ONE. engine.yml's cold build
-# steps aside for a warm compile, and engine-release.yml's steps aside for
-# both. Two holders that each yielded to the other would hand the slot back
-# and forth, killing both builds every poll. Unranked is the highest: a waiter
-# that says nothing is a compile that never steps aside.
+# A ranked holder yields only to a higher rank, or two holders would hand the
+# slot back and forth. engine.yml's cold build yields to a warm compile, and
+# engine-release.yml yields to both. Unranked is highest.
 rm -rf "$WORK/slot" "$WORK/slot.waiting"
 slot take victor >/dev/null
-# Waiting long enough for all three questions below on a busy runner.
+# Long enough for all three checks below on a busy runner.
 ( DOMICILE_COMPILE_SLOT_RANK=1 DOMICILE_COMPILE_SLOT_WAIT=5 slot take walter >/dev/null ) &
 until_wanted victor >/dev/null
 expect "a rank-1 holder does not yield to a rank-1 waiter" refused \
@@ -301,11 +278,9 @@ expect "a rank-1 holder yields to an unranked waiter" ok \
 wait
 slot drop victor >/dev/null
 
-# A HOLD LEFT BY A RUNNER'S LAST JOB IS DEAD. A runner runs one job at a time
-# and kills what that job left running before the next, so a runner taking the
-# slot from a holder on that same runner is taking it from a job that is over:
-# on 2026-09-28 a runner restart skipped the `always()` drop and every compile
-# waited ten hours behind it. Any other holder is still refused.
+# A runner runs one job at a time and kills leftovers, so a hold left on the
+# same runner belongs to a finished job (a runner restart can skip the
+# `always()` drop). Any other holder is still refused.
 rm -rf "$WORK/slot" "$WORK/slot.waiting"
 RUNNER_NAME=crux-two slot take yvonne >/dev/null
 expect "a holder on another runner is refused" refused \
@@ -320,9 +295,8 @@ expect "a runner never clears a person's build" refused \
   "$(status "$(RUNNER_NAME=crux-two slot take dot)")"
 slot drop cyd >/dev/null
 
-# WHETHER A RUN WILL COMPILE. A tree can carry the series while its
-# out/Release is cold -- built under other args, or never -- and a cold build
-# without the slot is the OOM. Only a build of exactly these inputs is warm.
+# A tree can carry the series with a cold out/Release, and a cold build without
+# the slot runs out of memory. Only a build of these exact inputs is warm.
 export DOMICILE_BUILT_STAMP="$WORK/built"
 export DOMICILE_SERIES_STAMP="$WORK/series-stamp"
 echo "series A over commit 1" >"$DOMICILE_SERIES_STAMP"
@@ -336,7 +310,7 @@ warm() {
 expect "a tree never built here is cold" false "$(warm)"
 "$SLOT_SH" built "$WORK/tree/src" >/dev/null 2>&1
 expect "a tree just built from these inputs is warm" true "$(warm)"
-# The same series re-applied is a new commit, and its build may have died.
+# Re-applying the series makes a new commit, and its build may have died.
 echo "series A over commit 2" >"$DOMICILE_SERIES_STAMP"
 expect "a tree re-applied since its last build is cold" false "$(warm)"
 "$SLOT_SH" built "$WORK/tree/src" >/dev/null 2>&1

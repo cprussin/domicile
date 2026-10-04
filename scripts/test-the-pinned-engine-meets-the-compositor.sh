@@ -1,39 +1,25 @@
 #!/usr/bin/env bash
-# Whether anything checks that the engine `main` PINS satisfies the compositor
-# `main` BUILDS.
+# Tests that a CI job checks the engine `main` pins against the compositor
+# `main` builds.
 #
-# #411 landed both halves of a display-protocol change — a `name` on the
-# engine's C ABI display record, and a compositor that asserts the pointer is
-# non-null — while `engine-release.nix` still pinned `engine-f38ef3f`, whose
-# `DomicileDisplay` is 40 bytes to the new one's 48 and has no name field at
-# all. The compositor read a name out of the old struct's `x` and `y`, which
-# for a display at the origin are zero, and aborted inside an `extern "C"`
-# callback that cannot unwind:
+# Without this job, an ABI change can land with the pin still on an older
+# engine. In #411 the compositor read a display `name` the pinned engine's
+# 40-byte `DomicileDisplay` did not have, and aborted:
 #
 #   the engine names every display, even if it names it nothing
 #   domicile: the compositor exited (signal: 6 (SIGABRT) (core dumped))
 #
-# CI was green on that pull request and on every commit after it, because no
-# check put the two halves in one process. `nix-build.yml` builds the flake and
-# never starts a desktop; `engine.yml`'s pixel guard runs the engine it just
-# built out of `patches/`, never the tarball a user downloads. The gap is
-# recorded in #413, and the repin that ended the incident (#415) says the fix
-# is this job.
+# `nix-build.yml` never starts a desktop, and `engine.yml` guards the engine it
+# builds from `patches/`, not the published tarball (#413, #415).
 #
-# WHAT THIS FILE ASSERTS IS THAT THE JOB IS STILL THE CHEAP ONE. The check it
-# runs is `scripts/engine-guard-client-window.sh`, which is one of the twenty
-# `check.sh engine` runs against the tree engine.yml builds, and the difference
-# — the only difference that makes this affordable — is where the engine comes
-# from: `nix build .#engine` is a fetch of the pinned tarball and an
-# `autoPatchelfHook` over it, not a Chromium build. A job that reached for
-# `/build/chromium/src` instead would be the 27-minute queue on `crux`'s one
-# slot, on every pull request, and this check would cost more than it saves.
+# This file asserts that the job:
 #
-# AND THAT IT RUNS ON EVERYTHING. Three separate changes can break this pair
-# and only one of them is a repin: the compositor's side of the ABI
-# (`packages/domicile-compositor/src/engine.rs`), the header the two agree on,
-# and the pin itself. A `paths:` filter narrow enough to be tempting would let
-# #411 through again — it changed the compositor and the fork, and not the pin.
+# - Stays cheap. It runs `scripts/engine-guard-client-window.sh` against
+#   `nix build .#engine`, which fetches the pinned tarball and patches it. It
+#   must not build Chromium on `crux`'s single slot.
+# - Runs on every change. The compositor side
+#   (`packages/domicile-compositor/src/engine.rs`), the shared header and the
+#   pin can each break the pair, so no `paths:` filter.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -47,21 +33,13 @@ fail() {
   FAILED=$((FAILED + 1))
 }
 
-# The workflow by what it does rather than by its name: the subject here is
-# "something builds the pinned engine and guards it", and a rename should move
-# this file's attention rather than turn it into a green no-op.
+# Finds the workflow by what it does, so a rename does not make this pass
+# trivially.
 #
-# Comments are skipped, because `engine.yml` and `engine-release.yml` both
-# mention `nix build .#engine` in prose — they are the two jobs that explain why
-# they do NOT do this — and a comment is not a step.
-#
-# By WHOLE-LINE comment, not by "nothing before a `#`", which is what this used
-# to say. That became too strict the moment the guard moved into a script: the
-# step now reads `nix develop .#full --command
-# ./scripts/engine-guard-client-window.sh`, and `[^#]*` cannot cross the `#` in
-# `.#full`, so the one workflow that does this stopped matching and the rule
-# reported that nothing checked the pin at all. A green no-op in the other
-# direction, and the reason the count below is asserted to be exactly one.
+# Whole-line comments are skipped: `engine.yml` and `engine-release.yml`
+# mention `nix build .#engine` in comments. Only whole-line comments, because
+# the step contains `nix develop .#full`, whose `#` is not a comment. The
+# count is asserted to be one, so a pattern that matches nothing fails.
 GUARDS=""
 for workflow in "$WORKFLOWS"/*.yml; do
   code="$(grep -v '^[[:space:]]*#' "$workflow")"
@@ -84,10 +62,8 @@ ok "$NAME runs the pixel guard against the pinned engine"
 
 # --- it is the cheap one ----------------------------------------------------
 
-# `nix build .#engine` is `fetchurl` of the url and hash in
-# `engine-release.nix` and `autoPatchelfHook` over what comes out. It is the
-# only way to get the bytes a user gets; a checkout build is a different
-# binary, however carefully configured.
+# `nix build .#engine` fetches the url and hash in `engine-release.nix` and
+# runs `autoPatchelfHook`. Only that gives the bytes a user gets.
 if grep -qE 'nix build[^|&;]*\.#engine' "$WORKFLOW"; then
   ok "it fetches the pinned engine rather than building one"
 else
@@ -95,12 +71,10 @@ else
     "no 'nix build ... .#engine' in $NAME"
 fi
 
-# THE ASSERTION THIS FILE EXISTS FOR, and the one a plausible wrong version of
-# this job fails: the guard has to be pointed at what that build wrote. A job
-# that fetched the tarball and then ran the guard against `out/Domicile` would
-# satisfy every other rule here and prove nothing at all. Read as "the shell
-# variable the `.#engine` build was captured into is the argument the guard
-# gets", so it holds whatever the variable is called.
+# The guard must run against what that build wrote. A job that fetched the
+# tarball and guarded `out/Domicile` would pass every other rule here. Checks
+# that the variable holding the `.#engine` output is passed to the guard,
+# whatever it is called.
 engine_var="$(grep -oE '[A-Za-z_][A-Za-z0-9_]*="\$\(nix build[^)]*\.#engine[^)]*\)"' \
                 "$WORKFLOW" | head -1 | sed 's/=.*//')"
 if [ -z "$engine_var" ]; then
@@ -113,10 +87,9 @@ else
     "\$$engine_var holds the store path, and DOMICILE_CHROMIUM is not set to it — see scripts/lib/engine-guard.sh for the two variables that decide which build a check reads"
 fi
 
-# The store path is a Chromium `out` directory with nothing above it, so the
-# guard has to be told that its OUT is the directory itself. Unset, it looks
-# for `out/Domicile/chrome` under the store path and reports a missing engine —
-# which is a red job for the wrong reason, on the slot.
+# The store path is a Chromium `out` directory itself. Without
+# `DOMICILE_ENGINE_OUT=.` the guard looks for `out/Domicile/chrome` under it
+# and reports a missing engine.
 if grep -qE 'DOMICILE_ENGINE_OUT=\.( |$)' "$WORKFLOW"; then
   ok "the guard is told the store path is the out directory"
 else
@@ -124,17 +97,15 @@ else
     "no 'DOMICILE_ENGINE_OUT=.' in $NAME, so the guard looks for out/Domicile inside the store path"
 fi
 
-# Not a nicety: `--ozone-platform=headless` cannot import a dmabuf at all
+# `--ozone-platform=headless` cannot import a dmabuf
 # (HeadlessSurfaceFactory has no CreateNativePixmapFromHandle), so the guard
-# runs the engine under a nested wlroots compositor built on a render node.
-# See under-wayland.sh's own header and AGENTS.md's "Three things this cannot
-# reach".
+# runs the engine under a nested wlroots compositor on a render node. See
+# under-wayland.sh and AGENTS.md's "Three things this cannot reach".
 #
-# Asked of the check rather than of the workflow, because that is where it is
-# decided now: `scripts/engine-guard-client-window.sh` reaches
-# `engine_guard_and_control_under_wayland`, and the wrapper is in
-# `scripts/lib/engine-guard.sh`. Both halves are asserted, since a check naming
-# a helper the library does not define would pass a grep for either one alone.
+# The check script decides this: `scripts/engine-guard-client-window.sh` calls
+# `engine_guard_and_control_under_wayland`, defined in
+# `scripts/lib/engine-guard.sh`. Both are checked, so a call to an undefined
+# helper fails.
 CHECK="$ROOT/scripts/engine-guard-client-window.sh"
 LIB="$ROOT/scripts/lib/engine-guard.sh"
 if grep -q 'engine_guard_and_control_under_wayland' "$CHECK" 2>/dev/null &&
@@ -145,9 +116,8 @@ else
     "scripts/engine-guard-client-window.sh does not reach under-wayland.sh through scripts/lib/engine-guard.sh"
 fi
 
-# And a render node is hardware. `crux` is the only runner that has one;
-# AGENTS.md says no runner reaches the dmabuf import, which is why
-# `e2e-dmabuf.sh` is the one skip CI allows.
+# A render node needs hardware, and only `crux` has one. AGENTS.md lists the
+# dmabuf import as unreachable on other runners.
 if grep -q 'self-hosted, *crux' "$WORKFLOW"; then
   ok "it asks for the machine with a render node"
 else
@@ -155,9 +125,7 @@ else
     "$NAME does not run on [self-hosted, crux], so the dmabuf import cannot happen"
 fi
 
-# The other half of the pair. The pinned engine is only interesting against the
-# compositor in THIS checkout — that is the whole question — so the compositor
-# has to be built here rather than taken from anywhere else.
+# The compositor must be built from this checkout; that is the pair under test.
 if grep -q 'cargo build -p domicile-compositor' "$WORKFLOW"; then
   ok "the compositor it runs is the one in the checkout"
 else
@@ -165,10 +133,8 @@ else
     "$NAME never builds domicile-compositor, so what it guards against is not this tree"
 fi
 
-# THE COST CEILING. Every one of these is a step of engine.yml or
-# engine-release.yml, and any of them here would mean this job takes the shared
-# Chromium tree — the thing that makes those two hours long and the reason this
-# one can run on every pull request.
+# Any of these steps would make this job use the shared Chromium tree, which
+# makes engine.yml and engine-release.yml take hours.
 for expensive in engine-reset.sh apply.sh autoninja /build/chromium \
                  engine-tree-lock.sh engine-tree-pool.sh engine-compile-slot.sh; do
   if grep -qF "$expensive" "$WORKFLOW"; then
@@ -181,9 +147,9 @@ done
 
 # --- it runs on everything --------------------------------------------------
 
-# A `paths:` filter anywhere in the trigger block. #411 changed the compositor
-# and the fork's header and left the pin alone; a filter keyed on
-# `engine-release.nix` would have skipped exactly the change that broke main.
+# No `paths:` filter in the trigger block. #411 changed the compositor and the
+# fork's header but not the pin, so a filter on `engine-release.nix` would
+# have skipped it.
 on_block="$(awk '/^on:/ { inside = 1; next }
                  inside && /^[^[:space:]]/ { inside = 0 }
                  inside { print }' "$WORKFLOW")"
@@ -205,11 +171,9 @@ done
 
 # --- and it is not the expensive job wearing a new name ---------------------
 
-# The instruction this work came with, asserted rather than remembered:
-# `engine.yml` is gated on `packages/domicile-engine/**`, so a guard living
-# there would put a 27-minute Chromium build in front of every change to it.
-# It also answers a different question — that the engine built from `patches/`
-# passes — and a job cannot be both.
+# `engine.yml` is gated on `packages/domicile-engine/**` and builds Chromium,
+# so this guard must not live there. It also answers a different question:
+# whether the engine built from `patches/` passes.
 if grep -qE 'nix build[^|&;]*\.#engine' "$WORKFLOWS/engine.yml"; then
   fail "the fresh-build guard is still a separate question" \
     "engine.yml now builds .#engine too, so the pinned-engine check sits behind its path filter and its Chromium build"

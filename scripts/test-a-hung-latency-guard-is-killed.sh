@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
-# The latency guard's measurement is timed like every other engine check.
+# Checks the latency guard's measurement has a timeout.
 #
-# `check.sh` runs every engine check but latency under `timeout`, because
-# latency's own wait for a quiet machine is meant to be long. What follows that
-# wait was untimed: a measurement that never returned held a crux runner for
-# the job's twelve hours and the card until another run stole it. So the timer
-# starts once the card is taken, and covers the guard and its control alike.
+# `check.sh` does not time the latency guard, because its wait for a quiet
+# machine is meant to be long. The timer starts once the render node is taken
+# and covers the guard and its control, so a hung measurement cannot hold a
+# `crux` runner and the render node.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -18,9 +17,8 @@ FAILED=0
 ok() { printf '  ok    %s\n' "$1"; }
 fail() { printf '  FAIL  %s\n    %s\n' "$1" "$2"; FAILED=$((FAILED + 1)); }
 
-# A repository holding the latency guard, the lock it takes and the library it
-# runs through, with a stand-in for under-wayland.sh: a measurement that starts
-# a child and then waits on a browser that never answers.
+# A repo with the latency guard, its lock and its library. The
+# under-wayland.sh stub starts a child and then hangs.
 REPO="$WORK/repo"
 mkdir -p "$REPO/scripts/lib" "$REPO/.github/scripts" \
   "$REPO/packages/domicile-engine/scripts" "$WORK/chromium/out/Domicile"
@@ -52,7 +50,7 @@ took=$(($(date +%s) - started))
 grep -q "ran past 2s" "$WORK/out" && grep -q "waiting on a browser" "$WORK/out" &&
   ok "saying it timed out, beside its own log" ||
   fail "saying it timed out, beside its own log" "$(cat "$WORK/out")"
-# Dead or a zombie: a container whose init reaps nothing keeps the second.
+# Dead or a zombie: a container whose init reaps nothing leaves zombies.
 child="$(cat "$WORK/child.pid" 2>/dev/null)"
 [ -n "$child" ] && case "$(ps -o stat= -p "$child")" in (''|Z*) true ;; (*) false ;; esac &&
   ok "what it started is killed with it" ||

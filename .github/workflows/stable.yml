@@ -1,17 +1,16 @@
 name: Stable
 
-# `stable` is the newest main that runs the official engine, so
+# Move `stable` to the newest main that runs the official engine, so
 # `nix run github:cprussin/domicile/stable#manganese` never gets the checked
-# one. Main moves on every merge; the official engine of a new series is pinned
-# only after the nightly build (engine-release.yml), whose pin lands on main as
-# a merge of its own and so runs this too. See .github/scripts/promote-stable.sh.
+# engine. See .github/scripts/promote-stable.sh. engine-release.yml's official
+# pin lands on main as its own merge, which runs this too.
 on:
   push:
     branches: [main]
   workflow_dispatch:
 
-# One at a time, so two pushes never race for the ref; the newest pending run
-# is the one kept, and it promotes the newest main.
+# One at a time, so two pushes never race for the ref. The newest pending run
+# is kept, and it promotes the newest main.
 concurrency:
   group: stable
   cancel-in-progress: false

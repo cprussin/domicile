@@ -1,11 +1,9 @@
 #!/usr/bin/env bash
-# Which end the shell's web APIs guard blames, and which answers it calls a
-# pass.
+# Tests the verdict block of `guard-shell-web-apis.sh`: which side it blames
+# and what it passes.
 #
-# The unit is the verdict block in `guard-shell-web-apis.sh`, run out of the
-# real script so a rewrite that moves it fails here. The control is where it
-# matters: its second leg passes on an ABSENT color, and only after its first
-# leg found one.
+# The block is read from the real script. The control's second leg passes
+# on an absent color, but only after its first leg found one.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

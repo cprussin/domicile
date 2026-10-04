@@ -3,18 +3,15 @@
 #
 #   .github/scripts/promote-stable.sh
 #
-# `stable` is what somebody runs to get the production engine without a hash:
-# `nix run github:cprussin/domicile/stable#manganese`. Main runs the CHECKED
-# engine (DCHECKs on, no PGO) from a merge that moves the fork until the
-# nightly official build of that series is pinned (engine-release.yml), so
-# main alone cannot promise that. This commit can be stable when its official
-# pin is of its checked pin's series -- exactly when engine-pin.nix picks the
-# official engine.
+# `stable` gives users the production engine without a hash:
+# `nix run github:cprussin/domicile/stable#manganese`. Main can run the checked
+# engine (DCHECKs on, no PGO) until engine-release.yml pins the nightly official
+# build of the same series. A commit qualifies when its official and checked
+# pins share a series, which is when engine-pin.nix picks the official engine.
 #
-# ONLY FORWARD. Stable is pushed without force, so it only ever moves along
-# main. A run behind a newer one, whose commit stable already has, does
-# nothing; a stable that is not an ancestor of this commit is refused rather
-# than overwritten, because somebody put it there.
+# Only moves forward: the push is not forced. A stable that already contains
+# this commit is left alone. A stable that is not an ancestor is refused, since
+# someone put it there.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"

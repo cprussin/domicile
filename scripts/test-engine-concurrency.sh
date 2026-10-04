@@ -1,78 +1,32 @@
 #!/usr/bin/env bash
-# The concurrency keys of the workflows that run on `crux`, asserted.
+# Checks the concurrency and locking rules for workflows that run on `crux`.
 #
-# `crux` has two job slots, and only one of them can touch the Chromium tree.
-# `crux` is the label for the slot that holds the 97G checkout; `crux-light` is
-# a second runner on the same machine for the jobs that never open it
-# (cprussin/dotfiles: config/machines/crux/domicile-ci.nix). The runner queue
-# in front of each is unbounded and FIFO — it makes runs wait, and it never
-# throws one away.
+# `crux` has two runners: `crux` holds the Chromium checkout, and `crux-light`
+# runs jobs that never open it (cprussin/dotfiles:
+# config/machines/crux/domicile-ci.nix). Runner queues are FIFO and never
+# drop runs.
 #
-# IT USED TO BE ONE SLOT, and that single slot was doing three jobs at once: it
-# serialized the tree, it serialized the render node, and it made everything
-# queue. The third was costing hours a day — `pinned-engine.yml` measured 1m51s
-# of work behind 3h01m of queue on 2026-09-19 — so the slot was split, and the
-# other two had to be written down as locks rather than left as a side effect.
-# `engine-tree-lock.sh` was already one of them. `engine-render-node-lock.sh`
-# is the one that had to be written.
+# A GitHub concurrency group holds one pending run, and a newer run evicts it.
+# So:
 #
-# A GitHub concurrency group is not that queue. It holds exactly ONE pending
-# run, and a newer run entering the group evicts whoever was pending. So a
-# group shared across refs is a queue of depth one that silently discards work:
-# runs 176 and 177 of `Engine` were each canceled seconds after they were
-# created, by a run on a different branch, and a release can be thrown away by
-# an unrelated push the same way.
+# - The group varies with the ref, so only a newer push to the same ref
+#   evicts a run.
+# - A workflow that takes `engine-tree-lock.sh` never cancels in progress. A
+#   killed build is safe (lld and clang write to a temp file and rename), but
+#   publishing, the write-back push and the proof are not.
+#   engine-cancel-stale.yml stops replaced runs only in safe steps.
+# - No two workflows share a group.
 #
-# Hence the three rules below, one per way this goes wrong:
+# The cancel rule keys on the tree lock, not the runner label: a workflow that
+# never opens the tree has nothing to damage, and may cancel.
 #
-#   - the group varies with the ref, so two branches cannot evict each other
-#     and only a superseded push to the SAME ref does;
-#   - a workflow that resets the shared checkout never cancels a run in flight
-#     on a push: a killed build is safe (lld and clang write through a temp
-#     file and rename, so the next run resumes incrementally), but what comes
-#     after it -- publishing, the write-back push, the proof -- is not, and
-#     engine-cancel-stale.yml stops a replaced run only in the steps that are;
-#   - no two of these workflows share a group expression, because two different
-#     jobs that both need to run are not supersessions of one another.
+# Two locks sit under the runners:
 #
-# THE CANCEL RULE IS NOT THE BLANKET IT USED TO BE, and the narrowing is the
-# point rather than a relaxation. It was "no crux workflow cancels", which read
-# as a fact about the machine and was really a fact about the tree: what a
-# cancel can damage is a job that publishes or pushes from it, and a job that
-# never opens it has nothing to leave behind. `pinned-engine.yml`
-# is that job -- a `fetchurl` of a published tarball, a cargo build in its own
-# work directory, one guard -- and while it shared the one slot, making it wait
-# rather than cancel was still right, because the run behind it in the queue
-# was somebody's Chromium build. It is on a second slot now, where the thing
-# behind a superseded run is another run of the same job, and making that wait
-# is the discard spelled as a delay.
-#
-# So the rule is keyed on the tree lock rather than on the runner label: a
-# workflow that takes `engine-tree-lock.sh` is one that resets the checkout,
-# whatever it is called and whatever else it does. Both halves get a positive
-# control below, because a split that matches nothing on one side asserts
-# nothing on that side.
-#
-# AND THE MACHINE NOW HAS A SECOND LOCK, over the render node, because the
-# second job slot took away the one the single slot was providing by accident.
-# Most guards do not care; `guard-latency.sh` times sixty keystroke-to-pixel
-# rounds and a second client on the card is indistinguishable from the
-# regression it exists to catch. The rules for it are at the bottom: a workflow
-# that times something takes the card, and a workflow that takes the card drops
-# it in a step that runs even when the job was canceled -- which is the
-# ordinary way a lock between two runners leaks.
-#
-# The tree lock (.github/scripts/engine-tree-lock.sh) is the backstop under all
-# of this, and it is deliberately not a queue: it refuses and exits 1. It has
-# to. A lock that waited would hold a slot the holder may need in order to
-# finish — the three workflows that take it all want the same one — which is a
-# deadlock rather than a queue. So the group must never be the thing standing
-# between two CI runs; the slot is.
-#
-# The render node lock is the other way round, and the difference is which slot
-# each side holds: a job waiting for the card holds its own runner and the
-# holder holds the other, so the holder can always finish. That is why one lock
-# refuses and the other waits, and it is the single most confusable thing here.
+# - The tree lock (`engine-tree-lock.sh`) refuses instead of waiting. Its
+#   holders all need the same runner, so waiting would deadlock.
+# - The render node lock (`engine-render-node-lock.sh`) waits. A waiter holds
+#   its own runner and the holder holds the other, so the holder can finish.
+#   It keeps `guard-latency.sh` from timing beside another client.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -86,19 +40,15 @@ fail() {
   FAILED=$((FAILED + 1))
 }
 
-# The top-level `concurrency:` block only. A workflow's top-level keys are at
-# column zero, so the block runs from `concurrency:` to the next such line —
-# which is also what keeps a job-level `concurrency:` (indented) from being
-# read as this one.
+# The top-level `concurrency:` block only: from `concurrency:` to the next
+# column-zero line. Job-level blocks are indented and skipped.
 concurrency_block() {
   awk '/^concurrency:/ { inside = 1; next }
        inside && /^[^[:space:]]/ { inside = 0 }
        inside { print }' "$1"
 }
 
-# One key's value out of a block, empty if the block does not carry it. The
-# first match only: a key repeated in a YAML mapping is a file GitHub would
-# reject anyway, and taking the first is what a reader does.
+# One key's value from a block, or empty. Takes the first match.
 field() { # block, key
   printf '%s\n' "$1" | sed -n "s/^[[:space:]]*$2:[[:space:]]*//p" | head -1
 }
@@ -108,17 +58,13 @@ checked=0
 resets_tree=0
 leaves_tree_alone=0
 
-# A workflow's commands, with its comments taken out. Every rule below is about
-# what a step RUNS, and this file's subjects are the most heavily commented
-# YAML in the repository -- `pinned-engine.yml` names `guard-latency.sh` in a
-# comment explaining why it locks the card, and a grep that could not tell the
-# two apart would read that as a timed guard it is not.
+# A workflow's commands without comments. These files mention
+# `guard-latency.sh` in comments, which must not count as running it.
 commands() { sed 's/[[:space:]]*#.*$//' "$1"; }
 
 for workflow in "$WORKFLOWS"/*.yml; do
   name="$(basename "$workflow")"
-  # The machine, not the filename: a fourth workflow that reaches for that tree
-  # is in scope the moment it asks for the runner, whatever it is called.
+  # Scope by runner, not filename, so a new workflow on `crux` is covered.
   grep -q 'self-hosted, *crux' "$workflow" || continue
   checked=$((checked + 1))
 
@@ -137,9 +83,7 @@ for workflow in "$WORKFLOWS"/*.yml; do
           "group is '$group', which is the same for every branch — a push to one branch evicts another's pending run" ;;
   esac
 
-  # Whether this one resets the shared checkout, asked of its steps rather than
-  # of its name. A fifth workflow that takes the tree is in scope the moment it
-  # takes the lock.
+  # Decide by whether a step takes the tree lock, not by the workflow's name.
   if commands "$workflow" | grep -q 'engine-tree-lock.sh'; then
     resets_tree=$((resets_tree + 1))
     case "$cancel" in
@@ -159,12 +103,9 @@ for workflow in "$WORKFLOWS"/*.yml; do
   esac
 done
 
-# THE POSITIVE, ESTABLISHED FIRST — a loop that matched nothing reports every
-# rule above as passing, which is how a renamed runner label turns this file
-# into a green no-op. Four today: engine.yml, engine-release.yml,
-# engine-drm-probe.yml and pinned-engine.yml. The glob is `self-hosted, *crux`,
-# which matches `crux-light` too, and that is wanted: a second slot on the same
-# machine is still a workflow whose group must not evict another's.
+# Without this, a renamed runner label makes every rule above pass vacuously.
+# The pattern also matches `crux-light`, which is intended: those workflows
+# must not evict each other either.
 if [ "$checked" -ge 2 ]; then
   ok "the crux workflows were found at all ($checked of them)"
 else
@@ -172,11 +113,7 @@ else
     "only $checked workflow(s) matched 'self-hosted, crux'; the rules above asserted nothing"
 fi
 
-# AND THE POSITIVE FOR EACH SIDE OF THE SPLIT. The cancel rule above now asks a
-# question with two answers, and a question everything answers the same way is
-# not being asked. If every crux workflow took the tree, the "free to cancel"
-# branch would be dead and nobody would notice; if none did, the rule that
-# protects out/Domicile would be.
+# Each side of the cancel split needs a subject, or one side asserts nothing.
 if [ "$resets_tree" -ge 1 ]; then
   ok "some crux workflow resets the tree, so the no-cancel rule has a subject ($resets_tree)"
 else
@@ -192,27 +129,14 @@ fi
 
 # --- a lock dropped is a lock taken ------------------------------------------
 
-# NOTHING HERE WAS ASKING WHETHER THE TREE LOCK IS EVER TAKEN, and a refactor
-# dropped the `take` step out of `engine.yml` while leaving the `drop` in place.
-# Run 35552949501 said so in one line -- `no lock at
-# /build/chromium/.domicile-tree-lock to drop` -- and every rule in this file
-# still passed, because the rules above find a workflow by its mention of
-# `engine-tree-lock.sh` and the surviving `drop` was mention enough.
+# The tree lock must be both taken and dropped. A `drop` alone still mentions
+# `engine-tree-lock.sh`, so the rules above would pass while `engine-reset.sh`
+# runs unguarded and a reset lands in another run's build. A `take` alone
+# holds the tree until someone clears it.
 #
-# What that costs is the whole point of the lock: `engine-reset.sh` runs
-# unguarded, and a reset landing inside somebody's build on `crux` is silent --
-# siso carries on and links a binary compiled from two different trees. A loud
-# failure would have been better than a green one.
-#
-# So the pair is asserted as a pair, in both directions. A `take` with no `drop`
-# holds the tree until a person clears it by hand; a `drop` with no `take`
-# protects nothing at all.
-#
-# THE TAKE IS SPELLED TWO WAYS NOW. A workflow gets its tree from
-# `engine-tree-pool.sh pick`, which chooses and locks in one call -- they
-# cannot be two steps, because a tree chosen and then locked is a tree another
-# run can take in between. A person still runs `engine-tree-lock.sh take` by
-# hand, so both spellings count as taking.
+# Workflows take a tree with `engine-tree-pool.sh pick`, which chooses and
+# locks in one call so no run can take it in between. People run
+# `engine-tree-lock.sh take` by hand. Both count.
 echo "the tree lock is taken and dropped in pairs"
 
 commands_of() { grep -v '^[[:space:]]*#' "$1"; }
@@ -248,12 +172,9 @@ fi
 
 # --- the compile slot -------------------------------------------------------
 
-# WHAT THE TREE POOL TOOK AWAY, the same shape as the render node below. Two
-# trees is two runs compiling, and `crux` has 62G and no swap: two cold
-# Chromium builds in it is an OOM kill. `engine-compile-slot.sh` is what keeps
-# them to one, and it is only worth anything if every workflow that compiles
-# takes it -- and drops it, or the next cold build is refused by a job that
-# has ended.
+# Two trees allow two compiles, and two cold builds run `crux` (62G, no swap)
+# out of memory. Every workflow that compiles must take
+# `engine-compile-slot.sh` and drop it.
 echo "the compile slot is taken and dropped in pairs"
 
 slot_users=0
@@ -277,9 +198,7 @@ for workflow in "$WORKFLOWS"/*.yml; do
   fi
 done
 
-# EVERY WORKFLOW THAT TAKES A TREE COMPILES IN IT, so every one of them is a
-# subject here. A fifth that picks a tree and never takes the slot is the OOM
-# this rule exists to make impossible to add quietly.
+# Every workflow that picks a tree compiles in it, so it must take the slot.
 for workflow in "$WORKFLOWS"/*.yml; do
   name="$(basename "$workflow")"
   commands_of "$workflow" | grep -q 'engine-tree-pool\.sh pick' || continue
@@ -300,59 +219,41 @@ fi
 
 # --- the render node --------------------------------------------------------
 
-# WHAT THE SECOND JOB SLOT TOOK AWAY. One slot was one job on the card; two are
-# not, and `guard-latency.sh` is the guard that minds. These rules are what stop
-# that from being rediscovered as a flaky latency regression six months from now.
+# Two runners can put two clients on the GPU, which `guard-latency.sh` reads as
+# a latency regression.
 #
-# THE SUBJECTS ARE NO LONGER ONLY WORKFLOWS, and that is the one thing to
-# understand here. `engine.yml` used to run the timed guard from a step of its
-# own and take the card around it from two more; it runs `check.sh engine`
-# now, which is a single step, and holding the card for that whole group would
-# be ~15 minutes of guards that do not need it — the one-queue arrangement the
-# second slot exists to leave. So the lock moved into the check that wants it,
-# `scripts/engine-guard-latency.sh`, and the rules follow it there.
-#
-# Both kinds of subject are read, because a rule that only looked at YAML would
-# now assert nothing about the engine side and a rule that only looked at
-# scripts would assert nothing about the light one.
+# `engine.yml` runs all checks in one `check.sh engine` step, so it cannot hold
+# the card around just the timed guard. The lock lives in
+# `scripts/engine-guard-latency.sh` instead. The rules below read both
+# workflows and engine check scripts.
 LOCK_SH=".github/scripts/engine-render-node-lock.sh"
 [ -x "$ROOT/$LOCK_SH" ] || fail "the render node lock exists" "no $ROOT/$LOCK_SH"
 
-# Every file that could run the timed guard or take the card: the workflows, and
-# the engine checks `check.sh` runs. Globbed rather than listed, for the reason
-# the loop above globs the workflows — a sixth check that times something is in
-# scope the moment it exists.
+# Every file that could run the timed guard or take the card: the workflows and
+# the engine checks `check.sh` runs. Globbed so new files are covered.
 subjects() {
   printf '%s\n' "$WORKFLOWS"/*.yml
   printf '%s\n' "$ROOT"/scripts/engine-*.sh
 }
 
-# A subject's commands, with whole-line comments taken out. Not "everything
-# before a `#`", which is what this used to be: the step that runs the group is
-# `nix develop .#full --command ...`, and a pattern that stopped at the first
-# `#` would cut it in half. These files are the most heavily commented in the
-# repository — `pinned-engine.yml` names `guard-latency.sh` in a comment
-# explaining why it locks the card, and so does the check that takes it — so a
-# grep that could not tell prose from a command would read both as timed guards.
+# A subject's commands, with whole-line comments removed. Trailing `#` is kept,
+# since `nix develop .#full --command ...` contains one. These files mention
+# `guard-latency.sh` in comments, which must not count.
 commands_of() { grep -v '^[[:space:]]*#' "$1"; }
 
-# Whether a subject takes the card, asked in the two spellings there are. A
-# workflow runs the lock script by path; a check keeps the path in a variable
-# and runs `"$CARD" take`, because it also needs it for the drop in its trap.
+# Whether a subject takes the card. A workflow runs the lock script by path; a
+# check stores the path in `$CARD` for its trap and runs `"$CARD" take`.
 #
-# `take` has to follow one or the other on the same line rather than merely
-# appear in the file. Both spellings are required to mention the lock at all
-# first, which is what keeps `engine-tree-lock.sh take` — a different lock over
-# a different thing, in the same workflow — from reading as this one.
+# The verb must follow one of those on the same line, and the file must name
+# the render node lock, so `engine-tree-lock.sh take` does not match.
 takes_card() { # subject, verb (default: either)
   commands_of "$1" | grep -q 'engine-render-node-lock\.sh' || return 1
   commands_of "$1" |
     grep -qE "(engine-render-node-lock\\.sh|\\\$\\{?CARD\\}?)\"?[[:space:]]+${2:-(take|quiet)}"
 }
 
-# `quiet`, not `take`: the card alone did not keep the timing honest. Main run
-# 36226737213 held it and read a 49.04 ms commit to pixel while run
-# 36228817911 compiled Chromium on the other runner.
+# `quiet`, not `take`: holding the card did not stop a compile on the other
+# runner from skewing the timing (main run 36226737213).
 timed=0
 for subject in $(subjects); do
   [ -e "$subject" ] || continue
@@ -375,12 +276,11 @@ else
     "nothing runs guard-latency.sh, so the rule above asserted nothing"
 fi
 
-# AND `quiet` IS ONLY AS GOOD AS WHAT DECLARES ITSELF NOISE. Every compile a
-# workflow runs on `crux` does, on the line that runs it, and so does every
-# guard a workflow runs without holding the card around it -- and so do a
-# repin's reset and `gclient` sync, and the packaging, which load the
-# same machine without compiling. (`check.sh engine` declares its own checks;
-# `test-the-webview-guards-run-together.sh` says so.)
+# `quiet` relies on noisy work declaring itself. Every compile, reset, sync,
+# packaging step, and guard run without the card must call
+# `engine-render-node-lock.sh noisy` on the line that runs it.
+# (`check.sh engine` declares its own; see
+# `test-the-webview-guards-run-together.sh`.)
 noise=0
 for workflow in "$WORKFLOWS"/*.yml; do
   name="$(basename "$workflow")"
@@ -405,16 +305,12 @@ else
   fail "a workflow compiles something on crux" "none found, so the rule above asserted nothing"
 fi
 
-# A LOCK DROPPED ONLY ON THE HAPPY PATH IS A LOCK THAT LEAKS. A canceled run is
-# the ordinary way this one leaks -- pinned-engine.yml cancels superseded runs
-# now -- and the script does steal a lock that has aged out, but a ten-minute
-# stall on every cancel is not a design, it is a backstop.
+# The card must be released when a run fails or is canceled. The lock script
+# steals an aged-out lock, but that is a backstop.
 #
-# HOW A SUBJECT SAYS SO DEPENDS ON WHAT IT IS, and both forms mean the same
-# thing. A workflow drops it from a step carrying `if: ${{ always() }}`. A check
-# has no later step to put that in, so it drops it from a `trap ... EXIT`, which
-# is reached however the shell unwinds — including the run that failed to take
-# the lock at all, which `drop` treats as a no-op for the tree lock's reason.
+# A workflow drops it from a step with `if: ${{ always() }}`. A check drops it
+# from a `trap ... EXIT`, which also runs when the take failed (`drop` is then a
+# no-op).
 holders=0
 workflow_holders=0
 script_holders=0
@@ -427,10 +323,8 @@ for subject in $(subjects); do
   case "$subject" in
     (*.yml)
       workflow_holders=$((workflow_holders + 1))
-      # The drop, and an `always()` within the few lines above it — which is the
-      # step it belongs to. Read off the file with its comments still in,
-      # because the `if:` and the `run:` are different lines of the same step
-      # and the distance between them is what says they are.
+      # The drop must be within a few lines after `always()`, i.e. in the same
+      # step. Read with comments in, since `if:` and `run:` are separate lines.
       if awk -v lock="engine-render-node-lock.sh drop" '''
            /always\(\)/ { seen = NR }
            index($0, lock) && seen && NR - seen <= 4 { found = 1 }
@@ -443,14 +337,9 @@ for subject in $(subjects); do
       ;;
     (*)
       script_holders=$((script_holders + 1))
-      # A trap naming the drop. Asserted as one thing rather than as "there is a
-      # trap somewhere and a drop somewhere": a script with both, unconnected,
-      # is a script that drops the lock only where it happens to reach the line.
-      # Single-quoted, because the pattern has a `$` in it that belongs to grep
-      # rather than to bash: inside double quotes `\$` reaches grep as a bare
-      # `$`, which in an extended regular expression is end-of-line and matches
-      # nothing here. That is a green no-op in the making — the rule reported a
-      # failure it could not have reported a pass for.
+      # The drop must be in the trap itself, not just somewhere in the file.
+      # Single-quoted so grep receives `\$`; in double quotes it would get a
+      # bare `$` (end of line) and never match.
       if grep -qE '^[[:space:]]*trap .*(engine-render-node-lock\.sh|\$\{?CARD\}?)"?[[:space:]]+drop' \
            "$subject"; then
         ok "$name drops the render node from a trap, however it unwinds"
@@ -469,10 +358,7 @@ else
     "only $holders take $LOCK_SH; a lock one side does not take is not a lock"
 fi
 
-# AND ONE OF EACH KIND, because the two rules above are different code and a
-# split that matches nothing on one side asserts nothing on that side. The light
-# job takes it from YAML around its one guard; the engine side takes it from
-# inside the check, because its guards are one step now.
+# Each kind of holder needs a subject, since the two rules are separate code.
 if [ "$workflow_holders" -ge 1 ]; then
   ok "a workflow takes the render node ($workflow_holders)"
 else

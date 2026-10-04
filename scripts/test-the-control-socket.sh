@@ -1,30 +1,19 @@
 #!/usr/bin/env bash
-# Every running desktop answers a control socket, and each one answers its own.
+# Tests that every running desktop answers its own control socket.
 #
 #   ./scripts/test-the-control-socket.sh
 #
-# The unit tests own the socket's rules — what its name is made of, what
-# happens to a stale one, what a line that is not a request gets back. This
-# owns the wiring, which is the half they cannot reach: that the *binary* takes
-# a socket of its own when it starts a desktop, says which one in DOMICILE_SOCK,
-# answers on it from a thread while the supervisor is blocked waiting on its
-# components, and that a second `domicile` on the same session comes up beside
-# the first with a socket of its own rather than being refused.
+# The unit tests cover the socket's rules. This covers the wiring in the
+# binary: a desktop takes its own socket, names it in DOMICILE_SOCK, answers
+# from a thread while the supervisor waits on its components, and a second
+# `domicile` in the same session starts beside the first with its own socket.
 #
-# TWO DESKTOPS IS THE POINT OF THIS SCRIPT and it used to assert the opposite.
-# A compositor that will not start because another compositor is running is not
-# something Wayland, sway, Hyprland or river does, and it was not something
-# Domicile should have done either.
+# The positive case runs first, as in `test-a-desktop-that-fails-says-why.sh`.
+# Otherwise "the command was refused" and "the desktop never came up" look the
+# same.
 #
-# THE POSITIVE READING COMES FIRST, the same way
-# `test-a-desktop-that-fails-says-why.sh` does it: a command that reaches a
-# desktop and comes back with the right answer, before any of the refusals mean
-# anything. "The command was refused" and "the desktop never came up" look
-# identical from the outside otherwise.
-#
-# The two components are shell scripts here. Nothing about the supervisor cares
-# what they are, and a real engine takes four hours to build and needs a
-# display.
+# The components are shell scripts. The supervisor does not care what they
+# are, and a real engine takes hours to build and needs a display.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -45,21 +34,14 @@ cleanup() {
     kill "$desktop" 2>/dev/null
     wait "$desktop" 2>/dev/null
   done
-  # The fake components outlive a supervisor killed with a signal: nothing runs
-  # its cleanup, which is true of the real ones too. Each keeps the name the
-  # patterns below match across the exec it ends on — see the `exec -a` in
-  # each — because for as long as it did not, this reached nothing at all and
-  # every run left two `sleep 60`s behind it.
+  # The fake components outlive a supervisor killed by a signal, as the real
+  # ones do. Each keeps a name the patterns below match across its final
+  # `exec` (see `exec -a`).
   #
-  # KILLED UNTIL THEY ARE GONE rather than killed once, because a signal
-  # posted is not a process gone and these hold the stdout and stderr this
-  # script inherited from whoever ran it. A run that returns while they are
-  # still up hands its caller a pipe with nobody left writing to it: on a CI
-  # runner that is a step which has passed every check in it and does not end.
-  # Once is also not enough on its own terms — a supervisor still on its way
-  # out replaces the engine that was just killed under it, and that one is the
-  # leftover. Five seconds of it, and then said out loud: leaving them behind
-  # quietly is the whole failure this is here to stop.
+  # Kill until they are gone, not once. They hold this script's inherited
+  # stdout and stderr, so a survivor keeps the caller's pipe open and a CI step
+  # never ends. A supervisor still exiting can also replace an engine just
+  # killed. After five seconds, report what is left.
   local left=0
   while pgrep -f "$WORK/(engine/chrome|domicile-compositor)" >/dev/null 2>&1; do
     if [ "$left" -ge 50 ]; then
@@ -76,14 +58,13 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-# One shell each, so that "which desktop answered" is a question the answer can
-# be wrong about. Nothing loads either — the engine here is a shell script —
-# but they are the files `which-shell` has to name.
+# One shell module per desktop, so `which-shell` can name the wrong one. The
+# files are empty because the fake engine loads nothing.
 mkdir -p "$WORK/first" "$WORK/second"
 : >"$WORK/first/shell.js"
 : >"$WORK/second/shell.js"
 
-# The engine: creates the broker socket it was told to create, then stays alive.
+# The engine: creates the broker socket it is given, then stays alive.
 mkdir -p "$WORK/engine"
 cat >"$WORK/engine/chrome" <<'ENGINE'
 #!/usr/bin/env bash
@@ -93,20 +74,15 @@ for arg in "$@"; do
   esac
 done
 : >"$broker"
-# `exec -a "$0"`, so that the name `cleanup` reaches for survives the exec. A
-# plain `exec sleep 60` leaves a process whose whole command line is `sleep
-# 60`: the path `pkill -f` matches on went with the command line it was in, so
-# cleanup found nothing and this fake outlived the run by a minute, still
-# holding the stdout and stderr it inherited. See `cleanup`.
+# `exec -a "$0"` keeps this path in the command line, so `pkill -f` in
+# `cleanup` can find it.
 exec -a "$0" sleep 60
 ENGINE
 chmod +x "$WORK/engine/chrome"
 
-# The compositor: publishes the session document, then stays alive. It also
-# writes the DOMICILE_SOCK it was started with, which is the half of the
-# hand-off no unit test can see: the supervisor puts the path in the
-# compositor's environment, and every app the compositor spawns inherits it
-# from there.
+# The compositor: publishes the session document, then stays alive. It records
+# the DOMICILE_SOCK it was started with: apps it spawns inherit that value, and
+# no unit test sees this hand-off.
 cat >"$WORK/domicile-compositor" <<'COMPOSITOR'
 #!/usr/bin/env bash
 while [ $# -gt 0 ]; do
@@ -115,16 +91,14 @@ while [ $# -gt 0 ]; do
 done
 printf '%s' "${DOMICILE_SOCK-}" >"$session.sock-it-was-given"
 : >"$session"
-# Named across the exec for the reason the engine is; see `cleanup`.
+# Keeps its name across the exec, as the engine does; see `cleanup`.
 exec -a "$0" sleep 60
 COMPOSITOR
 chmod +x "$WORK/domicile-compositor"
 
 mkdir -p "$WORK/runtime"
-# `headless` because there is no display here and `platform` refuses to guess.
-# One XDG_RUNTIME_DIR for both desktops, which is the whole question this
-# script asks: a session is one runtime directory and may hold several
-# desktops.
+# `headless` because there is no display and `platform` does not guess. Both
+# desktops share one XDG_RUNTIME_DIR: a session may hold several desktops.
 run_domicile() {
   env OZONE=headless \
       XDG_RUNTIME_DIR="$WORK/runtime" \
@@ -133,16 +107,16 @@ run_domicile() {
       "$DOMICILE" "$@"
 }
 
-# Put one command to the desktop answering at $1, the way a terminal started
-# inside that desktop would have it in its environment.
+# Sends one command to the desktop at $1, as a terminal inside that desktop
+# would.
 ask_desktop() {
   env DOMICILE_SOCK="$1" "$DOMICILE" which-shell 2>&1
 }
 
 FAILED=0
 
-# Start a desktop on $2, logging to $1, and wait until it is up. Sets UP_SOCK
-# to the socket it said it was answering on and UP_PID to its process.
+# Starts a desktop on $2, logging to $1, and waits until it is up. Sets UP_SOCK
+# to the socket it reported and UP_PID to its process.
 start_desktop() {
   local log="$1" shell="$2" waited=0
   run_domicile "$shell" >"$log" 2>&1 &
@@ -164,10 +138,8 @@ start_desktop() {
     sed 's/^/    /' "$log"
     exit 1
   fi
-  # Read back out of the name rather than taken from `$!`, which is the
-  # subshell the background job runs in and not always the supervisor itself.
-  # The pid in the socket's name is the supervisor's by construction, and it
-  # is also what its run directory is named after.
+  # Taken from the socket name, not `$!`: `$!` may be the background
+  # subshell. The socket name and run directory use the supervisor's pid.
   UP_PID="${UP_SOCK##*domicile-ipc.}"
   UP_PID="${UP_PID%.sock}"
   DESKTOPS="$DESKTOPS $UP_PID"
@@ -192,9 +164,8 @@ else
 fi
 
 echo "== the compositor is started with the socket to hand on to its apps =="
-# What an app spawned by the shell inherits. A desktop whose compositor never
-# saw DOMICILE_SOCK is one where `domicile which-shell` typed into its own
-# terminal finds nothing.
+# Apps spawned by the shell inherit this. Without it, `domicile which-shell`
+# in the desktop's own terminal finds nothing.
 GIVEN="$(cat "$WORK/runtime/domicile-$FIRST_PID/session.json.sock-it-was-given" 2>/dev/null)"
 if [ "$GIVEN" = "$FIRST_SOCK" ]; then
   echo "PASS: the compositor was handed $GIVEN"
@@ -234,9 +205,8 @@ fi
 
 echo "== asking from outside every desktop says so rather than guessing =="
 OUTSIDE="$WORK/outside.log"
-# Two desktops are running as this is asked, which is the point: there is a
-# socket in the runtime directory that would answer, and two of them, and
-# picking one would be picking for the person who typed the command.
+# Two desktops are running, so there are sockets that would answer. Picking
+# one would guess for the user.
 if env -u DOMICILE_SOCK XDG_RUNTIME_DIR="$WORK/runtime" "$DOMICILE" which-shell \
      >"$OUTSIDE" 2>&1; then
   echo "FAIL: a command answered from outside every desktop:"
@@ -253,23 +223,16 @@ fi
 # ---- the desktop that is gone ---------------------------------------------
 
 echo "== the socket a killed desktop left behind fails rather than hangs =="
-# SIGKILL, so nothing unlinks the socket: this is what every terminal still
-# open inside that desktop has in its environment afterward.
+# SIGKILL, so nothing unlinks the socket. Terminals still open in that desktop
+# keep this path in their environment.
 kill -9 "$SECOND_PID" 2>/dev/null
-# AND THEN WAITED FOR, because `kill` only posts the signal. `wait` was what
-# stood here and it is no barrier at all: the supervisor is this shell's
-# *grand*child — the background job is the subshell around it — so waiting on
-# its pid says "not a child of this shell" and returns at once, with the
-# message swallowed by the redirect. The case below would then be asking a
-# desktop that is still running, which answers "took the command and did not
-# answer" — true of a live desktop and not the refusal this case is about. On
-# a loaded machine a killed process waits its turn to die like any other: at
-# load 46 on four cores, 7 runs in 80 read that sentence and failed.
+# `kill` only sends the signal, and `wait` cannot help: the supervisor is a
+# grandchild of this shell. Asking a still-running desktop gives a different
+# error, so poll until the process is gone. On a loaded machine that takes a
+# while.
 #
-# Waited out by whether the process is still there rather than by whether the
-# socket still answers, so this stays upstream of what is being asserted: a
-# socket that went on answering after its desktop was gone is exactly what the
-# case exists to catch, and polling on that would be polling the assertion.
+# Poll the process, not the socket: a socket that still answers after its
+# desktop is gone is what this case checks for.
 KILLED=0
 while kill -0 "$SECOND_PID" 2>/dev/null; do
   if [ "$KILLED" -ge 100 ]; then

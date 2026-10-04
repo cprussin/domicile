@@ -1,17 +1,14 @@
 #!/usr/bin/env bash
-# Which end the webview-popup-window guard blames, and which answers it calls a
-# pass.
+# Tests the verdict of `guard-webview-popup-window.sh`: which readings pass and
+# which component a failure blames.
 #
-# The unit is the verdict block in `guard-webview-popup-window.sh`, run out of
-# the real script rather than copied, as `test-webview-tabs-guard.sh` does. The
-# cases that matter most are the ones where the shell opened the window and the
-# extension still did not get one: a <webview> that is a tab of the desk rather
-# than of the popup window. Only the control, which opens the same <webview>
-# without `popupwindow`, can tell a window the attribute made from one that
-# would have been there anyway.
+# Runs the verdict block from the real guard. Key case: the shell opens the
+# window, but its <webview> is a tab of the desktop window, not of a popup
+# window. The control opens the same <webview> without `popupwindow` to show
+# that the attribute creates the popup window.
 #
-# Plus what the guard cannot check at runtime: the id it expects is the one the
-# fixture's key makes, and the fixture asks what the guard reads.
+# Also checks that the expected id matches the fixture's key and that the
+# fixture requests what the guard reads.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -40,7 +37,7 @@ expect() {
   fi
 }
 
-# Pass or fail, not the sentence: the sentences will be reworded.
+# Prints pass, fail or neither. Sentences are not compared, since they change.
 verdict() { # $1 MEASURED
   (
     MEASURED="$1"
@@ -55,8 +52,7 @@ verdict() { # $1 MEASURED
   )
 }
 
-# Whether the failing sentence names `$2`, where WHICH end it blames is the
-# point.
+# Whether the failure message contains `$2`, i.e. blames the right component.
 says() { # $1 MEASURED, $2 what the sentence must contain
   case "$(
     MEASURED="$1"
@@ -69,14 +65,17 @@ says() { # $1 MEASURED, $2 what the sentence must contain
 }
 
 # MEASURED is "<leg> <sent> <tray> <shown> <asked> <sized> <typed> <same>
-# <found> <closed> <created>": whether the stand-in sent the list, whether the
-# fixture's popup was in the tray, whether the shell's browser window showed
-# its page, whether the shell heard `domicile-popup-window`, whether it carried
-# the size the fixture asked for, whether the window's page called its window a
-# `popup`, whether that window was the one the event named, whether
-# tabs.query({windowType: "popup"}) found its tab, whether the shell heard the
-# window's windows.remove as `domicile-close`, and whether windows.create
-# answered with the window.
+# <found> <closed> <created>", each 0 or 1:
+#   sent     the stand-in sent the list
+#   tray     the fixture's popup was in the tray
+#   shown    the shell's browser window showed its page
+#   asked    the shell received `domicile-popup-window`
+#   sized    with the size the fixture requested
+#   typed    the window's page saw its window as a `popup`
+#   same     that window was the one the event named
+#   found    tabs.query({windowType: "popup"}) found its tab
+#   closed   the shell received windows.remove as `domicile-close`
+#   created  windows.create returned the window
 echo "the claim — the shell names the window, and the page is its tab"
 expect "a popup window, found, removed and answered, is the pass" "pass" \
   "$(verdict "popup 1 1 1 1 1 1 1 1 1 1")"
@@ -97,7 +96,8 @@ expect "the wrong size is a failure" "fail" \
 expect "and blames the size carried" "yes" \
   "$(says "popup 1 1 1 1 0 1 1 1 1 1" "size")"
 
-# THE CASE THE GUARD IS FOR: the shell opened it, and it is not a popup window.
+# The case the guard exists for: the shell opened it, but it is not a popup
+# window.
 expect "a page in the desk's window is a failure" "fail" \
   "$(verdict "popup 1 1 1 1 1 0 0 0 0 0")"
 expect "and blames popupwindow" "yes" \
@@ -119,7 +119,7 @@ echo
 echo "the control — the same <webview> without popupwindow"
 expect "a desk tab, unfound, unclosed and unanswered, is the pass" "pass" \
   "$(verdict "control 1 1 1 1 1 0 0 0 0 0")"
-# INVERTED: a popup window is the failure, because it is the claim's reading.
+# Inverted: a popup window is the failure, because it is the claim's reading.
 expect "a popup window anyway is a failure" "fail" \
   "$(verdict "control 1 1 1 1 1 1 1 1 1 1")"
 expect "and says the claim's window is not the attribute's" "yes" \

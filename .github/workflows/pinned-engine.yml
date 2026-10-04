@@ -1,82 +1,39 @@
 name: Pinned engine
 
-# Does the engine this checkout PINS satisfy the compositor this checkout
-# BUILDS?
+# Checks that the engine this checkout pins works with the compositor this
+# checkout builds.
 #
-# Nothing answered that until this job, and the night it cost us is #411: it
-# landed both halves of a display-protocol change — a `name` on the C ABI's
-# display record, and a compositor that asserts the pointer is non-null — while
-# `engine-release.nix` still pinned `engine-f38ef3f`, whose `DomicileDisplay`
-# is 40 bytes to the new one's 48 and carries no name at all. The compositor
-# read a name out of the old struct's `x` and `y`, which for a display at the
-# origin are zero, and aborted inside an `extern "C"` callback that cannot
-# unwind:
+# Other jobs check one half each: `nix-build.yml` never starts a desktop, and
+# engine.yml's pixel guard runs the engine it built from `patches/`, not the
+# published tarball. A C ABI change merged without a repin passed both and
+# aborted the compositor (#411, #413).
 #
-#   the engine names every display, even if it names it nothing
-#   domicile: the compositor exited (signal: 6 (SIGABRT) (core dumped))
-#
-# CI was green on that pull request and on every commit after it. It had to be:
-# `nix-build.yml` builds the flake and never starts a desktop, and
-# `engine.yml`'s pixel guard runs the engine it just built out of `patches/` —
-# which has the new field — never the tarball a user downloads. Every check
-# looked at one half. #413 records the gap and #415 paid for it with a repin.
-#
-# WHY THIS IS AFFORDABLE. It runs the same pixel guard engine.yml runs, and the
-# only difference is where the engine comes from: `nix build .#engine` is
-# `fetchurl` of the url and hash in `engine-release.nix` plus
-# `autoPatchelfHook` over what comes out — a ~210MB download, and on a warm
-# store not even that. No Chromium tree is touched and the tree lock is never
-# taken, so this is minutes rather than the 27 an incremental engine build
-# takes. That is the whole reason this is a workflow of its own rather than a
-# step in engine.yml, where it would sit behind both that build and the
-# `paths:` filter in front of it.
-#
-# BEING CHEAP WAS NOT ENOUGH WHILE THE MACHINE HAD ONE SLOT, which is what the
-# `runs-on:` below is about: a two-minute job queued behind a twenty-nine
-# minute one is a twenty-nine minute job. It has a slot of its own now, and the
-# one thing it still shares with the engine build is the render node — hence
-# the only lock it takes, around the guard step and nothing else.
-#
-# NO `paths:` FILTER HERE, AND THAT IS THE POINT RATHER THAN AN OVERSIGHT.
-# Three independent things break this pair — the compositor's side of the ABI
-# in `packages/domicile-compositor/src/engine.rs`, the header the two agree on,
-# and the pin — and #411 moved the first two and left the pin alone. A filter
-# keyed on `engine-release.nix`, which is the one anybody would reach for,
-# would have skipped exactly the change that broke main.
-#
-# IT RUNS ON THE MERGE AS WELL AS THE PULL REQUEST, for engine.yml's reason
-# and one of its own. A `pull_request` run builds the head merged into main as
-# main was when the event fired, and main moving does not fire it again — so a
-# repin and an ABI change open at the same time are each green alone and broken
-# together, which is this failure's exact shape.
+# - Cheap: `nix build .#engine` fetches the tarball named in
+#   `engine-release.nix` (~210MB), so no Chromium tree or tree lock is
+#   involved. That is why it is a separate workflow from engine.yml.
+# - No `paths:` filter: the compositor's side of the ABI
+#   (`packages/domicile-compositor/src/engine.rs`), the shared header and the
+#   pin can each break the pair.
+# - Runs on main as well as pull requests: a `pull_request` run tests against
+#   main as it was when the event fired, so a repin and an ABI change open at
+#   once pass alone and break together.
 on:
   pull_request:
   push:
     branches: [main]
 
-# Keyed by ref, which is the rule every workflow that reaches for this machine
-# follows; scripts/test-engine-concurrency.sh asserts it and engine.yml
-# explains what a shared group did to runs 176 and 177.
+# Keyed by ref, as scripts/test-engine-concurrency.sh requires of every
+# workflow on this machine.
 #
-# AND THIS ONE CANCELS, WHICH THE OTHERS MUST NOT. The rule they follow is
-# `cancel-in-progress: false`, and its reason is a killed Chromium link leaving a
-# half-linked out/Domicile that the next run inherits. This job compiles no
-# Chromium at all: it is a `fetchurl` of a published tarball, a cargo build in
-# a work directory of its own, and a guard. There is nothing here for a cancel
-# to leave behind.
+# Unlike the others, this one cancels in progress. They must not because a
+# killed Chromium link leaves a half-linked out directory. This job only
+# fetches a tarball, builds the compositor in its own directory and runs a
+# guard, so a cancel leaves nothing behind, and on `crux-light` a superseded
+# run only delays newer runs of this job.
 #
-# (Said without naming the build tool, because
-# scripts/test-the-pinned-engine-meets-the-compositor.sh greps this whole file
-# for it — comments included — to prove this job is a download. That is a
-# stricter rule than it needs to be and it is not this change's to relax.)
-#
-# An earlier version of this said so and kept `false` anyway, on the reasoning
-# that a canceled run still holds the slot while it tears down and a queue that
-# makes work wait beats a group that discards it. That was true while this job
-# and the engine build shared one slot. They do not: this runs on `crux-light`
-# now, where the thing behind a superseded run in the queue is another run of
-# this same job. Making it wait for a commit nobody will merge is the discard,
-# just spelled as a delay.
+# Comments here must not name Chromium's build tools:
+# scripts/test-the-pinned-engine-meets-the-compositor.sh greps the whole file
+# for them.
 concurrency:
   group: pinned-engine-${{ github.ref }}
   cancel-in-progress: true
@@ -86,68 +43,35 @@ permissions:
 
 jobs:
   guard:
-    # THE DMABUF IMPORT NEEDS A DRM RENDER NODE, so this cannot be
-    # `ubuntu-latest`. AGENTS.md names it as one of the three things CI cannot
-    # reach, `scripts/e2e-dmabuf.sh` is the skip CI explicitly allows for it,
-    # and `under-wayland.sh` exists because `--ozone-platform=headless` has no
-    # `CreateNativePixmapFromHandle` to import into. `crux` has the card.
+    # The dmabuf import needs a DRM render node, which `ubuntu-latest` lacks.
     #
-    # `crux-light`, NOT `crux`, AND THAT IS THE WHOLE POINT OF THIS LINE. Both
-    # labels are the same machine; they are different job slots on it
-    # (cprussin/dotfiles: config/machines/crux/domicile-ci.nix). `crux` is the
-    # slot that holds the 97G Chromium checkout, and a run of `engine.yml` owns
-    # it for ~29 minutes. This job opens no part of that checkout -- the engine
-    # it guards is a tarball out of the nix store -- and it ran on that slot
-    # anyway, because there was only one.
-    #
-    # WHAT THAT COST, measured on 2026-09-19 off the Actions API: run #101 of
-    # this workflow was created at 18:21:01, started at 21:22:45 and finished
-    # at 21:24:36. Three hours and two minutes of queue for one minute and
-    # fifty-one seconds of work, and it was an ordinary day rather than a bad
-    # one. This job carries no `paths:` filter on purpose, so that wait was in
-    # front of every pull request in the repository.
+    # `crux-light`, not `crux`: both are job slots on the same machine
+    # (cprussin/dotfiles: config/machines/crux/domicile-ci.nix). `crux` holds
+    # the Chromium checkout and is busy with engine.yml for ~29 minutes at a
+    # time. This job uses none of the checkout, and sharing that slot queued
+    # it for hours.
     runs-on: [self-hosted, crux-light]
 
-    # Minutes, not hours, and that is the claim this job is making. Measured on
-    # `crux`, first run, warm store: 18s to fetch the engine, 39s to build the
-    # compositor, 64s for the guard — 2m07s end to end, and 1m51s on the run
-    # cited above. A run that is still going at half an hour is stuck.
-    #
-    # The half hour has two things in it that can legitimately wait. The render
-    # node lock below gives up after twenty minutes, and that is deliberately
-    # inside this timeout rather than outside it, so a wedged card fails with
-    # the lock's message — which says who holds it and how to clear it — rather
-    # than with GitHub's, which says nothing. The guard's own draw poll is the
-    # other: it watches for up to four minutes now, because the other runner
-    # drawing on the same card makes this slower and used to make it red. The
-    # two do not add up to anything near thirty, and both say what they were
-    # waiting for when they give up.
+    # A warm run takes about two minutes, so a run at half an hour is stuck.
+    # The two legitimate waits fit inside it and report what they waited for:
+    # the render node lock (gives up after 20 minutes) and the guard's draw
+    # poll (up to four minutes).
     timeout-minutes: 30
 
     env:
-      # Who holds the render node, in words a person reading a held-lock
-      # message can act on. The same shape engine.yml uses for the tree lock,
-      # and for the same reason: "held by someone" is not something anybody can
-      # do anything about.
+      # The render node holder, named so a person can find the run.
       CARD_OWNER: pinned-engine.yml run ${{ github.run_id }} attempt ${{ github.run_attempt }}
 
     steps:
       - uses: actions/checkout@v7
 
-      # /tmp is the runner unit's, not this job's — PrivateTmp is per-service
-      # and the service outlives every job. Without this the failure dump below
-      # prints the last run's guard log, which engine.yml learned the hard way:
-      # numbers from a previous run are worse than no numbers.
+      # /tmp belongs to the runner service, which outlives each job, so the
+      # failure dump below would otherwise print the last run's logs.
       - name: Forget the last run's logs
         run: rm -f /tmp/domicile-*.log
 
-      # The bytes a user gets, by the only route that produces them. A build
-      # from the checkout would be a different binary however carefully it were
-      # configured, and it is the published one this job is about.
-      #
-      # The store path is printed because it is the evidence: it names the
-      # engine version in the log, so a failure here can be read against
-      # `engine-release.nix` without opening the flake.
+      # The published engine, as a user gets it. The store path names the
+      # engine version in the log.
       - name: Fetch the engine this checkout pins
         run: |
           set -euo pipefail
@@ -155,76 +79,34 @@ jobs:
           echo "the pin resolves to $ENGINE"
           echo "ENGINE=$ENGINE" >> "$GITHUB_ENV"
 
-      # And the other half of the pair, from this tree. Without this the job
-      # would be guarding the pinned engine against whatever compositor was
-      # lying around, which is a question nobody asked.
+      # The compositor from this tree, the other half of the pair.
       #
-      # As noise, so the engine job's latency guard waits it out.
+      # Under the render node lock as `noisy`, so engine.yml's latency guard
+      # waits for it.
       - name: Build the compositor this checkout carries
         run: .github/scripts/engine-render-node-lock.sh noisy "$CARD_OWNER" -- nix develop .#full --command cargo build -p domicile-compositor
 
-      # `.#full` rather than Chromium's toolchain shell, and it is not a
-      # superset: `engineRuntimeLibs` in flake.nix puts Chromium's runtime
-      # libraries beside the GL stack and the guard needs both. The GL stack,
-      # or no client can hand the compositor a dmabuf at all; Chromium's, or
-      # `libdomicile_engine.so` will not load. `guard-client-window.sh` says so
-      # in its own header, and `engine-release.yml` invokes it exactly this way
-      # against the freshly packaged tree.
-      #
-      # `OUT: .` because the store path IS the out directory — `chrome` and
-      # `libdomicile_engine.so` sit directly inside it, which is what
-      # `libexec/domicile/engine` points at. The guard's default is
-      # `out/Domicile`, which does not exist under there.
-      #
-      # WHAT FAILS HERE WHEN THE TWO HALVES DISAGREE is not the pixel
-      # comparison: the compositor dispatches the engine's display list before
-      # it ever brokers a frame sink, so a record it cannot read aborts the
-      # process and the guard reports a compositor that did not start. The
-      # panic is in the log the next step prints.
-      #
-      # No negative control alongside this. `engine.yml` already runs this
-      # script with `NEGATIVE=1` to show it can fail, and that property belongs
-      # to the script rather than to either caller — a second copy here would
-      # buy nothing and spend the slot twice.
-      # ONE JOB AT A TIME ON THE CARD, and only around the step that uses it.
-      #
-      # This job and `engine.yml` are now two slots on one machine, which is
-      # what stopped this waiting hours for a tarball fetch. The card did not
-      # get a second one. Most of what either job does is fine beside the other
-      # -- a pixel comparison asks whether a color landed, and a busy machine
-      # makes that slower rather than wrong -- but `engine.yml` ends in
-      # `guard-latency.sh`, which times sixty keystroke-to-pixel rounds, and a
-      # second client on the render node is indistinguishable from the
-      # regression that guard is there to catch.
-      #
-      # Taken here rather than for the whole job, because holding it from
-      # checkout to drop would put these two back into one queue and undo the
-      # change that gave this job its own slot. The fetch and the cargo build
-      # above touch no card.
-      #
-      # It waits where the tree lock refuses; see the script's header for why
-      # the second slot is what makes that safe.
+      # One job at a time on the render node, held only around the guard.
+      # Other work on the card only slows a pixel comparison, but engine.yml's
+      # `guard-latency.sh` cannot tell a second client from a latency
+      # regression. Holding it for the whole job would put the two back in
+      # one queue. Unlike the tree lock, which fails when held, this lock
+      # waits for the holder; see the script's header for why that is safe.
       - name: Take the render node
         run: .github/scripts/engine-render-node-lock.sh take "$CARD_OWNER"
 
-      # The same check `check.sh engine` runs against the tree engine.yml
-      # builds, pointed at the store path instead — which IS an out directory
-      # rather than a tree with one inside it, so `DOMICILE_ENGINE_OUT` is `.`.
-      # `scripts/lib/engine-guard.sh` is where those two variables are read.
+      # The guard `check.sh engine` runs, pointed at the store path.
+      # - `.#full`, not Chromium's toolchain shell: `engineRuntimeLibs` in
+      #   flake.nix provides both the GL stack (for client dmabufs) and
+      #   Chromium's runtime libraries (for `libdomicile_engine.so`).
+      # - `DOMICILE_ENGINE_OUT=.`: the store path is itself the out directory.
+      #   `scripts/lib/engine-guard.sh` reads both variables.
+      # - `DOMICILE_GUARD_CONTROL=0`: engine.yml already runs the guard with
+      #   `NEGATIVE=1` to show it can fail.
       #
-      # One check rather than the whole group, and deliberately: what this job
-      # asks is whether the engine the checkout PINS still meets the compositor
-      # the checkout carries, and a client's window on the page is the whole of
-      # that. It runs its own control, which is why there is one step here and
-      # not two.
-      #
-      # AND NO NEGATIVE CONTROL, which is why `DOMICILE_GUARD_CONTROL=0` is
-      # here: the check runs its guard and its control by default, because that
-      # is what makes it a check, and this caller is one of the two that said in
-      # prose it did not want the second run. `engine.yml` already runs this
-      # guard with `NEGATIVE=1`, the property belongs to the guard rather than to
-      # either caller, and a second copy here would buy nothing and spend ~65s
-      # of every pull request twice.
+      # An ABI mismatch aborts the compositor when it reads the engine's
+      # display list, before any frame, so the guard reports a compositor that
+      # did not start. The panic is in the log the next step prints.
       - name: The pinned engine draws a client's window on the page
         run: |
           set -euo pipefail
@@ -232,11 +114,8 @@ jobs:
             DOMICILE_GUARD_CONTROL=0 \
             nix develop .#full --command ./scripts/engine-guard-client-window.sh
 
-      # Even when the guard failed, and even when this run is being canceled --
-      # which this job's concurrency group now does -- because a lock left
-      # behind by a canceled run is the ordinary way this leaks. `drop` is a
-      # no-op unless the lock is still ours, so the run that failed to take it
-      # in the first place reaches here harmlessly.
+      # Always, including on cancel, so a canceled run does not leak the lock.
+      # `drop` is a no-op unless this run holds it.
       - name: Drop the render node
         if: ${{ always() }}
         run: .github/scripts/engine-render-node-lock.sh drop "$CARD_OWNER"

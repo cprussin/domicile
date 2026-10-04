@@ -1,18 +1,17 @@
 #!/usr/bin/env bash
-# A desktop running on a config module takes an edit to it: the config is
-# evaluated again into the file the compositor reads, and — the config being
-# the shell — built again and loaded.
+# Checks a desktop running a config module re-evaluates, rebuilds and reloads
+# the shell when the config is edited.
 #
 #   ./scripts/test-a-config-module-reloads.sh
 #
-# `tests/config_watch.rs` owns the watch and `test-a-running-desktop-takes-a-
-# new-shell.sh` the load; this owns the join: that `domicile` with no shell
-# runs the config's, hands the compositor the evaluation at a path that stays
-# put, and on an edit evaluates and builds again and tells the engine.
+# `tests/config_watch.rs` covers the watch and
+# `test-a-running-desktop-takes-a-new-shell.sh` the load. This covers the
+# supervisor between them: `domicile` with no shell runs the config's, passes
+# the compositor the evaluated config at a stable path, and on an edit
+# re-evaluates, rebuilds and tells the engine.
 #
-# THE BUILDER HERE IS A FEW LINES OF SHELL, standing in for `@domicile-desktop/builder`
-# — whose own tests build and evaluate for real — as the engine and the
-# compositor stand in for theirs: what is under test is the supervisor.
+# The builder, engine and compositor are stubs; `@domicile-desktop/builder`
+# has its own tests.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -39,14 +38,13 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-# The config, which is the shell: what it says is a version the fake builder
-# carries through into both what it evaluates and where it builds.
+# The config's text acts as a version: the stub builder puts it in both the
+# evaluated JSON and the build directory name.
 mkdir -p "$WORK/config/domicile"
 CONFIG="$WORK/config/domicile/domicile.ts"
 echo "first" >"$CONFIG"
 
-# The builder: evaluates a config into JSON carrying its text, and builds an
-# entry into a directory named after its text, one JSON line each.
+# Stub builder: `--evaluate` and `--entry` each print one JSON line.
 cat >"$WORK/builder" <<'BUILDER'
 #!/usr/bin/env bash
 mode="$1" target="$2" cache=""

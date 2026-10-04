@@ -1,26 +1,19 @@
 #!/usr/bin/env bash
-# Which tree a run builds in, and the one answer that must never be wrong.
+# Asserts which tree in the pool a run builds in.
 #
-# The pool exists because the Chromium checkout is keyed by `CHROMIUM_PIN` and
-# there is one of it. Two branches carrying different pins take turns in that
-# one tree, and each turn is a reset, a `gclient sync`, an apply and a compile
-# of most of Chromium — four hours, every time, in both directions. Two pull
-# requests open at once is four of those. The pool is N trees behind one path,
-# so a pin that has been built before is a symlink swap rather than a build.
+# Switching the Chromium checkout between pins costs a reset, a `gclient sync`,
+# an apply and a near-full compile, about four hours. The pool keeps N trees
+# behind one path, so a pin built before is a symlink swap.
 #
-# WHAT A WRONG ANSWER COSTS, and it is not symmetrical:
+# Wrong answers differ in cost:
 #
-#   - Choosing a tree that does NOT carry this pin when one does: one run pays
-#     what every run pays today. The ordinary price, not a failure.
-#   - Choosing a tree and saying it carries this pin when it does not: the
-#     build is skipped by `engine-series-stamp.sh` and a green check is
-#     reported over code nothing compiled. That is the failure, and it is the
-#     same one that script spends eleven of thirteen cases on.
+#   - Picking a tree without this pin when one has it costs one full build.
+#   - Claiming a tree carries this pin when it does not lets
+#     `engine-series-stamp.sh` skip the build and report green over uncompiled
+#     code.
 #
-# So this script never claims anything about a tree's contents. It picks a
-# directory and points the path at it; what is IN that directory is still the
-# stamp's question, asked afterward, against the tree the symlink now names.
-# The cases below are about the picking and about the swap being real.
+# So this script never vouches for a tree's contents. It picks a directory and
+# points the path at it; the stamp check then inspects that tree.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -49,8 +42,7 @@ contains() {
   esac
 }
 
-# A build root with `slots` trees in it, none of them carrying anything. The
-# real one is /build and a test has no business there, hence the seam.
+# A build root with `slots` empty trees. Tests pass it in place of /build.
 build_root() { # slots
   local root slot
   root="$(mktemp -d "$WORK/build.XXXXXX")"
@@ -61,21 +53,19 @@ build_root() { # slots
   printf '%s\n' "$root"
 }
 
-# A slot the unit made and never filled: the directory is there and there is no
-# Chromium in it. This is what `tree-1` on `crux` was.
+# A slot directory with no Chromium checkout in it.
 empty_slot() { # root, slot
   rm -rf "$1/trees/tree-$2/src"
 }
 
-# What `engine-sync.sh` writes beside a checkout when its DEPS reach a pin.
-# The pool reads that file and nothing else, so this is how a test says "this
-# slot was last built at that pin".
+# The file `engine-sync.sh` writes when a checkout's DEPS reach a pin. The
+# pool reads only this file to learn a slot's pin.
 carrying() { # root, slot, pin
   printf '%s\n' "$3" >"$1/trees/tree-$2/.domicile-synced-pin"
 }
 
-# When a slot was last handed out, backdated so the ordering is a fact rather
-# than a race between two `touch`es in the same second.
+# Backdates a slot's last-used time, so ordering does not depend on two
+# `touch`es in the same second.
 used_at() { # root, slot, seconds ago
   local when
   when="$(date -d "@$(($(date +%s) - $3))" +%Y%m%d%H%M.%S)"
@@ -92,8 +82,7 @@ use() { # root, pin — output on stdout, status as the first line
 }
 status() { printf '%s\n' "$1" | head -1; }
 
-# Which slot the path now names, as a slot number rather than a path, so the
-# assertions read as the decision rather than as a temp directory.
+# The slot the path points at, as a slot name.
 chose() { # root
   local target
   target="$(readlink "$1/chromium" 2>/dev/null || true)"
@@ -114,9 +103,9 @@ contains "and it says the build is the one being skipped" "already at bbbbbbb" "
 echo
 echo "== a pin nobody has built takes the cheapest slot to lose =="
 
-# An unbuilt slot costs nothing to take and a populated one costs its pin, so
-# an empty slot goes first however long ago it was last handed out. Without
-# this the first two pins evict each other while a whole tree sits unused.
+# An empty slot costs nothing to take, so it goes before any populated one,
+# however old. Otherwise the first two pins evict each other while a tree sits
+# unused.
 root="$(build_root 3)"
 carrying "$root" 0 aaaaaaa
 used_at "$root" 0 99999
@@ -125,10 +114,8 @@ used_at "$root" 2 1
 use "$root" ddddddd >/dev/null
 expect "an empty slot is taken before a populated one" tree-1 "$(chose "$root")"
 
-# THE CASE THE LAST-USED FILE EXISTS FOR. All three carry something, so one of
-# them loses its pin; the one to lose is the one no branch has asked for in
-# longest. Picking the first, or the newest, would throw away the tree the
-# other open pull request is about to want.
+# When every slot holds a pin, evict the least recently used. Picking the
+# first or newest would discard a tree another open pull request needs next.
 root="$(build_root 3)"
 carrying "$root" 0 aaaaaaa
 used_at "$root" 0 60
@@ -139,23 +126,17 @@ used_at "$root" 2 30
 use "$root" ddddddd >/dev/null
 expect "the least recently used slot is the one evicted" tree-1 "$(chose "$root")"
 
-# A run that died between `engine-sync.sh` clearing that file and writing it
-# again leaves a tree that is somewhere between two pins. It records no pin, so
-# it reads as empty — which is right in both directions: it is the cheapest
-# thing to take, and nothing will ever match it.
+# A run that died mid-sync leaves a tree between two pins, recording no pin.
+# It reads as empty: cheapest to take, and never a match.
 root="$(build_root 2)"
 carrying "$root" 0 aaaaaaa
 used_at "$root" 0 99999
 use "$root" eeeeeee >/dev/null
 expect "a slot that records no pin is free to take" tree-1 "$(chose "$root")"
 
-# AND THE TWO KINDS OF EMPTY ARE NOT ONE KIND, which is what run 35703990131
-# cost. The slot above records no pin because a sync is part-way through it,
-# and it is the cheapest thing in the pool to take. A slot the unit made and
-# has not filled records no pin either — and there is no checkout in it to
-# build, so the swap succeeds, nothing looks, and `engine-reset.sh` dies a
-# second later on `cannot change to '/build/chromium/src'`. The pick repeats
-# for the same reason every run after it, so it is every branch and not one.
+# A slot with no checkout also records no pin, but it cannot be built in.
+# Taking it makes `engine-reset.sh` fail on `cannot change to
+# '/build/chromium/src'`, and every later run would pick it again.
 root="$(build_root 2)"
 carrying "$root" 0 aaaaaaa
 used_at "$root" 0 99999
@@ -175,17 +156,15 @@ expect "the path is a symlink" symlink \
 expect "and it reaches the slot's checkout" ok \
   "$([ -d "$root/chromium/src" ] && echo ok || echo "no src behind it")"
 
-# Handing a slot out is what makes it recently used, and the file has to be
-# written for the eviction above to have anything to sort on. A `use` that
-# picks a slot and does not mark it would evict the tree it just filled.
+# Handing out a slot marks it used. Without the mark, eviction could discard
+# the tree just filled.
 root="$(build_root 2)"
 use "$root" aaaaaaa >/dev/null
 expect "the slot it hands out is marked used" ok \
   "$([ -f "$root/chromium/.domicile-last-used" ] && echo ok || echo "not marked")"
 
-# Twice for the same pin is the ordinary case — every step of the engine job
-# runs against a path that was already pointed here — and it must not become a
-# different answer the second time.
+# Every step of the engine job asks again for the same pin; the answer must not
+# change.
 root="$(build_root 2)"
 carrying "$root" 0 aaaaaaa
 use "$root" aaaaaaa >/dev/null
@@ -196,11 +175,9 @@ expect "asking twice for the same pin does not move" "$first" "$(chose "$root")"
 echo
 echo "== what it refuses to do =="
 
-# THE UN-ADOPTED MACHINE. Before the pool exists, /build/chromium is a real
-# directory with 97G of Chromium in it. Replacing that with a symlink is not
-# this script's to do: it is a move of the one tree on the machine, it belongs
-# to whoever owns /build, and getting it wrong here costs four hours and is
-# silent until the build starts. So it stops, and says which unit does it.
+# A machine not yet migrated has a real /build/chromium directory holding the
+# only tree. Replacing it with a symlink is the setup unit's job, not this
+# script's, so the script refuses and names the unit.
 root="$(mktemp -d "$WORK/unadopted.XXXXXX")"
 mkdir -p "$root/trees" "$root/chromium/src"
 out="$(use "$root" aaaaaaa)"
@@ -210,10 +187,8 @@ contains "and the refusal says what has to happen to it" \
 expect "and nothing was moved" ok \
   "$([ -d "$root/chromium/src" ] && [ ! -L "$root/chromium" ] && echo ok || echo moved)"
 
-# A MACHINE WITH NO POOL IS NOT A FAILURE, and this is the half that lets the
-# two repositories land in either order. Until the unit that makes /build/trees
-# is deployed there is nothing to choose between, and the run should build in
-# the tree that is already there exactly as it did before.
+# A machine with no pool builds in the existing tree, so this repository and
+# the one that deploys the pool can land in either order.
 root="$(mktemp -d "$WORK/nopool.XXXXXX")"
 mkdir -p "$root/chromium/src"
 out="$(use "$root" aaaaaaa)"
@@ -222,44 +197,37 @@ contains "and it says why it did nothing" "no pool" "$out"
 expect "and the checkout is untouched" ok \
   "$([ -d "$root/chromium/src" ] && echo ok || echo "it moved something")"
 
-# An empty pool directory is a deploy half-done rather than no pool at all, and
-# it must not read as one: `use` would otherwise silently leave the path
-# wherever it was and the next run would build in a tree nobody chose.
+# An empty pool directory is a partial deploy, not "no pool". Treating it as
+# no pool would leave the path pointing at a tree nobody chose.
 root="$(mktemp -d "$WORK/emptypool.XXXXXX")"
 mkdir -p "$root/trees"
 out="$(use "$root" aaaaaaa)"
 expect "a pool directory with no slots in it is refused" refused "$(status "$out")"
 contains "and the refusal names the directory that is empty" "$root/trees" "$out"
 
-# SLOTS WITH NOTHING IN THEM ARE THE SAME DEPLOY HALF-DONE, and filling one is
-# 97G and hours of `gclient` that this script is not the place for — it uses
-# what it finds and creates nothing. So there is nothing here to hand out, and
-# saying so is the only answer that does not end in a symlink onto a tree no
-# job can build in.
+# Slots with no checkout are also a partial deploy. Filling one takes ~97G and
+# hours of `gclient`, which this script does not do, so it refuses.
 root="$(build_root 2)"
 empty_slot "$root" 0
 empty_slot "$root" 1
 out="$(use "$root" aaaaaaa)"
 expect "a pool whose slots hold no checkout is refused" refused "$(status "$out")"
-# Filling a slot is bootstrap-chromium-tree.service's, not the unit that makes
-# the slots -- a reader sent to the wrong one finds a unit that ran fine.
+# bootstrap-chromium-tree.service fills slots; the unit that creates them is
+# not the one to check.
 contains "and the refusal says which unit fills them" "bootstrap-chromium-tree" "$out"
 expect "and the path is not pointed at one of them" ok \
   "$([ ! -e "$root/chromium" ] && echo ok || echo "it points at $(chose "$root")")"
 
 # ===================================================================
-# PICK, WHICH IS CHOOSE AND LOCK IN ONE OPERATION
+# PICK: CHOOSE AND LOCK IN ONE OPERATION
 # ===================================================================
 #
-# `use` points one path at a tree, so two runs cannot be in the pool at once:
-# the second repoints the path under the first. `pick` is what replaces it --
-# it names a tree on stdout and takes that tree's lock before printing it, so
-# two runs get two trees or the second is told there are none free.
+# `use` points one shared path at a tree, so only one run can use the pool.
+# `pick` prints a tree's path after taking its lock, so concurrent runs get
+# different trees or a refusal.
 #
-# CHOOSING AND LOCKING HAVE TO BE ONE STEP. Choosing first and locking after
-# is a race with exactly the shape the tree lock exists to prevent: two runs
-# read the same preference order, both pick tree-0, and the loser either
-# overwrites the winner's lock or builds in a tree it does not hold.
+# Choosing and locking must be atomic. Otherwise two runs both pick tree-0, and
+# one overwrites the other's lock or builds in a tree it does not hold.
 pick() { # root pin owner
   DOMICILE_BUILD_ROOT="$1" "$POOL_SH" pick "$2" "$3" 2>&1
 }
@@ -274,15 +242,14 @@ expect "pick names a tree's src" ok \
 expect "and takes that tree's lock" ok \
   "$([ -d "$(lock_of "$root" tree-0)" ] && echo ok || echo "no lock")"
 
-# The second run must not be handed the tree the first is in, and the lock is
-# the only thing that can tell it so -- the preference order alone would send
-# both to the same slot.
+# Only the lock keeps a second run off the first run's tree; the preference
+# order alone would send both to the same slot.
 out="$(pick "$root" aaaaaaa 'run two')"
 expect "a second run gets a different tree" ok \
   "$([ "$out" = "$root/trees/tree-1/src" ] && echo ok || echo "said $out")"
 
-# And when every tree is held, saying so is the only safe answer: building in
-# a locked tree is the reset-inside-someone-else's-build this all exists for.
+# With every tree held, the pick refuses. Building in a held tree resets it
+# under another run's build.
 out="$(DOMICILE_TREE_WAIT=0 pick "$root" aaaaaaa 'run three')"
 expect "a third run is refused rather than given a held tree" refused \
   "$(case "$out" in (*::error::*) echo refused ;; (*) echo "$out" ;; esac)"
@@ -291,11 +258,10 @@ contains "and the refusal says who holds them" "run one" "$out"
 echo
 echo "== a run that finds every tree held waits for one, and only one run waits =="
 
-# Refusing was a red check per run that lost the race: PR #794's build failed
-# three times in an afternoon on trees that freed minutes later. But a waiting
-# build holds one of crux's two runners, and a tree is only dropped by its
-# run's engine job, which needs a runner. Two waiters would hold both and wait
-# forever, so a second waiter is refused, which always leaves a runner free.
+# A run that finds every tree held waits, since trees often free up within
+# minutes. A waiting build holds one of crux's two runners, and only a run's
+# engine job (which needs a runner) drops its tree. Two waiters would deadlock,
+# so a second waiter is refused.
 LOCK_SH="$ROOT/.github/scripts/engine-tree-lock.sh"
 waiting_pick() { # root pin owner -- in the background, into $WORK/<owner>
   DOMICILE_TREE_WAIT=20 DOMICILE_TREE_POLL=1 \
@@ -319,8 +285,8 @@ expect "and holds its lock" waiter "$(cat "$(lock_of "$root" tree-1)/owner")"
 expect "and is no longer waiting" absent \
   "$([ -e "$root/.domicile-tree-waiter" ] && echo present || echo absent)"
 
-# A waiter that was canceled cannot say it stopped. It says it is alive every
-# poll, and one that has not for longer than that is not waiting.
+# A canceled waiter cannot announce it stopped. Waiters refresh a heartbeat
+# each poll; one with a stale heartbeat is not waiting.
 root="$(build_root 1)"
 pick "$root" aaaaaaa 'holder' >/dev/null
 mkdir "$root/.domicile-tree-waiter"
@@ -331,18 +297,17 @@ contains "a waiter that stopped saying it is alive is replaced" \
   "held after waiting 1s" "$out"
 contains "and the wait is bounded, naming who held the trees" "holder" "$out"
 
-# A tree carrying the pin is still preferred -- the lock decides between
-# candidates, it does not replace the ordering that makes a warm tree worth
-# having.
+# A tree carrying the pin is still preferred. The lock picks among candidates;
+# it does not replace the ordering.
 root="$(build_root 2)"
 printf 'bbbbbbb\n' >"$root/trees/tree-1/src/../.domicile-synced-pin"
 out="$(pick "$root" bbbbbbb 'warm run')"
 expect "the tree carrying the pin wins even though it is not first" ok \
   "$([ "$out" = "$root/trees/tree-1/src" ] && echo ok || echo "said $out")"
 
-# A waiter whose commit its branch has moved past is waiting for nothing, and
-# holds the one waiting place while it does. It asks, as the compile slot's
-# waiters do, and stops; a check that cannot answer is not a no.
+# A waiter whose branch has moved past its commit stops waiting and frees the
+# waiting place, as compile slot waiters do. A check that cannot answer does
+# not count as "no".
 root="$(build_root 1)"
 pick "$root" aaaaaaa 'holder' >/dev/null
 out="$(DOMICILE_TREE_WAIT=20 DOMICILE_TREE_POLL=1 DOMICILE_TREE_RECHECK=0 \
@@ -359,10 +324,9 @@ contains "a check that cannot answer leaves the wait alone" "held after waiting 
 echo
 echo "== a tree already carrying this run's series is the one to take =="
 
-# Run 36228817911 rebuilt in tree-1 the series 36223658113 had just built in
-# tree-0: both trees were at the pin, and the pin was all the pick looked at.
-# The stamp beside a tree names the series it last carried, and a pick that
-# reads it hands the run the tree whose reset, apply and compile are skipped.
+# The pick prefers a tree whose stamp names this run's series, since its reset,
+# apply and compile are skipped. Matching only the pin would rebuild a series
+# another tree already carries.
 SERIES_ID="$("$ROOT/.github/scripts/engine-series-stamp.sh" identity)"
 stamped() { # root, slot, identity
   printf '%s\n%s\n' "$3" deadbeef >"$1/trees/tree-$2/.domicile-series-stamp"
@@ -379,7 +343,7 @@ out="$(pick "$root" aaaaaaa 'same series')"
 expect "the tree carrying this series wins over the least recently used" ok \
   "$([ "$out" = "$root/trees/tree-1/src" ] && echo ok || echo "said $out")"
 
-# Preferred, never taken from under a holder: the lock still decides.
+# A matching series is preferred, but the lock still decides.
 root="$(build_root 2)"
 carrying "$root" 0 aaaaaaa
 carrying "$root" 1 aaaaaaa
@@ -390,9 +354,9 @@ out="$(pick "$root" aaaaaaa 'same series, held')"
 expect "a held tree carrying this series is skipped" ok \
   "$([ "$out" = "$root/trees/tree-0/src" ] && echo ok || echo "said $out")"
 
-# No tree carries the series, so one at the pin loses what it holds. The one
-# to lose is the one no run has asked for in longest -- not the first by name,
-# which is how two pull requests at one pin evicted each other's series.
+# With no series match, a tree at the pin loses its series. Evict the least
+# recently used, not the first by name, so two pull requests at one pin do not
+# evict each other.
 root="$(build_root 2)"
 carrying "$root" 0 aaaaaaa
 stamped "$root" 0 series-x
@@ -407,10 +371,9 @@ expect "with no series match, the least recently used tree at the pin is taken" 
 echo
 echo "== whether the tree pick would take needs a compile =="
 
-# engine.yml asks this before the build job takes a runner, so a run that
-# will compile queues on GitHub for the compile slot holding no runner, and a
-# run that will not goes straight through. It asks about the tree `pick`
-# would take now, because that is the tree the job will build in.
+# engine.yml asks this before the build job takes a runner, so a run that will
+# compile queues on GitHub without holding a runner. It answers for the tree
+# `pick` would take now.
 compiles() { # root pin
   : >"$WORK/output"
   DOMICILE_BUILD_ROOT="$1" GITHUB_OUTPUT="$WORK/output" \
@@ -453,10 +416,9 @@ expect "a warm tree carrying another series compiles" \
 echo
 echo "== whether that compile is cold =="
 
-# A cold compile holds the slot for an hour and more, a warm one a minute or
-# two. engine.yml queues them apart so the warm ones stop waiting behind the
-# cold, and asks this which is which. What a series changes in the tree comes
-# from engine-series-diff.sh, stubbed here: its own test covers it.
+# A cold compile holds the slot for over an hour, a warm one a minute or two.
+# engine.yml queues them separately and asks this which is which.
+# engine-series-diff.sh is stubbed here; its own test covers it.
 cat >"$WORK/series-diff" <<'EOF'
 #!/usr/bin/env bash
 printf '%s' "$STUB_CHANGED"
@@ -502,8 +464,8 @@ stamped "$root" 0 "$SERIES_ID"
 built "$root" 0
 expect "a run that compiles nothing is not cold" false "$(cold "$root" aaaaaaa '')"
 
-# A run from a workflow older than per-tree locks holds the single lock and
-# repoints /build/chromium into whichever tree it likes, so nothing is free.
+# A run from a workflow that predates per-tree locks holds the single pool lock
+# and may repoint /build/chromium into any tree, so no tree is free.
 root="$(build_root 2)"
 mkdir "$root/.domicile-tree-lock"
 echo "old run" >"$root/.domicile-tree-lock/owner"

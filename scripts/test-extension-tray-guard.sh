@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
-# Which end the extension-tray guard blames, and which answers it calls a pass.
+# Asserts the extension-tray guard's verdict: which answers pass, and which
+# end each failure blames.
 #
-# The unit is the verdict block in `guard-extension-tray.sh`, run out of the
-# real script rather than copied, as `test-extension-installer-guard.sh` does.
-# The cases that matter most: a control that saw no fixture must also have
-# heard a tray at all, because "not in the tray" and "no tray" are the same
-# absence -- a control whose page closed had a close nobody asked for -- and a
-# popup that never answered runtime.getContexts took the browser with it.
+# Runs the verdict block from `guard-extension-tray.sh` itself, as
+# `test-extension-installer-guard.sh` does. Key cases: a control that saw no
+# fixture must still have heard a tray, since "not in the tray" and "no tray"
+# look the same; a control page that closes was never asked to close, so the
+# close is a failure; and a popup that never answered runtime.getContexts
+# crashed the browser.
 #
-# Plus what the guard cannot check at runtime: the id it expects is the one the
-# fixture's key makes, and the badge it reads is the one the fixture sets.
+# Also checks what the guard cannot check at runtime: its expected id matches
+# the fixture's key, and its expected badge matches what the fixture sets.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -38,7 +39,7 @@ expect() {
   fi
 }
 
-# Pass or fail, not the sentence: the sentences will be reworded.
+# Prints pass or fail, not the message, which may be reworded.
 verdict() { # $1 MEASURED
   (
     MEASURED="$1"
@@ -53,8 +54,7 @@ verdict() { # $1 MEASURED
   )
 }
 
-# Whether the failing sentence names `$2`, where WHICH end it blames is the
-# point.
+# Whether the failure message contains `$2`; the end it blames matters.
 says() { # $1 MEASURED, $2 what the sentence must contain
   case "$(
     MEASURED="$1"
@@ -67,14 +67,18 @@ says() { # $1 MEASURED, $2 what the sentence must contain
 }
 
 # MEASURED is "<leg> <sent> <heard> <tray> <opened> <contexts> <closed>
-# <sized>":
-# whether the stand-in sent the list, whether the page heard any `extensions`
-# event, whether the fixture's row was in it (as expected, for the claim; at
-# all, for the control), whether the <webview> showed its page, whether the
-# popup's runtime.getContexts listed it as a POPUP and tabs.getCurrent named
-# no tab (any answer at all, for the control), whether the <webview> dispatched `domicile-close` (after any
-# answer, for the claim), and whether it reported the popup's content size as
-# the fixture lays it out (that size at all, for the control).
+# <sized>", each 1 or 0:
+#   sent      the stand-in sent the list
+#   heard     the page heard an `extensions` event
+#   tray      the fixture's row was present (as expected for the claim; at all
+#             for the control)
+#   opened    the <webview> showed its page
+#   contexts  runtime.getContexts listed the popup as a POPUP and
+#             tabs.getCurrent named no tab (any answer, for the control)
+#   closed    the <webview> dispatched `domicile-close` (after any answer, for
+#             the claim)
+#   sized     it reported the fixture's content size (that size at all, for
+#             the control)
 echo "the claim — the fixture in the tray, its popup opened, asked and closed"
 expect "all seven is a pass" "pass" "$(verdict "tray 1 1 1 1 1 1 1")"
 expect "a list never sent is a failure" "fail" "$(verdict "tray 0 1 1 1 1 1 1")"
@@ -91,8 +95,8 @@ expect "a popup that never showed is a failure" "fail" \
 expect "and blames the navigation" "yes" \
   "$(says "tray 1 1 1 0 0 0 0" "chrome-extension://")"
 
-# THE CASE THE CONTEXTS READING IS FOR: getContexts on a guest with no view
-# type is a NOTREACHED, which takes the browser down before any answer.
+# getContexts on a guest with no view type hits a NOTREACHED, which crashes
+# the browser before any answer.
 expect "a popup that never answered is a failure" "fail" \
   "$(verdict "tray 1 1 1 1 0 0 1")"
 expect "and blames the guest's view type" "yes" \
@@ -114,7 +118,8 @@ echo "the control — the list empty, a page that never closes"
 expect "heard, absent, shown, unasked and open is the pass" "pass" \
   "$(verdict "control 1 1 0 1 0 0 0")"
 
-# THE CASE THE HEARD READING IS FOR: an absence nothing was asked about.
+# A control with no fixture proves nothing if the page heard no tray event, so
+# it fails.
 expect "no tray heard is a failure" "fail" "$(verdict "control 1 0 0 1 0 0 0")"
 expect "the fixture from an empty list is a failure" "fail" \
   "$(verdict "control 1 1 1 1 0 0 0")"
@@ -124,7 +129,7 @@ expect "a page that never showed is a failure" "fail" \
 expect "an answer from a page that asked nothing is a failure" "fail" \
   "$(verdict "control 1 1 0 1 1 0 0")"
 
-# INVERTED: the close is the failure.
+# Inverted: a close is the failure.
 expect "a close from a page that never asked is a failure" "fail" \
   "$(verdict "control 1 1 0 1 0 1 0")"
 expect "and says so" "yes" "$(says "control 1 1 0 1 0 1 0" "never called")"
@@ -150,7 +155,7 @@ BADGE_COLOR="$(sed -n 's/^readonly BADGE_COLOR="\(.*\)"$/\1/p' "$GUARD")"
 expect "the service worker sets the badge the guard reads" "yes" \
   "$(grep -qF "setBadgeText({ text: \"$BADGE\" })" "$FIXTURE/background.js" &&
     echo yes || echo no)"
-# ARGB as the page reads it, #rrggbbaa, from the #RRGGBB the worker sets.
+# The page reads ARGB as #rrggbbaa; the worker sets #RRGGBB.
 SET_COLOR="$(sed -n 's/.*setBadgeBackgroundColor({ color: "#\([0-9A-F]\{6\}\)" }).*/\1/p' "$FIXTURE/background.js")"
 expect "and the color, as the engine spells it" "$BADGE_COLOR" \
   "#$(printf '%s' "$SET_COLOR" | tr 'A-F' 'a-f')ff"
@@ -164,9 +169,9 @@ expect "and asks runtime.getContexts first" "yes" \
   "$(grep -qF 'runtime.getContexts({})' "$FIXTURE/popup.js" && echo yes || echo no)"
 WIDTH="$(sed -n 's/^readonly WIDTH="\([0-9]*\)"$/\1/p' "$GUARD")"
 HEIGHT="$(sed -n 's/^readonly HEIGHT="\([0-9]*\)"$/\1/p' "$GUARD")"
-# Fluid, as Bitwarden's popup is in a tab: two halves of WIDTH side by side
-# and nothing fixing the width, so its min-content width is half its natural
-# one and a size read off the narrower is a strip.
+# A fluid layout, like Bitwarden's popup in a tab: two halves of WIDTH side by
+# side with no fixed width. Its min-content width is half its natural width,
+# so sizing from the narrower value gives a strip.
 HALF=$((WIDTH / 2))
 expect "and lays its popup out fluid, at the size the guard reads" "2 1 0" \
   "$(grep -oF "display: inline-block; width: ${HALF}px; height: ${HEIGHT}px" "$FIXTURE/popup.html" | wc -l) \

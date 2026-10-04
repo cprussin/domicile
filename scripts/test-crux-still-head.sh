@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
-# crux-still-head.sh: whether a run's commit is still what its branch points at.
+# Tests `crux-still-head.sh`: whether a run's commit is still its branch's head.
 #
-# An engine run waiting for the compile slot can wait hours, and one whose
-# branch has since moved on holds a `crux` runner that whole time for a result
-# nobody will read. This is the question engine.yml asks while it waits.
+# engine.yml asks this while a run waits for the compile slot, so a replaced
+# commit does not hold a `crux` runner for hours.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -61,8 +60,8 @@ git remote set-url origin "$WORK/nowhere.git"
 out="$(still_head "$second")"
 contains "an unreachable origin is an error, not an answer" "exit=3" "$out"
 
-# And engine.yml asks it while it waits for the compile slot, and turns a
-# "no" into a cancel rather than a red run.
+# engine.yml asks this while it waits for the slot, and turns "no" into a
+# cancel rather than a failed run.
 WORKFLOW="$ROOT/.github/workflows/engine.yml"
 step() { awk -v n="      - name: $1" '$0 == n {on=1; print; next} on && /^      - name:/ {exit} on' "$WORKFLOW"; }
 slot="$(step "Take the compile slot")"

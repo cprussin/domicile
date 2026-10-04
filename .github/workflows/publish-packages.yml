@@ -1,13 +1,11 @@
 name: Publish packages
 
-# Every public `@domicile-desktop/*` package to npm, as an alpha of the commit:
-# `0.0.0-alpha-<sha>` under the `latest` dist-tag. See
-# .github/scripts/publish-packages.sh.
+# Publish every public `@domicile-desktop/*` package to npm as
+# `0.0.0-alpha-<sha>`. See .github/scripts/publish-packages.sh.
 #
-# TRUSTED PUBLISHING, NO TOKEN. npm takes this workflow's OIDC token
-# (`id-token: write`) for each package whose trusted publisher on npmjs.com
-# names this repository and this file, and attaches provenance itself. A
-# package with no trusted publisher refuses the publish.
+# Uses trusted publishing: npm accepts this workflow's OIDC token for packages
+# whose trusted publisher on npmjs.com names this repository and file, and adds
+# provenance. A package without a trusted publisher refuses the publish.
 on:
   push:
     branches: [main]
@@ -35,9 +33,8 @@ jobs:
           registry-url: https://registry.npmjs.org
       - run: npm install -g npm@latest
       - run: bun install --frozen-lockfile
-      # NPM_TOKEN is only for a package's first publish, before npm has a
-      # package to hang a trusted publisher on. Unset, npm uses this run's
-      # OIDC token alone. Either way the publish carries provenance.
+      # NPM_TOKEN is only for a package's first publish, before it can have a
+      # trusted publisher. When unset, npm uses this run's OIDC token.
       - run: .github/scripts/publish-packages.sh
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

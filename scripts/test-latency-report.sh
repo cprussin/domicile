@@ -1,20 +1,12 @@
 #!/usr/bin/env bash
-# What the latency guard concludes from a compositor log.
+# Tests how `lib-latency.sh` reads a compositor log.
 #
-# The unit is `lib-latency.sh`. It exists because the alternative is a guard
-# whose reading of its own measurement can only be exercised by building
-# Chromium, starting a browser and waiting four minutes — which means it is
-# never exercised, and a threshold that silently stopped comparing would go on
-# passing for as long as nobody looked.
+# Fixtures match the lines `Spread::line` in
+# `packages/domicile-compositor/src/latency.rs` writes; its own tests assert
+# the format.
 #
-# The fixtures are the lines the compositor really writes: `Spread::line` in
-# `packages/domicile-compositor/src/latency.rs` builds them and its own unit
-# tests assert them whole, so a rewording at that end fails there and a
-# misreading at this end fails here.
-#
-# The comparison is the part worth having. `[ 16.68 -le 33.34 ]` is not a
-# failed comparison, it is a syntax error, and the shape that quietly is not
-# one — `${x%.*}` — discards the decimals the whole check is about.
+# The float comparison matters most: `[ 16.68 -le 33.34 ]` is a syntax error,
+# and `${x%.*}` drops the decimals the check depends on.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -41,9 +33,8 @@ log_of() {
   echo "$f"
 }
 
-# A whole run, in the shape the compositor writes it: tracing's prefix, the
-# target, then the message. The prefix is included so a grep anchored on the
-# start of a line fails here rather than on the runner.
+# A full run, including tracing's prefix, so a grep anchored at line start
+# fails here instead of on the runner.
 COMPLETE="$(cat <<'RUN'
 2026-09-07T14:00:00.1Z  INFO domicile::engine::spike: latency: the display frame is 16.67 ms
 2026-09-07T14:00:00.2Z  INFO domicile::engine::spike: latency floor: min 16.60, median 16.67, max 17.90 ms over 60 (median 1.0 frames)
@@ -64,8 +55,7 @@ RUN_LOG="$(log_of "$COMPLETE")"
 expect "the floor's median comes off its own line" \
   "16.67" "$(latency_median floor "$RUN_LOG")"
 
-# The one the design is answerable for, and the one a wrong anchor would take
-# from the wrong line: every line here has a `median`.
+# Every line has a `median`, so a wrong anchor would read the wrong one.
 expect "commit to pixel's median is not the floor's" \
   "16.68" "$(latency_median "commit to pixel" "$RUN_LOG")"
 
@@ -74,58 +64,43 @@ expect "a two-word label reads as one label" \
 
 expect "a completed run says so" "completed" "$(latency_ended "$RUN_LOG")"
 
-# THE DENOMINATOR, and the reason it is read off the run rather than written
-# here. `commit to pixel` is quantized to probe round trips and a probe round
-# trip is one display frame, so one display frame is what the assertion is a
-# multiple of. It is not the floor: the floor is that same frame sampled while
-# the browser is still starting, and it has come back at three times this on a
-# run whose own commit-to-pixel was less than two.
+# `commit to pixel` is quantized to probe round trips, which last one display
+# frame, so the threshold is a multiple of the display frame. The floor is the
+# same frame sampled during browser startup and can read three times higher.
 expect "the display frame comes off its own line" \
   "16.67" "$(latency_display_frame "$RUN_LOG")"
 expect "an unabandoned run says none" "0" "$(latency_abandoned "$RUN_LOG")"
 
-# Its own line and its own reader, and the reason both exist: a round the
-# client answered with two frames and one it never answered at all look the
-# same from the abandoned count, and they are opposite findings. Anchored on
-# its own wording so it cannot read the abandoned line, which also matches
+# A redraw during polling and an unanswered round have opposite meanings.
+# Anchor on the full wording, since the abandoned line also matches
 # `latency: <n> round(s)`.
 expect "a run the client redrew during says how often" \
   "2" "$(latency_redrew "$RUN_LOG")"
 expect "and the abandoned count is not it" \
   "0" "$(latency_abandoned "$RUN_LOG")"
 
-# A round given up because the probe point changed before the client answered
-# is a third thing again: the client was asked, and what reached the screen was
-# a frame from before the key. Its own line and its own reader for the reason
-# the two above have theirs — all three match `latency: <n> round(s)`, and a
-# reader that took the first of them would report one as another.
+# A round dropped because the probe point changed before the answer has its
+# own line and reader; all these lines match `latency: <n> round(s)`.
 expect "a run whose pixel moved before an answer says how often" \
   "1" "$(latency_moved "$RUN_LOG")"
 expect "and is neither the abandoned count nor the redrawn one" \
   "0 2" "$(latency_abandoned "$RUN_LOG") $(latency_redrew "$RUN_LOG")"
 
-# And the fourth, which reads as a measurement until you look at the size of
-# it: the client committed in the right order and the pixel followed, too long
-# after the key for the key to have caused either. Its own line and its own
-# reader for the reason the three above have theirs.
+# A commit too long after the key for the key to have caused it.
 expect "a run whose commit came too late says how often" \
   "3" "$(latency_late "$RUN_LOG")"
 expect "and is none of the other three" \
   "0 2 1" "$(latency_abandoned "$RUN_LOG") $(latency_redrew "$RUN_LOG") $(latency_moved "$RUN_LOG")"
 
-# And the near end of that same wait, which is a fifth line rather than more of
-# the fourth: a commit 0.82 ms after a key is the same stray arriving with the
-# key instead of long after it, and a report that called it "too late" would
-# send whoever read it looking for a slow client. Both lines end in the same
-# words, so this is also what decides whether the two readers anchor on
-# enough of theirs to tell them apart.
+# A commit very soon after the key is a frame already in flight. Reporting it
+# as "too late" would suggest a slow client. Both lines end in the same words,
+# so this also checks that each reader anchors on enough to tell them apart.
 expect "a run that passed over commits too soon says how many" \
   "4" "$(latency_soon "$RUN_LOG")"
 expect "and is not the count of the ones that came too late" \
   "3" "$(latency_late "$RUN_LOG")"
 
-# "Nothing measured" is the compositor's own line for a spread with no samples.
-# It must not read as a number, and it must not read as the previous line's.
+# "Nothing measured" must not read as a number, or as the previous line's.
 NOTHING="$(log_of "2026-09-07T14:00:00.2Z  INFO domicile::engine::spike: latency floor: min 16.60, median 16.67, max 17.90 ms over 60 (median 1.0 frames)
 2026-09-07T14:00:00.4Z  INFO domicile::engine::spike: latency commit to pixel: nothing measured")"
 expect "a spread with no samples yields no number" \
@@ -133,15 +108,14 @@ expect "a spread with no samples yields no number" \
 expect "and does not borrow the line above it" \
   "16.67" "$(latency_median floor "$NOTHING")"
 
-# A run that measured something and then measured nothing has no reading, and
-# must not be handed the earlier one. This is what decides whether the reader
-# takes the last line for the label or the last line with a number on it.
+# The reader takes the last line for the label, not the last line with a
+# number, so a later "nothing measured" does not inherit an earlier value.
 STALE="$(log_of "2026-09-07T13:00:00.4Z  INFO domicile::engine::spike: latency commit to pixel: min 16.61, median 16.68, max 34.10 ms over 60 (median 1.0 frames)
 2026-09-07T14:00:00.4Z  INFO domicile::engine::spike: latency commit to pixel: nothing measured")"
 expect "a later 'nothing measured' is not given the earlier number" \
   "" "$(latency_median "commit to pixel" "$STALE")"
 
-# The two give-up endings blame different halves and must not collapse.
+# The two give-up endings have different causes.
 UNSETTLED="$(log_of "2026-09-07T14:00:00.7Z  INFO domicile::engine::spike: latency: the run gave up — the screen at the probe point never held still, so the probe could not be priced against it")"
 expect "a screen that never settled is not a dark probe" \
   "unsettled" "$(latency_ended "$UNSETTLED")"
@@ -164,16 +138,14 @@ expect "and none of rounds whose commit came too late" \
 expect "and none of commits passed over too soon" \
   "" "$(latency_soon "$EMPTY")"
 
-# A control's run, where the client answers no keys.
+# A negative control run, where the client answers no keys.
 CONTROL="$(log_of "2026-09-07T14:00:00.6Z  INFO domicile::engine::spike: latency: 3 round(s) abandoned by the client
 2026-09-07T14:00:00.7Z  INFO domicile::engine::spike: latency: the run completed")"
 expect "a client that answered nothing is counted" \
   "3" "$(latency_abandoned "$CONTROL")"
 
-# The compositor's log is colorized: tracing wraps the timestamp, the level
-# and the target in escapes. The message after them is plain, which is what
-# these greps rely on — so one fixture carries the real escapes rather than
-# every fixture carrying none.
+# tracing wraps the timestamp, level and target in color escapes. The greps
+# rely on the message being plain, so one fixture includes real escapes.
 ANSI="$(log_of "$(printf '\033[2m2026-09-07T14:00:00.4Z\033[0m \033[32m INFO\033[0m \033[2mdomicile::engine::spike\033[0m\033[2m:\033[0m latency commit to pixel: min 16.61, median 16.68, max 34.10 ms over 60 (median 1.0 frames)')")"
 expect "a colorized line reads the same as a plain one" \
   "16.68" "$(latency_median "commit to pixel" "$ANSI")"
@@ -182,8 +154,7 @@ FRAME_ANSI="$(log_of "$(printf '\033[2m2026-09-07T14:00:00.1Z\033[0m \033[32m IN
 expect "and so does the display frame" \
   "16.67" "$(latency_display_frame "$FRAME_ANSI")"
 
-# The threshold. Two decimals, and the numbers that matter are within a few
-# hundredths of each other.
+# Values that matter differ by hundredths.
 latency_within 16.68 2 16.67 && expect "one floor is within two floors" ok ok ||
   expect "one floor is within two floors" ok FAILED
 latency_within 33.35 2 16.67 && expect "just over two floors is not" ok FAILED ||
@@ -191,22 +162,18 @@ latency_within 33.35 2 16.67 && expect "just over two floors is not" ok FAILED |
 latency_within 33.33 2 16.67 && expect "just under two floors is" ok ok ||
   expect "just under two floors is" ok FAILED
 
-# The pair that moved the denominator. Both are real: `commit to pixel` came
-# back at 28-29 ms on every CI run there has been, and the floor came back at
-# 16.43 on one of them and 48.71 on another. Against a display frame the two
-# runs agree; against their own floors they are 1.70 and 0.60, and the guard
-# would have been a coin toss between them.
+# Real CI readings: `commit to pixel` was 28-29 ms, and the floor varied from
+# 16.43 to 48.71 ms. Against the display frame both runs pass.
 latency_within 27.99 2 16.67 && expect "a run whose floor sampled low still passes" ok ok ||
   expect "a run whose floor sampled low still passes" ok FAILED
 latency_within 29.18 2 16.67 && expect "and so does the one whose floor sampled high" ok ok ||
   expect "and so does the one whose floor sampled high" ok FAILED
 
-# The case that decides whether this is a comparison at all: integer truncation
-# would make both of these 16 and 16, and pass.
+# Integer truncation would make both 16 and pass.
 latency_within 16.99 1 16.01 && expect "a difference in the decimals is seen" ok FAILED ||
   expect "a difference in the decimals is seen" ok ok
 
-# A threshold that passes when it could not read the numbers is worse than none.
+# Unreadable numbers must fail.
 latency_within "" 2 16.67 && expect "an unread measurement fails" ok FAILED ||
   expect "an unread measurement fails" ok ok
 latency_within 16.68 2 "nothing measured" &&
