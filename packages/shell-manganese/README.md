@@ -70,7 +70,6 @@ the screen it is on.
 
 | Keys | What |
 |---|---|
-| **Mod+Return** | Launch a terminal (`kitty`), which the compositor spawns. |
 | **Mod+Space**, **Mod+D** | Open the launcher, or put it away. The sway config's launcher keys, in both the places it binds one. |
 | **Mod+Shift+V** | Open the clipboard's history, or put it away. Not sway's: sway has no clipboard manager, and this is where every config that adds one puts it. |
 | **Mod+Shift+Q** | Close the window being worked in. |
@@ -188,12 +187,12 @@ so a sway config's lines carry over:
 | `layout stacking` / `layout tabbed` / `layout toggle split` | Lay out the container the focus is in. |
 | `fullscreen toggle` / `fullscreen toggle global` | Fill the screen, or every screen, with the window. |
 | `floating toggle` | Take the window out of the tiling, or put it back. |
+| `exec <argv…>` | Run `argv`, which the compositor spawns from its own `PATH`. An argv, not sway's `sh -c` string; built by `exec("kitty", "--single-instance")`. |
 
-And the five sway has no word for, which are manganese's own:
+And the four sway has no word for, which are manganese's own:
 
 | Command | What |
 |---|---|
-| `terminal` | Launch a terminal (`kitty`). |
 | `lock` | Lock the desk. |
 | `launcher` | Open the launcher, or put it away. |
 | `clipboard` | Open the clipboard's history, or put it away. |
@@ -204,13 +203,18 @@ A command this shell does not know is said on the console and does nothing.
 and a workspace switched behind it is the desktop reacting to keys somebody
 pressed at the panel. (`mode` is the SDK's, so it is not held back.)
 
-This is the sample: the defaults, with the workspaces on Programmer's
-Dvorak's number row, which is what the author's desk binds.
+**There is no terminal key.** Which terminal, if any, is yours to bind with
+`exec`, as the sample does.
+
+This is the sample: the defaults, a terminal on `Meta+Return`, and the
+workspaces on Programmer's Dvorak's number row, which is what the author's desk
+binds.
 
 ```tsx
 import {
   DEFAULT_KEYBINDINGS,
   DEFAULT_MODES,
+  exec,
   moveToWorkspace,
   runManganese,
   workspace,
@@ -226,6 +230,7 @@ export const Shell = runManganese({
   keybindings: {
     keybindings: {
       ...DEFAULT_KEYBINDINGS,
+      "Meta+Return": exec("kitty"),
       ...Object.fromEntries(
         ROW.flatMap((key, at) => [
           [`Meta+${key}`, workspace(String(at + 1))],
@@ -647,8 +652,8 @@ that is a fact about the desk.
 
 **The launcher's button is first**, set a little apart from the tray so it
 does not read as one of its icons: the panel `mod+Space` opens, for a hand
-already on the pointer. The terminal has no button; it is `mod+Return`, where
-sway's config puts it.
+already on the pointer. There is no terminal button: a terminal is whatever a
+binding `exec`s.
 
 What is behind it is the wallpaper: the windows are laid out in what is *left*
 of the screen under it, so nothing else is. A window that covers it is one the
@@ -1008,11 +1013,12 @@ theirs with `addEventListener` on a ref.
 
 The parts of the config this shell cannot answer, and why:
 
-- **Everything `exec`s a command.** The launcher, the password manager, the
-  lock screen, the volume and brightness keys are all paths into the user's own
-  nix store, and a shell has nowhere to read them from — the compositor spawns
-  what it is told to spawn, and nothing tells it. `mod+Return` and the
-  launcher keys are what is left: a terminal, and the shell's own launcher.
+- **`exec` takes an argv, not a shell string.** sway runs `exec`'s line
+  through `sh -c`; here the words are the argv, so pipes, `&&` and `$VAR` need
+  an explicit `exec("sh", "-c", "…")` — the builder, since a config's
+  `send-shell` string is split on whitespace and cannot keep `…` one word.
+  Nothing is bound to `exec` by default: the terminal, the password manager
+  and the rest are the user's to bind.
 - **Per-window rules.** `for_window [app_id="launcher"] floating enable` and
   the rest of the config's `window.commands` have no equivalent here: every
   window opens tiled, and floating one is a key away.

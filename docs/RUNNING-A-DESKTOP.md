@@ -39,8 +39,9 @@ that takes one: `nix run github:cprussin/domicile/stable -- ./dist/shell.js`. Se
 Domicile is a Wayland compositor, so an app joins the desktop by connecting to
 *its* display rather than your session's — set `XDG_RUNTIME_DIR` and
 `WAYLAND_DISPLAY` to the two values printed at startup in front of any Wayland
-client. Each desktop also launches a terminal on a key of its own, and
-everything started from that terminal lands here too:
+client. `simple` launches a terminal on Alt+Enter, manganese runs whatever a
+binding `exec`s (it binds none itself), and everything started from those lands
+here too:
 [the long answer](/packages/shell-simple/README.md#launch-an-app-into-it).
 
 Programs a desk should come up with — a notification daemon, an editor's

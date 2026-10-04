@@ -360,8 +360,8 @@ these is one run, and each has a line to look for.
   `--vmodule=drm*=1`. Expect `configuring N display(s)` for each, a bar and a
   wallpaper on every panel, and `told the chrome about N display(s)`. Then:
   `mod+2` puts the keyboard on the monitor showing workspace 2 and leaves that
-  workspace where it is; `mod+Return` opens the terminal on the monitor the
-  keyboard is on; moving the pointer to another monitor moves the keys with
+  workspace where it is; a key bound to `exec` opens its window on the monitor
+  the keyboard is on; moving the pointer to another monitor moves the keys with
   it; and a window keeps drawing while every one of those happens. Nothing
   here can see any of it — no runner has a `/dev/dri`, and the shell half is
   arithmetic over an injected desk.

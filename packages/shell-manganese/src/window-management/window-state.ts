@@ -319,6 +319,7 @@ export enum WindowActionKind {
   ChildFocused,
   ClipboardDismissed,
   ClipboardToggled,
+  CommandExecuted,
   ContainerSplit,
   DeskLocked,
   FileOpened,
@@ -340,7 +341,6 @@ export enum WindowActionKind {
   ScreenHovered,
   ScreensDescribed,
   SplitToggled,
-  TerminalLaunched,
   WindowClosed,
   WindowDropped,
   WindowDroppedOn,
@@ -452,6 +452,18 @@ export const WindowAction = {
     kind: WindowActionKind.ClipboardToggled as const,
   }),
 
+  /**
+   * `exec <argv…>`: run `argv`, which the compositor spawns.
+   *
+   * Nothing in the state moves: the window arrives as an announcement from
+   * the host like any other client's. It is an action so that every command
+   * a key can send is one of them.
+   */
+  CommandExecuted: (argv: readonly string[]) => ({
+    argv,
+    kind: WindowActionKind.CommandExecuted as const,
+  }),
+
   /** `splith` / `splitv`. */
   ContainerSplit: (axis: Axis) => ({
     axis,
@@ -472,7 +484,7 @@ export const WindowAction = {
    *
    * Nothing in the state moves but the panel: that application is a Wayland
    * client and its window arrives as an announcement from the host, exactly as
-   * {@link WindowAction.TerminalLaunched}'s does. `path` is relative to the
+   * {@link WindowAction.CommandExecuted}'s does. `path` is relative to the
    * home directory, or absolute for a file outside it — see
    * `launcher/open-command.ts`, which resolves the difference in the one
    * process that can.
@@ -614,17 +626,6 @@ export const WindowAction = {
 
   /** `layout toggle split`. */
   SplitToggled: () => ({ kind: WindowActionKind.SplitToggled as const }),
-
-  /**
-   * The user asked for a terminal, which the compositor spawns.
-   *
-   * Nothing in the state moves: the window arrives as an announcement from
-   * the host like any other client's. It is an action so that every command
-   * a key can send is one of them.
-   */
-  TerminalLaunched: () => ({
-    kind: WindowActionKind.TerminalLaunched as const,
-  }),
 
   /** The user closed a window from its title bar. */
   WindowClosed: (id: string) => ({
@@ -935,7 +936,7 @@ const reduceAction = (
       // The compositor locks it and the host says so.
       return state;
     }
-    case WindowActionKind.TerminalLaunched: {
+    case WindowActionKind.CommandExecuted: {
       // The compositor spawns it and the host announces the window it opens.
       return state;
     }

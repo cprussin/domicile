@@ -14,9 +14,6 @@ import {
   WindowActionKind,
 } from "./window-state";
 
-/** What the terminal launcher asks the compositor to run. */
-const TERMINAL_COMMAND = ["kitty"] as const;
-
 export type Windows = WindowState & {
   /**
    * Ask the desktop for something — a keystroke's command, or a press on the
@@ -25,7 +22,7 @@ export type Windows = WindowState & {
    * One entry point rather than one callback per command, because the
    * bindings are a table of exactly these: what a key does is data, and this
    * is what runs it. The two things the *state* cannot do on its own happen
-   * here as well — see the `kill` and the terminal below.
+   * here as well — see the `kill` and the `exec` below.
    */
   act: (action: WindowAction) => void;
   /** The window the user is working in, floating or tiled. */
@@ -55,7 +52,7 @@ export const useWindows = (
 ): Windows => {
   const [state, dispatch] = useReducer(reduceWindows, NO_WINDOWS);
 
-  // Everything the state cannot do itself: a terminal is a process the
+  // Everything the state cannot do itself: an `exec` is a process the
   // compositor starts, the lock is the compositor's, and a client's window is the client's to close — the
   // compositor sends its toplevel a close and the window goes when the host
   // says it went. Both are still actions, so that the bindings stay one table
@@ -63,8 +60,8 @@ export const useWindows = (
   const act = useCallback(
     (action: WindowAction) => {
       dispatch(action);
-      if (action.kind === WindowActionKind.TerminalLaunched) {
-        domicile.spawn(TERMINAL_COMMAND);
+      if (action.kind === WindowActionKind.CommandExecuted) {
+        domicile.spawn(action.argv);
       }
       if (action.kind === WindowActionKind.DeskLocked) {
         domicile.lock();

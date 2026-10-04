@@ -505,10 +505,10 @@
       # what makes joining `shell.js` on here safe — a build that emitted
       # anything else never reaches this line.
       #
-      # AND IT BRINGS THE TERMINAL IT PROMISES. Both of these shells bind
-      # Mod+Return to `domicile.spawn(["kitty"])`, and the compositor runs
-      # that through the environment it was started in -- so on a machine
-      # without kitty on `PATH` the desktop answers the chord with
+      # AND IT BRINGS THE TERMINAL IT PROMISES. `simple` binds Alt+Return to
+      # `domicile.spawn(["kitty"])`, and the compositor runs that through the
+      # environment it was started in -- so on a machine without kitty on
+      # `PATH` the desktop answers the chord with
       # `failed to spawn client err=No such file or directory`, in a log the
       # person pressing the key is not reading. It was on `PATH` for everyone
       # who developed this, because `kitty` is in the dev shell's
@@ -520,6 +520,9 @@
       # not a choice being taken away from them. A shell of your own that
       # spawns something else is unaffected either way -- `.#domicile` takes
       # the page as an argument and wraps no `PATH` at all.
+      #
+      # `manganese` binds no terminal: a config names its own with `exec`, so
+      # `.#manganese` as shipped opens none. The kitty here is `simple`'s.
       desktop = { name, description }:
         pkgs.runCommand name
           {

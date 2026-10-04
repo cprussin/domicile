@@ -16,8 +16,8 @@ export type Way = "left" | "down" | "up" | "right";
 /** A command for manganese, as the words after `send-shell`. */
 const command = (...words: readonly string[]) => KeyAction.SendShell(words);
 
-/** Launch a terminal. */
-export const terminal = () => command("terminal");
+/** Run `argv`, as sway's `exec` does but without a shell around it. */
+export const exec = (...argv: readonly string[]) => command("exec", ...argv);
 /** Close the window being worked in. */
 export const kill = () => command("kill");
 /** Lock the desk. */
@@ -97,7 +97,6 @@ export const DEFAULT_KEYBINDINGS: ModeKeybindings = {
   "Meta+e": layout("toggle split"),
   "Meta+f": fullscreen(),
   "Meta+minus": scratchpad(),
-  "Meta+Return": terminal(),
   "Meta+r": mode("resize"),
   "Meta+Shift+a": focus("child"),
   "Meta+Shift+f": fullscreen(true),

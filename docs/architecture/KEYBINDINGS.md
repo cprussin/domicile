@@ -7,7 +7,7 @@ answers.
 ```ts
 bindKeys(domicile, {
   keybindings: {
-    "Meta+Return": KeyAction.SendShell(["terminal"]),
+    "Meta+Return": KeyAction.SendShell(["exec", "kitty"]),
     "Meta+r": KeyAction.Mode("resize"),
   },
   modes: {

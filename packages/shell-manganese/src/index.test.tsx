@@ -2,7 +2,7 @@ import { describe, expect, it, spyOn } from "bun:test";
 import type { DomicileShortcut } from "@domicile-desktop/sdk/domicile-host";
 import { act, within } from "@testing-library/react";
 
-import { runManganese, terminal } from "./index";
+import { exec, runManganese } from "./index";
 
 describe("runManganese", () => {
   // The library's whole promise: a layout of the user's own, on the bar of a
@@ -56,7 +56,7 @@ describe("runManganese", () => {
     try {
       act(() => {
         runManganese({
-          keybindings: { keybindings: { "Meta+x": terminal() }, modes: {} },
+          keybindings: { keybindings: { "Meta+x": exec("kitty") }, modes: {} },
         })(document.createElement("div"));
       });
       act(() => {

@@ -5,7 +5,11 @@
 // them** wherever sway has the command — `focus left`, `move container to
 // workspace 2`, `layout tabbed` — so a sway user's bindings carry over by
 // copying the line. The few sway has no word for are manganese's own:
-// `terminal`, `lock`, `launcher`, `clipboard` and `resize grow <direction>`.
+// `lock`, `launcher`, `clipboard` and `resize grow <direction>`.
+//
+// `exec <argv…>` is sway's too, but its words are an argv, run as they are
+// rather than through `sh -c` as sway does: there is no terminal unless a
+// binding names one.
 //
 // A command this desktop does not know is the user's config, not a bug here,
 // so it is an `Err` naming it rather than a throw.
@@ -31,7 +35,6 @@ type Command = readonly [words: string, action: Action];
 
 /** Every command this desktop knows, by its words. */
 const COMMANDS: ReadonlyMap<string, Action> = new Map<string, Action>([
-  ["terminal", WindowAction.TerminalLaunched()],
   ["kill", WindowAction.WindowKilled()],
   // Not sway's, which has no lock.
   ["lock", WindowAction.DeskLocked()],
@@ -84,6 +87,18 @@ const COMMANDS: ReadonlyMap<string, Action> = new Map<string, Action>([
 export const parseCommand = (
   args: readonly string[],
 ): Result<Action, string> => {
+  const [verb, ...argv] = args;
+  return verb === "exec" ? parseExec(argv) : parseNamed(args);
+};
+
+/** `exec`'s argv, which has to name something to run. */
+const parseExec = (argv: readonly string[]): Result<Action, string> =>
+  argv.length === 0
+    ? Err("manganese: `exec` names nothing to run")
+    : Ok(WindowAction.CommandExecuted(argv));
+
+/** One of the commands in {@link COMMANDS}, by its words. */
+const parseNamed = (args: readonly string[]): Result<Action, string> => {
   const command = args.join(" ");
   const action = COMMANDS.get(command);
   return action === undefined
