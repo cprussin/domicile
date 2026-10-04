@@ -10,9 +10,8 @@ import { OTHER_THEME, THEMES } from "./theme-core";
 describe(ThemeSwitch, () => {
   describe("rendering (theme injected)", () => {
     it("exposes the theme via a data attribute", () => {
-      // `data-theme-mode` rather than `data-theme`: the preset's light
-      // condition is `[data-theme=light] &`, so naming it that would make the
-      // toggle's own descendants resolve light tokens over a dark page.
+      // Not `data-theme`, which would make the preset style the toggle's
+      // descendants as light.
       render(
         <ThemeSwitch
           useTheme={() => ({ flip: () => undefined, theme: "dark" })}
@@ -67,7 +66,7 @@ describe(ThemeSwitch, () => {
       );
       const button = screen.getByRole("button");
       await userEvent.click(button);
-      // Committed after the async wipe, and only because the source answered.
+      // Committed after the async wipe, once the source reports the change.
       await waitFor(() => {
         expect(button).toHaveAttribute("data-theme-mode", "light");
       });
@@ -83,9 +82,7 @@ describe(ThemeSwitch, () => {
 
   describe("OTHER_THEME", () => {
     it("takes every theme to the only other one", () => {
-      // Two members, so "the other one" is total and an involution. A third
-      // member would break both, which is what this is here to notice — see
-      // `theme-core.ts` for why there is not going to be one.
+      // Flipping assumes exactly two themes. See `theme-core.ts`.
       for (const theme of THEMES) {
         expect(OTHER_THEME[theme]).not.toBe(theme);
         expect(OTHER_THEME[OTHER_THEME[theme]]).toBe(theme);

@@ -7,9 +7,8 @@ import type { Display, DisplaySource } from "./display-source";
 import { Screen as ScreenComponent } from "./Screen";
 
 /**
- * A desktop to lay out against: a 16:9 screen with a smaller, denser one beside
- * it and a gap between, which is the shape of a real two-monitor setup. Scaled
- * down to fit a story — the real numbers would be a wall.
+ * A two-monitor desktop: a 16:9 screen and a smaller, denser one with a gap
+ * between. Scaled down to fit a story.
  */
 const DESKTOP: readonly Display[] = [
   { name: "left", position: [0, 0], scale: 1, size: [480, 270] },
@@ -17,11 +16,8 @@ const DESKTOP: readonly Display[] = [
 ];
 
 /**
- * A source per desktop, built once at module scope.
- *
- * Called here rather than in the decorator: a source is the connection, so
- * building a fresh one every render is the thing `DisplaySource` says not to
- * do, and a story is the shape someone copies.
+ * A source per desktop, built once at module scope because `DisplaySource`
+ * must be stable.
  */
 const sourceFor = (
   displays: readonly Display[] | undefined,
@@ -37,26 +33,19 @@ const UNDESCRIBED = sourceFor(undefined);
 /**
  * A stand-in desktop for the screens to sit on.
  *
- * `position: relative` is what a shell must *not* do — a `<Screen>` is placed
- * in the page's own coordinates, so the real one mounts in flow and lets the
- * initial containing block do the work. Storybook renders each story inside
- * its own padded frame, so without a positioned box here every screen would be
- * offset by however much padding that frame happens to have. The displays are
- * scaled down to match.
+ * `position: relative` offsets screens from Storybook's padded frame. A real
+ * shell must not do this: `<Screen>` uses page coordinates.
  */
 const desk = css({
   backgroundColor: "card",
-  // Raw px rather than the spacing scale: this is a stand-in for a *desktop*,
-  // whose size is however many pixels the monitors have. Nothing about it is a
-  // measurement on a design scale, and rounding it to one would put the
-  // screens somewhere the numbers above no longer explain.
+  // Raw px, not spacing tokens, to match the display sizes above.
   blockSize: "310px",
   border: "1px dashed {colors.border}",
   inlineSize: "840px",
   position: "relative",
 });
 
-/** Fills whatever screen it is put on, so a story shows the rectangle. */
+/** Fills its screen, so the story shows the rectangle. */
 const panel = center({
   backgroundColor: "accent",
   blockSize: "100%",
@@ -89,10 +78,8 @@ const meta = {
     },
   },
   component: ScreenComponent,
-  // One decorator for every story, picking the desktop off the story's own
-  // parameters. A story that wants the undescribed one sets `undescribed`
-  // rather than adding a decorator, which would nest a second provider and a
-  // second frame inside this one.
+  // Picks the desktop from story parameters. Stories set `undescribed`
+  // instead of adding a decorator, which would nest a second provider.
   decorators: [
     (Story, { parameters }) => (
       <DisplayProvider

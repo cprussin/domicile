@@ -70,15 +70,6 @@ export const TrailingGroup = ({
   }
 };
 
-// The pulled variant pulls the trailing group toward the wrapper edge by
-// negating the wrapper's inline padding (so suffix buttons sit flush with
-// the wrapper) while reserving 1 spacing unit of breathing room from the
-// border. For the non-rounded base padding (xs:1.5, sm:2.5, md:3, lg:3.5,
-// xl:4 — see `CONTROL_PADDING_INLINE` in `control-sizes.ts`), the offset is
-// `1 - paddingInline`. For the rounded variant (which inflates padding by
-// 1.5), the offset is `1 - (paddingInline + 1.5)`. Values inlined as
-// literals so Panda's static extractor can emit the atomic classes —
-// helper-returned compound variants are opaque to the extractor.
 const clearWrapperStyles = cva({
   base: {
     display: "inline-flex",
@@ -98,6 +89,11 @@ const suffixIconStyles = center({
   transition: "color {durations.fast} {easings.default}",
 });
 
+// `pulled` cancels the wrapper's inline padding, leaving 1 spacing unit to the
+// border, so suffix buttons sit near the edge. The margin is
+// `1 - paddingInline` (see `CONTROL_PADDING_INLINE` in `control-sizes.ts`),
+// and rounded adds 1.5 to the padding. The values are literals because Panda
+// only extracts static values.
 const trailingGroupStyles = cva({
   base: {
     alignItems: "center",

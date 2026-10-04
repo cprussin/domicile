@@ -1,9 +1,8 @@
-// A config module, as the JSON the compositor reads.
+// Evaluates a config module into the JSON the compositor reads.
 //
-// A config is a module like any shell: its `Shell` is the desktop, and every
-// other export is a section of the compositor's config. The compositor never
-// runs JavaScript, so the sections are evaluated here, under Bun, and written
-// out as JSON.
+// A config's `Shell` export is the desktop; every other export is a config
+// section. The compositor does not run JavaScript, so Bun evaluates the
+// sections here.
 
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -11,17 +10,16 @@ import path from "node:path";
 
 import type { BunPlugin } from "bun";
 
-/** What resolves from Domicile's install rather than the user's project. */
+/** Imports resolved from Domicile's install instead of the user's project. */
 const FROM_DOMICILE = /^(@domicile-desktop\/[^/]+|react|react-dom)(\/.*)?$/;
 
 /**
  * Evaluate the config module `config` and write every export but `Shell` to
  * `out` as JSON.
  *
- * **Bundled before it is imported**, so `@domicile-desktop/*` and React resolve from
- * `domicile` as a shell build resolves them, and a stylesheet a shell imports
- * — which only a page can use — is nothing here. Importing the module runs no
- * desktop: a shell does nothing until `Shell` is called, and nothing calls it.
+ * The module is bundled first, so Domicile's packages and React resolve as in
+ * a shell build and stylesheet imports are empty. Importing it starts no
+ * desktop, because nothing calls `Shell`.
  */
 export const evaluate = async (
   config: string,
@@ -48,7 +46,7 @@ export const evaluate = async (
   writeFileSync(out, `${JSON.stringify(sections)}\n`);
 };
 
-/** `@domicile-desktop/*` and React from Domicile's install, as manganese has them. */
+/** Resolve Domicile's packages and React from Domicile's install. */
 const fromDomicile = (domicile: string): BunPlugin => {
   const manganese = path.join(domicile, "packages", "shell-manganese");
   return {
@@ -64,7 +62,7 @@ const fromDomicile = (domicile: string): BunPlugin => {
   };
 };
 
-/** A stylesheet, which a page installs and a config has no use for. */
+/** Load stylesheets as empty modules; only a page can use them. */
 const noStyles: BunPlugin = {
   name: "domicile:no-styles",
   setup: (build) => {

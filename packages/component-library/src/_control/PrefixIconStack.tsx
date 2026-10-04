@@ -59,15 +59,10 @@ const PrefixStandalone = ({
   </span>
 );
 
-// When the control isn't invalid the standalone slot collapses to 0 width
-// (grid-template-columns: 0fr) AND offsets the wrapper's flex `gap` with an
-// equal-magnitude negative `marginInlineEnd` — otherwise the empty slot
-// would still reserve a visible gap before the control. On invalid,
-// `wrapperBase` overrides both (`gridTemplateColumns: 1fr` and
-// `marginInlineEnd: 0`), so the column expands AND the gap re-appears,
-// sliding the warning icon in from the left and pushing the control
-// rightward. The per-size negative margin values match the `control`
-// recipe's per-size `gap`.
+// While valid, the slot collapses to zero width and a negative margin cancels
+// the wrapper's flex `gap`, so no empty gap shows. `wrapperBase` resets both
+// when invalid, sliding the warning icon in. The margins match the `control`
+// recipe's `gap` for each size.
 const standaloneStyles = cva({
   base: {
     gridTemplateColumns: "0fr",

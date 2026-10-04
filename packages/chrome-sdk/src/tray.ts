@@ -1,19 +1,14 @@
-// The system tray, as a shell draws it and clicks it.
+// System tray types for shells.
 //
-// Its own module for `theme.ts`'s reason: both halves of the SDK need the
-// click's buttons, and only one of them is the wire. `DomicileHost` takes a
-// `TrayAction` and `DomicileClient` hands one on; a shell's tray says which.
-//
-// An icon is an application's StatusNotifierItem, which the compositor hosts
-// on the session bus a page cannot reach -- see `crate::tray` in
-// `domicile-compositor`. What a click does is the application's.
+// Each icon is an application's StatusNotifierItem, hosted by the compositor
+// on the session bus. See `docs/architecture/SYSTEM-TRAY.md`.
 
 import { z } from "zod";
 
 /**
  * Which button clicked an icon: StatusNotifierItem's `Activate`,
- * `SecondaryActivate` and `ContextMenu`. The engine's `DomicileTrayAction`,
- * which refuses any other word at the call.
+ * `SecondaryActivate` and `ContextMenu`. Matches the engine's
+ * `DomicileTrayAction`.
  */
 export const trayActionSchema = z.enum(["primary", "secondary", "context"]);
 
@@ -23,16 +18,12 @@ export type TrayAction = z.infer<typeof trayActionSchema>;
 /** One icon in the tray. */
 export type TrayItem = {
   /**
-   * What {@link DomicileClient.activateTrayItem} names it by, and the same
-   * when its application is closed and opened again — what a shell keeps its
-   * place by.
+   * The id for {@link DomicileClient.activateTrayItem}. Stable across
+   * application restarts.
    */
   id: string;
-  /** What it is, in words, and never empty: what a shell labels it with. */
+  /** A non-empty label. */
   title: string;
-  /**
-   * The picture, as a `data:` URL, or `undefined` for one the compositor could
-   * not draw — which leaves a shell the title.
-   */
+  /** The icon as a `data:` URL, or `undefined` if it could not be rendered. */
   icon: string | undefined;
 };

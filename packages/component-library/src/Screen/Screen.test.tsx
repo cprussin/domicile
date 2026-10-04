@@ -42,7 +42,7 @@ const on = (displays: readonly Display[] | undefined, children: ReactNode) => {
     <DisplayProvider source={describing(displays)}>{children}</DisplayProvider>,
   );
   return {
-    /** The same tree on a desktop that has since been described again. */
+    /** Re-renders the same tree with a new display list. */
     redescribed: (described: readonly Display[]) => {
       rerender(
         <DisplayProvider source={describing(described)}>
@@ -54,11 +54,10 @@ const on = (displays: readonly Display[] | undefined, children: ReactNode) => {
 };
 
 /**
- * The regions `<Screen>` laid out, in order, each as its rectangle.
+ * The rectangles of the rendered `<Screen>` regions, in order.
  *
- * Physical `left`/`top` rather than the logical `inset-inline-start`: a
- * display's position is desktop geometry, and a shell in a right-to-left
- * locale must not put the left-hand monitor on the right.
+ * Reads physical `left`/`top`, since display positions must not flip in
+ * right-to-left locales.
  */
 const regions = (): string[] =>
   [...document.querySelectorAll("[data-screen]")].map((region) => {
@@ -68,18 +67,15 @@ const regions = (): string[] =>
 
 describe("Screen", () => {
   it("takes its region out of the page's flow", () => {
-    // The whole premise: the page spans the desktop and a screen is a region
-    // of it, so a screen laid out in flow is a screen wherever the content
-    // above it happens to end. Compared against the same declaration rather
-    // than asserted as a class name, since Panda hashes them.
+    // In flow, a region would land wherever earlier content ends. Compared
+    // by declaration, since Panda hashes class names.
     on([LEFT], <Screen name="left">stuff</Screen>);
     const region = document.querySelector("[data-screen]");
     expect(region?.className).toBe(css({ position: "absolute" }));
   });
 
   it("names the display each region belongs to", () => {
-    // What a shell styles and a test selects on. Without it every region is
-    // anonymous and `[data-screen="left"]` addresses nothing.
+    // Shells style on it and tests select on it.
     on([LEFT, RIGHT], <Screen everywhere>stuff</Screen>);
     expect(
       [...document.querySelectorAll("[data-screen]")].map((region) =>
@@ -89,11 +85,8 @@ describe("Screen", () => {
   });
 
   it("lays a turned monitor's region out as it is, upright and logical", () => {
-    // The ENGINE turns and scales each monitor's slice of the page, so a 4K
-    // panel on its side at density 1.2 is an 1800x3200 region, the right way
-    // up. A transform here would turn it twice, and would leave everything a
-    // shell puts outside a region -- a portal, a dialog -- the other way round
-    // from everything inside one.
+    // The engine rotates and scales each monitor's slice. A transform here
+    // would rotate it twice and leave portals outside the region unrotated.
     on([SIDEWAYS], <Screen name="sideways">stuff</Screen>);
     const region = document.querySelector("[data-screen]") as HTMLElement;
     expect(region.style.transform).toBe("");
@@ -107,8 +100,7 @@ describe("Screen", () => {
   });
 
   it("renders nothing for a name no display has", () => {
-    // A screen that is not plugged in costs the shell an empty region rather
-    // than an error: the same config drives a docked and an undocked laptop.
+    // The same config serves a docked and an undocked laptop.
     on([LEFT], <Screen name="right">stuff</Screen>);
     expect(screen.queryByText("stuff")).not.toBeInTheDocument();
   });
@@ -134,12 +126,8 @@ describe("Screen", () => {
   });
 
   it("keeps a region where it is when the desktop is described again", () => {
-    // The desktop is re-described whenever it changes, and a region is the
-    // same children placed over a display: a region keyed by which display it
-    // is would be torn down and built again the moment a monitor is unplugged
-    // or a config is reloaded. For a shell whose chrome is on one screen that
-    // is an embedded page reloaded to where it started and every portal
-    // re-created blank, with nothing on the page to show that it happened.
+    // Keying by display would remount the region when monitors change,
+    // reloading embedded pages and resetting portals.
     const { redescribed } = on(
       [LEFT, RIGHT],
       <Screen everywhere>stuff</Screen>,
@@ -154,7 +142,6 @@ describe("Screen", () => {
   });
 
   it("hands `match` the whole display, not just its name", () => {
-    // A predicate is worth having only if it can see what a name cannot.
     const seen: Display[] = [];
     on(
       [LEFT, RIGHT],

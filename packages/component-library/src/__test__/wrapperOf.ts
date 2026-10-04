@@ -1,8 +1,7 @@
 /**
- * Returns the parent element of a control under test. Throws (rather than
- * returning `null`) so tests don't need to repeat the `if (wrapper === null)
- * throw …` guard at every call site. Use this when asserting on styles or
- * attributes the component sets on the wrapper div around a control element.
+ * Returns the wrapper element around a control under test.
+ *
+ * Throws instead of returning `null` so tests don't repeat the guard.
  */
 export const wrapperOf = (control: HTMLElement): HTMLElement => {
   const wrapper = control.parentElement;

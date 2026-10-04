@@ -11,8 +11,8 @@ type Props = {
 };
 
 export const ResizeHandle = ({ disabled, rounded, textareaRef }: Props) => {
-  // Holds the active-drag cleanup function so unmounting mid-drag can call
-  // it (otherwise the document listeners + body cursor lock leak).
+  // Lets an unmount mid-drag remove the document listeners and restore the
+  // body cursor.
   const cleanupRef = useRef<(() => void) | undefined>(undefined);
   useEffect(
     () => () => {
@@ -30,9 +30,8 @@ export const ResizeHandle = ({ disabled, rounded, textareaRef }: Props) => {
       className={handleStyles({ disabled, rounded })}
       data-resize-handle=""
       onMouseDown={(event) => {
-        // After the natural mouseup-driven cleanup runs, clear the ref —
-        // otherwise a later unmount would re-invoke the stale closure and
-        // re-apply the body cursor captured at drag-start.
+        // Clear the ref on mouseup so a later unmount doesn't restore a stale
+        // cursor.
         cleanupRef.current = startResize(event, textareaRef.current, () => {
           cleanupRef.current = undefined;
         });
@@ -81,12 +80,10 @@ const handleStyles = cva({
 });
 
 /**
- * Begins a resize drag. Returns a cleanup function that detaches the
- * document listeners and restores `document.body.style.cursor`, so callers
- * can abort the drag if the source component unmounts. The optional
- * `onComplete` callback fires when the natural mouseup-driven cleanup runs
- * (so callers can release any reference they hold to the cleanup). Returns
- * `undefined` if the textarea is missing or disabled.
+ * Starts a resize drag and returns a cleanup that aborts it.
+ *
+ * `onComplete` runs when the drag ends on mouseup. Returns `undefined` if the
+ * textarea is missing or disabled.
  */
 const startResize = (
   event: MouseEvent<HTMLElement>,
@@ -108,9 +105,7 @@ const startResize = (
       : parsedMax;
     const previousBodyCursor = document.body.style.cursor;
     document.body.style.cursor = "ns-resize";
-    // Mark the textarea as resizing so the wrapper's `:has([data-control]
-    // [data-resizing])` selector keeps the hover border color even when the
-    // pointer leaves the wrapper during the drag.
+    // Keeps the wrapper's hover border while the pointer is outside it.
     textarea.setAttribute("data-resizing", "");
     const handleMove = (moveEvent: globalThis.MouseEvent) => {
       const next = Math.min(

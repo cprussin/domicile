@@ -1,71 +1,19 @@
 // The in-page client for `window.domicile`.
 //
-// The engine gives a shell's document a typed control channel: a `DomicileHost`
-// that is an `EventTarget` with methods on it. There is no JSON here, no
-// socket, and no handshake — a page calls `host.spawn([...])` and listens for
-// `appappeared`, and the wire protocol lives in the browser process where a
-// page cannot construct a malformed message.
+// The engine gives a shell's document a `DomicileHost`: an `EventTarget` with
+// typed methods. This class adds what a shell needs on top of it:
 //
-// So what is this class for, if the host is already typed?
-//
-// # It listens so the page does not have to, and that is the whole point
-//
-// **A DOM event dispatched with no listener registered is gone.** An
-// `EventTarget` has no mailbox: `dispatchEvent` walks the listeners that exist
-// at that moment and returns. A React shell registers its handlers in its
-// first effect flush — tens of milliseconds after the compositor has started
-// talking, and *always* after, because rendering only schedules the effect.
-// What lands in that window is one `appappeared` per client already running,
-// which is to say a live, drawing client with no window on screen and no
-// second announcement coming.
-//
-// So this client registers its own listener for every event type in its
-// constructor, and {@link DomicileClient.on} is a registration against *this*
-// class rather than against the host. Anything that arrived before the page
-// asked for it is held (see {@link DomicileClient.#held}) and delivered when it
-// does. That is what `#held` was always for; what changed is that the gap it
-// covers is now between the page's handlers and this client's own, inside one
-// process, rather than between a page and a socket.
-//
-// **A page must therefore never call `addEventListener` on
-// `window.domicile` itself.** Not because it would fail — it would work,
-// and it would work for everything dispatched after the listener existed,
-// which is the subset that makes the bug invisible on a desktop with no
-// clients open.
-//
-// # Nothing can arrive before the client is listening
-//
-// The channel binds on first use, and as of the engine's control-channel
-// change that includes the first `addEventListener` — `DomicileHost::
-// AddedEventListener` calls `EnsureBound`. Binding is what hands the
-// compositor its way back into the page: until the channel is bound there is
-// no client end for the browser process to push on, so there is nothing that
-// could be dispatched and dropped. The constructor below registers before it
-// returns, so by the time anything holds a `DomicileClient` the ordering is
-// already safe. A socket the page has not opened cannot deliver either, and
-// this is the same guarantee one process further in.
-//
-// # It was `BridgeClient`, and there is no bridge
-//
-// The old name was the process's: `engine-chrome-host` served the shell over a
-// loopback HTTP port and proxied a WebSocket to the compositor, and this class
-// was the page's end of that socket. The engine serves the page over
-// `domicile://` now, `navigator.domicile` replaced the socket, and `supervise`
-// starts two processes. Nothing here is a transport — the channel is the
-// engine's, and this is a client of it that holds what arrived before the page
-// asked. So it is named for the channel rather than for what used to carry it.
-//
-// # It translates, because WebIDL's shapes are not a shell's
-//
-// `hasSize` beside the numbers it guards, a `DOMString` that is empty rather
-// than absent, one event class doing five jobs: those are what the IDL can
-// say. `host-message.ts` is what a shell wants instead, and it owns the
-// translation as well as the names — the listeners below are one call each.
-// The translators live there rather than inline here because a decision made
-// inside a DOM listener cannot be asserted on: a throw in one is reported to
-// the page's error handler rather than raised to whatever dispatched, so every
-// refusal those functions make — the cursor shape an engine older than this
-// SDK cannot name among them — would have no test at all.
+// - It listens for every event in its constructor and holds messages until
+//   the page registers a handler (see {@link DomicileClient.#held}). A DOM
+//   event with no listener is lost, and a React shell registers handlers in
+//   its first effect, after the compositor has announced running clients.
+//   Shells must not call `addEventListener` on `window.domicile` directly.
+// - No event can arrive before the constructor's listeners exist. The channel
+//   binds on the first `addEventListener`, and nothing is dispatched until it
+//   binds.
+// - `host-message.ts` translates WebIDL event shapes into the messages a shell
+//   handles. The translators live there so they can be tested; a throw inside
+//   a DOM listener goes to the page's error handler, not the test.
 
 import type {
   DomicileDisplay,
@@ -116,99 +64,68 @@ import type { AxisDelta } from "./wheel-axis";
 type Handler = (message: never) => void;
 
 /**
- * How big a client has drawn, in its own pixels.
+ * A client surface's size in its own pixels.
  *
- * `undefined` wherever one appears is a client that has not committed a buffer:
- * a toplevel maps before it draws, and how big a Wayland client wants to be is
- * something it says by drawing.
+ * Where optional, `undefined` means the client has not committed a buffer yet.
  */
 export type SurfaceSize = readonly [width: number, height: number];
 
 /**
- * The chrome's half of the control channel: a handler table for what the
- * compositor says, and a typed call per thing the chrome asks of it.
+ * The chrome's side of the control channel: handlers for compositor messages
+ * and a typed method per request.
  */
 export class DomicileClient {
   readonly #host: DomicileHost;
   readonly #handlers = new Map<HostMessageType, Handler>();
 
   /**
-   * Messages that arrived before the page registered a handler for their type,
-   * kept in arrival order and delivered when it does.
+   * Messages that arrived before any handler for their type, in arrival order.
    *
-   * The compositor starts talking the moment the channel binds — one
-   * `app_appeared` for every client already running — but a React page
-   * registers its handlers in its first effect flush, tens of milliseconds
-   * later. Not a race it usually wins: rendering only *schedules* the effect,
-   * so the binding precedes every `on` on every startup. Dropping what lands
-   * in between is a live, drawing client with no window on screen, and there
-   * is no second chance this page can count on: a window is announced once.
+   * The compositor sends `app_appeared` for running clients as soon as the
+   * channel binds, before a React page's first effect registers handlers. A
+   * window is announced only once, so dropping these would lose it.
    *
-   * Unbounded on purpose, and bounded in time by {@link #released}: what can
-   * pile up here is only a type the page does register — the constructor
-   * listens for exactly the types this build knows — and only before it has
-   * registered it, which it does for all of them in one mount.
+   * Unbounded: a type is held only until its first handler registers, and
+   * never after {@link #released}.
    */
   readonly #held = new Map<HostMessageType, unknown[]>();
   /**
-   * The types the page has listened for and stopped listening for.
+   * Types the page stopped listening for with {@link off}. These are no
+   * longer held, since nothing may drain them.
    *
-   * {@link #held} exists for the gap before a page has *ever* listened. An
-   * {@link off} says it listened and chose to stop, so holding for it again
-   * would pile up with nothing to drain it.
-   *
-   * The cost is that what arrives between an {@link off} and a later
-   * {@link on} is gone. Fine for anything the page can read back — the desktop
-   * is an attribute on the host, so a provider that unmounts and remounts
-   * still reads the current one off {@link displays} — and not fine for a
-   * lifecycle event, which arrives once on this page's account: `app_appeared`
-   * does not come again, so a page that lets go of it and takes it up again
-   * has missed whatever mapped in between. Let go of a type only where the
-   * page can recover the state some other way.
+   * Messages between an {@link off} and a later {@link on} are lost. Only
+   * release a type whose state the page can recover, e.g. {@link displays};
+   * not `app_appeared`, which is sent once per window.
    */
   readonly #released = new Set<HostMessageType>();
 
   /**
-   * The size each running client last drew at, recorded as the message goes
-   * past.
-   *
-   * Here rather than in the page because nothing but the SDK's own pointer
-   * arithmetic wants it: a surface-local coordinate is an element position
-   * scaled by this, and a shell that routed the size to an element was
-   * carrying a fact it had no other use for. Read through
-   * {@link surfaceSizeOf} on demand, the way {@link displays} is read, so this
-   * costs no handler slot — {@link on} is one per type, and a shell still
-   * registers `app_resized` for whatever it wants to draw from it.
+   * Each client's last surface size, for the SDK's pointer scaling. Recorded
+   * here so it does not take the shell's `app_resized` handler slot.
    */
   readonly #surfaceSizes = new Map<string, SurfaceSize>();
 
-  /**
-   * What each open popup is over, by the popup — see {@link windowOf}.
-   * Recorded as the message goes past, like the sizes above.
-   */
+  /** Each open popup's parent, by popup id; see {@link windowOf}. */
   readonly #popupParents = new Map<string, string>();
 
   /**
-   * The searches waiting on an answer, by the query each asked.
+   * Pending file searches, by query.
    *
-   * By query rather than in order, because the compositor answers each one
-   * with the query it answers: two searches for the same thing settle with the
-   * one answer, and an answer to `n` is never taken for the answer to `no`.
-   * Not in the handler table, because an answer has an asker and a handler
-   * slot does not.
+   * Keyed by query because each answer names its query, so a stale answer to
+   * `n` never settles a search for `no`.
    */
   readonly #searches = new Map<
     string,
     ((found: FoundFilesMessage) => void)[]
   >();
 
-  /** The application searches waiting on an answer, by query. */
+  /** Pending application searches, by query. */
   readonly #appSearches = new Map<
     string,
     ((found: FoundAppsMessage) => void)[]
   >();
 
-  /** The previews waiting on an answer, by the path each asked about. */
+  /** Pending file previews, by path. */
   readonly #previews = new Map<
     string,
     ((preview: FilePreviewMessage) => void)[]
@@ -217,15 +134,11 @@ export class DomicileClient {
   constructor(host: DomicileHost) {
     this.#host = host;
 
-    // One listener per event type, registered here rather than left to the
-    // page — see this file's head for why that is the whole point of the
-    // class, and why registering them all before the constructor returns is
-    // what makes the ordering safe.
+    // Register every listener before returning; see the module comment.
     host.addEventListener("appappeared", (event) => {
       const message = appAppeared(event);
-      // A size here is the replay a reconnecting chrome is given, and no
-      // `app_resized` follows it — that fires on a size that *changed*, so an
-      // idle client sends none.
+      // Record the size here too: on reconnect, no `app_resized` follows for a
+      // client whose size has not changed.
       if (message.size !== undefined) {
         this.#surfaceSizes.set(message.app_id, message.size);
       }
@@ -253,8 +166,6 @@ export class DomicileClient {
     });
     host.addEventListener("appclosed", (event) => {
       const message = appClosed(event);
-      // The size is the client's, so it ends with the client rather than with
-      // whatever element happened to be showing it.
       this.#surfaceSizes.delete(message.app_id);
       this.#popupParents.delete(message.app_id);
       this.#deliver("app_closed", message);
@@ -264,11 +175,8 @@ export class DomicileClient {
     });
     host.addEventListener("focuschanged", (event) => {
       const message = focusChanged(event);
-      // The keys this page forwards go where the compositor says the keyboard
-      // is, and not only where the page last asked for it: the compositor
-      // moves it on its own too, and a page that heard only its own requests
-      // went on forwarding every key to a client that no longer had it —
-      // which is a launcher's box, focused and empty under every letter.
+      // Track focus from the compositor, not only the page's own requests: the
+      // compositor also moves focus, and keys must follow it.
       setFocusedApp(message.app_id);
       this.#deliver("focus_changed", message);
     });
@@ -305,8 +213,8 @@ export class DomicileClient {
     host.addEventListener("battery", (event) => {
       this.#deliver("battery", battery(event));
     });
-    // Bare, like `displayschanged`: the engine writes the attribute first,
-    // so reading it here reads this reading.
+    // The event has no payload; the engine sets the attribute before
+    // dispatching.
     host.addEventListener("brightnesschanged", () => {
       const level = this.#host.brightness;
       if (level !== null) {
@@ -350,21 +258,11 @@ export class DomicileClient {
       this.#deliver("audio_levels", audioLevels(event));
     });
     host.addEventListener("displayschanged", () => {
-      // The event is bare and the desktop is on the attribute, which the
-      // engine writes before it dispatches — so reading it here is reading
-      // *this* description rather than the one before it. Read at dispatch and
-      // not at delivery: a description that waits in the hold is replayed with
-      // the desktop as of when it fired, and since the last one held carries
-      // the latest, a handler processing them in order still ends on the
-      // desktop that is there now.
+      // The event has no payload; the engine sets the attribute before
+      // dispatching. Read it now so a held message keeps its own snapshot.
       const described = this.#host.displays;
-      // Not deliverable as `null`, and not invented as `[]` either: an empty
-      // array claims a desktop with no screens, which is a description, and
-      // this would be the absence of one. The engine writes the attribute
-      // before it dispatches, so this cannot happen from a real host — it is
-      // here because the alternative to dropping an impossible event is
-      // fabricating a desktop, and a shell that rendered "no screens" from it
-      // would be unpickable from one that had been told so.
+      // `null` cannot happen from a real host. Drop it rather than deliver
+      // `[]`, which would mean a desktop with no screens.
       if (described !== null) {
         this.#deliver("displays", { displays: described });
       }
@@ -374,51 +272,28 @@ export class DomicileClient {
   /**
    * The displays the compositor described, or `undefined` until it has.
    *
-   * Read through to the host rather than retained here. The desktop is a fact
-   * and not a stream: it lives on `window.domicile.displays`, where a
-   * component that mounts long after the description reads the same answer as
-   * one that was there for it, and where a second reader cannot take it from
-   * the first.
-   *
-   * **`null` is "not told yet" and `[]` is a desktop with no screens**, and
-   * the SDK keeps them apart rather than collapsing them: a `<Screen>` renders
-   * nothing for a display nobody mentioned, which is the right answer for
-   * "there is no such screen" and the wrong one for "wait".
-   *
-   * This used to be a guess. The attribute was a `FrozenArray` that started
-   * empty, so the two states had one value, and the SDK read empty as "not
-   * told yet" on the strength of the compositor describing at least one
-   * output. That invariant is the compositor's and not the channel's — the
-   * `domicile` daemon has a host nobody has described a desktop to, and it is
-   * exactly what sends the empty list — so the guess was wrong for the one
-   * case that produces it. The engine says which it means now.
-   *
-   * Units are the display's own: logical CSS pixels for the geometry, and a
-   * `scale` that is what *clients* on that screen draw at — not this page's
-   * `devicePixelRatio`, which is one number for a shell however many screens
-   * it spans.
+   * Read from the host each time, so late readers see the current desktop.
+   * `undefined` (not described yet) and `[]` (no screens) are distinct.
+   * Geometry is in logical CSS pixels; `scale` is the client scale for that
+   * screen, not this page's `devicePixelRatio`.
    */
   get displays(): readonly DomicileDisplay[] | undefined {
     return this.#host.displays ?? undefined;
   }
 
   /**
-   * How big the client `appId` last drew, or `undefined` while it has not.
+   * The last surface size of client `appId`, or `undefined` before it draws.
    *
-   * What a pointer position over that window is scaled by: the element's box is
-   * whatever CSS made it and the client's surface is whatever the client chose,
-   * so the two only agree by accident. `undefined` maps the element's own
-   * pixels through 1:1, which is the best guess there is for a window with
-   * nothing behind it yet.
+   * Used to scale pointer positions from the element's box to the surface.
+   * Callers map 1:1 when it is `undefined`.
    */
   surfaceSizeOf(appId: string): SurfaceSize | undefined {
     return this.#surfaceSizes.get(appId);
   }
 
   /**
-   * The window `appId` belongs to: itself for a window, and for a popup the
-   * window at the bottom of the popups it is over. What a click on a popup
-   * focuses, because a menu is not a window a shell knows about.
+   * The top-level window for `appId`: itself, or a popup's root window. A
+   * click on a popup focuses this window.
    */
   windowOf(appId: string): string {
     const parent = this.#popupParents.get(appId);
@@ -437,9 +312,8 @@ export class DomicileClient {
   ): this {
     this.#handlers.set(type, handler as Handler);
     const waiting = this.#held.get(type);
-    // Deleted before the handler runs, not after: a handler that asks the host
-    // for something the compositor answers with the same type would otherwise
-    // find the hold still full and see its own messages again.
+    // Clear before running the handler, so a message it triggers is not
+    // replayed from the hold.
     this.#held.delete(type);
     for (const message of waiting ?? []) {
       handler(message as HostMessageOf<T>);
@@ -450,18 +324,9 @@ export class DomicileClient {
   /**
    * Stop delivering `type` to `handler`.
    *
-   * Only if `handler` is still the one registered. {@link on} is a single
-   * slot, so a later registration has already displaced an earlier one — and a
-   * teardown that removed whatever it found would then silence the live
-   * handler on behalf of the dead one. Which caller does that is not this
-   * class's business to predict: it takes the handler rather than the type
-   * alone so that letting one go is safe in any order, the way `off` on an
-   * event target is.
-   *
-   * Nothing is held for this type again — see {@link #released}. The hold is
-   * for the gap before a page has ever listened, and this says it listened and
-   * stopped. There is nothing to clear: {@link on} empties the hold as it
-   * registers, so by the time this runs it is already empty.
+   * Does nothing if another handler has since replaced `handler`, so teardown
+   * order does not matter. Messages of `type` are no longer held; see
+   * {@link #released}.
    */
   off<T extends HostMessageType>(
     type: T,
@@ -475,45 +340,29 @@ export class DomicileClient {
   }
 
   /**
-   * Draw the desktop the other way round.
+   * Request a theme change.
    *
-   * **Nothing is applied here, and that is the point.** What comes back is a
-   * `theme` message — to every chrome on the desk, this one included — so a
-   * shell renders from the message rather than from its own click. A desk of
-   * three monitors is three pages and the toggle is on one of them; a page
-   * that painted itself would be the only one that had.
-   *
-   * It leaves the page at all because the compositor is the only process the
-   * desk's *clients* can hear: it answers the settings portal GTK, Qt and
-   * Electron read a color scheme from, out of this same value. A theme kept
-   * here would be a desktop whose panels went dark and whose windows stayed
-   * light.
+   * Render from the `theme` message that every chrome page receives, not from
+   * the click, so all pages stay in sync. The compositor also serves the
+   * theme to clients through the settings portal.
    */
   setTheme(theme: Theme): void {
     this.#host.setTheme(theme);
   }
 
   /**
-   * Offer a passphrase at a locked desk.
+   * Submit a passphrase to unlock the session.
    *
-   * **Nothing is applied here, and that matters more than it does for
-   * {@link setTheme}.** What comes back is a `locked` message — to every chrome
-   * on the desk, this one included — so a shell clears its lock screen because
-   * the desk opened, never because it believed its own keystrokes. A page that
-   * did the latter would be a lock anybody with the devtools could open.
-   *
-   * A wrong passphrase is answered with `locked: true` again, which a page
-   * waiting on its check reads as the answer: nothing else sends one to a desk
-   * being checked. The compositor says why in its own log, without the
-   * passphrase in it.
+   * Clear the lock screen only on the `locked: false` message every chrome
+   * page receives; otherwise devtools could unlock it. A wrong passphrase is
+   * answered with `locked: true`.
    */
   unlock(passphrase: string): void {
     this.#host.unlock(passphrase);
   }
 
   /**
-   * Lock this desk now. Nothing is applied here either: draw the lock screen
-   * when the `locked` message says the desk shut. See
+   * Lock the session. Draw the lock screen on the `locked` message. See
    * {@link DomicileHost.lock}.
    */
   lock(): void {
@@ -521,62 +370,60 @@ export class DomicileClient {
   }
 
   /**
-   * Set the screen's backlight to `level`, 0 through 1. Nothing is applied
-   * here: the slider follows the `brightness` message that comes back. See
-   * {@link DomicileHost.setBrightness}.
+   * Set the backlight to `level`, from 0 to 1. Update UI from the
+   * `brightness` message. See {@link DomicileHost.setBrightness}.
    */
   setBrightness(level: number): void {
     this.#host.setBrightness(level);
   }
 
   /**
-   * Set a device's or a stream's volume, a fraction of the sound server's
-   * 100%. Nothing is applied here: a mixer follows the `audio` message that
-   * comes back. See {@link DomicileHost.setAudioVolume}.
+   * Set a device's or stream's volume as a fraction of 100%. Update UI from
+   * the `audio` message. See {@link DomicileHost.setAudioVolume}.
    */
   setAudioVolume(id: string, volume: number): void {
     this.#host.setAudioVolume(id, volume);
   }
 
-  /** Mute or unmute a device or a stream; answered like a volume. */
+  /** Mute or unmute a device or stream; answered by `audio`. */
   setAudioMuted(id: string, muted: boolean): void {
     this.#host.setAudioMuted(id, muted);
   }
 
-  /** Make a device the one new streams go to; answered like a volume. */
+  /** Make a device the default for new streams; answered by `audio`. */
   setDefaultAudioDevice(id: string): void {
     this.#host.setDefaultAudioDevice(id);
   }
 
   /**
-   * Move a stream to another device of its own direction; answered like a
-   * volume.
+   * Move a stream to another device of the same direction; answered by
+   * `audio`.
    */
   moveAudioStream(id: string, device: string): void {
     this.#host.moveAudioStream(id, device);
   }
 
-  /** Switch a device to one of its ports; answered like a volume. */
+  /** Switch a device to one of its ports; answered by `audio`. */
   setAudioPort(id: string, port: string): void {
     this.#host.setAudioPort(id, port);
   }
 
-  /** Switch a sound card to one of its profiles; answered like a volume. */
+  /** Switch a sound card to one of its profiles; answered by `audio`. */
   setAudioProfile(card: string, profile: string): void {
     this.#host.setAudioProfile(card, profile);
   }
 
   /**
-   * Meter these devices and streams; answered with `audio_levels`. A lease
-   * to renew every second — see {@link DomicileHost.watchAudioLevels}.
+   * Meter these devices and streams; answered by `audio_levels`. Renew every
+   * second; see {@link DomicileHost.watchAudioLevels}.
    */
   watchAudioLevels(ids: readonly string[]): void {
     this.#host.watchAudioLevels(ids);
   }
 
   /**
-   * This page's old frame is held for `theme`: turn the desk's windows now.
-   * Answered with a `windows_theme` message once they have. See
+   * Report that this page has captured its old frame for `theme`, so windows
+   * can switch. Answered by `windows_theme`. See
    * {@link DomicileHost.themeCaptured}.
    */
   themeCaptured(theme: Theme): void {
@@ -584,14 +431,10 @@ export class DomicileClient {
   }
 
   /**
-   * Ask the compositor to put the keyboard on `appId`'s client, and nothing
-   * else.
+   * Ask the compositor to focus `appId`'s client.
    *
-   * **A shell wants `focusApp` from `./focus-app` instead**, which calls this
-   * and also tells the SDK where the page's keystrokes go. Keyboard events are
-   * delivered to `document` rather than to any element, so moving the seat
-   * without moving that leaves the window focused in the compositor and every
-   * key still landing in the page.
+   * Shells should use `focusApp` from `./focus-app`, which also routes the
+   * page's key events to the client. This alone leaves keys in the page.
    */
   focusApp(appId: string): void {
     this.#host.focusApp(appId);
@@ -602,18 +445,11 @@ export class DomicileClient {
   }
 
   /**
-   * Put the pointer at `to`, in this page's own coordinates.
+   * Move the pointer to `to`, in page coordinates.
    *
-   * **The companion to moving the keyboard, and only a desktop where the two
-   * follow each other needs it.** Focus that follows the cursor hands itself
-   * straight back: a keyed focus change leaves the pointer over the window it
-   * came from, and the next thing to cross that window is what the focus is
-   * on. sway answers it with `mouse_warping` and so does every other
-   * compositor; here there is no pointer in the page to move, so the engine
-   * moves the one it is drawing.
-   *
-   * A pair here and two arguments on the host: a place is one value to a
-   * shell and WebIDL has no tuple.
+   * For focus-follows-mouse shells: after a keyboard focus change, warp the
+   * pointer so it does not refocus the old window (like sway's
+   * `mouse_warping`).
    */
   warpPointer(to: readonly [x: number, y: number]): void {
     this.#host.warpPointer(to[0], to[1]);
@@ -622,8 +458,8 @@ export class DomicileClient {
   /**
    * Ask the client owning `appId` to close its window.
    *
-   * A request, not a kill: a terminal exits, an editor with unsaved work puts
-   * a dialog up and stays. The window goes when `app_closed` arrives.
+   * The client may refuse, e.g. to prompt about unsaved work. Remove the
+   * window on `app_closed`.
    */
   closeApp(appId: string): void {
     this.#host.closeApp(appId);
@@ -635,19 +471,14 @@ export class DomicileClient {
   }
 
   /**
-   * What in the home matches `query`: every word of it, in any order,
-   * ignoring case.
+   * Search the home directory for files matching every word of `query`, in
+   * any order, ignoring case.
    *
-   * The compositor looks and answers with the front of what matched and how
-   * many there were — its index of the home never crosses into the page. It
-   * names no path, so what gets searched is the compositor's decision and not
-   * something a document served over `domicile://` can steer. See
-   * `DomicileHost.searchFiles`.
+   * Returns the top matches and the total count. The page cannot choose the
+   * searched path. See `DomicileHost.searchFiles`.
    *
-   * **A desktop with no index never settles this.** No `HOME`, or a home
-   * that would not open, is a compositor that says so in its log and answers
-   * nothing — because "you have no files" is that breakage wearing the face of
-   * an ordinary answer.
+   * Never settles if the compositor has no index (e.g. no `HOME`); it logs
+   * the error rather than answer with an empty result.
    */
   searchFiles(query: string): Promise<FoundFilesMessage> {
     return new Promise((settle) => {
@@ -657,12 +488,10 @@ export class DomicileClient {
   }
 
   /**
-   * What `path` holds — the front of a file, or of a directory — for a
-   * launcher's preview of the row it has reached.
+   * Preview the start of a file or directory, for a launcher.
    *
-   * `path` is one a {@link searchFiles} answered. The compositor reads only a
-   * path its index holds, and says `Unreadable` for anything else. Like a
-   * search, a desktop with no index never settles this.
+   * `path` must come from {@link searchFiles}; any other path is answered
+   * `Unreadable`. Never settles without an index, like a search.
    */
   previewFile(path: string): Promise<FilePreviewMessage> {
     return new Promise((settle) => {
@@ -672,8 +501,8 @@ export class DomicileClient {
   }
 
   /**
-   * Which installed applications match `query`, best first — each with the
-   * argv that launches it, for {@link spawn}. See `DomicileHost.searchApps`.
+   * Search installed applications, best first, each with an argv for
+   * {@link spawn}. See `DomicileHost.searchApps`.
    */
   searchApps(query: string): Promise<FoundAppsMessage> {
     return new Promise((settle) => {
@@ -686,73 +515,57 @@ export class DomicileClient {
   }
 
   /**
-   * Put a row of the clipboard's history back on the clipboard.
+   * Put a clipboard history entry back on the clipboard.
    *
-   * `entry` is an id from the last `clipboard` message. There is no answer:
-   * what follows is that the next paste in any window is that entry, served by
-   * the compositor rather than by whichever client first copied it — so a row
-   * outlives the terminal it came from, which is the whole of what a manager
-   * is for.
-   *
-   * An id the history has since dropped sets nothing, and the compositor says
-   * so in its log. Nothing else is put on the clipboard in its place: a
-   * desktop that substituted the newest row would be deciding a person meant
-   * something other than what they clicked.
+   * `entry` is an id from the last `clipboard` message. The compositor serves
+   * the paste, so it works after the source client exits. An unknown id is
+   * logged and changes nothing.
    */
   copyClipboardEntry(entry: number): void {
     this.#host.copyClipboardEntry(entry);
   }
 
   /**
-   * Click an extension's action, popup or not: Chrome's toolbar click. The
-   * extension gets `activeTab` on the focused browser window, and an action
-   * with no popup has its `action.onClicked` dispatched. One with a popup is
-   * the shell's to open, as a `<webview>` at its `popup`, after this call.
+   * Click an extension's action, like Chrome's toolbar button.
+   *
+   * Grants `activeTab` on the focused browser window and, if there is no
+   * popup, dispatches `action.onClicked`. For a popup, the shell then opens a
+   * `<webview>` at its `popup` URL.
    */
   activateExtension(id: string): void {
     this.#host.activateExtension(id);
   }
 
   /**
-   * Click an icon in the system tray: `id` from the last `tray` message, and
-   * which button. There is no answer — what the click does is the
-   * application's, and an icon that changes because of it arrives as the next
-   * `tray` message.
+   * Click a tray icon, by `id` from the last `tray` message. Any change
+   * arrives as the next `tray` message.
    */
   activateTrayItem(id: string, action: TrayAction): void {
     this.#host.activateTrayItem(id, action);
   }
 
   /**
-   * Clear notifications: ids from the last `notifications` message. There is
-   * no answer but the next `notifications` message, without them.
+   * Dismiss notifications, by ids from the last `notifications` message.
    */
   dismissNotifications(ids: readonly number[]): void {
     this.#host.dismissNotifications(ids);
   }
 
   /**
-   * Press one of a notification's actions, or `"default"` for the
-   * notification itself where it is `clickable`. What the press does is the
-   * application's; the notification is let go of, and the next
-   * `notifications` message is without it.
+   * Invoke a notification action, or `"default"` to click a `clickable`
+   * notification. The notification is then dismissed.
    */
   invokeNotificationAction(id: number, action: string): void {
     this.#host.invokeNotificationAction(id, action);
   }
 
   /**
-   * Claim a key combination for the desktop, whatever holds the keyboard.
+   * Grab a key chord for the shell, whatever has keyboard focus.
    *
-   * Claimed in two places, because there are two layers above a focused window
-   * and they are different layers. The host's claim is matched in the browser
-   * process, the only one above a `<webview>` guest, and the press arrives back
-   * as a `shortcut` message rather than as a DOM event, because the page is not
-   * what received it — carrying the same fields this was given, so a shell
-   * compares the two without parsing a string. A focused *Wayland* window is an
-   * element in the page, so its keys do reach the document, and the page's own
-   * copy of the claim — see `shortcut-claims.ts` — is what stops
-   * `keyboard-input.ts` forwarding the chord to it on the way past.
+   * Registered twice. The host grab works inside a `<webview>`, where the
+   * browser process matches it and sends a `shortcut` message with the same
+   * fields. The page grab (`shortcut-claims.ts`) stops `keyboard-input.ts`
+   * forwarding the chord to a focused Wayland window.
    */
   grabShortcut(shortcut: DomicileShortcut): void {
     claimShortcut(shortcut);
@@ -782,11 +595,8 @@ export class DomicileClient {
   }
 
   /**
-   * Hand a message to its handler, or hold it until one registers.
-   *
-   * A {@link #released} type has neither: nobody is listening and that is
-   * deliberate, so it is dropped rather than kept for a handler that may never
-   * come.
+   * Deliver a message to its handler, or hold it until one registers. Drop
+   * it if its type is {@link #released}.
    */
   #deliver<T extends HostMessageType>(
     type: T,

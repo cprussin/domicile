@@ -34,8 +34,8 @@ describe("listenWindowMs", () => {
   });
 
   it("throws on a value that is not a positive number", () => {
-    // Left unchecked this reaches `setTimeout` as NaN, which fires at once —
-    // a harness that exits immediately looks exactly like one that saw nothing.
+    // `setTimeout` treats NaN as 0, and a harness that exits at once looks
+    // like one that saw no frames.
     expect(() => listenWindowMs({ DOMICILE_CHROME_LISTEN_MS: "soon" })).toThrow(
       /DOMICILE_CHROME_LISTEN_MS/,
     );
@@ -47,8 +47,8 @@ describe("listenWindowMs", () => {
 
 describe("devicePixelRatio", () => {
   it("reports nothing when the caller did not ask for a density", () => {
-    // A headless harness honestly has no display, and sending a ratio it made
-    // up would make the compositor scale for a screen nobody is looking at.
+    // A made-up ratio would make the compositor scale for a display that does
+    // not exist.
     expect(devicePixelRatio({})).toBeUndefined();
   });
 

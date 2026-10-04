@@ -1,26 +1,17 @@
-// The chords the desktop claimed, kept where the page can be asked about them.
+// The page's copy of the shortcuts the shell claimed.
 //
-// WHY THE PAGE KEEPS A COPY. `grabShortcut` claims a combination in the
-// browser process, and that is the only layer above a focused `<webview>` — a
-// guest's keys reach neither this document nor the compositor, so the claim
-// has to be matched there. It is not the only layer above a focused *Wayland*
-// window: that window is an `<app>` element in this very page, DOM focus never
-// leaves the document, and every keystroke arrives here for `keyboard-input.ts`
-// to forward. A claim the forwarding does not know about is a chord the desktop
-// answers *and* the window receives — Alt+Enter spawning a terminal and typing
-// a newline into the one that was already open.
+// `grabShortcut` registers claims in the browser process, which covers focused
+// `<webview>`s. Keys for a focused Wayland window pass through this page
+// instead, so `keyboard-input.ts` checks this set to avoid forwarding them.
 //
-// So this mirrors `ShortcutRegistry` in the engine, and deliberately mirrors
-// its shape as well: the claims are the page's rather than any one client's,
-// and a claim is never given back. A shell re-running the effect that made one
-// is making the same claim, and a gap between the two is a chord the focused
-// window gets instead.
+// Mirrors the engine's `ShortcutRegistry`: claims belong to the page and are
+// never released, so a shell re-claiming in an effect leaves no gap.
 
 import type { DomicileShortcut } from "./domicile-host";
 
 /** A key that went down, in the terms a claim is written in. */
 export type KeyPress = {
-  /** An evdev code, the numbering the control channel speaks throughout. */
+  /** An evdev key code. */
   keycode: number;
   altKey: boolean;
   ctrlKey: boolean;
@@ -28,12 +19,10 @@ export type KeyPress = {
   metaKey: boolean;
 };
 
-// Each claim as one string, so that claiming a combination twice is one claim
-// and asking about a press is a lookup rather than a walk. A shell's effect
-// re-runs on every dependency change and claims again each time.
+// Keyed by `chord`, so repeated claims are deduplicated.
 const claimed = new Set<string>();
 
-/** Take a combination for the desktop, so no window is sent it. */
+/** Claim a key combination so it is not forwarded to windows. */
 export const claimShortcut = ({
   altKey = false,
   ctrlKey = false,
@@ -44,16 +33,14 @@ export const claimShortcut = ({
   claimed.add(chord({ altKey, ctrlKey, keycode, metaKey, shiftKey }));
 };
 
-/** Whether this press is one of them. */
+/** Whether a press matches a claimed combination. */
 export const isClaimed = (press: KeyPress): boolean =>
   claimed.has(chord(press));
 
 /**
- * One claim written as one value.
+ * The set key for a combination.
  *
- * Every modifier is part of it, which is what makes an omitted one a modifier
- * that must *not* be held: Ctrl+Alt+Enter is a different string from Alt+Enter
- * and nobody claimed it.
+ * Includes every modifier, so an omitted modifier must not be held.
  */
 const chord = ({
   altKey,

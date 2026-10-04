@@ -7,14 +7,13 @@ import { hstack, stack } from "../../styled-system/patterns";
 
 import { Button } from "../Button/Button";
 
-/** `MouseEvent.button` for the middle mouse button — the one that closes a tab. */
+/** `MouseEvent.button` for the middle button, which closes a tab. */
 const MIDDLE_BUTTON = 1;
 
 /** Which side of a drop target a dragged tab lands on. */
 export type DropPosition = "before" | "after";
 
-/** One tab in the rail: its stable `id`, the `label` naming it, and whether it
- *  shows a close button (defaults to closable). */
+/** One tab: a stable `id`, a `label`, and whether it can close (default yes). */
 export type TabRailTab = {
   id: string;
   label: string;
@@ -25,39 +24,29 @@ type Props = {
   tabs: readonly TabRailTab[];
   /** The `id` of the active tab. */
   activeId: string;
-  /** Make the tab `id` active — a view concern. */
+  /** Make the tab `id` active. */
   onSelect: (id: string) => void;
   /** Close the tab `id`. */
   onClose: (id: string) => void;
   /** Move the tab `fromId` to just before/after the tab `toId`. */
   onReorder: (fromId: string, toId: string, position: DropPosition) => void;
-  /** Open a fresh tab (the built-in new-tab button). */
+  /** Open a new tab, from the built-in new-tab button. */
   onNew: () => void;
-  /** App chrome framed in the header beside the new-tab button (a wordmark). */
+  /** Header content beside the new-tab button, e.g. a wordmark. */
   brand?: ReactNode | undefined;
-  /** App chrome framed at the foot (a history / settings / theme row). */
+  /** Footer content, e.g. settings or theme controls. */
   footer?: ReactNode | undefined;
 };
 
 /**
- * A vertical rail of tabs — the sidebar shape the horizontal {@link Tabs} bar
- * deliberately doesn't cover. Presentational: it owns the layout, styling, and
- * interaction (drag and keyboard reorder, active/hover/drag affordances) and
- * reports actions through callbacks; it holds no application state and reads no
- * context, so the same rail drives a workspace, a file tree, or a playlist.
+ * A vertical tab sidebar; see {@link Tabs} for a horizontal bar. Controlled:
+ * it holds no app state and reports actions through callbacks.
  *
- * Each `tabs` entry is a row: a label control that selects the tab (`onSelect`)
- * and, unless `closable` is `false`, a close button (`onClose`) — a closable row
- * also closes on a middle-click anywhere in it. Rows reorder by drag or by
- * Alt+Up / Alt+Down (switch) and Alt+Shift+Up / Alt+Shift+Down (rearrange) on a
- * focused row. The header pairs the app's `brand` with a built-in new-tab button
- * (`onNew`); the `footer` frames app chrome at the foot.
- *
- * The close and new-tab controls are the shared {@link Button} (icon-only,
- * ghost). The tab-select control stays a purpose-built element: it needs the
- * `aria-current` "selected" styling and single-line truncation of a nav item,
- * neither of which `Button` exposes — and `className` is private, so it can't be
- * styled from outside.
+ * - A closable row closes from its close button or a middle-click.
+ * - On a focused row, Alt+Up/Down switches tabs and Alt+Shift+Up/Down moves
+ *   the row. Rows also reorder by drag.
+ * - The select control is not a {@link Button}, which lacks `aria-current`
+ *   styling and truncation.
  */
 export const TabRail = ({
   activeId,
@@ -69,8 +58,7 @@ export const TabRail = ({
   onSelect,
   tabs,
 }: Props) => {
-  // Which tab is mid-drag — local view state for the drag affordance. The
-  // reorder itself is the caller's (reported through `onReorder`).
+  // The dragged tab, for drag styling only; `onReorder` does the move.
   const [draggingId, setDraggingId] = useState<string | undefined>(undefined);
 
   const handleDragStart = useCallback((tabId: string) => {
@@ -90,9 +78,8 @@ export const TabRail = ({
     [draggingId, onReorder],
   );
 
-  // Keyboard tab management on a focused row: Alt+Up / Alt+Down switch to the
-  // neighboring tab (moving focus with it), Alt+Shift+Up / Alt+Shift+Down
-  // rearrange the row past that neighbor — the counterparts to click and drag.
+  // Alt+Up/Down switches to the neighbor and moves focus; with Shift it moves
+  // the row past the neighbor.
   const handleKeyMove = useCallback(
     (event: KeyboardEvent<HTMLLIElement>, index: number) => {
       if (!event.altKey) {
@@ -166,11 +153,8 @@ type TabRowProps = {
 };
 
 /**
- * One tab row: a label button that selects it and a close button that drops it
- * (unless `closable` is false); a closable row also drops on a middle-click
- * anywhere in it. The row is the drag/keyboard reorder affordance — it owns the
- * pointer plumbing and calls the handlers with tab ids, so the parent stays free
- * of DOM-event details.
+ * One tab row. Handles drag, keyboard and middle-click events and calls the
+ * handlers with tab ids.
  */
 const TabRow = memo(
   ({
@@ -215,9 +199,8 @@ const TabRow = memo(
       onKeyDown={(event) => {
         onKeyDown(event, index);
       }}
-      // The rail scrolls, so a middle press would latch Chromium's autoscroll
-      // at the moment the `auxclick` above closes the tab. Only the middle
-      // button is suppressed — the primary button keeps its focus default.
+      // A middle press would start Chromium's autoscroll in the scrolling
+      // rail. Only the middle button is suppressed.
       onMouseDown={(event) => {
         if (event.button === MIDDLE_BUTTON) {
           event.preventDefault();
@@ -250,14 +233,14 @@ const TabRow = memo(
   ),
 );
 
-/** Which half of the row the cursor is over — where a dropped tab lands. */
+/** Which half of the row the cursor is over, i.e. where a drop lands. */
 const dropPosition = (event: DragEvent<HTMLLIElement>): DropPosition => {
   const rect = event.currentTarget.getBoundingClientRect();
   return event.clientY < rect.top + rect.height / 2 ? "before" : "after";
 };
 
-/** After a keyboard switch, move focus to the neighboring tab's button so a
- *  held Alt+Arrow keeps walking the rail. */
+/** Focuses the neighboring tab after a keyboard switch, so a held Alt+Arrow
+ *  keeps moving. */
 const focusSiblingTab = (row: HTMLLIElement, delta: -1 | 1) => {
   const sibling =
     delta < 0 ? row.previousElementSibling : row.nextElementSibling;
@@ -270,8 +253,6 @@ const railStyles = stack({
   borderInlineEndColor: "border",
   borderInlineEndStyle: "solid",
   borderInlineEndWidth: "1px",
-  // A fixed rail width; `flexShrink: 0` keeps it from compressing when framed
-  // beside a flexible content region.
   flexShrink: 0,
   gap: 0,
   inlineSize: 65,
@@ -307,15 +288,13 @@ const rowStyles = hstack({
     "background-color {durations.fast} {easings.default}, color {durations.fast} {easings.default}",
 });
 
-// Hover feedback, applied only when no drag is in progress so a highlight chasing
-// the cursor doesn't obscure the rows reordering underneath it.
+// Hover styling, off during a drag so it doesn't obscure reordering rows.
 const rowHoverStyles = css({
   _hover: { backgroundColor: "card", color: "foreground" },
 });
 
-// The active tab: a brighter label and a subtle fill, keyed off the select
-// button's `aria-current`. The attribute selector outweighs the base `muted`
-// color, so the active tab stays bright whether or not it's hovered.
+// The active tab, keyed off `aria-current`. The attribute selector outranks
+// the base `muted` color, so hover doesn't dim it.
 const rowActiveStyles = css({
   "&:has([aria-current=page])": {
     backgroundColor:
@@ -324,7 +303,6 @@ const rowActiveStyles = css({
   },
 });
 
-// Fades the row while it's the one being dragged.
 const rowDraggingStyles = css({ opacity: "dragging" });
 
 const selectStyles = css({

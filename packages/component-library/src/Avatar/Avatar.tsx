@@ -41,11 +41,8 @@ export const Avatar = ({ name, size = "md", src, alt, ...props }: Props) => {
         className={skeletonStyles({ loading: status === "loading" })}
       />
       {src !== undefined && (
-        // `key={src}` so the Image remounts when `src` changes, re-issuing
-        // `onLoadingStatusChange` from "idle" → "loading" → final. Without
-        // the key, a previously-loaded Image stays mounted and `status`
-        // stays at its prior value through the transition, briefly mismatching
-        // the new src's actual load state.
+        // Remount on a new `src` so `onLoadingStatusChange` restarts from
+        // "idle". Otherwise `status` briefly shows the old image's state.
         <BaseAvatar.Image
           alt={alt ?? name}
           className={imageStyles}

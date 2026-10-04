@@ -1,13 +1,7 @@
 // biome-ignore-all lint/suspicious/noConsole: this harness's whole output is the frames it prints
 
-// Headless stand-in for the chrome, driven by scripts/e2e-dmabuf.sh: connect
-// to the compositor's chrome socket, complete the handshake, and print every
-// frame the host pushes so the calling script can assert on them.
-//
-// `e2e-chrome.sh` and `e2e-hidpi.sh` drove it too, until each script's claims
-// got a killer in `cargo test` and they went. The density half is
-// `tests/density.rs` now, which reaches a 2x frame with no bun in the picture.
-// One caller and one reason left: a frame out of a real GPU.
+// Headless chrome for `scripts/e2e-dmabuf.sh`. It prints every frame the host
+// pushes so the script can assert on frames from a real GPU.
 
 import { setDevicePixelRatioMessage } from "@domicile-desktop/sdk/chrome-message";
 
@@ -18,8 +12,8 @@ import {
   requireSocketPath,
 } from "./chrome-socket";
 
-// A GPU client can be many seconds from launch to its first frame, so the
-// window is the caller's to set.
+// A GPU client can take many seconds to produce its first frame, so the
+// caller sets the window.
 const LISTEN_MS = listenWindowMs(Bun.env);
 
 const chrome = connectChromeSocket(requireSocketPath(Bun.env), {
@@ -28,9 +22,7 @@ const chrome = connectChromeSocket(requireSocketPath(Bun.env), {
   },
 });
 
-// A real chrome reports the density of the display it is painting on; this one
-// reports whatever the calling script wants to test with, and nothing at all
-// otherwise — a headless harness has no display to be honest about.
+// There is no display, so report a ratio only if the script set one.
 const ratio = devicePixelRatio(Bun.env);
 if (ratio !== undefined) {
   chrome.send(setDevicePixelRatioMessage(ratio));

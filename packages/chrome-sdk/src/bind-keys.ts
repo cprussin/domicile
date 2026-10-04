@@ -1,23 +1,12 @@
-// A shell's keys, as it binds them, answered.
+// Resolves, grabs and handles a shell's keybindings.
 //
-// A shell says what every key does — `"Meta+Return": KeyAction.SendShell(
-// ["terminal"])` — and the compositor says which key each keysym is on, on the
-// live keymap. What is left for a page is to resolve the chords, claim them and
-// answer them, and that is the same work for every shell, so it is here once.
+// A press arrives by one of two paths. In a `<webview>`, the browser process
+// matches the grab and sends a `shortcut` message. Everywhere else, including
+// over an `<app>`, it is a `keydown` on this document; the grab stops the SDK
+// forwarding it to the window. Both are handled here.
 //
-// **Two paths, because two different things can be holding the keyboard.** A
-// `<webview>` is a browsing context of its own, so a key pressed on a site the
-// shell is showing reaches neither this document nor the compositor: the
-// browser process matches the claim and hands it back as a `shortcut` message.
-// Every other press lands on this document as a `keydown` — a Wayland window
-// is an `<app>` element and DOM focus never leaves the page — and the claim is
-// what keeps the SDK from forwarding the chord to that window on its way past.
-// So any press arrives by exactly one of the two, and both are answered here.
-//
-// **Modes are the SDK's.** `mode resize` changes what the same keys do, and
-// the compositor knows nothing about it, so the mode is tracked here and both
-// paths read the keys in it. A shell is told the mode moved, to draw it; it is
-// never asked to move it.
+// Binding modes are tracked here; the compositor does not know about them. See
+// docs/architecture/KEYBINDINGS.md.
 
 import type { DomicileClient } from "./domicile-client";
 import type {
@@ -33,29 +22,26 @@ import { actionFor, sameChord } from "./keybindings";
 import type { ShellKeybindings } from "./own-keybindings";
 import { ownKeybindings } from "./own-keybindings";
 
-/** The mode a desk starts in: a shell's `keybindings`. */
+/** The initial binding mode. */
 const DEFAULT_MODE = "default";
 
-/** What a shell is told as its keys are answered. */
+/** Callbacks {@link bindKeys} calls. */
 export type KeyHandlers = {
-  /** A `send-shell` binding was pressed: the words after `send-shell`. */
+  /** A `send-shell` binding was pressed, with its arguments. */
   onCommand: (args: readonly string[]) => void;
-  /** The keys are read in another binding mode now. */
+  /** The binding mode changed. */
   onModeChanged: (mode: string) => void;
 };
 
-/** What {@link bindKeys} hands back. */
+/** The handle {@link bindKeys} returns. */
 export type KeyBinding = {
-  /** Read the keys in `name` from now on — see {@link bindKeys}. */
+  /** Switch to binding mode `name`; see {@link bindKeys}. */
   setMode: (name: string) => void;
-  /** Stop answering. The claims stay. */
+  /** Stop handling keys. Grabs are not released. */
   unbind: () => void;
 };
 
-/**
- * What `bindKeys` uses of a client: a {@link DomicileClient}, or anything with
- * its handler slots and its claim.
- */
+/** The part of a {@link DomicileClient} that `bindKeys` uses. */
 type KeyClient = {
   grabShortcut: DomicileClient["grabShortcut"];
   on<T extends HostMessageType>(
@@ -69,47 +55,32 @@ type KeyClient = {
 };
 
 /**
- * Answer the keys a shell binds, `own`.
+ * Handle the keybindings `own` for a shell.
  *
- * **`own` is resolved as each keyboard arrives** — `shell_config`, every
- * keysym the layout types and the key it is on — so a reload that changes the
- * layout moves the keys with it. A chord written wrong, or whose keysym the
- * keyboard cannot type, throws there.
+ * - `own` is resolved against each `shell_config` keymap, so a layout change
+ *   moves the keys. An invalid chord, or a keysym the layout cannot type,
+ *   throws then.
+ * - This takes the `shell_config` and `shortcut` handler slots; registering
+ *   either elsewhere replaces it.
+ * - Grabs are never released, because the protocol cannot release one. A key
+ *   bound in any mode is grabbed from all clients for the whole session, and a
+ *   key a layout change moved stays grabbed until the page reloads.
+ * - `setMode` syncs the mode across pages without calling `onModeChanged`. An
+ *   unknown mode falls back to `default` and is reported. Before the first
+ *   keymap, the mode is checked once one arrives.
+ * - Bind once per client. The keymap is sent only on connect and on change, so
+ *   a rebind after `unbind` does nothing until the next change.
  *
- * **This owns `shell_config` and `shortcut`.** {@link DomicileClient.on} is a
- * single slot per message, so a shell that registers either of its own
- * displaces this.
- *
- * **A claim is never given back.** Every chord of every mode is claimed as
- * each keyboard arrives, because the channel has no way to release one — so a
- * layout change leaves the keys it moved off the desktop's, answering nothing,
- * until the shell's page reloads. And for that reason, a bare key bound in a
- * mode is taken from every client for the whole session, not only while the
- * mode is on.
- *
- * **The mode is tracked here, and a shell can set it.** A desktop of several
- * pages shares one mode across them — a key that entered it may have landed on
- * another page — so `setMode` is how a page is told: the keys are read in that
- * mode from then on, and `onModeChanged` is not called for it, the shell
- * having said so itself. The mode the keys are already in does nothing; one
- * the shell does not have goes back to `default`, and that is reported. Before
- * any keyboard, the mode is kept until one arrives and is checked then.
- *
- * **Bind once per client.** The keyboard arrives once and again only when it
- * changes, so keys bound anew after an unbind answer nothing until the next
- * change of it. A React shell binds in an effect that depends on the client
- * and its keys, and reads anything else it needs when a key is pressed.
- *
- * @returns `unbind`, which stops the answering — the claims stay, as above —
- *   and `setMode`.
+ * @returns `unbind`, which stops handling keys but keeps the grabs, and
+ *   `setMode`.
  */
 export const bindKeys = (
   domicile: KeyClient,
   own: ShellKeybindings,
   { onCommand, onModeChanged }: KeyHandlers,
 ): KeyBinding => {
-  // `undefined` until the first keyboard: no key is bound yet, and a mode
-  // set in the meantime cannot be checked against anything.
+  // `undefined` until the first keymap, so an early `setMode` cannot be
+  // checked.
   let bindings: KeybindingsByMode | undefined;
   let mode = DEFAULT_MODE;
 
@@ -120,12 +91,12 @@ export const bindKeys = (
     }
   };
 
-  /** What a press does, if anything: whether it was bound at all. */
+  /** Run a press's action. Returns whether the press was bound. */
   const answer = (press: ShortcutMessage, repeat: boolean): boolean => {
     const action =
       bindings === undefined ? undefined : actionFor(bindings, mode, press);
-    // A held key repeats tens of times a second and the compositor never sees
-    // a repeat at all, so one press does one thing on either path.
+    // Ignore repeats so both paths act once per press; the compositor never
+    // sends repeats.
     if (action !== undefined && !repeat) {
       switch (action.kind) {
         case KeyActionKind.SendShell: {
@@ -158,9 +129,8 @@ export const bindKeys = (
 
   const onKeyDown = (event: KeyboardEvent) => {
     const press = pressOf(event);
-    // Taken from the page whether or not it acts: the chord is the desktop's
-    // for as long as it is held, and Tab would otherwise walk the focus ring
-    // out from under the window being worked in.
+    // Prevent the default even for repeats, so a bound Tab does not move page
+    // focus away from the window.
     if (press !== undefined && answer(press, event.repeat)) {
       event.preventDefault();
     }
@@ -196,8 +166,7 @@ const chordsOf = (bindings: KeybindingsByMode): readonly ShortcutMessage[] =>
     );
 
 /**
- * A key that went down on the page, in a binding's terms — or `undefined` for
- * a key with no evdev code, which no binding can name.
+ * Convert a `keydown` to a chord, or `undefined` for a key with no evdev code.
  */
 const pressOf = (event: KeyboardEvent): ShortcutMessage | undefined => {
   const keycode = evdevFromCode(event.code);

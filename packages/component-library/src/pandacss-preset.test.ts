@@ -4,24 +4,17 @@ import panda from "@pandacss/preset-panda";
 import { domicilePreset } from "./pandacss-preset";
 
 /**
- * The colors that are a pair rather than a mix — see the note beside them in
- * the preset. Each is written twice, once for each ground, and each of those
- * has to be legible on the ground it was written for.
+ * Colors with a separate value per theme.
  *
- * The derived tokens are not here and cannot be: they are `color-mix(...)` of
- * foreground and background, resolved by the engine at CSS time, so there is
- * no hex to measure until a browser has one.
+ * `color-mix(...)` tokens are left out because they have no hex until a
+ * browser resolves them.
  */
 const PER_THEME = ["accent", "danger", "success", "warning"] as const;
 
-/**
- * WCAG's floor for text somebody has to read, which is what these are: an
- * accent is the color a launcher marks a match in and a browser draws a lock
- * in, not decoration.
- */
+/** WCAG AA contrast for normal text. These colors are used for text. */
 const READABLE = 4.5;
 
-/** Which of a pair a theme takes: Panda's own name for each of the two. */
+/** Panda's condition name for each theme. */
 type Theme = "_light" | "base";
 
 describe("the domicile preset", () => {
@@ -34,7 +27,7 @@ describe("the domicile preset", () => {
   });
 });
 
-/** Which of the pairs fall short on `theme`'s ground, and by how much. */
+/** The colors below {@link READABLE} on `theme`'s background, with ratios. */
 const unreadableOn = (theme: Theme): readonly string[] => {
   const ground = colorFor("background", theme);
   return PER_THEME.filter(
@@ -44,7 +37,7 @@ const unreadableOn = (theme: Theme): readonly string[] => {
   );
 };
 
-/** What the preset says `name` is on `theme`'s ground, as a hex. */
+/** The hex value of color `name` in `theme`. */
 const colorFor = (name: string, theme: Theme): string => {
   const colors = at(
     at(at(domicilePreset, "theme"), "extend"),
@@ -58,7 +51,7 @@ const colorFor = (name: string, theme: Theme): string => {
   }
 };
 
-/** A `{colors.cyan.600}` reference, as the hex the palette gives it. */
+/** Resolves a `{colors.cyan.600}` reference to its palette hex. */
 const palette = (reference: string): string => {
   const named = /^\{colors\.(?<family>[a-z]+)\.(?<step>\d+)\}$/u.exec(
     reference,
@@ -77,23 +70,17 @@ const palette = (reference: string): string => {
 };
 
 /**
- * One step into a token tree, without saying what shape the tree is.
+ * Reads `key` from an untyped object, or `undefined`.
  *
- * The preset's own types describe what Panda will accept rather than what
- * this file wrote down, so walking them by key is a type error and a cast
- * would only silence it. This reads the object the way the test knows it to
- * be and answers `undefined` for anything else, which the callers above turn
- * into a failure that names the token.
+ * The preset's types describe Panda's input, not this preset's shape, so
+ * indexing them directly does not type-check.
  */
 const at = (source: unknown, key: string): unknown =>
   typeof source === "object" && source !== null && key in source
     ? Reflect.get(source, key)
     : undefined;
 
-/**
- * How far apart two colors are, by WCAG's contrast ratio: 1 for a pair that
- * is the same color, 21 for black on white.
- */
+/** WCAG contrast ratio, from 1 (same color) to 21 (black on white). */
 const contrast = (one: string, other: string): number => {
   const [brighter, darker] = [luminance(one), luminance(other)].sort(
     (first, second) => second - first,
@@ -101,7 +88,7 @@ const contrast = (one: string, other: string): number => {
   return ((brighter ?? 0) + 0.05) / ((darker ?? 0) + 0.05);
 };
 
-/** The relative luminance of a `#rrggbb`, which is what a ratio is taken of. */
+/** WCAG relative luminance of a `#rrggbb` color. */
 const luminance = (hex: string): number => {
   const [red, green, blue] = [1, 3, 5].map((at) => {
     const channel = Number.parseInt(hex.slice(at, at + 2), 16) / 255;

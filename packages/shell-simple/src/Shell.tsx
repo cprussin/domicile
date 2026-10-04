@@ -1,5 +1,5 @@
-// The whole of this shell: an `<app>` per client the host announces, moved and
-// resized on the Alt key, and a terminal on Alt+Enter.
+// A minimal shell: one `<app>` per client the host announces, moved and resized
+// with Alt, and a terminal on Alt+Enter.
 
 import { APP_TAG_NAME } from "@domicile-desktop/sdk/app-element";
 import { bindKeys } from "@domicile-desktop/sdk/bind-keys";
@@ -10,11 +10,10 @@ import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
 import type { CSSProperties, PointerEvent } from "react";
 import { Fragment, useEffect, useEffectEvent, useRef, useState } from "react";
 
-// `<app>` is the engine's own tag, not a custom element — a custom element's
-// name must contain a hyphen — so React has no entry for it and this is what
-// lets the shell write it at all. Its focus event is deliberately absent: React
-// treats a hyphenless tag as ordinary HTML and writes no `on…` prop for an
-// event it has never heard of.
+// `<app>` is the engine's tag. It has no hyphen, so it is not a custom element
+// and React has no JSX type for it. The focus event is not declared: React
+// treats a hyphenless tag as plain HTML and sets no `on…` prop for an unknown
+// event.
 declare module "react" {
   // biome-ignore lint/style/noNamespace: React declares its JSX types as a namespace; augmenting IntrinsicElements has to match that shape
   namespace JSX {
@@ -28,14 +27,14 @@ declare module "react" {
   }
 }
 
-/** How far each window opens off the last, and how many before it wraps. */
+/** Offset between cascaded windows, and how many before the cascade wraps. */
 const CASCADE_STEP = 32;
 const CASCADE_LENGTH = 8;
 
-/** What a window opens at when its client has not committed a size. */
+/** Window size before the client commits one. */
 const OPENING_SIZE = [640, 480] as const;
 
-/** Below this a resized window has no corner left to drag back out. */
+/** Smallest resize. Below this there is no corner left to drag. */
 const MINIMUM_SIZE = 32;
 
 /** The pointer button that resizes rather than moves. */
@@ -43,15 +42,15 @@ const SECONDARY_BUTTON = 2;
 
 const TERMINAL_COMMAND = ["kitty"] as const;
 
-/** What a command this shell does not know is said as coming from. */
+/** Prefix for errors about unknown commands. */
 const SHELL = "simple";
 
-/** The keys this shell binds: one, for a terminal. */
+/** Default bindings: Alt+Enter opens a terminal. */
 const SIMPLE_KEYS: ShellKeybindings = {
   keybindings: { "Alt+Return": KeyAction.SendShell(["terminal"]) },
 };
 
-/** What the desktop answers to, drawn in the background. */
+/** Bindings listed in the background legend. */
 const KEYBINDINGS = [
   ["Alt + press", "raise"],
   ["Alt + drag", "move (and raise)"],
@@ -59,13 +58,13 @@ const KEYBINDINGS = [
   ["Alt + Enter", "open a terminal"],
 ] as const;
 
-/** Where a command a binding names and this shell does not know is said. */
+/** Default reporter for unknown commands. */
 const logToConsole = (error: string): void => {
-  // biome-ignore lint/suspicious/noConsole: the bindings are the user's, and the console is where a shell tells them one named nothing
+  // biome-ignore lint/suspicious/noConsole: the bindings are the user's, and the console is where a shell reports an unknown command in them
   console.error(error);
 };
 
-/** A window on the desktop: where this shell put it, and what its client said. */
+/** A window on the desktop: its placement and client state. */
 type ShellWindow = {
   appId: string;
   cursor: string | undefined;
@@ -78,9 +77,8 @@ type ShellWindow = {
 };
 
 /**
- * A popup a client opened over one of its windows — a menu, a tooltip. Not a
- * window: it is drawn at its offset from what it is over, and is never dragged,
- * raised or given the keyboard by this shell.
+ * A popup, such as a menu or tooltip, over one of a client's windows. It is
+ * placed at an offset from its parent and is never dragged, raised or focused.
  */
 type Popup = {
   appId: string;
@@ -89,7 +87,7 @@ type Popup = {
   size: readonly [width: number, height: number];
 };
 
-/** A drag in progress, measured from the grab so small steps cannot drift. */
+/** A drag in progress, measured from the grab point so steps do not drift. */
 type Drag = {
   appId: string;
   fromX: number;
@@ -99,12 +97,11 @@ type Drag = {
 };
 
 /**
- * The desktop: every window the host has announced, and nothing else.
+ * The desktop: every window the host has announced.
  *
- * The pointer handlers run on the desktop rather than on each window, and stop
- * what they take: an `<app>` forwards every pointer event over it straight to
- * the client underneath, so an un-taken Alt-drag also clicks into the client
- * and leaves it holding a button that never comes up.
+ * Pointer handlers sit on the desktop and stop the events they handle. An
+ * `<app>` forwards pointer events to its client, so an unhandled Alt-drag would
+ * also click the client and leave a button stuck down.
  */
 export const Shell = ({
   domicile,
@@ -112,23 +109,23 @@ export const Shell = ({
   report = logToConsole,
 }: {
   domicile: DomicileClient;
-  /** The keys it binds: Alt+Enter for a terminal when not given. */
+  /** Key bindings. Defaults to Alt+Enter for a terminal. */
   keybindings?: ShellKeybindings | undefined;
-  /** Where an unknown command is reported. Injected so a test can read it. */
+  /** Reports unknown commands. Injectable for tests. */
   report?: typeof logToConsole;
 }) => {
   const [windows, setWindows] = useState<readonly ShellWindow[]>([]);
   const [popups, setPopups] = useState<readonly Popup[]>([]);
-  // Which ids are open, kept in step synchronously: two announcements in one
-  // tick would otherwise both find the state empty and open the same window.
+  // Open ids, updated synchronously. Otherwise two announcements in one tick
+  // would both see empty state and open the same window.
   const open = useRef(new Set<string>());
-  // Every chrome is replayed the windows already running, then told who holds
-  // the keyboard. Only a window after that is one the user just opened.
+  // A chrome first gets a replay of running windows, then `focus_changed`. Only
+  // windows announced after that were just opened by the user.
   const caughtUp = useRef(false);
   const drag = useRef<Drag | undefined>(undefined);
 
-  // The one command this shell has. Read when a key is pressed rather than
-  // bound with the keys, which are bound once: the keyboard arrives once.
+  // Handles the shell's one command. An effect event, so it reads current props
+  // without rebinding the keys.
   const onCommand = useEffectEvent((args: readonly string[]) => {
     if (args.join(" ") === "terminal") {
       domicile.spawn(TERMINAL_COMMAND);
@@ -158,8 +155,7 @@ export const Shell = ({
       setWindows((all) => all.filter((window) => window.appId !== app_id));
       setPopups((all) => all.filter((popup) => popup.appId !== app_id));
     });
-    // The size is the SDK's, recorded as the message goes past; what reaches
-    // here is that the window has stopped being empty.
+    // The SDK records the size. Here it only marks the window as drawn.
     domicile.on("app_resized", ({ app_id }) => {
       setWindows((all) =>
         withWindow(all, app_id, (window) => ({ ...window, drawn: true })),
@@ -174,11 +170,11 @@ export const Shell = ({
       caughtUp.current = true;
     });
 
-    // The SDK claims the chord, resolved on the keyboard the compositor
-    // describes, and hears it by whichever path the press took.
+    // The SDK resolves the chord against the compositor's keymap and handles
+    // the press whether it reaches the page or the compositor.
     return bindKeys(domicile, keybindings, {
       onCommand,
-      // A desktop with one command has no modes to draw.
+      // This shell has no modes to show.
       onModeChanged: () => undefined,
     }).unbind;
   }, [domicile, keybindings]);
@@ -187,8 +183,8 @@ export const Shell = ({
     const window = event.altKey ? windowAt(windows, event.target) : undefined;
     if (window !== undefined) {
       take(event);
-      // Every later event for this pointer lands here whatever it is over, and
-      // the browser guarantees the release that ends the drag.
+      // Capture routes later events for this pointer here and guarantees the
+      // release that ends the drag.
       event.currentTarget.setPointerCapture(event.pointerId);
       drag.current = {
         appId: window.appId,
@@ -218,12 +214,11 @@ export const Shell = ({
     }
   };
 
-  // Capture is released implicitly on both of these, so there is nothing to
-  // undo but the drag itself. A client that exits mid-drag needs nothing
-  // either: its window is gone from the list, so the moves stop landing.
+  // Capture is released implicitly on up and cancel. If the client exits
+  // mid-drag, its window leaves the list and the moves stop applying.
   const endDrag = (event: PointerEvent<HTMLDivElement>) => {
     if (drag.current !== undefined) {
-      // Taken too: the client was never told the button went down.
+      // The client never saw the button go down, so it must not see it go up.
       take(event);
       drag.current = undefined;
     }
@@ -255,7 +250,7 @@ export const Shell = ({
   );
 };
 
-/** What the keys do, painted into the desktop behind whatever opens on it. */
+/** The key legend, drawn behind all windows. */
 const Keys = () => (
   <dl className="keys">
     {KEYBINDINGS.map(([chord, means]) => (
@@ -268,11 +263,11 @@ const Keys = () => (
 );
 
 /**
- * Where a newly announced client's window opens.
+ * The initial placement of a newly announced window.
  *
- * A Wayland client says nothing about where it goes, and nothing about how big
- * it is until it draws — so this cascades off the windows already open, and
- * takes a size only from the replay a reconnecting chrome is given.
+ * A Wayland client gives no position, and no size until it draws. Windows
+ * cascade off the open ones and take a size only from a replay to a
+ * reconnecting chrome.
  */
 const opened = (
   appId: string,
@@ -284,9 +279,9 @@ const opened = (
   return {
     appId,
     cursor: undefined,
-    // A size is a client that has drawn, and no frame is coming to say so: the
-    // hand-over skips a natively-drawn window, and `app_resized` fires only on
-    // a size that changed.
+    // A size means the client has drawn, and no frame will say so: the
+    // hand-over skips natively drawn windows, and `app_resized` fires only when
+    // the size changes.
     drawn: size !== undefined,
     height,
     left: step,
@@ -306,7 +301,7 @@ const withWindow = (
 const frontmost = (windows: readonly ShellWindow[]): number =>
   windows.reduce((top, window) => Math.max(top, window.z), 0);
 
-/** The window an event landed in — usually on the canvas its client draws to. */
+/** The window an event landed in, usually on its client's canvas. */
 const windowAt = (
   windows: readonly ShellWindow[],
   target: EventTarget,
@@ -357,9 +352,9 @@ const styleOf = ({
 });
 
 /**
- * Where a popup goes: its offset from what it is over, added up to a window,
- * at that window's depth — and after every window in the document, so it wins
- * the tie. `undefined` while its window is not open here.
+ * A popup's style: its offsets summed up to a window, at that window's z-index.
+ * Popups render after all windows, so they win the tie. `undefined` while the
+ * window is not open.
  */
 const popupStyleOf = (
   popup: Popup,
@@ -378,7 +373,7 @@ const popupStyleOf = (
       };
 };
 
-/** The top-left of `appId`'s box, and the depth of its window. */
+/** The top-left of `appId`'s box, and its window's z-index. */
 const originOf = (
   appId: string,
   popups: readonly Popup[],

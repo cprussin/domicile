@@ -2,18 +2,12 @@ import type { Decorator } from "@storybook/react-vite";
 import { useEffect, useState } from "react";
 
 /**
- * Storybook decorator that monkey-patches `window.Image` so the next image
- * created while a story is mounted defers its load callback by 5 seconds.
- * Lets the Avatar stories show the loading skeleton long enough to inspect
- * before the image fades in (or fails). Reverts the patch on unmount.
+ * Storybook decorator that delays image loads by 5 seconds, so Avatar stories
+ * show the loading skeleton.
  *
- * The patch is installed during render (via `useState` lazy init) rather
- * than from `useEffect`, because base-ui's `useImageLoadingStatus` calls
- * `new window.Image()` from inside `useIsoLayoutEffect` — a *layout* effect
- * that fires before our decorator's passive `useEffect`. Installing the
- * patch later would miss the probe Image's construction and the loading
- * delay would never apply. Uninstall still runs from `useEffect` cleanup,
- * which is fine because the patch only needs to be removed on unmount.
+ * Patches `window.Image` during render, not in `useEffect`: base-ui creates
+ * its probe image in a layout effect, which runs before this decorator's
+ * effects.
  */
 export const slowImageDecorator: Decorator = (Story) => {
   useState(installSlowImage);
@@ -44,8 +38,7 @@ const installSlowImage = () => {
       if (srcDescriptor === undefined || completeDescriptor === undefined) {
         return;
       } else {
-        // Must be a `function` (not arrow) because consumers call
-        // `new window.Image(...)` and arrow functions are not constructable.
+        // A `function`, since callers use `new` and arrows can't construct.
         const SlowImage = function (
           ...args: ConstructorParameters<typeof OriginalImage>
         ) {

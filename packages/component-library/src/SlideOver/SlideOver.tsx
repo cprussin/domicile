@@ -10,12 +10,10 @@ import { useScreenRegion } from "../Screen/DisplayProvider";
 export const { createHandle } = BaseDialog;
 
 /**
- * A panel that slides in from the right edge and holds full-height content — the
- * companion to {@link ModalDialog} for content that belongs alongside the page
- * rather than centered over it (a transcript, a details pane, settings). Same
- * dialog semantics (focus trap, backdrop, escape/close) and the same
- * `trigger` / `title` / `children` / `footer` API, so it's a drop-in swap when a
- * centered modal reads wrong; only the placement and the slide direction differ.
+ * A full-height modal panel that slides in from the right edge, for content
+ * that sits beside the page, such as settings or details.
+ *
+ * Same behavior and API as {@link ModalDialog}; only placement differs.
  */
 type Props = ExtendProps<
   typeof BaseDialog.Root,
@@ -23,9 +21,8 @@ type Props = ExtendProps<
     children: ReactNode;
     footer?: ReactNode | undefined;
     /**
-     * The display whose edge the panel slides in from, by name. A page
-     * spanning several monitors otherwise slides it in from the desk's far
-     * edge. Needs a `DisplayProvider`.
+     * Name of the display to slide in on. Without it, a page spanning several
+     * monitors uses the rightmost edge. Needs a `DisplayProvider`.
      */
     screen?: string | undefined;
     title?: ReactNode | undefined;
@@ -97,9 +94,8 @@ const backdropStyles = css({
   zIndex: "modalBackdrop",
 });
 
-// The full-viewport layer that pins the panel to the trailing (right) edge and
-// stretches it to full height, so the popup itself only owns its own width. A
-// size container, so that width is a fraction of the screen it is over.
+// Pins the panel to the right edge at full height. A size container, so the
+// panel's width is relative to the screen.
 const viewportStyles = flex({
   align: "stretch",
   containerType: "size",
@@ -109,8 +105,6 @@ const viewportStyles = flex({
   zIndex: "modal",
 });
 
-// The sliding panel: full height at the right edge, entering from off-screen
-// (`translateX(100%)`) and leaving the same way.
 const popupStyles = flex({
   _starting: {
     transform: "translateX(100%)",
@@ -148,8 +142,7 @@ const titleStyles = css({
   margin: 0,
 });
 
-// The scrollable body fills the space between the header and the optional
-// footer, so long content scrolls inside the panel rather than growing it.
+// Scrolls inside the panel instead of growing it.
 const bodyStyles = cva({
   base: {
     display: "flex",

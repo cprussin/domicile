@@ -1,124 +1,56 @@
-// The fork's `<webview>`: web content in a browsing context of its own.
+// Types and event names for the engine's `<webview>` element, which shows web
+// content in its own browsing context.
 //
-// There is no code here, and that is the point. The element belongs to the
-// engine — `src`, the history controls, the zoom and the state properties are
-// all `HTMLWebViewElement`'s, and the events below are dispatched by the
-// browser process rather than by anything in this package. What is left for the
-// SDK to say is the part TypeScript cannot read off the fork: what the tag is,
-// and what the engine calls the events it fires on it.
-//
-// It used to be a `<domicile-webview>` custom element wrapping one of these,
-// because a custom element's name must contain a hyphen and the SDK predates
-// the fork. The wrapper forwarded every call above straight through, so
-// nothing is lost by writing the tag itself.
+// The engine implements the element and dispatches every event below. This
+// module only declares them for TypeScript. See
+// `docs/architecture/BROWSER-WINDOWS.md`.
 
 /**
- * Fired when the page inside the view takes focus — a click in it, anywhere.
+ * Fired when the page inside the view takes focus, for example on a click.
  *
- * THE ENGINE DISPATCHES THIS, and the name is the contract between it and a
- * shell: the page in the view is a guest with a browsing context of its own, so
- * no pointer event inside it crosses back out. The focus it takes does — the
- * fork sends the view a real `focus` and `focusin`, which upstream holds back
- * while the embedder's page is unfocused — so focus-based code needs nothing
- * from this. This is for raising windows: it fires on every focus the element
- * takes, by whichever route. It bubbles, so a chrome can listen on the window
- * it drew rather than on the view.
- *
- * A shell reads it as "the user is working in this window now". See
+ * Use it to raise the window: pointer events inside the guest do not reach the
+ * shell. The view also gets real `focus` and `focusin` events. Bubbles. See
  * `HTMLWebViewElement::GuestTookFocus` in the engine.
  */
 export const WEBVIEW_GUEST_FOCUS_EVENT = "domicile-guest-focus";
 
 /**
- * Fired when the embedded view's history changes what it can do — a page
- * committed, a back taken, a forward spent.
+ * Fired when {@link HTMLWebViewElement.canGoBack} or
+ * {@link HTMLWebViewElement.canGoForward} may have changed.
  *
- * THE ENGINE DISPATCHES THIS, and it carries nothing. What changed is readable
- * on the element as {@link HTMLWebViewElement.canGoBack} and
- * {@link HTMLWebViewElement.canGoForward}, and those are the values a chrome
- * renders from; this only says "read them again". A payload here would be a
- * second copy of the same state, correct at the instant it was made and stale
- * for a chrome that read it later.
- *
- * WHICH IS ALSO WHY THE STATE IS NOT THIS EVENT. A shell that mounts after the
- * guest's first commit hears nothing — a React shell registers its listeners
- * in its first effect flush — and an address bar that learned only from events
- * would gray out the wrong button until the user navigated again. The
- * properties are always readable; this is the re-render trigger, not the
- * source of truth.
- *
- * It bubbles, so a chrome can listen on the window it drew rather than on the
- * view.
+ * Carries no payload. Read the properties instead, since a shell that mounts
+ * late misses earlier events. Bubbles.
  */
 export const WEBVIEW_HISTORY_CHANGE_EVENT = "domicile-history-change";
 
 /**
- * Fired when the page inside the view starts or stops loading.
+ * Fired when {@link HTMLWebViewElement.loading} changes.
  *
- * THE ENGINE DISPATCHES THIS, and like the history event it carries nothing:
- * what changed is readable on the element as
- * {@link HTMLWebViewElement.loading}. The reason is the same one — a payload
- * is a copy of the state that is correct only at the instant it was made — and
- * so is the reason the state is a property rather than this event: a chrome
- * that mounts after the guest has already started loading hears nothing, and
- * an address bar that learned only from events would show a settled page while
- * one was still arriving.
- *
- * NOT ONE EVENT PER NAVIGATION. The browser reports this when the answer
- * changes, so a page that loads a hundred subresources says "loading" once and
- * "not loading" once, and a same-document navigation — a fragment, a
- * `pushState` — says nothing at all, because it is not a load a browser's UI
- * spins for.
- *
- * It bubbles, so a chrome can listen on the window it drew rather than on the
- * view.
+ * Carries no payload. Fires once per start and stop, not per subresource.
+ * Same-document navigations (fragments, `pushState`) do not fire it. Bubbles.
  */
 export const WEBVIEW_LOADING_CHANGE_EVENT = "domicile-loading-change";
 
 /**
- * Fired when the page inside the view changes: a new address, a new verdict on
- * the connection behind it, or both.
+ * Fired when {@link HTMLWebViewElement.url} or
+ * {@link HTMLWebViewElement.security} changes. Carries no payload. Bubbles.
  *
- * THE EVENT THAT MAKES A `<webview>` A BROWSER. Before it, a chrome knew only
- * where it had *sent* a window — `src` is the author's attribute — so a link
- * followed, a redirect taken or a form posted left the address bar showing a
- * page the user had left. What the engine now reports is the guest's *visible
- * entry*: the one a browser's own address bar shows.
- *
- * THE ENGINE DISPATCHES THIS, and like the history and loading events it
- * carries nothing: what changed is readable on the element as
- * {@link HTMLWebViewElement.url} and {@link HTMLWebViewElement.security}. The
- * reason is the same one — a payload is a copy of the state correct only at
- * the instant it was made — and so is the reason the state is a property: a
- * chrome that mounts mid-load is the ordinary case, and one that learned the
- * security level only from an event would have none to draw.
- *
- * READ THE TWO TOGETHER. They arrive in one message, from one read of one
- * entry, so that the address and the lock always describe the same page — see
- * `components/domicile/mojom/web_view_guest.mojom`. A chrome that paired this
- * security with an address from anywhere else (from `src`, say) would draw a
- * padlock beside an address it does not belong to, which is the shape of every
- * address-bar spoof.
- *
- * It bubbles, so a chrome can listen on the window it drew rather than on the
- * view.
+ * Always show `security` with `url`, never with `src`. The engine updates both
+ * from the same navigation entry; pairing the lock with another address
+ * enables address-bar spoofing. See
+ * `components/domicile/mojom/web_view_guest.mojom`.
  */
 export const WEBVIEW_PAGE_CHANGE_EVENT = "domicile-page-change";
 
 /**
- * What the browser says about the connection behind the page in a `<webview>`.
+ * The connection security levels a `<webview>` can report.
  *
- * `security_state::GetSecurityLevel` narrowed to the four a chrome can draw —
- * the same function, over the same entry, that Chrome's own omnibox lock comes
- * from. Not a scheme: a `https://` that failed to validate is `dangerous`, and
- * a `https://` running active mixed content is too.
+ * Derived from `security_state::GetSecurityLevel`, as Chrome's omnibox lock
+ * is. An `https://` page with a bad certificate or active mixed content is
+ * `dangerous`.
  *
- * `""` IS NOT A LEVEL AND MUST NOT BE READ AS ONE. It is what the element
- * reports before the browser has said anything — a guest still on its initial
- * entry — and what an engine older than this contract reports by having no
- * such property at all. A chrome that treated it as "neutral" would be making
- * a claim nobody checked; see `connection-safety.ts` in shell-manganese for
- * what to do with it instead.
+ * The element reports `""` before the first navigation commits. Do not treat
+ * it as `neutral`; see `connection-safety.ts` in shell-manganese.
  */
 export const WEBVIEW_SECURITY_LEVELS = [
   "neutral",
@@ -130,188 +62,114 @@ export const WEBVIEW_SECURITY_LEVELS = [
 export type WebViewSecurity = (typeof WEBVIEW_SECURITY_LEVELS)[number];
 
 /**
- * Fired when the page inside the view asks for a window of its own — a link
- * with `target="_blank"`, a `window.open`, a form submitted at a named target
- * that does not exist.
+ * Fired when the page asks for a new window: `target="_blank"`,
+ * `window.open`, or a form aimed at a missing named target. Bubbles.
  *
- * THE ENGINE DISPATCHES THIS, and unlike the three above it carries a payload:
- * {@link DomicileNewWindowEvent.url}, the address the page asked for. It has to
- * — there is no element to read the answer off yet, which is the whole of what
- * the page is asking for.
+ * The shell should open a new browser window at
+ * {@link DomicileNewWindowEvent.url}. The browser refuses to create the window
+ * itself, because a guest without its own `SiteInstance` would hit a `CHECK`
+ * in `WebContentsImpl::CreateNewWindow`.
  *
- * WHAT A SHELL DOES WITH IT is open a second browser window at that address.
- * The browser process does NOT make one: a guest with no `SiteInstance` of its
- * own cannot be handed a content-created window without tripping a `CHECK` in
- * `WebContentsImpl::CreateNewWindow`, so the request is refused there and
- * reported here instead. A shell that ignores this event is a desktop where
- * `target="_blank"` does nothing at all, which is what this event exists to
- * stop being the case.
- *
- * WHAT IT COSTS, and it is worth knowing before writing a shell against it: the
- * window the shell opens is a NAVIGATION to that address rather than the window
- * the page asked for. So `window.open()` hands the opener `null`, the opener
- * relationship and `window.name` are not carried, and a form POSTed at a new
- * target arrives as a GET of its action. A link is the case that survives whole,
- * and a link is what this was written for.
- *
- * It bubbles, so a chrome can listen on the window it drew rather than on the
- * view.
+ * The new window is a plain navigation, so `window.open()` returns `null`, the
+ * opener and `window.name` are lost, and a POST becomes a GET. Links work
+ * fully.
  */
 export const WEBVIEW_NEW_WINDOW_EVENT = "domicile-new-window";
 
 /**
- * Fired when an extension asks for a window of its own:
- * `chrome.windows.create({type: "popup", url})`. Bitwarden's "Unlock" from its
- * autofill menu is one, and so is any extension's "pop out".
+ * Fired when an extension calls `chrome.windows.create({type: "popup", url})`,
+ * such as an extension's "pop out". Dispatched on the most recently used view.
+ * Bubbles.
  *
- * THE ENGINE DISPATCHES THIS, on the view the user last worked in, and it
- * carries what a second view needs: {@link DomicilePopupWindowEvent.windowId},
- * the id the extension was already handed for the window, the address to show
- * and the size it asked for. Where the window goes is the shell's, so it says
- * nothing about where.
+ * The shell should open a browser window whose `<webview>` has `popupwindow`
+ * set to {@link DomicilePopupWindowEvent.windowId}. Set the attribute before
+ * inserting the view: the engine reads it only once.
  *
- * WHAT A SHELL DOES WITH IT is open a browser window whose `<webview>` carries
- * that id as its `popupwindow` attribute. The attribute is what makes the view
- * the extension's window rather than one more tab of the desk's, and the engine
- * reads it ONCE, as the element asks for its guest — so it is set before the
- * view goes into the document, and changing it afterward does nothing. A shell
- * that ignores this leaves the extension's window unopened and its
- * `windows.create` unanswered.
- *
- * The view answers as any other does after that: `chrome.windows.remove(id)`
- * is {@link WEBVIEW_CLOSE_EVENT} on it, and `chrome.windows.update(id,
- * {focused: true})` is {@link WEBVIEW_FOCUS_REQUEST_EVENT}.
- *
- * It bubbles.
+ * Afterward, `chrome.windows.remove(id)` fires {@link WEBVIEW_CLOSE_EVENT} on
+ * the view and `chrome.windows.update(id, {focused: true})` fires
+ * {@link WEBVIEW_FOCUS_REQUEST_EVENT}. See
+ * `docs/architecture/EXTENSIONS.md`.
  */
 export const WEBVIEW_POPUP_WINDOW_EVENT = "domicile-popup-window";
 
 /**
- * Fired when the page inside the view calls `window.close()`.
+ * Fired when the page calls `window.close()`. The shell should remove the
+ * view. Bubbles.
  *
- * THE ENGINE DISPATCHES THIS, and it carries nothing. The browser closes
- * nothing: the view is the shell's element, so removing it is the shell's
- * answer. An extension's popup closes itself this way, which is what a tray
- * that opens one in a `<webview>` listens for.
- *
- * Only a page the browser lets close fires it: one whose history is a single
- * entry, per the HTML spec's "script-closable". A page the user has navigated
- * in is told no by its own renderer, and nothing reaches the shell.
- *
- * It bubbles.
+ * Fires only for script-closable pages (one history entry), per the HTML spec.
+ * Extension popups close this way.
  */
 export const WEBVIEW_CLOSE_EVENT = "domicile-close";
 
 /**
- * Fired when an extension asks for this browser window to be the one in
- * front: `chrome.tabs.update(id, {active: true})` or
- * `chrome.windows.update(id, {focused: true})`. Every `<webview>` is a tab to
- * `chrome.tabs`, and which window is in front is the shell's, so the browser
- * raises nothing and asks.
- *
- * THE ENGINE DISPATCHES THIS, and it carries nothing: the element is the
- * window asked for. A shell raises and focuses it. It bubbles.
+ * Fired when an extension calls `chrome.tabs.update(id, {active: true})` or
+ * `chrome.windows.update(id, {focused: true})` for this view. The shell should
+ * raise and focus it. Bubbles.
  */
 export const WEBVIEW_FOCUS_REQUEST_EVENT = "domicile-focus-request";
 
 /**
- * Fired when the page inside the view leaves a chord alone: a key pressed with
- * Ctrl, Alt or Meta held that the page did not `preventDefault`.
+ * A `KeyboardEvent` fired for a Ctrl, Alt or Meta chord the page did not
+ * `preventDefault`. Bubbles.
  *
- * A `KeyboardEvent`, with the `key`, `code`, modifiers and `repeat` a `keydown`
- * carries, so a chrome binds Ctrl+R over its page and in its own address bar
- * with one handler. A type of its own rather than `keydown` because the key was
- * not pressed in the shell's document, and every `keydown` listener there would
- * otherwise hear it as though it had been.
- *
- * THE ONLY WAY A SHELL HEARS ONE. A key pressed in a guest never reaches the
- * shell's document — see `WEBVIEW_GUEST_FOCUS_EVENT` for why nothing crosses
- * out — so the engine hands it back once the page has had its turn, which is
- * Chrome's own order: a site that binds a chord keeps it.
- *
- * CHORDS ONLY. A plain key the page did not consume is most of typing, a
- * password's included, and is not copied out of it.
- *
- * It bubbles, so a chrome can listen on the window it drew.
+ * Guest keys never reach the shell's document, so this is how a shell sees
+ * them. The page handles the key first, as in Chrome. It is not named
+ * `keydown` so existing `keydown` listeners do not see it. Plain keys are
+ * never forwarded, so typed text such as passwords stays in the guest.
  */
 export const WEBVIEW_GUEST_KEYDOWN_EVENT = "domicile-guest-keydown";
 
 /**
- * Fired when the page's zoom changes, which is readable on the element as
- * {@link HTMLWebViewElement.zoom}. Carries nothing, like the other state
- * events.
+ * Fired when {@link HTMLWebViewElement.zoom} changes. Carries no payload.
+ * Bubbles.
  *
- * The zoom is the SITE's, keyed by host the way Chrome keys it, so this fires
- * when the shell sets it, when another window on the same site does, and when
- * the page navigates to a site zoomed differently.
- *
- * It bubbles.
+ * Zoom is per host, as in Chrome, so another window on the same site or a
+ * navigation can also change it.
  */
 export const WEBVIEW_ZOOM_CHANGE_EVENT = "domicile-zoom-change";
 
 /**
- * Fired when the icon the page names for itself changes, which is readable on
- * the element as {@link HTMLWebViewElement.favicon}. Carries nothing, like the
- * other state events.
- *
- * It bubbles.
+ * Fired when {@link HTMLWebViewElement.favicon} changes. Carries no payload.
+ * Bubbles.
  */
 export const WEBVIEW_FAVICON_CHANGE_EVENT = "domicile-favicon-change";
 
 /**
- * Fired when the user asks the page to zoom in or out — Ctrl and the wheel,
- * over a page that did not take the wheel for itself.
+ * Fired on Ctrl+wheel over a page that did not handle the wheel.
  *
- * A REQUEST, NOT A ZOOM: the engine changes nothing, and what the step is is
- * the shell's, so the wheel and Ctrl+plus take one path through it. A shell
- * that ignores these is a browser window where Ctrl+wheel does nothing.
- *
- * Two names rather than one event with a direction on it, so both stay plain
- * `Event`s. They bubble.
+ * The engine does not zoom; the shell picks the step and calls `setZoom`, so
+ * the wheel and keyboard shortcuts share one path. Two plain `Event`s instead
+ * of one with a direction. Both bubble.
  */
 export const WEBVIEW_ZOOM_IN_REQUEST_EVENT = "domicile-zoom-in-request";
 export const WEBVIEW_ZOOM_OUT_REQUEST_EVENT = "domicile-zoom-out-request";
 
 /**
- * Fired when a find in the page has found something new, which is readable on
- * the element as {@link HTMLWebViewElement.findMatches} and
- * {@link HTMLWebViewElement.findActiveMatch}. Carries nothing, like the other
- * state events.
+ * Fired when {@link HTMLWebViewElement.findMatches} or
+ * {@link HTMLWebViewElement.findActiveMatch} changes. Carries no payload.
+ * Bubbles.
  *
- * The count settles over several of these as the browser searches the page
- * frame by frame, and goes back to nothing when the find is stopped or the page
- * navigates away — a new page ends a find, as it does in Chrome.
- *
- * It bubbles.
+ * Fires several times as frames are searched. Navigation ends the find and
+ * resets the counts, as in Chrome.
  */
 export const WEBVIEW_FIND_CHANGE_EVENT = "domicile-find-change";
 
 /**
- * Fired when the page's content changes size, which is readable on the element
- * as {@link HTMLWebViewElement.contentWidth} and
- * {@link HTMLWebViewElement.contentHeight}. Carries nothing, like the other
- * state events.
- *
- * It bubbles.
+ * Fired when {@link HTMLWebViewElement.contentWidth} or
+ * {@link HTMLWebViewElement.contentHeight} changes. Carries no payload.
+ * Bubbles.
  */
 export const WEBVIEW_CONTENT_SIZE_CHANGE_EVENT = "domicile-content-size-change";
 
 /**
- * Fired when the page inside the view needs a file picked: an
- * `<input type="file">` clicked, or a download that needs somewhere to go.
+ * Fired when the page needs a file picked: an `<input type="file">` or a
+ * download. Bubbles.
  *
- * THE ENGINE DISPATCHES THIS, and it is a question: the page waits until the
- * shell answers with {@link DomicileFileChooserEvent.choose} or
- * {@link DomicileFileChooserEvent.cancel}. The browser draws no dialog of its
- * own — a picker is the desktop's UI, so it is the shell's to draw.
- *
- * `preventDefault()` IS HOW A SHELL TAKES IT. One nobody takes is canceled as
- * soon as the dispatch returns, so a shell that ignores this is a desktop where
- * uploads and downloads are refused rather than one where the page hangs.
- *
- * Every download asks: the browser saves nothing without a path from here.
- *
- * It bubbles, so a chrome can listen on the window it drew.
+ * The browser draws no dialog. Call `preventDefault()` to handle it, then
+ * answer with {@link DomicileFileChooserEvent.choose} or
+ * {@link DomicileFileChooserEvent.cancel}. If no listener calls
+ * `preventDefault()`, the request is canceled, so uploads and downloads fail.
+ * Every download asks for a path.
  */
 export const WEBVIEW_FILE_CHOOSER_EVENT = "domicile-file-chooser";
 
@@ -320,7 +178,7 @@ export const WEBVIEW_FILE_CHOOSER_EVENT = "domicile-file-chooser";
  *
  * - `open`: one existing file.
  * - `open-multiple`: one or more existing files.
- * - `open-folder`: one existing directory — the browser reads what is in it.
+ * - `open-folder`: one existing directory, whose contents the browser reads.
  * - `save`: one path to write, which need not exist yet.
  */
 export const WEBVIEW_FILE_CHOOSER_MODES = [
@@ -334,103 +192,76 @@ export type WebViewFileChooserMode =
   (typeof WEBVIEW_FILE_CHOOSER_MODES)[number];
 
 /**
- * What a `<webview>` is, to everything holding one.
+ * Global declarations for the engine's `<webview>`.
  *
- * Global rather than exported, and merged rather than defined, because the name
- * is already taken twice over: `@types/react` declares an empty
- * `HTMLWebViewElement` and a `webview` entry in `JSX.IntrinsicElements` — left
- * over from Electron — so a shell writing the tag in JSX gets React's element
- * type for its `ref` whatever this module exports. An exported interface of the
- * same shape is a *different* type to that one, and a shell holding the ref
- * cannot assign it anywhere. So this fills in the empty one instead, and the
- * tag-name map beside it is what `document.querySelector("webview")` reads.
- *
- * Written out rather than imported because there is nothing to import from: the
- * interface is the fork's, and the engine ships no `.d.ts`. A shell that runs
- * on stock Chromium gets an `HTMLUnknownElement` with none of it — the same
- * trade `<app>` makes.
+ * Merged into the global `HTMLWebViewElement` because `@types/react` already
+ * declares an empty one for JSX `ref`s. A separate exported type would not be
+ * assignable to it. The engine ships no `.d.ts`, so the interface is written
+ * out here.
  */
 declare global {
-  // An `interface` rather than a type alias because it is filling in a name
-  // the DOM's own lib either declares or will be asked for: a type alias cannot
-  // merge, and `extends HTMLElement` is how the shape says what it already is.
+  // An `interface` so it can merge with existing declarations.
   interface HTMLWebViewElement extends HTMLElement {
-    /** The address to show. Reflected, so the attribute and the property are
-     * one value, the way `<img src>` is. */
+    /** The address to load. Reflects the `src` attribute. */
     src: string;
-    /** Whether {@link HTMLWebViewElement.goBack} would move the page, so an
-     * address bar can gray out a button that would do nothing. */
+    /** Whether {@link HTMLWebViewElement.goBack} would navigate. */
     readonly canGoBack: boolean;
     /** Whether {@link HTMLWebViewElement.goForward} would move the page. */
     readonly canGoForward: boolean;
     /**
-     * Whether the page inside the view is loading, so an address bar can show
-     * that it is. Changes are announced in
+     * Whether the page is loading. Changes fire
      * {@link WEBVIEW_LOADING_CHANGE_EVENT}.
      */
     readonly loading: boolean;
     /**
-     * Where the page actually is — the guest's visible entry, which is the
-     * address a browser's own bar shows. NOT {@link HTMLWebViewElement.src},
-     * which is where the element was last *sent*.
+     * The current address, as a browser's address bar shows it. Differs from
+     * {@link HTMLWebViewElement.src} after links and redirects.
      *
-     * `""` until the browser has said otherwise. Changes are announced in
+     * `""` until the first navigation commits. Changes fire
      * {@link WEBVIEW_PAGE_CHANGE_EVENT}.
      */
     readonly url: string;
     /**
-     * What the browser says about the connection behind that page: one of
-     * {@link WEBVIEW_SECURITY_LEVELS}, or `""` before the browser has said
-     * anything — which is not a level. See {@link WebViewSecurity}.
+     * The connection security of {@link HTMLWebViewElement.url}: one of
+     * {@link WEBVIEW_SECURITY_LEVELS}, or `""` before the first commit.
      *
-     * Typed as `string` rather than as the union on purpose: this is the value
-     * an engine hands the page, so it is external data, and the union is what
-     * a chrome gets after parsing it at that boundary.
+     * Typed as `string` because it is external data; parse it into
+     * {@link WebViewSecurity}.
      */
     readonly security: string;
     /**
-     * The page's zoom as a factor, where 1 is 100%. The browser's answer, so
-     * it is 1 until the browser says otherwise and changes only when
-     * {@link WEBVIEW_ZOOM_CHANGE_EVENT} says so.
+     * The zoom factor, where 1 is 100%. Changes fire
+     * {@link WEBVIEW_ZOOM_CHANGE_EVENT}.
      */
     readonly zoom: number;
     /**
-     * Ask the browser to zoom the page. Throws a `RangeError` outside 0.25 to
-     * 5, the browser's own limits; the answer arrives as
-     * {@link WEBVIEW_ZOOM_CHANGE_EVENT}.
+     * Set the zoom factor. Throws a `RangeError` outside 0.25 to 5. The result
+     * fires {@link WEBVIEW_ZOOM_CHANGE_EVENT}.
      */
     setZoom(factor: number): void;
     /**
-     * The icon the page names for itself — the best of the icons it links,
-     * an SVG before the biggest — as an absolute URL, or `""` for a page that
-     * names none or has not said yet. The page's own word, signed in as the
-     * user is. Changes are announced in {@link WEBVIEW_FAVICON_CHANGE_EVENT}.
+     * The page's best linked icon (SVG first, then largest) as an absolute
+     * URL, or `""` if none. Changes fire {@link WEBVIEW_FAVICON_CHANGE_EVENT}.
      */
     readonly favicon: string;
     /**
-     * Find `text` in the page and select a match: the next one, or the one
-     * before when `backward` is true. The same text again steps through the
-     * matches and different text is a new search. `""` ends the find with
-     * nothing selected. The answer arrives as
+     * Find `text` and select the next match, or the previous one when
+     * `backward` is true. Repeating the same text steps through matches; `""`
+     * ends the find and clears the selection. Results fire
      * {@link WEBVIEW_FIND_CHANGE_EVENT}.
      */
     find(text: string, backward?: boolean): void;
-    /** End the find, leaving the match it was on selected. */
+    /** End the find, keeping the current match selected. */
     stopFinding(): void;
-    /**
-     * How many matches the find has found, across every frame in the page. 0
-     * while there is no find.
-     */
+    /** The match count across all frames, or 0 with no active find. */
     readonly findMatches: number;
-    /** Which of them is selected, counted from 1. 0 while there is none. */
+    /** The 1-based index of the selected match, or 0 if none. */
     readonly findActiveMatch: number;
     /**
-     * The size the page's content wants, in CSS pixels: its natural width
-     * (max-content) and its document's height at the width it is laid out at.
-     * A page that fills its box reads as wide as its longest line, so cap it.
-     * What Chrome sizes an extension's popup from. Both 0 until the page has
-     * laid out. Changes are announced in
-     * {@link WEBVIEW_CONTENT_SIZE_CHANGE_EVENT}.
+     * The content's preferred size in CSS pixels: max-content width and
+     * document height at the current width. Used to size extension popups.
+     * Cap the width, since text can make it very wide. Both 0 before layout.
+     * Changes fire {@link WEBVIEW_CONTENT_SIZE_CHANGE_EVENT}.
      */
     readonly contentWidth: number;
     readonly contentHeight: number;
@@ -446,52 +277,39 @@ declare global {
   }
 
   /**
-   * The event {@link WEBVIEW_NEW_WINDOW_EVENT} names, and the one `<webview>`
-   * event with anything on it.
-   *
-   * A type of its own rather than a `CustomEvent` carrying a detail bag,
-   * because that is what the engine dispatches — see
-   * `third_party/blink/renderer/core/html/domicile/domicile_new_window_event.idl`
-   * in the fork. A shell reads `event.url`; nothing here parses a payload out of
-   * anything.
+   * The {@link WEBVIEW_NEW_WINDOW_EVENT} event. The engine defines it in
+   * `third_party/blink/renderer/core/html/domicile/domicile_new_window_event.idl`.
    */
   interface DomicileNewWindowEvent extends Event {
-    /**
-     * The address the page asked to open, resolved against the page that asked
-     * — so it is absolute, and it is the address a second view is pointed at.
-     */
+    /** The absolute address to open. */
     readonly url: string;
   }
 
   /**
-   * The event {@link WEBVIEW_POPUP_WINDOW_EVENT} names: an extension's window
-   * waiting for a view to be it. The engine's type, like the new window's —
-   * see `domicile_popup_window_event.idl` in the fork.
+   * The {@link WEBVIEW_POPUP_WINDOW_EVENT} event. The engine defines it in
+   * `domicile_popup_window_event.idl`.
    */
   interface DomicilePopupWindowEvent extends Event {
     /**
-     * The window's id to `chrome.windows`, which the extension already holds.
-     * What the view's `popupwindow` attribute is set to, in decimal.
+     * The extension's `chrome.windows` id. Set the view's `popupwindow`
+     * attribute to it, in decimal.
      */
     readonly windowId: number;
     /** The address to show, absolute. */
     readonly url: string;
     /**
-     * The size the extension asked for, in CSS pixels; 0 on an axis it did not
-     * ask about. The whole window's, as `chrome.windows.create` means it.
+     * The requested outer window size in CSS pixels, or 0 on an unspecified
+     * axis.
      */
     readonly width: number;
     readonly height: number;
   }
 
   /**
-   * The event {@link WEBVIEW_FILE_CHOOSER_EVENT} names: a page waiting for a
-   * file to be picked.
+   * The {@link WEBVIEW_FILE_CHOOSER_EVENT} event.
    *
-   * PATHS ARE ABSOLUTE OR RELATIVE TO THE HOME DIRECTORY, where `""` is the
-   * home. A picker starts at {@link DomicileFileChooserEvent.home} and walks
-   * the filesystem with {@link DomicileFileChooserEvent.list}. A path that
-   * climbs with `..` is a `TypeError`.
+   * Paths are absolute or relative to home, where `""` is home. A path
+   * containing `..` throws a `TypeError`.
    */
   interface DomicileFileChooserEvent extends Event {
     /**
@@ -500,30 +318,24 @@ declare global {
      */
     readonly mode: string;
     /**
-     * The file extensions the page will take, lower case and without the dot
-     * — the browser has already turned `image/*` and the like into them.
-     * Empty means anything.
+     * Accepted file extensions, lowercase without the dot. MIME types such as
+     * `image/*` are already expanded. Empty means any file.
      */
     readonly accept: readonly string[];
     /** The name the page suggests for a `save`; `""` otherwise. */
     readonly suggestedName: string;
-    /**
-     * The absolute home directory, which the page has no other way to learn:
-     * where a picker starts, and what its `~` means.
-     */
+    /** The absolute home directory, where a picker starts. */
     readonly home: string;
     /**
-     * Answer with the paths picked. `open`, `open-folder` and `save` take
-     * exactly one, `open-multiple` at least one; anything else is a
-     * `TypeError`. A second answer is an `InvalidStateError`.
+     * Answer with the picked paths. `open-multiple` takes one or more; other
+     * modes take exactly one. Otherwise throws a `TypeError`. Answering twice
+     * throws an `InvalidStateError`.
      */
     choose(paths: readonly string[]): void;
     /**
-     * The names in the directory at `path`, each a directory's ending in `/`,
-     * in no order — how a picker reaches what the home's index never found.
-     * Rejects with a `NotReadableError` for a path that is not a directory the
-     * browser can read. Only while unanswered: after, an
-     * `InvalidStateError`.
+     * The unordered entries of the directory at `path`, with directories
+     * ending in `/`. Rejects with `NotReadableError` if `path` is not a
+     * readable directory, and with `InvalidStateError` after an answer.
      */
     list(path: string): Promise<string[]>;
     /** Answer that nothing was picked. */
@@ -531,15 +343,9 @@ declare global {
   }
 
   /**
-   * So that a listener for the name above is handed the event's own type rather
-   * than a bare `Event` a shell would have to cast.
-   *
-   * `HTMLElementEventMap` rather than an interface of this element's own:
-   * `addEventListener`'s overloads are resolved through that map for every
-   * element, and `HTMLWebViewElement` is declared above as an `HTMLElement`
-   * with a handful of methods rather than as an element with an event map of
-   * its own. The names are this fork's and cannot collide with anything the
-   * platform adds.
+   * Types `addEventListener` for the events that carry data. Merged into
+   * `HTMLElementEventMap` because `HTMLWebViewElement` has no event map of its
+   * own.
    */
   // biome-ignore lint/style/useConsistentTypeDefinitions: declaration merging onto a built-in type is what `interface` is for and what a type alias cannot do
   interface HTMLElementEventMap {

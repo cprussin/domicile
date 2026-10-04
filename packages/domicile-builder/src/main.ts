@@ -1,12 +1,12 @@
 #!/usr/bin/env bun
 // `domicile-builder (--entry <file> | --package <spec> | --evaluate <config>)
-// --domicile <install> --cache <dir>`: build the entry, or the package's, into
-// a shell module — or evaluate a config module into the compositor's JSON —
-// saying each step on stdout as a JSON line.
+// --domicile <install> --cache <dir>`
 //
-// Only a line that is a JSON object with a `step` is a step: what the tools
-// underneath print goes to stdout too — Panda says how long it took — and is
-// the build's log, which `domicile` shows as it is.
+// Builds an entry or package into a shell module, or evaluates a config module
+// into the compositor's JSON. Reports each step on stdout as a JSON line.
+//
+// Only a JSON object with a `step` field is a step. Other stdout output, such
+// as Panda's timing, is the build log, which `domicile` shows as is.
 
 import {
   existsSync,
@@ -24,20 +24,20 @@ import { line, Step } from "./progress";
 import type { Manifest } from "./project";
 import { cacheKey, missingPackages, parseManifest, projectOf } from "./project";
 
-/** The module every build is, in the directory it is served from. */
+/** The built module's file name in its output directory. */
 const MODULE = "shell.js";
 
 const say = (step: Step): void => {
   process.stdout.write(`${line(step)}\n`);
 };
 
-/** A file's text, or `undefined` where there is no file. */
+/** A file's text, or `undefined` if there is no file. */
 const readFile = (file: string): string | undefined =>
   existsSync(file) && statSync(file).isFile()
     ? readFileSync(file, "utf8")
     : undefined;
 
-/** Run bun with `args` in `cwd`, and throw with what it said if it fails. */
+/** Run bun with `args` in `cwd`; throw with its stderr if it fails. */
 const runBun = (cwd: string, args: readonly string[]): void => {
   const ran = Bun.spawnSync([process.execPath, ...args], {
     cwd,
@@ -51,15 +51,15 @@ const runBun = (cwd: string, args: readonly string[]): void => {
   }
 };
 
-/** The project's `package.json`, or `undefined` where it has none. */
+/** The project's `package.json`, or `undefined` if it has none. */
 const manifestOf = (project: string): Manifest | undefined => {
   const text = readFile(path.join(project, "package.json"));
   return text === undefined ? undefined : parseManifest(text);
 };
 
 /**
- * The entry's files, and its project with every package it imports
- * installed: what a build and an evaluation both start from.
+ * Read the entry's import graph and add any packages its project lacks.
+ * Builds and evaluations both start here.
  */
 const prepared = (entry: string) => {
   say(Step.Resolving());
@@ -73,7 +73,7 @@ const prepared = (entry: string) => {
   return { graph, project };
 };
 
-/** The key of a build or an evaluation of what `prepared` read. */
+/** The cache key for what `prepared` read. */
 const keyOf = (
   { graph, project }: ReturnType<typeof prepared>,
   domicile: string,
@@ -84,7 +84,7 @@ const keyOf = (
     domicile,
   );
 
-/** Install what `project` lists, when it lists anything. */
+/** Install the dependencies `project` lists, if any. */
 const installed = (project: string): void => {
   if (manifestOf(project)?.dependencies !== undefined) {
     runBun(project, ["install", "--ignore-scripts", "--frozen-lockfile"]);
@@ -101,8 +101,8 @@ const build = async (
   if (readFile(path.join(root, MODULE)) === undefined) {
     installed(read.project);
     say(Step.Bundling());
-    // Imported here rather than at the top: vite and Panda take most of a
-    // second to load, and a build already in the cache needs neither.
+    // Imported lazily: vite and Panda take most of a second to load, and a
+    // cached build needs neither.
     const { bundle } = await import("./bundle");
     await bundle(entry, root, domicile, [...read.graph.files.keys()]);
     say(Step.Built(root, MODULE, false));
@@ -131,8 +131,8 @@ const evaluateConfig = async (
 };
 
 /**
- * Install `spec` into a project of its own, and serve the module it ships or
- * build its entry.
+ * Install `spec` into its own project, then use its prebuilt module or build
+ * its entry.
  */
 const buildPackage = async (
   spec: string,
@@ -171,7 +171,7 @@ const { values } = parseArgs({
 });
 const { cache, domicile, entry, evaluate: config, package: spec } = values;
 
-/** What the arguments ask for, or `undefined` where they ask for nothing. */
+/** Start what the arguments ask for, or `undefined` if they are invalid. */
 const asked = (): Promise<void> | undefined => {
   const asking = [entry, spec, config].filter((one) => one !== undefined);
   if (domicile === undefined || cache === undefined || asking.length !== 1) {

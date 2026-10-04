@@ -6,25 +6,18 @@ type Props = Omit<
   BaseSlider.Root.Props<number>,
   "children" | "className" | "style"
 > & {
-  /** What the slider sets, for a screen reader: the thumb's name. */
+  /** Accessible name for the thumb. */
   label: string;
   /**
-   * How loud, or how full, what the slider sets is right now, 0 through 1 —
-   * a meter drawn under the track, named for the slider. Absent for no meter.
+   * A live level from 0 to 1, drawn as a meter under the track, such as
+   * current audio volume. Omit for no meter.
    */
   level?: number | undefined;
 };
 
 /**
- * One value picked off a range: a thin track, a fill up to a round knob.
- *
- * **Drawn in `currentcolor`**, so it takes the color of whatever holds it —
- * white in a panel over the wallpaper, `foreground` in a card — the way the
- * theme toggle's icons do.
- *
- * Single-valued: a range of two thumbs is a different control and nothing here
- * asks for one. Every interaction — pointer, keyboard, the hidden range input a
- * screen reader drives — is base-ui's.
+ * A single-value slider over base-ui's Slider. Drawn in `currentcolor` so it
+ * fits any background.
  */
 export const Slider = ({ label, level, ...rootProps }: Props) => (
   <BaseSlider.Root className={rootStyles} {...rootProps}>
@@ -39,9 +32,8 @@ export const Slider = ({ label, level, ...rootProps }: Props) => (
 );
 
 /**
- * The level, as a hairline under the track: thin enough not to read as a
- * second slider, and green, as a meter is, so it does not read as more of
- * the slider's white either.
+ * The level meter: a thin green line under the track, so it isn't mistaken
+ * for a second slider.
  */
 const Meter = ({ label, level }: { label: string; level: number }) => {
   const percent = Math.round(Math.min(1, Math.max(0, level)) * 100);
@@ -59,14 +51,13 @@ const Meter = ({ label, level }: { label: string; level: number }) => {
   );
 };
 
-// As wide as whatever holds it, and a flex item that takes what is left of a
-// row rather than shrinking to its own empty content.
+// Fills the remaining row space instead of shrinking to its empty content.
 const rootStyles = css({
   flexGrow: 1,
   inlineSize: "100%",
 });
 
-// Taller than the track, so the whole band around the line takes the press.
+// Taller than the track, for a larger hit area.
 const controlStyles = css({
   alignItems: "center",
   blockSize: 5,
@@ -77,7 +68,6 @@ const controlStyles = css({
   userSelect: "none",
 });
 
-// Pinned to the foot of the control, under the track and out of its way.
 const meterStyles = css({
   backgroundColor: "color-mix(in oklab, currentcolor 12%, transparent)",
   blockSize: "2px",
@@ -89,8 +79,7 @@ const meterStyles = css({
   position: "absolute",
 });
 
-// Quick to rise and quick to fall: the levels arrive twenty times a second,
-// and a slower ease would draw a level that had already gone.
+// A short transition, since levels arrive twenty times a second.
 const meterFillStyles = css({
   backgroundColor: "success",
   blockSize: "100%",
@@ -106,9 +95,8 @@ const trackStyles = css({
   position: "relative",
 });
 
-// Eased into place when it jumps — a click on the track, a key, the desk
-// answering — and pinned to the pointer while it is dragged, where any easing
-// is lag.
+// Eases on jumps (track click, key, external update) but not while dragging,
+// where easing would lag the pointer.
 const indicatorStyles = css({
   "&:not([data-dragging])": {
     transition: "inline-size {durations.normal} {easings.outQuart}",
@@ -118,8 +106,7 @@ const indicatorStyles = css({
   borderRadius: "full",
 });
 
-// Placed by base-ui's own inline `translate` and `top`, so the press is `scale`
-// rather than a `transform` that would fight them.
+// Uses `scale`, since base-ui positions the thumb with inline `translate`.
 const thumbStyles = css({
   "&:has(:focus-visible)": {
     outline: "{spacing.0.5} solid currentcolor",

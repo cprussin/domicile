@@ -4,30 +4,21 @@ import { createContext, useContext, useEffect, useState } from "react";
 import type { Display, DisplaySource } from "./display-source";
 
 /**
- * The desktop below it, for every `<Screen>` and every {@link useDisplays}.
+ * The desktop's displays, for `<Screen>` and {@link useDisplays}.
  *
- * `undefined` distinguishes "no provider" from "a provider that has not been
- * told yet", which is why the context holds a box rather than the list: a
- * desktop the host has not described and a desktop of no screens are both
- * legitimate, and only the first is a wiring bug when it reaches a consumer.
+ * Holds an object, not the list, so `undefined` means "no provider" and
+ * `{ displays: undefined }` means "not described yet".
  */
 const DisplayContext = createContext<
   { displays: readonly Display[] | undefined } | undefined
 >(undefined);
 
 /**
- * Holds the desktop the host described, for the `<Screen>`s below.
+ * Provides the host's display list. Mount one around the shell's root.
  *
- * One provider per page, mounted around the shell's root. The host describes
- * the desktop on connecting and again whenever it changes, latest wins — so
- * this reads what the source has already been told as well as registering for
- * what it says next. A provider that only listened would render an empty
- * desktop from mounting until the next change, which on a desktop nobody is
- * resizing is for good.
- *
- * `source` is read on mount and re-read whenever its identity changes: it is
- * the connection, and a new one is a new desktop, which may already have been
- * described. It has to be as stable as a connection — see {@link DisplaySource}.
+ * Reads the source's current list as well as subscribing, since the host may
+ * not send another update for a long time. `source` must be stable; a new
+ * identity is treated as a new connection. See {@link DisplaySource}.
  */
 export const DisplayProvider = ({
   children,
@@ -36,17 +27,12 @@ export const DisplayProvider = ({
   const [displays, setDisplays] = useState(source.displays);
 
   useEffect(() => {
-    // Seeded by `useState` on the first render, so the first paint already has
-    // the desktop; assigned again here because a *changed* source is a new
-    // connection, and `useState`'s initializer does not run twice.
+    // `useState` covers the first render; this covers a changed `source`.
     setDisplays(source.displays);
     return source.onDisplays(setDisplays);
   }, [source]);
 
-  // A fresh box per render, which re-renders every consumer whenever this
-  // provider renders — the desktop is read during layout and changes about as
-  // often as a monitor is plugged in, so memoizing it would buy nothing and
-  // cost a dependency array to keep honest.
+  // Not memoized: the provider rarely re-renders, so it isn't worth it.
   return (
     <DisplayContext.Provider value={{ displays }}>
       {children}
@@ -55,13 +41,10 @@ export const DisplayProvider = ({
 };
 
 /**
- * The displays making up the desktop, or `undefined` while the host has yet to
- * describe it. An empty list is a desktop with no screens, which is a different
- * thing and renders differently.
+ * The desktop's displays, or `undefined` until the host describes them. An
+ * empty list means no screens.
  *
- * Throws when nothing is listening: a display consumer is only ever mounted in
- * an app that mounted a {@link DisplayProvider}, so a missing one is a wiring
- * bug to surface rather than a page that silently lays out against nothing.
+ * Throws without a {@link DisplayProvider}.
  */
 export const useDisplays = (): readonly Display[] | undefined => {
   const held = useContext(DisplayContext);
@@ -73,15 +56,12 @@ export const useDisplays = (): readonly Display[] | undefined => {
 };
 
 /**
- * Where on the page the display `name` is, as the physical `left`, `top`,
- * `width` and `height` of an element laid out over it — what a dialog's
- * viewport takes to sit on one monitor of a page that spans several, rather
- * than centered on all of them. `<Screen>` places its regions the same way.
+ * The page-space `left`, `top`, `width` and `height` of display `name`, for
+ * placing an element on one monitor of a page that spans several.
  *
- * `undefined` — the page — for no name, which needs no provider; and for a
- * name no display carries: a monitor unplugged under an open dialog is gone a
- * render before the shell has moved off it, and that render should not take
- * the page down.
+ * Returns `undefined` (the whole page) for no name, which needs no provider,
+ * and for an unknown name. An unplugged monitor disappears a render before
+ * the shell moves off it, so that must not throw.
  */
 export const useScreenRegion = (
   name: string | undefined,

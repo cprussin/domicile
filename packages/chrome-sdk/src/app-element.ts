@@ -1,116 +1,72 @@
-// The fork's `<app>`: a Wayland client's window, laid out by the page.
+// The engine's `<app>` element: a Wayland client's window, laid out by the
+// page.
 //
-// There is no element class here, and that is the point. The element belongs to
-// the engine — `app-id` is a reflected content attribute, and the surface embed
-// and the size the client is configured at are both the layout box's, reported
-// by `LayoutAppSurface` without anything in the page asking. What is left for
-// the SDK to say is the part TypeScript cannot read off the fork: what the tag
-// is, and what the SDK dispatches on it.
-//
-// It used to be a `<domicile-app>` custom element, because a custom element's
-// name must contain a hyphen and the SDK predates the fork. That element did
-// far more than forward: it created a `<canvas>` and called
-// `embedExternalSurface` on it, it measured its own box and reported it, it
-// mapped pointer coordinates, and it took five methods and three properties a
-// shell wrote to. The canvas and the embed are the engine's now; the rest moved
-// to document-level delegation over `closest("app")`, which is what
-// `registerElements` installs — see `pointer-input.ts` and `keyboard-input.ts`.
+// The engine defines the element, embeds the surface and reports its size. This
+// module only names the tag, the events the SDK dispatches on it, and its type.
+// Pointer and keyboard delegation live in `pointer-input.ts` and
+// `keyboard-input.ts`.
 
 /**
- * The tag a shell writes.
+ * The `<app>` tag name, shared by the SDK's delegation and a shell's styles and
+ * tests.
  *
- * Exported because the SDK's own delegation and a shell's stylesheets and tests
- * all have to name it, and one literal is better than five. Nothing registers
- * it: `customElements.define` cannot take a name without a hyphen, which is
- * exactly why the fork defines the element instead.
+ * Nothing registers it: `customElements.define` needs a hyphen in the name, so
+ * the engine defines the element.
  */
 export const APP_TAG_NAME = "app";
 
 /**
- * Fired on an `<app>` when something asks for the keyboard on its behalf — a
- * click, today — and cancelable, because who holds the keyboard is the
- * shell's to decide rather than the SDK's.
+ * Fired on an `<app>` when a click asks for keyboard focus for it.
  *
- * Left uncanceled it focuses the client, so a shell with no focus policy of
- * its own needs to know nothing about this. A shell that has one — focus that
- * follows the pointer, a window that may not be interrupted, a click that
- * raises without focusing — calls `preventDefault()` and then does whatever it
- * decided, which is usually `focusApp` a moment later.
+ * Cancelable so the shell owns focus policy. Left uncanceled, the SDK focuses
+ * the client. A shell with its own policy calls `preventDefault()` and later
+ * calls `focusApp` itself.
  *
- * THE SDK DISPATCHES THIS, unlike `<webview>`'s two events, which the engine
- * does. A click inside an `<app>` is a pointer event in this document — the
- * client is a surface rather than a browsing context — so the page is where the
- * question can be asked at all.
- *
- * It bubbles: a shell renders one `<app>` per window and would otherwise have
- * to bind a listener to each.
+ * The SDK dispatches this, not the engine, because the click is a pointer event
+ * in this document. It bubbles so a shell needs only one listener.
  */
 export const APP_FOCUS_REQUESTED_EVENT = "domicile-focus-requested";
 
 /** The detail of an {@link APP_FOCUS_REQUESTED_EVENT}. */
 export type AppFocusRequest = {
-  /** The host's name for the client whose window was reached for. */
+  /** The host's id for the client that was clicked. */
   appId: string;
 };
 
 /**
- * Fired on the `<app>` that holds the keyboard when a press lands off every
- * window, and cancelable for the same reason its opposite is: the keyboard
- * leaving a window is a move of it, and every move is the shell's to decide.
+ * Fired on the focused `<app>` when a press lands outside every window.
  *
- * Left uncanceled the keyboard goes back to the page, which is what a press on
- * the desktop means and what a shell with no window chrome of its own wants.
- * A shell that draws chrome *for* a window — a title bar, the sheet a drag is
- * caught on — calls `preventDefault()` when the press landed on it: that is a
- * reach for the window rather than away from it, and the SDK cannot tell the
- * two apart because nothing in the press says which window a `<div>` belongs
- * to. {@link AppFocusReleaseRequest.pressed} is what the shell reads to say.
- *
- * It bubbles, the way {@link APP_FOCUS_REQUESTED_EVENT} does and for the same
- * reason.
+ * Left uncanceled, keyboard focus returns to the page. A shell that draws
+ * chrome for a window, such as a title bar, calls `preventDefault()` when the
+ * press hit that chrome; the SDK cannot tell which window a `<div>` belongs
+ * to. Read {@link AppFocusReleaseRequest.pressed} to decide. It bubbles.
  */
 export const APP_FOCUS_RELEASE_REQUESTED_EVENT =
   "domicile-focus-release-requested";
 
 /** The detail of an {@link APP_FOCUS_RELEASE_REQUESTED_EVENT}. */
 export type AppFocusReleaseRequest = {
-  /** The host's name for the client that is about to lose the keyboard. */
+  /** The host's id for the client about to lose keyboard focus. */
   appId: string;
-  /**
-   * What the press landed on, or `undefined` where it landed on nothing an
-   * element can be read off.
-   */
+  /** The element the press hit, or `undefined` if there was none. */
   pressed: Element | undefined;
 };
 
 /**
- * What an `<app>` is, to everything holding one.
+ * The engine's `<app>` element type.
  *
- * Global rather than exported, and declared rather than imported, for the same
- * two reasons `<webview>`'s interface is. React resolves a `ref` on a tag to
- * whatever global interface the tag-name map names, so an identically-shaped
- * interface exported from here would be a *different* type that a shell holding
- * the ref could not assign anywhere — the trap `<webview>` fell into, where
- * `@types/react` had already declared the name. Nothing has declared this one,
- * so the SDK is free to; it is declared the same way anyway, because the shape
- * of the answer should not depend on who got there first.
- *
- * And there is nothing to import from: the interface is the fork's, and the
- * engine ships no `.d.ts`. A shell that runs on stock Chromium gets an
- * `HTMLUnknownElement` with none of it — the same trade `<webview>` makes, and
- * the reason the SDK's delegation reads `app-id` off the attribute rather than
- * off this property.
+ * Declared globally because React types a `ref` from `HTMLElementTagNameMap`;
+ * an exported copy would be a distinct type the ref cannot be assigned to. The
+ * engine ships no `.d.ts`. On stock Chromium the element is an
+ * `HTMLUnknownElement`, so the SDK reads the `app-id` attribute, not this
+ * property.
  */
 declare global {
-  // An `interface` rather than a type alias because it is filling in a name
-  // the DOM's own lib either declares or will be asked for: a type alias cannot
-  // merge, and `extends HTMLElement` is how the shape says what it already is.
+  // An `interface` so it can merge with a future DOM lib declaration.
   interface HTMLAppElement extends HTMLElement {
     /**
-     * Which window this element shows. Reflected, so the attribute and the
-     * property are one value, the way `<img src>` is — and empty rather than
-     * absent when the attribute is not set, which is what a reflected
-     * `DOMString` does.
+     * Which window this element shows. Reflects the `app-id` attribute; empty
+     * when the attribute is unset.
      */
     appId: string;
   }

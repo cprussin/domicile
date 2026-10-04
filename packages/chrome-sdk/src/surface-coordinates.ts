@@ -1,11 +1,8 @@
-// Turning a pointer position on screen into a coordinate inside the Wayland
-// client's surface.
+// Maps a screen position to a Wayland surface's pixel coordinates.
 //
-// The chrome owns this mapping because pointer events land on the DOM element,
-// not on the compositor — which no longer knows where any window is, so there
-// is nowhere else it could be done. It is the inverse of the element->screen
-// affine `measure` reports, so an app under any CSS transform — rotated,
-// scaled, skewed — still receives correct surface-local coordinates.
+// The page does this because the compositor does not know where windows are
+// drawn. Inverting the element's full transform from `measure` keeps it correct
+// under any CSS transform.
 
 import type { Matrix, Point } from "./matrix";
 import { apply, invert } from "./matrix";
@@ -15,11 +12,10 @@ export type SurfacePoint = { x: number; y: number };
 /**
  * Map a screen position into the client surface's pixel space.
  *
- * @param surfaceSize - The client surface's pixel size. `[0, 0]` (no frame
- *   drawn yet) maps element pixels 1:1, which is the best guess available.
- * @returns `undefined` when the element has no area to map through — it has no
- *   layout box yet, or its transform is singular — so there is no meaningful
- *   coordinate to report.
+ * @param surfaceSize - The client surface's pixel size. `[0, 0]` (nothing
+ *   drawn yet) maps element pixels 1:1.
+ * @returns `undefined` when the element has no layout box or its transform is
+ *   singular.
  */
 export const surfaceLocal = (
   elementToScreen: Matrix,

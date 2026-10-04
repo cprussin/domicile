@@ -7,27 +7,19 @@ import {
 } from "./DisplayProvider";
 import type { Display, DisplaySource } from "./display-source";
 
-/**
- * A display source that never says anything, standing in for a domicile client.
- */
+/** A display source that never sends a display list. */
 const silent = (): DisplaySource => ({
   displays: undefined,
   onDisplays: () => () => undefined,
 });
 
-/**
- * A source that has already been told, the way a client that received
- * `displays` before this provider mounted has.
- */
+/** A source that received `displays` before the provider mounted. */
 const alreadyTold = (displays: readonly Display[]): DisplaySource => ({
   displays,
   onDisplays: () => () => undefined,
 });
 
-/**
- * A source that is told later, handing back the setter so a test can drive
- * the message that arrives after mount.
- */
+/** A source updated after mount, through the returned setter. */
 const toldLater = (
   already?: readonly Display[],
 ): {
@@ -73,19 +65,16 @@ const RIGHT: Display = {
   size: [2560, 1440],
 };
 
-/** How a desktop reads as one line, `(never told)` being its absence. */
+/** Formats a display list as one line; `(never told)` for `undefined`. */
 const asText = (displays: readonly Display[] | undefined): string =>
   displays === undefined
     ? "(never told)"
     : displays.map((display) => display.name).join(" ");
 
-/** Renders what `useDisplays` returned, so a test can read it out of the DOM. */
+/** Renders what `useDisplays` returned. */
 const Reader = () => <span data-testid="read">{asText(useDisplays())}</span>;
 
-/**
- * Records what `useDisplays` returned on *every* render, so a test can see the
- * first one rather than only what the DOM settled on.
- */
+/** Records what `useDisplays` returned on every render, including the first. */
 const Recorder = ({ into }: { into: string[] }) => {
   const displays = useDisplays();
   into.push(asText(displays));
@@ -96,17 +85,15 @@ const read = (): string => screen.getByTestId("read").textContent ?? "";
 
 describe("useDisplays", () => {
   it("throws outside a provider, rather than pretending there are none", () => {
-    // A shell that forgot the provider would otherwise lay every `<Screen>`
-    // out against an empty desktop and render a blank page with no symptom.
+    // Otherwise a missing provider renders a blank page with no error.
     expect(() => {
       render(<Reader />);
     }).toThrow(/DisplayProvider/);
   });
 
   it("says nothing yet while the host has not described the desktop", () => {
-    // Not an empty desktop: a handshake still in flight and a desktop with no
-    // screens are different states, and collapsing them makes a shell render
-    // its "no screens" case for the fraction of a second before the answer.
+    // Distinct from an empty list, or a shell briefly shows its "no screens"
+    // state while connecting.
     render(
       <DisplayProvider source={silent()}>
         <Reader />
@@ -125,10 +112,8 @@ describe("useDisplays", () => {
   });
 
   it("reads displays the source was told before it mounted", () => {
-    // The host describes the desktop on connecting and again on every change,
-    // latest wins — so a provider that only listened would lay out against an
-    // empty desktop from mounting until the next change, and on a desktop
-    // nobody is resizing there is no next change.
+    // The host sends displays only on connect and on change, so a provider
+    // that only subscribed could show none indefinitely.
     render(
       <DisplayProvider source={alreadyTold([LEFT, RIGHT])}>
         <Reader />
@@ -150,10 +135,8 @@ describe("useDisplays", () => {
   });
 
   it("has the desktop on the very first render, not one paint later", () => {
-    // Seeding state from the source is what makes this true; catching up in an
-    // effect settles on the same answer, so the settled DOM cannot tell them
-    // apart. What differs is the render in between — every `<Screen>` matching
-    // nothing, which a shell shows as an empty desktop that then pops.
+    // Reading the source in an effect settles on the same DOM, but the first
+    // render would show an empty desktop.
     const renders: string[] = [];
     render(
       <DisplayProvider source={alreadyTold([LEFT, RIGHT])}>
@@ -164,9 +147,8 @@ describe("useDisplays", () => {
   });
 
   it("takes up the desktop of a source that replaces the one before it", () => {
-    // A source is a connection. A new one is a new desktop, and it may have
-    // been described already — `useState`'s initializer runs once, so nothing
-    // but re-reading it here would carry the old connection's screens over.
+    // The new source may already hold displays, and `useState`'s initializer
+    // runs only once.
     const { source: first } = toldLater([LEFT]);
     const { source: second } = toldLater([RIGHT]);
     const { rerender } = render(
@@ -184,9 +166,8 @@ describe("useDisplays", () => {
   });
 
   it("registers once for a source that does not change", () => {
-    // `DomicileClient.on` is a single slot and a source is the connection, so a
-    // provider that re-registered on every render would churn the one
-    // registration the page has.
+    // `DomicileClient.on` holds a single handler, so re-registering on every
+    // render would churn it.
     const { registrations, source } = toldLater();
     const { rerender } = render(
       <DisplayProvider source={source}>
@@ -202,10 +183,8 @@ describe("useDisplays", () => {
   });
 
   it("stops listening when it goes away", () => {
-    // The source outlives the provider — it is the connection — so nothing but
-    // the teardown stops it setting state on a tree that is gone. Asserted on
-    // the source, because React answers an update on an unmounted tree with a
-    // console line, and no test can fail on one of those.
+    // The source outlives the provider. Asserted on the source, because React
+    // only logs updates to an unmounted tree.
     const { listening, source } = toldLater();
     const { unmount } = render(
       <DisplayProvider source={source}>
@@ -218,11 +197,8 @@ describe("useDisplays", () => {
   });
 
   it("survives a source that answers registration immediately", () => {
-    // A `DomicileClient` replays what it is holding to the first handler that
-    // registers, so an adapter over one calls back inside `onDisplays` — with
-    // the same desktop the seed just used. Setting state during an effect is
-    // fine; the point is that the provider does not care whether the answer
-    // arrives during registration or after it.
+    // A `DomicileClient` replays its last value to the first handler, so an
+    // adapter calls back inside `onDisplays`.
     const eager: DisplaySource = {
       displays: [LEFT],
       onDisplays: (handler) => {
@@ -239,11 +215,7 @@ describe("useDisplays", () => {
   });
 
   it("stops listening to a source it has been moved off", () => {
-    // Same reason, and the case the teardown is actually for: the provider
-    // outlives that connection rather than the other way round, and the old
-    // one would otherwise keep overwriting the new desktop. React runs the
-    // cleanup before the effect that replaces it, so by the time the second
-    // source registers the first is already released.
+    // Otherwise the old source keeps overwriting the new one's displays.
     const { listening, source: first } = toldLater();
     const { source: second } = toldLater();
     const { rerender } = render(
@@ -288,8 +260,8 @@ describe("useScreenRegion", () => {
   });
 
   it("is the page for a display that has gone from the desktop", () => {
-    // A monitor unplugged under an open dialog is gone a render before the
-    // shell has moved off it, and that render should not take the page down.
+    // An unplugged monitor disappears a render before the shell moves off
+    // it, and that render must not throw.
     render(
       <DisplayProvider source={alreadyTold([LEFT])}>
         <RegionReader name="right" />

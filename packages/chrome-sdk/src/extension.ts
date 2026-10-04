@@ -1,35 +1,32 @@
-// One extension in the tray, as a shell draws it.
+// One browser extension, as a shell's tray draws it.
 //
-// Its own module because both halves of the SDK read it: `host-message.ts`
-// turns the engine's `extensions` event into a list of these, and a shell's
-// tray renders them. Parsed rather than passed through, as `appCursor` is: the
-// engine and this SDK ship apart, and a row this SDK cannot draw should be a
-// stack rather than a blank button.
+// `host-message.ts` parses the engine's `extensions` event into these. The
+// engine and the SDK ship separately, so the data is validated rather than
+// trusted.
 
 import { z } from "zod";
 
-/** An extension id: 32 letters `a` through `p`, which is how Chromium makes them. */
+/** A Chromium extension id: 32 letters `a` through `p`. */
 const EXTENSION_ID = /^[a-p]{32}$/;
 
-/** What the engine renders every icon to. */
+/** The engine renders every icon as a PNG data URL. */
 const PNG_DATA_URL = "data:image/png;base64,";
 
 export const extensionSchema = z.object({
-  /** A CSS color, `#rrggbbaa`: fully transparent when the extension set none. */
+  /** A CSS color, `#rrggbbaa`; transparent when the extension set none. */
   badgeColor: z.string(),
   badgeText: z.string(),
   /** `false` after the extension's `action.disable()`. */
   enabled: z.boolean(),
   /** A PNG at the page's device pixel ratio, as a data URL. */
   icon: z.string().startsWith(PNG_DATA_URL),
-  /** What {@link DomicileClient.activateExtension} names it by. */
+  /** The id to pass to {@link DomicileClient.activateExtension}. */
   id: z.string().regex(EXTENSION_ID),
   name: z.string(),
   /**
-   * The popup to open in a `<webview>` on a click; `undefined` for an action
-   * whose click is its `action.onClicked`. Either way the click is
-   * {@link DomicileClient.activateExtension}. The engine says `null`, which is
-   * WebIDL's absence rather than this SDK's.
+   * The popup to open in a `<webview>` on click, or `undefined` when the click
+   * fires `action.onClicked`. Either way, call
+   * {@link DomicileClient.activateExtension}. The engine sends `null`.
    */
   popup: z
     .string()

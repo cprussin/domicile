@@ -3,12 +3,7 @@ import type { HostGlobal } from "./connect-to-host";
 import { connectToHost, hasHost } from "./connect-to-host";
 import type { DomicileHost } from "./domicile-host";
 
-/**
- * As much of a `DomicileHost` as identity requires.
- *
- * Nothing here calls it: what these tests are about is *which* object comes
- * back, and what the one the SDK makes up does when there is none.
- */
+/** A fake `DomicileHost` for identity checks; no member is called. */
 const aHost = (): DomicileHost => ({ displays: [] }) as unknown as DomicileHost;
 
 const globalWith = (domicile: DomicileHost | null | undefined) =>
@@ -16,15 +11,10 @@ const globalWith = (domicile: DomicileHost | null | undefined) =>
 
 describe("connectToHost", () => {
   it("hands back the compositor when there is one, off either global", () => {
-    // Identity, not equality: everything downstream registers listeners on
-    // this object, and a copy would be an object nothing dispatches to.
+    // Identity, not equality: listeners must go on the real host.
     //
-    // Both spellings, because `window.domicile` is an alias for
-    // `navigator.domicile` and not a second host — one object, however a shell
-    // reached it. The `satisfies` is where the SDK's own declarations are
-    // asserted: `Pick<Window, "domicile">` does not type-check unless the SDK
-    // declares the property on `Window`, so `test:types` fails if either
-    // declaration is dropped and a shell author loses completion.
+    // The `satisfies` checks that the SDK declares `domicile` on `Window` and
+    // `Navigator`; `test:types` fails if either declaration is dropped.
     const host = aHost();
     const page = { domicile: host } satisfies Pick<Window, "domicile">;
     const nav = { domicile: host } satisfies Pick<Navigator, "domicile">;
@@ -34,12 +24,7 @@ describe("connectToHost", () => {
   });
 
   it("says so, once and in as many words, when there is none", async () => {
-    // A shell's page opened in an ordinary browser has no compositor and must
-    // still render — that is how a shell is styled and laid out without a
-    // desktop running. What it must not do is fail *quietly*: a page whose
-    // windows never appear is indistinguishable from a compositor with no
-    // clients, from a layout bug, and from a client that never drew, and this
-    // is the only layer that knows which.
+    // Without a warning, missing windows look like a shell or client bug.
     const said = await new Promise<string>((resolve) => {
       connectToHost(globalWith(undefined), resolve);
     });
@@ -48,10 +33,8 @@ describe("connectToHost", () => {
   });
 
   it("reads a null compositor as no compositor", () => {
-    // Both absences are real and they are not the same shape. The property is
-    // missing outright on a stock browser; the fork's own accessor answers
-    // `null` for a document with no frame. A shell that tested only for
-    // `undefined` would take the second one for a host and call methods on it.
+    // The engine returns `null` for a document with no frame; a stock browser
+    // has no property at all.
     const said: string[] = [];
 
     connectToHost(globalWith(null), (message) => said.push(message));
@@ -60,10 +43,8 @@ describe("connectToHost", () => {
   });
 
   it("gives back something inert rather than nothing at all", () => {
-    // The stand-in has to satisfy everything a real host does, because the
-    // client registers its listeners on whatever it is given and does it in
-    // its constructor. Throwing here — or handing back `undefined` — would
-    // turn "no desktop" into "no page".
+    // The client registers listeners in its constructor, so the stand-in must
+    // not throw or the page would fail to render.
     const host = connectToHost(globalWith(undefined), () => undefined);
 
     expect(() => {
@@ -74,12 +55,8 @@ describe("connectToHost", () => {
   });
 
   it("describes no desktop, because nothing ever will", () => {
-    // `null`, which is what the engine's own attribute says before a desktop
-    // has been described — and here it is also where it ends. Not `[]`: that
-    // claims a desktop with no screens on it, which is a description, and
-    // nothing here has described anything. A shell reads this as "not
-    // described yet" and takes the viewport's geometry instead — see
-    // `hasHost`, which is the question it asks to know that.
+    // `null` means "not described", matching the engine before a desktop is
+    // described. `[]` would mean a desktop with no screens.
     expect(
       connectToHost(globalWith(undefined), () => undefined).displays,
     ).toBeNull();
@@ -91,11 +68,7 @@ describe("hasHost", () => {
     expect(hasHost(globalWith(aHost()))).toBeTrue();
   });
 
-  // The one case a shell has to get right: with no compositor there is no
-  // display to lay windows out on, so a shell takes the viewport's geometry
-  // instead. Asked of the global rather than of `location`, which is what it
-  // used to be — the page's scheme said whether a *bridge* was serving it, and
-  // there is no bridge any more.
+  // A shell uses this to fall back to the viewport's geometry.
   it("is false when there is not, however that is spelled", () => {
     expect(hasHost(globalWith(undefined))).toBeFalse();
     expect(hasHost(globalWith(null))).toBeFalse();

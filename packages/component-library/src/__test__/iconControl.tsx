@@ -1,7 +1,5 @@
-// Documented exception to the "no barrel imports from @phosphor-icons/react"
-// rule: the storybook icon-control widget enumerates every icon as an option
-// in the controls panel, so we need the full namespace at storybook-build time.
-// The barrel cost is paid only by the storybook bundle, never by app bundles.
+// Exception to the no-barrel-imports rule for icons: the Storybook control
+// lists every icon. Only the Storybook bundle pays for it.
 import * as icons from "@phosphor-icons/react/dist/ssr";
 
 const suffixedIcons = Object.fromEntries(

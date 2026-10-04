@@ -2,15 +2,11 @@ import HTMLElementConfig from "happy-dom/lib/config/HTMLElementConfig.js";
 import HTMLElementConfigContentModelEnum from "happy-dom/lib/config/HTMLElementConfigContentModelEnum.js";
 
 /**
- * Teaches happy-dom the engine's `<app>`.
+ * Registers the engine's `<app>` element with happy-dom.
  *
- * The fork defines `<app>` (an `HTMLAppElement : HTMLElement`); happy-dom
- * knows no such tag and makes an `HTMLUnknownElement`, which React reads as a
- * misspelled component and warns about on the first `<app>` a test renders.
- * `customElements.define` cannot take a name without a hyphen — the reason
- * the element is the engine's — and happy-dom has no public way to add a tag,
- * so it goes in happy-dom's own table of HTML elements, as a plain
- * `HTMLElement` the way `<section>` is.
+ * Without this, happy-dom creates an `HTMLUnknownElement` and React warns.
+ * `customElements.define` rejects names without a hyphen, and happy-dom has
+ * no public API for new tags, so this edits happy-dom's internal tag table.
  */
 export const registerAppElement = () => {
   HTMLElementConfig.app = {

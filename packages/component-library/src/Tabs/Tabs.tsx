@@ -9,8 +9,7 @@ import type { ExtendProps } from "../extend-props";
 export const SIZES = ["sm", "md", "lg"] as const;
 export type Size = (typeof SIZES)[number];
 
-/** One tab: the `value` that identifies it, the `label` shown in the tab bar,
- *  and the `content` shown in its panel when active. */
+/** One tab: its `value` key, tab-bar `label` and panel `content`. */
 export type TabItem = {
   value: string;
   label: ReactNode;
@@ -18,9 +17,8 @@ export type TabItem = {
   disabled?: boolean | undefined;
 };
 
-// `orientation` is omitted: the styling here is horizontal-only (a bottom
-// underline over a tab row), so we don't expose the vertical layout base-ui
-// supports until there's styling for it. A vertical tab rail is its own widget.
+// No `orientation`: the styling is horizontal only. Use `TabRail` for a
+// vertical rail.
 type Props = Omit<
   ExtendProps<
     typeof BaseTabs.Root,
@@ -33,18 +31,10 @@ type Props = Omit<
 >;
 
 /**
- * A tabbed container: a tab bar over one panel showing the active tab. Wraps the
- * `@base-ui/react` Tabs primitive, which owns the accessible behavior — roving
- * tab focus, arrow-key navigation, `role="tab"`/`tabpanel"` wiring — so this
- * layer only supplies the domicile styling: a muted→accent active tab, a subtle
- * hover surface, and a soft accent `:focus-visible` fill (the global square
- * outline reads badly on a tab and on the panel). The active-tab underline is a
- * single `Tabs.Indicator` bar that slides — with a small `outBack` bounce —
- * between tabs as the selection changes, rather than a per-tab border. Every
- * other
- * `Tabs.Root` prop (`value`, `defaultValue`, `onValueChange`, …) passes
- * through. Inactive panels unmount, so hidden content holds no state and runs
- * no effects.
+ * A tab bar over a panel, styled over the `@base-ui/react` Tabs.
+ *
+ * Other `Tabs.Root` props pass through. Inactive panels unmount, so their
+ * content loses state.
  */
 export const Tabs = ({ tabs, size = "md", ...props }: Props) => (
   <BaseTabs.Root className={rootStyles} {...props}>
@@ -84,8 +74,7 @@ const listStyles = flex({
   borderBlockEnd: "1px solid {colors.border}",
   direction: "row",
   gap: 1,
-  // Anchors the absolutely-positioned indicator; base-ui measures the active
-  // tab's offset relative to this element.
+  // base-ui measures the indicator's offset from this element.
   position: "relative",
 });
 
@@ -95,10 +84,8 @@ const tabStyles = cva({
       cursor: "not-allowed",
       opacity: "disabled",
     },
-    // Keyboard focus fills the tab with a soft accent wash (rounded by the
-    // tab's own radius) rather than a ring or outline — the editor-tab-bar
-    // idiom. The global square outline is hidden by forcing its color
-    // transparent, which beats its longhand declarations without fighting them.
+    // A fill instead of the global square outline, which looks wrong on a
+    // tab. A transparent outline color hides the outline.
     _focusVisible: {
       backgroundColor: "color-mix(in oklab, {colors.accent} 16%, transparent)",
       outlineColor: "transparent",
@@ -143,16 +130,14 @@ const indicatorStyles = css({
   insetInlineStart: 0,
   position: "absolute",
   transform: "translateX(var(--active-tab-left))",
-  // Slide + resize between tabs with a small overshoot for the bounce. No
-  // animation on first paint (`none` direction) so the bar doesn't fly in.
+  // No animation on first paint (`none` direction), so the bar doesn't fly
+  // in.
   transition:
     "transform {durations.normal} {easings.outBack}, inline-size {durations.normal} {easings.outBack}",
 });
 
 const panelStyles = css({
-  // A faint accent wash marks the focused panel rather than a ring or outline
-  // around the whole content region; the global outline is hidden by forcing
-  // its color transparent.
+  // A faint fill instead of the global outline around the whole panel.
   _focusVisible: {
     backgroundColor: "color-mix(in oklab, {colors.accent} 6%, transparent)",
     outlineColor: "transparent",

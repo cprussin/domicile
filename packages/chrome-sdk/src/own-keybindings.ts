@@ -1,11 +1,8 @@
-// The keys a shell binds itself, resolved against the keyboard the compositor
-// describes.
+// Resolves a shell's own keybindings to keycodes.
 //
-// A shell's keybindings are its props, so the page holds the chords — written
-// sway-style, `Meta+Shift+l` — and only the compositor holds the keymap. The
-// compositor sends every keysym the keyboard can type and the key it is on
-// (`shell_config`'s `keys`), and this is the rest: the chord grammar, and the
-// lookup.
+// The shell writes chords sway-style (`Meta+Shift+l`). The compositor sends
+// the keysym-to-keycode map in `shell_config`'s `keys`. See
+// `docs/architecture/KEYBINDINGS.md`.
 
 import type {
   Keybinding,
@@ -14,20 +11,19 @@ import type {
 } from "./host-message";
 import type { KeyAction } from "./key-action";
 
-/** One mode's bindings: a chord, `Meta+Shift+l`, and what it does. */
+/** One mode's bindings, from chord (`Meta+Shift+l`) to action. */
 export type ModeKeybindings = Readonly<Record<string, KeyAction>>;
 
-/** The keys a shell binds: mode `default`, and its other modes by name. */
+/** A shell's keybindings: the `default` mode plus other modes by name. */
 export type ShellKeybindings = {
-  /** Mode `default`: what the keys do until a binding changes the mode. */
+  /** The `default` mode, active until a binding changes mode. */
   readonly keybindings?: ModeKeybindings;
-  /** Every other mode, by name. */
+  /** Other modes, by name. */
   readonly modes?: Readonly<Record<string, ModeKeybindings>>;
 };
 
 /**
- * The modifiers a chord can hold, by every spelling sway's accept. A map
- * rather than a record, so `constructor` is not a modifier.
+ * Modifier names sway accepts. A `Map` so `constructor` is not a modifier.
  */
 const MODIFIERS: ReadonlyMap<string, keyof Omit<ShortcutMessage, "keycode">> =
   new Map([
@@ -43,12 +39,10 @@ const MODIFIERS: ReadonlyMap<string, keyof Omit<ShortcutMessage, "keycode">> =
   ]);
 
 /**
- * `own`, every chord resolved to the key `keys` has its keysym on.
+ * Resolves every chord in `own` to a keycode using `keys`.
  *
- * Throws on a chord that is not one and on a keysym the keyboard
- * cannot type, naming it: both are the shell's bindings being wrong, and a
- * desktop that quietly dropped a key would leave its user pressing one that
- * does nothing.
+ * Throws on a malformed chord or a keysym the keyboard lacks, so a bad
+ * binding fails loudly instead of silently doing nothing.
  */
 export const ownKeybindings = (
   own: ShellKeybindings,
@@ -75,7 +69,7 @@ export const ownKeybindings = (
   );
 };
 
-/** `written`, as the key and the modifiers a press of it arrives as. */
+/** Parses chord `written` into a keycode and modifiers. */
 const shortcutOf = (
   written: string,
   keys: ReadonlyMap<string, number>,

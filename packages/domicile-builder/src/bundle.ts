@@ -1,4 +1,4 @@
-// One shell module out of a user's entry, built against Domicile's install.
+// Builds a user's shell entry into a module against Domicile's install.
 
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -9,26 +9,22 @@ import react from "@vitejs/plugin-react";
 import type { Plugin } from "vite";
 import { build } from "vite";
 
-/** What resolves from Domicile's install rather than the user's project. */
+/** Imports resolved from Domicile's install instead of the user's project. */
 const FROM_DOMICILE = /^(@domicile-desktop\/[^/]+|react|react-dom)(\/.*)?$/;
 
-/** Manganese, whose dependencies are Domicile's and whose styles are built. */
+/** The manganese package directory in a Domicile install. */
 const manganeseIn = (domicile: string): string =>
   path.join(domicile, "packages", "shell-manganese");
 
 /**
- * Bundle `entry` into `out/shell.js`, as `@domicile-desktop/component-library`'s
- * `shellBuild` builds one: its `Shell` export kept and its stylesheet inside.
+ * Bundle `entry` into `out/shell.js`, with its `Shell` export and styles.
  *
- * **Domicile's packages and React come from `domicile`**, whatever the
- * project installed: resolved as manganese resolves them, so a hook in the
- * user's code and one in manganese's are the same React's, and the SDK
- * speaks the protocol of the Domicile it was built by.
+ * Domicile's packages and React resolve from `domicile`, not the project. This
+ * gives the user's code and manganese one shared React, and keeps the SDK's
+ * protocol in step with the running Domicile.
  *
- * **Manganese's styles are built here**, by Panda over manganese's own config:
- * Panda's `css()` only names classes, and the build that scans a call is what
- * writes its rule. `files`, the user's own, are scanned beside manganese's, so
- * a `css()` from `@domicile-desktop/manganese/css` in them has its rule too.
+ * Panda's `css()` only names classes; the build that scans a call emits its
+ * rule. So the user's `files` are scanned along with manganese's.
  */
 export const bundle = async (
   entry: string,
@@ -44,9 +40,8 @@ export const bundle = async (
     configFile: false,
     css: {
       postcss: {
-        // @pandacss/dev bundles its own postcss, whose plugin types do not
-        // unify with vite's; cast through never to erase the type, as
-        // manganese's `vite.config.ts` does and says why.
+        // @pandacss/dev bundles its own postcss, whose plugin types don't
+        // match vite's. See manganese's `vite.config.ts` for the same cast.
         plugins: [
           panda({
             configPath: scanning(`${out}.panda.config.mjs`, manganese, files),
@@ -62,13 +57,11 @@ export const bundle = async (
 };
 
 /**
- * Write `config`: manganese's Panda config, scanning `files` as well.
+ * Write manganese's Panda config to `config`, with `files` added to its scan.
  *
- * Written rather than passed, because Panda's PostCSS plugin takes a config's
- * path and nothing else; beside the build rather than in a temporary
- * directory, because the plugin keeps the config it loaded for the life of
- * the process and reads it again on the next build. Its directory is made
- * here, because nothing has made it yet in a fresh cache.
+ * Panda's PostCSS plugin only takes a config path, so the config is a file. It
+ * sits next to the build output, not in a temp directory, because the plugin
+ * keeps the loaded config for the process and rereads it on the next build.
  */
 const scanning = (
   config: string,
@@ -87,8 +80,8 @@ export default { ...config, include: [...config.include, ...${JSON.stringify(fil
 };
 
 /**
- * Resolve what the user's code imports of Domicile's and React from
- * Domicile's install. What Domicile's own packages import is left to them.
+ * Resolve the user's imports of Domicile's packages and React from Domicile's
+ * install. Imports inside Domicile's own packages resolve normally.
  */
 const fromDomicile = (domicile: string): Plugin => {
   const manganese = manganeseIn(domicile);

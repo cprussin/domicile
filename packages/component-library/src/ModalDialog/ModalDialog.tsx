@@ -10,34 +10,24 @@ import { useScreenRegion } from "../Screen/DisplayProvider";
 export const { createHandle } = BaseDialog;
 
 /**
- * Where in the viewport the popup sits.
- *
- * `top` is what a launcher, a command palette or a find bar wants: the thing
- * being typed into belongs near the top of the screen, where that kind of
- * panel has always been and where it covers least of what is under it.
+ * Where in the viewport the popup sits. Use `top` for launchers, command
+ * palettes and find bars.
  */
 export const PLACEMENTS = ["center", "top"] as const;
 export type Placement = (typeof PLACEMENTS)[number];
 
 /**
- * What the popup is made of.
+ * The popup's surface.
  *
- * `glass` is a pane rather than a card: the ground it is drawn on is let
- * through and blurred, the border is a lit hairline rather than a drawn one,
- * and the backdrop under it is blurred hard enough for the two to read as one
- * depth. It wants something worth seeing behind it — a desktop, a photograph,
- * a document — and over a flat page it is only a paler card.
+ * `glass` is translucent with a blurred backdrop. It suits busy content
+ * behind it, such as a desktop; over a flat page it looks like a pale card.
  */
 export const SURFACES = ["card", "glass"] as const;
 export type Surface = (typeof SURFACES)[number];
 
 /**
- * How wide the popup is.
- *
- * `lg` is for a popup whose rows carry more than one thing to read — a
- * launcher's file name and the directory beside it — where `md` would leave
- * room for only one of them. `xl` is for one that shows two things side by
- * side — a launcher's rows and a preview of the one it is on.
+ * The popup's width. `lg` fits rows with several columns; `xl` fits a list
+ * beside a preview.
  */
 export const SIZES = ["md", "lg", "xl"] as const;
 export type Size = (typeof SIZES)[number];
@@ -50,24 +40,19 @@ type Props = ExtendProps<
   typeof BaseDialog.Root,
   {
     children: ReactNode;
-    /**
-     * Whether the corner ✕ is drawn. Turn it off for a dialog whose own
-     * contents already say how to leave — a panel that names Escape under
-     * itself does not also need a button nobody aims at.
-     */
+    /** Whether to draw the corner close button. */
     closeButton?: boolean | undefined;
     footer?: ReactNode | undefined;
     placement?: Placement | undefined;
     /**
-     * Whether the popup is drawn. Turn it off to draw only the backdrop — a
-     * desk of several monitors is several pages, and the panel belongs on the
-     * one the keyboard is on while the others are only dimmed under it.
+     * Whether to draw the popup. Turn it off to draw only the backdrop, e.g.
+     * on monitors other than the one with keyboard focus.
      */
     popup?: boolean | undefined;
     /**
-     * The display the popup is drawn over, by name — the one the keyboard is
-     * on. A page spanning several monitors otherwise centers it on the whole
-     * desk, which is the middle monitor. Needs a `DisplayProvider`.
+     * Name of the display to center the popup on. Without it, a page that
+     * spans several monitors centers it across all of them. Needs a
+     * `DisplayProvider`.
      */
     screen?: string | undefined;
     size?: Size | undefined;
@@ -101,17 +86,14 @@ const ModalDialogComponent = ({
           data-surface={surface}
         />
         {/*
-        Without its popup, a dialog still gets one to close on, drawn as
-        nothing. The dialog finishes closing when its popup has, so one with
-        none would never finish, and its backdrop would go on taking every
-        click on the page.
+        A hidden popup, since closing completes when the popup closes.
+        Without one the backdrop would stay and block every click.
       */}
         {!popup && <BaseDialog.Popup hidden />}
         {popup && (
           <BaseDialog.Viewport className={viewportStyles} style={region}>
-            {/* The placement, the size and the surface are written on the popup rather than
-            carried in its class name so that what a dialog is doing is
-            legible in the inspector — and so a test has something to read. */}
+            {/* Data attributes make the variant visible in the inspector and
+            to tests. */}
             <BaseDialog.Popup
               className={popupStyles}
               data-placement={placement}
@@ -163,11 +145,7 @@ export const ModalDialog = Object.assign(ModalDialogComponent, {
   CloseButton,
 });
 
-// A glass popup is only glass if there is a depth behind it, so the backdrop
-// under one is blurred far harder: the pane and the ground it lets through
-// have to read as one distance from the page. Values inlined as literals (not
-// derived from a helper) so Panda's static extractor can see them and emit
-// the corresponding atomic classes.
+// Values are literals so Panda's static extractor can see them.
 const backdropStyles = cva({
   base: css.raw({
     _starting: {
@@ -189,10 +167,8 @@ const backdropStyles = cva({
         backdropFilter: "blur({spacing.0.5})",
         backgroundColor: "backdrop",
       },
-      // A thinner scrim as well as a harder blur. The full one is a shutter
-      // pulled down over the page, which is what a dialog asking a question
-      // wants; a glass popup is meant to be looked *through*, and a shutter
-      // behind the glass leaves nothing there to see.
+      // A lighter scrim and stronger blur, so content stays visible through
+      // the glass popup.
       glass: {
         backdropFilter: "blur({spacing.2.5}) saturate(140%)",
         backgroundColor:
@@ -202,8 +178,8 @@ const backdropStyles = cva({
   },
 });
 
-// A size container, so the popup's offsets and widths are fractions of the
-// screen it is over rather than of a page that may span several.
+// A size container, so `cq*` units are relative to the screen, not a page
+// that may span several.
 const viewportStyles = center({
   containerType: "size",
   inset: 0,
@@ -224,10 +200,7 @@ const popupStyles = flex({
     transition:
       "opacity {durations.fast} {easings.in}, transform {durations.fast} {easings.in}",
   },
-  // Centered by the auto margins on both sides; at the top by dropping the
-  // one at the start for a fixed offset, which leaves the end margin to take
-  // up the slack. A `cqh` rather than a spacing token because what it is a
-  // fraction of is the screen — the viewport's, which is a container.
+  // Replaces the start auto margin with an offset relative to the screen.
   "&[data-placement=top]": {
     marginBlockEnd: "auto",
     marginBlockStart: "8cqh",
@@ -252,23 +225,10 @@ const popupStyles = flex({
     backgroundColor: "color-mix(in oklab, {colors.card} 62%, transparent)",
     borderColor: "color-mix(in oklab, {colors.foreground} 16%, transparent)",
   },
-  // A pane rather than a card: the ground behind it comes through blurred and
-  // a shade richer, and the top edge carries the line of light a pane catches
-  // — brightest in the middle and gone at both corners, so the rounding is
-  // not cut across by it.
-  // AND SO IS WHAT IS PUT ON IT. A form control paints itself an opaque
-  // ground, which on a pane reads as a solid card sitting on the glass rather
-  // than as part of it. This is the one rule that says otherwise, and it is
-  // here rather than a prop on every control because "what surface is this
-  // drawn on" is the container's answer and not each field's.
-  //
-  // The wrapper is found by what is inside it: every control in this library
-  // marks its own `<input>`, `<textarea>` or trigger with `data-control`, and
-  // the element holding one of those directly is the wrapper that paints the
-  // ground. Selecting it this way also settles the property race the
-  // wrapper's own `background-color` would otherwise be in — a descendant
-  // selector outranks the single class it is fighting, whichever order they
-  // land in — which is what `_control/wrapperBase.ts` warns about.
+  // Makes form controls translucent on glass. Controls mark their element
+  // with `data-control`, so its parent is the wrapper that paints the
+  // background. The descendant selector outranks the wrapper's own class
+  // regardless of order (see `_control/wrapperBase.ts`).
   "&[data-surface=glass] :has(> [data-control])": {
     backgroundColor:
       "color-mix(in oklab, {colors.background} 45%, transparent)",
@@ -288,10 +248,8 @@ const popupStyles = flex({
     "opacity {durations.normal} {easings.out}, transform {durations.normal} {easings.out}",
 });
 
-// The inline end clears the absolutely-positioned close button, so it is the
-// body's own padding again when there is no button to clear. Values inlined
-// as literals (not derived from a helper) so Panda's static extractor can see
-// them and emit the corresponding atomic classes.
+// The inline end clears the close button when there is one. Values are
+// literals so Panda's static extractor can see them.
 const headerStyles = cva({
   base: flex.raw({
     align: "center",
@@ -322,14 +280,9 @@ const closeStyles = css({
   position: "absolute",
 });
 
-// Body padding depends on what is above and below it:
-//   - no title  → the top padding clears the absolutely-positioned close
-//                 button (which would otherwise overlap the body), and is an
-//                 ordinary padding again when there is no button there
-//   - no footer → larger bottom padding so the body doesn't feel cramped
-//                 against the dialog edge
-// Values inlined as literals (not derived from a helper) so Panda's static
-// extractor can see them and emit the corresponding atomic classes.
+// Without a title, the top padding clears the close button if there is one.
+// Without a footer, the bottom padding is larger. Values are literals so
+// Panda's static extractor can see them.
 const bodyStyles = cva({
   base: {
     alignItems: "stretch",

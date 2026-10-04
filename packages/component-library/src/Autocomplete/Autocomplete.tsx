@@ -11,29 +11,25 @@ import type { ExtendProps } from "../extend-props";
 
 export { SIZES, type Size } from "../control-sizes";
 
-/** One line of the list under the field. */
+/** One row of the suggestion list. */
 export type Suggestion<V> = {
-  /** What the caller gets back when this one is taken. */
+  /** Passed to `onSuggestionTaken` when this row is taken. */
   value: V;
-  /** What the field fills with when this one is highlighted or taken. */
+  /** Field text when this row is highlighted or taken. */
   text: string;
-  /** The line itself. */
   label: ReactNode;
-  /** A second, quieter line under it — where the suggestion came from, what it will do. */
+  /** Secondary text, e.g. where the suggestion came from. */
   description?: ReactNode | undefined;
-  /** Drawn at the inline start of the line. */
+  /** Drawn at the inline start of the row. */
   icon?: ReactNode | undefined;
 };
 
 type CommonProps<V> = Partial<ControlVariant> & {
   /**
-   * Whether the first suggestion highlights as soon as the user types, so
-   * Enter takes it and the field fills with it ahead of the caret.
+   * Highlight the first suggestion as the user types, so Enter takes it.
    *
-   * What an address bar wants: the line it is already halfway to is the first
-   * one, so Enter means "the obvious thing" without an arrow key first. A
-   * field whose first line is not the obvious thing wants this off, or Enter
-   * takes something the user never looked at.
+   * Turn on only when the first suggestion is the obvious match, as in an
+   * address bar. Otherwise Enter takes a row the user never looked at.
    */
   autoHighlight?: boolean | undefined;
   disabled?: boolean | undefined;
@@ -43,13 +39,10 @@ type CommonProps<V> = Partial<ControlVariant> & {
   onValueChange?: ((value: string) => void) | undefined;
   rounded?: boolean | undefined;
   /**
-   * The lines to offer, already chosen and already in order.
+   * The rows to offer, already filtered and ordered.
    *
-   * THE CALLER DOES THE MATCHING. A field that filtered what it was given
-   * could only match on the text it can see, and the interesting lists are the
-   * ones where it cannot: an address bar ranks a host the user visits daily
-   * over one they saw once, and offers a search for what was typed that
-   * matches nothing at all.
+   * The caller does the matching, since ranking often uses data the field
+   * can't see, such as visit history.
    */
   suggestions: readonly Suggestion<V>[];
   /** Controls rendered at the inline end of the field, inside its border. */
@@ -61,10 +54,8 @@ type CommonProps<V> = Partial<ControlVariant> & {
 type Props<V> = ExtendProps<
   typeof BaseAutocomplete.Input,
   CommonProps<V> &
-    // A prefix is either decoration or a control, and never both: the icon
-    // slot takes no pointer — it is what the invalid indicator animates in
-    // and out of — so a button put there could not be pressed. A browser's
-    // site indicator is a control, which is what `prefixButtons` is for.
+    // The icon slot ignores the pointer (the invalid indicator animates
+    // there), so clickable prefixes go in `prefixButtons` instead.
     (
       | { prefixButtons?: undefined; prefixIcon?: ReactNode | undefined }
       | { prefixButtons: ReactNode; prefixIcon?: undefined }
@@ -72,18 +63,11 @@ type Props<V> = ExtendProps<
 >;
 
 /**
- * A text field with a list of suggestions under it, wrapping the
- * `@base-ui/react` Autocomplete primitive.
+ * A text field with a suggestion list, wrapping the `@base-ui/react`
+ * Autocomplete.
  *
- * Same surface as `Input`: the `control` recipe and the `wrapperBase` state
- * matrix, so its border, focus ring, hover and invalid styling are the other
- * form controls' verbatim. What it adds is the list — arrow keys move through
- * it, the highlighted line fills the field ahead of the caret, and Enter takes
- * it.
- *
- * Highlighting fills the field rather than only marking a line, which is the
- * behavior of every address bar: what the user would get by pressing Enter is
- * readable without looking away from where they are typing.
+ * Styled like `Input`. The highlighted row fills the field ahead of the caret,
+ * as in an address bar, so the user sees what Enter will take.
  */
 export const Autocomplete = <V,>({
   autoHighlight = false,
@@ -106,10 +90,8 @@ export const Autocomplete = <V,>({
     disabled={disabled}
     items={suggestions}
     itemToStringValue={(suggestion) => suggestion.text}
-    // `inline` rather than `list` or `both`: the caller has already chosen
-    // which lines to offer — see `suggestions` — so a second round of matching
-    // inside the field would only throw away the ones it could not see a
-    // reason for.
+    // `inline` skips base-ui's filtering; the caller already filtered
+    // `suggestions`.
     mode="inline"
     onValueChange={(next) => {
       onValueChange?.(next);
@@ -195,9 +177,8 @@ const inputStyles = css({
   textOverflow: "ellipsis",
 });
 
-// Both ends of the field, which want the same thing: a row of controls that
-// keeps its size while the text beside it grows, and that inherits the
-// control recipe's per-size gap so it is spaced like the rest of the field.
+// Prefix and suffix control rows. They don't shrink and inherit the recipe's
+// per-size gap.
 const affixStyles = css({
   alignItems: "center",
   display: "inline-flex",
@@ -205,16 +186,12 @@ const affixStyles = css({
   gap: "inherit",
 });
 
-// The rounded variant inflates inline padding by 1.5 spacing units on top of
-// the `control` recipe's per-size padding (xs: 1.5, sm: 2.5, md: 3, lg: 3.5,
-// xl: 4 — see `CONTROL_PADDING_INLINE` in `control-sizes.ts`), matching
-// Input's `rounded` overrides. Values inlined as literals (not derived from a
-// helper) so Panda's static extractor can emit the corresponding atomic
-// classes — helper return values are opaque to it.
+// `rounded` adds 1.5 spacing units to the recipe's inline padding
+// (`CONTROL_PADDING_INLINE` in `control-sizes.ts`), as in Input. Values are
+// literals because Panda's static extractor can't read helper results.
 const wrapperStyles = cva({
   base: {
-    // Owned here rather than in `wrapperBase` for the reason Input owns it —
-    // see the note at the top of `wrapperBase.ts`.
+    // Not in `wrapperBase`; see the note at the top of `wrapperBase.ts`.
     cursor: "text",
   },
   compoundVariants: [
@@ -256,9 +233,8 @@ const popupStyles = css({
     transition:
       "opacity {durations.fast} {easings.in}, transform {durations.fast} {easings.in}",
   },
-  // base-ui's own attribute rather than Panda's `_starting`: the browser's
-  // `@starting-style` does not reliably fire for an element that mounts inside
-  // a portal, which leaves the list snapped into place with no animation.
+  // base-ui's attribute instead of Panda's `_starting`: `@starting-style`
+  // does not reliably fire for elements mounted in a portal.
   "&[data-starting-style]": {
     opacity: 0,
     transform: "scaleY(0.9)",
@@ -269,9 +245,7 @@ const popupStyles = css({
   boxShadow: "lifted",
   display: "flex",
   flexDirection: "column",
-  // The field's own width, so the list reads as a continuation of it rather
-  // than a panel that happens to be underneath. `--anchor-width` is measured
-  // by base-ui's positioner.
+  // Match the field's width, measured by base-ui's positioner.
   inlineSize: "var(--anchor-width)",
   maxBlockSize: "min(60vh, {spacing.96})",
   opacity: 1,
@@ -284,9 +258,8 @@ const popupStyles = css({
     "opacity {durations.normal} {easings.out}, transform {durations.normal} {easings.out}",
 });
 
-// Stays mounted whether or not the list is empty — base-ui announces the
-// change through it, and a node that is conditionally rendered announces
-// nothing. `:empty` is what hides it when there is nothing to say.
+// Always mounted so base-ui can announce changes through it; `:empty` hides
+// it.
 const emptyStyles = css({
   "&:empty": { display: "none" },
   color: "muted",
@@ -311,9 +284,7 @@ const itemStyles = css({
   cursor: "pointer",
   display: "grid",
   fontSize: "sm",
-  // The icon takes what it needs, the label takes the rest, and the
-  // description is pinned at the inline end — which is the shape of every
-  // address bar's list: what you are going to, and why it is being offered.
+  // Icon, label filling the rest, description at the inline end.
   gridTemplateColumns: "auto 1fr auto",
   outlineStyle: "none",
   paddingBlock: 1.5,

@@ -18,17 +18,12 @@ import type { TrayAction } from "./tray";
 
 type Call = readonly [kind: string, ...args: unknown[]];
 
-/** The fields a `DomicileAppEvent` carries, all of them optional to a test. */
+/** `DomicileAppEvent` fields, all optional. */
 type AppEventFields = Partial<Omit<DomicileAppEvent, keyof Event>>;
 
 /**
- * A `DomicileAppEvent`, with the fields that event does not carry left as the
- * empty string the engine fills them with, and a zero `arrival` — nothing the
- * client does with one of these is about the hop.
- *
- * `Object.assign` onto an `Event` rather than a subclass per event type: what
- * the client reads is the fields, and five classes saying that would be a test
- * of the test.
+ * A `DomicileAppEvent` with unset fields defaulted as the engine does: empty
+ * strings, zeros and `false`.
  */
 const appEvent = (type: string, fields: AppEventFields): DomicileAppEvent =>
   Object.assign(new Event(type), {
@@ -46,32 +41,21 @@ const appEvent = (type: string, fields: AppEventFields): DomicileAppEvent =>
   });
 
 /**
- * A stand-in for `window.domicile`: it records what the page asks of it, and
- * it fires an event only at whatever registered for that event through
- * `addEventListener`.
+ * A fake `window.domicile` that records calls and dispatches only to
+ * listeners registered with `addEventListener`.
  *
- * **That last part is the point of the double.** What is under test is that
- * `DomicileClient` registers listeners *of its own*, in its constructor, rather
- * than leaving the page to do it — so `dispatch` below reaches nothing unless
- * it did. A double that called the client's handlers directly would be green
- * with those listeners never registered at all, which is the one failure that
- * loses a live client's window.
- *
- * Its own registry rather than an `EventTarget`, for two reasons. A real one
- * types `addEventListener`'s callback as `EventListener | EventListenerObject |
- * null`, which no typed listener is assignable to in either direction, so a
- * class extending it cannot `implements DomicileHost` without a cast. And a
- * real one swallows a listener's throw — the DOM reports it to the page's error
- * handler rather than raising it to whoever dispatched — which is exactly why
- * the translation lives in `host-message.ts` and is tested there.
+ * Dispatching through real listeners checks that `DomicileClient` registers
+ * them in its constructor. A custom registry, not an `EventTarget`, because
+ * `EventTarget`'s listener type does not fit `DomicileHost` without a cast and
+ * it swallows listener throws.
  */
 class FakeHost implements DomicileHost {
   readonly calls: Call[] = [];
 
-  /** Empty until the compositor has described the desktop, as the fork's is. */
+  /** `null` until the desktop is described, as in the engine. */
   displays: readonly DomicileDisplay[] | null = null;
 
-  /** Null until the compositor has said a brightness, as the fork's is. */
+  /** `null` until a brightness is reported, as in the engine. */
   brightness: number | null = null;
 
   readonly #listeners = new Map<string, (event: never) => void>();
@@ -83,7 +67,7 @@ class FakeHost implements DomicileHost {
     this.#listeners.set(type, listener);
   }
 
-  /** The compositor saying something, to whoever asked to hear that. */
+  /** Dispatch an event to the registered listener, if any. */
   dispatch<T extends keyof DomicileHostEventMap>(
     type: T,
     event: DomicileHostEventMap[T],
@@ -192,16 +176,15 @@ class FakeHost implements DomicileHost {
   }
 
   /**
-   * The compositor describing the desktop: the attribute is written and *then*
-   * the bare event fires, which is the engine's order and the reason a handler
-   * can read the accessor and see this desktop.
+   * Describe the desktop: set the attribute, then fire the event, in the
+   * engine's order.
    */
   describes(displays: readonly DomicileDisplay[]): void {
     this.displays = displays;
     this.dispatch("displayschanged", new Event("displayschanged"));
   }
 
-  /** The backlight moving: the attribute, then the bare event. */
+  /** Report a brightness: set the attribute, then fire the event. */
   brightens(level: number): void {
     this.brightness = level;
     this.dispatch("brightnesschanged", new Event("brightnesschanged"));
@@ -212,7 +195,7 @@ class FakeHost implements DomicileHost {
   }
 }
 
-// A monitor of the desk. `domicile-host.ts` documents what each field means.
+// A display. See `domicile-host.ts` for the fields.
 const LEFT: DomicileDisplay = {
   height: 1080,
   modeHeight: 1080,
@@ -257,13 +240,9 @@ describe("DomicileClient", () => {
     });
 
     it("holds an event that arrives before its handler registers", () => {
-      // THE REASON THE BRIDGE LISTENS ON ITS OWN ACCOUNT, IN ITS CONSTRUCTOR.
-      // A DOM event dispatched with no listener registered is gone — an
-      // EventTarget has no mailbox — and a React shell registers its handlers
-      // in its first effect flush, tens of milliseconds after the compositor
-      // has started talking. Always after, never before: rendering only
-      // *schedules* the effect. What lands in that window is a live, drawing
-      // client, and there is no second announcement for it.
+      // The client listens from its constructor. A React shell registers
+      // handlers after the compositor's first messages, and an unheard DOM
+      // event is lost.
       host.dispatch(
         "appappeared",
         appEvent("appappeared", { appId: "term", title: "Terminal" }),
@@ -282,11 +261,11 @@ describe("DomicileClient", () => {
     });
 
     it("does not replay a held event to a handler that replaces another", () => {
-      // The flush empties the hold. Without that, every later `on` for the
-      // same type would mount the same windows again.
+      // Delivering empties the hold, so a later `on` does not see the same
+      // windows again.
       host.dispatch("appappeared", appEvent("appappeared", { appId: "term" }));
       domicile.on("app_appeared", () => {
-        // The first handler takes the held message; this is about the second.
+        // Takes the held message.
       });
 
       const seen: string[] = [];
@@ -298,9 +277,8 @@ describe("DomicileClient", () => {
     });
 
     it("holds only the type that has no handler", () => {
-      // One hold per type, not one queue for everything: a page that registers
-      // `app_appeared` must not be handed the `app_closed` it has no handler
-      // for yet.
+      // Held per type: a page with only an `app_appeared` handler must not get
+      // `app_closed`.
       const seen: string[] = [];
       host.dispatch("appclosed", appEvent("appclosed", { appId: "term" }));
       host.dispatch("appappeared", appEvent("appappeared", { appId: "term" }));
@@ -317,10 +295,7 @@ describe("DomicileClient", () => {
     });
 
     it("delivers the charge nobody asked for", () => {
-      // The other shape of message on this channel: pushed rather than
-      // answered, because a battery changes on its own. It goes through the
-      // same hold as the rest, which is what a bar that mounted a moment after
-      // the page connected needs.
+      // Pushed, not requested, and held like the rest.
       const seen: unknown[] = [];
       domicile.on("battery", (message) => {
         seen.push(message);
@@ -350,9 +325,7 @@ describe("DomicileClient", () => {
     });
 
     it("delivers the clipboard's history nobody asked for", () => {
-      // Pushed like the charge, and like it the whole state every time: a
-      // copy re-orders the history as often as it adds to it, so there is no
-      // delta a page could apply.
+      // Each message is the whole history, since a copy can reorder it.
       const seen: unknown[] = [];
       domicile.on("clipboard", (message) => {
         seen.push(message);
@@ -484,9 +457,7 @@ describe("DomicileClient", () => {
     });
 
     it("delivers the theme the desktop is drawn in", () => {
-      // Pushed like the charge, and the one pushed message this page can
-      // cause: `setTheme` is answered with this rather than applied where it
-      // was called, so a desk of three pages moves together.
+      // `setTheme` is answered with this message, so all pages change together.
       const seen: unknown[] = [];
       domicile.on("theme", (message) => {
         seen.push(message);
@@ -504,8 +475,7 @@ describe("DomicileClient", () => {
     });
 
     it("delivers the theme the desk's windows are drawn in", () => {
-      // The other half of `theme`: it arrives once the windows have turned,
-      // which a shell holding its wipe waits for.
+      // Sent once the windows have switched theme.
       const seen: unknown[] = [];
       domicile.on("windows_theme", (message) => {
         seen.push(message);
@@ -523,10 +493,8 @@ describe("DomicileClient", () => {
     });
 
     it("delivers whether anybody is at the desk", () => {
-      // Through the same hold as the rest, and that is what this one is for:
-      // the message a page gets on connecting is the one that says the desk
-      // has been idle since before the page existed, and it lands while React
-      // is still on its first render.
+      // Held, because the idle state on connect arrives during React's first
+      // render.
       const seen: unknown[] = [];
       domicile.on("idle", (message) => {
         seen.push(message);
@@ -541,11 +509,8 @@ describe("DomicileClient", () => {
     });
 
     it("delivers whether the desk is locked", () => {
-      // Through the same hold as the rest, and this is the message that hold
-      // was built for: a page that reloaded over a locked desk is told so as it
-      // connects, which lands while React is still on its first render. A shell
-      // that missed it would draw an open desktop over a desk that delivers
-      // nothing.
+      // Held, because a page reloaded over a locked session learns it on
+      // connect, during React's first render.
       const seen: unknown[] = [];
       domicile.on("locked", (message) => {
         seen.push(message);
@@ -560,8 +525,7 @@ describe("DomicileClient", () => {
     });
 
     it("delivers the keyboard, held until the shell asks", () => {
-      // Sent as the page connects, which is before any shell has bound its
-      // keys: a desktop that dropped it would answer no key at all.
+      // Sent on connect, before a shell binds its keys, so it must be held.
       host.dispatch(
         "shellconfig",
         Object.assign(new Event("shellconfig"), {
@@ -626,7 +590,7 @@ describe("DomicileClient", () => {
         }),
       );
 
-      // The engine's empty strings are the SDK's `undefined`.
+      // The engine's empty strings become `undefined`.
       expect(seen).toStrictEqual([
         {
           cards: [
@@ -683,9 +647,8 @@ describe("DomicileClient", () => {
     });
 
     it("delivers an address to open", () => {
-      // `domicile open-url`, which is what `BROWSER` runs inside a desktop.
-      // Through the hold like the rest: an app can open a link while the
-      // shell is still on its first render.
+      // From `domicile open-url`, which `BROWSER` runs. Held, because an app
+      // can open a link during the shell's first render.
       const seen: unknown[] = [];
       domicile.on("open_url", (message) => {
         seen.push(message);
@@ -752,7 +715,7 @@ describe("DomicileClient", () => {
           y: 30,
         }),
       );
-      // A submenu, which is over the menu and so over the same window.
+      // A submenu of the menu, so of the same window.
       host.dispatch(
         "popupplaced",
         appEvent("popupplaced", {
@@ -775,7 +738,7 @@ describe("DomicileClient", () => {
       });
       expect(domicile.windowOf("submenu")).toBe("term");
       expect(domicile.windowOf("term")).toBe("term");
-      // A popup's box is its buffer, which is what the pointer maps through.
+      // Pointer mapping uses the popup's buffer size.
       expect(domicile.surfaceSizeOf("menu")).toStrictEqual([180, 240]);
 
       host.dispatch("appclosed", appEvent("appclosed", { appId: "menu" }));
@@ -794,17 +757,12 @@ describe("DomicileClient", () => {
       );
 
       expect(asked).toStrictEqual([{ app_id: "term" }]);
-      // And nothing was asked of the host: a request the shell has not
-      // answered yet is a request, and answering it is `focusApp`.
+      // The client does not focus; the shell answers with `focusApp`.
       expect(host.lastCall()).toBeUndefined();
     });
 
-    // THE PAGE FORWARDS KEYS TO WHERE THE COMPOSITOR SAYS THE KEYBOARD IS, and
-    // not only to where the page last asked for it. The compositor moves the
-    // keyboard on its own — a focused client going away, a press on another
-    // monitor's page — and a page that heard only its own requests went on
-    // forwarding every key to the client it last named: a launcher's box
-    // focused over that window and taking none of the letters typed into it.
+    // Keys go where the compositor says focus is, not only where the page last
+    // asked: the compositor also moves focus on its own.
     it("routes the page's keys to whoever the compositor says has them", () => {
       focusApp(domicile, "term");
 
@@ -820,11 +778,8 @@ describe("DomicileClient", () => {
   });
 
   describe("what a client has said about its own window", () => {
-    // The size a client drew at is recorded as the message goes past, because
-    // it is only ever an input to the SDK's own pointer arithmetic: a shell
-    // that carried it to an element was a courier for a fact it had no other
-    // use for. Read on demand rather than pushed, the way `displays` is, so
-    // nothing subscribes and no handler slot is taken from the page.
+    // Surface sizes are recorded for the SDK's pointer mapping and read on
+    // demand, so they take no handler slot.
     it("remembers the size a client drew at", () => {
       host.dispatch(
         "appresized",
@@ -840,9 +795,7 @@ describe("DomicileClient", () => {
     });
 
     it("knows nothing about a client that has not drawn", () => {
-      // A toplevel maps before it draws, so the announcement carries no size —
-      // and the pointer over such a window maps against the element's own box
-      // rather than against a size invented for it.
+      // A toplevel maps before it draws, so there is no size yet.
       host.dispatch(
         "appappeared",
         appEvent("appappeared", { appId: "term", title: "Terminal" }),
@@ -852,11 +805,8 @@ describe("DomicileClient", () => {
     });
 
     it("remembers the size a replayed window had already drawn at", () => {
-      // The replay a reconnecting chrome is given carries whatever the client
-      // has committed since it mapped, and no `app_resized` follows it: that
-      // fires on a size that *changed*, so an idle client sends none. Without
-      // this the pointer over every window that was already running would be
-      // scaled against nothing.
+      // On reconnect, `app_appeared` carries the size and no `app_resized`
+      // follows for an idle client.
       host.dispatch(
         "appappeared",
         appEvent("appappeared", {
@@ -872,8 +822,6 @@ describe("DomicileClient", () => {
     });
 
     it("forgets a client that has gone", () => {
-      // The size is the client's, so it ends with the client rather than with
-      // whatever element happened to be showing it.
       host.dispatch(
         "appresized",
         appEvent("appresized", {
@@ -929,30 +877,26 @@ describe("DomicileClient", () => {
         "reply",
       ]);
 
-      // Passed on and nothing else: what a page draws comes back as a `theme`
-      // message, because every chrome on the desk is told.
+      // Only forwarded; the page renders from the `theme` message.
       domicile.setTheme("light");
       expect(host.lastCall()).toStrictEqual(["setTheme", "light"]);
     });
 
     it("offers a passphrase at a locked desk and applies nothing", () => {
-      // NOTHING IS APPLIED HERE, which is the same property `setTheme` above
-      // has and for a harder reason: a page that cleared its own lock screen
-      // because it believed its own keystrokes would be a lock anybody with the
-      // devtools could open. What opens the desk is the compositor agreeing, and
-      // what this page hears about it is a `locked` message.
+      // Only forwarded. The page must clear its lock screen on the `locked`
+      // message, never on its own input.
       domicile.unlock("open sesame");
       expect(host.lastCall()).toStrictEqual(["unlock", "open sesame"]);
 
-      // And the other way, which likewise waits for the `locked` message.
+      // Answered by a `locked` message.
       domicile.lock();
       expect(host.lastCall()).toStrictEqual(["lock"]);
 
-      // And the brightness, which comes back as a `brightness` message.
+      // Answered by a `brightness` message.
       domicile.setBrightness(0.3);
       expect(host.lastCall()).toStrictEqual(["setBrightness", 0.3]);
 
-      // And the mixer's, each answered with the next `audio` message.
+      // Each answered by the next `audio` message.
       domicile.setAudioVolume("output:s", 0.4);
       expect(host.lastCall()).toStrictEqual([
         "setAudioVolume",
@@ -1024,19 +968,15 @@ describe("DomicileClient", () => {
     });
 
     it("spreads a pointer's destination into the two doubles the host takes", () => {
-      // A place on the desktop is one value to a shell and two arguments to
-      // WebIDL, which has no tuple, and a CSS pixel is fractional the whole
-      // way across.
+      // WebIDL has no tuple, so the point is two arguments. Coordinates may be
+      // fractional.
       domicile.warpPointer([960.5, 540.25]);
       expect(host.lastCall()).toStrictEqual(["warpPointer", 960.5, 540.25]);
     });
 
     it("claims a grabbed chord for the page as well as the browser process", () => {
-      // The browser process matches a claim for a focused `<webview>`, whose
-      // keys never reach this document. A focused Wayland window's do — it is
-      // an element in this page — so the page has to know the same claim, or
-      // `keyboard-input.ts` forwards the chord to the window the shell just
-      // answered it over.
+      // The page also records the grab so `keyboard-input.ts` does not forward
+      // the chord to a focused Wayland window.
       domicile.grabShortcut({ altKey: true, keycode: 15, shiftKey: true });
 
       expect(
@@ -1052,7 +992,7 @@ describe("DomicileClient", () => {
   });
 
   describe("searching the home", () => {
-    /** The compositor answering `query`, as the engine dispatches it. */
+    /** Dispatch the compositor's answer to `query`. */
     const answer = (query: string, files: readonly string[]) => {
       host.dispatch(
         "files",
@@ -1081,9 +1021,7 @@ describe("DomicileClient", () => {
     });
 
     it("settles each search with its own answer, whichever comes back first", async () => {
-      // A launcher asks on every keystroke, so two are in flight whenever
-      // somebody types faster than the compositor answers. The answer to `n`
-      // is not the answer to `no`.
+      // Searches overlap while typing; the answer to `n` must not settle `no`.
       const shorter = domicile.searchFiles("n");
       const longer = domicile.searchFiles("no");
 
@@ -1096,7 +1034,7 @@ describe("DomicileClient", () => {
   });
 
   describe("previewing a file", () => {
-    /** The compositor saying what `path` holds, as text. */
+    /** Dispatch a text preview of `path`. */
     const answer = (path: string, text: string) => {
       host.dispatch(
         "filepreview",
@@ -1116,8 +1054,7 @@ describe("DomicileClient", () => {
     };
 
     it("asks the host, and settles each preview with its own path's answer", async () => {
-      // A launcher asks as the highlight moves, so two are in flight whenever
-      // an arrow key is faster than the compositor.
+      // Previews overlap while the highlight moves.
       const first = domicile.previewFile("a.txt");
       expect(host.lastCall()).toStrictEqual(["previewFile", "a.txt"]);
       const second = domicile.previewFile("b.txt");
@@ -1143,7 +1080,7 @@ describe("DomicileClient", () => {
       preview: "",
     };
 
-    /** The compositor answering `query`, as the engine dispatches it. */
+    /** Dispatch the compositor's answer to `query`. */
     const answer = (query: string, apps: readonly (typeof editor)[]) => {
       host.dispatch(
         "apps",
@@ -1175,9 +1112,7 @@ describe("DomicileClient", () => {
 
   describe("letting a handler go", () => {
     it("stops delivering to a handler that has been taken off", () => {
-      // A page that unmounts the thing that registered has to be able to say
-      // so. Without it the handler outlives its tree and is called into
-      // whatever is left of it.
+      // Lets an unmounting component stop its handler being called.
       const seen: unknown[] = [];
       const handler = (message: { app_id: string }) => {
         seen.push(message.app_id);
@@ -1190,9 +1125,7 @@ describe("DomicileClient", () => {
     });
 
     it("drops what arrives after it rather than piling it up", () => {
-      // The hold is for the gap before the page has *ever* listened for a
-      // type — see `#held`. An `off` says the page listened and stopped, so
-      // holding again would accumulate forever with nothing to drain it.
+      // After `off`, nothing is held for the type; nothing would drain it.
       const handler = () => undefined;
       domicile.on("app_closed", handler);
       domicile.off("app_closed", handler);
@@ -1207,11 +1140,8 @@ describe("DomicileClient", () => {
     });
 
     it("leaves a handler that replaced it alone", () => {
-      // `on` is a single slot, so the second registration already displaced
-      // the first. A teardown that ran afterward and removed whatever it
-      // found would silence the live handler on behalf of a dead one. Which
-      // caller does that is not this class's business to predict: taking the
-      // handler is what makes letting one go safe in any order.
+      // `on` is one slot, so removing an already replaced handler must not
+      // remove the live one.
       const seen: unknown[] = [];
       const first = () => seen.push("first");
       domicile.on("app_closed", first);
@@ -1225,19 +1155,12 @@ describe("DomicileClient", () => {
 
   describe("the desktop the host described", () => {
     it("is nothing until the host says", () => {
-      // Distinct from a desktop of no displays, which is an answer. A shell
-      // that could not tell them apart would render its "no screens" case for
-      // the moment before the answer arrives.
+      // Distinct from `[]`, a desktop with no displays.
       expect(domicile.displays).toBeUndefined();
     });
 
     it("is a desktop of no screens when that is what it was told", () => {
-      // The other half of the rule above, and the one that used to be
-      // unsayable: the attribute was a FrozenArray that started empty, so
-      // "nobody has described a desktop" and "this desktop has none" were the
-      // same value and the SDK guessed between them. `null` is the first and
-      // `[]` is the second, and a `<Screen>` renders nothing for either — which
-      // is right for one and wrong for the other, so a shell needs to know.
+      // `[]` is a real answer, distinct from `undefined`.
       host.describes([]);
 
       expect(domicile.displays).toStrictEqual([]);
@@ -1245,10 +1168,7 @@ describe("DomicileClient", () => {
     });
 
     it("reads through to the host, so everything that asks gets it", () => {
-      // Not retained here any more: the desktop is an attribute on the host,
-      // which every reader can reach whenever it likes. A component that
-      // mounts long after the description gets the same answer as one that was
-      // there for it.
+      // Read from the host, so late readers get the same answer.
       host.describes([LEFT]);
 
       expect(domicile.displays).toStrictEqual([LEFT]);
@@ -1256,9 +1176,8 @@ describe("DomicileClient", () => {
     });
 
     it("is the desktop the host describes now", () => {
-      // Latest wins, and reading through is what makes that free: with no
-      // displays configured the desktop is Domicile's own window, so every
-      // resize and every density change re-describes it.
+      // Without configured displays, every window resize re-describes the
+      // desktop.
       const RIGHT: DomicileDisplay = {
         height: 1440,
         modeHeight: 2880,
@@ -1277,10 +1196,8 @@ describe("DomicileClient", () => {
     });
 
     it("reaches a handler that registers after the description", () => {
-      // `displayschanged` is bare, so a shell that wants to *react* to a
-      // change would otherwise have to go and read the attribute itself. The
-      // client reads it and delivers it, and the hold covers a handler that
-      // was not there when it fired.
+      // The client reads the attribute and delivers it, and holds it for a late
+      // handler.
       host.describes([LEFT]);
 
       const seen: unknown[] = [];
@@ -1292,9 +1209,7 @@ describe("DomicileClient", () => {
     });
 
     it("is already the new desktop when the handler runs", () => {
-      // The attribute is written before the event is dispatched — the engine's
-      // ordering, not this class's — so a handler that reads the accessor sees
-      // this desktop rather than the one before it.
+      // The engine sets the attribute before dispatching.
       let seen: readonly DomicileDisplay[] | undefined;
       domicile.on("displays", () => {
         seen = domicile.displays;

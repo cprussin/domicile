@@ -3,19 +3,11 @@ import { DEFAULT_THEME } from "./theme-core";
 import type { ThemeSource } from "./theme-source";
 
 /**
- * A {@link ThemeSource} for a page with no desktop behind it: it answers its
- * own `setTheme` and nothing else is told.
+ * A {@link ThemeSource} for a page with no compositor, such as Storybook or a
+ * shell in an ordinary browser. `setTheme` applies the theme immediately.
  *
- * **This is the development case, not a fallback for the real one.** Storybook
- * is a page, and a shell opened in an ordinary browser for styling work is a
- * page; neither has a compositor to ask, and a toggle that did nothing in
- * either would make the component untestable by hand. Over a real desk, a
- * source built on `DomicileClient` is what a shell passes instead — there the
- * answer comes back from the compositor, because it has to reach the other
- * monitors and the desk's Wayland clients too.
- *
- * One handler, like the real thing: `onTheme` replaces whatever was registered
- * before it, so a provider that re-registers displaces rather than doubles.
+ * `onTheme` holds one handler and replaces any earlier one, matching
+ * `DomicileClient`.
  */
 export const standaloneThemeSource = (
   initial: Theme = DEFAULT_THEME,
@@ -35,7 +27,7 @@ export const standaloneThemeSource = (
       state.handler?.(theme);
     },
     theme: initial,
-    // Nothing behind the page but the page.
+    // No other windows to repaint.
     turnWindows: () => Promise.resolve(),
   };
   return source;

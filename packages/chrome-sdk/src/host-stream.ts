@@ -11,8 +11,8 @@ export type HostItem = {
 const NEWLINE = 0x0a;
 
 /**
- * A stateful reader over one host connection: feed it each chunk, get back
- * whatever it completed.
+ * Creates a reader for one host connection. Feed it each chunk; it returns
+ * the messages completed so far.
  */
 export const createHostStreamReader = (): ((
   chunk: Uint8Array,
@@ -43,7 +43,7 @@ export const createHostStreamReader = (): ((
     const items: HostItem[] = [];
     let line = takeLine();
     while (line !== undefined) {
-      // A keepalive newline carries nothing.
+      // Skip blank keepalive lines.
       if (line.trim().length > 0) {
         items.push({ text: line });
       }

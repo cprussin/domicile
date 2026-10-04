@@ -11,10 +11,9 @@ export const SIZES = [
 export type Size = (typeof SIZES)[number];
 
 /**
- * Per-size horizontal padding for control wrappers, in spacing-scale units.
- * Source of truth — read by the `control` recipe in `pandacss-preset.ts` and
- * by `_control/controlPadding.ts` to derive rounded-variant overrides and
- * pulled-trailing-group margins.
+ * Inline padding of control wrappers for each size, in spacing steps.
+ *
+ * The `control` recipe in `pandacss-preset.ts` reads this.
  */
 export const CONTROL_PADDING_INLINE = {
   "2xl": 5.5,
@@ -28,11 +27,10 @@ export const CONTROL_PADDING_INLINE = {
 } as const satisfies Record<Size, number>;
 
 /**
- * Per-size intrinsic control height, in spacing-scale units. Mirrors the
- * `blockSize` / `minBlockSize` set by the `control` recipe in
- * `pandacss-preset.ts`. Read by `Textarea` to clamp the user-supplied
- * `minHeight` to the size's natural height so a too-small `minHeight` can
- * never shrink the textarea below one line of the control.
+ * Control height for each size, in spacing steps.
+ *
+ * Must match the `control` recipe in `pandacss-preset.ts`. `Textarea` uses it
+ * as the floor for `minHeight`.
  */
 export const CONTROL_HEIGHT = {
   "2xl": 16,

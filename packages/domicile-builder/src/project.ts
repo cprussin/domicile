@@ -1,43 +1,43 @@
-// Where an entry's packages are installed, which it lacks, and when a build
-// of it can be reused.
+// Finds an entry's project, lists the packages it lacks, and computes the
+// build cache key.
 
 import path from "node:path";
 
 import { z } from "zod";
 
-/** Whether a file is there. */
+/** Whether a file exists. */
 export type Exists = (file: string) => boolean;
 
-/** The parts of a `package.json` read here; the rest is the project's. */
+/** The `package.json` fields used here; other fields pass through. */
 const manifestSchema = z.looseObject({
   dependencies: z.record(z.string(), z.string()).optional(),
 });
 
 export type Manifest = z.infer<typeof manifestSchema>;
 
-/** A project's `package.json`, parsed. Throws on one that is not one. */
+/** Parse a project's `package.json`. Throws if it is invalid. */
 export const parseManifest = (text: string): Manifest =>
   manifestSchema.parse(JSON.parse(text));
 
 /**
- * The packages a build takes from Domicile's own install, never the
- * project's: Domicile's packages, so the shell speaks the protocol of the
- * Domicile running it, and React, so a hook in the user's code and one in
- * manganese are the same React's.
+ * Packages always taken from Domicile's install, never the project's.
+ *
+ * Domicile's packages must match the running Domicile's protocol, and the
+ * user's code and manganese must share one React.
  */
 const FROM_DOMICILE = /^(@domicile-desktop\/.+|react|react-dom)$/;
 
 /**
- * The directory whose `package.json` and `bun.lock` an entry's packages go
- * in: the nearest above it that has a `package.json`, or the entry's own
- * where none does — and one is made there.
+ * The directory whose `package.json` and `bun.lock` hold an entry's packages:
+ * the nearest ancestor with a `package.json`, or else the entry's own
+ * directory, where one is created.
  */
 export const projectOf = (entry: string, exists: Exists): string => {
   const own = path.dirname(path.resolve(entry));
   return nearestProject(own, exists) ?? own;
 };
 
-/** `directory` or the nearest above it with a `package.json`, if any has. */
+/** `directory` or its nearest ancestor with a `package.json`, if any. */
 const nearestProject = (
   directory: string,
   exists: Exists,
@@ -52,7 +52,7 @@ const nearestProject = (
   }
 };
 
-/** What `imported` names that `manifest` does not list, in order. */
+/** Packages in `imported` that `manifest` lacks, except Domicile's, sorted. */
 export const missingPackages = (
   imported: ReadonlySet<string>,
   manifest: Manifest | undefined,
@@ -66,8 +66,8 @@ export const missingPackages = (
     .sort();
 
 /**
- * What a build is a function of: every file of the user's it reaches, the
- * lockfile that pins what it imports, and the Domicile it is built against.
+ * The build cache key: a hash of the user's files, the lockfile and the
+ * Domicile install path.
  */
 export const cacheKey = (
   files: ReadonlyMap<string, string>,
