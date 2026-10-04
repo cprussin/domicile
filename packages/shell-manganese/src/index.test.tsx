@@ -1,14 +1,39 @@
-import { describe, expect, it, spyOn } from "bun:test";
-import type { DomicileShortcut } from "@domicile-desktop/sdk/domicile-host";
+import { afterEach, describe, expect, it } from "bun:test";
+import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import { act, within } from "@testing-library/react";
 
 import { exec, runManganese } from "./index";
 
+/** A fake host describing one screen. */
+const onADesk = (): FakeDomicileHost => {
+  const fake = new FakeDomicileHost();
+  fake.set({
+    displays: [
+      {
+        height: 1080,
+        modeHeight: 1080,
+        modeWidth: 1920,
+        name: "left",
+        scale: 1,
+        transform: "normal",
+        width: 1920,
+        x: 0,
+        y: 0,
+      },
+    ],
+  });
+  (window as { domicile?: unknown }).domicile = fake.host;
+  return fake;
+};
+
+afterEach(() => {
+  delete (window as { domicile?: unknown }).domicile;
+});
+
 describe("runManganese", () => {
   // A custom bar layout on the stock desktop.
   it("mounts manganese into the root with the bar it is given", async () => {
-    // Without a compositor the shell logs a warning; not under test here.
-    const said = spyOn(console, "warn").mockImplementation(() => undefined);
+    onADesk();
     // Not attached to the document, so it can't leak into later tests.
     const root = document.createElement("div");
 
@@ -23,58 +48,28 @@ describe("runManganese", () => {
     });
 
     expect(root).toContainElement(await within(root).findByText("mail 3/12"));
-    said.mockRestore();
   });
 
-  // Custom keybindings replace the defaults. Runs under a compositor so the
-  // grabbed keys can be checked.
+  // Custom keybindings replace the defaults.
   it("binds the keys it is given rather than its own", () => {
-    const grabbed: DomicileShortcut[] = [];
-    // Minimal compositor: events, unanswered readings, and no-op calls except
-    // the one under test.
-    const events = new EventTarget();
-    const READINGS = new Set<PropertyKey>(["brightness", "displays"]);
-    const host = new Proxy(events, {
-      get: (target, name) => {
-        if (name === "grabShortcut") {
-          return (shortcut: DomicileShortcut) => grabbed.push(shortcut);
-        } else if (READINGS.has(name)) {
-          return null;
-        } else if (name in target) {
-          return Reflect.get(target, name).bind(target);
-        } else {
-          return () => undefined;
-        }
-      },
-    });
-    const global = window as unknown as { domicile?: unknown };
-    global.domicile = host;
-    try {
-      act(() => {
-        runManganese({
-          keybindings: { keybindings: { "Meta+x": exec("kitty") }, modes: {} },
-        })(document.createElement("div"));
-      });
-      act(() => {
-        events.dispatchEvent(
-          Object.assign(new Event("shellconfig"), {
-            arrival: 0,
-            config: JSON.stringify({ keys: { x: 45 }, type: "shell_config" }),
-          }),
-        );
-      });
+    const fake = onADesk();
 
-      expect(grabbed).toEqual([
-        {
-          altKey: false,
-          ctrlKey: false,
-          keycode: 45,
-          metaKey: true,
-          shiftKey: false,
-        },
-      ]);
-    } finally {
-      delete global.domicile;
-    }
+    act(() => {
+      runManganese({
+        keybindings: { keybindings: { "Meta+x": exec("kitty") }, modes: {} },
+      })(document.createElement("div"));
+    });
+
+    expect(fake.calls.filter(([method]) => method === "grabShortcut")).toEqual([
+      ["grabShortcut", "Meta+x"],
+    ]);
+  });
+
+  it("draws nothing in a page with no desktop behind it", () => {
+    const root = document.createElement("div");
+
+    runManganese()(root);
+
+    expect(root.childElementCount).toBe(0);
   });
 });

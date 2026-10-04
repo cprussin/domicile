@@ -1,21 +1,30 @@
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
-import type { TrayItem } from "@domicile-desktop/sdk/tray";
+import type {
+  DomicileHost,
+  DomicileTrayItem,
+} from "@domicile-desktop/sdk/domicile-host";
 import { useEffect, useState } from "react";
+
+import { watchHost } from "../host/watch-host";
 
 /**
  * The system tray's icons, as the compositor last described them.
  *
- * Like `useExtensions`: the full list is pushed on every change and on connect,
- * and the handler is registered once because `on` is a single slot.
+ * Like `useExtensions`: reads the full list from the host once for the whole
+ * desktop, and again on every change.
  */
-export const useTray = (domicile: DomicileClient): readonly TrayItem[] => {
-  const [items, setItems] = useState<readonly TrayItem[]>([]);
+export const useTray = (
+  domicile: DomicileHost,
+): readonly DomicileTrayItem[] => {
+  const [items, setItems] = useState<readonly DomicileTrayItem[]>([]);
 
-  useEffect(() => {
-    domicile.on("tray", (message) => {
-      setItems(message.items);
-    });
-  }, [domicile]);
+  useEffect(
+    () => watchHost(domicile, "traychanged", itemsOf, setItems),
+    [domicile],
+  );
 
   return items;
 };
+
+const itemsOf = ({
+  tray,
+}: DomicileHost): readonly DomicileTrayItem[] | undefined => tray ?? undefined;

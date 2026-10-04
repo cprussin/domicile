@@ -13,15 +13,11 @@
 // `typedAddress` decides site vs. search, so this box and a browser window's
 // address bar agree.
 
-import type {
-  Bookmark,
-  DesktopEntry,
-} from "@domicile-desktop/sdk/host-message";
-
 import type { TaggedSearch, TaggedSite } from "../address/search";
 import { googleUrl, taggedSearch, taggedSite } from "../address/search";
 import { TypedAddressKind, typedAddress } from "../address/typed-address";
 import { fileRow } from "./file-row";
+import type { Bookmark, DesktopEntry } from "./found-apps";
 import { Launch } from "./launch";
 
 /** The kind of a launcher row. */

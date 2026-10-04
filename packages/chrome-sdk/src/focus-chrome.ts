@@ -1,6 +1,6 @@
 // Returns keyboard focus to the chrome's page.
 
-import type { DomicileClient } from "./domicile-client";
+import type { InputHost } from "./element-context";
 import { setFocusedApp } from "./element-context";
 
 /**
@@ -12,7 +12,7 @@ import { setFocusedApp } from "./element-context";
  * a panel over the windows, such as a launcher. See `shell-manganese`'s
  * `AppWindow`.
  */
-export const focusChrome = (domicile: DomicileClient): void => {
+export const focusChrome = (domicile: InputHost): void => {
   setFocusedApp(undefined);
   domicile.focusChrome();
 };

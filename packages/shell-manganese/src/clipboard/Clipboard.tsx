@@ -1,5 +1,5 @@
 import { ModalDialog } from "@domicile-desktop/component-library/ModalDialog";
-import type { ClipboardMessage } from "@domicile-desktop/sdk/host-message";
+import type { DomicileClipboardEntry } from "@domicile-desktop/sdk/domicile-host";
 import { useEffect, useId, useRef, useState } from "react";
 
 import { css } from "../../styled-system/css";
@@ -10,7 +10,7 @@ const HISTORY = "What has been copied";
 
 type Props = {
   /** The clipboard history, newest first, from the compositor. */
-  entries: ClipboardMessage["entries"];
+  entries: readonly DomicileClipboardEntry[];
   /** Restores this entry, by its compositor ID, to the clipboard. */
   onCopy: (entry: number) => void;
   /** Escape, a backdrop click, or a chosen row. The desktop decides. */
@@ -57,7 +57,7 @@ export const Clipboard = ({
 );
 
 type HistoryProps = {
-  entries: ClipboardMessage["entries"];
+  entries: readonly DomicileClipboardEntry[];
   onCopy: (entry: number) => void;
   onDismiss: () => void;
 };

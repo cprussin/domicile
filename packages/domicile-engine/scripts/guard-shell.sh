@@ -10,8 +10,8 @@
 # harness can compute a probe point, and name app ids the harness chose. They
 # measure the seam. None of them measures the thing the seam is *for* — a shell
 # nobody wrote for this, built by its own vite config, joined to the compositor
-# by the SDK's own `connectToHost`, mounting `<app>` elements for windows it
-# learns about from the host.
+# through `window.domicile`, mounting `<app>` elements for windows it learns
+# about from the host.
 #
 # That is three things at once and each has failed on its own: the engine
 # serving the shell over `domicile://` and writing the document that loads it,

@@ -2,9 +2,9 @@
 # A shell on the fork, showing a real client's window — what all of it is for.
 #
 # Every other guard drives a page written for the guard. This one drives
-# shell-simple, built by its own vite config, joined to the compositor by the
-# SDK's own `connectToHost` over a WebSocket to the bridge serving it, and
-# mounting an `<app>` for a window it learned about from the host. Three things
+# shell-simple, built by its own vite config, joined to the compositor through
+# `window.domicile`, and mounting an `<app>` for a window it learned about from
+# the host. Three things
 # that have each failed on their own, and none of which any other guard
 # touches.
 #

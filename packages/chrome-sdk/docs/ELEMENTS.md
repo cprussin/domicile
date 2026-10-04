@@ -19,7 +19,7 @@ Event names and full types are in `src/app-element.ts` and
   and `zoom`. It cannot invert a perspective transform; it maps the window flat
   and logs a warning.
 - **Keyboard:** page keystrokes go to the window the user last clicked.
-  Use `focusApp` / `focusChrome` to move focus in code. The `DomicileClient`
+  Use `focusApp` / `focusChrome` to move focus in code. The `window.domicile`
   methods of the same name move only the compositor's seat. `registerElements`
   forwards keystrokes from `document`, so it also has to know which window has
   focus. `focusApp` / `focusChrome` update both.
@@ -55,8 +55,8 @@ once, when the view connects. The SDK provides types only.
     part of an item.
   - `domicile-content-size-change`: `contentWidth` / `contentHeight` changed.
     Use it to size extension popups.
-- **Browser windows:** `DomicileClient.on("browser_windows", …)` delivers the
-  desk's whole list. `openBrowserWindow(url)` and `closeBrowserWindow(id)` are
+- **Browser windows:** `domicile.browserWindows` is the desk's whole list;
+  `browserwindowschanged` reports changes. `openBrowserWindow(url)` and `closeBrowserWindow(id)` are
   for the shell's own UI. A link with `target="_blank"`, `domicile open-url`
   and an extension's `tabs.create` or `windows.create` open windows without
   the shell. See
@@ -80,6 +80,7 @@ document.addEventListener("keydown", follow);
 document.addEventListener("keyup", follow);
 ```
 
-Do not use the host's `modifiers` message for this. It reports the
-compositor's seat, which only sees keys forwarded while a client had focus.
-A modifier pressed while the page had focus is missing from it.
+Do not use the host's `altKey`, `ctrlKey`, `shiftKey` and `metaKey` for this.
+They report the compositor's seat, which only sees keys forwarded while a
+client had focus. A modifier pressed while the page had focus is missing from
+them.

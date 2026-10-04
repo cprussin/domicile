@@ -1,18 +1,16 @@
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 
-import { watchShared } from "../host/watch-shared";
+import { watchHost } from "../host/watch-host";
 
 /**
- * Watches the backlight: calls `onLevel` with each level (0 to 1) the host
- * reports, and returns a function that stops watching. Never called on a
- * machine without a backlight.
- *
- * Shared by every bar on the page; see `watchShared`.
+ * Watches the backlight: calls `onLevel` with the current level (0 to 1) and
+ * each one after, and returns a function that stops watching. Never called on
+ * a machine without a backlight.
  */
 export const watchBrightness = (
-  domicile: DomicileClient,
+  domicile: DomicileHost,
   onLevel: (level: number) => void,
-): (() => void) =>
-  watchShared(domicile, "brightness", ({ level }) => {
-    onLevel(level);
-  });
+): (() => void) => watchHost(domicile, "brightnesschanged", levelOf, onLevel);
+
+const levelOf = ({ brightness }: DomicileHost): number | undefined =>
+  brightness ?? undefined;

@@ -4,11 +4,11 @@
 
 import net from "node:net";
 
-import { helloMessage } from "@domicile-desktop/sdk/chrome-message";
-import { createHostStreamReader } from "@domicile-desktop/sdk/host-stream";
-import { withFrameDelimiter } from "@domicile-desktop/sdk/newline-frames";
-import type { HostMessageJson } from "@domicile-desktop/sdk/protocol";
-import { parseHostMessage } from "@domicile-desktop/sdk/protocol";
+import { helloMessage } from "./chrome-message";
+import { createHostStreamReader } from "./host-stream";
+import { withFrameDelimiter } from "./newline-frames";
+import type { HostMessageJson } from "./protocol";
+import { parseHostMessage } from "./protocol";
 
 export type ChromeSocket = {
   send: (message: unknown) => void;

@@ -15,7 +15,7 @@ How manganese implements the focus behavior in
 
 - The shell decides focus for both window kinds. For clients, the SDK sends a
   cancelable `domicile-focus-requested` and the shell handles it.
-  `focus_changed` reports where the keyboard went.
+  `focusedwindowchanged` reports where the keyboard went.
 - A click in a `<webview>` sends no pointer or focus events to the shell. The
   element dispatches its own event, which the window listens for.
   `packages/domicile-engine/scripts/guard-webview-click.sh` tests this.

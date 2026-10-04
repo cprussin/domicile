@@ -24,7 +24,7 @@ shell, see [`@domicile-desktop/manganese`](../shell-manganese/README.md).
 | Path | What |
 |---|---|
 | `src/Shell.tsx` | The desktop: windows, Alt gestures, terminal command, background legend. |
-| `src/index.tsx` | Entry point. Creates the `DomicileClient`, mounts React, reports density and desktop size. |
+| `src/index.tsx` | Entry point. Reads `window.domicile` (nothing to draw without one), installs `registerElements` and mounts React. |
 | `src/shell.css` | Window placement, the placeholder shown before a surface arrives, the legend. |
 | `vite.config.ts` | Module build. Inlines the stylesheet into `shell.js`, since the shell page has no `<link>`. |
 

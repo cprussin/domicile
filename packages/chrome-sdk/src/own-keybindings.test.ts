@@ -3,86 +3,60 @@ import { describe, expect, it } from "bun:test";
 import { KeyAction } from "./key-action";
 import { ownKeybindings } from "./own-keybindings";
 
-/** The keyboard the compositor describes: `dvp`'s `l` is the key `us` prints p on. */
-const KEYS: ReadonlyMap<string, number> = new Map([
-  ["Escape", 1],
-  ["Return", 28],
-  ["l", 25],
-  ["parenleft", 6],
-]);
-
 describe("ownKeybindings", () => {
-  it("resolves each chord's keysym to the key the keyboard has it on", () => {
+  it("files each binding under its chord, spelled the one way", () => {
     expect(
-      ownKeybindings(
-        { keybindings: { "Meta+Shift+parenleft": KeyAction.SendShell(["a"]) } },
-        KEYS,
-      ),
+      ownKeybindings({
+        keybindings: { "Shift+Meta+parenleft": KeyAction.SendShell(["a"]) },
+      }),
     ).toEqual(
       new Map([
         [
           "default",
-          [
-            {
-              action: KeyAction.SendShell(["a"]),
-              shortcut: {
-                altKey: false,
-                ctrlKey: false,
-                keycode: 6,
-                metaKey: true,
-                shiftKey: true,
-              },
-            },
-          ],
+          new Map([["Shift+Meta+parenleft", KeyAction.SendShell(["a"])]]),
         ],
       ]),
     );
   });
 
-  it("reads every spelling of every modifier, in any case", () => {
-    const [binding] =
-      ownKeybindings(
-        { keybindings: { "super+CONTROL+mod1+l": KeyAction.Mode("x") } },
-        KEYS,
-      ).get("default") ?? [];
-    expect(binding?.shortcut).toEqual({
-      altKey: true,
-      ctrlKey: true,
-      keycode: 25,
-      metaKey: true,
-      shiftKey: false,
-    });
+  it("reads every spelling of every modifier, in any case, in any order", () => {
+    const [chord] =
+      ownKeybindings({
+        keybindings: { "super+CONTROL+mod1+l": KeyAction.Mode("x") },
+      })
+        .get("default")
+        ?.keys() ?? [];
+    expect(chord).toBe("Ctrl+Alt+Meta+l");
   });
 
   it("keeps each mode's table apart, with `default` always there", () => {
-    const bindings = ownKeybindings(
-      { modes: { resize: { "Meta+Escape": KeyAction.Mode("default") } } },
-      KEYS,
-    );
+    const bindings = ownKeybindings({
+      modes: { resize: { "Meta+Escape": KeyAction.Mode("default") } },
+    });
     expect([...bindings.keys()]).toEqual(["default", "resize"]);
-    expect(bindings.get("default")).toEqual([]);
+    expect(bindings.get("default")).toEqual(new Map());
   });
 
   it("refuses a chord with no keysym, an unknown modifier or one held twice", () => {
     for (const chord of ["Meta+", "Hyper+l", "Meta+Super+l", "Meta+ l"]) {
       expect(() =>
-        ownKeybindings({ keybindings: { [chord]: KeyAction.Mode("x") } }, KEYS),
+        ownKeybindings({ keybindings: { [chord]: KeyAction.Mode("x") } }),
       ).toThrow(chord);
     }
   });
 
-  it("refuses a keysym the keyboard cannot type, by name", () => {
+  it("refuses two spellings of one chord in one mode", () => {
     expect(() =>
-      ownKeybindings(
-        { keybindings: { "Meta+Greek_alpha": KeyAction.Mode("x") } },
-        KEYS,
-      ),
-    ).toThrow("Greek_alpha");
+      ownKeybindings({
+        keybindings: {
+          "Meta+Shift+l": KeyAction.Mode("x"),
+          "Shift+Super+l": KeyAction.Mode("y"),
+        },
+      }),
+    ).toThrow("Shift+Super+l");
   });
 
   it("refuses a table for `default` beside the default one", () => {
-    expect(() => ownKeybindings({ modes: { default: {} } }, KEYS)).toThrow(
-      "default",
-    );
+    expect(() => ownKeybindings({ modes: { default: {} } })).toThrow("default");
   });
 });

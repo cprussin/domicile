@@ -5,10 +5,9 @@
 #   nix develop .#full --command \
 #     ./packages/domicile-engine/scripts/guard-windows-state.sh /build/chromium/src
 #
-# WHY THIS EXISTS. An event dispatched before a listener exists is gone, so a
-# shell that registered its handlers after the compositor announced the windows
-# already running used to need `DomicileClient` to buffer them. With the state
-# as attributes there is nothing to buffer: the page reads, then listens. This
+# WHY THIS EXISTS. An event dispatched before a listener exists is gone. With
+# the state as attributes there is nothing to buffer: the page reads, then
+# listens. This
 # guard's page reads only after the stand-in has said everything -- three
 # windows appearing, one retitled, resized, limited and given a cursor, one
 # focused, one closed, a popup placed -- and the attributes must hold all of it.

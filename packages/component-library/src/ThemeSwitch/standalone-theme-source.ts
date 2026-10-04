@@ -3,11 +3,10 @@ import { DEFAULT_THEME } from "./theme-core";
 import type { ThemeSource } from "./theme-source";
 
 /**
- * A {@link ThemeSource} for a page with no compositor, such as Storybook or a
- * shell in an ordinary browser. `setTheme` applies the theme immediately.
+ * A {@link ThemeSource} for a page with no compositor, such as Storybook.
+ * `setTheme` applies the theme immediately.
  *
- * `onTheme` holds one handler and replaces any earlier one, matching
- * `DomicileClient`.
+ * `onTheme` holds one handler and replaces any earlier one.
  */
 export const standaloneThemeSource = (
   initial: Theme = DEFAULT_THEME,

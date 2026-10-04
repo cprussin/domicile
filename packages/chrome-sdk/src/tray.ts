@@ -18,7 +18,7 @@ export type TrayAction = z.infer<typeof trayActionSchema>;
 /** One icon in the tray. */
 export type TrayItem = {
   /**
-   * The id for {@link DomicileClient.activateTrayItem}. Stable across
+   * The id for `DomicileHost.activateTrayItem`. Stable across
    * application restarts.
    */
   id: string;

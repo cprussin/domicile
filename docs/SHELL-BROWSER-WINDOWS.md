@@ -17,8 +17,8 @@ form input, history and playing media intact.
 ```ts
 const drawn = new Map<string, HTMLElement>();
 
-domicile.on("browser_windows", ({ windows }) => {
-  for (const { id } of windows) {
+const show = () => {
+  for (const { id } of domicile.browserWindows ?? []) {
     if (!drawn.has(id)) {
       const view = document.createElement("webview");
       view.setAttribute("window", id); // before append
@@ -26,14 +26,17 @@ domicile.on("browser_windows", ({ windows }) => {
       drawn.set(id, view);
     }
   }
-});
+};
+show();
+domicile.addEventListener("browserwindowschanged", show);
 
 plus.addEventListener("click", () => {
   domicile.openBrowserWindow("https://example.com");
 });
 ```
 
-- **`browser_windows`** sends the whole list when a window opens, closes,
+- **`browserWindows`** is the whole list, oldest first, `null` until the
+  engine lists it. `browserwindowschanged` fires when a window opens, closes,
   navigates or changes title. A window you have not drawn is new; a missing
   one was closed. Each has `id`, `url` and `title`. An extension's popup
   window also has `popupWindow`, `width` and `height`
@@ -174,8 +177,8 @@ Draw the context menu yourself:
 - Manganese's `browser/page-menu.ts` builds Chrome's menu from the event.
 
 Desktop chords from `bindKeys` still work while a guest has focus. They arrive
-as a `shortcut` message. `domicile.grabShortcut` claims a chord that
-`bindKeys` does not ([Keybindings](WRITING-A-SHELL.md#keybindings)).
+as a `shortcut` event. `domicile.grabShortcut` grabs a chord by name without
+`bindKeys` ([Keybindings](WRITING-A-SHELL.md#keybindings)).
 
 ## New windows
 
@@ -187,7 +190,7 @@ The browser opens a window without you for:
 - an extension's `tabs.create` or `windows.create`
 - DevTools, from `view.inspect()` or a context menu's `inspect`
 
-The window arrives in the next `browser_windows`. You decide where it goes.
+The window arrives in the next `browserwindowschanged`. You decide where it goes.
 
 The new window is a fresh navigation to that address:
 
@@ -200,7 +203,7 @@ A plain link (`target="_blank"` or middle click) loses nothing.
 ## Close requests
 
 `window.close()` in a browser window's page, or an extension's
-`chrome.tabs.remove`, closes the window. It leaves the next `browser_windows`.
+`chrome.tabs.remove`, closes the window. It leaves the next `browserwindowschanged`.
 `window.close()` works only when the page's history has a single entry.
 
 In a view of your own (a `<webview src>` with no `window`), the element fires

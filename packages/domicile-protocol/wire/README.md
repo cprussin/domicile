@@ -1,7 +1,7 @@
 # The wire
 
 `host-messages.jsonl` is the golden file for messages the compositor sends to
-the chrome SDK. Each line is one message, byte for byte as the compositor
+a chrome. Each line is one message, byte for byte as the compositor
 writes it.
 
 Rust and TypeScript define these messages separately, by hand. Both sides test
@@ -14,8 +14,8 @@ rejects.
 - **`packages/domicile-protocol/tests/wire.rs`**: checks that Rust writes each
   line byte for byte. This catches details a value comparison misses, like
   `800.0` vs `800`, or `"size":null` vs an absent key.
-- **`packages/chrome-sdk/src/wire-fixture.test.ts`**: checks that the SDK's Zod
-  schemas parse each line.
+- **`packages/e2e-harness/src/wire-fixture.test.ts`**: checks that the e2e
+  harness's Zod schemas parse each line.
 
 ## Rules the tests enforce
 

@@ -6,7 +6,7 @@
 // `docs/architecture/WINDOW-DOMICILE.md`.
 //
 // The host exists only in Domicile's engine, so the globals are optional.
-// `connect-to-host.ts` handles the missing case.
+// A page without it draws nothing.
 //
 // Sizes and coordinates are fractional CSS pixels, except in
 // {@link DomicileDisplay}. Keycodes are Linux evdev codes.
@@ -102,8 +102,8 @@ export type DomicileWindow = {
 /**
  * A window event: appeared, resized, closed, focus changed, and similar.
  *
- * Fields an event type does not use are empty or zero. `host-message.ts`
- * turns each event into a payload with only its own fields.
+ * Fields an event type does not use are empty or zero.
+ * {@link DomicileHost.windows} holds the same state with `null` for absent.
  */
 export type DomicileAppEvent = Event & {
   /** The window's id. Empty on `focuschanged` means the chrome has focus. */
@@ -140,8 +140,8 @@ export type DomicileAppCursorEvent = Event & {
   /**
    * The CSS `cursor` keyword the client asked for.
    *
-   * `host-message.ts` still validates it, because the SDK and engine ship
-   * separately and their lists can differ.
+   * The SDK and engine ship separately, so their lists can differ. Treat it
+   * as a keyword; don't switch over it exhaustively.
    */
   readonly cursor: CursorShape;
 
@@ -498,8 +498,9 @@ export type DomicileLockedEvent = Event & {
 /**
  * The shell config: key bindings, keymap and shell options.
  *
- * `config` is the compositor's raw JSON line; `host-message.ts` parses it.
- * Sent when the page connects and when a config reload changes it.
+ * `config` is the compositor's raw JSON line. The engine reads it to resolve
+ * the chords `grabShortcut` takes by name; a shell has no use for it. Sent
+ * when the page connects and when a config reload changes it.
  */
 export type DomicileShellConfigEvent = Event & {
   readonly config: string;
@@ -773,7 +774,8 @@ export type DomicileHostEventMap = {
  * channel, so nothing is dispatched before something listens.
  *
  * It is not typed as `EventTarget` here: that would add `lib.dom`'s overload
- * and type listeners as plain `Event`. As a result, an `EventTarget` does not
+ * and type listeners as plain `Event`. `dispatchEvent` is left out; nothing
+ * in a page dispatches to the host. As a result, an `EventTarget` does not
  * satisfy this type, so test doubles register listeners themselves.
  */
 export type DomicileHost = {
@@ -1044,6 +1046,10 @@ export type DomicileHost = {
   readonly metaKey: boolean | null;
 
   addEventListener<T extends keyof DomicileHostEventMap>(
+    type: T,
+    listener: (event: DomicileHostEventMap[T]) => void,
+  ): void;
+  removeEventListener<T extends keyof DomicileHostEventMap>(
     type: T,
     listener: (event: DomicileHostEventMap[T]) => void,
   ): void;

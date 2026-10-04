@@ -1,8 +1,8 @@
 //! Checks that this crate writes exactly the lines in
 //! `wire/host-messages.jsonl`.
 //!
-//! `chrome-sdk/src/wire-fixture.test.ts` checks that the SDK's Zod schemas read
-//! the same file, so the two hand-written definitions cannot drift apart. A
+//! `e2e-harness/src/wire-fixture.test.ts` checks that the harness's Zod schemas
+//! read the same file, so the two hand-written definitions cannot drift apart. A
 //! mismatch would otherwise show up only at runtime, as the chrome silently
 //! dropping messages it cannot parse. Message tags come from serde itself, so a
 //! new [`HostMessage`] variant fails here until the fixture covers it.

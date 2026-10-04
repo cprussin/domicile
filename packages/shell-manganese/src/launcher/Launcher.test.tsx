@@ -1,9 +1,5 @@
 import { beforeEach, describe, expect, it, spyOn } from "bun:test";
 import { FilePreview } from "@domicile-desktop/sdk/file-preview";
-import type {
-  Bookmark,
-  DesktopEntry,
-} from "@domicile-desktop/sdk/host-message";
 import {
   WEBVIEW_FAVICON_CHANGE_EVENT,
   WEBVIEW_GUEST_FOCUS_EVENT,
@@ -19,6 +15,7 @@ import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { loadEmittedStylesheet } from "../emitted-stylesheet";
 import { OnOneScreen, SCREEN } from "../screens/fixture";
+import type { Bookmark, DesktopEntry } from "./found-apps";
 import { Launcher } from "./Launcher";
 import { Launch } from "./launch";
 import { learnedIcons, learnIcon } from "./learned-icons";
@@ -66,7 +63,6 @@ const searchingApps =
     return Promise.resolve({
       apps: apps.filter((app) => named(app.name)),
       bookmarks: bookmarks.filter((bookmark) => named(bookmark.name)),
-      query,
     });
   };
 
@@ -87,7 +83,6 @@ const searching =
       files: matched.slice(0, 200),
       indexing,
       matched: matched.length,
-      query,
     });
   };
 
@@ -97,10 +92,7 @@ const previewed: string[] = [];
 /** Fake host preview: each path's text is its own name. */
 const previewing = (path: string) => {
   previewed.push(path);
-  return Promise.resolve({
-    path,
-    preview: holding(path),
-  });
+  return Promise.resolve(holding(path));
 };
 
 /** The test home's files. */

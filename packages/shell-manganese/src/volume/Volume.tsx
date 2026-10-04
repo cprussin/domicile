@@ -1,7 +1,6 @@
 import { Popover } from "@domicile-desktop/component-library/Popover";
 import type { AudioDevice } from "@domicile-desktop/sdk/audio";
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
-import type { AudioMessage } from "@domicile-desktop/sdk/host-message";
+import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import { SpeakerSimpleHighIcon } from "@phosphor-icons/react/dist/ssr/SpeakerSimpleHigh";
 import { SpeakerSimpleLowIcon } from "@phosphor-icons/react/dist/ssr/SpeakerSimpleLow";
 import { SpeakerSimpleNoneIcon } from "@phosphor-icons/react/dist/ssr/SpeakerSimpleNone";
@@ -12,6 +11,7 @@ import { useEffect, useState } from "react";
 
 import { css } from "../../styled-system/css";
 import { Mixer } from "./Mixer";
+import type { Audio } from "./watch-audio";
 import { watchAudio } from "./watch-audio";
 import type { watchAudioLevels } from "./watch-audio-levels";
 
@@ -20,7 +20,7 @@ const WHEEL_STEP = 0.05;
 
 type Props = {
   /** Source of audio state and target of volume changes. */
-  domicile: DomicileClient;
+  domicile: DomicileHost;
   /** Injected so tests can drive the audio state. */
   watch?: typeof watchAudio | undefined;
   /** Injected so tests can drive the meters. */
@@ -40,7 +40,7 @@ export const Volume = ({
   watch = watchAudio,
   watchLevels,
 }: Props) => {
-  const [audio, setAudio] = useState<AudioMessage | undefined>(undefined);
+  const [audio, setAudio] = useState<Audio | undefined>(undefined);
 
   useEffect(() => watch(domicile, setAudio), [domicile, watch]);
 

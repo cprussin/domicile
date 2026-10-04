@@ -1,4 +1,4 @@
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import { focusChrome } from "@domicile-desktop/sdk/focus-chrome";
 import {
   WEBVIEW_FOCUS_REQUEST_EVENT,
@@ -49,7 +49,7 @@ type Props = {
    * Used to tell the host that no client holds the keyboard. The page lives in
    * the shell's own window, so focusing it takes focus from any client.
    */
-  domicile: DomicileClient;
+  domicile: DomicileHost;
   /** Whether the pointer passes through this window, as during a drag. */
   clickThrough: boolean;
   /**

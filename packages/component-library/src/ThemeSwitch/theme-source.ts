@@ -8,7 +8,7 @@ import type { Theme } from "./theme-core";
  * through this interface.
  *
  * Keep a source stable (`useMemo` or module scope). The provider re-registers
- * whenever its identity changes, and `DomicileClient.on` holds one handler.
+ * whenever its identity changes.
  */
 export type ThemeSource = {
   /**

@@ -1,8 +1,7 @@
-import type { FoundAppsMessage } from "@domicile-desktop/sdk/host-message";
 import { useEffect, useState } from "react";
 
-/** Applications and bookmarks found for a query. */
-export type FoundApps = Pick<FoundAppsMessage, "apps" | "bookmarks">;
+import { superseded } from "../host/superseded";
+import type { FoundApps } from "./found-apps";
 
 /**
  * The applications and bookmarks the host found for `query`, re-queried on
@@ -16,7 +15,7 @@ export type FoundApps = Pick<FoundAppsMessage, "apps" | "bookmarks">;
  * `opening` is also shown until the first typed query is answered.
  */
 export const useFoundApps = (
-  searchApps: (query: string) => Promise<FoundAppsMessage>,
+  searchApps: (query: string) => Promise<FoundApps>,
   query: string,
   opening: FoundApps,
 ): FoundApps => {
@@ -32,8 +31,11 @@ export const useFoundApps = (
           }
         })
         .catch((error: unknown) => {
-          // biome-ignore lint/suspicious/noConsole: surfacing a search the host failed
-          console.error("The host could not search the applications", error);
+          // A newer search replaced this one, and is what the box is waiting on.
+          if (!superseded(error)) {
+            // biome-ignore lint/suspicious/noConsole: surfacing a search the host failed
+            console.error("The host could not search the applications", error);
+          }
         });
     }
     return () => {

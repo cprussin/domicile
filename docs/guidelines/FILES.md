@@ -62,13 +62,13 @@ from module `d`, import from `d` directly — not through `b` and `c`.
 
 ```ts
 // wrong — barrel import
-import { DomicileClient } from "@domicile-desktop/sdk";
+import { bindKeys } from "@domicile-desktop/sdk";
 
 // wrong — unnecessary chain (a → b → c → d)
-import { DomicileClient } from "../chrome/helpers";
+import { bindKeys } from "../chrome/helpers";
 
 // correct — direct import from the defining module
-import { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import { bindKeys } from "@domicile-desktop/sdk/bind-keys";
 ```
 
 ## Avoid grab-bag files and directories

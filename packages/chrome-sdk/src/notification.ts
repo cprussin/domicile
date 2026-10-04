@@ -16,7 +16,7 @@ export type NotificationUrgency = z.infer<typeof notificationUrgencySchema>;
 
 /** One button of a notification. */
 export type NotificationAction = {
-  /** The key for {@link DomicileClient.invokeNotificationAction}. */
+  /** The key for `DomicileHost.invokeNotificationAction`. */
   key: string;
   /** The button text. */
   label: string;
@@ -25,8 +25,8 @@ export type NotificationAction = {
 /** One notification. */
 export type Notification = {
   /**
-   * The id for {@link DomicileClient.dismissNotifications} and
-   * {@link DomicileClient.invokeNotificationAction}. A replaced notification
+   * The id for `DomicileHost.dismissNotifications` and
+   * `DomicileHost.invokeNotificationAction`. A replaced notification
    * keeps its id.
    */
   id: number;

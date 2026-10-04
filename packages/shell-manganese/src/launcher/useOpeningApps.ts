@@ -1,7 +1,7 @@
-import type { FoundAppsMessage } from "@domicile-desktop/sdk/host-message";
 import { useEffect, useRef, useState } from "react";
 
-import type { FoundApps } from "./useFoundApps";
+import { superseded } from "../host/superseded";
+import type { FoundApps } from "./found-apps";
 
 /** The result before the host has answered. */
 const NOTHING: FoundApps = { apps: [], bookmarks: [] };
@@ -14,7 +14,7 @@ const NOTHING: FoundApps = { apps: [], bookmarks: [] };
  * after the panel appears. Refetching on close picks up newly installed apps.
  */
 export const useOpeningApps = (
-  searchApps: (query: string) => Promise<FoundAppsMessage>,
+  searchApps: (query: string) => Promise<FoundApps>,
   open: boolean,
 ): FoundApps => {
   const [found, setFound] = useState<FoundApps>(NOTHING);
@@ -34,8 +34,12 @@ export const useOpeningApps = (
           }
         })
         .catch((error: unknown) => {
-          // biome-ignore lint/suspicious/noConsole: surfacing a search the host failed
-          console.error("The host could not search the applications", error);
+          // A search typed into the open launcher replaced this one. These
+          // rows are requested again when it closes.
+          if (!superseded(error)) {
+            // biome-ignore lint/suspicious/noConsole: surfacing a search the host failed
+            console.error("The host could not search the applications", error);
+          }
         });
     }
   }, [searchApps, open]);

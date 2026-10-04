@@ -2,8 +2,12 @@ import type {
   Display,
   DisplaySource,
 } from "@domicile-desktop/component-library/display-source";
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
-import type { DomicileDisplay } from "@domicile-desktop/sdk/domicile-host";
+import type {
+  DomicileDisplay,
+  DomicileHost,
+} from "@domicile-desktop/sdk/domicile-host";
+
+import { watchHost } from "../host/watch-host";
 
 /**
  * Adapts the host's desktop description to the component library's
@@ -12,31 +16,17 @@ import type { DomicileDisplay } from "@domicile-desktop/sdk/domicile-host";
  * The library has no protocol dependency, so the shell, which has both, does
  * the adapting.
  *
- * Build once per client, not per render: `DomicileClient.on` is a single slot
- * and `DisplayProvider` re-registers whenever the source's identity changes.
+ * Build once per host, not per render: `DisplayProvider` re-registers
+ * whenever the source's identity changes.
  */
-export const hostDisplays = (domicile: DomicileClient): DisplaySource => ({
+export const hostDisplays = (domicile: DomicileHost): DisplaySource => ({
   get displays() {
     // A getter, not a snapshot: the provider reads this on mount and on source
     // change, and the desktop may have changed since construction.
-    return domicile.displays?.map(asDisplay);
+    return displaysOf(domicile);
   },
-  onDisplays: (handler) => {
-    // Keep the wrapped handler, because `off` only removes the handler if it is
-    // still the registered one. That stops a teardown from silencing a handler
-    // that replaced it.
-    const registered = ({
-      displays,
-    }: {
-      displays: readonly DomicileDisplay[];
-    }) => {
-      handler(displays.map(asDisplay));
-    };
-    domicile.on("displays", registered);
-    return () => {
-      domicile.off("displays", registered);
-    };
-  },
+  onDisplays: (handler) =>
+    watchHost(domicile, "displayschanged", displaysOf, handler),
 });
 
 /**
@@ -55,3 +45,9 @@ const asDisplay = (display: DomicileDisplay): Display => ({
   scale: display.scale,
   size: [display.width, display.height],
 });
+
+/** The host's displays, or `undefined` before it has described any. */
+const displaysOf = ({
+  displays,
+}: DomicileHost): readonly Display[] | undefined =>
+  displays === null ? undefined : displays.map(asDisplay);

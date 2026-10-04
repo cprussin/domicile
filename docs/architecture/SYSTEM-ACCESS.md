@@ -135,7 +135,7 @@ trust from reaching anything else.
 
 ## Plan
 
-- [x] the wire types in `domicile-protocol` and the SDK's schemas
+- [x] the wire types in `domicile-protocol` and the TypeScript schemas (`e2e-harness`)
 - [x] the compositor serves files, watches and processes; `lock::refused`
       covers them
 - [ ] engine patch: opaque relay, binding for the top-level shell frame only,

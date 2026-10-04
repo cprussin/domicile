@@ -1,10 +1,14 @@
 import type { Display } from "@domicile-desktop/component-library/display-source";
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
-import { useCallback, useEffect, useMemo, useReducer } from "react";
+import type {
+  DomicileHost,
+  DomicileWindow,
+} from "@domicile-desktop/sdk/domicile-host";
+import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 
 import { openCommand } from "../launcher/open-command";
 import type { PlacedScreen } from "../screens/screen-toward";
 import { appIdOf, browserIdOf } from "./window";
+import { windowChanges } from "./window-changes";
 import type { WindowAction, WindowState } from "./window-state";
 import {
   WindowAction as Action,
@@ -37,7 +41,7 @@ export type Windows = WindowState & {
  *   described one.
  */
 export const useWindows = (
-  domicile: DomicileClient,
+  domicile: DomicileHost,
   displays: readonly Display[] | undefined,
 ): Windows => {
   const [state, dispatch] = useReducer(reduceWindows, NO_WINDOWS);
@@ -88,43 +92,52 @@ export const useWindows = (
     [domicile, state],
   );
 
+  // The host's last window list, diffed against the next. A ref, not
+  // effect-local, so a re-run effect does not announce every window again.
+  const listed = useRef<readonly DomicileWindow[]>([]);
+
   useEffect(() => {
     // Client buffer sizes are ignored: only the SDK's pointer scaling uses
-    // them, and `DomicileClient` records them itself.
-    domicile.on("app_appeared", ({ app_id, title }) => {
-      dispatch(Action.AppAppeared(app_id, title));
-    });
-    domicile.on("app_titled", ({ app_id, title }) => {
-      dispatch(Action.AppTitled(app_id, title));
-    });
-    domicile.on("app_min_size", ({ app_id, size }) => {
-      dispatch(Action.AppMinSize(app_id, size));
-    });
-    domicile.on("app_max_size", ({ app_id, size }) => {
-      dispatch(Action.AppMaxSize(app_id, size));
-    });
-    domicile.on("popup_placed", ({ app_id, parent, position, size }) => {
-      dispatch(Action.PopupPlaced({ appId: app_id, parent, position, size }));
-    });
-    domicile.on("app_closed", ({ app_id }) => {
-      dispatch(Action.AppClosed(app_id));
-    });
-    domicile.on("app_cursor", ({ app_id, cursor }) => {
-      dispatch(Action.AppCursorChanged(app_id, cursor));
-    });
-    domicile.on("focus_changed", ({ app_id }) => {
-      dispatch(Action.FocusChanged(app_id));
-    });
-    domicile.on("focus_requested", ({ app_id }) => {
-      // The compositor forwards the request without granting it;
-      // `reduceWindows` decides.
-      dispatch(Action.FocusRequested(app_id));
-    });
+    // them, and it reads them from `domicile.windows`.
+    const windowsChanged = () => {
+      const now = domicile.windows;
+      for (const action of windowChanges(listed.current, now)) {
+        dispatch(action);
+      }
+      listed.current = now;
+    };
+    const focusChanged = () => {
+      dispatch(Action.FocusChanged(domicile.focusedWindow ?? undefined));
+    };
+    // The compositor forwards the request without granting it;
+    // `reduceWindows` decides.
+    const focusRequested = ({ appId }: { appId: string }) => {
+      dispatch(Action.FocusRequested(appId));
+    };
     // Every browser window, from the engine. After `domicile load-shell` it
     // holds the previous shell's windows.
-    domicile.on("browser_windows", ({ windows }) => {
-      dispatch(Action.BrowserWindowsListed(windows));
-    });
+    const browserWindowsChanged = () => {
+      const windows = domicile.browserWindows;
+      if (windows !== null) {
+        dispatch(Action.BrowserWindowsListed(windows));
+      }
+    };
+    windowsChanged();
+    focusChanged();
+    browserWindowsChanged();
+    domicile.addEventListener("windowschanged", windowsChanged);
+    domicile.addEventListener("focusedwindowchanged", focusChanged);
+    domicile.addEventListener("focusrequested", focusRequested);
+    domicile.addEventListener("browserwindowschanged", browserWindowsChanged);
+    return () => {
+      domicile.removeEventListener("windowschanged", windowsChanged);
+      domicile.removeEventListener("focusedwindowchanged", focusChanged);
+      domicile.removeEventListener("focusrequested", focusRequested);
+      domicile.removeEventListener(
+        "browserwindowschanged",
+        browserWindowsChanged,
+      );
+    };
   }, [domicile]);
 
   // The desk the host described, which bounds where windows can go.

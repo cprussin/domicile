@@ -1,11 +1,7 @@
 import { describe, expect, it } from "bun:test";
-import type {
-  Bookmark,
-  DesktopEntry,
-  FoundAppsMessage,
-} from "@domicile-desktop/sdk/host-message";
 import { act, renderHook } from "@testing-library/react";
 
+import type { Bookmark, DesktopEntry, FoundApps } from "./found-apps";
 import { useFoundApps } from "./useFoundApps";
 
 const EDITOR: DesktopEntry = {
@@ -25,10 +21,9 @@ const MAIL: Bookmark = {
 
 /** The host's search for applications, answered in whatever order a test says. */
 const host = () => {
-  const asked: { query: string; settle: (found: FoundAppsMessage) => void }[] =
-    [];
+  const asked: { query: string; settle: (found: FoundApps) => void }[] = [];
   const searchApps = (query: string) =>
-    new Promise<FoundAppsMessage>((settle) => {
+    new Promise<FoundApps>((settle) => {
       asked.push({ query, settle });
     });
   return {
@@ -42,7 +37,7 @@ const host = () => {
         throw new Error(`nothing was asked at ${at.toString()}`);
       } else {
         await act(async () => {
-          asking.settle({ apps, bookmarks, query: asking.query });
+          asking.settle({ apps, bookmarks });
           await Promise.resolve();
         });
       }

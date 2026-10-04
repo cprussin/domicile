@@ -13,8 +13,8 @@ use serde::{Deserialize, Serialize};
 /// Pinned at 1: the host and every chrome are built from the same commit, so
 /// their versions cannot differ. Start bumping it when a chrome ships apart
 /// from the host. The compatibility rule then has to change in three places:
-/// [`negotiate`] here, `DomicileClient`'s welcome check in
-/// `@domicile-desktop/sdk`, and `greet` in `domicile-test-chrome`.
+/// [`negotiate`] here, the engine's welcome check, and `greet` in
+/// `domicile-test-chrome`.
 ///
 /// The `#[serde(default)]` attributes below are not a compatibility floor.
 /// They let this crate read older messages, such as test fixtures and lines

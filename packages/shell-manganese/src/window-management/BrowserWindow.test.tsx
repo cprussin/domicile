@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
+import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import { focusApp } from "@domicile-desktop/sdk/focus-app";
 import { registerElements } from "@domicile-desktop/sdk/register-elements";
 import {
@@ -25,16 +26,16 @@ import { BrowserWindow } from "./BrowserWindow";
 const silentDomicile = {
   focusApp: () => undefined,
   focusChrome: () => undefined,
-} as unknown as DomicileClient;
+} as unknown as DomicileHost;
 
 /** Records the window's host calls, in order. */
-const recordingDomicile = (calls: string[]): DomicileClient =>
+const recordingDomicile = (calls: string[]): DomicileHost =>
   ({
     ...silentDomicile,
     focusChrome: () => {
       calls.push("focusChrome");
     },
-  }) as unknown as DomicileClient;
+  }) as unknown as DomicileHost;
 
 const view = (container: HTMLElement): HTMLWebViewElement => {
   const element = container.querySelector("webview");
@@ -681,13 +682,8 @@ describe("BrowserWindow", () => {
     // Moving only the compositor's focus would keep forwarding there, so the
     // launcher's input would receive no keys.
     it("stops the page forwarding its keys to the client it took the keyboard from", () => {
-      const forwarded: string[] = [];
-      const domicile = {
-        ...silentDomicile,
-        key: (appId: string) => {
-          forwarded.push(appId);
-        },
-      } as unknown as DomicileClient;
+      const fake = new FakeDomicileHost();
+      const domicile = fake.host;
       registerElements(domicile);
       render(<app app-id="term" />);
       focusApp(domicile, "term");
@@ -712,7 +708,9 @@ describe("BrowserWindow", () => {
       );
       fireEvent.keyDown(document, { code: "KeyA" });
 
-      expect(forwarded).toStrictEqual([]);
+      expect(fake.calls.filter(([method]) => method === "key")).toStrictEqual(
+        [],
+      );
     });
 
     // The guest page has its own browsing context, so the window must focus it.
@@ -1295,7 +1293,7 @@ describe("BrowserWindow", () => {
             {
               ...silentDomicile,
               openBrowserWindow: opens,
-            } as unknown as DomicileClient
+            } as unknown as DomicileHost
           }
           dragging={false}
           focused

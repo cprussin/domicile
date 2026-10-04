@@ -1,6 +1,6 @@
 // Gives keyboard focus to a client's window.
 
-import type { DomicileClient } from "./domicile-client";
+import type { InputHost } from "./element-context";
 import { setFocusedApp } from "./element-context";
 
 /**
@@ -12,7 +12,7 @@ import { setFocusedApp } from "./element-context";
  * this; call it when showing a window without a click, such as opening it or
  * switching to its tab.
  */
-export const focusApp = (domicile: DomicileClient, appId: string): void => {
+export const focusApp = (domicile: InputHost, appId: string): void => {
   setFocusedApp(appId);
   domicile.focusApp(appId);
 };

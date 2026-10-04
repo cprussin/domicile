@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import {
   act,
   fireEvent,
@@ -24,7 +24,7 @@ const heldBacklight = () => {
       setBrightness: (level: number) => {
         asked.push(level);
       },
-    } as unknown as DomicileClient,
+    } as unknown as DomicileHost,
     report: (level: number) => {
       act(() => {
         for (const onLevel of listeners) {
@@ -32,7 +32,7 @@ const heldBacklight = () => {
         }
       });
     },
-    watch: (_domicile: DomicileClient, onLevel: (level: number) => void) => {
+    watch: (_domicile: DomicileHost, onLevel: (level: number) => void) => {
       listeners.push(onLevel);
       return () => undefined;
     },

@@ -4,7 +4,7 @@ import {
   APP_FOCUS_REQUESTED_EVENT,
 } from "@domicile-desktop/sdk/app-element";
 import type { CursorShape } from "@domicile-desktop/sdk/cursor-shape";
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import { focusApp } from "@domicile-desktop/sdk/focus-app";
 import { focusChrome } from "@domicile-desktop/sdk/focus-chrome";
 import { useEffect, useState } from "react";
@@ -52,7 +52,7 @@ type Props = {
   /** The window's `z-index`, which the SDK reports to the host. */
   depth: number;
   /** Used to request keyboard focus. */
-  domicile: DomicileClient;
+  domicile: DomicileHost;
   /**
    * The box spanning the title bar and contents; the transform origin (see
    * {@link scaledAbout}). `undefined` when {@link Props.rect} is.
@@ -158,7 +158,7 @@ export const AppWindow = ({
       width !== undefined &&
       height !== undefined
     ) {
-      domicile.setAppBounds(appId, { height, width, x, y });
+      domicile.setAppBounds(appId, x, y, width, height);
     }
   }, [appId, domicile, height, width, x, y]);
 

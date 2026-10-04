@@ -1,10 +1,7 @@
 import { beforeEach, describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import { APP_TAG_NAME } from "@domicile-desktop/sdk/app-element";
-import type {
-  AppBounds,
-  DomicileClient,
-} from "@domicile-desktop/sdk/domicile-client";
+import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import type { Measure } from "@domicile-desktop/sdk/measure";
 import { registerElements } from "@domicile-desktop/sdk/register-elements";
 import { fireEvent, render } from "@testing-library/react";
@@ -12,30 +9,18 @@ import { fireEvent, render } from "@testing-library/react";
 import { css } from "../../styled-system/css";
 import { AppWindow } from "./AppWindow";
 
-// Records `focusApp` and `setAppBounds` calls. Pointer mapping is the SDK's
-// and tested there.
-let focused: string[] = [];
-let placed: [string, AppBounds][] = [];
+// Records `focusApp` calls. Pointer mapping is the SDK's and tested there.
+const host = new FakeDomicileHost();
 
-const recordingDomicile = {
-  focusApp: (appId: string) => {
-    focused.push(appId);
-  },
-  focusChrome: () => undefined,
-  // Stubs so the SDK's handlers do not throw. `key` matters beyond this file:
-  // `registerElements` listens on the document with module-level focus state,
-  // so a later test file's keystroke can be forwarded to a window left
-  // focused here.
-  key: () => undefined,
-  pointerButton: () => undefined,
-  pointerMotion: () => undefined,
-  setAppBounds: (appId: string, bounds: AppBounds) => {
-    placed.push([appId, bounds]);
-  },
-  surfaceSizeOf: () => undefined,
-  // Every client here is a top-level window.
-  windowOf: (appId: string) => appId,
-} as unknown as DomicileClient;
+/** The windows this case asked the host to focus. */
+const focused = (): unknown[] =>
+  host.calls.filter(([method]) => method === "focusApp").map(([, id]) => id);
+
+/** Where this case told the host each window is. */
+const placed = (): unknown[] =>
+  host.calls
+    .filter(([method]) => method === "setAppBounds")
+    .map(([, id, x, y, width, height]) => [id, { height, width, x, y }]);
 
 // The test DOM performs no layout, so measurement is injected.
 const stubMeasure: Measure = () => ({
@@ -74,7 +59,7 @@ const windowProps = {
   clickThrough: false,
   cursor: undefined,
   depth: 0,
-  domicile: recordingDomicile,
+  domicile: host.host,
   dragging: false,
   frame: FRAME,
   fullscreen: false,
@@ -108,9 +93,8 @@ const portal = (container: HTMLElement): Element => {
 };
 
 beforeEach(() => {
-  focused = [];
-  placed = [];
-  registerElements(recordingDomicile, { measure: stubMeasure });
+  host.calls.length = 0;
+  registerElements(host.host, { measure: stubMeasure });
 });
 
 describe("AppWindow", () => {
@@ -163,7 +147,7 @@ describe("AppWindow", () => {
     );
 
     // Focus moves only when the `focused` prop changes.
-    expect(focused).toStrictEqual([]);
+    expect(focused()).toStrictEqual([]);
   });
 
   it("hides the element when the window is not on screen", () => {
@@ -176,13 +160,13 @@ describe("AppWindow", () => {
   it("gives the keyboard to the window the shell says is focused", () => {
     // Covers focus without a click, such as a newly opened or raised window.
     render(<AppWindow {...windowProps} focused />);
-    expect(focused).toStrictEqual(["term"]);
+    expect(focused()).toStrictEqual(["term"]);
   });
 
   it("says nothing while the window already has the keyboard", () => {
     // Otherwise each `focus_changed` reply would trigger another request.
     render(<AppWindow {...windowProps} focused hasKeyboard />);
-    expect(focused).toStrictEqual([]);
+    expect(focused()).toStrictEqual([]);
   });
 
   it("says so again when the keyboard has gone somewhere else", () => {
@@ -192,17 +176,17 @@ describe("AppWindow", () => {
       <AppWindow {...windowProps} focused hasKeyboard />,
     );
     // Ignore the request made on mount.
-    focused = [];
+    host.calls.length = 0;
 
     rerender(<AppWindow {...windowProps} focused hasKeyboard={false} />);
 
-    expect(focused).toStrictEqual(["term"]);
+    expect(focused()).toStrictEqual(["term"]);
   });
 
   it("does not ask for the keyboard for a window the shell has not named", () => {
     // There is no "unfocus" request; the keyboard always belongs to someone.
     render(<AppWindow {...windowProps} focused={false} />);
-    expect(focused).toStrictEqual([]);
+    expect(focused()).toStrictEqual([]);
   });
 
   it("tells the compositor where it is each time it moves", () => {
@@ -214,7 +198,7 @@ describe("AppWindow", () => {
     );
     rerender(<AppWindow {...windowProps} focused={false} rect={moved} />);
 
-    expect(placed).toStrictEqual([
+    expect(placed()).toStrictEqual([
       ["term", ON_SCREEN],
       ["term", moved],
     ]);
@@ -223,7 +207,7 @@ describe("AppWindow", () => {
   it("says nothing about where a window off screen is", () => {
     render(<AppWindow {...windowProps} focused={false} rect={undefined} />);
 
-    expect(placed).toStrictEqual([]);
+    expect(placed()).toStrictEqual([]);
   });
 
   it("shows the cursor the client asked for", () => {
@@ -335,7 +319,7 @@ describe("AppWindow", () => {
     it("does not ask for the keyboard it had", () => {
       render(<AppWindow {...windowProps} focused motion="closing" />);
 
-      expect(focused).toStrictEqual([]);
+      expect(focused()).toStrictEqual([]);
     });
 
     it("takes no pointer, and is nothing a keyboard can reach", () => {

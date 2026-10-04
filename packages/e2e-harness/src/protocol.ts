@@ -11,12 +11,11 @@
 // `wire-fixture.test.ts` checks that these schemas accept what Rust writes.
 // Schemas ignore unknown keys so a newer host can add fields.
 
+import { cursorShapeSchema } from "@domicile-desktop/sdk/cursor-shape";
+import { displayTransformSchema } from "@domicile-desktop/sdk/display-transform";
+import { notificationUrgencySchema } from "@domicile-desktop/sdk/notification";
+import { themeSchema } from "@domicile-desktop/sdk/theme";
 import { z } from "zod";
-
-import { cursorShapeSchema } from "./cursor-shape";
-import { displayTransformSchema } from "./display-transform";
-import { notificationUrgencySchema } from "./notification";
-import { themeSchema } from "./theme";
 
 /** The protocol version this build speaks. Must match the Rust constant. */
 export const PROTOCOL_VERSION = 1;

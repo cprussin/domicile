@@ -3,68 +3,76 @@
 // Domicile calls the `Shell` export with the element to draw `<app>` elements
 // in. See /docs/WRITING-A-SHELL.md.
 
-import { connectToHost } from "@domicile-desktop/sdk/connect-to-host";
-import { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import type { DomicileWindow } from "@domicile-desktop/sdk/domicile-host";
 import { registerElements } from "@domicile-desktop/sdk/register-elements";
 
 /** Draws the desktop into `root`, Domicile's empty `<body>`. */
 export const Shell = (root: HTMLElement): void => {
-  // In an ordinary browser `connectToHost` returns a stand-in, so the layout
-  // can be developed without a compositor.
-  const domicile = new DomicileClient(connectToHost(window));
+  // A plain browser has no `window.domicile`, so there is nothing to draw.
+  const domicile = window.domicile;
+  if (domicile === null || domicile === undefined) {
+    return;
+  }
   // Forwards pointer and keyboard input on `<app>` elements to the host.
   registerElements(domicile);
 
   /** Mounted `<app>` elements by app id. */
   const mounted = new Map<string, HTMLElement>();
 
-  domicile.on("app_appeared", ({ app_id }) => {
-    const element = document.createElement("app");
-    element.setAttribute("app-id", app_id);
-    // The elements share a stacking context, so appending puts it on top.
-    root.append(element);
-    mounted.set(app_id, element);
-  });
-
-  /**
-   * Absolute origin of each popup by app id.
-   *
-   * Popup positions are relative to their parent. Windows start at (0, 0), so
-   * a popup's origin is the sum of the offsets up its parent chain.
-   */
-  const origins = new Map<string, readonly [x: number, y: number]>();
-
-  domicile.on("popup_placed", ({ app_id, parent, position, size }) => {
-    const [parentX, parentY] = origins.get(parent) ?? [0, 0];
-    const [x, y] = [parentX + position[0], parentY + position[1]];
-    origins.set(app_id, [x, y]);
-    // A repositioned popup is placed again under the same id.
-    const element = mounted.get(app_id) ?? document.createElement("app");
-    element.setAttribute("app-id", app_id);
-    Object.assign(element.style, {
-      height: `${size[1].toString()}px`,
-      left: `${x.toString()}px`,
-      top: `${y.toString()}px`,
-      width: `${size[0].toString()}px`,
-    });
-    // Appending puts it above its parent.
-    root.append(element);
-    mounted.set(app_id, element);
-  });
-
-  domicile.on("app_closed", ({ app_id }) => {
-    origins.delete(app_id);
-    const element = mounted.get(app_id);
-    if (element === undefined) {
-      // The host announces every app before closing it, so this means the
-      // shell and compositor disagree about the desktop. Fail loudly rather
-      // than continue in an unknown state.
-      throw new Error(
-        `domicile: closed an app that was never opened: ${app_id}`,
-      );
-    } else {
-      element.remove();
-      mounted.delete(app_id);
+  /** Shows what `domicile.windows` lists, in its order. */
+  const show = () => {
+    const windows = domicile.windows;
+    for (const [appId, element] of mounted) {
+      if (!windows.some((window) => window.appId === appId)) {
+        element.remove();
+        mounted.delete(appId);
+      }
     }
+    for (const window of windows) {
+      let element = mounted.get(window.appId);
+      if (element === undefined) {
+        element = document.createElement("app");
+        element.setAttribute("app-id", window.appId);
+        // The elements share a stacking context, so appending puts it on top.
+        // Append only once: moving an `<app>` in the tree embeds it again.
+        root.append(element);
+        mounted.set(window.appId, element);
+      }
+      if (window.parent !== null) {
+        placePopup(element, window, windows);
+      }
+    }
+  };
+
+  show();
+  domicile.addEventListener("windowschanged", show);
+};
+
+/**
+ * Places a popup (a menu or tooltip). Popup positions are relative to their
+ * parent and windows start at (0, 0), so a popup's origin is the sum of the
+ * offsets up its parent chain.
+ */
+const placePopup = (
+  element: HTMLElement,
+  popup: DomicileWindow,
+  windows: readonly DomicileWindow[],
+): void => {
+  const [x, y] = originOf(popup, windows);
+  Object.assign(element.style, {
+    height: `${(popup.height ?? 0).toString()}px`,
+    left: `${x.toString()}px`,
+    top: `${y.toString()}px`,
+    width: `${(popup.width ?? 0).toString()}px`,
   });
+};
+
+/** The absolute origin of `window`'s box. */
+const originOf = (
+  window: DomicileWindow,
+  windows: readonly DomicileWindow[],
+): readonly [x: number, y: number] => {
+  const parent = windows.find((candidate) => candidate.appId === window.parent);
+  const [x, y] = parent === undefined ? [0, 0] : originOf(parent, windows);
+  return [x + (window.x ?? 0), y + (window.y ?? 0)];
 };
