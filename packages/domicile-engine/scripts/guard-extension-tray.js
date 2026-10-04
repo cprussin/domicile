@@ -59,9 +59,16 @@ export const Shell = () => {
   const expected = required(parameters, "expect");
   const open = required(parameters, "open");
 
-  /** The one <webview>, made the first time there is something to show. */
-  const show = (src) => {
+  /**
+   * The one <webview>, made the first time there is something to show: the
+   * tray's popup marked `extensionpopup`, as a shell's tray marks it, or the
+   * control's page as an ordinary browser window.
+   */
+  const show = (src, extensionPopup) => {
     const view = document.createElement("webview");
+    if (extensionPopup) {
+      view.setAttribute("extensionpopup", "");
+    }
     view.style.position = "absolute";
     view.style.inset = "10%";
     view.style.border = "0";
@@ -99,7 +106,7 @@ export const Shell = () => {
     const src = open === "popup" ? row?.popup : open;
     if (!opened && src !== undefined && src !== null) {
       opened = true;
-      show(src);
+      show(src, open === "popup");
     }
   });
   say("listening");

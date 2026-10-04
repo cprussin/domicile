@@ -120,6 +120,12 @@ constexpr char kPopupWindowEvent[] = "domicile-popup-window";
 // that reads it.
 constexpr char kPopupWindowAttr[] = "popupwindow";
 
+// And the attribute a shell marks an extension's action popup with: the
+// <webview> it opens from its tray. Its guest is then that popup and not a
+// tab, as Chrome's toolbar bubble is. Read once, when the element asks for its
+// guest, like `popupwindow`; its presence is the whole of it.
+constexpr char kExtensionPopupAttr[] = "extensionpopup";
+
 // The four values `security` can take, which are the four the browser's own
 // omnibox draws. Strings rather than an IDL enum -- see the .idl for why -- and
 // named here so the element and the SDK have one spelling between them.
@@ -223,7 +229,8 @@ void HTMLWebViewElement::RequestGuest() {
   host_->CreateGuest(placeholder->GetLocalFrameToken(),
                      guest_.BindNewPipeAndPassReceiver(task_runner),
                      client_receiver_.BindNewPipeAndPassRemote(task_runner),
-                     PopupWindow());
+                     PopupWindow(),
+                     hasAttribute(AtomicString(kExtensionPopupAttr)));
 }
 
 std::optional<int32_t> HTMLWebViewElement::PopupWindow() const {

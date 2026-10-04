@@ -1225,20 +1225,26 @@ opens a popup without it hands the popup a page it cannot touch. Then the row
 says what else:
 
 - **No `popup`:** nothing. The engine dispatches `action.onClicked`.
-- **A `popup`:** open a `<webview>` at it in a panel under the icon. The page
-  gets the extension API from its origin, not from the view. Close the panel on
-  a press outside it, on Escape, and on `domicile-close`, which is the popup
-  calling `window.close()`:
+- **A `popup`:** open a `<webview extensionpopup>` at it in a panel under the
+  icon. The page gets the extension API from its origin, not from the view.
+  Close the panel on a press outside it, on Escape, and on `domicile-close`,
+  which is the popup calling `window.close()`:
 
 ```ts
 import { WEBVIEW_CLOSE_EVENT } from "@domicile-desktop/sdk/webview-element";
 
 const view = document.createElement("webview");
+view.setAttribute("extensionpopup", "");
 view.setAttribute("src", extension.popup);
 view.addEventListener(WEBVIEW_CLOSE_EVENT, closePanel);
 panel.append(view);
 ```
 
+- **Mark it `extensionpopup`, before it is in the document.** The engine
+  reads it once, as the view asks for its page, and makes the page an
+  extension popup as Chrome's toolbar bubble is, rather than a tab: no tab id,
+  in no window. Without it the popup is a tab, and an extension that lays
+  itself out by where it is (Bitwarden's) lays itself out as a full page.
 - **Fit the view to the page.** Chrome fits its popup to the document. The
   view reports it as `contentWidth` / `contentHeight` (0 until the page has
   laid out), announced in `domicile-content-size-change`: size the view to
