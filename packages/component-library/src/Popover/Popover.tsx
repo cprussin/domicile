@@ -53,7 +53,8 @@ type Props = ExtendProps<
  * Non-modal: the page behind it stays scrollable and clickable, and pressing
  * outside or Escape closes it — and so does focus moving anywhere outside it,
  * which is all this document hears of a press inside a frame of another
- * process. That is the difference between this and
+ * process. A `Select` or a menu in it is still in it, though its list is
+ * drawn elsewhere. That is the difference between this and
  * `ModalDialog`, which is for something the user has to answer before carrying
  * on.
  */
@@ -72,6 +73,7 @@ const PopoverComponent = ({
   const actions = actionsRef ?? ownActions;
   const [popupRef, setPopupRef] = useStableRef<HTMLDivElement>();
   const [triggerRef, setTriggerRef] = useStableRef<HTMLElement>();
+  const within = useRef<FocusEvent | undefined>(undefined);
   return (
     <BasePopover.Root actionsRef={actions} {...rootProps}>
       {trigger !== undefined && (
@@ -81,6 +83,9 @@ const PopoverComponent = ({
         <BasePopover.Positioner
           align={align}
           className={positionerStyles}
+          onFocus={(event) => {
+            within.current = event.nativeEvent;
+          }}
           side={side}
           sideOffset={tone === "overPhoto" ? 6 : 8}
         >
@@ -94,6 +99,7 @@ const PopoverComponent = ({
               actions={actions}
               popup={popupRef}
               trigger={triggerRef}
+              within={within}
             />
             {title !== undefined && (
               <BasePopover.Title className={titleStyles}>
@@ -208,21 +214,29 @@ const bodyStyles = cva({
 /**
  * Close the open panel when focus lands outside it and its trigger. Mounted
  * inside the popup, so it listens only while the panel is open.
+ *
+ * Focus in something the panel's content drew elsewhere — a `Select`'s list,
+ * portaled to the body — is still the panel's. React says so: its focus
+ * events follow the component tree through portals, and reach `within`
+ * before the document hears the same event.
  */
 const CloseOnFocusOut = ({
   actions,
   popup,
   trigger,
+  within,
 }: {
   actions: RefObject<BasePopover.Root.Actions | null>;
   popup: RefObject<HTMLDivElement | null>;
   trigger: RefObject<HTMLElement | null>;
+  within: RefObject<FocusEvent | undefined>;
 }) => {
   useEffect(() => {
     const left = (event: FocusEvent) => {
       const target = event.target;
       if (
         target instanceof Node &&
+        event !== within.current &&
         popup.current?.contains(target) !== true &&
         trigger.current?.contains(target) !== true
       ) {
@@ -233,6 +247,6 @@ const CloseOnFocusOut = ({
     return () => {
       document.removeEventListener("focusin", left);
     };
-  }, [actions, popup, trigger]);
+  }, [actions, popup, trigger, within]);
   return undefined;
 };

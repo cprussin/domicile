@@ -8,6 +8,7 @@ import {
 import userEvent from "@testing-library/user-event";
 
 import { Button } from "../Button/Button";
+import { Select } from "../Select/Select";
 
 import { Popover } from "./Popover";
 
@@ -122,6 +123,30 @@ describe(Popover, () => {
       });
 
       expect(screen.getByRole("button", { name: "Inside" })).toBeVisible();
+    });
+
+    it("stays open while a select inside it is used, though its list is drawn elsewhere", async () => {
+      const user = userEvent.setup();
+      render(
+        <Popover title="Connection" trigger={<Button>Details</Button>}>
+          <Select
+            aria-label="Port"
+            defaultValue="speakers"
+            options={[
+              { label: "Speakers", value: "speakers" },
+              { label: "Headphones", value: "headphones" },
+            ]}
+          />
+        </Popover>,
+      );
+      await user.click(screen.getByRole("button", { name: "Details" }));
+
+      await user.click(screen.getByRole("combobox", { name: "Port" }));
+      await user.click(screen.getByRole("option", { name: "Headphones" }));
+
+      expect(screen.getByRole("combobox", { name: "Port" })).toHaveTextContent(
+        "Headphones",
+      );
     });
   });
 });

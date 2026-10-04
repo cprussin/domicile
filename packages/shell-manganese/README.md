@@ -805,15 +805,15 @@ over it to step a twentieth without opening anything.
 or a cross when it is muted.** Click it for the whole mixer in one panel hung
 off the bar; turn the wheel over it to step the output a twentieth.
 
-- **At a glance**: the default output and the default microphone, each with a
-  mute button, a slider and a meter under it.
-- **Below them, a section each** — Outputs, Inputs, Playback, Recording, Cards
-  — opening in place: every device's volume, mute, meter, port and whether it
-  is the default; every stream's volume, mute and where it plays or records
-  from; every card's profile. pavucontrol's, without leaving the panel.
-- **A choice slides in from the side** — a port, a profile, a stream's device
-  — and back out once it is made. No `Select`: its popup would take the focus
-  out of the panel, which shuts it.
+- **Two sliders**: the default output and the default microphone, each with
+  a mute button, a slider, a meter under it and its port as a `Select`.
+- **Beside each, the rest slides in** when there is any: the other outputs
+  and what is playing, or the other inputs and what is recording — every
+  volume, mute, meter, port, whether it is the default, and where a stream
+  plays or records from. A **Cards** button under them slides in the cards'
+  profiles.
+- **Every choice is a `Select`**: a port, a profile, a stream's device. Its
+  list is drawn outside the panel, which the `Popover` counts as inside.
 - **Read off the sound server with `pactl`**, PulseAudio's or PipeWire's: the
   compositor holds `pactl subscribe` open, re-reads `pactl -f json info` and
   `list` when something a mixer draws moves, and pushes the whole of it to

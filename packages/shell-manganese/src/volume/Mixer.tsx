@@ -1,7 +1,6 @@
-import type { AccordionItem } from "@domicile-desktop/component-library/Accordion";
-import { Accordion } from "@domicile-desktop/component-library/Accordion";
-import type { DrilldownDetail } from "@domicile-desktop/component-library/Drilldown";
 import { Drilldown } from "@domicile-desktop/component-library/Drilldown";
+import type { SelectOption } from "@domicile-desktop/component-library/Select";
+import { Select } from "@domicile-desktop/component-library/Select";
 import type {
   AudioCard,
   AudioChoice,
@@ -11,11 +10,11 @@ import type {
 import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
 import type { AudioMessage } from "@domicile-desktop/sdk/host-message";
 import { CaretRightIcon } from "@phosphor-icons/react/dist/ssr/CaretRight";
-import { CheckIcon } from "@phosphor-icons/react/dist/ssr/Check";
 import { CheckCircleIcon } from "@phosphor-icons/react/dist/ssr/CheckCircle";
+import type { ReactNode } from "react";
 import { useState } from "react";
 
-import { css, cva } from "../../styled-system/css";
+import { css } from "../../styled-system/css";
 import { flex, hstack } from "../../styled-system/patterns";
 import type { Direction } from "./Level";
 import { Level } from "./Level";
@@ -30,152 +29,96 @@ type Props = {
   watchLevels?: typeof watchAudioLevels | undefined;
 };
 
-/** One thing a section can be opened to show. */
-type Section = "outputs" | "inputs" | "playback" | "recording" | "cards";
+/** What can slide in over the two sliders. */
+type Pane = "outputs" | "inputs" | "cards";
 
 /**
- * A list of choices slid in over the mixer — a port, a profile, the device a
- * stream goes to — and what choosing one does.
- */
-type Chooser = {
-  title: string;
-  options: readonly { value: string; label: string }[];
-  current: string | undefined;
-  choose: (value: string) => void;
-};
-
-/**
- * The whole of the desk's sound, in the bar's panel: the default output and
- * microphone at the top, each with its meter, and under them a section for
- * every output, every input, what is playing and recording, and every card's
- * profile — what pavucontrol was for.
+ * The whole of the desk's sound, in the bar's panel — what pavucontrol was
+ * for.
  *
- * **One panel and nothing over it.** A section opens in place; a choice — a
- * port, a profile, where a stream goes — slides in from the side and back out
- * once it is made. A `Select` would open a popup of its own, which takes the
- * focus out of the panel and so shuts it.
+ * **Two sliders**: the default output and the default microphone, each with
+ * its meter and its port. Beside each, when there is more, a button slides in
+ * the rest: the other outputs and what is playing, or the other inputs and
+ * what is recording. Under them, the cards' profiles slide in the same way.
+ * The defaults are not in what slides in; their ports are already here.
  *
- * **Only what is on screen is metered**: the two at the top, and whatever the
- * open section shows. Recordings have no meter of their own; their input's is
- * in its section.
+ * **Every choice is a `Select`** — a port, a profile, where a stream goes.
+ * Its list is drawn outside the panel, which the `Popover` keeps as its own.
+ *
+ * **Only what is on screen is metered.** Recordings have no meter of their
+ * own; their input's is beside it.
  *
  * **The outputs' monitors are not inputs here**, as pavucontrol's default
  * leaves them out. They are still somewhere a recording can be moved to.
  */
 export const Mixer = ({ audio, domicile, watchLevels }: Props) => {
-  const [opened, setOpened] = useState<readonly string[]>([]);
-  const [chooser, setChooser] = useState<Chooser | undefined>(undefined);
+  const [pane, setPane] = useState<Pane | undefined>(undefined);
   const output = audio.outputs.find((device) => device.default);
   const input = audio.inputs.find(
     (device) => device.default && !device.monitor,
   );
-  const inputs = audio.inputs.filter((device) => !device.monitor);
-  // What each section meters while it is open. Recordings and cards have
-  // nothing of their own to meter.
-  const metered: readonly { section: Section; ids: readonly string[] }[] = [
-    { ids: audio.outputs.map((device) => device.id), section: "outputs" },
-    { ids: inputs.map((device) => device.id), section: "inputs" },
-    { ids: audio.playback.map((stream) => stream.id), section: "playback" },
-  ];
+  const outputs = audio.outputs.filter((device) => device !== output);
+  const inputs = audio.inputs.filter(
+    (device) => device !== input && !device.monitor,
+  );
   const levels = useMeters(
     domicile,
-    unique([
-      ...[output, input].flatMap((device) =>
-        device === undefined ? [] : [device.id],
-      ),
-      ...metered
-        .filter(({ section }) => opened.includes(section))
-        .flatMap(({ ids }) => ids),
-    ]),
+    metered(pane, { input, inputs, output, outputs, playback: audio.playback }),
     watchLevels,
   );
-  const choose = (next: Chooser) => {
-    setChooser({
-      ...next,
-      choose: (value) => {
-        next.choose(value);
-        setChooser(undefined);
-      },
-    });
+  const panes: Record<Pane, { title: string; content: ReactNode }> = {
+    cards: {
+      content: <Cards cards={audio.cards} domicile={domicile} />,
+      title: "Cards",
+    },
+    inputs: {
+      content: (
+        <>
+          <Devices
+            devices={inputs}
+            direction="input"
+            domicile={domicile}
+            levels={levels}
+          />
+          <Streams
+            devices={audio.inputs}
+            direction="input"
+            domicile={domicile}
+            label="Recording"
+            levels={undefined}
+            streams={audio.recording}
+          />
+        </>
+      ),
+      title: "Other inputs",
+    },
+    outputs: {
+      content: (
+        <>
+          <Devices
+            devices={outputs}
+            direction="output"
+            domicile={domicile}
+            levels={levels}
+          />
+          <Streams
+            devices={audio.outputs}
+            direction="output"
+            domicile={domicile}
+            label="Playing"
+            levels={levels}
+            streams={audio.playback}
+          />
+        </>
+      ),
+      title: "Other outputs",
+    },
   };
-  const sections: readonly (AccordionItem & {
-    value: Section;
-    count: number;
-  })[] = [
-    {
-      content: (
-        <Devices
-          choose={choose}
-          devices={audio.outputs}
-          direction="output"
-          domicile={domicile}
-          levels={levels}
-        />
-      ),
-      count: audio.outputs.length,
-      label: "Outputs",
-      value: "outputs",
-    },
-    {
-      content: (
-        <Devices
-          choose={choose}
-          devices={inputs}
-          direction="input"
-          domicile={domicile}
-          levels={levels}
-        />
-      ),
-      count: inputs.length,
-      label: "Inputs",
-      value: "inputs",
-    },
-    {
-      content: (
-        <Streams
-          choose={choose}
-          devices={audio.outputs}
-          direction="output"
-          domicile={domicile}
-          levels={levels}
-          streams={audio.playback}
-          verb="plays on"
-        />
-      ),
-      count: audio.playback.length,
-      label: "Playback",
-      value: "playback",
-    },
-    {
-      content: (
-        <Streams
-          choose={choose}
-          devices={audio.inputs}
-          direction="input"
-          domicile={domicile}
-          levels={undefined}
-          streams={audio.recording}
-          verb="records from"
-        />
-      ),
-      count: audio.recording.length,
-      label: "Recording",
-      value: "recording",
-    },
-    {
-      content: (
-        <Cards cards={audio.cards} choose={choose} domicile={domicile} />
-      ),
-      count: audio.cards.length,
-      label: "Cards",
-      value: "cards",
-    },
-  ];
   return (
     <Drilldown
-      detail={chooser === undefined ? undefined : choices(chooser)}
+      detail={pane === undefined ? undefined : panes[pane]}
       onBack={() => {
-        setChooser(undefined);
+        setPane(undefined);
       }}
     >
       <div className={mainStyles}>
@@ -186,6 +129,14 @@ export const Mixer = ({ audio, domicile, watchLevels }: Props) => {
             domicile={domicile}
             label="Volume"
             meter={levels.get(output.id)}
+            more={
+              outputs.length + audio.playback.length > 0
+                ? () => {
+                    setPane("outputs");
+                  }
+                : undefined
+            }
+            moreLabel="Other outputs"
           />
         )}
         {input !== undefined && (
@@ -195,17 +146,56 @@ export const Mixer = ({ audio, domicile, watchLevels }: Props) => {
             domicile={domicile}
             label="Microphone"
             meter={levels.get(input.id)}
+            more={
+              inputs.length + audio.recording.length > 0
+                ? () => {
+                    setPane("inputs");
+                  }
+                : undefined
+            }
+            moreLabel="Other inputs"
           />
         )}
-        <Accordion
-          items={sections.filter((section) => section.count > 0)}
-          multiple
-          onValueChange={setOpened}
-          value={[...opened]}
-        />
+        {audio.cards.length > 0 && (
+          <button
+            className={cardsButtonStyles}
+            onClick={() => {
+              setPane("cards");
+            }}
+            type="button"
+          >
+            Cards
+            <CaretRightIcon size={10} />
+          </button>
+        )}
       </div>
     </Drilldown>
   );
+};
+
+/** The ids on screen: the two defaults, and whatever has slid in. */
+const metered = (
+  pane: Pane | undefined,
+  shown: {
+    output: AudioDevice | undefined;
+    input: AudioDevice | undefined;
+    outputs: readonly AudioDevice[];
+    inputs: readonly AudioDevice[];
+    playback: readonly AudioStream[];
+  },
+) => {
+  switch (pane) {
+    case "outputs":
+      return [...shown.outputs, ...shown.playback].map(({ id }) => id);
+    case "inputs":
+      return shown.inputs.map(({ id }) => id);
+    case "cards":
+      return [];
+    case undefined:
+      return [shown.output, shown.input].flatMap((device) =>
+        device === undefined ? [] : [device.id],
+      );
+  }
 };
 
 type DefaultProps = {
@@ -215,296 +205,255 @@ type DefaultProps = {
   /** What the slider is called: what it is for, rather than which it is. */
   label: string;
   meter: number | undefined;
+  /** Slide in the rest, or `undefined` when there is none. */
+  more: (() => void) | undefined;
+  moreLabel: string;
 };
 
-/** One of the two always at the top, named under it for which device it is. */
+/**
+ * One of the two sliders, named over it for which device it is, with its
+ * port and the way to the rest.
+ */
 const Default = ({
   device,
   direction,
   domicile,
   label,
   meter,
+  more,
+  moreLabel,
 }: DefaultProps) => (
-  <div className={defaultStyles}>
-    <span className={captionStyles}>{device.description}</span>
-    <Level
-      direction={direction}
-      label={label}
-      level={device.volume}
-      meter={meter}
-      muted={device.muted}
-      onLevel={(level) => {
-        domicile.setAudioVolume(device.id, level);
-      }}
-      onMuted={(muted) => {
-        domicile.setAudioMuted(device.id, muted);
-      }}
-    />
+  <div className={rowStyles}>
+    <span className={headStyles}>
+      <span className={captionStyles}>{device.description}</span>
+      <Port device={device} domicile={domicile} />
+    </span>
+    <span className={levelRowStyles}>
+      <Level
+        direction={direction}
+        label={label}
+        level={device.volume}
+        meter={meter}
+        muted={device.muted}
+        onLevel={(level) => {
+          domicile.setAudioVolume(device.id, level);
+        }}
+        onMuted={(muted) => {
+          domicile.setAudioMuted(device.id, muted);
+        }}
+      />
+      {more !== undefined && (
+        <button
+          aria-label={moreLabel}
+          className={iconButtonStyles}
+          onClick={more}
+          title={moreLabel}
+          type="button"
+        >
+          <CaretRightIcon size={12} />
+        </button>
+      )}
+    </span>
   </div>
 );
 
 type DevicesProps = {
-  choose: (chooser: Chooser) => void;
   devices: readonly AudioDevice[];
   direction: Direction;
   domicile: DomicileClient;
   levels: ReadonlyMap<string, number>;
 };
 
-const Devices = ({
-  choose,
-  devices,
-  direction,
-  domicile,
-  levels,
-}: DevicesProps) => (
-  <ul className={listStyles}>
-    {devices.map((device) => (
-      <li className={rowStyles} key={device.id}>
-        <span className={headStyles}>
-          <button
-            aria-label={
-              device.default
-                ? `${device.description} is the default`
-                : `Make ${device.description} the default`
-            }
-            className={iconButtonStyles}
-            disabled={device.default}
-            onClick={() => {
-              domicile.setDefaultAudioDevice(device.id);
-            }}
-            type="button"
-          >
-            <CheckCircleIcon
-              size={14}
-              weight={device.default ? "fill" : "regular"}
-            />
-          </button>
-          <span className={nameStyles}>{device.description}</span>
-          {device.ports.length > 1 && (
-            <Pick
-              label={`${device.description} port: ${described(device.ports, device.port)}`}
-              onPick={() => {
-                choose({
-                  choose: (port) => {
-                    domicile.setAudioPort(device.id, port);
-                  },
-                  current: device.port,
-                  options: device.ports.map((port) =>
-                    option(port, "unplugged"),
-                  ),
-                  title: `${device.description} port`,
-                });
+/** The devices that are not the default, each of which can be made it. */
+const Devices = ({ devices, direction, domicile, levels }: DevicesProps) =>
+  devices.length > 0 && (
+    <ul className={listStyles}>
+      {devices.map((device) => (
+        <li className={rowStyles} key={device.id}>
+          <span className={headStyles}>
+            <button
+              aria-label={`Make ${device.description} the default`}
+              className={iconButtonStyles}
+              onClick={() => {
+                domicile.setDefaultAudioDevice(device.id);
               }}
-              shown={described(device.ports, device.port)}
-            />
-          )}
-        </span>
-        <Level
-          direction={direction}
-          label={device.description}
-          level={device.volume}
-          meter={levels.get(device.id)}
-          muted={device.muted}
-          onLevel={(level) => {
-            domicile.setAudioVolume(device.id, level);
-          }}
-          onMuted={(muted) => {
-            domicile.setAudioMuted(device.id, muted);
-          }}
-        />
-      </li>
-    ))}
-  </ul>
-);
+              title="Make it the default"
+              type="button"
+            >
+              <CheckCircleIcon size={14} />
+            </button>
+            <span className={nameStyles}>{device.description}</span>
+            <Port device={device} domicile={domicile} />
+          </span>
+          <Level
+            direction={direction}
+            label={device.description}
+            level={device.volume}
+            meter={levels.get(device.id)}
+            muted={device.muted}
+            onLevel={(level) => {
+              domicile.setAudioVolume(device.id, level);
+            }}
+            onMuted={(muted) => {
+              domicile.setAudioMuted(device.id, muted);
+            }}
+          />
+        </li>
+      ))}
+    </ul>
+  );
 
 type StreamsProps = {
-  choose: (chooser: Chooser) => void;
   /** Where a stream can go: the outputs, or every input monitors and all. */
   devices: readonly AudioDevice[];
   direction: Direction;
   domicile: DomicileClient;
+  /** What they are, over them: `Playing`. */
+  label: string;
   /** The meters, or `undefined` for streams that have none. */
   levels: ReadonlyMap<string, number> | undefined;
   streams: readonly AudioStream[];
-  /** How a stream's device is named: what it `plays on`. */
-  verb: string;
 };
 
 const Streams = ({
-  choose,
   devices,
   direction,
   domicile,
+  label,
   levels,
   streams,
-  verb,
-}: StreamsProps) => (
-  <ul className={listStyles}>
-    {streams.map((stream) => {
-      const name =
-        stream.title === undefined
-          ? stream.application
-          : `${stream.application}: ${stream.title}`;
-      // A device the server listed after the stream is settled by the next
-      // reading; until then there is nothing to name.
-      const on =
-        devices.find((device) => device.id === stream.device)?.description ??
-        "…";
-      return (
-        <li className={rowStyles} key={stream.id}>
-          <span className={headStyles}>
-            <span className={nameStyles}>{name}</span>
-            <Pick
-              label={`${name} ${verb} ${on}`}
-              onPick={() => {
-                choose({
-                  choose: (device) => {
+}: StreamsProps) =>
+  streams.length > 0 && (
+    <section aria-label={label} className={listStyles}>
+      <h3 className={sectionHeadingStyles}>{label}</h3>
+      <ul className={listStyles}>
+        {streams.map((stream) => {
+          const name =
+            stream.title === undefined
+              ? stream.application
+              : `${stream.application}: ${stream.title}`;
+          return (
+            <li className={rowStyles} key={stream.id}>
+              <span className={headStyles}>
+                <span className={nameStyles}>{name}</span>
+                <Choice
+                  label={`${name} ${direction}`}
+                  onChoose={(device) => {
                     domicile.moveAudioStream(stream.id, device);
-                  },
-                  current: stream.device,
-                  options: devices.map((device) => ({
+                  }}
+                  options={devices.map((device) => ({
                     label: device.description,
                     value: device.id,
-                  })),
-                  title: name,
-                });
-              }}
-              shown={on}
-            />
-          </span>
-          <Level
-            direction={direction}
-            label={name}
-            level={stream.volume}
-            meter={levels?.get(stream.id)}
-            muted={stream.muted}
-            onLevel={(level) => {
-              domicile.setAudioVolume(stream.id, level);
-            }}
-            onMuted={(muted) => {
-              domicile.setAudioMuted(stream.id, muted);
-            }}
-          />
-        </li>
-      );
-    })}
-  </ul>
-);
+                  }))}
+                  value={stream.device}
+                />
+              </span>
+              <Level
+                direction={direction}
+                label={name}
+                level={stream.volume}
+                meter={levels?.get(stream.id)}
+                muted={stream.muted}
+                onLevel={(level) => {
+                  domicile.setAudioVolume(stream.id, level);
+                }}
+                onMuted={(muted) => {
+                  domicile.setAudioMuted(stream.id, muted);
+                }}
+              />
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
 
 type CardsProps = {
   cards: readonly AudioCard[];
-  choose: (chooser: Chooser) => void;
   domicile: DomicileClient;
 };
 
-const Cards = ({ cards, choose, domicile }: CardsProps) => (
+const Cards = ({ cards, domicile }: CardsProps) => (
   <ul className={listStyles}>
     {cards.map((card) => (
       <li className={headStyles} key={card.id}>
         <span className={nameStyles}>{card.description}</span>
-        <Pick
-          label={`${card.description} profile: ${described(card.profiles, card.profile)}`}
-          onPick={() => {
-            choose({
-              choose: (profile) => {
-                domicile.setAudioProfile(card.id, profile);
-              },
-              current: card.profile,
-              options: card.profiles.map((profile) =>
-                option(profile, "unavailable"),
-              ),
-              title: `${card.description} profile`,
-            });
+        <Choice
+          label={`${card.description} profile`}
+          onChoose={(profile) => {
+            domicile.setAudioProfile(card.id, profile);
           }}
-          shown={described(card.profiles, card.profile)}
+          options={card.profiles.map((profile) =>
+            option(profile, "unavailable"),
+          )}
+          value={card.profile}
         />
       </li>
     ))}
   </ul>
 );
 
-type PickProps = {
-  /** What the button says to a screen reader: `Speakers port: Headphones`. */
-  label: string;
-  /** What is chosen now. */
-  shown: string;
-  onPick: () => void;
+type PortProps = {
+  device: AudioDevice;
+  domicile: DomicileClient;
 };
 
-/** A row's current choice, which opens the list of the others. */
-const Pick = ({ label, onPick, shown }: PickProps) => (
-  <button
-    aria-label={label}
-    className={pickStyles}
-    onClick={onPick}
-    type="button"
-  >
-    <span className={pickTextStyles}>{shown}</span>
-    <CaretRightIcon size={10} />
-  </button>
+/** A device's port, where it has more than one to choose. */
+const Port = ({ device, domicile }: PortProps) =>
+  device.ports.length > 1 && (
+    <Choice
+      label={`${device.description} port`}
+      onChoose={(port) => {
+        domicile.setAudioPort(device.id, port);
+      }}
+      options={device.ports.map((port) => option(port, "unplugged"))}
+      value={device.port}
+    />
+  );
+
+type ChoiceProps = {
+  label: string;
+  options: readonly SelectOption<string>[];
+  /** What is chosen now, as the server last said. */
+  value: string | undefined;
+  /** Ask for another; what is chosen changes when the server says so. */
+  onChoose: (value: string) => void;
+};
+
+/** A row's choice: a small `Select` at its end. */
+const Choice = ({ label, onChoose, options, value }: ChoiceProps) => (
+  <span className={choiceStyles}>
+    <Select
+      aria-label={label}
+      onValueChange={(chosen) => {
+        if (chosen !== null && chosen !== value) {
+          onChoose(chosen);
+        }
+      }}
+      options={options}
+      placeholder="…"
+      rounded
+      size="xs"
+      value={value ?? null}
+    />
+  </span>
 );
 
-/** A chooser as the detail the mixer slides in. */
-const choices = (chooser: Chooser): DrilldownDetail => ({
-  content: (
-    <ul className={listStyles}>
-      {chooser.options.map((choice) => (
-        <li key={choice.value}>
-          <button
-            aria-pressed={choice.value === chooser.current}
-            className={choiceStyles({
-              current: choice.value === chooser.current,
-            })}
-            onClick={() => {
-              chooser.choose(choice.value);
-            }}
-            type="button"
-          >
-            <span className={nameStyles}>{choice.label}</span>
-            {choice.value === chooser.current && <CheckIcon size={12} />}
-          </button>
-        </li>
-      ))}
-    </ul>
-  ),
-  title: chooser.title,
-});
-
 /** A port or a profile as an option, saying so when it cannot be used now. */
-const option = (choice: AudioChoice, unusable: string) => ({
+const option = (
+  choice: AudioChoice,
+  unusable: string,
+): SelectOption<string> => ({
   label: choice.available
     ? choice.description
     : `${choice.description} (${unusable})`,
   value: choice.name,
 });
 
-/** The description of the choice named `name`, or a dash for none. */
-const described = (choices: readonly AudioChoice[], name: string | undefined) =>
-  choices.find((choice) => choice.name === name)?.description ?? "—";
-
-/** `ids` once each, in the order first given. */
-const unique = (ids: readonly string[]) => [...new Set(ids)];
-
 const mainStyles = flex({
   direction: "column",
-  gap: 2,
+  gap: 3,
   inlineSize: 72,
-});
-
-const defaultStyles = flex({
-  direction: "column",
-  gap: 0.5,
-});
-
-// Ten pixels, the bar's own size, as the figures beside the sliders are.
-const captionStyles = css({
-  fontSize: "0.625rem",
-  opacity: 0.75,
-  overflow: "hidden",
-  paddingInlineStart: 8,
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
 });
 
 const listStyles = flex({
@@ -512,8 +461,6 @@ const listStyles = flex({
   gap: 2,
   listStyle: "none",
   margin: 0,
-  maxBlockSize: "50vh",
-  overflowY: "auto",
   padding: 0,
 });
 
@@ -524,6 +471,23 @@ const rowStyles = flex({
 
 const headStyles = hstack({
   gap: 1.5,
+  minBlockSize: 6,
+});
+
+const levelRowStyles = hstack({
+  gap: 1,
+});
+
+// Ten pixels, the bar's own size, as the figures beside the sliders are.
+const captionStyles = css({
+  flexGrow: 1,
+  fontSize: "0.625rem",
+  minInlineSize: 0,
+  opacity: 0.75,
+  overflow: "hidden",
+  paddingInlineStart: 8,
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
 });
 
 const nameStyles = css({
@@ -534,12 +498,25 @@ const nameStyles = css({
   whiteSpace: "nowrap",
 });
 
+const sectionHeadingStyles = css({
+  fontSize: "0.625rem",
+  fontWeight: "medium",
+  letterSpacing: "wide",
+  margin: 0,
+  marginBlockStart: 2,
+  opacity: 0.75,
+  textTransform: "uppercase",
+});
+
+const choiceStyles = css({
+  flexShrink: 1,
+  maxInlineSize: 36,
+  minInlineSize: 0,
+});
+
 // The bar's own button, in `currentcolor` — see `Level`.
 const iconButtonStyles = css({
-  _disabled: {
-    cursor: "default",
-  },
-  _hoverEnabled: {
+  _hover: {
     backgroundColor: "color-mix(in oklab, currentcolor 16%, transparent)",
   },
   alignItems: "center",
@@ -556,53 +533,20 @@ const iconButtonStyles = css({
   padding: 0,
 });
 
-const pickStyles = hstack({
+const cardsButtonStyles = hstack({
   _hover: {
-    backgroundColor: "color-mix(in oklab, currentcolor 16%, transparent)",
+    backgroundColor: "color-mix(in oklab, currentcolor 12%, transparent)",
   },
-  backgroundColor: "color-mix(in oklab, currentcolor 8%, transparent)",
+  alignSelf: "flex-end",
+  backgroundColor: "transparent",
   borderRadius: "full",
   borderStyle: "none",
   color: "inherit",
   cursor: "pointer",
-  flexShrink: 0,
   font: "inherit",
+  fontSize: "0.625rem",
   gap: 1,
-  maxInlineSize: 32,
+  opacity: 0.75,
   paddingBlock: 0.5,
   paddingInline: 2,
-});
-
-const pickTextStyles = css({
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
-});
-
-const choiceStyles = cva({
-  base: hstack.raw({
-    _hover: {
-      backgroundColor: "color-mix(in oklab, currentcolor 12%, transparent)",
-    },
-    backgroundColor: "transparent",
-    borderRadius: "md",
-    borderStyle: "none",
-    color: "inherit",
-    cursor: "pointer",
-    font: "inherit",
-    gap: 2,
-    inlineSize: "100%",
-    paddingBlock: 1.5,
-    paddingInline: 2,
-    textAlign: "start",
-  }),
-  variants: {
-    current: {
-      false: {},
-      true: {
-        backgroundColor: "color-mix(in oklab, currentcolor 8%, transparent)",
-        fontWeight: "medium",
-      },
-    },
-  },
 });

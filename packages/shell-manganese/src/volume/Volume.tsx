@@ -32,10 +32,9 @@ type Props = {
  * is, which opens the whole mixer in a panel hung off the bar — and which the
  * wheel turns without opening anything.
  *
- * The panel is {@link Mixer}: the default output and microphone first, with
- * their meters, and everything else a section below them. It is metered only
- * while it is open — the meters stop when it shuts, because metering a
- * microphone records it.
+ * The panel is {@link Mixer}: the default output and microphone, with their
+ * meters, and the rest a slide away. It is metered only while it is open —
+ * the meters stop when it shuts, because metering a microphone records it.
  *
  * Nothing is drawn until the host has said the sound, which on a desk with no
  * sound server is never.
