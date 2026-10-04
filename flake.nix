@@ -433,7 +433,6 @@
         # The same program as the handler for web links, so `xdg-open` and
         # anything asking which browser is the default open a browser window of
         # the desktop it was run in. Hidden: it is not something to launch.
-        # `programs.domicile.defaultBrowser` is what makes it the default.
         mkdir -p "$out/share/applications"
         cat >"$out/share/applications/domicile-open-url.desktop" <<DESKTOP
         [Desktop Entry]
@@ -444,6 +443,18 @@
         MimeType=text/html;x-scheme-handler/http;x-scheme-handler/https;
         NoDisplay=true
         DESKTOP
+        # And the file that makes it the default, read by GIO and
+        # `xdg-open`'s own lookup only where `XDG_CURRENT_DESKTOP` is
+        # `domicile`. `domicile` puts this `share` in front of every app's
+        # `XDG_DATA_DIRS`, so a desk needs nothing in the home for it; another
+        # session on the same machine never reads it. A browser the user named
+        # in a `mimeapps.list` of their own outranks it, as the spec says.
+        cat >"$out/share/applications/domicile-mimeapps.list" <<MIMEAPPS
+        [Default Applications]
+        text/html=domicile-open-url.desktop
+        x-scheme-handler/http=domicile-open-url.desktop
+        x-scheme-handler/https=domicile-open-url.desktop
+        MIMEAPPS
         ln -s ${domicileEngine} "$out/libexec/domicile/engine"
         cp ${domicileBuilder} "$out/libexec/domicile/builder"
         mkdir -p "$out/libexec/domicile/shells"
@@ -853,7 +864,8 @@
       #
       # `evalModules` WITH A STUB RATHER THAN home-manager AS AN INPUT. The
       # module sets only a few things outside its own namespace --
-      # `home.packages`, `xdg.configFile` and two lists of `xdg.portal` -- so
+      # `home.packages`, `xdg.configFile`, two lists of `xdg.portal`, and the
+      # `assertions` and `warnings` a removed option speaks through -- so
       # declaring those is the whole of what it takes to evaluate it.
       # `xdg.mimeApps` is left out on purpose: the module setting it is an
       # evaluation error here. Taking home-manager as a flake input to check
@@ -874,6 +886,16 @@
                     options.source = pkgs.lib.mkOption { type = pkgs.lib.types.path; };
                   });
                   default = { };
+                };
+                # Where a removed option says what replaced it, as
+                # home-manager's own module system does.
+                assertions = lib.mkOption {
+                  type = lib.types.listOf lib.types.unspecified;
+                  default = [ ];
+                };
+                warnings = lib.mkOption {
+                  type = lib.types.listOf lib.types.str;
+                  default = [ ];
                 };
                 xdg.portal.extraPortals = lib.mkOption {
                   type = lib.types.listOf lib.types.package;
@@ -1021,22 +1043,26 @@
             # And the verb that takes an address, for the same reason.
             saw "open-url https://example.com" open-url https://example.com
 
-            # THE DEFAULT BROWSER, which is what keeps other programs from asking
-            # to be it: every web link is `domicile-open-url`'s -- in a desk only.
-            # The file is `domicile-mimeapps.list`, which `xdg-open`, GIO and the
-            # portal read only where `XDG_CURRENT_DESKTOP` is `domicile`; outside
-            # one `domicile-open-url` has no desktop to ask, so the plain
-            # `mimeapps.list` is not this module's to write.
-            cp ${evaluated.config.xdg.configFile."domicile-mimeapps.list".source} mimeapps.list
+            # THE DEFAULT BROWSER IS THE DESK'S, NOT THE HOME'S: inside a desk a
+            # web link is `domicile-open-url`'s unless the user names a browser,
+            # and the file that says so
+            # ships with Domicile -- `domicile` puts its `share` in front of
+            # every app's `XDG_DATA_DIRS` -- so the module writes none. A home
+            # needing a file for links to open in the desk was a trap.
+            [ ${pkgs.lib.boolToString (evaluated.config.xdg.configFile ? "domicile-mimeapps.list")} = false ] || {
+              echo "the module still writes domicile-mimeapps.list into the home" >&2
+              exit 1
+            }
+            mimeapps=${domicilePackage}/share/applications/domicile-mimeapps.list
             for line in \
               '[Default Applications]' \
               'text/html=domicile-open-url.desktop' \
               'x-scheme-handler/http=domicile-open-url.desktop' \
               'x-scheme-handler/https=domicile-open-url.desktop'
             do
-              grep -qxF "$line" mimeapps.list || {
-                echo "domicile-mimeapps.list is missing: $line" >&2
-                cat mimeapps.list >&2
+              grep -qxF "$line" "$mimeapps" || {
+                echo "domicile's own domicile-mimeapps.list is missing: $line" >&2
+                cat "$mimeapps" >&2
                 exit 1
               }
             done

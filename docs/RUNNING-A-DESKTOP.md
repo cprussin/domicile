@@ -56,7 +56,13 @@ On NixOS that is `programs.domicile.settings.startup.commands`.
 A link an app opens opens in the desk: every app it starts has `BROWSER` set
 to `domicile-open-url`, which hands the address to the shell as a browser
 window, and `xdg-open` first on its `PATH` sends web links the same way (and
-anything else to your own `xdg-open`). `domicile open-url <url>` does the same from a terminal inside it.
+anything else to your own `xdg-open`). What runs neither — GTK through GIO —
+reads `domicile-mimeapps.list`, which Domicile ships and puts first on every
+app's `XDG_DATA_DIRS`: nothing to write into your home. A browser you named
+yourself in a `mimeapps.list` is respected there; with none named, the desk is
+the default. Links a sandboxed app (Flatpak) opens through the portal do not reach
+the desk yet; see [/ROADMAP.md](/ROADMAP.md). `domicile open-url <url>` does the same from
+a terminal inside it.
 
 ## Your session's keys, in a window
 
@@ -258,13 +264,6 @@ baked into `domicile` so it is not typed twice:
   };
 }
 ```
-
-It also makes `domicile-open-url` the default browser inside a desk — the
-handler for web links in `~/.config/domicile-mimeapps.list`, which is read only
-where `XDG_CURRENT_DESKTOP` is `domicile` — so `xdg-open` opens links in the
-desk and programs stop asking to be the default, while another session on the
-same home keeps the browser `mimeapps.list` names.
-`programs.domicile.defaultBrowser = false` writes no such file.
 
 It writes the config and installs no session — booting into a desk is a
 machine's decision, not a home directory's. For the same reason it declares no

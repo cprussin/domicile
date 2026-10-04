@@ -289,6 +289,16 @@ pub fn engine(
 /// for the same reason: `BROWSER` is read by some programs and `xdg-open` run
 /// by more. Prepended, so everything else is still found.
 ///
+/// `XDG_DATA_DIRS` starts with `data`, this installation's `share`, for the
+/// programs that run neither: GIO reads `domicile-mimeapps.list` out of the
+/// data directories wherever `XDG_CURRENT_DESKTOP` is `domicile`, and that
+/// file -- with the `domicile-open-url` entry it names -- is in `data`. So a
+/// desk opens links in itself with nothing written into anybody's home, unless
+/// the user named a browser of their own in a `mimeapps.list`: the spec reads
+/// config directories first, and an explicit choice is theirs to keep. The
+/// portal runs outside the desk and does not see this variable; see
+/// `ROADMAP.md`.
+///
 /// `LD_LIBRARY_PATH` carries the engine's own directory because that is where
 /// `libdomicile_engine.so` is: the compositor `dlopen`s it rather than linking
 /// it, so that `cargo build` does not need a Chromium checkout. Prepended
@@ -300,6 +310,7 @@ pub fn compositor(
     compositor: &Path,
     engine: &Path,
     browser: &Path,
+    data: &Path,
     runtime: &Runtime,
     config: Option<&Path>,
     inherited: &dyn Fn(&str) -> Option<String>,
@@ -309,6 +320,15 @@ pub fn compositor(
         path.push(":");
         path.push(theirs);
     }
+    // Unset is `/usr/local/share:/usr/share` to everything that reads it, so
+    // those stay behind this desktop's when nothing was inherited.
+    let mut data_dirs = OsString::from(data);
+    data_dirs.push(":");
+    data_dirs.push(
+        inherited("XDG_DATA_DIRS")
+            .filter(|theirs| !theirs.is_empty())
+            .unwrap_or_else(|| "/usr/local/share:/usr/share".to_string()),
+    );
     let mut libraries = OsString::from(engine);
     if let Some(theirs) = inherited("LD_LIBRARY_PATH") {
         libraries.push(":");
@@ -336,6 +356,7 @@ pub fn compositor(
             (VARIABLE.to_string(), runtime.control.clone().into()),
             ("BROWSER".to_string(), browser.into()),
             ("PATH".to_string(), path),
+            ("XDG_DATA_DIRS".to_string(), data_dirs),
             ("LD_LIBRARY_PATH".to_string(), libraries),
             (
                 "RUST_LOG".to_string(),
