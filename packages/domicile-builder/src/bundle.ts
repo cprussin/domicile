@@ -1,6 +1,6 @@
 // One shell module out of a user's entry, built against Domicile's install.
 
-import { writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { shellBuild } from "@domicile-desktop/component-library/vite-shell";
@@ -67,7 +67,8 @@ export const bundle = async (
  * Written rather than passed, because Panda's PostCSS plugin takes a config's
  * path and nothing else; beside the build rather than in a temporary
  * directory, because the plugin keeps the config it loaded for the life of
- * the process and reads it again on the next build.
+ * the process and reads it again on the next build. Its directory is made
+ * here, because nothing has made it yet in a fresh cache.
  */
 const scanning = (
   config: string,
@@ -75,6 +76,7 @@ const scanning = (
   files: readonly string[],
 ): string => {
   const theirs = JSON.stringify(path.join(manganese, "panda.config.ts"));
+  mkdirSync(path.dirname(config), { recursive: true });
   writeFileSync(
     config,
     `import config from ${theirs};
