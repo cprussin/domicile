@@ -27,6 +27,25 @@ class Host implements DomicileHost {
   brightness: number | null = null;
   readonly windows: readonly DomicileWindow[] = [];
   readonly focusedWindow: string | null = null;
+  readonly altKey = null;
+  readonly audioCards = null;
+  readonly audioInputs = null;
+  readonly audioOutputs = null;
+  readonly audioPlayback = null;
+  readonly audioRecording = null;
+  readonly batteryCharge = null;
+  readonly batteryCharging = null;
+  readonly clipboard = null;
+  readonly ctrlKey = null;
+  readonly extensions = null;
+  readonly idle = null;
+  readonly locked = null;
+  readonly metaKey = null;
+  readonly notifications = null;
+  readonly shiftKey = null;
+  readonly theme = null;
+  readonly tray = null;
+  readonly windowsTheme = null;
 
   readonly #listeners = new Map<string, (event: never) => void>();
 

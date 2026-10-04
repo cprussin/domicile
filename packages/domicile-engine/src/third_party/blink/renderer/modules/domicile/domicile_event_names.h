@@ -53,7 +53,18 @@
   X(audiolevels, Audiolevels)             \
   X(openurl, Openurl)                     \
   X(windowschanged, Windowschanged)       \
-  X(focusedwindowchanged, Focusedwindowchanged)
+  X(focusedwindowchanged, Focusedwindowchanged) \
+  X(clipboardchanged, Clipboardchanged)  \
+  X(traychanged, Traychanged)  \
+  X(notificationschanged, Notificationschanged)  \
+  X(extensionschanged, Extensionschanged)  \
+  X(audiochanged, Audiochanged)  \
+  X(batterychanged, Batterychanged)  \
+  X(idlechanged, Idlechanged)  \
+  X(lockedchanged, Lockedchanged)  \
+  X(themechanged, Themechanged)  \
+  X(windowsthemechanged, Windowsthemechanged)  \
+  X(modifierschanged, Modifierschanged)
 
 namespace blink::domicile_event_names {
 
