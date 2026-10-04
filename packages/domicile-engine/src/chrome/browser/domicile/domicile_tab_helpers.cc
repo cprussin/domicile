@@ -3,9 +3,11 @@
 
 #include "chrome/browser/domicile/domicile_tab_helpers.h"
 
+#include "base/check.h"
 #include "chrome/browser/domicile/domicile_desk.h"
 #include "chrome/browser/extensions/tab_helper.h"
 #include "chrome/browser/sessions/session_tab_helper_factory.h"
+#include "components/domicile/browser/web_view_guest.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/view_type_utils.h"
 #include "extensions/common/mojom/view_type.mojom.h"
@@ -13,6 +15,18 @@
 namespace domicile {
 
 void AttachTabHelpers(content::WebContents& guest) {
+  // AN EXTENSION'S ACTION POPUP IS NO TAB, as Chrome's toolbar bubble is none:
+  // the popup view type, and nothing else here. With no SessionTabHelper it
+  // has no tab id, so tabs.getCurrent() answers nothing; and in no window, so
+  // it never becomes the active tab whose page the popup is about.
+  WebViewGuest* web_view = WebViewGuest::FromWebContents(&guest);
+  CHECK(web_view);
+  if (web_view->extension_popup()) {
+    extensions::SetViewType(&guest,
+                            extensions::mojom::ViewType::kExtensionPopup);
+    return;
+  }
+
   // Chrome's own factory rather than SessionTabHelper::CreateForWebContents,
   // because the factory is also what tells the ExtensionWebContentsObserver to
   // follow the tab's window id. It hands the helper the profile's

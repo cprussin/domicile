@@ -110,10 +110,20 @@ interface WebViewGuestHost {
   // every other <webview>. An id that names no popup window waiting for its
   // tab is a guest the desk takes as its own; see
   // //chrome/browser/domicile/domicile_desk.h.
+  //
+  // `extension_popup` IS THE ELEMENT'S `extensionpopup` ATTRIBUTE: the
+  // <webview> is an extension's action popup, which a shell opens from its
+  // tray. Its guest is then that popup, as Chrome's toolbar bubble is, and no
+  // tab: it has the popup view type, no tab id, and is in no window, so
+  // `tabs.getCurrent()` answers nothing and `extension.getViews({type:
+  // "popup"})` finds it. An extension that lays itself out differently in a
+  // tab -- Bitwarden's, which sizes its body only in a popup -- sees what it
+  // sees in Chrome. See //chrome/browser/domicile/domicile_tab_helpers.h.
   CreateGuest(blink.mojom.LocalFrameToken placeholder_frame,
               pending_receiver<WebViewGuest> guest,
               pending_remote<WebViewGuestClient> client,
-              int32? popup_window);
+              int32? popup_window,
+              bool extension_popup);
 };
 
 // The leg back: what the browser tells a <webview> about the guest behind it.
