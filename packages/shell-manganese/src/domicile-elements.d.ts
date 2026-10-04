@@ -20,10 +20,13 @@ import type { DetailedHTMLProps, HTMLAttributes } from "react";
 // whatever React resolved — the trap `<webview>` fell into.
 
 declare module "react" {
-  // And the one attribute of `<webview>`'s React's Electron-era entry lacks:
+  // And the two attributes of `<webview>`'s React's Electron-era entry lacks:
   // `popupwindow`, which makes a view the extension's window it names — see
-  // `WEBVIEW_POPUP_WINDOW_EVENT`. A string because an attribute is one.
+  // `WEBVIEW_POPUP_WINDOW_EVENT` — and `extensionpopup`, which makes it an
+  // extension's action popup rather than a tab. Strings because attributes
+  // are; `extensionpopup`'s presence is the whole of it.
   interface WebViewHTMLAttributes<T> extends HTMLAttributes<T> {
+    extensionpopup?: string | undefined;
     popupwindow?: string | undefined;
   }
 
