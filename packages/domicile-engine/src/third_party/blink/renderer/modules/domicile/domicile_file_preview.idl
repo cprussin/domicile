@@ -1,0 +1,16 @@
+// Copyright 2026 Connor Prussin
+// SPDX-License-Identifier: MIT
+
+// What `DomicileHost.previewFile()` resolves with. See
+// DomicileFilePreviewEvent for what each member means; this is the same answer
+// without the event.
+dictionary DomicileFilePreview {
+  DOMString kind = "";
+  DOMString text = "";
+  sequence<DOMString> entries = [];
+  DOMString title = "";
+  DOMString artist = "";
+  DOMString album = "";
+  double duration = 0;
+  DOMString cover = "";
+};

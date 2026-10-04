@@ -12,6 +12,8 @@ import { hostTheme } from "./host-theme";
 
 /** What every call *out* to the compositor does here, unless it is recorded. */
 const ignored = (): undefined => undefined;
+/** An ask nobody answers. */
+const unanswered = (): Promise<never> => new Promise(() => undefined);
 
 /**
  * A compositor that states a theme and remembers being asked for one.
@@ -93,10 +95,10 @@ class Host implements DomicileHost {
   readonly pointerButton = ignored;
   readonly pointerLeave = ignored;
   readonly pointerMotion = ignored;
-  readonly previewFile = ignored;
+  readonly previewFile = unanswered;
   readonly moveAudioStream = ignored;
-  readonly searchFiles = ignored;
-  readonly searchApps = ignored;
+  readonly searchFiles = unanswered;
+  readonly searchApps = unanswered;
   readonly setAudioMuted = ignored;
   readonly setAudioPort = ignored;
   readonly setAudioProfile = ignored;
