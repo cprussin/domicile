@@ -22,6 +22,8 @@
 #include "base/supports_user_data.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
+#include "base/time/time.h"
+#include "components/domicile/browser/context_menu.h"
 #include "components/domicile/browser/file_choice.h"
 #include "components/domicile/browser/shortcut_registry.h"
 #include "components/domicile/browser/web_view_url.h"
@@ -37,17 +39,26 @@
 #include "content/public/browser/reload_type.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
+#include "content/public/browser/render_widget_host_view.h"
+#include "content/public/common/referrer.h"
 #include "content/public/common/stop_find_action.h"
 #include "content/public/common/url_constants.h"
 #include "mojo/public/cpp/bindings/callback_helpers.h"
 #include "mojo/public/cpp/bindings/message.h"
+#include "net/http/http_request_headers.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
+#include "third_party/blink/public/common/loader/network_utils.h"
 #include "third_party/blink/public/common/page/page_zoom.h"
 #include "third_party/blink/public/mojom/choosers/file_chooser.mojom.h"
+#include "third_party/blink/public/mojom/context_menu/context_menu.mojom.h"
 #include "third_party/blink/public/mojom/favicon/favicon_url.mojom.h"
 #include "third_party/blink/public/mojom/frame/find_in_page.mojom.h"
+#include "ui/base/clipboard/clipboard_buffer.h"
+#include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/base/window_open_disposition.h"
+#include "ui/gfx/geometry/point_conversions.h"
+#include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/events/keycodes/dom/dom_key.h"
@@ -80,10 +91,12 @@ class WebViewGuestHost final
  public:
   WebViewGuestHost(content::RenderFrameHost& frame,
                    mojo::PendingReceiver<mojom::WebViewGuestHost> receiver,
-                   GuestCreatedCallback created)
+                   GuestCreatedCallback created,
+                   InspectCallback inspect)
       : DocumentService(frame, std::move(receiver)),
         WebContentsObserver(content::WebContents::FromRenderFrameHost(&frame)),
-        created_(std::move(created)) {}
+        created_(std::move(created)),
+        inspect_(std::move(inspect)) {}
 
  private:
   // A CreateGuest whose placeholder the browser has not seen yet.
@@ -140,7 +153,8 @@ class WebViewGuestHost final
 
     WebViewGuest::CreateAndAttach(render_frame_host(), *placeholder,
                                   std::move(guest), std::move(client),
-                                  popup_window, extension_popup, created_);
+                                  popup_window, extension_popup, created_,
+                                  inspect_);
   }
 
   // content::WebContentsObserver:
@@ -189,7 +203,7 @@ class WebViewGuestHost final
     WebViewGuest::CreateAndAttach(
         render_frame_host(), *placeholder, std::move(request.guest),
         std::move(request.client), request.popup_window,
-        request.extension_popup, created_);
+        request.extension_popup, created_, inspect_);
   }
 
   // The frame `placeholder_frame` names, or null if the browser has none.
@@ -211,6 +225,7 @@ class WebViewGuestHost final
 
   // The embedder's helpers, for every guest this document makes.
   const GuestCreatedCallback created_;
+  const InspectCallback inspect_;
 
   base::WeakPtrFactory<WebViewGuestHost> weak_factory_{this};
 };
@@ -241,6 +256,11 @@ mojom::WebViewSecurity AsWebViewSecurity(security_state::SecurityLevel level) {
       NOTREACHED();
   }
 }
+
+// How long an edit from a context menu waits for the page to get the focus
+// back: 25 tries 20 ms apart. See WebViewGuest::EditWhenFocused.
+constexpr int kEditTries = 25;
+constexpr base::TimeDelta kEditRetry = base::Milliseconds(20);
 
 // What a guest's WebContents carries it under, so that FromWebContents can find
 // it from a WebContents and nothing else.
@@ -410,10 +430,11 @@ void WebViewGuest::CreateAndAttach(
     mojo::PendingRemote<mojom::WebViewGuestClient> client,
     std::optional<int> popup_window,
     bool extension_popup,
-    const GuestCreatedCallback& created) {
-  std::unique_ptr<WebViewGuest> guest = base::WrapUnique(
-      new WebViewGuest(owner, std::move(receiver), std::move(client),
-                       popup_window, extension_popup));
+    const GuestCreatedCallback& created,
+    InspectCallback inspect) {
+  std::unique_ptr<WebViewGuest> guest = base::WrapUnique(new WebViewGuest(
+      owner, std::move(receiver), std::move(client), popup_window,
+      extension_popup, std::move(inspect)));
 
   // `guest_delegate` is what makes the new WebContents a guest, and content
   // asks it for its owner while constructing -- which is why the delegate is
@@ -506,10 +527,12 @@ WebViewGuest::WebViewGuest(
     mojo::PendingReceiver<mojom::WebViewGuest> receiver,
     mojo::PendingRemote<mojom::WebViewGuestClient> client,
     std::optional<int> popup_window,
-    bool extension_popup)
+    bool extension_popup,
+    InspectCallback inspect)
     : owner_rfh_id_(owner.GetGlobalId()),
       popup_window_(popup_window),
       extension_popup_(extension_popup),
+      inspect_(std::move(inspect)),
       receiver_(this, std::move(receiver)),
       client_(std::move(client)) {}
 
@@ -834,7 +857,167 @@ void WebViewGuest::ContentsZoomChange(bool zoom_in) {
 bool WebViewGuest::HandleContextMenu(
     content::RenderFrameHost& render_frame_host,
     const content::ContextMenuParams& params) {
+  CHECK(guest_contents_);
+  // The guest's main frame view is the element's box. It exists: a frame of
+  // this page just asked for a menu.
+  content::RenderWidgetHostView* page =
+      guest_contents_->GetPrimaryMainFrame()->GetView();
+  CHECK(page);
+  const gfx::Point in_page =
+      gfx::ToRoundedPoint(page->TransformRootPointToViewCoordSpace(
+          gfx::PointF(params.x, params.y)));
+
+  context_menu_id_ += 1;
+  context_menu_frame_ = render_frame_host.GetGlobalId();
+  context_menu_params_ = params;
+
+  // The line the context menu guard greps for.
+  LOG(INFO) << "domicile: a <webview>'s page asked for a context menu; "
+               "asking the shell to draw it.";
+  client_->ContextMenuRequested(
+      AsWebViewContextMenu(context_menu_id_, params, in_page));
   return true;
+}
+
+void WebViewGuest::RunContextMenuAction(
+    int32_t menu,
+    mojom::WebViewContextMenuAction action) {
+  CHECK(guest_contents_);
+
+  // The element refuses ids it was never sent, so this one is not from it.
+  if (menu <= 0 || menu > context_menu_id_) {
+    receiver_.ReportBadMessage(
+        "domicile: a <webview> answered a context menu it was never sent.");
+    return;
+  }
+  // A race: the shell acted on a menu while a newer one was on its way.
+  if (menu != context_menu_id_) {
+    LOG(INFO) << "domicile: a <webview>'s context menu was replaced before "
+                 "the shell acted on it; dropping the action.";
+    return;
+  }
+  const content::ContextMenuParams& params = *context_menu_params_;
+  if (!Offers(params, action)) {
+    receiver_.ReportBadMessage(
+        "domicile: a <webview> asked a context menu for an action it does not "
+        "offer.");
+    return;
+  }
+  // The frame navigated away after the menu was drawn.
+  content::RenderFrameHost* frame =
+      content::RenderFrameHost::FromID(context_menu_frame_);
+  if (frame == nullptr) {
+    LOG(INFO) << "domicile: the page a <webview>'s context menu was for is "
+                 "gone; dropping the action.";
+    return;
+  }
+
+  LOG(INFO) << "domicile: a <webview>'s context menu ran action "
+            << static_cast<int>(action) << ".";
+  switch (action) {
+    case mojom::WebViewContextMenuAction::kUndo:
+      EditWhenFocused(&content::WebContents::Undo, kEditTries);
+      return;
+    case mojom::WebViewContextMenuAction::kRedo:
+      EditWhenFocused(&content::WebContents::Redo, kEditTries);
+      return;
+    case mojom::WebViewContextMenuAction::kCut:
+      EditWhenFocused(&content::WebContents::Cut, kEditTries);
+      return;
+    case mojom::WebViewContextMenuAction::kCopy:
+      EditWhenFocused(&content::WebContents::Copy, kEditTries);
+      return;
+    case mojom::WebViewContextMenuAction::kPaste:
+      EditWhenFocused(&content::WebContents::Paste, kEditTries);
+      return;
+    case mojom::WebViewContextMenuAction::kPasteAndMatchStyle:
+      EditWhenFocused(&content::WebContents::PasteAndMatchStyle, kEditTries);
+      return;
+    case mojom::WebViewContextMenuAction::kDelete:
+      EditWhenFocused(&content::WebContents::Delete, kEditTries);
+      return;
+    case mojom::WebViewContextMenuAction::kSelectAll:
+      EditWhenFocused(&content::WebContents::SelectAll, kEditTries);
+      return;
+    // Unfiltered, as Chrome copies it.
+    case mojom::WebViewContextMenuAction::kCopyLinkAddress:
+      CopyAddress(params.unfiltered_link_url);
+      return;
+    case mojom::WebViewContextMenuAction::kSaveLinkAs:
+      SaveFrom(*frame, params.link_url, params, /*is_subresource=*/true);
+      return;
+    // The frame maps the menu's root point back to its own coordinates. See
+    // RenderFrameHostImpl::TransformRootPointForContextMenuAction.
+    case mojom::WebViewContextMenuAction::kCopyImage:
+      frame->CopyImageAt(params.x, params.y);
+      return;
+    case mojom::WebViewContextMenuAction::kCopyMediaAddress:
+      CopyAddress(params.src_url);
+      return;
+    // As Chrome's ExecSaveAs: the renderer saves a canvas, or an image whose
+    // address was too large to send. Anything else is downloaded again.
+    case mojom::WebViewContextMenuAction::kSaveMediaAs:
+      if (params.media_type == blink::mojom::ContextMenuDataMediaType::kCanvas ||
+          !params.src_url.is_valid()) {
+        frame->SaveImageAt(params.x, params.y);
+      } else {
+        SaveFrom(*frame, params.src_url, params,
+                 /*is_subresource=*/!params.is_image_media_plugin_document);
+      }
+      return;
+    case mojom::WebViewContextMenuAction::kInspect:
+      inspect_.Run(*frame, gfx::Point(params.x, params.y));
+      return;
+  }
+}
+
+void WebViewGuest::EditWhenFocused(EditCommand command, int tries) {
+  CHECK(guest_contents_);
+  // Null while the focused frame tree is not this guest's. An edit sent then
+  // would go to the shell.
+  if (guest_contents_->GetFocusedFrame() != nullptr) {
+    (guest_contents_.get()->*command)();
+    return;
+  }
+  if (tries == 0) {
+    LOG(WARNING) << "domicile: a <webview>'s page never took the focus back "
+                    "for an edit from its context menu; the edit is dropped.";
+    return;
+  }
+  base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
+      FROM_HERE,
+      base::BindOnce(&WebViewGuest::EditWhenFocused,
+                     weak_factory_.GetWeakPtr(), command, tries - 1),
+      kEditRetry);
+}
+
+void WebViewGuest::Inspect() {
+  CHECK(guest_contents_);
+  inspect_.Run(*guest_contents_->GetPrimaryMainFrame(), std::nullopt);
+}
+
+void WebViewGuest::CopyAddress(const GURL& url) {
+  ui::ScopedClipboardWriter writer(ui::ClipboardBuffer::kCopyPaste);
+  writer.WriteText(base::UTF8ToUTF16(url.spec()));
+}
+
+void WebViewGuest::SaveFrom(content::RenderFrameHost& frame,
+                            const GURL& url,
+                            const content::ContextMenuParams& params,
+                            bool is_subresource) {
+  // Chrome's referrer and Accept header for the same save, for sites that
+  // check them.
+  net::HttpRequestHeaders headers;
+  if (params.media_type == blink::mojom::ContextMenuDataMediaType::kImage) {
+    headers.SetHeaderIfMissing(net::HttpRequestHeaders::kAccept,
+                               blink::network_utils::ImageAcceptHeader());
+  }
+  guest_contents_->SaveFrameWithHeaders(
+      url,
+      content::Referrer::SanitizeForRequest(
+          url, content::Referrer(params.frame_url.GetAsReferrer(),
+                                 params.referrer_policy)),
+      headers.ToString(), params.suggested_filename, &frame, is_subresource);
 }
 
 void WebViewGuest::RunFileChooser(
@@ -1320,10 +1503,12 @@ void WebViewGuest::WebContentsDestroyed() {
 void BindWebViewGuestHost(
     content::RenderFrameHost* frame,
     mojo::PendingReceiver<mojom::WebViewGuestHost> receiver,
-    GuestCreatedCallback created) {
+    GuestCreatedCallback created,
+    InspectCallback inspect) {
   // Owns itself and goes with the document. `new` with no matching delete is
   // what DocumentService is.
-  new WebViewGuestHost(*frame, std::move(receiver), std::move(created));
+  new WebViewGuestHost(*frame, std::move(receiver), std::move(created),
+                       std::move(inspect));
 }
 
 }  // namespace domicile

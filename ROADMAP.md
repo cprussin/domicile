@@ -256,6 +256,10 @@ Understood and not scheduled.
 - **Clients that pre-rotate their buffer render wrong.** Clients may
   pre-rotate their buffer to match `wl_output.transform`, but nothing reads
   `wl_surface.set_buffer_transform`. The fix is in the dmabuf submit path.
+- **Browser window context menus have Chrome's core items only.** No
+  spelling suggestions and no items a page or extension adds. DevTools' own
+  menus get the page menu. Each needs a field on `WebViewContextMenu` in
+  `web_view_guest.mojom`.
 - **Client-drawn cursor surfaces show a plain arrow.**
 - **Perspective transforms on a window are reported, not corrected.**
   `defaultMeasure` uses the flattened 2D part of the transform and logs that

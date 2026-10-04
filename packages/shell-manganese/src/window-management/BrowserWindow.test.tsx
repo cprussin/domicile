@@ -4,6 +4,7 @@ import { focusApp } from "@domicile-desktop/sdk/focus-app";
 import { registerElements } from "@domicile-desktop/sdk/register-elements";
 import {
   WEBVIEW_CLOSE_EVENT,
+  WEBVIEW_CONTEXT_MENU_EVENT,
   WEBVIEW_FILE_CHOOSER_EVENT,
   WEBVIEW_FIND_CHANGE_EVENT,
   WEBVIEW_FOCUS_REQUEST_EVENT,
@@ -223,6 +224,43 @@ const finds = (
 /** The find bar's input. */
 const findBox = (): HTMLElement =>
   screen.getByRole("searchbox", { name: "Find in page" });
+
+/**
+ * Fires the engine's context menu event on `element` with what was under the
+ * click. Returns the actions the window runs on it, in order.
+ */
+const asksForAMenu = (
+  element: HTMLWebViewElement,
+  under: Partial<DomicileContextMenuEvent>,
+  ran: string[] = [],
+): string[] => {
+  fireEvent(
+    element,
+    Object.assign(new Event(WEBVIEW_CONTEXT_MENU_EVENT), {
+      canCopy: false,
+      canCut: false,
+      canDelete: false,
+      canPaste: false,
+      canRedo: false,
+      canSelectAll: false,
+      canUndo: false,
+      hasImageContents: false,
+      isEditable: false,
+      linkText: "",
+      linkUrl: "",
+      mediaType: "none",
+      run: (action: string) => {
+        ran.push(action);
+      },
+      selectionText: "",
+      srcUrl: "",
+      x: 10,
+      y: 20,
+      ...under,
+    }),
+  );
+  return ran;
+};
 
 loadEmittedStylesheet(document);
 
@@ -1521,6 +1559,160 @@ describe("BrowserWindow", () => {
       guestPresses(view(container), { ctrlKey: true, key: "+" });
 
       expect(screen.getByRole("status")).toHaveTextContent("110%");
+    });
+  });
+
+  // The engine sends what was under a right click; the window draws the menu.
+  describe("a context menu its page asks for", () => {
+    const renderWindow = (onOpenWindow: (url: string) => void = noWindows) =>
+      render(
+        <BrowserWindow
+          clickThrough={false}
+          covered={false}
+          depth={0}
+          domicile={silentDomicile}
+          dragging={false}
+          focused
+          frame={FRAME}
+          fullscreen={false}
+          motion="resting"
+          onClose={nothingClosed}
+          onMotionEnded={nothingEnded}
+          onNavigate={() => undefined}
+          onOpenPopupWindow={noWindows}
+          onOpenWindow={onOpenWindow}
+          onReach={() => undefined}
+          rect={ON_SCREEN}
+          src="https://example.com"
+        />,
+      );
+
+    const menuItem = (name: string): Promise<HTMLElement> =>
+      screen.findByRole("menuitem", { name: new RegExp(`^${name}`, "u") });
+
+    it("draws the page's menu, with nothing in particular under the click", async () => {
+      const { container } = renderWindow();
+      asksForAMenu(view(container), {});
+
+      const menu = await screen.findByRole("menu", { name: "Page" });
+      expect(
+        [...menu.querySelectorAll("[role=menuitem]")].map(
+          (item) => item.textContent,
+        ),
+      ).toEqual(["Back", "Forward", "Reload", "InspectCtrl+Shift+I"]);
+    });
+
+    it("drives the view from the page's history", async () => {
+      const { container } = renderWindow();
+      const element = view(container);
+      historyReaches(element, true, false);
+      const calls: string[] = [];
+      element.goBack = () => {
+        calls.push("back");
+      };
+      asksForAMenu(element, {});
+
+      await userEvent.click(await menuItem("Back"));
+
+      expect(calls).toStrictEqual(["back"]);
+    });
+
+    it("opens a link in a window of its own", async () => {
+      const opened = Promise.withResolvers<string>();
+      const { container } = renderWindow(opened.resolve);
+      asksForAMenu(view(container), { linkUrl: "https://example.com/opened" });
+
+      await userEvent.click(await menuItem("Open link in new window"));
+
+      expect(await opened.promise).toBe("https://example.com/opened");
+    });
+
+    it("hands what only the browser can do back to the menu it came from", async () => {
+      const { container } = renderWindow();
+      const ran = asksForAMenu(view(container), {
+        hasImageContents: true,
+        linkUrl: "https://example.com/opened",
+        mediaType: "image",
+        srcUrl: "https://example.com/picture.png",
+      });
+
+      await userEvent.click(await menuItem("Copy link address"));
+      asksForAMenu(
+        view(container),
+        {
+          hasImageContents: true,
+          mediaType: "image",
+          srcUrl: "https://example.com/picture.png",
+        },
+        ran,
+      );
+      await userEvent.click(await menuItem("Copy image$"));
+      asksForAMenu(view(container), {}, ran);
+      await userEvent.click(await menuItem("Inspect"));
+
+      expect(ran).toStrictEqual(["copy-link-address", "copy-image", "inspect"]);
+    });
+
+    it("opens a search for the selection in a window of its own", async () => {
+      const opened = Promise.withResolvers<string>();
+      const { container } = renderWindow(opened.resolve);
+      asksForAMenu(view(container), {
+        canCopy: true,
+        selectionText: "domicile",
+      });
+
+      await userEvent.click(await menuItem("Search for"));
+
+      expect(await opened.promise).toBe("https://google.com/search?q=domicile");
+    });
+
+    it("pastes into the field under the click", async () => {
+      const { container } = renderWindow();
+      const ran = asksForAMenu(view(container), {
+        canPaste: true,
+        isEditable: true,
+      });
+
+      await userEvent.click(await menuItem("Paste$"));
+
+      expect(ran).toStrictEqual(["paste"]);
+    });
+  });
+
+  describe("DevTools", () => {
+    it("opens on Ctrl+Shift+I the page left alone", async () => {
+      const { container } = render(
+        <BrowserWindow
+          clickThrough={false}
+          covered={false}
+          depth={0}
+          domicile={silentDomicile}
+          dragging={false}
+          focused
+          frame={FRAME}
+          fullscreen={false}
+          motion="resting"
+          onClose={nothingClosed}
+          onMotionEnded={nothingEnded}
+          onNavigate={() => undefined}
+          onOpenPopupWindow={noWindows}
+          onOpenWindow={noWindows}
+          onReach={() => undefined}
+          rect={ON_SCREEN}
+          src="https://example.com"
+        />,
+      );
+      const inspected = await new Promise<boolean>((resolve) => {
+        view(container).inspect = () => {
+          resolve(true);
+        };
+        guestPresses(view(container), {
+          ctrlKey: true,
+          key: "I",
+          shiftKey: true,
+        });
+      });
+      expect(inspected).toBe(true);
     });
   });
 
