@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # An extension's action in the shell's tray, and its popup in a <webview>
-# asking runtime.getContexts and closing itself.
+# asking runtime.getContexts and tabs.getCurrent and closing itself.
 #
 #   nix develop .#full --command \
 #     ./packages/domicile-engine/scripts/guard-extension-tray.sh /build/chromium/src
@@ -12,19 +12,22 @@
 # `domicile-close` on the element (WebViewGuest::CloseContents). And a popup
 # asking runtime.getContexts, as Bitwarden's does on opening: that call switches
 # on each of the extension's frames' view type, and a guest with none is a
-# NOTREACHED that takes the whole browser down. Chrome gives every tab
-# kTabContents; AttachTabHelpers gives a guest the same.
+# NOTREACHED that takes the whole browser down. Chrome gives its toolbar popup
+# kExtensionPopup; AttachTabHelpers gives a <webview> marked `extensionpopup`
+# the same, and no tab -- so tabs.getCurrent, which Bitwarden tells a popup
+# from a tab by, answers nothing, as it does in Chrome.
 #
 # Headless, with guard-extension-installer.sh's stand-in for the compositor
 # naming the fixture as `unpacked`: the fixture has a default title, a badge
-# its service worker sets, and a popup that asks runtime.getContexts, writes
-# the answer into its own address, and closes itself a second after that loads.
+# its service worker sets, and a popup that asks runtime.getContexts and
+# tabs.getCurrent, writes the answers into its own address, and closes itself a second after that loads.
 #
 # WHAT IT ASSERTS. That the shell heard an `extensions` event carrying the
 # fixture's id with its title, the service worker's badge and color, its popup
 # URL, a PNG icon and `enabled`; that the <webview> the shell then points at
-# that popup URL shows it; that getContexts lists the popup as a `TAB`, as
-# Chrome lists an extension page in a tab; that the <webview> reports the
+# that popup URL, marked `extensionpopup`, shows it; that getContexts lists the
+# popup as a `POPUP` and tabs.getCurrent names no tab, as Chrome answers its
+# toolbar popup; that the <webview> reports the
 # popup's content size as the fixture lays it out, which is what a shell sizes
 # its panel from (WebViewGuest::UpdatePreferredSize); and that the popup's
 # `window.close()` reaches the shell as `domicile-close`.
@@ -62,7 +65,8 @@ readonly TITLE="Domicile tray guard"
 readonly BADGE="7"
 readonly BADGE_COLOR="#8e24aaff"
 readonly POPUP="chrome-extension://$ID/popup.html"
-readonly CONTEXT="TAB"
+readonly CONTEXT="POPUP"
+readonly CURRENT_TAB="none"
 readonly WIDTH="230"
 readonly HEIGHT="170"
 # What the width may read over WIDTH: Blink's max-content width for the page
@@ -222,7 +226,7 @@ if [ "$NEGATIVE" = "1" ]; then
   CLOSED=$(saw "\"GUARD closed url=$SHOWN\"")
   SIZED=$(sized "")
 else
-  CONTEXTS=$(saw "\"GUARD page url=$SHOWN?contexts=$CONTEXT\"")
+  CONTEXTS=$(saw "\"GUARD page url=$SHOWN?contexts=$CONTEXT&tab=$CURRENT_TAB\"")
   # After any answer, so a wrong one still tells a crash from a close.
   CLOSED=$(saw "\"GUARD closed url=$SHOWN?contexts=")
   SIZED=$(sized "$SHOWN")
@@ -245,7 +249,7 @@ case "$MEASURED" in
 "tray 1 1 1 1 1 1 1")
   PASSED="the tray reported the fixture's action as its service worker left \
 it, its popup showed in a <webview>, runtime.getContexts listed the popup as a \
-TAB, the <webview> reported the popup's content size, and the popup's \
+POPUP and tabs.getCurrent named no tab, the <webview> reported the popup's content size, and the popup's \
 window.close() reached the shell as domicile-close"
   ;;
 "tray 0 "*)
@@ -272,13 +276,14 @@ guest's navigation to chrome-extension:// was refused or never committed"
 "tray 1 1 1 1 0 0 "*)
   FAILURE="the popup showed and never answered runtime.getContexts: the call \
 switches on each frame's view type and NOTREACHEDs on kInvalid, taking the \
-browser down -- AttachTabHelpers did not give the guest kTabContents, as \
-Chrome's tab_helpers.cc gives every tab"
+browser down -- AttachTabHelpers did not give the guest kExtensionPopup, as \
+Chrome gives its toolbar popup"
   ;;
 "tray 1 1 1 1 0 1 "*)
-  FAILURE="the popup answered runtime.getContexts without listing itself as a \
-TAB -- the address it replaced itself with, in the GUARD page lines, says \
-what it got: a guest's view type other than kTabContents, or an error"
+  FAILURE="the popup answered without listing itself as a POPUP that is in no \
+tab -- the address it replaced itself with, in the GUARD page lines, says \
+what it got: a guest's view type other than kExtensionPopup, a tab id from a \
+SessionTabHelper AttachTabHelpers gave it, or an error"
   ;;
 "tray 1 1 1 1 1 0 "*)
   FAILURE="the popup showed and its window.close() never reached the shell: \

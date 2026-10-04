@@ -132,6 +132,19 @@ describe("ExtensionAction", () => {
       expect((await popupView()).getAttribute("src")).toBe(POPUP);
     });
 
+    it("marks the popup's view an extension popup, so its page is no tab", async () => {
+      render(
+        <ExtensionAction
+          domicile={NO_DOMICILE}
+          extension={blocker}
+          onOpen={() => undefined}
+          opened={BLOCKER}
+        />,
+      );
+
+      expect((await popupView()).hasAttribute("extensionpopup")).toBe(true);
+    });
+
     it("draws the popup's panel flush, with no padding framing the page", async () => {
       render(
         <ExtensionAction

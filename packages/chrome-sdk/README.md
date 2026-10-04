@@ -70,7 +70,10 @@ It provides these:
   guest, so a shell that ignores it is a desktop where such a link does
   nothing.
   `domicile-close` is the page calling `window.close()` — an extension's popup
-  closing itself — and removing the view is the shell's answer.
+  closing itself — and removing the view is the shell's answer. A view opened
+  for an extension's action popup carries `extensionpopup` from its first
+  render, which makes its page a popup, as Chrome's toolbar bubble is, and no
+  tab.
   `domicile-content-size-change` says `contentWidth` / `contentHeight` moved:
   the size the page's content wants, which Chrome sizes an extension's popup
   from.
