@@ -87,9 +87,10 @@ Input runs the other way. The engine delivers pointer and keyboard events to the
 page; the page reports what is under a pointer and which window has focus; the
 compositor routes to the client's seat accordingly.
 
-The page reaches the compositor through `window.domicile`, which the fork
-binds on the shell's origin and the browser process carries to the compositor's
-control socket. The engine serves the shell over `domicile://`, so nothing has
+The page reaches the compositor through the `domicile` handed to its `Shell`.
+The fork binds it on the shell's origin as `navigator.domicile`, answers it
+once per document to the document Domicile writes, which passes it on, and the
+browser process carries it to the compositor's control socket. The engine serves the shell over `domicile://`, so nothing has
 to be told where the session is and nothing binds a port.
 
 `domicile` is what starts the two, in the one order they can start in: the
@@ -152,7 +153,7 @@ libraries — build it in `nix develop .#full`:
 Web side:
 
 - `packages/chrome-sdk` — the shell-facing API: elements, the client for
-  `window.domicile`, measurement, input.
+  the desktop a shell is handed, measurement, input.
 - `packages/component-library` — the shared components and the Panda preset.
 - `packages/shell-manganese` — the reference desktop.
 - `packages/shell-simple` — a desktop with nothing in it but windows.

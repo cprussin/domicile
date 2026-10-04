@@ -182,7 +182,7 @@ expect "an empty log reads as no readings" \
   "listening=0 grab=0 zoom-out=0 pointr=0 finite=0 positive=0 ordered=0 names=0" \
   "$(printf '' | readings)"
 
-# THE EVENT NAMES. The fork keeps navigator.domicile's names in its own list
+# THE EVENT NAMES. The fork keeps DomicileHost's event names in its own list
 # (domicile_event_names.h) rather than Blink's, and the page fires each one at
 # its addEventListener listener and its on<name> handler. A name either side
 # lost is a whole message a shell stops hearing.

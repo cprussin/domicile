@@ -5,11 +5,11 @@
 //   GUARD listening              the channel is bound
 //   GUARD state <json>           every attribute the stand-in spoke to
 
-export const Shell = () => {
-  const host = window.domicile;
+export const Shell = (_root, desktop) => {
+  const host = desktop;
   if (host === null || host === undefined) {
     throw new Error(
-      "guard-desk-state: window.domicile is absent, so this document was not" +
+      "guard-desk-state: no desktop was handed to Shell, so this document was not" +
         " served by the forked engine",
     );
   }

@@ -1,4 +1,4 @@
-// `window.domicile`, in TypeScript.
+// The desktop a shell is handed — `Shell(root, domicile)` — in TypeScript.
 //
 // The engine's own contract is the WebIDL in
 // `packages/domicile-engine/src/third_party/blink/renderer/modules/domicile/`.
@@ -6,21 +6,10 @@
 // the same name, and nothing here invents one. When the two disagree the IDL
 // wins, because it is what the browser actually built.
 //
-// **Two spellings, one object.** `window.domicile` is what a shell writes —
-// system state is reached at `window.domicile.<interface>`, with nothing to
-// register and no singleton to construct — and `navigator.domicile` is where
-// it used to live and still does. The fork's `WindowDomicile::domicile`
-// forwards to `NavigatorDomicile`, so a window has exactly one host and a
-// listener bound through either spelling is bound to the one channel. Both are
-// declared below because a shell author gets completion on whichever it types.
-//
-// Declared here rather than taken from `lib.dom.d.ts` because it is not a web
-// standard and never will be — it exists on Domicile's fork, on documents
-// served over `domicile://`, and nowhere else. The property is declared
-// *optional* for the same reason `HTMLCanvasElement.embedExternalSurface`
-// is in `app-element.ts`: every use then has to answer what happens without
-// it, which on a stock browser is every use. `connect-to-host.ts` is where the
-// SDK answers it once.
+// **Handed, not found.** The engine has the host as `navigator.domicile`, but
+// answers it once per document: the document Domicile writes reads it and
+// passes it to the shell's `Shell`, and every read after that is null. So no
+// global is declared here — a shell keeps what it was handed. See `shell.ts`.
 //
 // # This is a typed surface, not a message pipe
 //
@@ -952,7 +941,7 @@ export type DomicileExtensionsEvent = Event & {
   readonly extensions: readonly DomicileExtension[];
 };
 
-/** Every event `window.domicile` fires, and what each one carries. */
+/** Every event the desktop fires, and what each one carries. */
 export type DomicileHostEventMap = {
   appappeared: DomicileAppEvent;
   appresized: DomicileAppEvent;
@@ -1427,32 +1416,3 @@ export type DomicileHost = {
     listener: (event: DomicileHostEventMap[T]) => void,
   ): void;
 };
-
-declare global {
-  // biome-ignore lint/style/useConsistentTypeDefinitions: declaration merging onto a built-in type is what `interface` is for and what a type alias cannot do
-  interface Window {
-    /**
-     * The compositor behind this page, or absent. **The spelling a shell
-     * writes.**
-     *
-     * The same object as {@link Navigator.domicile} rather than a second host:
-     * see the note at the top of this file.
-     *
-     * Optional *and* nullable, and both cases are real: the property does not
-     * exist at all on a stock browser, and the fork's own accessor answers
-     * `null` for a document with no frame. `?? ` covers both, which is what
-     * `connect-to-host.ts` does once so nothing else has to.
-     */
-    readonly domicile?: DomicileHost | null;
-  }
-
-  // biome-ignore lint/style/useConsistentTypeDefinitions: declaration merging onto a built-in type is what `interface` is for and what a type alias cannot do
-  interface Navigator {
-    /**
-     * The compositor behind this page, or absent. Where it was first hung and
-     * where it stays: pages that already read it keep working, and it is the
-     * same object {@link Window.domicile} answers with.
-     */
-    readonly domicile?: DomicileHost | null;
-  }
-}

@@ -1,4 +1,4 @@
-// Wiring the SDK to `window.domicile`: bind the element context and install the
+// Wiring the SDK to the desktop: bind the element context and install the
 // document-level input routing the `<app>` tag needs.
 //
 // Nothing is registered any more, and the name is kept anyway: it is the one
@@ -22,7 +22,7 @@ export type RegisterOptions = {
 let inputInstalled = false;
 
 /**
- * Wire the SDK to `window.domicile`.
+ * Wire the SDK to the desktop a shell is handed.
  *
  * Idempotent: safe to call once at chrome startup, and safe to call again with a
  * different host (which is how tests rebind between cases). The input

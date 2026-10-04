@@ -11,13 +11,7 @@ import { Shell as Desktop } from "./Shell";
 import "./shell.css";
 
 /** The simple desktop, mounted into `root`. */
-export const Shell: ShellModule = (root) => {
-  // The desktop, as the engine puts it on a document it served. A plain
-  // browser has none, and there is nothing to draw.
-  const domicile = window.domicile;
-  if (domicile === null || domicile === undefined) {
-    return;
-  }
+export const Shell: ShellModule = (root, domicile) => {
   registerElements(domicile);
 
   // A container of our own: the document reports a failure by appending to

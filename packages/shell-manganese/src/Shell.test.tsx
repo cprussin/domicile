@@ -89,7 +89,7 @@ const dialogBox = (): { left: string; width: string } => {
 };
 
 /**
- * `window.domicile` for the chrome: what the compositor says, under React's
+ * The desktop for the chrome: what the compositor says, under React's
  * `act`, and every call the chrome makes. The host's search is the one ask
  * answered, once {@link holds} has said what the home is.
  */

@@ -3,7 +3,7 @@ import type {
   DomicileHostEventMap,
 } from "@domicile-desktop/sdk/domicile-host";
 
-/** The bare events that say an attribute of `window.domicile` moved. */
+/** The bare events that say an attribute of the desktop moved. */
 export type HostChange = {
   [T in keyof DomicileHostEventMap]: DomicileHostEventMap[T] extends Event
     ? Event extends DomicileHostEventMap[T]

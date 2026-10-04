@@ -35,7 +35,7 @@ export type KeyBinding = {
   unbind: () => void;
 };
 
-/** What `bindKeys` uses of `window.domicile`. */
+/** What `bindKeys` uses of the desktop. */
 export type KeyHost = Pick<
   DomicileHost,
   "addEventListener" | "grabShortcut" | "removeEventListener"

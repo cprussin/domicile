@@ -80,39 +80,32 @@ neither of them is yours:
 The order is forced and Domicile forces it: the engine first, because the
 compositor connects to the socket it creates. Your page is served over
 `domicile://` rather than opened off disk because `file:` has no origin, and
-the channel to the compositor is `window.domicile` rather than a socket the
-page opens, because a page cannot open a Unix socket and nothing here binds a
-port.
+the channel to the compositor is the `domicile` handed to `Shell` rather than
+a socket the page opens, because a page cannot open a Unix socket and nothing
+here binds a port.
 
 ## The connection
 
-There is no wiring. The channel is `window.domicile`, a property the engine
-puts on a document it served:
+There is no wiring. The channel is the second argument to `Shell`, which the
+document Domicile writes hands over:
 
 ```ts
-const domicile = window.domicile;
-if (domicile === null || domicile === undefined) {
-  return; // a plain browser: no desktop
-}
+export const Shell: ShellModule = (root, domicile) => {
+  // `domicile` is the desktop
+};
 ```
 
-There is nothing to configure and nothing to pass: it is a property of the
-page, so no query string carries a socket path and no two things can disagree
-about where the compositor is. Its type is `DomicileHost`, from
-`@domicile-desktop/sdk/domicile-host`.
+There is nothing to configure: no query string carries a socket path and no two
+things can disagree about where the compositor is. Its type is `DomicileHost`,
+from `@domicile-desktop/sdk/domicile-host`.
 
-`navigator.domicile` is the same object and keeps working — the engine hangs
-one host off the window and answers both spellings with it, so a listener bound
-through either is bound to the one channel. Write `window.domicile`; it is the
-surface the rest of this guide names.
+**It is the only copy.** The engine answers `navigator.domicile` once per
+document, to the document Domicile writes, which hands it to `Shell`; every
+later read is `null`. There is no global to reach for, so keep it however you
+like — a React context, a variable — and pass it to what needs it.
 
-**In a plain browser it is absent**, and the types say so: the property is
-optional and nullable, so every shell checks for it. There an `<app>` is an
-`HTMLUnknownElement` — it takes a box and shows nothing.
-
-Do not develop against that, though: it is the chrome with every window in it
-missing, and a desktop's interesting behavior is all on the other side of the
-channel. Point `domicile` at your shell's module and let your own bundler watch
+**Only Domicile calls a shell**, so there is no plain-browser case to check
+for. Point `domicile` at your shell's module and let your own bundler watch
 it — `vite build --watch` beside `domicile ./dist/shell.js` is the whole dev
 loop, and it is a real desktop rather than a page pretending to be one.
 **Nothing reloads it by itself**: a desktop runs under `--app`, where there is
@@ -127,8 +120,8 @@ windows stay where they are
 **A shell does nothing about versions, and waits for nothing.** The channel is
 a typed surface rather than a message pipe: the compositor's protocol version
 is checked in the browser process, which logs a disagreement and carries on,
-and a page has no part in it. Say what you have to say as soon as you have
-`window.domicile`, and the first call is what binds the channel.
+and a page has no part in it. Say what you have to say as soon as `Shell` is
+called, and the first call is what binds the channel.
 
 **Nor does registration order matter.** What has a current value is an
 attribute — `windows`, `focusedWindow`, `displays`, `theme`, `locked`,
@@ -431,10 +424,10 @@ One package, published to npm and usable outside this repo:
 
 | Package | What |
 |---|---|
-| `@domicile-desktop/sdk` | The types of `window.domicile` (`domicile-host`) and of `Shell`; `registerElements` (the input routing over your `<app>` elements); `focusApp` and `focusChrome`; `bindKeys` (your keys); `windows` (`windowOf`, `surfaceSizeOf`); `fake-host` (`FakeDomicileHost`, for your tests); and pure helpers. `<app>` and `<webview>` are the engine's own tags: the SDK types them and names the events on them, and registers nothing. |
+| `@domicile-desktop/sdk` | The types of the desktop a shell is handed (`domicile-host`) and of `Shell`; `registerElements` (the input routing over your `<app>` elements); `focusApp` and `focusChrome`; `bindKeys` (your keys); `windows` (`windowOf`, `surfaceSizeOf`); `fake-host` (`FakeDomicileHost`, for your tests); and pure helpers. `<app>` and `<webview>` are the engine's own tags: the SDK types them and names the events on them, and registers nothing. |
 
-`window.domicile` is the API; the SDK is its types plus helpers. The
-definitive contract is the IDL under
+The desktop `Shell` is handed is the API; the SDK is its types plus helpers.
+The definitive contract is the IDL under
 `packages/domicile-engine/src/third_party/blink/renderer/modules/domicile/`.
 The one helper a shell cannot skip today is `registerElements`: until the
 engine routes input under `<app>` itself, it is what forwards the pointer and
@@ -460,11 +453,7 @@ One source file and a build config. The full version, with the comments, is in
 import { registerElements } from "@domicile-desktop/sdk/register-elements";
 import type { Shell as ShellModule } from "@domicile-desktop/sdk/shell";
 
-export const Shell: ShellModule = (root) => {
-  const domicile = window.domicile;
-  if (domicile === null || domicile === undefined) {
-    return;
-  }
+export const Shell: ShellModule = (root, domicile) => {
   registerElements(domicile);
 
   const mounted = new Map<string, HTMLElement>();
@@ -493,8 +482,9 @@ export const Shell: ShellModule = (root) => {
 ```
 
 **`Shell` is the whole contract.** Domicile imports the module and calls it
-once; every other export is ignored. Importing the module does nothing but
-install its stylesheet, so put everything else inside `Shell`. A module with no
+once, with the element to draw in and the desktop; every other export is
+ignored. Importing the module does nothing but install its stylesheet, so put
+everything else inside `Shell`. A module with no
 `Shell` export, or whose `Shell` throws, is reported on the screen.
 
 That is a working desktop: every window full-screen, newest on top. A real
@@ -1079,7 +1069,7 @@ client — its page is inside your own. Three things follow, none optional:
   see [Keybindings](#keybindings). The browser process is the only layer above
   a focused guest: a key pressed on a site reaches neither this page nor the
   compositor, so a claimed chord comes back as a `shortcut` event on
-  `window.domicile` rather than a key event on the page.
+  `domicile` rather than a key event on the page.
   `domicile.grabShortcut("Meta+Shift+l")` is the grab underneath, for a chord
   your bindings do not name; its press carries `chord: "Meta+Shift+l"`.
 

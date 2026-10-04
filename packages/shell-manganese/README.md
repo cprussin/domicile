@@ -19,9 +19,8 @@ stylesheet of its own.
 
 Every screen of the desk is a desktop: a bar across the top of it and the
 windows of the workspace it is showing under that. Nothing is drawn until a
-desktop has been described, which is the handshake's worth of blank window.
-Opened in a plain browser for styling work there is no host to describe one, so
-the shell describes the window itself. A host that describes a desktop with
+desktop has been described, which is the handshake's worth of blank window. A
+host that describes a desktop with
 *no* screens is a third thing again — there is nowhere to lay a window out —
 and the page says so rather than staying blank.
 
@@ -928,7 +927,7 @@ shell that wants its own pictures owns its own list.
 
 | Path | What |
 |---|---|
-| `src/index.tsx` | Entry point and library: `runManganese(options)` makes a `Shell` that reads `window.domicile` (drawing nothing without one), applies the theme, binds the SDK to it and mounts `<Shell>`; `Shell` is `runManganese()`; the bar's items are re-exported under their public names. |
+| `src/index.tsx` | Entry point and library: `runManganese(options)` makes a `Shell` that takes the desktop it is handed, applies the theme, binds the SDK to it and mounts `<Shell>`; `Shell` is `runManganese()`; the bar's items are re-exported under their public names. |
 | `src/Shell.tsx` | The composition root: the providers, and the one `DisplayProvider` every screen below fans out from. |
 | `src/Desktop.tsx` | The desk: the window state, the keys, the panels over every screen, and one `Monitor` per screen of it. |
 | `src/clock/` | The live clock, and what it says: in the middle of the bar on every screen. |
@@ -943,7 +942,7 @@ shell that wants its own pictures owns its own list.
 | `src/launcher/` | The box **Mod+Space** puts up and the things a line typed into it can mean. Its rows are the compositor's answer to what is in the box — the applications the machine's desktop entries offer (those its empty box offers asked for while it is shut, so they are drawn with the panel rather than pushing its rows down as they land), and what its index of the whole home matched, only the front of it — so the panel also says when that index is not finished, and asks again until it is. Every row is something Enter can do: a URL on top, then the applications and the desk's bookmarks as one list by name (`applications.bookmarks`, opened as a page rather than handed to a browser, drawn with the icon its own page named when it was last previewed, signed in, or else the one the compositor found its site naming), then the files, then a search, always. An application's row and preview carry the icon its entry names, found by the compositor in the `hicolor` theme, drawn without the frame a glyph's tile has; its preview is the picture its entry's `X-Domicile-Preview` names, or else what the entry says it is for and the command Enter runs. A `!` tag (`!wiki`, `!yt`) puts a search on that site above all of them, drawn with its logo, and the rest are what the line gets as typed, its search on Google. `!gh` with one name — `cprussin` or `cprussin/domicile` — goes to that page on GitHub, above the search for it. Beside the rows is a preview of the highlighted one — a file's front, read by the compositor only for a path its index holds and lit by its language (`lowlight`, colored in the desktop's own tokens so it reads in either theme); a folder as a grid of what it holds under its name, pictures as themselves; a song as the tags and cover the compositor reads of it, over a player; a video as one still a tenth of the way in; an image or PDF drawn from the engine's `domicile://home/`; or the page a URL is. It follows the highlight once the typing settles, keeping the last preview until then rather than naming the next row in between. The highlight starts on the first row and the pointer moves it, and while the panel is up no desktop key but its own answers. |
 | `src/mount-point.ts` | Where the chrome mounts. Its own file because Domicile writes the document, so there is no element to look up — the shell makes one. |
 | `src/screens/` | Where the desktop's screens come from, and what goes on each of them. |
-| `src/screens/host-displays.ts` | `window.domicile` as the component library's `DisplaySource`, which is the whole of what joins the two. |
+| `src/screens/host-displays.ts` | The desktop as the component library's `DisplaySource`, which is the whole of what joins the two. |
 | `src/screens/Monitor.tsx` | One screen of the desk's bar, rendered once per screen. |
 | `src/screens/stage-screens.ts` | What the `Stage` draws on each screen: its rectangles, the workspace it shows, and where that workspace's windows go. |
 | `src/screens/screen-toward.ts` | Which screen lies beside another, which is where `focus <direction>` goes off the edge of a workspace. |
@@ -1003,7 +1002,7 @@ shell that wants its own pictures owns its own list.
 
 There is no main process and no preload. The engine is the display compositor
 and serves this page over `domicile://`, and the channel to it is
-`window.domicile`, so what is here is the chrome and nothing else.
+the `DomicileHost` the engine hands `Shell`, so what is here is the chrome and nothing else.
 
 React owns this DOM, so the chrome writes the tags in JSX: `<app>` and
 `<webview>`, both the engine's own. React has had a `webview` tag and an

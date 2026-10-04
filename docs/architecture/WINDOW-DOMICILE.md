@@ -1,16 +1,13 @@
-# `window.domicile` is the API
+# The desktop a shell is handed is the API
 
-A shell talks to its desktop through `window.domicile` and nothing else. The
-engine owns everything a shell needs there. `@domicile-desktop/sdk` ships the
-TypeScript for it plus pure helpers, and `DomicileClient` is deleted.
+A shell talks to its desktop through the `domicile` handed to `Shell` and
+nothing else. The engine owns everything a shell needs there.
+`@domicile-desktop/sdk` ships the TypeScript for it plus pure helpers, and `DomicileClient` is deleted.
 
 ```ts
 import type { Shell } from "@domicile-desktop/sdk/shell";
 
-export const Shell: Shell = (root) => {
-  const domicile = window.domicile;
-  if (domicile == null) return; // a plain browser: no desktop
-
+export const Shell: Shell = (root, domicile) => {
   const show = () => {
     root.replaceChildren(
       ...domicile.windows.map(({ appId }) =>
@@ -112,7 +109,7 @@ action.
 
 | Module | Kind |
 |---|---|
-| `domicile-host` | types: `DomicileHost`, its events, and `Window.domicile` |
+| `domicile-host` | types: `DomicileHost` and its events |
 | `shell` | type: `Shell` |
 | `app-element`, `webview-element` | types |
 | `keybindings`, `key-action`, `own-keybindings` | pure helpers: chord grammar, modes |
@@ -137,11 +134,16 @@ and `host-stream` move to `@domicile-desktop/e2e-harness`, their only user.
 - **The new surface lands beside the old, then one step moves every shell.**
   Each engine step adds attributes and events and keeps the ones they replace,
   so `DomicileClient` and the shells keep working untouched; the last step
-  rewrites the three shells onto `window.domicile` and deletes the old events
+  rewrites the three shells onto the new surface and deletes the old events
   and the client together. No compatibility layer outlives that step.
-- **The do-nothing stand-in goes.** `window.domicile` is optional in the
-  types, and a shell opened in a plain browser checks for it. Styling a shell
-  without a desktop is the dev server's concern.
+- **The desktop is handed to `Shell`, not found on a global.** The shell
+  stores it however it likes — a React context, a variable — and nothing
+  pollutes the global namespace. The engine answers `navigator.domicile` once
+  per document, to the document Domicile writes, so the shell's copy is the
+  only one.
+- **The do-nothing stand-in goes.** Only Domicile calls a shell, so there is
+  no plain-browser case and no null check. Styling a shell without a desktop is
+  the dev server's concern.
 
 ## Plan
 
@@ -164,6 +166,8 @@ Each step ships alone.
       README move to `window.domicile`; `bindKeys` becomes a pure helper over
       `grabShortcut` and `shortcut`; `DomicileClient` and `connect-to-host`
       go; the wire modules move to `e2e-harness`
+- [x] `Shell(root, domicile)`: the document hands the desktop over; the engine
+      answers it once per document
 - [ ] the engine drops what nothing reads now: the events the attributes and
       promises replace (`appappeared` and the other seven `app*`,
       `focuschanged`, `files`, …) and `shellconfig`

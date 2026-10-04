@@ -1,4 +1,4 @@
-// Questions about `window.domicile.windows` that input routing asks.
+// Questions about `DomicileHost.windows` that input routing asks.
 
 import type { DomicileWindow } from "./domicile-host";
 

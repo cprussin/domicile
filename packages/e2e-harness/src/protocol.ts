@@ -4,17 +4,12 @@
 // place a raw frame becomes a typed value.
 //
 // **A page reads almost none of this.** Under the fork the compositor's JSON
-// is decoded in the browser process and reaches the document as typed events on
-// `window.domicile`; `host-message.ts` is what a shell sees. What still
+// is decoded in the browser process and reaches the document as typed
+// attributes and events on the `DomicileHost` a shell is handed. What still
 // reads these schemas is `@domicile-desktop/e2e-harness`, a headless stand-in for a
 // chrome that connects to the compositor's own socket — because what those
 // scripts assert is what the *compositor* sends, and a harness that went
 // through the browser process would be asserting the browser process too.
-//
-// The one exception is `shell_config`. A shell's `options` table is whatever
-// its config said, which WebIDL cannot type, so the engine forwards the
-// compositor's line as a string and `host-message.ts` parses it with
-// {@link shellConfigSchema} — the page reads that one schema itself.
 //
 // That makes this and `packages/domicile-protocol` two halves of one contract
 // with no page between them, and they still have to move together: see

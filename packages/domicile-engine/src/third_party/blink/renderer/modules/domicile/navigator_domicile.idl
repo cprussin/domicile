@@ -6,9 +6,9 @@
     RuntimeEnabled=DomicileControlChannel,
     SecureContext
 ] partial interface Navigator {
-  // Null outside a Domicile shell. A shell opened in an ordinary browser -- a
-  // `vite dev` on its page, which is how shells get styled -- has no desktop
-  // behind it, and finding that out by reading a property is better than
-  // finding out when a call throws.
-  [SameObject] readonly attribute DomicileHost? domicile;
+  // The desktop, for the document Domicile writes to hand to the shell it
+  // calls -- `Shell(root, domicile)`. Answered once per document: every read
+  // after the first is null, so a shell keeps what it was handed rather than
+  // reaching for a global. See NavigatorDomicile.
+  readonly attribute DomicileHost? domicile;
 };

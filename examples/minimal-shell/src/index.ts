@@ -9,15 +9,10 @@
 
 import type { DomicileWindow } from "@domicile-desktop/sdk/domicile-host";
 import { registerElements } from "@domicile-desktop/sdk/register-elements";
+import type { Shell as ShellModule } from "@domicile-desktop/sdk/shell";
 
 /** The desktop, drawn into `root`: Domicile's empty `<body>`. */
-export const Shell = (root: HTMLElement): void => {
-  // The desktop, as the engine puts it on a document it served. A plain
-  // browser has none, and there is nothing to draw.
-  const domicile = window.domicile;
-  if (domicile === null || domicile === undefined) {
-    return;
-  }
+export const Shell: ShellModule = (root, domicile) => {
   // `<app>` is the engine's tag and needs no defining, but the pointer and
   // keyboard over one are the page's to forward, and until this runs nothing
   // does.

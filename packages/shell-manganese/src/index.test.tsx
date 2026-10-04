@@ -1,10 +1,10 @@
-import { afterEach, describe, expect, it } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import { act, within } from "@testing-library/react";
 
 import { exec, runManganese } from "./index";
 
-/** A desk of one screen behind this page, as the engine puts it there. */
+/** A desk of one screen, as the engine hands it to the shell. */
 const onADesk = (): FakeDomicileHost => {
   const fake = new FakeDomicileHost();
   fake.set({
@@ -22,19 +22,14 @@ const onADesk = (): FakeDomicileHost => {
       },
     ],
   });
-  (window as { domicile?: unknown }).domicile = fake.host;
   return fake;
 };
-
-afterEach(() => {
-  delete (window as { domicile?: unknown }).domicile;
-});
 
 describe("runManganese", () => {
   // The library's whole promise: a layout of the user's own, on the bar of a
   // desktop they did not have to build.
   it("mounts manganese into the root with the bar it is given", async () => {
-    onADesk();
+    const fake = onADesk();
     // Never put in the document: a desktop this test cannot unmount would
     // still be on the page every later test queries.
     const root = document.createElement("div");
@@ -46,7 +41,7 @@ describe("runManganese", () => {
           middle: [],
           right: [],
         },
-      })(root);
+      })(root, fake.host);
     });
 
     expect(root).toContainElement(await within(root).findByText("mail 3/12"));
@@ -60,19 +55,11 @@ describe("runManganese", () => {
     act(() => {
       runManganese({
         keybindings: { keybindings: { "Meta+x": exec("kitty") }, modes: {} },
-      })(document.createElement("div"));
+      })(document.createElement("div"), fake.host);
     });
 
     expect(fake.calls.filter(([method]) => method === "grabShortcut")).toEqual([
       ["grabShortcut", "Meta+x"],
     ]);
-  });
-
-  it("draws nothing in a page with no desktop behind it", () => {
-    const root = document.createElement("div");
-
-    runManganese()(root);
-
-    expect(root.childElementCount).toBe(0);
   });
 });

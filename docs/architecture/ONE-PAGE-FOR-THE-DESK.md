@@ -1,7 +1,7 @@
 # One page for the desk
 
 A shell is one page whose viewport is the desk's bounding box in logical
-pixels, and `navigator.domicile.displays` says where each monitor sits in it.
+pixels, and the handed-in `domicile.displays` says where each monitor sits in it.
 The engine shows that page on every monitor at the monitor's own density and
 refresh rate: one layout, one frame, and tiles rastered per monitor at that
 monitor's scale. A shell never sees rotation, density or a second page.

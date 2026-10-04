@@ -12,7 +12,7 @@ const POINTER = 1;
 const PRIMARY = 0;
 const SECONDARY = 2;
 
-/** `window.domicile`, under React's `act`. */
+/** The desktop, under React's `act`. */
 const acting = (fake: FakeDomicileHost) => ({
   appear: (...args: Parameters<FakeDomicileHost["appear"]>) => {
     act(() => {

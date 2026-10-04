@@ -30,7 +30,7 @@
 #   and one it knows, sent after the one it does not, reaches it anyway — so
 #     "the bad name was refused" can be told apart from "the channel died on
 #     it", which without this reading are the same absence
-#   every event navigator.domicile names reaches both an addEventListener
+#   every event the desktop names reaches both an addEventListener
 #     listener and its on<name> handler. The names are the fork's own
 #     (modules/domicile/domicile_event_names.h), not Blink's global list, and
 #     a name either side lost is a message a shell stops hearing
@@ -192,7 +192,7 @@ FAILURE=""
 if [ "$LISTENING" != "1" ]; then
   FAILURE="the shell module never registered a listener, so nothing here was measured"
 elif [ "$NAMES" != "1" ]; then
-  FAILURE="an event navigator.domicile names did not reach its listener or its on<name> handler, so the fork's names in modules/domicile/domicile_event_names.h and the page disagree; the GUARD names line says which"
+  FAILURE="an event the desktop names did not reach its listener or its on<name> handler, so the fork's names in modules/domicile/domicile_event_names.h and the page disagree; the GUARD names line says which"
 elif [ "$UNKNOWN" = "1" ]; then
   FAILURE="a cursor name the engine does not know reached the page, so the closed set in components/domicile/common/cursor_shape.h is not being applied and an unknown CSS keyword is a silent no-op there"
 elif [ "$KNOWN_FIRST" != "1" ]; then

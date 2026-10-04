@@ -8,13 +8,13 @@
 > `src/`: run `bun run build` before anything outside the workspace resolves it.
 
 The in-page half of Domicile. A Domicile chrome is ordinary web content; it
-talks to the compositor through `window.domicile`, which the forked engine puts
-on a document it served, and mounts real Wayland clients as `<app>` elements.
+talks to the compositor through the `DomicileHost` the forked engine hands its
+`Shell`, and mounts real Wayland clients as `<app>` elements.
 This package is the TypeScript for that surface plus helpers around it.
 
 It provides these:
 
-- **`DomicileHost`** (`./domicile-host`) — the type of `window.domicile`,
+- **`DomicileHost`** (`./domicile-host`) — the type of the desktop a shell is handed,
   mirroring the engine's IDL. State is readonly attributes (`windows`,
   `focusedWindow`, `displays`, `theme`, `locked`, `idle`, `extensions`,
   `tray`, `notifications`, …), each with a bare `<name>changed` event: read,
@@ -24,10 +24,12 @@ It provides these:
   `previewFile` and `searchApps` return promises, and a newer call rejects the
   older with an `AbortError`. `openurl` is not the compositor's: it is an
   address `domicile open-url` asked the desktop to open — what `BROWSER` runs
-  inside it — and opening it is the shell's. `window.domicile` is optional in
-  the types and absent in a plain browser, so a shell checks for it.
+  inside it — and opening it is the shell's.
 - **`Shell`** (`./shell`) — the type of a shell module's `Shell` export: what
-  Domicile calls, once, with the element to draw in. A module without one is
+  Domicile calls, once, with the element to draw in and the desktop. The
+  engine hands the desktop out once per document, so there is no global: a
+  shell keeps it however it likes (a React context, a variable) and passes it
+  on. A module without one is
   refused on the screen.
 - **`registerElements`** (`./register-elements`) — the input routing behind the
   engine's `<app>` tag, until the engine does it itself. It forwards the
@@ -102,7 +104,7 @@ It provides these:
   keysym the keyboard cannot type is logged. Grabs are never given back.
   `./own-keybindings` is the grammar only (one spelling per chord, filed by
   mode) and `./key-action` the action a binding carries.
-- **`FakeDomicileHost`** (`./fake-host`) — a `window.domicile` for a shell's
+- **`FakeDomicileHost`** (`./fake-host`) — a desktop for a shell's
   tests. `host` is what the shell is handed; `set` changes attributes and
   dispatches each `<name>changed` they owe; `appear`, `change` and `close` edit
   `windows`; `dispatch` fires a moment (`shortcut`, `openurl`,
@@ -141,11 +143,7 @@ stand-in for a chrome that talks to the compositor's socket directly.
 import { registerElements } from "@domicile-desktop/sdk/register-elements";
 import type { Shell as ShellModule } from "@domicile-desktop/sdk/shell";
 
-export const Shell: ShellModule = (root) => {
-  const domicile = window.domicile;
-  if (domicile === null || domicile === undefined) {
-    return; // a plain browser: no desktop
-  }
+export const Shell: ShellModule = (root, domicile) => {
   registerElements(domicile);
 
   const show = () => {
@@ -161,12 +159,9 @@ compositor's protocol version is checked in the browser process and only
 logged, the engine reports the page's size and density itself, and the first
 call on the channel is what binds it.
 
-Opened in an ordinary browser there is no `window.domicile` at all. Develop
-against the real desktop instead (`./scripts/dev-shell.sh <shell>` in this
+Only Domicile calls a shell, so there is no plain-browser case to handle.
+Develop against the real desktop (`./scripts/dev-shell.sh <shell>` in this
 repo).
-
-`navigator.domicile` is the same object and still reads. `window.domicile` is
-the spelling the guides use.
 
 Then render `<app app-id="…">` / `<webview src="…">` as normal DOM and style
 them with ordinary CSS — rounding, blur, transforms, and z-index all apply to the
@@ -211,7 +206,7 @@ until then.
 
 `zod`, for the schemas this package exports — `./cursor-shape`, `./theme`,
 `./display-transform`, `./extension`, `./tray`, `./notification` and
-`./file-preview` — which a shell parses what `window.domicile` hands it with.
+`./file-preview` — which a shell parses what the desktop hands it with.
 Not because the engine fails to check it — `DomicileWindow.cursor` is a WebIDL
 `enum` over the same closed set as `./cursor-shape` — but because this package
 and the engine are published apart. A shape this list has and the running
