@@ -202,6 +202,13 @@ The evidence for each of those is in the doc that made the claim —
     shell should draw them with `<webview window>`. Not started.
     [BROWSER-WINDOWS.md](docs/architecture/BROWSER-WINDOWS.md).
 
+11. **Every portal answered by Domicile.** The compositor answers `Settings`
+    and gtk the rest, so an app's file dialog is a GTK window, and screen
+    sharing, remote desktop and global shortcuts have no backend. One request
+    channel to the shell, then every interface but `Secret` on it, then gtk
+    leaves the desk. Not started.
+    [PORTALS.md](docs/architecture/PORTALS.md).
+
 ## In the engine fork — the agent on `crux`
 
 1. **The shm upload, on a GPU.** An shm client's frame is drawn into a GBM
@@ -529,7 +536,8 @@ costs nothing.
   falls through the profile to `UseIn=` and then to a last-resort gtk. Closing
   it takes both halves: the protocol served (or an `impl.portal.ScreenCast` of
   our own over the engine's capture path) *and* the backend named where the
-  frontend will look.
+  frontend will look. [PORTALS.md](docs/architecture/PORTALS.md)'s
+  phase 2 is that plan.
 - **The settings portal answers one namespace and one key.** A desktop's
   backend usually carries GNOME's `org.gnome.desktop.interface` as well — the
   accent color, the interface font, the cursor theme — and Domicile has none
