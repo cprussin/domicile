@@ -132,6 +132,30 @@ fn a_tty_desktop_asks_for_the_whole_screen() {
 }
 
 #[test]
+fn the_desk_is_given_tile_memory_for_every_monitor() {
+    // OVER BUDGET, THE SHELL'S CHROME BLINKS. Chromium sizes a page's tile
+    // memory from the screen it first sees -- one monitor -- and a desk page
+    // spans all of them, each at its own density. Short of memory, the tiles
+    // a frame needs are marked out of memory and drawn as flat color until
+    // their turn comes round again: bars and panels redrawing in bands, while
+    // a webview or an app, which are surfaces of their own, look fine.
+    for platform in ["drm", "wayland"] {
+        let args = args_of(&engine(
+            Path::new("/l/engine"),
+            &shell(),
+            platform,
+            &runtime(),
+            None,
+        ));
+        let budget = args
+            .iter()
+            .find_map(|arg| arg.strip_prefix("--force-gpu-mem-available-mb="))
+            .and_then(|mb| mb.parse::<u32>().ok());
+        assert!(budget.is_some_and(|mb| mb >= 2048), "{platform}: {args:?}");
+    }
+}
+
+#[test]
 fn a_nested_desktop_does_not_take_over_the_screen() {
     // The other half, and the reason this is not passed unconditionally: a
     // nested run is a window inside somebody else's session, and a desktop

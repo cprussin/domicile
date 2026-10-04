@@ -108,6 +108,11 @@ const SCANOUT_PLATFORM: &str = "drm";
 /// here, where the platform name is.
 const NESTED_PLATFORM: &str = "wayland";
 
+/// The tile memory every page of the engine may use, in MB: a desk of three
+/// monitors' worth of full-desk layers at two densities, with room for a
+/// commit's pending copies. See `engine`.
+const DESK_TILE_MEMORY_MB: u32 = 3072;
+
 pub fn engine(
     engine: &Path,
     shell: &Shell,
@@ -198,6 +203,19 @@ pub fn engine(
         // has no `REL_WHEEL` case, so the wheel does nothing.
         // `kLibinputHandleMouse` is patch 0059's, off unless overridden.
         "--enable-features=LibinputHandleTouchpad,LibinputHandleMouse".into(),
+        // THE DESK'S TILE MEMORY, not one monitor's. A renderer sizes its tile
+        // budget from the screen it is created on (`GetGpuMemoryPolicy`: about
+        // 1152 MB per 10.9 Mpx, at least 512 MB), and the shell's page is
+        // created before it is told it spans the desk -- so on a laptop with
+        // two 4K monitors beside it the budget is the laptop's, ~580 MB,
+        // against a page of ~40 Mpx whose every full-desk layer costs ~160 MB
+        // and more again at each other monitor's density. Short of memory,
+        // cc evicts and re-rasters the shell's tiles on every commit and draws
+        // the ones it cannot fit as flat color: the bars and panels blink
+        // while a webview or an app, surfaces of their own, look fine. See
+        // docs/architecture/DISPLAY-TILINGS.md, "Tile memory". A limit, not an
+        // allocation: a page that needs less uses less.
+        format!("--force-gpu-mem-available-mb={DESK_TILE_MEMORY_MB}").into(),
         "--password-store=basic".into(),
         "--no-first-run".into(),
         format!("--user-data-dir={}", runtime.profile.display()).into(),
