@@ -1,0 +1,9 @@
+// Copyright 2026 Connor Prussin
+// SPDX-License-Identifier: MIT
+
+// What `DomicileHost.searchApps()` resolves with. See DomicileAppsEvent for
+// what each member means; this is the same answer without the event.
+dictionary DomicileAppSearch {
+  sequence<DomicileDesktopEntry> apps = [];
+  sequence<DomicileBookmark> bookmarks = [];
+};

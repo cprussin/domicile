@@ -116,14 +116,20 @@ class FakeHost implements DomicileHost {
   spawn(command: readonly string[]): void {
     this.calls.push(["spawn", command]);
   }
-  searchFiles(query: string): void {
+  // Each ask's own promise rejects, as the engine's does for every ask a newer
+  // one supersedes: the client settles from the answering event, and a
+  // rejection it ignored would surface as an unhandled one.
+  searchFiles(query: string): Promise<never> {
     this.calls.push(["searchFiles", query]);
+    return Promise.reject(new DOMException("superseded", "AbortError"));
   }
-  previewFile(path: string): void {
+  previewFile(path: string): Promise<never> {
     this.calls.push(["previewFile", path]);
+    return Promise.reject(new DOMException("superseded", "AbortError"));
   }
-  searchApps(query: string): void {
+  searchApps(query: string): Promise<never> {
     this.calls.push(["searchApps", query]);
+    return Promise.reject(new DOMException("superseded", "AbortError"));
   }
   copyClipboardEntry(entry: number): void {
     this.calls.push(["copyClipboardEntry", entry]);

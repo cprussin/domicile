@@ -1,0 +1,52 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Sun, 4 Oct 2026 00:00:00 +0000
+Subject: [PATCH] domicile: the shell's asks return promises
+
+Registers DomicileFileSearch, DomicileFilePreview and DomicileAppSearch,
+the dictionaries `DomicileHost.searchFiles()`, `previewFile()` and
+`searchApps()` resolve with.
+
+The dictionaries and the host's promises are new files and edits under
+src/; what cannot be is a name in a generated-bindings list. Its context is
+the domicile block as 0088 leaves it, for the reason 0045 gives.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on `crux`.
+---
+ third_party/blink/renderer/bindings/generated_in_modules.gni | 6 ++++++
+ third_party/blink/renderer/bindings/idl_in_modules.gni       | 3 +++
+ 2 files changed, 9 insertions(+)
+
+diff --git a/third_party/blink/renderer/bindings/generated_in_modules.gni b/third_party/blink/renderer/bindings/generated_in_modules.gni
+--- a/third_party/blink/renderer/bindings/generated_in_modules.gni
++++ b/third_party/blink/renderer/bindings/generated_in_modules.gni
+@@ -331,6 +331,12 @@ generated_dictionary_sources_in_modules = [
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_files_event_init.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_apps_event_init.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_apps_event_init.h",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_file_search.cc",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_file_search.h",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_file_preview.cc",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_file_preview.h",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_app_search.cc",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_app_search.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_modifiers_event_init.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_modifiers_event_init.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shell_config_event_init.cc",
+diff --git a/third_party/blink/renderer/bindings/idl_in_modules.gni b/third_party/blink/renderer/bindings/idl_in_modules.gni
+--- a/third_party/blink/renderer/bindings/idl_in_modules.gni
++++ b/third_party/blink/renderer/bindings/idl_in_modules.gni
+@@ -301,6 +301,9 @@ static_idl_files_in_modules = [
+   "//third_party/blink/renderer/modules/domicile/domicile_files_event_init.idl",
+   "//third_party/blink/renderer/modules/domicile/domicile_apps_event.idl",
+   "//third_party/blink/renderer/modules/domicile/domicile_apps_event_init.idl",
++  "//third_party/blink/renderer/modules/domicile/domicile_file_search.idl",
++  "//third_party/blink/renderer/modules/domicile/domicile_file_preview.idl",
++  "//third_party/blink/renderer/modules/domicile/domicile_app_search.idl",
+   "//third_party/blink/renderer/modules/domicile/domicile_desktop_entry.idl",
+   "//third_party/blink/renderer/modules/domicile/domicile_bookmark.idl",
+   "//third_party/blink/renderer/modules/domicile/domicile_host.idl",
+-- 
+2.43.0
+
