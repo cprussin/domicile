@@ -474,11 +474,6 @@ export class DomicileClient {
     return this;
   }
 
-  /** Tell the compositor the display density it should advertise to clients. */
-  setDevicePixelRatio(ratio: number): void {
-    this.#host.setDevicePixelRatio(ratio);
-  }
-
   /**
    * Draw the desktop the other way round.
    *
@@ -589,19 +584,6 @@ export class DomicileClient {
   }
 
   /**
-   * Tell the compositor how big the desktop is, in CSS pixels.
-   *
-   * The chrome's window *is* the desktop, and under an engine whose window the
-   * compositor does not own this is the only way it can learn the size.
-   *
-   * A pair here and two arguments on the host, because a size is one value to
-   * a shell and WebIDL has no tuple.
-   */
-  setDesktopSize(size: readonly [width: number, height: number]): void {
-    this.#host.setDesktopSize(size[0], size[1]);
-  }
-
-  /**
    * Ask the compositor to put the keyboard on `appId`'s client, and nothing
    * else.
    *
@@ -630,9 +612,8 @@ export class DomicileClient {
    * compositor; here there is no pointer in the page to move, so the engine
    * moves the one it is drawing.
    *
-   * A pair here and two arguments on the host, for the reason
-   * {@link setDesktopSize} states: a place is one value to a shell and WebIDL
-   * has no tuple.
+   * A pair here and two arguments on the host: a place is one value to a
+   * shell and WebIDL has no tuple.
    */
   warpPointer(to: readonly [x: number, y: number]): void {
     this.#host.warpPointer(to[0], to[1]);

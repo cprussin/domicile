@@ -139,8 +139,9 @@ and `host-stream` move to `@domicile-desktop/e2e-harness`, their only user.
 
 Each step ships alone, engine and shells together.
 
-- [ ] the engine reports size and density; `setDesktopSize`,
+- [x] the engine reports size and density; `setDesktopSize`,
       `setDevicePixelRatio`, `desktop-size` and `device-pixel-ratio` go
+      (`guard-desktop-geometry.sh`)
 - [ ] `windows` and `focusedWindow` with their change events; the eight `app*`
       events and `focuschanged` go
 - [ ] the rest of the state as attributes: `displays`, `brightness`, theme,

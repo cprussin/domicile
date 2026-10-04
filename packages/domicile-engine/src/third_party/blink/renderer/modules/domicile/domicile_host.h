@@ -33,6 +33,9 @@ class FrozenArray;
 class DomicileDisplay;
 class DomicileShortcut;
 class LocalDOMWindow;
+class MediaQueryList;
+class MediaQueryListListener;
+class NativeEventListener;
 
 // navigator.domicile — the shell's control channel to the compositor.
 //
@@ -92,8 +95,6 @@ class MODULES_EXPORT DomicileHost final
                  double width,
                  double height,
                  ExceptionState&);
-  void setDesktopSize(ScriptState*, double width, double height, ExceptionState&);
-  void setDevicePixelRatio(ScriptState*, double ratio, ExceptionState&);
   // Draw the desktop the other way round. Answered with a `theme` event to
   // every chrome on the desk, this one included.
   //
@@ -323,6 +324,18 @@ class MODULES_EXPORT DomicileHost final
   // already-running clients the compositor announces on connect are announced
   // to a page that is listening by construction.
   bool EnsureBound();
+
+  // The desktop's size and density, told to the compositor by the engine
+  // rather than by the page: the shell's window IS the desktop, the compositor
+  // never sees it, and a shell that forgot to say would leave every client laid
+  // out against the compositor's startup placeholder. Sent as the channel
+  // binds and again on every `resize` and every change of `devicePixelRatio`.
+  // See docs/architecture/WINDOW-DOMICILE.md.
+  void ReportGeometry();
+  void ReportDesktopSize();
+  // Re-arms `density_query_` at the new ratio: a `(resolution: Ndppx)` query
+  // matches one ratio, so hearing the next change means asking a new one.
+  void ReportDevicePixelRatio();
   bool Ready(ExceptionState&);
   bool ReadyForApp(const String& app_id, ExceptionState&);
 
@@ -345,6 +358,11 @@ class MODULES_EXPORT DomicileHost final
   HeapMojoRemote<domicile::mojom::blink::ExtensionTray> tray_;
   HeapMojoReceiver<domicile::mojom::blink::ExtensionTrayClient, DomicileHost>
       tray_receiver_;
+  // What ReportGeometry listens with: `resize` on the window, and a query for
+  // the ratio last reported. Null until the channel binds.
+  Member<NativeEventListener> resize_listener_;
+  Member<MediaQueryList> density_query_;
+  Member<MediaQueryListListener> density_listener_;
 };
 
 }  // namespace blink
