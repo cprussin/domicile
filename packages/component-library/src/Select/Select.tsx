@@ -1,7 +1,7 @@
 import { Select as BaseSelect } from "@base-ui/react/select";
 import { CaretDownIcon } from "@phosphor-icons/react/dist/ssr/CaretDown";
 import { CheckIcon } from "@phosphor-icons/react/dist/ssr/Check";
-import type { MouseEventHandler, ReactNode } from "react";
+import type { ComponentProps, MouseEventHandler, ReactNode } from "react";
 import { useRef, useState } from "react";
 import { css, cva, cx } from "../../styled-system/css";
 import type { ControlVariant } from "../../styled-system/recipes";
@@ -13,6 +13,10 @@ import { wrapperBase } from "../_control/wrapperBase";
 import type { ExtendProps } from "../extend-props";
 
 export { SIZES, type Size } from "../control-sizes";
+
+type Boundary = ComponentProps<
+  typeof BaseSelect.Positioner
+>["collisionBoundary"];
 
 /** A single option in the select popup. */
 export type SelectOption<V> = {
@@ -28,6 +32,18 @@ export type SelectOption<V> = {
 };
 
 type CommonProps<V> = Partial<ControlVariant> & {
+  /**
+   * Where the list has to stay — shifted, and narrowed, to fit. The viewport
+   * by default; on a desk of several screens that runs across all of them,
+   * so a panel's own span keeps its lists on its screen.
+   */
+  boundary?: Boundary | undefined;
+  /**
+   * Its value and a caret, in the color of what holds it, with no field
+   * around them: a setting read as part of a line of text — a device's port
+   * under its name — rather than a form's field.
+   */
+  quiet?: boolean | undefined;
   // `null` is base-ui's controlled-with-no-selection sentinel; `undefined`
   // means uncontrolled. We forward both verbatim so consumers can pick
   // either model without triggering the controlled/uncontrolled warning.
@@ -52,6 +68,7 @@ type Props<V> = ExtendProps<typeof BaseSelect.Trigger, CommonProps<V>>;
 // outline, hover border, and invalid styling match the rest of the form
 // controls verbatim. A right-aligned caret replaces the resize handle.
 export const Select = <V,>({
+  boundary,
   defaultValue,
   disabled,
   name,
@@ -59,6 +76,7 @@ export const Select = <V,>({
   options,
   placeholder,
   prefixIcon,
+  quiet = false,
   required,
   rounded = false,
   size = "md",
@@ -164,11 +182,15 @@ export const Select = <V,>({
       {/* biome-ignore lint/a11y/noStaticElementInteractions: forwards wrapper-padding clicks to the trigger so the full container is the clickable target; mirrors native <label> behavior */}
       {/* biome-ignore lint/a11y/useKeyWithClickEvents: the trigger button this onClick forwards to handles every keyboard interaction (Enter/Space to open, Esc to close, arrows to navigate); the wrapper onClick is a mouse-only convenience for click-anywhere-on-the-field */}
       <div
-        className={cx(
-          control({ size }),
-          wrapperBase,
-          wrapperStyles({ rounded, size }),
-        )}
+        className={
+          quiet
+            ? quietStyles
+            : cx(
+                control({ size }),
+                wrapperBase,
+                wrapperStyles({ rounded, size }),
+              )
+        }
         onClick={openTriggerOnWrapperClick}
         onMouseDown={focusControlOnMouseDown}
         ref={wrapperRef}
@@ -177,7 +199,7 @@ export const Select = <V,>({
         <PrefixIconStack prefixIcon={prefixIcon} size={size} />
         <BaseSelect.Trigger
           {...triggerProps}
-          className={triggerStyles}
+          className={cx(triggerStyles, quiet && quietTriggerStyles)}
           data-active={active ? "" : undefined}
           data-control=""
         >
@@ -204,6 +226,7 @@ export const Select = <V,>({
           // `inlineSize: var(--anchor-width)` to match the field exactly.
           anchor={wrapperRef}
           className={positionerStyles}
+          collisionBoundary={boundary}
           side="bottom"
           sideOffset={6}
         >
@@ -252,6 +275,30 @@ const openTriggerOnWrapperClick: MouseEventHandler<HTMLDivElement> = (
   }
   trigger.click();
 };
+
+// No field: the line's own text, tinted on hover and while open, and ringed
+// only for the keyboard.
+const quietStyles = css({
+  "&:has([data-control]:focus-visible)": {
+    outline: "1px solid {colors.accent}",
+  },
+  "&:has([data-control]:is(:hover, [data-popup-open]))": {
+    backgroundColor: "color-mix(in oklab, currentcolor 12%, transparent)",
+  },
+  alignItems: "center",
+  borderRadius: "sm",
+  cursor: "pointer",
+  display: "inline-flex",
+  gap: 1,
+  maxInlineSize: "100%",
+  paddingInline: 1,
+  transition: "background-color {durations.fast} {easings.out}",
+});
+
+const quietTriggerStyles = css({
+  color: "inherit",
+  gap: 1,
+});
 
 const triggerStyles = css({
   // Empty-value placeholder gets the muted color the wrapper would have

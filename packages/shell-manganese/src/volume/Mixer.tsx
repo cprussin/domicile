@@ -11,9 +11,9 @@ import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
 import type { AudioMessage } from "@domicile-desktop/sdk/host-message";
 import { CheckCircleIcon } from "@phosphor-icons/react/dist/ssr/CheckCircle";
 import type { ReactNode } from "react";
-import { useState } from "react";
+import { createContext, useContext, useState } from "react";
 
-import { css } from "../../styled-system/css";
+import { css, cx } from "../../styled-system/css";
 import { flex, hstack } from "../../styled-system/patterns";
 import type { Direction } from "./Level";
 import { Level } from "./Level";
@@ -54,10 +54,9 @@ type Drawer = "outputs" | "inputs" | "apps" | "cards";
  */
 export const Mixer = ({ audio, domicile, watchLevels }: Props) => {
   const [open, setOpen] = useState<readonly Drawer[]>([]);
-  const output = audio.outputs.find((device) => device.default);
-  const input = audio.inputs.find(
-    (device) => device.default && !device.monitor,
-  );
+  const [panel, setPanel] = useState<HTMLElement | null>(null);
+  const output = primary(audio.outputs);
+  const input = primary(audio.inputs.filter((device) => !device.monitor));
   const outputs = audio.outputs.filter((device) => device !== output);
   const inputs = audio.inputs.filter(
     (device) => device !== input && !device.monitor,
@@ -94,86 +93,95 @@ export const Mixer = ({ audio, domicile, watchLevels }: Props) => {
     />
   );
   return (
-    <div className={mainStyles}>
-      {output !== undefined && (
-        <section aria-label="Outputs" className={groupStyles}>
-          <Default
-            device={output}
-            direction="output"
-            domicile={domicile}
-            label="Volume"
-            meter={levels.get(output.id)}
-          />
-          {outputs.length > 0 && (
-            <div className={nestedStyles}>
-              {drawer(
-                "outputs",
-                "More outputs",
-                <Devices
-                  devices={outputs}
-                  direction="output"
-                  domicile={domicile}
-                  levels={levels}
-                />,
-                "sm",
-              )}
-            </div>
-          )}
-        </section>
-      )}
-      {input !== undefined && (
-        <section aria-label="Inputs" className={groupStyles}>
-          <Default
-            device={input}
-            direction="input"
-            domicile={domicile}
-            label="Microphone"
-            meter={levels.get(input.id)}
-          />
-          {inputs.length > 0 && (
-            <div className={nestedStyles}>
-              {drawer(
-                "inputs",
-                "More inputs",
-                <Devices
-                  devices={inputs}
-                  direction="input"
-                  domicile={domicile}
-                  levels={levels}
-                />,
-                "sm",
-              )}
-            </div>
-          )}
-        </section>
-      )}
-      {apps.length > 0 && (
-        <div className={groupStyles}>
-          {drawer(
-            "apps",
-            "Apps",
-            <Apps
-              apps={apps}
+    <Panel.Provider value={panel}>
+      <div className={mainStyles} ref={setPanel}>
+        {output !== undefined && (
+          <section aria-label="Outputs" className={groupStyles}>
+            <Default
+              device={output}
+              direction="output"
               domicile={domicile}
-              inputs={audio.inputs}
-              levels={levels}
-              outputs={audio.outputs}
-            />,
-          )}
-        </div>
-      )}
-      {audio.cards.length > 0 && (
-        <div className={groupStyles}>
-          {drawer(
-            "cards",
-            "Cards",
-            <Cards cards={audio.cards} domicile={domicile} />,
-          )}
-        </div>
-      )}
-    </div>
+              label="Volume"
+              meter={levels.get(output.id)}
+            />
+            {outputs.length > 0 && (
+              <div className={nestedStyles}>
+                {drawer(
+                  "outputs",
+                  "More outputs",
+                  <Devices
+                    devices={outputs}
+                    direction="output"
+                    domicile={domicile}
+                    levels={levels}
+                  />,
+                  "sm",
+                )}
+              </div>
+            )}
+          </section>
+        )}
+        {input !== undefined && (
+          <section aria-label="Inputs" className={groupStyles}>
+            <Default
+              device={input}
+              direction="input"
+              domicile={domicile}
+              label="Microphone"
+              meter={levels.get(input.id)}
+            />
+            {inputs.length > 0 && (
+              <div className={nestedStyles}>
+                {drawer(
+                  "inputs",
+                  "More inputs",
+                  <Devices
+                    devices={inputs}
+                    direction="input"
+                    domicile={domicile}
+                    levels={levels}
+                  />,
+                  "sm",
+                )}
+              </div>
+            )}
+          </section>
+        )}
+        {apps.length > 0 && (
+          <div className={groupStyles}>
+            {drawer(
+              "apps",
+              "Apps",
+              <Apps
+                apps={apps}
+                domicile={domicile}
+                inputs={audio.inputs}
+                levels={levels}
+                outputs={audio.outputs}
+              />,
+            )}
+          </div>
+        )}
+        {audio.cards.length > 0 && (
+          <div className={groupStyles}>
+            {drawer(
+              "cards",
+              "Cards",
+              <Cards cards={audio.cards} domicile={domicile} />,
+            )}
+          </div>
+        )}
+      </div>
+    </Panel.Provider>
   );
 };
+
+/**
+ * The mixer's panel, which every choice's list stays over: across it, so
+ * that none runs off its screen onto the next; and the whole height of the
+ * window, so that a long one still has room to drop.
+ */
+const Panel = createContext<HTMLElement | null>(null);
 
 /** A stream, and which way it goes. */
 type Flow = { stream: AudioStream; direction: Direction };
@@ -199,6 +207,15 @@ const byApp = (
   return [...apps].map(([name, flows]) => ({ flows, name }));
 };
 
+/**
+ * The device the sliders are for: the server's default, or — where it has
+ * none of these, as when its default input is an output's monitor or a
+ * device that has gone — the first, which is what the server would fall
+ * back to.
+ */
+const primary = (devices: readonly AudioDevice[]) =>
+  devices.find((device) => device.default) ?? devices[0];
+
 type DefaultProps = {
   device: AudioDevice;
   direction: Direction;
@@ -217,7 +234,7 @@ const Default = ({
   meter,
 }: DefaultProps) => (
   <div className={rowStyles}>
-    <span className={headStyles}>
+    <span className={cx(headStyles, captionLineStyles)}>
       <span className={captionStyles}>{device.description}</span>
       <Port device={device} domicile={domicile} />
     </span>
@@ -313,7 +330,7 @@ const Apps = ({ apps, domicile, inputs, levels, outputs }: AppsProps) => (
                 : `${stream.application}: ${title}`;
             return (
               <li className={rowStyles} key={stream.id}>
-                <span className={headStyles}>
+                <span className={cx(headStyles, captionLineStyles)}>
                   <span className={captionStyles}>
                     {title ??
                       (direction === "output" ? "Playing" : "Recording")}
@@ -408,24 +425,36 @@ type ChoiceProps = {
   onChoose: (value: string) => void;
 };
 
-/** A row's choice: a small `Select` at its end. */
-const Choice = ({ label, onChoose, options, value }: ChoiceProps) => (
-  <span className={choiceStyles}>
-    <Select
-      aria-label={label}
-      onValueChange={(chosen) => {
-        if (chosen !== null && chosen !== value) {
-          onChoose(chosen);
+/**
+ * A row's choice: a quiet `Select` after what it is the choice of — its
+ * value and a caret, read as more of the line — whose list stays over the
+ * panel.
+ */
+const Choice = ({ label, onChoose, options, value }: ChoiceProps) => {
+  const panel = useContext(Panel)?.getBoundingClientRect();
+  return (
+    <span className={choiceStyles}>
+      <Select
+        aria-label={label}
+        boundary={
+          panel === undefined
+            ? undefined
+            : { height: innerHeight, width: panel.width, x: panel.x, y: 0 }
         }
-      }}
-      options={options}
-      placeholder="…"
-      rounded
-      size="xs"
-      value={value ?? null}
-    />
-  </span>
-);
+        onValueChange={(chosen) => {
+          if (chosen !== null && chosen !== value) {
+            onChoose(chosen);
+          }
+        }}
+        options={options}
+        placeholder="…"
+        quiet
+        size="xs"
+        value={value ?? null}
+      />
+    </span>
+  );
+};
 
 /** A port or a profile as an option, saying so when it cannot be used now. */
 const option = (
@@ -438,9 +467,10 @@ const option = (
   value: choice.name,
 });
 
+// Wide enough that a device's name and its port share a line, as a rule.
 const mainStyles = flex({
   direction: "column",
-  inlineSize: 72,
+  inlineSize: 96,
 });
 
 // A hairline between the outputs, the inputs, the apps and the cards, so
@@ -475,38 +505,45 @@ const rowStyles = flex({
   gap: 0.5,
 });
 
+// A name and its choice on one line where they fit, and the choice on its own
+// line under the name where they do not — so that neither is cut short.
 const headStyles = hstack({
-  gap: 1.5,
+  columnGap: 1.5,
+  flexWrap: "wrap",
   minBlockSize: 6,
+  rowGap: 1,
 });
 
-// Ten pixels, the bar's own size, as the figures beside the sliders are.
 const captionStyles = css({
-  flexGrow: 1,
-  fontSize: "0.625rem",
+  flex: "0 1 auto",
   minInlineSize: 0,
   opacity: 0.75,
-  overflow: "hidden",
+  overflowWrap: "anywhere",
+});
+
+// A caption's line, from where the slider under it starts — past its mute
+// button — in ten pixels, the bar's own size, as the figures beside the
+// sliders are.
+const captionLineStyles = css({
+  fontSize: "0.625rem",
   paddingInlineStart: 8,
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
 });
 
 const nameStyles = css({
-  flexGrow: 1,
+  flex: "0 1 auto",
   minInlineSize: 0,
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
+  overflowWrap: "anywhere",
 });
 
-// A long list scrolls inside the drawer, so the panel stays on screen.
+// A long list scrolls inside the drawer, so the panel stays on screen — down,
+// and never across.
 const appsStyles = flex({
   direction: "column",
   gap: 4,
   listStyle: "none",
   margin: 0,
   maxBlockSize: "50vh",
+  overflowX: "hidden",
   overflowY: "auto",
   padding: 0,
 });
@@ -524,9 +561,12 @@ const appStyles = css({
   margin: 0,
 });
 
+// Straight after its name, or under it where the line is full — never cut
+// short to stay on the line. The name's size, at full strength, as something
+// to press.
 const choiceStyles = css({
-  flexShrink: 1,
-  maxInlineSize: 36,
+  flex: "0 0 auto",
+  maxInlineSize: "100%",
   minInlineSize: 0,
 });
 

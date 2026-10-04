@@ -76,6 +76,7 @@ const meta = {
     disabled: false,
     options: FONT_OPTIONS,
     placeholder: "Choose a font…",
+    quiet: false,
     rounded: false,
     size: "md",
     width: 64,
@@ -92,6 +93,10 @@ const meta = {
     prefixIcon: {
       ...iconControl,
       table: { category: "Contents" },
+    },
+    quiet: {
+      control: "boolean",
+      table: { category: "Style" },
     },
     rounded: {
       control: "boolean",

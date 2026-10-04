@@ -38,6 +38,11 @@ type Props = ExtendProps<
      */
     tone?: Tone | undefined;
     trigger?: ReactElement | undefined;
+    /**
+     * A wider cap, for a panel of controls whose names would otherwise be
+     * cut short — a mixer's devices, say.
+     */
+    wide?: boolean | undefined;
   }
 >;
 
@@ -67,6 +72,7 @@ const PopoverComponent = ({
   title,
   tone = "card",
   trigger,
+  wide = false,
   ...rootProps
 }: Props) => {
   const ownActions = useRef<BasePopover.Root.Actions | null>(null);
@@ -93,6 +99,7 @@ const PopoverComponent = ({
             className={popupStyles}
             data-flush={flush ? "" : undefined}
             data-tone={tone}
+            data-wide={wide ? "" : undefined}
             ref={setPopupRef}
           >
             <CloseOnFocusOut
@@ -165,6 +172,9 @@ const popupStyles = flex({
     paddingBlock: 1.5,
     paddingInline: 3,
     textShadow: "textOverPhoto",
+  },
+  "&[data-wide]": {
+    maxInlineSize: "min(30rem, 90vw)",
   },
   backgroundColor: "card",
   border: "1px solid {colors.border}",

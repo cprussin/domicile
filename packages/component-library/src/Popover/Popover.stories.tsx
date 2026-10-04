@@ -19,6 +19,7 @@ const meta = {
     title: "Connection",
     tone: "card",
     trigger: <Button beforeIcon={<InfoIcon />}>Details</Button>,
+    wide: false,
   },
   argTypes: {
     align: {
@@ -59,6 +60,10 @@ const meta = {
     trigger: {
       control: false,
       table: { category: "Contents" },
+    },
+    wide: {
+      control: "boolean",
+      table: { category: "Style" },
     },
   },
   component: PopoverComponent,
