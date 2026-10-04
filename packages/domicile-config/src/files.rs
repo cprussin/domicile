@@ -1,19 +1,16 @@
-//! What the file index leaves out of a home.
+//! What the launcher's file index leaves out of the home directory.
 //!
-//! The index is the whole home at every depth — see
-//! `domicile_host::home_walk` — and that is more than a launcher wants on a
-//! home with a `~/Library` of mail, or a `~/Projects` of checkouts whose
-//! `target/` directories are most of the disk. So what goes in is the desk's
-//! to say, here, as globs over paths named relative to the home.
+//! The index walks the whole home (see `domicile_host::home_walk`), which can
+//! include mail stores and build directories. The config omits paths with
+//! globs relative to the home. See `docs/LAUNCHER.md#files`.
 
 use globset::{Glob, GlobBuilder, GlobMatcher};
 use serde::Deserialize;
 
 /// What the file index is built from.
 ///
-/// Compared, which is what `PartialEq` is for: a reload asks what moved
-/// between two configs, and what the index omits is one of the answers — see
-/// the compositor's `Restatement`.
+/// `PartialEq` lets a reload detect a change; see the compositor's
+/// `Restatement`.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct FilesConfig {
@@ -22,22 +19,21 @@ pub struct FilesConfig {
 
 /// The paths the file index leaves out, and everything under them.
 ///
-/// **GITIGNORE'S RULES, WHICH ARE THE ONES ANYBODY WRITING THIS HAS MET.**
-/// Each pattern is a glob over a path relative to the home; a `*` stops at a
-/// `/` and a `**` does not; a pattern that starts with `!` takes a path back;
-/// and the last pattern to match a path decides it. An omitted directory is
-/// not walked, so nothing under it can be taken back — which is also what
-/// makes this worth having on a home with a `~/Library` in it.
+/// Patterns follow gitignore's rules:
+/// - Each is a glob over a path relative to the home. `*` stops at `/`; `**`
+///   does not.
+/// - A pattern starting with `!` takes a path back.
+/// - The last matching pattern wins.
+/// - An omitted directory is not walked, so nothing under it can be taken
+///   back.
 ///
-/// **SAYING NOTHING OMITS WHAT IS HIDDEN**, at every depth: `**/.*`. A list
-/// that is stated replaces that rather than adding to it, so a desk that wants
-/// its dotfiles offered can have them.
+/// The default is `**/.*`, which omits hidden paths. A configured list
+/// replaces the default.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(try_from = "Vec<String>")]
 pub struct Omit {
-    /// As written, for [`PartialEq`]: two lists that say the same thing in
-    /// different words are two configs, and a reload between them costs one
-    /// walk.
+    /// The patterns as written, for [`PartialEq`]. Two lists that match the
+    /// same paths compare unequal, which costs one extra walk on reload.
     written: Vec<String>,
     rules: Vec<Rule>,
 }
@@ -53,9 +49,9 @@ struct Rule {
 impl Omit {
     /// Whether `path`, named relative to the home, is left out of the index.
     ///
-    /// Only `path` itself: whether it is under something omitted is the
-    /// caller's to know — a walk never reaches it, and a watch has to ask of
-    /// each of its ancestors.
+    /// Checks only `path` itself, not its ancestors. A walk never enters an
+    /// omitted directory, but a watch must test each ancestor of a changed
+    /// path.
     pub fn omits(&self, path: &str) -> bool {
         self.rules
             .iter()
@@ -100,8 +96,8 @@ impl TryFrom<Vec<String>> for Omit {
     }
 }
 
-/// `pattern` as a glob whose `*` stops at a `/`, which is what makes `*/*`
-/// mean two deep rather than two deep or more.
+/// `pattern` as a glob whose `*` stops at `/`, so `*/*` means two levels
+/// deep and no more.
 fn compiled(pattern: &str) -> Result<Glob, globset::Error> {
     GlobBuilder::new(pattern).literal_separator(true).build()
 }

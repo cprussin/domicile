@@ -1,8 +1,7 @@
-//! What a run has to reach before it is a desktop, and what it says when it
-//! does not reach one.
+//! How a run waits for its components to come up, and how it reports a stall.
 //!
-//! The clock is a counter and the components are a closure, so the thirty
-//! seconds a real run spends waiting are four calls here.
+//! The clock is a counter and the components are closures, so a 30-second wait
+//! takes a few calls.
 
 use std::cell::Cell;
 use std::time::Duration;
@@ -18,8 +17,7 @@ fn broker() -> Milestone {
     }
 }
 
-/// A clock that moves one second every time it is asked, which is what a real
-/// one does between polls.
+/// A clock that advances one second per call, as a real one does between polls.
 fn ticking() -> impl FnMut() -> Duration {
     let elapsed = Cell::new(Duration::ZERO);
     move || {
@@ -44,7 +42,7 @@ fn something_already_there_is_not_waited_for() {
         &mut clock,
     )
     .expect("it is there");
-    // The clock was never asked, which is what "not waited for" means.
+    // The clock was never read.
     assert_eq!(clock(), Duration::from_secs(1));
 }
 
@@ -92,9 +90,9 @@ fn something_that_never_turns_up_names_itself_and_what_to_check() {
 
 #[test]
 fn a_component_that_exits_first_is_the_answer_rather_than_the_wait() {
-    // The whole point of watching the children while waiting: an engine that
-    // died at once used to be thirty seconds of nothing followed by a sentence
-    // about a socket, which is the symptom and not the failure.
+    // The children are watched while waiting, so an engine that dies at once is
+    // reported as the failure instead of as a missing socket after the full
+    // timeout.
     let stalled = reach(
         &broker(),
         &|| false,
@@ -118,8 +116,8 @@ fn a_component_that_exits_first_is_the_answer_rather_than_the_wait() {
 
 #[test]
 fn a_component_that_exits_beats_a_milestone_that_was_reached_anyway() {
-    // Both are true at once when a component creates its socket and then dies.
-    // The exit is the story; the socket is a file nothing is listening on.
+    // A component can create its socket and then die. The exit is the failure;
+    // the socket has no listener.
     let stalled = reach(
         &broker(),
         &|| true,
@@ -141,16 +139,11 @@ fn a_component_that_exits_beats_a_milestone_that_was_reached_anyway() {
 
 #[test]
 fn a_stop_asked_for_before_the_desktop_is_up_ends_the_wait() {
-    // THE MOST DANGEROUS THING THIS BINARY CAN DO IS OUTLIVE ITS OWN
-    // SUPERVISION. Only `until_one_exits` used to consult the flag, so a
-    // `SIGINT` or a `SIGTERM` that arrived while a milestone was still
-    // outstanding was ignored for the whole of the patience -- thirty seconds
-    // each, sixty for the two. Whatever sends that signal sends a `SIGKILL`
-    // after it, and a launcher killed before `Running::drop` has run leaves
-    // the engine alive on the tty holding logind's session control, every
-    // keyboard and mouse logind handed it, and the console in `K_OFF` and
-    // `KD_GRAPHICS`. Nothing then takes any of it back, because nothing is
-    // left that could: that is the machine with no way in.
+    // A launcher must never outlive its supervision. Whatever sends SIGINT or
+    // SIGTERM follows up with SIGKILL. A launcher killed before `Running::drop`
+    // runs leaves the engine on the tty holding logind's session control, the
+    // input devices and the console in `K_OFF` and `KD_GRAPHICS`, with nothing
+    // left to restore them. So a stop request ends the wait at once.
     let stalled = reach(
         &broker(),
         &|| false,

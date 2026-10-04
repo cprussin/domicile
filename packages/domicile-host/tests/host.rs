@@ -1,10 +1,7 @@
-//! Behavior tests for the host orchestrator, written before the implementation.
+//! Behavior tests for `Host`.
 //!
-//! `Host` is the compositor's brain: it tracks connected Wayland apps, applies
-//! the placement/focus decisions the chrome makes, and routes input. It sits
-//! between `domicile-protocol` (the chrome wire messages) and `domicile-scene` (the on-screen
-//! geometry), so these tests exercise the whole pipeline end to end without any
-//! Wayland or GPU dependency.
+//! `Host` tracks Wayland apps, applies the chrome's focus requests and reports
+//! changes back as `HostMessage`s. These tests need no Wayland or GPU.
 
 use domicile_host::ipc::apply_chrome_message;
 use domicile_host::{AppId, Host};
@@ -17,11 +14,8 @@ use domicile_scene::KeyboardTarget;
 
 #[test]
 fn a_window_says_what_it_is_called_when_the_client_says_it() {
-    // A toplevel is announced when the client creates it, which is before
-    // `set_title` — and the name changes again whenever the window's own idea
-    // of itself does, which for a terminal is every command it runs. Without
-    // this the title stayed whatever it was at announcement, which was
-    // nothing, and a chrome with a tab rail had nothing to write in it.
+    // A toplevel is announced before its first `set_title`, and a terminal
+    // retitles on every command, so title changes need their own message.
     let mut host = Host::new();
     let (app, _) = host.app_appeared(None, None);
 
@@ -32,7 +26,7 @@ fn a_window_says_what_it_is_called_when_the_client_says_it() {
             title: Some("a terminal".to_string()),
         })
     );
-    // And it is remembered, so the replay a reloading chrome gets says it too.
+    // The replay for a reloading chrome includes the title.
     assert_eq!(
         host.open_apps().first(),
         Some(&HostMessage::AppAppeared {
@@ -41,22 +35,17 @@ fn a_window_says_what_it_is_called_when_the_client_says_it() {
             size: None,
         })
     );
-    // Saying the same thing again is not news — the contract this type keeps
-    // so its state and the chromes' stay in step whatever a caller repeats.
+    // An unchanged title sends nothing.
     assert_eq!(host.app_titled(&app, Some("a terminal".to_string())), None);
-    // A client nobody has heard of is not an error to report to every chrome.
+    // An unknown app sends nothing.
     assert_eq!(host.app_titled("app-nowhere", None), None);
 }
 
 #[test]
 fn a_client_that_has_not_committed_is_announced_with_no_size() {
-    // `app_appeared` goes out when the toplevel maps, which is before the
-    // client has committed a buffer — so there is no size to announce. Saying
-    // `0x0` instead made every chrome that believed the field open a window
-    // with no box, which is a window that is never composited and never
-    // configured to a size to redraw at. The size arrives on the `app_resized`
-    // that follows, and the replay a reloading chrome gets says the same
-    // nothing until it has.
+    // A toplevel maps before its first buffer commit, so it has no size yet.
+    // A `0x0` size would make the chrome open a window with no box, which is
+    // never composited. The size arrives with the following `app_resized`.
     let mut host = Host::new();
     let (app, announce) = host.app_appeared(None, None);
     let announced = |size| HostMessage::AppAppeared {
@@ -78,27 +67,22 @@ fn a_client_that_has_not_committed_is_announced_with_no_size() {
 
 #[test]
 fn a_chrome_that_arrives_late_is_told_about_every_window_already_open() {
-    // A chrome learns about a window from `app_appeared`, which is sent once,
-    // when the client maps — and nothing ever says it again. A page that was
-    // not listening at that moment loses that window permanently, though the
-    // client is alive and drawing: it happens when a client maps in the
-    // milliseconds after the chrome's handshake, and every time the page
-    // reloads.
+    // `app_appeared` is sent once, when the client maps. A chrome that
+    // connects later, or reloads, learns about existing windows only from
+    // this replay.
     let mut host = Host::new();
     let (first, _) = host.app_appeared(Some("a terminal".to_string()), Some((640.0, 480.0)));
     let (second, _) = host.app_appeared(None, Some((100.0, 200.0)));
-    // Enough of them that arrival order and a hash map's order are all but
-    // certain to differ. With two, an unordered implementation passes this
-    // about half the time, which is a test that reports luck.
+    // Enough apps that hash map order almost surely differs from arrival
+    // order. With two, an unordered implementation passes half the time.
     let rest: Vec<AppId> = (0..10)
         .map(|n| host.app_appeared(None, Some((f64::from(n), 0.0))).0)
         .collect();
 
     let announcements = host.open_apps();
 
-    // Everything the chrome would have been told, and in the order the apps
-    // arrived — a desktop that mounts its windows differently on each reload
-    // is its own bug.
+    // In arrival order, so the chrome mounts windows the same way on each
+    // reload.
     let expected: Vec<HostMessage> = [
         HostMessage::AppAppeared {
             app_id: first,
@@ -121,7 +105,7 @@ fn a_chrome_that_arrives_late_is_told_about_every_window_already_open() {
                 size: Some([n as f64, 0.0]),
             }),
     )
-    // And who has the keyboard, which is the chrome while nothing is placed.
+    // Then the focus holder: the chrome, since no app has focus.
     .chain(std::iter::once(HostMessage::FocusChanged { app_id: None }))
     .collect();
     assert_eq!(announcements, expected);
@@ -129,13 +113,11 @@ fn a_chrome_that_arrives_late_is_told_about_every_window_already_open() {
 
 #[test]
 fn focus_is_reported_when_it_moves_and_not_when_it_does_not() {
-    // The chrome asks for focus, but it is not the only thing that moves it —
-    // a click on a window focuses it in the compositor. Without a message the
-    // chrome's idea of the active window is right until the first click and
-    // wrong afterward, which is every focus affordance a desktop has.
+    // A click in the compositor also moves focus, so the chrome needs a
+    // message to track the active window.
     //
-    // And silent when nothing moved: this is asked after *every* chrome
-    // message, so a report per ask would be a message per mouse move.
+    // `focus_change` runs after every chrome message, so it reports only
+    // actual changes. Otherwise every mouse move would send a message.
     let mut host = Host::new();
     let (app, _) = host.app_appeared(None, Some((100.0, 100.0)));
 
@@ -155,7 +137,7 @@ fn focus_is_reported_when_it_moves_and_not_when_it_does_not() {
 
 #[test]
 fn the_keyboard_coming_back_to_the_chrome_is_reported_too() {
-    // The mirror, and the one a chrome cannot infer: it did not ask for this.
+    // The chrome cannot infer this case, so it must be reported.
     let mut host = Host::new();
     let (app, _) = host.app_appeared(None, Some((100.0, 100.0)));
     host.handle_chrome_message(ChromeMessage::FocusApp {
@@ -175,11 +157,9 @@ fn the_keyboard_coming_back_to_the_chrome_is_reported_too() {
 
 #[test]
 fn a_client_asking_for_the_keyboard_is_a_question_rather_than_a_move() {
-    // The whole point of the message: a client that asks is telling the shell
-    // it wants the keyboard, and the shell is what decides whether it gets it.
-    // A host that moved the seat here would be writing the shell's focus
-    // policy for it, and no desktop built on this could refuse a window that
-    // interrupts what its user is typing into.
+    // The shell owns focus policy. The host forwards the request and leaves
+    // the keyboard alone, so a shell can refuse a window that would interrupt
+    // typing.
     let mut host = Host::new();
     let (asking, _) = host.app_appeared(None, None);
     let (typing, _) = host.app_appeared(None, None);
@@ -209,9 +189,8 @@ fn a_client_asking_for_the_keyboard_is_a_question_rather_than_a_move() {
 
 #[test]
 fn a_client_nobody_has_heard_of_cannot_ask_for_the_keyboard() {
-    // The same gate `focus_app` keeps. A request naming a window no chrome has
-    // an element for is one no shell could answer, and forwarding it would
-    // have every shell write the check this one owes them.
+    // Same check as `focus_app`: no shell can act on a window it does not
+    // know, so the host drops the request instead of every shell checking.
     let host = Host::new();
 
     assert_eq!(host.focus_requested("app-404"), None);
@@ -219,9 +198,8 @@ fn a_client_nobody_has_heard_of_cannot_ask_for_the_keyboard() {
 
 #[test]
 fn a_focused_window_closing_hands_the_keyboard_back_and_says_so() {
-    // Nothing asked for this at all — the client went away, possibly by
-    // crashing. A chrome told only that the app closed would go on marking it
-    // active, and there is nothing else it could consult.
+    // The client may have crashed. Without a focus message the chrome would
+    // keep marking the closed app active.
     let mut host = Host::new();
     let (app, _) = host.app_appeared(None, Some((100.0, 100.0)));
     host.handle_chrome_message(ChromeMessage::FocusApp {
@@ -240,8 +218,7 @@ fn a_focused_window_closing_hands_the_keyboard_back_and_says_so() {
 
 #[test]
 fn a_chrome_that_arrives_late_is_told_who_has_the_keyboard() {
-    // A page that has just loaded has no other way to learn it, and every
-    // other route to this message is a *change* it was not there for.
+    // A newly loaded page has no other way to learn the focus holder.
     let mut host = Host::new();
     let (app, _) = host.app_appeared(None, Some((100.0, 100.0)));
     host.handle_chrome_message(ChromeMessage::FocusApp {
@@ -258,7 +235,7 @@ fn a_chrome_that_arrives_late_is_told_who_has_the_keyboard() {
         }),
         "after the windows, since it names one of them"
     );
-    // And telling one chrome does not make the others think focus moved.
+    // The replay must not consume the change still owed to other chromes.
     assert_eq!(
         host.focus_change(),
         Some(HostMessage::FocusChanged { app_id: Some(app) }),
@@ -285,8 +262,6 @@ fn app_appeared_assigns_ids_and_announces_to_chrome() {
         }
         other => panic!("expected AppAppeared, got {other:?}"),
     }
-
-    // An app exists but has no on-screen portal until the chrome places it.
 }
 
 #[test]
@@ -298,8 +273,8 @@ fn a_popup_is_announced_as_its_own_app_over_its_window() {
         .popup_placed(&window, (12.0, 30.0), (180.0, 240.0), true)
         .expect("a window's popup is announced");
 
-    // An id of its own, from the windows' counter: the engine embeds by it, so
-    // it can be no id a window has.
+    // The engine embeds by id, so the popup takes one from the window
+    // counter.
     assert_ne!(popup, window);
     assert_eq!(
         placed,
@@ -311,11 +286,11 @@ fn a_popup_is_announced_as_its_own_app_over_its_window() {
             grab: true,
         }
     );
-    // A popup over a popup, which is a submenu.
+    // A popup over a popup is a submenu.
     assert!(host
         .popup_placed(&popup, (180.0, 0.0), (100.0, 100.0), true)
         .is_some());
-    // Over nothing it is nothing anybody can place.
+    // A popup over an unknown app is not announced.
     assert!(host
         .popup_placed("app-nowhere", (0.0, 0.0), (1.0, 1.0), false)
         .is_none());
@@ -386,8 +361,8 @@ fn a_windows_size_limits_are_reported_when_they_change() {
             size: [680.0, 500.0],
         })
     );
-    // A client restates its limits with every commit that changes anything
-    // else about its state; the chromes hear a change once.
+    // Clients restate their limits on unrelated commits; only changes are
+    // reported.
     assert_eq!(host.app_min_size(&id, (680.0, 500.0)), None);
     assert_eq!(
         host.app_max_size(&id, (1920.0, 0.0)),
@@ -397,7 +372,7 @@ fn a_windows_size_limits_are_reported_when_they_change() {
         })
     );
     assert_eq!(host.app_max_size(&id, (1920.0, 0.0)), None);
-    // And none is no limit, which is what an app starts with.
+    // Zero means no limit, which is the initial state.
     let (fresh, _) = host.app_appeared(None, None);
     assert_eq!(host.app_min_size(&fresh, (0.0, 0.0)), None);
     assert_eq!(host.app_min_size("app-nowhere", (1.0, 1.0)), None);
@@ -436,7 +411,7 @@ fn a_reloaded_chrome_is_told_every_windows_size_limits() {
         ],
         "{free} has no limits, so nothing is said about it"
     );
-    // After the window they are about, which the chrome has to know first.
+    // Limits follow the window's announcement, which the chrome needs first.
     let appeared = replayed
         .iter()
         .position(|message| matches!(message, HostMessage::AppAppeared { app_id, .. } if *app_id == limited))
@@ -469,8 +444,6 @@ fn resizing_and_closing_report_to_chrome() {
     assert!(host.app_closed(&id).is_none(), "closing twice is a no-op");
 }
 
-// ---- placement from the chrome --------------------------------------------
-
 // ---- focus ----------------------------------------------------------------
 
 #[test]
@@ -491,7 +464,7 @@ fn focus_routes_keyboard_between_app_and_chrome() {
 
 #[test]
 fn spawn_is_a_no_op_in_the_brain() {
-    // The compositor intercepts Spawn; the brain must just ignore it.
+    // The compositor handles `Spawn` before it reaches `Host`.
     let mut host = Host::new();
     host.handle_chrome_message(ChromeMessage::Spawn {
         command: vec!["kitty".into()],
@@ -502,10 +475,9 @@ fn spawn_is_a_no_op_in_the_brain() {
 
 #[test]
 fn asking_a_client_to_close_leaves_the_window_where_it_is() {
-    // The compositor sends the toplevel a close and the client decides: an
-    // editor with unsaved work stays up. A brain that dropped the window here
-    // would take the tab away from a window still on screen, and nothing ever
-    // puts it back — `app_appeared` is sent once.
+    // The client decides whether to close; an editor with unsaved work stays
+    // up. Dropping the window here would remove its tab for good, since
+    // `app_appeared` is sent once.
     let mut host = Host::new();
     let (id, _) = host.app_appeared(None, Some((100.0, 100.0)));
 
@@ -515,17 +487,12 @@ fn asking_a_client_to_close_leaves_the_window_where_it_is() {
     assert_eq!(host.app_count(), 1);
 }
 
-// ---- how a window is drawn, as opposed to where ---------------------------
-
-// ---- the desktop the chrome is told about --------------------------------
+// ---- displays -------------------------------------------------------------
 
 #[test]
 fn the_displays_are_answered_after_the_welcome() {
-    // Order matters on this path: a chrome that read the handshake's `displays`
-    // before it knew the version agreed would be acting on a message from a
-    // host it has not finished negotiating with. Only on this path — a change
-    // broadcast reaches a connection that has not been welcomed, which is what
-    // latest-wins retention is for.
+    // The chrome must know the agreed protocol version before it reads any
+    // other message in the handshake reply.
     let mut host = Host::new();
     host.describe_displays(vec![lying_down("left", [0, 0], [1920, 1080], 1)]);
     let mut ready = false;
@@ -551,15 +518,12 @@ fn the_displays_are_answered_after_the_welcome() {
     );
 }
 
-// ---- the theme the desktop is drawn in ------------------------------------
+// ---- theme ----------------------------------------------------------------
 
 #[test]
 fn a_host_nobody_told_a_theme_is_the_one_the_chrome_was_drawn_against() {
-    // Unlike the keymap beside it, this is never absent. A keymap a host has
-    // not been handed is a desk with no keyboard behind it and inventing a
-    // layout for it would be a desktop typing in one nobody chose; a theme is
-    // not like that -- a page paints in one or the other, and the one it
-    // paints in when nothing said is the dark the chrome was designed for.
+    // Unlike the keymap, the theme always has a value. The default is dark,
+    // which the chrome is designed for.
     assert_eq!(
         Host::new().describe_theme(),
         HostMessage::Theme { theme: Theme::Dark }
@@ -568,9 +532,8 @@ fn a_host_nobody_told_a_theme_is_the_one_the_chrome_was_drawn_against() {
 
 #[test]
 fn a_theme_that_moved_is_what_every_chrome_is_told() {
-    // The answer is the broadcast: a toggle clicked on one monitor's page is
-    // the whole desktop changing, and the compositor sends what this hands
-    // back to every chrome rather than only to the one that asked.
+    // The compositor broadcasts the returned message to every chrome, not
+    // only the one that toggled the theme.
     let mut host = Host::new();
 
     assert_eq!(
@@ -590,11 +553,8 @@ fn a_theme_that_moved_is_what_every_chrome_is_told() {
 
 #[test]
 fn a_theme_that_did_not_move_is_not_restated() {
-    // A config file is rewritten for all sorts of reasons and a page that just
-    // connected is told the theme it is already painting in -- so "set it to
-    // what it is" is the ordinary case rather than the odd one, and a
-    // broadcast for it would be every chrome on the desk running the wipe
-    // animation over a theme that did not change.
+    // Setting the current theme is common (config rewrites, new pages). A
+    // broadcast would make every chrome run the wipe animation for nothing.
     let mut host = Host::new();
     host.set_theme(Theme::Light);
 
@@ -603,11 +563,9 @@ fn a_theme_that_did_not_move_is_not_restated() {
 
 #[test]
 fn the_windows_theme_is_kept_apart_from_the_chromes() {
-    // The chrome turns over when it is told; the windows only once every
-    // chrome has captured the frame its wipe starts from. So between the two
-    // the desk has one theme on its panels and the other on its windows, and
-    // a host that kept one value would tell a chrome connecting in that gap
-    // the wrong thing about half of them.
+    // Windows change theme only after every chrome captures its wipe's start
+    // frame. Until then the chromes and windows have different themes, and a
+    // chrome connecting in that gap needs both.
     let mut host = Host::new();
     host.set_theme(Theme::Light);
 
@@ -626,14 +584,11 @@ fn the_windows_theme_is_kept_apart_from_the_chromes() {
 
 #[test]
 fn a_desktop_described_again_replaces_the_one_before_it() {
-    // The compositor re-describes whenever the desktop changes at runtime,
-    // which with no displays configured is every time Domicile's own window is
-    // resized or its density changes. Appending would leave a chrome laying
-    // out against every size the window has ever been.
+    // When nested, the compositor re-describes on every resize or scale
+    // change of its window. Appending would keep every stale size.
     //
-    // Asserted on `describe_desktop` rather than through a handshake: replacing
-    // is a property of `describe_displays`, and driving it through
-    // `apply_chrome_message` would make this fail for a handshake bug too.
+    // Checked on `describe_desktop` so a handshake bug does not fail this
+    // test.
     let mut host = Host::new();
     host.describe_displays(vec![lying_down("old", [0, 0], [800, 600], 1)]);
     host.describe_displays(vec![lying_down("new", [0, 0], [1920, 1080], 2)]);
@@ -645,9 +600,7 @@ fn a_desktop_described_again_replaces_the_one_before_it() {
     );
 }
 
-/// One monitor lying down and at its own pixels, which is the uninteresting
-/// case: `mode` is `size` and nothing is turned. A test that wants otherwise
-/// writes the `DisplayInfo` out, so the shape it is about is on the page.
+/// A display with no rotation and a mode equal to its size.
 fn lying_down(name: &str, position: [i32; 2], size: [u32; 2], scale: u32) -> DisplayInfo {
     DisplayInfo {
         name: name.to_string(),

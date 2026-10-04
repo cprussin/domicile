@@ -1,9 +1,8 @@
-//! What a desk runs as it comes up.
+//! Commands a desk runs at startup.
 //!
-//! A session's own programs — a notification daemon, an editor's server — are
-//! the session's to start, on its display, and not anything a shell page can
-//! reach. Each is an argv, run as a launcher's application is: pointed at this
-//! desk's `WAYLAND_DISPLAY`.
+//! These start session programs, such as a notification daemon, that a shell
+//! page cannot start. Each runs like a launched application, with this desk's
+//! `WAYLAND_DISPLAY`.
 
 use serde::Deserialize;
 
@@ -11,14 +10,13 @@ use crate::ConfigError;
 
 /// The commands a desk starts with.
 ///
-/// **Run once, when the compositor starts**, and not on a reload: a reload
-/// that started them again would be a second notification daemon, and one that
-/// stopped the old ones would be killing what the person has since used.
+/// Run once, when the compositor starts. A reload does not rerun them, which
+/// would start duplicates, or stop them, which would kill programs in use.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct StartupConfig {
-    /// Each an argv: the program, then its arguments, with no shell between.
-    /// `["sh", "-c", "…"]` is how to have one.
+    /// Each an argv, run without a shell. For shell syntax, use
+    /// `["sh", "-c", "…"]`.
     pub commands: Vec<Vec<String>>,
 }
 

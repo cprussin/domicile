@@ -1,42 +1,19 @@
-//! The system tray: this compositor is the desk's StatusNotifierItem host.
+//! The D-Bus side of the system tray: the compositor is the
+//! StatusNotifierItem watcher and host, and sends the items to the shell as
+//! [`HostMessage::Tray`](domicile_protocol::HostMessage::Tray).
 //!
-//! **StatusNotifierItem is the tray there is on Wayland.** The X11 tray embeds
-//! an icon's window in the panel's, which a Wayland client has no way to do;
-//! what every toolkit speaks instead — Qt, libappindicator for GTK, Electron —
-//! is an object on the session bus that describes its icon, and a
-//! *watcher* the items register with. A desktop's panel is normally both the
-//! watcher and the host that draws them. Here the drawing is the shell's, and
-//! the shell is a page with no bus, so this process owns
-//! `org.kde.StatusNotifierWatcher`, reads each item, and tells every chrome
-//! the tray as a [`HostMessage::Tray`](domicile_protocol::HostMessage::Tray).
-//! A click comes back as `activate_tray_item` and is called on the item.
+//! Item parsing and the [`Registry`] live in `domicile_host::tray`. Design:
+//! `docs/architecture/SYSTEM-TRAY.md`.
 //!
-//! What an item's properties are *shown as* is `domicile_host::tray`, which is
-//! pure and tested there; so is the [`Registry`] of who registered what. This
-//! is the bus, and nothing else.
-//!
-//! **One worker, and nothing it does waits on an application.** The watcher's
-//! methods run on zbus's own executor and must not block it, so every one of
-//! them, every signal an item sends and every click are events on one
-//! channel, which a worker thread takes in turn. Reading an item is a thread
-//! of its own that answers on that channel: zbus 4 waits on a reply for as
-//! long as the bus lets it, and one slow application must not hold up the
-//! others. Two more threads listen for the two kinds of signal that matter —
-//! an item that changed, and a name that changed hands — because a blocking
-//! iterator is one match rule on one thread.
-//!
-//! A click reaches this through the Wayland thread, which is where a locked
-//! desk refuses it — see [`crate::lock::refused`].
-//!
-//! **Nothing here can take the desktop down**, for [`crate::appearance`]'s
-//! reason: a desk on a bare tty may have no session bus, and a desk started
-//! inside another session will find the watcher's name taken by that
-//! session's panel. Either way the tray stays empty and the log says why once.
-//!
-//! **No menus yet.** An item's own menu is `com.canonical.dbusmenu`, which a
-//! host has to read and draw; until that exists a secondary click asks the
-//! item to open one itself with `ContextMenu`, which many items do not. See
-//! ROADMAP.md.
+//! - Watcher methods, item signals and clicks are events on one channel,
+//!   handled by one worker thread. Watcher methods must not block zbus's
+//!   executor.
+//! - Each item read runs on its own thread, because zbus 4 has no method
+//!   timeout and one slow application must not stall the others.
+//! - Clicks arrive through the Wayland thread, which refuses them while
+//!   locked (see [`crate::lock::refused`]).
+//! - Failure leaves the tray empty and logs once. A bare tty may have no
+//!   session bus, and a nested desktop may find the watcher name taken.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -53,26 +30,26 @@ use zbus::object_server::SignalEmitter;
 use zbus::zvariant::OwnedValue;
 use zbus::MatchRule;
 
-/// The name a watcher answers on. KDE's, because it is the one every item
-/// looks for: the freedesktop spelling was proposed and never taken up.
+/// The watcher's bus name. Items look for KDE's name; the freedesktop one was
+/// never adopted.
 const WATCHER_NAME: &str = "org.kde.StatusNotifierWatcher";
 
-/// Where the watcher answers.
+/// The watcher's object path.
 const WATCHER_PATH: &str = "/StatusNotifierWatcher";
 
 /// The interface every item implements.
 const ITEM_INTERFACE: &str = "org.kde.StatusNotifierItem";
 
-/// Something the worker has to do.
+/// Work for the worker thread.
 enum Event {
     /// `RegisterStatusNotifierItem(service)`, from `sender`.
     Registered { service: String, sender: String },
-    /// An item's `New*` signal: something about how it looks moved.
+    /// An item's `New*` signal: its appearance changed.
     Changed { sender: String, path: String },
     /// A connection or a well-known name went away (`owner` empty), or a
     /// well-known name changed hands.
     Owner { name: String, owner: String },
-    /// What reading `id` said, the `sequence`-th time it was asked.
+    /// The result of the `sequence`-th read of `id`.
     Read {
         id: String,
         sequence: u64,
@@ -82,31 +59,27 @@ enum Event {
     Activate { id: String, action: TrayAction },
 }
 
-/// A handle on the tray: tell it a click and the item hears about it.
+/// A handle that forwards clicks to tray items.
 ///
-/// [`crate::appearance::Appearance`]'s shape and for its reason: a desk whose
-/// watcher never started holds one of these that goes nowhere, so the caller
-/// has one path for a click rather than one for a desk with a bus and another
-/// for a desk without.
+/// Works the same when the watcher failed to start; clicks then go nowhere,
+/// like [`crate::appearance::Appearance`].
 #[derive(Debug, Clone)]
 pub struct Tray {
     told: Sender<Event>,
 }
 
 impl Tray {
-    /// Ask the item `id` to do what a click with `action` means.
+    /// Sends a click with `action` to the item `id`.
     pub fn activate(&self, id: String, action: TrayAction) {
-        // A closed channel is a worker that has stopped, which it does only
-        // after saying why.
+        // A closed channel means the worker stopped and already logged why.
         let _ = self.told.send(Event::Activate { id, action });
     }
 }
 
-/// Start being the desk's watcher and host, calling `publish` with the tray
-/// whenever what it shows changes. Icons are looked for under `data_dirs`.
+/// Starts the watcher and host, calling `publish` whenever the tray changes.
+/// Icons are looked up under `data_dirs`.
 ///
-/// Returns as soon as the thread is spawned: whether a bus answers is not
-/// something a desktop's startup should wait on.
+/// Returns once the thread is spawned, so startup does not wait on the bus.
 pub fn serve(data_dirs: Vec<PathBuf>, publish: impl Fn(Vec<TrayItem>) + Send + 'static) -> Tray {
     let (told, events) = channel();
     let heard = told.clone();
@@ -122,8 +95,8 @@ pub fn serve(data_dirs: Vec<PathBuf>, publish: impl Fn(Vec<TrayItem>) + Send + '
     Tray { told }
 }
 
-/// Take the names, serve the watcher, listen, and do each event in turn.
-/// Returns only on failure, or when the compositor has gone.
+/// Takes the bus names, serves the watcher and handles events in turn.
+/// Returns only on failure or when the compositor exits.
 fn answer(
     told: Sender<Event>,
     events: &Receiver<Event>,
@@ -138,8 +111,8 @@ fn answer(
             items: Vec::new(),
         },
     )?;
-    // Listening before the name is taken, so an item that registers the
-    // moment it sees the watcher and changes straight after is not missed.
+    // Listen before taking the name, so an item that registers and changes
+    // immediately is not missed.
     listen(
         &connection,
         MatchRule::builder()
@@ -161,9 +134,7 @@ fn answer(
         owner,
     )?;
     connection.request_name(WATCHER_NAME)?;
-    // The host's own name, which is how an item that checks for one before
-    // registering — `IsStatusNotifierHostRegistered` is the other way — finds
-    // that there is a tray to be in.
+    // Some items check for a host name before registering.
     connection.request_name(format!("org.kde.StatusNotifierHost-{}", std::process::id()))?;
     debug!("this desktop hosts the system tray");
 
@@ -171,16 +142,15 @@ fn answer(
         .object_server()
         .interface::<_, Watcher>(WATCHER_PATH)?;
     let mut registry = Registry::default();
-    // How many reads of each item have been asked for: a read that answers
-    // after a later one was asked is a picture that has already changed.
+    // The latest read sequence per item. Replies to older reads are stale.
     let mut asked: HashMap<String, u64> = HashMap::new();
-    // Ends when every sender has gone, which is the compositor exiting.
+    // Ends when every sender is dropped, when the compositor exits.
     for event in events {
         match event {
             Event::Registered { service, sender } => {
-                // The connection that registered is the one the item's
-                // signals come from; a well-known name that changes hands
-                // later is followed by `Owner`.
+                // Signals come from the registering connection. A
+                // well-known name that later changes hands is tracked by
+                // `Owner`.
                 let (bus, path) = address(&service, &sender);
                 if let Some(id) = registry.register(&bus, &sender, &path) {
                     debug!(%id, "a tray icon registered");
@@ -213,9 +183,8 @@ fn answer(
                             let name = registry.named(&id, &properties.id);
                             registry.show(&id, item(&name, properties, &mut icons));
                         }
-                        // Held but not shown: an application whose tray code
-                        // is broken, and nothing on this side can draw an
-                        // icon it will not describe.
+                        // Kept registered but hidden: there is nothing to
+                        // draw.
                         Err(why) => {
                             debug!(%id, %why, "a tray icon could not be read");
                             registry.show(&id, None);
@@ -232,12 +201,10 @@ fn answer(
     Ok(())
 }
 
-/// Say the watcher's list changed: the property, and which item arrived or
-/// left.
+/// Emits the watcher's item-list change signals.
 ///
-/// A failure is said and gone past rather than ending the worker. An item
-/// that missed a signal still has its icon in the tray, and a worker that
-/// stopped would drop every click after it.
+/// Logs failure instead of stopping the worker, which would drop every later
+/// click.
 fn listed(
     watcher: &InterfaceRef<Watcher>,
     registry: &Registry,
@@ -264,12 +231,11 @@ fn listed(
     }
 }
 
-/// Ask the item `id` what it looks like, on a thread of its own, and hand
-/// what it says back to the worker as an [`Event::Read`].
+/// Reads item `id`'s properties on a new thread and sends an
+/// [`Event::Read`] back.
 ///
-/// A thread rather than the call here because zbus 4 waits on a reply for as
-/// long as the bus lets it — forever, on dbus-broker — and one application
-/// that is slow to answer must not hold up every other icon, or the clicks.
+/// zbus 4 has no method timeout (dbus-broker never times out), so a slow
+/// application must not block the worker.
 fn read(
     connection: &Connection,
     told: &Sender<Event>,
@@ -293,8 +259,7 @@ fn read(
         .and_then(|proxy| {
             proxy.call::<_, _, HashMap<String, OwnedValue>>("GetAll", &(ITEM_INTERFACE,))
         });
-        // A closed channel is a worker that has stopped, which it does only
-        // after saying why.
+        // A closed channel means the worker stopped and already logged why.
         let _ = told.send(Event::Read {
             id,
             sequence,
@@ -303,20 +268,17 @@ fn read(
     });
 }
 
-/// Call what a click with `action` means on the item a shell knows as `id`.
+/// Calls the method for `action` on item `id`.
 ///
-/// No reply is waited for. `Activate` on an item that has only a menu is an
-/// error the item returns, and a click that did nothing is what the person
-/// already saw; and an application that is slow to answer must not hold the
-/// tray's other icons up.
+/// Does not wait for a reply: an error (such as `Activate` on a menu-only
+/// item) changes nothing, and a slow application must not stall the tray.
 fn activate(connection: &Connection, registry: &Registry, id: &str, action: TrayAction) {
     let Some((bus, path)) = registry.clicked(id) else {
         debug!(%id, "a click on a tray icon that has gone");
         return;
     };
-    // Where on the screen the click was, which an X11 item positions its
-    // own window by. A Wayland client cannot place a window, and the page's
-    // coordinates are not the screen's, so it is told the corner.
+    // Screen coordinates, used only by X11 items to place a window. Wayland
+    // clients cannot place windows, so send the origin.
     let called = Proxy::new(connection, bus.as_str(), path.as_str(), ITEM_INTERFACE)
         .and_then(|proxy| proxy.call_noreply(method(action), &(0i32, 0i32)));
     if let Err(why) = called {
@@ -324,8 +286,8 @@ fn activate(connection: &Connection, registry: &Registry, id: &str, action: Tray
     }
 }
 
-/// What an item's `GetAll` says, as [`Properties`]. A property it left out,
-/// or sent as something the spec does not say it is, is read as empty.
+/// Converts an item's `GetAll` reply to [`Properties`]. A missing or
+/// wrongly typed property reads as empty.
 fn parse(mut properties: HashMap<String, OwnedValue>) -> Properties {
     let mut text = |name: &str| {
         properties
@@ -357,8 +319,8 @@ fn parse(mut properties: HashMap<String, OwnedValue>) -> Properties {
     };
     let icon_pixmaps = pixmaps("IconPixmap");
     let attention_pixmaps = pixmaps("AttentionIconPixmap");
-    // `(icon name, icon pixmaps, title, description)`: the title is what a
-    // label can say.
+    // `(icon name, icon pixmaps, title, description)`; only the title is
+    // used.
     let tooltip = properties
         .remove("ToolTip")
         .and_then(|value| {
@@ -379,8 +341,8 @@ fn parse(mut properties: HashMap<String, OwnedValue>) -> Properties {
     }
 }
 
-/// Hand every message matching `rule` to `heard`, and what it makes of it to
-/// the worker, on a thread of its own.
+/// Passes each message matching `rule` through `heard` to the worker, on a
+/// new thread.
 fn listen(
     connection: &Connection,
     rule: MatchRule<'static>,
@@ -398,8 +360,7 @@ fn listen(
                         }
                     }
                 }
-                // One message that would not decode is that message, not the
-                // stream: said, and the next one read.
+                // Skip a message that does not decode; keep reading.
                 Err(why) => debug!(%why, "the tray could not read a message"),
             }
         }
@@ -407,7 +368,7 @@ fn listen(
     Ok(())
 }
 
-/// An item's signal: which connection sent it, about which object.
+/// An item's signal, as its sender and object path.
 fn changed(message: &zbus::Message) -> Option<Event> {
     let header = message.header();
     Some(Event::Changed {
@@ -416,7 +377,7 @@ fn changed(message: &zbus::Message) -> Option<Event> {
     })
 }
 
-/// `NameOwnerChanged`: who holds a name now, nobody included.
+/// `NameOwnerChanged`: a name's new owner, empty when released.
 fn owner(message: &zbus::Message) -> Option<Event> {
     let (name, _, owner): (String, String, String) = message.body().deserialize().ok()?;
     Some(Event::Owner { name, owner })
@@ -425,16 +386,15 @@ fn owner(message: &zbus::Message) -> Option<Event> {
 /// The object at `/StatusNotifierWatcher`.
 struct Watcher {
     told: Sender<Event>,
-    /// The items registered, by id, as `RegisteredStatusNotifierItems` lists
-    /// them. The worker's [`Registry`] is what decides this; it is copied
-    /// here for the property to read.
+    /// Registered item ids for `RegisteredStatusNotifierItems`, copied from
+    /// the worker's [`Registry`].
     items: Vec<String>,
 }
 
 #[zbus::interface(name = "org.kde.StatusNotifierWatcher")]
 impl Watcher {
-    /// An item asking to be in the tray. Handed to the worker, which reads it:
-    /// nothing here may block the bus's executor.
+    /// Queues an item registration for the worker, so the bus executor never
+    /// blocks.
     fn register_status_notifier_item(&self, service: &str, #[zbus(header)] header: Header<'_>) {
         if let Some(sender) = header.sender() {
             let _ = self.told.send(Event::Registered {
@@ -444,8 +404,7 @@ impl Watcher {
         }
     }
 
-    /// A second host. There is one tray on this desk and it is this one, so
-    /// another is acknowledged and nothing more.
+    /// Ignores other hosts: this compositor is the only tray.
     fn register_status_notifier_host(&self, _service: &str) {}
 
     #[zbus(property)]
@@ -484,7 +443,7 @@ mod tests {
     use super::*;
     use zbus::zvariant::Value;
 
-    /// `properties` as a `GetAll` answers them.
+    /// `properties` in the shape of a `GetAll` reply.
     fn answered(properties: Vec<(&str, Value<'static>)>) -> HashMap<String, OwnedValue> {
         properties
             .into_iter()
@@ -543,8 +502,7 @@ mod tests {
 
     #[test]
     fn a_property_left_out_or_of_the_wrong_type_is_empty() {
-        // Every property is optional in the spec, and an item that sends a
-        // title as a number has sent no title.
+        // Every property is optional, and a wrongly typed one is ignored.
         let read = parse(answered(vec![
             ("Id", Value::from("sync")),
             ("Title", Value::from(7u32)),

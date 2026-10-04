@@ -1,10 +1,7 @@
-//! The command line a shell starts the compositor with.
+//! Parses the compositor's command line.
 //!
-//! Every value is stated: nothing is read from the environment and nothing has
-//! a default location. The compositor is started by a program now, and a
-//! program that meant to say something can say it — while a fallback silently
-//! turns a shell's bug into a desktop that comes up wearing settings nobody
-//! chose.
+//! Nothing comes from the environment or a default location. A program starts
+//! the compositor, and a fallback would hide that program's bugs.
 
 use std::ffi::{OsStr, OsString};
 use std::os::unix::ffi::OsStrExt as _;
@@ -12,33 +9,27 @@ use std::path::PathBuf;
 
 use crate::handshake::Expected;
 
-/// What the compositor was told to do.
+/// The compositor's parsed command line.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Arguments {
-    /// Where the host protocol is served. The shell picks it, so it knows
-    /// where to connect without being told back.
+    /// Where the host protocol is served. The shell picks it so it knows where
+    /// to connect.
     pub chrome_socket: PathBuf,
     /// Where to publish the session once everything is bound.
     pub session: PathBuf,
-    /// The compositor's own configuration, written by the shell. `None` runs
-    /// the defaults.
+    /// The compositor's config file. `None` uses the defaults.
     pub config: Option<PathBuf>,
-    /// Submit client buffers to the forked engine over this socket, instead of
-    /// reading them back and sending pixels to the chrome.
+    /// Socket for submitting client buffers to the forked engine instead of
+    /// sending pixels to the chrome.
     ///
-    /// `None` runs the compositor as it always has. When it is set the engine
-    /// is required: `libdomicile_engine.so` not being loadable is a startup
-    /// failure that says so, because a compositor that silently shows nothing
-    /// is the defect this flag would otherwise introduce. See
+    /// When set, failing to load `libdomicile_engine.so` is a startup error,
+    /// so the compositor never silently shows nothing. See
     /// `docs/architecture/ENGINE-FORK.md`.
     pub engine_socket: Option<PathBuf>,
-    /// Whether a page is going to dial [`chrome_socket`](Self::chrome_socket).
+    /// Whether a page will connect to [`chrome_socket`](Self::chrome_socket).
     ///
-    /// [`Expected::APage`] unless `--expect-a-page no` says otherwise, because
-    /// a compositor is nearly always started to draw a desktop and a control
-    /// socket nothing reaches is the failure
-    /// [`crate::handshake`] exists to name. The engine spike's harnesses are
-    /// the exception and say so; [`Expected`] is where the reason is.
+    /// Defaults to [`Expected::APage`] so [`crate::handshake`] can report a
+    /// page that never connects. See [`Expected`] for the exceptions.
     pub expect_a_page: Expected,
 }
 
@@ -64,7 +55,7 @@ pub enum ArgumentError {
     NotYesOrNo { flag: &'static str, value: String },
 }
 
-/// Read a compositor command line, or say why it cannot be run.
+/// Parses a compositor command line.
 pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, ArgumentError> {
     let mut chrome_socket = None;
     let mut session = None;
@@ -76,22 +67,14 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
     let mut seen = Vec::new();
     while let Some(argument) = args.next() {
         let (flag, joined) = split(&argument);
-        // Before anything is read: a program that wrote a flag twice meant one
-        // of them, and nothing here can tell which. Silently taking the last
-        // is the same "a request that silently did not happen" that an unknown
-        // argument is refused for.
+        // A repeated flag is ambiguous, so reject it rather than silently
+        // taking the last value.
         if seen.contains(&flag) {
             return Err(ArgumentError::Repeated { flag });
         }
         seen.push(flag.clone());
-        // EVERY FLAG TAKES A VALUE. `--present` was the one that did not, and
-        // it went with the window it opened — so there is no longer a way to
-        // write a flag that must *not* be given one, and no `UnwantedValue` to
-        // refuse it with.
-        //
-        // `OsString` rather than `PathBuf`, because not every value is a path
-        // any more: `--expect-a-page` takes a word. Which flags become paths
-        // is decided once, below, where the whole command line is read back.
+        // Every flag takes a value. Values stay `OsString` because not all are
+        // paths; they are converted below.
         let slot = match flag.as_str() {
             CHROME_SOCKET => &mut chrome_socket,
             SESSION => &mut session,
@@ -136,12 +119,10 @@ const CONFIG: &str = "--config";
 const ENGINE_SOCKET: &str = "--engine-socket";
 const EXPECT_A_PAGE: &str = "--expect-a-page";
 
-/// Which of the two words `--expect-a-page` was given.
+/// Parses the `yes` or `no` given to `--expect-a-page`.
 ///
-/// Not "anything that is not `no` means yes". The thing this flag can do is
-/// turn a watchdog off, so a value nobody here understands is refused for the
-/// reason an unknown flag is: a request that silently did not happen is worse
-/// than one that failed.
+/// Other values are rejected because this flag turns off a watchdog, and a
+/// typo should not silently leave it on.
 fn expected(value: &OsStr) -> Result<Expected, ArgumentError> {
     match value.as_bytes() {
         b"yes" => Ok(Expected::APage),
@@ -153,11 +134,10 @@ fn expected(value: &OsStr) -> Result<Expected, ArgumentError> {
     }
 }
 
-/// One argument, split at the first `=` if it has one.
+/// Splits an argument at its first `=`.
 ///
-/// The flag half is `String` rather than `OsString`: a flag this compositor
-/// knows is ASCII, and one it does not is going into an error message either
-/// way.
+/// The flag is a lossy `String`: known flags are ASCII, and unknown ones only
+/// go into error messages.
 fn split(argument: &OsStr) -> (String, Option<OsString>) {
     let bytes = argument.as_bytes();
     match bytes.iter().position(|byte| *byte == b'=') {

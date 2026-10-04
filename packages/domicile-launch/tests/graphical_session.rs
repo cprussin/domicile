@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 use domicile_launch::graphical_session::{begin, end, SHUTDOWN, TARGET};
 use domicile_launch::notification::connected;
 
-/// One call, as the user manager heard it.
+/// A call the fake user manager received.
 #[derive(Debug, PartialEq)]
 enum Heard {
     SetEnvironment(Vec<String>),
@@ -48,7 +48,7 @@ impl Manager {
     }
 }
 
-/// A user manager and a client over one socket pair, with no bus between them.
+/// A fake user manager and a client, connected peer-to-peer over a socket pair.
 fn paired() -> (
     zbus::blocking::Connection,
     zbus::blocking::Connection,
@@ -77,11 +77,9 @@ fn paired() -> (
 
 #[test]
 fn a_desk_that_is_the_session_is_said_before_the_session_starts() {
-    // `graphical-session.target` is what the portal -- and every service a
-    // home binds to a graphical session -- waits on, and each of them takes
-    // the user manager's environment as it starts. So the desk is said first:
-    // which desktop this is, the display its apps open on, and the control
-    // socket `domicile-open-url` finds it by. Only then does the target start.
+    // Services bound to `graphical-session.target`, such as the portal, read
+    // the user manager's environment when they start. So the environment is set
+    // before the target starts.
     let (_server, client, heard) = paired();
     begin(
         &client,
@@ -105,11 +103,11 @@ fn a_desk_that_is_the_session_is_said_before_the_session_starts() {
 
 #[test]
 fn a_desk_that_ends_takes_its_session_and_its_variables_with_it() {
-    // Stopping the desk's own target is not enough: a running portal holds
-    // `graphical-session.target` up (`Requisite=` pins it), and with it the
-    // portal itself, a dead desk's socket in its environment. The shutdown
-    // target conflicts with the graphical session and takes it down whatever
-    // holds it. Then the variables go, so nothing started later finds them.
+    // Stopping the desktop's own target is not enough: a running portal holds
+    // `graphical-session.target` up (`Requisite=`) with a stale socket in its
+    // environment. The shutdown target conflicts with the graphical session and
+    // stops it regardless. Unsetting the variables keeps later services from
+    // seeing them.
     let (_server, client, heard) = paired();
     end(&client).unwrap();
     assert_eq!(

@@ -1,4 +1,4 @@
-//! A desktop is three programs shipped together, and two of them are found.
+//! Tests for locating the compositor, engine, builder and bundled shells.
 
 use std::path::{Path, PathBuf};
 
@@ -8,7 +8,7 @@ fn nothing(_: &str) -> Option<String> {
     None
 }
 
-/// The layout a package installs, as a set of paths that exist.
+/// The paths a package installs.
 const INSTALLED: &[&str] = &[
     "/usr/bin/domicile",
     "/usr/bin/domicile-compositor",
@@ -32,9 +32,8 @@ fn the_two_are_found_beside_the_binary() {
 
 #[test]
 fn a_store_path_finds_its_own_siblings() {
-    // `current_exe` resolves `/proc/self/exe`, so a `~/.nix-profile/bin`
-    // symlink arrives here already pointing into the store — which is where
-    // the other three are, in the same output.
+    // `current_exe` resolves symlinks such as `~/.nix-profile/bin`, so the
+    // siblings are found in the same store path.
     let store = |path: &Path| {
         [
             "/nix/store/abc-domicile/bin/domicile-compositor",
@@ -57,8 +56,7 @@ fn a_store_path_finds_its_own_siblings() {
 
 #[test]
 fn the_environment_overrides_one_without_the_others() {
-    // A checkout points at what it just built, and the rest still come from
-    // the package it is running out of.
+    // A checkout can override one component and use the installed rest.
     let env = |name: &str| {
         (name == "DOMICILE_COMPOSITOR").then(|| "/w/target/debug/domicile-compositor".to_string())
     };
@@ -72,9 +70,8 @@ fn the_environment_overrides_one_without_the_others() {
 
 #[test]
 fn an_override_is_taken_without_asking_whether_it_is_there() {
-    // Somebody who named a path meant it. Checking would refuse a component
-    // that a build is about to produce, and the program that runs it reports
-    // the failure with the reason attached.
+    // Not checked: the component may not be built yet, and starting it
+    // reports any failure.
     let env = |name: &str| (name == "DOMICILE_ENGINE").then(|| "/not/built/yet".to_string());
     let found = components(Path::new("/usr/bin/domicile"), &env, &installed).unwrap();
     assert_eq!(found.engine, PathBuf::from("/not/built/yet"));
@@ -82,9 +79,7 @@ fn an_override_is_taken_without_asking_whether_it_is_there() {
 
 #[test]
 fn a_missing_sibling_names_what_is_missing_and_how_to_say_where_it_is() {
-    // One of the three absent rather than all of them: with every path gone,
-    // which one is reported is whichever the struct happens to fill first,
-    // and a test that pinned that would be asserting field order.
+    // Remove only one, so the test does not depend on lookup order.
     let no_compositor =
         |path: &Path| installed(path) && Path::new("/usr/bin/domicile-compositor") != path;
     let refused = components(Path::new("/usr/bin/domicile"), &nothing, &no_compositor)
@@ -96,8 +91,7 @@ fn a_missing_sibling_names_what_is_missing_and_how_to_say_where_it_is() {
         refused.looked,
         PathBuf::from("/usr/bin/domicile-compositor")
     );
-    // The message has to carry the path, because "no compositor" sends a
-    // reader looking in the place they assumed rather than the one asked for.
+    // The message names the path that was checked.
     assert!(
         refused.to_string().contains("/usr/bin/domicile-compositor"),
         "{refused}"

@@ -1,8 +1,7 @@
-//! What the builder says on its stdout, read, and drawn as a bar.
+//! Parses the shell builder's stdout and renders it as a progress bar.
 //!
-//! One JSON line per step; `built` or `failed` last. Anything else on the
-//! stream is the build's own log — Panda says how long it took — and is kept
-//! for a failure to show rather than drawn.
+//! The builder writes one JSON line per step, ending with `built` or `failed`.
+//! Other lines are build log, kept to show if the build fails.
 
 use std::path::PathBuf;
 
@@ -10,7 +9,7 @@ use serde::Deserialize;
 
 use crate::shell_path::Shell;
 
-/// A step a build is on.
+/// A build step.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Step {
     Resolving,
@@ -18,17 +17,17 @@ pub enum Step {
     Bundling,
 }
 
-/// One line of the builder's stdout, read.
+/// One parsed line of the builder's stdout.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Heard {
     Step(Step),
-    /// The module, and the directory it is served out of.
+    /// The built module and the directory it is served from.
     Built(Shell),
-    /// A config module evaluated: the compositor's config, as JSON there.
+    /// A config module was evaluated to this JSON file.
     Evaluated(PathBuf),
-    /// The build failed, in the builder's words.
+    /// The build failed, with the builder's message.
     Failed(String),
-    /// Not a step: the build's own log.
+    /// A build log line.
     Log(String),
 }
 
@@ -43,7 +42,7 @@ enum Line {
     Failed { why: String },
 }
 
-/// What `line` says.
+/// Parses one line of builder output.
 pub fn heard(line: &str) -> Heard {
     match serde_json::from_str::<Line>(line) {
         Ok(Line::Resolving) => Heard::Step(Step::Resolving),
@@ -56,7 +55,7 @@ pub fn heard(line: &str) -> Heard {
     }
 }
 
-/// `step` as the line a terminal shows while a shell builds.
+/// Renders `step` as a terminal progress line.
 pub fn bar(step: &Step) -> String {
     let (done, saying) = match step {
         Step::Resolving => (1, "reading what it imports".to_string()),

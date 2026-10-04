@@ -1,10 +1,8 @@
-//! What a launcher is shown of the row it has reached.
+//! Builds the launcher's preview of a selected file.
 //!
-//! **The page names the path, and the index decides whether it is read.** A
-//! page has no filesystem, and `preview_file` is not one: a path the index of
-//! the home does not hold is answered [`FilePreview::Unreadable`] without
-//! touching the disk, so a page learns nothing a search could not already have
-//! named.
+//! Only paths in the file index are read. Any other path returns
+//! [`FilePreview::Unreadable`] without touching the disk, so a page cannot use
+//! previews to probe the filesystem.
 
 use std::borrow::Cow;
 use std::fs::{self, File};
@@ -20,18 +18,16 @@ use lofty::tag::Tag;
 use crate::data_url::data_url;
 use crate::file_search::FileSearch;
 
-/// How much of a file a preview is sent. A pane's worth, not a file's.
+/// Bytes of a file sent in a preview.
 const PREVIEW_BYTES: usize = 8 * 1024;
 
-/// How many of a directory's entries a preview is sent.
+/// Directory entries sent in a preview.
 const PREVIEW_ENTRIES: usize = 200;
 
-/// The largest picture of itself a song is sent with. A cover is a pane's
-/// worth of picture, and one bigger than this is a scan nobody needs to see in
-/// a launcher.
+/// Largest album cover sent in a preview, in bytes.
 const COVER_BYTES: usize = 1024 * 1024;
 
-/// What `path`, relative to `home`, holds — if `search` offers it.
+/// Previews `path`, relative to `home`, if `search` holds it.
 pub fn preview(home: &Path, path: &str, search: &FileSearch) -> FilePreview {
     let at = home.join(path);
     let read = if !search.holds(path) {
@@ -41,12 +37,11 @@ pub fn preview(home: &Path, path: &str, search: &FileSearch) -> FilePreview {
     } else {
         heard(&at).map_or_else(|| front(&at), Ok)
     };
-    // A path the walk found and the disk no longer has, or one it will not
-    // open: the preview says there is nothing to show rather than a guess.
+    // The path may be gone or unopenable.
     read.unwrap_or(FilePreview::Unreadable)
 }
 
-/// The front of a directory: its names, sorted, a directory ending in `/`.
+/// A directory's entry names, sorted, with directories ending in `/`.
 fn listed(at: &Path) -> std::io::Result<FilePreview> {
     let mut entries = fs::read_dir(at)?
         .map(|entry| {
@@ -64,8 +59,8 @@ fn listed(at: &Path) -> std::io::Result<FilePreview> {
     Ok(FilePreview::Directory { entries })
 }
 
-/// What a file that plays says about itself, or `None` for one that does not
-/// read as sound — whatever its name says, since a name is a guess.
+/// Audio tags for `at`, or `None` if it does not parse as audio. Detects by
+/// content, not extension.
 fn heard(at: &Path) -> Option<FilePreview> {
     let song = Probe::open(at).ok()?.guess_file_type().ok()?.read().ok()?;
     let tag = song.primary_tag().or_else(|| song.first_tag());
@@ -78,10 +73,8 @@ fn heard(at: &Path) -> Option<FilePreview> {
     })
 }
 
-/// The picture a song carries of its front, or the first it carries of
-/// anything, as a URL a page can draw. Not one too big to send, and not one
-/// that does not say what it is: a page guessing at bytes is how a preview
-/// shows garbage.
+/// The front cover, else the first picture, as a `data:` URL. Skips pictures
+/// over [`COVER_BYTES`] or without a MIME type.
 fn cover(tag: &Tag) -> Option<String> {
     let picture = tag
         .get_picture_type(PictureType::CoverFront)
@@ -90,10 +83,10 @@ fn cover(tag: &Tag) -> Option<String> {
     Some(data_url(picture.mime_type()?.as_str(), picture.data()))
 }
 
-/// The front of a file, as text if it is text.
+/// The start of a file, as text if it is text.
 ///
-/// Binary is a NUL, or bytes that are not UTF-8 before the limit. A character
-/// the limit cut in half is not either: it is left out.
+/// A NUL or invalid UTF-8 means binary. A character cut off by the limit is
+/// dropped rather than treated as invalid.
 fn front(at: &Path) -> std::io::Result<FilePreview> {
     let mut bytes = Vec::with_capacity(PREVIEW_BYTES);
     File::open(at)?

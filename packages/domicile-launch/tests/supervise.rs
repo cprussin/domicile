@@ -1,9 +1,7 @@
-//! The components of a run, and which one stopped being one.
+//! Starting a run's components and reporting which one exited.
 //!
-//! Real processes, because the thing being tested is which child `wait`
-//! answers about — and that is exactly what a double would have to invent.
-//! `/bin/sh` because it is the one program every machine that can run a
-//! desktop has.
+//! These use real `/bin/sh` processes, because the behavior under test is which
+//! child `wait` reports on.
 
 use std::ffi::OsString;
 use std::path::PathBuf;
@@ -49,11 +47,9 @@ fn nothing_has_exited_while_everything_is_running() {
 
 #[test]
 fn the_component_that_exited_is_named_however_late_it_was_started() {
-    // The one this replaces waited on the *last* child, which is the
-    // compositor — so an engine that died left a desktop hanging on a window
-    // that was never going to be drawn, with nothing said. Both orders are
-    // asserted because "the first in the list" and "the one that exited" agree
-    // on one of them.
+    // The engine exits while the compositor keeps running. Both start orders
+    // are tested so "the first in the list" cannot pass for "the one that
+    // exited".
     let mut running = Running::new();
     running.start("engine", &sh("exit 4")).expect("it starts");
     running
@@ -63,21 +59,17 @@ fn the_component_that_exited_is_named_however_late_it_was_started() {
     let exit = running.until_one_exits();
     assert_eq!(exit.what, "engine");
     assert!(exit.how.contains('4'), "{}", exit.how);
-    // NO LONGER "so the desktop is over": what a component that exited earns
-    // is another desktop, up to the point `domicile_launch::restart` stops
-    // giving them, so the sentence this carries is the observation alone and
-    // what follows it is said by whatever decides.
+    // The message states only the exit. `domicile_launch::restart` decides what
+    // follows.
     assert_eq!(exit.to_string(), "the engine exited (exit status: 4)");
 }
 
 #[test]
 fn one_component_is_let_go_of_without_the_run_letting_go_of_the_other() {
-    // An engine started again under a compositor that is still serving. The
-    // dead one has to leave this list — a `wait` on it answers forever, so a
-    // run that kept it would report the same corpse on every poll and never
-    // notice the engine that replaced it — and the compositor has to be
-    // exactly where it was, because the whole point is that its clients never
-    // knew.
+    // An engine restarts under a compositor that is still serving. The dead
+    // engine must leave the list, or `wait` would report it on every poll and
+    // miss its replacement. The compositor stays untouched so its clients are
+    // unaffected.
     let mut running = Running::new();
     running.start("engine", &sh("exit 4")).expect("it starts");
     running

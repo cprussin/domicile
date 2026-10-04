@@ -1,11 +1,8 @@
-//! The watch on a home, taken over a real directory and a real inotify.
+//! The home directory watch, tested on a real directory with inotify.
 //!
-//! What it is watched through is the walk: a directory is watched as it is
-//! read, so what the desk's `files.omit` leaves out is never watched at all.
-//! It used to be one recursive watch over the whole home, which set up a watch
-//! on every directory under it — a `~/.cache` a browser writes into all day
-//! included — and whose events, all of them thrown away, were what overflowed
-//! the kernel's queue and walked the home again.
+//! Directories are watched as the walk reads them, so paths in `files.omit`
+//! are never watched. This keeps busy directories like `~/.cache` from
+//! overflowing the kernel's event queue.
 
 use std::fs;
 use std::os::unix::fs::symlink;
@@ -16,13 +13,13 @@ use std::time::Duration;
 use domicile_host::home_walk::walk;
 use domicile_host::home_watch::HomeWatcher;
 
-/// How long an event the test is waiting for may take to arrive.
+/// How long to wait for an expected event.
 const HEARD_WITHIN: Duration = Duration::from_secs(10);
 
 #[test]
 fn what_is_omitted_is_not_watched() {
-    // The events are read in the order the kernel queued them, so by the time
-    // `Notes/today.org` is heard, anything `.cache` said has been heard too.
+    // Events arrive in queue order, so any `.cache` event would come before
+    // `Notes/today.org`.
     let home = tempfile::tempdir().expect("a home to lay out");
     fs::create_dir(home.path().join(".cache")).expect("the directory");
     fs::create_dir(home.path().join("Notes")).expect("the directory");
@@ -43,8 +40,8 @@ fn what_is_omitted_is_not_watched() {
 
 #[test]
 fn a_link_to_a_directory_is_offered_but_not_walked() {
-    // `d_type` says what the entry is, without following it: a link reads as
-    // a link, so the walk offers it and goes no further.
+    // `d_type` does not follow links, so the walk offers the link and does
+    // not enter it.
     let home = tempfile::tempdir().expect("a home to lay out");
     let elsewhere = tempfile::tempdir().expect("a directory outside the home");
     fs::write(elsewhere.path().join("inside.txt"), "").expect("the file");
@@ -56,11 +53,11 @@ fn a_link_to_a_directory_is_offered_but_not_walked() {
     assert_eq!(found, ["result"]);
 }
 
-/// A watcher that has watched nothing yet, and what it hears.
+/// A watcher with no watches yet, and the receiver for its events.
 fn watching() -> (HomeWatcher, Receiver<std::path::PathBuf>) {
     let (heard, hearing) = channel();
     let watcher = HomeWatcher::new(move |event: notify::Result<notify::Event>| {
-        // Refused only once the test has ended.
+        // Sending fails only after the test drops the receiver.
         for path in event.expect("an event").paths {
             let _ = heard.send(path);
         }
@@ -69,7 +66,7 @@ fn watching() -> (HomeWatcher, Receiver<std::path::PathBuf>) {
     (watcher, hearing)
 }
 
-/// Everything the walk of `home` through `watcher` finds.
+/// Every path the walk of `home` through `watcher` finds.
 fn walked(home: &Path, watcher: &HomeWatcher, omitted: &impl Fn(&str) -> bool) -> Vec<String> {
     walk(home, watcher, omitted).expect("home reads").collect()
 }

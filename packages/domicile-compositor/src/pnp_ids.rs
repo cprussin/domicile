@@ -1,16 +1,12 @@
-//! The vendor behind a monitor's three-letter id.
+//! Maps a monitor's three-letter EDID vendor id to the vendor's name.
 //!
-//! An EDID names its maker in three letters — `DEL`, `BOE`, `GSM` — and
-//! nothing else. The table that turns those into `Dell Inc.`, `BOE` and
-//! `LG Electronics` is hwdata's `pnp.ids`, which every distribution ships and
-//! which libdisplay-info reads for exactly this; Chromium does not carry it,
-//! so the engine's reading of a panel's name arrives here still spelled the
-//! way the firmware spells it.
+//! An EDID names its maker only by an id such as `DEL`, `BOE` or `GSM`.
+//! hwdata's `pnp.ids` maps these to names. Chromium does not ship it, so
+//! panel names from the engine arrive with the raw id.
 //!
-//! The table is data under GPL-2+ and this tree is MIT OR Apache-2.0, so
-//! nothing here is generated from it and nothing here embeds it. It is read at
-//! run time from the file the machine already has, and a machine that has none
-//! keeps the three letters — [`read_the_table`] is what says so out loud.
+//! The table is GPL-2+ and this tree is MIT OR Apache-2.0, so it is never
+//! embedded or generated from. It is read at run time from the machine's
+//! copy; without one, names keep the id and [`read_the_table`] says why.
 
 use std::collections::HashMap;
 use std::io::ErrorKind;
@@ -20,10 +16,9 @@ use thiserror::Error;
 
 /// The environment variable naming the table to read.
 ///
-/// Read at run time rather than baked in at build time, because the binary
-/// this repository builds with `cargo` and the one the flake installs are the
-/// same binary: the wrapper sets this, a checkout does not, and the search in
-/// [`where_hwdata_keeps_it`] is what covers the second case.
+/// Read at run time because `cargo` builds and the flake's install are the
+/// same binary. The flake's wrapper sets it; a checkout falls back to
+/// [`where_hwdata_keeps_it`].
 const STATED: &str = "DOMICILE_PNP_IDS";
 
 /// hwdata's `pnp.ids`, as the lookup a monitor's name needs.
@@ -33,17 +28,14 @@ pub struct Vendors {
 }
 
 impl Vendors {
-    /// The table, as hwdata writes one: an id, a tab, the vendor's own name.
+    /// Parse a table in hwdata's format: an id, a tab, the vendor's name.
     ///
-    /// Lenient about the shape of a line and strict about nothing, because
-    /// this is somebody else's file and the cost of a line it cannot read is
-    /// one monitor named in three letters. Blank lines and `#` comments are
-    /// not entries; anything else is split at its first run of whitespace, so
-    /// a file separated by spaces reads the same as one separated by tabs.
+    /// Lenient, because it is someone else's file and a bad line only costs
+    /// one monitor its name. Blank lines and `#` comments are skipped; other
+    /// lines split at the first whitespace.
     ///
-    /// Ids are held uppercase and looked up uppercase: hwdata spells two of
-    /// its own entries in lower case (`inu`), an EDID spells its maker in
-    /// upper, and a monitor is not going to be named for the difference.
+    /// Ids are stored and looked up uppercase: hwdata has lowercase entries
+    /// (`inu`) and EDIDs are uppercase.
     pub fn listed_in(table: &str) -> Vendors {
         Vendors {
             by_id: table
@@ -63,12 +55,12 @@ impl Vendors {
         }
     }
 
-    /// `description` with its three-letter id replaced by the vendor's own
-    /// name, or `None` where this table does not name that id.
+    /// `description` with its leading id replaced by the vendor's name, or
+    /// `None` if the table lacks the id.
     ///
-    /// `None` rather than the description back, because the caller's two uses
-    /// differ: what a `wl_output` states wants the best name there is, and a
-    /// profile has to go on matching the letters a config was written with.
+    /// Returns `None` rather than `description` because callers differ: a
+    /// `wl_output` wants the best name, while profiles must keep matching the
+    /// id a config was written with.
     pub fn spelled_out(&self, description: &str) -> Option<String> {
         let (id, rest) = match description.split_once(' ') {
             Some((id, rest)) => (id, rest),
@@ -95,31 +87,26 @@ pub enum NoTable {
     #[error("could not read the pnp.ids at {}: {why}", path.display())]
     Unreadable { path: PathBuf, why: std::io::Error },
 
-    /// A file in the right place holding nothing this can read. hwdata's own
-    /// table is two and a half thousand entries, so zero is a file that is not
-    /// it rather than a vendor list that happens to be short.
+    /// A file with no readable entries. hwdata's table has about 2500, so an
+    /// empty one is the wrong file.
     #[error("the pnp.ids at {} names no vendors at all", path.display())]
     NamesNothing { path: PathBuf },
 }
 
-/// The table this machine keeps, or why it keeps none.
+/// The machine's table, or why it has none.
 ///
-/// The failure is the caller's to state and recover from — a desktop comes up
-/// whether or not a monitor can be named — and it is returned rather than
-/// logged here so that the one place which decides to carry on without a table
-/// is also the one place that says so.
+/// The error is returned, not logged, so the caller that decides to carry on
+/// without names is the one place that reports it.
 pub fn read_the_table() -> Result<Vendors, NoTable> {
     read(&where_hwdata_keeps_it(
         std::env::var(STATED).ok().as_deref(),
     ))
 }
 
-/// Every place this machine might keep hwdata's table, the most deliberate
-/// first.
+/// Candidate paths for hwdata's table, most specific first.
 ///
-/// `stated` is what the wrapper the flake builds sets, and is an exact store
-/// path. The rest is where a distribution puts the `hwdata` package's copy,
-/// and is what a `cargo run` out of a checkout finds.
+/// `stated` is the exact store path the flake's wrapper sets. The others are
+/// where distributions install `hwdata`, used by `cargo run` from a checkout.
 fn where_hwdata_keeps_it(stated: Option<&str>) -> Vec<PathBuf> {
     stated
         .map(PathBuf::from)
@@ -132,11 +119,10 @@ fn where_hwdata_keeps_it(stated: Option<&str>) -> Vec<PathBuf> {
         .collect()
 }
 
-/// The first of these paths that holds a table.
+/// The table at the first candidate path that exists.
 ///
-/// A path that is not there is the next candidate's turn; a path that is there
-/// and cannot be read is the answer, because a table named and unreadable is a
-/// machine misconfigured rather than a machine without one.
+/// A missing path moves on to the next. An existing but unreadable one is an
+/// error, because it means the machine is misconfigured.
 fn read(candidates: &[PathBuf]) -> Result<Vendors, NoTable> {
     for path in candidates {
         match std::fs::read_to_string(path) {
@@ -148,8 +134,7 @@ fn read(candidates: &[PathBuf]) -> Result<Vendors, NoTable> {
                     Ok(vendors)
                 };
             }
-            // The only error that means "look somewhere else". Every other one
-            // is about the file that *is* there.
+            // Only a missing file means "try the next path".
             Err(why) if why.kind() == ErrorKind::NotFound => {}
             Err(why) => {
                 return Err(NoTable::Unreadable {

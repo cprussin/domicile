@@ -1,19 +1,17 @@
-//! The desktop a configured layout makes up, in one coordinate space.
+//! The desktop a configured layout makes up, with its top-left at the origin.
 //!
-//! The config places each display wherever the user finds it natural to —
-//! negative coordinates included, since "to the left of that one" is the
-//! obvious way to describe a second monitor. Everything downstream wants the
-//! opposite: the nested window's transform is a pure scale, the chrome layer
-//! is pinned at the origin, and `getBoundingClientRect` is relative to a page
-//! that starts at zero. [`Desktop`] is where the two meet.
+//! The config may place displays at negative coordinates. Everything
+//! downstream expects the desktop to start at zero: the nested window's
+//! transform is a pure scale, the chrome layer sits at the origin, and
+//! `getBoundingClientRect` is relative to the page. [`Desktop`] normalizes the
+//! layout.
 
 use crate::DisplayConfig;
 
 /// One display, placed in the desktop's own coordinate space.
 ///
-/// The same fields [`DisplayConfig`] carries, except that `position` has been
-/// normalized — so this is what the compositor advertises and what the chrome
-/// is told, and the config's own numbers never leave this crate.
+/// [`DisplayConfig`] with `position` normalized. The compositor advertises
+/// these values and sends them to the chrome.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Display {
     pub name: String,
@@ -23,11 +21,10 @@ pub struct Display {
     pub scale: u32,
 }
 
-/// Every configured display, and the box they occupy together.
+/// Every configured display, and their bounding box.
 ///
-/// Only ever built from a non-empty list: a desktop of no displays is not an
-/// empty desktop but the *absence* of a described one, which is the case where
-/// the single output follows Domicile's own window. See
+/// Never empty. With no displays configured, the single output follows
+/// Domicile's own window instead; see
 /// [`OutputConfig::desktop`](crate::OutputConfig::desktop).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Desktop {
@@ -41,35 +38,23 @@ impl Desktop {
         self.displays.iter()
     }
 
-    /// The bounding box of every display, gaps between them included.
+    /// The bounding box of every display, including gaps between them.
     ///
-    /// Gaps are legal, and the chrome's page spans them — so the box is what
-    /// the displays reach, not what they cover.
+    /// Gaps are allowed, and the chrome's page spans them.
     pub fn size(&self) -> (u32, u32) {
         self.size
     }
 
-    /// Place `configured` about its own top-left corner.
-    ///
-    /// Returns `None` for an empty list, which is the absence of a described
-    /// desktop rather than one with nothing on it. The non-empty case is taken
-    /// once, by `split_first`, so everything below has a first display to
-    /// reduce from and nothing needs a fallback for a list that cannot be here.
+    /// `configured`, shifted so its top-left corner is the origin, or `None`
+    /// if it is empty.
     ///
     /// # Panics
     ///
-    /// If `configured` describes a layout whose normalized extent does not fit
-    /// an `i32`, or a display whose own size does not — not merely if it
-    /// skipped [`Config::parse`](crate::Config::parse), since most unvalidated
-    /// layouts are perfectly representable.
-    ///
-    /// `OutputConfig::validate_extent` and `DisplayConfig::validate` are what
-    /// make the subtraction and the addition below fit, and this type is
-    /// reachable without either: `desktop()`, `OutputConfig`'s fields and
-    /// `Deserialize` are all public. So both are asserted rather than
-    /// assumed — an unvalidated layout is a caller error, and a named panic is
-    /// a better answer than arithmetic that wraps, in release, into a
-    /// plausible desktop of the wrong size.
+    /// If the layout's normalized extent, or a display's own size, does not
+    /// fit an `i32`. [`Config::parse`](crate::Config::parse) rejects such
+    /// layouts, but callers can build an `OutputConfig` without it. A panic is
+    /// better than arithmetic that wraps in release into a desktop of the
+    /// wrong size.
     pub(crate) fn of(configured: &[DisplayConfig]) -> Option<Desktop> {
         let (first, rest) = configured.split_first()?;
         let left = rest
@@ -100,36 +85,28 @@ impl Desktop {
     }
 }
 
-/// One coordinate, measured from the desktop's own corner rather than the
-/// config's origin.
+/// One coordinate, measured from the desktop's top-left corner.
 ///
-/// `near` is the smallest of these, so the difference is non-negative; that it
-/// also *fits* is `OutputConfig::validate_extent`'s guarantee, and this is
-/// where that guarantee is checked rather than trusted.
+/// `near` is the smallest coordinate, so the result is non-negative.
+/// `OutputConfig::validate_extent` ensures it fits; this checks it.
 fn normalized(coordinate: i32, near: i32) -> i32 {
     coordinate
         .checked_sub(near)
         .expect("the layout's extent is validated before a desktop is built")
 }
 
-/// How far the furthest display's far edge reaches along one axis.
-///
-/// The desktop's near edge is zero, so the furthest reach *is* the extent.
-/// Each display's own near edge is not — it is wherever normalizing put it —
-/// which is why the length is added to the position rather than taken alone.
+/// The furthest far edge of any display along one axis, which is the
+/// desktop's extent since its near edge is zero.
 fn reach(displays: &[Display], edge: impl Fn(&Display) -> (i32, u32)) -> u32 {
     displays
         .iter()
         .map(|display| {
             let (start, length) = edge(display);
-            // Not `unsigned_abs`: that would turn a negative position — which
-            // `normalized` has already ruled out — into a plausible positive
-            // one, and hand back a desktop of the wrong size with no signal.
+            // Not `unsigned_abs`, which would turn a negative position into a
+            // wrong size silently.
             let start = u32::try_from(start).expect("normalized positions are non-negative");
-            // Checked for the same reason the subtraction is, and not because
-            // it is reachable: `checked_*` is what makes the invariant hold in
-            // release, where a plain `+` wraps silently into a desktop of
-            // plausible but wrong geometry.
+            // Checked so an invalid layout panics in release instead of
+            // wrapping.
             start
                 .checked_add(length)
                 .expect("a display's own size is validated before a desktop is built")

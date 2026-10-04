@@ -1,15 +1,9 @@
-//! Who the keyboard goes to, and who decides.
+//! Tests for keyboard focus, which the shell decides.
 //!
-//! The decision is the shell's: the compositor holds the seat because it is
-//! the only thing that can deliver a key, but every move of it starts with a
-//! shell saying so. A client that wants the keyboard asks, over
-//! `xdg-activation`, and the compositor's whole part in that is to pass the
-//! question on.
-//!
-//! Unit tests cover the near side — that `focus_requested` goes out and the
-//! seat stays put. What needs a real client and a real compositor is the half
-//! those cannot reach: that the global is advertised at all, that a client's
-//! request crosses the socket, and that a shell answering it moves the seat.
+//! A client asks for focus over `xdg-activation`, and the compositor forwards
+//! the request to the shell. Unit tests cover the forwarding. These check the
+//! global is advertised, a real request arrives, and the shell's answer moves
+//! the seat.
 
 mod running;
 
@@ -21,12 +15,10 @@ const ONE_DISPLAY: &str = r#"
 { "output": { "displays": [{ "name": "left", "size": [1920, 1080] }] } }
 "#;
 
-/// The window with the keyboard is told it is the active one, and the one it
-/// left is told it no longer is.
+/// Focus sets `activated` on the new window and clears it on the old one.
 ///
-/// `xdg_toplevel`'s `activated` state is what Chromium and Electron read as
-/// whether their page has focus. Never sent, an Electron window types
-/// characters and ignores Backspace and every shortcut.
+/// Chromium and Electron read `activated` as page focus. Without it, Electron
+/// ignores Backspace and shortcuts.
 #[test]
 fn the_window_with_the_keyboard_is_the_activated_one() {
     let compositor = Compositor::started_with(ONE_DISPLAY);
@@ -45,8 +37,7 @@ fn the_window_with_the_keyboard_is_the_activated_one() {
         first.trace()
     );
 
-    // Counted from here, because every configure before the keyboard arrived
-    // said `false` too.
+    // Count from here: earlier configures also said `false`.
     let inactive = first.trace().matches("activated(false)").count();
     chrome
         .say(&ChromeMessage::FocusApp { app_id: second_id })
@@ -77,9 +68,8 @@ fn appeared(chrome: &mut domicile_test_chrome::Chrome) -> String {
 #[test]
 fn a_client_asks_for_the_keyboard_and_the_shell_is_what_gives_it() {
     let compositor = Compositor::started_with(ONE_DISPLAY);
-    // Connected before the client starts, so the request is heard live rather
-    // than through the replay a late chrome gets — which does not carry one:
-    // a question that was already asked is not part of the desktop's state.
+    // Connect before the client: the `hello` replay does not include focus
+    // requests.
     let mut chrome = compositor.chrome();
     let _client = compositor.client_asking_for_focus("eager");
 
@@ -90,20 +80,15 @@ fn a_client_asks_for_the_keyboard_and_the_shell_is_what_gives_it() {
         unreachable!("the wait matched on this variant")
     };
 
-    // And the seat moves when the shell says so, not before. The two halves
-    // fail apart: a compositor that granted the activation itself would send
-    // the `focus_changed` below with nothing having asked for it, and one that
-    // dropped the request would never send this.
+    // The seat moves only when the shell answers.
     chrome
         .say(&ChromeMessage::FocusApp {
             app_id: app_id.clone(),
         })
         .expect("the chrome socket takes an answer");
 
-    // A window rather than any move at all: the chrome was caught up on who
-    // held the keyboard when it connected, and that answer — itself, because
-    // nothing had granted the request — is a `focus_changed` this would
-    // otherwise match before the client had asked for anything.
+    // Match a window, not any `focus_changed`: the handshake already sent
+    // one naming no window.
     assert_eq!(
         chrome
             .wait_for(|message| matches!(message, HostMessage::FocusChanged { app_id: Some(_) }))

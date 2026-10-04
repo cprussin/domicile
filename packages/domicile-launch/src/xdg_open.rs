@@ -1,19 +1,16 @@
-//! What `xdg-open` does inside a desktop.
+//! The `xdg-open` replacement apps see inside a desktop.
 //!
-//! The desktop puts `domicile-xdg-open` first on every app's `PATH` under the
-//! name `xdg-open` (see [`crate::spawn`]). A link — one web address — goes to
-//! `domicile open-url`, so it opens in a browser window of this desktop
-//! whatever `mimeapps.list` says. Anything else is handed to the `xdg-open`
-//! this one stands in front of, which knows which program opens a PDF.
+//! `domicile-xdg-open` is first on every app's `PATH` as `xdg-open` (see
+//! [`crate::spawn`]). A single web URL goes to `domicile open-url`, so it
+//! opens in this desktop regardless of `mimeapps.list`. Anything else goes to
+//! the system `xdg-open`.
 
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
-/// The link `args` is, if it is one: exactly one argument, an `http:` or
-/// `https:` URL.
+/// Returns the URL if `args` is a single `http:` or `https:` URL.
 ///
-/// Only the web. `mailto:` is a mail client's and `file:` is whatever opens
-/// that file; neither is a browser window's to answer.
+/// Other schemes such as `mailto:` and `file:` belong to other programs.
 pub fn link(args: &[OsString]) -> Option<&str> {
     match args {
         [only] => only.to_str().filter(|word| {
@@ -25,12 +22,10 @@ pub fn link(args: &[OsString]) -> Option<&str> {
     }
 }
 
-/// The `xdg-open` this one stands in front of: the first on `path` that
-/// `usable` accepts.
+/// Returns the first `<dir>/xdg-open` on `path` that `usable` accepts.
 ///
-/// `usable` is asked about each `<dir>/xdg-open` in order, and is what says
-/// both that it exists and that it is not this program — which is first on
-/// the path, so the first answer would otherwise be a loop.
+/// `usable` must reject this program, which is first on the path, or the call
+/// would loop.
 pub fn underlying(path: Option<&str>, usable: &dyn Fn(&Path) -> bool) -> Option<PathBuf> {
     path?
         .split(':')

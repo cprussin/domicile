@@ -1,12 +1,11 @@
 //! An shm client's frame, drawn into a GPU buffer the engine can import.
 //!
-//! The copy is a draw rather than a `memcpy` into a mapping, and that is a
-//! finding rather than a preference: NVIDIA's gbm will not hand out a buffer
-//! that is both CPU-writable and renderable, and a linear one imports into the
-//! browser without error and then draws as the embedder's fallback — see
-//! `packages/domicile-engine/scripts/spike-dmabuf.sh`. A buffer the GPU
-//! renders into is one every driver samples, so the client's pixels go up as a
-//! texture and come down as a quad.
+//! The copy is a GPU draw, not a `memcpy` into a mapping. NVIDIA's gbm will
+//! not allocate a buffer that is both CPU-writable and renderable, and a linear
+//! buffer imports into the browser but draws as the embedder's fallback (see
+//! `packages/domicile-engine/scripts/spike-dmabuf.sh`). Every driver can sample
+//! a buffer the GPU rendered into, so the client's pixels are uploaded as a
+//! texture and drawn as a quad.
 
 use smithay::backend::allocator::Modifier;
 use smithay::backend::renderer::gles::{GlesError, GlesRenderer, GlesTexture};
@@ -18,11 +17,10 @@ use thiserror::Error;
 
 use crate::uploads::Shape;
 
-/// Draw `texture` over the whole of `target`, and wait until it is there.
+/// Draws `texture` over all of `target` and waits for the draw to finish.
 ///
-/// Waited for because the engine reads the buffer from another process, and
-/// nothing crosses the seam to say when the GPU is done with it — a frame
-/// submitted before its draw lands is the previous frame, or a torn one.
+/// The engine reads the buffer from another process with no fence, so a frame
+/// submitted before the draw finishes shows the previous frame or a torn one.
 pub fn copy<T>(
     renderer: &mut GlesRenderer,
     texture: &GlesTexture,
@@ -36,8 +34,7 @@ where
     let source = Rectangle::from_size(Size::from((f64::from(size.w), f64::from(size.h))));
     let mut framebuffer = renderer.bind(target)?;
     let mut frame = renderer.render(&mut framebuffer, size, Transform::Normal)?;
-    // Cleared first because the buffer is reused: blending a translucent
-    // pixel over the frame before last is not the client's pixel.
+    // The buffer is reused, so clear it before blending translucent pixels.
     frame.clear(Color32F::TRANSPARENT, &[whole])?;
     Frame::render_texture_from_to(
         &mut frame,
@@ -52,8 +49,8 @@ where
     frame.finish()?.wait().map_err(|_| CopyError::Interrupted)
 }
 
-/// What an shm buffer needs a GPU buffer to be. `None` for a buffer that is
-/// not shm, or whose format has no DRM fourcc.
+/// The GPU buffer shape an shm buffer needs. `None` for a buffer that is not
+/// shm, or whose format has no DRM fourcc.
 pub fn shm_shape(buffer: &wl_buffer::WlBuffer) -> Option<Shape> {
     with_buffer_contents(buffer, |_, _, data| {
         shm_format_to_fourcc(data.format).map(|fourcc| Shape {
@@ -66,11 +63,11 @@ pub fn shm_shape(buffer: &wl_buffer::WlBuffer) -> Option<Shape> {
     .flatten()
 }
 
-/// The layouts the renderer can draw a `fourcc` buffer in and also sample
-/// one from — which is what the browser does with it, on the same GPU.
+/// The modifiers the renderer can both render to and sample from for
+/// `fourcc`. The browser samples the buffer on the same GPU.
 ///
-/// Empty when the driver names none but the implicit one, which is libgbm's
-/// cue to lay the buffer out as it likes.
+/// Empty when the driver lists only the implicit modifier, which lets libgbm
+/// pick the layout.
 pub fn render_modifiers(renderer: &GlesRenderer, fourcc: u32) -> Vec<u64> {
     let context = renderer.egl_context();
     let sampled = context.dmabuf_texture_formats();
@@ -86,7 +83,7 @@ pub fn render_modifiers(renderer: &GlesRenderer, fourcc: u32) -> Vec<u64> {
         .collect()
 }
 
-/// Why a frame did not make it into the buffer.
+/// Why copying a frame into the buffer failed.
 #[derive(Debug, Error)]
 pub enum CopyError {
     #[error("the GPU would not draw the client's frame: {0}")]
@@ -106,8 +103,8 @@ mod tests {
 
     use super::copy;
 
-    /// Four opaque pixels in `Argb8888`'s byte order (B, G, R, A), one color
-    /// per corner, so a flip or a swizzle in either axis moves one of them.
+    /// Four opaque pixels in `Argb8888` byte order (B, G, R, A), one color per
+    /// corner, so a flip or swizzle on either axis changes the result.
     const CORNERS: [u8; 16] = [
         0, 0, 255, 255, // top left: red
         0, 255, 0, 255, // top right: green

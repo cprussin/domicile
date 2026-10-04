@@ -1,13 +1,4 @@
-//! Behavior tests for `domicile-scene`, written before the implementation.
-//!
-//! What is left of it is the affine transform type the compositor lays screens
-//! out with, the box it derives from one, and which app has the keyboard.
-//!
-//! Because `<app>` is a full CSS element, an app's placement is an affine
-//! transform (translate/scale/rotate) from the app's local pixels to screen
-//! space, plus a stacking order. Pointer routing is not here and does not come
-//! back: the page hit-tests in the DOM and forwards coordinates already
-//! resolved to a window.
+//! Behavior tests for `domicile-scene`: transforms, bounds and keyboard focus.
 
 use domicile_scene::{Bounds, KeyboardTarget, Point, Scene, Transform};
 
@@ -73,12 +64,6 @@ fn singular_transform_has_no_inverse() {
     assert!(Transform::scale(0.0, 0.0).inverse().is_none());
 }
 
-// ---- hit-testing ----------------------------------------------------------
-
-// ---- registry management --------------------------------------------------
-
-// ---- input routing --------------------------------------------------------
-
 // ---- keyboard focus -------------------------------------------------------
 
 #[test]
@@ -86,23 +71,7 @@ fn focus_defaults_to_chrome() {
     assert_eq!(Scene::new().keyboard_target(), KeyboardTarget::Chrome);
 }
 
-// ---- the drawing transform (what the compositor renders through) ---------
-//
-// A renderer draws a textured quad from the *unit square*, so a portal's size
-// belongs in the matrix rather than in the vertices. These map a portal onto
-// the output the same way `hit_test` maps the output back onto a portal, and
-// the two disagreeing is the bug that looks like a window drawn correctly
-// whose clicks land somewhere else.
-
-// ---- which screen a window reaches ----------------------------------------
-
-// ---- The chrome claiming the pointer where it paints -----------------------
-
-// ---- what a window's box overlaps ------------------------------------------
-//
-// `Bounds` outlived the portals it used to be derived from: `screens.rs` lays
-// displays out with it, and "is this window on that screen" is the same
-// question as "do these two boxes share any area".
+// ---- Bounds ----------------------------------------------------------------
 
 fn box_of(min: (f64, f64), max: (f64, f64)) -> Bounds {
     Bounds {
@@ -113,8 +82,7 @@ fn box_of(min: (f64, f64), max: (f64, f64)) -> Bounds {
 
 #[test]
 fn two_boxes_side_by_side_do_not_overlap() {
-    // Touching edges do not count. Two displays laid out side by side abut
-    // exactly, and a window ending on the seam is on the screen it is *in*.
+    // Adjacent displays share an edge; a window ending there is on one only.
     assert!(!box_of((0.0, 0.0), (100.0, 100.0)).overlaps(&box_of((100.0, 0.0), (200.0, 100.0))));
 }
 
@@ -123,7 +91,7 @@ fn two_boxes_over_each_other_overlap() {
     assert!(box_of((0.0, 0.0), (100.0, 100.0)).overlaps(&box_of((50.0, 50.0), (150.0, 150.0))));
 }
 
-// ---- the keyboard ----------------------------------------------------------
+// ---- keyboard focus -------------------------------------------------------
 
 #[test]
 fn the_keyboard_starts_with_the_chrome() {
@@ -132,9 +100,7 @@ fn the_keyboard_starts_with_the_chrome() {
 
 #[test]
 fn focus_is_given_to_whoever_is_asked_for() {
-    // Ungated here now. It used to refuse an app with no portal, which was a
-    // second opinion about whether a window existed; `Host` holds the only one
-    // there is and asks its own map before calling.
+    // Unchecked: `Host` verifies the window exists before calling.
     let mut scene = Scene::new();
     scene.focus_app("term");
     assert_eq!(
@@ -145,8 +111,6 @@ fn focus_is_given_to_whoever_is_asked_for() {
 
 #[test]
 fn a_window_that_goes_away_hands_the_keyboard_back() {
-    // Nothing else says so, and a focus naming a window that has gone is a
-    // keyboard pointed at nothing.
     let mut scene = Scene::new();
     scene.focus_app("term");
     scene.window_gone("term");

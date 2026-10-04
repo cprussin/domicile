@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 use domicile_launch::notification::{connected, notify, ANSWER_WITHIN};
 use zbus::zvariant::OwnedValue;
 
-/// One `Notify`, as the server heard it.
+/// One `Notify` call the fake server received.
 #[derive(Debug, PartialEq)]
 struct Heard {
     app_name: String,
@@ -45,7 +45,7 @@ impl Server {
     }
 }
 
-/// A server and a client over one socket pair, with no bus between them.
+/// A fake server and a client, connected peer-to-peer over a socket pair.
 fn paired() -> (
     zbus::blocking::Connection,
     zbus::blocking::Connection,

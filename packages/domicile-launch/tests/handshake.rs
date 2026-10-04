@@ -1,5 +1,5 @@
-//! What the control socket heard, and what a compositor says when it heard
-//! too little.
+//! Messages the compositor logs when no page completes the control socket
+//! handshake.
 
 use std::path::Path;
 use std::time::Duration;
@@ -40,9 +40,8 @@ fn a_socket_nothing_ever_dialed_says_so_and_names_itself() {
 
 #[test]
 fn a_connection_that_never_spoke_is_a_different_sentence() {
-    // Worth telling apart from nothing at all: something dialed the socket, so
-    // the engine knows where it is and the shell's document ran far enough to
-    // ask for the channel. What did not happen is the `hello`.
+    // Something connected, so the engine found the socket and the shell
+    // started. Only the `hello` is missing.
     let said = silence(Expected::APage, Heard::AConnection, socket(), after())
         .expect("no page agreed anything");
 
@@ -55,11 +54,8 @@ fn a_connection_that_never_spoke_is_a_different_sentence() {
     );
 }
 
-/// The engine spike's harnesses run a compositor with no shell in front of it:
-/// chrome is started on the broker socket and nothing can dial the control
-/// one. A sentence about that is not a finding, it is the harness described
-/// back to itself — and it was printed on every green run of
-/// `guard-client-window.sh`.
+/// Engine spike harnesses run a compositor with no shell, so nothing dials the
+/// control socket. A message there would be noise.
 #[test]
 fn a_socket_no_page_was_ever_going_to_dial_is_not_worth_a_word() {
     assert_eq!(
@@ -68,9 +64,7 @@ fn a_socket_no_page_was_ever_going_to_dial_is_not_worth_a_word() {
     );
 }
 
-/// And the flag is about what was EXPECTED rather than about what to print:
-/// something dialing a socket nobody was meant to dial is still not this
-/// compositor's complaint to make, because it has no page to be missing.
+/// With no page expected, a connection is not worth reporting either.
 #[test]
 fn a_connection_on_a_socket_no_page_was_due_on_is_not_either() {
     assert_eq!(
@@ -94,8 +88,8 @@ fn a_dial_on_its_own_is_a_connection() {
 
 #[test]
 fn a_page_that_agreed_outranks_the_connections_that_did_not() {
-    // Two chromes is a supported shape, and one of them being a probe that
-    // hangs up must not turn a desktop that came up into a complaint.
+    // Two chrome processes are supported. One that connects and hangs up must
+    // not cause a warning when the other agreed.
     let handshake = Handshake::new();
     handshake.connected();
     handshake.connected();

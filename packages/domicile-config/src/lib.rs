@@ -1,20 +1,12 @@
 //! Domicile compositor configuration.
 //!
-//! Responsibilities:
-//! - Define the config schema ([`Config`]).
-//! - Parse it, apply defaults, and validate it ([`Config::parse`]), expanding
-//!   a `~` against `HOME`.
-//! - Provide hot-reload that is *safe*: a bad write keeps the last known-good
-//!   config live and surfaces the error rather than crashing ([`ConfigStore`]).
+//! - [`Config`] is the schema. [`Config::parse`] applies defaults, expands `~`
+//!   against `HOME` and validates.
+//! - [`ConfigStore`] holds the live config. A failed reload keeps the last
+//!   good config and records the error.
 //!
-//! This is not a file a person edits. A Domicile desktop is started by its
-//! *shell*, the shell owns the configuration its users write, and what it
-//! hands the compositor is generated from that — so the schema here is the
-//! shell-to-compositor interface rather than a user interface, and it is JSON.
-//!
-//! The compositor watches the file and feeds new contents into a
-//! [`ConfigStore`]; the store is the single source of truth for the live
-//! configuration. All of this is pure logic and unit-tested.
+//! The shell generates this JSON file; people do not edit it. See
+//! `docs/SHELL-CONFIG.md`.
 
 mod applications;
 mod desktop;
@@ -33,23 +25,18 @@ use std::time::Duration;
 
 use serde::Deserialize;
 
-/// Everything that can go wrong loading a config.
+/// An error loading a config.
 ///
-/// Deliberately `Clone + PartialEq` (it holds rendered messages, not opaque
-/// source errors) so it can be stored on [`ConfigStore`] and asserted in tests.
+/// Holds rendered messages, so it is `Clone + PartialEq` and can be stored on
+/// [`ConfigStore`] and compared in tests.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ConfigError {
     #[error("could not read config file {path}: {message}")]
     Io { path: String, message: String },
 
-    /// A config that was read from a file, and the file it came from.
+    /// An error in a config file, with the file's path.
     ///
-    /// [`Config::parse`] is given text and has no file to name; [`Config::load`]
-    /// has one, so the path goes on here rather than into every message
-    /// underneath. Without it only [`ConfigError::Io`] said which config it was
-    /// about, and a machine has more than one: the shell's generated file, the
-    /// one a `--config` flag names, whatever is under `$XDG_CONFIG_HOME`. A
-    /// complaint about a key that names none of them is a hunt.
+    /// A machine can have several configs, so the path says which one failed.
     #[error("the config at {path} could not be loaded:\n{why}")]
     At { path: String, why: Box<ConfigError> },
 
@@ -60,26 +47,14 @@ pub enum ConfigError {
     Validation(String),
 }
 
-/// Keyboard settings, named after the `xkb_*` options SwayWM accepts.
+/// Keyboard settings, named after SwayWM's `xkb_*` options.
 ///
-/// `xkb_rules`, `xkb_model`, `xkb_layout` and `xkb_variant` are handed to xkb
-/// verbatim, so sway's comma-separated multi-layout form (`xkb_layout =
-/// "us,de"` with `xkb_variant = "dvp,"`) works here too. Empty `xkb_rules` /
-/// `xkb_model` mean "whatever libxkbcommon defaults to". `xkb_options` is a
-/// list rather than a comma-separated string because the format has one; it
-/// carries the common keyswaps (`caps:swapescape`, `compose:ralt`, …).
+/// The string fields go to xkb verbatim, so sway's multi-layout form
+/// (`xkb_layout = "us,de"`) works. Empty `xkb_rules` and `xkb_model` use the
+/// libxkbcommon defaults. The default layout is `us`.
 ///
-/// **THE DEFAULTS ARE NOBODY'S KEYBOARD, WHICH IS THE POINT.** They were
-/// Programmer's Dvorak with Caps Lock and Escape swapped, which is one
-/// author's desk and a surprise on anybody else's: a user who configured
-/// nothing got a layout they never asked for, and the only symptom is that
-/// every key is wrong. A shell that wants a layout states one -- that is what
-/// the config is for -- and a desk that states nothing gets the plain `us`
-/// that saying nothing ought to mean.
-///
-/// Compared, which is what `PartialEq` is for: a reload asks what moved
-/// between two configs, and the keyboard is one of the answers — see the
-/// compositor's `Restatement`.
+/// `PartialEq` lets a reload detect a change; see the compositor's
+/// `Restatement`.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct KeyboardConfig {
@@ -95,12 +70,8 @@ impl Default for KeyboardConfig {
         KeyboardConfig {
             xkb_rules: String::new(),
             xkb_model: String::new(),
-            // `us` rather than empty because `validate` refuses an empty
-            // layout, and it refuses one because xkb's own fallback for it is
-            // a build-time default this cannot see -- so a desktop would come
-            // up on a layout nothing here could name. The variant and the
-            // options have no such problem: empty is exactly "the layout as it
-            // comes", which is what a desk that said nothing means.
+            // `validate` refuses an empty layout: xkb would fall back to a
+            // build-time default this crate cannot name.
             xkb_layout: "us".into(),
             xkb_variant: String::new(),
             xkb_options: Vec::new(),
@@ -109,10 +80,9 @@ impl Default for KeyboardConfig {
 }
 
 impl KeyboardConfig {
-    /// The options in the comma-separated form xkb wants.
+    /// The options joined with commas, as xkb expects.
     ///
-    /// An empty list yields `""`, which xkb reads as "no options at all" —
-    /// distinct from leaving the option string unset.
+    /// An empty list yields `""`, which xkb reads as "no options".
     pub fn xkb_options_string(&self) -> String {
         self.xkb_options.join(",")
     }
@@ -141,43 +111,29 @@ pub struct InputConfig {
 
 /// One display, described in the config rather than discovered.
 ///
-/// A nested compositor has no monitors to enumerate and no DRM to ask, so the
-/// desktop's shape is whatever the config says it is. Each display becomes a
-/// `wl_output`, and a region of the one chrome page that spans the desktop;
-/// `name` is what the shell addresses that region by.
-///
-/// `position` and `size` are logical units. `position` is where this display's
-/// top-left corner sits in the config's own space, which is what puts two
-/// displays side by side rather than on top of each other — see [`Desktop`]
-/// for the space that reaches the rest of Domicile.
+/// A nested compositor has no monitors to enumerate. Each display becomes a
+/// `wl_output` and a region of the chrome page, which the shell addresses by
+/// `name`. `position` and `size` are logical units.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DisplayConfig {
-    /// How the chrome and the compositor name this display to each other.
+    /// The name the chrome and the compositor use for this display.
     ///
-    /// Matched exactly, in both directions, which is why a padded one is
-    /// rejected rather than trimmed.
+    /// Matched exactly, so a name padded with whitespace is rejected.
     pub name: String,
-    /// The top-left corner, in the *config's* coordinate space.
+    /// The top-left corner in the config's coordinate space.
     ///
-    /// Wherever the user finds it natural to put it — negative included, since
-    /// "to the left of that one" is the obvious way to describe a second
-    /// monitor. Not the desktop's space, which [`Desktop`] normalizes this
-    /// into and which is what the compositor advertises and the chrome is
-    /// told; these numbers do not leave this crate.
+    /// May be negative. [`Desktop`] normalizes it; these values do not leave
+    /// this crate.
     #[serde(default)]
     pub position: (i32, i32),
-    /// The `wl_output` scale to advertise for clients on this display.
+    /// The `wl_output` scale for clients on this display.
     ///
-    /// Stated outright rather than capped: [`OutputConfig::max_scale`] governs
-    /// the display Domicile's own window landed on, which a described display
-    /// is not.
+    /// [`OutputConfig::max_scale`] does not apply to described displays.
     #[serde(default = "one")]
     pub scale: u32,
-    /// Width and height in logical units.
-    ///
-    /// Logical, so a `wl_output` mode — which is physical pixels — is this
-    /// multiplied by `scale`.
+    /// Width and height in logical units. The `wl_output` mode is this times
+    /// `scale`.
     pub size: (u32, u32),
 }
 
@@ -186,10 +142,7 @@ fn one() -> u32 {
 }
 
 impl DisplayConfig {
-    /// Whether this display and `other` cover any of the same ground.
-    ///
-    /// Both axes, because a rectangle that overlaps along only one of them is
-    /// the display next to it rather than the display on top of it.
+    /// Whether this display and `other` overlap.
     fn overlaps(&self, other: &DisplayConfig) -> bool {
         overlap(
             span(self.position.0, self.size.0),
@@ -225,29 +178,15 @@ impl DisplayConfig {
                 self.name
             )));
         }
-        // The `wl_output` mode is physical pixels, which is this times the
-        // scale — so a size and a scale that each fit on their own can still
-        // multiply past what a coordinate is. Checked here rather than where
-        // the mode is built, which is arithmetic in the Smithay backend that
-        // nothing can test and that would wrap in release.
+        // Width times scale can exceed `i32` even when each fits. Check it
+        // here: the Smithay backend builds the mode unchecked and would wrap
+        // in release.
         //
-        // `u64`, not `i64`: two `u32`s multiply to just under `u64::MAX` and
-        // to nearly twice `i64::MAX`, so the check written in `i64` panicked
-        // on the largest inputs in debug — which `ConfigStore` cannot have,
-        // since a bad config must never take the compositor down.
+        // Multiply in `u64`: two `u32`s can overflow `i64`, and a panic here
+        // would let a bad config crash the compositor.
         //
-        // On *this* path that is the whole of it: wrapping needs a width past
-        // `i32::MAX`, and no such display survives — the far-corner check just
-        // below rejects one whose corner lands off the coordinate space, and
-        // `validate_extent` rejects the rest by the span they put between two
-        // displays. So an `i64` version here would have wrapped and been
-        // convicted by one of those anyway. The nested check has no backstop
-        // at all, and there a wrapped product really does land back under the
-        // bound and admit what the check exists to reject.
-        //
-        // This subsumes bounding the logical size on its own: the scale is at
-        // least 1 by the check above, so a mode that fits means a size that
-        // fits, which is the invariant `Desktop` asserts when it normalizes.
+        // Scale is at least 1, so this also bounds the logical size, which
+        // `Desktop` asserts when it normalizes.
         let mode = (
             u64::from(width) * u64::from(self.scale),
             u64::from(height) * u64::from(self.scale),
@@ -274,19 +213,17 @@ impl DisplayConfig {
     }
 }
 
-/// One display's half-open extent along one axis, in the config's own space.
+/// One display's half-open extent along one axis, in the config's space.
 ///
-/// Widened, because a display placed far out along an axis has an end that is
-/// not an `i32` — and rejecting that layout is [`DisplayConfig::validate`]'s
-/// job rather than something wrapping arithmetic decides silently here.
+/// Widened to `i64` so a far end past `i32` does not wrap;
+/// [`DisplayConfig::validate`] rejects it.
 fn span(start: i32, length: u32) -> (i64, i64) {
     (i64::from(start), i64::from(start) + i64::from(length))
 }
 
-/// Whether two half-open spans of one axis intersect.
+/// Whether two half-open spans intersect.
 ///
-/// Half-open, so spans that share an endpoint — the ordinary side-by-side or
-/// stacked desktop — are adjacent rather than overlapping.
+/// Spans that share an endpoint are adjacent, not overlapping.
 fn overlap((start, end): (i64, i64), (other_start, other_end): (i64, i64)) -> bool {
     start < other_end && other_start < end
 }
@@ -297,39 +234,26 @@ fn overlap((start, end): (i64, i64), (other_start, other_end): (i64, i64)) -> bo
 pub struct OutputConfig {
     /// The displays that make up the desktop.
     ///
-    /// Empty means the one output a nested compositor can manage without being
-    /// told: sized by whatever window Domicile itself was given.
+    /// Empty means one output sized to Domicile's own window.
     pub displays: Vec<DisplayConfig>,
-    /// The highest `wl_output` scale to advertise, whatever the chrome's
-    /// display actually is.
+    /// The highest `wl_output` scale to advertise.
     ///
-    /// This is a cost dial, not a preference. A client asked to draw at scale
-    /// N renders N² times the pixels — its own work, and the engine's to
-    /// composite — so sharpness is bought in the square. `1` turns scaling off
-    /// entirely.
-    ///
-    /// Governs the single output that follows Domicile's own window, and so
-    /// applies only while [`displays`](OutputConfig::displays) is empty: a
-    /// described display states its own `scale` and has no ratio to cap.
+    /// Limits cost: a client at scale N renders N² times the pixels. `1` turns
+    /// scaling off. Applies only while [`displays`](OutputConfig::displays) is
+    /// empty.
     pub max_scale: u32,
-    /// The arrangements of *real* monitors, and what to do with each.
+    /// Placements for real monitors, matched against what is connected.
     ///
-    /// The third way a desktop gets described, and the only one that is a
-    /// function of the hardware: [`displays`](OutputConfig::displays) states a
-    /// desktop outright and the nested size follows a window, while a profile
-    /// states a placement and the monitor states its mode. So this is the one
-    /// that is re-read on every hotplug — see [`OutputConfig::layout`].
-    ///
-    /// Empty is a config that says nothing about placement, which leaves the
-    /// monitors wherever the engine's own reading put them.
+    /// Re-read on every hotplug; see [`OutputConfig::layout`]. Empty leaves
+    /// the monitors where the engine placed them. See
+    /// `docs/DISPLAYS.md#profiles`.
     pub profiles: Vec<Profile>,
 }
 
 impl Default for OutputConfig {
     fn default() -> Self {
-        // 2 covers the ordinary retina laptop, which is the display that makes
-        // unscaled text look wrong; past that the frame gets expensive faster
-        // than it gets better.
+        // 2 covers a typical HiDPI laptop. Higher scales cost more than they
+        // improve.
         OutputConfig {
             displays: Vec::new(),
             max_scale: 2,
@@ -339,38 +263,27 @@ impl Default for OutputConfig {
 }
 
 impl OutputConfig {
-    /// The desktop these displays make up, placed about its own top-left.
+    /// The desktop these displays make up, shifted so its top-left corner is
+    /// the origin.
     ///
-    /// `None` when none are configured, which is not an empty desktop but the
-    /// absence of a described one — the case where the single output follows
-    /// whatever window Domicile itself was given.
+    /// `None` when no displays are configured. The compositor then uses one
+    /// output, `domicile-0`, that follows its window. An empty desktop would
+    /// give the chrome nothing to lay out against.
     ///
-    /// That `None` becomes the compositor's own startup placeholder and, on
-    /// the wire, a display named `domicile-0` — the one output that follows
-    /// the window. Not an empty `displays` list: an empty list is a desktop of
-    /// *no* screens, and a chrome told one would lay out against nothing.
-    ///
-    /// Rebuilt on each call, names and all. Fine for a list the config states
-    /// once; not something to put on a frame path.
+    /// Rebuilt on each call; keep it off frame paths.
     pub fn desktop(&self) -> Option<Desktop> {
         Desktop::of(&self.displays)
     }
 
-    /// The first profile `connected` is the set for, applied to them.
+    /// The first profile matching `connected`, applied to those monitors.
     ///
-    /// `Ok(None)` is no profile matching, which is not an empty desktop but a
-    /// config that says nothing about this arrangement of monitors — the
-    /// displays then stay wherever the engine's own reading put them, which is
-    /// the behavior that existed before profiles did.
+    /// `Ok(None)` means no profile matches, and the monitors stay where the
+    /// engine placed them. `Err` means the matched profile cannot apply: a
+    /// mode mismatch, a scale that leaves no logical pixels, or a placement
+    /// too large for a desktop. These depend on the monitor's mode, so parsing
+    /// cannot catch them.
     ///
-    /// The `Err` arm is a matched profile that cannot be applied to the
-    /// monitors it matched: a monitor that is not at the mode the profile
-    /// states it is, a scale that leaves one with no logical pixels, or a
-    /// placement that spans further than a desktop can. None is reachable at
-    /// parse time, because each needs a mode that arrives with the monitor.
-    ///
-    /// Rebuilt on each call. That is the point rather than a cost: this is
-    /// what a hotplug calls, and the answer is supposed to change.
+    /// Called on each hotplug.
     pub fn layout(&self, connected: &[Connected]) -> Result<Option<Layout>, ConfigError> {
         profile::layout(&self.profiles, connected)
     }
@@ -398,30 +311,18 @@ impl OutputConfig {
                 }
             }
         }
-        // Last, because it is the least specific thing that can be wrong with
-        // a layout. A display whose own far corner does not fit is an error
-        // about *that display*, and running this first would answer it with
-        // "the displays span N across" — which is a fact about a pair, and so
-        // names the wrong display when one of the pair is the one at fault.
-        //
-        // Only observable with two or more: a lone display's extent is its own
-        // size, which `DisplayConfig::validate` bounds first anyway.
+        // Run last: a per-display error names the faulty display, while this
+        // check can only name a pair.
         self.validate_extent()?;
         profile::validate(&self.profiles)
     }
 
-    /// Whether the displays together span a desktop that is a coordinate space.
+    /// Whether the displays together fit in `i32` coordinates.
     ///
-    /// Only ever two *different* displays: a lone one spans its own size,
-    /// which `DisplayConfig::validate` has already bounded, so the message
-    /// below can name a pair without ever naming one display twice.
-    ///
-    /// Each entry's own far corner fitting an `i32` is not enough: two that
-    /// each fit can still be four billion apart. The desktop is placed about
-    /// its own top-left corner, so a display's normalized position is the
-    /// distance between two of those corners — and `i32` is what a position
-    /// is. Checked here rather than left to `Desktop::of`, which does that
-    /// subtraction and would overflow doing it.
+    /// Each display fitting is not enough: two can be four billion apart.
+    /// `Desktop::of` subtracts corners to normalize positions and would
+    /// overflow. A single display is already bounded by
+    /// `DisplayConfig::validate`, so the error always names two displays.
     fn validate_extent(&self) -> Result<(), ConfigError> {
         for axis in [Axis::Horizontal, Axis::Vertical] {
             let furthest = self.displays.iter().max_by_key(|d| axis.reach(d));
@@ -442,7 +343,7 @@ impl OutputConfig {
     }
 }
 
-/// One axis of the desktop, so the extent check reads once rather than twice.
+/// One axis of the desktop, for the extent check.
 #[derive(Debug, Clone, Copy)]
 enum Axis {
     Horizontal,
@@ -450,7 +351,7 @@ enum Axis {
 }
 
 impl Axis {
-    /// This display's near edge along the axis, in the config's own space.
+    /// The display's near edge along the axis, in the config's space.
     fn near(self, display: &DisplayConfig) -> i32 {
         match self {
             Axis::Horizontal => display.position.0,
@@ -458,8 +359,8 @@ impl Axis {
         }
     }
 
-    /// Its far edge, widened — the near edge fits an `i32` and the sum need
-    /// not, which is what makes this worth checking at all.
+    /// The display's far edge along the axis, widened because it can exceed
+    /// `i32`.
     fn reach(self, display: &DisplayConfig) -> i64 {
         let length = match self {
             Axis::Horizontal => display.size.0,
@@ -478,39 +379,28 @@ impl std::fmt::Display for Axis {
     }
 }
 
-/// When a desktop nobody is at turns its screens off.
+/// When an idle desktop turns its screens off.
 ///
-/// **ABSENT IS NEVER, AND THAT IS THE DEFAULT.** A blank screen is
-/// indistinguishable from a desktop that has died, and nothing warns a moment
-/// before this one, so a desk whose shell never mentioned idle would go dark for
-/// the first time on an upgrade it did not ask for, with no way to tell that
-/// from a crash. A shell that wants the screens off says how long.
+/// Absent means never, and that is the default: a blank screen looks like a
+/// crash, so a shell must opt in. When [`LockConfig`] sets a verifier,
+/// blanking also locks the desk. See `docs/IDLE.md`.
 ///
-/// **It is also what locks a desk**, on a desktop that states a
-/// [`LockConfig::passphrase`]: the dark edge is the only thing that locks one
-/// by itself, so a desk with no timeout here locks only when its shell asks.
+/// The unit is in the key name because a generator writes this file.
 ///
-/// Seconds, spelled in the name, because this file is generated: a unit that
-/// has to be read out of a doc comment is one a generator gets wrong, and the
-/// only alternative -- `"10m"` -- is a parser and a second way to be wrong
-/// about what a config says.
-///
-/// Compared, which is what `PartialEq` is for: a reload asks what moved
-/// between two configs, and when the screens go dark is one of the answers --
-/// see the compositor's `Restatement`.
+/// `PartialEq` lets a reload detect a change; see the compositor's
+/// `Restatement`.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct IdleConfig {
-    /// How long the desktop goes untouched before its screens go dark.
+    /// Seconds without input before the screens go dark.
     ///
-    /// Absent is a desktop that never blanks. Zero is refused rather than
-    /// read as either one -- see [`IdleConfig::validate`].
+    /// Absent means never. Zero is refused.
     pub blank_after_seconds: Option<u64>,
 }
 
 impl IdleConfig {
-    /// How long a desktop goes untouched before it blanks, or `None` for one
-    /// that never does.
+    /// How long the desktop goes without input before it blanks, or `None`
+    /// for never.
     pub fn blank_after(&self) -> Option<Duration> {
         self.blank_after_seconds.map(Duration::from_secs)
     }
@@ -527,69 +417,49 @@ impl IdleConfig {
     }
 }
 
-/// What opens this desk once it has locked itself.
+/// What unlocks this desk.
 ///
-/// **ABSENT IS NEVER, AND THAT IS THE DEFAULT** — for the reason
-/// [`IdleConfig`] above says nothing means never, and one that is not merely
-/// conservative: a desk that locked with nothing to open it is a desk nobody
-/// can get back into, and the way out would be another tty. So the lock is
-/// opt-in, and a desk that states no verifier never locks and never sends
-/// `HostMessage::Locked` at all.
+/// Absent means the desk never locks, and that is the default: a locked desk
+/// with no verifier cannot be unlocked. Such a desk never sends
+/// `HostMessage::Locked`.
 ///
-/// **TWO VERIFIERS, AND A DESK STATES ONE OF THEM.** `pam_service` is the real
-/// one: the desk's own user, authenticated against the PAM service it names —
-/// the arrangement every other lock screen on Linux has, and the one whose
-/// secret is not in this file. `passphrase` is the one that came first, and it
-/// is a mechanism rather than a secret: this file is generated — on NixOS by
-/// home-manager, into a world-readable store — so a passphrase written here is
-/// readable by every process of every user on the machine. It stays because it
-/// is what a desk on a machine with no PAM service for it can use, and because
-/// removing it would change what an existing config means without a word.
+/// Set one verifier:
+/// - `pam_service` authenticates the desk's user against a PAM service.
+/// - `passphrase` is for machines without a PAM service. The file is
+///   generated, often into the world-readable Nix store, so any user can read
+///   it.
 ///
-/// **NEITHER IS A FALLBACK FOR THE OTHER.** A desk that states both is refused
-/// by name rather than given one of them, because whichever was picked the
-/// other would be a line that did nothing — and the dangerous reading is a
-/// passphrase somebody believes stands in for PAM when PAM cannot run. A desk
-/// that names a service PAM does not have does not come up at all; the
-/// compositor says which service and what to declare.
+/// A config with both is refused, so a passphrase is never mistaken for a PAM
+/// fallback. A PAM service that does not exist stops the compositor from
+/// starting. See `docs/LOCK.md#verifiers`.
 ///
-/// Compared, which is what `PartialEq` is for: a reload asks what moved between
-/// two configs, and whether this desk can lock is one of the answers -- see the
-/// compositor's `Restatement`.
+/// `PartialEq` lets a reload detect a change; see the compositor's
+/// `Restatement`.
 #[derive(Clone, Default, PartialEq, Eq, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct LockConfig {
-    /// A passphrase that opens this desk. The empty string is refused rather
-    /// than read as "never locks" -- see [`LockConfig::validate`].
+    /// A passphrase that unlocks this desk. An empty string is refused.
     ///
-    /// **What keeps this out of a log is the `Debug` below and not its
-    /// visibility.** Private would buy nothing here: `{:?}` on the struct
-    /// holding it goes through that impl either way, and a caller that wanted
-    /// the string would reach it through the accessor. It is `pub` like every
-    /// other key in this file, which is also what lets
-    /// `scripts/test-the-home-manager-module-agrees.sh` read it -- a key the
-    /// module writes and this struct does not accept refuses the whole config
-    /// file, so being readable by that comparison is worth more than a
-    /// visibility that protects nothing.
+    /// The `Debug` impl below redacts it. It is `pub` so
+    /// `scripts/test-the-home-manager-module-agrees.sh` can check that this
+    /// struct accepts every key the home-manager module writes.
     pub passphrase: Option<String>,
-    /// The PAM service this desk's own user is authenticated against, which
-    /// the system has to declare -- `/etc/pam.d/<this>`. On NixOS that is
-    /// `security.pam.services.<this> = {};`, and `"domicile"` is the name the
-    /// docs use.
+    /// The PAM service the desk's user authenticates against.
+    ///
+    /// The system must declare it in `/etc/pam.d/`; on NixOS,
+    /// `security.pam.services.<name> = {};`. The docs use `"domicile"`.
     pub pam_service: Option<String>,
 }
 
-/// What a desk said opens it, once [`LockConfig::validate`] has made sure it
-/// said at most one thing.
+/// The verifier a desk configured.
 ///
-/// Borrowed from the config rather than copied out of it, so that asking which
-/// verifier a desk has does not make another copy of a passphrase.
+/// Borrows from the config so the passphrase is not copied.
 #[derive(PartialEq, Eq)]
 pub enum LockVerifier<'a> {
-    /// `lock.passphrase`: this string, compared.
+    /// `lock.passphrase`: compared with what the user types.
     Passphrase(&'a str),
-    /// `lock.pam_service`: the desk's own user, authenticated by PAM against
-    /// this service.
+    /// `lock.pam_service`: the desk's user, authenticated by PAM against this
+    /// service.
     Pam { service: &'a str },
 }
 
@@ -632,13 +502,11 @@ impl LockConfig {
     }
 }
 
-/// Says whether there is a passphrase here and never what it is.
+/// Redacts the passphrase.
 ///
-/// Derived `Debug` is what this struct exists to not have. It is reached by
-/// `Config`'s own derive and by the compositor's `Restatement`, so the
-/// redaction has to live on the type rather than at whichever call site
-/// eventually prints one. `domicile_protocol::Passphrase` is the same decision
-/// on the wire half.
+/// The redaction lives on the type because `Config`'s derived `Debug` and the
+/// compositor's `Restatement` both print it. `domicile_protocol::Passphrase`
+/// does the same on the wire.
 impl std::fmt::Debug for LockConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("LockConfig")
@@ -651,8 +519,7 @@ impl std::fmt::Debug for LockConfig {
     }
 }
 
-/// The same redaction, for the same reason, on the value the compositor
-/// chooses its verifier from.
+/// Redacts the passphrase, as [`LockConfig`]'s `Debug` does.
 impl std::fmt::Debug for LockVerifier<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -664,24 +531,15 @@ impl std::fmt::Debug for LockVerifier<'_> {
     }
 }
 
-/// Which way round the desktop is drawn: dark, or light.
+/// Whether the desktop is drawn dark or light.
 ///
-/// **THERE IS NO THIRD ANSWER, AND THE MISSING ONE IS THE POINT.** Every other
-/// desktop offers "follow the system" because it is a program running on one.
-/// Domicile *is* the system: the chrome is the only thing on the screen that
-/// is not a client, and there is nothing above it whose preference it could
-/// follow. A `system` here would be the desktop deferring to itself, so the
-/// word is refused rather than quietly read as one of the two — see
-/// `rejects_a_theme_that_is_neither` in `tests/config.rs`.
-///
-/// It goes the other way instead: this is what the desktop's *clients* follow,
-/// through the settings portal the compositor answers — see
-/// `domicile_compositor::appearance`.
+/// There is no "follow the system" option: the chrome is the system, so there
+/// is nothing to follow. Clients follow this value through the settings
+/// portal; see `domicile_compositor::appearance`.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum ThemeMode {
-    /// Light text on a dark ground, which is what the chrome was drawn
-    /// against and so what a desk that says nothing gets.
+    /// Light text on a dark background, which the chrome is designed for.
     #[default]
     Dark,
     Light,
@@ -689,29 +547,25 @@ pub enum ThemeMode {
 
 /// How the desktop is themed.
 ///
-/// One key today. A section of its own rather than a bare top-level `theme =`
-/// because the theme is a subject rather than a setting — an accent color, a
-/// wallpaper and a font all belong under this heading, and a scalar here would
-/// have to become a table to admit the second of them.
+/// A section rather than a top-level key, so related keys such as an accent
+/// color or a wallpaper can join `mode`.
 ///
-/// Compared, which is what `PartialEq` is for: a reload asks what moved
-/// between two configs, and the theme is one of the answers — see the
-/// compositor's `Restatement`.
+/// `PartialEq` lets a reload detect a change; see the compositor's
+/// `Restatement`.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct ThemeConfig {
     pub mode: ThemeMode,
 }
 
-/// The Chrome extensions this desk runs, which the engine installs into the
-/// profile its browser windows use — see `docs/architecture/EXTENSIONS.md`.
+/// Chrome extensions the engine installs into the browser windows' profile.
+/// See `docs/architecture/EXTENSIONS.md`.
 ///
-/// Naming one is the consent: there is no install prompt, and an extension
-/// the list stops naming is uninstalled.
+/// Listing an extension is consent: there is no install prompt. Removing one
+/// from the list uninstalls it.
 ///
-/// Compared, which is what `PartialEq` is for: a reload asks what moved
-/// between two configs, and the extensions are one of the answers — see the
-/// compositor's `Restatement`.
+/// `PartialEq` lets a reload detect a change; see the compositor's
+/// `Restatement`.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct ExtensionsConfig {
@@ -723,9 +577,8 @@ pub struct ExtensionsConfig {
 
 impl ExtensionsConfig {
     fn validate(&self) -> Result<(), ConfigError> {
-        // Thirty-two letters from `a` to `p`, which is what the Store names an
-        // extension by. Refused here, where the file can be named, rather than
-        // by the Store a network round trip later in a log nobody reads.
+        // Store ids are 32 letters from `a` to `p`. Checking here names the
+        // config file; the Store would fail later, in a log.
         if let Some(id) = self
             .web_store
             .iter()
@@ -736,8 +589,7 @@ impl ExtensionsConfig {
                  32 letters from `a` to `p`"
             )));
         }
-        // Absolute once a `~` is expanded, because a relative path is relative
-        // to wherever the compositor happened to start.
+        // A relative path would depend on the compositor's working directory.
         match self.unpacked.iter().find(|path| !path.is_absolute()) {
             Some(path) => Err(ConfigError::Validation(format!(
                 "extensions.unpacked {:?} is not an absolute path, or one under `~`",
@@ -749,9 +601,8 @@ impl ExtensionsConfig {
 
     /// These extensions, with a leading `~` in `unpacked` expanded to `home`.
     ///
-    /// Here rather than in the browser, which is handed the path and expands
-    /// nothing. Only `~` itself and `~/`, as `domicile`'s own argument does:
-    /// `~alice` is another user's home, a lookup this does not make.
+    /// The browser does not expand `~`. Only `~` and `~/` expand, as in
+    /// `domicile`'s own argument; `~alice` is refused.
     fn at_home(self, home: Option<&Path>) -> Result<ExtensionsConfig, ConfigError> {
         self.unpacked
             .into_iter()
@@ -764,8 +615,7 @@ impl ExtensionsConfig {
 /// `path` with a leading `~` component replaced by `home`.
 fn under_home(path: PathBuf, home: Option<&Path>) -> Result<PathBuf, ConfigError> {
     match (path.strip_prefix("~"), home) {
-        // Collected, so that a bare `~` is the home rather than the home with
-        // a `/` on the end.
+        // Collecting the components drops the trailing `/` from a bare `~`.
         (Ok(rest), Some(home)) => Ok(home.join(rest).components().collect()),
         (Ok(_), None) => Err(ConfigError::Validation(format!(
             "extensions.unpacked {:?} starts at a home directory and HOME is not \
@@ -796,25 +646,20 @@ pub struct Config {
     pub output: OutputConfig,
     pub startup: StartupConfig,
     pub theme: ThemeConfig,
-    /// The shell `domicile` runs when it is given none — a path or a
-    /// package, as `domicile load-shell` takes one. `domicile`'s alone: the
-    /// compositor takes it and reads nothing of it.
+    /// The shell `domicile` runs when given none: a path or a package, as
+    /// `domicile load-shell` takes. The compositor ignores it.
     pub shell: Option<String>,
 }
 
 impl Config {
     /// Parse a config from JSON text, applying defaults and validating it.
-    ///
-    /// JSON is the one text a config arrives as: what a module config is
-    /// evaluated to, and what a generator writes.
     pub fn parse(text: &str) -> Result<Config, ConfigError> {
         Config::parse_at_home(text, home_directory().as_deref())
     }
 
     /// [`Config::parse`], with the home directory given rather than read.
     fn parse_at_home(text: &str, home: Option<&Path>) -> Result<Config, ConfigError> {
-        // `to_string` keeps serde_json's line and column, and names the key
-        // it refused.
+        // `to_string` keeps serde_json's line, column and key name.
         let parsed: Config =
             serde_json::from_str(text).map_err(|e| ConfigError::Parse(e.to_string()))?;
         Config::settled(parsed, home)
@@ -839,14 +684,14 @@ impl Config {
             path: path.display().to_string(),
             message: e.to_string(),
         })?;
-        // Not the read failure above, which names the path already.
+        // Add the path to parse errors; the read error above already has it.
         Config::parse(&text).map_err(|why| ConfigError::At {
             path: path.display().to_string(),
             why: Box::new(why),
         })
     }
 
-    /// Semantic validation beyond what the type system / deserializer enforce.
+    /// Validation the deserializer cannot express.
     fn validate(&self) -> Result<(), ConfigError> {
         self.extensions.validate()?;
         self.idle.validate()?;
@@ -857,19 +702,18 @@ impl Config {
     }
 }
 
-/// The home directory a `~` stands for: `HOME`, which is the same one the
-/// compositor indexes for a launcher.
+/// The home directory `~` expands to: `HOME`, which the compositor also
+/// indexes for the launcher.
 fn home_directory() -> Option<PathBuf> {
     std::env::var_os("HOME").map(PathBuf::from)
 }
 
-/// Holds the live configuration and applies hot-reloads safely.
+/// Holds the live configuration and applies hot-reloads.
 ///
-/// The guarantee: [`reload_from_str`](ConfigStore::reload_from_str) /
-/// [`reload_from_path`](ConfigStore::reload_from_path) only replace the live
-/// config when the new one is valid. On failure the previous config stays
-/// active and the error is retained via [`last_error`](ConfigStore::last_error),
-/// so a typo in the config file can never take the compositor down.
+/// A reload replaces the live config only when the new one is valid.
+/// Otherwise the previous config stays and the error is kept in
+/// [`last_error`](ConfigStore::last_error), so a bad write cannot crash the
+/// compositor.
 #[derive(Debug, Clone)]
 pub struct ConfigStore {
     current: Config,
@@ -919,26 +763,14 @@ impl ConfigStore {
     }
 }
 
-/// A live watcher over a config file.
+/// Watches a config file and sends a parsed [`Config`] or [`ConfigError`] on
+/// `rx` after each change. Pass the results to [`ConfigStore::apply_watch`].
 ///
-/// **Keep the whole `ConfigWatcher` for as long as you read `rx`.** The OS
-/// watcher is the field beside it and owns the sending half, so dropping the
-/// struct closes the channel: `recv` then returns `Err` rather than blocking,
-/// which reads as a file nobody is editing rather than as a watcher nobody
-/// kept — no error, no event, nothing to find.
-///
-/// Easier to do by accident than it looks, and it has been done twice here. A
-/// `move` closure in edition 2021 captures the *fields* it names, so both
-/// `thread::spawn(move || … watcher.rx.recv() …)` and
-/// `thread::spawn(move || for r in watcher.rx …)` take the receiver alone and
-/// leave the watcher to be dropped where it stood. Name the whole struct
-/// inside the closure — `let watcher = watcher;` — to move it in.
-///
-/// Keeps the underlying OS watcher alive and delivers a freshly parsed
-/// [`Config`] (or a [`ConfigError`]) on `rx` each time the file changes. Wire
-/// `rx` into a [`ConfigStore`] via [`ConfigStore::apply`] to get safe
-/// hot-reload. (The parse/store logic is unit-tested; this thin OS glue is
-/// exercised via integration/manual runs.)
+/// Keep the whole struct alive while reading `rx`. The OS watcher owns the
+/// sender, so dropping it closes the channel and `recv` returns `Err` with no
+/// other sign. In edition 2021 a `move` closure that names `watcher.rx`
+/// captures only that field; write `let watcher = watcher;` inside the closure
+/// to move the whole struct.
 pub struct ConfigWatcher {
     _watcher: notify::RecommendedWatcher,
     pub rx: std::sync::mpsc::Receiver<Result<Config, ConfigError>>,
@@ -949,7 +781,7 @@ pub fn watch(path: impl AsRef<Path>) -> Result<ConfigWatcher, ConfigError> {
     use notify::Watcher;
 
     let path = path.as_ref().to_path_buf();
-    // Watch the parent directory: editors often save via atomic rename, which
+    // Watch the parent directory: editors often save by atomic rename, which
     // a direct file watch can miss.
     let dir = path
         .parent()

@@ -1,83 +1,49 @@
-//! Whether a page ever reached the compositor, and what to say when none did.
+//! Detects a page that never connects to the compositor's control socket.
 //!
-//! THIS IS THE ONE THAT COST A DAY. `nix run …#manganese` came up on a blank
-//! Chrome window; four separate causes were found behind it, and the last was
-//! that `MaybeLaunchAppShortcutWindow` declines `--app=domicile://shell/`
-//! because the scheme is deliberately not web-safe — so startup carried on as
-//! though the flag had never been passed and the user got a browser on the New
-//! Tab page. The engine logged nothing, because from its side nothing had
-//! failed. The compositor logged nothing, because it has no opinion about how
-//! long a socket stays quiet. The page could not log anything, because there
-//! was no page.
-//!
-//! So the compositor is the one that knows: it binds the control socket, and
-//! it is the only end that can tell "nobody has dialed this" from "nobody is
-//! coming". [`Handshake`] is what it counts on that socket and [`silence`] is
-//! what it says about a count that is too low. Both live here, in a crate with
-//! no Smithay in it, so the sentence a user reads is a unit test rather than
-//! something only a machine with a display can run.
-//!
-//! What it will not do is name the cause. `--app` is one way to get a browser
-//! that never loads a shell and a mistyped `--domicile-control-socket` is
-//! another; the observation is the same and it is the observation that goes in
-//! the message.
+//! If the engine never loads the shell, the user sees a blank browser window
+//! and the engine logs nothing. The compositor owns the control socket, so it
+//! reports the silence. [`Handshake`] counts what the socket hears and
+//! [`silence`] builds the message. The message states what was observed, not
+//! a guessed cause.
 
 use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
-/// How long a compositor waits for a page before saying it has not had one.
+/// How long the compositor waits for a page before reporting it.
 ///
-/// The engine's `ControlChannel::kReachFor`, deliberately: that is how long the
-/// browser's end spends retrying a socket that is not there, so a shorter wait
-/// here would complain about a page that was still on its way, and a longer one
-/// would leave the two ends failing at different times for the same reason.
+/// Matches the engine's `ControlChannel::kReachFor` retry window, so both ends
+/// give up at the same time.
 pub const WAIT_FOR_A_PAGE: Duration = Duration::from_secs(30);
 
-/// Whether a page was ever going to dial this socket.
+/// Whether a page is expected to connect, set by `--expect-a-page` (see
+/// [`crate::arguments`]).
 ///
-/// THE WATCHDOG ABOVE IS ONLY A WATCHDOG WHERE A PAGE IS DUE. A compositor
-/// started by `domicile` is loading a shell, so a control socket nothing dials
-/// is the failure this module exists to name. The engine spike's harnesses are
-/// the other shape: `guard-client-window.sh` starts chrome with
-/// `--domicile-broker-socket` and no `--domicile-control-socket`, because what
-/// it measures is a client's window reaching a `file://` page through the
-/// broker. `ControlChannel` is bound for the shell's origin, so no page in
-/// that harness can dial the socket whatever it is told — and the compositor
-/// printed the sentence below on every one of those runs, green ones included.
-/// An error that is unconditional in a passing run is noise, and noise on a
-/// green run is read as the reason for the next red one.
-///
-/// The compositor cannot work this out: from here "no page yet" and "no page
-/// ever" are the same silence. So it is told, by
-/// [`crate::arguments`]' `--expect-a-page`.
+/// Test harnesses such as `guard-client-window.sh` run the engine without a
+/// shell page. They pass `no` so passing runs do not print a false error.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Expected {
-    /// A shell is being loaded, so a page will dial this socket and its
-    /// silence is worth a sentence.
+    /// A shell page will connect; report if it does not.
     APage,
-    /// Nothing will, and the run is correct without one.
+    /// No page will connect.
     NoPage,
 }
 
-/// What the control socket had heard when its patience ran out.
+/// What the control socket heard before the timeout.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Heard {
-    /// A page connected and agreed the protocol. This is a desktop.
+    /// A page connected and agreed on the protocol.
     APage,
-    /// Something dialed the socket, and no page has agreed the protocol on
-    /// it.
+    /// Something connected, but no page agreed on the protocol.
     AConnection,
-    /// Nothing at all.
+    /// Nothing connected.
     Nothing,
 }
 
-/// What the socket has heard, counted as it happens.
+/// Counts connections and protocol agreements on the control socket.
 ///
-/// Two counters rather than a state machine because both ends of it are
-/// racing: connections arrive on their own threads, and a `hello` is read on
-/// the connection's. Nothing here has to be consistent with anything else at
-/// an instant — the question is only ever asked once, long after.
+/// Independent relaxed counters suffice: updates come from several threads,
+/// and the result is read once, long after.
 #[derive(Debug, Default)]
 pub struct Handshake {
     connections: AtomicUsize,
@@ -89,19 +55,18 @@ impl Handshake {
         Handshake::default()
     }
 
-    /// Something dialed the socket.
+    /// Records a connection.
     pub fn connected(&self) {
         self.connections.fetch_add(1, Ordering::Relaxed);
     }
 
-    /// A page on it agreed a protocol this compositor speaks.
+    /// Records a page agreeing on a supported protocol.
     pub fn agreed(&self) {
         self.agreements.fetch_add(1, Ordering::Relaxed);
     }
 
-    /// The most that has happened, which is what the answer is about. One
-    /// page that agreed makes this a desktop however many other connections
-    /// came and went.
+    /// The furthest stage reached. One agreement wins over any number of
+    /// connections.
     pub fn heard(&self) -> Heard {
         match (
             self.agreements.load(Ordering::Relaxed),
@@ -114,11 +79,8 @@ impl Handshake {
     }
 }
 
-/// What to tell the user about a control socket that has heard only this much.
-///
-/// `None` when there is nothing to say, which is the case a running desktop is
-/// in — and the case a harness that was never going to have a page is in, for
-/// the reason [`Expected`] gives.
+/// The message for a control socket that heard only `heard`, or `None` if
+/// nothing is wrong.
 pub fn silence(
     expected: Expected,
     heard: Heard,

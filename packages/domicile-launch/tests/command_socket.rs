@@ -1,4 +1,4 @@
-//! Carrying one command to the engine, over the socket it binds.
+//! Tests for sending commands over the engine command socket.
 
 use std::io::{BufRead as _, BufReader, Write as _};
 use std::os::unix::net::UnixListener;
@@ -8,9 +8,8 @@ use std::time::Duration;
 use domicile_launch::command::{load_shell_line, open_url_line};
 use domicile_launch::command_socket::{load_shell, open_url, CommandError};
 
-/// Long enough that a loaded machine does not report an engine that answered
-/// as one that did not, short enough that a test waiting it out is not why the
-/// suite is slow.
+/// Reply timeout: long enough for a loaded machine, short enough for a fast
+/// suite.
 const BRIEFLY: Duration = Duration::from_millis(200);
 
 #[test]
@@ -26,10 +25,7 @@ fn the_engine_is_sent_the_shell_and_says_it_is_serving_it() {
     )
     .expect("the engine loaded it");
 
-    // The bytes, against the same line `command.rs` says they are: this is the
-    // half of that contract that goes on a socket, and a request that never
-    // reached the engine intact is one the engine refuses in words nobody here
-    // wrote.
+    // The bytes on the socket match the line `command.rs` checks.
     assert_eq!(
         heard.join().expect("the engine was listening"),
         load_shell_line(Path::new("/desktops/other"), Path::new("shell.js"))
@@ -80,9 +76,8 @@ fn an_engine_that_refused_is_carried_back_in_its_own_words() {
 
 #[test]
 fn an_engine_that_is_not_there_is_said_rather_than_waited_for() {
-    // A desktop whose engine has died is a desktop the supervisor is about to
-    // replace, and a `load-shell` that arrives in that second has nowhere to
-    // go. Named rather than hung on: the person is at a terminal.
+    // This happens while the supervisor replaces a dead engine. Fail fast
+    // rather than hang the user's terminal.
     let (_scratch, path) = scratch();
 
     let why = load_shell(
@@ -103,10 +98,8 @@ fn an_engine_that_is_not_there_is_said_rather_than_waited_for() {
 
 #[test]
 fn an_engine_that_takes_the_command_and_says_nothing_is_not_a_shell_that_loaded() {
-    // Silence is the answer that could be read as either, so it is read as
-    // neither: a desktop that went on serving the old shell while the terminal
-    // said the new one had loaded is the one outcome this command must not
-    // have.
+    // No reply is an error, so the terminal never reports a load that did
+    // not happen.
     let (_scratch, path) = scratch();
     let heard = an_engine(&path, None);
 
@@ -127,11 +120,8 @@ fn an_engine_that_takes_the_command_and_says_nothing_is_not_a_shell_that_loaded(
     heard.join().expect("the engine was listening");
 }
 
-/// An engine bound at `path` that reads one line and answers `with`, or hangs
-/// up without answering where there is nothing to answer with.
-///
-/// The real one is a Chromium browser process; what it is here is the socket's
-/// two ends, which is all this module has any part in.
+/// A fake engine at `path` that reads one line and replies `with`, or hangs up
+/// if `with` is `None`.
 fn an_engine(path: &Path, with: Option<&'static str>) -> std::thread::JoinHandle<String> {
     let listener = UnixListener::bind(path).expect("the engine binds its command socket");
     std::thread::spawn(move || {
@@ -150,8 +140,7 @@ fn an_engine(path: &Path, with: Option<&'static str>) -> std::thread::JoinHandle
     })
 }
 
-/// A directory of this test's own, and a socket path in it that nothing has
-/// taken.
+/// A temporary directory and an unused socket path in it.
 fn scratch() -> (tempfile::TempDir, PathBuf) {
     let directory = tempfile::tempdir().expect("a temp directory");
     let path = directory.path().join("command.sock");

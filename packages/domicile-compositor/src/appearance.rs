@@ -1,54 +1,20 @@
-//! What the desk's *clients* are told about the theme.
+//! Answers the settings portal so Wayland clients follow the desk's theme.
 //!
-//! The chrome hears about a theme over the host protocol, because the chrome
-//! is a page on the end of a socket this process already owns. Every other
-//! window on the desk is a Wayland client that has never heard of that socket,
-//! and there is no Wayland protocol for "which way round is this desktop
-//! drawn" — `wl_output` describes pixels, not taste.
+//! GTK, Qt, Electron and Firefox read `color-scheme` from the
+//! `org.freedesktop.appearance` namespace and follow its `SettingChanged`
+//! signal. This module implements the backend interface
+//! `org.freedesktop.impl.portal.Settings`; `xdg-desktop-portal` routes to it
+//! by `XDG_CURRENT_DESKTOP`. Theme changes are announced once every shell has
+//! captured its wipe's start frame (see `domicile_host::theme_turnover`). See
+//! `docs/architecture/PORTALS.md`.
 //!
-//! What there is instead is the **settings portal**. GTK4 and libadwaita, Qt6,
-//! Electron and Firefox all read `color-scheme` out of the
-//! `org.freedesktop.appearance` namespace on `org.freedesktop.portal.Settings`
-//! and follow the `SettingChanged` signal for it while they run — it is the
-//! one thing every toolkit on a Linux desktop agrees about, and it is how a
-//! GNOME or a KDE dark-mode switch reaches an app that is neither. So Domicile
-//! answers it, and a click on the shell's toggle turns the windows over too --
-//! once every shell has captured the frame its wipe starts from, so the wipe
-//! passes across them. See `domicile_host::theme_turnover`.
+//! `xdg-desktop-portal` is activated by D-Bus or systemd, so it reads
+//! `XDG_CURRENT_DESKTOP` from their activation environment, not from this
+//! process's clients. [`say_which_desktop`] sets it there. This does not
+//! re-route a frontend that is already running.
 //!
-//! **The backend half, not the frontend.** `xdg-desktop-portal` is the process
-//! apps actually talk to; what a desktop supplies is an implementation of
-//! `org.freedesktop.impl.portal.Settings` for the frontend to route to, chosen
-//! by `XDG_CURRENT_DESKTOP` and the `.portal` files the frontend reads. That
-//! is why this owns `org.freedesktop.impl.portal.desktop.domicile` and not
-//! `org.freedesktop.portal.Desktop`: taking the frontend's name would mean
-//! this process also had to implement FileChooser, ScreenCast and the dozen
-//! other interfaces an app asks for, which it does not and should not.
-//!
-//! **A backend is only reached if the frontend was told which desktop this
-//! is.** `xdg-desktop-portal` picks both its `portals.conf` and its `UseIn=`
-//! matches out of *its own* `XDG_CURRENT_DESKTOP` — not the calling client's —
-//! and it is D-Bus- or systemd-activated, so what it inherits is whatever the
-//! session was started with. Setting the variable on the clients this
-//! compositor spawns does nothing for it. [`say_which_desktop`] is the other
-//! half, and it is what every Wayland compositor does at startup under the
-//! name `dbus-update-activation-environment --systemd`. With it goes this
-//! desk's `WAYLAND_DISPLAY`, or an activated app opens on whichever other
-//! session said so last — see [`activation_environment`]. Only a desk that is
-//! the session says either: one in a window leaves its session's portal to
-//! that session.
-//!
-//! What that cannot do is re-route a frontend that is **already running**
-//! under another desktop's name: the environment reaches services activated
-//! after the call and nothing else.
-//!
-//! **Nothing here can take the desktop down.** A desk on a bare tty may have
-//! no session bus at all, and a desk started inside another session may find
-//! the name already taken. Both leave the desktop running with its own theme
-//! working and its clients not following it — which is exactly where every
-//! desktop was before this existed — and both say so once in the log. A
-//! compositor that exited because a bus was missing would be a desktop that
-//! will not start on a machine where the previous build ran fine.
+//! Failures (no session bus, name taken) are logged once and leave clients
+//! unthemed; they never stop the compositor.
 
 use std::collections::HashMap;
 use std::ffi::OsStr;
@@ -60,55 +26,36 @@ use tracing::{debug, warn};
 use zbus::object_server::SignalEmitter;
 use zbus::zvariant::{OwnedValue, Value};
 
-/// The namespace every toolkit reads a color scheme out of.
-///
-/// Not a Domicile name and deliberately not one: the point of answering this
-/// at all is that an app built for GNOME, for KDE or for neither already knows
-/// to ask for it.
+/// The standard namespace toolkits read the color scheme from.
 const NAMESPACE: &str = "org.freedesktop.appearance";
 
-/// The key inside it.
+/// The color scheme key in [`NAMESPACE`].
 const COLOR_SCHEME: &str = "color-scheme";
 
-/// Where the frontend looks for a backend's implementation.
+/// The object path the frontend calls backends at.
 const OBJECT_PATH: &str = "/org/freedesktop/portal/desktop";
 
-/// The well-known name this backend answers on.
+/// The bus name this backend owns.
 ///
-/// The suffix is what a `.portal` file and `XDG_CURRENT_DESKTOP` name, which
-/// is how `xdg-desktop-portal` decides that a desk running Domicile should
-/// route `Settings` here rather than to the GTK backend.
+/// Owns the backend name, not the frontend's `org.freedesktop.portal.Desktop`,
+/// so other portal interfaces still reach their own backends.
 const BUS_NAME: &str = "org.freedesktop.impl.portal.desktop.domicile";
 
-/// What this desktop calls itself to the things that route by it.
+/// This desktop's `XDG_CURRENT_DESKTOP` value.
 ///
-/// **A routing key rather than a label**, and it is read in two places that
-/// have to agree: `xdg-desktop-portal` matches it against the `UseIn=` in the
-/// `.portal` files it finds, and `domicile.portal` in the flake names the same
-/// word. It is also what a `.desktop` file's `OnlyShowIn`/`NotShowIn` is
-/// matched against, so a desk that called itself nothing would show every
-/// entry an application ships for every other desktop.
-///
-/// Set in two places for the two readers: [`say_which_desktop`] puts it where
-/// the portal frontend will be activated from, and `client_command` puts it in
-/// each client's own environment.
+/// Must match `UseIn=` in the flake's `domicile.portal`. `.desktop` files'
+/// `OnlyShowIn`/`NotShowIn` also match on it. [`say_which_desktop`] sets it
+/// for activated services and `client_command` for spawned clients.
 pub const CURRENT_DESKTOP: &str = "domicile";
 
-/// The version of `org.freedesktop.impl.portal.Settings` this implements.
-///
-/// 2 is the version that has `ReadOne`; 1 had only `Read`, which this answers
-/// as well because an app built against the older frontend still calls it.
+/// The `org.freedesktop.impl.portal.Settings` version implemented. Version 2
+/// adds `ReadOne`.
 const INTERFACE_VERSION: u32 = 2;
 
-/// What `color-scheme` is, for a theme.
+/// The portal's `color-scheme` value for a theme.
 ///
-/// The three values the spec defines, of which a Domicile desk can only ever
-/// be two: `0` is "no preference", which is what a desktop with no opinion
-/// answers and Domicile always has one. `1` is prefer-dark and `2` is
-/// prefer-light — and the numbering is *not* an accident worth guessing at,
-/// which is why this function exists rather than a cast: light being 2 and
-/// dark being 1 is the opposite of the order the themes are written in
-/// everywhere else in this repository.
+/// The spec defines 0 as no preference, 1 as dark and 2 as light. Do not
+/// replace this with a cast: `Theme` lists dark first, so a cast gives 0.
 pub fn color_scheme(theme: Theme) -> u32 {
     match theme {
         Theme::Dark => 1,
@@ -116,12 +63,10 @@ pub fn color_scheme(theme: Theme) -> u32 {
     }
 }
 
-/// Whether a `ReadAll` asking for `requested` wants this namespace.
+/// Whether a `ReadAll` for `requested` includes `org.freedesktop.appearance`.
 ///
-/// The spec's matching is by prefix on the dotted name, so
-/// `org.freedesktop` asks for `org.freedesktop.appearance` and
-/// `org.freedesktop.appearances` does not. An empty list is "everything",
-/// which is what a client with no particular question sends.
+/// Matches whole dotted components by prefix, so `org.freedesktop` matches
+/// and `org.freedesktop.appear` does not. An empty list matches everything.
 pub fn wants_appearance(requested: &[String]) -> bool {
     requested.is_empty()
         || requested.iter().any(|namespace| {
@@ -132,63 +77,43 @@ pub fn wants_appearance(requested: &[String]) -> bool {
         })
 }
 
-/// A handle on the desk's clients: tell it a theme and they hear about it.
+/// Handle for announcing theme changes to the portal thread.
 ///
-/// Cheap to clone and cheap to drop. A desktop whose service never started —
-/// no bus, or a name already taken — holds one of these that goes nowhere,
-/// which is deliberate: the caller has one path for "the theme changed"
-/// rather than one for a desk with a portal and another for a desk without.
+/// If the service failed to start, announcements are dropped, so callers need
+/// no separate path for a desk without a portal.
 #[derive(Debug, Clone)]
 pub struct Appearance {
     told: Sender<Theme>,
 }
 
 impl Appearance {
-    /// Tell the desk's clients which way round it is drawn now.
-    ///
-    /// Returns nothing, and cannot fail from the caller's side: the send is
-    /// dropped where no service is running, which is the case this type exists
-    /// to make uninteresting. What the clients then do is theirs — an app that
-    /// does not read the portal is an app that does not follow the theme, and
-    /// there is nothing above it that can make it.
-    /// A handle with nobody on the other end.
-    ///
-    /// For a `ChromeHub` built where there is no portal to answer, which in
-    /// this repository is every unit test: they drive chrome connections
-    /// against a hub in-process and have no session bus, and a test that
-    /// started one would be asserting D-Bus rather than the compositor.
+    /// A handle with no service behind it, for unit tests without a session
+    /// bus.
     #[cfg(test)]
     pub fn to_nobody() -> Self {
-        // The receiver is dropped here, which is the same state a service
-        // thread that has stopped leaves behind -- so this is the documented
-        // case rather than a second one.
+        // Same state as a service thread that has stopped.
         let (told, _) = channel();
         Appearance { told }
     }
 
+    /// Tells the desk's clients the current theme. Dropped if no service is
+    /// running.
     pub fn announce(&self, theme: Theme) {
-        // The receiving end is the service thread, so a closed channel is a
-        // thread that has stopped -- which it does only after saying why.
+        // A closed channel means the service stopped and already logged why.
         let _ = self.told.send(theme);
     }
 }
 
-/// Start answering the settings portal, with `theme` as the desk's current
-/// one, and say which desktop — and, on a tty, which display — activated
-/// services belong to. See [`activation_environment`] for `ours` and
-/// `nested_in`.
+/// Starts the settings portal thread with `theme` as the current theme, and
+/// sets the activation environment. See [`activation_environment`] for `ours`
+/// and `nested_in`.
 ///
-/// Returns as soon as the thread is spawned rather than when the name is
-/// taken: whether a bus answers is not something a desktop's startup should
-/// wait on, and the first client to ask arrives long after either way.
+/// Returns without waiting for the bus, so startup never blocks on D-Bus.
 pub fn serve(theme: Theme, ours: &str, nested_in: Option<&OsStr>) -> Appearance {
     let environment = activation_environment(ours, nested_in);
     let (told, changes) = channel();
     thread::spawn(move || {
-        // Every failure below is the same failure from the caller's side --
-        // the desk runs, its clients do not follow the theme -- so they are
-        // one arm rather than four, and the message names what was being
-        // attempted rather than only what went wrong.
+        // Every failure has the same effect: clients do not follow the theme.
         if let Err(why) = answer(theme, &environment, &changes) {
             warn!(
                 %why,
@@ -200,12 +125,11 @@ pub fn serve(theme: Theme, ours: &str, nested_in: Option<&OsStr>) -> Appearance 
     Appearance { told }
 }
 
-/// Say which desktop this is, take the name, serve the interface, and restate
-/// the theme whenever it moves. Returns only on failure, or when the
-/// compositor has gone.
+/// Sets the activation environment, serves the interface, and signals each
+/// theme change. Returns on failure or when every handle is dropped.
 ///
-/// Said before the name is taken, because a name another desk already holds
-/// is no reason for this one's apps to open on that desk.
+/// Sets the environment before taking the name, so it is set even if another
+/// desk holds the name.
 fn answer(
     theme: Theme,
     environment: &[(&str, String)],
@@ -225,19 +149,14 @@ fn answer(
     let served = connection
         .object_server()
         .interface::<_, Settings>(OBJECT_PATH)?;
-    // Ends when the sending half goes, which is the compositor exiting.
+    // Ends when every `Appearance` is dropped.
     for next in changes {
-        // Scoped, so the interface's lock is not held across the signal: what
-        // a client reads and what it is told are the same value, and the write
-        // has to land before the telling.
+        // Update the stored theme before signaling, and release the lock
+        // before the signal is sent.
         {
             served.get_mut().theme = next;
         }
-        // `block_on` is zbus's own re-export of the executor its `blocking`
-        // module is built on, and the one thing that module does not wrap: a
-        // signal is emitted through the async `SignalEmitter` whichever API
-        // you hold. This thread exists to block, so blocking here is what it
-        // is for.
+        // zbus's blocking API has no signal emitter, so block on the async one.
         zbus::block_on(Settings::setting_changed(
             served.signal_emitter(),
             NAMESPACE,
@@ -248,25 +167,15 @@ fn answer(
     Ok(())
 }
 
-/// What [`say_which_desktop`] puts where activated services are started from.
+/// The variables [`say_which_desktop`] sets for activated services.
 ///
-/// `XDG_CURRENT_DESKTOP`, for the portal, and `WAYLAND_DISPLAY` — `ours` —
-/// only when this desk is not a window inside a session (`nested_in`, the
-/// compositor's own `WAYLAND_DISPLAY`): the bus and the systemd user manager
-/// are one per *user*, not per session, so another session on another tty has
-/// put *its* display there, and an app they start — `gnome-terminal`'s
-/// server, anything D-Bus activated — would open on it. A desk in a window
-/// says neither, because the session it is inside is the one that owns those
-/// apps and whose portal routes by its desktop's name; saying `domicile`
-/// there would route that session's links here. The supervisor says the same
-/// and starts the graphical session once the desk is up
-/// (`domicile_launch::graphical_session`); this is the bus's half, and is said
-/// as early as the compositor can. Empty is unset, as `domicile_launch::platform` reads
-/// it.
-///
-/// **The last session to start wins**, which is how every compositor that
-/// runs `dbus-update-activation-environment` already behaves: back on the
-/// other tty, its activated apps open here until it says so again.
+/// Sets `XDG_CURRENT_DESKTOP` and `WAYLAND_DISPLAY` (`ours`) only when this
+/// desk is the session. When nested in another session (`nested_in` is the
+/// compositor's own non-empty `WAYLAND_DISPLAY`), sets nothing: that session
+/// owns its activated apps and portal routing. The activation environment is
+/// per user, so the last session to start wins, as with
+/// `dbus-update-activation-environment`. The supervisor sets the same values
+/// in `domicile_launch::graphical_session`.
 fn activation_environment(ours: &str, nested_in: Option<&OsStr>) -> Vec<(&'static str, String)> {
     match nested_in.filter(|display| !display.is_empty()) {
         Some(_) => Vec::new(),
@@ -277,26 +186,14 @@ fn activation_environment(ours: &str, nested_in: Option<&OsStr>) -> Vec<(&'stati
     }
 }
 
-/// Put [`activation_environment`] where a portal frontend — and every other
-/// activated service — will be started from.
+/// Sets [`activation_environment`] in the D-Bus and systemd user activation
+/// environments, like `dbus-update-activation-environment --systemd`.
 ///
-/// **Without this the backend above is never chosen**, however correctly it
-/// answers. `xdg-desktop-portal` reads its own environment to decide which
-/// `portals.conf` to load and which `UseIn=` to match, and it is started by
-/// D-Bus or by the systemd user manager rather than by this process — so the
-/// variable has to be put into *their* activation environments, which is what
-/// these two calls are. `dbus-update-activation-environment --systemd` is the
-/// same pair of calls with a command line around it, and it is what a sway
-/// config runs by hand at startup.
-///
-/// **Both are best effort and neither is fatal.** A desk with no systemd user
-/// manager is an ordinary desk, and a frontend already running under another
-/// desktop's name will not be re-routed by either call — see this module's
-/// head. Said at `debug` rather than `warn` for that reason: the thing worth a
-/// warning is the portal not being answered at all, and that is
-/// [`serve`]'s line.
+/// Without this `xdg-desktop-portal` never routes to this backend. Both calls
+/// are best effort and log at `debug`: a desk without a systemd user manager
+/// is normal.
 fn say_which_desktop(connection: &zbus::blocking::Connection, environment: &[(&str, String)]) {
-    // The bus's own activation environment, for a service it starts directly.
+    // For services D-Bus starts directly.
     let bus = zbus::blocking::Proxy::new(
         connection,
         "org.freedesktop.DBus",
@@ -316,10 +213,8 @@ fn say_which_desktop(connection: &zbus::blocking::Connection, environment: &[(&s
         tracing::debug!(%why, "the session bus would not take this desktop's name");
     }
 
-    // And the systemd user manager, which is what actually starts the portal
-    // frontend on a distribution that ships it as a unit -- the bus call above
-    // hands the unit nothing. `KEY=VALUE` strings, which is the shape
-    // `SetEnvironment` takes.
+    // For services started as systemd user units, which is how most
+    // distributions start the portal frontend.
     let systemd = zbus::blocking::Proxy::new(
         connection,
         "org.freedesktop.systemd1",
@@ -340,25 +235,18 @@ fn say_which_desktop(connection: &zbus::blocking::Connection, environment: &[(&s
     }
 }
 
-/// The object at `/org/freedesktop/portal/desktop`.
+/// The `Settings` backend object, serving only `color-scheme`.
 ///
-/// One namespace and one key. A desktop's own settings backend usually carries
-/// the whole of GNOME's `org.gnome.desktop.interface` as well -- the accent
-/// color, the font, the cursor theme -- and none of those is a thing Domicile
-/// has yet. A backend that answered them with invented values would be worse
-/// than one that says it has nothing: the frontend falls back to the next
-/// backend for a namespace nobody implements.
+/// Other keys are left to the next backend rather than answered with
+/// invented values.
 struct Settings {
     theme: Theme,
 }
 
 #[zbus::interface(name = "org.freedesktop.impl.portal.Settings")]
 impl Settings {
-    /// Everything this backend has to say, filtered to what was asked for.
-    ///
-    /// An empty answer is a real one: it is a backend saying it has no opinion
-    /// about the namespaces in the question, which is the honest reply to
-    /// anything but `org.freedesktop.appearance`.
+    /// All settings in the requested namespaces. Empty for any namespace but
+    /// [`NAMESPACE`].
     fn read_all(&self, namespaces: Vec<String>) -> HashMap<String, HashMap<String, OwnedValue>> {
         if wants_appearance(&namespaces) {
             HashMap::from([(
@@ -373,35 +261,23 @@ impl Settings {
         }
     }
 
-    /// One setting, for version 2 of this interface.
+    /// One setting (interface version 2).
     fn read_one(&self, namespace: &str, key: &str) -> zbus::fdo::Result<OwnedValue> {
         if namespace == NAMESPACE && key == COLOR_SCHEME {
             Ok(OwnedValue::from(color_scheme(self.theme)))
         } else {
-            // AN ERROR, BECAUSE THE FRONTEND CONTINUES ON ONE. `Settings` is
-            // multi-backend: xdg-desktop-portal walks the backends in the
-            // order the profile names them and moves to the next on any error
-            // from one, so refusing here is how a key this desktop has never
-            // heard of reaches the backend that has. Answering `0` instead
-            // would be this desktop claiming to have no opinion about it,
-            // which ends the walk with the wrong answer.
-            //
-            // NOT the error the portal spec names, which is
-            // `org.freedesktop.portal.Error.NotFound`: `zbus::fdo::Error` is
-            // the standard D-Bus set and carries no portal-namespaced
-            // variant, and a `DBusError` type of our own would be machinery
-            // for a distinction the frontend does not draw.
+            // Return an error so xdg-desktop-portal asks the next backend;
+            // it moves on after any error. The spec names
+            // `org.freedesktop.portal.Error.NotFound`, but the frontend does
+            // not distinguish error names and `zbus::fdo::Error` lacks it.
             Err(zbus::fdo::Error::UnknownProperty(format!(
                 "{namespace} {key} is not a setting this desktop has"
             )))
         }
     }
 
-    /// The same question under the name version 1 gave it.
-    ///
-    /// Kept because an app built against the older frontend still calls it,
-    /// and because a backend that answers only `ReadOne` looks to that
-    /// frontend exactly like a backend with no settings at all.
+    /// Version 1's name for [`Self::read_one`], still called by older
+    /// frontends.
     fn read(&self, namespace: &str, key: &str) -> zbus::fdo::Result<OwnedValue> {
         self.read_one(namespace, key)
     }
@@ -426,22 +302,16 @@ mod tests {
 
     #[test]
     fn dark_is_one_and_light_is_two() {
-        // THE ONE PLACE IN THIS REPOSITORY WHERE THE THEMES ARE NUMBERED, and
-        // they are numbered the other way round from how they are written
-        // everywhere else -- `THEMES`, `mojom::Theme` and the config's own
-        // enum all put dark first. A cast would have made light 1 and dark 0,
-        // which is "no preference" and would leave every client on the desk
-        // deciding for itself.
+        // The portal numbers differ from `Theme`'s order; dark is 1, not 0
+        // (0 means no preference).
         assert_eq!(color_scheme(Theme::Dark), 1);
         assert_eq!(color_scheme(Theme::Light), 2);
     }
 
     #[test]
     fn a_desk_that_is_the_session_is_where_activated_apps_open() {
-        // An app the bus or the systemd user manager starts -- a D-Bus
-        // activated one, or `gnome-terminal`'s server -- opens on whatever
-        // `WAYLAND_DISPLAY` they hold, and another session on another tty put
-        // its own there. Not saying ours is every such app opening over there.
+        // Activated apps open on the `WAYLAND_DISPLAY` in the activation
+        // environment, which another session may have set.
         assert_eq!(
             activation_environment("wayland-1", None),
             [
@@ -453,10 +323,7 @@ mod tests {
 
     #[test]
     fn a_desk_in_a_window_leaves_its_sessions_activation_environment_alone() {
-        // The session this desk is a window inside of is the one the person
-        // started it from: its activated apps belong on its display, and its
-        // portal routes by its desktop's name. Saying `domicile` there would
-        // route that session's portal -- its links among them -- here.
+        // The outer session owns its activated apps and portal routing.
         assert_eq!(
             activation_environment("wayland-1", Some(OsStr::new("wayland-0"))),
             []
@@ -465,8 +332,8 @@ mod tests {
 
     #[test]
     fn an_empty_display_is_no_session() {
-        // `domicile_launch::platform`'s rule: `WAYLAND_DISPLAY=` took the
-        // drm platform, so this desk is the session.
+        // As in `domicile_launch::platform`, an empty `WAYLAND_DISPLAY` means
+        // the drm platform, so this desk is the session.
         assert_eq!(
             activation_environment("wayland-1", Some(OsStr::new(""))),
             activation_environment("wayland-1", None)
@@ -485,16 +352,13 @@ mod tests {
 
     #[test]
     fn a_question_naming_a_prefix_of_it_wants_it() {
-        // The spec matches on the dotted name, so an app asking for
-        // everything freedesktop is asking for this too.
+        // The spec matches dotted-name prefixes.
         assert!(wants_appearance(&["org.freedesktop".to_string()]));
     }
 
     #[test]
     fn a_prefix_that_is_not_a_dotted_one_does_not_want_it() {
-        // `org.freedesktop.appearance` starts with the string
-        // `org.freedesktop.appear`, and a naive `starts_with` would answer a
-        // question nobody asked. The next component has to begin.
+        // A string prefix that ends mid-component does not match.
         assert!(!wants_appearance(&["org.freedesktop.appear".to_string()]));
     }
 

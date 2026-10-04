@@ -1,4 +1,4 @@
-//! What a launcher is offered of the applications installed on the machine.
+//! Installed applications offered to the launcher.
 
 use std::ffi::OsString;
 use std::fs;
@@ -9,8 +9,7 @@ use domicile_host::desktop_entries::{
 };
 use domicile_protocol::DesktopEntry;
 
-/// An application directory holding `entries`, each a relative path and its
-/// text.
+/// An application directory holding `entries`, as relative paths and text.
 fn applications(entries: &[(&str, &str)]) -> tempfile::TempDir {
     let dir = tempfile::tempdir().expect("a directory to write in");
     for (path, text) in entries {
@@ -84,7 +83,7 @@ mod parsing {
                 "not displayed",
                 &format!("{}NoDisplay=true\n", entry("A", "a")),
             ),
-            // Which terminal to open it in is not something this desktop knows.
+            // The compositor does not know which terminal to use.
             (
                 "in a terminal",
                 &format!("{}Terminal=true\n", entry("A", "a")),
@@ -126,8 +125,8 @@ mod commands {
 
     #[test]
     fn a_string_escape_is_read_before_the_quoting() {
-        // `\s` is the desktop file's escape for a space, and `\\` its escape
-        // for a backslash -- which inside quotes then escapes the next one.
+        // `\s` escapes a space and `\\` a backslash; inside quotes the result
+        // then escapes the next character.
         assert_eq!(
             command(r#"a\sb "c\\\\d""#),
             Some(vec!["a".into(), "b".into(), r"c\d".into()])

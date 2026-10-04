@@ -1,12 +1,12 @@
-//! The desk's bookmarks, as a launcher's search matches them.
+//! Launcher search over bookmarks.
 
 use domicile_protocol::Bookmark;
 
-/// The bookmarks `query` matches, best first and no more than `limit`.
+/// Up to `limit` bookmarks matching `query`, best first.
 ///
-/// [`crate::desktop_entries::find`]'s rule, so a launcher's rows agree about
-/// what matching is: every word of the query, ignoring case, in the name or
-/// the URL. A name that starts with the query is best; after that, by name.
+/// Matches like [`crate::desktop_entries::find`] so launcher rows agree: every
+/// query word must appear, case-insensitively, in the name or URL. Names that
+/// start with the query rank first, then sort by name.
 pub fn find(bookmarks: &[Bookmark], query: &str, limit: usize) -> Vec<Bookmark> {
     let query = query.trim().to_lowercase();
     let words: Vec<&str> = query.split_whitespace().collect();

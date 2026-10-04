@@ -107,7 +107,7 @@ fn a_word_that_is_a_file_where_it_was_typed_is_the_file() {
 
 #[test]
 fn a_packaged_desktop_s_module_is_its_own() {
-    // The wrapper hands the module over and passes its name: the name is
+    // The wrapper hands over the module and passes its name, so the name is
     // never a package.
     assert_eq!(
         shell_source(

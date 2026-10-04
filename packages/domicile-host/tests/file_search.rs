@@ -1,4 +1,4 @@
-//! What a launcher's query finds in the index, which is all a page is told.
+//! Searching the file index for the launcher.
 
 use domicile_host::file_search::{FileSearch, Found};
 
@@ -8,8 +8,8 @@ fn home(paths: &[&str]) -> FileSearch {
 
 #[test]
 fn every_word_has_to_appear_in_any_order_and_any_case() {
-    // `fzf --exact`, which is what the launcher this one is modeled on filters
-    // with: no ranking, and the index's own order kept.
+    // Matches `fzf --exact`, as the launcher it is modeled on: no ranking,
+    // index order kept.
     let search = home(&["Notes/2026/Plan.org", "plan-b.txt", "src/plan.rs"]);
 
     assert_eq!(
@@ -23,8 +23,8 @@ fn every_word_has_to_appear_in_any_order_and_any_case() {
 
 #[test]
 fn only_the_front_of_what_matched_is_sent_and_all_of_it_is_counted() {
-    // THE POINT OF SEARCHING HERE. A home is hundreds of thousands of paths,
-    // and a query that matched most of them is still a panel of a few rows.
+    // A home has hundreds of thousands of paths, but the panel shows a few
+    // rows, so results are capped here.
     let search = home(&["a1", "a2", "a3", "b"]);
 
     assert_eq!(
@@ -45,9 +45,9 @@ fn an_empty_query_finds_everything() {
 
 #[test]
 fn a_directory_is_marked_with_a_slash_whether_or_not_what_is_in_it_matched() {
-    // A page has no filesystem, so which rows are directories is the host's to
-    // say. `Notes-old` sorts between `Notes` and `Notes/…`, which is what a
-    // check of only the next path would get wrong.
+    // A page has no filesystem, so the host marks directories. `Notes-old`
+    // sorts between `Notes` and `Notes/…`, so checking only the next path is
+    // wrong.
     let search = home(&["Notes", "Notes-old", "Notes/today.org"]);
 
     assert_eq!(

@@ -1,45 +1,9 @@
-//! What a chrome forwards, and whether a real client receives it.
+//! Tests that input a chrome forwards reaches a real Wayland client, and that
+//! the keymap reaches both.
 //!
-//! Ported from `scripts/e2e-input.sh`, deleted in the change that added this
-//! file.
-//!
-//! Input is the one path where the compositor is a *courier* rather than a
-//! decider: a chrome routes a pointer or a key over its socket, the compositor
-//! puts it into the seat, and a Wayland client is supposed to be given it. Both
-//! ends of that are real processes, and the middle is Smithay — so nothing
-//! below this level can see it happen. The unit tests reach as far as a
-//! `ClientRequest` landing on the Wayland thread, which is the near side.
-//!
-//! # Every claim here was uncovered
-//!
-//! Measured before writing any of it, by mutation against the whole workspace:
-//!
-//! | mutation | before | after |
-//! |---|---|---|
-//! | the keyboard filter intercepts instead of forwarding | passes | **fails** |
-//! | the `pointer.button` call is removed | passes | **fails** |
-//! | the `app_cursor` broadcast is removed | passes | **fails** |
-//!
-//! "Passes" there is the entire Rust suite, 37 binaries — so a compositor that
-//! took every key out of the stream, or never gave a client a button, or never
-//! told the chrome which cursor to draw, was caught by this script and by
-//! nothing else in the repo.
-//!
-//! # A window has to be placed before any of it works
-//!
-//! `Scene::focus_app` refuses an app with no portal — a window that is not on
-//! screen is not one the keyboard can go to — and the pointer is routed against
-//! the portal's geometry. A real chrome places one when it mounts the element;
-//! a test that forgets makes `focus_app` a silent no-op and then reports the
-//! compositor for delivering no input.
-//!
-//! So the placement is not merely done here, it is *asserted*, by waiting for
-//! the compositor to say `keyboard focus -> client` before any test looks at
-//! anything. It logs a different line for the window with no surface, so the
-//! fixture's own fault and the compositor's are distinguishable rather than
-//! both arriving as "no input was delivered". The deleted `e2e-chrome-layer.sh`
-//! got this wrong and passed anyway for as long as it existed; `tests/layers.rs`
-//! took its claims over and places first.
+//! The compositor passes keys and pointer events from the chrome socket into
+//! the Smithay seat. Unit tests stop at the request reaching the Wayland
+//! thread; only a real client shows delivery.
 
 mod running;
 
@@ -51,10 +15,10 @@ const ONE_DISPLAY: &str = r#"
 { "output": { "displays": [{ "name": "left", "size": [1920, 1080] }] } }
 "#;
 
-/// A display, and a keyboard laid out deliberately unlike the default.
+/// A Dvorak keyboard.
 ///
-/// `dvorak` rather than the `dvp` the config falls back to, so that the keymap
-/// this test reads off the wire can only have come from *this* file.
+/// Uses `dvorak`, not the default `dvp`, so the keymap can only come from this
+/// config.
 const A_DVORAK_KEYBOARD: &str = r#"
 {
   "output": { "displays": [{ "name": "left", "size": [1920, 1080] }] },
@@ -62,11 +26,10 @@ const A_DVORAK_KEYBOARD: &str = r#"
 }
 "#;
 
-/// The same desk, typing US QWERTY as it comes.
+/// A US QWERTY keyboard.
 ///
-/// The display list is the one above, byte for byte: a reload that changed the
-/// desktop as well would leave the keymap and the displays as one event, and
-/// the keyboard is supposed to move on its own.
+/// The displays match [`A_DVORAK_KEYBOARD`] so a reload changes only the
+/// keyboard.
 const A_PLAIN_KEYBOARD: &str = r#"
 {
   "output": { "displays": [{ "name": "left", "size": [1920, 1080] }] },
@@ -74,10 +37,10 @@ const A_PLAIN_KEYBOARD: &str = r#"
 }
 "#;
 
-/// A keyboard that parses and that xkb will not build.
+/// A keyboard config that parses but xkb cannot compile.
 ///
-/// Rules rather than a layout, because the rules file is looked up by name and
-/// a missing one is a failure xkb reports rather than one it papers over.
+/// Uses missing rules because xkb reports those, while it silently falls back
+/// on an unknown layout.
 const A_KEYBOARD_XKB_HAS_NEVER_HEARD_OF: &str = r#"
 {
   "output": { "displays": [{ "name": "left", "size": [1920, 1080] }] },
@@ -85,22 +48,20 @@ const A_KEYBOARD_XKB_HAS_NEVER_HEARD_OF: &str = r#"
 }
 "#;
 
-/// The left mouse button, as Linux names it and the protocol carries it.
+/// The Linux code for the left mouse button.
 const BTN_LEFT: u32 = 0x110;
 
-/// `a`, in evdev codes — what a chrome sends. The compositor adds the 8 that
-/// turns it into an X keycode, which is what a `wl_keyboard` keymap speaks.
+/// The evdev code for `a`, which a chrome sends. The keymap uses X keycodes,
+/// which are 8 higher.
 const EVDEV_KEY_A: u32 = 30;
 
-/// `b` and `c`, for keys that are not the one `drive` types.
+/// Evdev codes for `b` and `c`, keys that `drive` does not type.
 const EVDEV_KEY_B: u32 = 48;
 const EVDEV_KEY_C: u32 = 46;
 
-/// Take the keyboard to the window, then move, click and type.
+/// Focuses the window, then moves the pointer, clicks and types `a`.
 ///
-/// No placement first: the chrome no longer reports where its boxes are, and
-/// the coordinates below are surface-local, which is what a client is handed
-/// whatever the page did with the element.
+/// Coordinates are surface-local, so the window needs no placement.
 fn drive(chrome: &mut domicile_test_chrome::Chrome, app_id: &str) {
     for message in [
         ChromeMessage::FocusApp {
@@ -141,37 +102,14 @@ fn drive(chrome: &mut domicile_test_chrome::Chrome, app_id: &str) {
     }
 }
 
-/// Connect a chrome, start a client, place its window and drive input at it.
+/// Connects a chrome, starts a client and drives input at its window.
 ///
-/// Every test here needs the same arrangement and it costs a real client
-/// start, so they share the setup rather than the assertions. The app id comes
-/// back with it: every assertion below is about *this* window, and a
-/// `focus_changed` or an `app_cursor` naming some other one is the failure
-/// they exist to catch.
+/// Returns the window's app id so tests can reject messages naming another
+/// window. Waits for the log line `keyboard focus -> client`, which shows the
+/// fixture worked; a window with no surface logs a different line.
 ///
-/// The wait is on the compositor saying the keyboard reached a client, not on
-/// a clock. That line is the premise of all three tests — `Scene::focus_app`
-/// refuses an app with no portal, so a placement that stopped landing would
-/// make `focus_app` a silent no-op and every assertion below would convict the
-/// compositor of the fixture's fault. The compositor distinguishes the two out
-/// loud, and this reads it:
-///
-///   - `keyboard focus -> client` — the window was placed and took the keyboard
-///   - `keyboard focus -> a window with no surface; the chrome keeps it` — not
-///
-/// An earlier version sent the sequence twice, 750ms apart, against a race in
-/// which the chrome hears about an app before its client has bound
-/// `wl_pointer`. The client's own start-up rules that out — `run()` is `bind()`,
-/// then a roundtrip in which the seat's capabilities are answered with
-/// `get_keyboard`/`get_pointer`, and only then `open()`, which creates the
-/// toplevel that `app_appeared` announces. The retry was also never delivered,
-/// against the compositor of the time: a test that stopped draining its chrome
-/// filled the socket, `serve_outbound` blocked holding the writer, and the
-/// reader blocked behind it at the end of an iteration that had nothing to
-/// write — measured, the compositor read one message of the second wave and
-/// nothing more for twenty seconds. `write_responses` no longer takes the lock
-/// for an empty answer, so that no longer happens; the wave is still one,
-/// because one and a signal is both shorter and honest.
+/// One pass is enough: the test client binds its keyboard and pointer before
+/// it creates the toplevel that `app_appeared` announces.
 fn a_client_being_typed_at(
     compositor: &Compositor,
 ) -> (domicile_test_chrome::Chrome, crate::running::Client, String) {
@@ -191,20 +129,10 @@ fn a_client_being_typed_at(
     (chrome, client, app_id)
 }
 
-/// A key and a click a chrome forwarded arrive at the client as protocol
-/// events.
+/// Forwarded key and button presses and releases reach the client.
 ///
-/// Both in one test because they fail together and for the same reason — the
-/// seat never got the window — and because separating them would cost a second
-/// real client start for no extra mutation killed.
-///
-/// The release as well as the press, and the code as well as the interface.
-/// The client traces `key(serial, time, code, state)`, so the tail of that is
-/// what names which key and which half of it — waiting on `.key(` alone is
-/// answered by a press, and a compositor that delivers presses and swallows
-/// releases leaves every key down in the seat for good. Waiting on any
-/// `wl_keyboard` line is worse still: the keymap arrives the moment the client
-/// binds the seat, before a single key has been forwarded.
+/// The client traces `key(serial, time, code, state)`, so matching the tail
+/// checks the code and the state. A dropped release would leave the key held.
 #[test]
 fn a_key_and_a_click_the_chrome_forwarded_reach_the_client() {
     let compositor = Compositor::started_with(ONE_DISPLAY);
@@ -225,11 +153,9 @@ fn a_key_and_a_click_the_chrome_forwarded_reach_the_client() {
     }
 }
 
-/// A release nobody pressed is not a key.
+/// A release for a key the seat never saw pressed is not forwarded.
 ///
-/// A page sends every release it hears, and the seat is what knows which of
-/// them were ever down: a key the page typed into its own launcher comes up
-/// the same way, and it is not the window's.
+/// The page forwards every release, including keys pressed while it had focus.
 #[test]
 fn a_release_the_seat_never_saw_pressed_does_not_reach_the_client() {
     let compositor = Compositor::started_with(ONE_DISPLAY);
@@ -245,8 +171,8 @@ fn a_release_the_seat_never_saw_pressed_does_not_reach_the_client() {
             .expect("the chrome socket takes a key");
     }
 
-    // The press after it is what says the release was handled: the seat is
-    // one queue, so a release it forwarded is traced ahead of this.
+    // Events arrive in order, so once this press is traced, a forwarded
+    // release would be too.
     assert!(
         client.wait_for_trace(&format!(", {EVDEV_KEY_C}, 1)"), 1),
         "the key pressed after the stray release never arrived; it traced:\n{}",
@@ -259,32 +185,17 @@ fn a_release_the_seat_never_saw_pressed_does_not_reach_the_client() {
     );
 }
 
-/// A focus the chrome asked for comes back to it over the socket.
+/// A focus the chrome requested is reported back over the socket.
 ///
-/// The gap this closes is a narrow one and worth naming, because a unit test
-/// already covers most of it. `a_chrome_asking_for_focus_is_answered_to_every_chrome`
-/// drives a real connection and asserts the move reaches the hub's *queue* —
-/// so a focus written back to the asking socket instead of broadcast is caught
-/// there. What that cannot see is the other end: `serve_outbound` draining
-/// that queue onto the sockets. Dropping `focus_changed` on the way out passes
-/// the unit test, because the message did reach the queue.
-///
-/// A separate test rather than another assertion above, because it fails for a
-/// different reason than a key that never arrived: this one is the compositor
-/// not telling the chrome what it did, and a desktop whose active-window
-/// marker is right until the first click and wrong afterward.
+/// `a_chrome_asking_for_focus_is_answered_to_every_chrome` checks the hub's
+/// queue. This checks `serve_outbound` writes it to the socket.
 #[test]
 fn a_focus_the_chrome_asked_for_comes_back_over_the_socket() {
     let compositor = Compositor::started_with(ONE_DISPLAY);
     let (mut chrome, _client, app) = a_client_being_typed_at(&compositor);
 
-    // The *named* window, not merely some `focus_changed`. Two reasons, and
-    // the second is why the script this replaces matched on the id too: a
-    // chrome is caught up with the current holder as it connects, and with
-    // nothing focused yet that catch-up is `None`; and a compositor that names
-    // a window which does not exist is the failure this test is about — an
-    // active-window marker that is right until the first click and wrong
-    // afterward — which `Some(_)` accepts.
+    // Match this window's id: the handshake already sent a `focus_changed`
+    // naming none, and `Some(_)` would accept the wrong window.
     chrome
         .wait_for(|message| {
             matches!(message, HostMessage::FocusChanged { app_id: Some(id) } if *id == app)
@@ -292,27 +203,17 @@ fn a_focus_the_chrome_asked_for_comes_back_over_the_socket() {
         .expect("the chrome is told the window it focused has the keyboard");
 }
 
-/// A pointer entering a window has the client ask the chrome for a cursor.
+/// A client's cursor on pointer enter reaches the chrome as `app_cursor`.
 ///
-/// The way back out, and the only message in this file that travels client →
-/// compositor → chrome rather than the other way. A client sets its cursor on
-/// `wl_pointer.enter`; the compositor turns that into a CSS keyword for the
-/// app's element, because the chrome draws the pointer and cannot know what the
-/// window under it wants.
-///
-/// Without it every window on the desktop shows whatever cursor the page last
-/// set — a text field over a terminal keeps an arrow, and a resize edge never
-/// appears.
+/// The chrome draws the pointer, so the compositor converts the client's
+/// cursor into a CSS keyword for the app's element.
 #[test]
 fn a_pointer_over_a_window_asks_the_chrome_for_that_window_s_cursor() {
     let compositor = Compositor::started_with(ONE_DISPLAY);
     let (mut chrome, _client, app) = a_client_being_typed_at(&compositor);
 
-    // Named, for the same reason as the focus above: a cursor attributed to
-    // the wrong element gives every other window on the desktop whatever that
-    // one asked for. The *shape* is deliberately not asserted — the client
-    // sends `Default`, so pinning the keyword would pin the client's choice
-    // rather than the compositor's translation of it.
+    // Match this window's id. The shape is not checked: the client always
+    // sends `Default`.
     chrome
         .wait_for(
             |message| matches!(message, HostMessage::AppCursor { app_id, .. } if *app_id == app),
@@ -320,24 +221,12 @@ fn a_pointer_over_a_window_asks_the_chrome_for_that_window_s_cursor() {
         .expect("a client the pointer entered asks the chrome for a cursor");
 }
 
-/// The keymap the compositor compiled reaches the chrome, and it is the one
-/// the config asked for.
+/// The chrome receives the keymap compiled from the config.
 ///
-/// **The chrome here stands in for the browser process, not for a page.** The
-/// engine drawing the desktop decodes every key the shell is typed with
-/// through a `KeyboardLayoutEngine` of its own, and off ChromeOS the only
-/// thing in Chromium that ever gives one a keymap is the *Wayland* ozone
-/// platform handling `wl_keyboard.keymap` — which a DRM/Ozone browser is not
-/// running. So its `xkb_state` stays null, `XkbLookup` logs `No current XKB
-/// state` at every press, and every printable key comes out as an
-/// unidentified `DomKey` on a positional US-QWERTY code: a shell nobody can
-/// type into, in whatever layout they configured.
-///
-/// The symbol rather than the string's mere presence, and a variant the
-/// default is not, because both halves can be wrong quietly: a compositor that
-/// sent some keymap would pass a length check, and one that compiled its own
-/// defaults instead of reading the config would pass anything that only
-/// asserted `dvp`.
+/// The chrome here stands for the browser process. On DRM/Ozone, Chromium's
+/// `KeyboardLayoutEngine` gets no keymap from Wayland, so without this message
+/// printable keys decode as unidentified. The test checks a symbol from a
+/// non-default variant.
 #[test]
 fn the_keymap_the_config_names_reaches_the_chrome() {
     let compositor = Compositor::started_with(A_DVORAK_KEYBOARD);
@@ -357,21 +246,11 @@ fn the_keymap_the_config_names_reaches_the_chrome() {
     );
 }
 
-/// A keyboard edited on disk is the one the desktop types on afterward — for
-/// the clients and for the chrome alike.
+/// A reloaded keyboard reaches both open clients and the chrome.
 ///
-/// Both ends in one check, because the reload compiles *one* keymap and hands
-/// it to both: there is no mutation that gives the seat a reloaded layout and
-/// the browser the startup one, so a second compositor would buy nothing. What
-/// each end is asserted on is its own, though. The client reads a
-/// `wl_keyboard.keymap` fd, which is the only thing an application ever gets;
-/// the chrome reads the text off its socket, which is the only thing the
-/// browser process ever gets.
-///
-/// The layout's own name rather than a key's symbols, because it is the one
-/// line of a compiled keymap that says which layout this is in words — and a
-/// compositor that recompiled the *old* config would pass anything that only
-/// asserted a keymap arrived at all.
+/// The client gets a `wl_keyboard.keymap` fd and the chrome gets text over
+/// its socket. Both are checked by layout name, so a recompile of the old
+/// config fails.
 #[test]
 fn a_keyboard_edited_on_disk_reaches_the_client_and_the_chrome() {
     let compositor = Compositor::started_with(A_DVORAK_KEYBOARD);
@@ -416,22 +295,11 @@ fn a_keyboard_edited_on_disk_reaches_the_client_and_the_chrome() {
     );
 }
 
-/// A keymap the reloaded config cannot compile leaves the desktop typing on
-/// the one it has.
+/// A reloaded keymap that fails to compile is logged and ignored.
 ///
-/// The one place the startup rule is deliberately not the reload rule.
-/// `main`'s `?` on `compiled_keymap` fails the boot rather than hand clients a
-/// layout nobody chose — there is no desktop to lose yet, and coming up on
-/// xkb's fallback is the silent wrongness the whole message exists to end. By
-/// the time a file is edited there *is* a desktop, with windows on it, and
-/// taking it down over a typo costs the user everything that was open to fix
-/// nothing: the layout they are already typing on is the last one that
-/// compiled.
-///
-/// So it is refused, said out loud, and the desk carries on. Asserted by the
-/// keymap a chrome connecting afterward is handed, rather than by the log
-/// alone: a compositor that logged the refusal and then handed out a keymap
-/// xkb had invented would pass a check that only read its complaint.
+/// At startup the same failure is fatal. On reload, exiting would close every
+/// open window, so the desk keeps its last good keymap. The test checks the
+/// keymap a later chrome receives, not only the log.
 #[test]
 fn a_keymap_the_reload_cannot_compile_leaves_the_desktop_typing() {
     let compositor = Compositor::started_with(A_DVORAK_KEYBOARD);
@@ -464,11 +332,9 @@ fn key_block(keymap: &str, name: &str) -> String {
     rest[..ends].to_string()
 }
 
-/// What a compiled keymap calls its first group — `English (Dvorak)`.
+/// The name of a compiled keymap's first group, such as `English (Dvorak)`.
 ///
-/// The same reading the test client makes of the fd it is handed, so the two
-/// ends of the check are compared on one field rather than on two spellings
-/// of it.
+/// The test client reads the same field from its keymap fd.
 fn group_name(keymap: &str) -> String {
     let opens = "name[Group1]=\"";
     let at = keymap

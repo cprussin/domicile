@@ -1,10 +1,7 @@
-//! The extensions a desk's config names reach the browser process, and follow
-//! an edit.
+//! Tests that the config's extensions reach the chrome and follow edits.
 //!
-//! `domicile_host`'s tests hold where the message sits in the handshake and
-//! `restatement`'s hold when a reload moves it. What needs a real compositor
-//! is that the config it was started on and the file it is watching are the
-//! lists it tells — see `docs/architecture/EXTENSIONS.md`.
+//! Unit tests cover the handshake and reload logic. See
+//! `docs/architecture/EXTENSIONS.md`.
 
 mod running;
 
@@ -56,8 +53,8 @@ fn the_extensions_the_config_names_reach_the_chrome_and_follow_an_edit() {
 
 #[test]
 fn an_unpacked_extension_under_a_tilde_reaches_the_chrome_under_the_home() {
-    // The chrome hands the path to an engine that expands nothing, so the
-    // `~` is expanded before it leaves, from the home the compositor runs in.
+    // The engine does not expand `~`, so the compositor expands it from its
+    // own home.
     let home = tempfile::tempdir().expect("a home");
     let compositor = Compositor::started_in_a_home(
         r#"

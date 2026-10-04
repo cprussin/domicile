@@ -1,10 +1,7 @@
-//! Behavior tests for `domicile-protocol`, written before the implementation.
+//! Behavior tests for `domicile-protocol`.
 //!
-//! This crate defines the wire contract between the Rust host and the in-page
-//! client (JS). Two things matter and are tested here:
-//!  1. Every message round-trips through JSON unchanged.
-//!  2. The on-the-wire shape is stable (the JS side hard-codes these strings),
-//!     so we pin the tag/field names explicitly.
+//! Every message must round-trip through JSON, and tag and field names are
+//! pinned because the JS client hard-codes them.
 
 use domicile_protocol::{
     negotiate, AudioCard, AudioChoice, AudioDevice, AudioLevel, AudioStream, Bookmark,
@@ -105,12 +102,8 @@ fn chrome_messages_round_trip() {
     });
 }
 
-/// The launcher's ask carries a query and no path, and that is the security
-/// property.
-///
-/// A page cannot name a directory to enumerate, so this message is no route
-/// out of the sandbox the shell is served in: it asks "what matches this",
-/// and where the compositor looks for the answer is the compositor's.
+/// A file search carries a query and no path, so a page cannot choose which
+/// directory the compositor reads.
 #[test]
 fn searching_for_something_to_open_names_no_directory() {
     let v = serde_json::to_value(ChromeMessage::SearchFiles {
@@ -123,7 +116,7 @@ fn searching_for_something_to_open_names_no_directory() {
     );
 }
 
-/// The launcher's ask for applications is words, like its ask for files.
+/// An app search carries a query, like a file search.
 #[test]
 fn searching_for_an_application_names_no_directory() {
     let v = serde_json::to_value(ChromeMessage::SearchApps {
@@ -136,8 +129,8 @@ fn searching_for_an_application_names_no_directory() {
     );
 }
 
-/// A desktop entry arrives as the argv it runs, so a shell hands it straight
-/// to `spawn` and nothing on the page parses an `Exec` line.
+/// A desktop entry carries its argv, so a shell passes it to `spawn` without
+/// parsing `Exec`.
 #[test]
 fn a_desktop_entry_carries_the_command_it_runs() {
     let v = serde_json::to_value(HostMessage::FoundApps {
@@ -189,11 +182,8 @@ fn spawn_wire_shape_is_pinned() {
     assert_eq!(v["command"][0], "kitty");
 }
 
-/// A preview names the one path it is about, as a search answered it.
-///
-/// Unlike `search_files` this does carry a path, and the compositor answers
-/// only for one its index holds — so it reads nothing a search could not
-/// already have named.
+/// A preview request names one path; the compositor answers only for paths in
+/// its index.
 #[test]
 fn asking_for_a_preview_names_the_path_a_search_answered() {
     let v = serde_json::to_value(ChromeMessage::PreviewFile {
@@ -206,8 +196,8 @@ fn asking_for_a_preview_names_the_path_a_search_answered() {
     );
 }
 
-/// The preview's kind sits beside its path rather than nested under it, so
-/// the engine reads one flat object the way it reads every other message.
+/// The preview's kind is flattened beside its path, the shape the engine
+/// reads.
 #[test]
 fn a_preview_is_flat_on_the_wire() {
     let v = serde_json::to_value(HostMessage::FilePreview {
@@ -228,8 +218,8 @@ fn a_preview_is_flat_on_the_wire() {
     );
 }
 
-/// An audio file's tags sit flat beside its kind, and a tag the file does not
-/// carry is absent rather than empty: an empty title is a title.
+/// Audio tags are flattened beside the kind, and a missing tag is absent
+/// rather than empty.
 #[test]
 fn an_audio_preview_is_flat_on_the_wire() {
     let v = serde_json::to_value(HostMessage::FilePreview {
@@ -262,12 +252,8 @@ fn host_messages_round_trip() {
     });
 }
 
-/// The answer is the query it answers, paths relative to the home directory
-/// in the order they go on screen, and how many there were.
-///
-/// Relative because that is what a launcher shows — `Notes/today.org`, not
-/// `/home/you/Notes/today.org`. The query comes back so a shell can tell the
-/// answer to what is in its box from the answer to a keystroke ago.
+/// Search results echo the query, list paths relative to home in display
+/// order, and give the total match count.
 #[test]
 fn what_a_search_found_is_named_from_home() {
     let v = serde_json::to_value(HostMessage::FoundFiles {
@@ -289,17 +275,8 @@ fn what_a_search_found_is_named_from_home() {
     );
 }
 
-/// What was copied, in the shape a shell draws a row of it.
-///
-/// An id and a preview rather than the text, and the split is the whole shape
-/// of this message: the compositor keeps the bytes and the page is told enough
-/// to recognize them. A history of a hundred kilobytes broadcast on every
-/// copy would be the desktop moving its clipboard through the shell, and the
-/// shell has no use for it — what it does with a row is draw it and hand the
-/// id back.
-///
-/// Newest first, which is the order a manager is read in: the last thing
-/// copied is the one about to be wanted again.
+/// Clipboard entries carry an id and a preview, never the full text, newest
+/// first.
 #[test]
 fn a_clipboard_row_is_an_id_and_enough_to_recognize_it_by() {
     let v = serde_json::to_value(HostMessage::Clipboard {
@@ -325,14 +302,9 @@ fn a_clipboard_row_is_an_id_and_enough_to_recognize_it_by() {
     );
 }
 
-/// A desktop nothing has been copied on yet says so, rather than saying
-/// nothing.
+/// An empty clipboard history serializes as an empty list, not as nothing.
 ///
-/// The same distinction [`HostMessage::Displays`] draws, and it matters more
-/// here: the history empties when the desktop restarts, so an empty list is
-/// the ordinary state of a fresh session rather than an edge case. A shell
-/// told nothing would wait forever for a first copy it has already been told
-/// about.
+/// The history starts empty on every desktop start, so shells must receive it.
 #[test]
 fn a_desktop_nothing_was_copied_on_has_an_empty_clipboard() {
     let v = serde_json::to_value(HostMessage::Clipboard { entries: vec![] }).unwrap();
@@ -340,13 +312,8 @@ fn a_desktop_nothing_was_copied_on_has_an_empty_clipboard() {
     assert_eq!(v["entries"], serde_json::json!([]));
 }
 
-/// Handing an entry back names it by id and carries no text at all.
-///
-/// The asymmetry with every other chrome message is the point: a page that
-/// could put arbitrary bytes on the seat's clipboard would be a page writing
-/// the desktop's clipboard, and what a manager needs is to pick one of the
-/// things already on it. An id that names nothing is a shell bug and the
-/// compositor says so — see `domicile_host::clipboard::History::text`.
+/// Restoring a clipboard entry carries its id and no text, so a page cannot
+/// write arbitrary clipboard contents.
 #[test]
 fn an_entry_is_handed_back_by_id_rather_than_by_its_text() {
     let v = serde_json::to_value(ChromeMessage::CopyClipboardEntry { entry: 7 }).unwrap();
@@ -354,14 +321,8 @@ fn an_entry_is_handed_back_by_id_rather_than_by_its_text() {
     assert_eq!(v["entry"], 7);
 }
 
-/// The charge, in the shape the bar draws it.
-///
-/// A fraction rather than a percentage, and that is not a style choice: the
-/// bar rounds it to figures and fills a meter with it, and rounding once at
-/// the end is what keeps the two from disagreeing. `charging` is whether a
-/// lead is in rather than whether the cell is gaining — a full battery on AC
-/// is charging by this message's reckoning, because what the bolt on the bar
-/// says is that the machine is plugged in.
+/// Battery charge is a fraction, and `charging` means external power is
+/// connected, even when full.
 #[test]
 fn the_charge_is_a_fraction_and_the_lead_is_a_flag() {
     let v = serde_json::to_value(HostMessage::Battery {
@@ -374,10 +335,8 @@ fn the_charge_is_a_fraction_and_the_lead_is_a_flag() {
     assert_eq!(v["charging"], true);
 }
 
-/// A machine with no battery sends no message at all, so there is no "absent"
-/// to serialize — which is why both fields are plain and neither is an
-/// `Option`. An empty battery is a real reading and has to survive the wire
-/// as one, the same way a home with no files does.
+/// Neither battery field is an `Option`: a machine with no battery sends no
+/// message, and an empty battery is a real reading.
 #[test]
 fn an_empty_battery_is_a_reading_rather_than_a_silence() {
     let v = serde_json::to_value(HostMessage::Battery {
@@ -389,8 +348,7 @@ fn an_empty_battery_is_a_reading_rather_than_a_silence() {
     assert_eq!(v["charging"], false);
 }
 
-/// The screen's brightness, as a fraction like the charge: the slider is drawn
-/// off it and the figures rounded where they are shown.
+/// Brightness is a fraction, like the battery charge.
 #[test]
 fn the_brightness_is_a_fraction() {
     let v = serde_json::to_value(HostMessage::Brightness { level: 0.42 }).unwrap();
@@ -398,8 +356,8 @@ fn the_brightness_is_a_fraction() {
     assert_eq!(v["level"], 0.42);
 }
 
-/// A shell asks for a level and is answered with [`HostMessage::Brightness`],
-/// to every chrome, once the backlight has moved.
+/// A brightness request is answered with [`HostMessage::Brightness`] to every
+/// chrome once the backlight changes.
 #[test]
 fn setting_the_brightness_carries_the_level_and_nothing_else() {
     let sent = r#"{"type":"set_brightness","level":0.5}"#;
@@ -409,15 +367,8 @@ fn setting_the_brightness_carries_the_level_and_nothing_else() {
     );
 }
 
-/// Whether anybody is at the desk, in the one field that says it.
-///
-/// A state and not an edge, which is the difference between this and
-/// `crate::idle` in the compositor: that seam reports the turn the answer
-/// changed on, because lighting a connector is a modeset and a dark desk must
-/// not ask for one per tick. A page has the opposite problem — it reloads, and
-/// a page that has just loaded has missed every edge there ever was — so what
-/// crosses the wire is where the desk stands, and a chrome that has just said
-/// hello is told it.
+/// Idle is sent as a state, not an edge, so a reloaded page can be told where
+/// the desktop stands.
 #[test]
 fn whether_anybody_is_at_the_desk_is_a_state_rather_than_an_edge() {
     let dark = serde_json::to_value(HostMessage::Idle { idle: true }).unwrap();
@@ -432,13 +383,8 @@ fn whether_anybody_is_at_the_desk_is_a_state_rather_than_an_edge() {
     );
 }
 
-/// Whether this desk is locked, in the one field that says it.
-///
-/// A state and not an edge, for the reason `idle` above is one and a sharper
-/// one: a page reloads, and the whole point of a lock the compositor holds is
-/// that a reload does not open the desk. So a chrome saying hello has to be
-/// able to be told `true` — an edge nobody was there for is a lock screen that
-/// never comes back up.
+/// Locked is sent as a state, so a reloaded page can be told `true` and show
+/// its lock screen again.
 #[test]
 fn whether_the_desk_is_locked_is_a_state_rather_than_an_edge() {
     let shut = serde_json::to_value(HostMessage::Locked { locked: true }).unwrap();
@@ -453,12 +399,8 @@ fn whether_the_desk_is_locked_is_a_state_rather_than_an_edge() {
     );
 }
 
-/// An unlock carries the passphrase and names nothing else.
-///
-/// The whole of what it says: there is no user here to name — a desk has one —
-/// and no verdict to carry back, because the answer is
-/// [`HostMessage::Locked`] to every chrome rather than a reply to the one that
-/// asked.
+/// An unlock carries only the passphrase; the answer is
+/// [`HostMessage::Locked`] to every chrome.
 #[test]
 fn an_unlock_carries_the_passphrase_and_nothing_else() {
     let v = serde_json::to_value(ChromeMessage::Unlock {
@@ -471,30 +413,22 @@ fn an_unlock_carries_the_passphrase_and_nothing_else() {
     );
 }
 
-/// A lock is the tag and nothing else: there is only one desk to lock, and
-/// nothing a page says can choose how.
+/// A lock request carries only its tag.
 #[test]
 fn a_lock_is_the_tag_and_nothing_else() {
     let v = serde_json::to_value(ChromeMessage::Lock).unwrap();
     assert_eq!(v, serde_json::json!({"type": "lock"}));
 }
 
-/// A passphrase is not in what a log line would print.
-///
-/// **THE ONE WAY THIS FIELD CAN FAIL IS BY BEING EASY TO PRINT.** Every other
-/// member of `ChromeMessage` is something to trace, and `{:?}` on the message
-/// is how a compositor says which one it refused — so a `String` here would
-/// put the desk's passphrase in the journal the first time anybody added such
-/// a line, in a change with no reason to be thinking about the lock. The
-/// redaction is the type's rather than the call site's, so there is nowhere to
-/// forget it.
+/// `Debug` output never contains the passphrase, so a `debug!` of a message
+/// cannot leak it to the journal.
 #[test]
 fn a_passphrase_is_never_what_a_log_line_prints() {
     let secret = "correct horse battery staple";
 
     assert!(!format!("{:?}", Passphrase::from(secret)).contains(secret));
 
-    // And through the message, which is the shape a trace macro is handed.
+    // Including through the message, as a trace macro would format it.
     let message = ChromeMessage::Unlock {
         passphrase: Passphrase::from(secret),
     };
@@ -503,8 +437,7 @@ fn a_passphrase_is_never_what_a_log_line_prints() {
         "a message that prints its passphrase is one log line from the journal"
     );
 
-    // The value survives, or this would be a lost passphrase rather than a
-    // hidden one.
+    // The value itself is preserved.
     assert_eq!(Passphrase::from(secret).as_str(), secret);
 }
 
@@ -523,9 +456,8 @@ fn cursor_shapes_are_css_keywords() {
 
 #[test]
 fn the_desktop_is_described_to_the_chrome() {
-    // Everything the chrome needs to lay a display out and address it. The
-    // wire shape is pinned as well as round-tripped, because a shell reads
-    // these field names directly.
+    // Pin the wire shape as well as round-tripping, because shells read these
+    // field names directly.
     let displays = HostMessage::Displays {
         displays: vec![
             DisplayInfo {
@@ -562,15 +494,10 @@ fn the_desktop_is_described_to_the_chrome() {
 
 #[test]
 fn a_monitor_on_its_side_says_so_and_says_what_it_scans_out() {
-    // The three fields that say how a monitor is drawn. `size` is the box
-    // the shell lays out in, `mode` is the pixels the panel has, and the two
-    // are not each other's units: 3840x2160 stood on its side at density 1.2
-    // is a 1800x3200 box. Nothing can be derived from the other two --
-    // `scale` on the wire is the INTEGER `wl_output` one, so 1800 times 2 is
-    // not 2160 and never was.
-    //
-    // Kebab-case, because that is what the config file writes and there is no
-    // second spelling of a transform anywhere in this system.
+    // `size` is the logical box and `mode` the panel's pixels before rotation.
+    // Neither derives from the other, because `scale` is the integer
+    // `wl_output` scale: 3840x2160 rotated at density 1.2 is 1800x3200.
+    // Transforms use the config file's kebab-case spelling.
     let v = serde_json::to_value(DisplayInfo {
         name: "drm-3".into(),
         position: [0, 0],
@@ -587,24 +514,20 @@ fn a_monitor_on_its_side_says_so_and_says_what_it_scans_out() {
 
 #[test]
 fn a_display_that_predates_these_fields_still_reads() {
-    // Not a compatibility floor -- nothing can complete a handshake and then
-    // send a `displays` without them. It is that a captured session, a
-    // hand-written line, or a fixture from before the fork scanned anything
-    // out is still a thing this crate reads, and the answer it gives for the
-    // two is the desktop that had no notion of them: lying down.
+    // Older messages, such as fixtures, may lack these fields. They default to
+    // an unrotated display.
     let old: DisplayInfo =
         serde_json::from_str(r#"{"name":"left","position":[0,0],"size":[1920,1080],"scale":1}"#)
             .expect("it reads");
     assert_eq!(old.transform, DisplayTransform::Normal);
-    // `[0, 0]` and not the size: a mode nobody stated is not a mode.
+    // `[0, 0]`, not the size: an unstated mode stays unstated.
     assert_eq!(old.mode, [0, 0]);
 }
 
 #[test]
 fn which_turns_trade_a_monitors_width_for_its_height() {
-    // The one thing a transform changes about arithmetic. A page needs it to
-    // know which way `mode` divides into `size`, and getting it backwards is a
-    // desktop drawn at the wrong scale rather than an error.
+    // Getting this backwards draws the desktop at the wrong scale rather than
+    // failing.
     assert!(!DisplayTransform::Normal.swaps_axes());
     assert!(!DisplayTransform::Rotate180.swaps_axes());
     assert!(DisplayTransform::Rotate90.swaps_axes());
@@ -613,17 +536,10 @@ fn which_turns_trade_a_monitors_width_for_its_height() {
 
 #[test]
 fn a_desktop_of_no_displays_is_a_message_rather_than_a_silence() {
-    // A desktop with no screens on it is an answer the chrome has to be able
-    // to receive, not the absence of one. The compositor never sends it — it
-    // describes at least one output, and the window-following case is a
-    // display named `domicile-0` rather than an empty list — but a `Host`
-    // nobody has described a desktop to does, and the `domicile` daemon is
-    // one. "Told nothing" and "not told" are different states, and the shape
-    // has to survive the wire for a chrome to tell them apart.
-    // Asserted on the wire rather than through a round trip, which cannot see
-    // the difference: an empty `Vec` that serializes to nothing at all and one
-    // that serializes to `[]` both come back empty, and only the second is a
-    // desktop the chrome can parse.
+    // The compositor always describes at least one display, but a `Host` with
+    // no desktop described (unit tests, the `domicile` daemon) sends an empty
+    // list. Check the wire form, since a round trip cannot tell `[]` from a
+    // missing field.
     let v = serde_json::to_value(HostMessage::Displays { displays: vec![] }).unwrap();
     assert_eq!(v["type"], "displays");
     assert_eq!(v["displays"], serde_json::json!([]));
@@ -631,10 +547,9 @@ fn a_desktop_of_no_displays_is_a_message_rather_than_a_silence() {
 
 #[test]
 fn wire_shape_is_pinned() {
-    // The JS client depends on these exact strings — lock them.
-    // A size the client has not said is `null` on the wire rather than an
-    // absent key, which is the shape the chrome's schema parses: it reads
-    // `size` the way it already reads `title`, and both arrive as JSON null.
+    // The JS client depends on these exact strings.
+    // An unknown size is `null`, not an absent key, matching how the chrome's
+    // schema reads `title`.
     let v = serde_json::to_value(HostMessage::AppAppeared {
         app_id: "term".into(),
         title: None,
@@ -662,31 +577,20 @@ fn version_negotiation_rejects_mismatch() {
     assert!(negotiate(PROTOCOL_VERSION + 1).is_err());
 }
 
-/// `ROADMAP.md` states the version as a literal, and this pins it.
-///
-/// Nothing pinned it before, and the habit that produced is worth naming
-/// without counting, since any count includes the commit doing the counting.
-/// The line spent most of its life stale: it was caught up in batches long
-/// after the fact, once by a commit that bumped no version at all, and bumps
-/// that edited `ROADMAP.md` in the same breath still walked past it. So
-/// "remember to update the roadmap" was never the missing habit — a number
-/// written down in prose is a copy of the constant, and it belongs to the
-/// crate that owns the constant.
+/// `ROADMAP.md` states the version as a literal; this keeps it in sync with
+/// [`PROTOCOL_VERSION`].
 #[test]
 fn the_roadmap_states_the_version_this_build_speaks() {
-    // The path climbs out of the crate, which the crate itself never does. A
-    // test that reads a repo file is not the portable description of the
-    // protocol that `lib.rs` is; it is the check that the repo's prose about
-    // it is true, and there is nowhere else for that to live.
+    // Reads a file outside the crate: this checks the repo's prose, not the
+    // protocol.
     let roadmap = include_str!("../../../ROADMAP.md");
     let stated: Vec<&str> = roadmap
         .match_indices("`PROTOCOL_VERSION = ")
         .map(|(at, _)| &roadmap[at..])
         .collect();
 
-    // Every mention, not merely one that agrees: a roadmap that says 13 in one
-    // place and 14 in another satisfies "contains the right number" and is
-    // still wrong wherever a reader happens to look.
+    // Exactly one mention, so no stale copy can hide elsewhere in the
+    // roadmap.
     assert_eq!(
         stated.len(),
         1,
@@ -699,15 +603,10 @@ fn the_roadmap_states_the_version_this_build_speaks() {
     );
 }
 
-/// A window's box is the engine's to state, so the chrome has stopped saying
-/// it and this crate has stopped listening.
+/// `resize_app` is not a message, and is rejected rather than ignored.
 ///
-/// Refused rather than ignored, which is the whole of the change on the wire:
-/// the tag match is exact, so a chrome still sending `resize_app` does not
-/// quietly configure nothing — the compositor logs the line it could not read
-/// and the drift is visible. The other half of it is that an `<app>`'s layout
-/// box already *is* the `xdg_toplevel.configure`, reported natively, so a
-/// second opinion about the same box is not a message that went missing.
+/// The engine reports window size through `xdg_toplevel.configure`. Rejection
+/// makes the compositor log any chrome that still sends it.
 #[test]
 fn a_resize_the_chrome_no_longer_sends_is_not_a_message() {
     let line = r#"{"type":"resize_app","app_id":"term","size":[800.0,600.0]}"#;
@@ -717,8 +616,8 @@ fn a_resize_the_chrome_no_longer_sends_is_not_a_message() {
     );
 }
 
-/// The desk's sound, as a mixer draws it: every device and stream, each
-/// named by the id the chrome's requests name it by.
+/// The audio state lists every device and stream by the id the chrome's
+/// requests use.
 #[test]
 fn the_audio_round_trips() {
     host_round_trip(&HostMessage::Audio {
@@ -802,7 +701,7 @@ fn the_mixers_requests_parse_as_the_sdk_sends_them() {
     );
 }
 
-/// The meters a mixer draws: asked for by id, answered with each one's peak.
+/// Meters are requested by id and answered with each id's peak.
 #[test]
 fn the_meters_round_trip() {
     chrome_round_trip(&ChromeMessage::WatchAudioLevels {

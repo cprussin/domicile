@@ -1,8 +1,7 @@
-//! Behavior tests for `domicile-config`, written before the implementation.
+//! Behavior tests for `domicile-config`.
 //!
-//! The load-bearing requirement is hot-reload safety: a bad edit to the config
-//! file on disk must NEVER take down the compositor — the last known-good
-//! config stays active and the error is surfaced.
+//! The key requirement is hot-reload safety: a bad config file keeps the last
+//! good config active and reports the error.
 
 use std::path::PathBuf;
 use std::time::Duration;
@@ -15,11 +14,7 @@ use domicile_config::{
 
 #[test]
 fn a_desk_that_configured_no_keyboard_gets_nobodys_layout() {
-    // THIS USED TO BE PROGRAMMER'S DVORAK WITH CAPS LOCK AND ESCAPE SWAPPED,
-    // which is one author's desk and a surprise on anybody else's: a user who
-    // configured nothing got a layout they never asked for, and the only
-    // symptom is that every key is wrong. A shell that wants a layout states
-    // one; saying nothing means the layout as it comes.
+    // A config with no keyboard gets plain `us`.
     let keyboard = Config::parse("{}").unwrap().input.keyboard;
     assert_eq!(keyboard.xkb_layout, "us");
     assert_eq!(keyboard.xkb_variant, "");
@@ -28,15 +23,14 @@ fn a_desk_that_configured_no_keyboard_gets_nobodys_layout() {
         "{:?}",
         keyboard.xkb_options
     );
-    // Empty rules/model mean "whatever libxkbcommon defaults to".
+    // Empty rules and model use libxkbcommon's defaults.
     assert_eq!(keyboard.xkb_rules, "");
     assert_eq!(keyboard.xkb_model, "");
 }
 
 #[test]
 fn a_desk_that_states_a_keyboard_gets_that_one() {
-    // The other half, and the one the default stopped being needed for: a
-    // layout reaches the compositor because somebody wrote it down.
+    // A layout other than `us` comes only from the config.
     let text = r#"
 {
   "input": {
@@ -109,7 +103,7 @@ fn joins_xkb_options_for_xkb() {
 
 #[test]
 fn empty_xkb_options_disable_every_option() {
-    // An explicitly empty list means "no options", not "use xkb's defaults".
+    // An empty list means "no options", not "use xkb's defaults".
     let keyboard = Config::parse(
         r#"
 { "input": { "keyboard": { "xkb_options": [] } } }
@@ -134,7 +128,7 @@ fn rejects_empty_keyboard_layout() {
 
 #[test]
 fn rejects_blank_keyboard_option() {
-    // A stray comma in a hand-edited list would otherwise reach xkb as junk.
+    // A stray comma would otherwise reach xkb as an empty option.
     let err = Config::parse(
         r#"
 { "input": { "keyboard": { "xkb_options": ["caps:swapescape", ""] } } }
@@ -148,11 +142,8 @@ fn rejects_blank_keyboard_option() {
 
 #[test]
 fn a_desk_that_asked_for_no_timeout_never_blanks() {
-    // SAYING NOTHING MEANS NOTHING HAPPENS. A desk whose shell never mentioned
-    // idle should not start turning its screens off after an upgrade: nothing
-    // warns a moment before, so a screen that went dark on its own would read as
-    // a desktop that had died -- and on a desk that states a passphrase it is
-    // the edge that locks the thing, which is a larger surprise still.
+    // No idle key means the screens never blank: a blank screen with no
+    // warning looks like a crash.
     assert_eq!(Config::parse("{}").unwrap().idle.blank_after(), None);
 }
 
@@ -170,9 +161,8 @@ fn a_desk_that_states_a_timeout_gets_it() {
 
 #[test]
 fn rejects_a_timeout_of_no_time_at_all() {
-    // Zero is the ambiguous one: "blank the moment nobody types" and "never
-    // blank" are both readings of it, and the second already has a spelling --
-    // leave the key out. So it is refused by name rather than guessed at.
+    // Zero could mean "blank immediately" or "never"; "never" is spelled by
+    // leaving the key out. So zero is refused.
     let err = Config::parse(
         r#"
 { "idle": { "blank_after_seconds": 0 } }
@@ -192,10 +182,8 @@ fn rejects_a_timeout_of_no_time_at_all() {
 
 #[test]
 fn a_desk_that_states_no_verifier_cannot_lock() {
-    // SAYING NOTHING MEANS THE DESK NEVER LOCKS, and here that is not merely
-    // the conservative default -- it is the only safe reading. A desk that
-    // locked with nothing to open it is a desk nobody can get back into, and
-    // the only way out would be another tty.
+    // No lock key means the desk never locks: a locked desk with no verifier
+    // could not be unlocked.
     assert_eq!(Config::parse("{}").unwrap().lock.verifier(), None);
 }
 
@@ -233,11 +221,8 @@ fn a_desk_that_names_a_pam_service_is_opened_by_pam() {
 
 #[test]
 fn rejects_a_desk_that_states_both_verifiers() {
-    // NEITHER IS A FALLBACK FOR THE OTHER, and taking both would make one of
-    // them one: whichever this picked, the other would be a line in the file
-    // that did nothing -- or, worse, a passphrase somebody believes stands in
-    // for PAM when PAM cannot run. So a desk says which, and a desk that says
-    // both is refused by name.
+    // A config with both is refused, so a passphrase is never mistaken for a
+    // PAM fallback.
     let err = Config::parse(
         r#"
 { "lock": { "passphrase": "open sesame", "pam_service": "domicile" } }
@@ -272,10 +257,8 @@ fn rejects_a_pam_service_of_nothing_at_all() {
 
 #[test]
 fn rejects_a_passphrase_of_nothing_at_all() {
-    // The empty string is the ambiguous one, exactly as a zero timeout is:
-    // "lock, and let anybody in by pressing Enter" and "never lock" are both
-    // readings of it, and the second already has a spelling -- leave the key
-    // out. So it is refused by name rather than guessed at.
+    // An empty passphrase could mean "anyone can unlock" or "never lock";
+    // "never" is spelled by leaving the key out. So it is refused.
     let err = Config::parse(
         r#"
 { "lock": { "passphrase": "" } }
@@ -293,11 +276,9 @@ fn rejects_a_passphrase_of_nothing_at_all() {
 
 #[test]
 fn a_passphrase_is_not_in_what_a_log_line_would_print() {
-    // THE CONFIG IS THE OTHER PLACE THIS SECRET LIVES, and it is a `Debug`
-    // struct inside a `Debug` struct inside the compositor's `Restatement`.
-    // Nothing prints one today; the redaction is here so that the line which
-    // eventually does cannot be the one that leaks the desk's passphrase. The
-    // wire half is `domicile_protocol::Passphrase`, for the same reason.
+    // The config holds the passphrase and sits inside the compositor's
+    // `Restatement`, so its `Debug` must redact it before anything prints it.
+    // `domicile_protocol::Passphrase` does the same on the wire.
     let secret = "correct horse battery staple";
     let config = Config::parse(&format!(
         r#"
@@ -315,8 +296,7 @@ fn a_passphrase_is_not_in_what_a_log_line_would_print() {
         !format!("{:?}", config.lock.verifier()).contains(secret),
         "and neither is the verifier the compositor chooses from it"
     );
-    // And the value survives, or this would be a lost passphrase rather than a
-    // hidden one.
+    // Redaction must not lose the value.
     assert_eq!(
         config.lock.verifier(),
         Some(LockVerifier::Passphrase(secret))
@@ -327,10 +307,8 @@ fn a_passphrase_is_not_in_what_a_log_line_would_print() {
 
 #[test]
 fn a_desk_that_says_nothing_about_the_theme_is_dark() {
-    // DARK IS THE DEFAULT BECAUSE DOMICILE HAS NO OTHER ANSWER TO FALL BACK
-    // ON. Every other desktop reads a system preference here; this one *is*
-    // the system, so a desk that states no theme is not deferring to anything
-    // -- it is taking the one the chrome was designed against.
+    // Dark is the default: there is no system preference above the chrome to
+    // follow, and the chrome is designed for dark.
     assert_eq!(Config::parse("{}").unwrap().theme.mode, ThemeMode::Dark);
 }
 
@@ -348,9 +326,8 @@ fn a_desk_that_states_a_theme_gets_it() {
 
 #[test]
 fn rejects_a_theme_that_is_neither() {
-    // There are two, and a third word is a shell writing something no desktop
-    // can be -- including `system`, which reads like the one every other
-    // desktop takes and would be Domicile deferring to itself.
+    // Only `dark` and `light` exist. `system` is refused: Domicile is the
+    // system, so there is nothing to follow.
     let err = Config::parse(
         r#"
 { "theme": { "mode": "system" } }
@@ -371,8 +348,8 @@ fn a_desk_that_says_nothing_about_applications_offers_every_one() {
 
 #[test]
 fn a_desk_can_omit_every_application_but_the_ones_it_names() {
-    // The launcher's own rows and nothing a package happened to install:
-    // everything left out, then taken back by name, the last match deciding.
+    // Offer only the launcher's own entries: omit everything, then take them
+    // back by name. The last match wins.
     let omit = Config::parse(
         r#"
 {
@@ -433,8 +410,8 @@ fn a_bookmark_is_a_name_and_the_url_it_opens() {
 
 #[test]
 fn a_bookmark_is_a_name_and_a_url_and_nothing_else() {
-    // Shortcodes were a word in the query picking another URL; a bookmark per
-    // URL is what a desk says now, and a config still naming them is told so.
+    // A bookmark is only a name and a URL. Other keys, such as `shortcodes`,
+    // are refused.
     let err = Config::parse(
         r#"
 {
@@ -456,8 +433,8 @@ fn a_bookmark_is_a_name_and_a_url_and_nothing_else() {
 
 #[test]
 fn a_bookmark_whose_url_is_not_a_web_address_is_refused() {
-    // A launcher draws the site's icon from the URL, and opens it as a page:
-    // `calendar.google.com` with no scheme is neither.
+    // The launcher opens the URL as a page and loads the site's icon from it,
+    // so `calendar.google.com` with no scheme is refused.
     let err = Config::parse(
         r#"{ "applications": { "bookmarks": [{ "name": "Calendar", "url": "calendar.google.com" }] } }"#,
     )
@@ -498,8 +475,7 @@ fn a_startup_command_is_an_argv() {
 
 #[test]
 fn an_empty_startup_command_is_refused() {
-    // Nothing to run is a mistake in the file, not a command that ran and
-    // did nothing.
+    // An empty command is a mistake in the file.
     let err = Config::parse(
         r#"
 { "startup": { "commands": [[]] } }
@@ -513,9 +489,7 @@ fn an_empty_startup_command_is_refused() {
 
 #[test]
 fn a_desk_that_says_nothing_about_files_omits_what_is_hidden_at_any_depth() {
-    // The rule the index kept before it was a setting: a `.git` walked to the
-    // bottom is most of a home full of checkouts, and none of it is opened by
-    // name.
+    // By default hidden paths, such as `.git` directories, are omitted.
     let omit = Config::parse("{}").unwrap().files.omit;
     assert!(omit.omits(".config"));
     assert!(omit.omits("src/.git"));
@@ -525,8 +499,8 @@ fn a_desk_that_says_nothing_about_files_omits_what_is_hidden_at_any_depth() {
 
 #[test]
 fn a_desk_that_states_what_to_omit_replaces_the_default() {
-    // Replaced rather than added to, so a desk can offer its dotfiles: the
-    // default is only what saying nothing means.
+    // A configured list replaces the default, so a desk can offer its
+    // dotfiles.
     let omit = Config::parse(
         r#"
 { "files": { "omit": ["Library/*/*"] } }
@@ -542,9 +516,8 @@ fn a_desk_that_states_what_to_omit_replaces_the_default() {
 
 #[test]
 fn the_last_pattern_to_match_a_path_decides_it() {
-    // Which is gitignore's rule, and what makes "everything two deep except
-    // under `Scratch`" sayable: a later `!` takes back what an earlier pattern
-    // omitted. A `*` stops at a `/`, so `*/*` is two deep and no deeper.
+    // Gitignore's rule: a later `!` takes back what an earlier pattern
+    // omitted. `*` stops at `/`, so `*/*` is two levels deep and no more.
     let omit = Config::parse(
         r#"
 { "files": { "omit": ["*/*", "!Scratch/*"] } }
@@ -561,8 +534,8 @@ fn the_last_pattern_to_match_a_path_decides_it() {
 
 #[test]
 fn rejects_a_pattern_that_is_not_a_glob() {
-    // At load, where the file can be named, rather than at the walk -- which
-    // would be an index quietly built with one rule fewer than the desk said.
+    // Refused at load, where the file can be named. Otherwise the index would
+    // be built silently without the rule.
     let err = Config::parse(
         r#"
 { "files": { "omit": ["Library/[unclosed"] } }
@@ -604,9 +577,8 @@ fn a_desk_that_names_extensions_gets_them() {
 
 #[test]
 fn rejects_a_web_store_id_that_is_not_one() {
-    // Thirty-two letters from `a` to `p` is what an id is. Anything else is
-    // one the Store has no extension under, and the engine would find that
-    // out a network round trip later with nobody reading its log.
+    // A Store id is 32 letters from `a` to `p`. Refusing others here avoids a
+    // failure later in the engine's log.
     for id in [
         "ddkjiahejlhfcafbddmgiahcphecmpf",  // one short
         "ddkjiahejlhfcafbddmgiahcphecmpfz", // a letter past `p`
@@ -625,10 +597,8 @@ fn rejects_a_web_store_id_that_is_not_one() {
 
 #[test]
 fn rejects_an_unpacked_extension_that_is_not_an_absolute_path() {
-    // Nothing here knows what a relative path would be relative to, so one
-    // is refused at load rather than handed to an engine that cannot find it.
-    // A `~` is not relative: see the crate's own tests, which can say what the
-    // home is.
+    // A relative path has no defined base, so it is refused at load. `~` is
+    // tested in the crate's unit tests, which can set the home directory.
     let err =
         Config::parse(r#"{ "extensions": { "unpacked": ["src/my-extension"] } }"#).unwrap_err();
     let ConfigError::Validation(message) = &err else {
@@ -639,8 +609,8 @@ fn rejects_an_unpacked_extension_that_is_not_an_absolute_path() {
 
 #[test]
 fn rejects_an_unpacked_extension_in_another_users_home() {
-    // `~alice` is a lookup of another user's home, which this does not make.
-    // Refused as that, rather than as a relative path nobody wrote.
+    // `~alice` would need a lookup of another user's home, so it is refused
+    // as such rather than as a relative path.
     let err = Config::parse(r#"{ "extensions": { "unpacked": ["~alice/src/my-extension"] } }"#)
         .unwrap_err();
     let ConfigError::Validation(message) = &err else {
@@ -656,15 +626,12 @@ fn rejects_invalid_syntax() {
     assert!(matches!(err, ConfigError::Parse(_)), "got {err:?}");
 }
 
-/// A key nothing reads is refused rather than ignored.
+/// An unknown key is refused rather than ignored.
 ///
-/// The one property the whole shell-to-compositor interface leans on: a shell
-/// generates this file, so a key that does nothing is a bug in a program
-/// rather than a typo at a prompt. Nothing else here covers it: the test that
-/// did went with `shell`.
+/// A shell generates this file, so an unknown key is a bug in that program.
 #[test]
 fn rejects_a_key_nothing_reads() {
-    // Misspelled in a section that exists, which is the shape a real one takes.
+    // A misspelled key in an existing section.
     let err = Config::parse(
         r#"
 { "output": { "max_scaale": 2 } }
@@ -677,14 +644,12 @@ fn rejects_a_key_nothing_reads() {
         "the message should name the key: {err}"
     );
 
-    // And at the top level, where a whole section could be misspelled.
+    // A misspelled section at the top level.
     let err = Config::parse(r#"{ "outputs": {} }"#).unwrap_err();
     assert!(matches!(err, ConfigError::Parse(_)), "got {err:?}");
 
-    // Every section that carries the attribute, not only the two above. The
-    // ones a shell writes keys into are `output` and `input.keyboard`, and a
-    // guard that covered `Config` alone would have let a misspelled
-    // `xkb_optoins` through while reading as though it did not.
+    // Every section with `deny_unknown_fields`, not just `Config`, so a
+    // misspelled `xkb_optoins` is caught too.
     for section in [
         r#"
 { "idle": { "blank_after_secons": 600 } }
@@ -709,13 +674,9 @@ fn rejects_a_key_nothing_reads() {
 
 #[test]
 fn the_startup_placeholder_is_not_a_setting() {
-    // It was `compositor.nested_size`, and it never described anyone's desk.
-    // The desktop it names is the one advertised between the compositor coming
-    // up and the first real answer arriving -- DRM on a tty, the chrome's
-    // `SetDesktopSize` when nested -- so it is overwritten within a beat of
-    // every run, and no value a user could write here survives long enough to
-    // be worth writing. It is a constant in the compositor now, and the whole
-    // `compositor` section went with it.
+    // The startup desktop size is a compositor constant: DRM or the chrome's
+    // `SetDesktopSize` replaces it right away. A `compositor` section is
+    // refused.
     for stated in [
         r#"
 { "compositor": { "nested_size": [800, 600] } }
@@ -730,7 +691,7 @@ fn the_startup_placeholder_is_not_a_setting() {
     }
 }
 
-// ---- hot-reload semantics (the important part) ----------------------------
+// ---- hot-reload semantics ---------------------------------------------------
 
 #[test]
 fn store_reload_valid_swaps_current_and_clears_error() {
@@ -757,7 +718,7 @@ fn store_reload_invalid_keeps_last_good_and_records_error() {
         )
         .unwrap();
 
-    // A subsequent bad edit must NOT change the live config.
+    // A later bad edit must not change the live config.
     let err = store
         .reload_from_str(r#"{ "output": { "max_scale": } }"#)
         .unwrap_err();
@@ -814,14 +775,10 @@ fn missing_file_is_an_io_error() {
     assert!(matches!(err, ConfigError::Io { .. }), "got {err:?}");
 }
 
-/// A file that will not load says which file it was.
+/// An error loading a file names the file.
 ///
-/// `Io` named the path and the other two did not, which is the asymmetry a
-/// desk that would not come up ran into: the compositor's complaint was about
-/// a key, and a machine has a config under `$XDG_CONFIG_HOME`, one a
-/// `--config` flag may name, and whatever the shell generated -- with nothing
-/// in the sentence to say which of them was being read. `Config::parse` works
-/// on text and has no file to name; `load` does, so the path goes on here.
+/// A machine can have several configs, so the error must say which one.
+/// `Config::parse` has no path; `load` adds it.
 #[test]
 fn a_file_that_will_not_load_says_which_file() {
     let dir = tempfile::tempdir().unwrap();
@@ -839,8 +796,7 @@ fn a_file_that_will_not_load_says_which_file() {
         "and keep what the parser said about it: {said}"
     );
 
-    // The other half of the asymmetry: a config that parses and then does not
-    // hold up is about the same file and used to name it just as little.
+    // A config that parses but fails validation also names the file.
     let invalid = dir.path().join("validation.json");
     std::fs::write(&invalid, r#"{ "output": { "max_scale": 0 } }"#).unwrap();
     let err = Config::load(&invalid).unwrap_err();
@@ -880,16 +836,15 @@ fn store_reload_from_path_keeps_last_good_on_bad_file() {
 
 #[test]
 fn output_scaling_is_on_by_default_up_to_a_retina_display() {
-    // A 2x display is the common case the default has to cover; beyond that a
-    // frame costs more than the copy path can carry, so the default stops.
+    // The default covers a common 2x display; higher scales cost more than
+    // they are worth.
     assert_eq!(Config::parse("{}").unwrap().output.max_scale, 2);
 }
 
 #[test]
 fn max_scale_one_turns_hidpi_off() {
-    // The escape hatch: a client asked for scale N renders N² times the
-    // pixels, so a user who would rather have the speed than the sharpness
-    // needs a way to say so without a rebuild.
+    // A client at scale N renders N² times the pixels, so a user can trade
+    // sharpness for speed without a rebuild.
     assert_eq!(
         Config::parse(
             r#"
@@ -921,8 +876,7 @@ fn max_scale_must_leave_a_usable_scale() {
 
 #[test]
 fn no_displays_configured_means_the_output_follows_domiciles_window() {
-    // The nested backend's original behavior, and the only thing it can do
-    // without being told: one output, sized by whatever window Domicile got.
+    // With no displays configured, one output is sized to Domicile's window.
     assert_eq!(Config::parse("{}").unwrap().output.displays, vec![]);
 }
 
@@ -968,8 +922,7 @@ fn parses_a_side_by_side_desktop() {
 
 #[test]
 fn a_display_sits_at_the_origin_unless_placed() {
-    // The one-display case, where there is nothing for a position to be
-    // relative to.
+    // With one display there is nothing for a position to be relative to.
     let displays = Config::parse(
         r#"
 { "output": { "displays": [{ "name": "only", "size": [800, 600] }] } }
@@ -983,8 +936,7 @@ fn a_display_sits_at_the_origin_unless_placed() {
 
 #[test]
 fn a_display_needs_a_name_the_shell_can_tell_apart() {
-    // The name is how the chrome addresses one window rather than another, so
-    // two displays answering to it is not a preference the shell can resolve.
+    // The chrome addresses a display by name, so names must be unique.
     let err = Config::parse(
         r#"
 {
@@ -1010,12 +962,8 @@ fn a_display_needs_a_name_the_shell_can_tell_apart() {
 
 #[test]
 fn a_display_name_may_not_be_padded() {
-    // `left ` and `left` are one display to a reader and two to an exact-match
-    // lookup, and that lookup is how a chrome window says which display it is
-    // — so the space presents as "this chrome claims a display that does not
-    // exist" rather than as the typo it is. One entry, so what is pinned is
-    // the rejection rather than "these two do not both parse", which a
-    // trim-and-deduplicate would satisfy just as well.
+    // Names are matched exactly, so a padded name would look like a missing
+    // display. One entry, so a trim-and-deduplicate would not pass this test.
     let err = Config::parse(
         r#"
 { "output": { "displays": [{ "name": "left ", "size": [800, 600] }] } }
@@ -1034,8 +982,7 @@ fn a_display_name_may_not_be_padded() {
 
 #[test]
 fn a_display_named_nothing_is_rejected() {
-    // Reported by position: a display with no name has nothing else to be
-    // called, and the entry still has to be findable in a file with five.
+    // A display with no name is reported by its index.
     let err = Config::parse(
         r#"
 {
@@ -1061,7 +1008,7 @@ fn a_display_named_nothing_is_rejected() {
 
 #[test]
 fn a_display_with_no_pixels_is_rejected() {
-    // Either axis: a display zero wide is as absent as one zero high.
+    // Either axis: zero width or zero height.
     for size in ["[1920, 0]", "[0, 1080]"] {
         let err = Config::parse(&format!(
             r#"
@@ -1102,10 +1049,8 @@ fn a_display_must_have_a_usable_scale() {
 
 #[test]
 fn a_display_may_not_run_off_the_edge_of_the_desktop() {
-    // Its far corner has to be a coordinate too. The desktop's bounding box is
-    // computed from these, and an edge that is not representable is a layout
-    // nothing downstream can size a window from — so it is rejected where it
-    // is written rather than wrapping somewhere later.
+    // The far corner must fit `i32` too: the desktop's bounding box is
+    // computed from it, so it is rejected here rather than wrapping later.
     for position in ["[2147483000, 0]", "[0, 2147483000]"] {
         let err = Config::parse(&format!(
             r#"
@@ -1130,8 +1075,7 @@ fn a_display_may_not_run_off_the_edge_of_the_desktop() {
 
 #[test]
 fn displays_may_not_cover_the_same_ground() {
-    // Two outputs over one region has no answer for which one a point belongs
-    // to, so it is a typo in the layout rather than a desktop.
+    // Overlapping displays leave no answer for which one owns a point.
     let err = Config::parse(
         r#"
 {
@@ -1158,13 +1102,9 @@ fn displays_may_not_cover_the_same_ground() {
 
 #[test]
 fn displays_that_only_touch_are_a_desktop_rather_than_a_collision() {
-    // The two ordinary layouts: the second display starts exactly where the
-    // first ends, which is adjacency and not overlap, on each axis in turn.
-    //
-    // This pair is what holds the rectangle check honest. Each layout overlaps
-    // fully on the axis it does not extend along, so a check that has dropped
-    // either axis — or closed the interval — reports one of them as a
-    // collision and fails here.
+    // Side by side and stacked: displays that share an edge are adjacent,
+    // not overlapping. Each layout overlaps fully on its other axis, so a
+    // check that drops an axis or uses closed intervals fails here.
     Config::parse(
         r#"
 {
@@ -1195,13 +1135,10 @@ fn displays_that_only_touch_are_a_desktop_rather_than_a_collision() {
 
 #[test]
 fn a_desktop_may_reach_exactly_as_far_as_a_position_can_and_no_further() {
-    // The boundary the check is written against, pinned because it is where a
-    // future tightening would land: a far corner at exactly `i32::MAX`
-    // normalizes to a position of exactly `i32::MAX`, which is a position.
+    // The boundary: a far corner at `i32::MAX` normalizes to a valid position.
     //
-    // Both axes, and each sized so that reading the *other* axis's length
-    // would tip it over — which is the only way a test can tell a vertical
-    // check that reads heights from one that reads widths.
+    // Each axis is sized so that reading the other axis's length would
+    // exceed the limit, which tells the two axis checks apart.
     Config::parse(
         r#"
 {
@@ -1219,11 +1156,9 @@ fn a_desktop_may_reach_exactly_as_far_as_a_position_can_and_no_further() {
 "#,
     )
     .expect("a desktop exactly as wide as a position can describe should parse");
-    // One pixel past it, which is what pins the display's *length* as part of
-    // the reach. The near display sits at -1 so that the far one's own corner
-    // still fits — otherwise the per-display check rejects this first and the
-    // layout check is never asked. Without the length, the far position alone
-    // is under the limit and this desktop is accepted.
+    // One pixel past the limit, so the display's length must count toward
+    // its reach. The near display sits at -1 so the far display's own corner
+    // still fits and the per-display check does not reject it first.
     let err = Config::parse(
         r#"
 {
@@ -1266,8 +1201,7 @@ fn a_desktop_may_reach_exactly_as_far_as_a_position_can_and_no_further() {
 
 #[test]
 fn the_desktop_must_fit_the_coordinate_space_on_both_axes() {
-    // Stacked rather than side by side. The horizontal case cannot tell
-    // whether the vertical one reads the right fields — or is checked at all.
+    // Stacked, to check that the vertical case reads the right fields.
     let err = Config::parse(
         r#"
 {
@@ -1302,15 +1236,11 @@ fn the_desktop_must_fit_the_coordinate_space_on_both_axes() {
 
 #[test]
 fn a_display_too_big_on_its_own_is_reported_as_itself() {
-    // The specific diagnosis has to survive the layout-wide one: a single
-    // display whose own far corner does not fit is an error about that
-    // display, and "the displays span N across" names nobody and is not even
-    // true of one.
+    // A single display whose far corner overflows gets a per-display error,
+    // not the layout-wide "span N across" one.
     //
-    // Sized so the *mode* check lets it through — a billion at scale 1 is a
-    // representable mode — because that check runs first and would otherwise
-    // answer for this one, leaving the branch this test is named after
-    // reachable by nothing.
+    // A billion at scale 1 is a valid mode, so the earlier mode check does
+    // not reject it first.
     let err = Config::parse(
         r#"
 {
@@ -1333,11 +1263,9 @@ fn a_display_too_big_on_its_own_is_reported_as_itself() {
         "the message should name the display and its own far corner: {err}"
     );
 
-    // And with a second display, which is the only arrangement where the
-    // *order* of the two checks is observable: this layout spans too far and
-    // `far`'s own corner overflows, so whichever check runs first decides the
-    // message. Per-display first, because "from west to far across" is a fact
-    // about the pair and names `west`, which is not the one at fault.
+    // With two displays, both checks fail, so their order decides the
+    // message. The per-display check runs first because it names `far`, the
+    // display at fault.
     let err = Config::parse(
         r#"
 {
@@ -1368,10 +1296,8 @@ fn a_display_too_big_on_its_own_is_reported_as_itself() {
 
 #[test]
 fn the_desktop_as_a_whole_must_fit_the_coordinate_space() {
-    // Each display's own far corner fitting is not enough: two that each fit
-    // can still be four billion apart, and the desktop is placed about its own
-    // top-left corner, so that span is what everything downstream is sized
-    // and positioned in.
+    // Each display fitting is not enough: two can be four billion apart, and
+    // the normalized desktop spans that distance.
     let err = Config::parse(
         r#"
 {
@@ -1406,17 +1332,11 @@ fn the_desktop_as_a_whole_must_fit_the_coordinate_space() {
 
 #[test]
 fn a_displays_mode_must_fit_the_coordinate_space() {
-    // The `wl_output` mode is physical pixels — the logical size times the
-    // scale — so a size and a scale that each fit on their own can still
-    // multiply past what a coordinate is. Rejected here rather than left to
-    // overflow where the mode is computed, which is arithmetic in the Smithay
-    // backend where nothing can test it.
+    // The `wl_output` mode is size times scale, which can overflow even when
+    // each fits. Rejected here because the Smithay backend computes the mode
+    // where no test can reach it.
     //
-    // This is also what bounds the logical size on its own: the scale is at
-    // least 1, so a mode that fits means a size that fits, which is the
-    // invariant `Desktop` asserts when it normalizes. There is no separate
-    // size check to test — it was unreachable, and every input that would
-    // have reached it arrives here instead.
+    // Scale is at least 1, so this also bounds the logical size.
     let err = Config::parse(
         r#"
 {
@@ -1436,18 +1356,15 @@ fn a_displays_mode_must_fit_the_coordinate_space() {
         message.contains("output.displays[0]") && message.contains("dense"),
         "the message should name the display: {err}"
     );
-    // A display that does not fit is a fact about that display. The
-    // layout-wide message compares two displays near-to-far, and with only
-    // one of them it would say a display is that far from itself.
+    // A single display that does not fit gets a per-display error. The
+    // layout-wide message compares two displays.
     assert!(
         !message.contains("dense and dense"),
         "one display cannot be a distance from itself: {err}"
     );
 
-    // The boundary, exactly: `>` is the right comparison and a `>=` would
-    // reject a legal desktop. `i32::MAX` is a Mersenne prime, so scale 1 is
-    // the only way to land on it — at scale 2 the nearest mode below is one
-    // short, which is why the earlier version of this case tested nothing.
+    // The boundary: `>` is correct and `>=` would reject a legal desktop.
+    // `i32::MAX` is prime, so only scale 1 reaches it exactly.
     Config::parse(
         r#"
 {
@@ -1465,9 +1382,8 @@ fn a_displays_mode_must_fit_the_coordinate_space() {
     )
     .expect_err("one pixel more than a coordinate should not");
 
-    // Each axis on its own, and each with the *other* axis comfortably inside
-    // the bound: a case that trips both halves at once cannot tell whether
-    // either is checked.
+    // Each axis alone, with the other well inside the bound, so each check is
+    // tested separately.
     let err = Config::parse(
         r#"
 {
@@ -1497,13 +1413,11 @@ fn a_displays_mode_must_fit_the_coordinate_space() {
         "the height half is checked with a width that fits: {err}"
     );
 
-    // The largest inputs the types allow. Written in `i64` this check panicked
-    // on them in debug, which `ConfigStore` cannot have.
+    // The largest inputs the types allow. A check in `i64` would panic on
+    // them in debug.
     //
-    // Asserted on the *message*, not merely on `Validation(_)`: this display's
-    // far corner is also off the coordinate space, so a version of the mode
-    // check that wrapped would still be rejected here — by that check, with
-    // that reason. Only naming the mode pins the mode check.
+    // Assert on the message: this display's far corner also overflows, so a
+    // wrapping mode check would still be rejected by the corner check.
     let err = Config::parse(
         r#"
 {
@@ -1533,16 +1447,15 @@ fn a_displays_mode_must_fit_the_coordinate_space() {
 
 #[test]
 fn a_config_may_name_the_shell_domicile_runs() {
-    // `domicile` reads it when it is given no shell; the compositor has no
-    // use for it, and takes it without complaint.
+    // `domicile` reads it when given no shell; the compositor ignores it.
     let config = Config::parse(r#"{ "shell": "@domicile-desktop/manganese" }"#).unwrap();
     assert_eq!(config.shell.as_deref(), Some("@domicile-desktop/manganese"));
 }
 
 #[test]
 fn keys_are_a_shell_s_now_and_the_tables_are_refused() {
-    // A shell binds its keys as its props. A config that still has the tables
-    // is refused by name rather than read for keys nothing answers.
+    // A shell binds its own keys. The `keybindings`, `modes` and `shells`
+    // tables are refused.
     for table in [
         r#"{ "keybindings": {} }"#,
         r#"{ "modes": { "resize": {} } }"#,

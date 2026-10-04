@@ -1,41 +1,25 @@
-//! Which process is on the other end of a client's connection.
+//! Finds the process on the other end of a client's connection.
 //!
-//! **This is the half of "the app took forever to appear" the compositor
-//! cannot otherwise see.** A launched client leaves two lines in the log — the
-//! `spawning client` that starts it and the `toplevel mapped` when it first
-//! commits a buffer — and the gap between them is two things stacked: the
-//! client starting up, and then the client talking to us. A `kitty` that took
-//! 3.6s to appear on a desktop that had been up and idle for four seconds
-//! before it was asked for left nothing at all in between, so neither half
-//! could be ruled out and the compositor was as good a suspect as the
-//! terminal. An arrival logged between the two splits it, and every later
-//! `kitty` in that same run took 150ms, which is the shape of a cost paid
-//! once — but reading it that way is a guess until a line says where the time
-//! went.
+//! The log has `spawning client` when a client starts and `toplevel mapped`
+//! when it first commits a buffer. Logging the connection in between splits a
+//! slow launch into client startup and the client's Wayland setup.
 //!
-//! **`SO_PEERCRED`, so the pid is the kernel's word and not the client's.**
-//! It is stamped at `connect(2)`, which makes it the same kind of
-//! discriminator the chrome's own socket is: the compositor knows which
-//! process arrived rather than being told. That is what lets an arrival be
-//! matched to the spawn that caused it when a launcher opens several at once,
-//! which is exactly what a person impatiently pressing the key again does.
+//! The pid comes from `SO_PEERCRED`, which the kernel records at
+//! `connect(2)`, so the client cannot forge it. That lets a connection be
+//! matched to its spawn when several clients launch at once.
 //!
-//! A `libc` call rather than `UnixStream::peer_cred`, which is still unstable
-//! (`peer_credentials_unix_socket`). `libc` is already in this crate's
-//! manifest and is the libc every Rust binary links, so this adds nothing to
-//! the tree — the same reasoning `uevents` opens its netlink socket with.
+//! Uses `libc` because `UnixStream::peer_cred` is still unstable
+//! (`peer_credentials_unix_socket`).
 
 use std::os::fd::AsRawFd;
 use std::os::unix::net::UnixStream;
 
 use tracing::warn;
 
-/// The process on the far end of `stream`, as the kernel recorded it.
+/// The pid on the far end of `stream`, as the kernel recorded it.
 ///
-/// `None` is a credential the kernel would not give, which is said on the way
-/// past and costs the caller nothing else: the connection is the desktop's
-/// business and the line is only ours, so this is an operator losing one
-/// attribution rather than a person losing their terminal.
+/// `None` if the kernel refuses. That is logged, and only costs the log line
+/// its pid; the connection carries on.
 pub fn peer_pid(stream: &UnixStream) -> Option<i32> {
     let mut credentials = libc::ucred {
         pid: 0,
@@ -75,10 +59,8 @@ mod tests {
 
     #[test]
     fn an_arrival_names_the_process_on_the_far_end() {
-        // Both ends of a pair are held by this process, so this process is
-        // who the far end is. A real socket rather than a contrived
-        // descriptor, because `SO_PEERCRED` is only answered for one: the
-        // thing under test is the kernel's answer, not the call's spelling.
+        // This process holds both ends of the pair, so it is the peer. The
+        // test needs a real socket because `SO_PEERCRED` only works on one.
         let (client, compositor) = UnixStream::pair().expect("a socket pair");
 
         assert_eq!(

@@ -1,21 +1,13 @@
-//! A real compositor, started the way a shell starts one.
+//! Test fixture: a real compositor, started the way a shell starts one.
 //!
-//! Everything a script used to arrange: a runtime directory of this test's
-//! own, a config written where the compositor was told to look, the binary
-//! under test rather than whatever is on `PATH`, and a wait for the session it
-//! publishes rather than for a socket that appears before it.
+//! Each run gets its own runtime directory, config and home, and waits for the
+//! published session rather than for the socket.
 //!
-//! Killed on drop, so a test that fails an assertion still takes its
-//! compositor with it. Not for the display name — each test has a runtime
-//! directory of its own, so two compositors cannot collide on one — but
-//! because a leaked compositor outlives the whole run: `cargo test` waits for
-//! its own children, and nothing else would ever reap it.
+//! The compositor is killed on drop. A leaked one would outlive the run, since
+//! `cargo test` waits for its children and nothing else reaps it.
 
-// Each test binary compiles its own copy of this module and uses the part of
-// it that its own subject needs, so anything only one file calls is dead code
-// in every other. That is a fact about how integration tests are built rather
-// than about this fixture: `wait_for_log` has a caller, and so does `socket`,
-// just not in the same binary.
+// Each test binary compiles its own copy of this module and uses only part of
+// it, so the rest is dead code in that binary.
 #![allow(dead_code)]
 
 use std::path::PathBuf;
@@ -27,22 +19,19 @@ use domicile_test_chrome::Chrome;
 
 /// How long a compositor gets to publish its session.
 ///
-/// Generous: this covers an EGL probe on a machine with no GPU, which falls
-/// back through software rasterization and is the slowest thing a headless
-/// start does.
+/// Generous because an EGL probe without a GPU falls back to software
+/// rendering, which is slow.
 const PATIENCE: Duration = Duration::from_secs(20);
 
 /// A compositor process and the directory it was given.
 pub struct Compositor {
     child: Child,
-    /// The directory the compositor was told to run in, which is also where
-    /// its Wayland socket lives — so a client this fixture starts is pointed
-    /// at the same one rather than at the runner's own session.
+    /// The compositor's `XDG_RUNTIME_DIR`, where its Wayland sockets live.
+    /// Clients this fixture starts use it too.
     runtime_dir: PathBuf,
     complaint: Arc<Mutex<String>>,
     config_file: PathBuf,
-    /// Held, not read: dropping it removes the run directory, and the config
-    /// and socket in it. Underscored because that is the whole of its job.
+    /// Held only so that dropping it removes the run directory.
     _directory: tempfile::TempDir,
     session: Session,
 }
@@ -50,39 +39,28 @@ pub struct Compositor {
 /// What the compositor published, as this fixture needs it.
 pub struct Session {
     pub chrome_socket: PathBuf,
-    /// The display the *chrome's own window* goes on, which is a different
-    /// socket. Which one a client arrived on is the whole of how the
-    /// compositor tells the desktop from the things running on it.
+    /// The display for the chrome's own window. The compositor tells the
+    /// chrome from apps only by which display a client connects to.
     pub chrome_wayland_display: String,
     /// The display applications connect to, as the compositor named it.
     ///
-    /// Read from the session rather than assumed to be `wayland-1`, which is
-    /// what the scripts this replaced did — and why they each began by
-    /// deleting `$XDG_RUNTIME_DIR/wayland-*`. The compositor picks the first
-    /// free name, so the assumption held only for a directory nothing else had
-    /// ever bound in, and the deletion was there to force that.
+    /// Read from the session, not assumed: the compositor picks the first
+    /// free name.
     pub wayland_display: String,
 }
 
 impl Compositor {
-    /// Start one on `config`, which is the JSON a shell would have generated.
+    /// Start one on `config`, the JSON a shell would generate.
     ///
-    /// Panics rather than returning a `Result`: every caller is a test, and a
-    /// compositor that would not start is the end of that test either way —
-    /// with the difference that a panic here carries its stderr.
+    /// Panics on failure, with the compositor's output in the message.
     pub fn started_with(config: &str) -> Compositor {
         Compositor::started_in_a_home(config, None)
     }
 
     /// The same, over a home directory the test laid out.
     ///
-    /// **Every run gets a home of its own, and `None` is an empty one.** The
-    /// compositor walks `$HOME` at startup and then watches it — see
-    /// `crate::file_indexing` — so a fixture that let the runner's own home
-    /// through would have three hundred tests each index a developer's
-    /// machine, take an inotify watch per directory in it, and offer a
-    /// launcher whatever happened to be on that disk. The same reasoning as
-    /// the runtime directory below, with more at stake.
+    /// `None` gives an empty home. The compositor indexes and watches `$HOME`
+    /// (see `crate::file_indexing`), so tests must never see the runner's.
     pub fn started_in_a_home(config: &str, home: Option<&std::path::Path>) -> Compositor {
         let directory = tempfile::tempdir().expect("a runtime directory");
         let config_file = directory.path().join("config.json");
@@ -99,39 +77,23 @@ impl Compositor {
             .arg(&session_file)
             .arg("--config")
             .arg(&config_file)
-            // Its own, so a display this binds cannot collide with the
-            // session the test runner itself is in.
+            // Its own, so its displays cannot collide with the runner's.
             .env("XDG_RUNTIME_DIR", directory.path())
-            // What the file index is built from, and where it is written
-            // down. Both inside this run's own directory, so nothing a test
-            // does to one survives into the next.
+            // The file index's source and cache, both private to this run.
             .env("HOME", home.unwrap_or(&empty_home))
             .env("XDG_CACHE_HOME", directory.path().join("cache"))
-            // Where a launcher's applications are read from: the home's own,
-            // and none of the machine running the test.
+            // Read applications from the test home only, not the machine's.
             .env_remove("XDG_DATA_HOME")
             .env("XDG_DATA_DIRS", directory.path().join("no-data"))
-            // A decoy, and load-bearing. The compositor aims what it spawns
-            // by setting `WAYLAND_DISPLAY`, and a child that inherited the
-            // compositor's instead would open on whatever session the runner
-            // is in rather than inside Domicile. Left unset, the compositor
-            // inherits the runner's — very often `wayland-1`, which is also
-            // the first name the compositor binds in a fresh runtime
-            // directory, so "inherited" and "aimed" produce the same string
-            // and the test cannot tell them apart. `e2e-spawn.sh` set this
-            // for the same reason and said so; dropping it made the port
-            // silently weaker than the script on any machine running Wayland.
+            // A decoy. The compositor must set `WAYLAND_DISPLAY` for what it
+            // spawns. Without this, a child could inherit the runner's value,
+            // often `wayland-1`, which is also the compositor's first display
+            // name, and a test could not tell the two apart.
             .env("WAYLAND_DISPLAY", "not-domicile")
-            // Debug, because some of what a compositor decides it never says
-            // over the socket — a density it *refused* is a no-op on the wire,
-            // and this log line is the only trace that path leaves. Drained on
-            // a thread, so the extra volume costs nothing.
+            // Debug, because some decisions (such as a refused density)
+            // leave no trace on the socket, only in the log.
             .env("RUST_LOG", "info,domicile_compositor=debug")
-            // Both, and into one buffer. `tracing_subscriber::fmt()` writes to
-            // *stdout*, so a fixture that piped only stderr had every log line
-            // the compositor ever wrote go to /dev/null — including the ones
-            // its own failure messages promise to quote. Panics come out the
-            // other one, and a test wants whichever of the two explains it.
+            // Both into one buffer: logs go to stdout and panics to stderr.
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
@@ -151,10 +113,7 @@ impl Compositor {
             session: Session {
                 chrome_socket: chrome_socket.clone(),
                 chrome_wayland_display: String::new(),
-                // Filled in from the document itself, below. Empty until the
-                // compositor has said what it bound, because until then there
-                // is no true answer and a guess would be one a test carries
-                // into every client it starts.
+                // Filled in from the published session below.
                 wayland_display: String::new(),
             },
         };
@@ -164,8 +123,8 @@ impl Compositor {
         compositor
     }
 
-    /// The chrome socket, for a test that has to play the chrome itself —
-    /// one whose whole subject is a handshake that does not happen.
+    /// The chrome socket, for a test that plays the chrome itself without the
+    /// handshake.
     pub fn socket(&self) -> &std::path::Path {
         &self.session.chrome_socket
     }
@@ -177,84 +136,39 @@ impl Compositor {
 
     /// A stand-in chrome, connected and past the handshake.
     ///
-    /// **It only reads when asked to.** `Chrome::wait_for` is what pulls from
-    /// the socket, so a test that connects one and then waits on something
-    /// else — a client's trace, a log line — is not draining it, and a drawing
-    /// client fills that socket in a few frames. `serve_outbound` then blocks
-    /// in `write_all` holding the writer lock.
-    ///
-    /// That used to stop the compositor reading this connection at all:
-    /// `read_chrome_messages` took the same writer lock at the end of *every*
-    /// iteration, including for the whole input path, which answers with
-    /// nothing. So a chrome that only ever spoke — the ordinary case — parked
-    /// the reader behind a socket it was not draining, and everything it said
-    /// afterward was silently never processed. That was a real flake:
-    /// `tests/input.rs` failed one run in twenty-four of the whole workspace,
-    /// with the compositor's last `chrome -> host` line being the
-    /// `place_portal` and `chrome is behind; dropped a frame` repeating to the
-    /// end.
-    ///
-    /// `write_responses` now returns before taking the lock when there is
-    /// nothing to write, so that case is gone: measured, a test that stalls
-    /// fifteen seconds without reading a byte still has its next message acted
-    /// on, where before the fix it did not.
-    ///
-    /// What remains is one message. `apply_chrome_message` answers non-empty
-    /// for `ChromeMessage::Hello` and for nothing else, so a `hello` — which is
-    /// also how a test spells a page reloading — still takes the writer lock
-    /// and can still park the reader behind `serve_outbound`. Measured on the
-    /// fixed compositor, against a chrome nobody reads: fifty of them cost
-    /// three hundred microseconds and the whole check finishes in
-    /// four-hundredths of a second; two thousand wedge between the five
-    /// hundredth and the five hundred and fiftieth, and are still wedged two
-    /// minutes later. And it *hangs* rather than failing — `say` blocks,
-    /// nothing reaches a `wait_for`, so `PATIENCE` never fires and the run has
-    /// to be killed. Read the socket if you send hundreds.
+    /// It reads only inside `Chrome::wait_for`, so its socket can fill while a
+    /// test waits on something else. Most messages still get processed, but
+    /// a `hello` needs the writer lock and can block behind the full socket.
+    /// Hundreds of unread `hello`s hang the test, so read the socket if you
+    /// send many.
     pub fn chrome(&self) -> Chrome {
         Chrome::connect(&self.session.chrome_socket, PATIENCE)
             .expect("a chrome can connect to a compositor that published a session")
     }
 
-    /// Start a real Wayland client against this compositor, and watch what it
-    /// says.
+    /// Start a traced `domicile-test-client` on the apps' display.
     ///
-    /// `domicile-test-client` under `--trace`, on the display the compositor
-    /// actually published rather than on `wayland-1`. Its trace is the only
-    /// window a test has into what the *client* was told — a `close`, an
-    /// `enter`, a buffer coming back — because those are events the compositor
-    /// sends outward and never mentions on the chrome socket.
-    ///
-    /// Killed on drop, like the compositor: a client that outlived its test
-    /// would hold a window open on a compositor the next test starts.
+    /// Its trace shows what the client was told, which the chrome socket does
+    /// not. Killed on drop.
     pub fn client(&self, title: &str) -> Client {
         self.client_on(&self.session.wayland_display, title)
     }
 
-    /// The same, on the display the chrome's own window goes on.
+    /// The same, on the chrome's display.
     ///
-    /// A real chrome is the fork's engine with a shell in it; what matters to
-    /// the compositor is which socket the client arrived on, so an ordinary
-    /// test client on that display is the chrome as far as the classification
-    /// is concerned — which is what makes the claim testable without a
-    /// browser.
+    /// The compositor classifies a client only by its display, so this
+    /// stands in for the chrome without a browser.
     pub fn chrome_side_client(&self, title: &str) -> Client {
         self.client_on(&self.session.chrome_wayland_display, title)
     }
 
-    /// A client that asks for the keyboard once its window is up.
-    ///
-    /// `xdg-activation`, which is the one thing in this repo that produces a
-    /// `focus_requested` from a real client rather than from a unit test.
+    /// A client that asks for the keyboard through `xdg-activation` once its
+    /// window is up.
     pub fn client_asking_for_focus(&self, title: &str) -> Client {
         self.client_on_with(&self.session.wayland_display, title, &["--ask-for-focus"])
     }
 
-    /// A client given the flags a check needs and nothing else.
-    ///
-    /// The named helpers above each stand for one claim a check makes about a
-    /// client. This one is for the claims that need two flags at once — a
-    /// client that copies to both selections is what shows they are two — and
-    /// naming a helper per combination would be naming the cross product.
+    /// A client with extra command-line flags, for checks that combine them.
     pub fn client_with(&self, title: &str, extra: &[&str]) -> Client {
         self.client_on_with(&self.session.wayland_display, title, extra)
     }
@@ -264,11 +178,8 @@ impl Compositor {
     }
 
     fn client_on_with(&self, display: &str, title: &str, extra: &[&str]) -> Client {
-        // Handed over by cargo rather than looked for, which is the whole
-        // reason the client's binary is a target of this crate: cargo builds
-        // it before it runs these tests, and `CARGO_BIN_EXE_` is how it says
-        // where it put it — so this follows a `--release` or a
-        // `--target-dir` without knowing about either, and cannot be missing.
+        // The client is a target of this crate so cargo builds it first and
+        // gives its path, whatever the profile or target directory.
         let mut child = Command::new(env!("CARGO_BIN_EXE_domicile-test-client"))
             .arg("--title")
             .arg(title)
@@ -295,21 +206,16 @@ impl Compositor {
         &self.session.wayland_display
     }
 
-    /// A path inside this compositor's run directory, for a program it starts
-    /// to write to.
-    ///
-    /// In the run directory rather than a temporary of its own so it goes when
-    /// the compositor does — a spawned program that outlives its test would
-    /// otherwise leave a file nothing owns.
+    /// A path in the run directory for a spawned program to write to, removed
+    /// with the compositor.
     pub fn scratch_file(&self, name: &str) -> PathBuf {
         self.runtime_dir.join(name)
     }
 
-    /// Wait for `path` to exist and answer with its contents.
+    /// Wait for `path` to exist and return its contents.
     ///
-    /// For asking a spawned program what it saw. Fails with what the
-    /// compositor said, because the interesting failure is not "no file" but
-    /// whatever the compositor did instead of starting the program.
+    /// Fails with the compositor's log, which explains why a spawn did not
+    /// happen.
     pub fn await_file(&self, path: &std::path::Path) -> String {
         let until = Instant::now() + PATIENCE;
         loop {
@@ -328,21 +234,17 @@ impl Compositor {
 
     /// Rewrite the config the compositor is watching.
     ///
-    /// By rename, which is how an editor saves and what the compositor's
-    /// watcher is arranged around — a plain write is several events, and the
-    /// ones in the middle are a truncated file that parses as a desktop with
-    /// no displays in it.
+    /// By rename, as editors save. A plain write can expose a truncated file,
+    /// which parses as a desktop with no displays.
     pub fn reconfigure(&self, config: &str) {
         let staging = self.config_file.with_extension("json.new");
         std::fs::write(&staging, config).expect("the new config is written");
         std::fs::rename(&staging, &self.config_file).expect("it replaces the old one");
     }
 
-    /// Wait for the session document, and answer with the display it names.
+    /// Wait for the session document and parse it.
     ///
-    /// The document is published by rename, so it is either absent or whole —
-    /// which is what makes reading it the moment it exists safe, and why this
-    /// waits on the file rather than on the socket it describes.
+    /// It is published by rename, so it is safe to read once it exists.
     fn await_session(
         &mut self,
         session_file: &std::path::Path,
@@ -362,11 +264,7 @@ impl Compositor {
             std::thread::sleep(Duration::from_millis(20));
         }
         let published = std::fs::read_to_string(session_file).expect("the session is readable");
-        // Through the launcher's own type rather than by reaching into the
-        // JSON, so a field this reads is one a shell would have got too. A
-        // session that will not parse is the compositor having published
-        // something no shell could start against, which is a failure of the
-        // subject rather than of the fixture.
+        // Parsed with the launcher's type, so this reads what a shell would.
         serde_json::from_str::<domicile_launch::session::Session>(&published).unwrap_or_else(
             |why| {
                 let said = self.complaint();
@@ -377,12 +275,9 @@ impl Compositor {
         )
     }
 
-    /// Wait until the compositor has said something containing `pattern`.
+    /// Wait until the compositor's log contains `pattern`.
     ///
-    /// For the decisions that leave no mark on the socket. A test cannot prove
-    /// "nothing was broadcast" by waiting — every wait for an absence is
-    /// either a sleep or a lie — but it can watch for the compositor saying
-    /// why it declined.
+    /// For decisions that leave no trace on the socket, such as a refusal.
     pub fn wait_for_log(&self, pattern: &str) {
         let until = Instant::now() + PATIENCE;
         loop {
@@ -400,10 +295,8 @@ impl Compositor {
 
     /// Wait until the compositor has said `pattern` at least `wanted` times.
     ///
-    /// For a line the compositor says more than once, where the interesting
-    /// one is not the first. `wait_for_log` is answered by an earlier
-    /// occurrence and so cannot ask "and again" — the same distinction
-    /// `Chrome::wait_for` draws by consuming its matches.
+    /// For a line logged more than once, where `wait_for_log` would match an
+    /// earlier occurrence.
     pub fn wait_for_log_times(&self, pattern: &str, wanted: usize) {
         let until = Instant::now() + PATIENCE;
         loop {
@@ -420,16 +313,10 @@ impl Compositor {
         }
     }
 
-    /// Whatever the compositor has said on stderr so far.
+    /// Everything the compositor has written so far.
     ///
-    /// So far, rather than all of it: the compositor is usually still running
-    /// when this is asked for, and reading its pipe to end-of-file would wait
-    /// for it to exit — which on the timeout path is exactly what has not
-    /// happened. Reading to EOF here hung the run in place of failing it, and
-    /// a hang has no message at all.
-    /// Public because one claim is about what the compositor did *not* say:
-    /// `tests/lock.rs` reads this to require that a refused passphrase is not
-    /// in it. `wait_for_log` cannot ask that — it waits for a presence.
+    /// Public so a test can check what the log does not contain, such as a
+    /// refused passphrase in `tests/lock.rs`.
     pub fn complaint(&self) -> String {
         let said = self.complaint.lock().expect("nothing panics holding this");
         if said.trim().is_empty() {
@@ -447,40 +334,24 @@ impl Drop for Compositor {
     }
 }
 
-/// Read one of a compositor's pipes onto a thread of its own, into `said`.
+/// Copy a pipe into `said` on a background thread.
 ///
-/// Two failures at once. A pipe nobody reads fills at 64 KiB and the writer
-/// blocks — so a compositor logging at `debug`, which is what these tests ask
-/// for, would stop *because* it was being watched. And reading it on demand
-/// meant reading to end-of-file, which for a running compositor never comes.
-///
-/// Bytes rather than lines, appended lossily. A `lines()` loop has to decide
-/// what to do with a read error, and every answer is wrong here: stopping
-/// leaves `complaint()` returning a log that ends mid-run with nothing saying
-/// so, and one stray non-UTF-8 byte — a panic payload, a C library writing
-/// through the inherited fd — would turn a compositor's own explanation into a
-/// silent truncation, reported as a verdict against the compositor. A
-/// replacement character is a much smaller lie.
+/// A pipe nobody reads fills and blocks the writer. Bytes are decoded lossily
+/// so a stray non-UTF-8 byte does not truncate the log.
 fn drain(mut pipe: impl std::io::Read + Send + 'static, said: &Arc<Mutex<String>>) {
     let writing = said.clone();
     std::thread::spawn(move || {
         let mut buffer = [0u8; 4096];
-        // What the last read ended in the middle of. A `read` boundary falls
-        // wherever the kernel put it, so a multi-byte character can arrive in
-        // two halves — decoding each read on its own would put a replacement
-        // character into a log that was perfectly good UTF-8.
+        // A partial character from the last read. A read can split a
+        // multi-byte character.
         let mut pending = Vec::new();
         loop {
             let read = match pipe.read(&mut buffer) {
-                // The tail goes out too. It is at most three bytes, and only
-                // when the compositor died part-way through a character — but
-                // that is the moment a test most wants the last thing it said,
-                // and this fixture kills its compositor on drop.
+                // Keep the tail, even a partial character: the compositor may
+                // have been killed mid-write.
                 Ok(0) => return flush(&pending, &writing),
                 Ok(read) => read,
-                // Said out loud rather than swallowed: this thread is the only
-                // reader, so a failure here is the rest of the log going
-                // missing, and the message that quotes it has to show that.
+                // Note the failure in the log, since the rest of it is lost.
                 Err(err) => {
                     flush(&pending, &writing);
                     let mut said = writing.lock().expect("nothing panics holding this");
@@ -503,26 +374,20 @@ fn flush(pending: &[u8], said: &Mutex<String>) {
     }
 }
 
-/// Everything in `pending` that is a whole character, taken out of it.
+/// Remove and decode the complete characters at the start of `pending`.
 ///
-/// What is left behind is either the start of a character whose rest has not
-/// arrived, or nothing. A byte that can never begin one is not waited for —
-/// it becomes a replacement character and the log goes on, which is the whole
-/// point: a compositor's own explanation is worth more slightly damaged than
-/// truncated at the first stray byte.
+/// Leaves only an incomplete trailing character. Invalid bytes become
+/// replacement characters.
 fn decoded(pending: &mut Vec<u8>) -> String {
     let mut taken = String::new();
     loop {
         let whole = match std::str::from_utf8(pending) {
             Ok(_) => pending.len(),
             Err(err) => match err.error_len() {
-                // Cut short: the rest of this character is still on the wire.
+                // Incomplete: wait for the next read.
                 None => err.valid_up_to(),
-                // Not a character at all, and never will be. Take it with the
-                // valid part so `from_utf8_lossy` replaces it, then go round
-                // again — a bad byte in the middle of a read must not hold up
-                // the good bytes after it until the *next* read arrives, and
-                // on the last read there is no next one.
+                // Invalid: take it so `from_utf8_lossy` replaces it, and loop
+                // so the valid bytes after it are not held for the next read.
                 Some(bad) => err.valid_up_to() + bad,
             },
         };
@@ -534,67 +399,18 @@ fn decoded(pending: &mut Vec<u8>) -> String {
     }
 }
 
-/// The screens a client's window is on *now*, by name, read out of its trace.
+/// The names of the screens a client's window is on now, from its trace.
 ///
-/// Every output it entered and has not since left. Reading the leaves is what
-/// the `enter_only` rows in `outputs.rs`'s table turn on: a compositor that
-/// stops sending them leaves each window on every screen it entered at map.
+/// Every output entered and not since left. Names, not object ids, so results
+/// compare across clients. Output ids are never reused, because the test
+/// client never destroys a `wl_output`.
 ///
-/// A `leave` for a screen the window is *not* on changes nothing here — the
-/// retain removes nothing and the push is skipped — so this is blind to a
-/// compositor that leaves screens it never entered. Nothing asks about that;
-/// said because an earlier version of this sentence claimed the opposite.
+/// A trace line is written in several `write` calls, so a line may be read
+/// half-written. Each parse requires the closing bracket and skips the line
+/// otherwise.
 ///
-/// Named rather than numbered: an object id is per-connection and means
-/// nothing across two clients, which is exactly what a check comparing one
-/// window's screens against another's needs.
-///
-/// # Half-written lines are skipped, not guessed at
-///
-/// The client's stderr is unbuffered and `say!` nests `format_args!`, so one
-/// trace line is several `write` calls — `wl_surface@13`, `.enter(`,
-/// `wl_output`, `@`, `3`, `)`, `\n` — and [`Client::trace`] clones a buffer a
-/// drain thread is appending to. So every line has intermediate states in
-/// which it is readable and incomplete.
-///
-/// Each parse therefore requires its closing bracket and skips the line
-/// without it. On the `enter` side that is load-bearing and was not
-/// hypothetical: `trim_end_matches(')')` turned `enter(wl_output@` into a
-/// screen named `an unnamed wl_output@` and failed a check once for a window
-/// the compositor had narrowed correctly. Reverting that one guard alone fails
-/// the torn-line test below.
-///
-/// On the `name` side **nothing can kill the guard, measured** — revert it
-/// alone and both tests below and the whole workspace stay green. The reason
-/// is the ordering argument on that test: a torn `name` is always the trace's
-/// last line and always for an output nothing has entered yet, so the entry it
-/// would produce is never looked at. It is kept for symmetry, and because the
-/// ordering it rests on belongs to smithay rather than to this file.
-///
-/// # A display that goes away does not leave this answer
-///
-/// The compositor sends no `wl_surface.leave` when a display is retired — the
-/// retire path removes the global and `enter_only` then walks the *new* output
-/// list, which no longer holds it — so an `enter` for a screen that is gone
-/// has nothing to cancel it and the screen stays here for the rest of the run.
-///
-/// No choice of key fixes that: the record this reads is an `enter` with no
-/// matching `leave`, so a check that crosses a removal has to notice
-/// `wl_registry.global_remove` itself — or the compositor has to send the
-/// leaves before it removes the global, which is a change to the compositor
-/// rather than to this. Releasing the output client-side is *not* the third
-/// option it looks like: a release sends no `leave` and traces nothing, so the
-/// reading is unchanged, and it would free the id the paragraph below rests on
-/// never being freed. Every check using this adds displays and removes none.
-///
-/// Ids are *not* a hazard here, which an earlier version of this section
-/// claimed. Wayland client ids are recycled in principle — `wayland-backend`
-/// takes the first free slot — but `domicile-test-client` never destroys a
-/// `wl_output`: its `global_remove` arm drops its own bookkeeping and sends
-/// nothing, and `wayland-client` has no `Drop` to send it for them. So an
-/// output's id is never freed, nothing can take it, and resolving an id to the
-/// first name it carried is exact — including for a display removed and added
-/// again, which binds a fresh id.
+/// The compositor sends no `leave` when a display is removed, so a removed
+/// screen stays in this answer. Checks using this only add displays.
 fn screens_entered(trace: &str) -> Vec<String> {
     let mut named: Vec<(String, String)> = Vec::new();
     let mut window: Option<String> = None;
@@ -624,13 +440,8 @@ fn screens_entered(trace: &str) -> Vec<String> {
             continue;
         };
         let window = window.get_or_insert_with(|| object.to_string());
-        // One surface, and a second is a fault rather than something to filter
-        // past. `domicile-test-client` creates exactly one `wl_surface`, so a
-        // second entering an output means the client grew a popup — and a
-        // popup is entered and left too, which keyed on the output alone would
-        // have a menu closing over the right-hand screen erase the *window's*
-        // membership of it. That is a wrong answer this would then report as a
-        // compositor fault, so it says so here instead.
+        // The test client has one surface. A second (such as a popup) would
+        // mix its enters and leaves into the window's, so fail loudly.
         assert_eq!(
             window.as_str(),
             object,
@@ -649,12 +460,8 @@ fn screens_entered(trace: &str) -> Vec<String> {
             named
                 .iter()
                 .find(|(id, _)| id == &output)
-                // A screen the client entered and was never told the name of
-                // is a real failure — a toolkit cannot pick a density for it.
-                // Loud rather than reported as a screen called "an unnamed
-                // wl_output@3": a half-written line cannot reach here now, so
-                // the only way in is a compositor that entered a surface onto
-                // an output it never described.
+                // A compositor fault: a toolkit cannot pick a density for an
+                // output with no name.
                 .unwrap_or_else(|| {
                     panic!("the client entered {output}, which it was never told the name of")
                 })
@@ -662,17 +469,12 @@ fn screens_entered(trace: &str) -> Vec<String> {
                 .clone()
         })
         .collect();
-    // Sorted, because the order two enters arrive in is the compositor's and
-    // is not what is being asked about.
+    // Sorted, because arrival order is not part of the claim.
     screens.sort_unstable();
     screens
 }
 
-/// A trace is read for the screens the window is on, and for the leaves.
-///
-/// A table rather than one case, because the two events are separate rules:
-/// dropping either one is a compositor bug with a distinct symptom, and the
-/// reading has to tell them apart before a check can.
+/// A trace is read for both the enters and the leaves.
 #[test]
 fn the_screens_a_window_is_on_are_the_ones_it_entered_and_did_not_leave() {
     let whole = "\
@@ -689,34 +491,10 @@ wl_surface@13.enter(wl_output@4)";
     assert_eq!(screens_entered(&back), ["left", "right"]);
 }
 
-/// A line the drain thread has not finished writing is not an answer.
+/// A half-written trace line is skipped, not misread.
 ///
-/// A real intermediate state: the client writes a trace line in several
-/// `write` calls, so the buffer holds each of them in turn. Read loosely,
-/// `enter(wl_output@` is a screen called `an unnamed wl_output@` — which a
-/// check would report as the compositor having done something it did not, and
-/// once did.
-///
-/// # Why there is no torn-`name` case here
-///
-/// One was written and deleted for killing nothing, under the rule the rest of
-/// this migration applies: revert the `name` site to `trim_end_matches` and
-/// both this test and the whole workspace stay green. Measured.
-///
-/// The reason is structural. A torn `name` is always the trace's last line, so
-/// it is always for an output nothing has entered yet, so the entry it leaves
-/// behind is never looked at — `named` is read only from inside the walk over
-/// what was entered. What orders it is not the client, which writes what
-/// arrives on one stream from one thread, but smithay's `wl_output` bind
-/// handler: it sends `name` before the loop that enters the surfaces already
-/// on that output, and `wl_surface.enter` names a `wl_output` object that
-/// cannot exist before the client has bound it. `restate_output` never
-/// re-sends `name`, so a reload does not reorder it either.
-///
-/// So if that ordering ever broke, the symptom would not be a wrong name — it
-/// would be the panic in [`screens_entered`], for an output entered and never
-/// named. The guard on the `name` side is kept for symmetry with that
-/// reasoning rather than because a test can hold it up.
+/// No torn-`name` case: smithay sends `name` before any `enter` for that
+/// output, so a torn `name` is never for an output already entered.
 #[test]
 fn a_trace_line_still_being_written_is_skipped() {
     let described = "wl_output@3.name(\"left\")\nwl_surface@13.enter(wl_output@3)";
@@ -729,11 +507,7 @@ fn a_trace_line_still_being_written_is_skipped() {
     );
 }
 
-/// A character split across two reads is one character, not two mistakes.
-///
-/// The `read` boundary falls wherever the kernel put it. Decoding each read on
-/// its own would turn a log line that was perfectly good UTF-8 into one with
-/// replacement characters in it — and the log is what a failing test quotes.
+/// A character split across two reads decodes as one character.
 #[test]
 fn a_character_cut_in_half_by_a_read_is_waited_for() {
     let em_dash = "—".as_bytes();
@@ -747,11 +521,7 @@ fn a_character_cut_in_half_by_a_read_is_waited_for() {
     assert!(pending.is_empty(), "and nothing is left waiting");
 }
 
-/// A byte that can never start a character is not waited for.
-///
-/// The failure this whole path exists for: a panic payload or a C library
-/// writing raw bytes through the inherited fd used to end the drain thread, so
-/// `complaint()` returned a log that stopped mid-run with nothing saying so.
+/// An invalid byte is replaced at once, not held for the next read.
 #[test]
 fn a_byte_that_is_not_a_character_costs_one_character_rather_than_the_rest() {
     let mut pending = b"before\xffafter".to_vec();
@@ -766,11 +536,9 @@ fn a_byte_that_is_not_a_character_costs_one_character_rather_than_the_rest() {
     assert!(pending.is_empty());
 }
 
-/// A pipe that ends part-way through a character still gives up its tail.
+/// A pipe that ends mid-character still yields its tail.
 ///
-/// The cut this fixture makes itself: `Drop` kills the compositor, so a write
-/// in progress is a stream that stops mid-character — at the very moment a
-/// failing test most wants the last thing it said.
+/// `Drop` kills the compositor, which can cut a write short.
 #[test]
 fn what_a_pipe_was_cut_off_mid_character_saying_is_still_reported() {
     let em_dash = "—".as_bytes();
@@ -786,9 +554,7 @@ fn what_a_pipe_was_cut_off_mid_character_saying_is_still_reported() {
     loop {
         let text = said.lock().expect("nothing panics holding this").clone();
         if text.starts_with("cut here: ") && text.len() > "cut here: ".len() {
-            // The tail is a replacement character rather than nothing: what
-            // came before it is the point, and dropping the whole read to
-            // avoid one glyph is the bug this exists for.
+            // The tail becomes a replacement character, not nothing.
             assert!(text.ends_with('\u{fffd}'), "got {text:?}");
             return;
         }
@@ -805,18 +571,15 @@ pub struct Client {
 }
 
 impl Client {
-    /// The process this client is, which is the process the compositor sees
-    /// on the other end of its connection.
+    /// The client process.
     pub fn pid(&self) -> u32 {
         self.child.id()
     }
 
-    /// Wait for the client to exit, and answer whether it did so cleanly.
+    /// Wait for the client to exit, and return whether it exited cleanly.
     ///
-    /// The end of `e2e-close`'s question: a client told to close is one that
-    /// *goes*, and a client still running is the failure that check exists
-    /// for. Bounded, because a client that ignores the request would otherwise
-    /// hang the run rather than fail it.
+    /// Bounded, so a client that never exits fails the test instead of
+    /// hanging it.
     pub fn wait_for_exit(&mut self) -> bool {
         let until = Instant::now() + PATIENCE;
         loop {
@@ -832,13 +595,9 @@ impl Client {
         }
     }
 
-    /// Whether this client is still running.
+    /// Whether this client is still running, without waiting.
     ///
-    /// The other side of [`Client::wait_for_exit`], and it waits for nothing:
-    /// the question it answers is asked *after* something the compositor said,
-    /// so the client either outlived that or it did not. What it is for is
-    /// telling a compositor's answer to a closed window apart from its answer
-    /// to a dead client, which produce the same emptiness on this side.
+    /// Tells a closed window apart from a dead client.
     pub fn is_running(&mut self) -> bool {
         self.child
             .try_wait()
@@ -847,12 +606,9 @@ impl Client {
     }
 
     /// Wait until the client has traced at least `wanted` lines matching
-    /// `pattern`, and answer whether it did.
+    /// `pattern`, and return whether it did.
     ///
-    /// Counted rather than merely present, because the questions here are
-    /// about *how many* screens a client was told about, and one is the answer
-    /// a broken compositor gives. Bounded, so a compositor that never says it
-    /// fails the assertion that follows rather than hanging the run.
+    /// Bounded, so a missing line fails the test instead of hanging it.
     pub fn wait_for_trace(&mut self, pattern: &str, wanted: usize) -> bool {
         let until = Instant::now() + PATIENCE;
         loop {
@@ -868,24 +624,8 @@ impl Client {
 
     /// What the client was told each screen is, one entry per `wl_output`.
     ///
-    /// The same fields `wayland-info` printed for the shell check this
-    /// replaces — name, position, scale, and the mode with its flags — read
-    /// out of the client's own trace instead. That is what lets this run
-    /// anywhere: the script skipped when `wayland-info` was missing, and while
-    /// CI installs it, every machine without it got a pass for a check that
-    /// had not run.
-    ///
-    /// Every field is one a client acts on, which is why none is dropped: the
-    /// position places the screen, the scale is what a toolkit draws at, the
-    /// mode is the logical size in physical pixels, and the flags are two
-    /// separate promises — `current` and `preferred` — each of which a
-    /// one-line mutation can drop on its own.
-    ///
-    /// The millimeters and the refresh rate are read for the same reason and
-    /// one more: they are the two fields the compositor cannot know, and a
-    /// reading blind to them cannot tell a compositor that says so from one
-    /// that invents a panel — which is what this one did, for every screen and
-    /// always the same one.
+    /// Includes every field a client acts on. Physical size and refresh rate
+    /// are included to catch a compositor that invents them.
     pub fn screens(&self) -> Vec<String> {
         let trace = self.trace();
         let mut found: Vec<(String, Screen)> = Vec::new();
@@ -909,10 +649,8 @@ impl Client {
         found.into_iter().map(|(_, screen)| screen.said()).collect()
     }
 
-    /// The screens this client's window is on *now*, by name.
-    ///
-    /// See [`screens_entered`], which is where the reading is and what the
-    /// checks below it are about.
+    /// The screens this client's window is on now, by name. See
+    /// [`screens_entered`].
     pub fn on_screens(&self) -> Vec<String> {
         screens_entered(&self.trace())
     }
@@ -937,10 +675,7 @@ impl Drop for Client {
 
 /// One screen, as the client was told about it.
 ///
-/// Built up across the four events that describe an output rather than read
-/// from one, because that is how Wayland says it: `name`, `geometry`, `mode`
-/// and `scale` arrive separately and a client knows the screen only once it
-/// has them all.
+/// Built from the separate `name`, `geometry`, `mode` and `scale` events.
 #[derive(Default)]
 struct Screen {
     name: Option<String>,
@@ -952,11 +687,7 @@ struct Screen {
 }
 
 impl Screen {
-    /// Take whatever one traced event says about this screen.
-    ///
-    /// Unknown events are ignored rather than refused: the client traces more
-    /// than this reads, and a compositor that starts sending something new
-    /// should not fail a check about geometry.
+    /// Apply one traced event to this screen. Unknown events are ignored.
     fn take(&mut self, event: &str) {
         let Some((name, rest)) = event.split_once('(') else {
             return;
@@ -977,25 +708,11 @@ impl Screen {
         }
     }
 
-    /// `wl_output.mode`'s flags, spelled the way the protocol names them.
-    ///
-    /// Named rather than left as a number so a mode advertised as neither
-    /// current nor preferred reads as `(none)` instead of `(0)` — a client
-    /// bound to a screen with nothing to draw at, which is a real failure and
-    /// an unreadable one as an integer.
-    ///
-    /// The two bits are separately droppable, which is why both are spelled.
-    /// `change_current_state` writes only `current_mode`; `preferred_mode` is
-    /// written solely by `set_preferred`, so deleting `restate_output`'s call
-    /// to it leaves `(current)` and fails the check below. `preferred` alone
-    /// would leave a client bound to a screen with no mode to draw at, and
-    /// `current` alone a toolkit choosing a mode with nothing marked
-    /// preferred; a number would make those two failures look like one.
+    /// `wl_output.mode`'s flags, by their protocol names, for readable
+    /// failures.
     fn flags(said: &str) -> String {
-        // Not a fallback: `take` matches the arity first, so a torn line never
-        // reaches here and the only way in is the client changing its trace
-        // format. Defaulting to 0 would render that harness break as `(none)`
-        // — this function's own word for a real compositor fault.
+        // Torn lines never reach here, so a parse failure is a trace format
+        // change. Defaulting to 0 would misreport it as a compositor fault.
         let bits: u32 = said
             .parse()
             .expect("the client traces a mode's flags as a number");
@@ -1012,11 +729,7 @@ impl Screen {
         named.join(" ")
     }
 
-    /// The one line this screen was described in, or what is still missing.
-    ///
-    /// A screen the client was told only half about is its own failure, and
-    /// naming the absent field beats comparing against a string with a hole
-    /// in it.
+    /// This screen on one line, or which field is missing.
     fn said(&self) -> String {
         match (
             &self.name,

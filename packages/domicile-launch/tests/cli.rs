@@ -1,4 +1,4 @@
-//! The command line, and the one line of the bridge's that is an interface.
+//! Tests for parsing the `domicile` command line.
 
 use std::path::PathBuf;
 
@@ -22,9 +22,7 @@ fn a_shell_is_the_whole_command_line() {
 
 #[test]
 fn nothing_at_all_is_the_shell_the_config_names() {
-    // A config is a module, and its `Shell` -- or a JSON config's `shell` --
-    // is the desktop. Whether there is one is the run's to find out, from the
-    // config; a run that finds none refuses then.
+    // The shell then comes from the config. The run checks that one exists.
     assert_eq!(
         run(&[]),
         Ok(Invocation::Run {
@@ -36,8 +34,7 @@ fn nothing_at_all_is_the_shell_the_config_names() {
 
 #[test]
 fn a_second_argument_is_refused_and_named() {
-    // Quietly dropping a word somebody typed is how a run serves one page
-    // while they read another on their own command line.
+    // Dropping a word silently could serve a shell other than the one typed.
     assert_eq!(
         run(&["./dist/shell.js", "simple"]),
         Err(CliError::TooMany {
@@ -58,9 +55,7 @@ fn a_verb_is_a_command_for_a_desktop_that_is_already_running() {
 
 #[test]
 fn a_verb_given_an_argument_is_refused_and_named() {
-    // A command is not a shell, so the sentence about one shell being the
-    // whole command line is the wrong refusal here — and the word somebody
-    // typed is dropped either way if nothing says it was.
+    // A verb gets its own error, naming the extra word.
     assert_eq!(
         run(&["which-shell", "manganese"]),
         Err(CliError::Extra {
@@ -68,11 +63,8 @@ fn a_verb_given_an_argument_is_refused_and_named() {
             extra: "manganese".to_string()
         })
     );
-    // `--config` is not special here, and that is the assertion: a verb is a
-    // question put to a desktop that is already running, and that desktop
-    // read its config when it started. Hoisting the flag above this dispatch
-    // would hand a config to a process that will not read one -- worse than
-    // refused, because it looks like it worked.
+    // `--config` is refused too: the running desktop already read its config,
+    // so accepting the flag would look like it worked when it did nothing.
     assert_eq!(
         run(&["which-shell", "--config", "/a.json"]),
         Err(CliError::Extra {
@@ -84,12 +76,8 @@ fn a_verb_given_an_argument_is_refused_and_named() {
 
 #[test]
 fn load_shell_is_the_verb_that_takes_a_shell() {
-    // THE FIRST VERB WITH AN ARGUMENT. `which-shell` is a question a desktop
-    // answers out of what it already knows; this one says which shell to serve
-    // from now on, and that shell is the whole of what it says. Carried as
-    // typed rather than resolved: which file a relative path names is a
-    // question about the directory the person was standing in, and
-    // `shell_path` is what asks it.
+    // The shell is kept as typed. `shell_path` resolves it against the
+    // working directory.
     assert_eq!(
         run(&["load-shell", "./my-desktop/dist/shell.js"]).unwrap(),
         Invocation::Load {
@@ -100,18 +88,13 @@ fn load_shell_is_the_verb_that_takes_a_shell() {
 
 #[test]
 fn load_shell_with_nothing_to_load_is_refused() {
-    // There is no shell this could mean, and the desktop it is put to is
-    // already running one: a bare `load-shell` that quietly reloaded that one
-    // would be a different command wearing this one's name.
+    // It does not mean "reload the current shell".
     assert_eq!(run(&["load-shell"]), Err(CliError::NoShellToLoad));
 }
 
 #[test]
 fn load_shell_takes_one_shell_and_the_extra_word_is_named() {
-    // A desktop serves one shell, so a second word is somebody saying two
-    // things -- and `--config` is one of the words this catches, which is the
-    // rule every verb keeps: the desktop being asked read its config when it
-    // started.
+    // A desktop serves one shell. `--config` is refused as with every verb.
     assert_eq!(
         run(&["load-shell", "./dist/shell.js", "./other.js"]),
         Err(CliError::ExtraToLoad {
@@ -128,9 +111,7 @@ fn load_shell_takes_one_shell_and_the_extra_word_is_named() {
 
 #[test]
 fn open_url_is_the_verb_that_takes_an_address() {
-    // What `BROWSER` runs, with the one word it is handed. Carried as typed,
-    // like `load-shell`'s: a relative path is a question about the directory
-    // it was typed in, and this module has none.
+    // What `BROWSER` runs. The target is kept as typed, like `load-shell`'s.
     assert_eq!(
         run(&["open-url", "https://example.com/a?b=c"]).unwrap(),
         Invocation::Open {
@@ -146,8 +127,8 @@ fn open_url_with_nothing_to_open_is_refused() {
 
 #[test]
 fn open_url_takes_one_address_and_the_extra_word_is_named() {
-    // One address, one window. A program that hands `BROWSER` two is one
-    // that expects two windows, and opening the first quietly is not that.
+    // A caller passing two addresses expects two windows, so opening one
+    // would be wrong.
     assert_eq!(
         run(&["open-url", "https://a.example", "https://b.example"]),
         Err(CliError::ExtraToOpen {
@@ -158,10 +139,8 @@ fn open_url_takes_one_address_and_the_extra_word_is_named() {
 
 #[test]
 fn a_shell_whose_name_is_a_verb_is_still_reachable_as_a_path() {
-    // THE VERBS WIN, and they are a closed set for exactly this reason: which
-    // reading a bare word gets cannot depend on what happens to be on disk
-    // beside the person typing it. A shell named after one is run the way
-    // every path is.
+    // Verbs always win over a bare word, regardless of what is on disk. A
+    // shell with a verb's name is run by path.
     assert_eq!(
         run(&["./which-shell"]).unwrap(),
         Invocation::Run {
@@ -173,9 +152,7 @@ fn a_shell_whose_name_is_a_verb_is_still_reachable_as_a_path() {
 
 #[test]
 fn a_config_is_the_other_half_of_a_run() {
-    // The monitors, their scales and their turns. Without this the file a
-    // shell writes is read by nobody: the compositor takes `--config` and had
-    // no way to be given one.
+    // The config is passed through to the compositor.
     assert_eq!(
         run(&["./dist/shell.js", "--config", "/etc/domicile/desk.json"]).unwrap(),
         Invocation::Run {
@@ -187,10 +164,7 @@ fn a_config_is_the_other_half_of_a_run() {
 
 #[test]
 fn the_config_may_come_before_the_shell() {
-    // A run is two values and neither is positional against the other, so the
-    // order somebody types them in is not a thing to be right about. This is
-    // also the spelling a unit file or a wrapper script reaches for first,
-    // where the flags are fixed and the shell is the argument.
+    // Order does not matter. Wrapper scripts often put fixed flags first.
     assert_eq!(
         run(&["--config", "/etc/domicile/desk.json", "./dist/shell.js"]).unwrap(),
         Invocation::Run {
@@ -202,10 +176,8 @@ fn the_config_may_come_before_the_shell() {
 
 #[test]
 fn a_config_flag_with_nothing_behind_it_is_refused() {
-    // Rather than read as "no config", which is a real and different answer:
-    // the compositor runs its defaults on a missing flag and refuses a path
-    // it cannot load, so guessing here picks one of those for somebody who
-    // meant the other.
+    // Refused rather than read as "no config". A bare `--config` could mean
+    // either the defaults or a missing path.
     assert_eq!(
         run(&["./dist/shell.js", "--config"]),
         Err(CliError::ConfigWithoutPath)
@@ -214,9 +186,7 @@ fn a_config_flag_with_nothing_behind_it_is_refused() {
 
 #[test]
 fn two_configs_are_refused_and_the_second_is_named() {
-    // A desktop is one config. Keeping either one quietly is how a desk comes
-    // up wearing settings nobody chose, which is the failure this whole file
-    // is written against.
+    // Keeping either silently could apply settings nobody chose.
     assert_eq!(
         run(&[
             "./dist/shell.js",

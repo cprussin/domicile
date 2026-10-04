@@ -1,9 +1,7 @@
-//! A config module, and the files beside it, watched.
+//! Watches a config module's directory for edits.
 //!
-//! A module config is evaluated and built once at startup; an edit to it, or
-//! to a file it imports, is the same work again. Those files are the user's,
-//! wherever they put them, so the whole directory the config is in is
-//! watched — less what an install or a build writes there.
+//! The config may import any file near it, so the whole directory is watched,
+//! except `node_modules` and dot directories.
 
 use std::path::{Component, Path};
 use std::sync::mpsc;
@@ -11,17 +9,15 @@ use std::time::Duration;
 
 use notify::Watcher;
 
-/// The watch, for as long as it is held.
+/// An active watch. Dropping it stops watching.
 pub struct Watching {
     _watcher: notify::RecommendedWatcher,
 }
 
-/// Call `on_change` once for each burst of edits under `directory`, once the
-/// files have been still for `quiet`.
+/// Calls `on_change` after each burst of edits under `directory`, once no
+/// edit has happened for `quiet`.
 ///
-/// A burst rather than every event, because an editor's save is several — a
-/// temporary file, a rename over, a touch — and a build for each would be
-/// the same build several times.
+/// Debounced because one editor save produces several events.
 pub fn watch(
     directory: &Path,
     quiet: Duration,
@@ -31,12 +27,11 @@ pub fn watch(
     let watched = directory.to_path_buf();
     let mut watcher = notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
         if let Ok(event) = event {
-            // A file written, made, renamed or removed; not one read, which
-            // the watch itself does as it walks the directory.
+            // Ignore access events, which the watcher itself causes.
             let edited = event.kind.is_create() || event.kind.is_modify() || event.kind.is_remove();
             if edited && event.paths.iter().any(|path| matters(&watched, path)) {
-                // The receiver goes only with the thread below, which runs
-                // for as long as this watcher does.
+                // The receiving thread runs as long as the watcher, so a
+                // failed send can be ignored.
                 let _ = told.send(());
             }
         }
@@ -54,11 +49,11 @@ pub fn watch(
     Ok(Watching { _watcher: watcher })
 }
 
-/// Whether a change at `path`, under the watched `directory`, is an edit of
-/// the user's: not under `node_modules`, which an install writes, nor a dot
-/// directory, which a version control or an editor keeps. Only the part
-/// under `directory` is read: where the config itself lives is the user's
-/// business, a dot directory included.
+/// Whether a change at `path` is a user edit: not under `node_modules` or a
+/// dot directory.
+///
+/// Only the part below `directory` is checked, so the config may itself live
+/// in a dot directory.
 pub fn matters(directory: &Path, path: &Path) -> bool {
     let under = path.strip_prefix(directory).unwrap_or(path);
     !under.components().any(|component| match component {

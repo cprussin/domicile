@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use domicile_launch::profile_path::profile_directory;
 
-/// The environment as a pair of variables, which is all this reads.
+/// A fake environment holding the two variables `profile_directory` reads.
 fn env(xdg: Option<&'static str>, home: Option<&'static str>) -> impl Fn(&str) -> Option<String> {
     move |name| match name {
         "XDG_STATE_HOME" => xdg.map(str::to_string),
@@ -33,9 +33,8 @@ fn without_a_state_home_it_is_where_the_spec_says_one_is() {
 
 #[test]
 fn a_state_home_that_is_not_a_path_is_not_one() {
-    // The spec's rule, as for the config home: an empty or relative value is
-    // treated as unset, because a relative one resolves against wherever the
-    // desktop happened to be started from.
+    // Per the XDG spec, an empty or relative value counts as unset. A relative
+    // path would resolve against the launch directory.
     for nonsense in ["", "state", "./state"] {
         assert_eq!(
             profile_directory(&env(Some(nonsense), Some("/home/somebody"))),

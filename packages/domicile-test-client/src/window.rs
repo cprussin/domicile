@@ -1,11 +1,8 @@
 //! A mapped toplevel that keeps drawing.
 //!
-//! The smallest client that is a *real* one: it binds the globals a desktop
-//! client binds, drives the `xdg_surface` configure handshake, attaches a
-//! `wl_shm` buffer, and asks for a frame callback so it draws for as long as
-//! it runs. Every one of those is something a check needs — a window that
-//! never commits is not mapped, and a window that draws once cannot be the
-//! subject of a check about a compositor that is behind.
+//! It binds the usual desktop globals, completes the `xdg_surface` configure
+//! handshake, attaches `wl_shm` buffers and redraws on every frame callback,
+//! so checks can observe a live window.
 
 use std::io::{Read as _, Write as _};
 use std::os::fd::{AsFd as _, BorrowedFd, OwnedFd};
@@ -46,7 +43,7 @@ use wayland_protocols_misc::server_decoration::client::{
 
 use crate::arguments::{Arguments, HoldTheScreensOn};
 
-/// What can go wrong being a client.
+/// Why the client stopped.
 #[derive(Debug, thiserror::Error)]
 pub enum ClientError {
     #[error("there is no compositor to connect to: {0}")]
@@ -62,45 +59,30 @@ pub enum ClientError {
     NoBuffer(String),
 }
 
-/// The size a window opens at, in the surface's own pixels.
+/// The initial window size, in surface pixels.
 ///
-/// Not asked for: every check in `scripts/` needs *a* window and asserts on
-/// what the compositor did with it. Small enough to be cheap to composite and
-/// large enough to be a window rather than a dot — and not a screen size,
-/// because a client that filled the desktop would hide whichever placement bug
-/// a check was looking at.
-///
-/// It is where a window *starts* rather than where it stays only under
-/// `--follow-configure`; without that flag it is the size for the client's
-/// whole life. See [`crate::arguments::Arguments::follow_configure`].
+/// Small, and not a screen size, so a full-screen window cannot hide a
+/// placement bug. The client keeps this size unless
+/// [`crate::arguments::Arguments::follow_configure`] is set.
 const SIZE: (u32, u32) = (320, 240);
 
-/// Where `--popup` opens its menu against the window, and how big: `(x, y,
-/// width, height)` in the window's surface pixels. Public because that is what
-/// a check expects the compositor to say the popup is.
+/// The `--popup` geometry as `(x, y, width, height)` in window surface
+/// pixels. Public so checks can compare it with what the compositor reports.
 pub const POPUP: (i32, i32, i32, i32) = (10, 20, 120, 80);
 
-/// The one color a popup draws, which is neither of [`COLORS`] — so a popup
-/// found on screen is the popup and not the window under it.
+/// The popup's fill color, distinct from [`COLORS`] so checks can tell the
+/// popup from the window.
 pub const POPUP_COLOR: u32 = 0x00_c0_40_20;
 
-/// The two colors a frame alternates between.
-///
-/// Alternating, so that "is it still drawing" can be answered by looking at
-/// the window rather than by trusting a counter this process prints.
+/// The two colors frames alternate between, so checks can see the window is
+/// still redrawing.
 const COLORS: [u32; 2] = [0x00_20_30_50, 0x00_30_50_80];
 
-/// How opaque a `--translucent` window is.
+/// The alpha of a `--translucent` window.
 ///
-/// Half. Neither end of the range would do: clear is a window with nothing to
-/// see, and opaque is the answer `e2e-window-shows-through.sh` had to be able
-/// to tell a background painted over the window apart from.
-///
-/// Public because that check asserts on this exact number in the compositor's
-/// log — `alpha=128 opaque=false` is what says the texel over the window is
-/// the window — and `the_grepped_log_messages_are_what_the_scripts_expect`
-/// pins the two together. A change here that the script did not follow would
-/// otherwise be a check waiting for a value nothing produces.
+/// Half-opaque, so the window is neither invisible nor opaque. Public because
+/// `e2e-window-shows-through.sh` greps for `alpha=128` in the compositor log;
+/// `the_grepped_log_messages_are_what_the_scripts_expect` keeps them in sync.
 pub const TRANSLUCENT_ALPHA: u8 = 0x80;
 
 const _: () = assert!(
@@ -109,24 +91,14 @@ const _: () = assert!(
      has to tell a background apart from",
 );
 
-/// [`COLORS`] at [`TRANSLUCENT_ALPHA`], which is what a `--translucent`
-/// window draws.
+/// [`COLORS`] at [`TRANSLUCENT_ALPHA`], drawn by a `--translucent` window.
 ///
-/// Public for the same reason [`TRANSLUCENT_ALPHA`] is:
-/// `e2e-window-shows-through.sh` asserted on these exact colors in the
-/// compositor's log — they are what says the texel over the window is the
-/// window rather than something else at the same alpha — and
-/// `the_grepped_log_messages_are_what_the_scripts_expect` pins the two
-/// together.
+/// Public for the same reason as [`TRANSLUCENT_ALPHA`].
 pub const TRANSLUCENT_COLORS: [u32; 2] = [translucent(COLORS[0]), translucent(COLORS[1])];
 
-/// One color at [`TRANSLUCENT_ALPHA`], **premultiplied**.
+/// One color at [`TRANSLUCENT_ALPHA`], premultiplied as `Argb8888` requires.
 ///
-/// Premultiplied because that is what `Argb8888` means: a channel above the
-/// alpha is a color brighter than it is opaque, and no compositor owes an
-/// answer for one. Computed rather than written out, so the two colors cannot
-/// drift from the opaque ones they are supposed to be — a hand-scaled table is
-/// four multiplications nobody checks.
+/// Computed so the translucent colors cannot drift from [`COLORS`].
 const fn translucent(color: u32) -> u32 {
     let alpha = TRANSLUCENT_ALPHA as u32;
     let red = ((color >> 16) & 0xff) * alpha / 0xff;
@@ -135,29 +107,22 @@ const fn translucent(color: u32) -> u32 {
     (alpha << 24) | (red << 16) | (green << 8) | blue
 }
 
-/// The mime type a copy is offered under and asked for by.
+/// The only MIME type this client offers and requests.
 ///
-/// One rather than the four a toolkit offers, because a check is not about
-/// negotiation: the compositor's own `TEXT_MIMES` lists what it will take, and
-/// this is the one every party to a paste on this desktop already agrees on.
+/// The compositor's `TEXT_MIMES` accepts it.
 const TEXT_MIME: &str = "text/plain;charset=utf-8";
 
-/// How long a paste waits for the client that offered the selection.
+/// How long a paste waits for the offering client to write.
 ///
-/// **A bound on somebody else's work, for the compositor's reason.** A paste
-/// is this process reading a socket the *offering* client writes, and a client
-/// that offers a selection and never writes would otherwise stop this one for
-/// good — which a check would meet as a window that stopped drawing, with
-/// nothing said about why. Long enough that a paste that is going to happen
-/// has happened, and short enough to be a sentence rather than a hang.
+/// Without a limit, a client that offers a selection and never writes would
+/// block this one forever, and a check would only see a window that stopped
+/// drawing.
 const PASTE_PATIENCE: Duration = Duration::from_secs(5);
 
-/// The `wl_shm` format a window of each kind is drawn in.
+/// The `wl_shm` format for a window.
 ///
-/// `Xrgb8888` has no alpha channel at all, which is what makes an ordinary
-/// test window fully opaque however it is composited — see the compositor's
-/// `xrgb_forces_opaque_alpha`. A window a check has to see past has to say so
-/// in its format, not only in its pixels.
+/// `Xrgb8888` has no alpha, so an ordinary window is always opaque (see the
+/// compositor's `xrgb_forces_opaque_alpha`).
 const fn shm_format(translucent: bool) -> wl_shm::Format {
     if translucent {
         wl_shm::Format::Argb8888
@@ -168,23 +133,17 @@ const fn shm_format(translucent: bool) -> wl_shm::Format {
 
 /// Open a window on `$WAYLAND_DISPLAY` and draw until killed.
 ///
-/// Returns only on a failure: a client whose job is to be a window for the
-/// length of a check has nothing to return early *for*, and every caller in
-/// `scripts/` ends it with a signal.
+/// Returns only on failure; callers end the client with a signal.
 pub fn run(asked: &Arguments) -> Result<std::convert::Infallible, ClientError> {
     let connection =
         Connection::connect_to_env().map_err(|err| ClientError::NoDisplay(err.to_string()))?;
     let mut queue = connection.new_event_queue();
     let handle = queue.handle();
-    // Kept rather than discarded: binding happens once the whole list has
-    // arrived, and `bind` is a request on the registry rather than on the
-    // connection. Taking it from here instead of from the event means there is
-    // no window in which it does not exist.
+    // Kept to bind globals once the full list arrives, in `Client::bind`.
     let registry = connection.display().get_registry(&handle, ());
 
-    // Two roundtrips: the first brings the globals, the second brings what
-    // binding them produced — the `wl_shm.format` list, and the seat's
-    // capabilities, which is what says whether there is a keyboard to bind.
+    // The first roundtrip delivers the globals. The second delivers what
+    // binding produced: `wl_shm` formats and the seat's capabilities.
     let mut client = Client::new(asked);
     queue
         .roundtrip(&mut client)
@@ -202,196 +161,148 @@ pub fn run(asked: &Arguments) -> Result<std::convert::Infallible, ClientError> {
     }
 }
 
-/// The globals a window needs, and the window once it has them.
+/// The bound globals, the window, and the state it is drawn from.
 struct Client {
     title: String,
-    /// Whether to open a popup once the window is up — see
-    /// [`crate::arguments::Arguments::popup`] — and the popup, while it is.
+    /// Whether to open a popup once the window is up. See
+    /// [`crate::arguments::Arguments::popup`].
     wants_popup: bool,
-    /// Whether it grabs — see [`crate::arguments::Arguments::popup_grab`].
+    /// See [`crate::arguments::Arguments::popup_grab`].
     popup_grab: bool,
     popup: Option<Popup>,
-    /// What to tell the compositor about its size — see
-    /// [`crate::arguments::Arguments::min_size`].
+    /// See [`crate::arguments::Arguments::min_size`].
     min_size: Option<(i32, i32)>,
     max_size: Option<(i32, i32)>,
-    /// Whether this client's window is see-through — see
-    /// [`crate::arguments::Arguments::translucent`]. Held here rather than
-    /// passed down because the buffers are remade whenever the window changes
-    /// density, and the second set has to be the same kind as the first.
+    /// See [`crate::arguments::Arguments::translucent`]. Kept because buffers
+    /// are remade on every rescale and resize.
     translucent: bool,
-    /// Whether a configure's size is taken rather than the one this client
-    /// opened at — see [`crate::arguments::Arguments::follow_configure`].
+    /// See [`crate::arguments::Arguments::follow_configure`].
     follow_configure: bool,
-    /// Whether this client asks for the keyboard once its window is up — see
-    /// [`crate::arguments::Arguments::ask_for_focus`].
+    /// See [`crate::arguments::Arguments::ask_for_focus`].
     ask_for_focus: bool,
-    /// When this client takes an inhibitor, if it takes one — see
-    /// [`crate::arguments::Arguments::hold_the_screens_on`].
+    /// See [`crate::arguments::Arguments::hold_the_screens_on`].
     hold_the_screens_on: Option<HoldTheScreensOn>,
-    /// Whether this client stays when its window is closed — see
-    /// [`crate::arguments::Arguments::outlive_its_window`].
+    /// See [`crate::arguments::Arguments::outlive_its_window`].
     outlive_its_window: bool,
-    /// Whether the window has been closed on a client that outlives it.
+    /// Whether the toplevel was destroyed under `--outlive-its-window`.
     ///
-    /// What it stops is the drawing: the surface is still there, and so is
-    /// anything taken on it, but its role object is gone and there is nothing
-    /// left to commit a frame to.
+    /// Stops drawing: the surface remains but has no role to commit frames
+    /// to.
     window_is_gone: bool,
-    /// What to put on the clipboard — see [`Arguments::copy`].
+    /// See [`Arguments::copy`].
     copy: Option<String>,
-    /// What to put on the middle-click selection — see
-    /// [`Arguments::copy_primary`].
+    /// See [`Arguments::copy_primary`].
     copy_primary: Option<String>,
-    /// Whether to read out whatever is offered on either — see
-    /// [`Arguments::paste`].
+    /// See [`Arguments::paste`].
     paste: bool,
-    /// The two devices this client reaches the two clipboards through, once it
-    /// has taken them. `None` where it was told to do nothing with either.
+    /// The clipboard and primary selection devices. `None` unless a copy or
+    /// paste was requested.
     selections: Option<Selections>,
-    /// Whether it has asked already. Once per window: the request is answered
-    /// by a shell rather than by the compositor, and a client that repeated it
-    /// every configure would be asking a question nobody had finished
-    /// answering.
+    /// Whether focus was already requested. Once per window, so the client
+    /// does not repeat a request the shell has not answered yet.
     asked: bool,
-    /// A size the compositor configured and this client has not drawn at yet.
+    /// A configured size not yet applied.
     ///
-    /// Held between the two halves of one configure. `xdg_toplevel.configure`
-    /// carries the size and `xdg_surface.configure` carries the serial that
-    /// makes it current, in that order and on the same queue — so the size
-    /// arrives with nothing to acknowledge it and the acknowledgment arrives
-    /// with no size in it. Applying the size when it lands would redraw at a
-    /// geometry the compositor has not yet said is in force.
-    ///
-    /// Always `None` without `--follow-configure`: nothing records one.
+    /// `xdg_toplevel.configure` carries the size and the following
+    /// `xdg_surface.configure` carries the serial that makes it current, so
+    /// the size is held until then. Always `None` without
+    /// `--follow-configure`.
     configured_size: Option<(u32, u32)>,
     globals: Globals,
-    /// Made by [`Client::open`], which `run` calls before dispatching anything
-    /// that could draw. An event arriving with this still unset would be the
-    /// compositor talking about a surface this client never created.
+    /// Set by [`Client::open`] before any event that could draw is
+    /// dispatched.
     window: Option<Window>,
-    /// Set once the compositor has acknowledged the first configure. Until
-    /// then a buffer must not be attached — the surface has no agreed size to
-    /// attach one *at*.
+    /// Whether the first configure was acknowledged. No buffer may be
+    /// attached before then.
     configured: bool,
     /// Which of the two colors the next frame draws.
     frame: u32,
-    /// How this client asks for a cursor, made with the pointer it names.
+    /// The `wp_cursor_shape_v1` device for the pointer.
     ///
-    /// A shape rather than a surface of our own: `wp_cursor_shape_v1` is
-    /// modeled on the CSS keywords, which is what the compositor passes
-    /// through to the chrome — so a check can read the name the client asked
-    /// for rather than a picture nobody here can see.
+    /// A named shape rather than a cursor surface, so checks can read the
+    /// name the compositor passes to the chrome. `None` until the seat has a
+    /// pointer.
     cursor: Option<wp_cursor_shape_device_v1::WpCursorShapeDeviceV1>,
-    // NOTE: still an Option because the pointer it names does not exist until
-    // the seat says there is one. `open` refuses a compositor with no manager
-    // to make it from, so a `None` here is a seat with no pointer.
-    /// What each output said its scale is, as it said so.
+    /// Each output's scale.
     ///
-    /// Kept per output rather than as one number because a surface can be on
-    /// two screens of different densities, and the answer is then the larger
-    /// of them — a buffer drawn for the coarser one is visibly soft on the
-    /// finer, where the reverse only wastes pixels.
+    /// Per output because a surface on two screens draws for the denser
+    /// one.
     scales: Vec<(ObjectId, i32)>,
     /// Which outputs the surface is currently on.
     entered: Vec<ObjectId>,
-    /// The registry name each bound output arrived under.
+    /// The registry name each bound output was announced under.
     ///
-    /// `wl_registry.global_remove` names a screen by that rather than by the
-    /// object, so without this a display that went away would leave its scale
-    /// and its entry behind, and they would accumulate for the life of the
-    /// client.
-    ///
-    /// Reasoned rather than covered: nothing in the tree removes a display
-    /// yet. `tests/outputs.rs`'s reload *adds* one, and `screens_entered`'s
-    /// own doc says so in terms — measured, no-opping this whole arm passes
-    /// the workspace. An earlier version of this sentence claimed that reload
-    /// swapped the list, which it does not.
+    /// `wl_registry.global_remove` identifies outputs by this name, so it is
+    /// needed to drop a removed output's `scales` and `entered` entries. No
+    /// test removes an output yet, so this path is untested.
     outputs: Vec<(u32, ObjectId)>,
 }
 
-/// A device on each clipboard, which is what a client reaches either through.
+/// The clipboard and primary selection devices.
 ///
-/// Taken when the window opens rather than when there is something to copy,
-/// because a device is also the only thing a `selection` event is delivered
-/// to: a client that pastes needs one as much as a client that copies.
+/// Taken when the window opens, because `selection` events (for pasting) are
+/// delivered to a device too.
 struct Selections {
     clipboard: wl_data_device::WlDataDevice,
     primary: zwp_primary_selection_device_v1::ZwpPrimarySelectionDeviceV1,
-    /// Whether what this client was told to copy is on the clipboards.
+    /// Whether the requested copies were made.
     ///
-    /// Once per window, like the activation request: the keyboard can arrive
-    /// and leave any number of times, and a client that re-copied on each
-    /// arrival would be overwriting whatever the user had copied since.
+    /// Once per window: the keyboard can enter many times, and copying again
+    /// would overwrite whatever the user copied since.
     copied: bool,
 }
 
-/// What marks a popup's objects, so that their events are not taken for the
-/// window's: the same interfaces arrive for both, and the window's handlers
-/// are keyed on `()`.
+/// User data for a popup's objects, so their events reach separate handlers
+/// from the window's.
 struct PopupRole;
 
-/// A `--popup`, once it is open: one surface drawn once, in [`POPUP_COLOR`].
+/// An open `--popup`: one surface drawn once in [`POPUP_COLOR`].
 struct Popup {
     surface: wl_surface::WlSurface,
     xdg: xdg_surface::XdgSurface,
     popup: xdg_popup::XdgPopup,
-    /// Its one buffer, made at its first configure, and the file behind it.
+    /// Its buffer and backing file, created at its first configure.
     drawn: Option<(wl_buffer::WlBuffer, std::fs::File)>,
 }
 
-/// The surface and the pixels behind it, which exist together or not at all.
+/// The window's surface and its buffers.
 struct Window {
     surface: wl_surface::WlSurface,
-    /// What a popup is placed against.
+    /// The parent for a popup.
     xdg: xdg_surface::XdgSurface,
     pixels: Pixels,
-    /// The surface's size, in surface-local pixels.
+    /// The surface size, in surface-local pixels.
     ///
-    /// [`SIZE`] unless a configure has changed it, which only happens under
-    /// `--follow-configure`. Held on the window rather than read from a
-    /// constant because the buffers behind it are made for exactly this many
-    /// pixels: the two have to change together or a frame is drawn at one size
-    /// and damaged at another.
+    /// Changes only under `--follow-configure`. Stored with the buffers
+    /// because both must change together.
     size: (u32, u32),
-    /// The buffer scale these pixels were made for.
-    ///
-    /// The surface stays `size` however dense the screen is; what changes is
-    /// how many buffer pixels cover it. That is what `set_buffer_scale` means
-    /// and what a check about density reads.
+    /// The buffer scale these pixels were made for. The surface size does not
+    /// change with it.
     scale: i32,
 }
 
-/// Two buffers over one shared file, alternating.
+/// Two buffers in one shared file, used alternately.
 ///
-/// Made once rather than per frame. The first draft allocated, filled and
-/// unlinked a fresh file for every callback — correct, and about 34 MB a
-/// second of it at the rate a headless compositor hands out frames, inside
-/// checks whose subject is timing. Two buffers is what a client does instead:
-/// draw into the one the compositor has given back, leave the one it is
-/// reading alone.
+/// Allocated once rather than per frame, to keep memory traffic out of
+/// timing-sensitive checks. Each frame draws into the buffer the compositor
+/// has released.
 struct Pixels {
-    /// Written through rather than mapped: the compositor's mapping is
-    /// `MAP_SHARED` on this same file, so a write through the descriptor is a
-    /// write it sees — and no `unsafe` is needed to do it.
+    /// Written with `pwrite` rather than mapped; the compositor's
+    /// `MAP_SHARED` mapping sees the writes, and no `unsafe` is needed.
     file: std::fs::File,
     buffers: [wl_buffer::WlBuffer; 2],
-    /// Whether the compositor still holds each buffer. A client that drew
-    /// into a held buffer would be rewriting the frame being displayed.
+    /// Whether the compositor still holds each buffer. Drawing into a held
+    /// buffer would change the displayed frame.
     held: [bool; 2],
-    /// Bytes in one buffer, which is also the second one's offset.
+    /// Bytes in one buffer, which is also the second buffer's offset.
     each: usize,
-    /// Each color laid out as a whole buffer, once.
+    /// Each color as a full buffer's bytes.
     ///
-    /// A frame is then one `pwrite` of one of these, rather than the row loop
-    /// this started as — one syscall per scanline, measured at 240 a frame
-    /// against 264 commits, inside checks whose subject is timing. It is now
-    /// one per frame. Held rather than built per frame so a frame allocates
-    /// nothing.
+    /// Lets a frame be one `pwrite` with no allocation.
     colors: [Vec<u8>; 2],
 }
 
-/// What the registry advertised, before any of it is bound.
+/// The advertised globals, and those bound from them.
 #[derive(Default)]
 struct Globals {
     compositor: Option<wl_compositor::WlCompositor>,
@@ -399,20 +310,16 @@ struct Globals {
     wm_base: Option<xdg_wm_base::XdgWmBase>,
     cursor: Option<wp_cursor_shape_manager_v1::WpCursorShapeManagerV1>,
     activation: Option<xdg_activation_v1::XdgActivationV1>,
-    /// What a film asks the desktop to stay awake through.
+    /// For `--hold-the-screens-on`.
     inhibit: Option<zwp_idle_inhibit_manager_v1::ZwpIdleInhibitManagerV1>,
-    /// Kept rather than dropped like the rest of what the seat is for, because
-    /// a data device is made *from* a seat: both selections belong to one, and
-    /// `get_data_device` is the request that says which.
+    /// Kept because the selection devices are created from the seat.
     seat: Option<wl_seat::WlSeat>,
     clipboard: Option<wl_data_device_manager::WlDataDeviceManager>,
-    /// The middle-click selection's manager, which is a different global with
-    /// a different name — which is the whole of why a desktop can have one of
-    /// the two clipboards and not the other.
+    /// The primary selection manager, a separate global from the clipboard's.
     primary: Option<zwp_primary_selection_device_manager_v1::ZwpPrimarySelectionDeviceManagerV1>,
-    /// Who draws the frame, asked the way Chromium, Electron and Qt ask.
+    /// Decoration negotiation as Chromium, Electron and Qt do it.
     decoration: Option<zxdg_decoration_manager_v1::ZxdgDecorationManagerV1>,
-    /// Who draws the frame, asked the way GTK3 asks.
+    /// Decoration negotiation as GTK3 does it.
     kde_decoration:
         Option<org_kde_kwin_server_decoration_manager::OrgKdeKwinServerDecorationManager>,
     named: Vec<(u32, String, u32)>,
@@ -450,12 +357,11 @@ impl Client {
         }
     }
 
-    /// Bind what the registry named.
+    /// Bind the advertised globals.
     ///
-    /// Separate from the registry event because binding needs the whole list:
-    /// `wl_seat` is bound at the version the compositor offered rather than at
-    /// a number written here, and a client that guessed high is one the
-    /// compositor disconnects.
+    /// Runs after the whole list arrives. Each global is bound at no more
+    /// than the version the compositor offered, since binding higher is a
+    /// protocol error.
     fn bind(&mut self, registry: &wl_registry::WlRegistry, handle: &QueueHandle<Client>) {
         let named = std::mem::take(&mut self.globals.named);
         for (name, interface, version) in named {
@@ -478,11 +384,8 @@ impl Client {
                 "zwp_idle_inhibit_manager_v1" => {
                     self.globals.inhibit = Some(registry.bind(name, version.min(1), handle, ()));
                 }
-                // A seat is what carries the keyboard and the pointer, and a
-                // compositor only sends input to a client that asked for them.
-                // The handler below gets the seat back as its own argument;
-                // what it is kept for is the two selections, which are made
-                // from it rather than delivered to it.
+                // Binding the seat lets the compositor send input. It is
+                // kept to create the selection devices.
                 "wl_seat" => {
                     self.globals.seat = Some(registry.bind(name, version.min(5), handle, ()));
                 }
@@ -504,11 +407,10 @@ impl Client {
         }
     }
 
-    /// Make the surface, the pixels, and ask for a window.
+    /// Create the surface and buffers, and request a toplevel.
     fn open(&mut self, handle: &QueueHandle<Client>) -> Result<(), ClientError> {
-        // First, and not only because the borrow checker says so: a device
-        // taken before the surface exists is one the compositor can offer a
-        // selection on the moment this window is given the keyboard.
+        // Before the surface exists, so a selection can be offered as soon
+        // as the window gets focus.
         self.take_selection_devices(handle)?;
         let compositor = self
             .globals
@@ -520,22 +422,17 @@ impl Client {
         let wm_base = self.globals.wm_base.as_ref().ok_or(ClientError::Missing {
             global: "xdg_wm_base",
         })?;
-        // Here rather than at the first frame, so that a compositor offering
-        // no `wl_shm` is a failure `run` returns — a client that discovered it
-        // from inside an event handler could only print and carry on, and what
-        // a check would see is a window that never mapped.
+        // Checked here so a missing `wl_shm` is an error `run` returns, not a
+        // window that silently never maps.
         let shm = self
             .globals
             .shm
             .as_ref()
             .ok_or(ClientError::Missing { global: "wl_shm" })?;
-        // On the same footing as the three above, because it is now just as
-        // load-bearing: asking for a cursor is the only thing that tells the
-        // compositor there is one to pass to the chrome, and
+        // Required: the cursor-shape request is how the compositor learns of a
+        // cursor to pass to the chrome. Without the manager,
         // `tests/input.rs::a_pointer_over_a_window_asks_the_chrome_for_that_window_s_cursor`
-        // asserts the chrome was told. Left as a silent `None`, a compositor
-        // that advertised no manager would fail that check — convicting the
-        // compositor of a gap that is this client's.
+        // would fail and blame the compositor for the client's gap.
         if self.globals.cursor.is_none() {
             return Err(ClientError::Missing {
                 global: "wp_cursor_shape_manager_v1",
@@ -543,10 +440,8 @@ impl Client {
         }
 
         let surface = compositor.create_surface(handle, ());
-        // Before the surface is anything anybody can see, where a check asked
-        // for that: an inhibitor names a surface, and this one has no role
-        // yet, so what the desktop is holding at this point is a request for a
-        // window that does not exist.
+        // For `--hold-the-screens-on-before-it-has-a-window`: the surface has
+        // no role yet.
         if self.hold_the_screens_on == Some(HoldTheScreensOn::BeforeItHasAWindow) {
             self.take_an_inhibitor(&surface, handle)?;
         }
@@ -554,9 +449,7 @@ impl Client {
         let toplevel = xdg.get_toplevel(handle, ());
         toplevel.set_title(self.title.clone());
         crate::say!(toplevel.id(), "set_title(\"{}\")", self.title);
-        // An app id is what a chrome keys a window by, so a window with none
-        // is one a shell cannot address. The title is the human name; this is
-        // the one programs match on.
+        // Chromes identify windows by app id; the title is for people.
         toplevel.set_app_id("dev.domicile.test-client".to_string());
         if let Some((width, height)) = self.min_size {
             toplevel.set_min_size(width, height);
@@ -564,10 +457,9 @@ impl Client {
         if let Some((width, height)) = self.max_size {
             toplevel.set_max_size(width, height);
         }
-        // Asking to draw its own frame, which is what a client with
-        // decorations of its own asks — and so the request whose answer
-        // `tests/decorations.rs` reads. Before the first commit, as the
-        // protocol wants, so the answer rides the first configure.
+        // Request client-side decorations, which `tests/decorations.rs`
+        // checks. Sent before the first commit so the answer arrives with the
+        // first configure.
         if let Some(manager) = &self.globals.decoration {
             let decoration = manager.get_toplevel_decoration(&toplevel, handle, ());
             decoration.set_mode(zxdg_toplevel_decoration_v1::Mode::ClientSide);
@@ -576,14 +468,11 @@ impl Client {
             let decoration = manager.create(&surface, handle, ());
             decoration.request_mode(org_kde_kwin_server_decoration::Mode::Client);
         }
-        // Scale 1 here, not whatever the outputs have said: the surface has
-        // not entered one yet — that only happens once it is mapped — so there
-        // is no screen whose density this window is on. `follow` raises it
-        // when `wl_surface.enter` says which.
+        // Scale 1: the surface has entered no output until it maps. `follow`
+        // rescales on `wl_surface.enter`.
         let pixels = Pixels::new(shm, handle, SIZE.0, SIZE.1, self.translucent)?;
-        // The commit that starts the handshake, and it must carry no buffer:
-        // the compositor answers it with the size the surface may use, and
-        // attaching before that is asking for a size nobody agreed to.
+        // The initial commit must carry no buffer; the compositor answers it
+        // with the first configure.
         surface.commit();
         if self.hold_the_screens_on == Some(HoldTheScreensOn::OnItsWindow) {
             self.take_an_inhibitor(&surface, handle)?;
@@ -598,13 +487,10 @@ impl Client {
         Ok(())
     }
 
-    /// Ask that the desktop stay awake for as long as `surface` holds one.
+    /// Create an idle inhibitor on `surface`.
     ///
-    /// Kept by the connection rather than by this client: an inhibitor holds
-    /// for as long as the object exists, and `wayland-client` sends no destroy
-    /// of its own when the handle is dropped. Which is also the case the
-    /// compositor has to answer for — nothing this client does when it is
-    /// killed either.
+    /// The inhibitor is never destroyed: `wayland-client` sends no destructor
+    /// on drop, so it lasts until the client disconnects.
     fn take_an_inhibitor(
         &self,
         surface: &wl_surface::WlSurface,
@@ -618,13 +504,11 @@ impl Client {
         Ok(())
     }
 
-    /// Take a device on each clipboard, if this client has anything to do
-    /// with either.
+    /// Create the clipboard and primary selection devices, if copy or paste
+    /// was requested.
     ///
-    /// A missing manager is a failure rather than a silent `None`, for the
-    /// reason [`Client::open`] gives about the cursor: a client that shrugged
-    /// at a compositor advertising no `zwp_primary_selection_device_manager_v1`
-    /// would convict the compositor of a gap by way of a check that never ran.
+    /// A missing manager is an error, so a compositor without one fails here
+    /// rather than in a check that never ran.
     fn take_selection_devices(&mut self, handle: &QueueHandle<Client>) -> Result<(), ClientError> {
         if self.copy.is_none() && self.copy_primary.is_none() && !self.paste {
             return Ok(());
@@ -652,26 +536,16 @@ impl Client {
         Ok(())
     }
 
-    /// Put what this client was told to copy on each clipboard.
+    /// Offer the requested text on each selection.
     ///
-    /// **Called when the keyboard arrives, because a copy is something a
-    /// focused window does.** That is the protocol's rule rather than this
-    /// client's taste: `wl_data_device.set_selection` from a client that does
-    /// not hold the keyboard is denied, which is what stops a background
-    /// process from taking the clipboard out from under whatever you were
-    /// doing. A client that copied at startup would be denied in silence, and
-    /// what a check would see is an empty clipboard with nothing said about
-    /// why.
+    /// Called on keyboard enter, because the protocol denies `set_selection`
+    /// from an unfocused client.
     ///
-    /// A SERIAL NOBODY CHECKS, STATED RATHER THAN HIDDEN. The protocol wants
-    /// the input event the copy came from, which a client that has never been
-    /// typed into has not had. Smithay's `set_selection` reads the focus and
-    /// not the field, and a check that needed a real serial would be a check
-    /// about synthesizing input rather than about the clipboard.
+    /// The serial is `0`. The protocol wants the serial of the triggering
+    /// input event, which this client never had; Smithay checks focus, not
+    /// the serial.
     fn copy_what_was_asked_for(&mut self, handle: &QueueHandle<Client>) {
-        // No devices is a client told to do nothing with either clipboard,
-        // which is most of them: the keyboard arrives at every window a check
-        // focuses, and this is what it means for those.
+        // Most clients copy nothing and have no devices.
         let Some(selections) = &mut self.selections else {
             return;
         };
@@ -703,12 +577,10 @@ impl Client {
         }
     }
 
-    /// Mint an activation token for this window's surface.
+    /// Request an activation token for this window's surface.
     ///
-    /// No serial and no seat, which the protocol allows and which is the
-    /// honest shape of what this is for: a client with a recent input serial
-    /// is one the user was just in, and the request a focus policy has to be
-    /// able to refuse is the one from a client they were *not*.
+    /// Sent without a serial or seat, which the protocol allows. Checks use it
+    /// as the kind of request a focus policy should be able to refuse.
     fn ask_for_the_keyboard(&self, handle: &QueueHandle<Client>) -> Result<(), ClientError> {
         let activation = self
             .globals
@@ -727,15 +599,11 @@ impl Client {
         Ok(())
     }
 
-    /// The density of the screens this surface is on, if it is on any.
+    /// The highest scale among the outputs the surface is on.
     ///
-    /// `None` when it is on none. That is every moment before the first
-    /// `wl_surface.enter` — a client cannot know what it is being shown on
-    /// until it is told — and also the moment a mapped window is told it left
-    /// its last output, which occlusion, a workspace switch or a screen going
-    /// away all produce. Answering "1" for the second case would rebuild the
-    /// buffers at 1x and then again at 2x on the next `enter`, so the caller
-    /// keeps the density it had instead.
+    /// `None` before the first `wl_surface.enter`, and after the surface leaves
+    /// its last output. The caller keeps the current scale then, rather than
+    /// dropping to 1x and back.
     fn wanted_scale(&self) -> Option<i32> {
         self.entered
             .iter()
@@ -744,20 +612,16 @@ impl Client {
             .max()
     }
 
-    /// Redraw for the screen this window is on, if that has changed.
+    /// Rebuild the buffers if the wanted scale changed.
     ///
-    /// This is the half of being scale-aware that a check can see: a client
-    /// that only reads `wl_output.scale` and never acts on it is a client that
-    /// draws a 1x picture on a 2x screen, which is exactly the blurry window
-    /// `tests/density.rs` exists to catch. The buffer grows; the surface does not.
+    /// The buffer grows and the surface does not; `tests/density.rs` checks
+    /// this.
     fn follow(&mut self, handle: &QueueHandle<Client>) -> Result<(), ClientError> {
-        // On no screen: keep what we have. See [`Client::wanted_scale`].
+        // On no output: keep the current scale.
         let Some(wanted) = self.wanted_scale() else {
             return Ok(());
         };
-        // Before `open`, which is where the outputs' first `scale` events
-        // arrive: there is no surface to set a scale on yet, and `open` makes
-        // its pixels at 1 because the surface is on no screen until it maps.
+        // Outputs announce their scale before `open` creates the surface.
         let Some(window) = self.window.as_mut() else {
             return Ok(());
         };
@@ -772,16 +636,10 @@ impl Client {
 
         window.surface.set_buffer_scale(wanted);
         crate::say!(window.surface.id(), "set_buffer_scale({})", wanted);
-        // Destroyed, not dropped. Dropping a `wayland-client` proxy sends no
-        // destructor, so the old buffers would stay alive on both sides: they
-        // would go on delivering `release` into a handler keyed on an index
-        // into the *new* pool — measured, six stale releases each clearing a
-        // different buffer's slot — and they are the only thing holding the
-        // old pool's mapping, since the pool itself is destroyed at creation.
-        // That is a leak of 614 KB at 1x and 2.4 MB at 2x per rescale.
-        //
-        // Destroying says we will not use them again; the compositor keeps
-        // whatever it still needs to finish reading them.
+        // Destroy rather than drop: dropping a proxy sends no destructor, so
+        // the old buffers would stay alive, keep the old pool mapped, and keep
+        // delivering `release` events. The compositor keeps what it still
+        // needs to read.
         for buffer in &window.pixels.buffers {
             buffer.destroy();
         }
@@ -796,19 +654,11 @@ impl Client {
         Ok(())
     }
 
-    /// Take the size the compositor configured, if it sent one and it is new.
+    /// Rebuild the buffers at the configured size, if it changed.
     ///
-    /// The other half of being a chrome. A chrome does not choose its size:
-    /// the compositor sizes it to the desktop, `present` draws it at the size
-    /// it *committed* rather than stretched to fit, and a chrome that answered
-    /// a configure and went on drawing at its old size is a page in the corner
-    /// of a black screen. So this remakes the buffers at what was configured
-    /// and lets the next `draw` commit them.
-    ///
-    /// Answers `false` when there is nothing to do, which is every configure
-    /// without `--follow-configure`, every one repeating a size already taken,
-    /// and every one whose width or height is zero — a compositor saying "you
-    /// choose", which for this client means keeping what it has.
+    /// Used by `--follow-configure`, where the client acts as the chrome and
+    /// must fill the size the compositor gives it. Returns `false` when there
+    /// is nothing to do.
     fn resize(&mut self, handle: &QueueHandle<Client>) -> Result<bool, ClientError> {
         let Some(wanted) = self.configured_size.take() else {
             return Ok(false);
@@ -825,11 +675,7 @@ impl Client {
             .as_ref()
             .expect("open() proved there is a wl_shm before there was a window");
 
-        // Destroyed rather than dropped, for the reason `follow` gives at
-        // length: dropping a proxy sends no destructor, so the old buffers
-        // would go on delivering `release` into a handler keyed on an index
-        // into the new pool, and they are the only thing holding the old
-        // pool's mapping.
+        // Destroy rather than drop; see `follow`.
         for buffer in &window.pixels.buffers {
             buffer.destroy();
         }
@@ -853,22 +699,12 @@ impl Client {
             .expect("open() runs before anything that could draw");
         let (width, height) = window.size;
 
-        // The callback first, and unconditionally: it is what gets this
-        // client woken again. Skipping it on a frame with nothing to draw
-        // into would stop the loop for good.
+        // Request the next frame callback every time, even when no buffer is
+        // free, or the client would never wake again.
         window.surface.frame(handle, ());
-        // A `None` here is both buffers still with the compositor, and the
-        // commit below is still right: it carries the frame request, which is
-        // what asks to be told when there is a point in drawing again.
-        //
-        // There is no backoff on that path, and it does not need one against
-        // this compositor, which releases a buffer every frame — measured at
-        // the same ~5% CPU as drawing normally, including with a chrome that
-        // reads nothing. Against a compositor that held both past the frame
-        // callback it would spin, because a commit carrying only a frame
-        // request is answered at once: forced, that measured ~38% CPU and
-        // ~6000 commits a second. Left as it is rather than throttled on a
-        // case nothing here reaches, but it is a trap if one ever does.
+        // `None` means both buffers are held, so this commits only the frame
+        // request. A compositor that held both past the callback would make
+        // this loop spin; this one releases a buffer every frame.
         let drew = match window.pixels.free() {
             Some(index) => {
                 window.pixels.fill(index, color)?;
@@ -882,10 +718,8 @@ impl Client {
             None => false,
         };
         window.surface.commit();
-        // Advanced per frame *drawn*, not per buffer used: which of the two
-        // buffers is free depends on when the compositor gets round to
-        // releasing one, and a color that tracked that would stop alternating
-        // against a compositor that always released the same one first.
+        // Advance per frame drawn, not per buffer, so colors still alternate
+        // if the compositor always releases the same buffer first.
         if drew {
             self.frame = self.frame.wrapping_add(1);
         }
@@ -916,9 +750,7 @@ impl Pixels {
                 index,
             )
         });
-        // The pool is only a way to cut buffers out of the file; the buffers
-        // keep it alive on the compositor's side, so nothing here needs it
-        // again.
+        // The buffers keep the pool alive on the compositor side.
         pool.destroy();
         let painted = if translucent {
             TRANSLUCENT_COLORS
@@ -956,12 +788,11 @@ impl Pixels {
     }
 }
 
-/// A file of `bytes` bytes with no name, to share pixels through.
+/// An unlinked file of `bytes` bytes to share pixels through.
 ///
-/// `memfd` would be tidier and is not on every machine these checks run on; an
-/// unlinked temp file is what `wl_shm` has always taken. Unlinked at once, so
-/// the mapping outlives the name and nothing is left in `$XDG_RUNTIME_DIR` —
-/// which some of these checks assert about.
+/// A temp file rather than `memfd`, which some test machines lack. Unlinked
+/// at once so nothing is left in `$XDG_RUNTIME_DIR`, which some checks
+/// assert.
 fn anonymous(bytes: usize) -> std::io::Result<std::fs::File> {
     let directory = std::env::var_os("XDG_RUNTIME_DIR")
         .map(std::path::PathBuf::from)
@@ -978,20 +809,9 @@ fn anonymous(bytes: usize) -> std::io::Result<std::fs::File> {
     Ok(file)
 }
 
-/// Draw, or end the process saying why.
+/// Request focus once, if `--ask-for-focus` was given.
 ///
-/// The two callers are event handlers, which cannot return a `Result`. Ending
-/// here rather than printing and carrying on is what keeps `run`'s promise
-/// that this client only stops on a failure: a `draw` that failed has already
-/// skipped the `frame` request it needed to be woken again, so carrying on
-/// means a live process with no window and nothing left to wake it — which a
-/// check reads as the compositor never mapping anything.
-/// Ask for the keyboard, if this client was told to and has not yet.
-///
-/// Two steps, which is what the protocol is: a token is minted for the surface
-/// and the compositor answers it with a string, and the string is what the
-/// activation request carries. The answer arrives on the token object, so the
-/// second half is in that object's own handler rather than here.
+/// This mints a token; the token's `done` handler sends the activation.
 fn ask_for_focus_or_stop(client: &mut Client, handle: &QueueHandle<Client>) {
     if client.ask_for_focus && !client.asked {
         client.asked = true;
@@ -1001,11 +821,9 @@ fn ask_for_focus_or_stop(client: &mut Client, handle: &QueueHandle<Client>) {
     }
 }
 
-/// Open the `--popup` over the window, once and only if asked.
+/// Open the `--popup` over the window, once.
 ///
-/// A menu as a toolkit makes one: a positioner that anchors it to a point in
-/// the window, a surface of its own, and a first commit with no buffer, which
-/// the compositor answers with where it put it.
+/// Anchored by a positioner, with a first commit carrying no buffer.
 fn open_popup(client: &mut Client, handle: &QueueHandle<Client>) {
     if !client.wants_popup {
         return;
@@ -1028,17 +846,16 @@ fn open_popup(client: &mut Client, handle: &QueueHandle<Client>) {
     let xdg = wm_base.get_xdg_surface(&surface, handle, PopupRole);
     let popup = xdg.get_popup(Some(&window.xdg), &positioner, handle, PopupRole);
     positioner.destroy();
-    // Before the first commit, as xdg-shell wants. The serial is meant to be
-    // the press that opened the menu, and this client opens it unprompted:
-    // a compositor that checked it would dismiss this one, which a check
-    // about grabs would see as the popup going.
+    // Grab before the first commit, as xdg-shell requires. The serial
+    // should be the press that opened the menu; there is none, and a
+    // compositor that validated it would dismiss the popup.
     if client.popup_grab {
         if let Some(seat) = &client.globals.seat {
             popup.grab(seat, 0);
             crate::say!(popup.id(), "grab()");
         }
     }
-    // With its surface, which is what input to it names.
+    // Traced with its surface, which input events name.
     crate::say!(popup.id(), "opened({})", surface.id());
     surface.commit();
     client.popup = Some(Popup {
@@ -1049,7 +866,7 @@ fn open_popup(client: &mut Client, handle: &QueueHandle<Client>) {
     });
 }
 
-/// Draw the popup's one frame, or end the process saying why.
+/// Draw the popup's single frame, or exit with the error.
 fn draw_popup_or_stop(client: &mut Client, handle: &QueueHandle<Client>) {
     let shm = client
         .globals
@@ -1097,10 +914,14 @@ fn draw_popup_or_stop(client: &mut Client, handle: &QueueHandle<Client>) {
     popup.drawn = Some((buffer, file));
 }
 
+/// Draw a frame, or exit with the error.
+///
+/// Callers are event handlers and cannot return a `Result`. A failed draw has
+/// skipped its frame request, so continuing would leave a process that never
+/// draws again.
 fn draw_or_stop(client: &mut Client, handle: &QueueHandle<Client>) {
-    // A window that has been closed on a client that outlives it has nothing
-    // to draw into: the frame callback asked for before the close still
-    // arrives, and the surface it named has no role object left to commit to.
+    // A frame callback requested before the toplevel was destroyed can still
+    // arrive.
     if !client.window_is_gone {
         if let Err(err) = client.draw(handle) {
             eprintln!("domicile-test-client: {err}");
@@ -1109,13 +930,10 @@ fn draw_or_stop(client: &mut Client, handle: &QueueHandle<Client>) {
     }
 }
 
-/// Follow the screen's density, or end the process saying why.
+/// Rescale, or exit with the error.
 ///
-/// The mirror of [`draw_or_stop`], and for the same reason: the callers are
-/// event handlers that cannot return a `Result`, and a client that failed to
-/// remake its pixels has no buffers left to draw into. Carrying on would show
-/// a check a window that stopped redrawing, which reads as a compositor that
-/// stopped sending frames.
+/// Exits for the reason [`draw_or_stop`] does: without buffers the window
+/// would stop redrawing.
 fn follow_or_stop(client: &mut Client, handle: &QueueHandle<Client>) {
     if let Err(err) = client.follow(handle) {
         eprintln!("domicile-test-client: {err}");
@@ -1123,14 +941,9 @@ fn follow_or_stop(client: &mut Client, handle: &QueueHandle<Client>) {
     }
 }
 
-/// Take a configured size, or end the process saying why.
+/// Apply a configured size, or exit with the error.
 ///
-/// The same shape as [`follow_or_stop`], and the same reason: the caller is an
-/// event handler that cannot return a `Result`, and a client whose buffers
-/// could not be remade has nothing left to draw into.
-///
-/// Answers whether the size actually changed, which is what tells its caller
-/// there is a frame to draw.
+/// Returns whether the size changed, so the caller knows to draw.
 fn resize_or_stop(client: &mut Client, handle: &QueueHandle<Client>) -> bool {
     match client.resize(handle) {
         Ok(resized) => resized,
@@ -1163,27 +976,10 @@ impl Dispatch<wl_registry::WlRegistry, ()> for Client {
                     interface,
                     version
                 );
-                // Outputs are bound here rather than with the rest, because
-                // they are the one global that arrives after startup: plugging
-                // a display in announces a new one, and a compositor cannot
-                // tell a client its window is on a screen the client never
-                // bound. A window open across that change would go on being
-                // told about the screen it started on and no other.
-                //
-                // Safe to do from the event, unlike `wl_seat`, because an
-                // output's version comes with its announcement rather than
-                // having to be weighed against the rest of the list.
-                // Version 4 rather than 2 for `wl_output.name`, which is the
-                // only place a client learns what a screen is *called*. Every
-                // other field — where it sits, its scale, its mode — arrives
-                // at 2, so a check that only wants geometry never needed this.
-                // `both_configured_displays_are_advertised_to_a_client` does:
-                // it asserts a client is told `left` and `right`, and the
-                // fixture will not describe a screen it has no name for.
-                //
-                // Capped, not demanded: a compositor advertising less still
-                // binds at what it offers, and the extra events are additive,
-                // so a client reading the older ones is unaffected.
+                // Outputs are bound as they are announced, because displays
+                // can be added after startup. Version 4 for `wl_output.name`,
+                // which `both_configured_displays_are_advertised_to_a_client`
+                // needs.
                 if interface == "wl_output" {
                     let output: wl_output::WlOutput =
                         registry.bind(name, version.min(4), handle, ());
@@ -1192,11 +988,8 @@ impl Dispatch<wl_registry::WlRegistry, ()> for Client {
                 client.globals.named.push((name, interface, version));
             }
             wl_registry::Event::GlobalRemove { name } => {
-                // A screen that went away. The compositor sends no
-                // `wl_surface.leave` for one, so without this the client would
-                // sit at a dead screen's density for the rest of the run —
-                // and `scales`, `entered` and `outputs` would grow with the
-                // desktop's history rather than its shape.
+                // The compositor sends no `wl_surface.leave` for a removed
+                // output, so drop its state here and rescale.
                 client.globals.named.retain(|(named, _, _)| named != &name);
                 let Some(at) = client.outputs.iter().position(|(named, _)| named == &name) else {
                     return;
@@ -1220,7 +1013,7 @@ impl Dispatch<xdg_wm_base::XdgWmBase, ()> for Client {
         _: &Connection,
         _: &QueueHandle<Client>,
     ) {
-        // The one event a client must answer or be killed for not answering.
+        // A client that does not answer pings is killed.
         if let xdg_wm_base::Event::Ping { serial } = event {
             wm_base.pong(serial);
         }
@@ -1238,28 +1031,18 @@ impl Dispatch<xdg_surface::XdgSurface, ()> for Client {
     ) {
         if let xdg_surface::Event::Configure { serial } = event {
             xdg.ack_configure(serial);
-            // The size the `xdg_toplevel.configure` just before this carried,
-            // if any — see [`Client::configured_size`] for why it waits for
-            // this event rather than being applied where it arrived.
+            // Apply any size from the preceding `xdg_toplevel.configure`;
+            // see [`Client::configured_size`].
             let resized = resize_or_stop(client, handle);
-            // The first configure is what makes the surface attachable, and
-            // the frame drawn here is what maps the window. Later ones are
-            // answered and left alone unless the size changed: without
-            // `--follow-configure` this client keeps the size it asked for,
-            // because a check that stated a size wants that size.
-            //
-            // A resize draws for a second reason: the buffers behind the
-            // surface have just been remade, so nothing is attached and the
-            // frame callback that would have woken this client belonged to a
-            // buffer that no longer exists.
+            // Draw on the first configure, which maps the window, and after a
+            // resize, which replaced the buffers and lost the pending frame
+            // callback. Other configures are only acknowledged.
             if !client.configured || resized {
                 client.configured = true;
                 draw_or_stop(client, handle);
-                // After the window exists, because activation names a surface
-                // and a surface nothing has mapped is not a window any shell
-                // could be asked about.
+                // After mapping, since activation names a surface.
                 ask_for_focus_or_stop(client, handle);
-                // And a popup is placed against a window that is mapped.
+                // A popup needs a mapped parent.
                 open_popup(client, handle);
             }
         }
@@ -1292,8 +1075,7 @@ impl Dispatch<xdg_popup::XdgPopup, PopupRole> for Client {
         _: &QueueHandle<Client>,
     ) {
         match event {
-            // Where the compositor put it, relative to the window: what a
-            // check compares against what the chrome was told.
+            // The popup's position relative to the window.
             xdg_popup::Event::Configure {
                 x,
                 y,
@@ -1302,8 +1084,7 @@ impl Dispatch<xdg_popup::XdgPopup, PopupRole> for Client {
             } => {
                 crate::say!(popup.id(), "configure({x}, {y}, {width}, {height})");
             }
-            // Dismissed, which a toolkit answers by destroying the popup: a
-            // menu that was dismissed and stayed would be a menu still open.
+            // Destroy a dismissed popup, as toolkits do.
             xdg_popup::Event::PopupDone => {
                 crate::say!(popup.id(), "popup_done()");
                 if let Some(open) = client.popup.take() {
@@ -1326,11 +1107,8 @@ impl Dispatch<xdg_toplevel::XdgToplevel, ()> for Client {
         _: &Connection,
         _: &QueueHandle<Client>,
     ) {
-        // The size the compositor wants this window to be. Traced whether or
-        // not it is taken, because a check about sizing wants to tell "the
-        // compositor never asked" apart from "it asked and this client kept
-        // what it had" — and without `--follow-configure` the second is what
-        // always happens.
+        // Traced even when not followed, so checks can tell "no configure"
+        // from "configure ignored".
         if let xdg_toplevel::Event::Configure {
             width,
             height,
@@ -1338,38 +1116,26 @@ impl Dispatch<xdg_toplevel::XdgToplevel, ()> for Client {
         } = event
         {
             crate::say!(toplevel.id(), "configure({}, {})", width, height);
-            // Whether this window is the active one, on every configure, so a
-            // check can see it both given and taken away. Chromium reads this
-            // as whether its page has focus, and a page that thinks it has
-            // none takes characters but ignores Backspace and every shortcut.
+            // Trace activation on every configure. Chromium treats it as page
+            // focus; without it, a page ignores Backspace and shortcuts.
             let activated =
                 states.as_chunks::<4>().0.iter().any(|state| {
                     u32::from_ne_bytes(*state) == xdg_toplevel::State::Activated as u32
                 });
             crate::say!(toplevel.id(), "activated({activated})");
-            // Zero is a compositor saying "you choose", so there is nothing
-            // to follow. Negative cannot happen — the protocol's own type is
-            // signed and its values are sizes — but it is a cast to `u32`
-            // either way, and a negative one would arrive as an enormous
-            // window rather than as a refusal.
+            // Zero means "client chooses". Negative is invalid and would cast
+            // to a huge `u32`.
             if client.follow_configure && width > 0 && height > 0 {
                 client.configured_size = Some((width as u32, height as u32));
             }
         }
-        // A compositor that closed the window has ended this client's job, and
-        // exiting is how a check sees that it did:
+        // Exit 0 on close, which
         // `a_close_from_the_chrome_reaches_the_client_and_comes_back`
-        // (`domicile-compositor/tests/apps.rs`) waits for this process to go.
-        // Zero is the only success this binary has, which is what lets that
-        // wait mean "the close arrived and was acted on" rather than "the
-        // client stopped for some reason".
+        // (`domicile-compositor/tests/apps.rs`) waits for. Zero is the only
+        // success exit, so it means the close was handled.
         if let xdg_toplevel::Event::Close = event {
-            // Unless a check needs this client *after* its window, in which
-            // case the window is the only thing that goes: the toplevel is
-            // destroyed, the surface and whatever was taken on it stay, and
-            // the connection is still up. That is what tells a compositor's
-            // answer to a closed window apart from its answer to a dead
-            // client.
+            // Under `--outlive-its-window`, destroy only the toplevel and keep
+            // the connection.
             if client.outlive_its_window {
                 crate::say!(toplevel.id(), "destroy()");
                 toplevel.destroy();
@@ -1405,45 +1171,20 @@ impl Dispatch<wl_buffer::WlBuffer, usize> for Client {
         _: &Connection,
         _: &QueueHandle<Client>,
     ) {
-        // The compositor is done reading this one, so the next frame may draw
-        // into it. Without this the client runs out of buffers after two
-        // frames and never draws again.
+        // Without releases the client runs out of buffers after two frames.
         if let wl_buffer::Event::Release = event {
             crate::say!(buffer.id(), "release()");
             let window = client
                 .window
                 .as_mut()
                 .expect("a buffer was cut from this window's pool");
-            // Checked, not assumed. `index` is baked into the udata of the
-            // buffer this event is *about*, which after a rescale may be one
-            // from the pool before it: `follow` destroys those, but a release
-            // the compositor had already sent still arrives afterward.
-            // Clearing on the index alone then marks a live buffer free while
-            // the compositor is displaying it, and the next frame draws over
-            // the picture.
+            // Compare the buffer, not just the index: after a rescale, a
+            // release for a destroyed buffer can still arrive and would mark
+            // a held buffer in the new pool as free.
             //
-            // Measured rather than reasoned about, and destroying the old
-            // buffers is not enough on its own: with `destroy` in place and
-            // this check absent, forcing a rescale produced one such release
-            // per rescale, every one naming a buffer that is not the one in
-            // that slot. (How many depends on how hard the rescale is
-            // driven — it is one per swap with a buffer in flight, not a
-            // fixed number.)
-            //
-            // Latent rather than visible today: this compositor imports and
-            // releases before the next attach lands, so the slot being
-            // wrongly cleared is already `false`. Against one that holds a
-            // buffer across the swap it is a live buffer marked free.
-            //
-            // Comparing ids and not wire numbers, which matters more than it
-            // reads: `destroy` frees the numbers and a later pool takes them
-            // back — a `delete_id` round-trip later rather than at once, so it
-            // is the pool after next that reuses them, and it reuses them
-            // *reversed*. That is the shape a wire-number comparison cannot
-            // survive: a stale release naming `@17` would match the new
-            // `buffers[0]` by number while being a different object.
-            // `ObjectId` equality carries a generation (`id`, `serial` and
-            // interface), so the stale one still compares unequal.
+            // Compare `ObjectId`s, not wire numbers: destroyed buffers' wire
+            // numbers are reused by later pools, but `ObjectId` equality also
+            // checks a generation serial.
             if window.pixels.buffers[*index].id() == buffer.id() {
                 window.pixels.held[*index] = false;
             }
@@ -1460,9 +1201,8 @@ impl Dispatch<wl_seat::WlSeat, ()> for Client {
         _: &Connection,
         handle: &QueueHandle<Client>,
     ) {
-        // Taking the keyboard and the pointer is what makes the compositor
-        // send input here at all. Nothing reads what arrives: the checks that
-        // are about input read this client's protocol log.
+        // Binding the keyboard and pointer makes the compositor send input.
+        // Checks read the trace, not the input itself.
         if let wl_seat::Event::Capabilities {
             capabilities: WEnum::Value(capabilities),
         } = event
@@ -1472,9 +1212,8 @@ impl Dispatch<wl_seat::WlSeat, ()> for Client {
             }
             if capabilities.contains(wl_seat::Capability::Pointer) {
                 let pointer = seat.get_pointer(handle, ());
-                // Made here rather than on the first `enter`: `set_shape` names
-                // the pointer it applies to, so the device has to exist before
-                // there is a serial to spend on it.
+                // Created now, because `set_shape` on pointer enter needs the
+                // device to exist.
                 client.cursor = client
                     .globals
                     .cursor
@@ -1485,11 +1224,10 @@ impl Dispatch<wl_seat::WlSeat, ()> for Client {
     }
 }
 
-/// The compositor answered a token request: activate with what it said.
+/// Activates the surface with the token the compositor returned.
 ///
-/// The surface is the token's user data, set when the token was minted, so the
-/// two halves of one request do not need a field on the client to find each
-/// other — which matters because a client may have more than one in flight.
+/// The surface is the token's user data, so concurrent requests need no
+/// shared state.
 impl Dispatch<xdg_activation_token_v1::XdgActivationTokenV1, wl_surface::WlSurface> for Client {
     fn event(
         client: &mut Client,
@@ -1501,8 +1239,7 @@ impl Dispatch<xdg_activation_token_v1::XdgActivationTokenV1, wl_surface::WlSurfa
     ) {
         if let xdg_activation_token_v1::Event::Done { token: minted } = event {
             crate::say!(token.id(), "done(\"{minted}\")");
-            // Spent: the token is good for one activation, and the object for
-            // one token.
+            // A token is single-use.
             token.destroy();
             if let Some(activation) = client.globals.activation.as_ref() {
                 activation.activate(minted, surface);
@@ -1512,12 +1249,10 @@ impl Dispatch<xdg_activation_token_v1::XdgActivationTokenV1, wl_surface::WlSurfa
     }
 }
 
-/// The clipboard arriving, and a paste of it.
+/// Pastes each clipboard selection when `--paste` is given.
 ///
-/// A `selection` event is the compositor saying "the client with the keyboard
-/// may now read this" — it goes to one client at a time and to nobody when the
-/// seat is nowhere. `None` is that selection being cleared, and leaves nothing
-/// to say.
+/// `selection` events go only to the focused client. `None` means the
+/// selection was cleared.
 impl Dispatch<wl_data_device::WlDataDevice, ()> for Client {
     fn event(
         client: &mut Client,
@@ -1533,7 +1268,7 @@ impl Dispatch<wl_data_device::WlDataDevice, ()> for Client {
                     offer.receive(TEXT_MIME.to_string(), fd);
                 });
             }
-            // Drag-and-drop arrives here too, and this client does none.
+            // Drag-and-drop events; unused.
             _ => {}
         }
     }
@@ -1543,12 +1278,10 @@ impl Dispatch<wl_data_device::WlDataDevice, ()> for Client {
     ]);
 }
 
-/// The same, on the other clipboard.
+/// Pastes each primary selection when `--paste` is given.
 ///
-/// A separate interface with a separate device and a separate offer, which is
-/// what makes the two contents separate: a client reading this one cannot
-/// reach what `wl_data_device` is carrying, and that is the claim
-/// `tests/selection.rs` makes.
+/// A separate device and offer from the clipboard, which `tests/selection.rs`
+/// relies on to show the two selections are kept apart.
 impl Dispatch<zwp_primary_selection_device_v1::ZwpPrimarySelectionDeviceV1, ()> for Client {
     fn event(
         client: &mut Client,
@@ -1576,7 +1309,7 @@ impl Dispatch<zwp_primary_selection_device_v1::ZwpPrimarySelectionDeviceV1, ()> 
     ]);
 }
 
-/// Somebody is pasting what this client copied.
+/// Serves pastes of the clipboard text.
 impl Dispatch<wl_data_source::WlDataSource, ()> for Client {
     fn event(
         client: &mut Client,
@@ -1586,10 +1319,7 @@ impl Dispatch<wl_data_source::WlDataSource, ()> for Client {
         _: &Connection,
         _: &QueueHandle<Client>,
     ) {
-        // Nothing else a source is sent is anything to write: `target` and the
-        // three drag-and-drop events are about a drag this client is not in,
-        // and the fifth is the word that another client has taken over the
-        // clipboard.
+        // Other events concern drag-and-drop or losing the selection.
         if let wl_data_source::Event::Send { mime_type, fd } = event {
             let copy = client
                 .copy
@@ -1600,7 +1330,7 @@ impl Dispatch<wl_data_source::WlDataSource, ()> for Client {
     }
 }
 
-/// The same, on the other clipboard.
+/// Serves pastes of the primary selection text.
 impl Dispatch<zwp_primary_selection_source_v1::ZwpPrimarySelectionSourceV1, ()> for Client {
     fn event(
         client: &mut Client,
@@ -1610,7 +1340,7 @@ impl Dispatch<zwp_primary_selection_source_v1::ZwpPrimarySelectionSourceV1, ()> 
         _: &Connection,
         _: &QueueHandle<Client>,
     ) {
-        // The other event, as above, is another client taking this clipboard.
+        // The other event means the selection was lost.
         if let zwp_primary_selection_source_v1::Event::Send { mime_type, fd } = event {
             let copy = client
                 .copy_primary
@@ -1621,23 +1351,14 @@ impl Dispatch<zwp_primary_selection_source_v1::ZwpPrimarySelectionSourceV1, ()> 
     }
 }
 
-/// Read a selection somebody is offering, and say what it said.
+/// Read an offered selection and trace it.
 ///
-/// **A paste is a socket and two processes.** This one hands the offering
-/// client a descriptor and waits; that client writes what it has and closes,
-/// which is how a selection says it has written all of it. So a paste is two
-/// processes taking turns, and none of it can be checked without both of them
-/// being real.
+/// The offering client writes to the descriptor and closes it to mark the end.
+/// A `std` socket pair stands in for a pipe.
 ///
-/// A socket pair rather than a pipe, and no third-party crate to make one:
-/// both are a descriptor to write and a descriptor to read, the offering
-/// client cannot tell them apart, and `std` makes exactly one of the two.
-///
-/// The flush is load-bearing and the drop that follows it is too. `receive` is
-/// a request queued on the connection, so nothing has been sent when it
-/// returns; and the read below ends at end-of-file, which needs *every*
-/// descriptor that can write to be closed — this client's copy of the far end
-/// included.
+/// The flush and the drop are both required: `receive` is only queued until
+/// flushed, and the read ends at EOF only once every write end is closed,
+/// including this process's copy.
 fn paste(what: &str, connection: &Connection, receive: impl FnOnce(BorrowedFd<'_>)) {
     let (mut ours, theirs) =
         UnixStream::pair().expect("a socket pair is two descriptors and no policy");
@@ -1654,11 +1375,10 @@ fn paste(what: &str, connection: &Connection, receive: impl FnOnce(BorrowedFd<'_
     crate::trace::say(format_args!("{what}: {said}"));
 }
 
-/// Write what this client copied into the descriptor a paste handed over.
+/// Write the copied text to a paste's descriptor.
 ///
-/// Closed by the drop at the end, which is what tells the reader there is no
-/// more: a source that held the descriptor open would be a paste that hangs
-/// rather than one that is short.
+/// Dropping the descriptor closes it, which tells the reader the data is
+/// complete.
 fn serve(mime_type: &str, fd: OwnedFd, copy: &str) {
     assert_eq!(
         mime_type, TEXT_MIME,
@@ -1673,8 +1393,8 @@ delegate_noop!(Client: ignore xdg_activation_v1::XdgActivationV1);
 delegate_noop!(Client: ignore zxdg_decoration_manager_v1::ZxdgDecorationManagerV1);
 delegate_noop!(Client: ignore org_kde_kwin_server_decoration_manager::OrgKdeKwinServerDecorationManager);
 
-/// The answer to asking who draws the frame. Traced by name rather than by
-/// number, because the two protocols number their modes differently.
+/// Traces the xdg decoration mode by name, since the two decoration protocols
+/// number modes differently.
 impl Dispatch<zxdg_toplevel_decoration_v1::ZxdgToplevelDecorationV1, ()> for Client {
     fn event(
         _: &mut Client,
@@ -1715,8 +1435,8 @@ delegate_noop!(Client: ignore wl_shm::WlShm);
 delegate_noop!(Client: ignore wl_shm_pool::WlShmPool);
 delegate_noop!(Client: ignore xdg_positioner::XdgPositioner);
 
-// Nothing about a popup's surface or its buffer is read: it is drawn once and
-// left, and which screens it is on is the window's to say.
+// Popup surface and buffer events are ignored: it is drawn once, and the
+// window reports outputs.
 impl Dispatch<wl_surface::WlSurface, PopupRole> for Client {
     fn event(
         _: &mut Client,
@@ -1743,13 +1463,7 @@ impl Dispatch<wl_buffer::WlBuffer, PopupRole> for Client {
 delegate_noop!(Client: ignore wp_cursor_shape_manager_v1::WpCursorShapeManagerV1);
 delegate_noop!(Client: ignore wp_cursor_shape_device_v1::WpCursorShapeDeviceV1);
 
-/// Which outputs the window is on.
-///
-/// Reported *and* acted on: this is what tells the client which screen's
-/// density to draw for, so `follow` runs on every change. A compositor that
-/// never sends these leaves a scale-aware client drawing 1x pixels forever,
-/// and leaves the checks that ask which screen a window landed on with
-/// nothing to read.
+/// Tracks which outputs the surface is on and rescales on each change.
 impl Dispatch<wl_surface::WlSurface, ()> for Client {
     fn event(
         client: &mut Client,
@@ -1774,21 +1488,17 @@ impl Dispatch<wl_surface::WlSurface, ()> for Client {
             }
             _ => return,
         }
-        // Which screens the surface is on is half of what its density depends
-        // on; the other half is what those screens said their scale was.
+        // The wanted scale depends on both the outputs entered and their
+        // scales.
         follow_or_stop(client, handle);
     }
 }
 
-/// What each screen is, where it is, and how dense.
+/// Traces output geometry, mode, name and scale, and records the scale.
 ///
-/// `name` says which screen a window is on once `wl_surface.enter` has named
-/// the output, which is what `Client::on_screens` in the compositor's tests
-/// reads. `geometry`'s x and y are where that screen sits on the desktop, and
-/// `mode` is the physical size a check about density reads back. `scale` is
-/// the one this client acts on, and `done` is when it acts: the events above
-/// it are one description delivered in pieces, and redrawing on `scale` alone
-/// would redraw against half of one.
+/// `name` lets checks see which screen a window entered (see
+/// `Client::on_screens` in the compositor's tests). Rescaling waits for `done`,
+/// since the preceding events are parts of one update.
 impl Dispatch<wl_output::WlOutput, ()> for Client {
     fn event(
         client: &mut Client,
@@ -1850,9 +1560,7 @@ impl Dispatch<wl_output::WlOutput, ()> for Client {
             }
             wl_output::Event::Done => {
                 crate::say!(output.id(), "done()");
-                // The event that says the batch above is complete, which is
-                // when a client is meant to act on it. Acting on `scale`
-                // directly would redraw against a half-applied description.
+                // Act once the update is complete.
                 follow_or_stop(client, handle);
             }
             _ => {}
@@ -1860,14 +1568,11 @@ impl Dispatch<wl_output::WlOutput, ()> for Client {
     }
 }
 
-/// Keys, as they arrive.
+/// Traces keyboard events.
 ///
-/// `modifiers` as well as `key`: a compositor that loses a key release leaves
-/// a modifier held for good, and the count of one against the other is what
-/// says so. And `keymap`, which is the layout those keys are read against: it
-/// arrives once when the keyboard is bound and again whenever the compositor
-/// changes it, so a check that counts them can tell a desk that took up an
-/// edited config from one that merely said it had.
+/// `modifiers` lets checks spot a lost key release that leaves a modifier
+/// held. `keymap` is traced on each change so checks can see a reloaded
+/// layout.
 impl Dispatch<wl_keyboard::WlKeyboard, ()> for Client {
     fn event(
         client: &mut Client,
@@ -1878,11 +1583,9 @@ impl Dispatch<wl_keyboard::WlKeyboard, ()> for Client {
         handle: &QueueHandle<Client>,
     ) {
         match event {
-            // The one moment this client may copy — see
-            // `Client::copy_what_was_asked_for`, which says why the protocol
-            // makes that the rule.
+            // Copy on focus; see `Client::copy_what_was_asked_for`.
             wl_keyboard::Event::Enter { surface, .. } => {
-                // Which surface: the window's, or a menu's that grabbed.
+                // The window's surface, or a grabbing popup's.
                 crate::say!(keyboard.id(), "enter({})", surface.id());
                 client.copy_what_was_asked_for(handle);
             }
@@ -1926,7 +1629,7 @@ impl Dispatch<wl_keyboard::WlKeyboard, ()> for Client {
     }
 }
 
-/// The pointer, as far as a check needs it.
+/// Traces pointer events and sets the cursor shape.
 impl Dispatch<wl_pointer::WlPointer, ()> for Client {
     fn event(
         client: &mut Client,
@@ -1951,9 +1654,8 @@ impl Dispatch<wl_pointer::WlPointer, ()> for Client {
                     surface_x,
                     surface_y
                 );
-                // What a real client does the moment the pointer arrives, and
-                // the only way the compositor learns there is a cursor to tell
-                // the chrome about.
+                // The cursor shape request is how the compositor learns which
+                // cursor to pass to the chrome.
                 client
                     .cursor
                     .as_ref()
@@ -1993,13 +1695,8 @@ impl Dispatch<wl_pointer::WlPointer, ()> for Client {
     }
 }
 
-/// The number behind an enum argument.
-///
-/// libwayland prints the wire value, and the checks that read these lines
-/// match on it. `WEnum` is either the value or the number a newer compositor
-/// sent that this client's protocol copy has no name for — and the number is
-/// what both cases have.
-/// An enum a compositor stated, by name where this client knows the name.
+/// An enum value's name, or its number when this client's protocol version
+/// does not know it.
 fn named<T: std::fmt::Debug>(stated: WEnum<T>) -> String {
     match stated {
         WEnum::Value(value) => format!("{value:?}"),
@@ -2007,6 +1704,7 @@ fn named<T: std::fmt::Debug>(stated: WEnum<T>) -> String {
     }
 }
 
+/// An enum argument's wire value, which libwayland prints and checks match.
 fn number<T: Into<u32>>(stated: WEnum<T>) -> u32 {
     match stated {
         WEnum::Value(known) => known.into(),
@@ -2014,21 +1712,10 @@ fn number<T: Into<u32>>(stated: WEnum<T>) -> u32 {
     }
 }
 
-/// What the keymap on `fd` calls its first group — `English (Dvorak)`.
+/// The name of the keymap's first group, such as `English (Dvorak)`.
 ///
-/// The one line of a compiled keymap that names the layout in words, which is
-/// what makes a trace line worth reading: the text itself is sixty kilobytes,
-/// and a length or a checksum would say two keymaps differ without saying
-/// which is which.
-///
-/// Read rather than mapped, because a `wl_keyboard.keymap` fd is a file this
-/// client is handed and `read_exact_at` needs no `unsafe` to take it. The
-/// compositor states the size, and it counts the trailing NUL the protocol
-/// requires — so the text is everything before it.
-///
-/// A keymap this cannot read is reported as what was found rather than
-/// resolved into a plausible layout: a check waiting for a layout fails on
-/// the line, with the reason in it, instead of passing on a guess.
+/// The size includes the trailing NUL. An unreadable keymap is reported as
+/// such, so a check fails with the reason instead of passing on a guess.
 fn layout_named_by(fd: std::os::fd::OwnedFd, size: u32) -> String {
     let file = std::fs::File::from(fd);
     let mut text = vec![0u8; size as usize];
@@ -2057,10 +1744,7 @@ mod tests {
 
     #[test]
     fn a_see_through_window_is_premultiplied_and_actually_see_through() {
-        // `Argb8888` is premultiplied alpha. A channel above the alpha is a
-        // color brighter than it is opaque, which no compositor owes an
-        // answer for — and the answer this one gives is what
-        // `e2e-window-shows-through.sh` read.
+        // `Argb8888` is premultiplied: no channel may exceed alpha.
         for (translucent, opaque) in TRANSLUCENT_COLORS.iter().zip(COLORS) {
             let [alpha, red, green, blue] = translucent.to_be_bytes();
             assert_eq!(alpha, TRANSLUCENT_ALPHA, "{translucent:#010x}");
@@ -2072,10 +1756,7 @@ mod tests {
                     *channel <= alpha,
                     "{translucent:#010x}: {channel} over {alpha}",
                 );
-                // And it is *that* color at that alpha rather than some other
-                // one: premultiplying is what the compositor undoes, so a
-                // window drawn from an unrelated table would come back a
-                // color nothing expected.
+                // Each channel is the opaque color scaled by alpha.
                 assert_eq!(
                     u32::from(*channel),
                     u32::from(*of) * u32::from(alpha) / 0xff,
@@ -2087,9 +1768,8 @@ mod tests {
 
     #[test]
     fn only_a_see_through_window_asks_for_a_format_with_alpha() {
-        // The branch the flag actually turns: `Xrgb8888` has no alpha channel,
-        // so a window drawn in it is fully opaque whatever its pixels say —
-        // which is the reading that made `e2e-window-shows-through.sh` flaky.
+        // `Xrgb8888` has no alpha, so only `--translucent` may use
+        // `Argb8888`.
         assert_eq!(shm_format(true), wl_shm::Format::Argb8888);
         assert_eq!(shm_format(false), wl_shm::Format::Xrgb8888);
     }
