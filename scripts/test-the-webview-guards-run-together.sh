@@ -20,7 +20,7 @@ fail() { printf '  FAIL  %s\n    %s\n' "$1" "$2"; FAILED=$((FAILED + 1)); }
 
 TOGETHER="webview-framing shell-local-network webview-content-script extension-installer
   extension-tray webview-keyboard webview-escape webview-history webview-find
-  webview-click webview-new-window webview-routed-link webview-upload
+  webview-click webview-activate webview-new-window webview-routed-link webview-upload
   webview-download webview-save-picker webview-tabs webview-active-tab webview-passkey-extension
   webview-popup-window control-arrival webview-notifications"
 

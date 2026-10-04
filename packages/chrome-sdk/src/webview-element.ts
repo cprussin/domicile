@@ -203,11 +203,12 @@ export const WEBVIEW_POPUP_WINDOW_EVENT = "domicile-popup-window";
 export const WEBVIEW_CLOSE_EVENT = "domicile-close";
 
 /**
- * Fired when an extension asks for this browser window to be the one in
- * front: `chrome.tabs.update(id, {active: true})` or
- * `chrome.windows.update(id, {focused: true})`. Every `<webview>` is a tab to
- * `chrome.tabs`, and which window is in front is the shell's, so the browser
- * raises nothing and asks.
+ * Fired when this browser window asks to be in front. Its page asks with
+ * `window.focus()` or `client.focus()`, which is how a site answers a click on
+ * its notification. An extension asks with
+ * `chrome.tabs.update(id, {active: true})` or
+ * `chrome.windows.update(id, {focused: true})`. The shell decides which window
+ * is in front, so the browser raises nothing and asks.
  *
  * THE ENGINE DISPATCHES THIS, and it carries nothing: the element is the
  * window asked for. A shell raises and focuses it. It bubbles.

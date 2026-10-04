@@ -63,6 +63,7 @@ Headless.
 | `guard-webview-escape.sh` | Escape with an unfocused browser window does not crash the browser (patch 0037) |
 | `guard-webview-browser-page.sh` | `chrome://history` in a browser window is refused by `BrowserPageThrottle` (patch 0083) |
 | `guard-webview-click.sh` | a click in a browser window fires an event in the shell's document |
+| `guard-webview-activate.sh` | a page brought to the front (`Page.bringToFront`, the same `Activate()` as a notification click's `client.focus()`) fires `domicile-focus-request` |
 | `guard-webview-routed-link.sh` | a middle click on a link asks for a new window through `OpenURLFromTab` |
 | `guard-webview-new-window.sh` | a `target="_blank"` link fires `domicile-new-window`, and the new `<webview>` loads it |
 | `guard-webview-upload.sh` | `<input type="file">` asks the shell over `domicile-file-chooser`, and the page reads the chosen file (patch 0053) |
