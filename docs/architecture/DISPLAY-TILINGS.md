@@ -55,13 +55,32 @@ moving layer draws from its tilings.
 
 ## Tile memory
 
-- Budget (`GetGpuMemoryPolicy`): 1152 MB scaled by the widget's initial screen
-  area, at least 512 MB, at most a quarter of RAM.
-  `--force-gpu-mem-available-mb` overrides it.
-- The shell's page is created before it learns it spans the desk, so that
-  initial screen is the host monitor alone. `domicile-launch` therefore passes
+- **Upstream budget** (`GetGpuMemoryPolicy`): 1152 MB scaled by the widget's
+  initial screen area, at least 512 MB, at most a quarter of RAM. The desk
+  page starts on the host monitor, so this covers only the host's share of
+  the desk.
+- **`--force-gpu-mem-available-mb`**, when set, is the budget, and the desk
+  budget does not apply. `domicile-launch` passes
   `--force-gpu-mem-available-mb=3072` (`DESK_TILE_MEMORY_MB` in `spawn.rs`).
-- A ~40 Mpx desk at S needs ~160 MB of tiles per full-desk layer. A monitor at
-  ratio `r` adds `r²` of its share.
-- Over budget, required tiles are marked OOM and drawn as checkerboard. So
+- **Desk budget** (patch 0088, `DomicileTileBytesFor`): the page's pixels at S
+  plus each monitor's tiling (its region × `r²`), at 4 bytes, × 8: four
+  full-desk layers (the page, two wallpapers mid-crossfade, an overlay), each
+  with a pending twin. At most a quarter of RAM. 0 for a widget on no
+  monitor.
+  - `WidgetBase` computes it with the regions. The commit carries it, and
+    `LayerTreeHostImpl::ActualManagedMemoryPolicy` raises the budget to it.
+    It never lowers the budget, so upstream's is a floor.
+  - `home-office-right-two` (1.5 laptop, two 1.2 4K portrait monitors,
+    5520x3200 desk): 39.7 Mpx + 2 × 8.3 Mpx = 56.3 Mpx, ~1.7 GiB. Upstream
+    gives ~583 MB.
+  - `CommitState`'s copy keeps the regions and the budget for the next commit.
+- Over budget, required tiles are marked OOM and drawn as solid color. So
   when memory is tight, a display tiling is worse than resampling.
+- **Eviction order**: display tilings are NON_IDEAL, so in each eviction phase
+  their tiles go before high-res tiles, even inside a region where high res is
+  only fallback.
+  - Visible tiles of both stay: eviction stops at a tile of equal priority,
+    and both are NOW at distance 0.
+  - Ordering display tilings after high res would evict the host monitor's
+    drawn high-res tiles first. A region-aware order needs per-tile checks in
+    the eviction iterators.
