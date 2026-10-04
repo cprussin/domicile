@@ -32,6 +32,23 @@ class FrozenArray;
 
 class DomicileDisplay;
 class DomicileShortcut;
+class DomicileAudioEvent;
+class DomicileBatteryEvent;
+class DomicileClipboardEvent;
+class DomicileExtensionsEvent;
+class DomicileIdleEvent;
+class DomicileLockedEvent;
+class DomicileModifiersEvent;
+class DomicileNotificationsEvent;
+class DomicileThemeEvent;
+class DomicileTrayEvent;
+class DomicileClipboardEntry;
+class DomicileTrayItem;
+class DomicileNotification;
+class DomicileExtension;
+class DomicileAudioDevice;
+class DomicileAudioStream;
+class DomicileAudioCard;
 class DomicileWindow;
 struct DomicileWindowState;
 class LocalDOMWindow;
@@ -203,6 +220,28 @@ class MODULES_EXPORT DomicileHost final
   // The window holding the keyboard, or a null String when the page holds it.
   const String& focusedWindow() const { return focused_window_; }
 
+  // The desk's state: what the compositor last said, null until it has said
+  // anything. See the IDL.
+  const FrozenArray<DomicileClipboardEntry>* clipboard() const;
+  const FrozenArray<DomicileTrayItem>* tray() const;
+  const FrozenArray<DomicileNotification>* notifications() const;
+  const FrozenArray<DomicileExtension>* extensions() const;
+  const FrozenArray<DomicileAudioDevice>* audioOutputs() const;
+  const FrozenArray<DomicileAudioDevice>* audioInputs() const;
+  const FrozenArray<DomicileAudioStream>* audioPlayback() const;
+  const FrozenArray<DomicileAudioStream>* audioRecording() const;
+  const FrozenArray<DomicileAudioCard>* audioCards() const;
+  std::optional<double> batteryCharge() const;
+  std::optional<bool> batteryCharging() const;
+  std::optional<bool> idle() const;
+  std::optional<bool> locked() const;
+  std::optional<V8DomicileTheme> theme() const;
+  std::optional<V8DomicileTheme> windowsTheme() const;
+  std::optional<bool> altKey() const;
+  std::optional<bool> ctrlKey() const;
+  std::optional<bool> shiftKey() const;
+  std::optional<bool> metaKey() const;
+
   // EventTarget:
   const AtomicString& InterfaceName() const override;
   ExecutionContext* GetExecutionContext() const override;
@@ -370,6 +409,18 @@ class MODULES_EXPORT DomicileHost final
   Vector<DomicileWindowState> window_states_;
   Member<FrozenArray<DomicileWindow>> windows_;
   String focused_window_;
+  // The last of each stateful event, which its attributes read from.
+  Member<DomicileClipboardEvent> last_clipboard_;
+  Member<DomicileTrayEvent> last_tray_items_;
+  Member<DomicileNotificationsEvent> last_notifications_;
+  Member<DomicileExtensionsEvent> last_extensions_;
+  Member<DomicileAudioEvent> last_audio_;
+  Member<DomicileBatteryEvent> last_battery_;
+  Member<DomicileIdleEvent> last_idle_;
+  Member<DomicileLockedEvent> last_locked_;
+  Member<DomicileThemeEvent> last_theme_;
+  Member<DomicileThemeEvent> last_windows_theme_;
+  Member<DomicileModifiersEvent> last_modifiers_;
   std::optional<double> brightness_;
   HeapMojoRemote<domicile::mojom::blink::ControlChannel> channel_;
   HeapMojoReceiver<domicile::mojom::blink::ControlChannelClient, DomicileHost>
