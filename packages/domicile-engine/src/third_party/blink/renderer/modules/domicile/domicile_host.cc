@@ -10,6 +10,7 @@
 
 #include "base/check.h"
 #include "base/functional/callback.h"
+#include "ui/events/keycodes/dom/keycode_converter.h"
 #include "components/domicile/common/cursor_shape.h"
 #include "components/domicile/common/display_transform.h"
 #include "components/domicile/common/theme.h"
@@ -23,6 +24,8 @@
 #include "third_party/blink/renderer/core/css/media_query_list.h"
 #include "third_party/blink/renderer/core/css/media_query_list_listener.h"
 #include "third_party/blink/renderer/core/dom/events/native_event_listener.h"
+#include "third_party/blink/renderer/core/events/keyboard_event.h"
+#include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/event_target_names.h"
 #include "third_party/blink/renderer/core/event_type_names.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
@@ -60,6 +63,8 @@
 #include "third_party/blink/renderer/platform/bindings/exception_code.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/heap/persistent.h"
+#include "third_party/blink/renderer/platform/json/json_parser.h"
+#include "third_party/blink/renderer/platform/json/json_values.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
 
@@ -77,6 +82,18 @@ class DesktopResized final : public NativeEventListener {
 
  private:
   const base::RepeatingClosure report_;
+};
+
+// A key went down on the page.
+class PageKeyPressed final : public NativeEventListener {
+ public:
+  explicit PageKeyPressed(base::RepeatingCallback<void(Event*)> pressed)
+      : pressed_(std::move(pressed)) {}
+
+  void Invoke(ExecutionContext*, Event* event) override { pressed_.Run(event); }
+
+ private:
+  const base::RepeatingCallback<void(Event*)> pressed_;
 };
 
 // The ratio the last report named stopped matching: the window moved to a
@@ -742,6 +759,110 @@ void DomicileHost::grabShortcut(ScriptState*, const DomicileShortcut* shortcut,
   }
 }
 
+void DomicileHost::grabShortcut(ScriptState*,
+                                const String& written,
+                                ExceptionState& exception_state) {
+  String error;
+  const std::optional<DomicileWrittenChord> chord =
+      ParseDomicileChord(written, &error);
+  if (!chord) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kSyntaxError, error);
+    return;
+  }
+  // A keyboard already heard can say now that the keysym is on no key. One
+  // not heard yet says so when it arrives, as a warning: the page has long
+  // since returned.
+  if (keys_ && !ResolveDomicileChord(*chord, *keys_)) {
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kNotFoundError,
+        "chord \"" + written + "\": \"" + chord->keysym +
+            "\" is on no key of this keyboard");
+    return;
+  }
+  if (!Ready(exception_state)) {
+    return;
+  }
+  for (const GrabbedChord& grabbed : chords_) {
+    if (grabbed.written == written) {
+      return;
+    }
+  }
+  chords_.push_back(GrabbedChord{written, *chord, std::nullopt});
+  if (!key_listener_) {
+    key_listener_ = MakeGarbageCollected<PageKeyPressed>(BindRepeating(
+        &DomicileHost::PageKeyDown, WrapWeakPersistent(this)));
+    // Capturing, on the window: first of anything on the page, so a forward
+    // of keys to an `<app>` sees the chord already taken (`defaultPrevented`)
+    // and leaves it.
+    window_->addEventListener(event_type_names::kKeydown, key_listener_.Get(),
+                              /*use_capture=*/true);
+  }
+  ResolveChords();
+}
+
+// A claim is never given back -- the channel has no way to release one -- so a
+// chord whose key moved is grabbed on its new key and the old one stays the
+// desktop's, answering nothing, until the page reloads.
+void DomicileHost::ResolveChords() {
+  if (!keys_ || !channel_.is_bound()) {
+    return;
+  }
+  for (GrabbedChord& grabbed : chords_) {
+    const std::optional<DomicilePress> press =
+        ResolveDomicileChord(grabbed.chord, *keys_);
+    if (!press) {
+      if (window_) {
+        window_->AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
+            mojom::blink::ConsoleMessageSource::kJavaScript,
+            mojom::blink::ConsoleMessageLevel::kWarning,
+            "domicile: chord \"" + grabbed.written + "\": \"" +
+                grabbed.chord.keysym + "\" is on no key of this keyboard"));
+      }
+    } else if (press != grabbed.press) {
+      channel_->GrabShortcut(domicile::mojom::blink::Shortcut::New(
+          press->keycode, press->alt, press->ctrl, press->shift, press->meta));
+    }
+    grabbed.press = press;
+  }
+}
+
+String DomicileHost::ChordFor(const DomicilePress& press) const {
+  for (const GrabbedChord& grabbed : chords_) {
+    if (grabbed.press == press) {
+      return grabbed.written;
+    }
+  }
+  return String();
+}
+
+void DomicileHost::PageKeyDown(Event* event) {
+  auto* key = DynamicTo<KeyboardEvent>(event);
+  if (!key) {
+    return;
+  }
+  const int evdev = ui::KeycodeConverter::DomCodeToEvdevCode(
+      ui::KeycodeConverter::CodeStringToDomCode(key->code().Utf8()));
+  if (evdev <= 0) {
+    return;
+  }
+  const DomicilePress press{static_cast<uint32_t>(evdev), key->altKey(),
+                            key->ctrlKey(), key->shiftKey(), key->metaKey()};
+  const String chord = ChordFor(press);
+  if (chord.IsNull()) {
+    return;
+  }
+  // Taken from the page whether or not it fires: the chord is the desktop's
+  // for as long as it is held. A held key repeats; the compositor never sees a
+  // repeat, so neither does the shell.
+  event->preventDefault();
+  if (key->repeat()) {
+    return;
+  }
+  DispatchOrHold(*MakeGarbageCollected<DomicileShortcutEvent>(
+      domicile_event_names::Shortcut(), chord, press.keycode, press.alt,
+      press.ctrl, press.shift, press.meta, Arrival(key->PlatformTimeStamp())));
+}
+
 // Through the tray's pipe rather than the channel's: see the IDL. Ready()
 // because EnsureBound binds the two together, so a bound channel is a bound
 // tray.
@@ -905,9 +1026,12 @@ void DomicileHost::AppCursor(const String& app_id,
 
 void DomicileHost::ShortcutPressed(domicile::mojom::blink::ShortcutPtr shortcut,
                                    base::TimeTicks arrival) {
+  const DomicilePress press{shortcut->keycode, shortcut->alt, shortcut->ctrl,
+                            shortcut->shift, shortcut->meta};
   DispatchOrHold(*MakeGarbageCollected<DomicileShortcutEvent>(
-      domicile_event_names::Shortcut(), shortcut->keycode, shortcut->alt,
-      shortcut->ctrl, shortcut->shift, shortcut->meta, Arrival(arrival)));
+      domicile_event_names::Shortcut(), ChordFor(press), shortcut->keycode,
+      shortcut->alt, shortcut->ctrl, shortcut->shift, shortcut->meta,
+      Arrival(arrival)));
 }
 
 void DomicileHost::Modifiers(bool alt, bool ctrl, bool shift, bool meta,
@@ -1176,6 +1300,22 @@ void DomicileHost::Locked(bool locked, base::TimeTicks arrival) {
 // options are freeform, so the page parses `config` for itself. See
 // ControlChannelClient::ShellConfig.
 void DomicileHost::ShellConfig(const String& config, base::TimeTicks arrival) {
+  // The keys, for the chords grabbed by name. A line without them leaves the
+  // last keyboard heard in place: the browser forwards only what parsed.
+  if (std::unique_ptr<JSONObject> parsed = JSONObject::From(ParseJSON(config))) {
+    if (JSONObject* keys = parsed->GetJSONObject("keys")) {
+      HashMap<String, uint32_t> read;
+      for (wtf_size_t at = 0; at < keys->size(); ++at) {
+        const JSONObject::Entry entry = keys->at(at);
+        int keycode = 0;
+        if (entry.second->AsInteger(&keycode) && keycode > 0) {
+          read.Set(entry.first, static_cast<uint32_t>(keycode));
+        }
+      }
+      keys_ = std::move(read);
+      ResolveChords();
+    }
+  }
   DispatchEvent(*MakeGarbageCollected<DomicileShellConfigEvent>(
       domicile_event_names::Shellconfig(), config, Arrival(arrival)));
 }
@@ -1373,6 +1513,7 @@ void DomicileHost::Trace(Visitor* visitor) const {
   visitor->Trace(tray_);
   visitor->Trace(tray_receiver_);
   visitor->Trace(resize_listener_);
+  visitor->Trace(key_listener_);
   visitor->Trace(density_query_);
   visitor->Trace(density_listener_);
   EventTarget::Trace(visitor);
