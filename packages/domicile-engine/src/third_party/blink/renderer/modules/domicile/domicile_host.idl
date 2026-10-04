@@ -396,6 +396,27 @@
   // its density moved. Read `displays` for what it is now.
   attribute EventHandler ondisplayschanged;
 
+  // Every client window on the desktop, in the order they appeared: what the
+  // compositor has said about each so far. Reading it binds the channel, and
+  // the compositor announces the windows already running as it does, so a
+  // shell that reads late misses nothing -- it reads, then listens for
+  // `windowschanged`. A different array after every change, for `displays`'s
+  // reason.
+  readonly attribute FrozenArray<DomicileWindow> windows;
+
+  // A window appeared, closed, or changed: its title, size, limits, cursor or
+  // popup placement. Read `windows` for what they are now.
+  attribute EventHandler onwindowschanged;
+
+  // The window holding the keyboard, or null when the shell's page holds it.
+  readonly attribute DOMString? focusedWindow;
+
+  // The compositor said where the keyboard is: `focusedWindow` may have
+  // changed. Every time, and once after the windows already running are
+  // replayed to a page that has just connected -- which is how a page tells a
+  // window opened now from one that was running.
+  attribute EventHandler onfocusedwindowchanged;
+
   // The extensions with an action, as a DomicileExtensionsEvent: the whole
   // tray, whenever any of it changes and once as soon as this page listens.
   //
