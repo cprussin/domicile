@@ -796,6 +796,23 @@ export type DomicileAudioStream = {
   readonly device: string;
 };
 
+/** One meter, as the engine hands it over. */
+export type DomicileAudioLevel = {
+  readonly id: string;
+  /** The loudest sample since the last event, 0 through 1 of full scale. */
+  readonly peak: number;
+};
+
+/**
+ * How loud what {@link DomicileHost.watchAudioLevels} asked for is: some
+ * twenty times a second while anything is metered.
+ */
+export type DomicileAudioLevelsEvent = Event & {
+  readonly levels: readonly DomicileAudioLevel[];
+  /** See {@link DomicileModifiersEvent.arrival}. */
+  readonly arrival: DOMHighResTimeStamp;
+};
+
 /** A sound card, as the engine hands it over. */
 export type DomicileAudioCard = {
   readonly id: string;
@@ -949,6 +966,7 @@ export type DomicileHostEventMap = {
    */
   shellconfig: DomicileShellConfigEvent;
   audio: DomicileAudioEvent;
+  audiolevels: DomicileAudioLevelsEvent;
   /**
    * The extensions with an action, whole, whenever one changes and once on
    * connecting.
@@ -1174,6 +1192,16 @@ export type DomicileHost = {
   moveAudioStream(id: string, device: string): void;
   setAudioPort(id: string, port: string): void;
   setAudioProfile(card: string, profile: string): void;
+
+  /**
+   * Meter these devices and streams, by the ids an `audio` event carried,
+   * and fire `audiolevels` with their peaks.
+   *
+   * **A lease**: call it again every second while the meters are on screen.
+   * The compositor stops metering what nobody renewed — metering a microphone
+   * records it — and an empty list lets go at once.
+   */
+  watchAudioLevels(ids: readonly string[]): void;
 
   /**
    * This page's old frame is held for `theme`: turn the desk's windows now.

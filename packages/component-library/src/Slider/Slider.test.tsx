@@ -14,6 +14,24 @@ describe(Slider, () => {
     });
   });
 
+  describe("level", () => {
+    it("draws no meter unless given a level", () => {
+      render(<Slider label="Volume" max={100} min={0} value={42} />);
+
+      expect(screen.queryByRole("meter")).not.toBeInTheDocument();
+    });
+
+    it("meters a level beside the value, named for the slider", () => {
+      render(
+        <Slider label="Volume" level={0.25} max={100} min={0} value={42} />,
+      );
+
+      expect(
+        screen.getByRole("meter", { name: "Volume level" }),
+      ).toHaveAttribute("aria-valuenow", "25");
+    });
+  });
+
   describe("interactions", () => {
     it("steps with the arrow keys", async () => {
       const value = await new Promise((resolve) => {
