@@ -2,7 +2,7 @@ import { Accordion as BaseAccordion } from "@base-ui/react/accordion";
 import { CaretDownIcon } from "@phosphor-icons/react/dist/ssr/CaretDown";
 import type { ReactNode } from "react";
 
-import { css } from "../../styled-system/css";
+import { css, cva } from "../../styled-system/css";
 import { flex, hstack } from "../../styled-system/patterns";
 import type { ExtendProps } from "../extend-props";
 
@@ -21,8 +21,16 @@ type Props = ExtendProps<
   typeof BaseAccordion.Root<string>,
   {
     items: readonly AccordionItem[];
+    /**
+     * `sm` for sections under something they belong to — "more of these"
+     * under one of them: a smaller, quieter label.
+     */
+    size?: Size | undefined;
   }
 >;
+
+export const SIZES = ["md", "sm"] as const;
+export type Size = (typeof SIZES)[number];
 
 /**
  * Sections stacked under their labels, each opening in place with the rest
@@ -37,7 +45,7 @@ type Props = ExtendProps<
  * **Drawn in `currentcolor`**, as `Slider` is, so it reads in a card and over
  * a photograph alike.
  */
-export const Accordion = ({ items, ...rootProps }: Props) => (
+export const Accordion = ({ items, size = "md", ...rootProps }: Props) => (
   <BaseAccordion.Root className={rootStyles} {...rootProps}>
     {items.map((item) => (
       <BaseAccordion.Item
@@ -47,9 +55,12 @@ export const Accordion = ({ items, ...rootProps }: Props) => (
         value={item.value}
       >
         <BaseAccordion.Header className={headerStyles}>
-          <BaseAccordion.Trigger className={triggerStyles}>
-            <span className={labelStyles}>{item.label}</span>
-            <CaretDownIcon className={caretStyles} size={12} />
+          <BaseAccordion.Trigger className={triggerStyles({ size })}>
+            <span className={labelStyles({ size })}>{item.label}</span>
+            <CaretDownIcon
+              className={caretStyles}
+              size={size === "sm" ? 10 : 12}
+            />
           </BaseAccordion.Trigger>
         </BaseAccordion.Header>
         <BaseAccordion.Panel className={panelStyles}>
@@ -77,37 +88,51 @@ const headerStyles = css({
   margin: 0,
 });
 
-const triggerStyles = hstack({
-  _disabled: {
-    cursor: "not-allowed",
-    opacity: "disabled",
+const triggerStyles = cva({
+  base: hstack.raw({
+    _disabled: {
+      cursor: "not-allowed",
+      opacity: "disabled",
+    },
+    _focusVisible: {
+      backgroundColor: "color-mix(in oklab, currentcolor 12%, transparent)",
+      outlineColor: "transparent",
+    },
+    _hoverEnabled: {
+      backgroundColor: "color-mix(in oklab, currentcolor 8%, transparent)",
+    },
+    backgroundColor: "transparent",
+    borderRadius: "sm",
+    borderStyle: "none",
+    color: "inherit",
+    cursor: "pointer",
+    font: "inherit",
+    gap: 2,
+    inlineSize: "100%",
+    justify: "space-between",
+    paddingInline: 1,
+    textAlign: "start",
+    transition: "background-color {durations.fast} {easings.out}",
+  }),
+  variants: {
+    size: {
+      md: { paddingBlock: 1.5 },
+      sm: { fontSize: "xs", opacity: 0.75, paddingBlock: 1 },
+    },
   },
-  _focusVisible: {
-    backgroundColor: "color-mix(in oklab, currentcolor 12%, transparent)",
-    outlineColor: "transparent",
-  },
-  _hoverEnabled: {
-    backgroundColor: "color-mix(in oklab, currentcolor 8%, transparent)",
-  },
-  backgroundColor: "transparent",
-  borderRadius: "sm",
-  borderStyle: "none",
-  color: "inherit",
-  cursor: "pointer",
-  font: "inherit",
-  gap: 2,
-  inlineSize: "100%",
-  justify: "space-between",
-  paddingBlock: 1.5,
-  paddingInline: 1,
-  textAlign: "start",
-  transition: "background-color {durations.fast} {easings.out}",
 });
 
-const labelStyles = css({
-  flexGrow: 1,
-  fontWeight: "medium",
-  minInlineSize: 0,
+const labelStyles = cva({
+  base: {
+    flexGrow: 1,
+    minInlineSize: 0,
+  },
+  variants: {
+    size: {
+      md: { fontWeight: "medium" },
+      sm: {},
+    },
+  },
 });
 
 // Turned over while its section is open: base-ui marks the trigger.
@@ -129,7 +154,8 @@ const panelStyles = css({
   transition: "block-size {durations.normal} {easings.out}",
 });
 
+// As far from its label as from what comes after it.
 const contentStyles = css({
-  paddingBlockEnd: 2,
+  paddingBlock: 2,
   paddingInline: 1,
 });

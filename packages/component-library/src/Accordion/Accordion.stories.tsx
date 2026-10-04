@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 
 import { css } from "../../styled-system/css";
 import type { AccordionItem } from "./Accordion";
-import { Accordion as AccordionComponent } from "./Accordion";
+import { Accordion as AccordionComponent, SIZES } from "./Accordion";
 
 const ITEMS: readonly AccordionItem[] = [
   {
@@ -28,6 +28,7 @@ const meta = {
     defaultValue: [],
     items: ITEMS,
     multiple: false,
+    size: "md",
   },
   argTypes: {
     defaultValue: {
@@ -46,6 +47,11 @@ const meta = {
     onValueChange: {
       action: "valueChange",
       table: { category: "Events" },
+    },
+    size: {
+      control: "inline-radio",
+      options: SIZES,
+      table: { category: "Appearance" },
     },
     value: {
       control: false,
@@ -84,6 +90,20 @@ export const Multiple: StoryObj<typeof AccordionComponent> = {
   args: {
     defaultValue: ["outputs", "inputs"],
     multiple: true,
+  },
+};
+
+export const Small: StoryObj<typeof AccordionComponent> = {
+  args: {
+    defaultValue: [],
+    items: [
+      {
+        content: <p>HDMI, and a headset.</p>,
+        label: "More outputs",
+        value: "more",
+      },
+    ],
+    size: "sm",
   },
 };
 

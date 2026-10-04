@@ -817,11 +817,11 @@ off the bar; turn the wheel over it to step the output a twentieth.
 
 - **Two sliders**: the default output and the default microphone, each with
   a mute button, a slider, a meter under it and its port as a `Select`.
-- **Beside each, the rest slides in** when there is any: the other outputs
-  and what is playing, or the other inputs and what is recording — every
-  volume, mute, meter, port, whether it is the default, and where a stream
-  plays or records from. A **Cards** button under them slides in the cards'
-  profiles.
+- **Drawers under them**, each only when it has something: **More outputs**
+  under the volume and **More inputs** under the microphone (every other
+  device's volume, mute, meter, port, and making it the default); **Apps**
+  (each app playing or recording, its streams under it — volume, mute, meter,
+  where each plays or records from); **Cards** (each card's profile).
 - **Every choice is a `Select`**: a port, a profile, a stream's device. Its
   list is drawn outside the panel, which the `Popover` counts as inside.
 - **Read off the sound server with `pactl`**, PulseAudio's or PipeWire's: the

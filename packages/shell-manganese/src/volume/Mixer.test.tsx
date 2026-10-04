@@ -64,15 +64,14 @@ describe("Mixer", () => {
       mixer(sound, {
         ...laptop,
         outputs: [device({ default: true })],
-        playback: [],
       });
 
       expect(
-        screen.queryByRole("button", { name: "Other outputs" }),
+        screen.queryByRole("button", { name: "More outputs" }),
       ).not.toBeInTheDocument();
       expect(
-        screen.getByRole("button", { name: "Other inputs" }),
-      ).toBeInTheDocument();
+        screen.queryByRole("button", { name: "More inputs" }),
+      ).not.toBeInTheDocument();
     });
 
     it("meters only what is on screen", async () => {
@@ -81,34 +80,36 @@ describe("Mixer", () => {
       expect(sound.metered.at(-1)).toEqual(["output:speakers", "input:mic"]);
 
       await userEvent.click(
-        screen.getByRole("button", { name: "Other outputs" }),
+        screen.getByRole("button", { name: "More outputs" }),
       );
 
-      expect(sound.metered.at(-1)).toEqual(["output:hdmi", "playback:42"]);
+      expect(sound.metered.at(-1)).toEqual([
+        "output:speakers",
+        "input:mic",
+        "output:hdmi",
+      ]);
     });
   });
 
-  describe("other outputs", () => {
-    it("slides in the rest, but not the default, and back", async () => {
+  describe("more outputs", () => {
+    it("opens a drawer of the rest under the default, and shuts it", async () => {
       const sound = heldSound();
       mixer(sound);
+      const more = screen.getByRole("button", { name: "More outputs" });
 
-      await userEvent.click(
-        screen.getByRole("button", { name: "Other outputs" }),
-      );
+      await userEvent.click(more);
 
-      expect(
-        screen.getByRole("heading", { name: "Other outputs" }),
-      ).toBeVisible();
       expect(screen.getByRole("slider", { name: "HDMI" })).toBeVisible();
       expect(
         screen.queryByRole("slider", { name: "Speakers" }),
       ).not.toBeInTheDocument();
+      // The default is still there, over its drawer.
+      expect(screen.getByRole("slider", { name: "Volume" })).toBeVisible();
 
-      await userEvent.click(screen.getByRole("button", { name: "Back" }));
+      await userEvent.click(more);
 
       expect(
-        screen.queryByRole("heading", { name: "Other outputs" }),
+        screen.queryByRole("slider", { name: "HDMI" }),
       ).not.toBeInTheDocument();
     });
 
@@ -116,7 +117,7 @@ describe("Mixer", () => {
       const sound = heldSound();
       mixer(sound);
       await userEvent.click(
-        screen.getByRole("button", { name: "Other outputs" }),
+        screen.getByRole("button", { name: "More outputs" }),
       );
 
       screen.getByRole("slider", { name: "HDMI" }).focus();
@@ -130,13 +131,28 @@ describe("Mixer", () => {
         ["setDefaultAudioDevice", "output:hdmi"],
       ]);
     });
+  });
+
+  describe("apps", () => {
+    it("opens a drawer of each app and its streams", async () => {
+      const sound = heldSound();
+      mixer(sound);
+
+      await userEvent.click(screen.getByRole("button", { name: "Apps" }));
+
+      expect(screen.getByRole("heading", { name: "Firefox" })).toBeVisible();
+      expect(screen.getByRole("heading", { name: "Recorder" })).toBeVisible();
+      expect(sound.metered.at(-1)).toEqual([
+        "output:speakers",
+        "input:mic",
+        "playback:42",
+      ]);
+    });
 
     it("turns down what is playing, and moves it", async () => {
       const sound = heldSound();
       mixer(sound);
-      await userEvent.click(
-        screen.getByRole("button", { name: "Other outputs" }),
-      );
+      await userEvent.click(screen.getByRole("button", { name: "Apps" }));
 
       await userEvent.click(
         screen.getByRole("button", { name: "Mute Firefox: A song" }),
@@ -148,25 +164,26 @@ describe("Mixer", () => {
         ["moveAudioStream", "playback:42", "output:hdmi"],
       ]);
     });
-  });
 
-  describe("other inputs", () => {
-    it("leaves out the outputs' monitors, but can record from one", async () => {
+    it("can record from what an output plays", async () => {
       const sound = heldSound();
       mixer(sound);
-      await userEvent.click(
-        screen.getByRole("button", { name: "Other inputs" }),
-      );
-
-      expect(
-        screen.queryByRole("slider", { name: "Monitor of Speakers" }),
-      ).not.toBeInTheDocument();
+      await userEvent.click(screen.getByRole("button", { name: "Apps" }));
 
       await choose("Recorder input", "Monitor of Speakers");
 
       expect(sound.asked).toEqual([
         ["moveAudioStream", "recording:7", "input:speakers.monitor"],
       ]);
+    });
+
+    it("has no drawer when nothing plays or records", () => {
+      const sound = heldSound();
+      mixer(sound, { ...laptop, playback: [], recording: [] });
+
+      expect(
+        screen.queryByRole("button", { name: "Apps" }),
+      ).not.toBeInTheDocument();
     });
   });
 
