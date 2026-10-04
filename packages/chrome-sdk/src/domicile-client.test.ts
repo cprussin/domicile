@@ -7,6 +7,7 @@ import type {
   DomicileHost,
   DomicileHostEventMap,
   DomicileShortcut,
+  DomicileWindow,
 } from "./domicile-host";
 import { focusedApp } from "./element-context";
 import { FilePreview } from "./file-preview";
@@ -57,6 +58,8 @@ class FakeHost implements DomicileHost {
 
   /** `null` until a brightness is reported, as in the engine. */
   brightness: number | null = null;
+  readonly windows: readonly DomicileWindow[] = [];
+  readonly focusedWindow: string | null = null;
 
   readonly #listeners = new Map<string, (event: never) => void>();
 

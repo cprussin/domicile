@@ -90,6 +90,8 @@ const EVENT_NAMES = [
   "audiolevels",
   "notifications",
   "openurl",
+  "windowschanged",
+  "focusedwindowchanged",
 ];
 
 export const Shell = () => {

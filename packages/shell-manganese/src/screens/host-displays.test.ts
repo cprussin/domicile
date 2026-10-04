@@ -5,6 +5,7 @@ import type {
   DomicileDisplay,
   DomicileHost,
   DomicileHostEventMap,
+  DomicileWindow,
 } from "@domicile-desktop/sdk/domicile-host";
 
 import { hostDisplays } from "./host-displays";
@@ -22,6 +23,8 @@ const ignored = (): undefined => undefined;
 class Host implements DomicileHost {
   displays: readonly DomicileDisplay[] | null = null;
   brightness: number | null = null;
+  readonly windows: readonly DomicileWindow[] = [];
+  readonly focusedWindow: string | null = null;
 
   readonly #listeners = new Map<string, (event: never) => void>();
 
