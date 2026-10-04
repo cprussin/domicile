@@ -297,6 +297,7 @@ fn the_compositor_is_a_producer_to_the_engine() {
         Path::new("/b/domicile-compositor"),
         Path::new("/l/engine"),
         Path::new("/b/domicile-open-url"),
+        Path::new("/d/share"),
         &runtime(),
         None,
         &|_| None,
@@ -336,6 +337,7 @@ fn the_compositor_carries_this_desktops_control_socket_to_everything_it_starts()
         Path::new("/b/domicile-compositor"),
         Path::new("/l/engine"),
         Path::new("/b/domicile-open-url"),
+        Path::new("/d/share"),
         &runtime(),
         None,
         &|_| None,
@@ -356,6 +358,7 @@ fn a_link_an_app_opens_opens_in_this_desktop() {
         Path::new("/b/domicile-compositor"),
         Path::new("/l/engine"),
         Path::new("/b/domicile-open-url"),
+        Path::new("/d/share"),
         &runtime(),
         None,
         &|_| None,
@@ -373,6 +376,7 @@ fn xdg_open_is_this_desktops_for_every_app_it_starts() {
         Path::new("/b/domicile-compositor"),
         Path::new("/l/engine"),
         Path::new("/b/domicile-open-url"),
+        Path::new("/d/share"),
         &runtime(),
         None,
         &inherited,
@@ -380,6 +384,48 @@ fn xdg_open_is_this_desktops_for_every_app_it_starts() {
     assert_eq!(
         env_of(&spawned, "PATH").unwrap(),
         "/run/d/bin:/usr/bin:/bin"
+    );
+}
+
+#[test]
+fn a_link_an_app_opens_through_gio_or_a_portal_opens_in_this_desktop_too() {
+    // Not every program runs `xdg-open`: GIO and the portal read
+    // `domicile-mimeapps.list` out of the data directories themselves, where
+    // `XDG_CURRENT_DESKTOP` is `domicile`. The desktop's own `share` carries
+    // that file and the `domicile-open-url` entry it names, so it goes in
+    // front of every app's data directories -- with no file in anybody's home.
+    let inherited = |name: &str| (name == "XDG_DATA_DIRS").then(|| "/run/sw/share".to_string());
+    let spawned = compositor(
+        Path::new("/b/domicile-compositor"),
+        Path::new("/l/engine"),
+        Path::new("/b/domicile-open-url"),
+        Path::new("/d/share"),
+        &runtime(),
+        None,
+        &inherited,
+    );
+    assert_eq!(
+        env_of(&spawned, "XDG_DATA_DIRS").unwrap(),
+        "/d/share:/run/sw/share"
+    );
+}
+
+#[test]
+fn a_machine_with_no_data_directories_keeps_the_defaults_behind_this_desktops() {
+    // Unset means `/usr/local/share:/usr/share` to everything that reads it,
+    // and a variable holding only this desktop's would take those away.
+    let spawned = compositor(
+        Path::new("/b/domicile-compositor"),
+        Path::new("/l/engine"),
+        Path::new("/b/domicile-open-url"),
+        Path::new("/d/share"),
+        &runtime(),
+        None,
+        &|_| None,
+    );
+    assert_eq!(
+        env_of(&spawned, "XDG_DATA_DIRS").unwrap(),
+        "/d/share:/usr/local/share:/usr/share"
     );
 }
 
@@ -393,6 +439,7 @@ fn the_engines_libraries_go_in_front_of_whatever_was_there() {
         Path::new("/b/domicile-compositor"),
         Path::new("/l/engine"),
         Path::new("/b/domicile-open-url"),
+        Path::new("/d/share"),
         &runtime(),
         None,
         &inherited,
@@ -413,6 +460,7 @@ fn the_compositor_is_quiet_unless_asked_otherwise() {
         Path::new("/b/c"),
         Path::new("/l/engine"),
         Path::new("/b/domicile-open-url"),
+        Path::new("/d/share"),
         &runtime(),
         None,
         &|_| None,
@@ -427,6 +475,7 @@ fn the_compositor_is_quiet_unless_asked_otherwise() {
         Path::new("/b/c"),
         Path::new("/l/engine"),
         Path::new("/b/domicile-open-url"),
+        Path::new("/d/share"),
         &runtime(),
         None,
         &asked,
@@ -565,6 +614,7 @@ fn the_compositor_is_given_the_config_it_was_started_with() {
         Path::new("/b/domicile-compositor"),
         Path::new("/l/engine"),
         Path::new("/b/domicile-open-url"),
+        Path::new("/d/share"),
         &runtime(),
         Some(Path::new("/etc/domicile/desk.json")),
         &|_| None,
@@ -594,6 +644,7 @@ fn a_desktop_with_no_config_is_given_no_flag_rather_than_an_empty_one() {
         Path::new("/b/domicile-compositor"),
         Path::new("/l/engine"),
         Path::new("/b/domicile-open-url"),
+        Path::new("/d/share"),
         &runtime(),
         None,
         &|_| None,

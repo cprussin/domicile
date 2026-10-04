@@ -197,6 +197,15 @@
   '';
 
 in {
+  imports = [
+    (lib.mkRemovedOptionModule ["programs" "domicile" "defaultBrowser"] ''
+      Domicile ships its own `domicile-mimeapps.list` and puts it in front of
+      every app's data directories, so the home needs no file: inside a desk
+      web links open there unless a `mimeapps.list` of your own names a
+      browser.
+    '')
+  ];
+
   options.programs.domicile = {
     enable = lib.mkEnableOption "Domicile, a Wayland compositor whose renderer is a web engine";
 
@@ -208,19 +217,6 @@ in {
       type = lib.types.package;
       default = domicilePackages.domicile;
       defaultText = lib.literalExpression "domicile.packages.\${system}.domicile";
-    };
-
-    defaultBrowser = lib.mkOption {
-      description = ''
-        Make `domicile-open-url` the default browser inside a desktop: the
-        handler for web links in `domicile-mimeapps.list`, which `xdg-open`
-        reads and which programs check before asking to be the default
-        themselves. A link then opens in a browser window of that desktop;
-        `BROWSER` is set to the same program there whatever this says. Other
-        sessions keep the browser `mimeapps.list` names.
-      '';
-      type = lib.types.bool;
-      default = true;
     };
 
     shell = lib.mkOption {
@@ -620,21 +616,5 @@ in {
     # and why it walks lists as well as attrsets.
     xdg.configFile."domicile/domicile.json".source =
       json.generate "domicile.json" (withoutNulls cfg.settings);
-
-    # The desktop entry is the package's own, installed with it above.
-    #
-    # `domicile-mimeapps.list`, NOT `mimeapps.list`: `xdg-open`, GIO and the
-    # portal read it ahead of the plain one only where `XDG_CURRENT_DESKTOP`
-    # is `domicile`, which the compositor sets for everything it starts.
-    # `domicile-open-url` has no desktop to ask outside one, so the same home
-    # booted into another session keeps that session's browser.
-    xdg.configFile."domicile-mimeapps.list" = lib.mkIf cfg.defaultBrowser {
-      source = (pkgs.formats.ini {}).generate "domicile-mimeapps.list" {
-        "Default Applications" =
-          lib.genAttrs
-          ["text/html" "x-scheme-handler/http" "x-scheme-handler/https"]
-          (_: "domicile-open-url.desktop");
-      };
-    };
   };
 }

@@ -505,6 +505,15 @@ costs nothing.
   an `<app>` is embedded the same way, as a surface layer, and no pixel guard
   has yet put one under a transition. If it is not captured, a window shows
   through the wipe live and turns before it rather than behind it.
+- **The portal does not start in a desk, so neither its theme nor its links
+  reach one.** `xdg-desktop-portal.service` has
+  `Requisite=graphical-session.target`, and nothing in a desk starts that
+  target, so activation fails. Once it runs, a web link it opens for a
+  sandboxed app (Flatpak) starts `domicile-open-url` from the portal's own
+  environment, which needs this desk's `DOMICILE_SOCK` and
+  `domicile-mimeapps.list` there — handed over without capturing the links of
+  a session a nested desk sits in, and without a stale socket outliving the
+  desk that set it.
 - **A portal frontend already running under another desktop is not
   re-routed.** `xdg-desktop-portal` reads which backend to use out of its
   *own* `XDG_CURRENT_DESKTOP`, so the compositor puts the name into the D-Bus

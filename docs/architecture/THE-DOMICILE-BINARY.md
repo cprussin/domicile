@@ -265,8 +265,10 @@ where `xdg-open` links to `domicile-xdg-open`, so a link opens here whatever
 `mimeapps.list` says, and anything else goes to the next `xdg-open` on `PATH`.
 An app whose own wrapper puts another `xdg-open` first (nixpkgs' wrappers often
 prefix `xdg-utils`) misses the shim and reads `mimeapps.list` instead, which is
-why the home-manager module writes `domicile-mimeapps.list`: read only where
-`XDG_CURRENT_DESKTOP` is `domicile`, so other sessions keep their browser. The engine hands the
+why the package ships `share/applications/domicile-mimeapps.list` and the
+compositor's `XDG_DATA_DIRS` starts with that `share`: read only where
+`XDG_CURRENT_DESKTOP` is `domicile`, so other sessions keep their browser, and
+nothing is written into the home. The engine hands the
 address to the newest shell page (`UrlRegistry`), so a page mid-reload does
 not open it twice, and the shell opens it.
 

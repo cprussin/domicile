@@ -569,6 +569,7 @@ fn up(desktop: &Desktop, heard: &Arc<Mutex<Heard>>) -> Result<(), String> {
                 &desktop.components.compositor,
                 &desktop.components.engine,
                 desktop.browser,
+                &data_of(desktop.browser)?,
                 desktop.places,
                 desktop.config,
                 desktop.env,
@@ -924,6 +925,18 @@ fn shim_xdg_open(shims: &Path, program: &Path) -> Result<(), String> {
         .map_err(|why| format!("cannot make {}: {why}", shims.display()))?;
     std::os::unix::fs::symlink(program, shims.join("xdg-open"))
         .map_err(|why| format!("cannot put xdg-open in {}: {why}", shims.display()))
+}
+
+/// The `share` of the installation `browser` is in: `$out/share` beside
+/// `$out/bin`, which carries `domicile-mimeapps.list` and the
+/// `domicile-open-url` entry it names. Out of a checkout it is a `share` that
+/// is not there, and a data directory that does not exist is skipped.
+fn data_of(browser: &Path) -> Result<PathBuf, String> {
+    browser
+        .parent()
+        .and_then(Path::parent)
+        .map(|installation| installation.join("share"))
+        .ok_or_else(|| format!("{} is in no installation of its own", browser.display()))
 }
 
 /// A directory of this run's own, under the runtime directory when there is
