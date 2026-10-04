@@ -181,7 +181,7 @@ export const Select = <V,>({
           data-active={active ? "" : undefined}
           data-control=""
         >
-          <BaseSelect.Value placeholder={placeholder} />
+          <BaseSelect.Value className={valueStyles} placeholder={placeholder} />
           <BaseSelect.Icon className={caretStyles} render={<CaretDownIcon />} />
         </BaseSelect.Trigger>
       </div>
@@ -279,6 +279,16 @@ const triggerStyles = css({
   // `padding: 0` so the wrapper's per-size paddingInline owns the inset.
   padding: 0,
   textAlign: "start",
+});
+
+// One line, cut short, however long the chosen option: the field keeps its
+// height in a row.
+const valueStyles = css({
+  flexShrink: 1,
+  minInlineSize: 0,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
 });
 
 const caretStyles = css({
@@ -495,16 +505,17 @@ const popupStyles = css({
   // never visibly slide behind the rounded border on scroll.
   display: "flex",
   flexDirection: "column",
-  // Force the popup to render at the trigger's exact width so the
-  // "popup as continuation of the field" effect of `alignItemWithTrigger`
-  // is honored even when the longest option's natural width would be
-  // narrower than the trigger. `--anchor-width` is the trigger's measured
-  // pixel width, set by base-ui's anchor positioner via Floating UI's
-  // `size()` middleware. Long labels truncate via `text-overflow: ellipsis`
-  // on the item text rather than widening the popup.
-  inlineSize: "var(--anchor-width)",
+  // At least the trigger's width, so the popup reads as a continuation of
+  // the field (`alignItemWithTrigger`), and wider when an option needs it —
+  // up to the room there is — rather than cutting a short label to a few
+  // letters in a narrow field. `--anchor-width` and `--available-width` are
+  // base-ui's anchor positioner's, via Floating UI's `size()` middleware.
+  // An option longer than the room still truncates, on the item text.
+  inlineSize: "max-content",
   // Cap the visible window; the List inside handles scroll.
   maxBlockSize: "min(60vh, {spacing.96})",
+  maxInlineSize: "var(--available-width)",
+  minInlineSize: "var(--anchor-width)",
   opacity: 1,
   outlineStyle: "none",
   overflow: "hidden",

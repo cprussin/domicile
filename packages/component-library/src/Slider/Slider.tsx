@@ -40,7 +40,8 @@ export const Slider = ({ label, level, ...rootProps }: Props) => (
 
 /**
  * The level, as a hairline under the track: thin enough not to read as a
- * second slider, and in the slider's own color.
+ * second slider, and green, as a meter is, so it does not read as more of
+ * the slider's white either.
  */
 const Meter = ({ label, level }: { label: string; level: number }) => {
   const percent = Math.round(Math.min(1, Math.max(0, level)) * 100);
@@ -91,7 +92,7 @@ const meterStyles = css({
 // Quick to rise and quick to fall: the levels arrive twenty times a second,
 // and a slower ease would draw a level that had already gone.
 const meterFillStyles = css({
-  backgroundColor: "color-mix(in oklab, currentcolor 70%, transparent)",
+  backgroundColor: "success",
   blockSize: "100%",
   display: "block",
   transition: "inline-size {durations.fastest} {easings.linear}",
