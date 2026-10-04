@@ -406,9 +406,14 @@
       # a symlink: nothing asks where *it* really is.
       domicilePackage = pkgs.runCommand "domicile"
         {
-          # A login session as the desktops are, below: `domicile` with no
-          # shell named runs the one its config names, so this session is
-          # the desk the config describes.
+          # THE LOGIN SESSION, and the only one: `domicile` with no shell
+          # named runs the one its config names, so this session is whatever
+          # desk the config describes. `share/wayland-sessions` is where a
+          # display manager looks; `providedSessions` is the top-level
+          # attribute NixOS's `sessionPackages` refuses a package without;
+          # `DesktopNames` is what the display manager sets
+          # `XDG_CURRENT_DESKTOP` from. No `OZONE`: a display manager's session
+          # is on a VT, and `XDG_VTNR` already picks the drm platform.
           passthru.providedSessions = [ "domicile" ];
           meta = {
             description = "Run a Domicile desktop from a shell you built yourself";
@@ -498,19 +503,10 @@
       # not a choice being taken away from them. A shell of your own that
       # spawns something else is unaffected either way -- `.#domicile` takes
       # the page as an argument and wraps no `PATH` at all.
-      #
-      # AND IT IS A LOGIN SESSION, named after itself: `share/wayland-sessions`
-      # is where a display manager looks, and `providedSessions` is the
-      # top-level attribute NixOS's `services.displayManager.sessionPackages`
-      # refuses a package without. `DesktopNames` is what the display manager
-      # sets `XDG_CURRENT_DESKTOP` from, before the compositor gets the chance
-      # to. No `OZONE`: a session from a display manager is on a VT, and
-      # `XDG_VTNR` already picks the drm platform.
       desktop = { name, description }:
         pkgs.runCommand name
           {
             nativeBuildInputs = [ pkgs.makeWrapper ];
-            passthru.providedSessions = [ name ];
             meta = {
               inherit description;
               license = pkgs.lib.licenses.mit;
@@ -528,16 +524,6 @@
           makeWrapper ${domicilePackage}/bin/domicile "$out/bin/${name}" \
             --add-flags ${shellPage name}/shell.js \
             --suffix PATH : ${pkgs.lib.makeBinPath [ pkgs.kitty ]}
-
-          mkdir -p "$out/share/wayland-sessions"
-          cat >"$out/share/wayland-sessions/${name}.desktop" <<DESKTOP
-          [Desktop Entry]
-          Type=Application
-          Name=${name}
-          Comment=${description}
-          Exec=$out/bin/${name}
-          DesktopNames=domicile
-          DESKTOP
         '';
 
       # ── What a user installs ────────────────────────────────────────────
@@ -1087,11 +1073,7 @@
           let
             machine = pkgs.nixos {
               imports = [ self.nixosModules.domicile ];
-              programs.domicile = {
-                enable = true;
-                # A desktop, and Domicile itself: the desk its config names.
-                desktops = [ desktops.simple domicilePackage ];
-              };
+              programs.domicile.enable = true;
               # The module offers sessions and enables nothing: a machine
               # that boots to a login screen has said this itself.
               services.displayManager.enable = true;
@@ -1104,26 +1086,27 @@
             # What the display manager is actually handed: NixOS joins every
             # session package's `share/wayland-sessions` here and refuses one
             # that lacks the file its `providedSessions` names.
-            sessions = "${machine.config.services.displayManager.sessionData.desktops}/share/wayland-sessions";
+            inherit (machine.config.services.displayManager.sessionData) sessionNames;
+            session = "${machine.config.services.displayManager.sessionData.desktops}/share/wayland-sessions/domicile.desktop";
           in
           pkgs.runCommand "nixos-module-evaluates" { } ''
-            # A desktop is a login session named after itself, which is what a
-            # machine's `defaultSession` says to boot into, and it runs that
-            # desktop as the desktop it is: the display manager sets
+            # ONE SESSION, `domicile`, whatever the desk: `domicile` runs the
+            # shell its config names, so which desktop it is is the config's to
+            # say and not the login screen's.
+            [ ${pkgs.lib.escapeShellArg (toString sessionNames)} = domicile ] || {
+              echo "the sessions NixOS sees are: ${toString sessionNames}" >&2
+              echo "and they should have been: domicile" >&2
+              exit 1
+            }
+            # It runs `domicile` as the desktop it is: the display manager sets
             # `XDG_CURRENT_DESKTOP` from `DesktopNames` before the compositor
             # gets the chance to.
-            for session in \
-              'simple Exec=${desktops.simple}/bin/simple' \
-              'domicile Exec=${domicilePackage}/bin/domicile'
-            do
-              set -- $session
-              for line in "$2" 'DesktopNames=domicile'; do
-                grep -qxF "$line" "${sessions}/$1.desktop" || {
-                  echo "the $1 session is missing: $line" >&2
-                  cat "${sessions}/$1.desktop" >&2
-                  exit 1
-                }
-              done
+            for line in 'Exec=${domicilePackage}/bin/domicile' 'DesktopNames=domicile'; do
+              grep -qxF "$line" ${session} || {
+                echo "the domicile session is missing: $line" >&2
+                cat ${session} >&2
+                exit 1
+              }
             done
 
             # THE PAM SERVICE a desk's `lock.pam_service` names, which a
