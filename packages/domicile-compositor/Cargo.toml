@@ -46,13 +46,8 @@ serde_json.workspace = true
 thiserror.workspace = true
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-# D-Bus, for the settings portal (see `src/appearance.rs`) and logind. Pure
-# Rust, so it links nothing. `blocking-api` because this process runs a
-# `calloop` loop, not an async runtime; no default features to avoid tokio.
-zbus = { version = "5.0", default-features = false, features = [
-    "async-io",
-    "blocking-api",
-] }
+# D-Bus, for the settings portal (see `src/appearance.rs`) and logind.
+zbus.workspace = true
 ureq = { version = "3", default-features = false, features = ["rustls", "platform-verifier", "gzip"] }
 
 # The engine renders, so Smithay's winit, DRM and udev backends are left out.

@@ -14,6 +14,7 @@ const systemErrorSchema = z.looseObject({
     "is_a_directory",
     "invalid_input",
     "locked",
+    "dbus",
     "other",
   ]),
   message: z.string(),
@@ -39,13 +40,19 @@ const systemReplySchema = z.looseObject({
       modified_ms: z.number().nullable(),
       size: z.number(),
     }),
+    z.looseObject({
+      body: z.string(),
+      kind: z.literal("returned"),
+      signature: z.string(),
+    }),
     z.looseObject({ kind: z.literal("started") }),
     z.looseObject({ error: systemErrorSchema, kind: z.literal("failed") }),
   ]),
   type: z.literal("system_reply"),
 });
 
-// Output from a running process, or a change a watch saw.
+// Output from a running process, a change a watch saw, or a signal a D-Bus
+// match heard.
 const systemEventSchema = z.looseObject({
   event: z.discriminatedUnion("kind", [
     z.looseObject({
@@ -54,12 +61,21 @@ const systemEventSchema = z.looseObject({
       stream: z.enum(["stdout", "stderr"]),
     }),
     z.looseObject({ kind: z.literal("changed"), path: z.string() }),
+    z.looseObject({
+      body: z.string(),
+      interface: z.string(),
+      kind: z.literal("signal"),
+      member: z.string(),
+      path: z.string(),
+      sender: z.string(),
+      signature: z.string(),
+    }),
   ]),
   id: z.number(),
   type: z.literal("system_event"),
 });
 
-// The last message for a watch or process.
+// The last message for a watch, process or D-Bus match.
 const systemEndSchema = z.looseObject({
   end: z.discriminatedUnion("kind", [
     z.looseObject({

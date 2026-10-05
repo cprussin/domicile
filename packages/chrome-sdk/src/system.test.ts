@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import type { Result } from "@cprussin/option-result";
 import { Err, Ok } from "@cprussin/option-result";
 import type { SystemError, SystemHost } from "./system";
-import { FileType, Signal, SystemErrorKind, system } from "./system";
+import { Bus, FileType, Signal, SystemErrorKind, system } from "./system";
 
 /**
  * A desktop that records system calls and answers them as the
@@ -249,7 +249,7 @@ describe("watches", () => {
       [1, { call: "watch", path: "/home/ada/.config" }],
       [1, { call: "unwatch" }],
     ]);
-    expect(await Array.fromAsync(watch.changes)).toStrictEqual([
+    expect(await Array.fromAsync(watch.items)).toStrictEqual([
       "/home/ada/.config/a",
     ]);
     expect(await watch.ended).toStrictEqual(Ok("stopped"));
@@ -268,6 +268,120 @@ describe("watches", () => {
     expect(await watch.ended).toStrictEqual(
       Err({ kind: SystemErrorKind.Other, message: "the watch broke" }),
     );
+  });
+});
+
+describe("D-Bus", () => {
+  it("calls a method with a typed body", async () => {
+    const host = new FakeHost();
+    const calling = system(host).dbusCall({
+      body: ["org.freedesktop.UPower.Device"],
+      bus: Bus.System,
+      destination: "org.freedesktop.UPower",
+      interface: "org.freedesktop.DBus.Properties",
+      member: "GetAll",
+      path: "/org/freedesktop/UPower/devices/DisplayDevice",
+      signature: "s",
+    });
+    host.reply(1, {
+      body: JSON.stringify([{ Percentage: { signature: "d", value: 97 } }]),
+      kind: "returned",
+      signature: "a{sv}",
+    });
+
+    expect(host.calls).toStrictEqual([
+      [
+        1,
+        {
+          body: '["org.freedesktop.UPower.Device"]',
+          bus: "system",
+          call: "dbus_call",
+          destination: "org.freedesktop.UPower",
+          interface: "org.freedesktop.DBus.Properties",
+          member: "GetAll",
+          path: "/org/freedesktop/UPower/devices/DisplayDevice",
+          signature: "s",
+        },
+      ],
+    ]);
+    expect(await calling).toStrictEqual(
+      Ok({
+        body: [{ Percentage: { signature: "d", value: 97 } }],
+        signature: "a{sv}",
+      }),
+    );
+  });
+
+  it("names a method's error", async () => {
+    const host = new FakeHost();
+    const calling = system(host).dbusCall({
+      bus: Bus.Session,
+      destination: "org.example",
+      interface: "org.example",
+      member: "Nothing",
+      path: "/",
+    });
+    host.reply(1, {
+      error: {
+        kind: "dbus",
+        message: "org.freedesktop.DBus.Error.UnknownMethod",
+      },
+      kind: "failed",
+    });
+
+    expect(host.calls[0]?.[1]).toMatchObject({ body: "[]", signature: "" });
+    expect(await calling).toStrictEqual(
+      Err({
+        kind: SystemErrorKind.Dbus,
+        message: "org.freedesktop.DBus.Error.UnknownMethod",
+      }),
+    );
+  });
+
+  it("streams the signals a match names until it is stopped", async () => {
+    const host = new FakeHost();
+    const matching = system(host).dbusMatch({
+      bus: Bus.Session,
+      interface: "org.freedesktop.DBus.Properties",
+      member: "PropertiesChanged",
+    });
+    host.reply(1, { kind: "started" });
+    const match = started(await matching);
+    host.event(1, {
+      body: '["org.mpris.MediaPlayer2.Player",{},[]]',
+      interface: "org.freedesktop.DBus.Properties",
+      kind: "signal",
+      member: "PropertiesChanged",
+      path: "/org/mpris/MediaPlayer2",
+      sender: ":1.4",
+      signature: "sa{sv}as",
+    });
+    match.stop();
+    host.end(1, { kind: "stopped" });
+
+    expect(host.calls).toStrictEqual([
+      [
+        1,
+        {
+          bus: "session",
+          call: "dbus_match",
+          interface: "org.freedesktop.DBus.Properties",
+          member: "PropertiesChanged",
+        },
+      ],
+      [1, { call: "unwatch" }],
+    ]);
+    expect(await Array.fromAsync(match.items)).toStrictEqual([
+      {
+        body: ["org.mpris.MediaPlayer2.Player", {}, []],
+        interface: "org.freedesktop.DBus.Properties",
+        member: "PropertiesChanged",
+        path: "/org/mpris/MediaPlayer2",
+        sender: ":1.4",
+        signature: "sa{sv}as",
+      },
+    ]);
+    expect(await match.ended).toStrictEqual(Ok("stopped"));
   });
 });
 

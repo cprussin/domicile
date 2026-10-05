@@ -53,3 +53,6 @@
 {"type":"system_end","id":5,"end":{"kind":"exited","code":null,"signal":15}}
 {"type":"system_end","id":7,"end":{"kind":"stopped"}}
 {"type":"system_end","id":7,"end":{"kind":"failed","error":{"kind":"locked","message":"the desktop is locked"}}}
+{"type":"system_reply","id":8,"reply":{"kind":"returned","signature":"a{sv}","body":"[{\"Percentage\":{\"signature\":\"d\",\"value\":97.0}}]"}}
+{"type":"system_reply","id":10,"reply":{"kind":"failed","error":{"kind":"dbus","message":"org.freedesktop.DBus.Error.ServiceUnknown: The name is not activatable"}}}
+{"type":"system_event","id":9,"event":{"kind":"signal","sender":":1.4","path":"/org/mpris/MediaPlayer2","interface":"org.freedesktop.DBus.Properties","member":"PropertiesChanged","signature":"sa{sv}as","body":"[\"org.mpris.MediaPlayer2.Player\",{},[]]"}}

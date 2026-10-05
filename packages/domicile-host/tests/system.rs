@@ -8,8 +8,8 @@ use std::time::{Duration, Instant};
 
 use domicile_host::system::{locked_out, reach, Handled, Reach, System};
 use domicile_protocol::{
-    FileType, HostMessage, Signal, Stream, SystemEnd, SystemErrorKind, SystemEvent, SystemReply,
-    SystemRequest,
+    Bus, FileType, HostMessage, Signal, Stream, SystemEnd, SystemErrorKind, SystemEvent,
+    SystemReply, SystemRequest,
 };
 
 /// How long a test waits for the next message before failing.
@@ -551,5 +551,233 @@ mod locked {
             locked_out(4, &SystemRequest::Stdin { data: "".into() }),
             None
         );
+    }
+}
+
+/// D-Bus calls and matches, against a service on a peer-to-peer connection
+/// rather than a bus, so no bus daemon is needed.
+mod dbus {
+    use std::os::unix::net::UnixStream;
+    use std::sync::{Arc, Mutex};
+
+    use zbus::blocking::connection::Builder;
+    use zbus::blocking::Connection;
+
+    use super::*;
+
+    /// The service the tests call.
+    struct Greeter;
+
+    #[zbus::interface(name = "org.domicile.Test")]
+    impl Greeter {
+        fn greet(&self, name: &str, times: u32) -> String {
+            format!("hello {name}").repeat(times as usize)
+        }
+
+        fn fail(&self) -> zbus::fdo::Result<()> {
+            Err(zbus::fdo::Error::Failed("on purpose".into()))
+        }
+    }
+
+    /// Each connection the system opens, by the service's end of it.
+    type Services = Arc<Mutex<Vec<Connection>>>;
+
+    /// A system whose buses are each a fresh connection to a [`Greeter`].
+    fn connected(home: &Path) -> (System, Receiver<HostMessage>, Services) {
+        let services: Services = Arc::default();
+        let (told, heard) = channel();
+        let system = System::new(home.to_path_buf(), Vec::new(), move |message| {
+            let _ = told.send(message);
+        })
+        .connecting_with({
+            let services = services.clone();
+            move |_bus| {
+                let (ours, theirs) = UnixStream::pair()?;
+                let serving = std::thread::spawn(move || {
+                    Builder::async_io_unix_stream(theirs)
+                        .server(zbus::Guid::generate())?
+                        .p2p()
+                        .serve_at("/test", Greeter)?
+                        .build()
+                });
+                let client = Builder::async_io_unix_stream(ours).p2p().build()?;
+                services
+                    .lock()
+                    .unwrap()
+                    .push(serving.join().expect("the service starts")?);
+                Ok(client)
+            }
+        });
+        (system, heard, services)
+    }
+
+    fn call(member: &str, signature: &str, body: &str) -> SystemRequest {
+        SystemRequest::DbusCall {
+            bus: Bus::Session,
+            destination: "org.domicile.Test".into(),
+            path: "/test".into(),
+            interface: "org.domicile.Test".into(),
+            member: member.into(),
+            signature: signature.into(),
+            body: body.into(),
+        }
+    }
+
+    #[test]
+    fn a_call_returns_its_body_as_json() {
+        let home = tempfile::tempdir().unwrap();
+        let (system, heard, _services) = connected(home.path());
+
+        system.handle(1, call("Greet", "su", r#"["ada", 2]"#));
+
+        assert_eq!(
+            reply(&heard, 1),
+            SystemReply::Returned {
+                signature: "s".into(),
+                body: r#"["hello adahello ada"]"#.into(),
+            }
+        );
+    }
+
+    #[test]
+    fn a_method_error_is_named() {
+        let home = tempfile::tempdir().unwrap();
+        let (system, heard, _services) = connected(home.path());
+
+        system.handle(1, call("Fail", "", "[]"));
+
+        let SystemReply::Failed { error } = reply(&heard, 1) else {
+            panic!("expected a failure");
+        };
+        assert_eq!(error.kind, SystemErrorKind::Dbus);
+        assert!(
+            error
+                .message
+                .starts_with("org.freedesktop.DBus.Error.Failed"),
+            "{}",
+            error.message
+        );
+    }
+
+    #[test]
+    fn a_body_that_does_not_fit_is_refused() {
+        let home = tempfile::tempdir().unwrap();
+        let (system, heard, _services) = connected(home.path());
+
+        system.handle(1, call("Greet", "su", r#"["ada"]"#));
+
+        assert_eq!(failure(reply(&heard, 1)), SystemErrorKind::InvalidInput);
+    }
+
+    #[test]
+    fn a_match_reports_signals_until_it_is_stopped() {
+        let home = tempfile::tempdir().unwrap();
+        let (system, heard, services) = connected(home.path());
+
+        system.handle(
+            1,
+            SystemRequest::DbusMatch {
+                bus: Bus::Session,
+                sender: None,
+                path: None,
+                interface: Some("org.domicile.Test".into()),
+                member: Some("Pinged".into()),
+            },
+        );
+        assert_eq!(reply(&heard, 1), SystemReply::Started);
+        let service = services.lock().unwrap().last().cloned().expect("a service");
+        service
+            .emit_signal(None::<&str>, "/test", "org.domicile.Test", "Ignored", &())
+            .unwrap();
+        service
+            .emit_signal(
+                None::<&str>,
+                "/test",
+                "org.domicile.Test",
+                "Pinged",
+                &(7u32,),
+            )
+            .unwrap();
+
+        let HostMessage::SystemEvent {
+            id: 1,
+            event:
+                SystemEvent::Signal {
+                    path,
+                    interface,
+                    member,
+                    signature,
+                    body,
+                    ..
+                },
+        } = next(&heard)
+        else {
+            panic!("expected the signal");
+        };
+        assert_eq!(
+            (path, interface, member, signature, body),
+            (
+                "/test".into(),
+                "org.domicile.Test".into(),
+                "Pinged".into(),
+                "u".into(),
+                "[7]".into()
+            )
+        );
+
+        assert_eq!(system.handle(1, SystemRequest::Unwatch), Handled::Done);
+        assert_eq!(
+            next(&heard),
+            HostMessage::SystemEnd {
+                id: 1,
+                end: SystemEnd::Stopped
+            }
+        );
+    }
+
+    /// A page that goes away leaves no match listening.
+    #[test]
+    fn dropping_the_system_closes_its_matches() {
+        let home = tempfile::tempdir().unwrap();
+        let (system, heard, services) = connected(home.path());
+        system.handle(
+            1,
+            SystemRequest::DbusMatch {
+                bus: Bus::Session,
+                sender: None,
+                path: None,
+                interface: None,
+                member: None,
+            },
+        );
+        assert_eq!(reply(&heard, 1), SystemReply::Started);
+        let service = services.lock().unwrap().last().cloned().expect("a service");
+
+        drop(system);
+
+        let (closed, heard_closed) = channel();
+        std::thread::spawn(move || {
+            service.closed();
+            let _ = closed.send(());
+        });
+        heard_closed
+            .recv_timeout(PATIENCE)
+            .expect("the match's connection closes with the system");
+    }
+
+    #[test]
+    fn calls_and_matches_are_actions_to_the_lock() {
+        assert_eq!(reach(&call("Greet", "", "[]")), Reach::Acts);
+        assert_eq!(
+            reach(&SystemRequest::DbusMatch {
+                bus: Bus::System,
+                sender: None,
+                path: None,
+                interface: None,
+                member: None,
+            }),
+            Reach::Acts
+        );
+        assert!(locked_out(1, &call("Greet", "", "[]")).is_some());
     }
 }

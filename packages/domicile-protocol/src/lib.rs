@@ -621,7 +621,8 @@ pub enum SystemRequest {
     /// Report changes to a file or to a directory's entries. Answered with
     /// [`SystemReply::Started`], then a [`SystemEvent::Changed`] per change.
     Watch { path: String },
-    /// End the watch with this id. It ends with [`SystemEnd::Stopped`].
+    /// End the watch or D-Bus match with this id. It ends with
+    /// [`SystemEnd::Stopped`].
     Unwatch,
     /// Run a program. Answered with [`SystemReply::Started`], then its output
     /// as [`SystemEvent::Output`], then [`SystemEnd::Exited`].
@@ -644,6 +645,43 @@ pub enum SystemRequest {
     CloseStdin,
     /// Signal the process with this id.
     Kill { signal: Signal },
+    /// Call a D-Bus method. Answered with [`SystemReply::Returned`], or
+    /// [`SystemErrorKind::Dbus`] when the method returns an error.
+    ///
+    /// `body` is JSON text: an array with one element per type in
+    /// `signature`. See `domicile_host::dbus_json` for how each D-Bus type is
+    /// written.
+    DbusCall {
+        bus: Bus,
+        destination: String,
+        path: String,
+        interface: String,
+        member: String,
+        signature: String,
+        body: String,
+    },
+    /// Report the signals matching every field given. Answered with
+    /// [`SystemReply::Started`], then a [`SystemEvent::Signal`] per signal.
+    /// [`SystemRequest::Unwatch`] ends it.
+    DbusMatch {
+        bus: Bus,
+        #[serde(default)]
+        sender: Option<String>,
+        #[serde(default)]
+        path: Option<String>,
+        #[serde(default)]
+        interface: Option<String>,
+        #[serde(default)]
+        member: Option<String>,
+    },
+}
+
+/// Which D-Bus bus a call or match is on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Bus {
+    Session,
+    System,
 }
 
 /// A signal for [`SystemRequest::Kill`].
@@ -676,7 +714,10 @@ pub enum SystemReply {
         size: u64,
         modified_ms: Option<u64>,
     },
-    /// The watch or process is running.
+    /// What a D-Bus method returned: JSON text for its body, as
+    /// [`SystemRequest::DbusCall`] takes one, and the signature to read it by.
+    Returned { signature: String, body: String },
+    /// The watch, match or process is running.
     Started,
     /// The call failed. Nothing else follows under this id.
     Failed { error: SystemError },
@@ -711,6 +752,16 @@ pub enum SystemEvent {
     /// The watched file, or an entry of the watched directory, changed.
     /// `path` is absolute.
     Changed { path: String },
+    /// A D-Bus signal a match named, its body written as
+    /// [`SystemReply::Returned`]'s is.
+    Signal {
+        sender: String,
+        path: String,
+        interface: String,
+        member: String,
+        signature: String,
+        body: String,
+    },
 }
 
 /// One of a process's output streams.
@@ -731,7 +782,7 @@ pub enum SystemEnd {
         code: Option<i32>,
         signal: Option<i32>,
     },
-    /// The watch ended on [`SystemRequest::Unwatch`].
+    /// The watch or match ended on [`SystemRequest::Unwatch`].
     Stopped,
     /// The watch or process broke.
     Failed { error: SystemError },
@@ -759,6 +810,9 @@ pub enum SystemErrorKind {
     InvalidInput,
     /// The desktop is locked. See `docs/LOCK.md`.
     Locked,
+    /// A D-Bus method returned an error. The message starts with its name,
+    /// such as `org.freedesktop.DBus.Error.ServiceUnknown`.
+    Dbus,
     Other,
 }
 
