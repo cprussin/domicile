@@ -21,8 +21,8 @@
 # this repository describes. Two commits that do not move the fork have the
 # same identity and so need no repin between them.
 {
-  identity = "9c1af137365c45d070a9932552a2e5b9d1a0323cd002c906b0deb18093630568";
-  commit = "6902952abb67a8104430bd5b9164b304fd2c4055";
-  url = "https://github.com/cprussin/domicile/releases/download/engine-s9c1af137365c/domicile-engine-s9c1af137365c-linux-x64.tar.zst";
-  hash = "sha256-xYPc3EY99keeBhkMxw9yqblVNb0lxi5vZ4/AS1dKeas=";
+  identity = "1393ac2401f1d3dd0d8b9194b77f7b1122a9db06ef4cdb655ddfd608e11b4edb";
+  commit = "6e2187d546b625d6564ec12854031bc02715f4de";
+  url = "https://github.com/cprussin/domicile/releases/download/engine-s1393ac2401f1/domicile-engine-s1393ac2401f1-linux-x64.tar.zst";
+  hash = "sha256-sWs/XfWZnSPBXCQIKYuT8cyMTsXJ05KSOGOfwNziJ2Q=";
 }
