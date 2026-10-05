@@ -2,17 +2,29 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["config:recommended"],
   "timezone": "UTC",
+  "schedule": ["before 6am on monday"],
+  "automerge": false,
+  "separateMajorMinor": false,
   "minimumReleaseAge": "7 days",
   "nix": {
     "enabled": true
   },
   "packageRules": [
-    { "matchUpdateTypes": ["minor", "patch", "pin", "digest"], "automerge": true },
-    { "matchUpdateTypes": ["major"], "automerge": false },
     {
-      "matchManagers": ["bun"],
-      "automerge": false,
-      "description": "bun.lock updates require regenerating flake.nix's nodeModules outputHash by hand (see nix-build.yml); never automerge until that's done."
+      "description": "One weekly PR with every update; a Claude routine fixes it up (lockfiles, flake hashes, breaking changes) and merges it.",
+      "matchUpdateTypes": [
+        "major",
+        "minor",
+        "patch",
+        "pin",
+        "pinDigest",
+        "digest",
+        "lockFileMaintenance",
+        "rollback",
+        "replacement"
+      ],
+      "groupName": "all dependencies",
+      "groupSlug": "all"
     }
   ]
 }

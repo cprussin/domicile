@@ -41,10 +41,10 @@ from guard_webview_devtools import command, connect, shell_target
 # What a button looks like in the two ways CDP asks for it: `button` names which
 # one the event is about, and `buttons` is the mask of what is held while it
 # happens. The two are not the same spelling of one fact -- the mask is a
-# bitfield in the DOM's own order, where 1 is primary and 4 is auxiliary (2 is
-# the secondary button, which nothing here sends) -- and a press with an empty
-# mask is not a press.
-BUTTONS = {"left": 1, "middle": 4}
+# bitfield in the DOM's own order, where 1 is primary, 2 secondary and 4
+# auxiliary -- and a press with an empty mask is not a press. The secondary
+# one is what asks for a context menu.
+BUTTONS = {"left": 1, "middle": 4, "right": 2}
 NONE_HELD = 0
 
 
@@ -92,7 +92,7 @@ def main():
         "--button",
         choices=sorted(BUTTONS),
         default="left",
-        help="which button to press; middle is what asks for a second window",
+        help="which button to press; middle asks for a second window, right for a menu",
     )
     arguments = parser.parse_args()
 
