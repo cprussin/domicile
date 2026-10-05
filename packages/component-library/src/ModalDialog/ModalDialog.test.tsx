@@ -5,6 +5,7 @@ import { useMemo } from "react";
 
 import { Button } from "../Button/Button";
 import { DisplayProvider } from "../Screen/DisplayProvider";
+import type { DisplaySource } from "../Screen/display-source";
 
 import { createHandle, ModalDialog } from "./ModalDialog";
 
@@ -130,20 +131,7 @@ describe(ModalDialog, () => {
 
     it("puts the popup over the screen it is asked for", () => {
       render(
-        <DisplayProvider
-          source={{
-            displays: [
-              { name: "left", position: [0, 0], scale: 1, size: [1920, 1080] },
-              {
-                name: "right",
-                position: [1920, 120],
-                scale: 2,
-                size: [2560, 1440],
-              },
-            ],
-            onDisplays: () => () => undefined,
-          }}
-        >
+        <DisplayProvider source={TWO_SCREENS}>
           <ModalDialog open screen="right" title="Settings">
             Body
           </ModalDialog>
@@ -154,6 +142,24 @@ describe(ModalDialog, () => {
       expect(viewport?.style.top).toBe("120px");
       expect(viewport?.style.width).toBe("2560px");
       expect(viewport?.style.height).toBe("1440px");
+    });
+
+    it("dims and blurs only the screen it is on", () => {
+      // A backdrop over the whole page would blur the gaps between monitors
+      // too, which costs as much as the screens themselves.
+      const { baseElement } = render(
+        <DisplayProvider source={TWO_SCREENS}>
+          <ModalDialog open screen="right" title="Settings">
+            Body
+          </ModalDialog>
+        </DisplayProvider>,
+      );
+      const backdrop =
+        baseElement.querySelector<HTMLElement>("[data-backdrop]");
+      expect(backdrop?.style.left).toBe("1920px");
+      expect(backdrop?.style.top).toBe("120px");
+      expect(backdrop?.style.width).toBe("2560px");
+      expect(backdrop?.style.height).toBe("1440px");
     });
 
     it("renders the trigger when provided and keeps the dialog closed", () => {
@@ -209,6 +215,35 @@ describe(ModalDialog, () => {
         throw new Error("test: no backdrop drawn");
       } else {
         await user.click(backdrop);
+      }
+      expect(closed).toEqual([false]);
+    });
+
+    it("closes on a press on another screen", async () => {
+      // The backdrop covers only the dialog's screen. base-ui's own clear
+      // backdrop still covers the page and catches the press.
+      const user = userEvent.setup();
+      const closed: boolean[] = [];
+      render(
+        <DisplayProvider source={TWO_SCREENS}>
+          <ModalDialog
+            onOpenChange={(next) => {
+              closed.push(next);
+            }}
+            open
+            screen="right"
+          >
+            Body
+          </ModalDialog>
+        </DisplayProvider>,
+      );
+      const page = screen
+        .getAllByRole("presentation", { hidden: true })
+        .find((element) => !element.hasAttribute("data-backdrop"));
+      if (page === undefined) {
+        throw new Error("test: no backdrop over the page");
+      } else {
+        await user.click(page);
       }
       expect(closed).toEqual([false]);
     });
@@ -303,3 +338,12 @@ describe(ModalDialog, () => {
     });
   });
 });
+
+/** A desk of two monitors of different sizes, side by side. */
+const TWO_SCREENS = {
+  displays: [
+    { name: "left", position: [0, 0], scale: 1, size: [1920, 1080] },
+    { name: "right", position: [1920, 120], scale: 2, size: [2560, 1440] },
+  ],
+  onDisplays: () => () => undefined,
+} satisfies DisplaySource;

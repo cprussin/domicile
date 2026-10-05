@@ -50,9 +50,9 @@ type Props = ExtendProps<
      */
     popup?: boolean | undefined;
     /**
-     * Name of the display to center the popup on. Without it, a page that
-     * spans several monitors centers it across all of them. Needs a
-     * `DisplayProvider`.
+     * Name of the display to center the popup on and dim. Without it, a page
+     * that spans several monitors centers it across all of them and dims them
+     * all. Needs a `DisplayProvider`.
      */
     screen?: string | undefined;
     size?: Size | undefined;
@@ -80,10 +80,16 @@ const ModalDialogComponent = ({
     <BaseDialog.Root {...rootProps}>
       {trigger !== undefined && <BaseDialog.Trigger render={trigger} />}
       <BaseDialog.Portal>
+        {/*
+        On the dialog's screen only: its blur costs as much in the gaps
+        between monitors as on them. base-ui's own clear backdrop covers the
+        page, so a press on another screen still closes the dialog.
+      */}
         <BaseDialog.Backdrop
           className={backdropStyles({ surface })}
           data-backdrop=""
           data-surface={surface}
+          style={region}
         />
         {/*
         A hidden popup, since closing completes when the popup closes.

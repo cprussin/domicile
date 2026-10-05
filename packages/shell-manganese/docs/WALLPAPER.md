@@ -3,8 +3,9 @@
 A photograph behind the whole desktop, changing every minute. Source:
 `src/wallpaper/`.
 
-- One `position: fixed` element spans every display. It is not in a
-  `<Screen>`, so it shows before the compositor reports the screens.
+- **One copy per screen**, cropped to that monitor, so nothing is drawn in
+  the gaps between monitors of different sizes. All copies show the same
+  photo. Until the compositor reports the screens, one copy covers the page.
 - **Each theme has its own rotation**: night skies for dark, daylit
   landscapes for light. Both rotate together; CSS shows the current theme's.
   A theme switch shows an already loaded photo.

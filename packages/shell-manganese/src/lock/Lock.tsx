@@ -1,4 +1,8 @@
 import { Button } from "@domicile-desktop/component-library/Button";
+import {
+  useDisplays,
+  useScreenRegion,
+} from "@domicile-desktop/component-library/DisplayProvider";
 import { Input } from "@domicile-desktop/component-library/Input";
 import { ArrowRightIcon } from "@phosphor-icons/react/dist/ssr/ArrowRight";
 import { LockIcon } from "@phosphor-icons/react/dist/ssr/Lock";
@@ -30,6 +34,10 @@ type Props = {
 /**
  * The lock screen: a full-desktop sheet with a passphrase field.
  *
+ * The sheet catches input over the whole page, but only each screen is
+ * blurred: a blur over the gaps between monitors costs as much as one over
+ * the monitors themselves.
+ *
  * The compositor holds the lock and stops injecting this page's input into the
  * Wayland seat while locked. This component holds no lock state; it only draws
  * over the desktop and sends the passphrase, so reloading the page cannot
@@ -44,6 +52,7 @@ type Props = {
  * submit. That is why it does not use `ModalDialog`.
  */
 export const Lock = ({ checking, locked, onUnlock, refusals }: Props) => {
+  const displays = useDisplays();
   const [typed, setTyped] = useState("");
   const [wrong, setWrong] = useState(false);
   const field = useRef<HTMLInputElement>(null);
@@ -89,6 +98,13 @@ export const Lock = ({ checking, locked, onUnlock, refusals }: Props) => {
         }
       }}
     >
+      {displays === undefined ? (
+        // The whole page until the host describes the screens, so a desk
+        // that locks while starting is not left readable.
+        <Veil screen={undefined} />
+      ) : (
+        displays.map(({ name }) => <Veil key={name} screen={name} />)
+      )}
       <div className={contentStyles}>
         <LockClock />
         <div className={entryStyles}>
@@ -145,23 +161,44 @@ export const Lock = ({ checking, locked, onUnlock, refusals }: Props) => {
   );
 };
 
+/**
+ * The blurred veil over display `screen`, or the whole page. Data attribute
+ * for tests.
+ */
+const Veil = ({ screen }: { screen: string | undefined }) => (
+  <div className={veilStyles} data-veil="" style={useScreenRegion(screen)} />
+);
+
 // Above everything, including modal panels like the launcher, so nothing can
 // take input over the lock. `lock` is the preset's z-index token for it. One
-// sheet spans every display, since the page is the whole desktop.
+// sheet spans every display, since the page is the whole desktop. It paints
+// nothing itself; its veils and content fade.
 //
-// The desktop shows through blurred rather than hidden: the blur keeps it
-// unreadable. The veil and vignette keep the clock legible.
-//
-// It fades and blurs in and out together. `allow-discrete` delays `display:
-// none` until the fade ends.
+// `allow-discrete` delays `display: none` until the fade ends.
 const sheetStyles = center({
+  "&[inert]": {
+    display: "none",
+  },
+  inset: 0,
+  position: "fixed",
+  transition: "display {durations.slowest} allow-discrete",
+  zIndex: "lock",
+});
+
+// One screen's veil. The desktop shows through blurred rather than hidden:
+// the blur keeps it unreadable. The tint and vignette keep the clock legible.
+//
+// It fades and blurs in and out together. The veil fades itself rather than
+// the sheet, since a parent below full opacity would leave its blur nothing
+// to blur. The whole sheet, narrowed to a monitor by the region from
+// `useScreenRegion`.
+const veilStyles = css({
   _starting: {
     backdropFilter: "blur(0) saturate(100%)",
     opacity: 0,
   },
-  "&[inert]": {
+  "[inert] > &": {
     backdropFilter: "blur(0) saturate(100%)",
-    display: "none",
     opacity: 0,
   },
   backdropFilter: "blur({spacing.16}) saturate(160%)",
@@ -170,10 +207,9 @@ const sheetStyles = center({
     "radial-gradient(ellipse at center, transparent 40%, color-mix(in oklab, {colors.background} 50%, transparent))",
   inset: 0,
   opacity: 1,
-  position: "fixed",
+  position: "absolute",
   transition:
-    "opacity {durations.slowest} {easings.out}, backdrop-filter {durations.slowest} {easings.out}, display {durations.slowest} allow-discrete",
-  zIndex: "lock",
+    "opacity {durations.slowest} {easings.out}, backdrop-filter {durations.slowest} {easings.out}",
 });
 
 // The clock and field rise in as the desktop blurs, and sink as it clears.
@@ -188,6 +224,8 @@ const contentStyles = vstack({
   },
   gap: 10,
   opacity: 1,
+  // Positioned, so it draws over the veils before it.
+  position: "relative",
   transform: "none",
   transition:
     "opacity {durations.slowest} {easings.out}, transform {durations.slowest} {easings.emphasized}",

@@ -21,8 +21,9 @@ type Props = ExtendProps<
     children: ReactNode;
     footer?: ReactNode | undefined;
     /**
-     * Name of the display to slide in on. Without it, a page spanning several
-     * monitors uses the rightmost edge. Needs a `DisplayProvider`.
+     * Name of the display to slide in on and dim. Without it, a page spanning
+     * several monitors uses the rightmost edge and dims them all. Needs a
+     * `DisplayProvider`.
      */
     screen?: string | undefined;
     title?: ReactNode | undefined;
@@ -43,7 +44,15 @@ const SlideOverComponent = ({
     <BaseDialog.Root {...rootProps}>
       {trigger !== undefined && <BaseDialog.Trigger render={trigger} />}
       <BaseDialog.Portal>
-        <BaseDialog.Backdrop className={backdropStyles} />
+        {/*
+        On the panel's screen only, as in `ModalDialog`. Data attribute for
+        tests.
+      */}
+        <BaseDialog.Backdrop
+          className={backdropStyles}
+          data-backdrop=""
+          style={region}
+        />
         <BaseDialog.Viewport className={viewportStyles} style={region}>
           <BaseDialog.Popup className={popupStyles}>
             <header className={headerStyles}>
