@@ -102,7 +102,9 @@ export const WEBVIEW_POPUP_WINDOW_EVENT = "domicile-popup-window";
 export const WEBVIEW_CLOSE_EVENT = "domicile-close";
 
 /**
- * Fired when an extension calls `chrome.tabs.update(id, {active: true})` or
+ * Fired when the page calls `window.focus()` or `client.focus()` (how a site
+ * answers a click on its notification), or when an extension calls
+ * `chrome.tabs.update(id, {active: true})` or
  * `chrome.windows.update(id, {focused: true})` for this view. The shell should
  * raise and focus it. Bubbles.
  */
