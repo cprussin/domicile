@@ -383,7 +383,8 @@ if wanted engine; then
       scripts/engine-guard-webview-passkey-extension.sh \
       scripts/engine-guard-webview-survives-load-shell.sh \
       scripts/engine-guard-control-arrival.sh \
-      scripts/engine-guard-desktop-geometry.sh
+      scripts/engine-guard-desktop-geometry.sh \
+      scripts/engine-guard-windows-state.sh
     ! engine_stop; } &&
   engine_serial scripts/engine-guard-css-and-resize.sh &&
   run engine-guard-latency scripts/engine-guard-latency.sh &&

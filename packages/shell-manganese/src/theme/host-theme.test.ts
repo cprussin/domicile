@@ -5,6 +5,7 @@ import type {
   DomicileDisplay,
   DomicileHost,
   DomicileHostEventMap,
+  DomicileWindow,
 } from "@domicile-desktop/sdk/domicile-host";
 
 import { hostTheme } from "./host-theme";
@@ -24,6 +25,8 @@ class Host implements DomicileHost {
   displays: readonly DomicileDisplay[] | null = null;
   brightness: number | null = null;
   browserWindows = null;
+  readonly windows: readonly DomicileWindow[] = [];
+  readonly focusedWindow: string | null = null;
 
   readonly #listeners = new Map<string, (event: never) => void>();
 
