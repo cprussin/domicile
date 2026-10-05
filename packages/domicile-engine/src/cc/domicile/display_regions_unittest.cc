@@ -3,6 +3,10 @@
 
 #include "cc/domicile/display_regions.h"
 
+#include <cstddef>
+#include <limits>
+#include <vector>
+
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/geometry/transform.h"
 
@@ -174,6 +178,49 @@ TEST(DomicileDisplayRegionsTest, CoverageWithNoRegionsIsAllOfItAtOne) {
   ASSERT_EQ(pieces.size(), 1u);
   EXPECT_EQ(pieces[0].rect, gfx::Rect(0, 0, 10, 10));
   EXPECT_EQ(pieces[0].ratio, 1.f);
+}
+
+// `home-office-right-two`, as the browser tells the desk page: a 1.5 laptop
+// under the left edge of two 1.2 4K monitors turned on their sides, in a
+// 5520x3200 desk.
+std::vector<DomicileDisplay> HomeOfficeRightTwo() {
+  return {
+      {gfx::Rect(0, 1920, 1920, 1280), 1.5f},
+      {gfx::Rect(1920, 0, 1800, 3200), 1.2f},
+      {gfx::Rect(3720, 0, 1800, 3200), 1.2f},
+  };
+}
+
+constexpr size_t kNoCeiling = std::numeric_limits<size_t>::max();
+
+TEST(DomicileDisplayRegionsTest, TheDeskHasTileMemoryForEveryMonitor) {
+  // The page at 1.5 is 8280x4800, 39744000 pixels. Each 1.2 monitor's tiling
+  // is its own 2160x3840, 8294400 pixels. 56332800 pixels at 4 bytes, 8 times.
+  EXPECT_EQ(DomicileTileBytesFor(HomeOfficeRightTwo(),
+                                 gfx::Rect(0, 0, 5520, 3200), 1.5f, kNoCeiling),
+            1802649600u);
+}
+
+TEST(DomicileDisplayRegionsTest, AWidgetHasTileMemoryForWhereItIs) {
+  // A <webview> on the center monitor: 600x450 at 1.5, and as much again at
+  // 0.8 squared for the monitor's tiling of it. 442800 pixels, 4 bytes, 8 times.
+  EXPECT_EQ(
+      DomicileTileBytesFor(HomeOfficeRightTwo(), gfx::Rect(2000, 100, 400, 300),
+                           1.5f, kNoCeiling),
+      14169600u);
+}
+
+TEST(DomicileDisplayRegionsTest, TheDesksTileMemoryIsAtMostTheCeiling) {
+  EXPECT_EQ(DomicileTileBytesFor(HomeOfficeRightTwo(),
+                                 gfx::Rect(0, 0, 5520, 3200), 1.5f, 1000),
+            1000u);
+}
+
+TEST(DomicileDisplayRegionsTest, AWidgetOnNoMonitorAsksForNoTileMemory) {
+  // An ordinary page: its policy stays upstream's.
+  EXPECT_EQ(DomicileTileBytesFor({}, gfx::Rect(0, 0, 1920, 1080), 2.f,
+                                 kNoCeiling),
+            0u);
 }
 
 }  // namespace
