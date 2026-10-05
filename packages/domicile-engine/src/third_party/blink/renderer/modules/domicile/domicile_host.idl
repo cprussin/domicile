@@ -220,6 +220,18 @@
   [CallWith=ScriptState, RaisesException] undefined grabShortcut(
       DomicileShortcut shortcut);
 
+  // The same, by name: `grabShortcut("Meta+Shift+l")`, in sway's grammar. The
+  // engine finds the key the keysym is on, from the keyboard the compositor
+  // describes, and finds it again whenever the layout changes. The press comes
+  // back as a `shortcut` event whose `chord` is this string -- pressed in a
+  // `<webview>` or on this page, where it is taken from the page.
+  //
+  // Throws a SyntaxError for a chord written wrong, and a NotFoundError for a
+  // keysym the keyboard cannot type; before any keyboard is described, that
+  // one is a console warning once it is.
+  [CallWith=ScriptState, RaisesException] undefined grabShortcut(
+      DOMString chord);
+
   // Click an extension's action, popup or not: the extension is granted
   // activeTab on the active tab, as a toolbar click grants it in Chrome. Then
   // an action with no popup has its `action.onClicked` dispatched; one with a

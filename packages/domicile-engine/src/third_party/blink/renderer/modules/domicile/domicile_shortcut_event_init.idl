@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 dictionary DomicileShortcutEventInit : EventInit {
+  DOMString chord = "";
   unsigned long keycode = 0;
   boolean altKey = false;
   boolean ctrlKey = false;
