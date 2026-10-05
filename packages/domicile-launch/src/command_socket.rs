@@ -11,7 +11,7 @@ use std::os::unix::net::UnixStream;
 use std::path::Path;
 use std::time::Duration;
 
-use crate::command::{load_shell_line, open_url_line, reply, Reply};
+use crate::command::{load_shell_line, open_url_line, reply, screenshot_line, Reply};
 
 /// Why the engine did not carry out a command.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -67,6 +67,11 @@ pub fn load_shell(
 /// Tells the engine at `socket` to open `url` in the shell.
 pub fn open_url(socket: &Path, url: &str, patience: Duration) -> Result<(), CommandError> {
     carry_out(socket, &open_url_line(url), Reply::Opened, patience)
+}
+
+/// Tells the engine at `socket` to write a PNG of the desk to `file`.
+pub fn screenshot(socket: &Path, file: &Path, patience: Duration) -> Result<(), CommandError> {
+    carry_out(socket, &screenshot_line(file), Reply::Captured, patience)
 }
 
 /// Sends one command and succeeds only if the engine replies `done`.

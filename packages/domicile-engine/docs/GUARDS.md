@@ -48,6 +48,7 @@ Headless.
 | `guard-shell-shortcuts.sh` | Chrome's reload, back, fullscreen, zoom, close and quit keys do nothing to the shell (patch 0047) |
 | `guard-shell-local-network.sh` | the shell loads an image from loopback with no Local Network Access prompt (patch 0066) |
 | `guard-shell-web-apis.sh` | the shell may show notifications and read cross-origin responses (patches 0066, 0068) |
+| `guard-screenshot.sh` | `screenshot` on the command socket writes a PNG of what the shell drew |
 
 ## Browser windows (`<webview>`)
 
