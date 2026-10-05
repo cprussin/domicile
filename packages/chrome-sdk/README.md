@@ -31,38 +31,23 @@ It provides these:
   shell keeps it however it likes (a React context, a variable) and passes it
   on. A module without one is
   refused on the screen.
-- **`registerElements`** (`./register-elements`) — the input routing behind the
-  engine's `<app>` tag, until the engine does it itself. It forwards the
-  pointer over a window to the client underneath in that client's own surface
-  coordinates, and routes the page's keystrokes to whichever window was last
-  reached for. Nothing here says how big a window is: an `<app>`'s layout box
-  *is* the client's `xdg_toplevel.configure`, and the engine states it off the
-  layout it performed. All of it is delegated from `document` over
-  `closest("app")`: the tag is the engine's, so there is no element class to
-  hang any of it on, and nothing here is registered. A click on a window fires
-  a cancelable `domicile-focus-requested` and then focuses the client, and a
-  press that lands off every window fires a cancelable
-  `domicile-focus-release-requested` on the window that holds the keyboard and
-  then hands it back to the page — so a shell that wants focus to be its own
-  decision calls `preventDefault()` on either, and a shell with no opinion
-  needs to know nothing about them. A right-click over a window also loses the
-  browser's own context menu, because the press is forwarded and the menu a
-  right-click asked for is the client's, drawn inside its surface. Only over an
-  `<app>`: a `contextmenu` anywhere else — the desktop, a shell's chrome, the
-  page inside a `<webview>` — is left uncanceled and keeps its menu.
 - **`<app>`** (`./app-element`) — the tag name, the two focus events, and the
   TypeScript for the element, which is the fork's. The surface embed and the size
   a client is configured at are both the layout box's and the engine reports
-  them; there is nothing to call.
-- **`focusApp`, `focusChrome`** (`./focus-app`, `./focus-chrome`) — put the
-  keyboard on a client, or back on the page, without a click:
-  `focusApp(domicile, appId)`, `focusChrome(domicile)`. Not the same as
-  `domicile.focusApp` / `domicile.focusChrome`, which ask the compositor and
-  stop: keyboard events reach `document` rather than an element, so the SDK has
-  to be told too.
-- **`windowOf`, `surfaceSizeOf`** (`./windows`) — over `domicile.windows`: the
-  window a popup belongs to, however many popups deep, and the size a client
-  drew at (`undefined` before it has drawn).
+  them, and the engine sends the client the pointer and wheel over it, mapped
+  through the element's whole transform into the client's own surface
+  coordinates, and the page's keys while it has the keyboard; there is nothing
+  to call. A press on a window fires a cancelable `domicile-focus-requested`
+  (`detail.appId`, a popup's window rather than the popup) and then focuses the
+  client; a press off every window fires a cancelable
+  `domicile-focus-release-requested` (`detail.appId`, `detail.pressed`) on the
+  window that holds the keyboard and then hands it back to the page. A shell
+  that wants focus to be its own decision calls `preventDefault()` on either;
+  one that calls it on the `pointerdown` itself has taken the press, and the
+  client hears none of it. `domicile.focusApp(appId)` and
+  `domicile.focusChrome()` move the keyboard without a click, both in the
+  compositor's seat and for the keys this page hears. A right-click over a
+  window loses the browser's menu: the menu it asked for is the client's.
 - **`<webview>`** (`./webview-element`) — types and event names only. The
   element is the engine's: `src` is the address it loads, `goBack` /
   `goForward` / `stop` / `reload` are what a chrome's address bar drives it
@@ -119,18 +104,8 @@ It provides these:
   `activeTab`, and one with a `popup` is then a `<webview>` at that address. A
   notification's press is `domicile.invokeNotificationAction(id, key)`, a clear
   `domicile.dismissNotifications(ids)`.
-- **Pure helpers** — affine `./matrix` math mirroring the Rust
-  `domicile-scene::Transform`, `./cursor-shape` for the keyword set a client
-  can ask for, `./theme`, `./display-transform`, and `./input` keycode
-  mapping.
-- **The routing parts, published so they can be substituted** — `./measure` is
-  what `registerElements` takes an override of, and `./element-transform` and
-  `./surface-coordinates` are what invert a window's affine so a click under a
-  CSS rotation — or a `zoom`, which is not a transform and is carried
-  separately — lands where the user pressed. The one construct they cannot
-  invert is a perspective projection, which is not an affine at all; `./measure`
-  maps the window flat and says so on the console. A shell needs none of them;
-  a test of one does.
+- **Pure helpers** — `./cursor-shape` for the keyword set a client can ask
+  for, `./theme` and `./display-transform`.
 
 The compositor's own JSON wire is not here: a page never speaks it. Its
 schemas and framing live in
@@ -140,12 +115,9 @@ stand-in for a chrome that talks to the compositor's socket directly.
 ## Usage
 
 ```ts
-import { registerElements } from "@domicile-desktop/sdk/register-elements";
 import type { Shell as ShellModule } from "@domicile-desktop/sdk/shell";
 
 export const Shell: ShellModule = (root, domicile) => {
-  registerElements(domicile);
-
   const show = () => {
     // Render `domicile.windows` as `<app app-id="…">` elements into `root`.
   };
@@ -156,8 +128,8 @@ export const Shell: ShellModule = (root, domicile) => {
 
 That is the whole of it. There is nothing to await and no setup call: the
 compositor's protocol version is checked in the browser process and only
-logged, the engine reports the page's size and density itself, and the first
-call on the channel is what binds it.
+logged, the engine reports the page's size and density itself and routes the
+input over an `<app>`, and the first call on the channel is what binds it.
 
 Only Domicile calls a shell, so there is no plain-browser case to handle.
 Develop against the real desktop (`./scripts/dev-shell.sh <shell>` in this
@@ -178,8 +150,8 @@ of. Bind the events on a ref.
 
 **Read them off your own key events.** The desktop is the chrome's window, so
 the page hears every key the user presses whatever the compositor's seat is
-pointed at — that is how `registerElements` forwards a keystroke to a client in
-the first place:
+pointed at — that is how the engine forwards a keystroke to a client in the
+first place:
 
 ```ts
 const follow = (event: KeyboardEvent) => {
@@ -226,11 +198,7 @@ bun run turbo test --filter @domicile-desktop/sdk
 ```
 
 DOM-dependent suites run against happy-dom via
-[`@domicile-desktop/test-support`](../test-support/README.md). That DOM performs no
-layout, so the routing tests inject a `measure` stub through
-`registerElements(domicile, { measure })` rather than relying on
-`getBoundingClientRect`.
-
+[`@domicile-desktop/test-support`](../test-support/README.md).
 happy-dom has never heard of `<app>`, so it creates one as an
 `HTMLUnknownElement`, which React's development build reports on the console as
 an unrecognized tag. It cannot happen on the fork, where the tag is

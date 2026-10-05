@@ -1,5 +1,4 @@
 import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
-import { focusChrome } from "@domicile-desktop/sdk/focus-chrome";
 import {
   WEBVIEW_CLOSE_EVENT,
   WEBVIEW_FOCUS_REQUEST_EVENT,
@@ -477,19 +476,16 @@ export const BrowserWindow = ({
   // The window the user is working in takes the keyboard, and a browser
   // window's belongs to its page rather than to the chrome around it.
   //
-  // The host has to be told as well, which the SDK does for an `<app>` and
-  // cannot do for this element. There is one seat: the compositor holds `wl_keyboard`
-  // focus on whichever client the chrome last named, and a browser window names
-  // none — its page is inside the chrome's own window. Without `focusChrome`
-  // the focus a terminal was given stays with it while the user types into a
-  // site, and every key they press is delivered to a window they have switched
-  // away from.
-  //
-  // The SDK's `focusChrome` rather than the client's, because the page routes
-  // keys too: the client's moves the seat and leaves the SDK forwarding every
-  // key this document hears to the client it last named. The guest hides that
-  // — the document hears none of its keys — until something of the page's own
-  // takes typing, like the launcher's box, and every letter goes elsewhere.
+  // The host has to be told as well, which the engine does for an `<app>` and
+  // cannot do for this element. There is one seat: the compositor holds
+  // `wl_keyboard` focus on whichever client the chrome last named, and a
+  // browser window names none — its page is inside the chrome's own window.
+  // Without `focusChrome` the focus a terminal was given stays with it while
+  // the user types into a site, and every key they press is delivered to a
+  // window they have switched away from. It also stops the engine forwarding
+  // the keys this document hears to the client it last named, which the guest
+  // hides — the document hears none of its keys — until something of the
+  // page's own takes typing, like the launcher's box.
   //
   // THE PAGE IS NOT WHERE IT GOES WHEN THIS WINDOW ALREADY HAS IT. A press in
   // the address bar is a reach like any other — it is what makes this the
@@ -505,7 +501,7 @@ export const BrowserWindow = ({
   // answered. Once it is, the page has it back.
   useEffect(() => {
     if (holdsKeyboard && view !== null) {
-      focusChrome(domicile);
+      domicile.focusChrome();
       if (pickerBox !== null) {
         focusOwn(pickerBox);
       } else if (!holdsFocus(element.current)) {
@@ -768,7 +764,7 @@ const holdsFocus = (frame: HTMLElement | null): boolean =>
  * Take this document's focus off the window, if the window is holding it.
  *
  * A blur rather than a focus of something else, because the document is where
- * the keyboard belongs when no window holds it: the SDK listens for keys on
+ * the keyboard belongs when no window holds it: the engine listens for keys on
  * `document` and sends them to whichever client the shell named, and the page
  * a guest was typing into cannot hear them. Blink hands the embedder's own
  * frame the focus on the way out — `Element::blur` focuses the document's

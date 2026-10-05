@@ -1,6 +1,5 @@
 // The shell's entry point, and manganese as a library: `runManganese` makes a
-// `Shell` that wires the SDK to the desktop this page was opened in and mounts
-// the React chrome on top of it, and `Shell` is manganese as shipped.
+// `Shell` that mounts the React chrome on the desktop this page was opened in, and `Shell` is manganese as shipped.
 // The bar's items are exported for a layout of the user's own. Importing this
 // module does nothing but install its stylesheet.
 
@@ -9,7 +8,6 @@ import {
   DEFAULT_THEME,
 } from "@domicile-desktop/component-library/theme-core";
 import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
-import { registerElements } from "@domicile-desktop/sdk/register-elements";
 import type { Shell as ShellModule } from "@domicile-desktop/sdk/shell";
 import { createRoot } from "react-dom/client";
 
@@ -93,7 +91,6 @@ export const runManganese =
     // once, rather than per render, because a source is the connection.
     const displays = hostDisplays(domicile);
     const theme = hostTheme(domicile);
-    registerElements(domicile);
 
     createRoot(mountPoint(root)).render(
       <Chrome

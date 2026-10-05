@@ -9,12 +9,62 @@
 
 #include "components/viz/common/surfaces/surface_id.h"
 #include "third_party/blink/renderer/core/core_export.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/html/html_element.h"
 #include "third_party/blink/renderer/platform/graphics/external_surface_embedder.h"
 #include "third_party/blink/renderer/platform/graphics/surface_layer_bridge.h"
+#include "third_party/blink/renderer/platform/supplementable.h"
+#include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/gfx/geometry/size_f.h"
 
 namespace blink {
+
+class HTMLAppElement;
+class MouseEvent;
+
+// Where an <app> sends what lands on it: the desktop of the window it is in.
+//
+// Declared here and implemented in modules, by DomicileHost, because that is
+// where the channel to the compositor is and core cannot call into modules. The
+// desktop installs itself on its window and the element asks the window. A
+// window with no desktop -- any page but the shell's -- has none, and an <app>
+// on it sends nothing.
+//
+// The element maps and the desktop forwards: a point arrives in the element's
+// own CSS pixels, and the desktop scales it to what the client drew, which is
+// the compositor's to say and is in `DomicileHost.windows`.
+class CORE_EXPORT AppInputClient : public Supplement<LocalDOMWindow> {
+ public:
+  static const char kSupplementName[];
+
+  // The desktop of `window`, or null where it has none.
+  static AppInputClient* From(LocalDOMWindow& window);
+
+  explicit AppInputClient(LocalDOMWindow&);
+
+  // A press on `app`, which shows `app_id`: ask the shell whether its window
+  // takes the keyboard, and give it the keyboard unless the shell says no.
+  virtual void AppPressed(HTMLAppElement& app, const String& app_id) = 0;
+  // Where the pointer is over `app_id`: `point` within an element `size` big,
+  // both in the element's own CSS pixels.
+  virtual void AppPointerMotion(const String& app_id,
+                                const gfx::PointF& point,
+                                const gfx::SizeF& size) = 0;
+  // A Linux button code (input-event-codes.h), going down or coming up.
+  virtual void AppPointerButton(const String& app_id,
+                                uint32_t button,
+                                bool pressed) = 0;
+  virtual void AppPointerLeave(const String& app_id) = 0;
+  // A scroll as `wl_pointer` wants it: a distance and 120ths of a detent.
+  virtual void AppPointerAxis(const String& app_id,
+                              double dx,
+                              double dy,
+                              int32_t v120_x,
+                              int32_t v120_y) = 0;
+
+  void Trace(Visitor*) const override;
+};
 
 // <app> — a window belonging to a Wayland client, laid out by this page.
 //
@@ -62,6 +112,10 @@ class CORE_EXPORT HTMLAppElement final : public HTMLElement,
   // <app> the layout box *is* the xdg_toplevel.configure.
   void SurfaceBoxChanged(const gfx::Size& size);
 
+  // The pointer, the wheel and the secondary button's menu over this element
+  // are its client's: see the .cc. Every other event is an HTMLElement's.
+  void DefaultEventHandler(Event&) override;
+
   // WebSurfaceLayerBridgeObserver:
   void OnWebLayerUpdated() override;
   void RegisterContentsLayer(cc::Layer*) override;
@@ -83,6 +137,20 @@ class CORE_EXPORT HTMLAppElement final : public HTMLElement,
   void OnEmbedded(const std::optional<viz::SurfaceId>&);
 
   bool CreateLayer();
+
+  // Send `event` to the client `app_id` names, through `client`.
+  void ForwardInput(AppInputClient& client,
+                    const String& app_id,
+                    const Event& event);
+  void ForwardMotion(AppInputClient& client,
+                     const String& app_id,
+                     const MouseEvent& event);
+  // Where `event` is over this element's content box -- the box the surface is
+  // drawn in -- in the element's own CSS pixels, and that box's size in the
+  // same pixels. False where there is no box to map through.
+  bool MapToContent(const MouseEvent& event,
+                    gfx::PointF& point,
+                    gfx::SizeF& size);
 
   // The size last sent to the producer. Kept so that a layout that did not
   // change the box does not reconfigure the client, which would make every

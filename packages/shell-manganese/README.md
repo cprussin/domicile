@@ -548,8 +548,9 @@ for that as well as for its own chrome's pointer events. `guard-webview-click.sh
 is what says a real click in a real guest arrives here — it is also what found
 that the focus alone did not.
 
-A client's window arrives at the same place by a different road. The SDK would
-focus a clicked client by itself, and the shell stops it: the SDK asks first,
+A client's window arrives at the same place by a different road. The engine
+would focus a clicked client by itself, and the shell stops it: the engine asks
+first,
 with a cancelable `domicile-focus-requested`, and this shell answers every one
 of them. So both kinds of window are reached the same way — the shell decides,
 and `focus_changed` comes back afterward to say where the keyboard actually is.
@@ -575,8 +576,8 @@ keyboard: a browser window is a browsing context of its own, so a key pressed on
 a site the shell is showing reaches neither this page nor the compositor, and
 the layer inside the engine is the only one above it.
 
-That claim is also what keeps the two from both firing. The SDK forwards this
-document's keystrokes to whichever window has the keyboard, and a chord it did
+That claim is also what keeps the two from both firing. The engine forwards
+this document's keystrokes to whichever window has the keyboard, and a chord it did
 not know was spoken for went to the window as well as to the handler here —
 Mod+Return opening a terminal and typing a newline into the one already open. It
 reads the claim now, so the chord stops at the page. One ask, honored wherever
@@ -927,7 +928,7 @@ shell that wants its own pictures owns its own list.
 
 | Path | What |
 |---|---|
-| `src/index.tsx` | Entry point and library: `runManganese(options)` makes a `Shell` that takes the desktop it is handed, applies the theme, binds the SDK to it and mounts `<Shell>`; `Shell` is `runManganese()`; the bar's items are re-exported under their public names. |
+| `src/index.tsx` | Entry point and library: `runManganese(options)` makes a `Shell` that takes the desktop it is handed, applies the theme and mounts `<Shell>`; `Shell` is `runManganese()`; the bar's items are re-exported under their public names. |
 | `src/Shell.tsx` | The composition root: the providers, and the one `DisplayProvider` every screen below fans out from. |
 | `src/Desktop.tsx` | The desk: the window state, the keys, the panels over every screen, and one `Monitor` per screen of it. |
 | `src/clock/` | The live clock, and what it says: in the middle of the bar on every screen. |

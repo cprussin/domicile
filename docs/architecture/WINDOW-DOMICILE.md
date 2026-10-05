@@ -86,10 +86,22 @@ change. `setDesktopSize` and `setDevicePixelRatio` leave the IDL.
 
 ### `<app>` routes its own input
 
-`HTMLAppElement` forwards pointer, wheel and key events to its client in
-surface coordinates computed from its own layout and transform: the same
-mapping `measure.ts` and `element-transform.ts` compute in script, done where
-the transform is known exactly. The cancelable focus events stay as they are.
+The element maps; the desktop forwards.
+
+| Input | Where |
+|---|---|
+| pointer, wheel, `contextmenu` over an `<app>` | `HTMLAppElement::DefaultEventHandler` maps the point through its layout box and every transform above it (`AbsoluteToLocalPoint`, as `offsetX` does) |
+| scaling to what the client drew, a popup's window | `DomicileHost`, which has `windows` |
+| keys | `DomicileHost`: a key reaches `document`, never an `<app>` |
+
+The element reaches the desktop through `AppInputClient`, a core interface
+`DomicileHost` implements: core cannot call modules. Default handling rather
+than a listener, so a page's `preventDefault()` takes the event, and a page
+cannot click into a client by script. `domicile-focus-requested` and
+`domicile-focus-release-requested` keep their names, `detail` and
+cancelability; the engine dispatches them. `focusApp()` and `focusChrome()`
+move both the seat and the page's keys, so the SDK's wrappers go, and so do
+`key`, `pointerMotion`, `pointerButton`, `pointerLeave` and `pointerAxis`.
 
 ### Chords are the engine's
 
@@ -113,12 +125,13 @@ action.
 | `shell` | type: `Shell` |
 | `app-element`, `webview-element` | types |
 | `keybindings`, `key-action`, `own-keybindings` | pure helpers: chord grammar, modes |
-| `matrix`, `cursor-shape`, `theme`, … | pure helpers |
+| `cursor-shape`, `theme`, … | pure helpers |
 
 `domicile-client`, `connect-to-host`, `register-elements`, `desktop-size`,
-`device-pixel-ratio`, `host-message`, `bind-keys`, `measure`,
-`element-transform`, `surface-coordinates`, `pointer-input` and
-`keyboard-input` are deleted. `protocol`, `chrome-message`, `newline-frames`
+`device-pixel-ratio`, `host-message`, `measure`, `element-transform`,
+`surface-coordinates`, `matrix`, `pointer-input`, `keyboard-input`,
+`element-context`, `focus-app`, `focus-chrome`, `input`, `wheel-axis` and
+`windows` are deleted; `bind-keys` stays, a pure helper over `grabShortcut`. `protocol`, `chrome-message`, `newline-frames`
 and `host-stream` move to `@domicile-desktop/e2e-harness`, their only user.
 
 ## Key decisions
@@ -175,7 +188,8 @@ Each step ships alone.
       promises replace (`appappeared` and the other seven `app*`,
       `focuschanged`, `files`, …), `shellconfig` and the `arrival` stamp
       (`guard-windows-state.sh` fires every name left)
-- [ ] `<app>` routes its own input; `registerElements` and the routing modules go
+- [x] `<app>` routes its own input; `registerElements` and the routing modules
+      go (`guard-app-routes-input.sh`)
 
 ## Open questions
 

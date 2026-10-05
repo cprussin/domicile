@@ -54,8 +54,8 @@ type HeldModifiers = {
  * **The page is the only thing that hears this keyboard, and the compositor's
  * answer is this page's own keystrokes handed back short.** The desktop is the
  * chrome's window: every key the compositor's seat has ever seen arrived as a
- * `key` the SDK forwarded from this document, and the SDK forwards only while
- * a client holds the keyboard. So a modifier pressed while the chrome holds it
+ * `key` the engine forwarded from this document, and the engine forwards only
+ * while a client holds the keyboard. So a modifier pressed while the chrome holds it
  * — the Meta of the Meta+Return that spawned the terminal, before there was a
  * window to hold anything — never reaches the seat, and the next forwarded key
  * makes the compositor broadcast a set that denies it.

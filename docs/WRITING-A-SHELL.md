@@ -45,15 +45,11 @@ rather than reported as a number —
 [WINDOW-COMPOSITING.md](/docs/architecture/WINDOW-COMPOSITING.md) keeps that
 list.
 
-**One CSS construct is drawn right and clicked wrong: a perspective.** A window
-projected by a `perspective` above it — or by a `perspective()` in a transform
-over it — is painted exactly as the page asked, but the pointer position the
-client is handed comes from inverting an affine, and a projection is not one.
-The SDK detects that and says so on the console rather than guessing quietly;
-until it can be inverted, keep a `perspective` off the ancestors of an `<app>`
-you expect to be clickable. `zoom`, `rotate`, `scale` and 2D `transform`s on
-any ancestor are all carried, including a 3D rotation with no perspective over
-it, which CSS draws by dropping z and the SDK maps the same way.
+**A click lands where it was drawn.** The engine maps a pointer over an
+`<app>` through every transform between it and the screen — its own and each
+ancestor's, `zoom`, a 3D turn, a perspective — into the client's own surface
+pixels, so whatever CSS does to a window, the client is handed the point the
+user pressed.
 
 ```sh
 nix run github:cprussin/domicile/stable -- ./my-desktop/dist/shell.js
@@ -424,14 +420,13 @@ One package, published to npm and usable outside this repo:
 
 | Package | What |
 |---|---|
-| `@domicile-desktop/sdk` | The types of the desktop a shell is handed (`domicile-host`) and of `Shell`; `registerElements` (the input routing over your `<app>` elements); `focusApp` and `focusChrome`; `bindKeys` (your keys); `windows` (`windowOf`, `surfaceSizeOf`); `fake-host` (`FakeDomicileHost`, for your tests); and pure helpers. `<app>` and `<webview>` are the engine's own tags: the SDK types them and names the events on them, and registers nothing. |
+| `@domicile-desktop/sdk` | The types of the desktop a shell is handed (`domicile-host`) and of `Shell`; `bindKeys` (your keys); `fake-host` (`FakeDomicileHost`, for your tests); and pure helpers. `<app>` and `<webview>` are the engine's own tags: the SDK types them and names the events on them, and registers nothing. |
 
 The desktop `Shell` is handed is the API; the SDK is its types plus helpers.
 The definitive contract is the IDL under
 `packages/domicile-engine/src/third_party/blink/renderer/modules/domicile/`.
-The one helper a shell cannot skip today is `registerElements`: until the
-engine routes input under `<app>` itself, it is what forwards the pointer and
-keyboard to clients.
+There is no helper a shell cannot skip: the engine routes the pointer and the
+keyboard over an `<app>` to its client itself.
 
 **Test against `FakeDomicileHost`.** Hand its `host` to your shell, `set`
 attributes (each dispatches the `<name>changed` it owes), `appear` and `close`
@@ -450,12 +445,9 @@ One source file and a build config. The full version, with the comments, is in
 **`src/index.ts`** — the page, and the whole of the shell's behavior:
 
 ```ts
-import { registerElements } from "@domicile-desktop/sdk/register-elements";
 import type { Shell as ShellModule } from "@domicile-desktop/sdk/shell";
 
 export const Shell: ShellModule = (root, domicile) => {
-  registerElements(domicile);
-
   const mounted = new Map<string, HTMLElement>();
 
   const show = () => {
@@ -496,10 +488,9 @@ over, or another popup for a submenu. Its `x` and `y` are CSS pixels from the
 top-left of that parent's box, `width` and `height` its size, and `grab` says
 it is a menu. Mount an `<app>` for it there, above its window, and take it down
 when `windows` drops it like any other. It is not a window: give it no frame,
-do not tile it, and draw it only where its window is drawn. The SDK already
-routes a click on one to its window's keyboard (`windowOf`, from
-`@domicile-desktop/sdk/windows`), and the compositor dismisses a menu when the
-keyboard leaves its window. The example does it in a dozen lines; a popup the
+do not tile it, and draw it only where its window is drawn. The engine
+already routes a click on one to its window's keyboard, and the compositor
+dismisses a menu when the keyboard leaves its window. The example does it in a dozen lines; a popup the
 compositor placed near a screen edge is not moved back onto the screen.
 
 Removing what `windows` no longer lists is in there rather than left out
@@ -556,13 +547,12 @@ says at all: an `<app>`'s layout box *is* the client's
 so styling the element is the whole of resizing a window. And the size the
 client drew at is the entry's `width` and `height` (`null` until it has drawn).
 You are welcome to it — `shell-simple` uses it to take a "nothing here yet"
-placeholder down — but you do not have to route it anywhere: the SDK reads it
-off `domicile.windows` (`surfaceSizeOf`), because scaling a pointer position
-into the client's own pixels is the only use anyone has for it. A shell that
+placeholder down — but you do not have to route it anywhere: the engine
+scales a pointer position into the client's own pixels with it. A shell that
 holds that size is a courier.
 
 The element is the engine's, and it has no methods of its own for either of
-these: a cursor is a style and a size is something the SDK already has.
+these: a cursor is a style and a size is something the engine already has.
 
 **A client's limits are yours to keep, if you size windows.** `minWidth`,
 `minHeight`, `maxWidth` and `maxHeight` say the smallest and largest a client
@@ -583,7 +573,7 @@ every move of it starts with your shell. Two questions reach you, and a shell
 that answers neither is the desktop the smallest one above already is: a click
 focuses the window under it, and a client that asks for focus is ignored.
 
-**A click on a window** is the first. The SDK fires a cancelable
+**A click on a window** is the first. The engine fires a cancelable
 `domicile-focus-requested` on the `<app>` that was clicked
 (`APP_FOCUS_REQUESTED_EVENT` from `@domicile-desktop/sdk/app-element`) and, left
 alone, focuses the client — which is what you want when your shell has no
@@ -592,25 +582,25 @@ opinion. Call `preventDefault()` on it and nothing moves until you say so:
 ```ts
 import type { AppFocusRequest } from "@domicile-desktop/sdk/app-element";
 import { APP_FOCUS_REQUESTED_EVENT } from "@domicile-desktop/sdk/app-element";
-import { focusApp } from "@domicile-desktop/sdk/focus-app";
 
 document.addEventListener(APP_FOCUS_REQUESTED_EVENT, (event) => {
   const { appId } = (event as CustomEvent<AppFocusRequest>).detail;
   event.preventDefault();
   if (myPolicySays(appId)) {
-    focusApp(domicile, appId);
+    domicile.focusApp(appId);
   }
 });
 ```
 
-It bubbles, so one listener covers every window.
+It bubbles, so one listener covers every window. A popup's press asks for its
+window, so `appId` is never a menu's. And a `preventDefault()` on the
+`pointerdown` itself takes the whole press: the client hears none of it and
+nothing is asked.
 
-**`focusApp` rather than `domicile.focusApp`**, and the difference matters: the
-client's method asks the compositor and stops there, while this also tells the
-SDK where the page's keystrokes go. A key event is delivered to `document` and
-never to an element — a Wayland client is a surface, with nowhere for the browser
-to put focus — so both halves are needed, and calling only the first gives the
-window the seat while every keystroke stays in the page.
+`domicile.focusApp` moves both halves: the compositor's seat, and where the
+keys this page hears are sent. A key event is delivered to `document` and never
+to an element — a Wayland client is a surface, with nowhere for the browser to
+put focus — so the engine forwards each one to the window with the keyboard.
 
 It goes one way only. Which client holds the keyboard is one seat's answer and
 something is always in it, so "this window has it" is an instruction the
@@ -619,9 +609,7 @@ leaves a window when another takes it, when a click lands on the chrome, or
 when you say so:
 
 ```ts
-import { focusChrome } from "@domicile-desktop/sdk/focus-chrome";
-
-focusChrome(domicile);
+domicile.focusChrome();
 ```
 
 **Which is a thing to reach for exactly once: a panel your shell puts up over
@@ -631,10 +619,6 @@ holding the seat, so without this the compositor goes on delivering every
 keystroke to the client while the user types into a box on top of it: the box
 fills with nothing and the window underneath takes the letters.
 
-`focusChrome` rather than `domicile.focusChrome()`, for the reason `focusApp`
-is not `domicile.focusApp` either — both halves, or the page forwards to a
-window it has left.
-
 Putting it back is the job of whatever asks for the seat in the first place. In
 `shell-manganese` that is one effect in `AppWindow`: the window being worked in
 asks for the keyboard whenever the compositor says the keyboard is elsewhere,
@@ -642,8 +626,8 @@ so taking it for a panel and giving it back when the panel goes down are the
 same rule with the panel in it, rather than a second rule fighting the first.
 
 **A click on chrome you drew for a window** is the same question the other way
-round, and it is the one a shell with window furniture has to answer. The SDK
-reads a press that lands off every `<app>` as the page asking for the keyboard
+round, and it is the one a shell with window furniture has to answer. The
+engine reads a press that lands off every `<app>` as the page asking for the keyboard
 back, which is right for a press on the desktop and wrong for a press on a
 window's own title bar — or on the sheet a meta-drag is caught on. Those land
 off every `<app>` too, and nothing in a press says which window a `<div>`
@@ -679,7 +663,7 @@ than on the element, as `focusrequested` with the window's `appId`. This is
 also the dialog that puts itself in front of what you were typing into. The
 compositor does not grant it and makes no attempt to tell those two apart; it
 passes the question on with the seat where it was. Answer with
-`focusApp(domicile, appId)`, or do nothing, which is a desktop where a
+`domicile.focusApp(appId)`, or do nothing, which is a desktop where a
 background window cannot take the keyboard.
 
 **Where it actually is** is `domicile.focusedWindow` — `null` while your page
@@ -1033,14 +1017,14 @@ where `focusin` follows upstream's rules.
 There is one seat and something is always in it, and a browser window names no
 client — its page is inside your own. Three things follow, none optional:
 
-- **Say the page has the keyboard** with `focusChrome(domicile)` when a
+- **Say the page has the keyboard** with `domicile.focusChrome()` when a
   browser window becomes the window being worked in. Without it the terminal
   that was focused keeps the seat while the user types into a site, and every
   key they press is delivered to a window they have switched away from.
 - **Give it back when they move on**, by blurring whatever in the window holds
-  the focus. The SDK forwards *this document's* keystrokes to whichever client
+  the focus. The engine forwards *this document's* keystrokes to whichever client
   the shell named, and a key pressed while a guest holds the focus never
-  arrives in this document at all — so `focusApp` alone moves nothing, and a
+  arrives in this document at all — so `domicile.focusApp` alone moves nothing, and a
   browser window left holding the focus makes every other window deaf. Open
   one, and every terminal after it stops taking keystrokes.
 - **Nothing else takes a key.** Chrome's own shortcuts — Ctrl+R, Alt+Left,
@@ -1263,7 +1247,7 @@ panel.append(view);
   them, capped at the most the panel may take, and give it that box until
   then. The width counts the gutter a classic vertical scrollbar takes.
 - **The panel is a thing to type into**, like a launcher: take the keyboard
-  for it with `focusChrome` and give it back when it closes (see
+  for it with `domicile.focusChrome()` and give it back when it closes (see
   [Who gets the keyboard](#who-gets-the-keyboard)).
 - **Escape reaches your page only while your page has the focus.** A key
   pressed in the popup's page never arrives

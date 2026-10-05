@@ -191,7 +191,7 @@ describe("Shell", () => {
 
   describe("the keyboard", () => {
     it("gives it to a window opened once the host has caught up", () => {
-      // Nothing else would: the SDK routes keys to whichever window was last
+      // Nothing else would: the engine routes keys to whichever window was last
       // clicked, so without this a terminal opened from a key hears nothing.
       const host = shell();
       host.focus(null);

@@ -1,8 +1,5 @@
 import { describe, expect, it } from "bun:test";
 import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
-import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
-import { focusApp } from "@domicile-desktop/sdk/focus-app";
-import { registerElements } from "@domicile-desktop/sdk/register-elements";
 import {
   WEBVIEW_CLOSE_EVENT,
   WEBVIEW_FILE_CHOOSER_EVENT,
@@ -913,47 +910,6 @@ describe("BrowserWindow", () => {
         />,
       );
       expect(calls).toStrictEqual([]);
-    });
-
-    // AND THE PAGE STOPS FORWARDING KEYS TO THE CLIENT IT LEFT. The SDK sends
-    // every key this document hears to the client it last routed the keyboard
-    // to, and moving the seat does not change that — so a window that moved
-    // only the seat left the terminal before it named there. Nothing showed
-    // while the guest had the focus, because the document hears none of its
-    // keys; the launcher's box was where it showed, empty under every letter.
-    it("stops the page forwarding its keys to the client it took the keyboard from", () => {
-      const fake = new FakeDomicileHost();
-      const domicile = fake.host;
-      registerElements(domicile);
-      render(<app app-id="term" />);
-      focusApp(domicile, "term");
-
-      render(
-        <BrowserWindow
-          clickThrough={false}
-          covered={false}
-          depth={0}
-          domicile={domicile}
-          dragging={false}
-          focused
-          frame={FRAME}
-          fullscreen={false}
-          motion="resting"
-          onClose={nothingClosed}
-          onMotionEnded={nothingEnded}
-          onNavigate={() => undefined}
-          onOpenPopupWindow={noWindows}
-          onOpenWindow={noWindows}
-          onReach={() => undefined}
-          rect={ON_SCREEN}
-          src="https://example.com"
-        />,
-      );
-      fireEvent.keyDown(document, { code: "KeyA" });
-
-      expect(fake.calls.filter(([method]) => method === "key")).toStrictEqual(
-        [],
-      );
     });
 
     // AND THE KEYBOARD IT TAKES IS ITS PAGE'S. Nothing else can put it there:

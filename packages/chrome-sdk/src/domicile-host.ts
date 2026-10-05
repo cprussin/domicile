@@ -610,7 +610,10 @@ export type DomicileHost = {
    */
   copyClipboardEntry(entry: number): void;
 
-  /** Which window has the keyboard. `focusChrome()` takes it back to the page. */
+  /**
+   * Which window has the keyboard: the compositor's seat, and where the keys
+   * this page hears are sent. `focusChrome()` takes it back to the page.
+   */
   focusApp(appId: string): void;
   focusChrome(): void;
 
@@ -782,18 +785,6 @@ export type DomicileHost = {
    * An action it never offered does nothing.
    */
   invokeNotificationAction(id: number, action: string): void;
-
-  key(appId: string, keycode: number, pressed: boolean): void;
-  pointerMotion(appId: string, x: number, y: number): void;
-  pointerLeave(appId: string): void;
-  pointerButton(appId: string, button: number, pressed: boolean): void;
-  pointerAxis(
-    appId: string,
-    dx: number,
-    dy: number,
-    v120X: number,
-    v120Y: number,
-  ): void;
 
   /**
    * The screens of the desktop.

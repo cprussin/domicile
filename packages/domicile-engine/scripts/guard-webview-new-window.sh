@@ -205,6 +205,12 @@ wait_for_line "$TRIES" "GUARD shell-loaded" "$ENGINE_LOG" || {
   annotate_from "guard-webview-new-window: the shell page never ran, so nothing here was ever set up" "$ENGINE_LOG"
   echo "the engine said:" >&2
   tail -40 "$ENGINE_LOG" >&2
+  # An engine that died says why above its stack, and the tail above keeps
+  # only the bottom of a long one.
+  if grep -qE 'FATAL|Check failed|Received signal' "$ENGINE_LOG"; then
+    echo "where it died:" >&2
+    grep -m1 -A60 -E 'FATAL|Check failed|Received signal' "$ENGINE_LOG" >&2
+  fi
   exit 1
 }
 DEBUG_PORT="$(devtools_port "$PROFILE" "$TRIES")" || {

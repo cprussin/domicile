@@ -34,10 +34,6 @@
       "types": "./dist/domicile-host.d.ts",
       "default": "./dist/domicile-host.js"
     },
-    "./element-transform": {
-      "types": "./dist/element-transform.d.ts",
-      "default": "./dist/element-transform.js"
-    },
     "./extension": {
       "types": "./dist/extension.d.ts",
       "default": "./dist/extension.js"
@@ -50,29 +46,9 @@
       "types": "./dist/file-preview.d.ts",
       "default": "./dist/file-preview.js"
     },
-    "./focus-app": {
-      "types": "./dist/focus-app.d.ts",
-      "default": "./dist/focus-app.js"
-    },
-    "./focus-chrome": {
-      "types": "./dist/focus-chrome.d.ts",
-      "default": "./dist/focus-chrome.js"
-    },
-    "./input": {
-      "types": "./dist/input.d.ts",
-      "default": "./dist/input.js"
-    },
     "./key-action": {
       "types": "./dist/key-action.d.ts",
       "default": "./dist/key-action.js"
-    },
-    "./matrix": {
-      "types": "./dist/matrix.d.ts",
-      "default": "./dist/matrix.js"
-    },
-    "./measure": {
-      "types": "./dist/measure.d.ts",
-      "default": "./dist/measure.js"
     },
     "./notification": {
       "types": "./dist/notification.d.ts",
@@ -82,17 +58,9 @@
       "types": "./dist/own-keybindings.d.ts",
       "default": "./dist/own-keybindings.js"
     },
-    "./register-elements": {
-      "types": "./dist/register-elements.d.ts",
-      "default": "./dist/register-elements.js"
-    },
     "./shell": {
       "types": "./dist/shell.d.ts",
       "default": "./dist/shell.js"
-    },
-    "./surface-coordinates": {
-      "types": "./dist/surface-coordinates.d.ts",
-      "default": "./dist/surface-coordinates.js"
     },
     "./theme": {
       "types": "./dist/theme.d.ts",
@@ -105,10 +73,6 @@
     "./webview-element": {
       "types": "./dist/webview-element.d.ts",
       "default": "./dist/webview-element.js"
-    },
-    "./windows": {
-      "types": "./dist/windows.d.ts",
-      "default": "./dist/windows.js"
     }
   },
   "files": [

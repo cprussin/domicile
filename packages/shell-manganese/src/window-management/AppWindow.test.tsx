@@ -1,29 +1,24 @@
 import { beforeEach, describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
-import { APP_TAG_NAME } from "@domicile-desktop/sdk/app-element";
+import {
+  APP_FOCUS_REQUESTED_EVENT,
+  APP_TAG_NAME,
+} from "@domicile-desktop/sdk/app-element";
 import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
-import type { Measure } from "@domicile-desktop/sdk/measure";
-import { registerElements } from "@domicile-desktop/sdk/register-elements";
 import { fireEvent, render } from "@testing-library/react";
 
 import { css } from "../../styled-system/css";
 import { AppWindow } from "./AppWindow";
 
-// The SDK reports each window's size to a client, asks it for the keyboard when
-// a window is clicked, and forwards the pointer over one in the client's own
-// coordinates. What is read here is only the keyboard: whether it moved, and on
-// whose say-so. The pointer mapping is the SDK's own and is tested there.
+// The engine asks for the keyboard when a window is clicked and forwards the
+// pointer over one in the client's own coordinates. What is read here is only
+// the keyboard: whether it moved, and on whose say-so. The pointer is the
+// engine's, and `guard-app-routes-input.sh` reads it there.
 const host = new FakeDomicileHost();
 
 /** Every window this case asked the host to give the keyboard to. */
 const focused = (): unknown[] =>
   host.calls.filter(([method]) => method === "focusApp").map(([, id]) => id);
-
-// The test DOM performs no layout, so measurement is injected.
-const stubMeasure: Measure = () => ({
-  size: [100, 100],
-  transform: [1, 0, 0, 1, 0, 0],
-});
 
 /** Where a window on screen is, which no case here is about. */
 const ON_SCREEN = { height: 800, width: 1200, x: 0, y: 32 };
@@ -98,7 +93,6 @@ const portal = (container: HTMLElement): Element => {
 
 beforeEach(() => {
   host.calls.length = 0;
-  registerElements(host.host, { measure: stubMeasure });
 });
 
 describe("AppWindow", () => {
@@ -140,22 +134,27 @@ describe("AppWindow", () => {
     expect(portal(container).getAttribute("app-id")).toBe("term");
   });
 
-  it("answers a click on the window itself rather than letting the SDK", () => {
-    // The SDK focuses a clicked client unless something says otherwise, and
-    // this shell says otherwise: which window the user is working in is one
-    // fact, and it has one owner. Left to the SDK the keyboard would move
-    // while the desktop went on drawing the window before it as focused.
+  it("answers a click on the window itself rather than letting the engine", () => {
+    // The engine focuses a clicked client unless something says otherwise,
+    // and this shell says otherwise: which window the user is working in is
+    // one fact, and it has one owner. Left to the engine the keyboard would
+    // move while the desktop went on drawing the window before it as focused.
     const { container } = render(
       <AppWindow {...windowProps} focused={false} />,
     );
 
-    portal(container).dispatchEvent(
-      new MouseEvent("pointerdown", { bubbles: true, button: 0 }),
+    // What the engine dispatches for a press, and grants if it stands.
+    const stood = portal(container).dispatchEvent(
+      new CustomEvent(APP_FOCUS_REQUESTED_EVENT, {
+        bubbles: true,
+        cancelable: true,
+        detail: { appId: "term" },
+      }),
     );
 
     // It moves when the shell says so, which is the `focused` prop coming
     // back.
-    expect(focused()).toStrictEqual([]);
+    expect(stood).toBe(false);
   });
 
   it("hides the element when the window is not on screen", () => {
@@ -168,8 +167,8 @@ describe("AppWindow", () => {
   it("gives the keyboard to the window the shell says is focused", () => {
     // Without a click: the user types into what they just opened, switched to,
     // or brought to the front. The shell names one window and this is what
-    // carries that to the compositor — and to the SDK, which is what routes the
-    // keystrokes that follow.
+    // carries that to the compositor — and to the engine, which is what routes
+    // the keystrokes that follow.
     render(<AppWindow {...windowProps} focused />);
     expect(focused()).toStrictEqual(["term"]);
   });

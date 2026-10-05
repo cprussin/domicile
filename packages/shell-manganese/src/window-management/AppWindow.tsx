@@ -5,8 +5,6 @@ import {
 } from "@domicile-desktop/sdk/app-element";
 import type { CursorShape } from "@domicile-desktop/sdk/cursor-shape";
 import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
-import { focusApp } from "@domicile-desktop/sdk/focus-app";
-import { focusChrome } from "@domicile-desktop/sdk/focus-chrome";
 import { useEffect, useState } from "react";
 
 import { css, cx } from "../../styled-system/css";
@@ -191,19 +189,19 @@ export const AppWindow = ({
   useEffect(() => {
     if (behindPanel) {
       if (hasKeyboard) {
-        focusChrome(domicile);
+        domicile.focusChrome();
       }
     } else if (focused && !hasKeyboard && !leaving) {
-      focusApp(domicile, appId);
+      domicile.focusApp(appId);
     }
   }, [appId, behindPanel, domicile, focused, hasKeyboard, leaving]);
 
-  // A click on a client's window asks for the keyboard, and the SDK grants it
-  // unless something answers first. This answers first, and unconditionally:
-  // which window the user is working in is one fact with one owner, and the
-  // press that asked is the frame's to report — see `WindowFrame`. `focused`
-  // above is what carries the decision back to the same element a render
-  // later.
+  // A click on a client's window asks for the keyboard, and the engine grants
+  // it unless something answers first. This answers first, and
+  // unconditionally: which window the user is working in is one fact with one
+  // owner, and the press that asked is the frame's to report — see
+  // `WindowFrame`. `focused` above is what carries the decision back to the
+  // same element a render later.
   useEffect(() => {
     if (element === null) {
       return undefined;
@@ -218,9 +216,9 @@ export const AppWindow = ({
     }
   }, [element]);
 
-  // And the other direction. The SDK gives the keyboard back to the page for a
-  // press that lands off every `<app>`, which a float's own title bar and grab
-  // sheet do — so without this, taking hold of a window to move it took the
+  // And the other direction. The engine gives the keyboard back to the page
+  // for a press that lands off every `<app>`, which a float's own title bar and
+  // grab sheet do — so without this, taking hold of a window to move it took the
   // keyboard off it. Nothing in the press says which window a `<div>` belongs
   // to, which is why the chrome says so on itself and this reads it back.
   //
