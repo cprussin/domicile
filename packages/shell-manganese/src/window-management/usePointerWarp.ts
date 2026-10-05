@@ -15,6 +15,16 @@ import type { WindowState } from "./window-state";
  */
 const IN_FLIGHT = 4;
 
+/**
+ * How far, in page pixels, a pointer event can be from a spot and still be at
+ * it.
+ *
+ * At a fractional scale the engine floors a warp into device pixels, then
+ * floors the landing back into DIPs, so it arrives up to 1.5 page pixels off
+ * (at scale 1.2).
+ */
+const NEAR = 2;
+
 type Options = {
   domicile: DomicileClient;
   /** The focused window and its box, or none. */
@@ -36,9 +46,9 @@ export type Pointer = {
    * Whether a pointer event at `at` means the user moved the pointer there.
    *
    * Decided by position, not a flag: a crossing fires `pointerover` before
-   * `pointermove`, so a flag cleared on move would swallow it. An event at the
-   * last seen position or at a pending warp target is a window arriving under
-   * the pointer. Anything elsewhere is the user and clears pending warps. Fails
+   * `pointermove`, so a flag cleared on move would swallow it. An event within
+   * `NEAR` of the last seen position or of a pending warp target is a window
+   * arriving under the pointer. Anything farther is the user and clears pending warps. Fails
    * open while the pointer position is unknown.
    *
    * A target sent twice with another in between is ambiguous if the engine
@@ -161,9 +171,9 @@ export const usePointerWarp = ({
   return useMemo(() => ({ pointing: arrivedAt }), [arrivedAt]);
 };
 
-/** Whether two places on the page are the same place. */
+/** Whether two places on the page are the same place, give or take rounding. */
 const same = (one: Spot, other: Spot): boolean =>
-  one[0] === other[0] && one[1] === other[1];
+  Math.abs(one[0] - other[0]) < NEAR && Math.abs(one[1] - other[1]) < NEAR;
 
 /** Whether `other` is the box `one` is, or `false` for no box at all. */
 const sameBox = (one: Rect, other: Rect | undefined): boolean =>
