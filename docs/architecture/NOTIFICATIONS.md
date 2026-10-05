@@ -50,6 +50,9 @@ shell ─ dismissNotifications(ids) / invokeNotificationAction(id, key) ─▶ e
   action is dropped.
 - **Clicking an action** runs it and closes the notification, unless the
   notification is `resident`.
+- **A site raises its own window.** Its `client.focus()` or `window.focus()`
+  fires `domicile-focus-request` on the `<webview>`
+  (`WebViewGuest::ActivateContents`), and the shell raises it.
 - **Dismissing a toast** only hides the toast. **Clearing** a notification
   sends `NotificationClosed` (reason 2) to the application.
 - **When locked,** the shell shows no toasts and no drawer, and the compositor
