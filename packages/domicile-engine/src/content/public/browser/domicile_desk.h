@@ -18,7 +18,6 @@
 #include "ui/gfx/native_ui_types.h"
 
 namespace ui {
-class Compositor;
 class Layer;
 }  // namespace ui
 
@@ -67,8 +66,9 @@ CONTENT_EXPORT std::optional<gfx::Rect> GetDomicileDeskPageBounds(
     gfx::NativeWindow window);
 
 // The page a desk is, shown in another window's layers: a mirror of the
-// page's surface layer, and its frame sink a child of that window's
-// compositor, so viz draws it there at that window's scale.
+// page's surface layer, which viz draws there at that window's scale. The
+// page's frame sink stays a child of the host's compositor alone, so the page
+// ticks at the host display's BeginFrames.
 class CONTENT_EXPORT DomicileDeskMirror {
  public:
   virtual ~DomicileDeskMirror() = default;
@@ -83,8 +83,7 @@ class CONTENT_EXPORT DomicileDeskMirror {
 
 // `nullptr` for a page with no view yet.
 CONTENT_EXPORT std::unique_ptr<DomicileDeskMirror> MirrorDomicileDeskPage(
-    WebContents* page,
-    ui::Compositor* into);
+    WebContents* page);
 
 }  // namespace content
 

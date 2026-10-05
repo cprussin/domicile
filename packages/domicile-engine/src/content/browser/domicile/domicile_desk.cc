@@ -5,17 +5,14 @@
 
 #include <utility>
 
-#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/no_destructor.h"
-#include "components/viz/common/surfaces/frame_sink_id.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
 #include "ui/base/class_property.h"
-#include "ui/compositor/compositor.h"
 #include "ui/compositor/layer.h"
 
 DEFINE_UI_CLASS_PROPERTY_TYPE(display::ScreenInfos*)
@@ -43,20 +40,19 @@ Desk& TheDesk() {
   return *desk;
 }
 
+// Not a frame sink parent of the page. viz gives a sink the BeginFrameSource of
+// its first parent, and after a detach reattaches from sources ordered by
+// pointer, so a presenter as a second parent could leave the page ticking at a
+// slower monitor. The mirrored surface layer references the page's surface,
+// which is all viz needs to draw it here.
 class Mirror : public DomicileDeskMirror {
  public:
-  Mirror(RenderWidgetHostViewBase* view, ui::Compositor* into)
+  explicit Mirror(RenderWidgetHostViewBase* view)
       : view_(view->GetWeakPtr()),
-        sink_(view->GetFrameSinkId()),
-        into_(into),
-        layer_(view->GetNativeView()->layer()->Mirror()) {
-    into_->AddChildFrameSink(sink_);
-  }
+        layer_(view->GetNativeView()->layer()->Mirror()) {}
 
   Mirror(const Mirror&) = delete;
   Mirror& operator=(const Mirror&) = delete;
-
-  ~Mirror() override { into_->RemoveChildFrameSink(sink_); }
 
   ui::Layer* layer() override { return layer_.get(); }
 
@@ -66,24 +62,19 @@ class Mirror : public DomicileDeskMirror {
 
  private:
   base::WeakPtr<RenderWidgetHostViewBase> view_;
-  const viz::FrameSinkId sink_;
-  // Outlives this: the window whose layers this is in owns it.
-  const raw_ptr<ui::Compositor> into_;
   std::unique_ptr<ui::Layer> layer_;
 };
 
 }  // namespace
 
-std::unique_ptr<DomicileDeskMirror> MirrorDomicileDeskPage(
-    WebContents* page,
-    ui::Compositor* into) {
+std::unique_ptr<DomicileDeskMirror> MirrorDomicileDeskPage(WebContents* page) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   auto* view =
       static_cast<RenderWidgetHostViewBase*>(page->GetRenderWidgetHostView());
   if (view == nullptr || view->GetNativeView() == nullptr) {
     return nullptr;
   }
-  return std::make_unique<Mirror>(view, into);
+  return std::make_unique<Mirror>(view);
 }
 
 std::vector<DomicileDeskDisplay> GetDomicileDesk() {
