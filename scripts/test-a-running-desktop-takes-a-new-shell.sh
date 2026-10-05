@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Checks a running desktop loads a new shell and opens URLs on command, via
-# `domicile load-shell`, `BROWSER` and the `xdg-open` shim on its apps' PATH.
+# Checks a running desktop loads a new shell, opens URLs and takes screenshots
+# on command, via `domicile load-shell`, `BROWSER`, the `xdg-open` shim on its
+# apps' PATH, and `domicile screenshot`.
 #
 #   ./scripts/test-a-running-desktop-takes-a-new-shell.sh
 #
@@ -89,6 +90,7 @@ while True:
         heard.write(line.decode())
     answer = open("$WORK/answer").read().strip()
     done = ({"type": "opened"} if b'"type":"open_url"' in line
+            else {"type": "captured"} if b'"type":"screenshot"' in line
             else {"type": "loaded"})
     reply = (done if answer == "loaded"
              else {"type": "refused", "why": answer})
@@ -212,6 +214,28 @@ elif grep -q "no shell at" "$MISSING" &&
 else
   echo "FAIL: it failed for some other reason, or it reached the engine:"
   sed 's/^/    /' "$MISSING"
+  FAILED=1
+fi
+
+echo "== screenshot reaches the engine with the file made absolute =="
+# The engine does not share the terminal's working directory.
+echo loaded >"$WORK/answer"
+SAID="$(cd "$WORK" && ask_desktop screenshot shot.png)"
+HEARD="$(tail -n 1 "$WORK/engine-heard" 2>/dev/null)"
+WANT="{\"type\":\"screenshot\",\"version\":1,\"file\":\"$WORK/shot.png\"}"
+if [ "$HEARD" = "$WANT" ]; then
+  echo "PASS: $HEARD"
+else
+  echo "FAIL: the engine heard '$HEARD'"
+  echo "      and the protocol says  $WANT"
+  FAILED=1
+fi
+
+echo "== and the terminal is told where the screenshot is =="
+if [ "$SAID" = "$WORK/shot.png" ]; then
+  echo "PASS: $SAID"
+else
+  echo "FAIL: screenshot said '$SAID', and it wrote $WORK/shot.png"
   FAILED=1
 fi
 

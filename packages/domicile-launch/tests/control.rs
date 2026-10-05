@@ -3,7 +3,7 @@
 use std::cell::Cell;
 use std::path::{Path, PathBuf};
 
-use domicile_launch::control::{answer, parse_response, LoadShell, OpenUrl, Response};
+use domicile_launch::control::{answer, parse_response, LoadShell, OpenUrl, Response, Screenshot};
 
 #[test]
 fn a_desktop_says_which_shell_it_is_running() {
@@ -111,12 +111,50 @@ fn an_engine_that_would_not_open_the_address_is_quoted() {
     );
 }
 
+#[test]
+fn a_desktop_told_to_take_a_screenshot_tells_the_engine_and_says_where_it_is() {
+    let told = Cell::new(None);
+    let answered = answered_capturing(
+        "{\"type\":\"screenshot\",\"file\":\"/home/me/shot.png\"}",
+        &|file| {
+            told.set(Some(file.to_path_buf()));
+            Ok(())
+        },
+    );
+
+    assert_eq!(told.take(), Some(PathBuf::from("/home/me/shot.png")));
+    assert_eq!(
+        answered,
+        Response::Captured {
+            file: PathBuf::from("/home/me/shot.png")
+        }
+    );
+}
+
+#[test]
+fn an_engine_that_could_not_take_the_screenshot_is_quoted() {
+    let Response::Refused { why } = answered_capturing(
+        "{\"type\":\"screenshot\",\"file\":\"/home/me/shot.png\"}",
+        &|_| Err("could not write /home/me/shot.png".to_string()),
+    ) else {
+        panic!("an engine that refused the screenshot is not one that took it");
+    };
+    assert!(
+        why.contains("could not write"),
+        "the refusal did not carry the engine's own words: {why}"
+    );
+}
+
 /// Sends one request line and parses the one reply line.
 fn answered(line: &str, module: &Path, load: LoadShell) -> Response {
     parse_response(
-        answer(line, module, load, &|_| {
-            panic!("only open_url opens anything")
-        })
+        answer(
+            line,
+            module,
+            load,
+            &|_| panic!("only open_url opens anything"),
+            &|_| panic!("only screenshot captures anything"),
+        )
         .trim(),
     )
     .expect("a desktop answers with a response")
@@ -130,6 +168,22 @@ fn answered_opening(line: &str, open: OpenUrl) -> Response {
             Path::new("/shell.js"),
             &|_, _| panic!("only load_shell loads anything"),
             open,
+            &|_| panic!("only screenshot captures anything"),
+        )
+        .trim(),
+    )
+    .expect("a desktop answers with a response")
+}
+
+/// [`answered`], for `screenshot`.
+fn answered_capturing(line: &str, capture: Screenshot) -> Response {
+    parse_response(
+        answer(
+            line,
+            Path::new("/shell.js"),
+            &|_, _| panic!("only load_shell loads anything"),
+            &|_| panic!("only open_url opens anything"),
+            capture,
         )
         .trim(),
     )
