@@ -58,6 +58,14 @@
   // to spawn(), so nothing on the page parses an Exec line.
   [CallWith=ScriptState, RaisesException] undefined searchApps(DOMString query);
 
+  // A system call: a file, a directory, a watch or a process. `request` is
+  // the call as JSON, such as `{"call":"read_file","path":"/sys/x"}`. Answered
+  // with `system` events whose `data` carries `id`. The compositor checks
+  // every call, the lock included. See docs/architecture/SYSTEM-ACCESS.md and
+  // the SDK's `system` module, which is the way to call this.
+  [CallWith=ScriptState, RaisesException] undefined callSystem(
+      unsigned long id, DOMString request);
+
   // Put a row of the clipboard's history back on the clipboard.
   //
   // IT NAMES A ROW AND CARRIES NO TEXT: a shell is served over domicile:// so
@@ -475,4 +483,8 @@
   // id does nothing.
   [CallWith=ScriptState, RaisesException] undefined closeBrowserWindow(
       DOMString id);
+
+  // An answer to callSystem(), as a MessageEvent whose `data` is the
+  // compositor's `system_reply`, `system_event` or `system_end` line.
+  attribute EventHandler onsystem;
 };

@@ -468,6 +468,18 @@ source_set("desk_lock") {
   ]
 }
 
+# The shell's system calls, wrapped and recognized on their way through
+# :control_channel. Its own target for :line_framer's reason: it is the part a
+# test reaches with a string. //base only.
+source_set("system_call") {
+  sources = [
+    "browser/system_call.cc",
+    "browser/system_call.h",
+  ]
+
+  public_deps = [ "//base" ]
+}
+
 source_set("control_channel") {
   sources = [
     "browser/control_channel.cc",
@@ -482,6 +494,7 @@ source_set("control_channel") {
     ":extension_installer",
     ":line_framer",
     ":shortcut_registry",
+    ":system_call",
     ":theme",
     "//base",
     "//components/domicile/mojom",
@@ -511,6 +524,7 @@ source_set("unit_tests") {
     "browser/shell_url_loader_factory_unittest.cc",
     "browser/shell_windows_unittest.cc",
     "browser/shortcut_registry_unittest.cc",
+    "browser/system_call_unittest.cc",
     "browser/web_view_url_unittest.cc",
     "common/cursor_shape_unittest.cc",
     "common/display_transform_unittest.cc",
@@ -550,6 +564,7 @@ source_set("unit_tests") {
     ":shell_source",
     ":shell_windows",
     ":shortcut_registry",
+    ":system_call",
     ":theme",
     ":web_view_url",
     "//cc/domicile:display_regions",

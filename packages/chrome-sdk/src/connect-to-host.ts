@@ -78,6 +78,7 @@ const absentHost = (): DomicileHost => ({
   addEventListener: () => undefined,
   brightness: null,
   browserWindows: null,
+  callSystem: () => undefined,
   closeApp: () => undefined,
   closeBrowserWindow: () => undefined,
   copyClipboardEntry: () => undefined,
