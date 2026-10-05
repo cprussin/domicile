@@ -9,8 +9,8 @@
 ///
 /// `wl_output.scale` is an integer, so a fractional ratio rounds up: a client
 /// drawing extra pixels is downscaled and stays sharp, while one drawing too
-/// few is stretched and blurry. Exact fractional scaling needs
-/// `wp_fractional_scale_v1`.
+/// few is stretched and blurry. Clients that bind `wp_fractional_scale_v1` get
+/// the exact scale (`Screens::scale_for`).
 ///
 /// `max` exists because scale N renders N² times the pixels, which may be
 /// more than the machine can draw.

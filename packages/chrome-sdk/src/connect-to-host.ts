@@ -114,6 +114,7 @@ const absentHost = (): DomicileHost => ({
   previewFile: () => new Promise(() => undefined),
   searchApps: () => new Promise(() => undefined),
   searchFiles: () => new Promise(() => undefined),
+  setAppBounds: () => undefined,
   setAudioMuted: () => undefined,
   setAudioPort: () => undefined,
   setAudioProfile: () => undefined,

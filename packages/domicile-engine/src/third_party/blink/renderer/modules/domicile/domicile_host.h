@@ -130,6 +130,13 @@ class MODULES_EXPORT DomicileHost final
                  double width,
                  double height,
                  ExceptionState&);
+  void setAppBounds(ScriptState*,
+                    const String& app_id,
+                    double x,
+                    double y,
+                    double width,
+                    double height,
+                    ExceptionState&);
   // Draw the desktop the other way round. Answered with a `theme` event to
   // every chrome on the desk, this one included.
   //

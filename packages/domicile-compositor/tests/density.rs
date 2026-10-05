@@ -64,6 +64,49 @@ fn the_mode_carries_the_density() {
     );
 }
 
+/// A window open when the density changes is told its new scale.
+///
+/// `wp_fractional_scale_v1` counts in 120ths.
+#[test]
+fn an_open_window_follows_the_density_to_its_new_scale() {
+    let compositor = Compositor::started_with(FOLLOWING);
+    let mut client = compositor.client("app");
+    assert!(
+        client.wait_for_trace(".preferred_scale(120)", 1),
+        "the window was never given the desktop's first scale; it traced:\n{}",
+        client.trace()
+    );
+
+    let _chrome = a_chrome_reporting_two(&compositor);
+
+    assert!(
+        client.wait_for_trace(".preferred_scale(240)", 1),
+        "the window kept drawing at the old density; it traced:\n{}",
+        client.trace()
+    );
+}
+
+/// The chrome's own window is told the new scale too, as its outputs are.
+#[test]
+fn the_chromes_own_window_follows_the_density() {
+    let compositor = Compositor::started_with(FOLLOWING);
+    let mut window = compositor.chrome_side_client("chrome");
+    assert!(
+        window.wait_for_trace(".preferred_scale(120)", 1),
+        "the chrome's window was never given the desktop's first scale; it \
+         traced:\n{}",
+        window.trace()
+    );
+
+    let _chrome = a_chrome_reporting_two(&compositor);
+
+    assert!(
+        window.wait_for_trace(".preferred_scale(240)", 1),
+        "the chrome's window kept drawing at the old density; it traced:\n{}",
+        window.trace()
+    );
+}
+
 // Known gap: nothing checks that a window at density 2 is laid out in logical
 // units rather than device pixels. Getting it wrong scales every pointer
 // coordinate. The check belongs in the engine path: the `<app>` element's

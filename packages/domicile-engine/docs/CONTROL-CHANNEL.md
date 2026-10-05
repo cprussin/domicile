@@ -20,9 +20,9 @@ The engine has two channels to the rest of Domicile:
 - **Outbound:** `spawn`, `search_files`, `preview_file`,
   `search_apps`, `copy_clipboard_entry`, `activate_tray_item`,
   `dismiss_notifications`, `invoke_notification_action`, `focus_app`,
-  `focus_chrome`, `close_app`, `resize_app`, `set_desktop_size`,
-  `set_device_pixel_ratio`, `set_theme`, `theme_captured`, `unlock`, `lock`,
-  `set_brightness`, `set_audio_volume`, `set_audio_muted`,
+  `focus_chrome`, `close_app`, `resize_app`, `set_app_bounds`,
+  `set_desktop_size`, `set_device_pixel_ratio`, `set_theme`, `theme_captured`,
+  `unlock`, `lock`, `set_brightness`, `set_audio_volume`, `set_audio_muted`,
   `set_default_audio_device`, `move_audio_stream`, `set_audio_port`,
   `set_audio_profile`, `watch_audio_levels`, `key`, `pointer_motion`,
   `pointer_leave`, `pointer_button`, `pointer_axis`. The browser also sends

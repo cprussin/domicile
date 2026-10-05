@@ -91,6 +91,17 @@ pub enum ChromeMessage {
     /// resize.
     SetDesktopSize { size: [f64; 2] },
 
+    /// Where the page put an app's window, in desktop CSS pixels.
+    ///
+    /// The compositor enters the window on the displays it overlaps and gives
+    /// it the scale of the one holding most of it. It does not move the
+    /// window: the page's layout does that.
+    SetAppBounds {
+        app_id: String,
+        position: [f64; 2],
+        size: [f64; 2],
+    },
+
     /// Request keyboard focus for an app.
     FocusApp { app_id: String },
 
@@ -1205,6 +1216,21 @@ mod wire_names {
             serde_json::from_str::<ChromeMessage>(sent).expect("the SDK's own wire form"),
             ChromeMessage::SetDesktopSize {
                 size: [1600.0, 1200.0]
+            }
+        );
+    }
+
+    /// The exact JSON the engine's `setAppBounds` sends.
+    #[test]
+    fn an_apps_bounds_the_engine_sends_parse() {
+        let sent =
+            r#"{"type":"set_app_bounds","app_id":"7","position":[1920.5,30],"size":[800,600]}"#;
+        assert_eq!(
+            serde_json::from_str::<ChromeMessage>(sent).expect("the engine's own wire form"),
+            ChromeMessage::SetAppBounds {
+                app_id: "7".to_string(),
+                position: [1920.5, 30.0],
+                size: [800.0, 600.0],
             }
         );
     }
