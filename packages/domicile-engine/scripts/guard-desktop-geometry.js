@@ -17,9 +17,15 @@ export const Shell = (_root, desktop) => {
   }
   // Listening is what binds the channel -- see DomicileHost::AddedEventListener.
   host.addEventListener("displayschanged", () => undefined);
-  console.log(
-    `GUARD geometry width=${window.innerWidth} height=${window.innerHeight}` +
-      ` ratio=${window.devicePixelRatio}`,
-  );
+  const measure = () => {
+    console.log(
+      `GUARD geometry width=${window.innerWidth} height=${window.innerHeight}` +
+        ` ratio=${window.devicePixelRatio}`,
+    );
+  };
+  measure();
+  // Again on every resize: an infobar arrives after load, and the guard
+  // holds the engine's last report up against the page's last measurement.
+  window.addEventListener("resize", measure);
   console.log("GUARD listening");
 };
