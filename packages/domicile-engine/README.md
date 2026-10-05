@@ -166,14 +166,10 @@ release.
 
 ## The control channel's protocol, and what of it is here
 
-`navigator.domicile` is the shell's control channel, and the engine answers it
-once per document: the document Domicile writes reads it and hands it to the
-shell as `Shell(root, domicile)`, and every read after the first is null, so
-the shell's copy is the only one. `window.domicile` is the same handover by
-another spelling — `WindowDomicile::domicile` forwards to `NavigatorDomicile`,
-the supplement that owns the one `DomicileHost` a window gets, so the alias
-cannot become a second channel. The
-wire protocol lives in the browser process rather than in the page, which is
+`DomicileHost` is the shell's control channel, and no page script finds it:
+`DomicileShell` runs the shell module the shell document names and passes the
+host into `Shell(root, domicile)`, so there is no `navigator.domicile` or
+`window.domicile` and the shell's copy is the only one. The wire protocol lives in the browser process rather than in the page, which is
 what makes a malformed message unconstructable — and what makes adding one cost
 an engine release rather than a TypeScript edit. That trade was made
 deliberately; it is worth knowing which side of it you are on before asking for

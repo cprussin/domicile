@@ -6,10 +6,10 @@
 // the same name, and nothing here invents one. When the two disagree the IDL
 // wins, because it is what the browser actually built.
 //
-// **Handed, not found.** The engine has the host as `navigator.domicile`, but
-// answers it once per document: the document Domicile writes reads it and
-// passes it to the shell's `Shell`, and every read after that is null. So no
-// global is declared here — a shell keeps what it was handed. See `shell.ts`.
+// **Handed, not found.** The engine runs the shell module and passes the host
+// into its `Shell` (`DomicileShell`); there is no `navigator.domicile` or
+// `window.domicile`, so no global is declared here — a shell keeps what it
+// was handed. See `shell.ts`.
 //
 // # This is a typed surface, not a message pipe
 //

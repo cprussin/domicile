@@ -10,8 +10,8 @@ import type { DomicileHost } from "./domicile-host";
  * a config and a shell. Importing the module does nothing but install its
  * stylesheet; the desktop starts here.
  *
- * **`domicile` is the only copy.** The engine hands the desktop out once per
- * document, to the page that calls this, so there is no global to reach for:
+ * **`domicile` is the only copy.** The engine calls this itself and makes the
+ * desktop for the call, so there is no global to reach for:
  * keep it however the shell likes — a React context, a module's own variable
  * — and pass it to what needs it.
  */

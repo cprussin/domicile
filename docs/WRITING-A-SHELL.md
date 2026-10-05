@@ -99,10 +99,10 @@ There is nothing to configure: no query string carries a socket path and no two
 things can disagree about where the compositor is. Its type is `DomicileHost`,
 from `@domicile-desktop/sdk/domicile-host`.
 
-**It is the only copy.** The engine answers `navigator.domicile` once per
-document, to the document Domicile writes, which hands it to `Shell`; every
-later read is `null`. There is no global to reach for, so keep it however you
-like — a React context, a variable — and pass it to what needs it.
+**It is the only copy.** The engine runs your module and calls `Shell` with
+the desktop itself; there is no `navigator.domicile` or `window.domicile` to
+reach for. Keep it however you like — a React context, a variable — and pass it
+to what needs it.
 
 **Only Domicile calls a shell**, so there is no plain-browser case to check
 for. Point `domicile` at your shell's module and let your own bundler watch

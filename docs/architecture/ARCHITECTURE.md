@@ -88,9 +88,8 @@ page; the page reports what is under a pointer and which window has focus; the
 compositor routes to the client's seat accordingly.
 
 The page reaches the compositor through the `domicile` handed to its `Shell`.
-The fork binds it on the shell's origin as `navigator.domicile`, answers it
-once per document to the document Domicile writes, which passes it on, and the
-browser process carries it to the compositor's control socket. The engine serves the shell over `domicile://`, so nothing has
+The engine makes it when it runs the shell on the shell's origin and passes it
+into the call — there is no global for it — and the browser process carries it to the compositor's control socket. The engine serves the shell over `domicile://`, so nothing has
 to be told where the session is and nothing binds a port.
 
 `domicile` is what starts the two, in the one order they can start in: the

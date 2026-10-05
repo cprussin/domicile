@@ -14,7 +14,7 @@ namespace blink {
 //
 // A ScriptWrappable rather than a dictionary: WebIDL will not have a dictionary
 // as the type of an attribute, and these are read off
-// `navigator.domicile.displays`.
+// `DomicileHost.displays`.
 //
 // Its geometry is logical -- the CSS pixels a shell lays out in -- but for
 // `modeWidth`/`modeHeight`, which are the pixels the panel scans out. `scale`

@@ -385,7 +385,8 @@ if wanted engine; then
       scripts/engine-guard-desk-state.sh \
       scripts/engine-guard-held-moments.sh \
       scripts/engine-guard-asks-promise.sh \
-      scripts/engine-guard-shortcut-chords.sh
+      scripts/engine-guard-shortcut-chords.sh \
+      scripts/engine-guard-shell-handover.sh
     ! engine_stop; } &&
   engine_serial scripts/engine-guard-css-and-resize.sh &&
   run engine-guard-latency scripts/engine-guard-latency.sh &&

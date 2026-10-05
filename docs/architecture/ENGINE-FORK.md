@@ -1312,8 +1312,8 @@ pixels the compositor believes it has and does not*.
 **The control channel is a binding, not a socket the page opens.** The engine
 process already holds a unix socket to the compositor —
 `--domicile-control-socket`, beside `--domicile-broker-socket` — and the page
-reaches it through `navigator.domicile`, which the document Domicile writes
-hands to the shell's `Shell`, rather than through a channel of its own.
+reaches it through the `DomicileHost` the engine passes to the shell's
+`Shell` when it runs it, rather than through a channel of its own.
 Patch `0002` is the precedent for exposing something to the page at all, and
 `0004` for opening a unix socket at browser startup.
 
