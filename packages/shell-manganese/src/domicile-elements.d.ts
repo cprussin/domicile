@@ -11,13 +11,12 @@ import type { DetailedHTMLProps, HTMLAttributes } from "react";
 // different type.
 
 declare module "react" {
-  // `<webview>` attributes missing from React's Electron-era types:
-  // `popupwindow` makes a view the extension window it names (see
-  // `WEBVIEW_POPUP_WINDOW_EVENT`), and `extensionpopup`, by its presence, makes
-  // it an extension's action popup.
+  // `<webview>` attributes missing from React's Electron-era types: `window`
+  // makes a view show a browser window (see `WEBVIEW_WINDOW_ATTRIBUTE`), and
+  // `extensionpopup`, by its presence, makes it an extension's action popup.
   interface WebViewHTMLAttributes<T> extends HTMLAttributes<T> {
     extensionpopup?: string | undefined;
-    popupwindow?: string | undefined;
+    window?: string | undefined;
   }
 
   // biome-ignore lint/style/noNamespace: React declares its JSX types as a namespace; augmenting IntrinsicElements has to match that shape

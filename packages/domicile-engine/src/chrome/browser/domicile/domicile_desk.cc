@@ -9,6 +9,7 @@
 #include "base/functional/callback.h"
 #include "base/logging.h"
 #include "base/no_destructor.h"
+#include "chrome/browser/domicile/domicile_browser_windows.h"
 #include "chrome/browser/domicile/domicile_desk_functions.h"
 #include "chrome/browser/domicile/domicile_window_controller.h"
 #include "chrome/browser/extensions/domicile_desk_hooks.h"
@@ -90,6 +91,9 @@ void StartDesk(Profile* profile) {
     static base::NoDestructor<DeskHooks> hooks;
     extensions::domicile_desk::Install(*hooks);
     RegisterDeskFunctions();
+    // The browser windows: the desk's tabs, opened and closed by guests and
+    // shown by <webview window>.
+    StartBrowserWindows();
     return true;
   }();
   CHECK(installed);
@@ -107,11 +111,9 @@ void AddToDesk(content::WebContents& guest) {
     desk.Add(guest);
     return;
   }
-  // The <webview> a shell opened for a popup window, naming it. A window that
-  // is not waiting for its tab -- gone, never made, or given one already -- is
-  // a shell that opened a second <webview> for it, or one too late. A guest
-  // has to be some window's tab, and the desk's is the one it would have been
-  // without the attribute; said, so that is not silent.
+  // A browser window opened as a popup window's tab. If the popup window no
+  // longer awaits a tab (windows.remove ran first), the guest still needs a
+  // window, so it joins the desk's and logs a warning.
   DomicileWindowController* popup = desk.PopupAwaitingTab(*popup_window);
   if (popup == nullptr) {
     LOG(WARNING) << "domicile: a <webview> named popup window " << *popup_window

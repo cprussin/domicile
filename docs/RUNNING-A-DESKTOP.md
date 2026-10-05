@@ -47,8 +47,8 @@ Settings live in `~/.config/domicile/domicile.json` (or `.ts`/`.js`). Reference:
 
 ### Links open on the desktop
 
-- Apps get `BROWSER=domicile-open-url`, which opens the URL as a browser window
-  in the shell.
+- Apps get `BROWSER=domicile-open-url`, which opens the URL in a desktop
+  browser window.
 - Apps get Domicile's `xdg-open` first on `PATH`. It opens web links on
   the desktop and passes everything else to your own `xdg-open`.
 - GTK apps (via GIO) read `domicile-mimeapps.list`, which Domicile puts first

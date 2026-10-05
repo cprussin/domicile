@@ -33,7 +33,6 @@ import type { Focus } from "./window-management/pointer-warp";
 import { Stage } from "./window-management/Stage";
 import { usePointerWarp } from "./window-management/usePointerWarp";
 import { useWindows } from "./window-management/useWindows";
-import { siteOf } from "./window-management/window";
 import { WindowAction } from "./window-management/window-state";
 
 type Props = {
@@ -272,15 +271,6 @@ export const Desktop = ({ domicile, keybindings, topBar }: Props) => {
           // `floatDragged`.
           onMove={(id, x, y) => {
             act(WindowAction.WindowMoved(id, x, y));
-          }}
-          onOpenPopupWindow={(request) => {
-            act(WindowAction.PopupWindowOpened(request));
-          }}
-          onOpenWindow={(url) => {
-            act(WindowAction.BrowserOpened(url));
-          }}
-          onRename={(id, url) => {
-            act(WindowAction.WindowRenamed(id, siteOf(url)));
           }}
           // Converted to the float's screen's pixels.
           onResize={(id, box, on) => {

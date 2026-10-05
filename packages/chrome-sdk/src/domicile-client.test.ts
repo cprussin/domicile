@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from "bun:test";
 import { DomicileClient } from "./domicile-client";
 import type {
   DomicileAppEvent,
+  DomicileBrowserWindow,
   DomicileDisplay,
   DomicileHost,
   DomicileHostEventMap,
@@ -57,6 +58,9 @@ class FakeHost implements DomicileHost {
 
   /** `null` until a brightness is reported, as in the engine. */
   brightness: number | null = null;
+
+  /** Null until the browser lists its windows, as in the fork. */
+  browserWindows: readonly DomicileBrowserWindow[] | null = null;
 
   readonly #listeners = new Map<string, (event: never) => void>();
 
@@ -141,6 +145,12 @@ class FakeHost implements DomicileHost {
   activateExtension(id: string): void {
     this.calls.push(["activateExtension", id]);
   }
+  openBrowserWindow(url: string): void {
+    this.calls.push(["openBrowserWindow", url]);
+  }
+  closeBrowserWindow(id: string): void {
+    this.calls.push(["closeBrowserWindow", id]);
+  }
   activateTrayItem(id: string, action: TrayAction): void {
     this.calls.push(["activateTrayItem", id, action]);
   }
@@ -184,6 +194,12 @@ class FakeHost implements DomicileHost {
     this.dispatch("displayschanged", new Event("displayschanged"));
   }
 
+  /** Report browser windows: set the attribute, then fire the event. */
+  lists(windows: readonly DomicileBrowserWindow[]): void {
+    this.browserWindows = windows;
+    this.dispatch("browserwindowschanged", new Event("browserwindowschanged"));
+  }
+
   /** Report a brightness: set the attribute, then fire the event. */
   brightens(level: number): void {
     this.brightness = level;
@@ -194,6 +210,16 @@ class FakeHost implements DomicileHost {
     return this.calls.at(-1);
   }
 }
+
+// A browser window. See `domicile-host.ts` for the fields.
+const EXAMPLE_WINDOW: DomicileBrowserWindow = {
+  height: 0,
+  id: "1",
+  popupWindow: null,
+  title: "Example Domain",
+  url: "https://example.com/",
+  width: 0,
+};
 
 // A display. See `domicile-host.ts` for the fields.
 const LEFT: DomicileDisplay = {
@@ -646,20 +672,18 @@ describe("DomicileClient", () => {
       expect(seen).toStrictEqual([{ levels: new Map([["input:mic", 0.25]]) }]);
     });
 
-    it("delivers an address to open", () => {
-      // From `domicile open-url`, which `BROWSER` runs. Held, because an app
-      // can open a link during the shell's first render.
+    it("delivers the browser windows", () => {
+      // `domicile open-url`, `target="_blank"` and the shell's own UI all
+      // arrive as the full list. Held, so a reloaded shell gets the previous
+      // shell's windows before its first render.
       const seen: unknown[] = [];
-      domicile.on("open_url", (message) => {
+      domicile.on("browser_windows", (message) => {
         seen.push(message);
       });
 
-      host.dispatch(
-        "openurl",
-        Object.assign(new Event("openurl"), { url: "https://example.com/" }),
-      );
+      host.lists([EXAMPLE_WINDOW]);
 
-      expect(seen).toStrictEqual([{ url: "https://example.com/" }]);
+      expect(seen).toStrictEqual([{ windows: [EXAMPLE_WINDOW] }]);
     });
 
     it("delivers the smallest and largest a window will be", () => {
@@ -853,6 +877,15 @@ describe("DomicileClient", () => {
 
       domicile.copyClipboardEntry(3);
       expect(host.lastCall()).toStrictEqual(["copyClipboardEntry", 3]);
+
+      domicile.openBrowserWindow("https://example.com/");
+      expect(host.lastCall()).toStrictEqual([
+        "openBrowserWindow",
+        "https://example.com/",
+      ]);
+
+      domicile.closeBrowserWindow("1");
+      expect(host.lastCall()).toStrictEqual(["closeBrowserWindow", "1"]);
 
       domicile.activateExtension("abcdefghijklmnopabcdefghijklmnop");
       expect(host.lastCall()).toStrictEqual([
@@ -1150,6 +1183,20 @@ describe("DomicileClient", () => {
       host.dispatch("appclosed", appEvent("appclosed", { appId: "gone" }));
 
       expect(seen).toStrictEqual(["second"]);
+    });
+  });
+
+  describe("the browser windows the host listed", () => {
+    it("is nothing until the host says", () => {
+      // Distinct from an empty list, as for `displays`. Otherwise a shell
+      // would flash empty after every load-shell, before the list arrives.
+      expect(domicile.browserWindows).toBeUndefined();
+    });
+
+    it("reads through to the host", () => {
+      host.lists([EXAMPLE_WINDOW]);
+
+      expect(domicile.browserWindows).toStrictEqual([EXAMPLE_WINDOW]);
     });
   });
 

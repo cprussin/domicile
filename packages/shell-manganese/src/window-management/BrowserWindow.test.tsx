@@ -3,7 +3,6 @@ import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
 import { focusApp } from "@domicile-desktop/sdk/focus-app";
 import { registerElements } from "@domicile-desktop/sdk/register-elements";
 import {
-  WEBVIEW_CLOSE_EVENT,
   WEBVIEW_FILE_CHOOSER_EVENT,
   WEBVIEW_FIND_CHANGE_EVENT,
   WEBVIEW_FOCUS_REQUEST_EVENT,
@@ -11,9 +10,7 @@ import {
   WEBVIEW_GUEST_KEYDOWN_EVENT,
   WEBVIEW_HISTORY_CHANGE_EVENT,
   WEBVIEW_LOADING_CHANGE_EVENT,
-  WEBVIEW_NEW_WINDOW_EVENT,
   WEBVIEW_PAGE_CHANGE_EVENT,
-  WEBVIEW_POPUP_WINDOW_EVENT,
   WEBVIEW_ZOOM_CHANGE_EVENT,
   WEBVIEW_ZOOM_OUT_REQUEST_EVENT,
 } from "@domicile-desktop/sdk/webview-element";
@@ -37,10 +34,6 @@ const recordingDomicile = (calls: string[]): DomicileClient =>
       calls.push("focusChrome");
     },
   }) as unknown as DomicileClient;
-
-const noWindows = () => {
-  // No test here opens a window.
-};
 
 const view = (container: HTMLElement): HTMLWebViewElement => {
   const element = container.querySelector("webview");
@@ -85,33 +78,6 @@ const loads = (element: HTMLWebViewElement, loading: boolean): void => {
     value: loading,
   });
   fireEvent(element, new Event(WEBVIEW_LOADING_CHANGE_EVENT));
-};
-
-/**
- * Fires a new-window request (`target="_blank"`, `window.open`) for `url`.
- *
- * Built from a plain `Event` because the test DOM lacks the engine's event
- * type.
- */
-const asksForAWindow = (element: HTMLWebViewElement, url: string): void => {
-  fireEvent(
-    element,
-    Object.assign(new Event(WEBVIEW_NEW_WINDOW_EVENT), { url }),
-  );
-};
-
-/**
- * Fires an extension's `chrome.windows.create` popup request. Built from a
- * plain `Event`, like `asksForAWindow`.
- */
-const asksForAPopupWindow = (
-  element: HTMLWebViewElement,
-  popup: { height: number; url: string; width: number; windowId: number },
-): void => {
-  fireEvent(
-    element,
-    Object.assign(new Event(WEBVIEW_POPUP_WINDOW_EVENT), popup),
-  );
 };
 
 /**
@@ -236,10 +202,6 @@ const nothingEnded = () => {
   // No test here needs the callback.
 };
 
-const nothingClosed = () => {
-  // No test here needs the callback.
-};
-
 describe("BrowserWindow", () => {
   it("rounds its bottom corners, and clips the page to them", () => {
     render(
@@ -253,14 +215,11 @@ describe("BrowserWindow", () => {
         frame={FRAME}
         fullscreen={false}
         motion="resting"
-        onClose={nothingClosed}
         onMotionEnded={nothingEnded}
-        onNavigate={() => undefined}
-        onOpenPopupWindow={noWindows}
-        onOpenWindow={noWindows}
         onReach={() => undefined}
         rect={ON_SCREEN}
-        src="https://example.com"
+        url="https://example.com"
+        window="1"
       />,
     );
     const style = globalThis.getComputedStyle(browser());
@@ -283,14 +242,11 @@ describe("BrowserWindow", () => {
         frame={FRAME}
         fullscreen
         motion="resting"
-        onClose={nothingClosed}
         onMotionEnded={nothingEnded}
-        onNavigate={() => undefined}
-        onOpenPopupWindow={noWindows}
-        onOpenWindow={noWindows}
         onReach={() => undefined}
         rect={ON_SCREEN}
-        src="https://example.com"
+        url="https://example.com"
+        window="1"
       />,
     );
     const style = globalThis.getComputedStyle(browser());
@@ -314,21 +270,21 @@ describe("BrowserWindow", () => {
         frame={FRAME}
         fullscreen={false}
         motion="resting"
-        onClose={nothingClosed}
         onMotionEnded={nothingEnded}
-        onNavigate={() => undefined}
-        onOpenPopupWindow={noWindows}
-        onOpenWindow={noWindows}
         onReach={() => undefined}
         rect={ON_SCREEN}
-        src="https://example.com"
+        url="https://example.com"
+        window="1"
       />,
     );
 
     expect(browser().className).toContain(css({ borderColor: "borderStrong" }));
   });
 
-  it("points its view at the address it opened with", () => {
+  // The view names the engine's listed browser window and sends no address:
+  // the page is already loaded and outlives this shell. The bar shows the
+  // listed address until the view reports one.
+  it("shows the browser window it is given, at the address it is at", () => {
     const { container } = render(
       <BrowserWindow
         clickThrough={false}
@@ -340,17 +296,15 @@ describe("BrowserWindow", () => {
         frame={FRAME}
         fullscreen={false}
         motion="resting"
-        onClose={nothingClosed}
         onMotionEnded={nothingEnded}
-        onNavigate={() => undefined}
-        onOpenPopupWindow={noWindows}
-        onOpenWindow={noWindows}
         onReach={() => undefined}
         rect={ON_SCREEN}
-        src="https://example.com"
+        url="https://example.com"
+        window="1"
       />,
     );
-    expect(view(container).getAttribute("src")).toBe("https://example.com");
+    expect(view(container).getAttribute("window")).toBe("1");
+    expect(view(container).hasAttribute("src")).toBe(false);
     expect(address()).toHaveValue("https://example.com");
   });
 
@@ -367,14 +321,11 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
-          onClose={nothingClosed}
           onMotionEnded={nothingEnded}
-          onNavigate={() => undefined}
-          onOpenPopupWindow={noWindows}
-          onOpenWindow={noWindows}
           onReach={() => undefined}
           rect={ON_SCREEN}
-          src="https://example.com"
+          url="https://example.com"
+          window="1"
         />,
       );
       await userEvent.clear(address());
@@ -382,76 +333,6 @@ describe("BrowserWindow", () => {
       expect(view(container).getAttribute("src")).toBe(
         "https://docs.example.com",
       );
-    });
-
-    // Reports the page's actual URL, not the URL the shell sent, so the window
-    // is named after the page shown.
-    it("reports where the page went, so the window's tab follows it", () => {
-      const seen: string[] = [];
-      const { container } = render(
-        <BrowserWindow
-          clickThrough={false}
-          covered={false}
-          depth={0}
-          domicile={silentDomicile}
-          dragging={false}
-          focused
-          frame={FRAME}
-          fullscreen={false}
-          motion="resting"
-          onClose={nothingClosed}
-          onMotionEnded={nothingEnded}
-          onNavigate={(url) => {
-            seen.push(url);
-          }}
-          onOpenPopupWindow={noWindows}
-          onOpenWindow={noWindows}
-          onReach={() => undefined}
-          rect={ON_SCREEN}
-          src="https://example.com"
-        />,
-      );
-
-      shows(view(container), "https://elsewhere.example/landing", "secure");
-
-      expect(seen).toStrictEqual(["https://elsewhere.example/landing"]);
-    });
-
-    // `Stage.tsx` passes a new callback each render. Re-reporting the same page
-    // would rename the window, re-render it and loop.
-    it("reports a page once, however often it is re-rendered", () => {
-      const seen: string[] = [];
-      const windowProps = {
-        clickThrough: false,
-        covered: false,
-        depth: 0,
-        domicile: silentDomicile,
-        dragging: false,
-        focused: true,
-        frame: FRAME,
-        fullscreen: false,
-        motion: "resting",
-        onClose: nothingClosed,
-        onMotionEnded: nothingEnded,
-        onOpenPopupWindow: noWindows,
-        onOpenWindow: noWindows,
-        onReach: () => undefined,
-        rect: ON_SCREEN,
-        src: "https://example.com",
-      } as const;
-      const report = () => (url: string) => {
-        seen.push(url);
-      };
-      const { container, rerender } = render(
-        <BrowserWindow {...windowProps} onNavigate={report()} />,
-      );
-
-      shows(view(container), "https://elsewhere.example/landing", "secure");
-      // A new callback, as the desktop passes on every render.
-      rerender(<BrowserWindow {...windowProps} onNavigate={report()} />);
-      rerender(<BrowserWindow {...windowProps} onNavigate={report()} />);
-
-      expect(seen).toStrictEqual(["https://elsewhere.example/landing"]);
     });
 
     // The address bar shows the page's actual URL.
@@ -467,14 +348,11 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
-          onClose={nothingClosed}
           onMotionEnded={nothingEnded}
-          onNavigate={() => undefined}
-          onOpenPopupWindow={noWindows}
-          onOpenWindow={noWindows}
           onReach={() => undefined}
           rect={ON_SCREEN}
-          src="https://example.com"
+          url="https://example.com"
+          window="1"
         />,
       );
       expect(address()).toHaveValue("https://example.com");
@@ -498,14 +376,11 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
-          onClose={nothingClosed}
           onMotionEnded={nothingEnded}
-          onNavigate={() => undefined}
-          onOpenPopupWindow={noWindows}
-          onOpenWindow={noWindows}
           onReach={() => undefined}
           rect={ON_SCREEN}
-          src="https://example.com"
+          url="https://example.com"
+          window="1"
         />,
       );
       // No page committed yet, so the security state is unknown.
@@ -517,41 +392,9 @@ describe("BrowserWindow", () => {
     });
   });
 
-  // A `target="_blank"` link. The engine reports the URL instead of opening a
-  // window, so the desktop must open it.
-  describe("a window its page asks for", () => {
-    it("asks the desktop for the address the page wanted", async () => {
-      const wanted = await new Promise<string>((resolve) => {
-        const { container } = render(
-          <BrowserWindow
-            clickThrough={false}
-            covered={false}
-            depth={0}
-            domicile={silentDomicile}
-            dragging={false}
-            focused
-            frame={FRAME}
-            fullscreen={false}
-            motion="resting"
-            onClose={nothingClosed}
-            onMotionEnded={nothingEnded}
-            onNavigate={() => undefined}
-            onOpenPopupWindow={noWindows}
-            onOpenWindow={resolve}
-            onReach={() => undefined}
-            rect={ON_SCREEN}
-            src="https://example.com"
-          />,
-        );
-        asksForAWindow(view(container), "https://example.com/opened");
-      });
-      expect(wanted).toBe("https://example.com/opened");
-    });
-  });
-
   // An extension's popup window, such as Bitwarden's "Unlock" from its autofill
-  // menu (`chrome.windows.create`). The desktop opens a browser window bound to
-  // the engine's window id.
+  // menu (`chrome.windows.create`). The engine lists it with its
+  // `chrome.windows` id.
   describe("an extension's popup window", () => {
     const POPUP = "chrome-extension://vault/popup/index.html?uilocation=popout";
     const windowProps = {
@@ -564,48 +407,20 @@ describe("BrowserWindow", () => {
       frame: FRAME,
       fullscreen: false,
       motion: "resting",
-      onClose: nothingClosed,
       onMotionEnded: nothingEnded,
-      onNavigate: () => undefined,
-      onOpenWindow: noWindows,
       onReach: () => undefined,
       rect: ON_SCREEN,
     } as const;
 
-    it("asks the desktop for the window an extension wanted", async () => {
-      const wanted = await new Promise((resolve) => {
-        const { container } = render(
-          <BrowserWindow
-            {...windowProps}
-            onOpenPopupWindow={resolve}
-            src="https://example.com"
-          />,
-        );
-        asksForAPopupWindow(view(container), {
-          height: 630,
-          url: POPUP,
-          width: 380,
-          windowId: 7,
-        });
-      });
-      expect(wanted).toStrictEqual({
-        height: 630,
-        url: POPUP,
-        width: 380,
-        windowId: 7,
-      });
-    });
-
-    // The engine reads the window id once when creating the guest. Recreating
-    // the view would make a second guest and leave the extension's window
-    // empty.
+    // The engine reads the `window` attribute once when the view is inserted.
+    // A recreated view would be refused and leave the window empty.
     it("is that window, in one view however often it is re-rendered", () => {
       const { container, rerender } = render(
         <BrowserWindow
           {...windowProps}
-          onOpenPopupWindow={noWindows}
           popupWindow={7}
-          src={POPUP}
+          url={POPUP}
+          window="1"
         />,
       );
       const first = view(container);
@@ -613,13 +428,13 @@ describe("BrowserWindow", () => {
         <BrowserWindow
           {...windowProps}
           focused={false}
-          onOpenPopupWindow={noWindows}
           popupWindow={7}
-          src={POPUP}
+          url={POPUP}
+          window="1"
         />,
       );
 
-      expect(first.getAttribute("popupwindow")).toBe("7");
+      expect(first.getAttribute("window")).toBe("1");
       expect(view(container)).toBe(first);
     });
 
@@ -628,46 +443,15 @@ describe("BrowserWindow", () => {
       render(
         <BrowserWindow
           {...windowProps}
-          onOpenPopupWindow={noWindows}
           popupWindow={7}
-          src={POPUP}
+          url={POPUP}
+          window="1"
         />,
       );
 
       expect(
         screen.queryByRole("combobox", { name: "Address" }),
       ).not.toBeInTheDocument();
-    });
-  });
-
-  // `window.close()` or `chrome.tabs.remove`. The engine only reports the
-  // request; see `WEBVIEW_CLOSE_EVENT`.
-  describe("a close its page asks for", () => {
-    it("asks the desktop to close the window", async () => {
-      await new Promise<void>((resolve) => {
-        const { container } = render(
-          <BrowserWindow
-            clickThrough={false}
-            covered={false}
-            depth={0}
-            domicile={silentDomicile}
-            dragging={false}
-            focused
-            frame={FRAME}
-            fullscreen={false}
-            motion="resting"
-            onClose={resolve}
-            onMotionEnded={nothingEnded}
-            onNavigate={() => undefined}
-            onOpenPopupWindow={noWindows}
-            onOpenWindow={noWindows}
-            onReach={() => undefined}
-            rect={ON_SCREEN}
-            src="https://example.com"
-          />,
-        );
-        view(container).dispatchEvent(new Event(WEBVIEW_CLOSE_EVENT));
-      });
     });
   });
 
@@ -683,14 +467,11 @@ describe("BrowserWindow", () => {
       frame: FRAME,
       fullscreen: false,
       motion: "resting",
-      onClose: nothingClosed,
       onMotionEnded: nothingEnded,
-      onNavigate: () => undefined,
-      onOpenPopupWindow: noWindows,
-      onOpenWindow: noWindows,
       onReach: () => undefined,
       rect: ON_SCREEN,
-      src: "https://example.com",
+      url: "https://example.com",
+      window: "1",
     } as const;
 
     it("answers the page with what is picked, and puts the picker away", async () => {
@@ -791,14 +572,11 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
-          onClose={nothingClosed}
           onMotionEnded={nothingEnded}
-          onNavigate={() => undefined}
-          onOpenPopupWindow={noWindows}
-          onOpenWindow={noWindows}
           onReach={() => undefined}
           rect={ON_SCREEN}
-          src="https://example.com"
+          url="https://example.com"
+          window="1"
         />,
       );
       // The window is a flex column, so the page fills the height below the
@@ -828,14 +606,11 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
-          onClose={nothingClosed}
           onMotionEnded={nothingEnded}
-          onNavigate={() => undefined}
-          onOpenPopupWindow={noWindows}
-          onOpenWindow={noWindows}
           onReach={() => undefined}
           rect={ON_SCREEN}
-          src="https://example.com"
+          url="https://example.com"
+          window="1"
         />,
       );
       expect(calls).toStrictEqual(["focusChrome"]);
@@ -854,14 +629,11 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
-          onClose={nothingClosed}
           onMotionEnded={nothingEnded}
-          onNavigate={() => undefined}
-          onOpenPopupWindow={noWindows}
-          onOpenWindow={noWindows}
           onReach={() => undefined}
           rect={ON_SCREEN}
-          src="https://example.com"
+          url="https://example.com"
+          window="1"
         />,
       );
       expect(calls).toStrictEqual([]);
@@ -893,14 +665,11 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
-          onClose={nothingClosed}
           onMotionEnded={nothingEnded}
-          onNavigate={() => undefined}
-          onOpenPopupWindow={noWindows}
-          onOpenWindow={noWindows}
           onReach={() => undefined}
           rect={ON_SCREEN}
-          src="https://example.com"
+          url="https://example.com"
+          window="1"
         />,
       );
       fireEvent.keyDown(document, { code: "KeyA" });
@@ -919,14 +688,11 @@ describe("BrowserWindow", () => {
         frame: FRAME,
         fullscreen: false,
         motion: "resting",
-        onClose: nothingClosed,
         onMotionEnded: nothingEnded,
-        onNavigate: () => undefined,
-        onOpenPopupWindow: noWindows,
-        onOpenWindow: noWindows,
         onReach: () => undefined,
         rect: ON_SCREEN,
-        src: "https://example.com",
+        url: "https://example.com",
+        window: "1",
       } as const;
       const { container, rerender } = render(
         <BrowserWindow {...windowProps} focused={false} />,
@@ -949,14 +715,11 @@ describe("BrowserWindow", () => {
         frame: FRAME,
         fullscreen: false,
         motion: "resting",
-        onClose: nothingClosed,
         onMotionEnded: nothingEnded,
-        onNavigate: () => undefined,
-        onOpenPopupWindow: noWindows,
-        onOpenWindow: noWindows,
         onReach: () => undefined,
         rect: ON_SCREEN,
-        src: "https://example.com",
+        url: "https://example.com",
+        window: "1",
       } as const;
       const { rerender } = render(
         <BrowserWindow {...windowProps} focused={false} />,
@@ -982,14 +745,11 @@ describe("BrowserWindow", () => {
         frame: FRAME,
         fullscreen: false,
         motion: "resting",
-        onClose: nothingClosed,
         onMotionEnded: nothingEnded,
-        onNavigate: () => undefined,
-        onOpenPopupWindow: noWindows,
-        onOpenWindow: noWindows,
         onReach: () => undefined,
         rect: ON_SCREEN,
-        src: "https://example.com",
+        url: "https://example.com",
+        window: "1",
       } as const;
       const { container, rerender } = render(
         <BrowserWindow {...windowProps} focused />,
@@ -1013,14 +773,11 @@ describe("BrowserWindow", () => {
         frame: FRAME,
         fullscreen: false,
         motion: "resting",
-        onClose: nothingClosed,
         onMotionEnded: nothingEnded,
-        onNavigate: () => undefined,
-        onOpenPopupWindow: noWindows,
-        onOpenWindow: noWindows,
         onReach: () => undefined,
         rect: ON_SCREEN,
-        src: "https://example.com",
+        url: "https://example.com",
+        window: "1",
       } as const;
       const { rerender } = render(<BrowserWindow {...windowProps} focused />);
       await userEvent.click(address());
@@ -1050,16 +807,13 @@ describe("BrowserWindow", () => {
             frame={FRAME}
             fullscreen={false}
             motion="resting"
-            onClose={nothingClosed}
             onMotionEnded={nothingEnded}
-            onNavigate={() => undefined}
-            onOpenPopupWindow={noWindows}
-            onOpenWindow={noWindows}
             onReach={() => {
               resolve();
             }}
             rect={ON_SCREEN}
-            src="https://example.com"
+            url="https://example.com"
+            window="1"
           />,
         );
         view(container).dispatchEvent(new Event(WEBVIEW_GUEST_FOCUS_EVENT));
@@ -1079,16 +833,13 @@ describe("BrowserWindow", () => {
             frame={FRAME}
             fullscreen={false}
             motion="resting"
-            onClose={nothingClosed}
             onMotionEnded={nothingEnded}
-            onNavigate={() => undefined}
-            onOpenPopupWindow={noWindows}
-            onOpenWindow={noWindows}
             onReach={() => {
               resolve();
             }}
             rect={ON_SCREEN}
-            src="https://example.com"
+            url="https://example.com"
+            window="1"
           />,
         );
         fireEvent.focusIn(view(container));
@@ -1110,16 +861,13 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
-          onClose={nothingClosed}
           onMotionEnded={nothingEnded}
-          onNavigate={() => undefined}
-          onOpenPopupWindow={noWindows}
-          onOpenWindow={noWindows}
           onReach={() => {
             reaches.push("reach");
           }}
           rect={ON_SCREEN}
-          src="https://example.com"
+          url="https://example.com"
+          window="1"
         />,
       );
 
@@ -1144,16 +892,13 @@ describe("BrowserWindow", () => {
             frame={FRAME}
             fullscreen={false}
             motion="resting"
-            onClose={nothingClosed}
             onMotionEnded={nothingEnded}
-            onNavigate={() => undefined}
-            onOpenPopupWindow={noWindows}
-            onOpenWindow={noWindows}
             onReach={() => {
               resolve();
             }}
             rect={ON_SCREEN}
-            src="https://example.com"
+            url="https://example.com"
+            window="1"
           />,
         );
         view(container).dispatchEvent(new Event(WEBVIEW_GUEST_FOCUS_EVENT));
@@ -1175,16 +920,13 @@ describe("BrowserWindow", () => {
             frame={FRAME}
             fullscreen={false}
             motion="resting"
-            onClose={nothingClosed}
             onMotionEnded={nothingEnded}
-            onNavigate={() => undefined}
-            onOpenPopupWindow={noWindows}
-            onOpenWindow={noWindows}
             onReach={() => {
               resolve();
             }}
             rect={ON_SCREEN}
-            src="https://example.com"
+            url="https://example.com"
+            window="1"
           />,
         );
         view(container).dispatchEvent(new Event(WEBVIEW_FOCUS_REQUEST_EVENT));
@@ -1205,16 +947,13 @@ describe("BrowserWindow", () => {
         frame: FRAME,
         fullscreen: false,
         motion: "resting",
-        onClose: nothingClosed,
         onMotionEnded: nothingEnded,
-        onNavigate: () => undefined,
-        onOpenPopupWindow: noWindows,
-        onOpenWindow: noWindows,
         onReach: () => {
           reaches.push("reach");
         },
         rect: ON_SCREEN,
-        src: "https://example.com",
+        url: "https://example.com",
+        window: "1",
       } as const;
       const { container, rerender } = render(
         <BrowserWindow {...windowProps} focused={false} />,
@@ -1247,16 +986,13 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
-          onClose={nothingClosed}
           onMotionEnded={nothingEnded}
-          onNavigate={() => undefined}
-          onOpenPopupWindow={noWindows}
-          onOpenWindow={noWindows}
           onReach={() => {
             reaches.push("reach");
           }}
           rect={ON_SCREEN}
-          src="https://example.com"
+          url="https://example.com"
+          window="1"
         />,
       );
       const guest = view(container);
@@ -1293,14 +1029,11 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
-          onClose={nothingClosed}
           onMotionEnded={nothingEnded}
-          onNavigate={() => undefined}
-          onOpenPopupWindow={noWindows}
-          onOpenWindow={noWindows}
           onReach={() => undefined}
           rect={ON_SCREEN}
-          src="https://example.com"
+          url="https://example.com"
+          window="1"
         />,
       );
       expect(control("Back")).toBeDisabled();
@@ -1322,14 +1055,11 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
-          onClose={nothingClosed}
           onMotionEnded={nothingEnded}
-          onNavigate={() => undefined}
-          onOpenPopupWindow={noWindows}
-          onOpenWindow={noWindows}
           onReach={() => undefined}
           rect={ON_SCREEN}
-          src="https://example.com"
+          url="https://example.com"
+          window="1"
         />,
       );
       expect(control("Forward")).toBeDisabled();
@@ -1354,14 +1084,11 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
-          onClose={nothingClosed}
           onMotionEnded={nothingEnded}
-          onNavigate={() => undefined}
-          onOpenPopupWindow={noWindows}
-          onOpenWindow={noWindows}
           onReach={() => undefined}
           rect={ON_SCREEN}
-          src="https://example.com"
+          url="https://example.com"
+          window="1"
         />,
       );
       // The element reports not loading until the browser says otherwise.
@@ -1385,14 +1112,11 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
-          onClose={nothingClosed}
           onMotionEnded={nothingEnded}
-          onNavigate={() => undefined}
-          onOpenPopupWindow={noWindows}
-          onOpenWindow={noWindows}
           onReach={() => undefined}
           rect={ON_SCREEN}
-          src="https://example.com"
+          url="https://example.com"
+          window="1"
         />,
       );
       const guest = view(container);
@@ -1424,14 +1148,11 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
-          onClose={nothingClosed}
           onMotionEnded={nothingEnded}
-          onNavigate={() => undefined}
-          onOpenPopupWindow={noWindows}
-          onOpenWindow={noWindows}
           onReach={() => undefined}
           rect={ON_SCREEN}
-          src="https://example.com"
+          url="https://example.com"
+          window="1"
         />,
       );
 
@@ -1537,14 +1258,11 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
-          onClose={nothingClosed}
           onMotionEnded={nothingEnded}
-          onNavigate={() => undefined}
-          onOpenPopupWindow={noWindows}
-          onOpenWindow={noWindows}
           onReach={() => undefined}
           rect={ON_SCREEN}
-          src="https://example.com"
+          url="https://example.com"
+          window="1"
         />,
       );
 
@@ -1657,14 +1375,11 @@ describe("BrowserWindow", () => {
         frame={FRAME}
         fullscreen={false}
         motion="resting"
-        onClose={nothingClosed}
         onMotionEnded={nothingEnded}
-        onNavigate={() => undefined}
-        onOpenPopupWindow={noWindows}
-        onOpenWindow={noWindows}
         onReach={() => undefined}
         rect={undefined}
-        src="https://example.com"
+        url="https://example.com"
+        window="1"
       />,
     );
     // A hidden element has no accessible name, but it is the only region.
@@ -1683,14 +1398,11 @@ describe("BrowserWindow", () => {
       frame: FRAME,
       fullscreen: false,
       motion: "resting",
-      onClose: nothingClosed,
       onMotionEnded: nothingEnded,
-      onNavigate: () => undefined,
-      onOpenPopupWindow: noWindows,
-      onOpenWindow: noWindows,
       onReach: () => undefined,
       rect: ON_SCREEN,
-      src: "https://example.com",
+      url: "https://example.com",
+      window: "1",
     } as const;
 
     it("plays the motion it is given", () => {

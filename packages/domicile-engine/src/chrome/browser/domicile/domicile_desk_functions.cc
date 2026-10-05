@@ -350,12 +350,13 @@ class DeskTabsCreateFunction : public ExtensionFunction {
     if (asker == nullptr) {
       return RespondNow(Error(kNoWindowToAskError));
     }
-    // The tab is the shell's to make, and the next one the desk gains is it.
-    // Retained: this function lives until the shell has made the tab.
+    // The tab is a browser window, and it is the next tab the desk gains.
+    // Retained until then. RequestWindow opens the window synchronously, so
+    // this usually responds before it returns: hence AlreadyResponded.
     desk->WhenNextTab(base::BindOnce(&DeskTabsCreateFunction::Created,
                                      base::WrapRefCounted(this)));
     GuestOf(*asker).RequestWindow(*url);
-    return RespondLater();
+    return did_respond() ? AlreadyResponded() : RespondLater();
   }
 
   // Never null: the desk's own window is never closed.
@@ -395,8 +396,8 @@ class DeskTabsRemoveFunction : public ExtensionFunction {
       }
       found.push_back(tab);
     }
-    // Asked, not waited for: closing is removing the element, and whether the
-    // shell does is its own. tabs.onRemoved says when it has.
+    // Not awaited: a browser window's page goes on a later task, and a shell's
+    // own page when the shell removes its element. tabs.onRemoved reports it.
     for (content::WebContents* tab : found) {
       GuestOf(*tab).RequestClose();
     }
@@ -661,9 +662,9 @@ class DeskWindowsUpdateFunction : public DeskWindowReadFunction {
 // which is the shell's to draw. See //components/domicile:desk_tabs's
 // DeskOpensWindow for what is refused.
 //
-// The window is made here, with no tab, and the shell is asked for its tab
-// through the active tab's element, as tabs.create asks for a browser window.
-// Answered with the window once the shell's <webview> is its tab.
+// Makes the window here with no tab, then opens a browser window as its tab
+// through the active tab's guest, as tabs.create does. Responds with the
+// window once that browser window is its tab.
 class DeskWindowsCreateFunction : public DeskWindowReadFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("windows.create", WINDOWS_CREATE)
@@ -716,15 +717,15 @@ class DeskWindowsCreateFunction : public DeskWindowReadFunction {
       return RespondNow(Error(kNoWindowToAskError));
     }
     DomicileWindowController& popup = desk->OpenPopup();
-    // Retained: this function lives until the shell has given the window its
-    // tab, or the window is removed first.
+    // Retained until the window has its tab or is removed. Usually responds
+    // before RequestPopupWindow returns, as in tabs.create.
     popup.WhenNextTab(base::BindOnce(&DeskWindowsCreateFunction::Opened,
                                      base::WrapRefCounted(this),
                                      popup.GetWindowId()));
     GuestOf(*asker).RequestPopupWindow(popup.GetWindowId(), *url,
                                        create.width.value_or(0),
                                        create.height.value_or(0));
-    return RespondLater();
+    return did_respond() ? AlreadyResponded() : RespondLater();
   }
 
   // Populated, as Chrome answers windows.create: the tab is what was asked
@@ -744,10 +745,9 @@ class DeskWindowsCreateFunction : public DeskWindowReadFunction {
   }
 };
 
-// windows.remove, for a popup window: its tab closed, as tabs.remove closes
-// one -- the shell is asked, and the window goes with its tab. One the shell
-// has yet to open goes now. The desk's own window is the whole desktop, and
-// is refused.
+// windows.remove for a popup window: closes its tab as tabs.remove does, and
+// the window goes with it. One with no tab yet goes immediately. The desk's
+// own window is the whole desktop, so it is refused.
 class DeskWindowsRemoveFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("windows.remove", WINDOWS_REMOVE)

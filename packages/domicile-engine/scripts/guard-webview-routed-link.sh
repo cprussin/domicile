@@ -30,12 +30,10 @@
 # reach the delegate. That run is why the fixture below is one site and one
 # link rather than two hosts and a frame.
 #
-# NOT THE SAME HOLE AS guard-webview-new-window.sh, and telling them apart is
-# THE point rather than a nicety: that one is `CreateNewWindow`, which a
-# `target="_blank"` takes and which #447 closed. Both halves end at the same
-# `NewWindowRequested`, so THE SHELL CANNOT TELL WHICH PATH ASKED IT. Only the
-# engine's own line can, which is why this guard reads that line and not just
-# the event.
+# This differs from guard-webview-new-window.sh, which covers `CreateNewWindow`
+# (the `target="_blank"` path #447 closed). Both paths open the same browser
+# window, so the shell cannot tell which path asked. Only the engine's own
+# line can, so this guard reads that line as well as the list.
 #
 # WHAT IT ASSERTS, in order, because each answer is only worth anything if the
 # one before it holds:
@@ -50,14 +48,14 @@
 #   the browser was asked            THE CLAIM's first half, read off the
 #                                     engine's own log: OpenURLFromTab ran on
 #                                     the guest with a new-window disposition
-#   the shell was told               THE CLAIM's other half: the element
-#                                     dispatched the event, carrying the address
+#   the window was listed            the claim's other half: a browser window
+#                                     at the address reached the desk's list
 #   the guest stayed where it was    a middle click asks for a SECOND window and
 #                                     must not take the first one anywhere
 #
 # AN ASK WITH NO ENGINE LINE IS A FAILURE, NOT THE CLAIM, and it is the reading
 # that makes this guard worth running. `ReportNewWindow` is shared with
-# `CreateCustomWebContents`, so a run that saw only the shell's event would pass
+# `CreateCustomWebContents`, so a run that saw only the shell's list would pass
 # against a fork carrying #447 and no override at all -- which is the fork this
 # change exists to improve on.
 #
@@ -243,7 +241,8 @@ python3 "$SCRIPTS/guard-webview-click-mouse.py" \
 # The press is answered before it is handled: `Input.dispatchMouseEvent` comes
 # back when the event has been forwarded, and what this reads is what the pages
 # logged afterward. Long enough for the whole path: the guest's renderer, the
-# browser, the delegate, the element's event, and an http page arriving.
+# browser, the delegate, the window it opens, the list, and an http page
+# arriving.
 #
 # A fixed wait rather than a poll on the line that must appear, because the
 # control's readings are ABSENCES, and an absence cannot be waited for -- it can
@@ -269,14 +268,16 @@ SAW_PRESS=$(saw "GUARD page-mousedown")
 # for the CURRENT_TAB arm's line instead, which a middle click never takes --
 # the guard could not have passed whatever the engine did.
 SAW_ROUTED=$(saw "domicile: a <webview> routed a second-window gesture")
-# WHAT THE SHELL HEARD, which is the other half of the claim: an element that
-# was told and dispatched the event, carrying the address the link names. The
-# engine's line above says the delegate ran; this says the answer left it.
+# The claim's other half: a browser window at the link's address in the desk's
+# list. The engine's line above shows the delegate ran; this shows its result
+# reached the shell.
 SAW_ASKED=$(saw "GUARD new-window url=$SITE/opened")
 # AND WHETHER THE GUEST WENT THERE ITSELF, which a middle click must NOT do --
 # and which is the control's positive reading, in the same file under the same
-# name, because the two runs differ only in the button.
-SAW_MOVED=$(saw "GUARD opened-loaded")
+# name, because the two runs differ only in the button. Read from the element:
+# /opened also loads in the browser's new window, so the page's own line
+# cannot say which window it is in.
+SAW_MOVED=$(saw "GUARD first-page url=$SITE/opened")
 
 echo
 echo "shell=$SAW_SHELL page=$SAW_PAGE button=$BUTTON"
@@ -344,7 +345,7 @@ elif [ "$SAW_ROUTED" != "1" ] && [ "$SAW_ASKED" = "1" ]; then
   FAILURE="THE SHELL WAS ASKED AND THIS DELEGATE NEVER RAN, which is this \
 guard measuring the other hole rather than the claim. ReportNewWindow is \
 shared, so CreateCustomWebContents -- the target=_blank path #447 closed -- \
-sends the identical event, and a run reading only the shell's side would go \
+opens the identical window, and a run reading only the shell's side would go \
 green against a fork with no OpenURLFromTab override at all. Either the middle \
 click is reaching CreateNewWindow rather than the delegate at this pin, or the \
 engine's line moved and this guard's grep did not follow it"
@@ -371,13 +372,14 @@ it -- a new-window one must not also reach the guest's own NavigationController"
 elif [ "$SAW_ASKED" != "1" ]; then
   FAILURE="THE DELEGATE TOOK IT AND SAID NOTHING: OpenURLFromTab ran on the \
 guest and the shell was never told, so the answer died on the way out. That is \
-ReportNewWindow, the mojom call or the element's event rather than the routing \
+ReportNewWindow, the browser window it opens or the list rather than the routing \
 -- a user middle-clicking that link watches nothing happen, which is the same \
 symptom as not being asked at all and a different fault. The engine's log has \
 the disposition it was asked with"
 else
   PASSED="a middle click on an ordinary link reached the guest's delegate, \
-which refused to open the window itself and told the shell the address instead \
+which refused to let content open the window and opened a browser window at \
+the address instead, which the shell heard in the desk's list \
 -- and left the page where it was. Which is what a user middle-clicking a link \
 in a browser window gets, measured end to end, with the browser's own line \
 saying it was THIS delegate rather than the target=_blank path that answered"

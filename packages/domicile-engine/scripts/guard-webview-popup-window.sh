@@ -1,36 +1,39 @@
 #!/usr/bin/env bash
-# An extension's windows.create({type: "popup"}) opened by the shell as a
-# window of its own, whose page is that window's tab -- and whose
-# windows.remove the shell hears.
+# An extension's windows.create({type: "popup"}) opens a desk browser window
+# as that popup window's tab, and its windows.remove closes it.
 #
 #   nix develop .#full --command \
 #     ./packages/domicile-engine/scripts/guard-webview-popup-window.sh /build/chromium/src
 #
-# WHY THIS EXISTS. Bitwarden's sign-in from its autofill menu is a popup window
-# of its own, opened with windows.create and closed with windows.remove once
-# signed in. A desk refused both, so the button did nothing. The desk now makes
-# the window, asks the shell for its tab as `domicile-popup-window`, and takes
-# the <webview> that names it in `popupwindow` as that tab. EXTENSIONS.md.
+# Why: Bitwarden's sign-in from its autofill menu is a popup window, opened
+# with windows.create and closed with windows.remove once signed in. The desk
+# makes the window and opens a browser window as its tab. The shell gets it in
+# `browserwindowschanged`, with the popup window and its size, and draws it
+# with `<webview window>`. See EXTENSIONS.md and
+# src/components/domicile/mojom/browser_windows.mojom.
 #
 # Headless, with guard-extension-installer.sh's stand-in for the compositor
 # naming the fixture as `unpacked`. The shell opens one browser window and
 # focuses it, then opens the fixture's popup in a <webview> never focused. The
-# popup asks for a popup window; the shell opens a <webview> at the address the
-# event carries, naming the window. The window's page writes what
+# popup asks for a popup window, the engine opens a browser window for it, and
+# the shell draws that window. The window's page writes what
 # windows.getCurrent and tabs.query({windowType: "popup"}) say into its own
 # address, then removes its window.
 #
-# WHAT IT ASSERTS. That the shell was asked, at the size the fixture asked for;
-# that the page's window is a `popup`, and the one the event named; that
-# tabs.query finds it; that the shell heard its windows.remove as
-# `domicile-close`; and that windows.create answered with the window.
+# It asserts:
+# - a window for the popup window reached the shell, at the requested size
+# - the page's window is a `popup`, and the one the list named
+# - tabs.query finds it
+# - its windows.remove took it out of the list
+# - windows.create answered with the window
 #
-# HOW IT CAN FAIL. NEGATIVE=1 runs the control: the same run, and the shell
-# opens the same <webview> WITHOUT `popupwindow`. Its page must be in the
-# desk's own window (`normal`), find no popup window's tab, be refused the
-# remove -- the desk's window is the desktop -- and windows.create must not
-# answer. That is what makes the claim's window the attribute's: a desk that
-# made every page a popup window, or none, answers the same both times.
+# Control: NEGATIVE=1 leaves the engine's window undrawn and opens the shell's
+# own window at the same page. Its page must be in the desk's own window
+# (`normal`) and be refused the remove, since the desk's window is the
+# desktop, so its window stays. A desk that made every page a popup window, or
+# none, would answer the same in both runs. The control skips the tabs.query
+# reading: the engine's popup window stays open until its page removes it,
+# which races the control's read.
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
@@ -158,9 +161,9 @@ TRIES=$((FOR_SECONDS * 4))
 wait_for_line "$TRIES" '"GUARD listening"' "$ENGINE_LOG" ||
   echo "the shell module never said it was listening; the verdict below says what that means" >&2
 
-# 4. The wait. Both legs end on the window's page saying where it is; the
-#    claim then on windows.create's answer, which comes once the window has
-#    its tab. The control's is bounded by what the claim's took.
+# 4. The wait. Both legs end when the window's page reports its window, then
+#    on windows.create's answer, which comes once the window has its tab. The
+#    claim's duration bounds the control's.
 if [ "$NEGATIVE" = "1" ]; then
   wait_for_line "$(($(budget_for webview-popup-window "$FOR_SECONDS") * 4))" \
     '"GUARD window current=' "$ENGINE_LOG"
@@ -168,12 +171,12 @@ else
   if wait_for_line "$TRIES" '"GUARD window current=' "$ENGINE_LOG"; then
     budget_note webview-popup-window "$(($(date +%s) - STARTED_AT))"
   fi
-  wait_for_line 20 '"GUARD created id=' "$ENGINE_LOG"
 fi
+wait_for_line 20 '"GUARD created id=' "$ENGINE_LOG"
 
-# The remove reaches the window's element over its own pipe, after the page
-# said where it is. Bounded: the page has already answered. The control waits
-# the same, for a close and an answer that must not come.
+# The remove reaches the list after the page reports. Bounded, since the page
+# has already answered. The control waits as long for a close that must not
+# come.
 wait_for_line 20 '"GUARD window closed"' "$ENGINE_LOG"
 sleep 1
 
@@ -197,6 +200,8 @@ TYPED=$(saw ' type=popup ')
 SAME=0
 [ -n "$NAMED" ] && SAME=$(saw "\"GUARD window current=$NAMED type=")
 FOUND=$(saw ' found=1 ')
+# Not read in the control: see the header.
+[ "$NEGATIVE" = "1" ] && FOUND=0
 CLOSED=$(saw '"GUARD window closed"')
 CREATED=0
 [ -n "$NAMED" ] && CREATED=$(saw "\"GUARD created id=$NAMED tabs=1\"")
@@ -216,16 +221,15 @@ FAILURE=""
 PASSED=""
 case "$MEASURED" in
 "popup 1 1 1 1 1 1 1 1 1 1")
-  PASSED="the shell was asked for the popup window at the size the fixture \
-asked for, the <webview> naming it was its tab -- a popup window tabs.query \
-finds -- its windows.remove reached the shell as domicile-close, and \
-windows.create answered with it"
+  PASSED="a browser window for the popup window reached the shell at the \
+size the fixture asked for, its page was the popup window's tab -- a popup \
+window tabs.query finds -- its windows.remove closed it, and windows.create \
+answered with it"
   ;;
-"control 1 1 1 1 1 0 0 0 0 0")
-  PASSED="the control is sharp: the same <webview> opened without \
-popupwindow was a tab of the desk's own window, found no popup window, was \
-refused the remove, and windows.create never answered -- so the claim's window \
-is the attribute's"
+"control 1 1 1 1 1 0 0 0 0 1")
+  PASSED="the control is sharp: the same page in a browser window the shell \
+opened itself was a tab of the desk's own window and was refused the remove \
+-- so the claim's window is the popup window's, not the page's"
   ;;
 "popup 0 "* | "control 0 "*)
   FAILURE="the list was never sent: the browser did not connect to the \
@@ -241,48 +245,56 @@ had nothing to open: the installer, or ExtensionTray"
 and there was no active tab to ask through. The guest, or the page server"
   ;;
 "popup 1 1 1 0 "* | "control 1 1 1 0 "*)
-  FAILURE="the shell was never asked for the window: the popup's \
-windows.create was refused or asked no element -- the engine log says which \
-(kNotOnADesk, no active tab), or WebViewGuestClient.PopupWindowRequested \
-never became domicile-popup-window"
+  FAILURE="no window for the popup window reached the shell: the popup's \
+windows.create was refused or had no tab to ask through -- the engine log says \
+which (kNotOnADesk, no active tab) -- or WebViewGuest::RequestPopupWindow \
+opened no browser window ('opened browser window' in the log), or the list \
+never carried it"
   ;;
 "popup 1 1 1 1 0 "* | "control 1 1 1 1 0 "*)
-  FAILURE="the shell was asked for the window at a size other than the \
+  FAILURE="the window reached the shell at a size other than the \
 fixture's: windows.create's width and height were not the ones carried"
   ;;
 "popup 1 1 1 1 1 0 "*)
-  FAILURE="the shell opened the <webview> naming the window and its page was \
-not in a popup window: the element did not carry popupwindow in CreateGuest, \
-or the desk did not take it as the window's tab (AddToDesk)"
+  FAILURE="the shell drew the window opened for the popup window and its \
+page was not in a popup window: OpenPopupWindow did not carry the popup \
+window's id to the guest, or the desk did not take it as the window's tab \
+(AddToDesk)"
   ;;
 "popup 1 1 1 1 1 1 0 "*)
-  FAILURE="the page is in a popup window, but not the one the shell was \
-asked for: the window the element named is not the window it joined"
+  FAILURE="the page is in a popup window, but not the one the list named: \
+the window its browser window was opened for is not the window it joined"
   ;;
 "popup 1 1 1 1 1 1 1 0 "*)
   FAILURE="the page is in its popup window and tabs.query({windowType: \
 \"popup\"}) did not find it: the desk's tabs.query walks the desk's window only"
   ;;
 "popup 1 1 1 1 1 1 1 1 0 "*)
-  FAILURE="the page removed its window and the shell never heard it: \
-windows.remove did not ask the window's tab to close (domicile-close)"
+  FAILURE="the page removed its window and its browser window stayed in the \
+list: windows.remove did not close the window's tab (BrowserWindowHost::Close)"
   ;;
 "popup 1 1 1 1 1 1 1 1 1 0")
   FAILURE="the window was opened, found and removed, and windows.create \
 never answered with it: the popup window's tab did not answer WhenNextTab"
   ;;
 "control 1 1 1 1 1 1 "*)
-  FAILURE="the control's <webview>, opened without popupwindow, was a popup \
-window anyway: the desk makes the window some way other than the attribute, \
-so the claim's pass was not the attribute's"
+  FAILURE="the control's window, opened by the shell without any popup \
+window, was a popup window's tab anyway: the desk makes a page a popup window's \
+tab some way other than the window it was opened for, so the claim's pass was \
+not the popup window's"
   ;;
 "control 1 1 1 1 1 0 0 0 1 "*)
   FAILURE="the control's page removed the desk's own window and the shell \
 heard it close: windows.remove must refuse the desk"
   ;;
+"control 1 1 1 1 1 0 0 0 0 0")
+  FAILURE="the control's page was in the desk's window, but windows.create \
+never answered: the popup window's tab did not answer WhenNextTab, for a \
+window the engine opened whether or not the shell drew it"""
+  ;;
 "control 1 1 1 1 1 0 "*)
-  FAILURE="the control's page was in the desk's window and still found a \
-popup window's tab, or windows.create answered with no tab in its window"
+  FAILURE="the control's page was in the desk's window and is not the window \
+it says: a reading this guard cannot place ($MEASURED)"
   ;;
 *)
   FAILURE="there is no measurement here of any kind ($MEASURED) -- the run did \

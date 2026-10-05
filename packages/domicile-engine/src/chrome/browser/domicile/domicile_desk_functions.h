@@ -17,16 +17,14 @@ namespace domicile {
 //   tabs.update {url, muted}      the guest; the browser holds its WebContents
 //   tabs.update {active}          the shell, as `domicile-focus-request`
 //   windows.update {focused}      the same, on that window's active tab
-//   tabs.create {url}             the shell, as `domicile-new-window` on the
-//                                 active tab's element. Answered with the next
-//                                 tab the desk gains
-//   windows.create {type: popup,  a popup window, made here with no tab; the
-//   url}                          shell is asked for its tab as
-//                                 `domicile-popup-window` on the active tab's
-//                                 element. Answered once the <webview> naming
-//                                 it in `popupwindow` is its tab
-//   tabs.remove                   the shell, as `domicile-close`. Answered at
-//                                 once: the shell is asked, not waited for
+//   tabs.create {url}             opens a browser window. Answered with the
+//                                 next tab the desk gains
+//   windows.create {type: popup,  a popup window, made here with no tab, plus
+//   url}                          a browser window as its tab. Answered once
+//                                 the tab is attached
+//   tabs.remove                   closes a browser window, or fires
+//                                 `domicile-close` on a shell's own page.
+//                                 Answered immediately
 //   windows.remove                a popup window's tab, the same way. The
 //                                 desk's own window is refused
 //   tabs.setZoom, getZoom         the guest's zoom, as its element's setZoom

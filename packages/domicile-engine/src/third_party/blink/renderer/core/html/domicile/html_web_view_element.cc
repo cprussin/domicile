@@ -21,8 +21,6 @@
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/html/domicile/domicile_file_chooser_event.h"
-#include "third_party/blink/renderer/core/html/domicile/domicile_new_window_event.h"
-#include "third_party/blink/renderer/core/html/domicile/domicile_popup_window_event.h"
 #include "third_party/blink/renderer/core/html/parser/html_parser_idioms.h"
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/layout/layout_iframe.h"
@@ -54,12 +52,6 @@ constexpr char kHistoryChangeEvent[] = "domicile-history-change";
 // is what a chrome that mounted in the middle of a load needs and what an
 // event's detail cannot be.
 constexpr char kLoadingChangeEvent[] = "domicile-loading-change";
-
-// And what it says when the page inside asks for a window of its own. The one
-// of the four that carries anything: what is being asked for is an address
-// nothing is showing yet, so there is no property on this element for a chrome
-// to read it off. See domicile_new_window_event.h.
-constexpr char kNewWindowEvent[] = "domicile-new-window";
 
 // And what it says when the page it is showing changes -- its address, the
 // browser's verdict on the connection behind it, or both. Carries nothing, for
@@ -108,23 +100,17 @@ constexpr char kCloseEvent[] = "domicile-close";
 // Carries nothing: the element is the target.
 constexpr char kFocusRequestEvent[] = "domicile-focus-request";
 
-// And what it says when an extension asks for a popup window of its own.
-// Carries the window, like the new-window event carries its address: nothing
-// is showing it yet. See domicile_popup_window_event.h.
-constexpr char kPopupWindowEvent[] = "domicile-popup-window";
-
-// The attribute a shell names that popup window by, on the <webview> it opens
-// for it. Read once, when the element asks for its guest: which window a tab
-// is in is settled as the tab is made. Not one of html_names, because a name
-// there is a patch to Chromium's own list and this element is the only one
-// that reads it.
-constexpr char kPopupWindowAttr[] = "popupwindow";
-
 // And the attribute a shell marks an extension's action popup with: the
 // <webview> it opens from its tray. Its guest is then that popup and not a
 // tab, as Chrome's toolbar bubble is. Read once, when the element asks for its
-// guest, like `popupwindow`; its presence is the whole of it.
+// guest; only its presence matters.
 constexpr char kExtensionPopupAttr[] = "extensionpopup";
+
+// The attribute naming the desk browser window a <webview> draws. Read once,
+// when the element asks for its guest, so the page is fixed at attach time.
+// Not in html_names: adding one patches Chromium's list, and only this element
+// reads it. See browser_windows.mojom.
+constexpr char kWindowAttr[] = "window";
 
 // The four values `security` can take, which are the four the browser's own
 // omnibox draws. Strings rather than an IDL enum -- see the .idl for why -- and
@@ -194,7 +180,11 @@ void HTMLWebViewElement::DidNotifySubtreeInsertionsToDocument() {
   RequestGuest();
   // A parsed <webview src="..."> has already been through ParseAttribute, at a
   // point where there was no guest to send to. This is the send it missed.
-  NavigateGuest();
+  // A browser window's page is already loaded, so it gets no `src` on attach;
+  // ParseAttribute sends a later `src`, as an address bar does.
+  if (BrowserWindow().IsNull()) {
+    NavigateGuest();
+  }
 }
 
 void HTMLWebViewElement::RequestGuest() {
@@ -229,25 +219,12 @@ void HTMLWebViewElement::RequestGuest() {
   host_->CreateGuest(placeholder->GetLocalFrameToken(),
                      guest_.BindNewPipeAndPassReceiver(task_runner),
                      client_receiver_.BindNewPipeAndPassRemote(task_runner),
-                     PopupWindow(),
+                     BrowserWindow(),
                      hasAttribute(AtomicString(kExtensionPopupAttr)));
 }
 
-std::optional<int32_t> HTMLWebViewElement::PopupWindow() const {
-  const AtomicString& named = getAttribute(AtomicString(kPopupWindowAttr));
-  if (named.IsNull()) {
-    return std::nullopt;
-  }
-  // A window id is a SessionID, which is positive. One that does not parse is
-  // the shell's mistake, and says so rather than making a desk tab quietly.
-  unsigned window_id = 0;
-  if (!ParseHTMLNonNegativeInteger(named, window_id) || window_id == 0 ||
-      window_id > static_cast<unsigned>(std::numeric_limits<int32_t>::max())) {
-    LOG(WARNING) << "domicile: a <webview>'s popupwindow=\"" << named.Utf8()
-                 << "\" names no window; its guest is a tab of the desk.";
-    return std::nullopt;
-  }
-  return static_cast<int32_t>(window_id);
+String HTMLWebViewElement::BrowserWindow() const {
+  return getAttribute(AtomicString(kWindowAttr));
 }
 
 void HTMLWebViewElement::NavigateGuest() {
@@ -460,23 +437,6 @@ void HTMLWebViewElement::LoadingChanged(bool is_loading) {
   DispatchEvent(*Event::CreateBubble(AtomicString(kLoadingChangeEvent)));
 }
 
-// The page asking for a window, which is the only thing the browser tells this
-// element that is not about the page it already has.
-//
-// NOTHING IS STORED, unlike the two above, and that is the difference between
-// an event and a state: the address is the message. Storing it would mean
-// answering "what window was asked for?" between asks, which has no true
-// answer.
-//
-// AND NOTHING IS OPENED HERE. This element cannot make a second one of itself
-// and must not try: where a window goes is the shell's, and the shell is what
-// hears this. `GetString()` rather than the KURL, because what a chrome does
-// with it is write it into another element's `src`.
-void HTMLWebViewElement::NewWindowRequested(const KURL& target_url) {
-  DispatchEvent(*MakeGarbageCollected<DomicileNewWindowEvent>(
-      AtomicString(kNewWindowEvent), target_url.GetString()));
-}
-
 void HTMLWebViewElement::PageChanged(
     const KURL& url,
     domicile::mojom::blink::WebViewSecurity security) {
@@ -575,15 +535,6 @@ void HTMLWebViewElement::CloseRequested() {
 // Bubbling, for CloseRequested's reason.
 void HTMLWebViewElement::FocusRequested() {
   DispatchEvent(*Event::CreateBubble(AtomicString(kFocusRequestEvent)));
-}
-
-void HTMLWebViewElement::PopupWindowRequested(int32_t window_id,
-                                              const KURL& url,
-                                              int32_t width,
-                                              int32_t height) {
-  DispatchEvent(*MakeGarbageCollected<DomicilePopupWindowEvent>(
-      AtomicString(kPopupWindowEvent), window_id, url.GetString(), width,
-      height));
 }
 
 void HTMLWebViewElement::FileChooserAnswered(DomicileFileChooserEvent& event) {

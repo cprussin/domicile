@@ -35,7 +35,9 @@ The engine has two channels to the rest of Domicile:
   `notifications`, `shell_config`, `audio`, `audio_levels`, `idle`, `locked`.
 - **Handled in the browser, never sent to the compositor:** `grab_shortcut`,
   `warp_pointer`.
-- **Not from the compositor:** `open_url` comes from the command socket.
+- **Not from the compositor:** `browserwindowschanged`, the desk's browser
+  windows, which the browser owns
+  (`components/domicile/mojom/browser_windows.mojom`).
 
 ### Members with special handling
 
@@ -127,10 +129,10 @@ The supervisor connects, sends one JSON line, reads one reply, and closes.
   starts passes one under the run's directory.
 - `domicile load-shell <path>` sends `load_shell`. `domicile open-url <url>`
   sends `open_url`.
-- `open_url` goes to the newest shell page only (`UrlRegistry`), as an
-  `openurl` event. During a reload, the old and new page both exist, and only
-  the new one gets it. An unparsable URL, or no page to hand it to, is
-  refused.
+- `open_url` opens a browser window at the address, as a page's
+  `target="_blank"` does. The shell gets it in `browserwindowschanged`, so a
+  shell mid-reload gets it with every other window. An unparsable URL, or a
+  desk with no shell to own the window, is refused.
 - It is its own socket because the compositor has no part in choosing the
   shell. The supervisor also passes it at
   launch as `--domicile-shell-root` and `--domicile-shell-module`. See
@@ -144,7 +146,7 @@ The supervisor connects, sends one JSON line, reads one reply, and closes.
 | `components/domicile/browser/command_protocol.{h,cc}` | parses a line and returns a reply; unit tested |
 | `chrome/browser/domicile/domicile_command_socket.{h,cc}` | the socket and the shell's window; in `//chrome` because reloading needs `GlobalBrowserCollection` |
 | `components/domicile/browser/shell_source.{h,cc}` | the shell being served; set from the two switches, replaced by `load_shell` |
-| `components/domicile/browser/url_registry.{h,cc}` | the shell pages `open_url` can go to |
+| `chrome/browser/domicile/domicile_browser_windows.{h,cc}` | the desk's browser windows; `open_url` opens one |
 
 ### Dev reload
 

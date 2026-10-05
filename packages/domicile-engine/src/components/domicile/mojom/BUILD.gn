@@ -11,6 +11,7 @@ mojom("mojom") {
   generate_blink = true
 
   sources = [
+    "browser_windows.mojom",
     "control_channel.mojom",
     "extension_tray.mojom",
     "external_surface.mojom",

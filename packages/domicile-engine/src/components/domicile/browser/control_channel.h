@@ -17,7 +17,6 @@
 #include "components/domicile/browser/extension_installer.h"
 #include "components/domicile/browser/line_framer.h"
 #include "components/domicile/browser/shortcut_registry.h"
-#include "components/domicile/browser/url_registry.h"
 #include "components/domicile/mojom/control_channel.mojom.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -184,10 +183,6 @@ class ControlChannel : public mojom::ControlChannel {
   void DeliverShortcutNow(Chord chord);
   void DeliverModifiersNow(Modifiers modifiers);
 
-  // An address from `domicile open-url`, handed to this page by UrlRegistry
-  // and posted here for DeliverShortcut's reason.
-  void DeliverOpenUrl(const std::string& url);
-
   void ReadLoop();
   void OnRead(int result);
   // One complete line off the socket, with the moment the bytes arrived.
@@ -216,11 +211,6 @@ class ControlChannel : public mojom::ControlChannel {
   // desktop's across a reload, and a gap between the two is a chord delivered
   // to whatever window is focused instead.
   ShortcutRegistry::ChannelId channel_;
-
-  // This page's registration with the process's url registry: made once the
-  // page has a client to be told on, and given back in the destructor. Zero
-  // until then, which no registration is.
-  UrlRegistry::PageId url_page_ = 0;
 
   std::unique_ptr<net::UnixDomainClientSocket> socket_;
   bool connected_ = false;

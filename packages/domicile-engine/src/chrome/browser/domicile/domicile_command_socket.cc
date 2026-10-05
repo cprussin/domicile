@@ -17,12 +17,12 @@
 #include "base/logging.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/no_destructor.h"
+#include "chrome/browser/domicile/domicile_browser_windows.h"
 #include "chrome/browser/ui/browser_window/public/browser_collection.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
 #include "components/domicile/browser/command_protocol.h"
 #include "components/domicile/browser/shell_source.h"
-#include "components/domicile/browser/url_registry.h"
 #include "components/domicile/common/domicile_scheme.h"
 #include "components/tabs/public/tab_interface.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -118,15 +118,16 @@ bool LoadShellIntoTheShellWindow(const base::FilePath& root,
 // thread's too. So whatever carries a command in is what posts -- and this
 // posts the line rather than the parse, which costs a JSON read of one short
 // line on the UI thread and buys one function that is the whole protocol.
-// Hand an address to the shell, which opens it -- or does not; that is the
-// shell's. One page of the desk is told: see UrlRegistry.
-bool OpenUrlInTheShell(const GURL& url) {
-  return UrlRegistry::Get().Open(url.spec());
+// Opens a browser window at `url`, as for a page's target="_blank". The shell
+// sees it in its window list. See domicile_browser_windows.h.
+bool OpenUrlInABrowserWindow(const GURL& url) {
+  return OpenBrowserWindow(url);
 }
 
 std::string AnswerOnUIThread(const std::string& line) {
   CHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  return AnswerCommand(line, &LoadShellIntoTheShellWindow, &OpenUrlInTheShell);
+  return AnswerCommand(line, &LoadShellIntoTheShellWindow,
+                       &OpenUrlInABrowserWindow);
 }
 
 // The socket the supervisor dials, on the browser's IO thread.

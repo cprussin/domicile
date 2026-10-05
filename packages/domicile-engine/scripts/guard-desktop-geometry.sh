@@ -101,9 +101,11 @@ wait_for_line "$TRIES" "set_device_pixel_ratio" "$SOCKET_LOG"
 wait_for_line "$TRIES" "set_desktop_size" "$SOCKET_LOG"
 sleep 1
 
-# The page's own numbers, off its console line. The closing quote is Chromium's
-# and keeps the match on the message: see guard-control-arrival.sh.
-GEOMETRY=$(grep -oE '"GUARD geometry width=[0-9.]+ height=[0-9.]+ ratio=[0-9.]+"' "$ENGINE_LOG" | head -1)
+# The page's own numbers, off its last console line: the window can shrink
+# after load (a startup infobar), and the last size is the one to match. The
+# closing quote is Chromium's and keeps the match on the message: see
+# guard-control-arrival.sh.
+GEOMETRY=$(grep -oE '"GUARD geometry width=[0-9.]+ height=[0-9.]+ ratio=[0-9.]+"' "$ENGINE_LOG" | tail -1)
 
 # The verdict, in Python because the lines are JSON and their numbers may be
 # written `900` or `900.0`.

@@ -80,9 +80,9 @@ extensions::api::tabs::ZoomSettings DeskZoomSettings();
 // outliving its window impossible rather than handled.
 //
 // AND SO IS EVERY POPUP WINDOW AN EXTENSION OPENED with windows.create: type
-// `popup`, owned by the desk's window, and with one tab -- the <webview> the
-// shell opened for it, whose element named it in `popupwindow`. It goes when
-// that tab does, or at windows.remove before the shell opened one.
+// `popup`, owned by the desk's window, and with one tab: the browser window
+// opened for it. It goes when that tab does, or at windows.remove before it
+// has one.
 class DomicileWindowController final : public extensions::WindowController,
                                        public base::SupportsUserData::Data {
  public:
@@ -108,12 +108,12 @@ class DomicileWindowController final : public extensions::WindowController,
   // THE DESK'S WINDOW ONLY, from here to Popup's end: what it keeps of the
   // windows its extensions opened.
   //
-  // A new popup window with no tab, and chrome.windows.onCreated. The shell
-  // is asked for its tab by the caller.
+  // Makes a popup window with no tab and fires chrome.windows.onCreated. The
+  // caller opens a browser window as its tab.
   DomicileWindowController& OpenPopup();
 
-  // The popup window `window_id` while the shell has yet to give it its tab,
-  // or null: no such window, or one with its tab already.
+  // The popup window `window_id` while it awaits its tab. Null when there is
+  // no such window or it has a tab.
   DomicileWindowController* PopupAwaitingTab(int window_id) const;
 
   // Close the popup window `window_id`, which has no tab: chrome.windows.
@@ -150,7 +150,7 @@ class DomicileWindowController final : public extensions::WindowController,
   bool IsActive(content::WebContents& tab) const;
 
   // Hear the next tab this window gains, once: tabs.create's and
-  // windows.create's answer, since the tab is the shell's to make. In the
+  // windows.create's answer, since the tab is made elsewhere. In the
   // order asked. Null for a popup window closed before it had one.
   void WhenNextTab(base::OnceCallback<void(content::WebContents*)> gained);
 
