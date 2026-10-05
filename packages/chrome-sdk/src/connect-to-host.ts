@@ -83,6 +83,7 @@ const absentHost = (): DomicileHost => ({
   displays: null,
   focusApp: () => undefined,
   focusChrome: () => undefined,
+  focusedWindow: null,
   grabShortcut: () => undefined,
   invokeNotificationAction: () => undefined,
   key: () => undefined,
@@ -107,4 +108,5 @@ const absentHost = (): DomicileHost => ({
   unlock: () => undefined,
   warpPointer: () => undefined,
   watchAudioLevels: () => undefined,
+  windows: [],
 });

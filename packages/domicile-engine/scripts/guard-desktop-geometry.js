@@ -5,7 +5,12 @@
 //
 //   GUARD listening                     the channel is bound
 //   GUARD geometry width=… height=… ratio=…
-//                                       what this page measures
+//                                       what this page measures, at load and
+//                                       again on every resize: the window can
+//                                       change after load (an infobar takes
+//                                       its height), and the engine's last
+//                                       report is held up against the page's
+//                                       last measurement
 
 export const Shell = () => {
   const host = window.domicile;
@@ -17,9 +22,13 @@ export const Shell = () => {
   }
   // Listening is what binds the channel -- see DomicileHost::AddedEventListener.
   host.addEventListener("displayschanged", () => undefined);
-  console.log(
-    `GUARD geometry width=${window.innerWidth} height=${window.innerHeight}` +
-      ` ratio=${window.devicePixelRatio}`,
-  );
+  const measure = () => {
+    console.log(
+      `GUARD geometry width=${window.innerWidth} height=${window.innerHeight}` +
+        ` ratio=${window.devicePixelRatio}`,
+    );
+  };
+  measure();
+  window.addEventListener("resize", measure);
   console.log("GUARD listening");
 };
