@@ -52,16 +52,19 @@ mentions() {
   esac
 }
 
-# Prints the verdict for seven readings, given in the guard's order. Each
+# Prints the verdict for the readings, given in the guard's order. Each
 # defaults to the passing value.
 verdict() { # listening grab pointr zoom-out finite positive ordered names
+            # system-leaked system-out system-in
   LISTENING="${1:-1}" KNOWN_FIRST="${2:-1}" UNKNOWN="${3:-0}" \
     KNOWN_AFTER="${4:-1}" FINITE="${5:-1}" POSITIVE="${6:-1}" \
-    ORDERED="${7:-1}" NAMES="${8:-1}" \
+    ORDERED="${7:-1}" NAMES="${8:-1}" SYSTEM_LEAKED="${9:-0}" \
+    SYSTEM_OUT="${10:-1}" SYSTEM_IN="${11:-1}" \
     bash -c 'set -u
       LISTENING=$LISTENING KNOWN_FIRST=$KNOWN_FIRST UNKNOWN=$UNKNOWN
       KNOWN_AFTER=$KNOWN_AFTER FINITE=$FINITE POSITIVE=$POSITIVE
-      ORDERED=$ORDERED NAMES=$NAMES
+      ORDERED=$ORDERED NAMES=$NAMES SYSTEM_LEAKED=$SYSTEM_LEAKED
+      SYSTEM_OUT=$SYSTEM_OUT SYSTEM_IN=$SYSTEM_IN
       '"$BLOCK"'
       printf "%s" "$FAILURE"'
 }
@@ -86,14 +89,27 @@ logged() { # every argument is one GUARD message
   done
 }
 
-readings() { # reads a log on stdin, prints the seven readings
+readings() { # reads a log on stdin, prints the cursor and stamp readings
   local log out
   log="$(mktemp)"
   cat >"$log"
-  out="$(ENGINE_LOG="$log" bash -c 'set -u
+  out="$(ENGINE_LOG="$log" SOCKET_LOG=/dev/null bash -c 'set -u
     '"$READINGS"'
     printf "listening=%s grab=%s zoom-out=%s pointr=%s finite=%s positive=%s ordered=%s names=%s" \
       "$LISTENING" "$KNOWN_FIRST" "$KNOWN_AFTER" "$UNKNOWN" "$FINITE" "$POSITIVE" "$ORDERED" "$NAMES"')"
+  rm -f "$log"
+  printf '%s' "$out"
+}
+
+# The system call readings, over an engine log on stdin and what the stand-in
+# received as $1.
+system_readings() { # $1 the stand-in's log
+  local log out
+  log="$(mktemp)"
+  cat >"$log"
+  out="$(ENGINE_LOG="$log" SOCKET_LOG="$1" bash -c 'set -u
+    '"$READINGS"'
+    printf "out=%s leaked=%s in=%s" "$SYSTEM_OUT" "$SYSTEM_LEAKED" "$SYSTEM_IN"')"
   rm -f "$log"
   printf '%s' "$out"
 }
@@ -154,6 +170,39 @@ expect "an empty log reads as no readings" \
 expect "a name that did not fire is read as missing" \
   "listening=1 grab=0 zoom-out=0 pointr=0 finite=0 positive=0 ordered=0 names=0" \
   "$(logged "names missing=ontheme" "listening" | readings)"
+
+# What the stand-in prints: the page's call as the browser wrapped it, keys
+# sorted the way base::Value writes them.
+STAND_IN="$(mktemp)"
+printf '%s\n' 'a channel connected' \
+  'said: {"type": "hello", "protocol_version": 1}' \
+  'said: {"id":1,"request":{"call":"stat","path":"/"},"type":"system_request"}' >"$STAND_IN"
+
+expect "a relayed call and answer read as both" \
+  "out=1 leaked=0 in=1" \
+  "$(logged 'system data={"type": "system_reply", "id": 1, "reply": {"kind": "written"}}' |
+      system_readings "$STAND_IN")"
+
+# The id is the whole difference between the call the browser must wrap and
+# the one it must refuse.
+printf '%s\n' 'said: {"id":2,"request":{"call":"stat"},"type":"system_request"}' >>"$STAND_IN"
+expect "a call that should have been refused is seen" \
+  "out=1 leaked=1 in=0" "$(printf '' | system_readings "$STAND_IN")"
+
+# A call the page wrote with its own `type` on top is not the wrapped one.
+printf '%s\n' 'said: {"type":"system_request","id":1,"call":"stat","path":"/"}' >"$STAND_IN"
+expect "a call that was not wrapped is not read as relayed" \
+  "out=0 leaked=0 in=0" "$(printf '' | system_readings "$STAND_IN")"
+rm -f "$STAND_IN"
+
+mentions "a call that should have been refused names the refusal" \
+  "is not refusing" "$(verdict 1 1 0 1 1 1 1 1 1)"
+
+mentions "a call that never left names the outward relay" \
+  "never reached the compositor" "$(verdict 1 1 0 1 1 1 1 1 0 0)"
+
+mentions "an answer that never arrived names the inward relay" \
+  "never reached the page as a system event" "$(verdict 1 1 0 1 1 1 1 1 0 1 0)"
 
 mentions "a name that did not fire is blamed on the fork's names" \
   "domicile_event_names.h" "$(verdict 1 1 0 1 1 1 1 0)"

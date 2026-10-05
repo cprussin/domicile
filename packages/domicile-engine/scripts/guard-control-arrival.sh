@@ -178,10 +178,17 @@ UNKNOWN=$(saw '"GUARD app-cursor app=guard cursor=pointr"')
 FINITE=$(saw '"GUARD hop-shape finite=true ')
 POSITIVE=$(saw '"GUARD hop-shape finite=[a-z]+ positive=true ')
 NAMES=$(saw '"GUARD names missing=none"')
+SYSTEM_IN=$(saw '"GUARD system data=\{"type": ?"system_reply"')
+said() { # $1 extended regular expression, over what the stand-in received
+  grep -qE "$1" "$SOCKET_LOG" && echo 1 || echo 0
+}
+SYSTEM_OUT=$(said '^said: \{"id":1,"request":\{"call":"stat","path":"/"\},"type":"system_request"\}$')
+SYSTEM_LEAKED=$(said '^said: .*"id":2')
 ORDERED=$(saw '"GUARD hop-shape .*ordered=true"')
 
 echo "listening=$LISTENING names=$NAMES grab=$KNOWN_FIRST zoom-out=$KNOWN_AFTER" \
-  "pointr=$UNKNOWN finite=$FINITE positive=$POSITIVE ordered=$ORDERED"
+  "pointr=$UNKNOWN finite=$FINITE positive=$POSITIVE ordered=$ORDERED" \
+  "system-out=$SYSTEM_OUT system-leaked=$SYSTEM_LEAKED system-in=$SYSTEM_IN"
 
 # THE VERDICT, AND IT IS ORDERED. Each arm rules out a layer, and an arm that
 # answered out of turn would name the wrong one in a true-sounding sentence —
@@ -205,6 +212,12 @@ elif [ "$POSITIVE" != "1" ]; then
   FAILURE="event.arrival is zero, which is a stamp nothing wrote into — the exact shape of the instrument that was deleted for reporting ipc_ms=0 every interval"
 elif [ "$ORDERED" != "1" ]; then
   FAILURE="event.arrival is later than the dispatch it precedes, so the browser's stamp and this document's clock are not the same clock and the difference is not a duration"
+elif [ "$SYSTEM_LEAKED" = "1" ]; then
+  FAILURE="a callSystem that is not a JSON call reached the compositor, so ControlChannel::CallSystem is not refusing what components/domicile/browser/system_call.h refuses"
+elif [ "$SYSTEM_OUT" != "1" ]; then
+  FAILURE="the page's callSystem never reached the compositor as a system_request wrapping it: Blink's callSystem, ControlChannel::CallSystem or SystemRequestLine lost or reshaped it"
+elif [ "$SYSTEM_IN" != "1" ]; then
+  FAILURE="a system_reply sent down the control socket never reached the page as a system event: the browser did not relay it, or Blink did not dispatch it"
 fi
 
 if [ -n "$FAILURE" ]; then

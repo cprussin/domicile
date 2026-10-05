@@ -91,6 +91,10 @@ class FakeHost implements DomicileHost {
   previewFile(path: string): void {
     this.calls.push(["previewFile", path]);
   }
+  callSystem(id: number, request: string): void {
+    this.calls.push(["callSystem", id, request]);
+  }
+
   searchApps(query: string): void {
     this.calls.push(["searchApps", query]);
   }

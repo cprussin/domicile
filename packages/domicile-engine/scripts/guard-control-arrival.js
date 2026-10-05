@@ -40,6 +40,10 @@
 //   GUARD hop arrival=… stamp=… ms=…
 //                                the stage, in milliseconds. THE CLAIM about
 //                                the stamp
+//   GUARD system data=…           a `system_reply` the stand-in sent, as it
+//                                reached this page. THE CLAIM about the relay
+//                                inward; the stand-in's log holds the outward
+//                                one
 //   GUARD hop-shape finite=… positive=… ordered=…
 //                                that `arrival` is a number on this clock at
 //                                all: finite, after the time origin, and not
@@ -92,6 +96,7 @@ const EVENT_NAMES = [
   "browserwindowschanged",
   "windowschanged",
   "focusedwindowchanged",
+  "system",
 ];
 
 export const Shell = () => {
@@ -109,6 +114,14 @@ export const Shell = () => {
         " was not served by the forked engine",
     );
   }
+
+  // A system call's answer, as the compositor stand-in wrote it. Untrusted
+  // events are the names check below, not answers.
+  host.addEventListener("system", (event) => {
+    if (event.isTrusted) {
+      say(`system data=${event.data}`);
+    }
+  });
 
   host.addEventListener("appcursor", (event) => {
     // The names check below fires an untrusted `appcursor` of its own, which is
@@ -165,4 +178,9 @@ export const Shell = () => {
   // before this page is ready for it.
   say(`clock now=${performance.now().toFixed(3)}`);
   say("listening");
+
+  // One call the browser must wrap as a `system_request`, and one that is not
+  // a call and must not reach the compositor at all.
+  host.callSystem(1, JSON.stringify({ call: "stat", path: "/" }));
+  host.callSystem(2, "not a call");
 };

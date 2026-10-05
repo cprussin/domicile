@@ -53,7 +53,8 @@
   X(audiolevels, Audiolevels)             \
   X(browserwindowschanged, Browserwindowschanged) \
   X(windowschanged, Windowschanged)       \
-  X(focusedwindowchanged, Focusedwindowchanged)
+  X(focusedwindowchanged, Focusedwindowchanged) \
+  X(system, System)
 
 namespace blink::domicile_event_names {
 
