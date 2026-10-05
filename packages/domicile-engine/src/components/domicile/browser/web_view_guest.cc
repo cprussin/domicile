@@ -7,6 +7,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <tuple>
 #include <utility>
 
 #include "base/check.h"
@@ -37,6 +38,7 @@
 #include "content/public/browser/reload_type.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
+#include "content/public/browser/unowned_inner_web_contents_client.h"
 #include "content/public/common/stop_find_action.h"
 #include "content/public/common/url_constants.h"
 #include "mojo/public/cpp/bindings/callback_helpers.h"
@@ -59,6 +61,16 @@ namespace {
 // Why a CreateGuest is a bad message, whether it waited or not.
 constexpr char kNotItsOwnFrame[] =
     "domicile: a <webview> may only ask for a guest for its own frame.";
+
+// The desk's browser windows. See SetBrowserWindowHost.
+BrowserWindowHost* g_browser_window_host = nullptr;
+
+BrowserWindowHost& Host() {
+  // //chrome sets it in StartDesk, before any profile can bind anything. A
+  // guest finding none means the fork never set it.
+  CHECK(g_browser_window_host);
+  return *g_browser_window_host;
+}
 
 // The interface a <webview> asks for a guest over, for one document.
 //
@@ -95,7 +107,7 @@ class WebViewGuestHost final
     blink::LocalFrameToken placeholder_frame;
     mojo::PendingReceiver<mojom::WebViewGuest> guest;
     mojo::PendingRemote<mojom::WebViewGuestClient> client;
-    std::optional<int> popup_window;
+    std::optional<std::string> window;
     bool extension_popup;
     mojo::ReportBadMessageCallback report_bad_message;
   };
@@ -104,7 +116,7 @@ class WebViewGuestHost final
   void CreateGuest(const blink::LocalFrameToken& placeholder_frame,
                    mojo::PendingReceiver<mojom::WebViewGuest> guest,
                    mojo::PendingRemote<mojom::WebViewGuestClient> client,
-                   std::optional<int32_t> popup_window,
+                   const std::optional<std::string>& window,
                    bool extension_popup) override {
     content::RenderFrameHost* placeholder = FindPlaceholder(placeholder_frame);
 
@@ -120,9 +132,9 @@ class WebViewGuestHost final
       // run that shows nothing.
       LOG(INFO) << "domicile: a <webview> asked for a guest before its frame "
                    "arrived; waiting for it.";
-      waiting_ = WaitingRequest{
-          placeholder_frame, std::move(guest), std::move(client),
-          popup_window,      extension_popup,  mojo::GetBadMessageCallback()};
+      waiting_ = WaitingRequest{placeholder_frame, std::move(guest),
+                                std::move(client),  window,
+                                extension_popup,   mojo::GetBadMessageCallback()};
       return;
     }
 
@@ -138,9 +150,8 @@ class WebViewGuestHost final
       return;
     }
 
-    WebViewGuest::CreateAndAttach(render_frame_host(), *placeholder,
-                                  std::move(guest), std::move(client),
-                                  popup_window, extension_popup, created_);
+    Give(*placeholder, std::move(guest), std::move(client), window,
+         extension_popup);
   }
 
   // content::WebContentsObserver:
@@ -186,10 +197,37 @@ class WebViewGuestHost final
       return;
     }
 
-    WebViewGuest::CreateAndAttach(
-        render_frame_host(), *placeholder, std::move(request.guest),
-        std::move(request.client), request.popup_window,
-        request.extension_popup, created_);
+    Give(*placeholder, std::move(request.guest), std::move(request.client),
+         request.window, request.extension_popup);
+  }
+
+  // Puts a page behind `placeholder`: the browser window `window` names, or a
+  // new page owned by this document (an extension's action popup when
+  // `extension_popup` is set).
+  //
+  // An unknown `window` is expected: the shell names windows from the last
+  // list, and a window can close before the shell hears. The pipes drop and
+  // the log says why.
+  void Give(content::RenderFrameHost& placeholder,
+            mojo::PendingReceiver<mojom::WebViewGuest> guest,
+            mojo::PendingRemote<mojom::WebViewGuestClient> client,
+            const std::optional<std::string>& window,
+            bool extension_popup) {
+    if (!window.has_value()) {
+      WebViewGuest::CreateAndAttach(render_frame_host(), placeholder,
+                                    std::move(guest), std::move(client),
+                                    extension_popup, created_);
+      return;
+    }
+    WebViewGuest* shown =
+        Host().Find(*render_frame_host().GetBrowserContext(), *window);
+    if (shown == nullptr) {
+      LOG(WARNING) << "domicile: a <webview> named browser window \""
+                   << *window << "\", which is not open; it shows nothing.";
+      return;
+    }
+    shown->AttachToElement(render_frame_host(), placeholder, std::move(guest),
+                           std::move(client));
   }
 
   // The frame `placeholder_frame` names, or null if the browser has none.
@@ -408,46 +446,13 @@ void WebViewGuest::CreateAndAttach(
     content::RenderFrameHost& placeholder,
     mojo::PendingReceiver<mojom::WebViewGuest> receiver,
     mojo::PendingRemote<mojom::WebViewGuestClient> client,
-    std::optional<int> popup_window,
     bool extension_popup,
     const GuestCreatedCallback& created) {
-  std::unique_ptr<WebViewGuest> guest = base::WrapUnique(
-      new WebViewGuest(owner, std::move(receiver), std::move(client),
-                       popup_window, extension_popup));
+  std::unique_ptr<WebViewGuest> guest = base::WrapUnique(new WebViewGuest(
+      owner, std::move(receiver), std::move(client), extension_popup));
+  guest->owned_guest_contents_ = guest->MakeContents(
+      owner.GetBrowserContext(), /*initially_hidden=*/false, created);
 
-  // `guest_delegate` is what makes the new WebContents a guest, and content
-  // asks it for its owner while constructing -- which is why the delegate is
-  // built first and knows its owner from its constructor.
-  //
-  // No SiteInstance and no StoragePartitionConfig: the guest belongs in the
-  // default partition, where the user's cookies are. See the class comment.
-  content::WebContents::CreateParams params(owner.GetBrowserContext());
-  params.guest_delegate = guest.get();
-  std::unique_ptr<content::WebContents> contents =
-      content::WebContents::Create(params);
-
-  guest->guest_contents_ = contents.get();
-  contents->SetUserData(
-      kGuestUserDataKey,
-      std::make_unique<GuestLink>(guest->weak_factory_.GetWeakPtr()));
-  guest->owned_guest_contents_ = std::move(contents);
-  guest->Observe(guest->guest_contents_);
-  guest->guest_contents_->SetDelegate(guest.get());
-
-  // The embedder's helpers, now: after the delegate, which some of them ask
-  // for, and before the first navigation, which some of them record.
-  created.Run(*guest->guest_contents_);
-
-  // Unretained because the subscription is a member: it is dropped with this
-  // object, and before that with the WebContents -- see WebContentsDestroyed.
-  guest->zoom_subscription_ =
-      content::HostZoomMap::GetForWebContents(guest->guest_contents_)
-          ->AddZoomLevelChangedCallback(base::BindRepeating(
-              [](WebViewGuest* guest,
-                 const content::HostZoomMap::ZoomLevelChange& change) {
-                guest->ReportZoom();
-              },
-              base::Unretained(guest.get())));
 
   // Asynchronous, and the API says why: the placeholder is about to be swapped
   // out, so every beforeunload handler under it has to answer first, and a
@@ -501,19 +506,205 @@ void WebViewGuest::Attach(std::unique_ptr<WebViewGuest> guest,
   LOG(INFO) << "domicile: attached a guest to a <webview>.";
 }
 
+// static
+std::unique_ptr<WebViewGuest> WebViewGuest::MakeWindow(
+    content::WebContents& shell,
+    const std::string& window_id,
+    std::optional<int> popup_window,
+    const GuestCreatedCallback& created) {
+  std::unique_ptr<WebViewGuest> guest =
+      base::WrapUnique(new WebViewGuest(shell, window_id, popup_window));
+  // Hidden, like a background tab, until an element shows it. Content
+  // throttles it until AttachWindowTo makes it visible.
+  guest->owned_guest_contents_ = guest->MakeContents(
+      shell.GetBrowserContext(), /*initially_hidden=*/true, created);
+  LOG(INFO) << "domicile: opened browser window " << window_id << ".";
+  return guest;
+}
+
+std::unique_ptr<content::WebContents> WebViewGuest::MakeContents(
+    content::BrowserContext* context,
+    bool initially_hidden,
+    const GuestCreatedCallback& created) {
+  // `guest_delegate` is what makes the new WebContents a guest, and content
+  // asks it for its owner while constructing -- which is why the delegate is
+  // built first and knows its owner from its constructor.
+  //
+  // No SiteInstance and no StoragePartitionConfig: the guest belongs in the
+  // default partition, where the user's cookies are. See the class comment.
+  content::WebContents::CreateParams params(context);
+  params.guest_delegate = this;
+  params.initially_hidden = initially_hidden;
+  std::unique_ptr<content::WebContents> contents =
+      content::WebContents::Create(params);
+
+  guest_contents_ = contents.get();
+  contents->SetUserData(
+      kGuestUserDataKey,
+      std::make_unique<GuestLink>(weak_factory_.GetWeakPtr()));
+  Observe(guest_contents_);
+  guest_contents_->SetDelegate(this);
+
+  // The embedder's helpers, now: after the delegate, which some of them ask
+  // for, and before the first navigation, which some of them record.
+  created.Run(*guest_contents_);
+
+  // Unretained because the subscription is a member: it is dropped with this
+  // object, and before that with the WebContents -- see WebContentsDestroyed.
+  zoom_subscription_ =
+      content::HostZoomMap::GetForWebContents(guest_contents_)
+          ->AddZoomLevelChangedCallback(base::BindRepeating(
+              [](WebViewGuest* guest,
+                 const content::HostZoomMap::ZoomLevelChange& change) {
+                guest->ReportZoom();
+              },
+              base::Unretained(this)));
+  return contents;
+}
+
+void WebViewGuest::AttachToElement(
+    content::RenderFrameHost& owner,
+    content::RenderFrameHost& placeholder,
+    mojo::PendingReceiver<mojom::WebViewGuest> receiver,
+    mojo::PendingRemote<mojom::WebViewGuestClient> client) {
+  CHECK(!window_id_.empty());
+
+  // One frame at a time. A shell that draws a window twice (on two monitors'
+  // pages, or a new element before the old one leaves the document) gets it
+  // in the first only.
+  if (attaching_ || guest_contents_->GetOuterWebContents() != nullptr) {
+    LOG(WARNING) << "domicile: a <webview> named browser window " << window_id_
+                 << ", which another <webview> is already showing; it shows "
+                    "nothing.";
+    return;
+  }
+
+  // Bind the new element's pipes; any earlier binding was an element that has
+  // gone. Its disconnect signals when this element goes.
+  owner_rfh_id_ = owner.GetGlobalId();
+  receiver_.reset();
+  receiver_.Bind(std::move(receiver));
+  client_.reset();
+  client_.Bind(std::move(client));
+  client_.set_disconnect_handler(
+      base::BindOnce(&WebViewGuest::ElementGone, base::Unretained(this)));
+
+  attaching_ = true;
+  // Same preparation as CreateAndAttach, for its reason: the given frame may
+  // not be safe to swap.
+  placeholder.PrepareForInnerWebContentsAttach(base::BindOnce(
+      &WebViewGuest::AttachWindowTo, weak_factory_.GetWeakPtr()));
+}
+
+void WebViewGuest::AttachWindowTo(
+    content::RenderFrameHost* outer_contents_frame) {
+  attaching_ = false;
+  // Refused, as in Attach: a beforeunload handler kept the frame, or the frame
+  // went meanwhile. The window survives, and an element can ask again.
+  if (outer_contents_frame == nullptr) {
+    ElementGone();
+    return;
+  }
+
+  content::WebContents* owner =
+      content::WebContents::FromRenderFrameHost(outer_contents_frame);
+  CHECK(owner);
+  owner_contents_ = owner->GetWeakPtr();
+
+  // Attached unowned: the outer WebContents shows the page without owning it.
+  // When the frame goes (a reload, an element removed), content detaches the
+  // page and keeps it alive (WebContentsTreeNode::OnFrameTreeNodeDestroyed).
+  // The fork's patch enabling kAttachUnownedInnerWebContents provides the
+  // feature and the pass key.
+  owner->AttachUnownedInnerWebContents(
+      content::UnownedInnerWebContentsClient::GetPassKey(), guest_contents_,
+      outer_contents_frame);
+  guest_contents_->WasShown();
+
+  // Guards read this line to tell a reshown window from a recreated page.
+  // engine-diagnostics.sh greps for the `domicile:` prefix.
+  LOG(INFO) << "domicile: attached browser window " << window_id_
+            << " to a <webview>.";
+
+  ReportEverything();
+}
+
+void WebViewGuest::ElementGone() {
+  receiver_.reset();
+  Unclient();
+  // A find belongs to the element, and its find bar went with it.
+  find_text_.clear();
+  guest_contents_->WasHidden();
+  LOG(INFO) << "domicile: browser window " << window_id_
+            << " is shown by no <webview>.";
+}
+
+void WebViewGuest::Unclient() {
+  client_.reset();
+  std::ignore = client_.BindNewPipeAndPassReceiver();
+}
+
+void WebViewGuest::ReportEverything() {
+  reported_can_go_back_ = false;
+  reported_can_go_forward_ = false;
+  reported_loading_ = false;
+  reported_url_ = GURL();
+  reported_security_ = mojom::WebViewSecurity::kNeutral;
+  reported_find_matches_ = 0;
+  reported_find_active_match_ = 0;
+
+  ReportHistory();
+  ReportPage();
+  ReportLoading(guest_contents_->ShouldShowLoadingUI());
+  // Not through ReportZoom, which also notifies chrome.tabs: the zoom is
+  // unchanged, only the listener is new.
+  if (!blink::ZoomValuesEqual(reported_zoom_, 1.0)) {
+    client_->ZoomChanged(reported_zoom_);
+  }
+  if (!reported_favicon_.is_empty()) {
+    client_->FaviconChanged(reported_favicon_);
+  }
+  if (content_size_.has_value()) {
+    client_->ContentSizeChanged(content_size_->width(),
+                                content_size_->height());
+  }
+}
+
 WebViewGuest::WebViewGuest(
     content::RenderFrameHost& owner,
     mojo::PendingReceiver<mojom::WebViewGuest> receiver,
     mojo::PendingRemote<mojom::WebViewGuestClient> client,
-    std::optional<int> popup_window,
     bool extension_popup)
     : owner_rfh_id_(owner.GetGlobalId()),
-      popup_window_(popup_window),
       extension_popup_(extension_popup),
       receiver_(this, std::move(receiver)),
       client_(std::move(client)) {}
 
-WebViewGuest::~WebViewGuest() = default;
+WebViewGuest::WebViewGuest(content::WebContents& shell,
+                           const std::string& window_id,
+                           std::optional<int> popup_window)
+    : owner_rfh_id_(shell.GetPrimaryMainFrame()->GetGlobalId()),
+      popup_window_(popup_window),
+      extension_popup_(false),
+      window_id_(window_id),
+      owner_contents_(shell.GetWeakPtr()),
+      receiver_(this) {
+  // No element yet: see Unclient.
+  Unclient();
+}
+
+// A browser window's WebContents is destroyed first, while every member still
+// exists for the observer and delegate calls content makes during teardown.
+// Member order would destroy it last, into a half-destroyed delegate.
+WebViewGuest::~WebViewGuest() {
+  owned_guest_contents_.reset();
+}
+
+// static
+void WebViewGuest::SetBrowserWindowHost(BrowserWindowHost* host) {
+  CHECK(!g_browser_window_host);
+  g_browser_window_host = host;
+}
 
 // static
 WebViewGuest* WebViewGuest::FromWebContents(content::WebContents* contents) {
@@ -727,12 +918,22 @@ void WebViewGuest::ZoomTo(double factor) {
 }
 
 content::WebContents* WebViewGuest::GetOwnerWebContents() {
+  // A browser window's owner is the shell's WebContents, whatever document it
+  // holds. See MakeWindow.
+  if (!window_id_.empty()) {
+    return owner_contents_.get();
+  }
   content::RenderFrameHost* owner =
       content::RenderFrameHost::FromID(owner_rfh_id_);
   return owner ? content::WebContents::FromRenderFrameHost(owner) : nullptr;
 }
 
 content::RenderFrameHost* WebViewGuest::GetProspectiveOuterDocument() {
+  // Its prospective document is the shell's current one; a reload replaces
+  // the one it was opened under.
+  if (!window_id_.empty()) {
+    return owner_contents_ ? owner_contents_->GetPrimaryMainFrame() : nullptr;
+  }
   return content::RenderFrameHost::FromID(owner_rfh_id_);
 }
 
@@ -1236,24 +1437,32 @@ void WebViewGuest::ReportNewWindow(const GURL& target_url) {
   // that is about to write into a handle it did not get.
   if (!target_url.is_valid()) {
     LOG(WARNING) << "domicile: a <webview>'s page asked for a window with no "
-                    "address to open; refused, and the shell is not told.";
+                    "address to open; refused, and no window is opened.";
     return;
   }
 
-  client_->NewWindowRequested(target_url);
-
   // A warning rather than an info, because a refusal is still what happened:
-  // what the user gets is a window the shell opened at this address, not the
+  // what the user gets is a browser window opened at this address, not the
   // window the page asked for. A run where the two differ -- an opener that was
   // needed, a POST that became a GET -- starts here.
   LOG(WARNING) << "domicile: a <webview> refused to open a window for "
                << target_url.possibly_invalid_spec()
-               << "; the shell was asked to open one instead.";
+               << "; a browser window was opened at it instead.";
+
+  Host().Open(*guest_contents_->GetBrowserContext(), target_url);
 }
 
 void WebViewGuest::CloseContents(content::WebContents* source) {
   LOG(INFO) << "domicile: a <webview>'s page asked to close.";
-  client_->CloseRequested();
+  Close();
+}
+
+void WebViewGuest::Close() {
+  if (window_id_.empty()) {
+    client_->CloseRequested();
+  } else {
+    Host().Close(*guest_contents_->GetBrowserContext(), window_id_);
+  }
 }
 
 void WebViewGuest::EnablePreferredSize() {
@@ -1267,6 +1476,7 @@ void WebViewGuest::UpdatePreferredSize(content::WebContents* web_contents,
                                        const gfx::Size& pref_size) {
   LOG(INFO) << "domicile: a <webview>'s page reported its content size, "
             << pref_size.ToString() << ".";
+  content_size_ = pref_size;
   client_->ContentSizeChanged(pref_size.width(), pref_size.height());
 }
 
@@ -1277,7 +1487,7 @@ void WebViewGuest::RequestFocus() {
 
 void WebViewGuest::RequestClose() {
   LOG(INFO) << "domicile: an extension asked to close a <webview>.";
-  client_->CloseRequested();
+  Close();
 }
 
 void WebViewGuest::RequestWindow(const GURL& url) {
@@ -1288,11 +1498,12 @@ void WebViewGuest::RequestPopupWindow(int window_id,
                                       const GURL& url,
                                       int width,
                                       int height) {
-  // What guard-extension-popup-window.sh reads to tell "the shell was never
-  // asked" from "the shell was asked and opened nothing".
+  // guard-webview-popup-window.sh reads this to tell "no window was asked
+  // for" from "one was asked for and nothing opened".
   LOG(INFO) << "domicile: an extension asked for popup window " << window_id
-            << "; the shell was asked to open it.";
-  client_->PopupWindowRequested(window_id, url, width, height);
+            << "; a browser window was opened for it.";
+  Host().OpenPopupWindow(*guest_contents_->GetBrowserContext(), window_id, url,
+                         width, height);
 }
 
 base::CallbackListSubscription WebViewGuest::AddFocusedCallback(

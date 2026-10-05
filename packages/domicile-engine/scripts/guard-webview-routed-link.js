@@ -16,20 +16,18 @@
 // all looks exactly like a run where one did and nothing came of it.
 // `guard-webview-click.sh` is where that lesson was paid for.
 //
-// AND THE WINDOW THE GUEST ASKS FOR. The subject is a MIDDLE CLICK on an
-// ordinary link — a gesture asking for that link in a SECOND window, which a
-// page cannot open. It reaches `WebContentsDelegate::OpenURLFromTab` on the
-// guest, which refuses to open one and announces the address here instead. So
-// this event is half the claim, and the address on it is what says the right
-// link was announced rather than merely something having happened.
+// The subject is a middle click on an ordinary link: a gesture asking for the
+// link in a second window, which a page cannot open. It reaches
+// `WebContentsDelegate::OpenURLFromTab` on the guest, which opens a desk
+// browser window at the address instead of letting content open one. The
+// window in the desk's list is half the claim, and its address shows the
+// right link opened.
 //
-// WHAT THIS PAGE DOES NOT DO IS OPEN THE SECOND WINDOW. A real shell would,
-// and `guard-webview-new-window.js` does exactly that for the `target="_blank"`
-// path. Here it would measure nothing this guard is about and would cost a
-// second guest to attach and navigate — the question is whether the DELEGATE
-// was asked and answered, and the engine's own log plus this event are both
-// halves of it. The guard tells the two paths apart by that log line, because
-// `ReportNewWindow` is shared and this event alone cannot.
+// This page does not draw the second window. `guard-webview-new-window.js`
+// does that for `target="_blank"`. This guard asks whether the delegate was
+// asked and answered: the engine's log and the list cover both halves. The log
+// line tells the two paths apart, because `ReportNewWindow` is shared and the
+// list alone cannot.
 //
 // Everything is inside `Shell`, which the document Domicile writes calls once
 // the module has loaded.
@@ -86,11 +84,28 @@ export const Shell = () => {
     say(`chrome-mousedown target=${event.target.localName}`);
   });
 
-  // And the claim's other half. The address is logged with the event rather than
-  // beside it, so a run cannot pass on an announcement about some other page —
-  // the guard greps for the fixture's own /opened.
-  view.addEventListener("domicile-new-window", (event) => {
-    say(`new-window url=${event.url}`);
+  // The claim's other half: a browser window for the link in the desk's list.
+  // The address is logged on the same line, so a window at another page
+  // cannot pass; the guard greps for the fixture's /opened. This page's own
+  // <webview> is the shell's page, so it is in no list.
+  const host = navigator.domicile;
+  if (host === undefined) {
+    throw new Error(
+      "guard-webview-routed-link: navigator.domicile is absent, so this" +
+        " document is not a shell the engine serves",
+    );
+  }
+  host.addEventListener("browserwindowschanged", () => {
+    for (const window of host.browserWindows ?? []) {
+      say(`new-window url=${window.url}`);
+    }
+  });
+
+  // Where this window went, which a middle click must not change. Read from the
+  // element, not the page: /opened also loads in the browser's new window, so
+  // the page's own line cannot say which window it is in.
+  view.addEventListener("domicile-page-change", () => {
+    say(`first-page url=${view.url}`);
   });
 
   document.body.style.margin = "0";

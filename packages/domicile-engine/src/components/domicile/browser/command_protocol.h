@@ -61,9 +61,9 @@ using LoadShell =
     base::FunctionRef<bool(const base::FilePath& root,
                            const std::string& module)>;
 
-// Carrying a believed `open_url` out: hand the shell this address to open.
-// Answers whether there was a shell page to hand it to, for LoadShell's
-// reason. Which window it goes in, and whether, is the shell's.
+// Carries out a believed `open_url`: opens a browser window at `url`. Returns
+// whether a shell existed to own the window, for LoadShell's reason. The shell
+// places the window.
 using OpenUrl = base::FunctionRef<bool(const GURL& url)>;
 
 // Answer one request line, without its newline. The reply carries its own

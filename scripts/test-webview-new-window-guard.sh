@@ -9,8 +9,8 @@
 #     is a press that followed no link.
 #   - In the positive run, a press on the ordinary link blames geometry, not
 #     the defect.
-#   - A request with no page in the new window fails: an event is not a
-#     window.
+#   - A request with no page in the new window fails: a listed window is not
+#     a window on screen.
 #   - When nothing was requested, a browser log line decides which process is
 #     blamed.
 #
@@ -180,21 +180,21 @@ expect "the wrong link outranks the process the ask stopped in" "no" \
     SAW_OPENED=0 SAW_STAYED=1 SAW_REFUSED=0)"
 
 echo
-echo "the address, and the window the event is only half of"
-expect "an event carrying the wrong address is a failure" "fail" \
+echo "the address, and the window the list is only half of"
+expect "a window at the wrong address is a failure" "fail" \
   "$(verdict 0 SAW_ADDRESS=0)"
-expect "an event carrying the wrong address says so" "yes" \
+expect "a window at the wrong address says so" "yes" \
   "$(blames "WRONG ADDRESS" 0 SAW_ADDRESS=0)"
 expect "a shell that was told and opened nothing is a failure" "fail" \
   "$(verdict 0 SAW_SECOND=0 SAW_OPENED=0)"
 expect "a shell that was told and opened nothing blames this guard's page" \
   "yes" "$(blames "guard-webview-new-window.js" 0 SAW_SECOND=0 SAW_OPENED=0)"
-# The case this guard exists for: an event fired, but the user sees an empty
-# window.
+# The case this guard exists for: the window is listed, but the user sees an
+# empty window.
 expect "a second view with no page in it is a failure" "fail" \
   "$(verdict 0 SAW_OPENED=0)"
-expect "a second view with no page in it names the second guest" "yes" \
-  "$(blames "AN EVENT AND NO WINDOW" 0 SAW_OPENED=0)"
+expect "a second view with no page in it names the window's page" "yes" \
+  "$(blames "NONE ON THE SCREEN" 0 SAW_OPENED=0)"
 
 echo
 echo "the control run — an ordinary link, which must ask for nothing"

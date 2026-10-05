@@ -174,10 +174,10 @@ Mutations:
 
 | Call | Handled by |
 |---|---|
-| `tabs.create({url})` | The shell, as `domicile-new-window` on the active tab's element. Resolves with the next new tab. |
+| `tabs.create({url})` | The browser opens a browser window (`domicile_browser_windows.h`). Resolves with the next new tab. |
 | `tabs.update(id, {url})`, `{muted}` | The guest |
 | `tabs.update(id, {active: true})`, `windows.update(id, {focused: true})` | The shell, as `domicile-focus-request` on that element |
-| `tabs.remove(id)` | The shell, as `domicile-close` on that element. Resolves once sent. |
+| `tabs.remove(id)` | The browser closes that browser window. A shell's own `<webview src>` gets `domicile-close`. Resolves immediately. |
 | `windows.get`, `getCurrent`, `getLastFocused`, `getAll` | The desk |
 | `windows.create({type: "popup", url})` | A popup window (below) |
 | `windows.remove(id)` | A popup window's tab, as `tabs.remove`. Refused for the desk window. |
@@ -194,16 +194,14 @@ and closes it with `windows.remove`. A popup window is a second
 
 1. `windows.create` makes an empty window and fires `windows.onCreated`
    (`OpenPopup`).
-2. The engine fires `domicile-popup-window` on the active tab's element with
-   `windowId`, `url`, `width`, `height` (0 if unset)
-   (`WebViewGuestClient.PopupWindowRequested`, `DomicilePopupWindowEvent`,
-   patch 0078).
-3. The shell opens `<webview popupwindow={windowId} src={url}>`. The element
-   passes the id in `CreateGuest`, and the guest becomes the window's only tab
-   (`HTMLWebViewElement::PopupWindow`, `AddToDesk`).
+2. The browser opens a browser window at `url` as the window's only tab
+   (`WebViewGuest::RequestPopupWindow`, `BrowserWindowHost::OpenPopupWindow`,
+   `AddToDesk`).
+3. The shell gets it in `browserwindowschanged` with `popupWindow`, `width`
+   and `height` (0 if unset), and draws it.
 4. `windows.create` resolves with the populated window (`WhenNextTab`).
-5. `windows.remove` or the page's `window.close()` fires `domicile-close` on
-   the element. The window closes with its tab and fires `windows.onRemoved`
+5. `windows.remove` or the page's `window.close()` closes that browser window.
+   The window closes with its tab and fires `windows.onRemoved`
    (`DeskWindowsRemoveFunction`, `PopupEmptied`).
 
 | Call | A popup window |
@@ -233,8 +231,7 @@ relative to the source window and passes `NaN` without them.
   bug the extension can't detect.
 - **Popup windows are real windows.** They have their own id, so
   `windows.remove` closes them and `tabs.query({windowType: "popup"})` finds
-  them. The engine owns the window and the shell draws it. The `popupwindow`
-  attribute links them, since the browser can't tell `<webview>`s apart.
+  them. The engine owns the window and its page, and the shell draws it.
 - **Only `popup` windows.** A `normal` window is a shell browser window, which
   `tabs.create` already requests. Size is passed through. Position is the
   shell's choice, as under Wayland in Chrome.

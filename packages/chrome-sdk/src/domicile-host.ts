@@ -532,13 +532,33 @@ export type DomicileAudioEvent = Event & {
 };
 
 /**
- * A request to open a URL, from `domicile open-url` (the `BROWSER` for apps the
- * desktop starts).
+ * A browser window, drawn with `<webview window={id}>`.
  *
- * The URL is already validated. The shell decides where to open it, if at all.
+ * The engine holds the page, so it outlives the shell's document. After
+ * `domicile load-shell` the new shell gets the same windows. See
+ * docs/SHELL-BROWSER-WINDOWS.md.
  */
-export type DomicileOpenUrlEvent = Event & {
+export type DomicileBrowserWindow = {
+  /**
+   * The id `<webview window>` and {@link DomicileHost.closeBrowserWindow} take.
+   * Never reused while the browser runs.
+   */
+  readonly id: string;
+  /** The page's address. Empty before the page has loaded. */
   readonly url: string;
+  /** The page's title. Empty when the page has none. */
+  readonly title: string;
+  /**
+   * The extension popup window (`chrome.windows` id) whose one tab this is.
+   * `null` for an ordinary browser window.
+   */
+  readonly popupWindow: number | null;
+  /**
+   * The size the popup window asked for, in CSS pixels. 0 on an axis it left
+   * unset.
+   */
+  readonly width: number;
+  readonly height: number;
 };
 
 /**
@@ -637,8 +657,6 @@ export type DomicileHostEventMap = {
   extensions: DomicileExtensionsEvent;
   /** The full system tray, on change and on connect. */
   tray: DomicileTrayEvent;
-  /** A URL to open. See {@link DomicileOpenUrlEvent}. */
-  openurl: DomicileOpenUrlEvent;
   /** All notifications, on change and on connect. */
   notifications: DomicileNotificationsEvent;
   /**
@@ -651,6 +669,11 @@ export type DomicileHostEventMap = {
    * value.
    */
   brightnesschanged: Event;
+  /**
+   * A browser window opened, closed, navigated or changed title. Read
+   * {@link DomicileHost.browserWindows} for the new list.
+   */
+  browserwindowschanged: Event;
 };
 
 /**
@@ -804,6 +827,20 @@ export type DomicileHost = {
   activateExtension(id: string): void;
 
   /**
+   * Opens a browser window at `url`, for the shell's own UI such as a `+`
+   * button. It appears in the next `browserwindowschanged`. Windows that
+   * programs open (`domicile open-url`, `target="_blank"`, extensions) arrive
+   * the same way.
+   */
+  openBrowserWindow(url: string): void;
+
+  /**
+   * Closes browser window `id`. It leaves the next `browserwindowschanged`.
+   * Does nothing for an unknown id.
+   */
+  closeBrowserWindow(id: string): void;
+
+  /**
    * Click a system tray icon with the button `action` names. Does nothing if
    * the application has exited. Throws on an empty id.
    */
@@ -847,6 +884,14 @@ export type DomicileHost = {
    * and always on a machine with no backlight.
    */
   readonly brightness: number | null;
+
+  /**
+   * The browser windows, oldest first.
+   *
+   * An attribute so components that mount late can read it. `null` until the
+   * browser lists them, which it does as soon as something listens.
+   */
+  readonly browserWindows: readonly DomicileBrowserWindow[] | null;
 
   addEventListener<T extends keyof DomicileHostEventMap>(
     type: T,

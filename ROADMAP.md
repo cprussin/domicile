@@ -17,8 +17,8 @@ What works:
   Chromium the flake pins.
 - A client window is an `<app>` element in the shell's page. Seven CSS
   properties render bit-exact against a plain element.
-- `<webview>` is a browser window the shell lays out. It reports history,
-  loading and new-window requests to the page.
+- `<webview>` draws a browser window the engine owns and the shell lays out.
+  It reports history and loading to the page.
 - Keyboard, trackpad and clicks work on real hardware.
 - An idle desktop blanks and locks. The user's password unlocks it through
   PAM.
@@ -137,35 +137,30 @@ Evidence is in [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md),
 
    [WINDOW-DOMICILE.md](docs/architecture/WINDOW-DOMICILE.md).
 
-10. **`domicile load-shell` closes every browser window.** The shell's page
-    owns them, so a reload closes them. The engine should own them, and the
-    shell should draw them with `<webview window>`. Not started.
-    [BROWSER-WINDOWS.md](docs/architecture/BROWSER-WINDOWS.md).
-
-11. **Domicile answers every portal.** The compositor answers `Settings`; gtk
+10. **Domicile answers every portal.** The compositor answers `Settings`; gtk
     answers the rest. So file dialogs are GTK windows, and screen sharing,
     remote desktop and global shortcuts have no backend. Plan: one request
     channel to the shell, then every interface except `Secret` on it, then
     drop gtk. Not started. [PORTALS.md](docs/architecture/PORTALS.md).
 
-12. **Split manganese into small packages.** `@domicile-desktop/manganese` is
+11. **Split manganese into small packages.** `@domicile-desktop/manganese` is
     one package with the layout, the bar and every bar item. Split the clock,
     tray, mixer and window management into their own packages, with manganese
     the shell that composes them. No design doc yet.
 
-13. **System access for the shell.** Each system readout (battery,
+12. **System access for the shell.** Each system readout (battery,
     backlight, audio) is a compositor module, a host message and an engine
     member, so the set of features grows inside Domicile. Plan: files,
     processes and D-Bus for the shell, and features as libraries on them,
     starting with wifi and bluetooth bar modules. Not started.
     [SYSTEM-ACCESS.md](docs/architecture/SYSTEM-ACCESS.md).
 
-14. **A History app.** Browser windows have back, forward and address
+13. **A History app.** Browser windows have back, forward and address
     suggestions, but nothing browses, searches or clears history.
     `chrome://history` is blocked like every `chrome://` page (patch 0083). No
     design doc yet.
 
-15. **A Settings app.** Extensions and config values can only be set by editing
+14. **A Settings app.** Extensions and config values can only be set by editing
     the config. A Settings app would manage both. It would also hold the
     *Known gaps* that need a place to store state: a persistent theme choice,
     and the cookies, site data and permissions that `chrome://settings`
@@ -292,9 +287,9 @@ Understood and not scheduled.
 
 - **Browser windows deny permission requests and dialogs.** A `<webview>`
   guest's `WebContentsDelegate` gives the default answer. `window.open` is the
-  exception: the address reaches the shell, which opens its own browser window.
-  But `window.open` returns `null`, the opener and target name are dropped, and
-  a form POST to a new target arrives as a GET.
+  exception: the engine opens a browser window at the address. But
+  `window.open` returns `null`, the opener and target name are dropped, and a
+  form POST to a new target arrives as a GET.
 - **Some file dialogs are refused.** Every file dialog goes to the shell
   (`domicile-file-chooser`): file inputs, downloads, File System Access pickers
   and the PDF viewer's save (patch 0086). Not covered:
@@ -303,7 +298,7 @@ Understood and not scheduled.
   - Download progress is not reported.
 - **No settings page.** Browser windows block every `chrome://` page (patch
   0083), so nothing can clear cookies and site data or change site
-  permissions. The Settings app (item 15) will cover this. Printing is also
+  permissions. The Settings app (item 14) will cover this. Printing is also
   blocked: `window.print()` opens `chrome://print`.
 - **Resize cost is unmeasured.** Patch 0054 stops the shell's frame waiting
   for a `<webview>` to draw at each new size, matching `<app>`. No guard times
@@ -338,7 +333,7 @@ Understood and not scheduled.
 - **A theme picked from the toggle lasts only until restart.** `theme.mode` is
   the startup value. The config file is generated (by a shell, or by
   home-manager on NixOS), so the desktop does not write to it. Persisting the
-  choice needs a separate store for desktop state; the Settings app (item 15)
+  choice needs a separate store for desktop state; the Settings app (item 14)
   needs the same.
 - **Unmeasured: whether Wayland windows are in the theme transition's old
   frame.** Windows change theme inside the shell's view transition, after it
@@ -370,7 +365,8 @@ Understood and not scheduled.
 - **Hot-swapping the shell reloads the page.** `domicile load-shell` triggers
   it, and `announce_open_apps` re-sends the desktop state to the new page. A
   shell loses any state kept in its page. App windows survive because the
-  compositor is not involved. Browser windows do not; see item 10.
+  compositor is not involved. Browser windows survive because the engine owns
+  their pages.
 
 ### Engine CI
 

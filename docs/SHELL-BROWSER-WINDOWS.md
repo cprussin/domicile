@@ -1,27 +1,58 @@
 # Browser windows in a shell
 
-`<webview src="…">` is a tag built into the engine. It shows a web page in its
-own browsing context. A browser window in a shell is an address bar you draw
-over a `<webview>`. Manganese's is
+`<webview>` is a tag built into the engine. It shows a web page in its own
+browsing context. A browser window in a shell is an address bar you draw over a
+`<webview>`. Manganese's is
 [`BrowserWindow.tsx`](/packages/shell-manganese/src/window-management/BrowserWindow.tsx).
 
 Part of [WRITING-A-SHELL.md](WRITING-A-SHELL.md). Extensions are in
 [SHELL-EXTENSIONS.md](SHELL-EXTENSIONS.md).
 
-```ts
-const view = document.createElement("webview");
-view.src = "https://example.com";
-document.body.append(view);
+## The engine owns browser windows
 
-back.addEventListener("click", () => {
-  view.goBack();
+The browser holds each browser window's page, so it outlives your document.
+After `domicile load-shell`, the new shell gets every window with its scroll,
+form input, history and playing media intact.
+
+```ts
+const drawn = new Map<string, HTMLElement>();
+
+domicile.on("browser_windows", ({ windows }) => {
+  for (const { id } of windows) {
+    if (!drawn.has(id)) {
+      const view = document.createElement("webview");
+      view.setAttribute("window", id); // before append
+      document.body.append(view);
+      drawn.set(id, view);
+    }
+  }
+});
+
+plus.addEventListener("click", () => {
+  domicile.openBrowserWindow("https://example.com");
 });
 ```
+
+- **`browser_windows`** sends the whole list when a window opens, closes,
+  navigates or changes title. A window you have not drawn is new; a missing
+  one was closed. Each has `id`, `url` and `title`. An extension's popup
+  window also has `popupWindow`, `width` and `height`
+  ([SHELL-EXTENSIONS.md](SHELL-EXTENSIONS.md)).
+- **`openBrowserWindow(url)` and `closeBrowserWindow(id)`** are for your own
+  UI. The result arrives in the next list. Other windows open without you
+  ([New windows](#new-windows)).
+- **Set `window` before the view enters the document.** The engine reads it
+  once, when the view connects. A window shows in one view at a time: a second
+  view naming it stays empty, so never remount the view drawing it.
+- **A `<webview src="…">` with no `window`** is your own page, such as an
+  extension's popup or a preview. It closes with your document.
 
 ## Basics
 
 - `goBack`, `goForward`, `stop` and `reload` are element methods.
-- `src` is reflected: setting the property or the attribute navigates.
+- `src` is reflected: setting the property or the attribute navigates. A view
+  drawing a browser window does not send `src` on connect, since the page is
+  already loaded.
 - Give it a size. Its intrinsic size is 300×150.
 - `domicile://` addresses, and `blob:` URLs the shell created, show
   `about:blank#blocked`. A guest on the shell's origin could control the
@@ -132,17 +163,14 @@ as a `shortcut` message. `domicile.grabShortcut` claims a chord that
 
 ## New windows
 
-A `target="_blank"` link, `window.open`, or a middle click fires
-`domicile-new-window` with `event.url`. The browser opens no window. Open one
-yourself, or the link does nothing.
+The browser opens a window without you for:
 
-```ts
-import { WEBVIEW_NEW_WINDOW_EVENT } from "@domicile-desktop/sdk/webview-element";
+- a `target="_blank"` link, `window.open` or a middle click
+- `domicile open-url <url>`, which `BROWSER` (`domicile-open-url`) and
+  `xdg-open` run inside a desktop
+- an extension's `tabs.create` or `windows.create`
 
-frame.addEventListener(WEBVIEW_NEW_WINDOW_EVENT, (event) => {
-  openBrowserWindow(event.url);
-});
-```
+The window arrives in the next `browser_windows`. You decide where it goes.
 
 The new window is a fresh navigation to that address:
 
@@ -152,30 +180,22 @@ The new window is a fresh navigation to that address:
 
 A plain link (`target="_blank"` or middle click) loses nothing.
 
-Apps outside the browser open links with `domicile open-url <url>` (the
-desktop's `BROWSER`, `domicile-open-url`, runs it). It sends `open_url` to the
-shell:
-
-```ts
-domicile.on("open_url", ({ url }) => {
-  openBrowserWindow(url);
-});
-```
-
 ## Close requests
 
-`window.close()` in the page, or an extension's `chrome.tabs.remove`, fires
-`domicile-close`. Nothing closes until you remove the window:
+`window.close()` in a browser window's page, or an extension's
+`chrome.tabs.remove`, closes the window. It leaves the next `browser_windows`.
+`window.close()` works only when the page's history has a single entry.
+
+In a view of your own (a `<webview src>` with no `window`), the element fires
+`domicile-close` and nothing closes until you remove it:
 
 ```ts
 import { WEBVIEW_CLOSE_EVENT } from "@domicile-desktop/sdk/webview-element";
 
-frame.addEventListener(WEBVIEW_CLOSE_EVENT, () => {
-  closeBrowserWindow(frame);
+popupView.addEventListener(WEBVIEW_CLOSE_EVENT, () => {
+  popupView.remove();
 });
 ```
-
-`window.close()` fires it only when the page's history has a single entry.
 
 ## File pickers
 
