@@ -189,6 +189,61 @@ export type WebViewFileChooserMode =
   (typeof WEBVIEW_FILE_CHOOSER_MODES)[number];
 
 /**
+ * Fired on a right click the page did not `preventDefault`. Bubbles.
+ *
+ * The browser draws no context menu. The event carries what was under the
+ * click, so the shell can draw one. {@link DomicileContextMenuEvent.run} does
+ * the browser's part of an item. A newer menu replaces this one, after which
+ * `run()` throws.
+ */
+export const WEBVIEW_CONTEXT_MENU_EVENT = "domicile-context-menu";
+
+/**
+ * What {@link DomicileContextMenuEvent.run} can do.
+ *
+ * - Edit commands on the focused element: `undo`, `redo`, `cut`, `copy`,
+ *   `paste`, `paste-and-match-style`, `delete`, `select-all`.
+ * - Over a link: `copy-link-address`, `save-link-as`.
+ * - Over an image with pixels, or a canvas: `copy-image`.
+ * - Over an image, video or audio: `copy-media-address`, `save-media-as`.
+ * - Anywhere: `inspect`, DevTools on the element under the click.
+ *
+ * A save asks {@link WEBVIEW_FILE_CHOOSER_EVENT} where.
+ */
+export const WEBVIEW_CONTEXT_MENU_ACTIONS = [
+  "undo",
+  "redo",
+  "cut",
+  "copy",
+  "paste",
+  "paste-and-match-style",
+  "delete",
+  "select-all",
+  "copy-link-address",
+  "save-link-as",
+  "copy-image",
+  "copy-media-address",
+  "save-media-as",
+  "inspect",
+] as const;
+
+export type WebViewContextMenuAction =
+  (typeof WEBVIEW_CONTEXT_MENU_ACTIONS)[number];
+
+/** What was under the click: {@link DomicileContextMenuEvent.mediaType}. */
+export const WEBVIEW_MEDIA_TYPES = [
+  "none",
+  "image",
+  "video",
+  "audio",
+  "canvas",
+  "file",
+  "plugin",
+] as const;
+
+export type WebViewMediaType = (typeof WEBVIEW_MEDIA_TYPES)[number];
+
+/**
  * Global declarations for the engine's `<webview>`.
  *
  * Merged into the global `HTMLWebViewElement` because `@types/react` already
@@ -262,6 +317,12 @@ declare global {
      */
     readonly contentWidth: number;
     readonly contentHeight: number;
+    /**
+     * Open DevTools for the page in a new browser window. If DevTools is
+     * already open, the view showing it fires
+     * {@link WEBVIEW_FOCUS_REQUEST_EVENT} instead.
+     */
+    inspect(): void;
     goBack(): void;
     goForward(): void;
     stop(): void;
@@ -271,6 +332,47 @@ declare global {
   // biome-ignore lint/style/useConsistentTypeDefinitions: declaration merging onto a built-in type is what `interface` is for and what a type alias cannot do
   interface HTMLElementTagNameMap {
     webview: HTMLWebViewElement;
+  }
+
+  /**
+   * The {@link WEBVIEW_CONTEXT_MENU_EVENT} event. The engine defines it in
+   * `domicile_context_menu_event.idl`.
+   */
+  interface DomicileContextMenuEvent extends Event {
+    /** The click, in CSS pixels from the view's top left. */
+    readonly x: number;
+    readonly y: number;
+    /** The absolute link address, or `""` for none. */
+    readonly linkUrl: string;
+    readonly linkText: string;
+    /** The absolute image, video or audio address, or `""` for none. */
+    readonly srcUrl: string;
+    /**
+     * One of {@link WEBVIEW_MEDIA_TYPES}. A `string` because it is external
+     * data; parse it at the boundary.
+     */
+    readonly mediaType: string;
+    /** Whether an image has pixels to copy. A broken image has none. */
+    readonly hasImageContents: boolean;
+    /** The selected text, or `""`. */
+    readonly selectionText: string;
+    /** Whether the click was in an editable element. */
+    readonly isEditable: boolean;
+    /** What the page reports can be done where the click was. */
+    readonly canUndo: boolean;
+    readonly canRedo: boolean;
+    readonly canCut: boolean;
+    readonly canCopy: boolean;
+    readonly canPaste: boolean;
+    readonly canDelete: boolean;
+    readonly canSelectAll: boolean;
+    /**
+     * Do one of {@link WEBVIEW_CONTEXT_MENU_ACTIONS} for this menu. Throws a
+     * `TypeError` for an unknown action, a `NotSupportedError` for one this
+     * menu does not offer (a link action with no link), and an
+     * `InvalidStateError` once a newer menu has replaced this one.
+     */
+    run(action: WebViewContextMenuAction): void;
   }
 
   /**
@@ -319,5 +421,6 @@ declare global {
   interface HTMLElementEventMap {
     "domicile-guest-keydown": KeyboardEvent;
     "domicile-file-chooser": DomicileFileChooserEvent;
+    "domicile-context-menu": DomicileContextMenuEvent;
   }
 }

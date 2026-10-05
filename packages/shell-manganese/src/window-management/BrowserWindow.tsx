@@ -16,7 +16,10 @@ import { AddressBar } from "./browser/AddressBar";
 import { BrowserCommand, browserCommandFor } from "./browser/browser-command";
 import { FilePicker } from "./browser/FilePicker";
 import { FindBar } from "./browser/FindBar";
+import { PageMenu } from "./browser/PageMenu";
+import { choosePageCommand, pageMenuFor } from "./browser/page-menu";
 import { useFileRequest } from "./browser/useFileRequest";
+import { usePageMenu } from "./browser/usePageMenu";
 import { zoomedIn, zoomedOut } from "./browser/zoom-steps";
 import type { Rect } from "./rect";
 import type { Restack } from "./restacking";
@@ -170,6 +173,8 @@ export const BrowserWindow = ({
   const [finding, setFinding] = useState(false);
   const [findBox, setFindBox] = useState<HTMLInputElement | null>(null);
   const found = useFindResult(view);
+  // The context menu the page asked for. The engine draws none.
+  const [menu, dismissMenu] = usePageMenu(view);
 
   // Focuses an element in this window without reporting it as a user reach.
   // All programmatic focus here must go through this.
@@ -241,6 +246,12 @@ export const BrowserWindow = ({
           }
           case BrowserCommand.Forward: {
             view.goForward();
+            break;
+          }
+          // The view asks the desktop for a DevTools window, as a
+          // `target="_blank"` link does.
+          case BrowserCommand.Inspect: {
+            view.inspect();
             break;
           }
           case BrowserCommand.Reload: {
@@ -490,6 +501,21 @@ export const BrowserWindow = ({
               });
             }}
             ref={setFindBox}
+          />
+        )}
+        {menu !== undefined && (
+          <PageMenu
+            at={menu.at}
+            items={pageMenuFor(menu.context, { canGoBack, canGoForward })}
+            onChoose={(command) => {
+              choosePageCommand(command, menu.context, {
+                browse: run,
+                openWindow: (url) => {
+                  domicile.openBrowserWindow(url);
+                },
+              });
+            }}
+            onClose={dismissMenu}
           />
         )}
         {asking !== undefined && (
