@@ -5,6 +5,7 @@
 
 #include "base/check.h"
 #include "chrome/browser/domicile/domicile_desk.h"
+#include "chrome/browser/domicile/domicile_devtools.h"
 #include "chrome/browser/extensions/tab_helper.h"
 #include "chrome/browser/sessions/session_tab_helper_factory.h"
 #include "components/domicile/browser/web_view_guest.h"
@@ -50,6 +51,9 @@ void AttachTabHelpers(content::WebContents& guest) {
 
   // And a tab of the desk's one window, now that it has an id to be one by.
   AddToDesk(guest);
+
+  // So this guest can become a DevTools window.
+  WatchForDevTools(guest);
 }
 
 }  // namespace domicile

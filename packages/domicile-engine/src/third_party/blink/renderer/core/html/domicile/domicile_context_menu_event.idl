@@ -1,0 +1,49 @@
+// Copyright 2026 Connor Prussin
+// SPDX-License-Identifier: MIT
+
+// Fired by a <webview> when its page asks for a context menu and does not
+// cancel it. The shell draws the menu. Domicile's engine fork only; no
+// constructor, since only the browser creates one.
+[
+    RuntimeEnabled=DomicileExternalSurface,
+    Exposed=Window
+] interface DomicileContextMenuEvent : Event {
+  // Where the click was, in CSS pixels from the top left of the page's box.
+  readonly attribute long x;
+  readonly attribute long y;
+
+  // The link under the click and its text; the empty string for none.
+  readonly attribute USVString linkUrl;
+  readonly attribute DOMString linkText;
+
+  // The image, video or audio under the click; the empty string for none.
+  readonly attribute USVString srcUrl;
+  // "none", "image", "video", "audio", "canvas", "file" or "plugin". A
+  // DOMString, like HTMLWebViewElement's `security`, to avoid a generated
+  // enum file.
+  readonly attribute DOMString mediaType;
+  // Whether an image has pixels to copy. A broken image has none.
+  readonly attribute boolean hasImageContents;
+
+  // The selected text; the empty string for none.
+  readonly attribute DOMString selectionText;
+
+  // Whether the click was in an editable element, and what the page reports
+  // can be done there.
+  readonly attribute boolean isEditable;
+  readonly attribute boolean canUndo;
+  readonly attribute boolean canRedo;
+  readonly attribute boolean canCut;
+  readonly attribute boolean canCopy;
+  readonly attribute boolean canPaste;
+  readonly attribute boolean canDelete;
+  readonly attribute boolean canSelectAll;
+
+  // Do `action` for this menu: "undo", "redo", "cut", "copy", "paste",
+  // "paste-and-match-style", "delete", "select-all", "copy-link-address",
+  // "save-link-as", "copy-image", "copy-media-address", "save-media-as" or
+  // "inspect". Throws TypeError for any other word, NotSupportedError for an
+  // action this menu does not offer (a link action with no link), and
+  // InvalidStateError once a newer menu replaced this one.
+  [RaisesException] undefined run(DOMString action);
+};
