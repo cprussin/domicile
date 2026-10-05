@@ -10,6 +10,7 @@
 
 #include "base/check.h"
 #include "base/files/file_path.h"
+#include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/strings/strcat.h"
@@ -19,9 +20,10 @@
 namespace domicile {
 namespace {
 
-// The commands there are. No dispatch table: two rows are an `if` each.
+// The commands there are. No dispatch table: three rows are an `if` each.
 constexpr char kLoadShell[] = "load_shell";
 constexpr char kOpenUrl[] = "open_url";
+constexpr char kScreenshot[] = "screenshot";
 
 std::string Line(base::DictValue reply) {
   std::string line;
@@ -41,6 +43,9 @@ std::string Done(std::string_view type) {
 std::string AnswerLoadShell(const base::DictValue& request,
                             LoadShell load_shell);
 std::string AnswerOpenUrl(const base::DictValue& request, OpenUrl open_url);
+void AnswerScreenshot(const base::DictValue& request,
+                      Screenshot screenshot,
+                      CommandReply reply);
 
 }  // namespace
 
@@ -51,14 +56,17 @@ std::string RefusedCommand(std::string_view why) {
   return Line(std::move(reply));
 }
 
-std::string AnswerCommand(std::string_view line,
-                          LoadShell load_shell,
-                          OpenUrl open_url) {
+void AnswerCommand(std::string_view line,
+                   LoadShell load_shell,
+                   OpenUrl open_url,
+                   Screenshot screenshot,
+                   CommandReply reply) {
   const std::optional<base::DictValue> request =
       base::JSONReader::ReadDict(line, base::JSON_PARSE_RFC);
   if (!request) {
-    return RefusedCommand(
-        "a command is one JSON object on one line, and this is not one");
+    std::move(reply).Run(RefusedCommand(
+        "a command is one JSON object on one line, and this is not one"));
+    return;
   }
 
   // THE VERSION IS READ FIRST, BEFORE THE COMMAND IT QUALIFIES. It says how
@@ -67,29 +75,37 @@ std::string AnswerCommand(std::string_view line,
   // believing either.
   const std::optional<int> version = request->FindInt("version");
   if (version != kCommandVersion) {
-    return RefusedCommand(base::StrCat(
+    std::move(reply).Run(RefusedCommand(base::StrCat(
         {"this engine speaks version ", base::NumberToString(kCommandVersion),
          " of the command protocol and the request says ",
          version ? base::NumberToString(*version) : std::string("nothing"),
          ". The supervisor and the engine are published separately, so this "
          "is two different releases talking rather than a typo: "
          "packages/domicile-engine/engine-release.nix is which engine this "
-         "desktop is running."}));
+         "desktop is running."})));
+    return;
   }
 
   const std::string* type = request->FindString("type");
   if (type == nullptr) {
-    return RefusedCommand("a command needs a \"type\"");
+    std::move(reply).Run(RefusedCommand("a command needs a \"type\""));
+    return;
   }
   if (*type == kLoadShell) {
-    return AnswerLoadShell(*request, load_shell);
+    std::move(reply).Run(AnswerLoadShell(*request, load_shell));
+    return;
   }
   if (*type == kOpenUrl) {
-    return AnswerOpenUrl(*request, open_url);
+    std::move(reply).Run(AnswerOpenUrl(*request, open_url));
+    return;
   }
-  return RefusedCommand(base::StrCat(
+  if (*type == kScreenshot) {
+    AnswerScreenshot(*request, screenshot, std::move(reply));
+    return;
+  }
+  std::move(reply).Run(RefusedCommand(base::StrCat(
       {"\"", *type, "\" is not a command this engine knows; it takes \"",
-       kLoadShell, "\" and \"", kOpenUrl, "\""}));
+       kLoadShell, "\", \"", kOpenUrl, "\" and \"", kScreenshot, "\""})));
 }
 
 namespace {
@@ -155,6 +171,33 @@ std::string AnswerOpenUrl(const base::DictValue& request, OpenUrl open_url) {
     return RefusedCommand("this engine has no shell page to open it in");
   }
   return Done("opened");
+}
+
+void AnswerScreenshot(const base::DictValue& request,
+                      Screenshot screenshot,
+                      CommandReply reply) {
+  const std::string* file = request.FindString("file");
+  if (file == nullptr || file->empty()) {
+    std::move(reply).Run(RefusedCommand(
+        "screenshot needs a \"file\": the path to write the PNG to"));
+    return;
+  }
+  const base::FilePath path = base::FilePath::FromUTF8Unsafe(*file);
+  // For load_shell's reason: the engine's working directory is not the
+  // sender's.
+  if (!path.IsAbsolute()) {
+    std::move(reply).Run(RefusedCommand(
+        base::StrCat({"\"", *file, "\" is not an absolute path"})));
+    return;
+  }
+  screenshot(
+      path, base::BindOnce(
+                [](CommandReply reply, base::expected<void, std::string> done) {
+                  std::move(reply).Run(done.has_value()
+                                           ? Done("captured")
+                                           : RefusedCommand(done.error()));
+                },
+                std::move(reply)));
 }
 
 }  // namespace

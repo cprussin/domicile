@@ -19,7 +19,7 @@ pub enum CliError {
          --config <path>: a module's `Shell` export, or a JSON config's \
          \"shell\", is the shell when none is given.\n\
          Or a command for the desktop already running: which-shell, \
-         load-shell <shell>, or open-url <url>.\n"
+         load-shell <shell>, open-url <url>, or screenshot <file>.\n"
     )]
     NoShell,
     #[error(
@@ -51,6 +51,14 @@ pub enum CliError {
          address is one browser window."
     )]
     ExtraToOpen { extra: String },
+    #[error(
+        "screenshot takes the file to write the PNG to, and was given \
+         nothing:\n\n    \
+         domicile screenshot ~/shot.png\n"
+    )]
+    NowhereToSave,
+    #[error("screenshot takes one file, and it was given {extra} as well.")]
+    ExtraToSave { extra: String },
     #[error(
         "--config takes the path to the compositor's config file and was given \
          nothing. Leaving the flag off reads ~/.config/domicile/domicile.{{ts,tsx,js,mjs,json}} \
@@ -87,6 +95,10 @@ pub enum Invocation {
     ///
     /// Kept as typed; [`crate::address`] makes it a URL.
     Open { target: String },
+    /// Tell the running desktop to write a PNG of the desk to this file.
+    ///
+    /// Kept as typed; the client makes it absolute.
+    Screenshot { file: String },
 }
 
 /// Parses the command line.
@@ -123,6 +135,11 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
                 (None, _) => Err(CliError::NothingToOpen),
                 (Some(target), None) => Ok(Invocation::Open { target }),
                 (Some(_), Some(extra)) => Err(CliError::ExtraToOpen { extra }),
+            },
+            Verb::Capturing => match (args.next(), args.next()) {
+                (None, _) => Err(CliError::NowhereToSave),
+                (Some(file), None) => Ok(Invocation::Screenshot { file }),
+                (Some(_), Some(extra)) => Err(CliError::ExtraToSave { extra }),
             },
         };
     }
@@ -166,6 +183,8 @@ enum Verb {
     Loading,
     /// `open-url`, which takes an address.
     Opening,
+    /// `screenshot`, which takes a file.
+    Capturing,
 }
 
 /// The verb `word` names, if any.
@@ -176,6 +195,7 @@ fn verb(word: &str) -> Option<Verb> {
         "which-shell" => Some(Verb::Asking(Request::WhichShell)),
         "load-shell" => Some(Verb::Loading),
         "open-url" => Some(Verb::Opening),
+        "screenshot" => Some(Verb::Capturing),
         _ => None,
     }
 }
