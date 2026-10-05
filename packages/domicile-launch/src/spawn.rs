@@ -59,11 +59,6 @@ const SCANOUT_PLATFORM: &str = "drm";
 /// The ozone platform that runs as a client of another compositor.
 const NESTED_PLATFORM: &str = "wayland";
 
-/// Tile memory each engine page may use, in MB. Fits three monitors of
-/// full-desk layers at two densities, plus a commit's pending copies. See
-/// `engine`.
-const DESK_TILE_MEMORY_MB: u32 = 3072;
-
 /// The engine command line for `shell`.
 ///
 /// `--app` hides the browser's tab strip, address bar and shortcuts.
@@ -105,17 +100,6 @@ pub fn engine(
         // A second `--enable-features` in `extra` replaces this one, since the
         // last copy of a switch wins. Repeat these features there.
         "--enable-features=LibinputHandleTouchpad,LibinputHandleMouse".into(),
-        // Tile memory for the whole desk, not one monitor. A renderer sizes
-        // its tile budget from the screen it is created on
-        // (`GetGpuMemoryPolicy`: about 1152 MB per 10.9 Mpx, at least 512 MB),
-        // and the shell's page is created before it spans the desk. A laptop
-        // with two 4K monitors gets ~580 MB for a ~40 Mpx page whose
-        // full-desk layers cost ~160 MB each, more at other densities. Short
-        // of memory, cc re-rasters the shell's tiles on every commit and draws
-        // the rest as flat color, so bars and panels blink. See
-        // docs/architecture/DISPLAY-TILINGS.md, "Tile memory". This is a
-        // limit, not an allocation.
-        format!("--force-gpu-mem-available-mb={DESK_TILE_MEMORY_MB}").into(),
         "--password-store=basic".into(),
         "--no-first-run".into(),
         format!("--user-data-dir={}", runtime.profile.display()).into(),

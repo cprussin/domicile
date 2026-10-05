@@ -60,8 +60,8 @@ moving layer draws from its tilings.
   page starts on the host monitor, so this covers only the host's share of
   the desk.
 - **`--force-gpu-mem-available-mb`**, when set, is the budget, and the desk
-  budget does not apply. `domicile-launch` passes
-  `--force-gpu-mem-available-mb=3072` (`DESK_TILE_MEMORY_MB` in `spawn.rs`).
+  budget does not apply. `domicile-launch` does not pass it, so the desk
+  budget below sizes the shell's page.
 - **Desk budget** (patch 0088, `DomicileTileBytesFor`): the page's pixels at S
   plus each monitor's tiling (its region × `r²`), at 4 bytes, × 8: four
   full-desk layers (the page, two wallpapers mid-crossfade, an overlay), each
