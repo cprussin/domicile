@@ -8,7 +8,9 @@
 #include <string_view>
 
 #include "base/files/file_path.h"
+#include "base/functional/callback.h"
 #include "base/functional/function_ref.h"
+#include "base/types/expected.h"
 #include "url/gurl.h"
 
 namespace domicile {
@@ -23,6 +25,10 @@ namespace domicile {
 //
 //   {"type":"open_url","version":1,"url":"https://example.com/"}
 //   -> {"type":"opened"}
+//   -> {"type":"refused","why":"..."}
+//
+//   {"type":"screenshot","version":1,"file":"/home/me/shot.png"}
+//   -> {"type":"captured"}
 //   -> {"type":"refused","why":"..."}
 //
 // Newline-delimited JSON because that is already the framing in this system --
@@ -66,11 +72,27 @@ using LoadShell =
 // reason. Which window it goes in, and whether, is the shell's.
 using OpenUrl = base::FunctionRef<bool(const GURL& url)>;
 
-// Answer one request line, without its newline. The reply carries its own
-// trailing newline, because what a caller wants is the bytes to write.
-std::string AnswerCommand(std::string_view line,
-                          LoadShell load_shell,
-                          OpenUrl open_url);
+// How a screenshot ended: written, or why not.
+using ScreenshotDone =
+    base::OnceCallback<void(base::expected<void, std::string>)>;
+
+// Carrying a believed `screenshot` out: write a PNG of the desk to `file`.
+// Answers through `done` because the display compositor reads the desk back
+// after this returns.
+using Screenshot =
+    base::FunctionRef<void(const base::FilePath& file, ScreenshotDone done)>;
+
+// The reply line, with its trailing newline: the bytes to write.
+using CommandReply = base::OnceCallback<void(std::string)>;
+
+// Answer one request line, without its newline. `reply` runs once: before
+// this returns for every command but `screenshot`, and when `screenshot`'s
+// `done` runs for that one.
+void AnswerCommand(std::string_view line,
+                   LoadShell load_shell,
+                   OpenUrl open_url,
+                   Screenshot screenshot,
+                   CommandReply reply);
 
 // The reply for a request this engine will not carry out, given the reason a
 // person should read.

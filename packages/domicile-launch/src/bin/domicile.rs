@@ -18,7 +18,7 @@ use std::time::{Duration, Instant};
 use domicile_launch::address::url_for;
 use domicile_launch::build_progress::{bar, heard, Heard as BuilderHeard};
 use domicile_launch::cli::{invocation, CliError, Invocation};
-use domicile_launch::command_socket::{load_shell, open_url};
+use domicile_launch::command_socket::{load_shell, open_url, screenshot};
 use domicile_launch::components::{builder, components, our_shell, Components};
 use domicile_launch::config_path::{config_file, is_module, ConfigFile};
 use domicile_launch::config_watch;
@@ -46,6 +46,10 @@ use domicile_launch::supervise::{catch_interrupts, interrupted, Running, ASK_EVE
 /// How long each startup milestone may take. A debug build on a loaded
 /// machine takes seconds.
 const PATIENCE: Duration = Duration::from_secs(30);
+
+/// How long a screenshot may take: the engine reads back the whole desk and
+/// encodes a PNG, which for several 4K monitors takes seconds.
+const CAPTURE_WITHIN: Duration = Duration::from_secs(10);
 
 /// How many of the compositor's last stderr lines to repeat when a run gives
 /// up.
@@ -75,6 +79,12 @@ fn run() -> Result<ExitCode, String> {
                 &std::env::current_dir()
                     .map_err(|why| format!("cannot tell where this was typed: {why}"))?,
             ),
+        }),
+        // Absolute here, since the engine does not share this working
+        // directory.
+        Invocation::Screenshot { file } => asked(&Request::Screenshot {
+            file: std::path::absolute(&file)
+                .map_err(|why| format!("cannot tell where {file} is: {why}"))?,
         }),
     }
 }
@@ -242,13 +252,23 @@ fn beside(config: &Path) -> PathBuf {
 fn asked(request: &Request) -> Result<ExitCode, String> {
     let socket =
         advertised(std::env::var(VARIABLE).ok().as_deref()).map_err(|why| why.to_string())?;
-    let answer = ask(&socket, request, ANSWER_WITHIN).map_err(|why| why.to_string())?;
+    let patience = match request {
+        // Longer than the supervisor waits for the engine, so the engine's
+        // own failure reaches this terminal rather than a timeout.
+        Request::Screenshot { .. } => CAPTURE_WITHIN + ANSWER_WITHIN,
+        _ => ANSWER_WITHIN,
+    };
+    let answer = ask(&socket, request, patience).map_err(|why| why.to_string())?;
     match answer {
         Response::Shell { module } => {
             println!("{}", module.display());
             Ok(ExitCode::SUCCESS)
         }
         Response::Opened => Ok(ExitCode::SUCCESS),
+        Response::Captured { file } => {
+            println!("{}", file.display());
+            Ok(ExitCode::SUCCESS)
+        }
         // Print the desktop's own reason.
         Response::Refused { why } => {
             eprintln!("domicile: {why}");
@@ -638,6 +658,10 @@ fn answering(
                             &|root, module| load_the_shell(&engine, root, module, &serving),
                             &|url| {
                                 open_url(&engine, url, ANSWER_WITHIN).map_err(|why| why.to_string())
+                            },
+                            &|file| {
+                                screenshot(&engine, file, CAPTURE_WITHIN)
+                                    .map_err(|why| why.to_string())
                             },
                         )
                     }) {

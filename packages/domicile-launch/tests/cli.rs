@@ -138,6 +138,32 @@ fn open_url_takes_one_address_and_the_extra_word_is_named() {
 }
 
 #[test]
+fn screenshot_is_the_verb_that_takes_a_file() {
+    // Kept as typed; the client makes it absolute.
+    assert_eq!(
+        run(&["screenshot", "shot.png"]).unwrap(),
+        Invocation::Screenshot {
+            file: "shot.png".to_string()
+        }
+    );
+}
+
+#[test]
+fn screenshot_with_no_file_is_refused() {
+    assert_eq!(run(&["screenshot"]), Err(CliError::NowhereToSave));
+}
+
+#[test]
+fn screenshot_takes_one_file_and_the_extra_word_is_named() {
+    assert_eq!(
+        run(&["screenshot", "a.png", "b.png"]),
+        Err(CliError::ExtraToSave {
+            extra: "b.png".to_string()
+        })
+    );
+}
+
+#[test]
 fn a_shell_whose_name_is_a_verb_is_still_reachable_as_a_path() {
     // Verbs always win over a bare word, regardless of what is on disk. A
     // shell with a verb's name is run by path.

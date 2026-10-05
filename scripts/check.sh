@@ -361,6 +361,7 @@ if wanted engine; then
       scripts/engine-guard-shell-local-network.sh \
       scripts/engine-guard-webview-notifications.sh \
       scripts/engine-guard-shell-web-apis.sh \
+      scripts/engine-guard-screenshot.sh \
       scripts/engine-guard-webview-content-script.sh \
       scripts/engine-guard-extension-installer.sh \
       scripts/engine-guard-extension-tray.sh \
