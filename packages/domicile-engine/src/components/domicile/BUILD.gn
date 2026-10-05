@@ -288,6 +288,25 @@ source_set("web_view_url") {
 # content's guest machinery, and a target boundary is what says so. Like
 # :shell_scheme it depends on //content, which is why neither is part of
 # :browser.
+# Context menu conversions for :web_view_guest. Separate so they can be unit
+# tested without a browser.
+source_set("context_menu") {
+  sources = [
+    "browser/context_menu.cc",
+    "browser/context_menu.h",
+  ]
+
+  public_deps = [ "//components/domicile/mojom" ]
+
+  deps = [
+    "//base",
+    "//content/public/browser",
+    "//third_party/blink/public/common",
+    "//ui/gfx/geometry",
+    "//url",
+  ]
+}
+
 source_set("web_view_guest") {
   sources = [
     "browser/web_view_guest.cc",
@@ -295,6 +314,7 @@ source_set("web_view_guest") {
   ]
 
   public_deps = [
+    ":context_menu",
     ":file_choice",
     ":shortcut_registry",
     ":web_view_url",
@@ -313,6 +333,11 @@ source_set("web_view_guest") {
     "//mojo/public/cpp/bindings",
     "//third_party/blink/public/common",
     "//ui/base",
+    # Context menu actions: the clipboard, and the Accept header for an image
+    # save.
+    "//content/public/common",
+    "//net",
+    "//ui/base/clipboard",
     "//ui/events:dom_keycode_converter",
     "//ui/gfx/geometry",
     "//url",
@@ -512,6 +537,7 @@ source_set("unit_tests") {
     "browser/browser_pages_unittest.cc",
     "browser/color_scheme_unittest.cc",
     "browser/command_protocol_unittest.cc",
+    "browser/context_menu_unittest.cc",
     "browser/desk_geometry_unittest.cc",
     "browser/desk_tabs_unittest.cc",
     "browser/desktop_prefs_unittest.cc",
@@ -551,6 +577,7 @@ source_set("unit_tests") {
     ":browser_pages",
     ":color_scheme",
     ":command_protocol",
+    ":context_menu",
     ":cursor_shape",
     ":desk_geometry",
     ":desk_tabs",

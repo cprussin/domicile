@@ -24,6 +24,8 @@ source_set("domicile") {
     "domicile_desk_presenters.h",
     "domicile_desk_functions.cc",
     "domicile_desk_functions.h",
+    "domicile_devtools.cc",
+    "domicile_devtools.h",
     "domicile_extension_installer.cc",
     "domicile_extension_installer.h",
     "domicile_extension_tray.cc",
@@ -97,6 +99,8 @@ source_set("domicile") {
     # extensions.
     "//components/domicile:file_choice",
     "//ui/shell_dialogs",
+    # DevTools for a guest's page: Chrome's front end and its bindings.
+    "//chrome/browser/devtools",
     # And a tab's zoom, as blink's factors and range.
     "//third_party/blink/public/common",
     "//ui/base/mojom:ui_base_types",

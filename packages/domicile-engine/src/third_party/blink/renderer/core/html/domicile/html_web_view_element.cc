@@ -20,6 +20,7 @@
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
+#include "third_party/blink/renderer/core/html/domicile/domicile_context_menu_event.h"
 #include "third_party/blink/renderer/core/html/domicile/domicile_file_chooser_event.h"
 #include "third_party/blink/renderer/core/html/domicile/domicile_new_window_event.h"
 #include "third_party/blink/renderer/core/html/domicile/domicile_popup_window_event.h"
@@ -100,6 +101,10 @@ constexpr char kContentSizeChangeEvent[] = "domicile-content-size-change";
 // domicile_file_chooser_event.h.
 constexpr char kFileChooserEvent[] = "domicile-file-chooser";
 
+// Fired when the page asks for a context menu. See
+// domicile_context_menu_event.h.
+constexpr char kContextMenuEvent[] = "domicile-context-menu";
+
 // And what it says when the page inside calls window.close(). Carries nothing:
 // what is closing is this element's page, and the element is the target.
 constexpr char kCloseEvent[] = "domicile-close";
@@ -133,6 +138,29 @@ constexpr char kSecurityNeutral[] = "neutral";
 constexpr char kSecureSecurity[] = "secure";
 constexpr char kSecurityWarning[] = "warning";
 constexpr char kSecurityDangerous[] = "dangerous";
+
+// Whether `action` is an edit command, which acts on the focused frame. No
+// default arm, so a new action fails the build.
+bool IsEdit(domicile::mojom::blink::WebViewContextMenuAction action) {
+  switch (action) {
+    case domicile::mojom::blink::WebViewContextMenuAction::kUndo:
+    case domicile::mojom::blink::WebViewContextMenuAction::kRedo:
+    case domicile::mojom::blink::WebViewContextMenuAction::kCut:
+    case domicile::mojom::blink::WebViewContextMenuAction::kCopy:
+    case domicile::mojom::blink::WebViewContextMenuAction::kPaste:
+    case domicile::mojom::blink::WebViewContextMenuAction::kPasteAndMatchStyle:
+    case domicile::mojom::blink::WebViewContextMenuAction::kDelete:
+    case domicile::mojom::blink::WebViewContextMenuAction::kSelectAll:
+      return true;
+    case domicile::mojom::blink::WebViewContextMenuAction::kCopyLinkAddress:
+    case domicile::mojom::blink::WebViewContextMenuAction::kSaveLinkAs:
+    case domicile::mojom::blink::WebViewContextMenuAction::kCopyImage:
+    case domicile::mojom::blink::WebViewContextMenuAction::kCopyMediaAddress:
+    case domicile::mojom::blink::WebViewContextMenuAction::kSaveMediaAs:
+    case domicile::mojom::blink::WebViewContextMenuAction::kInspect:
+      return false;
+  }
+}
 
 // The browser's verdict as the string the element reports.
 //
@@ -436,6 +464,36 @@ void HTMLWebViewElement::stopFinding() {
   }
 }
 
+// A no-op with no guest, like the history controls.
+void HTMLWebViewElement::inspect() {
+  if (guest_.is_bound()) {
+    guest_->Inspect();
+  }
+}
+
+// Only the guest dispatches menus, so an element with one has a guest.
+void HTMLWebViewElement::RunContextMenuAction(
+    const DomicileContextMenuEvent& menu,
+    domicile::mojom::blink::WebViewContextMenuAction action,
+    ExceptionState& exception_state) {
+  if (menu.id() != context_menu_id_) {
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kInvalidStateError,
+        "A newer context menu has replaced this one.");
+    return;
+  }
+  CHECK(guest_.is_bound());
+  // An edit acts on the focused element, and the shell's menu has the focus.
+  // Give it back to the page first so a paste lands in the right field. The
+  // browser waits for it: see WebViewGuest::EditWhenFocused.
+  if (IsEdit(action)) {
+    // Qualified: a frame owner's Focus(const FocusParams&) override hides the
+    // no-argument overload.
+    Element::Focus();
+  }
+  guest_->RunContextMenuAction(menu.id(), action);
+}
+
 // The browser's answer arriving, which is the only way this element has one.
 //
 // STORED FIRST AND ANNOUNCED SECOND, because the announcement is what makes a
@@ -564,6 +622,14 @@ void HTMLWebViewElement::FileChooserRequested(
   if (!event->defaultPrevented()) {
     event->CancelIfUnanswered();
   }
+}
+
+// Stored before dispatch, so a handler can run the menu immediately.
+void HTMLWebViewElement::ContextMenuRequested(
+    domicile::mojom::blink::WebViewContextMenuPtr menu) {
+  context_menu_id_ = menu->id;
+  DispatchEvent(*MakeGarbageCollected<DomicileContextMenuEvent>(
+      AtomicString(kContextMenuEvent), std::move(menu), *this));
 }
 
 // Bubbling, for the reason the others bubble: a shell hangs one handler on the

@@ -35,13 +35,17 @@ Event names and full types are in `src/app-element.ts` and
 `<webview src="…">` embeds a web page. The SDK provides types only.
 
 - **Properties:** `src`, `goBack()`, `goForward()`, `stop()`, `reload()`,
-  `canGoBack`, `canGoForward`, `loading`, `focus()`.
+  `canGoBack`, `canGoForward`, `loading`, `focus()`, `inspect()` (opens
+  DevTools as a new window).
 - **Events** (selected; see `src/webview-element.ts` for all):
   - `domicile-new-window`: a `target="_blank"` link, with `event.url`. The
     engine opens no window itself; if the shell ignores it, the link does
     nothing.
   - `domicile-close`: the page called `window.close()`. The shell removes the
     view.
+  - `domicile-context-menu`: a right click the page left alone, with what was
+    under it. The shell draws the menu; `event.run(action)` does the browser's
+    part of an item.
   - `domicile-content-size-change`: `contentWidth` / `contentHeight` changed.
     Use it to size extension popups.
   - `domicile-popup-window`: an extension called `chrome.windows.create` for a
