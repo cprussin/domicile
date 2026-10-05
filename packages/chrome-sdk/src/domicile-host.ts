@@ -715,6 +715,28 @@ export type DomicileHostEventMap = {
    * now.
    */
   focusedwindowchanged: Event;
+  /** Bare: the attribute it names moved. */
+  clipboardchanged: Event;
+  /** Bare: the attribute it names moved. */
+  traychanged: Event;
+  /** Bare: the attribute it names moved. */
+  notificationschanged: Event;
+  /** Bare: the attribute it names moved. */
+  extensionschanged: Event;
+  /** Bare: the attributes it names moved. */
+  audiochanged: Event;
+  /** Bare: the attributes it names moved. */
+  batterychanged: Event;
+  /** Bare: the attribute it names moved. */
+  idlechanged: Event;
+  /** Bare: the attribute it names moved. */
+  lockedchanged: Event;
+  /** Bare: the attribute it names moved. */
+  themechanged: Event;
+  /** Bare: the attribute it names moved. */
+  windowsthemechanged: Event;
+  /** Bare: the attributes it names moved. */
+  modifierschanged: Event;
 };
 
 /**
@@ -944,6 +966,29 @@ export type DomicileHost = {
 
   /** The window holding the keyboard, or `null` when the shell's page holds it. */
   readonly focusedWindow: string | null;
+
+  // THE DESK'S STATE. Each is what the compositor last said, `null` until it
+  // has said anything; a bare `<name>changed` says it moved.
+  readonly clipboard: readonly DomicileClipboardEntry[] | null;
+  readonly tray: readonly DomicileTrayItem[] | null;
+  readonly notifications: readonly DomicileNotification[] | null;
+  readonly extensions: readonly DomicileExtension[] | null;
+  readonly audioOutputs: readonly DomicileAudioDevice[] | null;
+  readonly audioInputs: readonly DomicileAudioDevice[] | null;
+  readonly audioPlayback: readonly DomicileAudioStream[] | null;
+  readonly audioRecording: readonly DomicileAudioStream[] | null;
+  readonly audioCards: readonly DomicileAudioCard[] | null;
+  readonly batteryCharge: number | null;
+  readonly batteryCharging: boolean | null;
+  readonly idle: boolean | null;
+  readonly locked: boolean | null;
+  readonly theme: Theme | null;
+  readonly windowsTheme: Theme | null;
+  /** The compositor seat's — see the README before trusting them. */
+  readonly altKey: boolean | null;
+  readonly ctrlKey: boolean | null;
+  readonly shiftKey: boolean | null;
+  readonly metaKey: boolean | null;
 
   addEventListener<T extends keyof DomicileHostEventMap>(
     type: T,

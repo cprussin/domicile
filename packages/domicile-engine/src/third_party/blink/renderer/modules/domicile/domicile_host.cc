@@ -202,6 +202,90 @@ const FrozenArray<DomicileWindow>& DomicileHost::windows() {
   return *client_windows_;
 }
 
+const FrozenArray<DomicileClipboardEntry>* DomicileHost::clipboard() const {
+  return last_clipboard_ ? &last_clipboard_->entries() : nullptr;
+}
+
+const FrozenArray<DomicileTrayItem>* DomicileHost::tray() const {
+  return last_tray_items_ ? &last_tray_items_->items() : nullptr;
+}
+
+const FrozenArray<DomicileNotification>* DomicileHost::notifications() const {
+  return last_notifications_ ? &last_notifications_->items() : nullptr;
+}
+
+const FrozenArray<DomicileExtension>* DomicileHost::extensions() const {
+  return last_extensions_ ? &last_extensions_->extensions() : nullptr;
+}
+
+const FrozenArray<DomicileAudioDevice>* DomicileHost::audioOutputs() const {
+  return last_audio_ ? &last_audio_->outputs() : nullptr;
+}
+
+const FrozenArray<DomicileAudioDevice>* DomicileHost::audioInputs() const {
+  return last_audio_ ? &last_audio_->inputs() : nullptr;
+}
+
+const FrozenArray<DomicileAudioStream>* DomicileHost::audioPlayback() const {
+  return last_audio_ ? &last_audio_->playback() : nullptr;
+}
+
+const FrozenArray<DomicileAudioStream>* DomicileHost::audioRecording() const {
+  return last_audio_ ? &last_audio_->recording() : nullptr;
+}
+
+const FrozenArray<DomicileAudioCard>* DomicileHost::audioCards() const {
+  return last_audio_ ? &last_audio_->cards() : nullptr;
+}
+
+std::optional<double> DomicileHost::batteryCharge() const {
+  return last_battery_ ? std::make_optional(last_battery_->charge())
+                       : std::nullopt;
+}
+
+std::optional<bool> DomicileHost::batteryCharging() const {
+  return last_battery_ ? std::make_optional(last_battery_->charging())
+                       : std::nullopt;
+}
+
+std::optional<bool> DomicileHost::idle() const {
+  return last_idle_ ? std::make_optional(last_idle_->idle()) : std::nullopt;
+}
+
+std::optional<bool> DomicileHost::locked() const {
+  return last_locked_ ? std::make_optional(last_locked_->locked())
+                      : std::nullopt;
+}
+
+std::optional<V8DomicileTheme> DomicileHost::theme() const {
+  return last_theme_ ? std::make_optional(last_theme_->theme()) : std::nullopt;
+}
+
+std::optional<V8DomicileTheme> DomicileHost::windowsTheme() const {
+  return last_windows_theme_ ? std::make_optional(last_windows_theme_->theme())
+                             : std::nullopt;
+}
+
+std::optional<bool> DomicileHost::altKey() const {
+  return last_modifiers_ ? std::make_optional(last_modifiers_->altKey())
+                         : std::nullopt;
+}
+
+std::optional<bool> DomicileHost::ctrlKey() const {
+  return last_modifiers_ ? std::make_optional(last_modifiers_->ctrlKey())
+                         : std::nullopt;
+}
+
+std::optional<bool> DomicileHost::shiftKey() const {
+  return last_modifiers_ ? std::make_optional(last_modifiers_->shiftKey())
+                         : std::nullopt;
+}
+
+std::optional<bool> DomicileHost::metaKey() const {
+  return last_modifiers_ ? std::make_optional(last_modifiers_->metaKey())
+                         : std::nullopt;
+}
+
 DomicileWindowState& DomicileHost::WindowNamed(const String& app_id) {
   for (DomicileWindowState& state : window_states_) {
     if (state.app_id == app_id) {
@@ -758,9 +842,11 @@ void DomicileHost::ShortcutPressed(domicile::mojom::blink::ShortcutPtr shortcut,
 
 void DomicileHost::Modifiers(bool alt, bool ctrl, bool shift, bool meta,
                              base::TimeTicks arrival) {
-  DispatchEvent(*MakeGarbageCollected<DomicileModifiersEvent>(
+  last_modifiers_ = MakeGarbageCollected<DomicileModifiersEvent>(
       domicile_event_names::Modifiers(), alt, ctrl, shift, meta,
-      Arrival(arrival)));
+      Arrival(arrival));
+  DispatchEvent(*last_modifiers_);
+  DispatchEvent(*Event::Create(domicile_event_names::Modifierschanged()));
 }
 
 // The wire name of a turn, as the page reads it off `DomicileDisplay`.
@@ -811,8 +897,10 @@ void DomicileHost::ExtensionsChanged(
         extension->popup.empty() ? String() : extension->popup,
         extension->enabled));
   }
-  DispatchEvent(*MakeGarbageCollected<DomicileExtensionsEvent>(
-      domicile_event_names::Extensions(), std::move(tray)));
+  last_extensions_ = MakeGarbageCollected<DomicileExtensionsEvent>(
+      domicile_event_names::Extensions(), std::move(tray));
+  DispatchEvent(*last_extensions_);
+  DispatchEvent(*Event::Create(domicile_event_names::Extensionschanged()));
 }
 
 // The one message on this channel that answers a question. It is an event
@@ -878,8 +966,10 @@ void DomicileHost::Apps(const String& query,
 void DomicileHost::Battery(double charge,
                            bool charging,
                            base::TimeTicks arrival) {
-  DispatchEvent(*MakeGarbageCollected<DomicileBatteryEvent>(
-      domicile_event_names::Battery(), charge, charging, Arrival(arrival)));
+  last_battery_ = MakeGarbageCollected<DomicileBatteryEvent>(
+      domicile_event_names::Battery(), charge, charging, Arrival(arrival));
+  DispatchEvent(*last_battery_);
+  DispatchEvent(*Event::Create(domicile_event_names::Batterychanged()));
 }
 
 // Kept, like Displays: the event says the brightness moved and the attribute
@@ -901,8 +991,10 @@ void DomicileHost::Clipboard(
     history.push_back(MakeGarbageCollected<DomicileClipboardEntry>(
         entry->id, entry->preview));
   }
-  DispatchEvent(*MakeGarbageCollected<DomicileClipboardEvent>(
-      domicile_event_names::Clipboard(), std::move(history), Arrival(arrival)));
+  last_clipboard_ = MakeGarbageCollected<DomicileClipboardEvent>(
+      domicile_event_names::Clipboard(), std::move(history), Arrival(arrival));
+  DispatchEvent(*last_clipboard_);
+  DispatchEvent(*Event::Create(domicile_event_names::Clipboardchanged()));
 }
 
 // Pushed, like Clipboard: an icon is the session bus's, which the compositor
@@ -915,8 +1007,10 @@ void DomicileHost::Tray(Vector<domicile::mojom::blink::TrayItemPtr> items,
     tray.push_back(MakeGarbageCollected<DomicileTrayItem>(item->id, item->title,
                                                           item->icon));
   }
-  DispatchEvent(*MakeGarbageCollected<DomicileTrayEvent>(
-      domicile_event_names::Tray(), std::move(tray), Arrival(arrival)));
+  last_tray_items_ = MakeGarbageCollected<DomicileTrayEvent>(
+      domicile_event_names::Tray(), std::move(tray), Arrival(arrival));
+  DispatchEvent(*last_tray_items_);
+  DispatchEvent(*Event::Create(domicile_event_names::Traychanged()));
 }
 
 // Pushed, like Tray: a notification is a call on the session bus, which the
@@ -938,9 +1032,11 @@ void DomicileHost::Notifications(
         item->urgency, std::move(actions), item->clickable, item->timeout_ms,
         item->time));
   }
-  DispatchEvent(*MakeGarbageCollected<DomicileNotificationsEvent>(
+  last_notifications_ = MakeGarbageCollected<DomicileNotificationsEvent>(
       domicile_event_names::Notifications(), std::move(notifications),
-      Arrival(arrival)));
+      Arrival(arrival));
+  DispatchEvent(*last_notifications_);
+  DispatchEvent(*Event::Create(domicile_event_names::Notificationschanged()));
 }
 
 // Pushed, like Battery, and the one pushed message this page can cause:
@@ -949,16 +1045,20 @@ void DomicileHost::Notifications(
 // reason and with `AppCursor`'s unreachable CHECK.
 void DomicileHost::ThemeChanged(domicile::mojom::blink::Theme theme,
                                 base::TimeTicks arrival) {
-  DispatchEvent(*MakeGarbageCollected<DomicileThemeEvent>(
-      domicile_event_names::Theme(), PageTheme(theme), Arrival(arrival)));
+  last_theme_ = MakeGarbageCollected<DomicileThemeEvent>(
+      domicile_event_names::Theme(), PageTheme(theme), Arrival(arrival));
+  DispatchEvent(*last_theme_);
+  DispatchEvent(*Event::Create(domicile_event_names::Themechanged()));
 }
 
 // The same event interface as `theme`, under its own type: what it carries is
 // the same closed set, about the desk's windows rather than its chrome.
 void DomicileHost::WindowsThemeChanged(domicile::mojom::blink::Theme theme,
                                        base::TimeTicks arrival) {
-  DispatchEvent(*MakeGarbageCollected<DomicileThemeEvent>(
-      domicile_event_names::Windowstheme(), PageTheme(theme), Arrival(arrival)));
+  last_windows_theme_ = MakeGarbageCollected<DomicileThemeEvent>(
+      domicile_event_names::Windowstheme(), PageTheme(theme), Arrival(arrival));
+  DispatchEvent(*last_windows_theme_);
+  DispatchEvent(*Event::Create(domicile_event_names::Windowsthemechanged()));
 }
 
 // Pushed like Battery, and a state rather than an edge -- the compositor
@@ -967,8 +1067,10 @@ void DomicileHost::WindowsThemeChanged(domicile::mojom::blink::Theme theme,
 // a page which has only just loaded is not left drawing a desktop somebody is
 // at. See `crate::idle` in the compositor.
 void DomicileHost::Idle(bool idle, base::TimeTicks arrival) {
-  DispatchEvent(*MakeGarbageCollected<DomicileIdleEvent>(
-      domicile_event_names::Idle(), idle, Arrival(arrival)));
+  last_idle_ = MakeGarbageCollected<DomicileIdleEvent>(
+      domicile_event_names::Idle(), idle, Arrival(arrival));
+  DispatchEvent(*last_idle_);
+  DispatchEvent(*Event::Create(domicile_event_names::Idlechanged()));
 }
 
 // Pushed like Idle above, and a state for its reason with the stakes the other
@@ -977,8 +1079,10 @@ void DomicileHost::Idle(bool idle, base::TimeTicks arrival) {
 // something the desk survives rather than something that opens it. See
 // `crate::lock` in the compositor.
 void DomicileHost::Locked(bool locked, base::TimeTicks arrival) {
-  DispatchEvent(*MakeGarbageCollected<DomicileLockedEvent>(
-      domicile_event_names::Locked(), locked, Arrival(arrival)));
+  last_locked_ = MakeGarbageCollected<DomicileLockedEvent>(
+      domicile_event_names::Locked(), locked, Arrival(arrival));
+  DispatchEvent(*last_locked_);
+  DispatchEvent(*Event::Create(domicile_event_names::Lockedchanged()));
 }
 
 // Pushed like ThemeChanged, and handed on as the line it arrived as: a shell's
@@ -1050,10 +1154,12 @@ void DomicileHost::Audio(
     Vector<domicile::mojom::blink::AudioStreamPtr> recording,
     Vector<domicile::mojom::blink::AudioCardPtr> cards,
     base::TimeTicks arrival) {
-  DispatchEvent(*MakeGarbageCollected<DomicileAudioEvent>(
+  last_audio_ = MakeGarbageCollected<DomicileAudioEvent>(
       domicile_event_names::Audio(), AudioDevices(outputs),
       AudioDevices(inputs), AudioStreams(playback), AudioStreams(recording),
-      AudioCards(cards), Arrival(arrival)));
+      AudioCards(cards), Arrival(arrival));
+  DispatchEvent(*last_audio_);
+  DispatchEvent(*Event::Create(domicile_event_names::Audiochanged()));
 }
 
 // Pushed while anything is metered, as rows like every list here.
@@ -1190,6 +1296,17 @@ void DomicileHost::Trace(Visitor* visitor) const {
   visitor->Trace(displays_);
   visitor->Trace(browser_windows_);
   visitor->Trace(client_windows_);
+  visitor->Trace(last_clipboard_);
+  visitor->Trace(last_tray_items_);
+  visitor->Trace(last_notifications_);
+  visitor->Trace(last_extensions_);
+  visitor->Trace(last_audio_);
+  visitor->Trace(last_battery_);
+  visitor->Trace(last_idle_);
+  visitor->Trace(last_locked_);
+  visitor->Trace(last_theme_);
+  visitor->Trace(last_windows_theme_);
+  visitor->Trace(last_modifiers_);
   visitor->Trace(window_);
   visitor->Trace(channel_);
   visitor->Trace(client_receiver_);

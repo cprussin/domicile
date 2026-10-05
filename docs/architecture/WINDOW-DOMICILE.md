@@ -54,8 +54,9 @@ misses nothing, so nothing needs buffering.
 | `displays`, `brightness` | already attributes, with `displayschanged` and `brightnesschanged` |
 | `theme`, `windowsTheme` | `theme`, `windowstheme` |
 | `locked`, `idle` | `locked`, `idle` |
-| `extensions`, `tray`, `notifications`, `clipboard` | events of the same names |
-| `modifiers` | `modifiers` |
+| `batteryCharge`, `batteryCharging`; `audioOutputs`, `audioInputs`, `audioPlayback`, `audioRecording`, `audioCards` | `battery`, `audio` |
+| `extensions`, `tray`, `notifications`, `clipboard` | the events of those names |
+| `altKey`, `ctrlKey`, `shiftKey`, `metaKey` | `modifiers` |
 
 `DomicileWindow` uses optional fields in place of the IDL's `hasSize` and empty
 strings: `size?: { width, height }`, `title`, `minSize?`, `maxSize?`, `cursor`,
@@ -143,10 +144,10 @@ Each step ships alone.
       (`guard-desktop-geometry.sh`)
 - [x] `windows` and `focusedWindow` with `windowschanged` and
       `focusedwindowchanged` (`guard-windows-state.sh`)
-- [ ] the rest of the state as attributes: `displays`, `brightness`, theme,
-      lock, idle, battery, audio, extensions, tray, notifications, clipboard,
-      modifiers
-- [ ] the engine queues one-off events until a listener exists
+- [x] the rest of the state as attributes: theme, lock, idle, battery, audio,
+      extensions, tray, notifications, clipboard, modifiers
+      (`guard-desk-state.sh`)
+- [ ] the engine queues moment events until a listener exists
 - [ ] search and preview return promises
 - [ ] the engine resolves chords; `shell_config` leaves the page; `bindKeys`
       becomes a pure helper over `grabShortcut` and `shortcut`

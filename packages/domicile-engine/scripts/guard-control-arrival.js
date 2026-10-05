@@ -92,6 +92,17 @@ const EVENT_NAMES = [
   "browserwindowschanged",
   "windowschanged",
   "focusedwindowchanged",
+  "clipboardchanged",
+  "traychanged",
+  "notificationschanged",
+  "extensionschanged",
+  "audiochanged",
+  "batterychanged",
+  "idlechanged",
+  "lockedchanged",
+  "themechanged",
+  "windowsthemechanged",
+  "modifierschanged",
 ];
 
 export const Shell = () => {
