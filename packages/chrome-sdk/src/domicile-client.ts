@@ -70,6 +70,14 @@ type Handler = (message: never) => void;
  */
 export type SurfaceSize = readonly [width: number, height: number];
 
+/** Where an `<app>` is on the page, in CSS pixels. */
+export type AppBounds = {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+};
+
 /**
  * The chrome's side of the control channel: handlers for compositor messages
  * and a typed method per request.
@@ -477,6 +485,17 @@ export class DomicileClient {
    */
   closeApp(appId: string): void {
     this.#host.closeApp(appId);
+  }
+
+  /**
+   * Report where the page put `appId`'s `<app>`, in page CSS pixels.
+   *
+   * The compositor tells the client which monitors it is on and gives it the
+   * scale of the one holding most of it. Call it whenever the window moves or
+   * resizes. Until a window is reported, it draws for the densest monitor.
+   */
+  setAppBounds(appId: string, { x, y, width, height }: AppBounds): void {
+    this.#host.setAppBounds(appId, x, y, width, height);
   }
 
   /** Ask the compositor to spawn a client process (argv array). */

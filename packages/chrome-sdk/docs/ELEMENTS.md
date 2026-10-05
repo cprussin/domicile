@@ -10,6 +10,10 @@ Event names and full types are in `src/app-element.ts` and
 
 - **Size:** the element's layout box is the client's size. The engine sends it
   as the `xdg_toplevel.configure`. There is nothing to call.
+- **Scale:** call `DomicileClient.setAppBounds(appId, box)` with the
+  element's box in page pixels whenever it moves or resizes. The client draws
+  at the scale of the monitor holding most of the box. An unreported window
+  draws for the densest monitor.
 - **Pointer:** `registerElements` forwards pointer events over an `<app>` to
   the client, in the client's surface coordinates. It inverts CSS transforms
   and `zoom`. It cannot invert a perspective transform; it maps the window flat

@@ -131,6 +131,15 @@ class FakeHost implements DomicileHost {
   closeApp(appId: string): void {
     this.calls.push(["closeApp", appId]);
   }
+  setAppBounds(
+    appId: string,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+  ): void {
+    this.calls.push(["setAppBounds", appId, x, y, width, height]);
+  }
   setTheme(theme: Theme): void {
     this.calls.push(["setTheme", theme]);
   }
@@ -899,6 +908,21 @@ describe("DomicileClient", () => {
 
       domicile.closeApp("term");
       expect(host.lastCall()).toStrictEqual(["closeApp", "term"]);
+
+      domicile.setAppBounds("term", {
+        height: 600,
+        width: 800,
+        x: 1920.5,
+        y: 30,
+      });
+      expect(host.lastCall()).toStrictEqual([
+        "setAppBounds",
+        "term",
+        1920.5,
+        30,
+        800,
+        600,
+      ]);
 
       domicile.spawn(["kitty"]);
       expect(host.lastCall()).toStrictEqual(["spawn", ["kitty"]]);

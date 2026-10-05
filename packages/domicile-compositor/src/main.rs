@@ -63,6 +63,9 @@ use smithay::wayland::{
     dmabuf::{
         get_dmabuf, DmabufFeedbackBuilder, DmabufGlobal, DmabufHandler, DmabufState, ImportNotifier,
     },
+    fractional_scale::{
+        with_fractional_scale, FractionalScaleHandler, FractionalScaleManagerState,
+    },
     idle_inhibit::{IdleInhibitHandler, IdleInhibitManagerState},
     output::{OutputHandler, OutputManagerState},
     selection::data_device::{
@@ -91,9 +94,10 @@ use smithay::wayland::{
 };
 use smithay::{
     delegate_compositor, delegate_content_type, delegate_cursor_shape, delegate_data_device,
-    delegate_dmabuf, delegate_idle_inhibit, delegate_kde_decoration, delegate_output,
-    delegate_primary_selection, delegate_seat, delegate_shm, delegate_single_pixel_buffer,
-    delegate_viewporter, delegate_xdg_activation, delegate_xdg_decoration, delegate_xdg_shell,
+    delegate_dmabuf, delegate_fractional_scale, delegate_idle_inhibit, delegate_kde_decoration,
+    delegate_output, delegate_primary_selection, delegate_seat, delegate_shm,
+    delegate_single_pixel_buffer, delegate_viewporter, delegate_xdg_activation,
+    delegate_xdg_decoration, delegate_xdg_shell,
 };
 use tracing::{debug, error, info, warn};
 
@@ -304,6 +308,11 @@ enum ClientRequest {
     /// The chrome's viewport changed. Re-advertise the output at that size.
     SetOutputSize {
         logical: (i32, i32),
+    },
+    /// The page put the window `app_id` at `bounds`, in desktop logical units.
+    SetAppBounds {
+        app_id: String,
+        bounds: domicile_scene::Bounds,
     },
     /// The chrome asked the client of `app_id` to close its window.
     CloseApp {
@@ -1189,6 +1198,22 @@ fn read_chrome_messages(
                 });
                 Vec::new()
             }
+            // Which displays a window is on is Wayland state, not something
+            // `Host` models.
+            Ok(ChromeMessage::SetAppBounds {
+                app_id,
+                position: [x, y],
+                size: [width, height],
+            }) => {
+                hub.send_request(ClientRequest::SetAppBounds {
+                    app_id,
+                    bounds: domicile_scene::Bounds {
+                        min: domicile_scene::Point::new(x, y),
+                        max: domicile_scene::Point::new(x + width, y + height),
+                    },
+                });
+                Vec::new()
+            }
             // `Host` decides focus and the seat follows its answer, so the
             // keyboard and the page always agree on the focused window.
             Ok(ChromeMessage::FocusApp { app_id }) => {
@@ -1536,6 +1561,10 @@ struct DomicileCompositor {
     content: HashMap<String, u64>,
     /// Mapped toplevels, paired with the host-assigned app id (Wayland-thread only).
     toplevels: Vec<(String, ToplevelSurface)>,
+    /// Where the page last said each window is, in desktop logical units
+    /// (`ChromeMessage::SetAppBounds`). Decides its displays and scale; see
+    /// [`place_window`](DomicileCompositor::place_window).
+    app_bounds: HashMap<String, domicile_scene::Bounds>,
     /// Every announced popup (menus), by its host-assigned id.
     ///
     /// The engine treats each as its own app, placed rather than laid out; see
@@ -1924,29 +1953,55 @@ impl DomicileCompositor {
         }
     }
 
-    /// Tell every client which displays its windows and popups are on.
+    /// Tell every client which displays its windows and popups are on, and
+    /// the scale to draw at.
     ///
     /// Runs on every placement change, since the chrome can move an `<app>`
-    /// across displays without a Wayland event. [`Screens::entered_by`]
-    /// decides; this applies it. Smithay only sends `enter`/`leave` when the
-    /// set changes, so repeating it is cheap.
+    /// across displays without a Wayland event. Smithay only sends
+    /// `enter`/`leave` and the preferred scale when they change, so repeating
+    /// it is cheap.
     ///
-    /// The chrome's own toplevel is excluded: it belongs on every output.
-    /// `new_toplevel` and
-    /// [`adopt_the_desktop`](DomicileCompositor::adopt_the_desktop) handle it.
+    /// The chrome's own toplevel only gets its scale here. It belongs on every
+    /// output, which `new_toplevel` and
+    /// [`adopt_the_desktop`](DomicileCompositor::adopt_the_desktop) enter.
     fn enter_the_displays_each_window_is_on(&self) {
-        // Known gap: every surface enters every display, because the page does
-        // not report window boxes. Harmless with one output. With several, a
-        // client draws at the largest scale. The fix is for the shell to name a
-        // screen (`<Screen name="left">`; see
-        // `docs/architecture/ARCHITECTURE.md`), not for this side to infer one.
-        for (_, toplevel) in &self.toplevels {
-            self.enter_only(toplevel.wl_surface(), None);
+        for (app_id, toplevel) in &self.toplevels {
+            self.place_window(toplevel.wl_surface(), self.app_bounds.get(app_id).copied());
         }
-        // Popups too, for the same reason.
+        // Known gap: popups are on every display, at the densest scale. The
+        // page reports no bounds for them, and they do not follow their
+        // parent window's.
         for popup in self.xdg_shell_state.popup_surfaces() {
-            self.enter_only(popup.wl_surface(), None);
+            self.place_window(popup.wl_surface(), None);
         }
+        // The chrome covers every display, so it draws for the densest.
+        if let Some(chrome) = &self.chrome_toplevel {
+            self.prefer_scale(chrome.wl_surface(), None);
+        }
+    }
+
+    /// Put `surface` on the displays `bounds` overlaps, at the scale of the one
+    /// holding most of it. `None` is every display, at the densest scale.
+    fn place_window(&self, surface: &WlSurface, bounds: Option<domicile_scene::Bounds>) {
+        self.enter_only(surface, bounds);
+        self.prefer_scale(surface, bounds);
+    }
+
+    /// Send `wp_fractional_scale_v1.preferred_scale` for a window in `bounds`.
+    /// See [`Screens::scale_for`].
+    fn prefer_scale(&self, surface: &WlSurface, bounds: Option<domicile_scene::Bounds>) {
+        let scale = self.screens.scale_for(bounds);
+        with_states(surface, |states| {
+            with_fractional_scale(states, |fractional| fractional.set_preferred_scale(scale));
+        });
+    }
+
+    /// Where the page last put the window `surface` is, if it has said.
+    fn bounds_of(&self, surface: &WlSurface) -> Option<domicile_scene::Bounds> {
+        self.toplevels
+            .iter()
+            .find(|(_, toplevel)| toplevel.wl_surface() == surface)
+            .and_then(|(app_id, _)| self.app_bounds.get(app_id).copied())
     }
 
     /// Enter `surface` on the displays `bounds` reaches and leave the rest.
@@ -1996,6 +2051,7 @@ impl DomicileCompositor {
         self.last_frame.remove(app_id);
         // Host ids are never reused, so a stale entry would only leak.
         self.content.remove(app_id);
+        self.app_bounds.remove(app_id);
         // An app id can return (a reconnecting client), but it then names a
         // different window.
         if self.pointer_app.as_deref() == Some(app_id) {
@@ -2863,6 +2919,9 @@ impl DomicileCompositor {
             .output;
         output.change_current_state(Some(mode), None, Some(Scale::Integer(scale)), None);
         output.set_preferred(mode);
+        // Clients that draw at a fractional scale read it from here, not from
+        // the output.
+        self.enter_the_displays_each_window_is_on();
         // Re-send the existing configure to prompt clients to redraw at the new
         // scale.
         for (_, toplevel) in &self.toplevels {
@@ -4129,6 +4188,16 @@ impl DomicileCompositor {
                 self.set_output_scale(scale);
             }
             ClientRequest::SetOutputSize { logical } => self.set_output_size(logical),
+            ClientRequest::SetAppBounds { app_id, bounds } => {
+                if self.toplevel_for(&app_id).is_some() {
+                    self.app_bounds.insert(app_id, bounds);
+                    self.enter_the_displays_each_window_is_on();
+                } else {
+                    // Usually the window closed while the message was in
+                    // flight. Logged in case the chrome sent a bogus id.
+                    debug!(%app_id, "bounds: a window with no toplevel");
+                }
+            }
             ClientRequest::Spawn { command } => spawn_client(&command, &self.hub.wayland_display),
             ClientRequest::CloseApp { app_id } => match self.toplevel_for(&app_id) {
                 Some(toplevel) => {
@@ -4723,6 +4792,15 @@ impl DmabufHandler for DomicileCompositor {
 
 delegate_compositor!(DomicileCompositor);
 delegate_viewporter!(DomicileCompositor);
+
+impl FractionalScaleHandler for DomicileCompositor {
+    /// A client asked for its surface's scale, often before the surface has a
+    /// role.
+    fn new_fractional_scale(&mut self, surface: WlSurface) {
+        self.prefer_scale(&surface, self.bounds_of(&surface));
+    }
+}
+delegate_fractional_scale!(DomicileCompositor);
 delegate_single_pixel_buffer!(DomicileCompositor);
 delegate_content_type!(DomicileCompositor);
 delegate_shm!(DomicileCompositor);
@@ -5716,6 +5794,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     // buffer scale. If ignored, every surface on a dense display is twice its
     // size. See `viewport`.
     ViewporterState::new::<DomicileCompositor>(&dh);
+    // A window's exact scale, which `wl_output.scale` rounds up. Clients that
+    // use it draw through `wp_viewporter`. See `place_window`.
+    FractionalScaleManagerState::new::<DomicileCompositor>(&dh);
     SinglePixelBufferState::new::<DomicileCompositor>(&dh);
     ContentTypeState::new::<DomicileCompositor>(&dh);
     // Always advertised, even without an idle timeout, so a reload never
@@ -6022,6 +6103,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         hub,
         content: HashMap::new(),
         toplevels: Vec::new(),
+        app_bounds: HashMap::new(),
         popups: Vec::new(),
         grabbing: Vec::new(),
         pointer_app: None,
