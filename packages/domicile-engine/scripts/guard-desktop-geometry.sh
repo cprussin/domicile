@@ -17,6 +17,10 @@
 # page's own `innerWidth` and `innerHeight`, and `set_device_pixel_ratio` with
 # its `devicePixelRatio`, from a page that asked for neither. The density is
 # forced to 2 so a report of the default 1 cannot pass by coincidence.
+#
+# And the page has the whole window: `--no-sandbox` raises Chrome's
+# "unsupported command-line flag" infobar, and a shell window that laid it out
+# would hand the desktop a page 56px shorter than the window (patch 0091).
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
@@ -103,7 +107,7 @@ sleep 1
 
 # The page's own numbers, off its console line. The closing quote is Chromium's
 # and keeps the match on the message: see guard-control-arrival.sh.
-GEOMETRY=$(grep -oE '"GUARD geometry width=[0-9.]+ height=[0-9.]+ ratio=[0-9.]+"' "$ENGINE_LOG" | head -1)
+GEOMETRY=$(grep -oE '"GUARD geometry width=[0-9.]+ height=[0-9.]+ ratio=[0-9.]+"' "$ENGINE_LOG" | tail -1)
 
 # The verdict, in Python because the lines are JSON and their numbers may be
 # written `900` or `900.0`.
@@ -126,7 +130,9 @@ for line in open(sys.argv[1]):
     elif message.get("type") == "set_device_pixel_ratio":
         ratios.append(message["ratio"])
 
-if ratio != 2:
+if (width, height) != (900, 700):
+    print("the page is %gx%g in a 900x700 window, so the browser laid something out over the desktop -- an infobar, if it is 56px short" % (width, height))
+elif ratio != 2:
     print("the page measured a density of %g where --force-device-scale-factor=2 was asked for, so a report of 1 could pass by coincidence" % ratio)
 elif not sizes:
     print("the compositor never heard set_desktop_size, so the engine does not report the desktop's size and a shell that does not is a desktop at the placeholder")

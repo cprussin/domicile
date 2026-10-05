@@ -1,0 +1,53 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Sun, 4 Oct 2026 00:00:00 +0000
+Subject: [PATCH] domicile: a shell window lays out no infobar
+
+An app window in this engine is a shell, and the page in it is the
+desktop. Chrome's app layout puts an infobar above the page and takes
+its height off the page's: one infobar -- the "unsupported command-line
+flag" bar `--no-sandbox` raises, for one -- and the desktop is that
+much shorter, with Chrome's bar drawn across its top. The container is
+never laid out, so the page keeps the whole window.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on `crux`.
+---
+ .../frame/layout/browser_view_app_layout_impl.cc    | 21 ++++++---------------
+ 1 file changed, 6 insertions(+), 15 deletions(-)
+
+diff --git a/chrome/browser/ui/views/frame/layout/browser_view_app_layout_impl.cc b/chrome/browser/ui/views/frame/layout/browser_view_app_layout_impl.cc
+--- a/chrome/browser/ui/views/frame/layout/browser_view_app_layout_impl.cc
++++ b/chrome/browser/ui/views/frame/layout/browser_view_app_layout_impl.cc
+@@ -170,22 +170,13 @@ BrowserViewAppLayoutImpl::CalculateProposedLayout(
+                            top_container_layout.bounds.bottom()));
+   }
+ 
+-  // Lay out infobar container if present.
++  // DOMICILE: never lay out the infobar container. An app window here is a
++  // shell, and its page is the desktop. An infobar -- "unsupported
++  // command-line flag", say -- would take its height off the top of the
++  // desktop, and the bar would be Chrome's drawn over a desktop that is the
++  // shell's to draw.
+   if (IsParentedTo(views().infobar_container, views().browser_view)) {
+-    gfx::Rect infobar_bounds;
+-    const bool infobar_visible = delegate().IsInfobarVisible();
+-    if (infobar_visible) {
+-      infobar_bounds = gfx::Rect(
+-          params.visual_client_area.x(),
+-          // Infobar needs to get down out of the way of immersive mode elements
+-          // in some cases.
+-          params.visual_client_area.y() + delegate().GetExtraInfobarOffset(),
+-          params.visual_client_area.width(),
+-          // This returns zero for empty infobar.
+-          views().infobar_container->GetPreferredSize().height());
+-      params.SetTop(infobar_bounds.bottom());
+-    }
+-    layout.AddChild(views().infobar_container, infobar_bounds, infobar_visible);
++    layout.AddChild(views().infobar_container, gfx::Rect(), false);
+   }
+ 
+   // Lay out contents container.
+-- 
+2.43.0
+
