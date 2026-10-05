@@ -7,6 +7,9 @@
 # above it under its own source.
 set -u
 
+# shellcheck source=packages/domicile-engine/scripts/lib-last-words.sh
+. "$(dirname "$0")/../../packages/domicile-engine/scripts/lib-last-words.sh"
+
 # A glob rather than a list: each guard writes its own file and its negative
 # control writes a `-negative` one beside it, and a list is a thing to forget
 # to update when a guard is added.
@@ -29,7 +32,13 @@ done
 for log in /tmp/domicile-*-engine.log; do
   [ -f "$log" ] || continue
   echo "::group::$log"
-  grep -aE 'domicile:|CONSOLE|Fatal|ERROR:' "$log" | cut -c1-300 | tail -40 || true
+  grep -aE 'domicile:|CONSOLE|:FATAL:|ERROR:' "$log" | cut -c1-300 | tail -40 || true
+  # Whole, and uncut: the frames under the fatal line name the failed check.
+  crash="$(crash_of "$log")"
+  if [ -n "$crash" ]; then
+    echo "--- the crash:"
+    echo "$crash"
+  fi
   echo "--- last 10 lines:"
   tail -10 "$log" 2>&1 | cut -c1-300 || true
   echo "::endgroup::"

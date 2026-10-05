@@ -32,6 +32,8 @@ set -u
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=packages/domicile-engine/scripts/lib-annotate.sh
 . "$SCRIPTS/lib-annotate.sh"
+# shellcheck source=packages/domicile-engine/scripts/lib-last-words.sh
+. "$SCRIPTS/lib-last-words.sh"
 # shellcheck source=packages/domicile-engine/scripts/lib-ports.sh
 . "$SCRIPTS/lib-ports.sh"
 # shellcheck source=packages/domicile-engine/scripts/lib-control-budget.sh
@@ -239,7 +241,7 @@ fi
 annotate "guard-shell-web-apis: $FAILURE"
 if [ -n "$LAST_ENGINE_LOG" ]; then
   echo "the engine's last words ($LAST_ENGINE_LOG):" >&2
-  tail -30 "$LAST_ENGINE_LOG" >&2
+  last_words "$LAST_ENGINE_LOG" >&2
 fi
 echo "what the other origin was asked for:" >&2
 tail -20 "$SERVER_LOG" >&2
