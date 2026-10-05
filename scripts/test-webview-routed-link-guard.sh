@@ -7,8 +7,8 @@
 #
 #   - The shell asked for a window without the engine's routed-link line
 #     fails. `CreateCustomWebContents` (target="_blank") and `OpenURLFromTab`
-#     (this path) both send `NewWindowRequested`, so only the engine's line
-#     shows the delegate under test ran.
+#     (this path) both open a browser window, so only the engine's line shows
+#     the delegate under test ran.
 #   - The run and control press the same point on the same link with
 #     different buttons. A middle press that navigated in place arrived as a
 #     left press; that blames the driver or hit test, not the delegate.

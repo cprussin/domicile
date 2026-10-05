@@ -25,6 +25,7 @@ import type {
   DomicileAudioLevelsEvent,
   DomicileAudioStream,
   DomicileBatteryEvent,
+  DomicileBrowserWindow,
   DomicileClipboardEntry,
   DomicileClipboardEvent,
   DomicileDisplay,
@@ -35,7 +36,6 @@ import type {
   DomicileLockedEvent,
   DomicileModifiersEvent,
   DomicileNotificationsEvent,
-  DomicileOpenUrlEvent,
   DomicileShellConfigEvent,
   DomicileShortcutEvent,
   DomicileThemeEvent,
@@ -363,11 +363,12 @@ export type NotificationsMessage = {
 };
 
 /**
- * A URL to open, from `domicile open-url` (the `BROWSER` for apps on the
- * desktop). The shell decides where, or whether, to open it.
+ * Every browser window, sent in full when the shell starts listening and on
+ * each change. After `domicile load-shell` it holds the previous shell's
+ * windows.
  */
-export type OpenUrlMessage = {
-  url: string;
+export type BrowserWindowsMessage = {
+  windows: readonly DomicileBrowserWindow[];
 };
 
 /**
@@ -419,7 +420,7 @@ export type HostMessageMap = {
   extensions: ExtensionsMessage;
   tray: TrayMessage;
   notifications: NotificationsMessage;
-  open_url: OpenUrlMessage;
+  browser_windows: BrowserWindowsMessage;
   /**
    * The windows' theme, sent once they have switched after `theme`. See
    * {@link DomicileHost.themeCaptured}.
@@ -607,11 +608,6 @@ export const idle = (event: DomicileIdleEvent): IdleMessage => ({
 /** Translates a lock event, dropping `arrival`. */
 export const locked = (event: DomicileLockedEvent): LockedMessage => ({
   locked: event.locked,
-});
-
-/** Translates an open-URL event. The engine has already validated the URL. */
-export const openUrl = (event: DomicileOpenUrlEvent): OpenUrlMessage => ({
-  url: event.url,
 });
 
 /**

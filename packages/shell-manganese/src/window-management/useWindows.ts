@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useReducer } from "react";
 
 import { openCommand } from "../launcher/open-command";
 import type { PlacedScreen } from "../screens/screen-toward";
-import { appIdOf } from "./window";
+import { appIdOf, browserIdOf } from "./window";
 import type { WindowAction, WindowState } from "./window-state";
 import {
   WindowAction as Action,
@@ -42,10 +42,11 @@ export const useWindows = (
 ): Windows => {
   const [state, dispatch] = useReducer(reduceWindows, NO_WINDOWS);
 
-  // Side effects the reducer cannot perform: spawning processes, locking, and
-  // asking a client to close. The window is removed when the host reports it
-  // closed. Keeping these as actions keeps the reducer pure and the bindings
-  // one table.
+  // Side effects the reducer cannot perform: spawning processes, locking,
+  // asking a client to close, and opening or closing browser windows. A client
+  // window is removed when the host reports it closed, and a browser window
+  // when the engine's list drops it. Keeping these as actions keeps the
+  // reducer pure and the bindings one table.
   const act = useCallback(
     (action: WindowAction) => {
       dispatch(action);
@@ -63,6 +64,9 @@ export const useWindows = (
       if (action.kind === WindowActionKind.AppLaunched) {
         domicile.spawn(action.command);
       }
+      if (action.kind === WindowActionKind.BrowserOpened) {
+        domicile.openBrowserWindow(action.src);
+      }
       if (
         action.kind === WindowActionKind.WindowKilled ||
         action.kind === WindowActionKind.WindowClosed
@@ -74,6 +78,10 @@ export const useWindows = (
         const appId = id === undefined ? undefined : appIdOf(id);
         if (appId !== undefined) {
           domicile.closeApp(appId);
+        }
+        const browser = id === undefined ? undefined : browserIdOf(id);
+        if (browser !== undefined) {
+          domicile.closeBrowserWindow(browser);
         }
       }
     },
@@ -112,9 +120,10 @@ export const useWindows = (
       // `reduceWindows` decides.
       dispatch(Action.FocusRequested(app_id));
     });
-    // `domicile open-url`, which `BROWSER` runs inside the desktop.
-    domicile.on("open_url", ({ url }) => {
-      dispatch(Action.BrowserOpened(url));
+    // Every browser window, from the engine. After `domicile load-shell` it
+    // holds the previous shell's windows.
+    domicile.on("browser_windows", ({ windows }) => {
+      dispatch(Action.BrowserWindowsListed(windows));
     });
   }, [domicile]);
 

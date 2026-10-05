@@ -16,7 +16,7 @@ More:
 - [SHELL-CONFIG.md](SHELL-CONFIG.md): the config file that describes a
   desktop.
 - [SHELL-BROWSER-WINDOWS.md](SHELL-BROWSER-WINDOWS.md): browser windows
-  (`<webview>`), and `open_url`.
+  (`<webview>`) and `browser_windows`.
 - [SHELL-EXTENSIONS.md](SHELL-EXTENSIONS.md): Chrome extensions' toolbar
   buttons and popups.
 - [SHELL-DESKTOP-EVENTS.md](SHELL-DESKTOP-EVENTS.md): displays, theme, system

@@ -89,7 +89,7 @@ const EVENT_NAMES = [
   "audio",
   "audiolevels",
   "notifications",
-  "openurl",
+  "browserwindowschanged",
 ];
 
 export const Shell = () => {

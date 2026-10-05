@@ -62,39 +62,34 @@ export const WEBVIEW_SECURITY_LEVELS = [
 export type WebViewSecurity = (typeof WEBVIEW_SECURITY_LEVELS)[number];
 
 /**
- * Fired when the page asks for a new window: `target="_blank"`,
- * `window.open`, or a form aimed at a missing named target. Bubbles.
+ * The attribute that makes a `<webview>` show a browser window:
+ * `<webview window="1">` shows the window whose `DomicileBrowserWindow.id` is
+ * `"1"`.
  *
- * The shell should open a new browser window at
- * {@link DomicileNewWindowEvent.url}. The browser refuses to create the window
- * itself, because a guest without its own `SiteInstance` would hit a `CHECK`
- * in `WebContentsImpl::CreateNewWindow`.
- *
- * The new window is a plain navigation, so `window.open()` returns `null`, the
- * opener and `window.name` are lost, and a POST becomes a GET. Links work
- * fully.
+ * - **Lifetime:** the engine holds the page, so it outlives the shell's
+ *   document. After `domicile load-shell` the next shell draws the same pages,
+ *   with scroll, form input and history intact. A `<webview src>` page belongs
+ *   to the document and goes with it.
+ * - **Read once,** when the element is inserted. Set it before inserting the
+ *   view; later changes do nothing.
+ * - **`src`:** ignored on insert, since the page is already loaded. A later
+ *   `src` navigates the window.
+ * - **One view per window.** A second view of the same window is empty.
+ * - **Opening:** `target="_blank"`, `window.open`, `domicile open-url`,
+ *   `chrome.tabs.create` and `chrome.windows.create` open windows without the
+ *   shell. They appear in `DomicileHost.browserWindows`. The shell's own UI
+ *   opens one with `DomicileHost.openBrowserWindow`.
  */
-export const WEBVIEW_NEW_WINDOW_EVENT = "domicile-new-window";
+export const WEBVIEW_WINDOW_ATTRIBUTE = "window";
 
 /**
- * Fired when an extension calls `chrome.windows.create({type: "popup", url})`,
- * such as an extension's "pop out". Dispatched on the most recently used view.
+ * Fired when the page calls `window.close()`, or an extension's
+ * `chrome.tabs.remove` names the view. The shell should remove the view.
  * Bubbles.
  *
- * The shell should open a browser window whose `<webview>` has `popupwindow`
- * set to {@link DomicilePopupWindowEvent.windowId}. Set the attribute before
- * inserting the view: the engine reads it only once.
- *
- * Afterward, `chrome.windows.remove(id)` fires {@link WEBVIEW_CLOSE_EVENT} on
- * the view and `chrome.windows.update(id, {focused: true})` fires
- * {@link WEBVIEW_FOCUS_REQUEST_EVENT}. See
- * `docs/architecture/EXTENSIONS.md`.
- */
-export const WEBVIEW_POPUP_WINDOW_EVENT = "domicile-popup-window";
-
-/**
- * Fired when the page calls `window.close()`. The shell should remove the
- * view. Bubbles.
+ * Fired only on a view without {@link WEBVIEW_WINDOW_ATTRIBUTE}. A browser
+ * window closes in the browser instead and leaves
+ * `DomicileHost.browserWindows`.
  *
  * Fires only for script-closable pages (one history entry), per the HTML spec.
  * Extension popups close this way.
@@ -277,35 +272,6 @@ declare global {
   }
 
   /**
-   * The {@link WEBVIEW_NEW_WINDOW_EVENT} event. The engine defines it in
-   * `third_party/blink/renderer/core/html/domicile/domicile_new_window_event.idl`.
-   */
-  interface DomicileNewWindowEvent extends Event {
-    /** The absolute address to open. */
-    readonly url: string;
-  }
-
-  /**
-   * The {@link WEBVIEW_POPUP_WINDOW_EVENT} event. The engine defines it in
-   * `domicile_popup_window_event.idl`.
-   */
-  interface DomicilePopupWindowEvent extends Event {
-    /**
-     * The extension's `chrome.windows` id. Set the view's `popupwindow`
-     * attribute to it, in decimal.
-     */
-    readonly windowId: number;
-    /** The address to show, absolute. */
-    readonly url: string;
-    /**
-     * The requested outer window size in CSS pixels, or 0 on an unspecified
-     * axis.
-     */
-    readonly width: number;
-    readonly height: number;
-  }
-
-  /**
    * The {@link WEBVIEW_FILE_CHOOSER_EVENT} event.
    *
    * Paths are absolute or relative to home, where `""` is home. A path
@@ -349,8 +315,6 @@ declare global {
    */
   // biome-ignore lint/style/useConsistentTypeDefinitions: declaration merging onto a built-in type is what `interface` is for and what a type alias cannot do
   interface HTMLElementEventMap {
-    "domicile-new-window": DomicileNewWindowEvent;
-    "domicile-popup-window": DomicilePopupWindowEvent;
     "domicile-guest-keydown": KeyboardEvent;
     "domicile-file-chooser": DomicileFileChooserEvent;
   }

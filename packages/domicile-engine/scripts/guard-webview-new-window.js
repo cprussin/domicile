@@ -9,22 +9,18 @@
 // only for the shell's origin, so a <webview> anywhere else cannot ask for a
 // guest at all.
 //
-// WHAT THIS PAGE IS FOR. A link with `target="_blank"` inside a browser window
-// used to do nothing whatsoever. The page in one is a guest, and a guest has no
-// SiteInstance of its own — which is what keeps the user logged in, and which
-// content CHECKs against the WebContents in `WebContentsImpl::CreateNewWindow`
-// — so the browser refuses the window content would have made. It now reports
-// the address instead, and opening a window is the shell's: a second
-// `<webview>`, in a second window it drew, pointed at what the page asked for.
-// That is what this page does, in the smallest form that is still the real
-// thing.
+// What it tests: a link with `target="_blank"` inside a browser window. The
+// page is a guest, which has no SiteInstance of its own. That keeps the user
+// logged in, and content CHECKs it in `WebContentsImpl::CreateNewWindow`, so
+// the browser refuses the window content would make. It opens a desk browser
+// window at that address instead. The shell gets `browserwindowschanged` with
+// an undrawn window in `browserWindows`, and draws it in a second `<webview>`
+// naming the window.
 //
-// THE SECOND VIEW IS THE POINT, and it is why this page does more than log.
-// An event is not a window: a run that read only "the shell was told" would
-// pass with a desktop where `target="_blank"` still shows the user nothing. So
-// the address goes into a second element, that element gets a guest of its own,
-// and the page at the far end says it ran — which is the reading no earlier
-// step can fake.
+// The second view is required. A window in the list is not a window on screen,
+// so a run that only read the list would pass a desktop that shows the user
+// nothing. The page in the second element logging that it ran is the one
+// reading no earlier step can fake.
 //
 // THE STRIP IS NOT DECORATION. It is the shell's own half of the window — an
 // address bar, in the desktop this stands for — and it is what the guard clicks
@@ -39,11 +35,12 @@
 //   GUARD shell-loaded          this module ran and the window is set up
 //   GUARD chrome-mousedown      a press reached the SHELL's document, which is
 //                               the harness working rather than a finding
-//   GUARD new-window url=…      THE CLAIM: the element said its page asked for
-//                               a window, and at which address
-//   GUARD second-view           a second <webview> was made and pointed there,
-//                               which separates "the shell was told" from "the
-//                               shell acted"
+//   GUARD new-window url=…      the claim: an undrawn browser window, and its
+//                               address, appeared in the desk's list
+//   GUARD second-view           a second <webview> naming it was made: the
+//                               shell acted, not just received the list
+//   GUARD second-page url=…     the second <webview> shows that page, so the
+//                               window's page was attached to it
 //
 // The page in the window says `GUARD opener-loaded` and `GUARD guest-mousedown`
 // for itself, and the page the new window lands on says `GUARD opened-loaded`;
@@ -105,21 +102,39 @@ export const Shell = () => {
     return view;
   };
 
-  // THE CLAIM: the element saying its page asked for a window of its own.
-  // Listened for on the document rather than on the element, because bubbling is
-  // half of what makes it usable — a chrome hangs one handler on the window it
-  // drew, which is what `BrowserWindow.tsx` does with it.
-  document.addEventListener("domicile-new-window", (event) => {
-    say(`new-window url=${event.url}`);
+  // The claim: a browser window the desk opened, not this page. This
+  // document's own `<webview src>` is in no list, so every listed window is one
+  // a page asked for.
+  const host = navigator.domicile;
+  if (host === undefined) {
+    throw new Error(
+      "guard-webview-new-window: navigator.domicile is absent, so this" +
+        " document is not a shell the engine serves",
+    );
+  }
+  const drawn = new Set();
+  host.addEventListener("browserwindowschanged", () => {
+    for (const window of host.browserWindows ?? []) {
+      if (!drawn.has(window.id)) {
+        drawn.add(window.id);
+        say(`new-window url=${window.url}`);
 
-    // AND THE WINDOW ITSELF, which is the half an event cannot be. A second
-    // element, stacked over the first because this guard has no layout and does
-    // not need one: what is being measured is that a guest was made for it and
-    // the page arrived, and where the box is has nothing to do with either.
-    const opened = viewFilling();
-    document.body.append(opened);
-    opened.setAttribute("src", event.url);
-    say("second-view");
+        // Draw the window in a second element, stacked over the first: the
+        // guard measures that the page arrives, not where the box is. `window`
+        // is set before the element enters the document, when it asks for
+        // its page.
+        const opened = viewFilling();
+        opened.setAttribute("window", window.id);
+        // Read what the element shows, not the page's own line: the window's
+        // page loads whether or not anything draws it. The element learns its
+        // page on attach.
+        opened.addEventListener("domicile-page-change", () => {
+          say(`second-page url=${opened.url}`);
+        });
+        document.body.append(opened);
+        say("second-view");
+      }
+    }
   });
 
   // The harness's own reading: a press that landed in this document, which is

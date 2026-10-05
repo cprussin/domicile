@@ -16,6 +16,7 @@
 //   a DOM listener goes to the page's error handler, not the test.
 
 import type {
+  DomicileBrowserWindow,
   DomicileDisplay,
   DomicileHost,
   DomicileShortcut,
@@ -49,7 +50,6 @@ import {
   locked,
   modifiers,
   notifications,
-  openUrl,
   popupPlaced,
   shellConfig,
   shortcut,
@@ -213,6 +213,13 @@ export class DomicileClient {
     host.addEventListener("battery", (event) => {
       this.#deliver("battery", battery(event));
     });
+    // The event has no payload; the engine sets the list before dispatching.
+    host.addEventListener("browserwindowschanged", () => {
+      const windows = this.#host.browserWindows;
+      if (windows !== null) {
+        this.#deliver("browser_windows", { windows });
+      }
+    });
     // The event has no payload; the engine sets the attribute before
     // dispatching.
     host.addEventListener("brightnesschanged", () => {
@@ -241,9 +248,6 @@ export class DomicileClient {
     });
     host.addEventListener("notifications", (event) => {
       this.#deliver("notifications", notifications(event));
-    });
-    host.addEventListener("openurl", (event) => {
-      this.#deliver("open_url", openUrl(event));
     });
     host.addEventListener("windowstheme", (event) => {
       this.#deliver("windows_theme", theme(event));
@@ -279,6 +283,16 @@ export class DomicileClient {
    */
   get displays(): readonly DomicileDisplay[] | undefined {
     return this.#host.displays ?? undefined;
+  }
+
+  /**
+   * The browser windows, or `undefined` until the browser lists them.
+   *
+   * Read from the host each time, so late readers see the current list. Draw
+   * each with `<webview window={id}>`.
+   */
+  get browserWindows(): readonly DomicileBrowserWindow[] | undefined {
+    return this.#host.browserWindows ?? undefined;
   }
 
   /**
@@ -534,6 +548,19 @@ export class DomicileClient {
    */
   activateExtension(id: string): void {
     this.#host.activateExtension(id);
+  }
+
+  /**
+   * Opens a browser window at `url`, for the shell's own UI. It arrives in the
+   * next `browser_windows`.
+   */
+  openBrowserWindow(url: string): void {
+    this.#host.openBrowserWindow(url);
+  }
+
+  /** Closes browser window `id`. It leaves the next `browser_windows`. */
+  closeBrowserWindow(id: string): void {
+    this.#host.closeBrowserWindow(id);
   }
 
   /**

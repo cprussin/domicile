@@ -4,7 +4,7 @@ import { Axis, Direction } from "./direction";
 import { TITLE_BAR } from "./rect";
 import { Layout, windowsIn } from "./tree/node";
 import { windowsOf } from "./tree/tiling";
-import { appWindowId } from "./window";
+import { appWindowId, browserWindowId } from "./window";
 import type { WindowState } from "./window-state";
 import {
   activeIdOf,
@@ -33,6 +33,25 @@ const desktop = (...appIds: readonly string[]): WindowState =>
   );
 
 const APP = appWindowId;
+const BROWSER = browserWindowId;
+
+/** A browser window as the engine lists it. */
+const listed = (
+  id: string,
+  url: string,
+  popup: { popupWindow: number; width: number; height: number } = {
+    height: 0,
+    popupWindow: 0,
+    width: 0,
+  },
+) => ({
+  height: popup.height,
+  id,
+  popupWindow: popup.popupWindow === 0 ? null : popup.popupWindow,
+  title: "",
+  url,
+  width: popup.width,
+});
 
 /** Screens of 1920 by 1080, left to right in the order named. */
 const sideBySide = (...names: readonly string[]) =>
@@ -94,25 +113,57 @@ describe("the windows a host announces", () => {
   });
 });
 
-describe("the browser windows the shell opens itself", () => {
+describe("the browser windows the engine lists", () => {
   it("opens one on the workspace on screen and works in it", () => {
     const state = reduce(
       desktop("kitty"),
-      WindowAction.BrowserOpened("https://example.com"),
+      WindowAction.BrowserWindowsListed([listed("1", "https://example.com/")]),
     );
 
-    expect(activeIdOf(state)).toBe("browser:1");
+    expect(activeIdOf(state)).toBe(BROWSER("1"));
     expect(state.windows[1]).toMatchObject({ title: "example.com" });
   });
 
-  it("closes one itself, because the shell owns it", () => {
+  it("asks for one and opens nothing until it is listed", () => {
+    // The engine owns the page, so the window arrives with the list.
+    const state = reduce(
+      desktop("kitty"),
+      WindowAction.BrowserOpened("https://example.com/"),
+    );
+
+    expect(state.windows).toHaveLength(1);
+  });
+
+  it("names a window after the site its page is at now", () => {
     const state = reduce(
       desktop(),
-      WindowAction.BrowserOpened("https://example.com"),
+      WindowAction.BrowserWindowsListed([listed("1", "https://example.com/")]),
+      WindowAction.BrowserWindowsListed([listed("1", "https://docs.rs/")]),
+    );
+
+    expect(state.windows).toHaveLength(1);
+    expect(state.windows[0]).toMatchObject({ title: "docs.rs" });
+  });
+
+  it("takes a window away when the engine no longer lists it", () => {
+    const state = reduce(
+      desktop("kitty"),
+      WindowAction.BrowserWindowsListed([listed("1", "https://example.com/")]),
+      WindowAction.BrowserWindowsListed([]),
+    );
+
+    expect(state.windows.map(({ id }) => id)).toEqual([APP("kitty")]);
+  });
+
+  it("leaves a browser window for the engine to close", () => {
+    // `closeBrowserWindow` is asked, and the window goes when the list says.
+    const state = reduce(
+      desktop(),
+      WindowAction.BrowserWindowsListed([listed("1", "https://example.com/")]),
       WindowAction.WindowKilled(),
     );
 
-    expect(state.windows).toEqual([]);
+    expect(state.windows).toHaveLength(1);
   });
 
   it("leaves a client's window for the client to close", () => {
@@ -142,16 +193,13 @@ describe("the windows an extension asks for", () => {
   it("opens one floating in front, the size it asked for, and works in it", () => {
     const state = reduce(
       desktop("kitty"),
-      WindowAction.PopupWindowOpened({
-        height: 630,
-        url: POPUP,
-        width: 380,
-        windowId: 7,
-      }),
+      WindowAction.BrowserWindowsListed([
+        listed("1", POPUP, { height: 630, popupWindow: 7, width: 380 }),
+      ]),
     );
 
-    expect(activeIdOf(state)).toBe("browser:1");
-    expect(state.windows[1]).toMatchObject({ popupWindow: 7, src: POPUP });
+    expect(activeIdOf(state)).toBe(BROWSER("1"));
+    expect(state.windows[1]).toMatchObject({ popupWindow: 7 });
     expect(floatOf(state)).toMatchObject({ height: 630, width: 380 });
   });
 
@@ -160,12 +208,9 @@ describe("the windows an extension asks for", () => {
     const state = reduce(
       desktop("kitty"),
       WindowAction.ScreensDescribed(sideBySide("left")),
-      WindowAction.PopupWindowOpened({
-        height: 630,
-        url: POPUP,
-        width: 0,
-        windowId: 7,
-      }),
+      WindowAction.BrowserWindowsListed([
+        listed("1", POPUP, { height: 630, popupWindow: 7, width: 0 }),
+      ]),
     );
 
     expect(floatOf(state)).toMatchObject({ height: 630, width: 1280 });
@@ -1015,9 +1060,9 @@ describe("a floating window dragged across screens", () => {
     const state = reduce(
       desktop(),
       WindowAction.ScreensDescribed(sideBySide("left", "right")),
-      WindowAction.BrowserOpened("https://example.com"),
+      WindowAction.BrowserWindowsListed([listed("1", "https://example.com/")]),
       WindowAction.FloatToggled(),
-      WindowAction.WindowMoved("browser:1", 1700, 100),
+      WindowAction.WindowMoved(BROWSER("1"), 1700, 100),
     );
 
     expect(windowsOn(workspaceOn(state, "left"))).toEqual([]);
@@ -1124,7 +1169,6 @@ describe("the launcher", () => {
     );
 
     expect(launched.launcherOpen).toBe(false);
-    expect(launched.windows).toHaveLength(1);
   });
 
   it("shuts behind the application it ran, and opens no window itself", () => {

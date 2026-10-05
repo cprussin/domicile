@@ -1,0 +1,72 @@
+// Copyright 2026 Connor Prussin
+// SPDX-License-Identifier: MIT
+
+module domicile.mojom;
+
+import "url/mojom/url.mojom";
+
+// The desk's browser windows. The browser owns their pages.
+//
+// Why the browser owns them:
+// - A shell is a page, and `domicile load-shell` reloads it. The reload
+//   destroys every guest its document owns.
+// - The profile owns each window's page here. A shell draws one with
+//   `<webview window="id">`, which attaches the existing page.
+// - A reloaded shell gets the same list and draws the same pages, with scroll,
+//   form input and history intact.
+//
+// Who opens one:
+// - A program asking for a window gets one, as a Wayland client's toplevel
+//   exists before the shell hears of it: `domicile open-url`, a page's
+//   `target="_blank"`, chrome.tabs.create and chrome.windows.create.
+// - Open below is for the shell's own UI, such as a `+` button or a launcher.
+// - The shell decides where a window goes and whether it is in front.
+//
+// A separate pipe, as for ExtensionTray: the windows are browser state, and
+// ControlChannel relays the compositor's socket.
+//
+// Access control is the binder's, as for ControlChannel: the browser binds
+// this only for a document with the shell's origin.
+//
+// See "A browser window" in the Domicile repository's docs/WRITING-A-SHELL.md.
+
+// One browser window, as a shell draws it.
+struct BrowserWindow {
+  // The name `<webview window>` and Close use: "1", "2", ... in open order.
+  // Never reused while the browser runs, so a stale id names no window.
+  string id;
+  // The page's address. Empty before it has shown anything.
+  url.mojom.Url url;
+  // The page's title. Empty when the page has none.
+  string title;
+  // The chrome.windows id of the extension popup window (windows.create) whose
+  // one tab this is. 0 for a tab of the desk's own window.
+  int32 popup_window;
+  // The size the popup window asked for, in CSS pixels. 0 on an axis it left
+  // unset, and always 0 outside a popup window.
+  int32 width;
+  int32 height;
+};
+
+// Renderer -> browser, bound per document.
+interface BrowserWindows {
+  // Sets the list's receiver. The list is sent immediately and on every
+  // change, so a reloaded page draws the surviving windows right away. A
+  // second client is a bad message.
+  SetClient(pending_remote<BrowserWindowsClient> client);
+
+  // Opens a browser window at `url`; it appears in the next list. A
+  // domicile:// address shows about:blank#blocked, as in a <webview>.
+  Open(url.mojom.Url url);
+
+  // Closes window `id` and destroys its page; it leaves the next list. An
+  // unknown id is a close that raced another, and does nothing.
+  Close(string id);
+};
+
+// Browser -> renderer.
+interface BrowserWindowsClient {
+  // The whole list, oldest first, on every open, close, navigation or title
+  // change. Deltas would leave a page wrong for good after one missed message.
+  WindowsChanged(array<BrowserWindow> windows);
+};

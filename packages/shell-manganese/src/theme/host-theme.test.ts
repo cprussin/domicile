@@ -23,6 +23,7 @@ class Host implements DomicileHost {
   readonly captured: Theme[] = [];
   displays: readonly DomicileDisplay[] | null = null;
   brightness: number | null = null;
+  browserWindows = null;
 
   readonly #listeners = new Map<string, (event: never) => void>();
 
@@ -56,6 +57,8 @@ class Host implements DomicileHost {
   };
 
   readonly activateExtension = ignored;
+  readonly closeBrowserWindow = ignored;
+  readonly openBrowserWindow = ignored;
   readonly activateTrayItem = ignored;
   readonly dismissNotifications = ignored;
   readonly invokeNotificationAction = ignored;

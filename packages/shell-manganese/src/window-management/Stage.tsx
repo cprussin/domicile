@@ -34,8 +34,8 @@ import { focusedWindowIn } from "./tree/tiling";
 import { useWindowMotion } from "./useWindowMotion";
 import { WindowFrame } from "./WindowFrame";
 import { WindowTitleBar } from "./WindowTitleBar";
-import type { PopupWindowRequest, ShellWindow } from "./window";
-import { WindowKind } from "./window";
+import type { ShellWindow } from "./window";
+import { browserIdOf, WindowKind } from "./window";
 import { barMotion } from "./window-motion";
 import { slidAcross } from "./window-styles";
 
@@ -73,18 +73,6 @@ type Props = {
    */
   onHover: (id: string, at: Spot) => void;
   onMove: (id: string, x: number, y: number) => void;
-  /**
-   * A browser page asked for a new window, such as a `target="_blank"` link.
-   * The desktop places it like any newly opened window.
-   */
-  onOpenWindow: (url: string) => void;
-  /**
-   * An extension asked for a popup window, via the last used browser window.
-   * See `BrowserWindow`.
-   */
-  onOpenPopupWindow: (request: PopupWindowRequest) => void;
-  /** A browser page navigated, so the window's title changes. */
-  onRename: (id: string, url: string) => void;
   /** A float resized to `box`, in the page's pixels, on the screen `on`. */
   onResize: (id: string, box: Rect, on: Geometry) => void;
   /** The user clicked a window or its chrome. */
@@ -126,9 +114,6 @@ export const Stage = ({
   onGrab,
   onHover,
   onMove,
-  onOpenPopupWindow,
-  onOpenWindow,
-  onRename,
   onResize,
   onSelect,
   onStretch,
@@ -244,22 +229,15 @@ export const Stage = ({
                   frame={placement?.frame}
                   fullscreen={fillsScreen(screens, window.id)}
                   motion={motion}
-                  onClose={() => {
-                    onClose(window.id);
-                  }}
                   onMotionEnded={onMotionEnded}
-                  onNavigate={(url) => {
-                    onRename(window.id, url);
-                  }}
-                  onOpenPopupWindow={onOpenPopupWindow}
-                  onOpenWindow={onOpenWindow}
                   onReach={() => {
                     onSelect(window.id);
                   }}
                   popupWindow={window.popupWindow}
                   rect={contents?.rect}
                   restack={restack}
-                  src={window.src}
+                  url={window.url}
+                  window={engineWindowOf(window.id)}
                 />
               )}
               {/*
@@ -611,5 +589,18 @@ const titleOf = (windows: readonly ShellWindow[], id: string): string => {
     throw new Error(`shell: no window ${id} to name`);
   } else {
     return window.title;
+  }
+};
+
+/**
+ * Returns the engine's id behind a browser window's window id. Every browser
+ * window id is built from one, so a missing id is a wiring bug.
+ */
+const engineWindowOf = (id: string): string => {
+  const engine = browserIdOf(id);
+  if (engine === undefined) {
+    throw new Error(`stage: ${id} is no browser window of the engine's`);
+  } else {
+    return engine;
   }
 };

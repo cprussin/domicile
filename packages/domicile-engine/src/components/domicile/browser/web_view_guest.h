@@ -34,7 +34,12 @@
 #include "third_party/blink/public/mojom/choosers/file_chooser.mojom-forward.h"
 #include "third_party/blink/public/mojom/favicon/favicon_url.mojom-forward.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/size.h"
 #include "url/gurl.h"
+
+namespace content {
+class BrowserContext;
+}  // namespace content
 
 namespace domicile {
 
@@ -99,6 +104,43 @@ namespace domicile {
 using GuestCreatedCallback =
     base::RepeatingCallback<void(content::WebContents&)>;
 
+class WebViewGuest;
+
+// Holds the desk's browser windows, one per profile. Implemented in //chrome
+// (//chrome/browser/domicile/domicile_browser_windows.h) because a window's
+// page is a tab, and tab helpers live in //chrome.
+//
+// Declared here and implemented there for GuestCreatedCallback's reason: this
+// target may not depend on what opens, closes and shows windows. //chrome sets
+// it once, with SetBrowserWindowHost, before any shell can bind a
+// WebViewGuestHost.
+class BrowserWindowHost {
+ public:
+  virtual ~BrowserWindowHost() = default;
+
+  // Opens a browser window at `url` in `context`'s desk, for a page's new
+  // window or an extension's tabs.create.
+  virtual void Open(content::BrowserContext& context, const GURL& url) = 0;
+
+  // Opens popup window `window_id`'s one tab at `url`, for an extension's
+  // chrome.windows.create. `width` and `height` are the requested size, or 0.
+  virtual void OpenPopupWindow(content::BrowserContext& context,
+                               int window_id,
+                               const GURL& url,
+                               int width,
+                               int height) = 0;
+
+  // Closes window `id`. The list updates immediately and the page is
+  // destroyed on a later task, since the caller is usually that window's own
+  // WebContents.
+  virtual void Close(content::BrowserContext& context,
+                     const std::string& id) = 0;
+
+  // Returns window `id` in `context`, or null.
+  virtual WebViewGuest* Find(content::BrowserContext& context,
+                             const std::string& id) = 0;
+};
+
 class WebViewGuest : public mojom::WebViewGuest,
                      public content::BrowserPluginGuestDelegate,
                      public content::WebContentsDelegate,
@@ -116,16 +158,58 @@ class WebViewGuest : public mojom::WebViewGuest,
   // Chrome, and for the same reason: a helper that keys on the tab's id has to
   // be there before the first navigation it would record.
   //
-  // `popup_window` and `extension_popup` are the element's, from
-  // CreateGuest: see popup_window() and extension_popup().
+  // `extension_popup` is the element's, from CreateGuest: see
+  // extension_popup().
   static void CreateAndAttach(
       content::RenderFrameHost& owner,
       content::RenderFrameHost& placeholder,
       mojo::PendingReceiver<mojom::WebViewGuest> receiver,
       mojo::PendingRemote<mojom::WebViewGuestClient> client,
-      std::optional<int> popup_window,
       bool extension_popup,
       const GuestCreatedCallback& created);
+
+  // Makes a browser window's page. It has no element, and BrowserWindowHost's
+  // implementation owns it. See
+  // components/domicile/mojom/browser_windows.mojom.
+  //
+  // It is still a guest, for the class comment's reasons, so it needs an
+  // owner from creation: BrowserPluginGuest reads the owner's WebContents.
+  // The owner is `shell`, the shell's WebContents. `domicile load-shell`
+  // keeps it, since a reload loads a new document into the same tab.
+  //
+  // - `window_id`: the id a <webview window> uses.
+  // - `popup_window`: the chrome.windows popup window whose one tab this is;
+  //   empty for a tab of the desk's window. See popup_window().
+  // - `created`: runs before the first navigation, as in CreateAndAttach.
+  //
+  // The caller navigates it with Navigate.
+  static std::unique_ptr<WebViewGuest> MakeWindow(
+      content::WebContents& shell,
+      const std::string& window_id,
+      std::optional<int> popup_window,
+      const GuestCreatedCallback& created);
+
+  // Shows this window in `placeholder`, the <webview window> frame under
+  // `owner`, and binds the element's pipes to it.
+  //
+  // Refused, with the pipes dropped and a log line, when another element
+  // shows the window: one page cannot be in two frames. When the frame goes
+  // (element removed or document reloaded), content detaches the page without
+  // destroying it. That is how a browser window survives a shell reload.
+  void AttachToElement(content::RenderFrameHost& owner,
+                       content::RenderFrameHost& placeholder,
+                       mojo::PendingReceiver<mojom::WebViewGuest> receiver,
+                       mojo::PendingRemote<mojom::WebViewGuestClient> client);
+
+  // Set once by //chrome, before any guest exists. See BrowserWindowHost.
+  static void SetBrowserWindowHost(BrowserWindowHost* host);
+
+  // The id a <webview window> uses for this window. Empty for a shell's own
+  // page.
+  const std::string& window_id() const { return window_id_; }
+
+  // This guest's WebContents. Never null: a guest goes with its WebContents.
+  content::WebContents& contents() const { return *guest_contents_; }
 
   WebViewGuest(const WebViewGuest&) = delete;
   WebViewGuest& operator=(const WebViewGuest&) = delete;
@@ -165,33 +249,34 @@ class WebViewGuest : public mojom::WebViewGuest,
       base::OnceCallback<void(std::optional<std::vector<base::FilePath>>)>
           chosen);
 
-  // WHAT chrome.tabs ASKS OF A BROWSER WINDOW, which is the shell's to carry
-  // out: a window in front, a window closed, a second window opened. Each is
-  // the element's event -- `domicile-focus-request`, `domicile-close`,
-  // `domicile-new-window` -- exactly as if the page had asked. See
-  // //chrome/browser/domicile/domicile_desk.h.
+  // chrome.tabs requests on a tab, handled as if the page had asked:
+  // - Focus: the shell raises windows, so the element fires
+  //   `domicile-focus-request`.
+  // - Close: the browser closes a browser window; a shell's own page fires
+  //   `domicile-close`.
+  // - New window: the browser opens one.
+  // See //chrome/browser/domicile/domicile_desk.h.
   void RequestFocus();
   void RequestClose();
   void RequestWindow(const GURL& url);
 
-  // And a popup window opened, which is the element's
-  // `domicile-popup-window`: chrome.windows.create's, for popup window
-  // `window_id`. `width` and `height` are 0 where the extension asked for
-  // none.
+  // chrome.windows.create for popup window `window_id`: opens a browser window
+  // as its one tab. `width` and `height` are 0 when the extension set none.
   void RequestPopupWindow(int window_id,
                           const GURL& url,
                           int width,
                           int height);
 
-  // The popup window the element named this guest the tab of -- its
-  // `popupwindow` attribute -- or nothing for every other <webview>. Read by
-  // the desk as the guest becomes a tab, which is before it is attached.
+  // The extension popup window (chrome.windows.create) whose one tab this
+  // guest is, or empty. The desk reads it as the guest becomes a tab, before
+  // anything shows it.
   std::optional<int> popup_window() const { return popup_window_; }
 
   // Whether the element is an extension's action popup -- its
   // `extensionpopup` attribute -- which a guest is in place of a tab: what
   // Chrome's toolbar bubble is. Read as the guest is made, like
-  // popup_window(). See //chrome/browser/domicile/domicile_tab_helpers.h.
+  // popup_window(). Always false for a browser window. See
+  // //chrome/browser/domicile/domicile_tab_helpers.h.
   bool extension_popup() const { return extension_popup_; }
 
   // Hear the element take focus, for as long as the subscription is held.
@@ -335,15 +420,12 @@ class WebViewGuest : public mojom::WebViewGuest,
   // A page in a browser window asking for a second one -- target="_blank", a
   // window.open, a form at an unopened target name.
   //
-  // THE WINDOW IS STILL REFUSED HERE, AND THE ELEMENT IS TOLD. Overridden
-  // rather than left to the default because the default is content creating the
-  // window itself, and for a guest with no guest SiteInstance that path CHECKs
-  // -- see the class comment. So CreateCustomWebContents returns null as it
-  // always did, and sends NewWindowRequested on the way: the shell opens a
-  // browser window of its own at that address, which is the layer that knows
-  // where a window goes. What that costs -- the opener, the handle, a POST body
-  // -- is written down beside the message in
-  // components/domicile/mojom/web_view_guest.mojom.
+  // Refuses the window content would make and opens a browser window at its
+  // address instead (ReportNewWindow). Content's default creates the window
+  // itself, which CHECKs for a guest with no guest SiteInstance; see the class
+  // comment. The new window is a navigation, so it loses the opener, the
+  // window.open handle, the target name and a POST body. Links work in full,
+  // and links are the use case.
   bool IsWebContentsCreationOverridden(
       content::RenderFrameHost* opener,
       content::SiteInstance* source_site_instance,
@@ -381,8 +463,8 @@ class WebViewGuest : public mojom::WebViewGuest,
   // A CURRENT-TAB DISPOSITION IS THIS GUEST'S TO PERFORM, and it performs it:
   // the address goes to the guest's own NavigationController, which is the
   // thing the page was asking to move. Everything that asks for a SECOND window
-  // is reported to the shell instead, exactly as CreateCustomWebContents does
-  // -- see ReportNewWindow.
+  // opens a browser window instead, as CreateCustomWebContents does. See
+  // ReportNewWindow.
   //
   // WHAT THE SHELL IS NOT TOLD is that the window went somewhere: an address
   // bar still shows where the shell SENT the window rather than where its page
@@ -415,10 +497,10 @@ class WebViewGuest : public mojom::WebViewGuest,
   // THE PAGE CALLED window.close(), and its renderer let it. Content's
   // default does nothing, so a popup that closed itself -- an extension's,
   // which is how every one of them says it is done -- sat open until the user
-  // clicked away. The element is told instead, and removing it is the shell's
-  // answer: the guest's WebContents is owned by the outer one it is attached
-  // to, and destroying it from here would pull a frame out from under the
-  // shell's document. See CloseRequested in the mojom.
+  // clicked away. A browser window closes here. A shell's own page fires
+  // `domicile-close` and the shell removes the element: the outer WebContents
+  // owns that guest, so destroying it here would pull a frame out from under
+  // the shell's document. See CloseRequested in the mojom.
   void CloseContents(content::WebContents* source) override;
 
   // Asks the guest's current page to report its content's size.
@@ -477,17 +559,45 @@ class WebViewGuest : public mojom::WebViewGuest,
   WebViewGuest(content::RenderFrameHost& owner,
                mojo::PendingReceiver<mojom::WebViewGuest> receiver,
                mojo::PendingRemote<mojom::WebViewGuestClient> client,
-               std::optional<int> popup_window,
                bool extension_popup);
+  WebViewGuest(content::WebContents& shell,
+               const std::string& window_id,
+               std::optional<int> popup_window);
 
-  // Tell the element a page asked for a window of its own, at `target_url`.
+  // Makes this guest's WebContents with this as guest delegate, delegate and
+  // observer. Shared by both kinds of guest.
+  std::unique_ptr<content::WebContents> MakeContents(
+      content::BrowserContext* context,
+      bool initially_hidden,
+      const GuestCreatedCallback& created);
+
+  // Finishes AttachToElement once content has a frame safe to swap, or null
+  // if the frame went away.
+  void AttachWindowTo(content::RenderFrameHost* outer_contents_frame);
+
+  // Handles the showing element going away: drops its pipes and hides the
+  // page, like a background tab.
+  void ElementGone();
+
+  // Points `client_` at an unread pipe, since a window with no element still
+  // reports. A reply it needs, such as a file chooser's, is dropped, and the
+  // wrapped callbacks treat that as a cancel.
+  void Unclient();
+
+  // Closes this guest: via the browser for a browser window, via
+  // `domicile-close` for a shell's own page.
+  void Close();
+
+  // Resends everything the element mirrors to a new element. Resets each
+  // report to a fresh guest's values first, so every one is sent.
+  void ReportEverything();
+
+  // Opens a browser window at `target_url` for a page that asked for one.
   //
-  // ONE PLACE, because two different questions arrive at the same answer: a
-  // page asking content to CREATE a window (CreateCustomWebContents) and a
-  // navigation routed here with a disposition that wants one (OpenURLFromTab).
-  // Both are refused in this process and both are the shell's to open, so the
-  // rule about what is worth reporting -- an address, and never a window with
-  // none -- is written once.
+  // Shared by three callers: CreateCustomWebContents (a page creating a
+  // window), OpenURLFromTab (a disposition that wants one) and RequestWindow
+  // (tabs.create). It holds the one rule: open an address, never an empty
+  // window.
   void ReportNewWindow(const GURL& target_url);
 
   // Tell the element what back and forward can do, if it has changed.
@@ -559,7 +669,9 @@ class WebViewGuest : public mojom::WebViewGuest,
                      content::RenderFrameHost* outer_contents_frame);
 
   // Ours until Attach hands it to the outer WebContents, which is also the
-  // moment this object stops being owned and starts owning itself.
+  // moment this object stops being owned and starts owning itself. A browser
+  // window keeps it: it is attached unowned and dies with this object. See
+  // the destructor.
   std::unique_ptr<content::WebContents> owned_guest_contents_;
   raw_ptr<content::WebContents> guest_contents_ = nullptr;
 
@@ -576,6 +688,22 @@ class WebViewGuest : public mojom::WebViewGuest,
 
   // See extension_popup().
   const bool extension_popup_;
+
+  // See window_id().
+  const std::string window_id_;
+
+  // A browser window's owner: the shell's WebContents, which outlives every
+  // document loaded into it. Null for a shell's own page, owned through
+  // `owner_rfh_id_`.
+  base::WeakPtr<content::WebContents> owner_contents_;
+
+  // True between AttachToElement and AttachWindowTo. A second element asking
+  // then is refused, as when the window is already shown.
+  bool attaching_ = false;
+
+  // The content size the page last reported, resent to a new element. Empty
+  // until the first report.
+  std::optional<gfx::Size> content_size_;
 
   mojo::Receiver<mojom::WebViewGuest> receiver_;
   // How many of this guest's file choosers the shell has yet to answer, which

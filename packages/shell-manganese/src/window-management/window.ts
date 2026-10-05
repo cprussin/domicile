@@ -1,11 +1,17 @@
-// A window the shell holds: either a Wayland client the host announced or a
-// browser window the shell opened itself. Both are tiled, floated and closed
-// the same way, so they share one id space and one title.
+// A window the shell holds: a Wayland client the host announced or a browser
+// window the engine listed. The shell tiles and floats both, but the client or
+// the engine opens and closes them. They share one id space and one title.
 
 import type { CursorShape } from "@domicile-desktop/sdk/cursor-shape";
 
 /** The prefix {@link appWindowId} namespaces a client's window with. */
 const APP_PREFIX = "app:";
+
+/** The prefix {@link browserWindowId} namespaces a browser window with. */
+const BROWSER_PREFIX = "browser:";
+
+/** The name of a browser window with no address yet. */
+const BLANK_PAGE = "about:blank";
 
 /**
  * Where a new browser window opens, from the bar's `+` or the sway launcher
@@ -39,17 +45,6 @@ export type ClientWindow = {
 };
 
 /**
- * A window an extension requested with `chrome.windows.create` (see
- * `WEBVIEW_POPUP_WINDOW_EVENT`). A size of 0 means the axis was unspecified.
- */
-export type PopupWindowRequest = {
-  height: number;
-  url: string;
-  width: number;
-  windowId: number;
-};
-
-/**
  * A client's size limit per axis, in layout pixels. `undefined` means no
  * limit.
  */
@@ -77,27 +72,23 @@ export const ShellWindow = {
   }),
 
   /**
-   * A browser window the shell opened. `src` is the start address and never
-   * changes: the view owns navigation, and changing `src` would reload it.
+   * A browser window from the engine's list.
+   *
+   * - `windowId`: the engine's id, for `<webview window>`. `id` prefixes it.
+   * - `url`: the page's current address.
+   * - `popupWindow`: the `chrome.windows` id of the extension popup window
+   *   whose one tab this is. Drawn without an address bar, as in Chrome.
    */
-  Browser: (ordinal: number, src: string) => ({
-    id: `browser:${ordinal.toString()}`,
+  Browser: (
+    windowId: string,
+    url: string,
+    popupWindow: number | undefined,
+  ) => ({
+    id: browserWindowId(windowId),
     kind: WindowKind.Browser as const,
-    popupWindow: undefined,
-    src,
-    title: siteOf(src),
-  }),
-
-  /**
-   * A browser window opened by an extension (see {@link PopupWindowRequest}).
-   * `popupWindow` is its `chrome.windows` id, passed to the view on creation.
-   */
-  PopupWindow: (ordinal: number, { url, windowId }: PopupWindowRequest) => ({
-    id: `browser:${ordinal.toString()}`,
-    kind: WindowKind.Browser as const,
-    popupWindow: windowId,
-    src: url,
-    title: siteOf(url),
+    popupWindow,
+    title: url === "" ? BLANK_PAGE : siteOf(url),
+    url,
   }),
 };
 
@@ -116,6 +107,17 @@ export const appWindowId = (appId: string): string => `${APP_PREFIX}${appId}`;
  */
 export const appIdOf = (id: string): string | undefined =>
   id.startsWith(APP_PREFIX) ? id.slice(APP_PREFIX.length) : undefined;
+
+/** Returns the window id for a browser window the engine listed. */
+export const browserWindowId = (windowId: string): string =>
+  `${BROWSER_PREFIX}${windowId}`;
+
+/**
+ * Returns the engine's browser window id behind a window id, or `undefined`
+ * for a client's window. Closing a window asks the engine to close this id.
+ */
+export const browserIdOf = (id: string): string | undefined =>
+  id.startsWith(BROWSER_PREFIX) ? id.slice(BROWSER_PREFIX.length) : undefined;
 
 /**
  * A window's title: the host of the URL it shows, or the whole URL when it has

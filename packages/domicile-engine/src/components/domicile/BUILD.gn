@@ -211,20 +211,6 @@ source_set("command_protocol") {
   ]
 }
 
-# The shell pages an address can be handed to, and which one gets it.
-#
-# Its own target for :shortcut_registry's reasons: :control_channel registers
-# into it and //chrome/browser/domicile's command socket asks it, and it is the
-# part of opening an address that can be tested without a browser.
-source_set("url_registry") {
-  sources = [
-    "browser/url_registry.cc",
-    "browser/url_registry.h",
-  ]
-
-  public_deps = [ "//base" ]
-}
-
 # The chords the shell claimed for the desktop, and who to tell when one fires.
 #
 # Its own target between :control_channel and :web_view_guest because it is the
@@ -497,7 +483,6 @@ source_set("control_channel") {
     ":line_framer",
     ":shortcut_registry",
     ":theme",
-    ":url_registry",
     "//base",
     "//components/domicile/mojom",
     "//mojo/public/cpp/bindings",
@@ -526,7 +511,6 @@ source_set("unit_tests") {
     "browser/shell_url_loader_factory_unittest.cc",
     "browser/shell_windows_unittest.cc",
     "browser/shortcut_registry_unittest.cc",
-    "browser/url_registry_unittest.cc",
     "browser/web_view_url_unittest.cc",
     "common/cursor_shape_unittest.cc",
     "common/display_transform_unittest.cc",
@@ -567,7 +551,6 @@ source_set("unit_tests") {
     ":shell_windows",
     ":shortcut_registry",
     ":theme",
-    ":url_registry",
     ":web_view_url",
     "//cc/domicile:display_regions",
     "//cc/domicile:unit_tests",

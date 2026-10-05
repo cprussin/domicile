@@ -8,8 +8,7 @@
 //
 // Not a web standard and not proposed as one; it exists in Domicile's engine
 // fork only, beside the element that dispatches it. No constructor and no
-// event-init dictionary, for the reason DomicileNewWindowEvent has none: only
-// the browser process asks for one.
+// event-init dictionary: only the browser process asks for one.
 [
     RuntimeEnabled=DomicileExternalSurface,
     Exposed=Window

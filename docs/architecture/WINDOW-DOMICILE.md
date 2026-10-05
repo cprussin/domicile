@@ -62,8 +62,7 @@ strings: `size?: { width, height }`, `title`, `minSize?`, `maxSize?`, `cursor`,
 
 ### One-off events are queued by the engine
 
-`focusrequested`, `openurl`, `shortcut` and `audiolevels` have no current
-value. The engine queues each event type until its first listener attaches,
+`focusrequested`, `shortcut` and `audiolevels` have no current value. The engine queues each event type until its first listener attaches,
 then delivers the queue. This replaces `DomicileClient.#held`.
 
 ### Requests return promises
