@@ -5,7 +5,7 @@
 //
 // An interface rather than a dictionary for DomicileClipboardEntry's reason:
 // WebIDL will not have a dictionary as the element type of an attribute's
-// array, and these are read off a DomicileExtensionsEvent.
+// array, and these are read off DomicileHost.extensions.
 //
 // The state is the active tab's -- the <webview> that last had focus -- or the
 // action's default where there is none. See docs/architecture/EXTENSIONS.md.

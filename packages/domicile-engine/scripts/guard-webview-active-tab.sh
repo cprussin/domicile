@@ -197,7 +197,7 @@ if [ "$NEGATIVE" != "1" ] && [ "$STATUS" -eq 0 ]; then
 fi
 
 # THE READINGS, each anchored on the quote Chromium puts after a console
-# message -- see guard-control-arrival.sh for the run that learned why.
+# message -- see guard-windows-state.sh for why.
 saw() { # $1 fixed string
   grep -qF -- "$1" "$ENGINE_LOG" 2>/dev/null && echo 1 || echo 0
 }

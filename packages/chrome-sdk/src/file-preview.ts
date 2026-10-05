@@ -1,9 +1,8 @@
 // What a path holds, as a launcher's preview draws it.
 //
-// Its own module because both halves of the SDK read it: `host-message.ts`
-// turns the engine's `filepreview` event into one, and a shell switches on it.
-// The wire's words are the engine's `kind` strings; this is the memory form,
-// and `filePreviewKindSchema` is the one place the two meet.
+// A shell turns what `previewFile()` resolves with into one, and switches on
+// it. The wire's words are the engine's `kind` strings; this is the memory
+// form, and `filePreviewKindSchema` is the one place the two meet.
 
 import { z } from "zod";
 

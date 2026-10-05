@@ -99,10 +99,10 @@ export const Shell = (_root, desktop) => {
   view.addEventListener("domicile-page-change", focusOnceArrived);
   view.addEventListener("domicile-loading-change", focusOnceArrived);
 
-  host.addEventListener("extensions", (event) => {
+  host.addEventListener("extensionschanged", () => {
     if (
       !installed &&
-      event.extensions.some(
+      host.extensions.some(
         (extension) =>
           extension.id === expected && extension.badgeText === "on",
       )

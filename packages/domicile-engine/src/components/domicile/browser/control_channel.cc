@@ -61,9 +61,9 @@ ControlChannel::ControlChannel(
   channel_ = ShortcutRegistry::Get().AddChannel(
       page,
       base::BindPostTaskToCurrentDefault(base::BindRepeating(
-          &ControlChannel::DeliverShortcutNow, weak_factory_.GetWeakPtr())),
+          &ControlChannel::DeliverShortcut, weak_factory_.GetWeakPtr())),
       base::BindPostTaskToCurrentDefault(base::BindRepeating(
-          &ControlChannel::DeliverModifiersNow, weak_factory_.GetWeakPtr())));
+          &ControlChannel::DeliverModifiers, weak_factory_.GetWeakPtr())));
   give_up_at_ = base::TimeTicks::Now() + kReachFor;
   Connect();
 }
@@ -674,39 +674,22 @@ void ControlChannel::OnWrite(int result) {
   }
 }
 
-void ControlChannel::DeliverShortcut(Chord chord, base::TimeTicks arrival) {
+void ControlChannel::DeliverShortcut(Chord chord) {
   if (client_) {
-    client_->ShortcutPressed(
-        mojom::Shortcut::New(chord.keycode, chord.alt, chord.ctrl, chord.shift,
-                             chord.meta),
-        arrival);
+    client_->ShortcutPressed(mojom::Shortcut::New(
+        chord.keycode, chord.alt, chord.ctrl, chord.shift, chord.meta));
   }
 }
 
-void ControlChannel::DeliverModifiers(Modifiers modifiers,
-                                      base::TimeTicks arrival) {
+void ControlChannel::DeliverModifiers(Modifiers modifiers) {
   if (client_) {
     client_->Modifiers(modifiers.alt, modifiers.ctrl, modifiers.shift,
-                       modifiers.meta, arrival);
+                       modifiers.meta);
   }
 }
 
-// THE REGISTRY'S SIDE OF THOSE TWO, AND THE STAMP IS TAKEN HERE RATHER THAN
-// BOUND INTO THE CALLBACK. A chord claimed by the shell is matched on the UI
-// thread and posted to this sequence; `base::TimeTicks::Now()` at the far end
-// of that post is when this channel had it, which is the quantity the page
-// subtracts. Taking it at the match instead would price the post into the hop
-// and report a stage that is not the one being measured.
 void ControlChannel::DeliverOpenUrl(const std::string& url) {
   client_->OpenUrl(url);
-}
-
-void ControlChannel::DeliverShortcutNow(Chord chord) {
-  DeliverShortcut(chord, base::TimeTicks::Now());
-}
-
-void ControlChannel::DeliverModifiersNow(Modifiers modifiers) {
-  DeliverModifiers(modifiers, base::TimeTicks::Now());
 }
 
 void ControlChannel::ReadLoop() {
@@ -728,24 +711,15 @@ void ControlChannel::OnRead(int result) {
     return;
   }
 
-  // WHEN THE BROWSER PROCESS TOOK THIS OFF THE COMPOSITOR'S SOCKET. This line
-  // is the whole of `arrival`: everything downstream of it -- the JSON parse,
-  // the mojo call, the renderer, Blink's dispatch -- is the stage the page
-  // prices by subtracting this from `Event.timeStamp`. Before the read's own
-  // bookkeeping, so the parse of the first message is inside the measurement
-  // rather than outside it.
-  const base::TimeTicks arrival = base::TimeTicks::Now();
-
   for (const std::string& line : framer_.Take(std::string_view(
            read_buffer_->data(), static_cast<size_t>(result)))) {
-    DispatchLine(line, arrival);
+    DispatchLine(line);
   }
 
   ReadLoop();
 }
 
-void ControlChannel::DispatchLine(const std::string& line,
-                                 base::TimeTicks arrival) {
+void ControlChannel::DispatchLine(const std::string& line) {
   if (line.empty()) {
     return;
   }
@@ -841,7 +815,7 @@ void ControlChannel::DispatchLine(const std::string& line,
     // down already reads the same field the other way, which is the reading
     // that matches the wire.
     const std::string* title = message.FindString("title");
-    client_->AppTitled(*app_id, title ? *title : std::string(), arrival);
+    client_->AppTitled(*app_id, title ? *title : std::string());
     return;
   }
 
@@ -858,7 +832,7 @@ void ControlChannel::DispatchLine(const std::string& line,
     const bool has_size = size && size->size() == 2u;
     client_->AppAppeared(*app_id, title ? *title : std::string(), has_size,
                          has_size ? Number((*size)[0]) : 0.0,
-                         has_size ? Number((*size)[1]) : 0.0, arrival);
+                         has_size ? Number((*size)[1]) : 0.0);
     return;
   }
 
@@ -867,11 +841,9 @@ void ControlChannel::DispatchLine(const std::string& line,
     const base::ListValue* size = message.FindList("size");
     if (app_id && size && size->size() == 2u) {
       if (*type == "app_min_size") {
-        client_->AppMinSize(*app_id, Number((*size)[0]), Number((*size)[1]),
-                            arrival);
+        client_->AppMinSize(*app_id, Number((*size)[0]), Number((*size)[1]));
       } else {
-        client_->AppMaxSize(*app_id, Number((*size)[0]), Number((*size)[1]),
-                            arrival);
+        client_->AppMaxSize(*app_id, Number((*size)[0]), Number((*size)[1]));
       }
     }
     return;
@@ -887,7 +859,7 @@ void ControlChannel::DispatchLine(const std::string& line,
         size->size() == 2u && grab) {
       client_->PopupPlaced(*app_id, *parent, Number((*position)[0]),
                            Number((*position)[1]), Number((*size)[0]),
-                           Number((*size)[1]), *grab, arrival);
+                           Number((*size)[1]), *grab);
     }
     return;
   }
@@ -896,15 +868,14 @@ void ControlChannel::DispatchLine(const std::string& line,
     const std::string* app_id = message.FindString("app_id");
     const base::ListValue* size = message.FindList("size");
     if (app_id && size && size->size() == 2u) {
-      client_->AppResized(*app_id, Number((*size)[0]), Number((*size)[1]),
-                          arrival);
+      client_->AppResized(*app_id, Number((*size)[0]), Number((*size)[1]));
     }
     return;
   }
 
   if (*type == "app_closed") {
     if (const std::string* app_id = message.FindString("app_id")) {
-      client_->AppClosed(*app_id, arrival);
+      client_->AppClosed(*app_id);
     }
     return;
   }
@@ -932,7 +903,7 @@ void ControlChannel::DispatchLine(const std::string& line,
                       "the request was dropped.";
       return;
     }
-    client_->AppCursor(*app_id, *shape, arrival);
+    client_->AppCursor(*app_id, *shape);
     return;
   }
 
@@ -956,8 +927,7 @@ void ControlChannel::DispatchLine(const std::string& line,
               combination->FindBool("alt").value_or(false),
               combination->FindBool("ctrl").value_or(false),
               combination->FindBool("shift").value_or(false),
-              combination->FindBool("logo").value_or(false)},
-        arrival);
+              combination->FindBool("logo").value_or(false)});
     return;
   }
 
@@ -965,8 +935,7 @@ void ControlChannel::DispatchLine(const std::string& line,
     DeliverModifiers(Modifiers{message.FindBool("alt").value_or(false),
                                message.FindBool("ctrl").value_or(false),
                                message.FindBool("shift").value_or(false),
-                               message.FindBool("logo").value_or(false)},
-                     arrival);
+                               message.FindBool("logo").value_or(false)});
     return;
   }
 
@@ -1038,7 +1007,7 @@ void ControlChannel::DispatchLine(const std::string& line,
     // that matched nothing is an answer, and a launcher that never heard one
     // would wait for a message the compositor has already sent.
     client_->Files(*query, std::move(files), static_cast<uint32_t>(*matched),
-                   *indexing, arrival);
+                   *indexing);
     return;
   }
 
@@ -1076,7 +1045,7 @@ void ControlChannel::DispatchLine(const std::string& line,
                          artist ? *artist : std::string(),
                          album ? *album : std::string(),
                          message.FindDouble("duration").value_or(0),
-                         cover ? *cover : std::string(), arrival);
+                         cover ? *cover : std::string());
     return;
   }
 
@@ -1141,7 +1110,7 @@ void ControlChannel::DispatchLine(const std::string& line,
       }
     }
     // Sent even when it is empty, for the reason `found_files` is.
-    client_->Apps(*query, std::move(apps), std::move(bookmarks), arrival);
+    client_->Apps(*query, std::move(apps), std::move(bookmarks));
     return;
   }
 
@@ -1158,7 +1127,7 @@ void ControlChannel::DispatchLine(const std::string& line,
     if (!charge || !charging) {
       return;
     }
-    client_->Battery(*charge, *charging, arrival);
+    client_->Battery(*charge, *charging);
     return;
   }
 
@@ -1189,7 +1158,7 @@ void ControlChannel::DispatchLine(const std::string& line,
     if (!theme) {
       return;
     }
-    client_->ThemeChanged(*theme, arrival);
+    client_->ThemeChanged(*theme);
     return;
   }
 
@@ -1209,7 +1178,7 @@ void ControlChannel::DispatchLine(const std::string& line,
     // shell captures the frame its wipe starts from in between: a site
     // turned on `theme` would be in that frame already turned.
     theme_sink_.Run(*theme);
-    client_->WindowsThemeChanged(*theme, arrival);
+    client_->WindowsThemeChanged(*theme);
     return;
   }
 
@@ -1240,7 +1209,7 @@ void ControlChannel::DispatchLine(const std::string& line,
     // Sent even when it is empty, for the reason `displays` and `files` are: a
     // desktop nothing has been copied on is an answer, and a panel that never
     // heard one would wait for a message that has already been sent.
-    client_->Clipboard(std::move(entries), arrival);
+    client_->Clipboard(std::move(entries));
     return;
   }
 
@@ -1271,7 +1240,7 @@ void ControlChannel::DispatchLine(const std::string& line,
     }
     // Sent even when it is empty, for `clipboard`'s reason: a tray with
     // nothing in it is an answer.
-    client_->Tray(std::move(items), arrival);
+    client_->Tray(std::move(items));
     return;
   }
 
@@ -1326,7 +1295,7 @@ void ControlChannel::DispatchLine(const std::string& line,
           *time));
     }
     // Sent even when it is empty, for `clipboard`'s reason.
-    client_->Notifications(std::move(items), arrival);
+    client_->Notifications(std::move(items));
     return;
   }
 
@@ -1340,7 +1309,7 @@ void ControlChannel::DispatchLine(const std::string& line,
     if (!idle) {
       return;
     }
-    client_->Idle(*idle, arrival);
+    client_->Idle(*idle);
     return;
   }
 
@@ -1358,23 +1327,23 @@ void ControlChannel::DispatchLine(const std::string& line,
     // Written down before the page hears it, so the home is shut to
     // domicile://home/ no later than the page learns the desk is locked.
     DeskLock::Set(*locked);
-    client_->Locked(*locked, arrival);
+    client_->Locked(*locked);
     return;
   }
 
   if (*type == "shell_config") {
-    // RELAYED AS THE LINE IT ARRIVED AS, and read no further than `type`. A
-    // shell's `options` are freeform, so the page parses this itself -- see
+    // RELAYED AS THE LINE IT ARRIVED AS, and read no further than `type`: the
+    // renderer half of DomicileHost reads its keys -- see
     // ControlChannelClient::ShellConfig -- and a field picked out here would be
-    // a second reader of a shape the page already owns. The parse above has
-    // already refused a line that is not a JSON object.
-    client_->ShellConfig(line, arrival);
+    // a second reader of that shape. The parse above has already refused a
+    // line that is not a JSON object.
+    client_->ShellConfig(line);
     return;
   }
 
   if (*type == "audio_levels") {
     client_->AudioLevels(
-        Rows<mojom::AudioLevelPtr>(message, "levels", ReadAudioLevel), arrival);
+        Rows<mojom::AudioLevelPtr>(message, "levels", ReadAudioLevel));
     return;
   }
 
@@ -1386,7 +1355,7 @@ void ControlChannel::DispatchLine(const std::string& line,
         Rows<mojom::AudioDevicePtr>(message, "inputs", ReadAudioDevice),
         Rows<mojom::AudioStreamPtr>(message, "playback", ReadAudioStream),
         Rows<mojom::AudioStreamPtr>(message, "recording", ReadAudioStream),
-        Rows<mojom::AudioCardPtr>(message, "cards", ReadAudioCard), arrival);
+        Rows<mojom::AudioCardPtr>(message, "cards", ReadAudioCard));
     return;
   }
 
@@ -1394,7 +1363,7 @@ void ControlChannel::DispatchLine(const std::string& line,
     // Empty app_id means the chrome itself has focus, which is a state rather
     // than a missing field.
     const std::string* app_id = message.FindString("app_id");
-    client_->FocusChanged(app_id ? *app_id : std::string(), arrival);
+    client_->FocusChanged(app_id ? *app_id : std::string());
     return;
   }
 
@@ -1403,7 +1372,7 @@ void ControlChannel::DispatchLine(const std::string& line,
     // answer: nothing but a client asks for the keyboard.
     const std::string* app_id = message.FindString("app_id");
     if (app_id) {
-      client_->FocusRequested(*app_id, arrival);
+      client_->FocusRequested(*app_id);
     }
     return;
   }

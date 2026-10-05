@@ -93,7 +93,7 @@ wait_for_line "$TRIES" "GUARD asks " "$ENGINE_LOG"
 sleep 1
 
 # The closing quote is Chromium's and keeps each match on the message: see
-# guard-control-arrival.sh.
+# guard-windows-state.sh.
 ASKS=$(grep -oE '"GUARD asks [^"]*"' "$ENGINE_LOG" | head -1)
 WANTED='"GUARD asks old=AbortError new=new.txt preview=text:hi notes.txt apps=Editor"'
 

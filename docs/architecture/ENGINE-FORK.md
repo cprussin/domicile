@@ -1239,18 +1239,14 @@ copy path before the compositor can submit leaves nothing drawing at all.
       allocation and the browser's import of it need a render node, which no
       check here has.
 
-- [x] **an arrival stamp on the control channel's events.** Every
-      `ControlChannelClient` method carries a `mojo_base.mojom.TimeTicks
-      arrival`, taken in `ControlChannel::OnRead` — once per read, not per
-      line — and `DomicileHost::Arrival` puts it on the document's clock, so
-      `event.timeStamp - event.arrival` is the stage. `Displays` is the one
-      without one: it dispatches a bare `Event` and there is nothing to hang it
-      on. **Measured:** `guard-control-arrival.sh` drives three lines down a
-      real control socket and has the page print the subtraction, reading the
-      stamp's shape as well as its value — a stamp nobody fills in reports a
-      plausible hop, which is how the deleted instrument printed `ipc_ms=0`
-      every interval. The SDK's window for it is still gone; rebuilding an
-      instrument is the item below, and this is the number it was missing.
+- [x] **an arrival stamp on the control channel's events — built, then
+      dropped.** Every `ControlChannelClient` method carried a
+      `mojo_base.mojom.TimeTicks arrival`, taken in `ControlChannel::OnRead`,
+      and the page could subtract it from `event.timeStamp`. Nothing read it but
+      its own guard, and the state events it rode are attributes now
+      (WINDOW-DOMICILE.md), so it went with them. `latency.rs` and
+      `guard-latency.sh`, below, are the real measurement. The cursor's closed
+      set its guard also read is `guard-windows-state.sh`'s now.
 - [x] **rebuild the latency measurement** in the compositor (#206). It is the
       one process that both puts the key into the client's seat and holds the
       engine connection that knows when viz presented; a page can see the first

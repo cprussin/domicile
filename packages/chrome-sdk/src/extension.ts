@@ -1,8 +1,7 @@
 // One extension in the tray, as a shell draws it.
 //
-// Its own module because both halves of the SDK read it: `host-message.ts`
-// turns the engine's `extensions` event into a list of these, and a shell's
-// tray renders them. Parsed rather than passed through, as `appCursor` is: the
+// A shell's tray parses `DomicileHost.extensions` into a list of these and
+// renders them. Parsed rather than passed through, as `appCursor` is: the
 // engine and this SDK ship apart, and a row this SDK cannot draw should be a
 // stack rather than a blank button.
 

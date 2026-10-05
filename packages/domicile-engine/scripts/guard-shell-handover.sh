@@ -91,7 +91,7 @@ TRIES=$((FOR_SECONDS * 4))
 wait_for_line "$TRIES" "GUARD handover " "$ENGINE_LOG"
 
 # The closing quote is Chromium's and keeps each match on the message: see
-# guard-control-arrival.sh.
+# guard-windows-state.sh.
 HANDOVER=$(grep -oE '"GUARD handover [^"]*"' "$ENGINE_LOG" | head -1)
 WANTED='"GUARD handover root=body desktop=yes navigator=none window=none"'
 

@@ -4,7 +4,7 @@
 // A URL the desk offers by name, from its config.
 //
 // An interface rather than a dictionary for DomicileDesktopEntry's reason:
-// these are read off a DomicileAppsEvent's array attribute.
+// these are read off a DomicileAppSearch.
 
 [
     Exposed=Window,

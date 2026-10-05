@@ -3,7 +3,6 @@
 
 module domicile.mojom;
 
-import "mojo/public/mojom/base/time.mojom";
 
 // The shell's control channel to the compositor, as a renderer-to-browser
 // interface rather than a socket the page opens.
@@ -513,67 +512,40 @@ interface ControlChannel {
 
 // Compositor -> browser -> page. One method, not a callback on Spawn: these
 // arrive because a client did something, not because the page asked.
-//
-// EVERY METHOD HERE CARRIES AN `arrival`, AND IT IS NOT DECORATION. Between
-// the compositor's socket and a listener in the page there is a real stage --
-// a read in the browser process, a mojo message, a hop into the renderer, a
-// dispatch -- and until this parameter existed nothing in a page could price
-// it. `Event.timeStamp` is when the event was *constructed*, in the renderer,
-// at dispatch, so measuring against it reports a few microseconds of Blink and
-// calls it the IPC; that is exactly how the deleted instrument came to print
-// `ipc_ms=0` every interval. `arrival` is `base::TimeTicks::Now()` taken in
-// `ControlChannel::OnRead`, the moment the browser process had the bytes, and
-// Blink turns it into a `DOMHighResTimeStamp` on the same clock as
-// `performance.now()` -- so `event.timeStamp - event.arrival` is the stage.
-// See docs/architecture/ENGINE-FORK.md, phase 2.
-//
-// `Displays` is the one method without one, because there is nothing to put it
-// on: it dispatches a bare `Event` and the desktop is read off
-// `DomicileHost.displays` rather than carried. A parameter no event
-// class can hold would be a field nothing reads.
 interface ControlChannelClient {
   // A window's title changed. `app_id` is the same id an <app> element names.
-  AppTitled(string app_id, string title, mojo_base.mojom.TimeTicks arrival);
+  AppTitled(string app_id, string title);
 
   // A window exists. Size is absent until the client has committed a buffer --
   // a toplevel maps before it draws, and how big a Wayland client wants to be
   // is something it says by drawing. Believing a zero here is what opened
   // windows at nothing at all.
   AppAppeared(string app_id, string title, bool has_size,
-              double width, double height,
-              mojo_base.mojom.TimeTicks arrival);
+              double width, double height);
 
-  AppResized(string app_id, double width, double height,
-             mojo_base.mojom.TimeTicks arrival);
+  AppResized(string app_id, double width, double height);
 
   // The smallest and largest a client will draw its window, in logical units,
   // with 0 on an axis for no limit -- xdg-shell's own spelling.
-  AppMinSize(string app_id, double width, double height,
-             mojo_base.mojom.TimeTicks arrival);
-  AppMaxSize(string app_id, double width, double height,
-             mojo_base.mojom.TimeTicks arrival);
+  AppMinSize(string app_id, double width, double height);
+  AppMaxSize(string app_id, double width, double height);
 
   // A popup over the window or popup `parent_app_id`: its box is `width` by
   // `height` at (`x`, `y`) from that one's, in logical units. Sent again when
   // the client moves it; it goes with AppClosed.
   PopupPlaced(string app_id, string parent_app_id, double x, double y,
-              double width, double height, bool grab,
-              mojo_base.mojom.TimeTicks arrival);
-  AppClosed(string app_id, mojo_base.mojom.TimeTicks arrival);
+              double width, double height, bool grab);
+  AppClosed(string app_id);
 
   // The cursor a client asked for over its own surface.
-  AppCursor(string app_id, CursorShape cursor,
-            mojo_base.mojom.TimeTicks arrival);
+  AppCursor(string app_id, CursorShape cursor);
 
   // A grabbed shortcut fired. Named for the event rather than the struct,
   // which would shadow the type inside the generated class.
   //
-  // Its `arrival` is the one stamp here that is not always a socket read: a
-  // chord claimed by the shell is matched in the browser process by
-  // ShortcutRegistry and never crosses the compositor's socket at all. It is
-  // taken when the match is made, which is the same quantity -- the moment
-  // this process had the message -- measured against the same clock.
-  ShortcutPressed(Shortcut shortcut, mojo_base.mojom.TimeTicks arrival);
+  // A chord claimed by the shell is matched in the browser process by
+  // ShortcutRegistry and never crosses the compositor's socket at all.
+  ShortcutPressed(Shortcut shortcut);
 
   // The seat's modifier state. One seat, outliving every window, which is why
   // a dropped key release latches modifiers into clients that never saw it.
@@ -581,8 +553,7 @@ interface ControlChannelClient {
   // Which modifiers are held, not xkb's four masks: the compositor has already
   // resolved depressed/latched/locked against the keymap, and a shell asking
   // "is control down" cannot answer that from a mask without the keymap too.
-  Modifiers(bool alt, bool ctrl, bool shift, bool meta,
-            mojo_base.mojom.TimeTicks arrival);
+  Modifiers(bool alt, bool ctrl, bool shift, bool meta);
 
   // The whole desktop, whenever any of it changes.
   //
@@ -617,8 +588,7 @@ interface ControlChannelClient {
   Files(string query,
         array<string> files,
         uint32 matched,
-        bool indexing,
-        mojo_base.mojom.TimeTicks arrival);
+        bool indexing);
 
   // What is in the file a PreviewFile named: `path` is the one answered, and
   // `kind` says which of the rest means anything.
@@ -645,16 +615,14 @@ interface ControlChannelClient {
               string artist,
               string album,
               double duration,
-              string cover,
-              mojo_base.mojom.TimeTicks arrival);
+              string cover);
 
   // The applications and bookmarks a SearchApps matched, each best first. An
   // answer like Files, so the query comes back for the page to tell answers
   // apart; empty arrays are a query that matched nothing.
   Apps(string query,
        array<DesktopEntry> apps,
-       array<Bookmark> bookmarks,
-       mojo_base.mojom.TimeTicks arrival);
+       array<Bookmark> bookmarks);
 
   // The machine's battery: `charge` is a fraction 0.0 through 1.0, `charging`
   // is whether a lead is in.
@@ -669,14 +637,13 @@ interface ControlChannelClient {
   // resolves with the default BatteryStatus -- charging, and full -- which no
   // page can distinguish from a real full battery. A machine with no battery
   // sends nothing rather than a zero, for the same reason.
-  Battery(double charge, bool charging, mojo_base.mojom.TimeTicks arrival);
+  Battery(double charge, bool charging);
 
   // How bright the screen is, 0.0 through 1.0.
   //
   // Pushed like Battery: when the backlight moves -- a key, another program,
   // or SetBrightness -- and once more to a chrome that has just connected. A
-  // machine with no backlight sends none. No arrival: the page keeps it as an
-  // attribute, like Displays, rather than handing it out on an event.
+  // machine with no backlight sends none.
   Brightness(double level);
 
   // What has been copied on this desktop, newest first.
@@ -692,7 +659,7 @@ interface ControlChannelClient {
   // that looks like it can: that API answers out of this browser's own
   // clipboard, which on the platform this engine scans out on is connected to
   // no Wayland client at all.
-  Clipboard(array<ClipboardEntry> entries, mojo_base.mojom.TimeTicks arrival);
+  Clipboard(array<ClipboardEntry> entries);
 
   // The system tray: every application showing an icon, in the order they
   // registered.
@@ -702,7 +669,7 @@ interface ControlChannelClient {
   // that has just connected. The compositor is the StatusNotifierItem host --
   // the session bus is its, and a page has none. An empty array is a desk no
   // application has put an icon on, and every desk with no session bus.
-  Tray(array<TrayItem> items, mojo_base.mojom.TimeTicks arrival);
+  Tray(array<TrayItem> items);
 
   // The desk's notifications: every one not yet cleared, oldest first.
   //
@@ -711,8 +678,7 @@ interface ControlChannelClient {
   // connected -- the history is the compositor's, so a page that reloads
   // keeps it. Which are new is the page's to tell. An empty array is a desk
   // with nothing to say, and every desk with no session bus.
-  Notifications(array<Notification> items,
-                mojo_base.mojom.TimeTicks arrival);
+  Notifications(array<Notification> items);
 
   // Which way round the desktop is drawn now.
   //
@@ -726,7 +692,7 @@ interface ControlChannelClient {
   // ControlChannel::SetTheme. The sender is told again as part of that last
   // one, which is deliberate -- one path sets the theme, rather than a page
   // that believes its own click.
-  ThemeChanged(Theme theme, mojo_base.mojom.TimeTicks arrival);
+  ThemeChanged(Theme theme);
   // Whether anybody is at this desktop: true is a desk nobody has touched for
   // as long as its config says, false is somebody back at it.
   //
@@ -747,7 +713,7 @@ interface ControlChannelClient {
   // than the page's. That refusal is Locked below, which is a member of its own
   // because the two are not the same fact -- a desk can be dark and open, and a
   // locked desk somebody has just wiggled the mouse at is lit and shut.
-  Idle(bool idle, mojo_base.mojom.TimeTicks arrival);
+  Idle(bool idle);
 
   // Whether this desk is locked: true is a desktop that will not deliver a
   // keystroke or a click to any client until somebody says the passphrase.
@@ -768,7 +734,7 @@ interface ControlChannelClient {
   // would have raised its lock screen. Sent on the turn the answer changes and
   // once more to a chrome that has just connected. A desktop with no passphrase
   // configured sends none of these at all, because it cannot lock.
-  Locked(bool locked, mojo_base.mojom.TimeTicks arrival);
+  Locked(bool locked);
 
   // Which way round the desk's windows are drawn now: ThemeChanged's other
   // half. It arrives once every chrome has called ThemeCaptured -- or the
@@ -776,7 +742,7 @@ interface ControlChannelClient {
   // repaint, and again when a chrome connects. The browser has already drawn
   // its own pages this way by the time it arrives; a shell holding its wipe
   // lets go on it.
-  WindowsThemeChanged(Theme theme, mojo_base.mojom.TimeTicks arrival);
+  WindowsThemeChanged(Theme theme);
 
   // The shell's part of the desk's config -- its keybindings, each mode's, and
   // the options the config keeps for a shell by name -- as the one JSON line
@@ -784,15 +750,15 @@ interface ControlChannelClient {
   //
   // A STRING AND NOT A STRUCT, which is the opposite of every other member
   // here and is deliberate. A shell's `options` are whatever its config says,
-  // and neither mojom nor WebIDL can type a value nobody has declared, so the
-  // page parses the line for itself; a struct for the half that can be typed
-  // would be the same message read in two places. The browser has already
-  // parsed it once, as it does every line, so what arrives is a JSON object in
-  // valid UTF-8 and nothing more is promised.
+  // and mojom cannot type a value nobody has declared. The renderer half of
+  // DomicileHost reads the keys out of it, to resolve the chords grabbed by
+  // name, and none of it reaches the page. The browser has already parsed it
+  // once, as it does every line, so what arrives is a JSON object in valid
+  // UTF-8 and nothing more is promised.
   //
   // Pushed like ThemeChanged: once to a chrome that has just connected, and
   // again whenever a reload of the compositor's config moved what it carries.
-  ShellConfig(string config, mojo_base.mojom.TimeTicks arrival);
+  ShellConfig(string config);
 
   // The desk's sound: every output and input, every stream playing or
   // recording, every sound card, each list in the sound server's order.
@@ -804,23 +770,22 @@ interface ControlChannelClient {
         array<AudioDevice> inputs,
         array<AudioStream> playback,
         array<AudioStream> recording,
-        array<AudioCard> cards,
-        mojo_base.mojom.TimeTicks arrival);
+        array<AudioCard> cards);
 
   // How loud what WatchAudioLevels asked for is: some twenty times a second
   // while anything is metered, and never otherwise. An id not heard on yet is
   // left out rather than sent as silence.
-  AudioLevels(array<AudioLevel> levels, mojo_base.mojom.TimeTicks arrival);
+  AudioLevels(array<AudioLevel> levels);
 
   // Focus moved, including to the chrome itself, in which case app_id is empty.
-  FocusChanged(string app_id, mojo_base.mojom.TimeTicks arrival);
+  FocusChanged(string app_id);
 
   // A client asked for the keyboard and has not been given it. The shell
   // decides: the compositor forwards the request with the seat where it was,
   // so a page that ignores this is a desktop where a background window cannot
   // take what its user is typing into. Never empty -- a request comes from a
   // client, and the chrome asking itself for focus does not cross the wire.
-  FocusRequested(string app_id, mojo_base.mojom.TimeTicks arrival);
+  FocusRequested(string app_id);
 
   // An address somebody asked this desktop to open -- `domicile open-url`,
   // which is what `BROWSER` runs inside it. Not the compositor's: it comes

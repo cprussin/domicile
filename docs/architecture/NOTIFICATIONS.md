@@ -11,7 +11,7 @@ application ──Notify / CloseNotification──▶ compositor (org.freedeskto
 page in a <webview> ─ new Notification() ─▶ engine (Chrome's Linux bridge) ─Notify─▶ │
             ◀──ActionInvoked, NotificationClosed────                                 │  HostMessage::Notifications { items }
                                                                                      ▼
-                                                        engine: `notifications` event
+                                                        engine: `notifications` attribute
                                                                                      ▼
                                          shell: domicile.notifications, notificationschanged → toasts, bell, drawer
 shell ─ dismissNotifications(ids) / invokeNotificationAction(id, key) ─▶ engine ─▶ compositor
@@ -22,7 +22,7 @@ shell ─ dismissNotifications(ids) / invokeNotificationAction(id, key) ─▶ e
 | Wire: `HostMessage::Notifications`, `ChromeMessage::DismissNotifications`, `InvokeNotificationAction`, `Notification`, `Urgency` | `packages/domicile-protocol` |
 | The history; what a `Notify` is shown as (pictures, actions, urgency, a page's origin) | `packages/domicile-host/src/notifications.rs` |
 | The bus: the name, `Notify`, the signals | `packages/domicile-compositor/src/notifications.rs` |
-| `notifications` event, `dismissNotifications()`, `invokeNotificationAction()` | `control_channel.mojom`, `modules/domicile/domicile_notification*`, patch 0067 |
+| `notifications` attribute, `dismissNotifications()`, `invokeNotificationAction()` | `control_channel.mojom`, `modules/domicile/domicile_notification*`, patch 0067 |
 | Web Notifications allowed without a prompt | patch 0068, `guard-webview-notifications.sh`; the shell's own page, `guard-shell-web-apis.sh` |
 | `DomicileNotification`, `notifications`, `dismissNotifications`, `invokeNotificationAction`; `Notification` | `@domicile-desktop/sdk/domicile-host`, `@domicile-desktop/sdk/notification` |
 | `Toaster`: the deck of toasts | `@domicile-desktop/component-library/Toaster` |

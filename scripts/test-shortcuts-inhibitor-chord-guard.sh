@@ -284,7 +284,7 @@ expect "the page taking it without the switch names the switch" "yes" \
 # is a zero in the same voice as a key that never arrived. So they are run here
 # over a log shaped the way Chromium writes a console line: the message inside
 # quotes, with a prefix and a source after it. The format is the one recorded
-# from run 34623505023 in `scripts/test-control-arrival-guard.sh`.
+# from engine run 34623505023.
 echo
 echo "what the readings read"
 CONSOLE='[1656824:1656824:0911/102653.088606:INFO:CONSOLE:48] "GUARD %s", source: domicile://shell/guard-shortcuts-inhibitor-chord.js (48)'
@@ -333,7 +333,7 @@ expect "the chord's key without Meta is the page taking it, without Meta" \
   "listening=1 focused=1 plain=1 page=1 meta=0 host=0" \
   "$(logged "listening" "focused" "keydown key=$PLAIN_KEY meta=false" \
        "keydown key=$CHORD_KEY meta=false" | taken 1 1)"
-# THE QUOTE IS LOAD-BEARING, the way `guard-control-arrival.sh` found out: a key
+# THE QUOTE IS LOAD-BEARING, as `guard-windows-state.sh` says: a key
 # whose name starts with the chord's is a different key, and an unanchored match
 # would let it answer for the chord.
 expect "a key named after the chord's is not the chord" \

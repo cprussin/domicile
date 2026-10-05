@@ -6,7 +6,7 @@
 // because the browser shows one by calling that server.
 //
 // An interface rather than a dictionary for DomicileTrayItem's reason: these
-// are read off a DomicileNotificationsEvent's array.
+// are read off DomicileHost.notifications.
 
 [
     Exposed=Window,

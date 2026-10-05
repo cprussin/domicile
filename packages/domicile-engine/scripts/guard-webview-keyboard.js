@@ -138,10 +138,10 @@ export const Shell = (_root, desktop) => {
     );
   });
 
-  host.addEventListener("modifiers", (event) => {
+  host.addEventListener("modifierschanged", () => {
     say(
-      `modifiers alt=${event.altKey} ctrl=${event.ctrlKey}` +
-        ` shift=${event.shiftKey} meta=${event.metaKey}`,
+      `modifiers alt=${host.altKey} ctrl=${host.ctrlKey}` +
+        ` shift=${host.shiftKey} meta=${host.metaKey}`,
     );
   });
 

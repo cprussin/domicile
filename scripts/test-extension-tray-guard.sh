@@ -68,8 +68,8 @@ says() { # $1 MEASURED, $2 what the sentence must contain
 
 # MEASURED is "<leg> <sent> <heard> <tray> <opened> <contexts> <closed>
 # <sized>":
-# whether the stand-in sent the list, whether the page heard any `extensions`
-# event, whether the fixture's row was in it (as expected, for the claim; at
+# whether the stand-in sent the list, whether the page heard any
+# `extensionschanged`, whether the fixture's row was in it (as expected, for the claim; at
 # all, for the control), whether the <webview> showed its page, whether the
 # popup's runtime.getContexts listed it as a POPUP and tabs.getCurrent named
 # no tab (any answer at all, for the control), whether the <webview> dispatched `domicile-close` (after any

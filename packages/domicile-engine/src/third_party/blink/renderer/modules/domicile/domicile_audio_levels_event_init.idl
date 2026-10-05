@@ -3,5 +3,4 @@
 
 dictionary DomicileAudioLevelsEventInit : EventInit {
   sequence<DomicileAudioLevel> levels = [];
-  DOMHighResTimeStamp arrival = 0;
 };

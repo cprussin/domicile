@@ -67,7 +67,7 @@ the `DomicileHost` handed to `Shell`:
 
 ```ts
 // DomicileHost
-onextensions: (event: DomicileExtensionsEvent) => void;
+readonly extensions: readonly DomicileExtension[] | null; // with extensionschanged
 activateExtension(id: string): void;
 
 interface DomicileExtension {

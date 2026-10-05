@@ -10,7 +10,7 @@
 #
 # What this holds, without a build: no patch writes the global list again, the
 # fork's code names no event through it, and the fork's list, the IDL's
-# `on<name>` handlers and the list the control-arrival guard exercises in a
+# `on<name>` handlers and the list the windows-state guard exercises in a
 # real engine are one set. The guard is what shows each name still fires.
 set -u
 
@@ -54,7 +54,7 @@ expect "and it is built" 0 "$?"
 
 ours="$(sed -n 's/^ *X(\([a-z]*\), *[A-Za-z]*) *\\\?$/\1/p' "$NAMES_H" 2>/dev/null | sorted)"
 idl="$(sed -n 's/^ *attribute EventHandler on\([a-z]*\);.*/\1/p' "$DOMICILE/domicile_host.idl" | sorted)"
-guard="$(sed -n '/^const EVENT_NAMES = \[/,/^\];/p' "$ENGINE/scripts/guard-control-arrival.js" |
+guard="$(sed -n '/^const EVENT_NAMES = \[/,/^\];/p' "$ENGINE/scripts/guard-windows-state.js" |
   grep -o '"[a-z]*"' | tr -d '"' | sorted)"
 
 [ -n "$idl" ]
