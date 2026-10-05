@@ -159,6 +159,36 @@ TEST(DrmPointerCrossingTest, AWarpPastTheHostLandsOnTheMonitorThatHoldsIt) {
            kRight, gfx::PointF(1920, 1080));
 }
 
+// aura asks where the cursor is to synthesize a move after a window changes,
+// and the window that answers is the one that hears the pointer.
+TEST(DrmPointerCrossingTest, TheDesksHostHearsThePointerOnEveryMonitor) {
+  const std::optional<PointerHeard> heard =
+      PointerHeardAt(RightTwoScreens(), RightTwoLayout(), kLaptop,
+                     gfx::PointF(2880 + 3072, 2154));
+  ASSERT_TRUE(heard.has_value());
+  EXPECT_EQ(heard->window, kLaptop);
+  ExpectNear(heard->location, gfx::PointF(2887.5, 960));
+}
+
+TEST(DrmPointerCrossingTest, WithNoHostTheWindowUnderThePointerHearsIt) {
+  const std::optional<PointerHeard> heard = PointerHeardAt(
+      SideBySide(), kHardwareDecides, gfx::kNullAcceleratedWidget,
+      gfx::PointF(2000, 10));
+  ASSERT_TRUE(heard.has_value());
+  EXPECT_EQ(heard->window, kRight);
+  ExpectNear(heard->location, gfx::PointF(80, 10));
+}
+
+// A host whose window closed before the shell named another is not asked:
+// `PointerInWindow` CHECKs that its window is a screen.
+TEST(DrmPointerCrossingTest, AHostWithNoScreenLeavesItToTheWindowUnderIt) {
+  const std::optional<PointerHeard> heard =
+      PointerHeardAt(SideBySide(), kHardwareDecides, kLaptop,
+                     gfx::PointF(100, 10));
+  ASSERT_TRUE(heard.has_value());
+  EXPECT_EQ(heard->window, kLeft);
+}
+
 // `home-office-center`: the laptop centered under one monitor.
 std::vector<PointerScreen> CenterScreens() {
   return {

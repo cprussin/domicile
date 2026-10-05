@@ -181,6 +181,28 @@ gfx::PointF PointerInWindow(const std::vector<PointerScreen>& screens,
   return ToPanel(*to, there->FromDesk(on_the_desk, UprightSize(*to)));
 }
 
+std::optional<PointerHeard> PointerHeardAt(
+    const std::vector<PointerScreen>& screens,
+    const std::vector<DomicileDisplayLayout>& layout,
+    gfx::AcceleratedWidget desk_host,
+    const gfx::PointF& location) {
+  if (std::ranges::find(screens, desk_host, &PointerScreen::window) !=
+      screens.end()) {
+    return PointerHeard{desk_host,
+                        PointerInWindow(screens, layout, location, desk_host)};
+  }
+  const auto on =
+      std::ranges::find_if(screens, [&](const PointerScreen& screen) {
+        return screen.bounds_in_screen.Contains(
+            gfx::ToFlooredPoint(location));
+      });
+  if (on == screens.end()) {
+    return std::nullopt;
+  }
+  return PointerHeard{on->window,
+                      location - on->bounds_in_screen.OffsetFromOrigin()};
+}
+
 bool HasTheKeyboard(const gfx::Rect& bounds_in_screen,
                     const gfx::PointF& pointer) {
   return bounds_in_screen.Contains(gfx::ToFlooredPoint(pointer));
