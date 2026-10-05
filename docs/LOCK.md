@@ -26,6 +26,7 @@ desktop treats it.
 | Input | `Key`, pointer motion, buttons, axis, leave | Dropped (`debug` log) |
 | Commands | `CloseApp`, `Spawn`, `CopyClipboardEntry`, tray, notifications, audio | Refused (`warn` log) |
 | Reads on the connection | `SearchFiles`, `PreviewFile`, `SearchApps` | Answered with nothing (`warn` log) |
+| System calls | `SystemRequest`, except reads under `/sys` and calls that stop something running | A call that starts something is answered `locked`; `stdin` is dropped (`warn` log) |
 | Allowed | `ChromeHello`, `Lock`, `Unlock`, `KeyboardFocus`, output scale and size, `ClipboardCopied`, theme, brightness | Handled normally |
 
 Why some requests are allowed:
@@ -36,6 +37,9 @@ Why some requests are allowed:
   about focus after unlock. No key reaches the window while locked anyway.
 - `ClipboardCopied`: it is a client's copy, and the history must match pastes.
 - `SetTheme`: it opens and reads nothing.
+- System reads under `/sys`: a lock screen shows the battery. Only an absolute
+  path with no `..` counts, since the user can change nothing under `/sys`.
+- `unwatch`, `close_stdin`, `kill`: they stop what the shell started.
 
 ## Ordering
 

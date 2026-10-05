@@ -177,13 +177,15 @@ use domicile_host::clipboard::{text_mime, History, LONGEST_COPY, TEXT_MIMES};
 use domicile_host::desktop_entries::{application_dirs, data_dirs, find, installed};
 use domicile_host::file_preview::preview;
 use domicile_host::ipc::{apply_chrome_message, parse_chrome, to_line};
+use domicile_host::system::{locked_out, reach, Environment, Handled, System};
 use domicile_host::theme_turnover::{Step, Turnover, CAPTURE_WITHIN, REPAINT_WITHIN};
 use domicile_host::Host;
 use domicile_launch::arguments::arguments;
 use domicile_launch::handshake::{silence, Handshake, WAIT_FOR_A_PAGE};
 use domicile_launch::session::{publish, Session};
 use domicile_protocol::{
-    Bookmark, ChromeMessage, CursorShape, DesktopEntry, HostMessage, Passphrase, Theme, TrayAction,
+    Bookmark, ChromeMessage, CursorShape, DesktopEntry, HostMessage, Passphrase, SystemRequest,
+    Theme, TrayAction,
 };
 use smithay::backend::renderer::gles::GlesRenderer;
 use smithay::backend::renderer::ImportMemWl as _;
@@ -923,6 +925,25 @@ fn read_chrome_messages(
     // [`crate::which_engine`].
     let served_by = peer_pid(&stream);
     let reader = BufReader::new(stream);
+    // Dropped when the connection ends, which kills the page's processes.
+    let system = System::new(
+        // A user with no home gets `/`, as `login` gives them.
+        home_directory().unwrap_or_else(|| "/".into()),
+        desktop_environment(
+            &hub.wayland_display,
+            std::env::var_os("LD_LIBRARY_PATH").as_deref(),
+        ),
+        {
+            let writer = writer.clone();
+            move |message| {
+                // A failed write means the page is gone; this connection's
+                // reader then ends and drops `system`.
+                let mut writer = writer.lock().unwrap();
+                let _ = writer.write_all(to_line(&message).as_bytes());
+                let _ = writer.flush();
+            }
+        },
+    );
     let mut ready = false;
     // Whether this connection is in the broadcast list. Separate from `ready`
     // because a socket can send `hello` twice, and the writer must not be added
@@ -1040,6 +1061,9 @@ fn read_chrome_messages(
             }
             Ok(ChromeMessage::SearchFiles { query }) => {
                 answer_on_the_connection(hub, ConnectionRequest::SearchFiles { query })
+            }
+            Ok(ChromeMessage::SystemRequest { id, request }) => {
+                call_the_system(hub, &system, id, request)
             }
             Ok(ChromeMessage::PreviewFile { path }) => {
                 answer_on_the_connection(hub, ConnectionRequest::PreviewFile { path })
@@ -1247,6 +1271,36 @@ fn answer_on_the_connection(hub: &ChromeHub, request: ConnectionRequest) -> Vec<
         }
         None => answered_on_the_connection(hub, request),
     }
+}
+
+/// Run a system call for the page, unless the desktop is locked.
+///
+/// Answers go straight to the page from `system`'s threads. The only response
+/// returned here is a refusal. See `docs/architecture/SYSTEM-ACCESS.md`.
+fn call_the_system(
+    hub: &ChromeHub,
+    system: &System,
+    id: u32,
+    request: SystemRequest,
+) -> Vec<HostMessage> {
+    let refusal = if hub.the_desk_is_locked() {
+        crate::lock::refused(Asked::System(reach(&request)))
+    } else {
+        None
+    };
+    if let Some(refusal) = refusal {
+        say_what_the_lock_refused(refusal);
+        return locked_out(id, &request).into_iter().collect();
+    }
+    match system.handle(id, request) {
+        Handled::Done => {}
+        Handled::NothingRunning => debug!(id, "a system call drove an id that has ended"),
+        Handled::Malformed => warn!(
+            id,
+            "a system call drove an id with a request that does not fit it"
+        ),
+    }
+    Vec::new()
 }
 
 /// Answer a connection request.
@@ -5386,20 +5440,38 @@ fn client_command(
 ) -> Option<Command> {
     let (program, args) = command.split_first()?;
     let mut child = Command::new(program);
-    child
-        .args(args)
-        .env("WAYLAND_DISPLAY", wayland_display)
+    child.args(args);
+    for (name, value) in desktop_environment(wayland_display, library_path) {
+        match value {
+            Some(value) => child.env(name, value),
+            None => child.env_remove(name),
+        };
+    }
+    Some(child)
+}
+
+/// The variables [`client_command`] sets, or with `None` removes, so a process
+/// runs in this desktop rather than the one the compositor was started from.
+///
+/// Also what the shell's processes run with; see `domicile_host::system`.
+fn desktop_environment(wayland_display: &OsStr, library_path: Option<&OsStr>) -> Environment {
+    [
+        ("WAYLAND_DISPLAY", Some(wayland_display.to_os_string())),
         // For `OnlyShowIn` in `.desktop` files and for toolkits. Portal routing
         // uses the frontend's environment instead; see
         // `appearance::say_which_desktop`.
-        .env("XDG_CURRENT_DESKTOP", CURRENT_DESKTOP)
-        .envs(WAYLAND_PREFERENCE)
-        .env_remove("DISPLAY");
-    match library_path.and_then(without_the_engine) {
-        Some(theirs) => child.env("LD_LIBRARY_PATH", theirs),
-        None => child.env_remove("LD_LIBRARY_PATH"),
-    };
-    Some(child)
+        ("XDG_CURRENT_DESKTOP", Some(CURRENT_DESKTOP.into())),
+        ("DISPLAY", None),
+        ("LD_LIBRARY_PATH", library_path.and_then(without_the_engine)),
+    ]
+    .into_iter()
+    .chain(
+        WAYLAND_PREFERENCE
+            .iter()
+            .map(|&(name, value)| (name, Some(value.into()))),
+    )
+    .map(|(name, value)| (name.into(), value))
+    .collect()
 }
 
 /// `path` without any directory containing the engine, or `None` if nothing is

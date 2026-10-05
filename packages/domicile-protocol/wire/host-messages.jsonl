@@ -39,3 +39,17 @@
 {"type":"tray","items":[{"id":":1.42/StatusNotifierItem","title":"Network","icon":"data:image/png;base64,iVBORw0KGgo="},{"id":"org.kde.StatusNotifierItem-4071-1/StatusNotifierItem","title":"Syncthing"}]}
 {"type":"shell_config","keys":{"Return":28,"l":25,"parenleft":6}}
 {"type":"notifications","items":[{"id":7,"app_name":"Firefox","summary":"New message","body":"Ada: lunch?","icon":"data:image/png;base64,iVBORw0KGgo=","urgency":"normal","actions":[{"key":"reply","label":"Reply"}],"clickable":true,"time":1790000000000},{"id":8,"app_name":"","summary":"Battery low","body":"","urgency":"critical","actions":[],"clickable":false,"timeout_ms":0,"time":1790000060000}]}
+{"type":"system_reply","id":1,"reply":{"kind":"read","data":"OTcK"}}
+{"type":"system_reply","id":2,"reply":{"kind":"written"}}
+{"type":"system_reply","id":3,"reply":{"kind":"entries","entries":[{"name":"BAT0","file_type":"symlink"},{"name":"uevent","file_type":"file"}]}}
+{"type":"system_reply","id":4,"reply":{"kind":"stat","file_type":"directory","size":4096,"modified_ms":1790000000000}}
+{"type":"system_reply","id":4,"reply":{"kind":"stat","file_type":"other","size":0,"modified_ms":null}}
+{"type":"system_reply","id":5,"reply":{"kind":"started"}}
+{"type":"system_reply","id":6,"reply":{"kind":"failed","error":{"kind":"not_found","message":"No such file or directory (os error 2)"}}}
+{"type":"system_event","id":5,"event":{"kind":"output","stream":"stdout","data":"RXZlbnQgJ2NoYW5nZScK"}}
+{"type":"system_event","id":5,"event":{"kind":"output","stream":"stderr","data":"d2FybmluZwo="}}
+{"type":"system_event","id":7,"event":{"kind":"changed","path":"/home/ada/.config/domicile/bookmarks.json"}}
+{"type":"system_end","id":5,"end":{"kind":"exited","code":0,"signal":null}}
+{"type":"system_end","id":5,"end":{"kind":"exited","code":null,"signal":15}}
+{"type":"system_end","id":7,"end":{"kind":"stopped"}}
+{"type":"system_end","id":7,"end":{"kind":"failed","error":{"kind":"locked","message":"the desktop is locked"}}}

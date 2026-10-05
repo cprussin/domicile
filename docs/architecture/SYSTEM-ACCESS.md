@@ -76,11 +76,15 @@ Everything else moves to libraries on the primitives.
 
 ### Wire
 
-- Page to compositor: `SystemRequest { id, request }`, with `request` one of
-  `ReadFile`, `WriteFile`, `ReadDir`, `Stat`, `Watch`, `Spawn`, `Stdin`,
-  `Kill`, `DBusCall`, `DBusMatch`, `Cancel`.
-- Compositor to page: `SystemReply { id, reply }`, plus `SystemChunk { id,
-  data }` and `SystemEnd { id, outcome }` for streams. Bytes are base64.
+- Page to compositor: `system_request { id, request }`. `request` starts a
+  call (`read_file`, `write_file`, `read_dir`, `stat`, `watch`, `spawn`) or
+  drives one running under the same `id` (`unwatch`, `stdin`, `close_stdin`,
+  `kill`). D-Bus calls are to come.
+- Compositor to page: one `system_reply` per call that starts something
+  (`failed` included), then for a watch or process any number of
+  `system_event` and one `system_end`. Bytes are base64.
+- Types: `domicile_protocol::SystemRequest` and its neighbors. The executor is
+  `domicile_host::system`, one per chrome connection.
 - The engine relays both as opaque strings: one IDL method, one event. Adding
   a request type changes `domicile-protocol`, the compositor and the SDK, not
   the engine.
@@ -99,11 +103,12 @@ trust from reaching anything else.
   A script injected through a notification body, window title or file name
   does not run.
 - **argv only:** no shell string. A shell that wants `sh -c` passes it.
-- **Lock:** `crate::lock::refused` covers every `SystemRequest`. While locked:
-  - `Spawn`, `WriteFile`, `DBusCall` and new `DBusMatch` are refused
-  - `ReadFile`, `ReadDir`, `Stat` and `Watch` are answered only under `/sys`,
-    so a lock screen can show the battery
-  - streams opened before the lock keep running
+- **Lock:** `crate::lock::refused` covers every system call. While locked:
+  - a call that starts something fails with `locked`, except a read, stat,
+    listing or watch of an absolute path under `/sys` with no `..`, so a lock
+    screen can show the battery
+  - `stdin` is dropped; `unwatch`, `close_stdin` and `kill` are allowed
+  - processes and watches started before the lock keep running
 - **Lifetime:** a page's processes, watches and matches end when its
   connection closes, so a reload or `domicile load-shell` leaks nothing.
 
@@ -130,9 +135,9 @@ trust from reaching anything else.
 
 ## Plan
 
-- [ ] `SystemRequest`, `SystemReply`, `SystemChunk`, `SystemEnd` in
-      `domicile-protocol`, versioned
-- [ ] the compositor serves files and processes; `lock::refused` covers them
+- [x] the wire types in `domicile-protocol` and the SDK's schemas
+- [x] the compositor serves files, watches and processes; `lock::refused`
+      covers them
 - [ ] engine patch: opaque relay, binding for the top-level shell frame only,
       `script-src 'self'` on `domicile://shell`
 - [ ] `@domicile-desktop/sdk/system`
