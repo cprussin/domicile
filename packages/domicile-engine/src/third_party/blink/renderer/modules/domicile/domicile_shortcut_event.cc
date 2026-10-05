@@ -23,8 +23,7 @@ DomicileShortcutEvent::DomicileShortcutEvent(
       alt_(initializer->altKey()),
       ctrl_(initializer->ctrlKey()),
       shift_(initializer->shiftKey()),
-      meta_(initializer->metaKey()),
-      arrival_(initializer->arrival()) {}
+      meta_(initializer->metaKey()) {}
 
 DomicileShortcutEvent::DomicileShortcutEvent(const AtomicString& type,
                                              const String& chord,
@@ -32,16 +31,14 @@ DomicileShortcutEvent::DomicileShortcutEvent(const AtomicString& type,
                                              bool alt,
                                              bool ctrl,
                                              bool shift,
-                                             bool meta,
-                                             DOMHighResTimeStamp arrival)
+                                             bool meta)
     : Event(type, Bubbles::kNo, Cancelable::kNo),
       chord_(chord),
       keycode_(keycode),
       alt_(alt),
       ctrl_(ctrl),
       shift_(shift),
-      meta_(meta),
-      arrival_(arrival) {}
+      meta_(meta) {}
 
 DomicileShortcutEvent::~DomicileShortcutEvent() = default;
 

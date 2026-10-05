@@ -4,7 +4,7 @@
 // An application a desktop entry offers, as a launcher draws and runs it.
 //
 // An interface rather than a dictionary for DomicileClipboardEntry's reason:
-// these are read off a DomicileAppsEvent's array attribute.
+// these are read off a DomicileAppSearch.
 
 [
     Exposed=Window,

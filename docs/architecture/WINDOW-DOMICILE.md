@@ -168,9 +168,10 @@ Each step ships alone.
 - [x] the engine runs the shell and passes the desktop itself;
       `navigator.domicile` and `window.domicile` go
       (`guard-shell-handover.sh`)
-- [ ] the engine drops what nothing reads now: the events the attributes and
+- [x] the engine drops what nothing reads now: the events the attributes and
       promises replace (`appappeared` and the other seven `app*`,
-      `focuschanged`, `files`, …) and `shellconfig`
+      `focuschanged`, `files`, …), `shellconfig` and the `arrival` stamp
+      (`guard-windows-state.sh` fires every name left)
 - [ ] `<app>` routes its own input; `registerElements` and the routing modules go
 
 ## Open questions

@@ -260,8 +260,8 @@ expect "the page taking it without the switch names the switch" "yes" \
 # The readings, over the lines the engine writes.
 #
 # A reading that cannot match returns zero, the same as a key that never
-# arrived. So run them over Chromium's console line format, as recorded in
-# `scripts/test-control-arrival-guard.sh`.
+# arrived. So run them over Chromium's console line format, as recorded from
+# engine run 34623505023.
 echo
 echo "what the readings read"
 CONSOLE='[1656824:1656824:0911/102653.088606:INFO:CONSOLE:48] "GUARD %s", source: domicile://shell/guard-shortcuts-inhibitor-chord.js (48)'
@@ -310,7 +310,7 @@ expect "the chord's key without Meta is the page taking it, without Meta" \
   "$(logged "listening" "focused" "keydown key=$PLAIN_KEY meta=false" \
        "keydown key=$CHORD_KEY meta=false" | taken 1 1)"
 # The closing quote anchors the key name. Without it, a key whose name starts
-# with the chord key's would match, as `guard-control-arrival.sh` found.
+# with the chord key's would match, as `guard-windows-state.sh` says.
 expect "a key named after the chord's is not the chord" \
   "listening=1 focused=1 plain=1 page=0 meta=0 host=0" \
   "$(logged "listening" "focused" "keydown key=$PLAIN_KEY meta=false" \

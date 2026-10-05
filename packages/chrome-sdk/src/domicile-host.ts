@@ -103,62 +103,12 @@ export type DomicileWindow = {
 };
 
 /**
- * A window event: appeared, resized, closed, focus changed, and similar.
- *
- * Fields an event type does not use are empty or zero.
- * {@link DomicileHost.windows} holds the same state with `null` for absent.
+ * A client asked for the keyboard (`focusrequested`). Focus has not moved; the
+ * shell answers with {@link DomicileHost.focusApp} or ignores it.
  */
 export type DomicileAppEvent = Event & {
-  /** The window's id. Empty on `focuschanged` means the chrome has focus. */
+  /** The window's id. */
   readonly appId: string;
-  readonly title: string;
-  /**
-   * False until the client has committed a buffer.
-   *
-   * A window can appear before it has a size. Ignore `width` and `height`
-   * while this is false.
-   */
-  readonly hasSize: boolean;
-  readonly width: number;
-  readonly height: number;
-
-  /**
-   * `popupplaced` only: the popup's parent, and its offset from the parent's
-   * top-left in CSS pixels.
-   */
-  readonly parentAppId: string;
-  readonly x: number;
-  readonly y: number;
-  /** `popupplaced` only: `true` for a menu, `false` for a tooltip. */
-  readonly grab: boolean;
-
-  /** See {@link DomicileModifiersEvent.arrival}. */
-  readonly arrival: DOMHighResTimeStamp;
-};
-
-/** A client set the cursor shape over its window. */
-export type DomicileAppCursorEvent = Event & {
-  readonly appId: string;
-
-  /**
-   * The CSS `cursor` keyword the client asked for.
-   *
-   * The SDK and engine ship separately, so their lists can differ. Treat it
-   * as a keyword; don't switch over it exhaustively.
-   */
-  readonly cursor: CursorShape;
-
-  /** See {@link DomicileModifiersEvent.arrival}. */
-  readonly arrival: DOMHighResTimeStamp;
-};
-
-/** A window's title was set or changed. */
-export type DomicileAppTitledEvent = Event & {
-  readonly appId: string;
-  readonly title: string;
-
-  /** See {@link DomicileModifiersEvent.arrival}. */
-  readonly arrival: DOMHighResTimeStamp;
 };
 
 /** A combination claimed with `grabShortcut()` was pressed. */
@@ -173,38 +123,15 @@ export type DomicileShortcutEvent = Event & {
   readonly ctrlKey: boolean;
   readonly shiftKey: boolean;
   readonly metaKey: boolean;
-
-  /** See {@link DomicileModifiersEvent.arrival}. */
-  readonly arrival: DOMHighResTimeStamp;
-};
-
-/** The modifiers the seat holds, already resolved against the keymap. */
-export type DomicileModifiersEvent = Event & {
-  readonly altKey: boolean;
-  readonly ctrlKey: boolean;
-  readonly shiftKey: boolean;
-  readonly metaKey: boolean;
-
-  /**
-   * When the browser process received this message, on the `performance.now()`
-   * clock.
-   *
-   * Use this, not `timeStamp`, to measure IPC latency: `timeStamp` is set in
-   * the renderer at dispatch.
-   */
-  readonly arrival: DOMHighResTimeStamp;
 };
 
 /**
- * The answer to {@link DomicileHost.previewFile}.
+ * The answer {@link DomicileHost.previewFile} resolves with.
  *
  * `kind` is `text`, `directory`, `audio`, `binary` or `unreadable`. Only the
  * fields for that kind are filled; the rest are empty.
  */
-export type DomicileFilePreviewEvent = Event & {
-  /** The path that was asked about. */
-  readonly path: string;
-
+export type DomicileFilePreview = {
   readonly kind: string;
 
   /** The start of the file, for a `text` preview. */
@@ -223,9 +150,6 @@ export type DomicileFilePreviewEvent = Event & {
 
   /** Cover art of an `audio` preview, as a `data:` URL. */
   readonly cover: string;
-
-  /** See {@link DomicileModifiersEvent.arrival}. */
-  readonly arrival: DOMHighResTimeStamp;
 };
 
 /** An application from a desktop entry. */
@@ -267,52 +191,21 @@ export type DomicileBookmark = {
   readonly icon: string;
 };
 
-/** The answer to {@link DomicileHost.searchApps}, each list best first. */
-export type DomicileAppsEvent = Event & {
-  /** The query that was searched. */
-  readonly query: string;
-
+/** The answer {@link DomicileHost.searchApps} resolves with, each list best first. */
+export type DomicileAppSearch = {
   readonly apps: readonly DomicileDesktopEntry[];
 
   readonly bookmarks: readonly DomicileBookmark[];
-
-  /** See {@link DomicileModifiersEvent.arrival}. */
-  readonly arrival: DOMHighResTimeStamp;
 };
 
-/** What {@link DomicileHost.searchFiles} resolves with; see {@link DomicileFilesEvent}. */
-export type DomicileFileSearch = Pick<
-  DomicileFilesEvent,
-  "files" | "matched" | "indexing"
->;
-
-/** What {@link DomicileHost.previewFile} resolves with; see {@link DomicileFilePreviewEvent}. */
-export type DomicileFilePreview = Pick<
-  DomicileFilePreviewEvent,
-  | "kind"
-  | "text"
-  | "entries"
-  | "title"
-  | "artist"
-  | "album"
-  | "duration"
-  | "cover"
->;
-
-/** What {@link DomicileHost.searchApps} resolves with; see {@link DomicileAppsEvent}. */
-export type DomicileAppSearch = Pick<DomicileAppsEvent, "apps" | "bookmarks">;
-
 /**
- * The answer to {@link DomicileHost.searchFiles}.
+ * The answer {@link DomicileHost.searchFiles} resolves with. The home's index
+ * never crosses into the page.
  *
  * Paths are relative to the home directory and sorted; directories end in
- * `/`. Only the first matches are included. No event is sent if the home
- * cannot be read.
+ * `/`. Only the first matches are included; `matched` counts them all.
  */
-export type DomicileFilesEvent = Event & {
-  /** The query that was searched. */
-  readonly query: string;
-
+export type DomicileFileSearch = {
   readonly files: readonly string[];
 
   /** The total number of matches; {@link files} holds the first of them. */
@@ -324,27 +217,6 @@ export type DomicileFilesEvent = Event & {
    * When true, the results may be incomplete. Show them and search again.
    */
   readonly indexing: boolean;
-
-  /** See {@link DomicileModifiersEvent.arrival}. */
-  readonly arrival: DOMHighResTimeStamp;
-};
-
-/**
- * The battery state, sent whenever it changes visibly.
- *
- * Use this instead of `navigator.getBattery`, which needs UPower and reports
- * a fake full battery without it. The compositor reads
- * `/sys/class/power_supply`. Not sent on a machine with no battery.
- */
-export type DomicileBatteryEvent = Event & {
-  /** Charge level, 0 through 1. */
-  readonly charge: number;
-
-  /** Whether external power is connected, even when full. */
-  readonly charging: boolean;
-
-  /** See {@link DomicileModifiersEvent.arrival}. */
-  readonly arrival: DOMHighResTimeStamp;
 };
 
 /** One entry in the clipboard history. */
@@ -363,21 +235,6 @@ export type DomicileClipboardEntry = {
   readonly preview: string;
 };
 
-/**
- * The clipboard history, newest first.
- *
- * `navigator.clipboard` only sees the browser's own clipboard, not Wayland
- * clients' copies. Sent whenever the history changes and when the page
- * connects.
- */
-export type DomicileClipboardEvent = Event & {
-  /** Newest first. */
-  readonly entries: readonly DomicileClipboardEntry[];
-
-  /** See {@link DomicileModifiersEvent.arrival}. */
-  readonly arrival: DOMHighResTimeStamp;
-};
-
 /** One system tray icon. */
 export type DomicileTrayItem = {
   /** The id to pass to {@link DomicileHost.activateTrayItem}. */
@@ -386,20 +243,6 @@ export type DomicileTrayItem = {
   readonly title: string;
   /** The icon as a `data:` URL, or empty if it could not be drawn. */
   readonly icon: string;
-};
-
-/**
- * The full system tray (StatusNotifierItems on the session bus).
- *
- * Sent whenever an icon is added, removed or changed, and when the page
- * connects.
- */
-export type DomicileTrayEvent = Event & {
-  /** In registration order. */
-  readonly items: readonly DomicileTrayItem[];
-
-  /** See {@link DomicileModifiersEvent.arrival}. */
-  readonly arrival: DOMHighResTimeStamp;
 };
 
 /** One button of a notification. */
@@ -435,83 +278,6 @@ export type DomicileNotification = {
   readonly time: number;
 };
 
-/**
- * All uncleared notifications, oldest first.
- *
- * The compositor serves `org.freedesktop.Notifications`, which also receives
- * the page's own Web Notifications. Sent whenever the list changes and when
- * the page connects. The shell decides which are new.
- */
-export type DomicileNotificationsEvent = Event & {
-  /** Oldest first. */
-  readonly items: readonly DomicileNotification[];
-
-  /** See {@link DomicileModifiersEvent.arrival}. */
-  readonly arrival: DOMHighResTimeStamp;
-};
-
-/**
- * The desktop's current light or dark theme.
- *
- * Use this instead of `prefers-color-scheme`, which does not reflect the
- * desktop's theme. The theme comes from `theme.mode` in the config and from
- * {@link DomicileHost.setTheme}. Sent to every chrome after a `setTheme`, on
- * a config reload, and when the page connects.
- */
-export type DomicileThemeEvent = Event & {
-  readonly theme: Theme;
-
-  /** See {@link DomicileModifiersEvent.arrival}. */
-  readonly arrival: DOMHighResTimeStamp;
-};
-
-/**
- * Whether the desktop is idle. See `docs/IDLE.md`.
- *
- * Web idle signals such as `document.visibilityState` do not change when the
- * screens blank. Sent when the state changes and when the page connects. Not
- * sent when no idle timeout is configured.
- */
-export type DomicileIdleEvent = Event & {
-  /** `true` when idle, `false` when the user returns. */
-  readonly idle: boolean;
-
-  /** See {@link DomicileModifiersEvent.arrival}. */
-  readonly arrival: DOMHighResTimeStamp;
-};
-
-/**
- * Whether the desktop is locked. See `docs/LOCK.md`.
- *
- * The compositor holds the lock: while locked, it drops all input the page
- * forwards to clients. The page still gets its own keys, so it can show a lock
- * screen and call {@link DomicileHost.unlock}.
- *
- * Sent when the state changes and when the page connects, so a reloaded page
- * still shows its lock screen. Not sent when no passphrase is configured.
- */
-export type DomicileLockedEvent = Event & {
-  /** `true` while no input reaches any client. */
-  readonly locked: boolean;
-
-  /** See {@link DomicileModifiersEvent.arrival}. */
-  readonly arrival: DOMHighResTimeStamp;
-};
-
-/**
- * The shell config: key bindings, keymap and shell options.
- *
- * `config` is the compositor's raw JSON line. The engine reads it to resolve
- * the chords `grabShortcut` takes by name; a shell has no use for it. Sent
- * when the page connects and when a config reload changes it.
- */
-export type DomicileShellConfigEvent = Event & {
-  readonly config: string;
-
-  /** See {@link DomicileModifiersEvent.arrival}. */
-  readonly arrival: DOMHighResTimeStamp;
-};
-
 /** A port of a device, or a profile of a card. */
 export type DomicileAudioChoice = {
   readonly name: string;
@@ -541,7 +307,7 @@ export type DomicileAudioStream = {
   readonly title: string;
   readonly volume: number;
   readonly muted: boolean;
-  /** Empty until a later event assigns the device. */
+  /** Empty until a later `audiochanged` assigns the device. */
   readonly device: string;
 };
 
@@ -558,8 +324,6 @@ export type DomicileAudioLevel = {
  */
 export type DomicileAudioLevelsEvent = Event & {
   readonly levels: readonly DomicileAudioLevel[];
-  /** See {@link DomicileModifiersEvent.arrival}. */
-  readonly arrival: DOMHighResTimeStamp;
 };
 
 /** A sound card. */
@@ -569,24 +333,6 @@ export type DomicileAudioCard = {
   readonly profiles: readonly DomicileAudioChoice[];
   /** The profile in use, or empty. */
   readonly profile: string;
-};
-
-/**
- * The full audio state: devices, streams and cards, in the sound server's
- * order.
- *
- * Sent on every change and when the page connects. Not sent without a sound
- * server.
- */
-export type DomicileAudioEvent = Event & {
-  readonly outputs: readonly DomicileAudioDevice[];
-  readonly inputs: readonly DomicileAudioDevice[];
-  readonly playback: readonly DomicileAudioStream[];
-  readonly recording: readonly DomicileAudioStream[];
-  readonly cards: readonly DomicileAudioCard[];
-
-  /** See {@link DomicileModifiersEvent.arrival}. */
-  readonly arrival: DOMHighResTimeStamp;
 };
 
 /**
@@ -649,74 +395,15 @@ export type DomicileExtension = {
   readonly enabled: boolean;
 };
 
-/**
- * All extensions with an action, sent on any change and when the page
- * connects.
- *
- * No `arrival`: this comes from the browser process, not the compositor.
- */
-export type DomicileExtensionsEvent = Event & {
-  readonly extensions: readonly DomicileExtension[];
-};
-
 /** Every event the desktop fires, by name. */
 export type DomicileHostEventMap = {
-  appappeared: DomicileAppEvent;
-  appresized: DomicileAppEvent;
-  /**
-   * The window's minimum size from xdg-shell's `set_min_size`. `0` means no
-   * limit on that axis.
-   */
-  appminsize: DomicileAppEvent;
-  /** The maximum size, like {@link DomicileHostEventMap.appminsize}. */
-  appmaxsize: DomicileAppEvent;
-  /**
-   * A client opened or moved a popup. See `popup_placed` in
-   * `domicile-protocol`.
-   */
-  popupplaced: DomicileAppEvent;
-  appclosed: DomicileAppEvent;
-  appcursor: DomicileAppCursorEvent;
-  focuschanged: DomicileAppEvent;
   /**
    * A client asked for keyboard focus. Focus has not moved; the shell may call
    * `focusApp()`. See `focus_requested` in `domicile-protocol`.
    */
   focusrequested: DomicileAppEvent;
-  apptitled: DomicileAppTitledEvent;
   shortcut: DomicileShortcutEvent;
-  modifiers: DomicileModifiersEvent;
-  /** The answer to {@link DomicileHost.searchFiles}. */
-  files: DomicileFilesEvent;
-  /** The answer to {@link DomicileHost.previewFile}. */
-  filepreview: DomicileFilePreviewEvent;
-  /** The answer to {@link DomicileHost.searchApps}. */
-  apps: DomicileAppsEvent;
-  /** The battery state, on change. */
-  battery: DomicileBatteryEvent;
-  /** The clipboard history, on change. */
-  clipboard: DomicileClipboardEvent;
-  /** The desktop theme, on change. See {@link DomicileHost.setTheme}. */
-  theme: DomicileThemeEvent;
-  /** The idle state, on change and on connect. */
-  idle: DomicileIdleEvent;
-  /** The lock state, on change and on connect. */
-  locked: DomicileLockedEvent;
-  /**
-   * The client windows' theme, after they repaint and on connect. See
-   * {@link DomicileHost.themeCaptured}.
-   */
-  windowstheme: DomicileThemeEvent;
-  /** The shell config, on connect and when a reload changes it. */
-  shellconfig: DomicileShellConfigEvent;
-  audio: DomicileAudioEvent;
   audiolevels: DomicileAudioLevelsEvent;
-  /** All extensions with an action, on change and on connect. */
-  extensions: DomicileExtensionsEvent;
-  /** The full system tray, on change and on connect. */
-  tray: DomicileTrayEvent;
-  /** All notifications, on change and on connect. */
-  notifications: DomicileNotificationsEvent;
   /**
    * A screen was added, removed, resized or rescaled. Read
    * {@link DomicileHost.displays} for the new state.
@@ -790,9 +477,8 @@ export type DomicileHost = {
   spawn(command: readonly string[]): void;
 
   /**
-   * Search the home directory for `query`. Resolves with the result, which
-   * also arrives as a `files` event. A newer call rejects this one with an
-   * `AbortError`.
+   * Search the home directory for `query`. Resolves with the result. A newer
+   * call rejects this one with an `AbortError`.
    *
    * It takes no path on purpose, so pages cannot browse the filesystem. The
    * compositor matches against its index and sends only the matches. See
@@ -801,9 +487,8 @@ export type DomicileHost = {
   searchFiles(query: string): Promise<DomicileFileSearch>;
 
   /**
-   * Preview `path`. Resolves with the result, which also arrives as a
-   * `filepreview` event. A newer call rejects this one, as with
-   * {@link searchFiles}.
+   * Preview `path`. Resolves with the result. A newer call rejects this one, as
+   * with {@link searchFiles}.
    *
    * Paths outside the compositor's home index are `unreadable`, so a page can
    * only read what a search could return. See `domicile_host::file_preview`.
@@ -812,17 +497,17 @@ export type DomicileHost = {
 
   /**
    * Search installed applications and bookmarks for `query`. Resolves with
-   * the result, which also arrives as an `apps` event. A newer call rejects
-   * this one, as with {@link searchFiles}. See `domicile_host::desktop_entries`.
+   * the result. A newer call rejects this one, as with {@link searchFiles}.
+   * See `domicile_host::desktop_entries`.
    */
   searchApps(query: string): Promise<DomicileAppSearch>;
 
   /**
    * Put a clipboard history entry back on the clipboard.
    *
-   * Takes an id from the last `clipboard` event, not text, so a page cannot
-   * write arbitrary data to the clipboard. The compositor then serves the
-   * entry, even if the client that copied it has exited.
+   * Takes an id from {@link clipboard}, not text, so a page cannot write
+   * arbitrary data to the clipboard. The compositor then serves the entry,
+   * even if the client that copied it has exited.
    */
   copyClipboardEntry(entry: number): void;
 
@@ -859,8 +544,8 @@ export type DomicileHost = {
   /**
    * Set the desktop theme.
    *
-   * Answered with a `theme` event to every chrome, including this one, so
-   * render from the event. The compositor also serves the theme to clients
+   * Answered with `themechanged` to every chrome, including this one, so
+   * render from {@link theme}. The compositor also serves the theme to clients
    * through the settings portal. Not saved to the config.
    */
   setTheme(theme: Theme): void;
@@ -868,8 +553,8 @@ export type DomicileHost = {
   /**
    * Try to unlock the desktop with `passphrase`.
    *
-   * Answered with a `locked` event to every chrome. Hide the lock screen only
-   * when that event says unlocked. A wrong passphrase sends `locked: true`.
+   * Answered with `lockedchanged` to every chrome. Hide the lock screen only
+   * when {@link locked} says unlocked. A wrong passphrase leaves it `true`.
    * There is no retry limit or delay yet.
    */
   unlock(passphrase: string): void;
@@ -877,7 +562,7 @@ export type DomicileHost = {
   /**
    * Lock the desktop now.
    *
-   * Answered with a `locked` event to every chrome. Does nothing when no lock
+   * Answered with `lockedchanged` to every chrome. Does nothing when no lock
    * is configured.
    */
   lock(): void;
@@ -891,11 +576,11 @@ export type DomicileHost = {
   setBrightness(level: number): void;
 
   /**
-   * Mixer controls. Ids come from the last `audio` event; volume is a fraction
-   * of the sound server's 100%.
+   * Mixer controls. Ids come from the `audio*` attributes; volume is a
+   * fraction of the sound server's 100%.
    *
-   * Answered with the next `audio` event to every chrome. Unknown ids are
-   * logged and ignored.
+   * Answered with `audiochanged` to every chrome. Unknown ids are logged and
+   * ignored.
    */
   setAudioVolume(id: string, volume: number): void;
   setAudioMuted(id: string, muted: boolean): void;
@@ -905,8 +590,8 @@ export type DomicileHost = {
   setAudioProfile(card: string, profile: string): void;
 
   /**
-   * Meter these devices and streams (ids from an `audio` event) and fire
-   * `audiolevels`.
+   * Meter these devices and streams (ids from the `audio*` attributes) and
+   * fire `audiolevels`.
    *
    * This is a lease: call it again every second while the meters are visible.
    * The compositor stops metering anything not renewed, because metering a
@@ -920,7 +605,7 @@ export type DomicileHost = {
    *
    * The windows must switch after the capture and before the transition
    * starts. The compositor waits for every chrome (with a timeout), updates
-   * the windows, and sends `windowstheme` once they repaint.
+   * the windows, and fires `windowsthemechanged` once they repaint.
    */
   themeCaptured(theme: Theme): void;
 
@@ -968,8 +653,8 @@ export type DomicileHost = {
   activateTrayItem(id: string, action: TrayAction): void;
 
   /**
-   * Dismiss notifications by id and tell their applications. Unknown ids are
-   * ignored.
+   * Dismiss notifications by id (from {@link notifications}) and tell their
+   * applications. Unknown ids are ignored.
    */
   dismissNotifications(ids: readonly number[]): void;
 
@@ -1027,20 +712,53 @@ export type DomicileHost = {
 
   // THE DESK'S STATE. Each is what the compositor last said, `null` until it
   // has said anything; a bare `<name>changed` says it moved.
+
+  /**
+   * What has been copied on this desktop, newest first. **Not
+   * `navigator.clipboard`**, which answers out of the browser's own clipboard
+   * and no Wayland client's.
+   */
   readonly clipboard: readonly DomicileClipboardEntry[] | null;
+  /** The system tray: every application showing an icon, in the order they registered. */
   readonly tray: readonly DomicileTrayItem[] | null;
+  /** The desk's notifications: every one not yet cleared, oldest first. */
   readonly notifications: readonly DomicileNotification[] | null;
+  /** The extensions with an action, from this browser rather than the compositor. */
   readonly extensions: readonly DomicileExtension[] | null;
+  /** The desk's sound, each list in the sound server's order. */
   readonly audioOutputs: readonly DomicileAudioDevice[] | null;
   readonly audioInputs: readonly DomicileAudioDevice[] | null;
   readonly audioPlayback: readonly DomicileAudioStream[] | null;
   readonly audioRecording: readonly DomicileAudioStream[] | null;
   readonly audioCards: readonly DomicileAudioCard[] | null;
+  /**
+   * The machine's battery: how full, 0 through 1, and whether a lead is in.
+   * **Not `navigator.getBattery`**, which on a bare tty reports full and
+   * charging whatever the battery says. `null` on a machine with none.
+   */
   readonly batteryCharge: number | null;
   readonly batteryCharging: boolean | null;
+  /**
+   * Whether anybody is at this desktop. **Not `document.visibilityState`**: a
+   * shell's document stays visible while the glass is off. `null` on a desktop
+   * with no idle timeout.
+   */
   readonly idle: boolean | null;
+  /**
+   * Whether this desk is locked: `true` is a desk that delivers nothing to
+   * any client. The compositor holds it, so a reload does not open it. `null`
+   * on a desktop with no passphrase.
+   */
   readonly locked: boolean | null;
+  /**
+   * Which way round the desktop is drawn. **Not `prefers-color-scheme`**: the
+   * theme is the compositor's, and {@link setTheme} is how a page moves it.
+   */
   readonly theme: Theme | null;
+  /**
+   * Which way round the desk's windows are drawn: {@link theme}'s other half,
+   * moved once they have turned — see {@link themeCaptured}.
+   */
   readonly windowsTheme: Theme | null;
   /** The compositor seat's — see the README before trusting them. */
   readonly altKey: boolean | null;

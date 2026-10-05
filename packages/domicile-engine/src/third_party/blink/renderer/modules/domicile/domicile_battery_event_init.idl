@@ -1,8 +1,0 @@
-// Copyright 2026 Connor Prussin
-// SPDX-License-Identifier: MIT
-
-dictionary DomicileBatteryEventInit : EventInit {
-  double charge = 0;
-  boolean charging = false;
-  DOMHighResTimeStamp arrival = 0;
-};

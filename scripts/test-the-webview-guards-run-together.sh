@@ -21,7 +21,7 @@ TOGETHER="webview-framing shell-local-network webview-content-script extension-i
   extension-tray webview-keyboard webview-escape webview-history webview-find
   webview-click webview-activate webview-new-window webview-routed-link webview-context-menu webview-upload
   webview-download webview-save-picker webview-tabs webview-active-tab webview-passkey-extension
-  webview-popup-window control-arrival webview-notifications
+  webview-popup-window windows-state webview-notifications
   webview-survives-load-shell"
 
 # A repository with check.sh and a stand-in for every engine check that
@@ -38,7 +38,7 @@ for script in "$ROOT"/scripts/engine-*.sh; do
 #!/usr/bin/env bash
 date +%s.%N >"$WORK/$name.start"
 cat "$WORK"/noise/*/owner >"$WORK/$name.noise" 2>/dev/null
-case "$name" in (engine-guard-webview-*|engine-guard-control-arrival|engine-guard-shell-local-network|engine-guard-extension-installer|engine-guard-extension-tray) sleep 1 ;; esac
+case "$name" in (engine-guard-webview-*|engine-guard-windows-state|engine-guard-shell-local-network|engine-guard-extension-installer|engine-guard-extension-tray) sleep 1 ;; esac
 [ "\${FAIL:-}" = "$name" ] && { echo "$name broke"; exit 1; }
 date +%s.%N >"$WORK/$name.end"
 STUB
@@ -71,9 +71,9 @@ latest_start="$(printf '%s\n' $starts | sort -n | tail -1)"
 earliest_end="$(printf '%s\n' $ends | sort -n | head -1)"
 if [ -n "$latest_start" ] && [ -n "$earliest_end" ] &&
    awk "BEGIN { exit !($latest_start < $earliest_end) }"; then
-  ok "the webview guards and control-arrival run at the same time"
+  ok "the webview guards and windows-state run at the same time"
 else
-  fail "the webview guards and control-arrival run at the same time" "$(cat "$WORK/out")"
+  fail "the webview guards and windows-state run at the same time" "$(cat "$WORK/out")"
 fi
 
 missing=""

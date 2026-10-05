@@ -1,4 +1,4 @@
-// The badge guard-extension-tray.sh reads off the shell's `extensions` event:
+// The badge guard-extension-tray.sh reads off the shell's `extensions`:
 // set by the service worker rather than the manifest, because a manifest has
 // no badge -- so the event carrying it is ExtensionActionDispatcher's change
 // reaching the page, not the list read once at load.

@@ -5,7 +5,7 @@
 //
 // An interface rather than a dictionary because WebIDL will not have a
 // dictionary as the element type of an attribute's array, which is how these
-// are read -- off a DomicileClipboardEvent rather than handed over in a call.
+// are read -- off DomicileHost.clipboard rather than handed over in a call.
 
 [
     Exposed=Window,

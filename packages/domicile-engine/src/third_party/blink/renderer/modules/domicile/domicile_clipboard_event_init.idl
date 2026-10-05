@@ -1,7 +1,0 @@
-// Copyright 2026 Connor Prussin
-// SPDX-License-Identifier: MIT
-
-dictionary DomicileClipboardEventInit : EventInit {
-  sequence<DomicileClipboardEntry> entries = [];
-  DOMHighResTimeStamp arrival = 0;
-};

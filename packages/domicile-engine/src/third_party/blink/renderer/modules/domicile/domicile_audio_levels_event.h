@@ -5,7 +5,6 @@
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_DOMICILE_DOMICILE_AUDIO_LEVELS_EVENT_H_
 
 #include "third_party/blink/renderer/bindings/core/v8/frozen_array.h"
-#include "third_party/blink/renderer/core/dom/dom_high_res_time_stamp.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_audio_level.h"
 #include "third_party/blink/renderer/modules/event_modules.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
@@ -28,15 +27,10 @@ class MODULES_EXPORT DomicileAudioLevelsEvent final : public Event {
   DomicileAudioLevelsEvent(const AtomicString& type,
                            const DomicileAudioLevelsEventInit* initializer);
   DomicileAudioLevelsEvent(const AtomicString& type,
-                           HeapVector<Member<DomicileAudioLevel>> levels,
-                           DOMHighResTimeStamp arrival);
+                           HeapVector<Member<DomicileAudioLevel>> levels);
   ~DomicileAudioLevelsEvent() override;
 
   const FrozenArray<DomicileAudioLevel>& levels() const { return *levels_; }
-
-  // When the browser process had this, on `performance.now()`'s clock. See
-  // DomicileAppEvent::arrival.
-  DOMHighResTimeStamp arrival() const { return arrival_; }
 
   const AtomicString& InterfaceName() const override;
   void Trace(Visitor*) const override;
@@ -44,7 +38,6 @@ class MODULES_EXPORT DomicileAudioLevelsEvent final : public Event {
  private:
   // Frozen because the IDL says so, and never null.
   Member<FrozenArray<DomicileAudioLevel>> levels_;
-  DOMHighResTimeStamp arrival_ = 0;
 };
 
 }  // namespace blink

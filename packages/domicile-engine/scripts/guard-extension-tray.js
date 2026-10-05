@@ -7,7 +7,7 @@
 //   GUARD listening              the desktop was handed to Shell and a listener is
 //                                registered -- the harness working, and what
 //                                tells "nothing arrived" from "this never ran"
-//   GUARD extensions count=…     an `extensions` event arrived, and how many
+//   GUARD extensions count=…     an `extensionschanged` arrived, and how many
 //                                rows it had. The control's reading that its
 //                                absence is an answer
 //   GUARD tray id=… title=… badge=… color=… popup=… icon=… enabled=…
@@ -23,7 +23,7 @@
 //
 // WHAT IT OPENS. `?open=popup` is the claim: the popup the `expect` row names,
 // once a row names one -- so the address opened is the one the tray reported.
-// Anything else is an address, opened as soon as any `extensions` event
+// Anything else is an address, opened as soon as any `extensionschanged`
 // arrives: the control's page, which never calls window.close().
 //
 // Everything is inside `Shell`, which the document Domicile writes calls once
@@ -92,9 +92,9 @@ export const Shell = (_root, desktop) => {
   };
 
   let opened = false;
-  host.addEventListener("extensions", (event) => {
-    say(`extensions count=${event.extensions.length}`);
-    const row = event.extensions.find((extension) => extension.id === expected);
+  host.addEventListener("extensionschanged", () => {
+    say(`extensions count=${host.extensions.length}`);
+    const row = host.extensions.find((extension) => extension.id === expected);
     if (row !== undefined) {
       say(
         `tray id=${row.id} title=${row.title} badge=${row.badgeText}` +
