@@ -109,6 +109,10 @@ class MODULES_EXPORT DomicileHost final
   ScriptPromise<DomicileAppSearch> searchApps(ScriptState*,
                                               const String& query,
                                               ExceptionState&);
+  void callSystem(ScriptState*,
+                  uint32_t id,
+                  const String& request,
+                  ExceptionState&);
   void copyClipboardEntry(ScriptState*, uint32_t entry, ExceptionState&);
   void activateTrayItem(ScriptState*,
                         const String& id,
@@ -366,6 +370,7 @@ class MODULES_EXPORT DomicileHost final
              base::TimeTicks arrival) override;
   void FocusChanged(const String& app_id, base::TimeTicks arrival) override;
   void FocusRequested(const String& app_id, base::TimeTicks arrival) override;
+  void System(const String& message) override;
   void Displays(
       Vector<domicile::mojom::blink::DisplayInfoPtr> displays) override;
 

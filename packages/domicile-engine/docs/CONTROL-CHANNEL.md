@@ -18,7 +18,7 @@ The engine has two channels to the rest of Domicile:
 ### Members
 
 - **Outbound:** `spawn`, `search_files`, `preview_file`,
-  `search_apps`, `copy_clipboard_entry`, `activate_tray_item`,
+  `search_apps`, `call_system`, `copy_clipboard_entry`, `activate_tray_item`,
   `dismiss_notifications`, `invoke_notification_action`, `focus_app`,
   `focus_chrome`, `close_app`, `resize_app`, `set_desktop_size`,
   `set_device_pixel_ratio`, `set_theme`, `theme_captured`, `unlock`, `lock`,
@@ -32,7 +32,8 @@ The engine has two channels to the rest of Domicile:
   `shortcut`, `modifiers`, `found_files`, `file_preview`, `found_apps`,
   `battery`, `brightness`, `clipboard`, `theme`, `focus_changed`,
   `focus_requested`, `displays`, `keymap`, `extensions`, `tray`,
-  `notifications`, `shell_config`, `audio`, `audio_levels`, `idle`, `locked`.
+  `notifications`, `shell_config`, `audio`, `audio_levels`, `idle`, `locked`,
+  `system`.
 - **Handled in the browser, never sent to the compositor:** `grab_shortcut`,
   `warp_pointer`.
 - **Not from the compositor:** `browserwindowschanged`, the desk's browser
@@ -47,6 +48,12 @@ The engine has two channels to the rest of Domicile:
     else is `unreadable`.
   - Audio files come back as `audio`, with tags and the cover as a `data:` URL.
     The page can draw from `domicile://home/` but cannot read it.
+- **`call_system`** and **`system`** carry the shell's system calls. The
+  browser wraps the page's request as a `system_request` line and relays
+  `system_reply`, `system_event` and `system_end` lines whole, as a
+  `MessageEvent`. It reads nothing else of them; the compositor checks each
+  call. See `components/domicile/browser/system_call.h` and
+  [SYSTEM-ACCESS.md](/docs/architecture/SYSTEM-ACCESS.md).
 - **`resize_app`** is implemented but unused. An `<app>`'s layout box already
   sets the client's size through `LayoutAppSurface` and
   `ExternalSurfaceProvider::Embed`. Removing it from the IDL needs an engine
