@@ -17,6 +17,7 @@
 #include "components/domicile/mojom/web_view_guest.mojom.h"
 #include "components/input/native_web_keyboard_event.h"
 #include "content/public/browser/browser_plugin_guest_delegate.h"
+#include "content/public/browser/context_menu_params.h"
 #include "content/public/browser/file_select_listener.h"
 #include "content/public/browser/global_routing_id.h"
 #include "content/public/browser/host_zoom_map.h"
@@ -33,6 +34,7 @@
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/choosers/file_chooser.mojom-forward.h"
 #include "third_party/blink/public/mojom/favicon/favicon_url.mojom-forward.h"
+#include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 #include "url/gurl.h"
@@ -141,6 +143,13 @@ class BrowserWindowHost {
                              const std::string& id) = 0;
 };
 
+// Opens DevTools on `frame`'s page, at `root_point` (a context menu's click,
+// in root view coordinates) when given. Provided by //chrome, which owns the
+// DevTools front end: see //chrome/browser/domicile/domicile_devtools.h.
+using InspectCallback =
+    base::RepeatingCallback<void(content::RenderFrameHost& frame,
+                                 std::optional<gfx::Point> root_point)>;
+
 class WebViewGuest : public mojom::WebViewGuest,
                      public content::BrowserPluginGuestDelegate,
                      public content::WebContentsDelegate,
@@ -203,6 +212,10 @@ class WebViewGuest : public mojom::WebViewGuest,
 
   // Set once by //chrome, before any guest exists. See BrowserWindowHost.
   static void SetBrowserWindowHost(BrowserWindowHost* host);
+
+  // Set once by //chrome, before any guest exists. Runs for Inspect and a
+  // menu's kInspect. See InspectCallback.
+  static void SetInspect(InspectCallback inspect);
 
   // The id a <webview window> uses for this window. Empty for a shell's own
   // page.
@@ -329,6 +342,12 @@ class WebViewGuest : public mojom::WebViewGuest,
   void ListDirectory(const std::string& path,
                      ListDirectoryCallback callback) override;
 
+  // The shell's context menu choices. Each acts on the newest menu's frame and
+  // click. See HandleContextMenu.
+  void RunContextMenuAction(int32_t menu,
+                            mojom::WebViewContextMenuAction action) override;
+  void Inspect() override;
+
   // content::BrowserPluginGuestDelegate:
   content::WebContents* GetOwnerWebContents() override;
   content::RenderFrameHost* GetProspectiveOuterDocument() override;
@@ -382,7 +401,11 @@ class WebViewGuest : public mojom::WebViewGuest,
   // A RIGHT CLICK IS THE PAGE'S AND THE SHELL'S, NEVER THE BROWSER'S. The
   // page's own `contextmenu` event has already fired by the time this runs,
   // so a site's menu still works; claiming the rest is what stops content
-  // drawing Chrome's menu -- back, reload, inspect -- over a desktop.
+  // drawing Chrome's menu over a desktop. The menu's contents go to the
+  // element as ContextMenuRequested, and the shell draws it.
+  //
+  // The click is converted from root view (shell) coordinates to the guest's
+  // main frame view, which is the element's box.
   bool HandleContextMenu(content::RenderFrameHost& render_frame_host,
                          const content::ContextMenuParams& params) override;
 
@@ -569,6 +592,27 @@ class WebViewGuest : public mojom::WebViewGuest,
                const std::string& window_id,
                std::optional<int> popup_window);
 
+  // One of WebContents' edit commands, which act on the focused frame.
+  using EditCommand = void (content::WebContents::*)();
+
+  // Run `command` once this guest holds the focus, retrying `tries` times.
+  //
+  // Edits go to the focused frame tree, and the shell's menu has the focus.
+  // The element refocuses the page before sending an edit, but the focus
+  // change travels on another channel and can arrive later. Running the edit
+  // first would paste into the shell.
+  void EditWhenFocused(EditCommand command, int tries);
+
+  // Write `url` to the clipboard as text, as Chrome's "copy link address"
+  // does.
+  void CopyAddress(const GURL& url);
+
+  // Download `url` from `frame`'s page. The shell is asked where to save it.
+  void SaveFrom(content::RenderFrameHost& frame,
+                const GURL& url,
+                const content::ContextMenuParams& params,
+                bool is_subresource);
+
   // Makes this guest's WebContents with this as guest delegate, delegate and
   // observer. Shared by both kinds of guest.
   std::unique_ptr<content::WebContents> MakeContents(
@@ -709,6 +753,12 @@ class WebViewGuest : public mojom::WebViewGuest,
   // The content size the page last reported, resent to a new element. Empty
   // until the first report.
   std::optional<gfx::Size> content_size_;
+
+  // The newest context menu sent to the element: its id (0 before the first),
+  // its frame and what was under the click.
+  int context_menu_id_ = 0;
+  content::GlobalRenderFrameHostId context_menu_frame_;
+  std::optional<content::ContextMenuParams> context_menu_params_;
 
   mojo::Receiver<mojom::WebViewGuest> receiver_;
   // How many of this guest's file choosers the shell has yet to answer, which
