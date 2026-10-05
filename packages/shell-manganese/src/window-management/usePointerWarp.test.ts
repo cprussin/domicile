@@ -244,6 +244,27 @@ describe("usePointerWarp", () => {
     expect(result.current.pointing([600, 350])).toBe(false);
   });
 
+  it("counts a landing the engine rounded as where it put the pointer", () => {
+    // At a fractional scale the engine floors the warp into device pixels and
+    // again into DIPs, so the landing reaches the page up to 1.5 pixels short
+    // of the target.
+    const { rerender, press, result } = warping(desktopOf(LEFT, BOTH));
+    pointerAt(200, 300);
+    act(() => {
+      press();
+    });
+    rerender(desktopOf(RIGHT, BOTH));
+
+    expect(result.current.pointing([598.5, 351.5])).toBe(false);
+  });
+
+  it("still reads two pixels from the pointer as the hand", () => {
+    const { result } = warping(desktopOf(LEFT, BOTH));
+    pointerAt(200, 300);
+
+    expect(result.current.pointing([202, 300])).toBe(true);
+  });
+
   it("answers for a pointer it has never seen at all", () => {
     // The pointer's position is unknown at first. Guessing it would swallow the
     // user's first crossing.
