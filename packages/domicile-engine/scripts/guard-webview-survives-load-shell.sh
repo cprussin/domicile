@@ -24,8 +24,9 @@
 #   the new shell shows it           the second shell's <webview> says it
 #                                    shows the page, so the window was
 #                                    attached, not just kept alive
-#   the page kept ticking            the same page is still running after its
-#                                    frame went
+#   the page kept ticking            the same page ticked three more times
+#                                    after the second shell loaded, so it is
+#                                    still running after its frame went
 #
 # Control: NEGATIVE=1 shows the same page in a `<webview src>`, the shell
 # document's own page. The reload must load it again, giving a second token.
@@ -59,6 +60,9 @@ PROFILE="${PROFILE:-/tmp/domicile-webview-survives-load-shell$WHICH-profile}"
 ENGINE_LOG="${ENGINE_LOG:-/tmp/domicile-webview-survives-load-shell$WHICH-engine.log}"
 HTTP_LOG="${HTTP_LOG:-/tmp/domicile-webview-survives-load-shell$WHICH-http.log}"
 FOR_SECONDS="${FOR_SECONDS:-120}"
+# How long to watch for the first page's ticks after the second load. Bounded
+# because the control expects an absence: its first page stops.
+WATCH_SECONDS="${WATCH_SECONDS:-15}"
 
 STARTED=()
 cleanup() {
@@ -122,15 +126,14 @@ STARTED+=($!)
 
 TRIES=$((FOR_SECONDS * 4))
 
-# 3. Wait for a few ticks, so "kept ticking" below measures a change and not
-#    a late first tick.
+# 3. Wait for the page to tick, so there is a running page to swap the shell
+#    out from under.
 wait_for_line "$TRIES" "GUARD tick token=" "$ENGINE_LOG" ||
   echo "the page never ticked; the verdict below says what that means" >&2
 sleep 1
 
 # 4. The swap: load the same shell over itself by sending the supervisor's
 #    `domicile load-shell` line to the engine's socket.
-BEFORE="$(grep -c -F "GUARD tick token=" "$ENGINE_LOG" 2>/dev/null || true)"
 ANSWER="$(python3 - "$COMMAND" "$SCRIPTS" <<'EOF' 2>&1
 import json, socket, sys
 
@@ -149,34 +152,50 @@ EOF
 )"
 echo "the engine answered: $ANSWER"
 
-# 5. Wait for the second shell, then watch for ticks. Two bounds (the second
-#    load, then a fixed watch) because the control expects an absence: the
-#    first page stops.
+FIRST="$(sed -n 's/.*GUARD page-loaded token=\([a-z0-9]*\).*/\1/p' "$ENGINE_LOG" | head -1)"
+
+# Lines matching $1 after the second `shell-loaded`.
+after_the_reload() {
+  awk -v want="$1" '
+    /GUARD shell-loaded/ { loads++ }
+    loads >= 2 && index($0, want) { n++ }
+    END { print n + 0 }' "$ENGINE_LOG"
+}
+
+# Whether the new shell's <webview> says it shows the page.
+shown() {
+  [ "$(after_the_reload "GUARD shown url=$SUBJECT/page")" -ge 1 ]
+}
+
+# Whether the first page kept ticking: three of its ticks after the second
+# load, so ticks from before the old frame went do not count. A count with a
+# deadline: a detached page is hidden, and Chromium throttles a hidden page's
+# timers to once a second, or slower on a loaded runner.
+ticked() {
+  [ -n "$FIRST" ] && [ "$(after_the_reload "GUARD tick token=$FIRST ")" -ge 3 ]
+}
+
+# 5. Wait for the second shell, then for it to show the page and the page to
+#    tick. Two bounds (the second load, then WATCH_SECONDS) because the
+#    control expects an absence: the first page stops.
 for _ in $(seq 1 "$TRIES"); do
   [ "$(grep -c -F "GUARD shell-loaded" "$ENGINE_LOG" 2>/dev/null)" -ge 2 ] && break
   sleep 0.25
 done
-sleep 3
+for _ in $(seq 1 $((WATCH_SECONDS * 4))); do
+  shown && ticked && break
+  sleep 0.25
+done
 
 # The readings, all from the engine's log.
 ANSWERED=0
 [ "$ANSWER" = '{"type":"loaded"}' ] && ANSWERED=1
 LOADS="$(grep -c -F "GUARD shell-loaded" "$ENGINE_LOG" 2>/dev/null || true)"
 TOKENS="$(sed -n 's/.*GUARD page-loaded token=\([a-z0-9]*\).*/\1/p' "$ENGINE_LOG" | sort -u | wc -l | tr -d ' ')"
-FIRST="$(sed -n 's/.*GUARD page-loaded token=\([a-z0-9]*\).*/\1/p' "$ENGINE_LOG" | head -1)"
-# Whether the new shell's <webview> says it shows the page: a `shown` line
-# after the second `shell-loaded`.
-SHOWN="$(awk -v want="GUARD shown url=$SUBJECT/page" '
-  /GUARD shell-loaded/ { loads++ }
-  loads >= 2 && index($0, want) { seen = 1 }
-  END { print seen + 0 }' "$ENGINE_LOG")"
-# Whether the first page kept ticking: at least four more ticks after the swap
-# than before it, about one second of running.
+SHOWN=0
+shown && SHOWN=1
 TICKED=0
-if [ -n "$FIRST" ]; then
-  AFTER="$(grep -c -F "GUARD tick token=$FIRST " "$ENGINE_LOG" 2>/dev/null || true)"
-  [ "${AFTER:-0}" -ge $((${BEFORE:-0} + 4)) ] && TICKED=1
-fi
+ticked && TICKED=1
 
 MEASURED="$MODE $ANSWERED $LOADS $TOKENS $SHOWN $TICKED"
 echo
