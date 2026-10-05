@@ -18,6 +18,7 @@
 #include "base/task/bind_post_task.h"
 #include "base/values.h"
 #include "components/domicile/browser/desk_lock.h"
+#include "components/domicile/browser/system_call.h"
 #include "components/domicile/common/cursor_shape.h"
 #include "components/domicile/common/display_transform.h"
 #include "components/domicile/common/theme.h"
@@ -362,6 +363,18 @@ void ControlChannel::SearchApps(const std::string& query) {
   base::DictValue message = Typed("search_apps");
   message.Set("query", query);
   SendMessage(std::move(message));
+}
+
+// Wrapped rather than read: the compositor judges the call. See
+// components/domicile/browser/system_call.h.
+void ControlChannel::CallSystem(uint32_t id, const std::string& request) {
+  std::optional<std::string> line = SystemRequestLine(id, request);
+  if (!line) {
+    LOG(WARNING) << "domicile: a page's system call " << id
+                 << " is not a JSON object with a `call`; it was dropped.";
+    return;
+  }
+  Send(*line);
 }
 
 // The one member that names a row of the clipboard, and the whole of what a
@@ -1360,6 +1373,12 @@ void ControlChannel::DispatchLine(const std::string& line,
     // domicile://home/ no later than the page learns the desk is locked.
     DeskLock::Set(*locked);
     client_->Locked(*locked, arrival);
+    return;
+  }
+
+  // Relayed as it arrived, like `shell_config`: the page parses it.
+  if (IsSystemAnswer(*type)) {
+    client_->System(line);
     return;
   }
 
