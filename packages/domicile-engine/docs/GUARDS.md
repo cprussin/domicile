@@ -16,6 +16,7 @@ toolchain shell ([BUILD-MACHINE.md](BUILD-MACHINE.md#toolchain-shell)).
 | `guard_webview_devtools.py` | sends keys and clicks to a running engine over the debugging port |
 | `guard-webview-guest-page.py` | the guest page for the keyboard and click guards |
 | `lib-annotate.sh` | reports where a guard stopped as a GitHub annotation |
+| `lib-last-words.sh` | prints the end of an engine's log, reaching back to a crash's fatal line |
 | `lib-latency.sh` | reads a latency run's log; also used by `/scripts/test-latency-report.sh` |
 | `lib-compositor-cleanup.sh` | stops a nested compositor and its whole process group |
 | `lib-control-budget.sh` | sizes a control's timeout from how long its guard took |
