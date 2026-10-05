@@ -79,7 +79,7 @@ grep -q holding "$WORK/holder.log" || {
   exit 1
 }
 
-# The stand-in engine: opens its broker socket, requests its page, and, when
+# The stand-in engine: requests its page, opens its broker socket, and, when
 # asked for a debugging port, serves one on any free port and writes it to the
 # profile, as Chromium does for port 0. It then prints every line a guard waits
 # for before driving, and stays up.
@@ -100,10 +100,10 @@ def record(name, text):
 
 
 record("engine.args", " ".join(sys.argv[1:]))
-broker = socket.socket(socket.AF_UNIX)
-broker.bind(given["--domicile-broker-socket"])
-broker.listen(1)
 
+# The page before the broker: a guard waits only for the broker socket, then
+# runs its probe (which exits at once here) and kills the engine. A page
+# fetched after the socket opens loses that race on a loaded runner.
 page = re.search(r"http://(?:127\.0\.0\.1|localhost):[0-9]+[^&]*", given["--app"]).group(0)
 try:
     with urllib.request.urlopen(page, timeout=5) as answer:
@@ -112,6 +112,10 @@ except urllib.error.HTTPError:
     record("engine.page", "answered")
 except OSError as failure:
     record("engine.page", "no answer at %s: %s" % (page, failure))
+
+broker = socket.socket(socket.AF_UNIX)
+broker.bind(given["--domicile-broker-socket"])
+broker.listen(1)
 
 if "--remote-debugging-port" in given:
 
