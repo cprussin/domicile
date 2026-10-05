@@ -74,6 +74,7 @@ class Host implements DomicileHost {
   readonly dismissNotifications = ignored;
   readonly invokeNotificationAction = ignored;
   readonly closeApp = ignored;
+  readonly setAppBounds = ignored;
   readonly copyClipboardEntry = ignored;
   readonly focusApp = ignored;
   readonly focusChrome = ignored;

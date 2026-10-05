@@ -111,6 +111,11 @@ class ControlChannel : public mojom::ControlChannel {
   void ResizeApp(const std::string& app_id,
                  double width,
                  double height) override;
+  void SetAppBounds(const std::string& app_id,
+                    double x,
+                    double y,
+                    double width,
+                    double height) override;
   void SetDesktopSize(double width, double height) override;
   void SetDevicePixelRatio(double ratio) override;
   void SetTheme(mojom::Theme theme) override;

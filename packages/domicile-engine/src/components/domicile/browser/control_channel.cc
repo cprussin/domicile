@@ -439,6 +439,17 @@ void ControlChannel::ResizeApp(const std::string& app_id,
   SendMessage(std::move(message));
 }
 
+void ControlChannel::SetAppBounds(const std::string& app_id,
+                                  double x,
+                                  double y,
+                                  double width,
+                                  double height) {
+  base::DictValue message = ForApp("set_app_bounds", app_id);
+  message.Set("position", Size(x, y));
+  message.Set("size", Size(width, height));
+  SendMessage(std::move(message));
+}
+
 void ControlChannel::SetDesktopSize(double width, double height) {
   base::DictValue message = Typed("set_desktop_size");
   message.Set("size", Size(width, height));

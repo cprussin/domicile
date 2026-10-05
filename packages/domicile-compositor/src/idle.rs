@@ -226,6 +226,7 @@ pub fn somebody_is_here(request: &ClientRequest) -> bool {
         | ClientRequest::KeyboardFocus { .. }
         | ClientRequest::SetOutputScale { .. }
         | ClientRequest::SetOutputSize { .. }
+        | ClientRequest::SetAppBounds { .. }
         | ClientRequest::CloseApp { .. }
         | ClientRequest::Spawn { .. }
         | ClientRequest::ChromeHello { .. }
@@ -775,6 +776,16 @@ mod tests {
                 "the chrome reporting its size",
                 ClientRequest::SetOutputSize {
                     logical: (1920, 1080),
+                },
+            ),
+            (
+                "the page reporting where a window is",
+                ClientRequest::SetAppBounds {
+                    app_id: "app-1".into(),
+                    bounds: domicile_scene::Bounds {
+                        min: domicile_scene::Point::new(0.0, 0.0),
+                        max: domicile_scene::Point::new(800.0, 600.0),
+                    },
                 },
             ),
             (

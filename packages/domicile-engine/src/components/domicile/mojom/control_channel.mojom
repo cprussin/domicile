@@ -404,6 +404,11 @@ interface ControlChannel {
   // make a window's size depend on which half of the channel measured it.
   ResizeApp(string app_id, double width, double height);
 
+  // Where the page put an <app>, in the desk's CSS pixels. The compositor
+  // gives the client the scale of the monitor holding most of it. It positions
+  // nothing: layout does that.
+  SetAppBounds(string app_id, double x, double y, double width, double height);
+
   // The desktop's own geometry, and the scale the page is drawn at.
   SetDesktopSize(double width, double height);
   SetDevicePixelRatio(double ratio);

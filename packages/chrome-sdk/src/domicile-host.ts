@@ -840,6 +840,18 @@ export type DomicileHost = {
   closeApp(appId: string): void;
 
   /**
+   * Report where the page put an `<app>`, in page CSS pixels. The client draws
+   * at the scale of the monitor holding most of that box.
+   */
+  setAppBounds(
+    appId: string,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+  ): void;
+
+  /**
    * Set the desktop theme.
    *
    * Answered with a `theme` event to every chrome, including this one, so
