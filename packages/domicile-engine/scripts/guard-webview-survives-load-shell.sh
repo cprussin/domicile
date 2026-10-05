@@ -37,6 +37,8 @@ set -u
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=packages/domicile-engine/scripts/lib-annotate.sh
 . "$SCRIPTS/lib-annotate.sh"
+# shellcheck source=packages/domicile-engine/scripts/lib-last-words.sh
+. "$SCRIPTS/lib-last-words.sh"
 # shellcheck source=packages/domicile-engine/scripts/lib-ports.sh
 . "$SCRIPTS/lib-ports.sh"
 
@@ -274,5 +276,5 @@ annotate_from "guard-webview-survives-load-shell: $FAILURE" "$ENGINE_LOG"
 echo "what the engine died of, if it did:" >&2
 grep -n -A45 -E "FATAL|Check failed|Received signal" "$ENGINE_LOG" | head -150 >&2
 echo "the engine's last words:" >&2
-tail -40 "$ENGINE_LOG" >&2
+last_words "$ENGINE_LOG" >&2
 exit 1

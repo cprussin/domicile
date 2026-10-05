@@ -30,6 +30,8 @@ set -u
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=packages/domicile-engine/scripts/lib-annotate.sh
 . "$SCRIPTS/lib-annotate.sh"
+# shellcheck source=packages/domicile-engine/scripts/lib-last-words.sh
+. "$SCRIPTS/lib-last-words.sh"
 # shellcheck source=packages/domicile-engine/scripts/lib-ports.sh
 . "$SCRIPTS/lib-ports.sh"
 
@@ -212,7 +214,7 @@ fi
 
 annotate "guard-shell-shortcuts: $FAILURE"
 echo "the engine's last words:" >&2
-tail -40 "$ENGINE_LOG" >&2
+last_words "$ENGINE_LOG" >&2
 echo "what the keystrokes did:" >&2
 tail -20 "$KEY_LOG" >&2
 exit 1
