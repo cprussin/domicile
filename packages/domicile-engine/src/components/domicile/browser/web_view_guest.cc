@@ -18,12 +18,14 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/notreached.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/supports_user_data.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "components/domicile/browser/file_choice.h"
+#include "components/domicile/browser/placeholder_stage.h"
 #include "components/domicile/browser/shortcut_registry.h"
 #include "components/domicile/browser/web_view_url.h"
 #include "components/security_state/content/content_utils.h"
@@ -62,6 +64,10 @@ namespace {
 constexpr char kNotItsOwnFrame[] =
     "domicile: a <webview> may only ask for a guest for its own frame.";
 
+// Why a second CreateGuest waiting on one pipe is a bad message.
+constexpr char kOneGuest[] =
+    "domicile: a <webview> may only ask for one guest.";
+
 // The desk's browser windows. See SetBrowserWindowHost.
 BrowserWindowHost* g_browser_window_host = nullptr;
 
@@ -86,6 +92,10 @@ BrowserWindowHost& Host() {
 // yet. That is the order, not a fault in it, and the request waits for the
 // frame rather than being dropped: dropping it was a <webview> that showed
 // nothing, which is how concurrent guards found it.
+//
+// The request also waits for the frame's about:blank commit, which follows the
+// frame on the same channel and loses the same race.
+// PlaceholderStage::kCommitting says what attaching before it does.
 class WebViewGuestHost final
     : public content::DocumentService<mojom::WebViewGuestHost>,
       public content::WebContentsObserver {
@@ -120,24 +130,6 @@ class WebViewGuestHost final
                    bool extension_popup) override {
     content::RenderFrameHost* placeholder = FindPlaceholder(placeholder_frame);
 
-    if (placeholder == nullptr) {
-      // ONE REQUEST WAITS PER PIPE, which is the cap on what a renderer can
-      // make this hold: the element sends one CreateGuest on a pipe of its own.
-      if (waiting_.has_value()) {
-        ReportBadMessageAndDeleteThis(
-            "domicile: a <webview> may only ask for one guest.");
-        return;
-      }
-      // The line that tells a guest that waited from one that did not, in a
-      // run that shows nothing.
-      LOG(INFO) << "domicile: a <webview> asked for a guest before its frame "
-                   "arrived; waiting for it.";
-      waiting_ = WaitingRequest{placeholder_frame, std::move(guest),
-                                std::move(client),  window,
-                                extension_popup,   mojo::GetBadMessageCallback()};
-      return;
-    }
-
     // A lie, and the only one available here: a document claiming a guest for
     // a frame that is not its own child could put a page it does not own
     // inside somebody else's element.
@@ -145,13 +137,38 @@ class WebViewGuestHost final
     // DocumentService's own version rather than mojo::ReportBadMessage, which
     // its header asks for: it resets the receiver before deleting, so a reply
     // callback does not have to be run with made-up arguments first.
-    if (placeholder->GetParent() != &render_frame_host()) {
+    if (placeholder != nullptr &&
+        placeholder->GetParent() != &render_frame_host()) {
       ReportBadMessageAndDeleteThis(kNotItsOwnFrame);
       return;
     }
 
-    Give(*placeholder, std::move(guest), std::move(client), window,
-         extension_popup);
+    const GURL committed =
+        placeholder == nullptr ? GURL() : placeholder->GetLastCommittedURL();
+    switch (StageOf(placeholder != nullptr, committed)) {
+      case PlaceholderStage::kAbsent:
+      case PlaceholderStage::kCommitting:
+        // ONE REQUEST WAITS PER PIPE, which is the cap on what a renderer can
+        // make this hold: the element sends one CreateGuest on a pipe of its
+        // own.
+        if (waiting_.has_value()) {
+          ReportBadMessageAndDeleteThis(kOneGuest);
+          return;
+        }
+        // The line that tells a guest that waited from one that did not, in a
+        // run that shows nothing.
+        LOG(INFO) << "domicile: a <webview> asked for a guest before its frame "
+                     "or its frame's first page arrived; waiting for it.";
+        waiting_ = WaitingRequest{
+            placeholder_frame, std::move(guest),
+            std::move(client), window,
+            extension_popup,   mojo::GetBadMessageCallback()};
+        return;
+      case PlaceholderStage::kReady:
+        Give(*placeholder, std::move(guest), std::move(client), window,
+             extension_popup);
+        return;
+    }
   }
 
   // content::WebContentsObserver:
@@ -162,8 +179,23 @@ class WebViewGuestHost final
   // ordinary path never makes. A task later is when a CreateGuest that lost no
   // race is read.
   void RenderFrameCreated(content::RenderFrameHost* frame) override {
+    RetryIfWaitingFor(*frame);
+  }
+
+  // The placeholder's about:blank commit, which a request that found the frame
+  // still committing waits for. Posted for RenderFrameCreated's reason: this is
+  // called from inside Navigator::DidNavigate.
+  void DidFinishNavigation(
+      content::NavigationHandle* navigation_handle) override {
+    if (navigation_handle->HasCommitted()) {
+      RetryIfWaitingFor(*navigation_handle->GetRenderFrameHost());
+    }
+  }
+
+  // Runs the waiting request again, in a task, if `frame` is its placeholder.
+  void RetryIfWaitingFor(content::RenderFrameHost& frame) {
     if (!waiting_.has_value() ||
-        frame->GetFrameToken() != waiting_->placeholder_frame) {
+        frame.GetFrameToken() != waiting_->placeholder_frame) {
       return;
     }
     base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
@@ -197,8 +229,25 @@ class WebViewGuestHost final
       return;
     }
 
-    Give(*placeholder, std::move(request.guest), std::move(request.client),
-         request.window, request.extension_popup);
+    switch (StageOf(/*frame_exists=*/true,
+                    placeholder->GetLastCommittedURL())) {
+      case PlaceholderStage::kAbsent:
+        NOTREACHED();
+      case PlaceholderStage::kCommitting:
+        // The frame has arrived and its commit has not: wait again, for
+        // DidFinishNavigation. With CreateGuest's cap on what waits.
+        if (waiting_.has_value()) {
+          std::move(request.report_bad_message).Run(kOneGuest);
+          ResetAndDeleteThis();
+          return;
+        }
+        waiting_ = std::move(request);
+        return;
+      case PlaceholderStage::kReady:
+        Give(*placeholder, std::move(request.guest), std::move(request.client),
+             request.window, request.extension_popup);
+        return;
+    }
   }
 
   // Puts a page behind `placeholder`: the browser window `window` names, or a
