@@ -76,6 +76,78 @@ enum WebViewFileChooserMode {
   kSave,
 };
 
+// The kind of element under a context menu's click.
+enum WebViewMediaType {
+  kNone,
+  kImage,
+  kVideo,
+  kAudio,
+  kCanvas,
+  kFile,
+  kPlugin,
+};
+
+// A right click the page did not cancel: what was under it, and what the page
+// reports can be done there. The shell draws the menu from it.
+struct WebViewContextMenu {
+  // Identifies the menu to RunContextMenuAction. Increases for the guest's
+  // life; a newer menu replaces an older one.
+  int32 id;
+
+  // Where the click was, in CSS pixels from the top left of the page's box.
+  int32 x;
+  int32 y;
+
+  // The link under the click and its text, or an empty URL for none. Filtered
+  // by content: a link the guest's process may not request is
+  // about:blank#blocked, so opening it in a new window grants nothing.
+  // "Copy link address" copies the unfiltered link, as Chrome does.
+  url.mojom.Url link_url;
+  string link_text;
+
+  // The image, video or audio under the click, and what it is.
+  url.mojom.Url src_url;
+  WebViewMediaType media_type;
+  // Whether an image has pixels to copy. A broken image has none.
+  bool has_image_contents;
+
+  // The selected text, empty for none.
+  string selection_text;
+
+  // Whether the click was in an editable element, and Blink's edit flags.
+  bool is_editable;
+  bool can_undo;
+  bool can_redo;
+  bool can_cut;
+  bool can_copy;
+  bool can_paste;
+  bool can_delete;
+  bool can_select_all;
+};
+
+// What a shell's context menu can ask the browser to do.
+enum WebViewContextMenuAction {
+  // Blink's edit commands, on the focused frame.
+  kUndo,
+  kRedo,
+  kCut,
+  kCopy,
+  kPaste,
+  kPasteAndMatchStyle,
+  kDelete,
+  kSelectAll,
+  // Copy the link's address, or save the link. A save asks the shell where.
+  kCopyLinkAddress,
+  kSaveLinkAs,
+  // Copy the image's pixels.
+  kCopyImage,
+  // Copy the image, video or audio address, or save the file.
+  kCopyMediaAddress,
+  kSaveMediaAs,
+  // Open DevTools on the element under the click. See WebViewGuest.Inspect.
+  kInspect,
+};
+
 // Renderer -> browser, bound per document.
 interface WebViewGuestHost {
   // Give `placeholder_frame` a guest page.
@@ -342,6 +414,11 @@ interface WebViewGuestClient {
   // SENT ONLY WHEN IT CHANGES, like the reports above; a fresh guest sends its
   // first page's once that page has laid out.
   ContentSizeChanged(int32 width, int32 height);
+
+  // The user asked for a context menu (right click or menu key) and the page
+  // did not cancel its `contextmenu` event. The browser draws no menu (patch
+  // 0047), so the shell draws one from this. One message per menu.
+  ContextMenuRequested(WebViewContextMenu menu);
 };
 
 // One guest, for as long as the element that asked for it lives.
@@ -442,4 +519,16 @@ interface WebViewGuest {
   // element is where the shell's focus lands. See
   // HTMLWebViewElement::SetFocused.
   Focused();
+
+  // Do `action` for menu `menu`, on that menu's link, image and click.
+  // - An id older than the newest menu is a race and is dropped.
+  // - An id never sent, or an action the menu does not offer (a link action
+  //   with no link), is a bad message. The element refuses both first.
+  RunContextMenuAction(int32 menu, WebViewContextMenuAction action);
+
+  // Open DevTools on the page in a new browser window at DevTools' address,
+  // which the browser attaches to the page. If DevTools is already open, its
+  // window's element gets FocusRequested instead. See
+  // //chrome/browser/domicile/domicile_devtools.h.
+  Inspect();
 };
