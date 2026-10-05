@@ -36,6 +36,8 @@ namespace domicile {
 //
 // Then it adds the guest to its profile's desk -- domicile_desk.h, slice 2 --
 // which is what makes it a tab chrome.tabs can find.
+// It also watches for DevTools' front end loading in the guest (see
+// domicile_devtools.h).
 //
 // EXCEPT AN EXTENSION'S ACTION POPUP: a <webview> with `extensionpopup` (see
 // WebViewGuest::extension_popup). That guest gets the popup view type and
