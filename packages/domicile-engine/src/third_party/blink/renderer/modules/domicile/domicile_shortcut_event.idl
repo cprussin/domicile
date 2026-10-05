@@ -18,6 +18,10 @@
   constructor(DOMString type,
               optional DomicileShortcutEventInit eventInitDict = {});
 
+  // The chord as the shell grabbed it -- `Meta+Shift+l` -- or empty for one
+  // grabbed as a keycode. See DomicileHost.grabShortcut().
+  readonly attribute DOMString chord;
+
   // The Linux evdev code, the same numbering key() forwards in.
   readonly attribute unsigned long keycode;
 
