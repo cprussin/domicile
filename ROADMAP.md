@@ -365,6 +365,18 @@ Understood and not scheduled.
   through to the next backend, which is correct, so `nix/domicile.portal`
   lists only what Domicile implements.
 
+- **Screenshots are a Domicile command, not a protocol.** `domicile
+  screenshot <file>` asks the engine for a PNG of the shell page. It is a
+  stopgap:
+  - No region or window picker, and no screen recording.
+  - Tools such as `grim`, `wf-recorder` and `xdg-desktop-portal` clients
+    cannot capture the desk.
+
+  Replace it with `ext-image-copy-capture-v1` (and `wlr-screencopy` for older
+  tools) and the Screenshot portal ([PORTALS.md](docs/architecture/PORTALS.md)
+  phase 2), on the same engine readback. Draw the picker in the shell. Then
+  remove the command.
+
 ### Shell reload
 
 - **Hot-swapping the shell reloads the page.** `domicile load-shell` triggers

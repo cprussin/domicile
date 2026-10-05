@@ -121,16 +121,23 @@ The supervisor connects, sends one JSON line, reads one reply, and closes.
 
 {"type":"open_url","version":1,"url":"https://example.com/"}
 {"type":"opened"}   |   {"type":"refused","why":"…"}
+
+{"type":"screenshot","version":1,"file":"/home/me/shot.png"}
+{"type":"captured"}   |   {"type":"refused","why":"…"}
 ```
 
 - Without the switch, the engine binds nothing. Every desktop `domicile`
   starts passes one under the run's directory.
 - `domicile load-shell <path>` sends `load_shell`. `domicile open-url <url>`
-  sends `open_url`.
+  sends `open_url`. `domicile screenshot <file>` sends `screenshot`.
 - `open_url` goes to the newest shell page only (`UrlRegistry`), as an
   `openurl` event. During a reload, the old and new page both exist, and only
   the new one gets it. An unparsable URL, or no page to hand it to, is
   refused.
+- `screenshot` copies the shell page's surface (`CopyFromSurface`) and writes
+  it as a PNG. The page is the whole desk, so the copy has every `<app>` in
+  it, at the page's scale and unrotated. The reply waits for the file. A
+  relative path, no shell page, or a failed copy or write is refused.
 - It is its own socket because the compositor has no part in choosing the
   shell. The supervisor also passes it at
   launch as `--domicile-shell-root` and `--domicile-shell-module`. See

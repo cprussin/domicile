@@ -26,6 +26,10 @@ pub enum Request {
     /// Open this URL in a browser window. The client converts paths with
     /// [`crate::address`].
     OpenUrl { url: String },
+    /// Write a PNG of the desk to this absolute path.
+    ///
+    /// The client makes the path absolute, as for `LoadShell`.
+    Screenshot { file: PathBuf },
 }
 
 /// A desktop's response.
@@ -42,6 +46,9 @@ pub enum Response {
     /// The shell decides whether and where to open it, and does not report
     /// back.
     Opened,
+
+    /// The engine wrote the screenshot to this file.
+    Captured { file: PathBuf },
 
     /// The request was unknown or could not be carried out.
     ///
@@ -73,11 +80,22 @@ pub type LoadShell<'a> = &'a dyn Fn(&Path, &Path) -> Result<(), String>;
 /// [`crate::command_socket::open_url`] in a desktop; a closure in tests.
 pub type OpenUrl<'a> = &'a dyn Fn(&str) -> Result<(), String>;
 
+/// Tells the engine to write a PNG of the desk to a file.
+///
+/// [`crate::command_socket::screenshot`] in a desktop; a closure in tests.
+pub type Screenshot<'a> = &'a dyn Fn(&Path) -> Result<(), String>;
+
 /// Answers one request line, given the current shell `module`.
 ///
-/// `load` and `open` reach the engine; they are injected so this can be
-/// tested without sockets.
-pub fn answer(line: &str, module: &Path, load: LoadShell, open: OpenUrl) -> String {
+/// `load`, `open` and `capture` reach the engine; they are injected so this
+/// can be tested without sockets.
+pub fn answer(
+    line: &str,
+    module: &Path,
+    load: LoadShell,
+    open: OpenUrl,
+    capture: Screenshot,
+) -> String {
     match parse_request(line.trim()) {
         Ok(Request::WhichShell) => to_line(&Response::Shell {
             module: module.to_path_buf(),
@@ -92,6 +110,10 @@ pub fn answer(line: &str, module: &Path, load: LoadShell, open: OpenUrl) -> Stri
         }),
         Ok(Request::OpenUrl { url }) => to_line(&match open(&url) {
             Ok(()) => Response::Opened,
+            Err(why) => Response::Refused { why },
+        }),
+        Ok(Request::Screenshot { file }) => to_line(&match capture(&file) {
+            Ok(()) => Response::Captured { file },
             Err(why) => Response::Refused { why },
         }),
         Err(why) => to_line(&Response::Refused {
