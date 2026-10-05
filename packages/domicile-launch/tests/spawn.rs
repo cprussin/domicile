@@ -118,13 +118,11 @@ fn a_tty_desktop_asks_for_the_whole_screen() {
 }
 
 #[test]
-fn the_desk_is_given_tile_memory_for_every_monitor() {
-    // OVER BUDGET, THE SHELL'S CHROME BLINKS. Chromium sizes a page's tile
-    // memory from the screen it first sees -- one monitor -- and a desk page
-    // spans all of them, each at its own density. Short of memory, the tiles
-    // a frame needs are marked out of memory and drawn as flat color until
-    // their turn comes round again: bars and panels redrawing in bands, while
-    // a webview or an app, which are surfaces of their own, look fine.
+fn the_engine_sizes_its_own_tile_memory() {
+    // NO FIXED BUDGET. The engine sizes the desk page's tile memory from the
+    // monitors it spans (patch 0088, `DomicileTileBytesFor`), and an explicit
+    // `--force-gpu-mem-available-mb` would override that with one number for
+    // every desk -- and for every other page, which needs far less.
     for platform in ["drm", "wayland"] {
         let args = args_of(&engine(
             Path::new("/l/engine"),
@@ -133,11 +131,12 @@ fn the_desk_is_given_tile_memory_for_every_monitor() {
             &runtime(),
             None,
         ));
-        let budget = args
-            .iter()
-            .find_map(|arg| arg.strip_prefix("--force-gpu-mem-available-mb="))
-            .and_then(|mb| mb.parse::<u32>().ok());
-        assert!(budget.is_some_and(|mb| mb >= 2048), "{platform}: {args:?}");
+        assert!(
+            !args
+                .iter()
+                .any(|arg| arg.starts_with("--force-gpu-mem-available-mb")),
+            "{platform}: {args:?}"
+        );
     }
 }
 
