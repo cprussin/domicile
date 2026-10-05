@@ -497,7 +497,8 @@ export class DomicileClient {
   searchFiles(query: string): Promise<FoundFilesMessage> {
     return new Promise((settle) => {
       this.#searches.set(query, [...(this.#searches.get(query) ?? []), settle]);
-      this.#host.searchFiles(query);
+      // Settled by the event; a superseded ask's rejection is not news.
+      this.#host.searchFiles(query).catch(() => undefined);
     });
   }
 
@@ -510,7 +511,8 @@ export class DomicileClient {
   previewFile(path: string): Promise<FilePreviewMessage> {
     return new Promise((settle) => {
       this.#previews.set(path, [...(this.#previews.get(path) ?? []), settle]);
-      this.#host.previewFile(path);
+      // Settled by the event; a superseded ask's rejection is not news.
+      this.#host.previewFile(path).catch(() => undefined);
     });
   }
 
@@ -524,7 +526,8 @@ export class DomicileClient {
         ...(this.#appSearches.get(query) ?? []),
         settle,
       ]);
-      this.#host.searchApps(query);
+      // Settled by the event; a superseded ask's rejection is not news.
+      this.#host.searchApps(query).catch(() => undefined);
     });
   }
 

@@ -386,7 +386,8 @@ if wanted engine; then
       scripts/engine-guard-desktop-geometry.sh \
       scripts/engine-guard-windows-state.sh \
       scripts/engine-guard-desk-state.sh \
-      scripts/engine-guard-held-moments.sh
+      scripts/engine-guard-held-moments.sh \
+      scripts/engine-guard-asks-promise.sh
     ! engine_stop; } &&
   engine_serial scripts/engine-guard-css-and-resize.sh &&
   run engine-guard-latency scripts/engine-guard-latency.sh &&
