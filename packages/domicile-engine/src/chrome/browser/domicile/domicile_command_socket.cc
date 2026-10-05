@@ -5,19 +5,29 @@
 
 #include <unistd.h>
 
+#include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "base/check.h"
 #include "base/check_op.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
+#include "base/files/file_util.h"
 #include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/no_destructor.h"
 #include "chrome/browser/domicile/domicile_browser_windows.h"
+#include "base/strings/strcat.h"
+#include "base/strings/string_number_conversions.h"
+#include "base/task/bind_post_task.h"
+#include "base/task/thread_pool.h"
+#include "base/time/time.h"
+#include "base/types/expected.h"
 #include "chrome/browser/ui/browser_window/public/browser_collection.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
@@ -25,16 +35,22 @@
 #include "components/domicile/browser/shell_source.h"
 #include "components/domicile/common/domicile_scheme.h"
 #include "components/tabs/public/tab_interface.h"
+#include "components/viz/common/frame_sinks/copy_output_result.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/reload_type.h"
+#include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
 #include "net/socket/stream_socket.h"
 #include "net/socket/unix_domain_server_socket_posix.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
+#include "third_party/skia/include/core/SkBitmap.h"
+#include "ui/gfx/codec/png_codec.h"
+#include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/size.h"
 #include "url/gurl.h"
 
 namespace domicile {
@@ -51,6 +67,11 @@ constexpr int kReadBufferSize = 4 * 1024;
 // peer that never sends a newline must not be able to grow this process's
 // heap by holding a socket open.
 constexpr size_t kMaxRequestSize = 64 * 1024;
+
+// How long viz may take to read the desk back. Under the supervisor's wait
+// for the engine, so a timeout here reaches the terminal as this engine's
+// refusal.
+constexpr base::TimeDelta kCaptureTimeout = base::Seconds(5);
 
 // Whoever can open the path may command the desktop, and this is the belt to
 // that brace: the socket lives in the supervisor's own runtime directory, and
@@ -110,7 +131,70 @@ bool LoadShellIntoTheShellWindow(const base::FilePath& root,
   return true;
 }
 
-// One request line, answered on the UI thread.
+// Opens a browser window at `url`, as for a page's target="_blank". The shell
+// sees it in its window list. See domicile_browser_windows.h.
+bool OpenUrlInABrowserWindow(const GURL& url) {
+  return OpenBrowserWindow(url);
+}
+
+// Encodes `desk` and writes it to `file`. Blocking, so on the thread pool.
+base::expected<void, std::string> WritePng(const base::FilePath& file,
+                                           const SkBitmap& desk) {
+  const std::optional<std::vector<uint8_t>> png =
+      gfx::PNGCodec::EncodeBGRASkBitmap(desk, /*discard_transparency=*/true);
+  if (!png) {
+    return base::unexpected("the desk could not be encoded as a PNG");
+  }
+  if (!base::WriteFile(file, *png)) {
+    return base::unexpected(
+        base::StrCat({"could not write ", file.AsUTF8Unsafe()}));
+  }
+  return base::ok();
+}
+
+void OnDeskCopied(const base::FilePath& file,
+                  ScreenshotDone done,
+                  const content::CopyFromSurfaceResult& copied) {
+  if (!copied.has_value()) {
+    std::move(done).Run(base::unexpected(base::StrCat(
+        {"the display compositor did not read the desk back (",
+         "content::CopyFromSurfaceError ",
+         base::NumberToString(static_cast<int>(copied.error())), ")"})));
+    return;
+  }
+  // `done` ends in a reply bound to the IO thread, so it may run here.
+  base::ThreadPool::PostTask(
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+      base::BindOnce(
+          [](const base::FilePath& file, const SkBitmap& desk,
+             ScreenshotDone done) {
+            std::move(done).Run(WritePng(file, desk));
+          },
+          file, copied->bitmap, std::move(done)));
+}
+
+// Writes a PNG of the shell page to `file`.
+//
+// The page is the whole desk: on a tty it spans every monitor
+// (docs/architecture/ONE-PAGE-FOR-THE-DESK.md), and a copy of its surface is
+// aggregated with every `<app>` embedded in it. It is copied at the page's
+// own scale, unrotated.
+void ScreenshotTheDesk(const base::FilePath& file, ScreenshotDone done) {
+  CHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  content::WebContents* shell = FindShellContents();
+  content::RenderWidgetHostView* view =
+      shell == nullptr ? nullptr : shell->GetRenderWidgetHostView();
+  if (view == nullptr) {
+    std::move(done).Run(
+        base::unexpected("this engine has no shell page to capture"));
+    return;
+  }
+  view->CopyFromSurface(gfx::Rect(), gfx::Size(), kCaptureTimeout,
+                        base::BindOnce(&OnDeskCopied, file, std::move(done)));
+}
+
+// One request line, answered from the UI thread.
 //
 // THE HOP IS HERE BECAUSE THE SEQUENCE IS. `ShellSource` takes no lock: it is
 // read where the shell's URLLoaderFactory is built and asked, which is the UI
@@ -118,16 +202,11 @@ bool LoadShellIntoTheShellWindow(const base::FilePath& root,
 // thread's too. So whatever carries a command in is what posts -- and this
 // posts the line rather than the parse, which costs a JSON read of one short
 // line on the UI thread and buys one function that is the whole protocol.
-// Opens a browser window at `url`, as for a page's target="_blank". The shell
-// sees it in its window list. See domicile_browser_windows.h.
-bool OpenUrlInABrowserWindow(const GURL& url) {
-  return OpenBrowserWindow(url);
-}
-
-std::string AnswerOnUIThread(const std::string& line) {
+// `reply` is bound to the IO thread, so a screenshot may answer from any.
+void AnswerOnUIThread(const std::string& line, CommandReply reply) {
   CHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  return AnswerCommand(line, &LoadShellIntoTheShellWindow,
-                       &OpenUrlInABrowserWindow);
+  AnswerCommand(line, &LoadShellIntoTheShellWindow, &OpenUrlInABrowserWindow,
+                &ScreenshotTheDesk, std::move(reply));
 }
 
 // The socket the supervisor dials, on the browser's IO thread.
@@ -223,9 +302,13 @@ class CommandSocket {
     // ONE CONNECTION IS ONE REQUEST, so whatever follows the first newline is
     // not a second command -- it is a client that does not speak this
     // protocol, and it is dropped with the connection.
-    content::GetUIThreadTaskRunner({})->PostTaskAndReplyWithResult(
-        FROM_HERE, base::BindOnce(&AnswerOnUIThread, request_.substr(0, newline)),
-        base::BindOnce(&CommandSocket::Reply, base::Unretained(this)));
+    content::GetUIThreadTaskRunner({})->PostTask(
+        FROM_HERE,
+        base::BindOnce(
+            &AnswerOnUIThread, request_.substr(0, newline),
+            base::BindPostTask(content::GetIOThreadTaskRunner({}),
+                               base::BindOnce(&CommandSocket::Reply,
+                                              base::Unretained(this)))));
   }
 
   void Reply(std::string line) {

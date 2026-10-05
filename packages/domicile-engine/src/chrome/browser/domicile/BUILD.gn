@@ -54,6 +54,8 @@ source_set("domicile") {
     "//components/tabs:public",
     "//content/public/browser",
     "//net",
+    # `screenshot`: the shell page's surface read back by viz, as a PNG.
+    "//components/viz/common",
     # The extensions a desk's config names, installed into a profile: the
     # ExtensionService, the pending and unpacked installers, and the profile
     # pref holding what was installed. //chrome for the same reason as the

@@ -59,6 +59,12 @@ Settings live in `~/.config/domicile/domicile.json` (or `.ts`/`.js`). Reference:
   theme.
 - `domicile open-url <url>` does the same from a terminal on the desktop.
 
+## Screenshots
+
+`domicile screenshot <file>` writes a PNG of the whole desk to `<file>`, from a
+terminal on the desktop. It has no region or window picker. See ROADMAP's
+*Session and portals*.
+
 ## Host shortcuts in a window
 
 A nested desktop needs the Meta key, which your host compositor also uses.
