@@ -134,4 +134,8 @@
   // others are.
   readonly attribute long contentWidth;
   readonly attribute long contentHeight;
+
+  // Open DevTools for the page in a new browser window. If DevTools is already
+  // open, the <webview> showing it dispatches `domicile-focus-request`.
+  undefined inspect();
 };

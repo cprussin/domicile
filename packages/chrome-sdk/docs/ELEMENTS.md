@@ -37,7 +37,8 @@ the desk's browser windows, which the engine owns; the engine reads `window`
 once, when the view connects. The SDK provides types only.
 
 - **Properties:** `src`, `goBack()`, `goForward()`, `stop()`, `reload()`,
-  `canGoBack`, `canGoForward`, `loading`, `focus()`.
+  `canGoBack`, `canGoForward`, `loading`, `focus()`, `inspect()` (opens
+  DevTools as a new window).
 - **Events** (selected; see `src/webview-element.ts` for all):
   - `domicile-close`: the page in a shell's own view (no `window`) called
     `window.close()`. The shell removes the view. A browser window closes in
@@ -45,6 +46,9 @@ once, when the view connects. The SDK provides types only.
   - `domicile-focus-request`: the page called `window.focus()` or
     `client.focus()` (how a site answers a click on its notification), or an
     extension asked for the tab. The shell raises the view.
+  - `domicile-context-menu`: a right click the page left alone, with what was
+    under it. The shell draws the menu; `event.run(action)` does the browser's
+    part of an item.
   - `domicile-content-size-change`: `contentWidth` / `contentHeight` changed.
     Use it to size extension popups.
 - **Browser windows:** `DomicileClient.on("browser_windows", …)` delivers the

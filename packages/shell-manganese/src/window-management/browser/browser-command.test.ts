@@ -94,4 +94,13 @@ describe("browserCommandFor", () => {
       browserCommandFor(press("ArrowLeft", { ctrlKey: true })),
     ).toBeUndefined();
   });
+
+  // Chrome's DevTools chord. Shift is what makes it DevTools: Ctrl+I alone is
+  // a page's italic.
+  it("inspects on Ctrl+Shift+I, and not on Ctrl+I", () => {
+    expect(
+      browserCommandFor(press("I", { ctrlKey: true, shiftKey: true })),
+    ).toBe(BrowserCommand.Inspect);
+    expect(browserCommandFor(press("i", { ctrlKey: true }))).toBeUndefined();
+  });
 });

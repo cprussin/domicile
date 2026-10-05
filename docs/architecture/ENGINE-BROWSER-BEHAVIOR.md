@@ -15,7 +15,11 @@ Patch `0047`:
 
 In a browser window (`WebViewGuest`):
 
-- A right click is only the page's `contextmenu` event.
+- A right click the page leaves alone goes to the shell as
+  `domicile-context-menu` (patch `0092`). The shell draws the menu and sends
+  the chosen action back with `event.run()`.
+- `inspect` opens DevTools in a browser window at DevTools' address.
+  `chrome/browser/domicile/domicile_devtools.h` attaches it.
 - A chord the page does not handle goes to the shell.
 - Ctrl+wheel goes to the shell as a zoom request.
 
@@ -57,4 +61,5 @@ gets its Meta chords.
 - `guard-shortcuts-inhibitor.sh` and `guard-shortcuts-inhibitor-chord.sh`: the
   engine sends the inhibit request, and sway honors it. See
   [ENGINE-FORK-MEASUREMENTS.md](ENGINE-FORK-MEASUREMENTS.md#host-shortcut-inhibitor).
-- No guard reads the context menu or the browser's offers.
+- `guard-webview-context-menu.sh`: the context menu and DevTools.
+- No guard reads the browser's offers.
