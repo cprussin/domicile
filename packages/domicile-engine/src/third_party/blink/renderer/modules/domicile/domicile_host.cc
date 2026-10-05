@@ -28,6 +28,7 @@
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/event_target_names.h"
 #include "third_party/blink/renderer/core/event_type_names.h"
+#include "third_party/blink/renderer/core/events/message_event.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/timing/dom_window_performance.h"
 #include "third_party/blink/renderer/core/timing/window_performance.h"
@@ -485,6 +486,15 @@ ScriptPromise<DomicileAppSearch> DomicileHost::searchApps(
   auto promise = resolver->Promise();
   channel_->SearchApps(query);
   return promise;
+}
+
+void DomicileHost::callSystem(ScriptState*,
+                              uint32_t id,
+                              const String& request,
+                              ExceptionState& exception_state) {
+  if (Ready(exception_state)) {
+    channel_->CallSystem(id, request);
+  }
 }
 
 // The whole of what a page may do about the lock, and it is an offer rather
@@ -1486,6 +1496,17 @@ void DomicileHost::WindowsChanged(
       std::move(listed));
   DispatchEvent(
       *Event::Create(domicile_event_names::Browserwindowschanged()));
+}
+
+// A standard MessageEvent, so a line the page parses needs no event type of
+// its own.
+void DomicileHost::System(const String& message) {
+  MessageEvent* event = MessageEvent::Create();
+  event->initMessageEvent(domicile_event_names::System(), /*bubbles=*/false,
+                          /*cancelable=*/false, message, /*origin=*/nullptr,
+                          /*last_event_id=*/String(), /*source=*/nullptr,
+                          /*ports=*/nullptr);
+  DispatchEvent(*event);
 }
 
 void DomicileHost::AppTitled(const String& app_id, const String& title,

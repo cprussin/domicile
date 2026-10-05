@@ -86,6 +86,7 @@ const absentHost = (): DomicileHost => ({
   batteryCharging: null,
   brightness: null,
   browserWindows: null,
+  callSystem: () => undefined,
   clipboard: null,
   closeApp: () => undefined,
   closeBrowserWindow: () => undefined,
