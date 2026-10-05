@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "@cprussin/option-result": "catalog:",
     "zod": "catalog:"
   },
   "description": "The SDK for writing a Domicile shell: the types of the desktop a shell is handed, the <app> and <webview> elements, keybindings, and the Shell type.",
@@ -61,6 +62,10 @@
     "./shell": {
       "types": "./dist/shell.d.ts",
       "default": "./dist/shell.js"
+    },
+    "./system": {
+      "types": "./dist/system.d.ts",
+      "default": "./dist/system.js"
     },
     "./theme": {
       "types": "./dist/theme.d.ts",
