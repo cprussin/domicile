@@ -18,6 +18,7 @@
 #include "components/input/native_web_keyboard_event.h"
 #include "content/public/browser/browser_plugin_guest_delegate.h"
 #include "content/public/browser/file_select_listener.h"
+#include "content/public/browser/frame_tree_node_id.h"
 #include "content/public/browser/global_routing_id.h"
 #include "content/public/browser/host_zoom_map.h"
 #include "content/public/browser/invalidate_type.h"
@@ -220,6 +221,14 @@ class WebViewGuest : public mojom::WebViewGuest,
   // shell's own page, say. How //chrome finds its way here from a download,
   // which knows its WebContents and nothing about <webview>.
   static WebViewGuest* FromWebContents(content::WebContents* contents);
+
+  // Whether a guest is attached at `frame` in `outer`: the frame a <webview>
+  // made for it. A FrameTree leaves that frame out of its loading state, so a
+  // commit there is in no load. One arrives when the <webview>'s about:blank
+  // commit is overtaken by the attach request, which comes on another pipe.
+  // PageLoadMetrics asks this; see patch 0071.
+  static bool IsAttachedAt(content::WebContents& outer,
+                           content::FrameTreeNodeId frame);
 
   // Ask the shell where a download from this guest's page goes.
   //
@@ -705,6 +714,9 @@ class WebViewGuest : public mojom::WebViewGuest,
   // True between AttachToElement and AttachWindowTo. A second element asking
   // then is refused, as when the window is already shown.
   bool attaching_ = false;
+
+  // The owner's frame this guest was last attached at. See IsAttachedAt.
+  content::FrameTreeNodeId attach_point_;
 
   // The content size the page last reported, resent to a new element. Empty
   // until the first report.

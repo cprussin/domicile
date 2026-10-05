@@ -483,6 +483,7 @@ void WebViewGuest::Attach(std::unique_ptr<WebViewGuest> guest,
 
   std::unique_ptr<content::WebContents> contents =
       std::move(guest->owned_guest_contents_);
+  guest->attach_point_ = outer_contents_frame->GetFrameTreeNodeId();
 
   // From here the guest is scoped to the guest page's lifetime, exactly as
   // GuestViewBase does it: the outer WebContents takes the inner one, and this
@@ -610,6 +611,7 @@ void WebViewGuest::AttachWindowTo(
       content::WebContents::FromRenderFrameHost(outer_contents_frame);
   CHECK(owner);
   owner_contents_ = owner->GetWeakPtr();
+  attach_point_ = outer_contents_frame->GetFrameTreeNodeId();
 
   // Attached unowned: the outer WebContents shows the page without owning it.
   // When the frame goes (a reload, an element removed), content detaches the
@@ -711,6 +713,20 @@ WebViewGuest* WebViewGuest::FromWebContents(content::WebContents* contents) {
   const auto* link =
       static_cast<GuestLink*>(contents->GetUserData(kGuestUserDataKey));
   return link == nullptr ? nullptr : link->guest();
+}
+
+// static
+bool WebViewGuest::IsAttachedAt(content::WebContents& outer,
+                                content::FrameTreeNodeId frame) {
+  // Only the guests attached now: content drops a detached one from this list,
+  // so an `attach_point_` left from an earlier frame is never read.
+  for (content::WebContents* inner : outer.GetInnerWebContents()) {
+    const WebViewGuest* guest = FromWebContents(inner);
+    if (guest != nullptr && guest->attach_point_ == frame) {
+      return true;
+    }
+  }
+  return false;
 }
 
 void WebViewGuest::ChooseDownloadPath(
