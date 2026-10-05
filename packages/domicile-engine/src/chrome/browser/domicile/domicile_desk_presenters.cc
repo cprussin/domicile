@@ -19,8 +19,7 @@ namespace domicile {
 struct DeskPresenters::Presenter {
   int64_t display = 0;
   std::unique_ptr<views::Widget> widget;
-  // After the widget, so it goes first: it unregisters from the widget's
-  // compositor.
+  // After the widget, so it goes first: its layer is in the widget's tree.
   std::unique_ptr<content::DomicileDeskMirror> mirror;
 };
 
@@ -77,8 +76,7 @@ void DeskPresenters::Present(content::WebContents* page,
         wanted.pixels);
     if (presenter.mirror == nullptr || !presenter.mirror->Mirrors(page)) {
       presenter.mirror.reset();
-      presenter.mirror = content::MirrorDomicileDeskPage(
-          page, presenter.widget->GetCompositor());
+      presenter.mirror = content::MirrorDomicileDeskPage(page);
       if (presenter.mirror == nullptr) {
         // No view yet. The page loading asks again.
         continue;

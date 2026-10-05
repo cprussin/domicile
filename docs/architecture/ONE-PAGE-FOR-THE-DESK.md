@@ -51,8 +51,9 @@ enters a gap, because pointer crossing follows `desk`.
 - The host's `WebContents` view is sized to the desk box and offset by the
   host's `desk` origin. The window clips it to the host's own slice.
 - Every other window is a `DeskPresenter`: a widget with no `WebContents`.
-  - Its root `ui::Layer` shows the page's `SurfaceId` at the same offset
-    (`SetShowSurface`, as in `DelegatedFrameHost`, plus `AddChildFrameSink`).
+  - Its root `ui::Layer` holds a mirror of the page's surface layer at the
+    same offset (`ui::Layer::Mirror`). The page's frame sink is not a child of
+    the presenter's compositor (see [Frames](#frames)).
   - `SurfaceAggregator::EmitSurfaceContent` scales a child frame by
     `parent_dsf / frame_dsf`. So a presenter at 1.2 draws the page's frame at
     1.2/S.
@@ -90,10 +91,17 @@ Details: [DISPLAY-TILINGS.md](DISPLAY-TILINGS.md).
 
 ### Frames
 
-- The page's frame sink hangs off the host, so it uses the host display's
-  `BeginFrameSource`. `FrameSinkManagerImpl::RecursivelyAttachBeginFrameSource`
-  attaches the host's source explicitly, so it does not depend on registration
-  order.
+- The page's frame sink has one parent, the host's compositor
+  (`DelegatedFrameHost`), so it uses the host display's `BeginFrameSource`.
+- A presenter's compositor is never a second parent. viz gives a child its
+  first parent's source, and after a detach reattaches from sources ordered by
+  pointer (`FrameSinkManagerImpl::UnregisterFrameSinkHierarchy`). A second
+  parent could leave the page on a slower monitor's clock.
+- A presenter needs no hierarchy to draw the page: its frames reference the
+  page's surface
+  ([measured](ENGINE-FORK-MEASUREMENTS.md#getting-a-surface-on-screen)).
+  `scripts/test-the-desk-page-ticks-at-the-host.sh` checks no
+  fork code calls `AddChildFrameSink`.
 - A slower display draws the latest surface at its own vsync. A slide across a
   seam is one animation on one clock, sampled by two vsyncs.
 
@@ -155,6 +163,8 @@ Done:
 Left:
 
 - [ ] Hardware check: text on the lower-density monitor is crisp
+- [ ] Hardware check: with a slower monitor lit, the shell animates at the
+  host's refresh rate, including after a resume and a hotplug
 - [ ] `<app>` scale from the display under its center
 
 ## Open questions
