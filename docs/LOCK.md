@@ -27,12 +27,13 @@ desktop treats it.
 | Commands | `CloseApp`, `Spawn`, `CopyClipboardEntry`, tray, notifications, audio | Refused (`warn` log) |
 | Reads on the connection | `SearchFiles`, `PreviewFile`, `SearchApps` | Answered with nothing (`warn` log) |
 | System calls | `SystemRequest`, except reads under `/sys` and calls that stop something running | A call that starts something is answered `locked`; `stdin` is dropped (`warn` log) |
-| Allowed | `ChromeHello`, `Lock`, `Unlock`, `KeyboardFocus`, output scale and size, `ClipboardCopied`, theme, brightness | Handled normally |
+| Allowed | `ChromeHello`, `Lock`, `Unlock`, `KeyboardFocus`, output scale and size, window bounds, `ClipboardCopied`, theme, brightness | Handled normally |
 
 Why some requests are allowed:
 
 - `ChromeHello`: a reloaded page learns the desktop is locked from the answer.
-- `SetOutputScale`, `SetOutputSize`: nothing replays them after unlock.
+- `SetOutputScale`, `SetOutputSize`, `SetAppBounds`: nothing replays them
+  after unlock.
 - `KeyboardFocus`: refusing it would leave the shell and the compositor disagreeing
   about focus after unlock. No key reaches the window while locked anyway.
 - `ClipboardCopied`: it is a client's copy, and the history must match pastes.

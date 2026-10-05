@@ -5,15 +5,17 @@
 //! chrome on reload while leaving open windows on the old displays. These
 //! checks catch that.
 //!
-//! Every window enters every display, because the shell's layout positions
-//! windows and the compositor does not know where they are. The reload check
-//! also reads `wl_surface.leave`, so it can tell a compositor that updates a
+//! A window enters every display until the page reports its bounds
+//! (`set_app_bounds`), then the displays it overlaps. The reload check also
+//! reads `wl_surface.leave`, so it can tell a compositor that updates a
 //! window's displays from one that never does.
 //!
 //! The client's own trace reports the outputs, so no `wayland-info` is
 //! needed.
 
 mod running;
+
+use domicile_protocol::{ChromeMessage, HostMessage};
 
 use crate::running::Compositor;
 
@@ -148,4 +150,87 @@ fn a_window_open_across_a_reload_is_told_about_the_display_that_arrived() {
         "the window is on the wrong screens after the reload; it traced:\n{}",
         client.trace()
     );
+}
+
+/// The id of the next window the chrome is told about.
+fn appeared(chrome: &mut domicile_test_chrome::Chrome) -> String {
+    let appeared = chrome
+        .wait_for(|message| matches!(message, HostMessage::AppAppeared { .. }))
+        .expect("a client that opened a window is announced to the chrome");
+    let HostMessage::AppAppeared { app_id, .. } = appeared else {
+        unreachable!("the wait matched on this variant")
+    };
+    app_id
+}
+
+/// The page put `app_id`'s window at `position` with `size`.
+fn placed(
+    chrome: &mut domicile_test_chrome::Chrome,
+    app_id: &str,
+    position: [f64; 2],
+    size: [f64; 2],
+) {
+    chrome
+        .say(&ChromeMessage::SetAppBounds {
+            app_id: app_id.to_string(),
+            position,
+            size,
+        })
+        .expect("the chrome reports where it put the window");
+}
+
+/// Until the page says where a window is, it draws for the densest screen,
+/// since it is on them all.
+///
+/// `wp_fractional_scale_v1` counts in 120ths, so the right screen's 2 is 240.
+#[test]
+fn a_window_the_page_has_not_placed_draws_for_the_densest_screen() {
+    let compositor = Compositor::started_with(TWO_DISPLAYS);
+    let mut client = compositor.client("app");
+
+    assert!(
+        client.wait_for_trace(".preferred_scale(240)", 1),
+        "the window was never given the densest screen's scale; it traced:\n{}",
+        client.trace()
+    );
+}
+
+/// A window the page put on one screen is on that screen alone, at its scale,
+/// and both follow the window to the next screen.
+#[test]
+fn a_window_takes_the_scale_of_the_screen_the_page_put_it_on() {
+    let compositor = Compositor::started_with(TWO_DISPLAYS);
+    let mut chrome = compositor.chrome();
+    let mut client = compositor.client("app");
+    let app_id = appeared(&mut chrome);
+
+    placed(&mut chrome, &app_id, [100.0, 100.0], [800.0, 600.0]);
+
+    assert!(
+        client.wait_for_trace(".preferred_scale(120)", 1),
+        "a window on the 1x screen was not given scale 1; it traced:\n{}",
+        client.trace()
+    );
+    assert!(
+        client.wait_for_trace(".leave(", 1),
+        "a window on the left screen alone never left the right one; it \
+         traced:\n{}",
+        client.trace()
+    );
+    assert_eq!(client.on_screens(), vec!["left".to_string()]);
+
+    placed(&mut chrome, &app_id, [2000.0, 100.0], [800.0, 600.0]);
+
+    assert!(
+        client.wait_for_trace(".preferred_scale(240)", 2),
+        "a window moved to the 2x screen kept scale 1; it traced:\n{}",
+        client.trace()
+    );
+    assert!(
+        client.wait_for_trace(".leave(", 2),
+        "a window moved to the right screen never left the left one; it \
+         traced:\n{}",
+        client.trace()
+    );
+    assert_eq!(client.on_screens(), vec!["right".to_string()]);
 }

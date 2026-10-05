@@ -99,9 +99,20 @@ Details: [DISPLAY-TILINGS.md](DISPLAY-TILINGS.md).
 
 ### Client windows
 
-An `<app>` is one element wherever it is. Its buffer scale
-(`OnSurfaceEmbedded`) is the scale of the display under the `<app>`'s center.
-Other monitors resample the client's buffer, like any compositor.
+An `<app>` is one element wherever it is. The client draws at the scale of
+the display holding most of it, as in sway. Other monitors resample its buffer.
+
+- The shell reports each window's box with `DomicileClient.setAppBounds`
+  (`set_app_bounds` on the wire). Manganese's `AppWindow` sends it whenever the
+  box changes.
+- The compositor enters the window on every display the box overlaps and sends
+  `wp_fractional_scale_v1.preferred_scale` for the one with the largest overlap
+  (`Screens::scale_for`). A client without that protocol gets the rounded-up
+  `wl_output.scale` of the displays it entered.
+- A window the shell has not reported, or one in a gap, is on every display at
+  the densest scale.
+- Popups are on every display at the densest scale. They do not follow their
+  parent window yet.
 
 ### Floats across screens (manganese)
 
@@ -135,6 +146,9 @@ Other monitors resample the client's buffer, like any compositor.
 - **A float's center decides its screen,** not the pointer. This matches sway,
   and a window dragged by its far edge doesn't switch screens the moment the
   pointer crosses.
+- **The shell reports window boxes** over the engine finding the display under
+  each `<app>`. The shell already knows its layout, a box report only feeds the
+  scale, and the overlap rule stays in the compositor where it is tested.
 - **Presenters per CRTC** over one window spanning every CRTC. Besides
   `FindWindowAt` (see [Why one page](#why-one-page)), per-CRTC page flips and
   rotation assume a window per CRTC and stay upstream.
@@ -151,11 +165,11 @@ Done:
   activation waits on display tilings (0079)
 - [x] Phase 3: floats drawn once at desk level; browser windows cross screens
   without reloading
+- [x] `<app>` scale from the display holding most of it
 
 Left:
 
 - [ ] Hardware check: text on the lower-density monitor is crisp
-- [ ] `<app>` scale from the display under its center
 
 ## Open questions
 

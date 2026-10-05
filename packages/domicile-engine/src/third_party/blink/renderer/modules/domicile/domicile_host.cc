@@ -627,6 +627,14 @@ void DomicileHost::resizeApp(ScriptState*, const String& app_id, double width,
   }
 }
 
+void DomicileHost::setAppBounds(ScriptState*, const String& app_id, double x,
+                                double y, double width, double height,
+                                ExceptionState& exception_state) {
+  if (ReadyForApp(app_id, exception_state)) {
+    channel_->SetAppBounds(app_id, x, y, width, height);
+  }
+}
+
 // THROUGH THE WIRE NAME, for the reason `AppCursor` below reads one: the only
 // mapping between `DomicileTheme` and `mojom::Theme` in either direction is
 // the X-macro in components/domicile/common/theme.h, so the list stays

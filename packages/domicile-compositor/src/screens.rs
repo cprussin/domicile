@@ -495,6 +495,31 @@ impl Screens {
         }
     }
 
+    /// The scale a window in `bounds` should draw at, for
+    /// `wp_fractional_scale_v1`.
+    ///
+    /// The scale of the display holding the most of the window, as sway picks
+    /// it. With no bounds or no overlap the window is on every display
+    /// ([`entered_by`](Screens::entered_by)), so it draws for the densest.
+    pub fn scale_for(&self, bounds: Option<Bounds>) -> f64 {
+        let densest = || {
+            self.outputs
+                .iter()
+                .map(|output| output.scale)
+                .reduce(f64::max)
+                // A desktop of no displays has no density to match.
+                .unwrap_or(1.0)
+        };
+        let most_of = bounds.and_then(|bounds| {
+            self.outputs
+                .iter()
+                .map(|output| (overlap_area(&output.bounds(), &bounds), output.scale))
+                .filter(|(area, _)| *area > 0.0)
+                .max_by(|(a, _), (b, _)| a.total_cmp(b))
+        });
+        most_of.map_or_else(densest, |(_, scale)| scale)
+    }
+
     /// The desktop's size in logical units — the bounding box of the outputs.
     pub fn size(&self) -> (i32, i32) {
         self.size
@@ -516,6 +541,13 @@ fn advertised_description(display: &Display, vendors: &Vendors) -> String {
     vendors
         .spelled_out(&display.description)
         .unwrap_or_else(|| display.description.clone())
+}
+
+/// The area two boxes share, or zero when they do not overlap.
+fn overlap_area(a: &Bounds, b: &Bounds) -> f64 {
+    let width = a.max.x.min(b.max.x) - a.min.x.max(b.min.x);
+    let height = a.max.y.min(b.max.y) - a.min.y.max(b.min.y);
+    width.max(0.0) * height.max(0.0)
 }
 
 /// The `wl_output` name for an engine display.
@@ -854,6 +886,60 @@ mod tests {
         assert_eq!(
             screens.entered_by(Some(window_at((-4000.0, -4000.0), (100.0, 100.0)))),
             vec![true, true]
+        );
+    }
+
+    /// `HOME_OFFICE`: a 1.2x monitor (900x1600 at the origin) above a 1.5x
+    /// laptop (1920x1280 at `0,1920`).
+    fn monitor_over_laptop() -> Screens {
+        Screens::nested()
+            .replugged_into(&two_plugged_in(), &output(HOME_OFFICE), &unspelled())
+            .expect("the profile should be applicable")
+            .expect("a matched profile defines the desktop")
+    }
+
+    #[test]
+    fn a_window_draws_at_the_scale_of_the_display_it_is_on() {
+        let screens = monitor_over_laptop();
+
+        assert_eq!(
+            screens.scale_for(Some(window_at((100.0, 100.0), (600.0, 800.0)))),
+            1.2
+        );
+        assert_eq!(
+            screens.scale_for(Some(window_at((100.0, 2000.0), (800.0, 600.0)))),
+            1.5
+        );
+    }
+
+    #[test]
+    fn a_window_across_two_displays_draws_for_the_one_holding_more_of_it() {
+        // As sway: one buffer cannot match both densities, so the larger
+        // overlap wins.
+        let screens = monitor_over_laptop();
+
+        assert_eq!(
+            screens.scale_for(Some(window_at((0.0, 1000.0), (800.0, 980.0)))),
+            1.2,
+            "600 rows on the monitor, 60 on the laptop"
+        );
+        assert_eq!(
+            screens.scale_for(Some(window_at((0.0, 1500.0), (800.0, 600.0)))),
+            1.5,
+            "100 rows on the monitor, 180 on the laptop"
+        );
+    }
+
+    #[test]
+    fn a_window_on_no_known_display_draws_for_the_densest() {
+        // It enters every display (`entered_by`), and a client on several
+        // draws for the densest.
+        let screens = monitor_over_laptop();
+
+        assert_eq!(screens.scale_for(None), 1.5);
+        assert_eq!(
+            screens.scale_for(Some(window_at((-4000.0, -4000.0), (100.0, 100.0)))),
+            1.5
         );
     }
 

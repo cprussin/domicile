@@ -147,6 +147,21 @@ export const AppWindow = ({
     }
   }, [appId, behindPanel, domicile, focused, hasKeyboard, leaving]);
 
+  // Tells the compositor where the window is, so the client draws at the
+  // scale of the monitor under it. Keyed on the numbers, since `rect` is a new
+  // object on every render. A window off screen keeps its last monitor.
+  const { x, y, width, height } = rect ?? {};
+  useEffect(() => {
+    if (
+      x !== undefined &&
+      y !== undefined &&
+      width !== undefined &&
+      height !== undefined
+    ) {
+      domicile.setAppBounds(appId, { height, width, x, y });
+    }
+  }, [appId, domicile, height, width, x, y]);
+
   // Cancels the SDK's default focus-on-click. The shell owns focus:
   // `WindowFrame` reports the press and `focused` drives the effect above.
   useEffect(() => {
