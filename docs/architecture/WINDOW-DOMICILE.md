@@ -95,8 +95,10 @@ domicile.grabShortcut("Meta+Shift+l");
 domicile.addEventListener("shortcut", (event) => event.chord); // "Meta+Shift+l"
 ```
 
-- The browser process already holds the keymap (`ControlChannel`'s
-  `KeymapSink`). It resolves each chord and re-resolves on layout change.
+- `DomicileHost` resolves each chord against the keys `shell_config` carries
+  and re-resolves on layout change.
+- `shortcut` carries the chord, whether pressed in a `<webview>` or on the
+  page (taken from the page).
 - `shell_config` no longer reaches the page.
 - Modes stay in the shell. A pure `@domicile-desktop/sdk/keybindings` helper
   maps a chord in a mode to an action.
@@ -153,11 +155,13 @@ Each step ships alone.
 - [x] the engine queues moment events until a listener exists
       (`guard-held-moments.sh`)
 - [x] search and preview return promises (`guard-asks-promise.sh`)
-- [ ] the engine resolves chords; `shell_config` leaves the page; `bindKeys`
-      becomes a pure helper over `grabShortcut` and `shortcut`
+- [x] chords resolved by the engine: `grabShortcut(chord)` and
+      `shortcut.chord` (`guard-shortcut-chords.sh`)
 - [ ] `<app>` routes its own input; `registerElements` and the routing modules go
 - [ ] the shells, `examples/minimal-shell`, WRITING-A-SHELL.md and the SDK
-      README move to `window.domicile`; the events the attributes replace
+      README move to `window.domicile`; `bindKeys` becomes a pure helper over
+      `grabShortcut` and `shortcut`, and `shell_config` leaves the page; the
+      events the attributes replace
       (`appappeared` and the other seven `app*`, `focuschanged`, …),
       `DomicileClient` and `connect-to-host` go; the wire modules move to
       `e2e-harness`

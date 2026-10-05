@@ -18,6 +18,7 @@ DomicileShortcutEvent::DomicileShortcutEvent(
     const AtomicString& type,
     const DomicileShortcutEventInit* initializer)
     : Event(type, initializer),
+      chord_(initializer->chord()),
       keycode_(initializer->keycode()),
       alt_(initializer->altKey()),
       ctrl_(initializer->ctrlKey()),
@@ -26,6 +27,7 @@ DomicileShortcutEvent::DomicileShortcutEvent(
       arrival_(initializer->arrival()) {}
 
 DomicileShortcutEvent::DomicileShortcutEvent(const AtomicString& type,
+                                             const String& chord,
                                              uint32_t keycode,
                                              bool alt,
                                              bool ctrl,
@@ -33,6 +35,7 @@ DomicileShortcutEvent::DomicileShortcutEvent(const AtomicString& type,
                                              bool meta,
                                              DOMHighResTimeStamp arrival)
     : Event(type, Bubbles::kNo, Cancelable::kNo),
+      chord_(chord),
       keycode_(keycode),
       alt_(alt),
       ctrl_(ctrl),

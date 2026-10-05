@@ -160,6 +160,11 @@ export type DomicileAppTitledEvent = Event & {
 
 /** A combination claimed with `grabShortcut()` was pressed. */
 export type DomicileShortcutEvent = Event & {
+  /**
+   * The chord as {@link DomicileHost.grabShortcut} was given it by name —
+   * `Meta+Shift+l` — or empty for one grabbed as a keycode.
+   */
+  readonly chord: string;
   readonly keycode: number;
   readonly altKey: boolean;
   readonly ctrlKey: boolean;
@@ -905,9 +910,18 @@ export type DomicileHost = {
   /**
    * Route a key combination to the page instead of the focused client.
    *
-   * Presses arrive as `shortcut` events with the same fields.
+   * By name (`grabShortcut("Meta+Shift+l")`, sway's grammar), the engine finds
+   * the key the keysym is on, and again on layout change. Presses arrive as
+   * `shortcut` events whose `chord` is this string, from a `<webview>` or this
+   * page (taken from the page).
+   *
+   * As a {@link DomicileShortcut}, presses arrive with the same fields and an
+   * empty `chord`.
+   *
+   * @throws `SyntaxError` for a malformed chord; `NotFoundError` for a keysym
+   *   the keyboard cannot type, once the compositor has described it.
    */
-  grabShortcut(shortcut: DomicileShortcut): void;
+  grabShortcut(shortcut: string | DomicileShortcut): void;
 
   /**
    * Click an extension's action: grants `activeTab` on the active tab, and

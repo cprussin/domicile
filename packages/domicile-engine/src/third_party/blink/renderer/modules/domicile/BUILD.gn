@@ -29,6 +29,8 @@ blink_modules_sources("domicile") {
     "domicile_audio_stream.h",
     "domicile_bookmark.cc",
     "domicile_bookmark.h",
+    "domicile_chord.cc",
+    "domicile_chord.h",
     "domicile_battery_event.cc",
     "domicile_battery_event.h",
     "domicile_browser_window.cc",
@@ -96,5 +98,8 @@ blink_modules_sources("domicile") {
     # way.
     "//components/domicile:theme",
     "//components/domicile/mojom:mojom_blink",
+    # A key pressed on the page is a DOM `code`; a chord the shell grabbed is
+    # an evdev key. See DomicileHost::PageKeyDown.
+    "//ui/events:dom_keycode_converter",
   ]
 }
