@@ -34,6 +34,8 @@ class FrozenArray;
 class DomicileBrowserWindow;
 class DomicileDisplay;
 class DomicileShortcut;
+class DomicileWindow;
+struct DomicileWindowState;
 class LocalDOMWindow;
 class MediaQueryList;
 class MediaQueryListListener;
@@ -206,6 +208,12 @@ class MODULES_EXPORT DomicileHost final
   // reflects it.
   void openBrowserWindow(ScriptState*, const String& url, ExceptionState&);
   void closeBrowserWindow(ScriptState*, const String& id, ExceptionState&);
+  // Every client window, in the order they appeared. Not const: reading it
+  // binds the channel, which is what has the compositor announce them.
+  const FrozenArray<DomicileWindow>& windows();
+
+  // The window holding the keyboard, or a null String when the page holds it.
+  const String& focusedWindow() const { return focused_window_; }
 
   // EventTarget:
   const AtomicString& InterfaceName() const override;
@@ -339,6 +347,13 @@ class MODULES_EXPORT DomicileHost final
   // to a page that is listening by construction.
   bool EnsureBound();
 
+  // The window `app_id` names, added at the end if the compositor has not
+  // mentioned it before.
+  DomicileWindowState& WindowNamed(const String& app_id);
+  // Rebuild `client_windows_` from `window_states_` and say so with
+  // `windowschanged`.
+  void WindowsChanged();
+
   // The desktop's size and density, told to the compositor by the engine
   // rather than by the page: the shell's window IS the desktop, the compositor
   // never sees it, and a shell that forgot to say would leave every client laid
@@ -363,6 +378,11 @@ class MODULES_EXPORT DomicileHost final
   // Replaced wholesale on every description rather than edited: the compositor
   // sends the whole desktop each time, and a `FrozenArray` is frozen.
   Member<FrozenArray<DomicileDisplay>> displays_;
+  // What the compositor has said about each window, in the order they
+  // appeared, and the frozen copy `windows` hands out.
+  Vector<DomicileWindowState> window_states_;
+  Member<FrozenArray<DomicileWindow>> client_windows_;
+  String focused_window_;
   std::optional<double> brightness_;
   // Replaced wholesale, like `displays_`, and for its reason.
   Member<FrozenArray<DomicileBrowserWindow>> browser_windows_;

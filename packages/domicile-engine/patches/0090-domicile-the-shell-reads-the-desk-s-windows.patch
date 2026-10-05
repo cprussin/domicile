@@ -1,0 +1,47 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Sun, 4 Oct 2026 00:00:00 +0000
+Subject: [PATCH] domicile: the shell reads the desk's windows
+
+Registers DomicileWindow, the interface `DomicileHost.windows` lists: one
+client window as the compositor has described it so far -- its title, size,
+limits, cursor and popup placement.
+
+The interface, the host's `windows` and `focusedWindow` attributes and
+their `windowschanged` and `focusedwindowchanged` events are new files and
+edits under src/; what cannot be is a name in a generated-bindings list. Its
+context is the domicile block as 0089 leaves it, for the reason 0045 gives.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on `crux`.
+---
+ third_party/blink/renderer/bindings/generated_in_modules.gni | 2 ++
+ third_party/blink/renderer/bindings/idl_in_modules.gni       | 1 +
+ 2 files changed, 3 insertions(+)
+
+diff --git a/third_party/blink/renderer/bindings/generated_in_modules.gni b/third_party/blink/renderer/bindings/generated_in_modules.gni
+--- a/third_party/blink/renderer/bindings/generated_in_modules.gni
++++ b/third_party/blink/renderer/bindings/generated_in_modules.gni
+@@ -2466,6 +2466,8 @@ generated_interface_sources_in_modules = [
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_tray_event.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_tray_item.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_tray_item.h",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_window.cc",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_window.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_notification.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_notification.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_notification_action.cc",
+diff --git a/third_party/blink/renderer/bindings/idl_in_modules.gni b/third_party/blink/renderer/bindings/idl_in_modules.gni
+--- a/third_party/blink/renderer/bindings/idl_in_modules.gni
++++ b/third_party/blink/renderer/bindings/idl_in_modules.gni
+@@ -329,6 +329,7 @@ static_idl_files_in_modules = [
+   "//third_party/blink/renderer/modules/domicile/domicile_tray_event.idl",
+   "//third_party/blink/renderer/modules/domicile/domicile_tray_event_init.idl",
+   "//third_party/blink/renderer/modules/domicile/domicile_tray_item.idl",
++  "//third_party/blink/renderer/modules/domicile/domicile_window.idl",
+   "//third_party/blink/renderer/modules/domicile/domicile_notification.idl",
+   "//third_party/blink/renderer/modules/domicile/domicile_notification_action.idl",
+   "//third_party/blink/renderer/modules/domicile/domicile_notifications_event.idl",
+-- 
+2.43.0
+
