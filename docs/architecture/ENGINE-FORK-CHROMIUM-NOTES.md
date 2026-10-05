@@ -124,3 +124,19 @@ reads it ([WINDOW-COMPOSITING.md](WINDOW-COMPOSITING.md#backdrop-filter-over-a-w
   visible quad.
 - Exception: a quad with `requires_overlay` (protected content) is promoted
   under a filter anyway.
+
+## Attaching an inner `WebContents` before its frame's first commit
+
+A new frame with no `src` commits about:blank synchronously in the renderer
+(crbug.com/778318). The browser hears the commit later, as
+`DidCommitProvisionalLoad` on the frame's channel.
+
+- `AttachInnerWebContents` on a frame whose commit has not arrived makes it an
+  outer delegate first.
+- `FrameTree::CollectNodesForIsLoading` skips an outer delegate node, so the
+  late commit does not start a load on the outer `WebContents`.
+- `PageLoadMetricsWebContentsObserver::DidFinishNavigation` then fails
+  `DCHECK(is_loading_)` when nothing else in the outer page is loading.
+- The browser's `GetLastCommittedURL()` for the frame is empty until the commit
+  arrives. `WebViewGuestHost` waits for it; see
+  `components/domicile/browser/placeholder_stage.h`.

@@ -267,6 +267,18 @@ source_set("web_view_url") {
   deps = [ ":common" ]
 }
 
+# Whether a <webview>'s frame is ready for a guest. Its own target for
+# :web_view_url's reason: it is the part of the attach that needs no browser,
+# which is where its tests are.
+source_set("placeholder_stage") {
+  sources = [
+    "browser/placeholder_stage.cc",
+    "browser/placeholder_stage.h",
+  ]
+
+  public_deps = [ "//url" ]
+}
+
 # The page behind a <webview>.
 #
 # Its own target beside :shell_scheme rather than part of it, for the reason
@@ -282,6 +294,7 @@ source_set("web_view_guest") {
 
   public_deps = [
     ":file_choice",
+    ":placeholder_stage",
     ":shortcut_registry",
     ":web_view_url",
     "//base",
@@ -506,6 +519,7 @@ source_set("unit_tests") {
     "browser/file_choice_unittest.cc",
     "browser/frame_sink_broker_unittest.cc",
     "browser/line_framer_unittest.cc",
+    "browser/placeholder_stage_unittest.cc",
     "browser/pointer_warp_unittest.cc",
     "browser/shell_source_unittest.cc",
     "browser/shell_url_loader_factory_unittest.cc",
@@ -545,6 +559,7 @@ source_set("unit_tests") {
     ":file_choice",
     ":keyboard_layout",
     ":line_framer",
+    ":placeholder_stage",
     ":pointer_warp",
     ":shell_scheme",
     ":shell_source",
