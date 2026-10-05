@@ -153,11 +153,12 @@ Evidence is in [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md),
     tray, mixer and window management into their own packages, with manganese
     the shell that composes them. No design doc yet.
 
-13. **Wifi and bluetooth bar modules.** The bar has the tray, workspaces,
-    clock, volume, brightness and battery. Nothing shows or switches networks
-    or bluetooth devices. Each needs the compositor to read the system service
-    (NetworkManager, BlueZ) over D-Bus and report it on the host protocol, as
-    battery and audio do, plus a bar item in manganese. No design doc yet.
+13. **System access for the shell.** Each system readout (battery,
+    backlight, audio) is a compositor module, a host message and an engine
+    member, so the set of features grows inside Domicile. Plan: files,
+    processes and D-Bus for the shell, and features as libraries on them,
+    starting with wifi and bluetooth bar modules. Not started.
+    [SYSTEM-ACCESS.md](docs/architecture/SYSTEM-ACCESS.md).
 
 14. **A History app.** Browser windows have back, forward and address
     suggestions, but nothing browses, searches or clears history.
