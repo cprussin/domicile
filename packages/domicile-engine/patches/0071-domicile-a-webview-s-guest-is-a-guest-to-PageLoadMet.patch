@@ -9,11 +9,19 @@ GuestViewBase. A <webview>'s guest is an inner WebContents just as one
 is and was not skipped, and guard-webview-tabs.sh's popup took the
 browser down on that DCHECK.
 
-The observer now skips a domicile::WebViewGuest the same way.
+The frame a guest is attached at trips it too. A FrameTree leaves an
+outer delegate node out of its loading state, and the <webview>'s
+about:blank can commit there after the attach: the commit comes on the
+frame's channel, the attach request on another pipe, and nothing orders
+the two. That commit starts no load, and a shell that had finished
+loading went down on the DCHECK.
+
+The observer now skips a domicile::WebViewGuest, and a commit in the
+frame one is attached at.
 ---
- chrome/browser/performance_manager/BUILD.gn              | 1 +
- .../observers/page_load_metrics_observer.cc              | 9 +++++++++
- 2 files changed, 10 insertions(+)
+ chrome/browser/performance_manager/BUILD.gn             |  1 +
+ .../observers/page_load_metrics_observer.cc             | 15 +++++++++++++++
+ 2 files changed, 16 insertions(+)
 
 diff --git a/chrome/browser/performance_manager/BUILD.gn b/chrome/browser/performance_manager/BUILD.gn
 index fd3ab7849e..5893908524 100644
@@ -28,7 +36,7 @@ index fd3ab7849e..5893908524 100644
      "//components/guest_view/browser",
      "//components/guest_view/buildflags",
 diff --git a/chrome/browser/performance_manager/observers/page_load_metrics_observer.cc b/chrome/browser/performance_manager/observers/page_load_metrics_observer.cc
-index 861a63c3f5..8c350a85dd 100644
+index 861a63c3f5..a4c2028275 100644
 --- a/chrome/browser/performance_manager/observers/page_load_metrics_observer.cc
 +++ b/chrome/browser/performance_manager/observers/page_load_metrics_observer.cc
 @@ -7,6 +7,7 @@
@@ -39,7 +47,7 @@ index 861a63c3f5..8c350a85dd 100644
  #include "components/guest_view/buildflags/buildflags.h"
  #include "components/no_state_prefetch/browser/no_state_prefetch_manager.h"
  #include "components/performance_manager/public/performance_manager.h"
-@@ -293,6 +294,14 @@ void PageLoadMetricsWebContentsObserver::DidFinishNavigation(
+@@ -293,6 +294,20 @@ void PageLoadMetricsWebContentsObserver::DidFinishNavigation(
    }
  #endif
  
@@ -47,7 +55,13 @@ index 861a63c3f5..8c350a85dd 100644
 +  // WebContents as a GuestViewBase is but is not one, so the check above
 +  // misses it. A guest's commit can arrive with no load started, and the
 +  // DCHECK below then takes the browser down.
-+  if (domicile::WebViewGuest::FromWebContents(web_contents())) {
++  //
++  // Nor in the frame a guest is attached at. Content counts that frame in no
++  // load, and the <webview>'s own about:blank can commit there after the
++  // attach.
++  if (domicile::WebViewGuest::FromWebContents(web_contents()) ||
++      domicile::WebViewGuest::IsAttachedAt(
++          *web_contents(), navigation_handle->GetFrameTreeNodeId())) {
 +    return;
 +  }
 +
