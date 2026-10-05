@@ -26,6 +26,7 @@ Each export is `@domicile-desktop/component-library/<name>`.
 | `Input` | Text input with prefix icon, clear button and invalid state. |
 | `Kbd` | Keyboard key cap. |
 | `ModalDialog` | Modal dialog with `title`, `footer` and `trigger` props. |
+| `ContextMenu` | Menu opened at a point, such as a right click's. |
 | `Popover` | Non-modal panel anchored to the control that opened it. |
 | `Provider` | base-ui `DirectionProvider` wrapper. Every app roots its tree in it. |
 | `Screen` | Renders its children once per selected display. |
