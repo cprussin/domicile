@@ -253,7 +253,8 @@ relative to the source window and passes `NaN` without them.
 
 ## Not in scope
 
-- `chrome.contextMenus`: the desk disables the context menu (#608).
+- `chrome.contextMenus`: the shell draws the context menu, and
+  `domicile-context-menu` carries no extension items.
 - `chrome.commands`: shortcuts belong to the shell. Use `grabShortcut` if
   needed.
 - Install, permission and "extension added" bubbles (see Installing).

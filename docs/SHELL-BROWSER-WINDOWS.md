@@ -108,8 +108,8 @@ keyboard focus to and from them:
 
 The guest has no built-in browser behavior:
 
-- No Chrome shortcuts (Ctrl+R, Alt+Left, F11, Ctrl+W, …), no context menu (the
-  page's `contextmenu` event is all you get), no swipe navigation.
+- No Chrome shortcuts (Ctrl+R, Alt+Left, F11, Ctrl+W, …), no browser-drawn
+  context menu, no swipe navigation.
 - No password saving, autofill, translation or built-in passkeys. Passkeys
   come from a password manager extension.
 
@@ -124,7 +124,22 @@ Bind browser keys yourself:
   match. `view.stopFinding()` ends it. A navigation ends it too. Matches are
   counted across all frames.
 - Manganese's `BrowserWindow.tsx` binds Chrome's default keys, including
-  Ctrl+F.
+  Ctrl+F and Ctrl+Shift+I.
+
+Draw the context menu yourself:
+
+- `domicile-context-menu`: a right click the page did not `preventDefault`.
+  The event carries what was under the click: `linkUrl`, `srcUrl`,
+  `mediaType`, `selectionText`, `isEditable`, the `can*` edit flags, and `x` /
+  `y` relative to the view.
+- `event.run(action)` does what only the browser can: `copy-link-address`,
+  `save-link-as`, `copy-image`, `copy-media-address`, `save-media-as`, the
+  edit commands (`cut`, `paste`, …) and `inspect`. A save asks
+  `domicile-file-chooser` where. See `WEBVIEW_CONTEXT_MENU_ACTIONS`.
+- Back, reload and "open in new window" need no browser help.
+- `view.inspect()` opens DevTools for the page. It arrives as
+  `domicile-new-window` at DevTools' address; open it like any other window.
+- Manganese's `browser/page-menu.ts` builds Chrome's menu from the event.
 
 Desktop chords from `bindKeys` still work while a guest has focus. They arrive
 as a `shortcut` message. `domicile.grabShortcut` claims a chord that

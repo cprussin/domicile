@@ -31,6 +31,7 @@
     "./Avatar": "./src/Avatar/Avatar.tsx",
     "./Button": "./src/Button/Button.tsx",
     "./Card": "./src/Card/Card.tsx",
+    "./ContextMenu": "./src/ContextMenu/ContextMenu.tsx",
     "./control-sizes": "./src/control-sizes.ts",
     "./DisplayProvider": "./src/Screen/DisplayProvider.tsx",
     "./Drilldown": "./src/Drilldown/Drilldown.tsx",

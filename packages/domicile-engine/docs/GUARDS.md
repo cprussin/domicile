@@ -64,6 +64,7 @@ Headless.
 | `guard-webview-browser-page.sh` | `chrome://history` in a browser window is refused by `BrowserPageThrottle` (patch 0083) |
 | `guard-webview-click.sh` | a click in a browser window fires an event in the shell's document |
 | `guard-webview-routed-link.sh` | a middle click on a link asks for a new window through `OpenURLFromTab` |
+| `guard-webview-context-menu.sh` | a right click fires `domicile-context-menu` with the link and image under it; its `inspect` opens DevTools in a new `<webview>` (patch 0088) |
 | `guard-webview-new-window.sh` | a `target="_blank"` link fires `domicile-new-window`, and the new `<webview>` loads it |
 | `guard-webview-upload.sh` | `<input type="file">` asks the shell over `domicile-file-chooser`, and the page reads the chosen file (patch 0053) |
 | `guard-webview-download.sh` | a download asks the shell and lands at the chosen path (patch 0053) |

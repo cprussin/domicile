@@ -17,6 +17,7 @@
 #include "components/domicile/mojom/web_view_guest.mojom.h"
 #include "components/input/native_web_keyboard_event.h"
 #include "content/public/browser/browser_plugin_guest_delegate.h"
+#include "content/public/browser/context_menu_params.h"
 #include "content/public/browser/file_select_listener.h"
 #include "content/public/browser/global_routing_id.h"
 #include "content/public/browser/host_zoom_map.h"
@@ -33,6 +34,7 @@
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/choosers/file_chooser.mojom-forward.h"
 #include "third_party/blink/public/mojom/favicon/favicon_url.mojom-forward.h"
+#include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 #include "url/gurl.h"
 
@@ -99,6 +101,13 @@ namespace domicile {
 using GuestCreatedCallback =
     base::RepeatingCallback<void(content::WebContents&)>;
 
+// Opens DevTools on `frame`'s page, at `root_point` (a context menu's click,
+// in root view coordinates) when given. Provided by //chrome, which owns the
+// DevTools front end. See //chrome/browser/domicile/domicile_devtools.h.
+using InspectCallback =
+    base::RepeatingCallback<void(content::RenderFrameHost& frame,
+                                 std::optional<gfx::Point> root_point)>;
+
 class WebViewGuest : public mojom::WebViewGuest,
                      public content::BrowserPluginGuestDelegate,
                      public content::WebContentsDelegate,
@@ -117,7 +126,8 @@ class WebViewGuest : public mojom::WebViewGuest,
   // be there before the first navigation it would record.
   //
   // `popup_window` and `extension_popup` are the element's, from
-  // CreateGuest: see popup_window() and extension_popup().
+  // CreateGuest: see popup_window() and extension_popup(). `inspect` runs for
+  // Inspect and a menu's kInspect.
   static void CreateAndAttach(
       content::RenderFrameHost& owner,
       content::RenderFrameHost& placeholder,
@@ -125,7 +135,8 @@ class WebViewGuest : public mojom::WebViewGuest,
       mojo::PendingRemote<mojom::WebViewGuestClient> client,
       std::optional<int> popup_window,
       bool extension_popup,
-      const GuestCreatedCallback& created);
+      const GuestCreatedCallback& created,
+      InspectCallback inspect);
 
   WebViewGuest(const WebViewGuest&) = delete;
   WebViewGuest& operator=(const WebViewGuest&) = delete;
@@ -244,6 +255,12 @@ class WebViewGuest : public mojom::WebViewGuest,
   void ListDirectory(const std::string& path,
                      ListDirectoryCallback callback) override;
 
+  // The shell's context menu choices. Each acts on the newest menu's frame and
+  // click. See HandleContextMenu.
+  void RunContextMenuAction(int32_t menu,
+                            mojom::WebViewContextMenuAction action) override;
+  void Inspect() override;
+
   // content::BrowserPluginGuestDelegate:
   content::WebContents* GetOwnerWebContents() override;
   content::RenderFrameHost* GetProspectiveOuterDocument() override;
@@ -297,7 +314,11 @@ class WebViewGuest : public mojom::WebViewGuest,
   // A RIGHT CLICK IS THE PAGE'S AND THE SHELL'S, NEVER THE BROWSER'S. The
   // page's own `contextmenu` event has already fired by the time this runs,
   // so a site's menu still works; claiming the rest is what stops content
-  // drawing Chrome's menu -- back, reload, inspect -- over a desktop.
+  // drawing Chrome's menu over a desktop. The menu's contents go to the
+  // element as ContextMenuRequested, and the shell draws it.
+  //
+  // The click is converted from root view (shell) coordinates to the guest's
+  // main frame view, which is the element's box.
   bool HandleContextMenu(content::RenderFrameHost& render_frame_host,
                          const content::ContextMenuParams& params) override;
 
@@ -478,7 +499,29 @@ class WebViewGuest : public mojom::WebViewGuest,
                mojo::PendingReceiver<mojom::WebViewGuest> receiver,
                mojo::PendingRemote<mojom::WebViewGuestClient> client,
                std::optional<int> popup_window,
-               bool extension_popup);
+               bool extension_popup,
+               InspectCallback inspect);
+
+  // One of WebContents' edit commands, which act on the focused frame.
+  using EditCommand = void (content::WebContents::*)();
+
+  // Run `command` once this guest holds the focus, retrying `tries` times.
+  //
+  // Edits go to the focused frame tree, and the shell's menu has the focus.
+  // The element refocuses the page before sending an edit, but the focus
+  // change travels on another channel and can arrive later. Running the edit
+  // first would paste into the shell.
+  void EditWhenFocused(EditCommand command, int tries);
+
+  // Write `url` to the clipboard as text, as Chrome's "copy link address"
+  // does.
+  void CopyAddress(const GURL& url);
+
+  // Download `url` from `frame`'s page. The shell is asked where to save it.
+  void SaveFrom(content::RenderFrameHost& frame,
+                const GURL& url,
+                const content::ContextMenuParams& params,
+                bool is_subresource);
 
   // Tell the element a page asked for a window of its own, at `target_url`.
   //
@@ -577,6 +620,15 @@ class WebViewGuest : public mojom::WebViewGuest,
   // See extension_popup().
   const bool extension_popup_;
 
+  // See InspectCallback.
+  const InspectCallback inspect_;
+
+  // The newest context menu sent to the element: its id (0 before the first),
+  // its frame and what was under the click.
+  int context_menu_id_ = 0;
+  content::GlobalRenderFrameHostId context_menu_frame_;
+  std::optional<content::ContextMenuParams> context_menu_params_;
+
   mojo::Receiver<mojom::WebViewGuest> receiver_;
   // How many of this guest's file choosers the shell has yet to answer, which
   // is when ListDirectory answers at all.
@@ -651,11 +703,13 @@ class WebViewGuest : public mojom::WebViewGuest,
 // document whose origin is domicile:// -- and that decision is the whole of
 // the security property. See PopulateChromeFrameBinders.
 //
-// `created` is run on every guest this host makes -- see GuestCreatedCallback.
+// `created` runs on every guest this host makes (see GuestCreatedCallback);
+// `inspect` opens DevTools for each.
 void BindWebViewGuestHost(
     content::RenderFrameHost* frame,
     mojo::PendingReceiver<mojom::WebViewGuestHost> receiver,
-    GuestCreatedCallback created);
+    GuestCreatedCallback created,
+    InspectCallback inspect);
 
 }  // namespace domicile
 
