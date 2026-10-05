@@ -50,10 +50,9 @@ then subscribes. A late listener misses nothing, so no buffering is needed.
 |---|---|
 | `windows: DomicileWindow[]` | `appappeared`, `appclosed`, `appresized`, `apptitled`, `appminsize`, `appmaxsize`, `appcursor`, `popupplaced` |
 | `focusedWindow: string \| null` | `focuschanged` |
-| `displays`, `brightness` | already attributes; add `displayschange`, `brightnesschange` |
+| `displays` | already an attribute; add `displayschange` |
 | `theme`, `windowsTheme` | `theme`, `windowstheme` |
 | `locked`, `idle` | `locked`, `idle` |
-| `battery`, `audio` | `battery`, `audio` |
 | `extensions`, `tray`, `notifications`, `clipboard` | events of the same names |
 | `modifiers` | `modifiers` |
 
@@ -116,6 +115,9 @@ domicile.addEventListener("shortcut", (event) => event.chord); // "Meta+Shift+l"
 
 ## Key decisions
 
+- **Battery, brightness and audio are not attributes.** They become libraries
+  on the system primitives in [SYSTEM-ACCESS.md](SYSTEM-ACCESS.md).
+
 - **Attributes plus a bare change event, over events carrying the value.** The
   attribute is the single source of truth. This matches the platform
   (`navigator.onLine` with `online`/`offline`, `screen.orientation` with
@@ -135,9 +137,8 @@ Each step ships alone, engine and shells together.
 - [x] the engine reports size and density (`guard-desktop-geometry.sh`)
 - [ ] `windows` and `focusedWindow` with their change events; the eight `app*`
       events and `focuschanged` go
-- [ ] the rest of the state as attributes: `displays`, `brightness`, theme,
-      lock, idle, battery, audio, extensions, tray, notifications, clipboard,
-      modifiers
+- [ ] the rest of the state as attributes: `displays`, theme, lock, idle,
+      extensions, tray, notifications, clipboard, modifiers
 - [ ] the engine queues one-off events until a listener exists
 - [ ] search and preview return promises
 - [ ] the engine resolves chords; `shell_config` leaves the page; `bindKeys`

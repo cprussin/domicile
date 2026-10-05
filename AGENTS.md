@@ -146,6 +146,7 @@ not rules, and carry no authority level. Read the one for the area you work in.
 | [/docs/architecture/PORTALS.md](/docs/architecture/PORTALS.md) | Proposal: Domicile as the only `xdg-desktop-portal` backend, with the shell drawing every dialog. Not started. |
 | [/docs/architecture/WINDOW-DOMICILE.md](/docs/architecture/WINDOW-DOMICILE.md) | Proposal: `window.domicile` as the whole shell API, and `DomicileClient` deleted. Not started. |
 | [/docs/architecture/BROWSER-WINDOWS.md](/docs/architecture/BROWSER-WINDOWS.md) | Proposal: the engine owns browser windows, the shell draws them with `<webview window>`, and pages survive `domicile load-shell`. Not started. |
+| [/docs/architecture/SYSTEM-ACCESS.md](/docs/architecture/SYSTEM-ACCESS.md) | Proposal: files, processes and D-Bus for the shell; desktop features as libraries on them. Not started. |
 
 [`/ROADMAP.md`](/ROADMAP.md) lists open work and known gaps, each pointing at
 the doc with the detail. Read it before substantial work. Remove items when
