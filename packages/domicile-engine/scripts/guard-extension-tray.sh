@@ -7,7 +7,7 @@
 #
 # WHY THIS EXISTS. EXTENSIONS.md's tray is two things the engine does and a
 # page cannot fake: the browser telling the shell what an action says --
-# the desktop's `extensions` event, from ExtensionTray -- and a popup in
+# the desktop's `extensions`, from ExtensionTray -- and a popup in
 # a <webview> saying it is done, which is `window.close()` becoming
 # `domicile-close` on the element (WebViewGuest::CloseContents). And a popup
 # asking runtime.getContexts, as Bitwarden's does on opening: that call switches
@@ -22,8 +22,8 @@
 # its service worker sets, and a popup that asks runtime.getContexts and
 # tabs.getCurrent, writes the answers into its own address, and closes itself a second after that loads.
 #
-# WHAT IT ASSERTS. That the shell heard an `extensions` event carrying the
-# fixture's id with its title, the service worker's badge and color, its popup
+# WHAT IT ASSERTS. That the shell heard `extensionschanged`, with `extensions`
+# holding the fixture's id with its title, the service worker's badge and color, its popup
 # URL, a PNG icon and `enabled`; that the <webview> the shell then points at
 # that popup URL, marked `extensionpopup`, shows it; that getContexts lists the
 # popup as a `POPUP` and tabs.getCurrent names no tab, as Chrome answers its
@@ -34,7 +34,7 @@
 #
 # HOW IT CAN FAIL. NEGATIVE=1 runs the control: the list empty, and the
 # <webview> pointed at a served page that never calls `window.close()`. The
-# shell must still hear an `extensions` event -- so the fixture's absence is an
+# shell must still hear `extensionschanged` -- so the fixture's absence is an
 # answer -- with no fixture in it, and the page must show, answer nothing, and
 # NOT close, for as long as the claim took to close -- nor report the
 # fixture's size.
@@ -194,7 +194,7 @@ fi
 sleep 1
 
 # THE READINGS, each anchored on the quote Chromium puts after a console
-# message -- see guard-control-arrival.sh for the run that learned why.
+# message -- see guard-windows-state.sh for why.
 saw() { # $1 fixed string
   grep -qF -- "$1" "$ENGINE_LOG" 2>/dev/null && echo 1 || echo 0
 }
@@ -258,7 +258,7 @@ compositor stand-in, so the shell's control channel did not bind and nothing \
 was installed"
   ;;
 "tray 1 0 "*)
-  FAILURE="the shell heard no extensions event at all, so ExtensionTray did not \
+  FAILURE="the shell heard no extensionschanged at all, so ExtensionTray did not \
 bind -- the frame binder, or DomicileHost::EnsureBound -- or bound and never \
 sent the list SetClient is owed"
   ;;
@@ -309,7 +309,7 @@ the popup's"
 nothing: the shell's control channel did not bind"
   ;;
 "control 1 0 "*)
-  FAILURE="the control heard no extensions event, so the fixture's absence from \
+  FAILURE="the control heard no extensionschanged, so the fixture's absence from \
 it is not a reading: ExtensionTray did not bind or did not send"
   ;;
 "control 1 1 1 "*)

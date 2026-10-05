@@ -1,8 +1,0 @@
-// Copyright 2026 Connor Prussin
-// SPDX-License-Identifier: MIT
-
-dictionary DomicileAppTitledEventInit : EventInit {
-  DOMString appId = "";
-  DOMString title = "";
-  DOMHighResTimeStamp arrival = 0;
-};

@@ -24,7 +24,7 @@
 // **Its own module rather than a member of `protocol.ts`, because both halves
 // of the SDK need it and only one of them is the wire**: `protocol.ts` parses
 // the compositor's JSON for the headless harness, and a shell reads this same
-// name off `DomicileThemeEvent.theme`. One list, two readers — which is the
+// name off `DomicileHost.theme`. One list, two readers — which is the
 // arrangement `display-transform.ts` is in, for the same reason.
 //
 // Unlike that one, nothing here falls back. A turn nobody knows arrives as one

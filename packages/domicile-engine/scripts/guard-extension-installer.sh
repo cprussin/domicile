@@ -13,7 +13,7 @@
 # `--load-extension`.
 #
 # Headless, with a stand-in for the compositor's end of the control socket, as
-# `guard-control-arrival.sh`; the page, the fixture and the colors are
+# `guard-windows-state.sh`; the page, the fixture and the colors are
 # `guard-webview-content-script.sh`'s.
 #
 # WHAT IT ASSERTS. That the stand-in sent the list naming the fixture as

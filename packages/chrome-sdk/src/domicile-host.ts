@@ -145,138 +145,12 @@ export type DomicileWindow = {
 };
 
 /**
- * Something happened to a window: it appeared, resized or closed — and, with
- * only `appId` filled in, focus moved to it or was asked for by it.
- *
- * One type for the five because they carry the same thing (which window) and
- * differ only in what else they carry. The fields a given type does not carry
- * are the empty string rather than absent, which is WebIDL's `DOMString` and
- * not a choice the SDK gets to make. Superseded by
- * {@link DomicileHost.windows}, which says absent as `null`.
- *
- * A cursor is not one of them. {@link DomicileAppCursorEvent} carries that,
- * because `DomicileCursorShape` is a closed set and a closed set has no
- * spelling for "this event is not about a cursor".
+ * A client asked for the keyboard: `focusrequested`. Nothing has moved; the
+ * shell answers with {@link DomicileHost.focusApp} or lets it stand.
  */
 export type DomicileAppEvent = Event & {
-  /** The id an `<app>` element names. Empty on `focuschanged` means the chrome. */
+  /** The id an `<app>` element names. */
   readonly appId: string;
-  readonly title: string;
-  /**
-   * False until the client has committed a buffer.
-   *
-   * A toplevel maps before it draws, and how big a Wayland client wants to be
-   * is something it says by drawing — so a window that has *appeared* may not
-   * yet have a size. A shell that reads `width`/`height` while this is false
-   * opens the window at nothing at all, which is what happened when the size
-   * was zero-when-absent rather than absent.
-   */
-  readonly hasSize: boolean;
-  readonly width: number;
-  readonly height: number;
-
-  /**
-   * `popupplaced` only: the window or popup this popup is over, and where its
-   * box goes from that one's top-left, in CSS pixels. Empty and zero on every
-   * other event.
-   */
-  readonly parentAppId: string;
-  readonly x: number;
-  readonly y: number;
-  /** `popupplaced` only: a menu, which grabbed; `false` for a tooltip. */
-  readonly grab: boolean;
-
-  /**
-   * When the browser process had this message, in `performance.now()`'s
-   * milliseconds.
-   *
-   * **Not `timeStamp`**, which is when the event object was *constructed* — in
-   * the renderer, at dispatch — so a shell pricing the IPC against it measures
-   * a few microseconds of Blink and calls it the hop. The difference between
-   * the two is the stage: the compositor's line read off a socket in the
-   * browser process, turned into a mojo message, carried into this renderer
-   * and dispatched here.
-   *
-   * `shortcut` is the one event whose stamp is not a socket read — a chord the
-   * shell claimed is matched in the browser process and never reaches the
-   * compositor — but it is the same quantity on the same clock: when that
-   * process had it.
-   */
-  readonly arrival: DOMHighResTimeStamp;
-};
-
-/**
- * A client asked for a cursor to be shown over its window.
- *
- * Its own type rather than a {@link DomicileAppEvent}, and that is the engine's
- * shape rather than the SDK's: `cursor` is a WebIDL `DomicileCursorShape`, a
- * closed set with no member meaning "not a cursor event", so the five events
- * that have nothing to say about a cursor cannot carry the attribute at all.
- * While it was a `DOMString` they carried `""` and a shell had to know that
- * `""` was not a shape.
- */
-export type DomicileAppCursorEvent = Event & {
-  readonly appId: string;
-
-  /**
-   * The CSS `cursor` keyword the client asked for.
-   *
-   * Typed as the closed set because the engine's bindings now hold it to one:
-   * `domicile_cursor_shape.idl` is the same list, and a value outside it
-   * cannot cross the bindings in either direction. A shell built against a
-   * newer list than the engine ships can still be handed one it does not know,
-   * since this SDK is versioned apart from the engine it runs against, so read
-   * it as a keyword rather than switch over it exhaustively.
-   */
-  readonly cursor: CursorShape;
-
-  /**
-   * When the browser process had this message, in `performance.now()`'s
-   * milliseconds.
-   *
-   * **Not `timeStamp`**, which is when the event object was *constructed* — in
-   * the renderer, at dispatch — so a shell pricing the IPC against it measures
-   * a few microseconds of Blink and calls it the hop. The difference between
-   * the two is the stage: the compositor's line read off a socket in the
-   * browser process, turned into a mojo message, carried into this renderer
-   * and dispatched here.
-   *
-   * `shortcut` is the one event whose stamp is not a socket read — a chord the
-   * shell claimed is matched in the browser process and never reaches the
-   * compositor — but it is the same quantity on the same clock: when that
-   * process had it.
-   */
-  readonly arrival: DOMHighResTimeStamp;
-};
-
-/**
- * A window's title changed.
- *
- * Its own type rather than a {@link DomicileAppEvent}: a client sends
- * `set_title` after creating the toplevel the announcement was for, so the
- * name arrives on its own and again each time it changes.
- */
-export type DomicileAppTitledEvent = Event & {
-  readonly appId: string;
-  readonly title: string;
-
-  /**
-   * When the browser process had this message, in `performance.now()`'s
-   * milliseconds.
-   *
-   * **Not `timeStamp`**, which is when the event object was *constructed* — in
-   * the renderer, at dispatch — so a shell pricing the IPC against it measures
-   * a few microseconds of Blink and calls it the hop. The difference between
-   * the two is the stage: the compositor's line read off a socket in the
-   * browser process, turned into a mojo message, carried into this renderer
-   * and dispatched here.
-   *
-   * `shortcut` is the one event whose stamp is not a socket read — a chord the
-   * shell claimed is matched in the browser process and never reaches the
-   * compositor — but it is the same quantity on the same clock: when that
-   * process had it.
-   */
-  readonly arrival: DOMHighResTimeStamp;
 };
 
 /**
@@ -296,69 +170,16 @@ export type DomicileShortcutEvent = Event & {
   readonly ctrlKey: boolean;
   readonly shiftKey: boolean;
   readonly metaKey: boolean;
-
-  /**
-   * When the browser process had this message, in `performance.now()`'s
-   * milliseconds.
-   *
-   * **Not `timeStamp`**, which is when the event object was *constructed* — in
-   * the renderer, at dispatch — so a shell pricing the IPC against it measures
-   * a few microseconds of Blink and calls it the hop. The difference between
-   * the two is the stage: the compositor's line read off a socket in the
-   * browser process, turned into a mojo message, carried into this renderer
-   * and dispatched here.
-   *
-   * `shortcut` is the one event whose stamp is not a socket read — a chord the
-   * shell claimed is matched in the browser process and never reaches the
-   * compositor — but it is the same quantity on the same clock: when that
-   * process had it.
-   */
-  readonly arrival: DOMHighResTimeStamp;
 };
 
 /**
- * Which modifiers the seat holds. One seat, outliving every window.
- *
- * The compositor has already resolved xkb's depressed/latched/locked against
- * the keymap; a mask would hand the page a number it cannot read without the
- * keymap too.
- */
-export type DomicileModifiersEvent = Event & {
-  readonly altKey: boolean;
-  readonly ctrlKey: boolean;
-  readonly shiftKey: boolean;
-  readonly metaKey: boolean;
-
-  /**
-   * When the browser process had this message, in `performance.now()`'s
-   * milliseconds.
-   *
-   * **Not `timeStamp`**, which is when the event object was *constructed* — in
-   * the renderer, at dispatch — so a shell pricing the IPC against it measures
-   * a few microseconds of Blink and calls it the hop. The difference between
-   * the two is the stage: the compositor's line read off a socket in the
-   * browser process, turned into a mojo message, carried into this renderer
-   * and dispatched here.
-   *
-   * `shortcut` is the one event whose stamp is not a socket read — a chord the
-   * shell claimed is matched in the browser process and never reaches the
-   * compositor — but it is the same quantity on the same clock: when that
-   * process had it.
-   */
-  readonly arrival: DOMHighResTimeStamp;
-};
-
-/**
- * What a path holds, answering {@link DomicileHost.previewFile}.
+ * What a path holds: what {@link DomicileHost.previewFile} resolves with.
  *
  * `kind` is `text`, `directory`, `audio`, `binary` or `unreadable`; `text` is
  * filled for the first, `entries` for the second and the tags for the third,
  * and each is empty otherwise.
  */
-export type DomicileFilePreviewEvent = Event & {
-  /** The path this answers. */
-  readonly path: string;
-
+export type DomicileFilePreview = {
   readonly kind: string;
 
   /** The front of the file, for a `text` preview. */
@@ -377,9 +198,6 @@ export type DomicileFilePreviewEvent = Event & {
 
   /** The picture an `audio` preview carries of itself, as a `data:` URL. */
   readonly cover: string;
-
-  /** When the browser process had it, on `performance.now()`'s clock. */
-  readonly arrival: DOMHighResTimeStamp;
 };
 
 /**
@@ -435,60 +253,23 @@ export type DomicileBookmark = {
 
 /**
  * The applications and bookmarks a {@link DomicileHost.searchApps} matched,
- * each best first.
+ * each best first: what it resolves with.
  */
-export type DomicileAppsEvent = Event & {
-  /** The query this answers. */
-  readonly query: string;
-
+export type DomicileAppSearch = {
   readonly apps: readonly DomicileDesktopEntry[];
 
   readonly bookmarks: readonly DomicileBookmark[];
-
-  /**
-   * When the browser process had this message, in `performance.now()`'s
-   * milliseconds. See {@link DomicileModifiersEvent.arrival}, which documents
-   * what this is and what it is not.
-   */
-  readonly arrival: DOMHighResTimeStamp;
 };
 
-/** What {@link DomicileHost.searchFiles} resolves with; see {@link DomicileFilesEvent}. */
-export type DomicileFileSearch = Pick<
-  DomicileFilesEvent,
-  "files" | "matched" | "indexing"
->;
-
-/** What {@link DomicileHost.previewFile} resolves with; see {@link DomicileFilePreviewEvent}. */
-export type DomicileFilePreview = Pick<
-  DomicileFilePreviewEvent,
-  | "kind"
-  | "text"
-  | "entries"
-  | "title"
-  | "artist"
-  | "album"
-  | "duration"
-  | "cover"
->;
-
-/** What {@link DomicileHost.searchApps} resolves with; see {@link DomicileAppsEvent}. */
-export type DomicileAppSearch = Pick<DomicileAppsEvent, "apps" | "bookmarks">;
-
 /**
- * What matched a {@link DomicileHost.searchFiles}, answering it and nothing
- * else — the compositor's index of the home never crosses into the page.
+ * What matched a {@link DomicileHost.searchFiles}: what it resolves with —
+ * the compositor's index of the home never crosses into the page.
  *
  * Paths relative to the home directory the desktop is running as, sorted, and
  * a directory ends in `/`. Only the front of what matched is here; `matched`
- * is how many there were. A home that could not be read is no event at all,
- * because "you have no files" is not something a broken desktop should be
- * able to say.
+ * is how many there were.
  */
-export type DomicileFilesEvent = Event & {
-  /** The query this answers. */
-  readonly query: string;
-
+export type DomicileFileSearch = {
   readonly files: readonly string[];
 
   /** How many paths matched, of which {@link files} is the front. */
@@ -504,43 +285,6 @@ export type DomicileFilesEvent = Event & {
    * language a launcher has, that they do not have it. Draw it, and ask again.
    */
   readonly indexing: boolean;
-
-  /**
-   * When the browser process had this message, in `performance.now()`'s
-   * milliseconds. See {@link DomicileModifiersEvent.arrival}, which documents
-   * what this is and what it is not.
-   */
-  readonly arrival: DOMHighResTimeStamp;
-};
-
-/**
- * The machine's battery, pushed whenever the reading moves far enough to draw.
- *
- * **Not what `navigator.getBattery` would tell you**, and that is why this
- * exists. The Battery Status API reads UPower over D-Bus; a desktop on a bare
- * tty has neither, so the engine resolves with Chromium's default
- * `BatteryStatus` — charging, and full — which is a plausible reading and so
- * indistinguishable from the truth from inside a page. The compositor reads
- * `/sys/class/power_supply` instead, which is in every kernel and wants no
- * daemon.
- *
- * There is no `listBattery()` to go with it. A charge changes on its own,
- * where a home directory changes for reasons nothing is watching, so this is
- * pushed and `files` is answered. A machine with no battery sends nothing.
- */
-export type DomicileBatteryEvent = Event & {
-  /** How full, 0 through 1. */
-  readonly charge: number;
-
-  /** Whether a lead is in. A full battery on AC is `true`. */
-  readonly charging: boolean;
-
-  /**
-   * When the browser process had this message, in `performance.now()`'s
-   * milliseconds. See {@link DomicileModifiersEvent.arrival}, which documents
-   * what this is and what it is not.
-   */
-  readonly arrival: DOMHighResTimeStamp;
 };
 
 /**
@@ -572,32 +316,6 @@ export type DomicileClipboardEntry = {
   readonly preview: string;
 };
 
-/**
- * What has been copied on this desktop, newest first.
- *
- * **A page cannot read this for itself, and `navigator.clipboard` is the trap
- * that looks like it can.** That API answers out of the browser's own
- * clipboard, which on the platform this engine scans out on is not connected
- * to any Wayland client at all — so a shell reading it would be reading what
- * the shell itself copied and nothing a window did. The compositor is the
- * process a `wl_data_device.set_selection` arrives at, and this is that.
- *
- * Pushed, like the battery: sent whenever the history changes, and again to a
- * page that has just connected. An empty list is a desktop nothing has been
- * copied on yet, which is an answer rather than a gap.
- */
-export type DomicileClipboardEvent = Event & {
-  /** The rows, newest first. */
-  readonly entries: readonly DomicileClipboardEntry[];
-
-  /**
-   * When the browser process had this message, in `performance.now()`'s
-   * milliseconds. See {@link DomicileModifiersEvent.arrival}, which documents
-   * what this is and what it is not.
-   */
-  readonly arrival: DOMHighResTimeStamp;
-};
-
 /** One icon in the system tray, as the compositor read it off the bus. */
 export type DomicileTrayItem = {
   /** What {@link DomicileHost.activateTrayItem} names this icon by. */
@@ -609,29 +327,6 @@ export type DomicileTrayItem = {
    * draw.
    */
   readonly icon: string;
-};
-
-/**
- * The system tray: every application showing an icon, in the order they
- * registered.
- *
- * **A page cannot read this for itself.** An icon is a StatusNotifierItem on
- * the session bus, which the compositor hosts and a page has no way to reach.
- *
- * Pushed, like the clipboard, and the whole tray every time: sent whenever an
- * icon arrives, leaves or changes how it looks, and again to a page that has
- * just connected. An empty list is a desk no application has put an icon on.
- */
-export type DomicileTrayEvent = Event & {
-  /** The icons, in the order their applications registered. */
-  readonly items: readonly DomicileTrayItem[];
-
-  /**
-   * When the browser process had this message, in `performance.now()`'s
-   * milliseconds. See {@link DomicileModifiersEvent.arrival}, which documents
-   * what this is and what it is not.
-   */
-  readonly arrival: DOMHighResTimeStamp;
 };
 
 /** One button of a notification. */
@@ -667,144 +362,6 @@ export type DomicileNotification = {
   readonly time: number;
 };
 
-/**
- * The desk's notifications: every one not yet cleared, oldest first.
- *
- * **A page cannot read these for itself.** A notification is a call to
- * `org.freedesktop.Notifications` on the session bus, which the compositor
- * serves — a page's own Web Notification included, because the browser shows
- * one by calling that server.
- *
- * Pushed, like the tray, and the whole list every time: sent whenever one
- * arrives, is replaced or is let go of, and again to a page that has just
- * connected. Which are new is the shell's to tell.
- */
-export type DomicileNotificationsEvent = Event & {
-  /** The notifications, oldest first. */
-  readonly items: readonly DomicileNotification[];
-
-  /**
-   * When the browser process had this message, in `performance.now()`'s
-   * milliseconds. See {@link DomicileModifiersEvent.arrival}, which documents
-   * what this is and what it is not.
-   */
-  readonly arrival: DOMHighResTimeStamp;
-};
-
-/**
- * Which way round the desktop is drawn now.
- *
- * **A page cannot work this out for itself, and `prefers-color-scheme` is the
- * trap that looks like it can.** That media query reports the engine's own
- * notion of a system preference, and under Domicile there is no system above
- * the desktop to have one — the shell *is* the desktop's chrome. The theme is
- * the compositor's: out of `theme.mode` in its config, and out of whatever
- * {@link DomicileHost.setTheme} has done to it since.
- *
- * Pushed, like the battery, and the one pushed event a page can cause: it
- * answers a `setTheme`, to every chrome on the desk rather than to the one
- * that called. It also arrives when this page connects — so a shell paints in
- * the desk's theme rather than painting and flipping — and whenever a reload
- * of the config moves the theme.
- */
-export type DomicileThemeEvent = Event & {
-  readonly theme: Theme;
-
-  /**
-   * When the browser process had this message, in `performance.now()`'s
-   * milliseconds. See {@link DomicileModifiersEvent.arrival}, which documents
-   * what this is and what it is not.
-   */
-  readonly arrival: DOMHighResTimeStamp;
-};
-
-/**
- * Whether anybody is at this desktop, pushed when that changes.
- *
- * **A page cannot see this for itself, and `document.visibilityState` is the
- * trap that looks like it can.** A shell is the desktop: its document stays
- * visible while the glass is off, because the compositor turns the connector
- * off and tells the browser nothing about it — so every idle signal the web
- * platform has reads "somebody is here" on a desk nobody has been at for an
- * hour. The compositor is what counts the hands, and this is that count.
- *
- * Pushed, like the battery: it arrives on the turn the answer changes and once
- * more to a page that has just connected — so a page that reloaded while the
- * desk was idle is told, rather than left drawing a desktop somebody is at.
- * A desktop with no idle timeout configured sends none of these at all.
- *
- * It does not lead the blanking: the screens go dark in the same breath it
- * arrives. What it leads is the relight, which takes tens of milliseconds
- * against a repaint's one.
- */
-export type DomicileIdleEvent = Event & {
-  /** `true` is a desk nobody is at; `false` is somebody back at it. */
-  readonly idle: boolean;
-
-  /**
-   * When the browser process had this message, in `performance.now()`'s
-   * milliseconds. See {@link DomicileModifiersEvent.arrival}, which documents
-   * what this is and what it is not.
-   */
-  readonly arrival: DOMHighResTimeStamp;
-};
-
-/**
- * Whether this desk is locked, pushed when that changes.
- *
- * **The compositor holds this, and that is the whole of why it is a message.**
- * Input on this system does not originate there: your page owns it and forwards
- * it, and the compositor injects it into a Wayland seat. While `locked` is
- * `true` that injection does not happen — so no client on the desk sees a
- * keystroke or a click, and nothing your page does changes that. A reload does
- * not open the desk, an engine that died and came back does not open it, and
- * neither does a shell edited in the devtools of the browser drawing it.
- *
- * Your page keeps its own keys throughout, which reads like a hole and is the
- * opposite: you are the thing forwarding, so you can draw a lock screen and
- * take a passphrase while nothing you forward arrives anywhere. {@link
- * DomicileHost.unlock} is how you offer one.
- *
- * Pushed, like the battery: it arrives on the turn the answer changes and once
- * more to a page that has just connected — which here is the point rather than a
- * convenience, because the edge a reloaded page missed is the one that would
- * have raised its lock screen. A desktop with no passphrase configured sends
- * none of these at all.
- */
-export type DomicileLockedEvent = Event & {
-  /** `true` is a desk that delivers nothing to any client. */
-  readonly locked: boolean;
-
-  /**
-   * When the browser process had this message, in `performance.now()`'s
-   * milliseconds. See {@link DomicileModifiersEvent.arrival}, which documents
-   * what this is and what it is not.
-   */
-  readonly arrival: DOMHighResTimeStamp;
-};
-
-/**
- * The keyboard, for the keys a shell binds: every keysym it can type and the
- * key it is on.
- *
- * **A string, and JSON in it.** The compositor's `shell_config` line, exactly
- * as it was sent. The engine reads its keys itself, to resolve the chords
- * `grabShortcut` is given by name; a shell has no use for it.
- *
- * Pushed when this page connects and again whenever a reload of the config
- * moves the keyboard.
- */
-export type DomicileShellConfigEvent = Event & {
-  readonly config: string;
-
-  /**
-   * When the browser process had this message, in `performance.now()`'s
-   * milliseconds. See {@link DomicileModifiersEvent.arrival}, which documents
-   * what this is and what it is not.
-   */
-  readonly arrival: DOMHighResTimeStamp;
-};
-
 /** A port of a device, or a profile of a card. */
 export type DomicileAudioChoice = {
   readonly name: string;
@@ -834,7 +391,7 @@ export type DomicileAudioStream = {
   readonly title: string;
   readonly volume: number;
   readonly muted: boolean;
-  /** Empty for a device the next event will settle. */
+  /** Empty for a device the next `audiochanged` will settle. */
   readonly device: string;
 };
 
@@ -851,8 +408,6 @@ export type DomicileAudioLevel = {
  */
 export type DomicileAudioLevelsEvent = Event & {
   readonly levels: readonly DomicileAudioLevel[];
-  /** See {@link DomicileModifiersEvent.arrival}. */
-  readonly arrival: DOMHighResTimeStamp;
 };
 
 /** A sound card, as the engine hands it over. */
@@ -862,27 +417,6 @@ export type DomicileAudioCard = {
   readonly profiles: readonly DomicileAudioChoice[];
   /** The profile in use, or empty. */
   readonly profile: string;
-};
-
-/**
- * The desk's sound: every output and input, every stream, every sound card,
- * each list in the sound server's order.
- *
- * Pushed whenever the sound server says something moved, and once more when
- * this page connects. Never on a desk with no sound server.
- */
-export type DomicileAudioEvent = Event & {
-  readonly outputs: readonly DomicileAudioDevice[];
-  readonly inputs: readonly DomicileAudioDevice[];
-  readonly playback: readonly DomicileAudioStream[];
-  readonly recording: readonly DomicileAudioStream[];
-  readonly cards: readonly DomicileAudioCard[];
-
-  /**
-   * When the browser process had this message. See
-   * {@link DomicileModifiersEvent.arrival}.
-   */
-  readonly arrival: DOMHighResTimeStamp;
 };
 
 /**
@@ -929,103 +463,18 @@ export type DomicileExtension = {
   readonly enabled: boolean;
 };
 
-/**
- * The extensions with an action, whole, whenever any of them changes — and
- * once to a page that has just connected, so a reload is told rather than left
- * with an empty tray.
- *
- * No `arrival`, unlike the compositor's events: the browser process is where
- * an action's state lives, so there is no socket read to stamp.
- */
-export type DomicileExtensionsEvent = Event & {
-  readonly extensions: readonly DomicileExtension[];
-};
-
 /** Every event the desktop fires, and what each one carries. */
 export type DomicileHostEventMap = {
-  appappeared: DomicileAppEvent;
-  appresized: DomicileAppEvent;
-  /**
-   * The smallest a client will draw its window, as `width` and `height` with
-   * `0` for no limit on that axis — xdg-shell's `set_min_size`.
-   */
-  appminsize: DomicileAppEvent;
-  /** The largest, as {@link DomicileHostEventMap.appminsize} is the smallest. */
-  appmaxsize: DomicileAppEvent;
-  /**
-   * A client opened a popup over one of its windows, or moved one — see
-   * `popup_placed` in `domicile-protocol`.
-   */
-  popupplaced: DomicileAppEvent;
-  appclosed: DomicileAppEvent;
-  appcursor: DomicileAppCursorEvent;
-  focuschanged: DomicileAppEvent;
   /**
    * A client asked for the keyboard, and nothing has moved: the shell answers
    * with `focusApp()` or lets it stand. See `focus_requested` in
    * `domicile-protocol`.
    */
   focusrequested: DomicileAppEvent;
-  apptitled: DomicileAppTitledEvent;
   shortcut: DomicileShortcutEvent;
-  modifiers: DomicileModifiersEvent;
-  /** What a {@link DomicileHost.searchFiles} found. Only ever an answer. */
-  files: DomicileFilesEvent;
-  /** What a {@link DomicileHost.previewFile} found. Only ever an answer. */
-  filepreview: DomicileFilePreviewEvent;
-  /** What a {@link DomicileHost.searchApps} found. Only ever an answer. */
-  apps: DomicileAppsEvent;
-  /** The charge, whenever it moves far enough to draw. Nobody asked for it. */
-  battery: DomicileBatteryEvent;
-  /** What has been copied, whenever that changes. Nobody asked for it either. */
-  clipboard: DomicileClipboardEvent;
-  /**
-   * Which way round the desktop is drawn. Pushed like the two above, and the
-   * one of the three a page can cause — see {@link DomicileHost.setTheme}.
-   */
-  theme: DomicileThemeEvent;
-  /**
-   * Whether anybody is at the desk, whenever that changes — and once to a page
-   * that has just connected, which is the whole reason it carries the state
-   * rather than the edge the compositor decided on.
-   */
-  idle: DomicileIdleEvent;
-  /**
-   * Whether this desk is locked, whenever that changes — and once to a page
-   * that has just connected, which is what makes a reload something the lock
-   * survives rather than something that opens it.
-   */
-  locked: DomicileLockedEvent;
-  /**
-   * Which way round the desk's windows are drawn: `theme`'s other half. It
-   * arrives once they have turned — see {@link DomicileHost.themeCaptured} —
-   * and on connecting.
-   */
-  windowstheme: DomicileThemeEvent;
-  /**
-   * The keys the config binds and each shell's options, once on connecting
-   * and whenever a reload changes them.
-   */
-  shellconfig: DomicileShellConfigEvent;
-  audio: DomicileAudioEvent;
   audiolevels: DomicileAudioLevelsEvent;
-  /**
-   * The extensions with an action, whole, whenever one changes and once on
-   * connecting.
-   */
-  extensions: DomicileExtensionsEvent;
-  /**
-   * The system tray, whole, whenever an icon arrives, leaves or changes, and
-   * once on connecting.
-   */
-  tray: DomicileTrayEvent;
   /** An address to open — see {@link DomicileOpenUrlEvent}. */
   openurl: DomicileOpenUrlEvent;
-  /**
-   * The desk's notifications, whole, whenever one arrives, changes or goes,
-   * and once on connecting.
-   */
-  notifications: DomicileNotificationsEvent;
   /**
    * The desktop changed: a screen arrived or left, a display was resized, or
    * its density moved. Bare — read {@link DomicileHost.displays} for what it
@@ -1110,9 +559,8 @@ export type DomicileHost = {
   spawn(command: readonly string[]): void;
 
   /**
-   * Ask what in the home matches `query`. Resolves with the answer, which
-   * also arrives as a `files` event carrying the same query. A newer call
-   * supersedes this one, which rejects with an `AbortError`.
+   * Ask what in the home matches `query`. Resolves with the answer. A newer
+   * call supersedes this one, which rejects with an `AbortError`.
    *
    * **It takes no path, and that is the security property rather than an
    * oversight.** A shell is served over `domicile://` precisely so that it has
@@ -1129,9 +577,8 @@ export type DomicileHost = {
   searchFiles(query: string): Promise<DomicileFileSearch>;
 
   /**
-   * Ask what `path` holds. Resolves with the answer, which also arrives as a
-   * `filepreview` event carrying the same path. A newer call supersedes this
-   * one, as with {@link searchFiles}.
+   * Ask what `path` holds. Resolves with the answer. A newer call supersedes
+   * this one, as with {@link searchFiles}.
    *
    * **This one names a path**, and what keeps it from being a filesystem is
    * that the compositor answers only for a path its index of the home holds —
@@ -1142,8 +589,7 @@ export type DomicileHost = {
 
   /**
    * Ask which installed applications match `query`. Resolves with the
-   * answer, which also arrives as an `apps` event carrying the same query. A
-   * newer call supersedes this one, as with {@link searchFiles}.
+   * answer. A newer call supersedes this one, as with {@link searchFiles}.
    *
    * Words, like {@link searchFiles}: which directories hold the desktop
    * entries is the compositor's to read. See `domicile_host::desktop_entries`.
@@ -1155,8 +601,8 @@ export type DomicileHost = {
    *
    * **It names a row and carries no text**: a page that could put arbitrary bytes
    * on the seat's clipboard would be writing the desktop's clipboard rather
-   * than choosing among what is already on it. The `id` is one the last
-   * `clipboard` event carried.
+   * than choosing among what is already on it. The `id` is one
+   * {@link clipboard} lists.
    *
    * There is no answer. What follows is that every Wayland client now pastes
    * that entry, and the compositor serves it — so the row outlives the client
@@ -1195,10 +641,10 @@ export type DomicileHost = {
    * Draw the desktop the other way round.
    *
    * **The one call here that says what the desktop *is*** rather than asking
-   * it for something. It reaches the compositor and comes back as a `theme`
-   * event — to every chrome on the desk, this one included, which is why a
-   * shell renders from the event rather than from its own click. Three
-   * monitors are three pages and the toggle is on one of them.
+   * it for something. It reaches the compositor and comes back as
+   * `themechanged` — to every chrome on the desk, this one included, which is
+   * why a shell renders from {@link theme} rather than from its own click.
+   * Three monitors are three pages and the toggle is on one of them.
    *
    * It leaves the page at all because the compositor is the only process the
    * desk's *clients* can hear: it answers the settings portal GTK, Qt and
@@ -1219,15 +665,16 @@ export type DomicileHost = {
    * into the seat; this call is what ends that, and only if the compositor
    * agrees.
    *
-   * Answered with a `locked` event and not with a return value — to every chrome
+   * Answered with `lockedchanged` and not with a return value — to every chrome
    * on the desk, not just this one, because three monitors are three pages and
-   * the desk they draw has one lock. So clear your lock screen when the event
-   * says the desk opened, never because you believed your own keystrokes: a page
-   * that did the latter would be a lock anybody with the devtools could open.
+   * the desk they draw has one lock. So clear your lock screen when
+   * {@link locked} says the desk opened, never because you believed your own
+   * keystrokes: a page that did the latter would be a lock anybody with the
+   * devtools could open.
    *
-   * A wrong passphrase produces a `locked` event saying the desk is still
-   * locked: nothing else sends one to a desk being checked, so a page waiting on
-   * its check reads it as the refusal. There is no count and no delay on this
+   * A wrong passphrase produces a `lockedchanged` with {@link locked} still
+   * `true`: nothing else sends one to a desk being checked, so a page waiting
+   * on its check reads it as the refusal. There is no count and no delay on this
    * protocol yet; the compositor says why in its own log, without the
    * passphrase in it.
    */
@@ -1236,7 +683,7 @@ export type DomicileHost = {
   /**
    * Lock this desk now, whoever is at it.
    *
-   * Answered like {@link unlock}: with a `locked` event to every chrome, and
+   * Answered like {@link unlock}: with `lockedchanged` to every chrome, and
    * only when the desk actually shut. A desktop with no lock configured has
    * nothing to shut, and sends nothing.
    */
@@ -1255,10 +702,10 @@ export type DomicileHost = {
    * The mixer: set a device's or a stream's volume, a fraction of the sound
    * server's 100%; mute it; make a device the default; move a stream to
    * another device of its direction; switch a device's port or a card's
-   * profile. Each names what it acts on by an id from the last `audio` event.
+   * profile. Each names what it acts on by an id the `audio*` attributes list.
    *
-   * Requests, like {@link setBrightness}: answered with the next `audio` to
-   * every chrome once the sound server has moved. An id the compositor never
+   * Requests, like {@link setBrightness}: answered with `audiochanged` to every
+   * chrome once the sound server has moved. An id the compositor never
    * gave out does nothing but say so in its log.
    */
   setAudioVolume(id: string, volume: number): void;
@@ -1269,7 +716,7 @@ export type DomicileHost = {
   setAudioProfile(card: string, profile: string): void;
 
   /**
-   * Meter these devices and streams, by the ids an `audio` event carried,
+   * Meter these devices and streams, by the ids the `audio*` attributes list,
    * and fire `audiolevels` with their peaks.
    *
    * **A lease**: call it again every second while the meters are on screen.
@@ -1286,7 +733,7 @@ export type DomicileHost = {
    * the old way when it is taken and the new way when the wipe starts — which
    * is only true if they are told in between. The compositor waits for every
    * chrome on the desk (or gives up waiting), tells the windows, and answers
-   * with a `windowstheme` event once they have repainted.
+   * with `windowsthemechanged` once they have repainted.
    */
   themeCaptured(theme: Theme): void;
 
@@ -1323,7 +770,7 @@ export type DomicileHost = {
   activateTrayItem(id: string, action: TrayAction): void;
 
   /**
-   * Clear notifications: ids a `notifications` event carried. Each
+   * Clear notifications: ids {@link notifications} lists. Each
    * application hears its notification was dismissed; an id already gone is
    * passed over.
    */
@@ -1386,20 +833,53 @@ export type DomicileHost = {
 
   // THE DESK'S STATE. Each is what the compositor last said, `null` until it
   // has said anything; a bare `<name>changed` says it moved.
+
+  /**
+   * What has been copied on this desktop, newest first. **Not
+   * `navigator.clipboard`**, which answers out of the browser's own clipboard
+   * and no Wayland client's.
+   */
   readonly clipboard: readonly DomicileClipboardEntry[] | null;
+  /** The system tray: every application showing an icon, in the order they registered. */
   readonly tray: readonly DomicileTrayItem[] | null;
+  /** The desk's notifications: every one not yet cleared, oldest first. */
   readonly notifications: readonly DomicileNotification[] | null;
+  /** The extensions with an action, from this browser rather than the compositor. */
   readonly extensions: readonly DomicileExtension[] | null;
+  /** The desk's sound, each list in the sound server's order. */
   readonly audioOutputs: readonly DomicileAudioDevice[] | null;
   readonly audioInputs: readonly DomicileAudioDevice[] | null;
   readonly audioPlayback: readonly DomicileAudioStream[] | null;
   readonly audioRecording: readonly DomicileAudioStream[] | null;
   readonly audioCards: readonly DomicileAudioCard[] | null;
+  /**
+   * The machine's battery: how full, 0 through 1, and whether a lead is in.
+   * **Not `navigator.getBattery`**, which on a bare tty reports full and
+   * charging whatever the battery says. `null` on a machine with none.
+   */
   readonly batteryCharge: number | null;
   readonly batteryCharging: boolean | null;
+  /**
+   * Whether anybody is at this desktop. **Not `document.visibilityState`**: a
+   * shell's document stays visible while the glass is off. `null` on a desktop
+   * with no idle timeout.
+   */
   readonly idle: boolean | null;
+  /**
+   * Whether this desk is locked: `true` is a desk that delivers nothing to
+   * any client. The compositor holds it, so a reload does not open it. `null`
+   * on a desktop with no passphrase.
+   */
   readonly locked: boolean | null;
+  /**
+   * Which way round the desktop is drawn. **Not `prefers-color-scheme`**: the
+   * theme is the compositor's, and {@link setTheme} is how a page moves it.
+   */
   readonly theme: Theme | null;
+  /**
+   * Which way round the desk's windows are drawn: {@link theme}'s other half,
+   * moved once they have turned — see {@link themeCaptured}.
+   */
   readonly windowsTheme: Theme | null;
   /** The compositor seat's — see the README before trusting them. */
   readonly altKey: boolean | null;

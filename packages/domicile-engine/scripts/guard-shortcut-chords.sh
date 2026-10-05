@@ -93,7 +93,7 @@ wait_for_line "$TRIES" "GUARD chords " "$ENGINE_LOG"
 sleep 1
 
 # The closing quote is Chromium's and keeps each match on the message: see
-# guard-control-arrival.sh.
+# guard-windows-state.sh.
 CHORDS=$(grep -oE '"GUARD chords [^"]*"' "$ENGINE_LOG" | head -1)
 WANTED='"GUARD chords bad=SyntaxError missing=NotFoundError page=taken,taken,free heard=Meta+Shift+l,Meta+Shift+l"'
 

@@ -10,8 +10,8 @@ namespace domicile {
 
 // Make the desktop's theme the color scheme every page in this process sees.
 //
-// The shell hears the theme as a `theme` event; a site in a browser window
-// hears nothing of the kind. What it reads is `prefers-color-scheme`, which
+// The shell reads the theme off `DomicileHost.theme`; a site in a browser
+// window hears nothing of the kind. What it reads is `prefers-color-scheme`, which
 // comes from this process's ui::NativeTheme -- and with no system above the
 // desktop to have a preference, that was whatever the process started with.
 // Setting the process-wide override is how Chrome's own "follow the system"

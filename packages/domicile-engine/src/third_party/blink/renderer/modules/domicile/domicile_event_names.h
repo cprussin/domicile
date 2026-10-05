@@ -19,51 +19,27 @@
 // type, dispatch compares AtomicStrings by pointer wherever they were made,
 // and each is made once, on the main thread, the first time it is used.
 // scripts/test-engine-event-names.sh keeps this list, the IDL's on<name>
-// handlers and the list guard-control-arrival fires in a real engine the
-// same set.
-#define DOMICILE_EVENT_NAMES(X)           \
-  X(apptitled, Apptitled)                 \
-  X(appappeared, Appappeared)             \
-  X(appresized, Appresized)               \
-  X(appminsize, Appminsize)               \
-  X(appmaxsize, Appmaxsize)               \
-  X(popupplaced, Popupplaced)             \
-  X(appclosed, Appclosed)                 \
-  X(appcursor, Appcursor)                 \
-  X(shortcut, Shortcut)                   \
-  X(modifiers, Modifiers)                 \
-  X(files, Files)                         \
-  X(filepreview, Filepreview)             \
-  X(apps, Apps)                           \
-  X(battery, Battery)                     \
-  X(brightnesschanged, Brightnesschanged) \
-  X(clipboard, Clipboard)                 \
-  X(theme, Theme)                         \
-  X(windowstheme, Windowstheme)           \
-  X(idle, Idle)                           \
-  X(focuschanged, Focuschanged)           \
-  X(focusrequested, Focusrequested)       \
-  X(displayschanged, Displayschanged)     \
-  X(locked, Locked)                       \
-  X(extensions, Extensions)               \
-  X(tray, Tray)                           \
-  X(notifications, Notifications)         \
-  X(shellconfig, Shellconfig)             \
-  X(audio, Audio)                         \
-  X(audiolevels, Audiolevels)             \
-  X(openurl, Openurl)                     \
-  X(windowschanged, Windowschanged)       \
+// handlers and the list guard-windows-state fires in a real engine the same
+// set.
+#define DOMICILE_EVENT_NAMES(X)                 \
+  X(shortcut, Shortcut)                         \
+  X(focusrequested, Focusrequested)             \
+  X(openurl, Openurl)                           \
+  X(audiolevels, Audiolevels)                   \
+  X(displayschanged, Displayschanged)           \
+  X(brightnesschanged, Brightnesschanged)       \
+  X(windowschanged, Windowschanged)             \
   X(focusedwindowchanged, Focusedwindowchanged) \
-  X(clipboardchanged, Clipboardchanged)  \
-  X(traychanged, Traychanged)  \
-  X(notificationschanged, Notificationschanged)  \
-  X(extensionschanged, Extensionschanged)  \
-  X(audiochanged, Audiochanged)  \
-  X(batterychanged, Batterychanged)  \
-  X(idlechanged, Idlechanged)  \
-  X(lockedchanged, Lockedchanged)  \
-  X(themechanged, Themechanged)  \
-  X(windowsthemechanged, Windowsthemechanged)  \
+  X(clipboardchanged, Clipboardchanged)         \
+  X(traychanged, Traychanged)                   \
+  X(notificationschanged, Notificationschanged) \
+  X(extensionschanged, Extensionschanged)       \
+  X(audiochanged, Audiochanged)                 \
+  X(batterychanged, Batterychanged)             \
+  X(idlechanged, Idlechanged)                   \
+  X(lockedchanged, Lockedchanged)               \
+  X(themechanged, Themechanged)                 \
+  X(windowsthemechanged, Windowsthemechanged)   \
   X(modifierschanged, Modifierschanged)
 
 namespace blink::domicile_event_names {

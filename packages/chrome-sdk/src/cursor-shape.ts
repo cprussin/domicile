@@ -9,7 +9,7 @@
 // is what the compositor serializes, `components/domicile/common/cursor_shape.h`
 // is what the browser process refuses an unknown name against when it reads the
 // socket, and `domicile_cursor_shape.idl` is a WebIDL `enum`, so
-// `DomicileAppCursorEvent.cursor` is a member of it by construction rather than
+// `DomicileWindow.cursor` is a member of it by construction rather than
 // a `DOMString` that happens to hold one.
 //
 // So why parse at all. Because the engine and this package are not one deploy

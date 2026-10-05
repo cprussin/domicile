@@ -13,7 +13,7 @@ namespace blink {
 // A URL the desk offers by name, as the compositor described it.
 //
 // A ScriptWrappable rather than a dictionary, for DomicileDesktopEntry's
-// reason: these are read off a DomicileAppsEvent's array attribute.
+// reason: these are read off a DomicileAppSearch.
 class MODULES_EXPORT DomicileBookmark final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 

@@ -6,6 +6,18 @@ It answers `hello` with a `welcome`, then describes three windows, retitles and
 resizes one, focuses one, closes one and places a popup -- and prints every line
 the browser writes. The page reads only after all of it, which is the case the
 attributes exist for: a shell that listens late misses nothing.
+
+AND THE CURSOR'S CLOSED SET, IN THREE LINES WHOSE ORDER IS THE ASSERTION:
+
+    app_cursor  second  grab        a shape the engine knows
+    app_cursor  second  pointr      one it does not
+    app_cursor  first   zoom-out    a shape it knows, AFTER the one it does not
+
+`pointr` must not reach the page -- an unknown CSS keyword is a silent no-op
+there, and the symptom is an arrow where a hand should be -- so `second` keeps
+`grab`. The third line is why the second can be asserted at all: without it,
+"the bad cursor was refused" and "the channel died on the bad cursor" are the
+same reading. See components/domicile/common/cursor_shape.h.
 """
 
 import argparse
@@ -23,6 +35,8 @@ SEQUENCE = [
     {"type": "app_resized", "app_id": "first", "size": [800, 600]},
     {"type": "app_min_size", "app_id": "first", "size": [100, 50]},
     {"type": "app_cursor", "app_id": "second", "cursor": "grab"},
+    {"type": "app_cursor", "app_id": "second", "cursor": "pointr"},
+    {"type": "app_cursor", "app_id": "first", "cursor": "zoom-out"},
     {"type": "focus_changed", "app_id": "second"},
     {"type": "app_closed", "app_id": "gone"},
     {

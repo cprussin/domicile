@@ -64,7 +64,6 @@ same reason.
 | `scripts/guard_webview_devtools.py` | driving a key or a press at a running engine over the debugging port, which is the only keyboard and pointer `crux` has. Imported, which is why it is the one file here with underscores |
 | `scripts/guard-css-and-resize.sh` | the measurement: seven CSS properties, those properties again under a `backdrop-filter`, the resize, and the latency |
 | `scripts/guard-latency.sh` | keystroke to pixel with a real client — the whole of what a user waits for, read out of the compositor's own `latency` lines. Under `under-wayland.sh` |
-| `scripts/guard-control-arrival.sh`, `guard-control-arrival.js`, `guard-control-arrival-compositor.py` | the hop from the compositor's socket into the page, measured off the `arrival` stamp every `ControlChannelClient` method carries, and the cursor keyword set read end to end |
 | `scripts/lib-latency.sh` | what a latency run means, read out of a log. Sourced by `guard-latency.sh` and by `/scripts/test-latency-report.sh`, so the reading is exercised without starting a browser |
 | `scripts/lib-annotate.sh` | how a guard says where it stopped, as a GitHub annotation rather than a line in a thousand-line job log |
 | `scripts/spike.sh` | run one step of the spike end to end; the producer's exit code is the verdict. What `guard-css-and-resize.sh` runs three times |
@@ -206,14 +205,12 @@ opinion about the same box, and it disagreed by a border. The host no longer
 reads the message and the SDK no longer calls the method; taking the member out
 of the IDL is an engine change, and an engine change is a release.
 
-`shell_config` is the one inbound member relayed as a string: the page's
-`shellconfig` event carries the compositor's line verbatim as `config`, and
-the SDK parses it. It carried a shell's freeform `options` once, which WebIDL
-cannot type; it carries the keyboard now, and what it says can change without
-a release.
+`shell_config` is the one inbound member relayed as a string, and it stops in
+the renderer: `DomicileHost` reads its keys to resolve the chords
+`grabShortcut` is given by name, and none of it reaches the page.
 
 **The tray is not the control channel.** `DomicileHost`'s `extensions`
-event and `activateExtension()` ride `components/domicile/mojom/extension_tray.mojom`,
+attribute and `activateExtension()` ride `components/domicile/mojom/extension_tray.mojom`,
 a pipe of the browser's own bound beside the channel and gated the same way:
 an action's state is this browser's, and the compositor has never heard of it.
 See `src/chrome/browser/domicile/domicile_extension_tray.h`.
@@ -311,7 +308,7 @@ recompiled most of Blink — 79 minutes on engine run 36179223074, holding the
 one compile slot while every other engine run waited. Only this directory
 includes the fork's list, so a name costs a rebuild of this directory.
 `scripts/test-engine-event-names.sh` keeps the list, the IDL and the names
-`guard-control-arrival` fires in a real engine the same set.
+`guard-windows-state` fires in a real engine the same set.
 
 ## The command socket, which is how the shell is replaced
 

@@ -16,10 +16,6 @@ class DomicileOpenUrlEventInit;
 
 // An address somebody asked this desktop to open: `domicile open-url`, which
 // is what `BROWSER` runs inside it.
-//
-// No `arrival`, unlike the compositor's events: this comes from the engine's
-// own command socket rather than off the compositor's, and nothing measures
-// the hop.
 class MODULES_EXPORT DomicileOpenUrlEvent final : public Event {
   DEFINE_WRAPPERTYPEINFO();
 

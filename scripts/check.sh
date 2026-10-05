@@ -379,7 +379,6 @@ if wanted engine; then
       scripts/engine-guard-webview-active-tab.sh \
       scripts/engine-guard-webview-popup-window.sh \
       scripts/engine-guard-webview-passkey-extension.sh \
-      scripts/engine-guard-control-arrival.sh \
       scripts/engine-guard-desktop-geometry.sh \
       scripts/engine-guard-windows-state.sh \
       scripts/engine-guard-desk-state.sh \
