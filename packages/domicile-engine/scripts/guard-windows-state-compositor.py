@@ -18,6 +18,9 @@ there, and the symptom is an arrow where a hand should be -- so `second` keeps
 `grab`. The third line is why the second can be asserted at all: without it,
 "the bad cursor was refused" and "the channel died on the bad cursor" are the
 same reading. See components/domicile/common/cursor_shape.h.
+
+A `system_reply` ends the sequence: the engine relays it to the page whole, and
+the page's `system_request` comes back as a `said:` line. See SYSTEM-ACCESS.md.
 """
 
 import argparse
@@ -47,6 +50,7 @@ SEQUENCE = [
         "size": [120, 90],
         "grab": True,
     },
+    {"type": "system_reply", "id": 1, "reply": {"kind": "written"}},
 ]
 
 

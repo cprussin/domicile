@@ -40,7 +40,8 @@
   X(lockedchanged, Lockedchanged)                 \
   X(themechanged, Themechanged)                   \
   X(windowsthemechanged, Windowsthemechanged)     \
-  X(modifierschanged, Modifierschanged)
+  X(modifierschanged, Modifierschanged)         \
+  X(system, System)
 
 namespace blink::domicile_event_names {
 

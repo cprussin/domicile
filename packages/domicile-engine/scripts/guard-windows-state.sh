@@ -22,6 +22,9 @@
 #   the cursor's closed set: a cursor the engine does not know does NOT reach
 #     `windows`, and one it knows, sent after it, does -- so "the bad name was
 #     refused" can be told apart from "the channel died on it"
+#   the relay of the shell's system calls: the page's `callSystem` reaches the
+#     compositor wrapped as a `system_request`, one that is not a JSON call
+#     never leaves the browser, and a `system_reply` reaches the page whole
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
@@ -116,8 +119,12 @@ NAMES=$(grep -oE '"GUARD names missing=[^"]*"' "$ENGINE_LOG" | head -1)
 WINDOWS=$(grep -oE '"GUARD windows .*"' "$ENGINE_LOG" | head -1)
 FOCUSED=$(grep -oE '"GUARD focused [^"]*"' "$ENGINE_LOG" | head -1)
 CHANGED=$(grep -oE '"GUARD changed n=[0-9]+"' "$ENGINE_LOG" | head -1)
+SYSTEM_IN=$(grep -cE '"GUARD system data=\{"type": ?"system_reply"' "$ENGINE_LOG")
+SYSTEM_OUT=$(grep -cE '^said: \{"id":1,"request":\{"call":"stat","path":"/"\},"type":"system_request"\}$' "$SOCKET_LOG")
+SYSTEM_LEAKED=$(grep -cE '^said: .*"id":2' "$SOCKET_LOG")
 
-FAILURE=$(NAMES="$NAMES" WINDOWS="$WINDOWS" FOCUSED="$FOCUSED" CHANGED="$CHANGED" python3 - <<'PY'
+FAILURE=$(NAMES="$NAMES" WINDOWS="$WINDOWS" FOCUSED="$FOCUSED" CHANGED="$CHANGED" \
+  SYSTEM_IN="$SYSTEM_IN" SYSTEM_OUT="$SYSTEM_OUT" SYSTEM_LEAKED="$SYSTEM_LEAKED" python3 - <<'PY'
 import json, os
 
 if os.environ["NAMES"] != '"GUARD names missing=none"':
@@ -160,10 +167,17 @@ elif os.environ["FOCUSED"] != '"GUARD focused second"':
     print("`focusedWindow` is %s where the compositor focused second" % os.environ["FOCUSED"])
 elif os.environ["CHANGED"] != '"GUARD changed n=0"':
     print("a listener registered after the compositor fell silent heard %s; nothing changed after it subscribed, so the engine is dispatching late or twice" % os.environ["CHANGED"])
+elif os.environ["SYSTEM_LEAKED"] != "0":
+    print("a callSystem that is not a JSON call reached the compositor, so ControlChannel::CallSystem is not refusing what components/domicile/browser/system_call.h refuses")
+elif os.environ["SYSTEM_OUT"] == "0":
+    print("the page's callSystem never reached the compositor as a system_request wrapping it: Blink's callSystem, ControlChannel::CallSystem or SystemRequestLine lost or reshaped it")
+elif os.environ["SYSTEM_IN"] == "0":
+    print("a system_reply sent down the control socket never reached the page as a system event: the browser did not relay it, or Blink did not dispatch it")
 PY
 )
 
 echo "page: $NAMES $WINDOWS $FOCUSED $CHANGED"
+echo "system: out=$SYSTEM_OUT leaked=$SYSTEM_LEAKED in=$SYSTEM_IN"
 
 if [ -n "$FAILURE" ]; then
   annotate_from "guard-windows-state: $FAILURE" "$ENGINE_LOG"
@@ -174,4 +188,4 @@ if [ -n "$FAILURE" ]; then
   tail -40 "$ENGINE_LOG" >&2
   exit 1
 fi
-echo "PASS: a shell that reads late reads the whole desk, every event name fires and the cursor set is closed"
+echo "PASS: a shell that reads late reads the whole desk, every event name fires, the cursor set is closed and system calls cross the browser"
