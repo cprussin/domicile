@@ -7,7 +7,6 @@ import type {
   DomicileHost,
   DomicileWindow,
 } from "@domicile-desktop/sdk/domicile-host";
-import { focusApp } from "@domicile-desktop/sdk/focus-app";
 import { KeyAction } from "@domicile-desktop/sdk/key-action";
 import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
 import type { CSSProperties, PointerEvent } from "react";
@@ -104,10 +103,11 @@ type Drag = {
 /**
  * The desktop: every window the host has announced, and nothing else.
  *
- * The pointer handlers run on the desktop rather than on each window, and stop
- * what they take: an `<app>` forwards every pointer event over it straight to
- * the client underneath, so an un-taken Alt-drag also clicks into the client
- * and leaves it holding a button that never comes up.
+ * The pointer handlers run on the desktop rather than on each window, and take
+ * what they handle with `preventDefault()`: an `<app>` forwards every pointer
+ * event over it that the page left alone to the client underneath, so an
+ * un-taken Alt-drag also clicks into the client and leaves it holding a button
+ * that never comes up.
  */
 export const Shell = ({
   domicile,
@@ -150,7 +150,7 @@ export const Shell = ({
         if (!open.has(window.appId)) {
           open.add(window.appId);
           if (caughtUp) {
-            focusApp(domicile, window.appId);
+            domicile.focusApp(window.appId);
           }
         }
       }

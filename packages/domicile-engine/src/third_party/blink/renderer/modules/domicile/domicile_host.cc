@@ -10,11 +10,15 @@
 
 #include "base/check.h"
 #include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
 #include "components/domicile/common/cursor_shape.h"
 #include "components/domicile/common/display_transform.h"
 #include "components/domicile/common/theme.h"
 #include "third_party/blink/renderer/bindings/core/v8/frozen_array.h"
+#include "third_party/blink/renderer/bindings/core/v8/script_value.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_object_builder.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_app_search.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_cursor_shape.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_file_preview.h"
@@ -23,12 +27,17 @@
 #include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_theme.h"
 #include "third_party/blink/renderer/core/css/media_query_list.h"
 #include "third_party/blink/renderer/core/css/media_query_list_listener.h"
+#include "third_party/blink/renderer/core/dom/document.h"
+#include "third_party/blink/renderer/core/dom/element_traversal.h"
+#include "third_party/blink/renderer/core/dom/events/custom_event.h"
 #include "third_party/blink/renderer/core/dom/events/native_event_listener.h"
 #include "third_party/blink/renderer/core/events/keyboard_event.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/event_target_names.h"
 #include "third_party/blink/renderer/core/event_type_names.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
+#include "third_party/blink/renderer/core/frame/local_frame.h"
+#include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_app_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_audio_card.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_audio_choice.h"
@@ -70,16 +79,29 @@ class DesktopResized final : public NativeEventListener {
   const base::RepeatingClosure report_;
 };
 
-// A key went down on the page.
-class PageKeyPressed final : public NativeEventListener {
- public:
-  explicit PageKeyPressed(base::RepeatingCallback<void(Event*)> pressed)
-      : pressed_(std::move(pressed)) {}
+// The Linux evdev key a key event is on, from its DOM `code`; zero or less
+// for a code with none.
+int EvdevOf(const KeyboardEvent& key) {
+  return ui::KeycodeConverter::DomCodeToEvdevCode(
+      ui::KeycodeConverter::CodeStringToDomCode(key.code().Utf8()));
+}
 
-  void Invoke(ExecutionContext*, Event* event) override { pressed_.Run(event); }
+// The events an <app> dispatches for the shell to answer. Not the desktop's
+// own names -- they are dispatched on the element, not on the desktop, and the
+// SDK names them -- so they are not in domicile_event_names.h.
+constexpr char kFocusRequested[] = "domicile-focus-requested";
+constexpr char kFocusReleaseRequested[] = "domicile-focus-release-requested";
+
+// Something happened on the page: a key went down or up, a press, a blur.
+class PageHeard final : public NativeEventListener {
+ public:
+  explicit PageHeard(base::RepeatingCallback<void(Event*)> heard)
+      : heard_(std::move(heard)) {}
+
+  void Invoke(ExecutionContext*, Event* event) override { heard_.Run(event); }
 
  private:
-  const base::RepeatingCallback<void(Event*)> pressed_;
+  const base::RepeatingCallback<void(Event*)> heard_;
 };
 
 // The ratio the last report named stopped matching: the window moved to a
@@ -98,7 +120,8 @@ class DensityChanged final : public MediaQueryListListener {
 }  // namespace
 
 DomicileHost::DomicileHost(LocalDOMWindow& window)
-    : window_(&window),
+    : AppInputClient(window),
+      window_(&window),
       // `displays_` is left null: a shell that has not been told about a
       // desktop must be able to tell that apart from one told there are no
       // screens. See the attribute's note in the IDL.
@@ -375,10 +398,13 @@ bool DomicileHost::ReadyForApp(const String& app_id,
   return Ready(exception_state);
 }
 
+// Both halves: the compositor's seat, and where this page's keys go. A shell
+// used to need the SDK's `focusApp` for the second, and one that called this
+// alone moved the seat and went on typing into the page.
 void DomicileHost::focusApp(ScriptState*, const String& app_id,
                             ExceptionState& exception_state) {
   if (ReadyForApp(app_id, exception_state)) {
-    channel_->FocusApp(app_id);
+    FocusAppKeyboard(app_id);
   }
 }
 
@@ -574,7 +600,7 @@ void DomicileHost::copyClipboardEntry(ScriptState*,
 
 void DomicileHost::focusChrome(ScriptState*, ExceptionState& exception_state) {
   if (Ready(exception_state)) {
-    channel_->FocusChrome();
+    FocusChromeKeyboard();
   }
 }
 
@@ -767,7 +793,7 @@ void DomicileHost::grabShortcut(ScriptState*,
   }
   chords_.push_back(GrabbedChord{written, *chord, std::nullopt});
   if (!key_listener_) {
-    key_listener_ = MakeGarbageCollected<PageKeyPressed>(BindRepeating(
+    key_listener_ = MakeGarbageCollected<PageHeard>(BindRepeating(
         &DomicileHost::PageKeyDown, WrapWeakPersistent(this)));
     // Capturing, on the window: first of anything on the page, so a forward
     // of keys to an `<app>` sees the chord already taken (`defaultPrevented`)
@@ -818,8 +844,7 @@ void DomicileHost::PageKeyDown(Event* event) {
   if (!key) {
     return;
   }
-  const int evdev = ui::KeycodeConverter::DomCodeToEvdevCode(
-      ui::KeycodeConverter::CodeStringToDomCode(key->code().Utf8()));
+  const int evdev = EvdevOf(*key);
   if (evdev <= 0) {
     return;
   }
@@ -856,41 +881,283 @@ void DomicileHost::activateExtension(ScriptState*,
   }
 }
 
-void DomicileHost::key(ScriptState*, const String& app_id, uint32_t keycode,
-                       bool pressed, ExceptionState& exception_state) {
-  if (ReadyForApp(app_id, exception_state)) {
-    channel_->Key(app_id, keycode, pressed);
+// THE PAGE'S INPUT, which was the SDK's `registerElements`. An <app> maps a
+// pointer over it and hands it here; the keys are the document's, and are
+// heard on it. On the document and in the bubbling phase, as the SDK's were,
+// so a shell that stops a key or a press before it gets there has taken it.
+void DomicileHost::RouteInput() {
+  ProvideTo(*window_, static_cast<AppInputClient*>(this));
+  Document& document = *window_->document();
+  const auto listen = [this](EventTarget& target, const AtomicString& type,
+                             void (DomicileHost::*heard)(Event*)) {
+    auto* listener = MakeGarbageCollected<PageHeard>(
+        BindRepeating(heard, WrapWeakPersistent(this)));
+    target.addEventListener(type, listener);
+    input_listeners_.push_back(listener);
+  };
+  listen(document, event_type_names::kKeydown, &DomicileHost::ForwardKeyDown);
+  listen(document, event_type_names::kKeyup, &DomicileHost::ForwardKeyUp);
+  listen(document, event_type_names::kPointerdown,
+         &DomicileHost::ReleaseKeyboardOffApp);
+  // A page that has lost the keyboard -- or is going away -- is never told a
+  // key came up. `pagehide` as well as `blur` because a reload is not a focus
+  // change, and it is the event a navigation fires reliably.
+  listen(*window_, event_type_names::kBlur, &DomicileHost::ReleaseHeldKeys);
+  listen(*window_, event_type_names::kPagehide,
+         &DomicileHost::ReleaseHeldKeys);
+  listen(document, event_type_names::kFocusin, &DomicileHost::ReleaseIntoGuest);
+  // AND A WHEEL LISTENER THAT DOES NOTHING, because listening is what brings a
+  // wheel to this thread at all: with none on the page the compositor thread
+  // scrolls by itself and no `wheel` is dispatched, so an <app> would never
+  // see one. Passive -- the platform makes a document's so -- so it holds up
+  // no scroll. The pointer needs no such thing: the `pointerdown` above is a
+  // pointer listener, which is what Blink asks before it dispatches any.
+  auto* wheel = MakeGarbageCollected<PageHeard>(
+      base::DoNothingAs<void(Event*)>());
+  document.addEventListener(event_type_names::kWheel, wheel);
+  input_listeners_.push_back(wheel);
+}
+
+void DomicileHost::AppPressed(HTMLAppElement& app, const String& app_id) {
+  // A popup's window rather than the popup: a click on a menu is a click on
+  // the window it belongs to.
+  const String window = WindowOf(app_id);
+  if (Ask(app, kFocusRequested, window, std::nullopt)) {
+    FocusAppKeyboard(window);
   }
 }
 
-void DomicileHost::pointerMotion(ScriptState*, const String& app_id, double x,
-                                 double y, ExceptionState& exception_state) {
-  if (ReadyForApp(app_id, exception_state)) {
+void DomicileHost::AppPointerMotion(const String& app_id,
+                                    const gfx::PointF& point,
+                                    const gfx::SizeF& size) {
+  // Into what the client drew, which the compositor said; one that has drawn
+  // nothing yet is mapped through its own box, 1:1.
+  double x = point.x();
+  double y = point.y();
+  for (const DomicileWindowState& state : window_states_) {
+    if (state.app_id == app_id && state.width && state.height) {
+      x = *state.width > 0 ? x * *state.width / size.width() : x;
+      y = *state.height > 0 ? y * *state.height / size.height() : y;
+      break;
+    }
+  }
+  if (EnsureBound()) {
     channel_->PointerMotion(app_id, x, y);
   }
 }
 
-void DomicileHost::pointerLeave(ScriptState*, const String& app_id,
-                                ExceptionState& exception_state) {
-  if (ReadyForApp(app_id, exception_state)) {
-    channel_->PointerLeave(app_id);
-  }
-}
-
-void DomicileHost::pointerButton(ScriptState*, const String& app_id,
-                                 uint32_t button, bool pressed,
-                                 ExceptionState& exception_state) {
-  if (ReadyForApp(app_id, exception_state)) {
+void DomicileHost::AppPointerButton(const String& app_id,
+                                    uint32_t button,
+                                    bool pressed) {
+  if (EnsureBound()) {
     channel_->PointerButton(app_id, button, pressed);
   }
 }
 
-void DomicileHost::pointerAxis(ScriptState*, const String& app_id, double dx,
-                               double dy, int32_t v120_x, int32_t v120_y,
-                               ExceptionState& exception_state) {
-  if (ReadyForApp(app_id, exception_state)) {
+void DomicileHost::AppPointerLeave(const String& app_id) {
+  if (EnsureBound()) {
+    channel_->PointerLeave(app_id);
+  }
+}
+
+void DomicileHost::AppPointerAxis(const String& app_id,
+                                  double dx,
+                                  double dy,
+                                  int32_t v120_x,
+                                  int32_t v120_y) {
+  if (EnsureBound()) {
     channel_->PointerAxis(app_id, dx, dy, v120_x, v120_y);
   }
+}
+
+void DomicileHost::FocusAppKeyboard(const String& app_id) {
+  keyboard_app_ = app_id;
+  if (EnsureBound()) {
+    channel_->FocusApp(app_id);
+  }
+}
+
+void DomicileHost::FocusChromeKeyboard() {
+  keyboard_app_ = String();
+  if (EnsureBound()) {
+    channel_->FocusChrome();
+  }
+}
+
+// The window the keyboard was routed to can leave the page without anything
+// saying so: a shell takes an <app> down when its client closes. Left alone,
+// every key after a window closes is taken from the page and sent to a client
+// that is gone. The compositor's seat still points at it too, so the page says
+// the keyboard is its own again, which is where a closed client's keyboard
+// goes. One walk of the <app>s per key, against a socket write on the same
+// path.
+String DomicileHost::KeyboardTarget() {
+  if (!keyboard_app_.IsNull() && !AppElement(keyboard_app_)) {
+    FocusChromeKeyboard();
+  }
+  return keyboard_app_;
+}
+
+void DomicileHost::ForwardKeyDown(Event* event) {
+  auto* key = DynamicTo<KeyboardEvent>(event);
+  if (!key) {
+    return;
+  }
+  const String app_id = KeyboardTarget();
+  const int evdev = EvdevOf(*key);
+  if (evdev <= 0) {
+    return;
+  }
+  const uint32_t keycode = static_cast<uint32_t>(evdev);
+  // A chord grabbed by name arrives taken -- PageKeyDown heard it first and
+  // answered it as `shortcut` -- and so does a key the page took. Its release
+  // is not the client's either.
+  if (event->defaultPrevented()) {
+    taken_keys_.insert(keycode);
+    return;
+  }
+  if (app_id.IsNull()) {
+    return;
+  }
+  event->preventDefault();
+  // The browser repeats a held key; Wayland does not. A client repeats from
+  // `wl_keyboard.repeat_info` itself, so forwarding these as presses would
+  // give it two sources of repeat, drawn as one character over and over.
+  if (key->repeat()) {
+    return;
+  }
+  held_keys_.Set(keycode, app_id);
+  if (EnsureBound()) {
+    channel_->Key(app_id, keycode, true);
+  }
+}
+
+// Every release the page hears, not only those for a press it forwarded: a
+// key held while the page reloads comes up on a page that never saw it go
+// down, and kept back it stays down in the seat under every later key. The
+// compositor drops a release for a key its seat does not hold, which is what
+// makes sending them all safe. Except a key whose press was taken.
+void DomicileHost::ForwardKeyUp(Event* event) {
+  auto* key = DynamicTo<KeyboardEvent>(event);
+  if (!key) {
+    return;
+  }
+  const int evdev = EvdevOf(*key);
+  if (evdev <= 0) {
+    return;
+  }
+  const uint32_t keycode = static_cast<uint32_t>(evdev);
+  if (taken_keys_.Contains(keycode)) {
+    taken_keys_.erase(keycode);
+    return;
+  }
+  const String held = held_keys_.Take(keycode);
+  if (!held.IsNull()) {
+    event->preventDefault();
+  }
+  // The window the press was sent for where this page sent it, and otherwise
+  // the one that has the keyboard. The compositor reads neither -- it injects
+  // the key into the seat, whose focus delivers it -- and an empty one is a
+  // desk where no window has it.
+  String app_id = held;
+  if (app_id.IsNull()) {
+    app_id = keyboard_app_.IsNull() ? g_empty_string : keyboard_app_;
+  }
+  if (EnsureBound()) {
+    channel_->Key(app_id, keycode, false);
+  }
+}
+
+void DomicileHost::ReleaseHeldKeys(Event*) {
+  if (EnsureBound()) {
+    for (const auto& held : held_keys_) {
+      channel_->Key(held.value, held.key, false);
+    }
+  }
+  held_keys_.clear();
+}
+
+// A key released while a <webview>'s guest has the focus comes up on the site
+// and never in this document, so what this page holds is let go as the guest
+// takes it. Without that, Super held through the chord that focuses a browser
+// window stays down in the seat, and every window afterward takes each key as
+// a Super chord.
+void DomicileHost::ReleaseIntoGuest(Event* event) {
+  auto* element =
+      DynamicTo<Element>(event->target() ? event->target()->ToNode() : nullptr);
+  if (element && element->localName() == "webview") {
+    ReleaseHeldKeys(event);
+  }
+}
+
+// A press off every <app> landed on the page, and nothing in it says whether
+// that was the desktop behind the windows or the title bar of the window that
+// has the keyboard. So the shell is asked, and the keyboard comes back to the
+// page unless it says no. A window whose <app> has left the page is not asked
+// and does not keep it.
+void DomicileHost::ReleaseKeyboardOffApp(Event* event) {
+  Element* pressed =
+      DynamicTo<Element>(event->target() ? event->target()->ToNode() : nullptr);
+  if (keyboard_app_.IsNull() ||
+      (pressed && Traversal<HTMLAppElement>::FirstAncestorOrSelf(*pressed))) {
+    return;
+  }
+  const String app_id = keyboard_app_;
+  HTMLAppElement* app = AppElement(app_id);
+  if (!app || Ask(*app, kFocusReleaseRequested, app_id, pressed)) {
+    FocusChromeKeyboard();
+  }
+}
+
+String DomicileHost::WindowOf(const String& app_id) const {
+  for (const DomicileWindowState& state : window_states_) {
+    if (state.app_id == app_id) {
+      return state.parent.empty() ? app_id : WindowOf(state.parent);
+    }
+  }
+  return app_id;
+}
+
+HTMLAppElement* DomicileHost::AppElement(const String& app_id) const {
+  Document* document = window_ ? window_->document() : nullptr;
+  if (!document) {
+    return nullptr;
+  }
+  for (HTMLAppElement& app :
+       Traversal<HTMLAppElement>::DescendantsOf(*document)) {
+    if (app.FastGetAttribute(html_names::kAppIdAttr) == app_id) {
+      return &app;
+    }
+  }
+  return nullptr;
+}
+
+// A CustomEvent, as the SDK dispatched it, so a shell reads the same `detail`.
+// Untrusted, as that one was: the page is being asked, not told.
+bool DomicileHost::Ask(Element& target,
+                       const char* type,
+                       const String& app_id,
+                       std::optional<Element*> pressed) {
+  LocalFrame* frame = window_ ? window_->GetFrame() : nullptr;
+  ScriptState* script_state =
+      frame ? ToScriptStateForMainWorld(frame) : nullptr;
+  // A document with no script has no shell to say no.
+  if (!script_state) {
+    return true;
+  }
+  ScriptState::Scope scope(script_state);
+  V8ObjectBuilder detail(script_state);
+  detail.AddString("appId", app_id);
+  if (pressed && *pressed) {
+    detail.Add("pressed", *pressed);
+  } else if (pressed) {
+    detail.AddV8Value("pressed", v8::Undefined(script_state->GetIsolate()));
+  }
+  CustomEvent* event = CustomEvent::Create();
+  event->initCustomEvent(
+      script_state, AtomicString(type), /*bubbles=*/true, /*cancelable=*/true,
+      ScriptValue(script_state->GetIsolate(), detail.V8Object()));
+  return target.DispatchEvent(*event) == DispatchEventResult::kNotCanceled;
 }
 
 void DomicileHost::AppAppeared(const String& app_id, const String& title,
@@ -1330,6 +1597,11 @@ void DomicileHost::FocusChanged(const String& app_id) {
   // a channel that has just bound, and a shell that waits for it is how it
   // tells a window opened now from one that was already running.
   focused_window_ = app_id.empty() ? String() : app_id;
+  // The keys this page forwards go where the compositor says the keyboard is,
+  // and not only where the page last asked: it moves the keyboard on its own
+  // too, and a page that heard only its own asks went on forwarding every key
+  // to a client that no longer had it.
+  keyboard_app_ = focused_window_;
   DispatchEvent(*Event::Create(domicile_event_names::Focusedwindowchanged()));
 }
 
@@ -1409,7 +1681,9 @@ void DomicileHost::Trace(Visitor* visitor) const {
   visitor->Trace(key_listener_);
   visitor->Trace(density_query_);
   visitor->Trace(density_listener_);
+  visitor->Trace(input_listeners_);
   EventTarget::Trace(visitor);
+  AppInputClient::Trace(visitor);
 }
 
 }  // namespace blink

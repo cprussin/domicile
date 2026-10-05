@@ -129,11 +129,9 @@ export const clickThroughStyles = css({ pointerEvents: "none" });
  * Inline for the reason {@link placedAt} is: these are runtime numbers, and
  * Panda extracts styles by reading literals at build time.
  *
- * It costs the mapping a client's pointer is inverted through nothing at all.
- * `transform-origin` conjugates a transform by a translation, which leaves its
- * linear part alone, and the SDK solves for the translation from where the box
- * actually lands — so every origin gives the same answer. See the chrome SDK's
- * `element-transform.ts`.
+ * It costs the mapping a client's pointer is inverted through nothing at all:
+ * the engine maps a pointer through the `<app>`'s whole transform, origin
+ * included.
  */
 export const scaledAbout = (frame: Rect, rect: Rect): CSSProperties => ({
   transformOrigin: `${(frame.x + frame.width / 2 - rect.x).toString()}px ${(frame.y + frame.height / 2 - rect.y).toString()}px`,

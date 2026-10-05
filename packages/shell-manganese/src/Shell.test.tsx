@@ -11,7 +11,6 @@ import type { DomicileState } from "@domicile-desktop/sdk/fake-host";
 import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import { KeyAction } from "@domicile-desktop/sdk/key-action";
 import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
-import { registerElements } from "@domicile-desktop/sdk/register-elements";
 import {
   WEBVIEW_CLOSE_EVENT,
   WEBVIEW_GUEST_FOCUS_EVENT,
@@ -206,7 +205,6 @@ const renderingShell = (
     domicile.fake.set({ displays: desktop });
   }
   const client = domicile.host;
-  registerElements(client);
   // A standalone theme source rather than `hostTheme`: what the bar's toggle
   // does with the compositor is `host-theme.test.ts`'s, and a double that had
   // to answer `theme` as well would make every test here depend on it.

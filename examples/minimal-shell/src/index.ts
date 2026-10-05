@@ -8,15 +8,12 @@
 // this.
 
 import type { DomicileWindow } from "@domicile-desktop/sdk/domicile-host";
-import { registerElements } from "@domicile-desktop/sdk/register-elements";
 import type { Shell as ShellModule } from "@domicile-desktop/sdk/shell";
 
 /** The desktop, drawn into `root`: Domicile's empty `<body>`. */
 export const Shell: ShellModule = (root, domicile) => {
-  // `<app>` is the engine's tag and needs no defining, but the pointer and
-  // keyboard over one are the page's to forward, and until this runs nothing
-  // does.
-  registerElements(domicile);
+  // Nothing to set up: `<app>` is the engine's tag, and the pointer and the
+  // keyboard over one reach its client without the page doing anything.
 
   /** Every window on the page, by the id the engine lists it under. */
   const mounted = new Map<string, HTMLElement>();

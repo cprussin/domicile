@@ -95,7 +95,8 @@
   [CallWith=ScriptState, RaisesException] undefined invokeNotificationAction(
       unsigned long id, DOMString action);
 
-  // Which window has the keyboard. focusChrome() takes it back to the page.
+  // Which window has the keyboard: the compositor's seat, and where the keys
+  // this page hears are sent. focusChrome() takes it back to the page.
   [CallWith=ScriptState, RaisesException] undefined focusApp(DOMString appId);
   [CallWith=ScriptState, RaisesException] undefined focusChrome();
 
@@ -244,18 +245,8 @@
   [CallWith=ScriptState, RaisesException] undefined activateExtension(
       DOMString id);
 
-  // Input forwarding. Surface-local coordinates and evdev keycodes, because
-  // that is what a Wayland client expects to be handed.
-  [CallWith=ScriptState, RaisesException] undefined key(
-      DOMString appId, unsigned long keycode, boolean pressed);
-  [CallWith=ScriptState, RaisesException] undefined pointerMotion(
-      DOMString appId, double x, double y);
-  [CallWith=ScriptState, RaisesException] undefined pointerLeave(
-      DOMString appId);
-  [CallWith=ScriptState, RaisesException] undefined pointerButton(
-      DOMString appId, unsigned long button, boolean pressed);
-  [CallWith=ScriptState, RaisesException] undefined pointerAxis(
-      DOMString appId, double dx, double dy, long v120X, long v120Y);
+  // No input forwarding: an <app> sends its client what lands on it, and the
+  // page's keys go to the window with the keyboard. See HTMLAppElement.
 
   // A grabbed shortcut fired, as a DomicileShortcutEvent.
   attribute EventHandler onshortcut;
