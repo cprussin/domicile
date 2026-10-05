@@ -296,6 +296,13 @@ the old window is still under the pointer. Move the pointer with
 - `shell-manganese` warps on its own focus changes (keyboard-driven, or a new
   window taking focus) when the pointer is not already over the window.
 
+### Window scale on several monitors
+
+Call `domicile.setAppBounds(appId, { x, y, width, height })` with each
+`<app>`'s box in page pixels whenever it moves or resizes. The client draws at
+the scale of the monitor holding most of the box. A window you never report
+draws for the densest monitor. `shell-manganese` reports from `AppWindow`.
+
 ## Keybindings
 
 A shell's keys come from its own props. Each chord maps to a shell command or a

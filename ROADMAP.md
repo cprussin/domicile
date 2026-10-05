@@ -111,8 +111,8 @@ Evidence is in [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md),
 6. **Native density on every monitor.** On a tty the shell is one page over
    all monitors. It is hosted on the fastest monitor, rastered at the largest
    scale, and each lower-density monitor's region is also rastered at its own
-   scale. Left: test on hardware, and give an `<app>` the scale of the monitor
-   under it. [ONE-PAGE-FOR-THE-DESK.md](docs/architecture/ONE-PAGE-FOR-THE-DESK.md).
+   scale. Left: test on hardware.
+   [ONE-PAGE-FOR-THE-DESK.md](docs/architecture/ONE-PAGE-FOR-THE-DESK.md).
 
 7. **`domicile send-shell` from a terminal.** Keybindings are shell props and
    their commands reach the shell. The same command typed as
@@ -268,10 +268,9 @@ Understood and not scheduled.
 
 ### Displays
 
-- **Mixed-density desktops draw at one density, and `wl_output.scale` rounds
-  up.** Intended: a client rendered at 2× and downscaled is sharper than one at
-  1× and stretched. Only the integer scale rounds; the fractional scale goes
-  through `xdg_output`.
+- **A client without `wp_fractional_scale_v1` draws at `wl_output.scale`,
+  rounded up.** Intended: a client rendered at 2× and downscaled is sharper
+  than one at 1× and stretched. Clients with it get the exact scale.
 - **A monitor profile can require a mode but not set it.** `mode = [3840,
   2160]` on a placement names the mode the positions assume. A monitor that
   comes up in another mode leaves the desktop unchanged and logs both modes.

@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import { APP_TAG_NAME } from "@domicile-desktop/sdk/app-element";
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import type {
+  AppBounds,
+  DomicileClient,
+} from "@domicile-desktop/sdk/domicile-client";
 import type { Measure } from "@domicile-desktop/sdk/measure";
 import { registerElements } from "@domicile-desktop/sdk/register-elements";
 import { fireEvent, render } from "@testing-library/react";
@@ -9,8 +12,10 @@ import { fireEvent, render } from "@testing-library/react";
 import { css } from "../../styled-system/css";
 import { AppWindow } from "./AppWindow";
 
-// Records `focusApp` calls. Pointer mapping is the SDK's and tested there.
+// Records `focusApp` and `setAppBounds` calls. Pointer mapping is the SDK's
+// and tested there.
 let focused: string[] = [];
+let placed: [string, AppBounds][] = [];
 
 const recordingDomicile = {
   focusApp: (appId: string) => {
@@ -24,6 +29,9 @@ const recordingDomicile = {
   key: () => undefined,
   pointerButton: () => undefined,
   pointerMotion: () => undefined,
+  setAppBounds: (appId: string, bounds: AppBounds) => {
+    placed.push([appId, bounds]);
+  },
   surfaceSizeOf: () => undefined,
   // Every client here is a top-level window.
   windowOf: (appId: string) => appId,
@@ -101,6 +109,7 @@ const portal = (container: HTMLElement): Element => {
 
 beforeEach(() => {
   focused = [];
+  placed = [];
   registerElements(recordingDomicile, { measure: stubMeasure });
 });
 
@@ -194,6 +203,27 @@ describe("AppWindow", () => {
     // There is no "unfocus" request; the keyboard always belongs to someone.
     render(<AppWindow {...windowProps} focused={false} />);
     expect(focused).toStrictEqual([]);
+  });
+
+  it("tells the compositor where it is each time it moves", () => {
+    // The client draws at the scale of the monitor under it.
+    const moved = { ...ON_SCREEN, x: 1920 };
+    const { rerender } = render(<AppWindow {...windowProps} focused={false} />);
+    rerender(
+      <AppWindow {...windowProps} focused={false} rect={{ ...ON_SCREEN }} />,
+    );
+    rerender(<AppWindow {...windowProps} focused={false} rect={moved} />);
+
+    expect(placed).toStrictEqual([
+      ["term", ON_SCREEN],
+      ["term", moved],
+    ]);
+  });
+
+  it("says nothing about where a window off screen is", () => {
+    render(<AppWindow {...windowProps} focused={false} rect={undefined} />);
+
+    expect(placed).toStrictEqual([]);
   });
 
   it("shows the cursor the client asked for", () => {

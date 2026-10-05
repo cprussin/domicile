@@ -489,7 +489,7 @@ impl Host {
                 // The compositor intercepts this as the `wl_output` scale. The
                 // scene uses logical units, so it is unaffected.
             }
-            ChromeMessage::SetDesktopSize { .. } => {
+            ChromeMessage::SetDesktopSize { .. } | ChromeMessage::SetAppBounds { .. } => {
                 // The compositor intercepts this as `wl_output` state. The
                 // chrome sends absolute coordinates, so the scene needs no
                 // size.

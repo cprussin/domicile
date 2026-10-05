@@ -196,6 +196,9 @@ class FakeDomicile {
   closeApp(appId: string): void {
     this.calls.push(["closeApp", appId]);
   }
+  setAppBounds(appId: string, bounds: unknown): void {
+    this.calls.push(["setAppBounds", appId, bounds]);
+  }
   activateExtension(id: string): void {
     this.calls.push(["activateExtension", id]);
   }

@@ -22,6 +22,9 @@ use wayland_client::{
 use wayland_protocols::wp::cursor_shape::v1::client::{
     wp_cursor_shape_device_v1, wp_cursor_shape_manager_v1,
 };
+use wayland_protocols::wp::fractional_scale::v1::client::{
+    wp_fractional_scale_manager_v1, wp_fractional_scale_v1,
+};
 use wayland_protocols::wp::idle_inhibit::zv1::client::{
     zwp_idle_inhibit_manager_v1, zwp_idle_inhibitor_v1,
 };
@@ -322,6 +325,9 @@ struct Globals {
     /// Decoration negotiation as GTK3 does it.
     kde_decoration:
         Option<org_kde_kwin_server_decoration_manager::OrgKdeKwinServerDecorationManager>,
+    /// The scale the compositor prefers for the window, as kitty and GTK 4
+    /// read it on a fractional display.
+    fractional_scale: Option<wp_fractional_scale_manager_v1::WpFractionalScaleManagerV1>,
     named: Vec<(u32, String, u32)>,
 }
 
@@ -402,6 +408,10 @@ impl Client {
                     self.globals.kde_decoration =
                         Some(registry.bind(name, version.min(1), handle, ()));
                 }
+                "wp_fractional_scale_manager_v1" => {
+                    self.globals.fractional_scale =
+                        Some(registry.bind(name, version.min(1), handle, ()));
+                }
                 _ => {}
             }
         }
@@ -467,6 +477,10 @@ impl Client {
         if let Some(manager) = &self.globals.kde_decoration {
             let decoration = manager.create(&surface, handle, ());
             decoration.request_mode(org_kde_kwin_server_decoration::Mode::Client);
+        }
+        // Only traced: the window keeps drawing at its integer scale.
+        if let Some(manager) = &self.globals.fractional_scale {
+            manager.get_fractional_scale(&surface, handle, ());
         }
         // Scale 1: the surface has entered no output until it maps. `follow`
         // rescales on `wl_surface.enter`.
@@ -1392,6 +1406,24 @@ fn serve(mime_type: &str, fd: OwnedFd, copy: &str) {
 delegate_noop!(Client: ignore xdg_activation_v1::XdgActivationV1);
 delegate_noop!(Client: ignore zxdg_decoration_manager_v1::ZxdgDecorationManagerV1);
 delegate_noop!(Client: ignore org_kde_kwin_server_decoration_manager::OrgKdeKwinServerDecorationManager);
+delegate_noop!(Client: ignore wp_fractional_scale_manager_v1::WpFractionalScaleManagerV1);
+
+/// Traces the preferred scale in the protocol's 120ths, so 1.2 reads
+/// `preferred_scale(144)`.
+impl Dispatch<wp_fractional_scale_v1::WpFractionalScaleV1, ()> for Client {
+    fn event(
+        _: &mut Client,
+        fractional: &wp_fractional_scale_v1::WpFractionalScaleV1,
+        event: wp_fractional_scale_v1::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Client>,
+    ) {
+        if let wp_fractional_scale_v1::Event::PreferredScale { scale } = event {
+            crate::say!(fractional.id(), "preferred_scale({scale})");
+        }
+    }
+}
 
 /// Traces the xdg decoration mode by name, since the two decoration protocols
 /// number modes differently.
