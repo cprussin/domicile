@@ -36,6 +36,8 @@ set -u
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=packages/domicile-engine/scripts/lib-annotate.sh
 . "$SCRIPTS/lib-annotate.sh"
+# shellcheck source=packages/domicile-engine/scripts/lib-last-words.sh
+. "$SCRIPTS/lib-last-words.sh"
 # shellcheck source=packages/domicile-engine/scripts/lib-ports.sh
 . "$SCRIPTS/lib-ports.sh"
 # shellcheck source=packages/domicile-engine/scripts/lib-control-budget.sh
@@ -302,7 +304,7 @@ annotate_from "guard-webview-active-tab: $FAILURE" "$ENGINE_LOG"
 echo "the compositor stand-in said:" >&2
 tail -20 "$SOCKET_LOG" >&2
 echo "the engine's last words ($ENGINE_LOG):" >&2
-tail -40 "$ENGINE_LOG" >&2
+last_words "$ENGINE_LOG" >&2
 echo "what the server was asked for:" >&2
 tail -20 "$HTTP_LOG" >&2
 exit 1
