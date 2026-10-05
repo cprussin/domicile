@@ -270,6 +270,14 @@ pub enum ChromeMessage {
     /// [`Notification::clickable`] notification. The application receives
     /// `ActionInvoked`, then the notification closes, as other servers do.
     InvokeNotificationAction { id: u32, action: String },
+
+    /// A call on the system: a file, a directory, a watch or a process.
+    ///
+    /// `id` is the page's, and names the call in every answer. A watch or a
+    /// process keeps its id until [`HostMessage::SystemEnd`], and the page
+    /// drives it by sending further requests under the same id. See
+    /// `docs/architecture/SYSTEM-ACCESS.md`.
+    SystemRequest { id: u32, request: SystemRequest },
 }
 
 /// Messages sent from the host to the chrome (in-page client).
@@ -562,6 +570,185 @@ pub enum HostMessage {
     /// compositor has the keymap. See the SDK's `bindKeys`. Sent on connect
     /// and when a reload changes the keyboard.
     ShellConfig { keys: BTreeMap<String, u32> },
+
+    /// The answer to a [`ChromeMessage::SystemRequest`]. Every call that
+    /// starts something gets exactly one.
+    SystemReply { id: u32, reply: SystemReply },
+
+    /// Something a running watch or process produced.
+    SystemEvent { id: u32, event: SystemEvent },
+
+    /// A watch or process is over. The last message under its `id`.
+    SystemEnd { id: u32, end: SystemEnd },
+}
+
+/// What a [`ChromeMessage::SystemRequest`] asks for.
+///
+/// A relative path is read from the home directory. Bytes travel as standard
+/// padded base64.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "call", rename_all = "snake_case")]
+pub enum SystemRequest {
+    /// Read a whole file. Answered with [`SystemReply::Read`].
+    ReadFile { path: String },
+    /// Write a whole file, creating it if needed. Answered with
+    /// [`SystemReply::Written`].
+    ///
+    /// `atomic` writes a temporary file beside it and renames it over, so a
+    /// reader never sees half a file. Files under `/sys` and `/proc` cannot be
+    /// renamed over, so write those with `atomic` off.
+    WriteFile {
+        path: String,
+        data: String,
+        atomic: bool,
+    },
+    /// List a directory. Answered with [`SystemReply::Entries`].
+    ReadDir { path: String },
+    /// Describe a path, following symlinks. Answered with
+    /// [`SystemReply::Stat`].
+    Stat { path: String },
+    /// Report changes to a file or to a directory's entries. Answered with
+    /// [`SystemReply::Started`], then a [`SystemEvent::Changed`] per change.
+    Watch { path: String },
+    /// End the watch with this id. It ends with [`SystemEnd::Stopped`].
+    Unwatch,
+    /// Run a program. Answered with [`SystemReply::Started`], then its output
+    /// as [`SystemEvent::Output`], then [`SystemEnd::Exited`].
+    ///
+    /// `argv[0]` is looked up on the compositor's `PATH`; there is no shell.
+    /// `cwd` defaults to the home and `env` adds to the compositor's
+    /// environment. Without `stdin` the program reads `/dev/null`.
+    Spawn {
+        argv: Vec<String>,
+        #[serde(default)]
+        cwd: Option<String>,
+        #[serde(default)]
+        env: BTreeMap<String, String>,
+        #[serde(default)]
+        stdin: bool,
+    },
+    /// Write to the standard input of the process with this id.
+    Stdin { data: String },
+    /// Close the standard input of the process with this id.
+    CloseStdin,
+    /// Signal the process with this id.
+    Kill { signal: Signal },
+}
+
+/// A signal for [`SystemRequest::Kill`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Signal {
+    Hup,
+    Int,
+    Term,
+    Kill,
+    Usr1,
+    Usr2,
+}
+
+/// The answer to a [`SystemRequest`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum SystemReply {
+    /// A file's contents, base64.
+    Read { data: String },
+    /// The file was written.
+    Written,
+    /// A directory's entries, in no particular order.
+    Entries { entries: Vec<DirEntry> },
+    /// A path's type, size in bytes and modification time in milliseconds
+    /// since the epoch. Files under `/sys` and `/proc` report a size of 4096
+    /// or 0 whatever they hold.
+    Stat {
+        file_type: FileType,
+        size: u64,
+        modified_ms: Option<u64>,
+    },
+    /// The watch or process is running.
+    Started,
+    /// The call failed. Nothing else follows under this id.
+    Failed { error: SystemError },
+}
+
+/// One entry of a directory.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DirEntry {
+    pub name: String,
+    /// The entry's own type: a symlink is reported as one, not followed.
+    pub file_type: FileType,
+}
+
+/// What a path is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FileType {
+    File,
+    Directory,
+    Symlink,
+    /// A device, socket or pipe.
+    Other,
+}
+
+/// Something a running watch or process produced.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum SystemEvent {
+    /// Bytes a process wrote, base64, in the order it wrote them on each
+    /// stream.
+    Output { stream: Stream, data: String },
+    /// The watched file, or an entry of the watched directory, changed.
+    /// `path` is absolute.
+    Changed { path: String },
+}
+
+/// One of a process's output streams.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Stream {
+    Stdout,
+    Stderr,
+}
+
+/// How a watch or process ended.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum SystemEnd {
+    /// The process exited with `code`, or was killed by `signal`. Sent after
+    /// all its output.
+    Exited {
+        code: Option<i32>,
+        signal: Option<i32>,
+    },
+    /// The watch ended on [`SystemRequest::Unwatch`].
+    Stopped,
+    /// The watch or process broke.
+    Failed { error: SystemError },
+}
+
+/// Why a system call failed.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SystemError {
+    pub kind: SystemErrorKind,
+    /// The operating system's description, for logs. Not for matching.
+    pub message: String,
+}
+
+/// The kinds of [`SystemError`] a shell can act on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SystemErrorKind {
+    NotFound,
+    PermissionDenied,
+    AlreadyExists,
+    NotADirectory,
+    IsADirectory,
+    /// The request itself was wrong: bad base64, an empty argv, or an id that
+    /// is already running.
+    InvalidInput,
+    /// The desktop is locked. See `docs/LOCK.md`.
+    Locked,
+    Other,
 }
 
 /// An application from a desktop entry, for a launcher.

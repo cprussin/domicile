@@ -18,6 +18,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 
 use domicile_config::LockVerifier;
+use domicile_host::system::Reach;
 use domicile_protocol::{HostMessage, Passphrase};
 
 use crate::pam::{NoPam, Pam};
@@ -283,6 +284,9 @@ pub enum Refusal {
 pub enum Asked<'a> {
     OnTheWaylandThread(&'a ClientRequest),
     OnTheConnection(&'a ConnectionRequest),
+    /// A system call from the shell, by what it touches. See
+    /// `docs/architecture/SYSTEM-ACCESS.md`.
+    System(Reach),
 }
 
 /// Whether a request is refused while locked, and why.
@@ -307,6 +311,9 @@ pub enum Asked<'a> {
 ///   the disk.
 /// - **Theme changes** are allowed. They open and read nothing, and keep the
 ///   lock screen's colors current.
+/// - **System calls** are refused, except reads under `/sys`, so a lock screen
+///   can show the battery, and calls that stop what the shell already started.
+///   Processes and watches started before the lock keep running.
 pub fn refused(asked: Asked) -> Option<Refusal> {
     match asked {
         Asked::OnTheWaylandThread(
@@ -331,7 +338,8 @@ pub fn refused(asked: Asked) -> Option<Refusal> {
             ConnectionRequest::SearchFiles { .. }
             | ConnectionRequest::PreviewFile { .. }
             | ConnectionRequest::SearchApps { .. },
-        ) => Some(Refusal::Command),
+        )
+        | Asked::System(Reach::Acts) => Some(Refusal::Command),
         Asked::OnTheWaylandThread(
             ClientRequest::KeyboardFocus { .. }
             | ClientRequest::SetOutputScale { .. }
@@ -346,7 +354,8 @@ pub fn refused(asked: Asked) -> Option<Refusal> {
             | ClientRequest::TurnTheWindows { .. }
             | ClientRequest::ThemeCaptured { .. },
         )
-        | Asked::OnTheConnection(ConnectionRequest::SetTheme { .. }) => None,
+        | Asked::OnTheConnection(ConnectionRequest::SetTheme { .. })
+        | Asked::System(Reach::ReadsTheKernel | Reach::Stops) => None,
     }
 }
 
@@ -369,6 +378,7 @@ mod tests {
     use std::time::Duration;
 
     use domicile_config::LockVerifier;
+    use domicile_host::system::Reach;
 
     use super::{
         announced, chosen, refused, Asked, CouldNotCheck, Lock, Offer, Refusal, Unlocking, Verdict,
@@ -742,6 +752,20 @@ mod tests {
                  a locked desk has nobody it reads for"
             );
         }
+    }
+
+    /// The lock screen may still read the battery under `/sys`, and stop what
+    /// the shell started. See `domicile_host::system::reach`.
+    #[test]
+    fn a_locked_desk_lets_the_shell_read_the_kernel_and_stop_things() {
+        assert_eq!(refused(Asked::System(Reach::ReadsTheKernel)), None);
+        assert_eq!(refused(Asked::System(Reach::Stops)), None);
+        assert_eq!(
+            refused(Asked::System(Reach::Acts)),
+            Some(Refusal::Command),
+            "a file read, a write or a process is the desktop acting for \
+             whoever is at it"
+        );
     }
 
     #[test]

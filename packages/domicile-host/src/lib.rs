@@ -14,6 +14,7 @@ use domicile_protocol::{ChromeMessage, DisplayInfo, HostMessage, Notification, T
 pub mod app_icons;
 pub mod audio;
 pub mod backlight;
+pub mod base64;
 pub mod battery;
 pub mod bookmarks;
 pub mod clipboard;
@@ -31,6 +32,7 @@ pub mod index_location;
 pub mod ipc;
 pub mod notifications;
 mod png;
+pub mod system;
 pub mod theme_turnover;
 pub mod tray;
 use domicile_scene::{KeyboardTarget, Scene};
@@ -529,7 +531,8 @@ impl Host {
             | ChromeMessage::PointerAxis { .. }
             | ChromeMessage::Key { .. }
             | ChromeMessage::Unlock { .. }
-            | ChromeMessage::Lock => {
+            | ChromeMessage::Lock
+            | ChromeMessage::SystemRequest { .. } => {
                 // The compositor intercepts these side effects so this type
                 // stays pure.
                 //
