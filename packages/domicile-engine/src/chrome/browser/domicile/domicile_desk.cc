@@ -6,11 +6,13 @@
 #include <optional>
 
 #include "base/check.h"
+#include "base/functional/bind.h"
 #include "base/functional/callback.h"
 #include "base/logging.h"
 #include "base/no_destructor.h"
 #include "chrome/browser/domicile/domicile_browser_windows.h"
 #include "chrome/browser/domicile/domicile_desk_functions.h"
+#include "chrome/browser/domicile/domicile_devtools.h"
 #include "chrome/browser/domicile/domicile_window_controller.h"
 #include "chrome/browser/extensions/domicile_desk_hooks.h"
 #include "chrome/browser/profiles/profile.h"
@@ -94,6 +96,8 @@ void StartDesk(Profile* profile) {
     // The browser windows: the desk's tabs, opened and closed by guests and
     // shown by <webview window>.
     StartBrowserWindows();
+    // DevTools, for a context menu's "inspect" and <webview>.inspect().
+    WebViewGuest::SetInspect(base::BindRepeating(&OpenDevTools));
     return true;
   }();
   CHECK(installed);

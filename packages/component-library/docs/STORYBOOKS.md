@@ -46,7 +46,7 @@ component inside `<BaseField.Root invalid={invalid}>`. See
 | `Navigation/` | Moving between views | Drilldown, TabRail, Tabs |
 | `Forms & Inputs/` | Inputs and controls | Autocomplete, Button, Field, Input, Select, Slider, Textarea |
 | `Data Display/` | Presenting data | Avatar, Kbd |
-| `Overlays/` | Content drawn over other content | ModalDialog, Popover, SlideOver, Toaster |
+| `Overlays/` | Content drawn over other content | ContextMenu, ModalDialog, Popover, SlideOver, Toaster |
 
 ## Showcases
 

@@ -9,6 +9,7 @@ export enum BrowserCommand {
   Back = "Back",
   Find = "Find",
   Forward = "Forward",
+  Inspect = "Inspect",
   Reload = "Reload",
   ZoomIn = "ZoomIn",
   ZoomOut = "ZoomOut",
@@ -57,6 +58,11 @@ const ctrlCommandFor = (key: string): BrowserCommand | undefined => {
     case "f":
     case "F": {
       return BrowserCommand.Find;
+    }
+    // Shift is the whole of it: Ctrl+I alone is a page's italic, and a
+    // shifted letter arrives capital.
+    case "I": {
+      return BrowserCommand.Inspect;
     }
     case "r":
     case "R": {
