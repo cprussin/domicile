@@ -163,6 +163,8 @@ void DomicileShell::Run() {
   // Kept here as well as in the shell's hands: the channel is the desktop's
   // for the life of the document, whether or not the shell holds on to it.
   desktop_ = MakeGarbageCollected<DomicileHost>(*window);
+  // Before the shell runs, so the desktop's listeners come before its own.
+  desktop_->RouteInput();
   v8::Local<v8::Value> arguments[] = {
       V8String(isolate, module.GetString()),
       ToV8Traits<DomicileHost>::ToV8(script_state, desktop_.Get()),

@@ -11,7 +11,6 @@ import type { DomicileState } from "@domicile-desktop/sdk/fake-host";
 import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import { KeyAction } from "@domicile-desktop/sdk/key-action";
 import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
-import { registerElements } from "@domicile-desktop/sdk/register-elements";
 import { WEBVIEW_GUEST_FOCUS_EVENT } from "@domicile-desktop/sdk/webview-element";
 import {
   act,
@@ -213,7 +212,6 @@ const renderingShell = (
     domicile.fake.set({ displays: desktop });
   }
   const client = domicile.host;
-  registerElements(client);
   // A standalone theme, so these tests do not depend on the host theme
   // protocol; `host-theme.test.ts` covers that.
   const rendered = render(

@@ -5,8 +5,6 @@ import {
 } from "@domicile-desktop/sdk/app-element";
 import type { CursorShape } from "@domicile-desktop/sdk/cursor-shape";
 import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
-import { focusApp } from "@domicile-desktop/sdk/focus-app";
-import { focusChrome } from "@domicile-desktop/sdk/focus-chrome";
 import { useEffect, useState } from "react";
 
 import { css, cx } from "../../styled-system/css";
@@ -93,8 +91,8 @@ type Props = {
 /**
  * A Wayland client's window, rendered as an `<app>` element.
  *
- * Hiding the element takes the window off screen: it has no box, so the SDK
- * tells the host it is no longer composited.
+ * Hiding the element takes the window off screen: it has no box, so the
+ * engine tells the host it is no longer composited.
  *
  * `<app>` has no hyphen, so React treats it as a plain HTML element and drops
  * unknown properties and `on…` listeners. Focus events are therefore bound
@@ -140,10 +138,10 @@ export const AppWindow = ({
   useEffect(() => {
     if (behindPanel) {
       if (hasKeyboard) {
-        focusChrome(domicile);
+        domicile.focusChrome();
       }
     } else if (focused && !hasKeyboard && !leaving) {
-      focusApp(domicile, appId);
+      domicile.focusApp(appId);
     }
   }, [appId, behindPanel, domicile, focused, hasKeyboard, leaving]);
 
@@ -162,7 +160,7 @@ export const AppWindow = ({
     }
   }, [appId, domicile, height, width, x, y]);
 
-  // Cancels the SDK's default focus-on-click. The shell owns focus:
+  // Cancels the engine's default focus-on-click. The shell owns focus:
   // `WindowFrame` reports the press and `focused` drives the effect above.
   useEffect(() => {
     if (element === null) {
@@ -178,7 +176,7 @@ export const AppWindow = ({
     }
   }, [element]);
 
-  // The SDK gives the keyboard to the page for a press off every `<app>`.
+  // The engine gives the keyboard to the page for a press off every `<app>`.
   // Cancels that for presses on this window's own chrome (title bar, grab
   // sheet), found by its `data-window` attribute, so dragging a window keeps
   // its keyboard.

@@ -1,7 +1,7 @@
 # @domicile-desktop/sdk
 
-Types and helpers for a Domicile shell: the desktop it is handed, input
-routing for `<app>` and `<webview>`, keybindings and the `Shell` export.
+Types and helpers for a Domicile shell: the desktop it is handed, the
+`<app>` and `<webview>` elements, keybindings and the `Shell` export.
 
 - Published to npm. To write a shell, start with
   [WRITING-A-SHELL.md](/docs/WRITING-A-SHELL.md); this README is the package
@@ -12,12 +12,9 @@ routing for `<app>` and `<webview>`, keybindings and the `Shell` export.
 ## Usage
 
 ```ts
-import { registerElements } from "@domicile-desktop/sdk/register-elements";
 import type { Shell as ShellModule } from "@domicile-desktop/sdk/shell";
 
 export const Shell: ShellModule = (root, domicile) => {
-  registerElements(domicile);
-
   const show = () => {
     // Render `domicile.windows` as `<app app-id="…">` elements into `root`.
   };
@@ -39,12 +36,15 @@ export const Shell: ShellModule = (root, domicile) => {
   `./scripts/dev-shell.sh <shell>`.
 - Render `<app app-id="…">` and `<webview window="…">` as normal DOM. CSS
   (rounding, blur, transforms, z-index) applies to the live surface.
+- The engine sends the pointer, wheel and keys over an `<app>` to its client,
+  through every CSS transform. `domicile.focusApp(appId)` and
+  `domicile.focusChrome()` move the keyboard without a click.
 - Both tags are the engine's built-in elements. In React, bind their events on
   a ref; React does not bind `on…` props for unknown events.
 - Errors follow [ERRORS.md](/docs/guidelines/ERRORS.md): bugs throw, absence
   is `T | undefined`.
 
-See [docs/ELEMENTS.md](docs/ELEMENTS.md) for input routing, focus and the
+See [docs/ELEMENTS.md](docs/ELEMENTS.md) for `<app>` input and focus, and the
 `<webview>` API.
 
 ## Modules
@@ -53,16 +53,12 @@ See [docs/ELEMENTS.md](docs/ELEMENTS.md) for input routing, focus and the
 | --- | --- |
 | `./domicile-host` | `DomicileHost`: the type of the desktop `Shell` is handed, mirroring the engine's IDL. |
 | `./shell` | `Shell`: the export a shell module must provide. Domicile calls it once with the element to draw in. |
-| `./register-elements` | Input routing for `<app>`. |
 | `./app-element`, `./webview-element` | Types and event names for `<app>` and `<webview>`. |
-| `./focus-app`, `./focus-chrome` | Move the keyboard to a client or back to the page. Use these, not `domicile.focusApp` / `domicile.focusChrome`, which only move the compositor's seat. |
-| `./windows` | `windowOf` (a popup's toplevel window) and `surfaceSizeOf` over `domicile.windows`. |
 | `./bind-keys` | `bindKeys`: grab a shell's own chords by name and handle them by mode. `./key-action` and `./own-keybindings` are its parts. |
 | `./fake-host` | `FakeDomicileHost`: a desktop for a shell's tests. |
 | `./extension`, `./tray`, `./notification`, `./audio`, `./theme`, `./file-preview`, `./display-transform` | Data types and Zod schemas for what the desktop holds. |
 
-Internals, not needed by shells: `./matrix`, `./measure`,
-`./element-transform`, `./surface-coordinates`, `./input`, `./cursor-shape`.
+Internal, not needed by shells: `./cursor-shape`.
 
 The compositor's JSON socket protocol lives in
 [`@domicile-desktop/e2e-harness`](../e2e-harness/README.md); a page never
@@ -79,8 +75,5 @@ speaks it.
 bun run turbo test --filter @domicile-desktop/sdk
 ```
 
-- DOM suites run on happy-dom via
-  [`@domicile-desktop/test-support`](../test-support/README.md).
-- happy-dom does no layout, so routing tests pass a `measure` stub:
-  `registerElements(domicile, { measure })`.
-- React's dev build logs an unknown-tag warning for `<app>` in tests only.
+- React's dev build logs an unknown-tag warning for `<app>` in a shell's tests
+  only.

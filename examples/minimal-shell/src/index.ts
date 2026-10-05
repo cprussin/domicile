@@ -4,13 +4,12 @@
 // in. See /docs/WRITING-A-SHELL.md.
 
 import type { DomicileWindow } from "@domicile-desktop/sdk/domicile-host";
-import { registerElements } from "@domicile-desktop/sdk/register-elements";
 import type { Shell as ShellModule } from "@domicile-desktop/sdk/shell";
 
 /** Draws the desktop into `root`, Domicile's empty `<body>`. */
 export const Shell: ShellModule = (root, domicile) => {
-  // Forwards pointer and keyboard input on `<app>` elements to the host.
-  registerElements(domicile);
+  // `<app>` is the engine's tag; the engine sends the pointer and keyboard
+  // over one to its client.
 
   /** Mounted `<app>` elements by app id. */
   const mounted = new Map<string, HTMLElement>();

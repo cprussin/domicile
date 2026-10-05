@@ -1,8 +1,5 @@
 import { describe, expect, it } from "bun:test";
 import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
-import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
-import { focusApp } from "@domicile-desktop/sdk/focus-app";
-import { registerElements } from "@domicile-desktop/sdk/register-elements";
 import {
   WEBVIEW_CONTEXT_MENU_EVENT,
   WEBVIEW_FILE_CHOOSER_EVENT,
@@ -678,41 +675,6 @@ describe("BrowserWindow", () => {
       expect(calls).toStrictEqual([]);
     });
 
-    // The SDK forwards this document's keys to the last client it focused.
-    // Moving only the compositor's focus would keep forwarding there, so the
-    // launcher's input would receive no keys.
-    it("stops the page forwarding its keys to the client it took the keyboard from", () => {
-      const fake = new FakeDomicileHost();
-      const domicile = fake.host;
-      registerElements(domicile);
-      render(<app app-id="term" />);
-      focusApp(domicile, "term");
-
-      render(
-        <BrowserWindow
-          clickThrough={false}
-          covered={false}
-          depth={0}
-          domicile={domicile}
-          dragging={false}
-          focused
-          frame={FRAME}
-          fullscreen={false}
-          motion="resting"
-          onMotionEnded={nothingEnded}
-          onReach={() => undefined}
-          rect={ON_SCREEN}
-          url="https://example.com"
-          window="1"
-        />,
-      );
-      fireEvent.keyDown(document, { code: "KeyA" });
-
-      expect(fake.calls.filter(([method]) => method === "key")).toStrictEqual(
-        [],
-      );
-    });
-
     // The guest page has its own browsing context, so the window must focus it.
     it("puts the keyboard in its page when it becomes the window being worked in", () => {
       const windowProps = {
@@ -768,7 +730,7 @@ describe("BrowserWindow", () => {
       expect(address()).toHaveFocus();
     });
 
-    // The SDK forwards keys from this document to clients, but keys sent to a
+    // The engine forwards keys from this document to clients, but keys sent to a
     // focused guest never reach the document. A guest left focused would block
     // typing into every client, and `focusChrome` cannot fix that.
     it("gives the keyboard back when the user moves to another window", () => {

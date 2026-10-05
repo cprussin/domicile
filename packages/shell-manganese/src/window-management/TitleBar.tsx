@@ -79,7 +79,7 @@ type Props = {
    */
   tabbed?: TabLayout | undefined;
   title: string;
-  /** The window this bar names, which the SDK reads on a press. */
+  /** The window this bar names, which `AppWindow` reads on a press. */
   window: string;
 };
 
