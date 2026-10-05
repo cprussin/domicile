@@ -1,3 +1,7 @@
+import {
+  useDisplays,
+  useScreenRegion,
+} from "@domicile-desktop/component-library/DisplayProvider";
 import type { Theme } from "@domicile-desktop/component-library/theme-core";
 import { THEMES } from "@domicile-desktop/component-library/theme-core";
 import { useEffect, useState } from "react";
@@ -35,13 +39,17 @@ enum Layer {
  * The desktop wallpaper: a photograph rotation that changes every minute. See
  * `packages/shell-manganese/docs/WALLPAPER.md`.
  *
- * - One sheet spans the whole desktop. A `<Screen>` would add a second region
- *   per display, which breaks lookups by `data-screen`.
+ * - Each screen gets its own copy, cropped to that monitor, so nothing is
+ *   drawn in the gaps between monitors. The copies are not `<Screen>`s, which
+ *   would add a second region per display and break lookups by
+ *   `data-screen`.
+ * - Every copy shows the same step, so the screens change together.
  * - Both themes' rotations stay mounted and CSS shows one, so a theme switch
  *   shows loaded photographs and needs only the `data-theme` attribute.
  * - It takes no pointer events.
  */
 export const Wallpaper = () => {
+  const displays = useDisplays();
   const [step, setStep] = useState(0);
   // Whether this step's fade has finished.
   const [settled, setSettled] = useState(true);
@@ -70,29 +78,57 @@ export const Wallpaper = () => {
 
   return (
     <div className={sheetStyles}>
-      {THEMES.map((theme) => (
-        <div
-          className={rotationStyles[theme]}
-          data-wallpaper-theme={theme}
-          key={theme}
-        >
-          {WALLPAPER_PHOTOS[theme].map((photo, index, photos) => (
-            // Empty `alt` because the wallpaper is decorative. The role is an
-            // attribute so one stylesheet covers all states and tests can
-            // read it.
-            <img
-              alt=""
-              className={layerStyles}
-              data-wallpaper={layerOf(index, step, photos.length, settled)}
-              key={photo}
-              src={photo}
-            />
-          ))}
-        </div>
-      ))}
+      {displays === undefined ? (
+        // The whole page until the host describes the screens, so the
+        // desktop is not blank while it starts.
+        <ScreenWallpaper screen={undefined} settled={settled} step={step} />
+      ) : (
+        displays.map(({ name }) => (
+          <ScreenWallpaper
+            key={name}
+            screen={name}
+            settled={settled}
+            step={step}
+          />
+        ))
+      )}
     </div>
   );
 };
+
+/** The rotation on display `screen`, or the whole page, at `step`. */
+const ScreenWallpaper = ({
+  screen,
+  settled,
+  step,
+}: {
+  screen: string | undefined;
+  settled: boolean;
+  step: number;
+}) => (
+  <div className={screenStyles} style={useScreenRegion(screen)}>
+    {THEMES.map((theme) => (
+      <div
+        className={rotationStyles[theme]}
+        data-wallpaper-theme={theme}
+        key={theme}
+      >
+        {WALLPAPER_PHOTOS[theme].map((photo, index, photos) => (
+          // Empty `alt` because the wallpaper is decorative. The role is an
+          // attribute so one stylesheet covers all states and tests can read
+          // it.
+          <img
+            alt=""
+            className={layerStyles}
+            data-wallpaper={layerOf(index, step, photos.length, settled)}
+            key={photo}
+            src={photo}
+          />
+        ))}
+      </div>
+    ))}
+  </div>
+);
 
 /**
  * The role of the photograph at `index` on this `step` of the rotation.
@@ -121,7 +157,8 @@ const sheetStyles = css({
   // stack in the page's context, over the chrome and level with floats.
   isolation: "isolate",
   pointerEvents: "none",
-  // The viewport is sized to the whole desktop, so this covers every screen.
+  // The viewport is sized to the whole desktop, so the screens' page-space
+  // regions land on their monitors.
   position: "fixed",
   // The depth of windows hidden behind a tab (`COVERED` in `placement.ts`).
   // They come later in the document, so they draw over the wallpaper. Higher,
@@ -129,7 +166,14 @@ const sheetStyles = css({
   zIndex: -2,
 });
 
-// `contents` keeps the layers positioned and stacked against the sheet.
+// The whole sheet, narrowed to a monitor by the region from
+// `useScreenRegion`.
+const screenStyles = css({
+  inset: 0,
+  position: "absolute",
+});
+
+// `contents` keeps the layers positioned and stacked against the screen.
 const rotationStyles: Record<Theme, string> = {
   dark: css({ _light: { display: "none" } }),
   light: css({ _light: { display: "contents" }, display: "none" }),
@@ -150,7 +194,7 @@ const layerStyles = css({
   blockSize: "100%",
   inlineSize: "100%",
   inset: 0,
-  // Crops the photograph to the desktop's shape.
+  // Crops the photograph to the monitor's shape.
   objectFit: "cover",
   opacity: 0,
   position: "absolute",

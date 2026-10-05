@@ -28,7 +28,7 @@ describe(SlideOver, () => {
     expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument();
   });
 
-  it("slides in over the screen it is asked for", () => {
+  it("slides in over, and dims, only the screen it is asked for", () => {
     render(
       <DisplayProvider
         source={{
@@ -52,6 +52,11 @@ describe(SlideOver, () => {
     const viewport = screen.getByRole("dialog").parentElement;
     expect(viewport?.style.left).toBe("0px");
     expect(viewport?.style.width).toBe("1920px");
+    // The backdrop too: over the whole page it would blur the gaps between
+    // monitors as well.
+    const backdrop = document.querySelector<HTMLElement>("[data-backdrop]");
+    expect(backdrop?.style.left).toBe("0px");
+    expect(backdrop?.style.width).toBe("1920px");
   });
 
   it("renders the trigger and keeps the panel closed until clicked", async () => {

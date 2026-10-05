@@ -1,7 +1,9 @@
 import { describe, expect, it } from "bun:test";
+import { DisplayProvider } from "@domicile-desktop/component-library/DisplayProvider";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+import { OnOneScreen } from "../screens/fixture";
 import { Lock } from "./Lock";
 
 /** The lock state, as `useLocked` returns it. */
@@ -18,7 +20,9 @@ const lock = (locked = true) => {
       }}
     />
   );
-  const { rerender } = render(drawn({ checking: false, locked, refusals: 0 }));
+  const { rerender } = render(drawn({ checking: false, locked, refusals: 0 }), {
+    wrapper: OnOneScreen,
+  });
   return {
     field: () => screen.getByLabelText("Passphrase") as HTMLInputElement,
     offered,
@@ -46,6 +50,73 @@ describe("Lock", () => {
     lock();
 
     expect(screen.getByLabelText("Passphrase").closest("[inert]")).toBeNull();
+  });
+
+  it("blurs each screen and not the gaps between them", () => {
+    // Monitors of different sizes leave gaps in the page. A blur over the
+    // whole page would cost as much there as on the screens.
+    render(
+      <Lock checking={false} locked onUnlock={() => undefined} refusals={0} />,
+      {
+        wrapper: ({ children }) => (
+          <DisplayProvider
+            source={{
+              displays: [
+                {
+                  name: "left",
+                  position: [0, 0],
+                  scale: 1,
+                  size: [1920, 1080],
+                },
+                {
+                  name: "right",
+                  position: [1920, 120],
+                  scale: 2,
+                  size: [2560, 1440],
+                },
+              ],
+              onDisplays: () => () => undefined,
+            }}
+          >
+            {children}
+          </DisplayProvider>
+        ),
+      },
+    );
+
+    expect(
+      [...document.querySelectorAll<HTMLElement>("[data-veil]")].map(
+        ({ style: { height, left, top, width } }) => ({
+          height,
+          left,
+          top,
+          width,
+        }),
+      ),
+    ).toEqual([
+      { height: "1080px", left: "0px", top: "0px", width: "1920px" },
+      { height: "1440px", left: "1920px", top: "120px", width: "2560px" },
+    ]);
+  });
+
+  it("blurs the whole page until the screens are described", () => {
+    // A desk that locks while starting must not be left readable.
+    render(
+      <Lock checking={false} locked onUnlock={() => undefined} refusals={0} />,
+      {
+        wrapper: ({ children }) => (
+          <DisplayProvider
+            source={{ displays: undefined, onDisplays: () => () => undefined }}
+          >
+            {children}
+          </DisplayProvider>
+        ),
+      },
+    );
+
+    const veils = document.querySelectorAll<HTMLElement>("[data-veil]");
+    expect(veils.length).toBe(1);
+    expect(veils[0]?.getAttribute("style")).toBeNull();
   });
 
   describe("the keyboard", () => {
