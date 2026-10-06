@@ -25,7 +25,6 @@ const asks = (
         answers.push(`choose ${mode} ${paths.join(",")}`);
       },
       home: "/home/someone",
-      list: () => Promise.resolve([]),
       mode,
       suggestedName: "",
     },
@@ -36,11 +35,14 @@ const asks = (
   return event;
 };
 
+/** A lister the picker never calls here. */
+const NO_LIST = () => Promise.resolve([]);
+
 describe("useFileRequest", () => {
   // The engine cancels unclaimed requests when dispatch returns.
   it("takes the page's question", () => {
     const view = document.createElement("webview");
-    const { result } = renderHook(() => useFileRequest(view));
+    const { result } = renderHook(() => useFileRequest(view, NO_LIST));
 
     const event = asks(view, "open", []);
 
@@ -51,7 +53,7 @@ describe("useFileRequest", () => {
   it("answers it once, and has no question left", () => {
     const view = document.createElement("webview");
     const answers: string[] = [];
-    const { result } = renderHook(() => useFileRequest(view));
+    const { result } = renderHook(() => useFileRequest(view, NO_LIST));
     asks(view, "open", answers);
 
     act(() => {
@@ -65,7 +67,7 @@ describe("useFileRequest", () => {
   it("has no question left once it is canceled either", () => {
     const view = document.createElement("webview");
     const answers: string[] = [];
-    const { result } = renderHook(() => useFileRequest(view));
+    const { result } = renderHook(() => useFileRequest(view, NO_LIST));
     asks(view, "open", answers);
 
     act(() => {
@@ -80,7 +82,7 @@ describe("useFileRequest", () => {
   it("cancels the question it was holding when another arrives", () => {
     const view = document.createElement("webview");
     const answers: string[] = [];
-    const { result } = renderHook(() => useFileRequest(view));
+    const { result } = renderHook(() => useFileRequest(view, NO_LIST));
 
     asks(view, "open", answers);
     asks(view, "save", answers);
@@ -93,7 +95,7 @@ describe("useFileRequest", () => {
   it("cancels the question it was holding when it goes", () => {
     const view = document.createElement("webview");
     const answers: string[] = [];
-    const { unmount } = renderHook(() => useFileRequest(view));
+    const { unmount } = renderHook(() => useFileRequest(view, NO_LIST));
     asks(view, "open", answers);
 
     unmount();
@@ -102,7 +104,7 @@ describe("useFileRequest", () => {
   });
 
   it("asks nothing of a window with no view yet", () => {
-    const { result } = renderHook(() => useFileRequest(null));
+    const { result } = renderHook(() => useFileRequest(null, NO_LIST));
 
     expect(result.current).toBeUndefined();
   });
