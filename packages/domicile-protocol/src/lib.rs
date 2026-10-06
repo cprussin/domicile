@@ -538,13 +538,19 @@ pub enum PortalKind {
     /// `org.freedesktop.impl.portal.FileChooser`: pick files to open or a
     /// place to save.
     FileChooser(FileChooserDialog),
+    /// `org.freedesktop.impl.portal.Inhibit`: an application holding off
+    /// logout, user switching or suspend, so a shell can say who. Listed
+    /// until the application lets go. Not a dialog: it accepts no answer.
+    Inhibit(Inhibition),
 }
 
 impl PortalKind {
     /// Whether `answer` can answer a request of this kind: its own kind, or a
-    /// dismissal or refusal. A chosen application must be one offered.
+    /// dismissal or refusal. A chosen application must be one offered. An
+    /// inhibitor takes none.
     pub fn accepts(&self, answer: &PortalAnswer) -> bool {
         match (self, answer) {
+            (PortalKind::Inhibit(_), _) => false,
             (_, PortalAnswer::Canceled | PortalAnswer::Refused) => true,
             (PortalKind::Access(_), PortalAnswer::Access) => true,
             (PortalKind::AppChooser(dialog), PortalAnswer::AppChooser { choice }) => {
@@ -562,6 +568,25 @@ impl PortalKind {
             ) => false,
         }
     }
+}
+
+/// What an application's inhibitor holds off, and why.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Inhibition {
+    /// Never empty.
+    pub what: Vec<Inhibited>,
+    /// The application's own words.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
+/// A session change an [`Inhibition`] holds off.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Inhibited {
+    Logout,
+    UserSwitch,
+    Suspend,
 }
 
 /// An `AccessDialog`'s texts.

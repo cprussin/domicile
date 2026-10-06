@@ -88,6 +88,7 @@ An edit applies to the running desktop, and windows stay open:
 | `output.displays`, `output.profiles` | Displays rearranged |
 | `idle.blank_after_seconds` | Idle timer restarts. Dark screens relight |
 | `theme.mode` | Shell and windows repaint |
+| `theme.accent_color`, `contrast`, `reduced_motion` | Windows that read the settings portal follow |
 | `files.omit` | Launcher file index rebuilt |
 | `extensions` | Extensions installed or removed ([EXTENSIONS.md](/docs/architecture/EXTENSIONS.md)) |
 
@@ -149,6 +150,15 @@ Implementation: [LOCK.md](LOCK.md).
 
 `theme.mode` is `"dark"` or `"light"`. There is no `"system"` value, because
 this config is the system setting. `"system"` is rejected.
+
+Applications read the rest through the settings portal
+(`org.freedesktop.appearance`):
+
+| Key | Values | Default |
+|---|---|---|
+| `theme.accent_color` | `"#rrggbb"` | unset: each application's own |
+| `theme.contrast` | `"normal"`, `"high"` | `"normal"` |
+| `theme.reduced_motion` | `true`, `false` | `false` |
 
 Shell side: [SHELL-DESKTOP-EVENTS.md](SHELL-DESKTOP-EVENTS.md#theme).
 

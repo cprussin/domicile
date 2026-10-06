@@ -6,7 +6,9 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use domicile_config::{Config, ConfigError, ConfigStore, DisplayConfig, LockVerifier, ThemeMode};
+use domicile_config::{
+    AccentColor, Config, ConfigError, ConfigStore, Contrast, DisplayConfig, LockVerifier, ThemeMode,
+};
 
 // ---- parsing & defaults ---------------------------------------------------
 
@@ -333,6 +335,44 @@ fn rejects_a_theme_that_is_neither() {
     )
     .unwrap_err();
     assert!(matches!(err, ConfigError::Parse(_)), "got {err:?}");
+}
+
+#[test]
+fn a_desk_that_says_nothing_about_its_look_has_no_accent_normal_contrast_and_motion() {
+    let theme = Config::parse("{}").unwrap().theme;
+    assert_eq!(
+        (theme.accent_color, theme.contrast, theme.reduced_motion),
+        (None, Contrast::Normal, false)
+    );
+}
+
+#[test]
+fn a_desk_that_states_its_look_gets_it() {
+    let theme = Config::parse(
+        r##"
+{ "theme": { "accent_color": "#3584E4", "contrast": "high", "reduced_motion": true } }
+"##,
+    )
+    .unwrap()
+    .theme;
+    assert_eq!(
+        (theme.accent_color, theme.contrast, theme.reduced_motion),
+        (Some(AccentColor([0x35, 0x84, 0xe4])), Contrast::High, true)
+    );
+}
+
+#[test]
+fn rejects_an_accent_that_is_not_a_hex_color() {
+    for accent in ["blue", "#35e", "#3584e4ff", "#3584g4", "#+1+2+3"] {
+        let err = Config::parse(&format!(
+            r#"{{ "theme": {{ "accent_color": "{accent}" }} }}"#
+        ))
+        .unwrap_err();
+        assert!(
+            matches!(err, ConfigError::Parse(_)),
+            "{accent}: got {err:?}"
+        );
+    }
 }
 
 // ---- applications ---------------------------------------------------------

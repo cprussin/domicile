@@ -31,6 +31,7 @@ pub mod ipc;
 mod lock_screen_readouts;
 pub mod notifications;
 mod png;
+pub mod portal_notifications;
 pub mod portals;
 pub mod system;
 pub mod theme_turnover;

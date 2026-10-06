@@ -6,20 +6,23 @@
 # environments (`portals::say_which_desktop`). A portal already running
 # under another desktop's name keeps that name.
 #
-# Domicile implements `Settings`, `Access`, `AppChooser` and `FileChooser`.
-# Every interface not listed here goes to another backend, mostly
-# `xdg-desktop-portal-gtk`. Listing an interface Domicile does not implement
-# would take it from the backend that does.
+# Domicile implements `Settings`, `Access`, `AppChooser`, `FileChooser`,
+# `Notification` and `Inhibit`. Every interface not listed here goes to
+# another backend, mostly `xdg-desktop-portal-gtk`. Listing an interface
+# Domicile does not implement would take it from the backend that does.
 # Screenshot and ScreenCast have no backend: gtk does not implement them and the
 # wlroots backends need protocols Domicile does not serve.
 #
 # `Settings` carries `org.freedesktop.appearance`'s `color-scheme`, which GTK4,
-# Qt6, Electron and Firefox read to follow the theme. `Access` is a yes/no
-# question the shell draws. `AppChooser` is the app list the shell draws for
-# `OpenURI` and "Open with", and `FileChooser` its file picker. See
+# Qt6, Electron and Firefox read to follow the theme, and its accent color,
+# contrast and reduced motion. `Access` is a yes/no question the shell draws.
+# `AppChooser` is the app list the shell draws for `OpenURI` and "Open with",
+# and `FileChooser` its file picker. `Notification` feeds the shell's
+# notification drawer. `Inhibit` holds off blanking and lists logout and
+# suspend inhibitors for the shell. See
 # `packages/domicile-compositor/src/portals/` and
 # `docs/architecture/PORTALS.md`.
 [portal]
 DBusName=org.freedesktop.impl.portal.desktop.domicile
-Interfaces=org.freedesktop.impl.portal.Settings;org.freedesktop.impl.portal.Access;org.freedesktop.impl.portal.AppChooser;org.freedesktop.impl.portal.FileChooser;
+Interfaces=org.freedesktop.impl.portal.Settings;org.freedesktop.impl.portal.Access;org.freedesktop.impl.portal.AppChooser;org.freedesktop.impl.portal.FileChooser;org.freedesktop.impl.portal.Notification;org.freedesktop.impl.portal.Inhibit;
 UseIn=domicile

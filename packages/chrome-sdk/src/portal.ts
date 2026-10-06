@@ -16,6 +16,11 @@ export enum PortalKind {
   AppChooser,
   /** Files to open, or where to save. */
   FileChooser,
+  /**
+   * An application holding off logout, user switching or suspend, until it
+   * lets go. Not a question: the compositor refuses answers to it.
+   */
+  Inhibit,
   /** A kind this SDK cannot parse. Answer it with {@link PortalAnswer.Refused}. */
   Unknown,
 }
@@ -115,6 +120,19 @@ export type FileChosen = {
   paths: readonly string[];
 };
 
+/** A session change an inhibitor holds off. */
+export enum Inhibited {
+  Logout,
+  UserSwitch,
+  Suspend,
+}
+
+/** What an inhibitor holds off, and the application's reason. */
+export type InhibitBody = {
+  what: readonly Inhibited[];
+  reason: string | undefined;
+};
+
 export const PortalRequest = {
   Access: (base: PortalRequestBase, body: AccessBody) => ({
     ...base,
@@ -130,6 +148,11 @@ export const PortalRequest = {
     ...base,
     body,
     kind: PortalKind.FileChooser as const,
+  }),
+  Inhibit: (base: PortalRequestBase, body: InhibitBody) => ({
+    ...base,
+    body,
+    kind: PortalKind.Inhibit as const,
   }),
   Unknown: (base: PortalRequestBase, wireKind: string) => ({
     ...base,
@@ -294,6 +317,24 @@ const fileChooserSchema = z
     }),
   );
 
+const INHIBITED = {
+  logout: Inhibited.Logout,
+  suspend: Inhibited.Suspend,
+  user_switch: Inhibited.UserSwitch,
+} as const;
+
+const inhibitSchema = z
+  .object({
+    reason: z.string().optional(),
+    what: z.array(z.enum(["logout", "user_switch", "suspend"])),
+  })
+  .transform(
+    (body): InhibitBody => ({
+      reason: body.reason,
+      what: body.what.map((inhibited) => INHIBITED[inhibited]),
+    }),
+  );
+
 /** Reads one kind's body into a request. */
 type ReadKind = (base: PortalRequestBase, body: unknown) => PortalRequest;
 
@@ -312,6 +353,11 @@ const KINDS: ReadonlyMap<string, ReadKind> = new Map<string, ReadKind>([
     "file_chooser",
     (base, body) =>
       PortalRequest.FileChooser(base, fileChooserSchema.parse(body)),
+  ],
+  [
+    "inhibit",
+    (base: PortalRequestBase, body: unknown) =>
+      PortalRequest.Inhibit(base, inhibitSchema.parse(body)),
   ],
 ]);
 

@@ -31,7 +31,9 @@ domicile.addEventListener("displayschanged", show);
 - The shell reads `domicile.theme`; `themechanged` reports changes.
 - The compositor also publishes it to the settings portal
   (`org.freedesktop.appearance` `color-scheme`, followed by GTK4, Qt6,
-  Electron and Firefox) and applies it to browser windows.
+  Electron and Firefox) and applies it to browser windows. The portal also
+  carries `theme.accent_color`, `contrast` and `reduced_motion`; the shell
+  reads its own config for those.
 - `prefers-color-scheme` in the shell's page follows it.
 - `domicile.setTheme("light")` changes it until the desktop exits. It does not
   write the config. A later config edit overrides it.
@@ -117,6 +119,10 @@ import { PortalDialogs } from "@domicile-desktop/component-library/PortalDialogs
   so `host` must take system calls. `domicile` does.
 - A dialog goes on the screen `screenOf` names for the window that asked, or
   on `screen` when the application named no window.
+- An `Inhibit` request is an application holding off logout, user switching
+  or suspend (`body.what`), listed until it lets go. It asks nothing, so a
+  shell only shows it ("Editor is preventing logout"). The compositor refuses
+  answers to it.
 - Without React, `watchPortalRequests` and `answerPortalRequest` in
   `@domicile-desktop/sdk/portal` give the requests, parsed, and send answers.
 - A shell must answer every request. One left unanswered keeps its application

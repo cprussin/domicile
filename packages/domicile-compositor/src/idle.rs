@@ -8,6 +8,8 @@
 //!   [`Idle::dark`] for the state.
 //! - A `zwp_idle_inhibit_manager_v1` inhibitor vetoes blanking while its client
 //!   is alive and its surface has a window. See [`holds`].
+//! - An idle inhibitor from the Inhibit portal vetoes blanking while held. See
+//!   [`Idle::held_by_portals`].
 //! - The shell gets the state, not the edge, since a reloaded page missed
 //!   earlier edges. See [`announced`].
 //! - Blanking does not block input. The dark edge also engages
@@ -53,6 +55,8 @@ pub struct Idle<S> {
     /// A list, not a set: a surface can carry several inhibitors and a destroy
     /// names only the surface, so each destroy removes one entry.
     inhibitors: Vec<S>,
+    /// Whether an application holds an idle inhibitor through the portal.
+    held_by_portals: bool,
 }
 
 impl<S: StillThere + PartialEq> Idle<S> {
@@ -62,6 +66,7 @@ impl<S: StillThere + PartialEq> Idle<S> {
             stirred_at: now,
             dark: false,
             inhibitors: Vec::new(),
+            held_by_portals: false,
         })
     }
 
@@ -114,6 +119,19 @@ impl<S: StillThere + PartialEq> Idle<S> {
         }
     }
 
+    /// Whether portal idle inhibitors are held. `Some` only on an edge.
+    ///
+    /// The portal names no surface, so these hold with no window showing.
+    pub fn held_by_portals(
+        &mut self,
+        held: bool,
+        now: Instant,
+        on_the_desktop: &[S],
+    ) -> Option<Blanking> {
+        self.held_by_portals = held;
+        self.settle(now, on_the_desktop)
+    }
+
     /// Removes inhibitors whose clients are gone.
     ///
     /// Called after every client dispatch, so it returns `None` when nothing
@@ -143,6 +161,7 @@ impl<S: StillThere + PartialEq> Idle<S> {
     /// inhibitors, so dropping them would blank the screen mid-video.
     pub fn takes_over_from(mut self, previous: &mut Idle<S>) -> Idle<S> {
         self.inhibitors = std::mem::take(&mut previous.inhibitors);
+        self.held_by_portals = previous.held_by_portals;
         self
     }
 
@@ -190,6 +209,7 @@ impl<S: StillThere + PartialEq> Idle<S> {
     /// the last one after the timeout darkens at once. See [`holds`].
     fn should_be_dark(&self, now: Instant, on_the_desktop: &[S]) -> bool {
         now.duration_since(self.stirred_at) >= self.blank_after
+            && !self.held_by_portals
             && !self
                 .inhibitors
                 .iter()
@@ -240,6 +260,8 @@ pub fn somebody_is_here(request: &ClientRequest) -> bool {
         | ClientRequest::DismissNotifications { .. }
         | ClientRequest::InvokeNotificationAction { .. }
         | ClientRequest::AnswerPortalRequest { .. }
+        // An application, not a person.
+        | ClientRequest::HeldAwakeByThePortal { .. }
         // The lock chord landed on the shell, and locking must not light the
         // screens.
         | ClientRequest::Lock => false,
@@ -515,6 +537,25 @@ mod tests {
         );
         assert_eq!(
             idle.elapsed(start + AFTER, &showing(1)),
+            Some(Blanking::GoDark)
+        );
+    }
+
+    #[test]
+    fn a_portal_inhibitor_holds_with_no_window_and_survives_a_reload() {
+        // The portal names no surface, so nothing on the desk need show.
+        let start = Instant::now();
+        let mut idle = desk(start);
+        idle.elapsed(start + AFTER, SHOWING_NOTHING);
+
+        assert_eq!(
+            idle.held_by_portals(true, start + AFTER, SHOWING_NOTHING),
+            Some(Blanking::ComeBack)
+        );
+        let mut reloaded = desk(start).takes_over_from(&mut idle);
+        assert_eq!(reloaded.elapsed(start + AFTER, SHOWING_NOTHING), None);
+        assert_eq!(
+            reloaded.held_by_portals(false, start + AFTER, SHOWING_NOTHING),
             Some(Blanking::GoDark)
         );
     }

@@ -350,7 +350,9 @@ pub fn refused(asked: Asked) -> Option<Refusal> {
             | ClientRequest::Lock
             // Part of a theme change; allowed like `SetTheme`.
             | ClientRequest::TurnTheWindows { .. }
-            | ClientRequest::ThemeCaptured { .. },
+            | ClientRequest::ThemeCaptured { .. }
+            // From an application, like a Wayland idle inhibitor.
+            | ClientRequest::HeldAwakeByThePortal { .. },
         )
         | Asked::OnTheConnection(ConnectionRequest::SetTheme { .. })
         | Asked::System(Reach::ReadsTheKernel | Reach::Readout | Reach::Stops) => None,

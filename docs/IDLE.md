@@ -56,6 +56,10 @@ An inhibitor holds only while its surface is a toplevel window
 - An inhibitor whose window closes stops holding at once.
 - An inhibitor on a subsurface holds nothing.
 
+The Inhibit portal's idle flag (`8`) blocks blanking the same way while the
+application holds it. It names no surface, so it holds with no window showing
+(`Idle::held_by_portals`).
+
 ### Checking it on hardware
 
 CI has no `/dev/dri`. On hardware, look for:

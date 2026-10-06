@@ -32,7 +32,8 @@ type Props = {
 
 /**
  * Every dialog applications ask for through `xdg-desktop-portal`, one at a
- * time, oldest first. Requests of a kind it has no dialog for are refused. See
+ * time, oldest first. Requests of a kind it has no dialog for are refused.
+ * Inhibitors are not questions, so it leaves them be. See
  * docs/architecture/PORTALS.md.
  */
 export const PortalDialogs = ({
@@ -58,7 +59,7 @@ export const PortalDialogs = ({
     }
   }, [host, requests]);
 
-  const shown = requests.find((request) => request.kind !== PortalKind.Unknown);
+  const shown = requests.find(isAsked);
   return shown === undefined ? undefined : (
     <Dialog
       answer={(answer) => {
@@ -116,6 +117,7 @@ const Dialog = ({
           screen={screen}
         />
       );
+    case PortalKind.Inhibit:
     case PortalKind.Unknown:
       return undefined;
   }
@@ -132,6 +134,19 @@ const screenFor = (
       ? undefined
       : screenOf?.(request.parentAppId);
   return parents ?? screen;
+};
+
+/** Whether `request` is a question this draws a dialog for. */
+const isAsked = (request: PortalRequest): boolean => {
+  switch (request.kind) {
+    case PortalKind.Access:
+    case PortalKind.AppChooser:
+    case PortalKind.FileChooser:
+      return true;
+    case PortalKind.Inhibit:
+    case PortalKind.Unknown:
+      return false;
+  }
 };
 
 /** How a dialog names the application asking. */

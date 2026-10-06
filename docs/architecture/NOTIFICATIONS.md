@@ -32,6 +32,13 @@ shell ─ dismissNotifications(ids) / invokeNotificationAction(id, key) ─▶ e
 
 - **One server for apps and pages.** Chrome on Linux sends Web Notifications
   over `org.freedesktop.Notifications`, so both arrive the same way.
+- **The notification portal joins the same history.** Its notifications
+  (`portals/notification.rs`) get history ids; a press goes back to the portal
+  as `ActionInvoked` with the action's target, not over the bus. Mapping:
+  `priority` `urgent` is critical and the rest normal; `display-hint`
+  `persistent` keeps the toast up; buttons and `default-action` become actions
+  and a click. `transient` and the lock-screen hints change nothing: the drawer
+  keeps every notification, and the shell shows none while locked.
 - **Pages get notification permission by default.** Chrome's permission prompt
   is a bubble the shell has no place to draw, so the profile allows it.
 - **The compositor keeps the history.**

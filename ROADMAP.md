@@ -130,8 +130,9 @@ Evidence is in [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md),
    [COMPOSABLE-SHELLS.md](docs/architecture/COMPOSABLE-SHELLS.md).
 
 9. **Domicile answers every portal.** The compositor answers `Settings`,
-    `Access`, `AppChooser` and `FileChooser`, over the request channel to the
-    shell; gtk answers the rest. Screen sharing, remote desktop and global
+    `Access`, `AppChooser`, `FileChooser`, `Notification` and `Inhibit`, over
+    the request channel to the shell; gtk answers the rest. Screen sharing,
+    remote desktop and global
     shortcuts have no backend. Next: every other interface except `Secret` on
     the channel, then drop gtk. [PORTALS.md](docs/architecture/PORTALS.md).
 
@@ -372,9 +373,9 @@ Understood and not scheduled.
   - A desktop that exits uncleanly leaves its environment variables until the
     next one replaces them.
   - A nested desktop does not register, so the host session keeps its portal.
-- **The settings portal answers one namespace and one key.** Desktop backends
-  often also serve `org.gnome.desktop.interface` (accent color, font, cursor
-  theme). Domicile has no values for those. An unanswered namespace falls
+- **The settings portal answers one namespace.** Desktop backends often also
+  serve `org.gnome.desktop.interface` (font, cursor theme). Domicile has no
+  values for those. An unanswered namespace falls
   through to the next backend, which is correct, so `nix/domicile.portal`
   lists only what Domicile implements.
 
