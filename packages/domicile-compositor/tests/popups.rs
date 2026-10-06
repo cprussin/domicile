@@ -1,4 +1,5 @@
-//! A client's popups (its menus) reaching the chrome.
+//! A client's popups (its menus, and the bubbles Chromium draws as
+//! subsurfaces) reaching the chrome.
 //!
 //! A popup is its own `<app>`, placed by the shell over its window. These
 //! tests cover the messages both ways: the popup appearing and where, going
@@ -8,7 +9,7 @@ mod running;
 
 use domicile_protocol::{ChromeMessage, HostMessage};
 use domicile_test_chrome::Chrome;
-use domicile_test_client::POPUP;
+use domicile_test_client::{BUBBLE, BUBBLE_GROWN, POPUP};
 
 use crate::running::Compositor;
 
@@ -224,4 +225,112 @@ fn a_grabbing_popup_goes_when_the_keyboard_leaves_its_window() {
         "the menu went when the keyboard left its window:\n{}",
         client.trace()
     );
+}
+
+/// A box as the chrome is told it: its position and its size.
+fn placement((x, y, width, height): (i32, i32, i32, i32)) -> ([f64; 2], [f64; 2]) {
+    (
+        [f64::from(x), f64::from(y)],
+        [f64::from(width), f64::from(height)],
+    )
+}
+
+/// Chromium draws an extension popup as a desync subsurface of its window.
+/// It is announced as a popup over that window, and placed again as it grows
+/// to fit its page.
+#[test]
+fn a_subsurface_bubble_is_announced_over_its_window_and_follows_its_growth() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let mut chrome = compositor.chrome();
+    let _client = compositor.client_with("a window with a bubble", &["--bubble"]);
+
+    let window = window_of(&mut chrome);
+    let HostMessage::PopupPlaced {
+        app_id,
+        parent,
+        position,
+        size,
+        grab,
+    } = popup_of(&mut chrome)
+    else {
+        unreachable!("the wait matched on this variant")
+    };
+    assert_eq!(parent, window);
+    assert_eq!((position, size), placement(BUBBLE));
+    assert!(!grab, "a bubble never grabs");
+
+    let (position, size) = placement(BUBBLE_GROWN);
+    let grown = chrome.wait_for(|message| {
+        *message
+            == HostMessage::PopupPlaced {
+                app_id: app_id.clone(),
+                parent: window.clone(),
+                position,
+                size,
+                grab: false,
+            }
+    });
+    assert!(grown.is_ok(), "the grown bubble was placed again");
+}
+
+/// A pointer over a bubble's `<app>` is over the bubble's surface. Chromium
+/// hides a bubble by destroying its `wl_subsurface` and keeping the surface;
+/// the chrome is then told it is gone.
+#[test]
+fn a_bubble_takes_the_pointer_and_goes_when_hidden() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let mut chrome = compositor.chrome();
+    let mut client = compositor.client_with("a window with a bubble", &["--bubble"]);
+    let HostMessage::PopupPlaced { app_id: bubble, .. } = popup_of(&mut chrome) else {
+        unreachable!("the wait matched on this variant")
+    };
+    let surface = popup_surface(&mut client);
+
+    chrome
+        .say(&ChromeMessage::PointerMotion {
+            app_id: bubble.clone(),
+            x: 5.0,
+            y: 6.0,
+        })
+        .expect("the chrome can move the pointer");
+    assert!(
+        client.wait_for_trace(&format!("{surface}, 5, 6)"), 1),
+        "the pointer entered {surface} at the bubble's own point:\n{}",
+        client.trace()
+    );
+    chrome
+        .say(&ChromeMessage::PointerButton {
+            app_id: bubble.clone(),
+            button: 0x110,
+            pressed: true,
+        })
+        .expect("the chrome can press");
+
+    assert!(client.wait_for_trace("hid()", 1), "{}", client.trace());
+    let closed = chrome
+        .wait_for(|message| matches!(message, HostMessage::AppClosed { .. }))
+        .expect("the bubble's going is announced");
+    assert_eq!(closed, HostMessage::AppClosed { app_id: bubble });
+}
+
+/// A bubble whose surface is destroyed goes, as when Chromium closes an
+/// extension popup or exits.
+#[test]
+fn a_bubble_goes_with_its_client() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let mut chrome = compositor.chrome();
+    let client = compositor.client_with("a window with a bubble", &["--bubble"]);
+    let HostMessage::PopupPlaced { app_id: bubble, .. } = popup_of(&mut chrome) else {
+        unreachable!("the wait matched on this variant")
+    };
+
+    drop(client);
+
+    let closed = chrome.wait_for(|message| {
+        *message
+            == HostMessage::AppClosed {
+                app_id: bubble.clone(),
+            }
+    });
+    assert!(closed.is_ok(), "the bubble's going is announced");
 }

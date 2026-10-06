@@ -346,7 +346,8 @@ pub enum HostMessage {
     /// `wl_pointer` uses), not buffer pixels.
     AppResized { app_id: String, size: [f64; 2] },
 
-    /// A client opened or moved a popup, such as a menu or tooltip.
+    /// A client opened or moved a popup, such as a menu, a tooltip or a
+    /// bubble drawn as a subsurface (Chromium's extension popups).
     ///
     /// The popup is its own `<app>`, positioned rather than laid out:
     /// `position` is its top-left relative to `parent`, and `size` its box,
