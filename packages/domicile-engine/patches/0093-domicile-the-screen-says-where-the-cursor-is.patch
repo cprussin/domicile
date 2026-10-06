@@ -1,0 +1,118 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Mon, 5 Oct 2026 00:00:00 +0000
+Subject: [PATCH] domicile: the screen says where the cursor is
+
+`DrmScreen::GetCursorScreenPoint` answered (0, 0), and aura synthesizes a
+mouse move at that point after a window changes or the cursor is warped. On
+a desk whose host is at the screen's corner, that move landed at the host's
+top-left and focus followed it there.
+
+- `DrmScreen` takes the `DrmCursor`.
+- `DrmCursor::Heard` says which window hears the pointer and where in its
+  pixels (`PointerHeardAt`, under src/).
+- `DrmWindowHost::ToScreenInDIP` turns that into the screen DIPs aura reads
+  the window's events in.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on `crux`.
+---
+ ui/ozone/platform/drm/host/drm_cursor.cc      |  6 ++++++
+ ui/ozone/platform/drm/host/drm_cursor.h       |  4 ++++
+ ui/ozone/platform/drm/host/drm_window_host.cc | 11 +++++++++++
+ ui/ozone/platform/drm/host/drm_window_host.h  |  4 ++++
+ ui/ozone/platform/drm/ozone_platform_drm.cc   |  2 +-
+ 5 files changed, 26 insertions(+), 1 deletion(-)
+
+diff --git a/ui/ozone/platform/drm/host/drm_cursor.cc b/ui/ozone/platform/drm/host/drm_cursor.cc
+index 4c0829feee..2e49417f53 100644
+--- a/ui/ozone/platform/drm/host/drm_cursor.cc
++++ b/ui/ozone/platform/drm/host/drm_cursor.cc
+@@ -198,6 +198,12 @@
+   desk_host_ = host;
+ }
+ 
++std::optional<PointerHeard> DrmCursor::Heard() {
++  base::AutoLock lock(lock_);
++  return PointerHeardAt(screens_, layout_, desk_host_,
++                        GetLocationWithoutLock());
++}
++
+ void DrmCursor::MoveCursorTo(gfx::AcceleratedWidget window,
+                              const gfx::PointF& location) {
+   TRACE_EVENT0("drmcursor", "DrmCursor::MoveCursorTo (window)");
+diff --git a/ui/ozone/platform/drm/host/drm_cursor.h b/ui/ozone/platform/drm/host/drm_cursor.h
+index b3f0485932..246cacedba 100644
+--- a/ui/ozone/platform/drm/host/drm_cursor.h
++++ b/ui/ozone/platform/drm/host/drm_cursor.h
+@@ -99,6 +99,10 @@
+   // `OzonePlatform::SetDomicileDeskHost`.
+   void SetDomicileDeskHost(gfx::AcceleratedWidget host);
+ 
++  // DOMICILE: the window that hears the pointer, and where in its pixels. See
++  // `PointerHeardAt`.
++  std::optional<PointerHeard> Heard();
++
+   // CursorDelegateEvdev:
+   void MoveCursorTo(gfx::AcceleratedWidget window,
+                     const gfx::PointF& location) override;
+diff --git a/ui/ozone/platform/drm/host/drm_window_host.cc b/ui/ozone/platform/drm/host/drm_window_host.cc
+index 1609a51512..dae841e046 100644
+--- a/ui/ozone/platform/drm/host/drm_window_host.cc
++++ b/ui/ozone/platform/drm/host/drm_window_host.cc
+@@ -20,6 +20,7 @@
+ #include "ui/events/ozone/evdev/event_factory_evdev.h"
+ #include "ui/events/ozone/events_ozone.h"
+ #include "ui/events/platform/platform_event_source.h"
++#include "ui/gfx/geometry/point_conversions.h"
+ #include "ui/ozone/common/bitmap_cursor.h"
+ #include "ui/ozone/platform/drm/domicile/drm_fullscreen.h"
+ #include "ui/ozone/platform/drm/domicile/drm_pointer_crossing.h"
+@@ -336,6 +337,16 @@
+   event_factory_->SynthesizeMouseMove(location);
+ }
+ 
++gfx::Point DrmWindowHost::ToScreenInDIP(const gfx::PointF& location) const {
++  // aura's own arithmetic for an event at `location`: the root transform turns
++  // the window's pixels into its DIPs, and `GetBoundsInDIP` is where the
++  // screen position client puts the root window.
++  const gfx::PointF in_window = delegate_->ConvertScreenPointToLocalDIP(
++      bounds_.origin() + gfx::ToFlooredPoint(location).OffsetFromOrigin());
++  return GetBoundsInDIP().origin() +
++         gfx::ToFlooredPoint(in_window).OffsetFromOrigin();
++}
++
+ void DrmWindowHost::ConfineCursorToBounds(const gfx::Rect& bounds) {
+   if (cursor_confined_bounds_ == bounds)
+     return;
+diff --git a/ui/ozone/platform/drm/host/drm_window_host.h b/ui/ozone/platform/drm/host/drm_window_host.h
+index d30729c1b6..700f090814 100644
+--- a/ui/ozone/platform/drm/host/drm_window_host.h
++++ b/ui/ozone/platform/drm/host/drm_window_host.h
+@@ -111,6 +111,10 @@
+   // stayed put.
+   void FollowDisplayTurn();
+ 
++  // DOMICILE: `location`, in this window's pixels, in the screen DIPs aura
++  // reads this window's events in. See `DrmScreen::GetCursorScreenPoint`.
++  gfx::Point ToScreenInDIP(const gfx::PointF& location) const;
++
+  private:
+   void SendBoundsChange();
+ 
+diff --git a/ui/ozone/platform/drm/ozone_platform_drm.cc b/ui/ozone/platform/drm/ozone_platform_drm.cc
+index 65bd24f2b8..f972392f37 100644
+--- a/ui/ozone/platform/drm/ozone_platform_drm.cc
++++ b/ui/ozone/platform/drm/ozone_platform_drm.cc
+@@ -103,7 +103,7 @@
+   // ScreenOzone -> CreateScreen() and hit the NOTREACHED() that was here.
+   // See docs/architecture/A-DESKTOP-ON-A-TTY.md in the Domicile repository.
+   std::unique_ptr<PlatformScreen> CreateScreen() override {
+-    return std::make_unique<DrmScreen>(window_manager_.get());
++    return std::make_unique<DrmScreen>(window_manager_.get(), cursor_.get());
+   }
+   void InitScreen(PlatformScreen* screen) override {
+     // Start the modeset driver here, and not earlier, because here is where
+-- 
+2.43.0
+

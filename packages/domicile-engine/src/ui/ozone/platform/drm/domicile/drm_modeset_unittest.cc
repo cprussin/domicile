@@ -440,7 +440,7 @@ TEST(DrmModesetTest, AnAskThatReachedNothingDoesNotSuppressTheNextOne) {
   fake->SetSnapshots(Pointers(snapshots));
 
   DrmWindowHostManager window_manager;
-  DrmScreen screen(&window_manager);
+  DrmScreen screen(&window_manager, nullptr);
   DrmModeset modeset(std::move(owned), &screen);
 
   modeset.Start();
@@ -463,7 +463,7 @@ TEST(DrmModesetTest, AConfirmedModesetSuppressesTheHotplugItCauses) {
   fake->SetSnapshots(Pointers(snapshots));
 
   DrmWindowHostManager window_manager;
-  DrmScreen screen(&window_manager);
+  DrmScreen screen(&window_manager, nullptr);
   DrmModeset modeset(std::move(owned), &screen);
 
   modeset.Start();
@@ -486,7 +486,7 @@ TEST(DrmModesetTest, ARefusedModesetDoesNotSuppressTheNextOne) {
   fake->SetSnapshots(Pointers(snapshots));
 
   DrmWindowHostManager window_manager;
-  DrmScreen screen(&window_manager);
+  DrmScreen screen(&window_manager, nullptr);
   DrmModeset modeset(std::move(owned), &screen);
 
   modeset.Start();
@@ -517,7 +517,7 @@ TEST(DrmModesetTest, AnAnswerFromInsideTheAskIsNotAConfirmation) {
   fake->AnswersFromInsideConfigure(true);
 
   DrmWindowHostManager window_manager;
-  DrmScreen screen(&window_manager);
+  DrmScreen screen(&window_manager, nullptr);
   DrmModeset modeset(std::move(owned), &screen);
 
   modeset.Start();
@@ -548,7 +548,7 @@ TEST(DrmModesetTest, AWakeLightsTheScreensAgainThoughTheyReadTheSame) {
   fake->SetSnapshots(Pointers(snapshots));
 
   DrmWindowHostManager window_manager;
-  DrmScreen screen(&window_manager);
+  DrmScreen screen(&window_manager, nullptr);
   DrmModeset modeset(std::move(owned), &screen);
 
   modeset.Start();
@@ -573,7 +573,7 @@ TEST(DrmModesetTest, ARelitScreenStillSuppressesTheHotplugItCauses) {
   fake->SetSnapshots(Pointers(snapshots));
 
   DrmWindowHostManager window_manager;
-  DrmScreen screen(&window_manager);
+  DrmScreen screen(&window_manager, nullptr);
   DrmModeset modeset(std::move(owned), &screen);
 
   modeset.Start();
