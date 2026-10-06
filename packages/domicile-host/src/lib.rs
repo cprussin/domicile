@@ -9,7 +9,9 @@ use std::collections::HashMap;
 
 use std::collections::BTreeMap;
 
-use domicile_protocol::{ChromeMessage, DisplayInfo, HostMessage, Notification, Theme, TrayItem};
+use domicile_protocol::{
+    ChromeMessage, DisplayInfo, HostMessage, Notification, PortalRequest, Theme, TrayItem,
+};
 
 pub mod base64;
 pub mod clipboard;
@@ -28,6 +30,7 @@ pub mod ipc;
 mod lock_screen_readouts;
 pub mod notifications;
 mod png;
+pub mod portals;
 pub mod system;
 pub mod theme_turnover;
 pub mod tray;
@@ -120,6 +123,8 @@ pub struct Host {
     /// Handles clients exported their windows under, for a portal's
     /// `parent_window`.
     exports: xdg_foreign::Exports,
+    /// The unanswered portal dialogs. `None` until set, as for `tray`.
+    portal_requests: Option<Vec<PortalRequest>>,
 }
 
 impl Host {
@@ -260,6 +265,25 @@ impl Host {
         self.notifications
             .clone()
             .map(|items| HostMessage::Notifications { items })
+    }
+
+    /// Set the unanswered portal dialogs and return the message to broadcast,
+    /// or `None` if they did not change.
+    pub fn set_portal_requests(&mut self, items: Vec<PortalRequest>) -> Option<HostMessage> {
+        (self.portal_requests.as_ref() != Some(&items)).then(|| {
+            let message = HostMessage::PortalRequests {
+                items: items.clone(),
+            };
+            self.portal_requests = Some(items);
+            message
+        })
+    }
+
+    /// The portal requests message, or `None` if none were set.
+    pub fn describe_portal_requests(&self) -> Option<HostMessage> {
+        self.portal_requests
+            .clone()
+            .map(|items| HostMessage::PortalRequests { items })
     }
 
     /// Register a newly-mapped Wayland toplevel. Returns its assigned id and
@@ -516,7 +540,8 @@ impl Host {
             | ChromeMessage::Key { .. }
             | ChromeMessage::Unlock { .. }
             | ChromeMessage::Lock
-            | ChromeMessage::SystemRequest { .. } => {
+            | ChromeMessage::SystemRequest { .. }
+            | ChromeMessage::AnswerPortalRequest { .. } => {
                 // The compositor intercepts these side effects so this type
                 // stays pure.
                 //

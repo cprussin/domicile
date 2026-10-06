@@ -55,6 +55,10 @@
       "types": "./dist/own-keybindings.d.ts",
       "default": "./dist/own-keybindings.js"
     },
+    "./portal": {
+      "types": "./dist/portal.d.ts",
+      "default": "./dist/portal.js"
+    },
     "./shell": {
       "types": "./dist/shell.d.ts",
       "default": "./dist/shell.js"

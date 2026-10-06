@@ -277,6 +277,12 @@ interface ControlChannel {
   // it, the lock included. See docs/SHELL-SYSTEM-ACCESS.md.
   CallSystem(uint32 id, string request);
 
+  // Answer portal request `id`, which a ControlChannelClient::PortalRequests
+  // listed. `answer` is JSON with a string `kind`, `{"kind":"access"}`. The
+  // browser wraps it as an `answer_portal_request` line and reads nothing
+  // else of it; the compositor checks it. See docs/architecture/PORTALS.md.
+  AnswerPortalRequest(uint32 id, string answer);
+
   // Put a row of the clipboard's history back on the clipboard.
   //
   // IT NAMES A ROW AND CARRIES NO TEXT: what makes this channel safe is which
@@ -639,4 +645,9 @@ interface ControlChannelClient {
   // An answer to a CallSystem: a `system_reply`, `system_event` or
   // `system_end` line, as the compositor wrote it. The page parses it.
   System(string message);
+
+  // Every unanswered portal request: the `portal_requests` line, as the
+  // compositor wrote it. Pushed whole on every change and on connect. The page
+  // parses it.
+  PortalRequests(string message);
 };

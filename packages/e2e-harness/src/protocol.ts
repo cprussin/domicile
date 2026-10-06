@@ -273,6 +273,22 @@ const notificationsSchema = z.looseObject({
   type: z.literal("notifications"),
 });
 
+// Every unanswered portal dialog, oldest first. Pushed on change and on
+// connect. `body` is per `kind`; the SDK's `portal` module parses it. Answer
+// with `answer_portal_request`. See `docs/architecture/PORTALS.md`.
+const portalRequestSchema = z.looseObject({
+  app_id: z.string(),
+  body: z.unknown(),
+  id: z.number(),
+  kind: z.string(),
+  parent_app_id: z.string().optional(),
+});
+
+const portalRequestsSchema = z.looseObject({
+  items: z.array(portalRequestSchema),
+  type: z.literal("portal_requests"),
+});
+
 // The desktop's light or dark theme. Sent with the handshake, after any
 // `setTheme` (to every chrome) and on config reload.
 //
@@ -435,6 +451,7 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   clipboardSchema,
   traySchema,
   notificationsSchema,
+  portalRequestsSchema,
   themeMessageSchema,
   idleSchema,
   lockedSchema,
@@ -470,6 +487,7 @@ export type FilePreviewMessage = z.infer<typeof filePreviewSchema>;
 export type ClipboardMessage = z.infer<typeof clipboardSchema>;
 export type TrayMessage = z.infer<typeof traySchema>;
 export type NotificationsMessage = z.infer<typeof notificationsSchema>;
+export type PortalRequestsMessage = z.infer<typeof portalRequestsSchema>;
 export type ThemeMessage = z.infer<typeof themeMessageSchema>;
 export type IdleMessage = z.infer<typeof idleSchema>;
 export type LockedMessage = z.infer<typeof lockedSchema>;

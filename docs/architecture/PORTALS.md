@@ -6,7 +6,8 @@ Make Domicile the session's only `xdg-desktop-portal` backend:
 - The shell draws every portal dialog.
 - `xdg-desktop-portal-gtk` is removed from the session.
 
-Today the compositor implements only `Settings` and routes the rest to gtk.
+Today the compositor implements `Settings` and `Access` and routes the rest to
+gtk.
 So an Electron app's file dialog is a GTK window, and screen sharing, remote
 desktop and global shortcuts have no backend.
 
@@ -16,7 +17,7 @@ desktop and global shortcuts have no backend.
 app ──org.freedesktop.portal.*──▶ xdg-desktop-portal ──impl.portal.*──▶ compositor
                                                                          │ domicile_host::portals (queue)
                                     HostMessage::PortalRequests { items } ▼
-                                         engine: `portalrequests` event (one patch, all kinds)
+                                         engine: `portalrequests` event (all kinds)
                                                                          ▼
                         shell: domicile.addEventListener("portalrequests") → <PortalDialogs>
                         ◀── answerPortalRequest(id, answer) ── engine ── compositor ──▶ Response
@@ -27,9 +28,9 @@ One request channel carries all dialogs. Each interface's backend builds on it.
 | Piece | Where |
 |---|---|
 | Wire types: `HostMessage::PortalRequests`, `ChromeMessage::AnswerPortalRequest`, `PortalRequest`, `PortalAnswer` | `packages/domicile-protocol` |
-| Queue: pending requests, their apps, answer validation | `packages/domicile-host/src/portals/` |
+| Queue: pending requests, their apps, answer validation | `packages/domicile-host/src/portals.rs` |
 | D-Bus service: one name, one object, all interfaces; `Request`/`Session` objects | `packages/domicile-compositor/src/portals/` (`Settings` moves here from `appearance.rs`) |
-| `portalrequests` event, `answerPortalRequest()` | `control_channel.mojom`, `modules/domicile/`, one engine patch |
+| `portalrequests` event, `answerPortalRequest()` | `control_channel.mojom`, `modules/domicile/`; new files only, no patch |
 | Request kinds, parsed with Zod | `@domicile-desktop/sdk/portal` |
 | Ready-made dialogs for any shell | `@domicile-desktop/component-library/PortalDialogs` |
 | `parent_window` to window lookup | `zxdg_exporter_v2` / `v1` in the compositor |
@@ -51,7 +52,7 @@ One request channel carries all dialogs. Each interface's backend builds on it.
   or a second monitor's page still sees a pending dialog. The first answer
   wins; later answers are refused.
 - **The engine relays request bodies untyped.** It carries each body as a
-  `base::Value`; the SDK parses it with Zod. One engine patch serves every
+  `base::Value`; the SDK parses it with Zod. One engine change serves every
   kind, so a new portal needs no four-hour engine build. A typed mojom union
   per kind adds nothing: the compositor and SDK already validate both ends.
 - **No dialog listener means refusal.** If no listener takes a request, it is
@@ -125,14 +126,14 @@ managers and `wl-paste` work without a focused window.
 
 Phase 0: request channel.
 
-- [ ] `PortalRequest`, `PortalAnswer`, the two messages; protocol round-trip tests
-- [ ] `domicile_host::portals`: queue, first answer wins, refuse when no listener
-- [ ] `src/portals/`: one name, `Request` and `Session` objects, `Settings` moved from `appearance.rs`
-- [ ] engine patch: `portalrequests`, `answerPortalRequest`; guard against a stand-in compositor
-- [ ] SDK: `portal_requests`, kinds parsed with Zod
+- [x] `PortalRequest`, `PortalAnswer`, the two messages; protocol round-trip tests
+- [x] `domicile_host::portals`: queue, first answer wins, refuse when no listener
+- [x] `src/portals/`: one name, `Request` and `Session` objects, `Settings` moved from `appearance.rs`
+- [x] engine patch: `portalrequests`, `answerPortalRequest`; guard against a stand-in compositor
+- [x] SDK: `portal_requests`, kinds parsed with Zod
 - [x] `zxdg_exporter_v2` and `v1`; resolve a handle to an app id (`domicile_host::xdg_foreign`; no importer)
 - [ ] `<PortalDialogs />` in component-library; mounted in manganese, shell-simple, `examples/minimal-shell`
-- [ ] `domicile.portal` lists each interface as it lands; the conf routes it here
+- [x] `domicile.portal` lists each interface as it lands; the conf routes it here
 
 Phase 1: dialogs.
 

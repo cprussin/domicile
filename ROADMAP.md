@@ -129,11 +129,11 @@ Evidence is in [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md),
 
    [COMPOSABLE-SHELLS.md](docs/architecture/COMPOSABLE-SHELLS.md).
 
-9. **Domicile answers every portal.** The compositor answers `Settings`; gtk
-    answers the rest. So file dialogs are GTK windows, and screen sharing,
-    remote desktop and global shortcuts have no backend. Plan: one request
-    channel to the shell, then every interface except `Secret` on it, then
-    drop gtk. Not started. [PORTALS.md](docs/architecture/PORTALS.md).
+9. **Domicile answers every portal.** The compositor answers `Settings` and
+    `Access`, over the request channel to the shell; gtk answers the rest. So
+    file dialogs are GTK windows, and screen sharing, remote desktop and global
+    shortcuts have no backend. Next: every other interface except `Secret` on
+    the channel, then drop gtk. [PORTALS.md](docs/architecture/PORTALS.md).
 
 10. **Split manganese into small packages.** `@domicile-desktop/manganese` is
     one package with the layout, the bar and every bar item. Split the clock,

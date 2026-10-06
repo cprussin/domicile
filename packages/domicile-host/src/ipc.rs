@@ -101,6 +101,7 @@ pub fn apply_chrome_message(
                 .chain(host.describe_extensions())
                 .chain(host.describe_tray())
                 .chain(host.describe_notifications())
+                .chain(host.describe_portal_requests())
                 .collect()
             }
             // Reply with this build's version so the chrome can report the
