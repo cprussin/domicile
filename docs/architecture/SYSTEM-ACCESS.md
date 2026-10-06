@@ -23,10 +23,10 @@ protocol and the engine grow without bound.
 ## Design
 
 ```
-shell page ──── domicile.system ──────▶ engine (opaque relay) ──▶ compositor
-                                                                   ├─ files
-                                                                   ├─ processes
-                                                                   └─ D-Bus (session, system)
+shell page ─ domicile.callSystem() ─▶ engine (opaque relay) ─────▶ compositor
+                                                                  ├─ files
+                                                                  ├─ processes
+                                                                  └─ D-Bus (session, system)
 ```
 
 ### Page API
@@ -85,9 +85,10 @@ Everything else moves to libraries on the primitives.
   `system_event` and one `system_end`. Bytes are base64.
 - Types: `domicile_protocol::SystemRequest` and its neighbors. The executor is
   `domicile_host::system`, one per chrome connection.
-- The engine relays both as opaque strings: one IDL method, one event. Adding
-  a request type changes `domicile-protocol`, the compositor and the SDK, not
-  the engine.
+- The engine relays both as opaque strings: `callSystem(id, request)` and the
+  `system` event, a `MessageEvent` whose `data` is the line. Adding a request
+  type changes `domicile-protocol`, the compositor and the SDK, not the
+  engine.
 - Large files for display (`<img>`, `<video>`) keep using
   [`domicile://home/`](DOMICILE-SCHEME.md).
 
@@ -96,9 +97,10 @@ Everything else moves to libraries on the primitives.
 The shell is trusted code: `Spawn` already runs any argv. These rules keep that
 trust from reaching anything else.
 
-- **Binding:** only the top-level `domicile://shell` frame gets
-  `domicile.system`. `<webview>` guests, extensions and
-  `domicile://home` never do. Same check as the control channel.
+- **Binding:** only the `domicile` that the engine hands to `Shell` in a
+  `domicile://shell` document has `callSystem()`, through the control
+  channel's own binding. `<webview>` guests, extensions and `domicile://home`
+  never do.
 - **Content Security Policy:** `domicile://shell` serves `script-src 'self'`.
   A script injected through a notification body, window title or file name
   does not run.
@@ -138,8 +140,9 @@ trust from reaching anything else.
 - [x] the wire types in `domicile-protocol` and the TypeScript schemas (`e2e-harness`)
 - [x] the compositor serves files, watches and processes; `lock::refused`
       covers them
-- [ ] engine patch: opaque relay, binding for the top-level shell frame only,
-      `script-src 'self'` on `domicile://shell`
+- [x] engine relay: `callSystem()` and the `system` event, on the control
+      channel's binding (`guard-windows-state.sh`)
+- [ ] `script-src 'self'` on `domicile://shell`
 - [ ] `@domicile-desktop/sdk/system`
 - [ ] the compositor serves D-Bus calls and matches
 - [ ] `system-battery`; delete `domicile_host::battery`, its host message and

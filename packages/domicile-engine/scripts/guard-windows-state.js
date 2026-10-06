@@ -13,6 +13,9 @@
 //   GUARD changed n=…              how many `windowschanged` it heard after
 //                                  subscribing late: none are owed, and the
 //                                  attribute is what carries the state
+//   GUARD system data=…            a `system_reply` the stand-in sent, as it
+//                                  reached this page: the relay inward. The
+//                                  stand-in's log holds the outward one
 
 // THE NAMES. The desktop's event names are the fork's own, in
 // modules/domicile/domicile_event_names.h, rather than entries in Blink's
@@ -41,6 +44,7 @@ const EVENT_NAMES = [
   "themechanged",
   "windowsthemechanged",
   "modifierschanged",
+  "system",
 ];
 
 export const Shell = (_root, desktop) => {
@@ -73,9 +77,22 @@ export const Shell = (_root, desktop) => {
     `GUARD names missing=${missing.length === 0 ? "none" : missing.join(",")}`,
   );
 
+  // A system call's answer, as the stand-in wrote it. The names check above
+  // fired an untrusted `system`, which is not an answer.
+  host.addEventListener("system", (event) => {
+    if (event.isTrusted) {
+      console.log(`GUARD system data=${event.data}`);
+    }
+  });
+
   // Reading binds the channel, which is what has the compositor announce.
   void host.windows;
   console.log("GUARD listening");
+
+  // One call the browser must wrap as a `system_request`, and one that is not
+  // a call and must not reach the compositor at all.
+  host.callSystem(1, JSON.stringify({ call: "stat", path: "/" }));
+  host.callSystem(2, "not a call");
 
   // Late: everything the stand-in sends lands well inside this.
   setTimeout(() => {

@@ -405,6 +405,12 @@ export type DomicileHostEventMap = {
   shortcut: DomicileShortcutEvent;
   audiolevels: DomicileAudioLevelsEvent;
   /**
+   * An answer to {@link DomicileHost.callSystem}: `data` is the compositor's
+   * `system_reply`, `system_event` or `system_end` line. See the `system`
+   * module.
+   */
+  system: MessageEvent<string>;
+  /**
    * A screen was added, removed, resized or rescaled. Read
    * {@link DomicileHost.displays} for the new state.
    */
@@ -501,6 +507,14 @@ export type DomicileHost = {
    * See `domicile_host::desktop_entries`.
    */
   searchApps(query: string): Promise<DomicileAppSearch>;
+
+  /**
+   * A system call: `request` is the call as JSON, answered with `system`
+   * events carrying `id`. The compositor checks every call, the lock
+   * included. Use the `system` module rather than calling this. See
+   * `docs/architecture/SYSTEM-ACCESS.md`.
+   */
+  callSystem(id: number, request: string): void;
 
   /**
    * Put a clipboard history entry back on the clipboard.
