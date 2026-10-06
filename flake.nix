@@ -54,6 +54,9 @@
         # Minimal Wayland clients for exercising the compositor in tests.
         weston
         wayland-utils
+        # `wl-copy` and `wl-paste`, the data-control clients the clipboard
+        # checks run.
+        wl-clipboard
         # The terminal the demo shell's Alt+Enter binding launches.
         kitty
         # A display for the compositor's `--present` window in headless e2e

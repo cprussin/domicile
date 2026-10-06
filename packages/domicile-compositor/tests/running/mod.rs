@@ -201,6 +201,16 @@ impl Compositor {
         }
     }
 
+    /// `program` set up to connect to the apps' display, for a test that runs
+    /// a real tool such as `wl-copy` instead of the test client.
+    pub fn command(&self, program: &str) -> Command {
+        let mut command = Command::new(program);
+        command
+            .env("WAYLAND_DISPLAY", &self.session.wayland_display)
+            .env("XDG_RUNTIME_DIR", &self.runtime_dir);
+        command
+    }
+
     /// The display the compositor published for applications.
     pub fn wayland_display(&self) -> &str {
         &self.session.wayland_display

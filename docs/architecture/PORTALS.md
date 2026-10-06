@@ -147,7 +147,7 @@ Phase 3: input.
 
 - [ ] EIS server in the compositor
 - [ ] RemoteDesktop, Clipboard, InputCapture
-- [ ] `ext-data-control-v1`
+- [x] `ext-data-control-v1`
 
 Phase 4: the rest.
 

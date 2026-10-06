@@ -73,9 +73,15 @@ use smithay::wayland::{
         request_data_device_client_selection, set_data_device_focus, set_data_device_selection,
         ClientDndGrabHandler, DataDeviceHandler, DataDeviceState, ServerDndGrabHandler,
     },
+    selection::ext_data_control::{
+        DataControlHandler as ExtDataControlHandler, DataControlState as ExtDataControlState,
+    },
     selection::primary_selection::{
         request_primary_client_selection, set_primary_focus, set_primary_selection,
         PrimarySelectionHandler, PrimarySelectionState,
+    },
+    selection::wlr_data_control::{
+        DataControlHandler as WlrDataControlHandler, DataControlState as WlrDataControlState,
     },
     selection::{SelectionHandler, SelectionSource, SelectionTarget},
     shell::kde::decoration::{KdeDecorationHandler, KdeDecorationState},
@@ -94,11 +100,11 @@ use smithay::wayland::{
     },
 };
 use smithay::{
-    delegate_compositor, delegate_content_type, delegate_cursor_shape, delegate_data_device,
-    delegate_dmabuf, delegate_fractional_scale, delegate_idle_inhibit, delegate_kde_decoration,
-    delegate_output, delegate_primary_selection, delegate_seat, delegate_shm,
-    delegate_single_pixel_buffer, delegate_viewporter, delegate_xdg_activation,
-    delegate_xdg_decoration, delegate_xdg_shell,
+    delegate_compositor, delegate_content_type, delegate_cursor_shape, delegate_data_control,
+    delegate_data_device, delegate_dmabuf, delegate_ext_data_control, delegate_fractional_scale,
+    delegate_idle_inhibit, delegate_kde_decoration, delegate_output, delegate_primary_selection,
+    delegate_seat, delegate_shm, delegate_single_pixel_buffer, delegate_viewporter,
+    delegate_xdg_activation, delegate_xdg_decoration, delegate_xdg_shell,
 };
 use tracing::{debug, error, info, warn};
 
@@ -1510,6 +1516,16 @@ struct DomicileCompositor {
     /// here, since it changes on every text selection and its history would be
     /// noise.
     primary_selection_state: PrimarySelectionState,
+    /// `ext-data-control-v1`: clipboard managers, `wl-copy` and `wl-paste`
+    /// read and set both selections with no window focused.
+    ///
+    /// Shares the seat's selections with `wl_data_device` and the primary
+    /// selection, so its copies reach [`DomicileCompositor::clipboard`] through
+    /// the same `SelectionHandler`.
+    ext_data_control_state: ExtDataControlState,
+    /// `zwlr_data_control_v1`, the same for clients that predate
+    /// `ext-data-control-v1`.
+    wlr_data_control_state: WlrDataControlState,
     /// Clipboard history, newest first.
     ///
     /// A Wayland clipboard disappears with the client that offered it. This
@@ -5543,6 +5559,22 @@ impl PrimarySelectionHandler for DomicileCompositor {
 
 delegate_primary_selection!(DomicileCompositor);
 
+impl ExtDataControlHandler for DomicileCompositor {
+    fn data_control_state(&self) -> &ExtDataControlState {
+        &self.ext_data_control_state
+    }
+}
+
+delegate_ext_data_control!(DomicileCompositor);
+
+impl WlrDataControlHandler for DomicileCompositor {
+    fn data_control_state(&self) -> &WlrDataControlState {
+        &self.wlr_data_control_state
+    }
+}
+
+delegate_data_control!(DomicileCompositor);
+
 impl ClientDndGrabHandler for DomicileCompositor {}
 impl ServerDndGrabHandler for DomicileCompositor {}
 
@@ -5980,6 +6012,17 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let mut seat_state = SeatState::new();
     let data_device_state = DataDeviceState::new::<DomicileCompositor>(&dh);
     let primary_selection_state = PrimarySelectionState::new::<DomicileCompositor>(&dh);
+    // Every client sees both, as a clipboard manager is an ordinary client.
+    let ext_data_control_state = ExtDataControlState::new::<DomicileCompositor, _>(
+        &dh,
+        Some(&primary_selection_state),
+        |_| true,
+    );
+    let wlr_data_control_state = WlrDataControlState::new::<DomicileCompositor, _>(
+        &dh,
+        Some(&primary_selection_state),
+        |_| true,
+    );
     // Advertise a keyboard and pointer.
     let mut seat: Seat<DomicileCompositor> = seat_state.new_wl_seat(&dh, "domicile");
     // The seat's keymap is what every client receives. A keymap xkb cannot
@@ -6258,6 +6301,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         seat_state,
         data_device_state,
         primary_selection_state,
+        ext_data_control_state,
+        wlr_data_control_state,
         clipboard: History::default(),
         copying: [None, None],
         holding: [None, None],

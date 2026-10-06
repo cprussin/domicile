@@ -23,6 +23,15 @@ so the text outlives the client that copied it.
 - Memory only. Nothing is written to disk.
 - An empty history shows a message.
 
+## Clipboard managers
+
+- The compositor serves `ext-data-control-v1` and `zwlr_data_control_v1`, so
+  clipboard managers, `wl-copy` and `wl-paste` work with no window focused.
+- Both selections. A data-control copy enters the history like any other, and
+  a restored row is what data-control clients read.
+- Tested in `packages/domicile-compositor/tests/selection.rs` and
+  `scripts/e2e-data-control.sh`.
+
 ## Browser windows
 
 - On a tty, the engine uses the compositor's clipboard
