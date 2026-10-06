@@ -1,38 +1,14 @@
 // Copyright 2026 Connor Prussin
 // SPDX-License-Identifier: MIT
 
+// The event behind DomicileHost.onfocusrequested: a client asked for the
+// keyboard.
 [
     RuntimeEnabled=DomicileControlChannel,
     Exposed=Window
 ] interface DomicileAppEvent : Event {
   constructor(DOMString type, optional DomicileAppEventInit eventInitDict = {});
 
+  // The window that asked: the id an <app> element names.
   readonly attribute DOMString appId;
-  readonly attribute DOMString title;
-
-  // When the browser process had this message, on `performance.now()`'s
-  // clock.
-  //
-  // NOT `timeStamp`, which is when this object was constructed -- in this
-  // renderer, at dispatch -- so subtracting it from itself reports a few
-  // microseconds of Blink and calls it the IPC. The difference between the two
-  // IS the stage: the read off the compositor's socket, the mojo message, the
-  // hop into this process and the dispatch. See
-  // components/domicile/mojom/control_channel.mojom.
-  readonly attribute DOMHighResTimeStamp arrival;
-
-  // False until the client has committed a buffer. A shell that treats width
-  // and height as meaningful while this is false opens the window at nothing.
-  readonly attribute boolean hasSize;
-  readonly attribute double width;
-  readonly attribute double height;
-
-  // `popupplaced` only: the window or popup this popup is over, and where its
-  // box goes from that one's top-left, in CSS pixels; and whether it grabbed,
-  // which a menu does and a tooltip does not. Empty, zero and false on every
-  // other event.
-  readonly attribute DOMString parentAppId;
-  readonly attribute double x;
-  readonly attribute double y;
-  readonly attribute boolean grab;
 };

@@ -1,8 +1,8 @@
 // Copyright 2026 Connor Prussin
 // SPDX-License-Identifier: MIT
 
-// Something playing (a sink input) or recording (a source output), as a
-// DomicileAudioEvent lists it.
+// Something playing (a sink input) or recording (a source output), as
+// DomicileHost.audioPlayback and audioRecording list it.
 
 [
     Exposed=Window,

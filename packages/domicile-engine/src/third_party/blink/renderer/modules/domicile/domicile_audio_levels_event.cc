@@ -21,17 +21,14 @@ DomicileAudioLevelsEvent::DomicileAudioLevelsEvent(
     const DomicileAudioLevelsEventInit* initializer)
     : Event(type, initializer),
       levels_(MakeGarbageCollected<FrozenArray<DomicileAudioLevel>>(
-          initializer->levels())),
-      arrival_(initializer->arrival()) {}
+          initializer->levels())) {}
 
 DomicileAudioLevelsEvent::DomicileAudioLevelsEvent(
     const AtomicString& type,
-    HeapVector<Member<DomicileAudioLevel>> levels,
-    DOMHighResTimeStamp arrival)
+    HeapVector<Member<DomicileAudioLevel>> levels)
     : Event(type, Bubbles::kNo, Cancelable::kNo),
       levels_(MakeGarbageCollected<FrozenArray<DomicileAudioLevel>>(
-          std::move(levels))),
-      arrival_(arrival) {}
+          std::move(levels))) {}
 
 DomicileAudioLevelsEvent::~DomicileAudioLevelsEvent() = default;
 

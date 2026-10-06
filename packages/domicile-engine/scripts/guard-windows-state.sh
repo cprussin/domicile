@@ -12,6 +12,16 @@
 # windows appearing, one retitled, resized, limited and given a cursor, one
 # focused, one closed, a popup placed -- and the attributes must hold all of it.
 # See docs/architecture/WINDOW-DOMICILE.md.
+#
+# AND TWO THINGS NO OTHER GUARD READS IN A REAL ENGINE:
+#
+#   every event the desktop names reaches both an addEventListener listener
+#     and its on<name> handler. The names are the fork's own
+#     (modules/domicile/domicile_event_names.h), not Blink's global list, and a
+#     name either side lost is a message a shell stops hearing
+#   the cursor's closed set: a cursor the engine does not know does NOT reach
+#     `windows`, and one it knows, sent after it, does -- so "the bad name was
+#     refused" can be told apart from "the channel died on it"
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
@@ -93,15 +103,26 @@ wait_for_line "$TRIES" "GUARD listening" "$ENGINE_LOG" || {
 wait_for_line "$TRIES" "GUARD changed n=" "$ENGINE_LOG"
 sleep 1
 
-# The closing quote is Chromium's and keeps each match on the message: see
-# guard-control-arrival.sh.
+# THE CLOSING QUOTE IS LOAD-BEARING. A console line reaches this log wrapped
+# by Chromium:
+#
+#   [...:INFO:CONSOLE:48] "GUARD focused second", source: ...
+#
+# so a `GUARD` line never ends where the message does, and a reading anchored
+# on `$` reads every one as absent. The quote Chromium puts after the message
+# is the terminator, and it also keeps these off the engine's own unquoted
+# warnings in the same log -- its line about an unknown cursor among them.
+NAMES=$(grep -oE '"GUARD names missing=[^"]*"' "$ENGINE_LOG" | head -1)
 WINDOWS=$(grep -oE '"GUARD windows .*"' "$ENGINE_LOG" | head -1)
 FOCUSED=$(grep -oE '"GUARD focused [^"]*"' "$ENGINE_LOG" | head -1)
 CHANGED=$(grep -oE '"GUARD changed n=[0-9]+"' "$ENGINE_LOG" | head -1)
 
-FAILURE=$(WINDOWS="$WINDOWS" FOCUSED="$FOCUSED" CHANGED="$CHANGED" python3 - <<'PY'
+FAILURE=$(NAMES="$NAMES" WINDOWS="$WINDOWS" FOCUSED="$FOCUSED" CHANGED="$CHANGED" python3 - <<'PY'
 import json, os
 
+if os.environ["NAMES"] != '"GUARD names missing=none"':
+    print("an event the desktop names did not reach its listener or its on<name> handler (%s), so the fork's names in modules/domicile/domicile_event_names.h and the page disagree" % (os.environ["NAMES"] or "no GUARD names line"))
+    raise SystemExit
 windows_line = os.environ["WINDOWS"]
 if not windows_line:
     print("the page never read `windows`, so the module did not run or the attribute threw")
@@ -117,12 +138,20 @@ def default(**fields):
     return window
 
 wanted = [
-    default(appId="first", title="Retitled", width=800, height=600, minWidth=100, minHeight=50),
+    default(appId="first", title="Retitled", width=800, height=600, minWidth=100, minHeight=50,
+            cursor="zoom-out"),
     default(appId="second", title="Second", width=640, height=480, cursor="grab"),
     default(appId="menu", parent="second", x=10, y=20, width=120, height=90, grab=True),
 ]
 
-if [w["appId"] for w in windows] != [w["appId"] for w in wanted]:
+# THE CURSOR ARMS FIRST, AND IN THIS ORDER. An unknown name reaching the page
+# outranks the one after it not reaching it: both can be true at once, and the
+# second would then be a false sentence about a run where something did arrive.
+if by_id.get("second", {}).get("cursor") not in (None, "grab"):
+    print("`second`'s cursor is %s where the compositor's last known shape for it was grab: either the unknown `pointr` after it moved it, and the closed set in components/domicile/common/cursor_shape.h is not being applied, or the grab itself never arrived" % by_id["second"]["cursor"])
+elif by_id.get("first", {}).get("cursor") != "zoom-out":
+    print("the cursor sent after the unknown one never reached `first` (%s), so the unknown name was not refused but fatal: the channel stopped on it" % by_id.get("first", {}).get("cursor"))
+elif [w["appId"] for w in windows] != [w["appId"] for w in wanted]:
     print("`windows` lists %s where the compositor left first, second and menu, in the order they appeared; a closed window kept, or one lost, is a shell drawing the wrong desk" % [w["appId"] for w in windows])
 elif windows != wanted:
     wrong = [w["appId"] for w, v in zip(windows, wanted) if w != v]
@@ -134,7 +163,7 @@ elif os.environ["CHANGED"] != '"GUARD changed n=0"':
 PY
 )
 
-echo "page: $WINDOWS $FOCUSED $CHANGED"
+echo "page: $NAMES $WINDOWS $FOCUSED $CHANGED"
 
 if [ -n "$FAILURE" ]; then
   annotate_from "guard-windows-state: $FAILURE" "$ENGINE_LOG"
@@ -145,4 +174,4 @@ if [ -n "$FAILURE" ]; then
   tail -40 "$ENGINE_LOG" >&2
   exit 1
 fi
-echo "PASS: a shell that reads late reads the whole desk"
+echo "PASS: a shell that reads late reads the whole desk, every event name fires and the cursor set is closed"

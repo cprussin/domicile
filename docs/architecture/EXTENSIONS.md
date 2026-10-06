@@ -77,7 +77,7 @@ control channel, and appears on the `DomicileHost` handed to `Shell`:
 
 ```ts
 // DomicileHost
-onextensions: (event: DomicileExtensionsEvent) => void;
+readonly extensions: readonly DomicileExtension[] | null; // with extensionschanged
 activateExtension(id: string): void;
 
 interface DomicileExtension {
@@ -92,8 +92,8 @@ interface DomicileExtension {
 }
 ```
 
-- **`onextensions`** sends the full list on every change, so a reloaded page
-  gets it again. Sources: `ExtensionRegistryObserver` and
+- **`extensions`** holds the full list, and `extensionschanged` fires on every
+  change, so a reloaded page reads it again. Sources: `ExtensionRegistryObserver` and
   `ExtensionActionDispatcher::Observer::OnExtensionActionUpdated`.
 - **`icon`** is a data URL because `action.setIcon({imageData})` has no URL.
 - **Action state** is per tab. The list reports the active tab's state and is

@@ -21,7 +21,7 @@ shell click ─ activateTrayItem(id, action) ─▶ engine ─ activate_tray_ite
 | Wire types: `HostMessage::Tray`, `ChromeMessage::ActivateTrayItem`, `TrayItem`, `TrayAction` | `packages/domicile-protocol` |
 | Item properties → title, image, hidden; the `Registry`; pixmap → PNG | `packages/domicile-host/src/tray.rs`, `png.rs` |
 | D-Bus: watcher, host name, signals, clicks | `packages/domicile-compositor/src/tray.rs` |
-| `tray` event, `activateTrayItem()` | `components/domicile/mojom/control_channel.mojom`, `modules/domicile/domicile_tray_*`, patch 0063 |
+| `tray` attribute, `activateTrayItem()` | `components/domicile/mojom/control_channel.mojom`, `modules/domicile/domicile_tray_*`, patch 0063 |
 | SDK: `DomicileTrayItem`, `tray`, `activateTrayItem`; `TrayItem`, `TrayAction` | `@domicile-desktop/sdk/domicile-host`, `@domicile-desktop/sdk/tray` |
 | Manganese tray: one reorderable row shared with extension actions | `packages/shell-manganese/src/tray/` |
 

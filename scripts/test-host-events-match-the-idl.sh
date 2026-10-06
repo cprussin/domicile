@@ -75,19 +75,8 @@ compare() { # interface, idl file
 }
 
 compare DomicileAppEvent domicile_app_event.idl
-compare DomicileAppCursorEvent domicile_app_cursor_event.idl
-compare DomicileAppTitledEvent domicile_app_titled_event.idl
 compare DomicileShortcutEvent domicile_shortcut_event.idl
-compare DomicileModifiersEvent domicile_modifiers_event.idl
-compare DomicileBatteryEvent domicile_battery_event.idl
-compare DomicileClipboardEvent domicile_clipboard_event.idl
-compare DomicileFilePreviewEvent domicile_file_preview_event.idl
-compare DomicileAppsEvent domicile_apps_event.idl
-compare DomicileIdleEvent domicile_idle_event.idl
-compare DomicileLockedEvent domicile_locked_event.idl
-compare DomicileTrayEvent domicile_tray_event.idl
-compare DomicileShellConfigEvent domicile_shell_config_event.idl
-compare DomicileNotificationsEvent domicile_notifications_event.idl
+compare DomicileAudioLevelsEvent domicile_audio_levels_event.idl
 
 if [ "$FAILED" -gt 0 ]; then
   echo "$FAILED failed"

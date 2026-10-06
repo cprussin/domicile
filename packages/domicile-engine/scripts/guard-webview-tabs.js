@@ -123,8 +123,8 @@ export const Shell = (_root, desktop) => {
     });
   }
 
-  host.addEventListener("extensions", (event) => {
-    const row = event.extensions.find((extension) => extension.id === expected);
+  host.addEventListener("extensionschanged", () => {
+    const row = host.extensions.find((extension) => extension.id === expected);
     if (row !== undefined && row.popup !== null && popup === undefined) {
       popup = row.popup;
       say(`tray popup=${popup}`);

@@ -3,12 +3,4 @@
 
 dictionary DomicileAppEventInit : EventInit {
   DOMString appId = "";
-  DOMString title = "";
-  DOMHighResTimeStamp arrival = 0;
-  double width;
-  double height;
-  DOMString parentAppId = "";
-  double x = 0;
-  double y = 0;
-  boolean grab = false;
 };

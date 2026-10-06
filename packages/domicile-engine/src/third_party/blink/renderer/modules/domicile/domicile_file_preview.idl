@@ -1,16 +1,30 @@
 // Copyright 2026 Connor Prussin
 // SPDX-License-Identifier: MIT
 
-// What `DomicileHost.previewFile()` resolves with. See
-// DomicileFilePreviewEvent for what each member means; this is the same answer
-// without the event.
+// What `DomicileHost.previewFile()` resolves with.
 dictionary DomicileFilePreview {
+  // Which of the rest means anything: "text", "directory", "audio", "binary"
+  // or "unreadable". "unreadable" is also what a path outside the compositor's
+  // index of the home gets -- see previewFile(). A DOMString rather than an
+  // enum: the browser drops an answer whose kind is not one of the five.
   DOMString kind = "";
+
+  // The front of the file, for "text".
   DOMString text = "";
+
+  // What is in it, for "directory": names, a subdirectory ending in `/`.
   sequence<DOMString> entries = [];
+
+  // What a song says of itself, for "audio": each tag empty when it does not
+  // say it.
   DOMString title = "";
   DOMString artist = "";
   DOMString album = "";
+
+  // How long it plays, in seconds, for "audio".
   double duration = 0;
+
+  // The picture it carries of itself, for "audio", as a `data:` URL -- the
+  // page cannot read the file to draw one of its own.
   DOMString cover = "";
 };

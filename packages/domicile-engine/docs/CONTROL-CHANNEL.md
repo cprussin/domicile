@@ -53,9 +53,9 @@ The engine has two channels to the rest of Domicile:
   sets the client's size through `LayoutAppSurface` and
   `ExternalSurfaceProvider::Embed`. Removing it from the IDL needs an engine
   release.
-- **`shell_config`** reaches the page as a string. The `shellconfig` event's
-  `config` is the compositor's line, and the SDK parses it. The keyboard config
-  it carries can change without an engine release.
+- **`shell_config`** stops in the renderer. `DomicileHost` reads its keys to
+  resolve the chords `grabShortcut` is given by name; none of it reaches the
+  page.
 - **`keymap`** stops in the browser process. It is the xkb keymap the
   compositor compiled from `input.keyboard`, and it feeds Chromium's
   `KeyboardLayoutEngine`. Without it, off ChromeOS, every printable key decodes
@@ -112,7 +112,7 @@ The engine has two channels to the rest of Domicile:
    - Do not use Blink's `event_type_names.json5`. Most of Blink includes its
      header, so a change there recompiles most of Blink.
    - `scripts/test-engine-event-names.sh` checks that this list, the IDL and
-     the events `guard-control-arrival` fires agree.
+     the events `guard-windows-state` fires agree.
 
 ## Command socket
 

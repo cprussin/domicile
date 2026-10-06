@@ -69,7 +69,7 @@ says() { # $1 MEASURED, $2 what the sentence must contain
 # MEASURED is "<leg> <sent> <heard> <tray> <opened> <contexts> <closed>
 # <sized>", each 1 or 0:
 #   sent      the stand-in sent the list
-#   heard     the page heard an `extensions` event
+#   heard     the page heard an `extensionschanged` event
 #   tray      the fixture's row was present (as expected for the claim; at all
 #             for the control)
 #   opened    the <webview> showed its page
