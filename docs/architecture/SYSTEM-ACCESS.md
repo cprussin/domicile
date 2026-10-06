@@ -32,33 +32,19 @@ shell page ─ domicile.callSystem() ─▶ engine (opaque relay) ────�
 ### Page API
 
 ```ts
-interface DomicileSystem {
-  readFile(path: string): Promise<Uint8Array>;
-  writeFile(path: string, data: Uint8Array, options?: { atomic?: boolean }): Promise<void>;
-  readDir(path: string): Promise<DirEntry[]>;
-  stat(path: string): Promise<Stat>;
-  watch(path: string): ReadableStream<WatchEvent>;
+import { system } from "@domicile-desktop/sdk/system";
 
-  spawn(argv: string[], options?: SpawnOptions): Subprocess;
-
-  dbus(bus: "session" | "system"): DBusConnection;
-}
-
-interface Subprocess {
-  stdout: ReadableStream<Uint8Array>;
-  stderr: ReadableStream<Uint8Array>;
-  stdin: WritableStream<Uint8Array> | undefined;
-  exited: Promise<{ code: number | undefined; signal: string | undefined }>;
-  kill(signal?: string): void;
-}
-
-interface DBusConnection {
-  call(message: DBusCall): Promise<unknown[]>;
-  signals(match: DBusMatch): ReadableStream<DBusSignal>;
-}
+export const Shell = async (root, domicile) => {
+  const host = system(domicile);
+  const charge = await host.readTextFile("/sys/class/power_supply/BAT0/capacity");
+  const changes = await host.spawn(["pactl", "subscribe"]);
+};
 ```
 
-- `@domicile-desktop/sdk/system` ships the types and Zod parsers.
+- `@domicile-desktop/sdk/system` is the API: each call resolves a
+  `Result<T, SystemError>`, and a process's output and a watch's changes are
+  `ReadableStream`s. Its types are the reference.
+- D-Bus calls and signals are to come.
 - Features are packages on these primitives: `@domicile-desktop/system-battery`
   (UPower), `system-audio` (`pactl`), `system-network` (NetworkManager),
   `system-bluetooth` (BlueZ), `system-backlight` (sysfs and logind).
@@ -143,7 +129,7 @@ trust from reaching anything else.
 - [x] engine relay: `callSystem()` and the `system` event, on the control
       channel's binding (`guard-windows-state.sh`)
 - [ ] `script-src 'self'` on `domicile://shell`
-- [ ] `@domicile-desktop/sdk/system`
+- [x] `@domicile-desktop/sdk/system`
 - [ ] the compositor serves D-Bus calls and matches
 - [ ] `system-battery`; delete `domicile_host::battery`, its host message and
       IDL member

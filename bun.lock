@@ -13,6 +13,7 @@
       "name": "@domicile-desktop/sdk",
       "version": "0.1.0",
       "dependencies": {
+        "@cprussin/option-result": "catalog:",
         "zod": "catalog:",
       },
       "devDependencies": {
