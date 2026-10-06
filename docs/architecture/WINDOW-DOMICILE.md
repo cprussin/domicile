@@ -52,7 +52,6 @@ misses nothing, so nothing needs buffering.
 | `displays` | already an attribute, with `displayschanged` |
 | `theme`, `windowsTheme` | `theme`, `windowstheme` |
 | `locked`, `idle` | `locked`, `idle` |
-| `batteryCharge`, `batteryCharging` | `battery` |
 | `extensions`, `tray`, `notifications`, `clipboard` | the events of those names |
 | `altKey`, `ctrlKey`, `shiftKey`, `metaKey` | `modifiers` |
 
@@ -162,7 +161,7 @@ Each step ships alone.
       (`guard-desktop-geometry.sh`)
 - [x] `windows` and `focusedWindow` with `windowschanged` and
       `focusedwindowchanged` (`guard-windows-state.sh`)
-- [x] the rest of the state as attributes: theme, lock, idle, battery, audio,
+- [x] the rest of the state as attributes: theme, lock, idle, audio,
       extensions, tray, notifications, clipboard, modifiers
       (`guard-desk-state.sh`)
 - [x] the engine queues moment events until a listener exists

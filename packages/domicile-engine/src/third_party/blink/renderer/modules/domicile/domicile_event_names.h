@@ -35,7 +35,6 @@
   X(notificationschanged, Notificationschanged)   \
   X(extensionschanged, Extensionschanged)         \
   X(audiochanged, Audiochanged)                   \
-  X(batterychanged, Batterychanged)               \
   X(idlechanged, Idlechanged)                     \
   X(lockedchanged, Lockedchanged)                 \
   X(themechanged, Themechanged)                   \
