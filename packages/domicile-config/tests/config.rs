@@ -6,9 +6,7 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use domicile_config::{
-    Bookmark, Config, ConfigError, ConfigStore, DisplayConfig, LockVerifier, ThemeMode,
-};
+use domicile_config::{Config, ConfigError, ConfigStore, DisplayConfig, LockVerifier, ThemeMode};
 
 // ---- parsing & defaults ---------------------------------------------------
 
@@ -340,117 +338,11 @@ fn rejects_a_theme_that_is_neither() {
 // ---- applications ---------------------------------------------------------
 
 #[test]
-fn a_desk_that_says_nothing_about_applications_offers_every_one() {
-    let omit = Config::parse("{}").unwrap().applications.omit;
-    assert!(!omit.omits("firefox.desktop"));
-    assert!(!omit.omits(".hidden.desktop"));
-}
-
-#[test]
-fn a_desk_can_omit_every_application_but_the_ones_it_names() {
-    // Offer only the launcher's own entries: omit everything, then take them
-    // back by name. The last match wins.
-    let omit = Config::parse(
-        r#"
-{
-  "applications": { "omit": ["*", "!launcher-*", "!org.gnome.Nautilus.desktop"] }
-}
-"#,
-    )
-    .unwrap()
-    .applications
-    .omit;
-    assert!(omit.omits("firefox.desktop"));
-    assert!(!omit.omits("launcher-btop.desktop"));
-    assert!(!omit.omits("org.gnome.Nautilus.desktop"));
-}
-
-#[test]
-fn an_application_pattern_that_is_not_a_glob_is_refused() {
-    let err = Config::parse(
-        r#"
-{ "applications": { "omit": ["[unclosed"] } }
-"#,
-    )
-    .unwrap_err();
-    assert!(matches!(err, ConfigError::Parse(_)), "got {err:?}");
-}
-
-#[test]
-fn a_desk_that_says_nothing_has_no_bookmarks() {
-    assert!(Config::parse("{}")
-        .unwrap()
-        .applications
-        .bookmarks
-        .is_empty());
-}
-
-#[test]
-fn a_bookmark_is_a_name_and_the_url_it_opens() {
-    let bookmarks = Config::parse(
-        r#"
-{
-  "applications": {
-    "bookmarks": [{ "name": "Calendar", "url": "https://calendar.google.com" }]
-  }
-}
-"#,
-    )
-    .unwrap()
-    .applications
-    .bookmarks;
-    assert_eq!(
-        bookmarks,
-        vec![Bookmark {
-            name: "Calendar".into(),
-            url: "https://calendar.google.com".into(),
-        }]
-    );
-}
-
-#[test]
-fn a_bookmark_is_a_name_and_a_url_and_nothing_else() {
-    // A bookmark is only a name and a URL. Other keys, such as `shortcodes`,
-    // are refused.
-    let err = Config::parse(
-        r#"
-{
-  "applications": {
-    "bookmarks": [
-      {
-        "name": "Calendar",
-        "url": "https://calendar.google.com",
-        "shortcodes": { "!work": "https://calendar.google.com?authuser=work" }
-      }
-    ]
-  }
-}
-"#,
-    )
-    .unwrap_err();
-    assert!(matches!(err, ConfigError::Parse(_)), "got {err:?}");
-}
-
-#[test]
-fn a_bookmark_whose_url_is_not_a_web_address_is_refused() {
-    // The launcher opens the URL as a page and loads the site's icon from it,
-    // so `calendar.google.com` with no scheme is refused.
-    let err = Config::parse(
-        r#"{ "applications": { "bookmarks": [{ "name": "Calendar", "url": "calendar.google.com" }] } }"#,
-    )
-    .unwrap_err();
-    assert!(matches!(err, ConfigError::Parse(_)), "got {err:?}");
-}
-
-#[test]
-fn a_bookmark_missing_its_url_is_refused() {
-    let err = Config::parse(
-        r#"
-{ "applications": { "bookmarks": [{ "name": "Calendar" }] } }
-"#,
-    )
-    .unwrap_err();
-    assert!(matches!(err, ConfigError::Parse(_)), "got {err:?}");
+fn applications_are_a_shell_s_and_the_section_is_refused() {
+    // A shell lists applications and bookmarks itself, through the system
+    // calls; manganese takes them as its `applications` option.
+    let err = Config::parse(r#"{ "applications": { "omit": ["*"] } }"#).unwrap_err();
+    assert!(matches!(err, ConfigError::Parse(_)), "{err:?}");
 }
 
 // ---- startup --------------------------------------------------------------

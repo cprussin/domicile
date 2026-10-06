@@ -59,4 +59,12 @@ describe("runManganese", () => {
       ["grabShortcut", "Meta+x"],
     ]);
   });
+
+  it("refuses a bookmark that is not a web address", () => {
+    expect(() =>
+      runManganese({
+        applications: { bookmarks: [{ name: "Mail", url: "mail.example" }] },
+      }),
+    ).toThrow("http or https");
+  });
 });

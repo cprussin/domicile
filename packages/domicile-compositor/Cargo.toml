@@ -51,7 +51,6 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 reis = { version = "0.7", features = ["calloop"] }
 # D-Bus, for the settings portal (see `src/appearance.rs`) and logind.
 zbus.workspace = true
-ureq = { version = "3", default-features = false, features = ["rustls", "platform-verifier", "gzip"] }
 
 # The engine renders, so Smithay's winit, DRM and udev backends are left out.
 # Smithay accepts clients and manages surfaces. `backend_egl` and `renderer_gl`

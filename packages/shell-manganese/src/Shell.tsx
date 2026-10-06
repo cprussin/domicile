@@ -7,10 +7,16 @@ import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
 
 import { Desktop } from "./Desktop";
 import { DEFAULT_KEYBINDINGS, DEFAULT_MODES } from "./keyboard/commands";
+import type { ApplicationsConfig } from "./launcher/applications-config";
 import type { TopBarLayout } from "./top-bar/layout";
 import { DEFAULT_TOP_BAR } from "./top-bar/layout";
 
 type Props = {
+  /**
+   * What the launcher offers beside files. Must be stable: a new one reads
+   * the installed applications again.
+   */
+  applications: ApplicationsConfig;
   /**
    * The source of display descriptions.
    *
@@ -35,6 +41,7 @@ type Props = {
  * Holds the single {@link DisplayProvider} every `<Screen>` reads from.
  */
 export const Shell = ({
+  applications,
   displays,
   domicile,
   keybindings = DEFAULT_SHELL_KEYBINDINGS,
@@ -43,7 +50,12 @@ export const Shell = ({
 }: Props) => (
   <Provider theme={theme}>
     <DisplayProvider source={displays}>
-      <Desktop domicile={domicile} keybindings={keybindings} topBar={topBar} />
+      <Desktop
+        applications={applications}
+        domicile={domicile}
+        keybindings={keybindings}
+        topBar={topBar}
+      />
     </DisplayProvider>
   </Provider>
 );

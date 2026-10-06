@@ -2,6 +2,7 @@ import { useDisplays } from "@domicile-desktop/component-library/DisplayProvider
 import { createToastManager } from "@domicile-desktop/component-library/Toaster";
 import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
+import { system } from "@domicile-desktop/sdk/system";
 import { useCallback, useMemo, useState } from "react";
 
 import { Clipboard } from "./clipboard/Clipboard";
@@ -10,7 +11,8 @@ import { popupShown } from "./extensions/shown";
 import { useExtensions } from "./extensions/useExtensions";
 import { useKeybindings } from "./keyboard/useKeybindings";
 import { useModifiers } from "./keyboard/useModifiers";
-import { foundAppsOf } from "./launcher/found-apps";
+import { appSearch } from "./launcher/app-search";
+import type { ApplicationsConfig } from "./launcher/applications-config";
 import { Launcher } from "./launcher/Launcher";
 import { LaunchKind } from "./launcher/launch";
 import { previewOf } from "./launcher/preview-of";
@@ -38,6 +40,8 @@ import { useWindows } from "./window-management/useWindows";
 import { WindowAction } from "./window-management/window-state";
 
 type Props = {
+  /** What the launcher offers beside files. */
+  applications: ApplicationsConfig;
   domicile: DomicileHost;
   /** The keys this desktop binds, merged under the config's. */
   keybindings: ShellKeybindings;
@@ -53,7 +57,12 @@ type Props = {
  * one {@link Stage} that draws every window. Workspaces are shared across
  * monitors, as in sway. See `docs/architecture/ONE-PAGE-FOR-THE-DESK.md`.
  */
-export const Desktop = ({ domicile, keybindings, topBar }: Props) => {
+export const Desktop = ({
+  applications,
+  domicile,
+  keybindings,
+  topBar,
+}: Props) => {
   const displays = useDisplays();
   const windows = useWindows(domicile, displays);
   const { act } = windows;
@@ -70,14 +79,15 @@ export const Desktop = ({ domicile, keybindings, topBar }: Props) => {
     (query: string) => domicile.searchFiles(query),
     [domicile],
   );
-  // Installed apps, read by the compositor from desktop entries.
-  const searchApps = useCallback(
-    (query: string) => domicile.searchApps(query).then(foundAppsOf),
-    [domicile],
+  // Installed apps and bookmarks, read through the desktop's system calls.
+  // Memoized because it holds what was read and the bookmarks' icons.
+  const apps = useMemo(
+    () => appSearch(system(domicile), applications),
+    [applications, domicile],
   );
-  // Fetched while the launcher is closed so its rows render with it rather
-  // than a moment later.
-  const opening = useOpeningApps(searchApps, windows.launcherOpen);
+  // Read while the launcher is closed so its rows render with it rather than
+  // a moment later.
+  const opening = useOpeningApps(apps.opening, windows.launcherOpen);
   // File previews, from the same index.
   const preview = useCallback(
     (path: string) => domicile.previewFile(path).then(previewOf),
@@ -322,7 +332,7 @@ export const Desktop = ({ domicile, keybindings, topBar }: Props) => {
         preview={preview}
         screen={windows.focused}
         search={search}
-        searchApps={searchApps}
+        searchApps={apps.search}
       />
       {/* Over the whole desktop, like the launcher. */}
       <Clipboard

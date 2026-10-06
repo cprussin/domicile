@@ -1,0 +1,12 @@
+[Desktop Entry]
+Name[de]=Zenity
+Name=Zenity
+Comment[de]=Dialogfenster aus der Befehlszeile heraus aufrufen
+Comment=Display dialog boxes from the command line
+Exec=zenity
+Terminal=false
+Type=Application
+NoDisplay=true
+StartupNotify=true
+DBusActivatable=true
+X-GNOME-UsesNotifications=true

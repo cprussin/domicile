@@ -2,15 +2,15 @@
 //!
 //! The D-Bus side lives in `domicile-compositor`'s `tray` module. It passes
 //! each item's [`Properties`] here and sends shells the resulting
-//! [`TrayItem`]s. Icons become `data:` URLs, as in [`crate::app_icons`]. See
+//! [`TrayItem`]s. Icons become `data:` URLs. See
 //! `docs/architecture/SYSTEM-TRAY.md`.
 
 use std::collections::HashMap;
+use std::fs;
 use std::path::{Path, PathBuf};
 
 use domicile_protocol::{TrayAction, TrayItem};
 
-use crate::app_icons::{read, KINDS};
 use crate::data_url::data_url;
 use crate::png::png;
 
@@ -295,8 +295,8 @@ fn pixmap(pixmaps: &[Pixmap]) -> Option<String> {
 
 /// Tray icon lookup by name in the XDG data directories.
 ///
-/// Like [`crate::app_icons::AppIcons`], but searches `status` and an item's
-/// own directory. Results, including misses, are cached for the compositor's
+/// Searches `hicolor`, then `pixmaps`, after an item's own directory.
+/// Results, including misses, are cached for the compositor's
 /// lifetime: an item that changes its icon uses a new name.
 pub struct TrayIcons {
     data_dirs: Vec<PathBuf>,
@@ -364,4 +364,22 @@ fn themed(root: PathBuf) -> impl Iterator<Item = PathBuf> {
             .iter()
             .map(move |category| root.join(size).join(category))
     })
+}
+
+/// Supported extensions and their MIME types.
+const KINDS: &[(&str, &str)] = &[("png", "image/png"), ("svg", "image/svg+xml")];
+
+/// Largest icon file sent.
+const LARGEST: u64 = 128 * 1024;
+
+/// Reads `path` as a `data:` URL. Returns `None` for a missing, oversized or
+/// unsupported file.
+fn read(path: &Path) -> Option<String> {
+    let ext = path.extension()?.to_str()?;
+    let (_, mime) = KINDS.iter().find(|(kind, _)| *kind == ext)?;
+    let metadata = fs::metadata(path).ok()?;
+    if metadata.len() > LARGEST {
+        return None;
+    }
+    Some(data_url(mime, &fs::read(path).ok()?))
 }

@@ -1,0 +1,49 @@
+{
+  "dependencies": {
+    "@cprussin/option-result": "catalog:",
+    "@domicile-desktop/sdk": "workspace:*",
+    "zod": "catalog:"
+  },
+  "description": "Installed applications and bookmarks for a Domicile shell's launcher, read through @domicile-desktop/sdk/system.",
+  "devDependencies": {
+    "@cprussin/tsconfig": "catalog:",
+    "@domicile-desktop/test-support": "workspace:*",
+    "@types/bun": "catalog:",
+    "typescript": "catalog:"
+  },
+  "exports": {
+    "./app-icons": "./src/app-icons.ts",
+    "./bookmark": "./src/bookmark.ts",
+    "./curl": "./src/curl.ts",
+    "./data-dirs": "./src/data-dirs.ts",
+    "./desktop-entry": "./src/desktop-entry.ts",
+    "./fake-system": "./src/fake-system.ts",
+    "./favicon": "./src/favicon.ts",
+    "./favicons": "./src/favicons.ts",
+    "./find-apps": "./src/find-apps.ts",
+    "./installed": "./src/installed.ts",
+    "./omit": "./src/omit.ts"
+  },
+  "files": [
+    "src/**",
+    "!src/**/*.test.ts",
+    "!src/recorded/**"
+  ],
+  "license": "MIT",
+  "name": "@domicile-desktop/system-apps",
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "directory": "packages/system-apps",
+    "type": "git",
+    "url": "git+https://github.com/cprussin/domicile.git"
+  },
+  "scripts": {
+    "test:types": "tsc --noEmit",
+    "test:unit": "bun test"
+  },
+  "type": "module",
+  "version": "0.0.0"
+}

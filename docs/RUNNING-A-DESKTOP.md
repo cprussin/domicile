@@ -92,8 +92,8 @@ bindsym --inhibited Mod4+Shift+q kill
 ## The launcher
 
 The launcher searches files in your home, desktop entries and bookmarks.
-Configure it with `files.omit`, `applications.omit` and
-`applications.bookmarks`: [LAUNCHER.md](LAUNCHER.md).
+Configure it with `files.omit` and manganese's `applications` option:
+[LAUNCHER.md](LAUNCHER.md).
 
 ## Blanking and locking
 

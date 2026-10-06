@@ -336,8 +336,7 @@ pub fn refused(asked: Asked) -> Option<Refusal> {
         )
         | Asked::OnTheConnection(
             ConnectionRequest::SearchFiles { .. }
-            | ConnectionRequest::PreviewFile { .. }
-            | ConnectionRequest::SearchApps { .. },
+            | ConnectionRequest::PreviewFile { .. },
         )
         | Asked::System(Reach::Acts) => Some(Refusal::Command),
         Asked::OnTheWaylandThread(
@@ -737,12 +736,6 @@ mod tests {
                 "a preview of a file in it",
                 ConnectionRequest::PreviewFile {
                     path: "plan.org".into(),
-                },
-            ),
-            (
-                "a search of the applications installed",
-                ConnectionRequest::SearchApps {
-                    query: "fire".into(),
                 },
             ),
         ] {

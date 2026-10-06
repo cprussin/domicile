@@ -3,8 +3,9 @@ import { z } from "zod";
 // Bookmark icons learned from the launcher's page previews.
 //
 // The preview loads with the user's sign-in, so it can find icons that the
-// compositor's anonymous lookup can't. Stored per bookmark in `localStorage`,
-// which every page of the desk shares, so they persist across reloads.
+// anonymous lookup (`@domicile-desktop/system-apps/favicon`) can't. Stored per
+// bookmark in `localStorage`, which every page of the desk shares, so they
+// persist across reloads.
 
 /** Storage key, versioned per the rule for persisted state. */
 const ICONS_KEY = "bookmark-icons:v1";

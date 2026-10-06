@@ -9,8 +9,8 @@ Every row is something Enter can do. Source: `src/launcher/`.
    it has one, then a search on that site, with its logo. `!gh` with a name
    (`cprussin` or `cprussin/domicile`) goes to that GitHub page.
 2. A URL, if the line is one.
-3. Applications and the desktop's bookmarks (`applications.bookmarks`), as one
-   list by name.
+3. Applications and bookmarks (the `applications` option), as one list by
+   name.
 4. A path, if the line is spelled like one.
 5. Files from the compositor's index of the home directory.
 6. A Google search for the line as typed. Always present.
@@ -20,11 +20,12 @@ Browser address bars use the same rule.
 
 ## Sources
 
-- **Applications**: the compositor reads desktop entries. Icons come from the
-  `hicolor` theme. The app list is fetched while the launcher is closed, so
-  rows don't shift when it opens.
+- **Applications**: `@domicile-desktop/system-apps` reads desktop entries
+  through the system calls (`launcher/app-search.ts`). Icons come from the
+  `hicolor` theme. Entries are read while the launcher is closed, so rows
+  don't shift when it opens; typing searches that list.
 - **Bookmarks**: open as a page. The icon is the one the page named when last
-  previewed or visited, else the one the compositor found.
+  previewed or visited, else the one `system-apps` fetched with `curl`.
 - **Files**: the compositor's index matches the query and returns the top
   results. While indexing is unfinished, the panel says so and re-queries.
 

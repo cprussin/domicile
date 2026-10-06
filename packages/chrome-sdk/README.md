@@ -30,7 +30,7 @@ export const Shell: ShellModule = (root, domicile) => {
   `theme`, …), each with a bare `<name>changed` event. Read, then listen.
 - Moments (`shortcut`, `focusrequested`, …) are events. The engine holds each
   type until its first listener exists.
-- `searchFiles`, `previewFile` and `searchApps` return promises. A newer call
+- `searchFiles` and `previewFile` return promises. A newer call
   rejects the older with an `AbortError`.
 - Only Domicile calls a shell. Develop against the real desktop with
   `./scripts/dev-shell.sh <shell>`.

@@ -17,7 +17,6 @@
 //! | `idle.blank_after_seconds` | idle clock restarted and timer re-armed (`reset_the_idle_clock`) |
 //! | `theme.mode` | sent to every chrome and the desk's clients (`take_up_the_theme`) |
 //! | `files.omit` | sent to the index, which rewalks the home (`omit_from_the_index`) |
-//! | `applications` | used for the next `search_apps` (`offer_the_applications`) |
 //! | `extensions.*` | sent to every chrome, whose browser installs them (`hand_over_the_extensions`) |
 //! | `keybindings` | resolved on the keyboard and sent to every chrome (`rebind_the_keys`) |
 //! | `modes` | the same, with `keybindings` |
@@ -39,9 +38,7 @@
 //! says why a reload cannot apply it. Copy the tests below: a changed field is
 //! restated and an unchanged one is not.
 
-use domicile_config::{
-    ApplicationsConfig, Config, ExtensionsConfig, IdleConfig, KeyboardConfig, Omit, ThemeMode,
-};
+use domicile_config::{Config, ExtensionsConfig, IdleConfig, KeyboardConfig, Omit, ThemeMode};
 
 /// What a reloaded config asks the compositor to restate.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -63,8 +60,6 @@ pub struct Restatement {
     pub theme: Option<ThemeMode>,
     /// What the file index leaves out, or `None` if unchanged.
     pub omit: Option<Omit>,
-    /// Which applications a launcher is offered, or `None` if unchanged.
-    pub applications: Option<ApplicationsConfig>,
     /// The extensions the browser process installs, or `None` if unchanged.
     pub extensions: Option<ExtensionsConfig>,
     /// Whether to resend the key config to the chromes, because keysyms
@@ -83,7 +78,6 @@ impl Restatement {
             idle: (was.idle != now.idle).then(|| now.idle.clone()),
             theme: (was.theme != now.theme).then_some(now.theme.mode),
             omit: (was.files.omit != now.files.omit).then(|| now.files.omit.clone()),
-            applications: (was.applications != now.applications).then(|| now.applications.clone()),
             extensions: (was.extensions != now.extensions).then(|| now.extensions.clone()),
             shell_config: was.input.keyboard != now.input.keyboard,
         }
@@ -171,20 +165,6 @@ mod tests {
     }
 
     #[test]
-    fn the_applications_a_desk_offers_are_restated_when_they_moved() {
-        let was = parsed(A_DVORAK_DESK);
-        let now = parsed(A_DESK_OFFERING_ONLY_ITS_OWN_APPLICATIONS);
-
-        let applications = Restatement::between(&was, &now)
-            .applications
-            .expect("the omitted applications moved");
-        assert!(
-            applications.omit.omits("firefox.desktop"),
-            "the rule handed back is the new one, not the one being replaced"
-        );
-    }
-
-    #[test]
     fn extensions_that_moved_are_restated() {
         let was = parsed(A_DVORAK_DESK);
         let now = parsed(A_DESK_WITH_AN_EXTENSION);
@@ -241,17 +221,6 @@ mod tests {
     const A_DESK_OFFERING_ITS_DOTFILES: &str = r#"
 {
   "files": { "omit": [] },
-  "input": {
-    "keyboard": { "xkb_variant": "dvp", "xkb_options": ["caps:swapescape"] }
-  },
-  "output": { "displays": [{ "name": "one", "size": [1024, 768] }] }
-}
-"#;
-
-    /// The same desk, offering only the launcher's own applications.
-    const A_DESK_OFFERING_ONLY_ITS_OWN_APPLICATIONS: &str = r#"
-{
-  "applications": { "omit": ["*", "!launcher-*"] },
   "input": {
     "keyboard": { "xkb_variant": "dvp", "xkb_options": ["caps:swapescape"] }
   },

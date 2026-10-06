@@ -95,6 +95,7 @@
         "@cprussin/option-result": "catalog:",
         "@domicile-desktop/component-library": "workspace:*",
         "@domicile-desktop/sdk": "workspace:*",
+        "@domicile-desktop/system-apps": "workspace:*",
         "@domicile-desktop/system-battery": "workspace:*",
         "@domicile-desktop/system-bluetooth": "workspace:*",
         "@domicile-desktop/system-network": "workspace:*",
@@ -138,6 +139,21 @@
         "@vitejs/plugin-react": "catalog:",
         "typescript": "catalog:",
         "vite": "catalog:",
+      },
+    },
+    "packages/system-apps": {
+      "name": "@domicile-desktop/system-apps",
+      "version": "0.0.0",
+      "dependencies": {
+        "@cprussin/option-result": "catalog:",
+        "@domicile-desktop/sdk": "workspace:*",
+        "zod": "catalog:",
+      },
+      "devDependencies": {
+        "@cprussin/tsconfig": "catalog:",
+        "@domicile-desktop/test-support": "workspace:*",
+        "@types/bun": "catalog:",
+        "typescript": "catalog:",
       },
     },
     "packages/system-battery": {
@@ -318,6 +334,8 @@
     "@domicile-desktop/sdk": ["@domicile-desktop/sdk@workspace:packages/chrome-sdk"],
 
     "@domicile-desktop/shell-simple": ["@domicile-desktop/shell-simple@workspace:packages/shell-simple"],
+
+    "@domicile-desktop/system-apps": ["@domicile-desktop/system-apps@workspace:packages/system-apps"],
 
     "@domicile-desktop/system-battery": ["@domicile-desktop/system-battery@workspace:packages/system-battery"],
 

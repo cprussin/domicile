@@ -11,6 +11,8 @@ import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
 import type { Shell as ShellModule } from "@domicile-desktop/sdk/shell";
 import { createRoot } from "react-dom/client";
 
+import type { ApplicationsOptions } from "./launcher/applications-config";
+import { applicationsConfigSchema } from "./launcher/applications-config";
 import { mountPoint } from "./mount-point";
 import { Shell as Chrome } from "./Shell";
 import { hostDisplays } from "./screens/host-displays";
@@ -60,6 +62,11 @@ export { DEFAULT_TOP_BAR, type TopBarLayout } from "./top-bar/layout";
 /** Options for `runManganese`. */
 export type ManganeseOptions = {
   /**
+   * What the launcher offers beside files: `omit`, desktop file IDs to hide,
+   * and `bookmarks`, pages to open by name. See `docs/LAUNCHER.md`.
+   */
+  readonly applications?: ApplicationsOptions;
+  /**
    * Shell keybindings, below any the config binds. Defaults to
    * `DEFAULT_KEYBINDINGS` and `DEFAULT_MODES` (sway's, on Meta).
    */
@@ -69,9 +76,10 @@ export type ManganeseOptions = {
 };
 
 /** Build a `Shell` that mounts manganese with `options`. */
-export const runManganese =
-  (options: ManganeseOptions = {}): ShellModule =>
-  (root, domicile) => {
+export const runManganese = (options: ManganeseOptions = {}): ShellModule => {
+  // Parsed when the config is built, so a bad bookmark fails it.
+  const applications = applicationsConfigSchema.parse(options.applications);
+  return (root, domicile) => {
     // Apply the last-seen theme before React mounts to avoid a theme flash on
     // first paint (the stylesheet ships in this module; see
     // `@domicile-desktop/component-library/vite-shell`). The compositor owns the
@@ -85,6 +93,7 @@ export const runManganese =
 
     createRoot(mountPoint(root)).render(
       <Chrome
+        applications={applications}
         displays={displays}
         domicile={domicile}
         keybindings={options.keybindings}
@@ -93,6 +102,7 @@ export const runManganese =
       />,
     );
   };
+};
 
 /** The default shell, loaded by `"shell": "@domicile-desktop/manganese"`. */
 export const Shell: ShellModule = runManganese();

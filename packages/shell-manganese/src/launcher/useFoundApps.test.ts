@@ -19,7 +19,7 @@ const MAIL: Bookmark = {
   url: "https://mail.example.com",
 };
 
-/** The host's search for applications, answered in whatever order a test says. */
+/** A search for applications, answered in whatever order a test says. */
 const host = () => {
   const asked: { query: string; settle: (found: FoundApps) => void }[] = [];
   const searchApps = (query: string) =>

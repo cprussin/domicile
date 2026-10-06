@@ -1,7 +1,8 @@
 # The launcher
 
 The launcher searches three sources: files in your home directory, installed
-desktop entries, and bookmarks from your config. A config reload applies
+desktop entries, and bookmarks. Files are configured in the desk config;
+applications and bookmarks are manganese options. A config reload applies
 changes.
 
 ## Files
@@ -26,14 +27,22 @@ changes.
 
 ## Applications
 
-The launcher lists the machine's desktop entries. `applications.omit` hides
-some, using the same glob rules over desktop file IDs (`firefox.desktop`).
+Manganese lists the machine's desktop entries. Its `applications.omit` option
+hides some, using the same glob rules over desktop file IDs
+(`firefox.desktop`).
 
-```json
-{ "applications": { "omit": ["*", "!launcher-*"] } }
+```tsx
+// ~/.config/domicile/domicile.tsx
+import { runManganese } from "@domicile-desktop/manganese";
+
+export const Shell = runManganese({
+  applications: { omit: ["*", "!launcher-*"] },
+});
 ```
 
 - Unset shows every entry.
+- Entries are read again each time the launcher closes, so a new install shows
+  on the next open.
 - `Icon` is drawn beside the row.
 - `X-Domicile-Preview` names a PNG or SVG under 128 KiB, found the same way as
   `Icon`. It fills the preview while the row is highlighted.
@@ -49,23 +58,24 @@ X-Domicile-Preview=/path/to/agenda-preview.svg
 
 ## Bookmarks
 
-`applications.bookmarks` adds web pages to the launcher. Selecting one opens it
-as a browser window in the shell.
+Manganese's `applications.bookmarks` option adds web pages to the launcher.
+Selecting one opens it as a browser window in the shell.
 
-```json
-{
-  "applications": {
-    "bookmarks": [
-      { "name": "Calendar - Home", "url": "https://calendar.google.com?authuser=me@home.example" },
-      { "name": "Calendar - Work", "url": "https://calendar.google.com?authuser=me@work.example" }
-    ]
-  }
-}
+```tsx
+export const Shell = runManganese({
+  applications: {
+    bookmarks: [
+      { name: "Calendar - Home", url: "https://calendar.google.com?authuser=me@home.example" },
+      { name: "Calendar - Work", url: "https://calendar.google.com?authuser=me@work.example" },
+    ],
+  },
+});
 ```
 
 - Each bookmark has one `http` or `https` URL. Other schemes are rejected.
-- The compositor fetches each site's icon when it reads the config: the page's
-  `<link rel="icon">`, else `/favicon.ico`.
+- Manganese fetches each site's icon with `curl`: the page's
+  `<link rel="icon">`, else `/favicon.ico`. The Nix package puts `curl` on the
+  compositor's `PATH`.
 - A failed fetch retries after a minute, so icons appear once the network is
   up.
 - The fetch sends no cookies, so sites behind a sign-in may show a placeholder

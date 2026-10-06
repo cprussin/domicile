@@ -24,6 +24,7 @@ import userEvent from "@testing-library/user-event";
 
 import { css } from "../styled-system/css";
 import { DEFAULT_KEYBINDINGS, DEFAULT_MODES } from "./keyboard/commands";
+import type { ApplicationsConfig } from "./launcher/applications-config";
 import { Shell } from "./Shell";
 import { hostDisplays } from "./screens/host-displays";
 import { BarClock, BarLauncher, BarWorkspaces } from "./top-bar/bar-items";
@@ -216,6 +217,7 @@ const renderingShell = (
   // protocol; `host-theme.test.ts` covers that.
   const rendered = render(
     <Shell
+      applications={NO_APPLICATIONS}
       displays={hostDisplays(client)}
       domicile={client}
       keybindings={keybindings}
@@ -279,6 +281,9 @@ const WORKSPACE_KEYS = [
   "equal",
   "asterisk",
 ] as const;
+
+/** A desk with no omitted applications and no bookmarks. */
+const NO_APPLICATIONS: ApplicationsConfig = { bookmarks: [], omit: [] };
 
 /** The README's sample config. */
 const MANGANESE_KEYS: ShellKeybindings = {
@@ -2438,18 +2443,24 @@ describe("the launcher", () => {
     expect(domicile.calls).toContainEqual(["searchFiles", ""]);
   });
 
-  it("asks the host for its empty box's applications before it is opened", () => {
-    // Unlike files, fetched before opening so late results do not push rows
-    // down. See `launcher/useOpeningApps.ts`.
+  it("reads the installed applications before it is opened", () => {
+    // Unlike files, read before opening so late results do not push rows
+    // down. See `launcher/useOpeningApps.ts`. A read starts by asking the
+    // desktop's environment where applications are installed.
     renderShell();
+    const reads = () =>
+      domicile.calls.filter(
+        ([call, , request]) =>
+          call === "callSystem" &&
+          typeof request === "string" &&
+          request.includes('"argv":["env","-0"]'),
+      );
 
-    expect(domicile.calls).toContainEqual(["searchApps", ""]);
+    expect(reads()).toHaveLength(1);
 
     press("space");
 
-    expect(
-      domicile.calls.filter(([call]) => call === "searchApps"),
-    ).toStrictEqual([["searchApps", ""]]);
+    expect(reads()).toHaveLength(1);
   });
 
   it("shows the files the host answered with", async () => {

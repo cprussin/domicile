@@ -11,16 +11,13 @@ use std::collections::BTreeMap;
 
 use domicile_protocol::{ChromeMessage, DisplayInfo, HostMessage, Notification, Theme, TrayItem};
 
-pub mod app_icons;
 pub mod audio;
 pub mod backlight;
 pub mod base64;
-pub mod bookmarks;
 pub mod clipboard;
+pub mod data_dirs;
 mod data_url;
 pub mod dbus_json;
-pub mod desktop_entries;
-pub mod favicons;
 pub mod file_changes;
 pub mod file_index;
 pub mod file_preview;
@@ -523,7 +520,6 @@ impl Host {
             | ChromeMessage::Spawn { .. }
             | ChromeMessage::SearchFiles { .. }
             | ChromeMessage::PreviewFile { .. }
-            | ChromeMessage::SearchApps { .. }
             | ChromeMessage::CopyClipboardEntry { .. }
             | ChromeMessage::ActivateTrayItem { .. }
             | ChromeMessage::DismissNotifications { .. }

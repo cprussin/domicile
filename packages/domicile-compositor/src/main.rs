@@ -121,7 +121,6 @@ mod engine_buffers;
 mod engine_session;
 mod engine_surfaces;
 mod engine_waiting;
-mod favicons;
 mod file_indexing;
 mod gbm;
 mod idle;
@@ -176,17 +175,14 @@ use crate::timing_window::TimingWindow;
 use crate::viewport::{source_pixels, surface_size, Viewport};
 use crate::which_engine::another_engine;
 use domicile_config::{
-    ApplicationsConfig, Config, ConfigError, ConfigStore, ExtensionsConfig, IdleConfig,
-    KeyboardConfig, Omit, ThemeMode,
+    Config, ConfigError, ConfigStore, ExtensionsConfig, IdleConfig, KeyboardConfig, Omit, ThemeMode,
 };
-use domicile_host::app_icons::AppIcons;
 use domicile_host::audio::Request as AudioRequest;
 use domicile_host::backlight::{
     announces_a_backlight, reading as backlight_reading, Brightness, RealBacklights,
 };
-use domicile_host::bookmarks::find as find_bookmarks;
 use domicile_host::clipboard::{text_mime, History, LONGEST_COPY, TEXT_MIMES};
-use domicile_host::desktop_entries::{application_dirs, data_dirs, find, installed};
+use domicile_host::data_dirs::data_dirs;
 use domicile_host::file_preview::preview;
 use domicile_host::ipc::{apply_chrome_message, parse_chrome, to_line};
 use domicile_host::system::{locked_out, reach, Environment, Handled, System};
@@ -196,8 +192,7 @@ use domicile_launch::arguments::arguments;
 use domicile_launch::handshake::{silence, Handshake, WAIT_FOR_A_PAGE};
 use domicile_launch::session::{publish, Session};
 use domicile_protocol::{
-    Bookmark, ChromeMessage, CursorShape, DesktopEntry, HostMessage, Passphrase, SystemRequest,
-    Theme, TrayAction,
+    ChromeMessage, CursorShape, HostMessage, Passphrase, SystemRequest, Theme, TrayAction,
 };
 use smithay::backend::renderer::gles::GlesRenderer;
 use smithay::backend::renderer::ImportMemWl as _;
@@ -414,7 +409,6 @@ enum ClientRequest {
 enum ConnectionRequest {
     SearchFiles { query: String },
     PreviewFile { path: String },
-    SearchApps { query: String },
     SetTheme { theme: Theme },
 }
 
@@ -453,13 +447,6 @@ struct ChromeHub {
     /// The lock state, for [`answer_on_the_connection`]. Set once at startup,
     /// only if the desktop can lock.
     lock: OnceLock<Seen>,
-    /// The `applications` config that launcher searches offer. Updated on
-    /// reload.
-    applications: Mutex<ApplicationsConfig>,
-    /// Cached application icons for launcher results.
-    app_icons: Mutex<AppIcons>,
-    /// Bookmark favicons, fetched in the background.
-    favicons: favicons::Favicons,
     /// Tells clients the theme.
     ///
     /// Driven by the Wayland thread's theme turnover, not the broadcast:
@@ -485,20 +472,6 @@ struct ChromeHub {
 }
 
 impl ChromeHub {
-    /// Use `applications` for later launcher searches.
-    ///
-    /// Nothing is broadcast: launchers query on every keystroke. Missing
-    /// bookmark favicons are fetched in the background.
-    fn offer_the_applications(&self, applications: &ApplicationsConfig) {
-        *self.applications.lock().unwrap() = applications.clone();
-        self.favicons.look_for(
-            applications
-                .bookmarks
-                .iter()
-                .map(|bookmark| bookmark.url.clone()),
-        );
-    }
-
     fn new(
         request_tx: Sender<ClientRequest>,
         max_scale: u32,
@@ -517,13 +490,6 @@ impl ChromeHub {
             offered: Mutex::new(None),
             home: OnceLock::new(),
             lock: OnceLock::new(),
-            applications: Mutex::new(ApplicationsConfig::default()),
-            app_icons: Mutex::new(AppIcons::new(data_dirs(
-                std::env::var_os("XDG_DATA_HOME"),
-                std::env::var_os("XDG_DATA_DIRS"),
-                home_directory().as_deref(),
-            ))),
-            favicons: favicons::Favicons::default(),
             appearance,
             tray: OnceLock::new(),
             notifications: OnceLock::new(),
@@ -808,38 +774,6 @@ const BRIGHTNESS_BACKSTOP: Duration = Duration::from_secs(120);
 /// Maximum file search results sent. `matched` still reports the full count.
 const FOUND: usize = 200;
 
-/// Bookmarks matching `query`, with any known favicons.
-///
-/// Missing favicons are fetched in the background for a later search. See
-/// [`favicons::Favicons::look_for`].
-fn offered_bookmarks(
-    bookmarks: &[domicile_config::Bookmark],
-    favicons: &favicons::Favicons,
-    query: &str,
-) -> Vec<Bookmark> {
-    let bookmarks: Vec<Bookmark> = bookmarks
-        .iter()
-        .map(|bookmark| Bookmark {
-            name: bookmark.name.clone(),
-            url: bookmark.url.clone(),
-            icon: None,
-        })
-        .collect();
-    favicons.look_for(bookmarks.iter().map(|bookmark| bookmark.url.clone()));
-    // Match first, so only sent results get icons.
-    find_bookmarks(&bookmarks, query, FOUND_APPS)
-        .into_iter()
-        .map(|bookmark| Bookmark {
-            icon: favicons.icon(&bookmark.url),
-            ..bookmark
-        })
-        .collect()
-}
-
-/// Maximum application search results sent. Lower than [`FOUND`] because each
-/// result carries an icon.
-const FOUND_APPS: usize = 50;
-
 /// How often the writer thread reports frame timings.
 const REPORT_EVERY: Duration = Duration::from_secs(5);
 
@@ -1091,9 +1025,6 @@ fn read_chrome_messages(
             }
             Ok(ChromeMessage::PreviewFile { path }) => {
                 answer_on_the_connection(hub, ConnectionRequest::PreviewFile { path })
-            }
-            Ok(ChromeMessage::SearchApps { query }) => {
-                answer_on_the_connection(hub, ConnectionRequest::SearchApps { query })
             }
             Ok(ChromeMessage::PointerMotion { app_id, x, y }) => {
                 hub.send_request(ClientRequest::PointerMotion { app_id, x, y });
@@ -1398,41 +1329,6 @@ fn answered_on_the_connection(hub: &ChromeHub, request: ConnectionRequest) -> Ve
                 // No index gets no response, as with search.
                 .into_iter()
                 .collect()
-        }
-        // Read from disk on every search, so a just-installed application shows
-        // up immediately. There are only hundreds of entries. An empty result
-        // is still sent, unlike a missing file index.
-        //
-        // Icons come from a cache that lives as long as the compositor. See
-        // `domicile_host::app_icons`.
-        ConnectionRequest::SearchApps { query } => {
-            let dirs = application_dirs(
-                std::env::var_os("XDG_DATA_HOME"),
-                std::env::var_os("XDG_DATA_DIRS"),
-                home_directory().as_deref(),
-            );
-            // Release the lock before reading the disk, so a reload is not
-            // blocked.
-            let offered = hub.applications.lock().unwrap().clone();
-            let installed: Vec<_> = installed(&dirs)
-                .into_iter()
-                .filter(|found| !offered.omit.omits(&found.entry.id))
-                .collect();
-            let mut icons = hub.app_icons.lock().unwrap();
-            let apps = find(&installed, &query, FOUND_APPS)
-                .into_iter()
-                .map(|found| DesktopEntry {
-                    icon: found.icon_name().and_then(|name| icons.icon(name)),
-                    preview: found.preview_name().and_then(|name| icons.icon(name)),
-                    ..found.entry.clone()
-                })
-                .collect();
-            let bookmarks = offered_bookmarks(&offered.bookmarks, &hub.favicons, &query);
-            vec![HostMessage::FoundApps {
-                apps,
-                bookmarks,
-                query,
-            }]
         }
     }
 }
@@ -3611,9 +3507,6 @@ impl DomicileCompositor {
         }
         if let Some(omit) = &restated.omit {
             self.omit_from_the_index(omit);
-        }
-        if let Some(applications) = &restated.applications {
-            self.hub.offer_the_applications(applications);
         }
         if let Some(extensions) = &restated.extensions {
             // Store then broadcast, so the next chrome to connect gets the new
@@ -6101,8 +5994,6 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             std::env::var_os("WAYLAND_DISPLAY").as_deref(),
         ),
     );
-    // Before any chrome connects, so the first search uses the config.
-    hub.offer_the_applications(&config.applications);
     // Before any chrome connects, so the handshake carries the desktop.
     {
         let mut host = hub.host.lock().unwrap();
