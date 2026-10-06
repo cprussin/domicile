@@ -4,47 +4,48 @@ import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import { SunIcon } from "@phosphor-icons/react/dist/ssr/Sun";
 import { SunDimIcon } from "@phosphor-icons/react/dist/ssr/SunDim";
 import type { WheelEvent } from "react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { css } from "../../styled-system/css";
 import { hstack } from "../../styled-system/patterns";
-import { watchBrightness } from "./watch-brightness";
+import { hostBacklight } from "./host-backlight";
 
 /** How far one wheel notch over the icon moves the brightness. */
 const WHEEL_STEP = 0.05;
 
 type Props = {
-  /** The host that reports the level and sets new ones. */
+  /** The desktop whose system calls reach the backlight. */
   domicile: DomicileHost;
   /** Injectable so tests can drive their own backlight. */
-  watch?: typeof watchBrightness | undefined;
+  backlight?: typeof hostBacklight | undefined;
 };
 
 /**
  * The brightness control on the bar: a sun icon that reflects the level,
  * opens a slider, and responds to the wheel.
  *
- * Changes go through the compositor to logind, and the slider shows the level
- * the host reports back, as the theme toggle does. During a drag it holds the
- * pointer's value, since replies to earlier requests arrive late.
+ * Changes go to logind, and the slider shows the level `/sys` reports back,
+ * as the theme toggle does. During a drag it holds the pointer's value, since
+ * readings after earlier requests arrive late.
  *
- * Draws nothing until the host reports a level, so a desktop with no backlight
- * (such as an external monitor) shows no slider.
+ * Draws nothing until there is a level, so a desktop with no backlight (such
+ * as an external monitor) shows no slider.
  */
-export const Brightness = ({ domicile, watch = watchBrightness }: Props) => {
+export const Brightness = ({ backlight = hostBacklight, domicile }: Props) => {
   const [reading, setReading] = useState<number | undefined>(undefined);
   const [held, setHeld] = useState<number | undefined>(undefined);
   const dragging = useRef(false);
+  const control = useMemo(() => backlight(domicile), [backlight, domicile]);
 
   useEffect(
     () =>
-      watch(domicile, (level) => {
+      control.watch((level) => {
         setReading(level);
         if (!dragging.current) {
           setHeld(undefined);
         }
       }),
-    [domicile, watch],
+    [control],
   );
 
   if (reading === undefined) {
@@ -54,7 +55,7 @@ export const Brightness = ({ domicile, watch = watchBrightness }: Props) => {
     const percent = Math.round(shown * 100);
     const ask = (level: number) => {
       setHeld(level);
-      domicile.setBrightness(level);
+      control.set(level);
     };
     return (
       <Popover

@@ -94,8 +94,8 @@ To style your own items with manganese's Panda CSS, see
 - A sun icon: dotted, rayed or filled by level. Hidden with no backlight.
 - Click for a slider in a popover. Scroll over it to step by 5%.
 - The level never goes to zero. See [Host readouts](HOST-READOUTS.md#brightness).
-- The slider shows the level the compositor reports. During a drag it stays
-  under the pointer.
+- The slider shows the level `/sys` reports. During a drag it stays under the
+  pointer.
 - The popover closes on an outside click or focus loss, including a click in
   a `<webview>`.
 

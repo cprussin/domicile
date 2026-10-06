@@ -4,40 +4,35 @@ import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 
 import { watchHost } from "./watch-host";
 
-const brightnessOf = ({ brightness }: DomicileHost): number | undefined =>
-  brightness ?? undefined;
+const lockedOf = ({ locked }: DomicileHost): boolean | undefined =>
+  locked ?? undefined;
 
-/** Every level `fake` tells a watcher, and what stops it. */
+/** Every state `fake` tells a watcher, and what stops it. */
 const watching = (fake: FakeDomicileHost) => {
-  const levels: number[] = [];
-  const stop = watchHost(
-    fake.host,
-    "brightnesschanged",
-    brightnessOf,
-    (level) => {
-      levels.push(level);
-    },
-  );
-  return { levels, stop };
+  const states: boolean[] = [];
+  const stop = watchHost(fake.host, "lockedchanged", lockedOf, (locked) => {
+    states.push(locked);
+  });
+  return { states, stop };
 };
 
 describe("watchHost", () => {
   it("tells what the host already said, then every change", () => {
     const fake = new FakeDomicileHost();
-    fake.set({ brightness: 0.5 });
+    fake.set({ locked: true });
 
-    const { levels } = watching(fake);
-    fake.set({ brightness: 0.4 });
+    const { states } = watching(fake);
+    fake.set({ locked: false });
 
-    expect(levels).toEqual([0.5, 0.4]);
+    expect(states).toEqual([true, false]);
   });
 
   it("tells nothing until the host has said something", () => {
     const fake = new FakeDomicileHost();
 
-    const { levels } = watching(fake);
+    const { states } = watching(fake);
 
-    expect(levels).toEqual([]);
+    expect(states).toEqual([]);
   });
 
   it("tells every watcher, not only the last one to start", () => {
@@ -45,19 +40,19 @@ describe("watchHost", () => {
 
     const first = watching(fake);
     const second = watching(fake);
-    fake.set({ brightness: 0.5 });
+    fake.set({ locked: true });
 
-    expect(first.levels).toEqual([0.5]);
-    expect(second.levels).toEqual([0.5]);
+    expect(first.states).toEqual([true]);
+    expect(second.states).toEqual([true]);
   });
 
   it("stops telling when it is stopped", () => {
     const fake = new FakeDomicileHost();
-    const { levels, stop } = watching(fake);
+    const { states, stop } = watching(fake);
 
     stop();
-    fake.set({ brightness: 0.5 });
+    fake.set({ locked: true });
 
-    expect(levels).toEqual([]);
+    expect(states).toEqual([]);
   });
 });

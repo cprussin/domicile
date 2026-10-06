@@ -30,7 +30,6 @@ const CHANGED: Readonly<
   Record<keyof DomicileState, keyof DomicileHostEventMap>
 > = {
   altKey: "modifierschanged",
-  brightness: "brightnesschanged",
   browserWindows: "browserwindowschanged",
   clipboard: "clipboardchanged",
   ctrlKey: "modifierschanged",
@@ -51,7 +50,6 @@ const CHANGED: Readonly<
 /** Every attribute before the compositor has sent anything. */
 const UNDESCRIBED: DomicileState = {
   altKey: null,
-  brightness: null,
   browserWindows: null,
   clipboard: null,
   ctrlKey: null,

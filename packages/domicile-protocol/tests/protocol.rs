@@ -72,7 +72,6 @@ fn chrome_messages_round_trip() {
         passphrase: Passphrase::from("open sesame"),
     });
     chrome_round_trip(&ChromeMessage::Lock);
-    chrome_round_trip(&ChromeMessage::SetBrightness { level: 0.25 });
 }
 
 /// A file search carries a query and no path, so a page cannot choose which
@@ -246,25 +245,6 @@ fn an_entry_is_handed_back_by_id_rather_than_by_its_text() {
     let v = serde_json::to_value(ChromeMessage::CopyClipboardEntry { entry: 7 }).unwrap();
     assert_eq!(v["type"], "copy_clipboard_entry");
     assert_eq!(v["entry"], 7);
-}
-
-/// Brightness is a fraction.
-#[test]
-fn the_brightness_is_a_fraction() {
-    let v = serde_json::to_value(HostMessage::Brightness { level: 0.42 }).unwrap();
-    assert_eq!(v["type"], "brightness");
-    assert_eq!(v["level"], 0.42);
-}
-
-/// A brightness request is answered with [`HostMessage::Brightness`] to every
-/// chrome once the backlight changes.
-#[test]
-fn setting_the_brightness_carries_the_level_and_nothing_else() {
-    let sent = r#"{"type":"set_brightness","level":0.5}"#;
-    assert_eq!(
-        serde_json::from_str::<ChromeMessage>(sent).unwrap(),
-        ChromeMessage::SetBrightness { level: 0.5 }
-    );
 }
 
 /// Idle is sent as a state, not an edge, so a reloaded page can be told where

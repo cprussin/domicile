@@ -312,11 +312,6 @@ export type DomicileHostEventMap = {
    */
   displayschanged: Event;
   /**
-   * The brightness changed. Read {@link DomicileHost.brightness} for the new
-   * value.
-   */
-  brightnesschanged: Event;
-  /**
    * A browser window opened, closed, navigated or changed title. Read
    * {@link DomicileHost.browserWindows} for the new list.
    */
@@ -467,14 +462,6 @@ export type DomicileHost = {
   lock(): void;
 
   /**
-   * Set the backlight to `level`, 0 through 1.
-   *
-   * Answered with `brightnesschanged` to every chrome. The compositor never
-   * turns the screen fully off. Throws if `level` is not a number.
-   */
-  setBrightness(level: number): void;
-
-  /**
    * Tell the compositor this page has captured its old frame for a `theme`
    * transition, so client windows can switch theme now.
    *
@@ -547,12 +534,6 @@ export type DomicileHost = {
    * frozen array after each `displayschanged`.
    */
   readonly displays: readonly DomicileDisplay[] | null;
-
-  /**
-   * The backlight level, 0 through 1. `null` until the compositor reports,
-   * and always on a machine with no backlight.
-   */
-  readonly brightness: number | null;
 
   /**
    * The browser windows, oldest first.

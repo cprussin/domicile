@@ -27,7 +27,7 @@ desktop treats it.
 | Commands | `CloseApp`, `Spawn`, `CopyClipboardEntry`, tray, notifications, audio | Refused (`warn` log) |
 | Reads on the connection | `SearchFiles`, `PreviewFile`, `SearchApps` | Answered with nothing (`warn` log) |
 | System calls | `SystemRequest`, except reads under `/sys` and calls that stop something running | A call that starts something is answered `locked`; `stdin` is dropped (`warn` log) |
-| Allowed | `ChromeHello`, `Lock`, `Unlock`, `KeyboardFocus`, output scale and size, window bounds, `ClipboardCopied`, theme, brightness | Handled normally |
+| Allowed | `ChromeHello`, `Lock`, `Unlock`, `KeyboardFocus`, output scale and size, window bounds, `ClipboardCopied`, theme | Handled normally |
 
 Why some requests are allowed:
 

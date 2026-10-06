@@ -11,7 +11,6 @@ use std::collections::BTreeMap;
 
 use domicile_protocol::{ChromeMessage, DisplayInfo, HostMessage, Notification, Theme, TrayItem};
 
-pub mod backlight;
 pub mod base64;
 pub mod clipboard;
 pub mod data_dirs;
@@ -508,7 +507,6 @@ impl Host {
             | ChromeMessage::DismissNotifications { .. }
             | ChromeMessage::InvokeNotificationAction { .. }
             | ChromeMessage::SetTheme { .. }
-            | ChromeMessage::SetBrightness { .. }
             | ChromeMessage::ThemeCaptured { .. }
             | ChromeMessage::PointerMotion { .. }
             | ChromeMessage::PointerLeave { .. }

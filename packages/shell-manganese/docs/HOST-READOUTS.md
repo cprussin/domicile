@@ -1,16 +1,16 @@
 # Host readouts
 
 How the backlight and audio that the [top bar](TOP-BAR.md) shows are read.
-The compositor pushes backlight changes to the page; the page reads audio
-itself. The battery comes from a library too; see
+The page reads both itself through libraries, as it does the battery; see
 [TOP-BAR.md](TOP-BAR.md#battery).
 
 ## Brightness
 
-- Reads `/sys/class/backlight` (`domicile_host::backlight`). It picks
-  firmware, then platform, then raw devices, in systemd's order.
-- Re-reads on uevents and pushes changes of a whole percent.
-- Sets the level through logind's `Session.SetBrightness`, never to zero.
+- Read, watched and set by
+  [`@domicile-desktop/system-backlight`](/packages/system-backlight/README.md)
+  on the shell's system calls, which has the rules.
+- `src/brightness/host-backlight.ts` wires it to the bar and logs failures to
+  the console.
 
 ## Volume
 

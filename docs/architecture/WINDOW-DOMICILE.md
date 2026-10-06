@@ -41,15 +41,15 @@ incomplete:
 ### State is attributes; changes are events
 
 Everything with a current value is a readonly attribute on `DomicileHost`, and
-a change dispatches `<name>changed` with no payload, as `displayschanged` and
-`brightnesschanged` already do. A shell reads, then subscribes. A late listener
+a change dispatches `<name>changed` with no payload, as `displayschanged`
+already does. A shell reads, then subscribes. A late listener
 misses nothing, so nothing needs buffering.
 
 | Attribute | Replaces |
 |---|---|
 | `windows: DomicileWindow[]` | `appappeared`, `appclosed`, `appresized`, `apptitled`, `appminsize`, `appmaxsize`, `appcursor`, `popupplaced` |
 | `focusedWindow: string \| null` | `focuschanged` |
-| `displays`, `brightness` | already attributes, with `displayschanged` and `brightnesschanged` |
+| `displays` | already an attribute, with `displayschanged` |
 | `theme`, `windowsTheme` | `theme`, `windowstheme` |
 | `locked`, `idle` | `locked`, `idle` |
 | `batteryCharge`, `batteryCharging` | `battery` |

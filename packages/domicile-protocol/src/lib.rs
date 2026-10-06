@@ -168,14 +168,6 @@ pub enum ChromeMessage {
     /// generated; the change lasts until the desktop restarts.
     SetTheme { theme: Theme },
 
-    /// Set the screen's backlight to `level`, a fraction 0.0 through 1.0.
-    ///
-    /// Answered with [`HostMessage::Brightness`] to every chrome once the
-    /// kernel reports the change. The compositor writes it through logind,
-    /// because `/sys` is root-owned, and never sets zero, which turns most
-    /// panels off. See `domicile_host::backlight`.
-    SetBrightness { level: f64 },
-
     /// This page has captured its old frame for `theme`; the windows may now
     /// switch.
     ///
@@ -411,13 +403,6 @@ pub enum HostMessage {
         #[serde(flatten)]
         preview: FilePreview,
     },
-
-    /// Screen brightness, 0.0 through 1.0.
-    ///
-    /// Pushed when the backlight changes and on connect; there is no request.
-    /// Not sent on machines with no backlight. See
-    /// `domicile_host::backlight`.
-    Brightness { level: f64 },
 
     /// The clipboard history, newest first.
     ///

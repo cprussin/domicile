@@ -25,7 +25,6 @@
 {"type":"file_preview","path":"Music/song.flac","kind":"audio","title":"Song","artist":"Band","duration":61.5,"cover":"data:image/png;base64,AQID"}
 {"type":"file_preview","path":"photo.jpg","kind":"binary"}
 {"type":"file_preview","path":"gone.txt","kind":"unreadable"}
-{"type":"brightness","level":0.42}
 {"type":"theme","theme":"light"}
 {"type":"windows_theme","theme":"light"}
 {"type":"clipboard","entries":[{"id":3,"preview":"ssh-rsa AAAAB3NzaC1yc2E"},{"id":1,"preview":"the first thing copied"}]}

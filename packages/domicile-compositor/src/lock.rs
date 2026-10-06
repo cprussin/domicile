@@ -345,8 +345,6 @@ pub fn refused(asked: Asked) -> Option<Refusal> {
             | ClientRequest::ClipboardCopied { .. }
             | ClientRequest::Unlock { .. }
             | ClientRequest::Lock
-            // Changes nothing a client sees, and the lock screen needs light.
-            | ClientRequest::SetBrightness { .. }
             // Part of a theme change; allowed like `SetTheme`.
             | ClientRequest::TurnTheWindows { .. }
             | ClientRequest::ThemeCaptured { .. },
