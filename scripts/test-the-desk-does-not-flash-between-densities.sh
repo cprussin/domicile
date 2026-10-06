@@ -93,6 +93,19 @@ check 'a checked build lets the pending tree hold them' \
   "$layer_cc" 'DCHECK_LE(tilings_->num_tilings() - NumDomicileDisplayTilings(), 1u);' \
   "CopyPropertiesTo still DCHECKs one tiling on the pending tree, which holds a monitor's tiling too."
 
+# Over budget, TileManager marks required tiles out of memory, and such a tile
+# counts as ready to draw: a solid color. A monitor's tile out of memory falls
+# back to the page's tile there instead (DomicileDrawsTile).
+coverage_h="$(net_added_in 'cc/tiles/tiling_set_coverage_iterator[.]h$')"
+
+check 'a monitor'"'"'s tile out of memory falls back to the page'"'"'s' \
+  "$tiling_h" 'DomicileDrawsTile(domicile_display_ratio_,' \
+  "PictureLayerTiling does not ask DomicileDrawsTile, so a monitor's tile out of memory is drawn as a solid color."
+
+check 'coverage passes over a tile its tiling does not draw' \
+  "$coverage_h" 'DomicileDrawsTile(tile)' \
+  "TilingSetCoverageIterator stops at a monitor's tile out of memory instead of falling back."
+
 if [ "$failed" -eq 0 ]; then
   echo "all ok"
   exit 0
