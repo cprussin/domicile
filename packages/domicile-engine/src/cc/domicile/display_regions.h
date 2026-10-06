@@ -62,6 +62,17 @@ size_t DomicileTileBytesFor(const std::vector<DomicileDisplay>& displays,
                             float page_scale,
                             size_t ceiling_bytes);
 
+// The viewport cc sizes a widget at `widget_rect`'s GPU tiles from: the largest
+// part of it one monitor shows, in device pixels at `page_scale`. Empty when no
+// monitor shows it, and cc sizes them from the widget's viewport.
+//
+// Sized from the whole desk, a tile is a desk-wide row: one raster task long
+// enough to cost a monitor a frame. See
+// docs/architecture/DISPLAY-TILINGS.md#cost.
+gfx::Size DomicileTileViewportFor(const std::vector<DomicileDisplay>& displays,
+                                  const gfx::Rect& widget_rect,
+                                  float page_scale);
+
 // The most display tilings a layer keeps. TilingSetRasterQueueAll has one
 // iterator per tiling (DOMICILE_DISPLAY_*); an extra tiling would never raster
 // and would block activation.
@@ -99,6 +110,12 @@ bool DomicileDrawsFromDisplayTilings(const DomicileLayer& layer);
 gfx::Rect DomicileRegionInLayer(const DomicileDisplayRegions& regions,
                                 float ratio,
                                 const gfx::Transform& to_target);
+
+// Whether a tile of a tiling for a monitor at `display_ratio` (0 for the page's
+// own) is drawn where it is ready. A monitor's tile out of memory is not: the
+// page's tile there is drawn instead, shrunk, where upstream draws a solid
+// color. See docs/architecture/DISPLAY-TILINGS.md#tile-memory.
+bool DomicileDrawsTile(float display_ratio, bool out_of_memory);
 
 // A part of a layer's drawn area and the tiling it draws from: the one at the
 // layer's scale times `ratio`.
