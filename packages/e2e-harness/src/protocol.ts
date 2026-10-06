@@ -248,22 +248,8 @@ const filePreviewSchema = z.looseObject({
   type: z.literal("file_preview"),
 });
 
-// Battery charge and charging state, read from `/sys/class/power_supply`.
-// Pushed on a visible change and on connect.
-//
-// Use this, not `navigator.getBattery`: that API needs UPower over D-Bus and,
-// without it, reports a full, charging battery.
-//
-// `charge` is a fraction. It is not clamped, so a compositor bug stays
-// visible.
-const batterySchema = z.looseObject({
-  charge: z.number(),
-  charging: z.boolean(),
-  type: z.literal("battery"),
-});
-
-// Screen brightness as an unclamped fraction. Pushed like `battery`. Not sent
-// without a backlight.
+// Screen brightness as an unclamped fraction. Pushed on change and on
+// connect. Not sent without a backlight.
 const brightnessSchema = z.looseObject({
   level: z.number(),
   type: z.literal("brightness"),
@@ -530,7 +516,6 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   foundFilesSchema,
   foundAppsSchema,
   filePreviewSchema,
-  batterySchema,
   brightnessSchema,
   audioSchema,
   audioLevelsSchema,
@@ -570,7 +555,6 @@ export type ModifiersMessage = z.infer<typeof modifiersSchema>;
 export type FoundFilesMessage = z.infer<typeof foundFilesSchema>;
 export type FilePreviewMessage = z.infer<typeof filePreviewSchema>;
 export type FoundAppsMessage = z.infer<typeof foundAppsSchema>;
-export type BatteryMessage = z.infer<typeof batterySchema>;
 export type ClipboardMessage = z.infer<typeof clipboardSchema>;
 export type TrayMessage = z.infer<typeof traySchema>;
 export type NotificationsMessage = z.infer<typeof notificationsSchema>;

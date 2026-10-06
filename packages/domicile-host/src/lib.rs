@@ -15,7 +15,6 @@ pub mod app_icons;
 pub mod audio;
 pub mod backlight;
 pub mod base64;
-pub mod battery;
 pub mod bookmarks;
 pub mod clipboard;
 mod data_url;

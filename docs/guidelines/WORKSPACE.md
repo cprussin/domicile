@@ -17,7 +17,8 @@ TypeScript side; the Rust side is in
 ## Layout
 
 Every bun workspace in this repo lives in `/packages`, whether it is a library
-(`chrome-sdk`, `component-library`, `test-support`, `e2e-harness`) or a shell —
+(`chrome-sdk`, `system-battery`, `component-library`, `test-support`,
+`e2e-harness`) or a shell —
 a chrome package, named `shell-*` (`shell-manganese`, `shell-simple`). A shell
 is not a program: it is a built web page, and Domicile is what runs it.
 

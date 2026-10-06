@@ -26,7 +26,7 @@ if ! DOMICILE_PUBLISH_DRY_RUN="$OUT" "$PUBLISH" >"$OUT/log" 2>&1; then
   fail "the dry run succeeds" "$(tail -20 "$OUT/log")"
 fi
 
-for name in sdk component-library manganese; do
+for name in sdk system-battery component-library manganese; do
   tarball="$(ls "$OUT"/domicile-desktop-"$name"-*.tgz 2>/dev/null | head -1)"
   if [ -z "$tarball" ]; then
     fail "@domicile-desktop/$name is packed" "no tarball in $OUT"
@@ -60,6 +60,12 @@ if [ -n "$sdk" ]; then
   tar -tzf "$sdk" | grep -q '^package/dist/domicile-host.js$' &&
     ok "the sdk ships its built dist" ||
     fail "the sdk ships its built dist" "$(tar -tzf "$sdk" | head)"
+fi
+battery="$(ls "$OUT"/domicile-desktop-system-battery-*.tgz 2>/dev/null | head -1)"
+if [ -n "$battery" ]; then
+  tar -tzf "$battery" | grep -q '^package/dist/battery.js$' &&
+    ok "system-battery ships its built dist" ||
+    fail "system-battery ships its built dist" "$(tar -tzf "$battery" | head)"
 fi
 
 [ "$(tree)" = "$before" ] &&

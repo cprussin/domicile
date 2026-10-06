@@ -321,34 +321,7 @@ fn an_entry_is_handed_back_by_id_rather_than_by_its_text() {
     assert_eq!(v["entry"], 7);
 }
 
-/// Battery charge is a fraction, and `charging` means external power is
-/// connected, even when full.
-#[test]
-fn the_charge_is_a_fraction_and_the_lead_is_a_flag() {
-    let v = serde_json::to_value(HostMessage::Battery {
-        charge: 0.42,
-        charging: true,
-    })
-    .unwrap();
-    assert_eq!(v["type"], "battery");
-    assert_eq!(v["charge"], 0.42);
-    assert_eq!(v["charging"], true);
-}
-
-/// Neither battery field is an `Option`: a machine with no battery sends no
-/// message, and an empty battery is a real reading.
-#[test]
-fn an_empty_battery_is_a_reading_rather_than_a_silence() {
-    let v = serde_json::to_value(HostMessage::Battery {
-        charge: 0.0,
-        charging: false,
-    })
-    .unwrap();
-    assert_eq!(v["charge"], 0.0);
-    assert_eq!(v["charging"], false);
-}
-
-/// Brightness is a fraction, like the battery charge.
+/// Brightness is a fraction.
 #[test]
 fn the_brightness_is_a_fraction() {
     let v = serde_json::to_value(HostMessage::Brightness { level: 0.42 }).unwrap();

@@ -27,7 +27,7 @@ The engine serves this page over `domicile://` and hands `Shell` the desktop.
 | `address/` | Parsing typed text as a URL or search, shared by the launcher and address bar. |
 | `top-bar/` | Bar columns, default layout, and bar items. |
 | `launcher/`, `clipboard/`, `notifications/`, `tray/`, `extensions/` | Those features. |
-| `battery/`, `brightness/`, `volume/`, `clock/` | Bar readouts and their host messages. |
+| `battery/`, `brightness/`, `volume/`, `clock/` | Bar readouts and where each reads from. |
 | `lock/` | Lock screen. |
 | `theme/` | Theme from the host or the last session. |
 | `wallpaper/` | Wallpaper and its photo list. |

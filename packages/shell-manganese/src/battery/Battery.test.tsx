@@ -1,23 +1,32 @@
 import { describe, expect, it } from "bun:test";
+import type { Option } from "@cprussin/option-result";
+import { None, Some } from "@cprussin/option-result";
 import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
+import type { Battery as BatteryReading } from "@domicile-desktop/system-battery/battery";
 import { act, render, screen } from "@testing-library/react";
 import { css } from "../../styled-system/css";
 import { Battery } from "./Battery";
-import type { BatteryReading } from "./watch-battery";
 
 /**
- * A test-controlled battery: `watch` replaces the host listener, and `report`
- * sends a reading.
+ * A test-controlled battery: `watch` replaces the UPower watch, and `report`
+ * and `absent` send readings.
  */
 const heldBattery = () => {
-  const listeners: ((reading: BatteryReading) => void)[] = [];
+  const listeners: ((reading: Option<BatteryReading>) => void)[] = [];
   const watching = { stopped: 0 };
   return {
+    absent: () => {
+      act(() => {
+        for (const onReading of listeners) {
+          onReading(None());
+        }
+      });
+    },
     report: (reading: BatteryReading) => {
       act(() => {
         for (const onReading of listeners) {
-          onReading(reading);
+          onReading(Some(reading));
         }
       });
     },
@@ -26,7 +35,7 @@ const heldBattery = () => {
     },
     watch: (
       _domicile: DomicileHost,
-      onReading: (reading: BatteryReading) => void,
+      onReading: (reading: Option<BatteryReading>) => void,
     ) => {
       listeners.push(onReading);
       return () => {
@@ -57,6 +66,16 @@ describe("Battery", () => {
     const battery = heldBattery();
 
     render(<Battery domicile={NO_HOST} watch={battery.watch} />);
+
+    expect(screen.queryByRole("meter")).not.toBeInTheDocument();
+  });
+
+  it("shows nothing for a machine without a battery", () => {
+    const battery = heldBattery();
+    render(<Battery domicile={NO_HOST} watch={battery.watch} />);
+
+    battery.report({ charge: 0.5, charging: false });
+    battery.absent();
 
     expect(screen.queryByRole("meter")).not.toBeInTheDocument();
   });

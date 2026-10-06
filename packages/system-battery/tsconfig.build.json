@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "declaration": true,
+    // Off: turbo caches `dist`, and a `.tsbuildinfo` that outlives a removed
+    // `dist` makes tsc skip emitting. See packages/chrome-sdk.
+    "incremental": false,
+    "noEmit": false,
+    "outDir": "dist",
+    "rootDir": "src",
+    "types": []
+  },
+  "exclude": ["src/**/*.test.ts"],
+  "extends": "./tsconfig.json"
+}

@@ -16,7 +16,7 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
 
 # Dependencies first, so a package is never on npm before what it needs.
-PACKAGES=(chrome-sdk component-library shell-manganese)
+PACKAGES=(chrome-sdk system-battery component-library shell-manganese)
 VERSION="0.0.0-alpha-$(git rev-parse --short=12 HEAD)"
 OUT="${DOMICILE_PUBLISH_DRY_RUN:-$(mktemp -d)}"
 
@@ -44,10 +44,11 @@ for package in "${PACKAGES[@]}"; do
 done
 bun install --ignore-scripts
 
-# What the tarballs hold that git does not: the SDK's `dist/` and the Panda
-# `styled-system/` the other two import.
+# What the tarballs hold that git does not: the SDK's and system-battery's
+# `dist/` and the Panda `styled-system/` the other two import.
 bun run turbo run prepare build \
-  --filter @domicile-desktop/sdk --filter @domicile-desktop/component-library --filter @domicile-desktop/manganese
+  --filter @domicile-desktop/sdk --filter @domicile-desktop/system-battery \
+  --filter @domicile-desktop/component-library --filter @domicile-desktop/manganese
 
 for package in "${PACKAGES[@]}"; do
   (cd "packages/$package" && bun pm pack --quiet --ignore-scripts --destination "$OUT")

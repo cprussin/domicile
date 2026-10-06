@@ -539,14 +539,6 @@ const boxOf = (element: HTMLElement) => ({
   y: element.style.insetBlockStart,
 });
 
-/** The compositor reports the battery state. */
-const machineSays = (reading: { charge: number; charging: boolean }): void => {
-  domicile.set({
-    batteryCharge: reading.charge,
-    batteryCharging: reading.charging,
-  });
-};
-
 /** The compositor reports the clipboard history, newest first. */
 const copied = (entries: readonly { id: number; preview: string }[]): void => {
   domicile.set({ clipboard: entries });
@@ -813,19 +805,6 @@ describe("Shell", () => {
       expect(screen.getByText("resize")).toBeInTheDocument();
     });
 
-    it("shows the charge, and the plug when AC is in", () => {
-      renderShell();
-
-      machineSays({ charge: 0.42, charging: true });
-
-      expect(screen.getByText("42%")).toBeVisible();
-      expect(screen.getByRole("meter", { name: "Battery" })).toHaveAttribute(
-        "aria-valuenow",
-        "42",
-      );
-      expect(screen.getByRole("img", { name: "Charging" })).toBeVisible();
-    });
-
     it("shows the brightness the host says", () => {
       renderShell();
 
@@ -844,7 +823,7 @@ describe("Shell", () => {
       expect(screen.getByRole("button", { name: "Volume 50%" })).toBeVisible();
     });
 
-    it("draws no meter for a machine the host says nothing about", () => {
+    it("draws no meter until UPower answers", () => {
       // A desktop PC gets no battery reading; the bar must not show `100%`.
       renderShell();
 
