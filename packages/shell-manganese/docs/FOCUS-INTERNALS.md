@@ -13,7 +13,7 @@ How manganese implements the focus behavior in
 
 ## Browser-window focus
 
-- The shell decides focus for both window kinds. For clients, the SDK sends a
+- The shell decides focus for both window kinds. For clients, the engine sends a
   cancelable `domicile-focus-requested` and the shell handles it.
   `focusedwindowchanged` reports where the keyboard went.
 - A click in a `<webview>` sends no pointer or focus events to the shell. The

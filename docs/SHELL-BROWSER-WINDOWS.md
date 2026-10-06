@@ -130,8 +130,8 @@ frame.addEventListener(WEBVIEW_GUEST_FOCUS_EVENT, () => {
 The compositor does not know about browser windows, so the shell moves
 keyboard focus to and from them:
 
-- **Take it:** call `focusChrome(domicile)` (from
-  `@domicile-desktop/sdk/focus-chrome`) when a browser window becomes active.
+- **Take it:** call `domicile.focusChrome()` when a browser window becomes
+  active.
   Otherwise the last focused client keeps receiving keys. See
   [Taking the keyboard](WRITING-A-SHELL.md#taking-the-keyboard-for-your-own-ui).
 - **Give it back:** blur the focused element in the browser window when the

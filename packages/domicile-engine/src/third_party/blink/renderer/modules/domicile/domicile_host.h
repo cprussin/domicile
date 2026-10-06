@@ -15,6 +15,7 @@
 #include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_theme.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_tray_action.h"
 #include "third_party/blink/renderer/core/dom/events/event_target.h"
+#include "third_party/blink/renderer/core/html/domicile/html_app_element.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_event_names.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
@@ -22,7 +23,11 @@
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/mojo/heap_mojo_receiver.h"
 #include "third_party/blink/renderer/platform/mojo/heap_mojo_remote.h"
+#include "third_party/blink/renderer/platform/wtf/hash_map.h"
+#include "third_party/blink/renderer/platform/wtf/hash_set.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
+#include "ui/gfx/geometry/point_f.h"
+#include "ui/gfx/geometry/size_f.h"
 
 namespace blink {
 
@@ -63,16 +68,43 @@ class NativeEventListener;
 //
 // See docs/architecture/ENGINE-FORK.md, "The page is served over a TCP port,
 // and it should not be".
+//
+// IT ROUTES THE PAGE'S INPUT TOO. An <app> maps a pointer over it into its own
+// box and hands it here (AppInputClient), which scales it to what the client
+// drew; the keys the page hears go to whichever window has the keyboard. See
+// RouteInput().
 class MODULES_EXPORT DomicileHost final
     : public EventTarget,
       public domicile::mojom::blink::ControlChannelClient,
       public domicile::mojom::blink::ExtensionTrayClient,
-      public domicile::mojom::blink::BrowserWindowsClient {
+      public domicile::mojom::blink::BrowserWindowsClient,
+      public AppInputClient {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
   explicit DomicileHost(LocalDOMWindow&);
   ~DomicileHost() override;
+
+  // Become the desktop the window's <app>s send to, and route the keys its
+  // document hears. Called once, by DomicileShell, before the shell runs: the
+  // listeners go on the document first, so a shell's own come after them, the
+  // order `registerElements` used to be called in.
+  void RouteInput();
+
+  // AppInputClient:
+  void AppPressed(HTMLAppElement& app, const String& app_id) override;
+  void AppPointerMotion(const String& app_id,
+                        const gfx::PointF& point,
+                        const gfx::SizeF& size) override;
+  void AppPointerButton(const String& app_id,
+                        uint32_t button,
+                        bool pressed) override;
+  void AppPointerLeave(const String& app_id) override;
+  void AppPointerAxis(const String& app_id,
+                      double dx,
+                      double dy,
+                      int32_t v120_x,
+                      int32_t v120_y) override;
 
   // Run a command on the machine running the desktop.
   //
@@ -180,29 +212,6 @@ class MODULES_EXPORT DomicileHost final
   // says the keyboard has, and again whenever it says so anew.
   void grabShortcut(ScriptState*, const String& chord, ExceptionState&);
   void activateExtension(ScriptState*, const String& id, ExceptionState&);
-  void key(ScriptState*,
-           const String& app_id,
-           uint32_t keycode,
-           bool pressed,
-           ExceptionState&);
-  void pointerMotion(ScriptState*,
-                     const String& app_id,
-                     double x,
-                     double y,
-                     ExceptionState&);
-  void pointerLeave(ScriptState*, const String& app_id, ExceptionState&);
-  void pointerButton(ScriptState*,
-                     const String& app_id,
-                     uint32_t button,
-                     bool pressed,
-                     ExceptionState&);
-  void pointerAxis(ScriptState*,
-                   const String& app_id,
-                   double dx,
-                   double dy,
-                   int32_t v120_x,
-                   int32_t v120_y,
-                   ExceptionState&);
 
   // Blink's DEFINE_ATTRIBUTE_EVENT_LISTENER, keyed on the fork's own names
   // rather than event_type_names: see domicile_event_names.h for why.
@@ -401,6 +410,40 @@ class MODULES_EXPORT DomicileHost final
   // desktop's: taken from the page and dispatched as `shortcut`, the same as
   // the browser process does for one pressed in a `<webview>`.
   void PageKeyDown(Event* event);
+
+  // The keyboard's routing, which was `keyboard-input.ts`. A key is delivered
+  // to this document and never to an element -- a client is a surface, not a
+  // browsing context -- so each is sent to `keyboard_app_`.
+  //
+  // Give `app_id` the keyboard: here, and in the compositor's seat.
+  void FocusAppKeyboard(const String& app_id);
+  // And take it back to the page.
+  void FocusChromeKeyboard();
+  // Which window a press is for, or null for the page. A window whose <app>
+  // has left the page gives the keyboard back: see the .cc.
+  String KeyboardTarget();
+  void ForwardKeyDown(Event* event);
+  void ForwardKeyUp(Event* event);
+  // A press off every <app> takes the keyboard back to the page, unless the
+  // shell says the press was for the window after all.
+  void ReleaseKeyboardOffApp(Event* event);
+  // Every key this page forwarded and has not heard come up, released. Takes
+  // the event that says the page stopped hearing them, and reads nothing of it.
+  void ReleaseHeldKeys(Event*);
+  void ReleaseIntoGuest(Event* event);
+  // The window a popup belongs to, however many popups deep; a toplevel is
+  // its own.
+  String WindowOf(const String& app_id) const;
+  // The <app> showing `app_id`, or null.
+  HTMLAppElement* AppElement(const String& app_id) const;
+  // Dispatch the cancelable, bubbling `type` on `target` with `{appId}` as its
+  // detail -- `{appId, pressed}` where `pressed` is given, `undefined` for a
+  // null one -- and say whether nothing canceled it.
+  bool Ask(Element& target,
+           const char* type,
+           const String& app_id,
+           std::optional<Element*> pressed);
+
   bool Ready(ExceptionState&);
   bool ReadyForApp(const String& app_id, ExceptionState&);
 
@@ -479,6 +522,20 @@ class MODULES_EXPORT DomicileHost final
   std::optional<HashMap<String, uint32_t>> keys_;
   // `keydown` on the window, once a chord is grabbed by name.
   Member<NativeEventListener> key_listener_;
+
+  // The window the page's keys go to, or null for the page itself: the last
+  // one reached for -- a press, a `focusApp()` -- or the one the compositor
+  // says has the keyboard, whichever said so last.
+  String keyboard_app_;
+  // The window each forwarded press was sent for, until the key comes up. A
+  // release is owed for every press wherever the keyboard has moved since: the
+  // seat's state outlives every window, and a lock key left down latches.
+  HashMap<uint32_t, String> held_keys_;
+  // The keys whose press the engine took as a grabbed chord, until they come
+  // up: their release is the desktop's too.
+  HashSet<uint32_t> taken_keys_;
+  // What RouteInput() listens with.
+  HeapVector<Member<NativeEventListener>> input_listeners_;
 };
 
 }  // namespace blink

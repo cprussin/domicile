@@ -97,8 +97,8 @@ export const useWindows = (
   const listed = useRef<readonly DomicileWindow[]>([]);
 
   useEffect(() => {
-    // Client buffer sizes are ignored: only the SDK's pointer scaling uses
-    // them, and it reads them from `domicile.windows`.
+    // Client buffer sizes are ignored: only the engine's pointer scaling uses
+    // them.
     const windowsChanged = () => {
       const now = domicile.windows;
       for (const action of windowChanges(listed.current, now)) {

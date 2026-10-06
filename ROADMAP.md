@@ -126,38 +126,30 @@ Evidence is in [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md),
 
    [COMPOSABLE-SHELLS.md](docs/architecture/COMPOSABLE-SHELLS.md).
 
-9. **The desktop handed to `Shell` as the whole shell API.** The engine reports desktop
-   size and density, state is attributes, and the shells use it directly.
-   Left:
-   - The engine drops the events the attributes and promises replace.
-   - `<app>` routing its own input.
-
-   [WINDOW-DOMICILE.md](docs/architecture/WINDOW-DOMICILE.md).
-
-10. **Domicile answers every portal.** The compositor answers `Settings`; gtk
+9. **Domicile answers every portal.** The compositor answers `Settings`; gtk
     answers the rest. So file dialogs are GTK windows, and screen sharing,
     remote desktop and global shortcuts have no backend. Plan: one request
     channel to the shell, then every interface except `Secret` on it, then
     drop gtk. Not started. [PORTALS.md](docs/architecture/PORTALS.md).
 
-11. **Split manganese into small packages.** `@domicile-desktop/manganese` is
+10. **Split manganese into small packages.** `@domicile-desktop/manganese` is
     one package with the layout, the bar and every bar item. Split the clock,
     tray, mixer and window management into their own packages, with manganese
     the shell that composes them. No design doc yet.
 
-12. **System access for the shell.** Each system readout (battery,
+11. **System access for the shell.** Each system readout (battery,
     backlight, audio) is a compositor module, a host message and an engine
     member, so the set of features grows inside Domicile. Plan: files,
     processes and D-Bus for the shell, and features as libraries on them,
     starting with wifi and bluetooth bar modules. Not started.
     [SYSTEM-ACCESS.md](docs/architecture/SYSTEM-ACCESS.md).
 
-13. **A History app.** Browser windows have back, forward and address
+12. **A History app.** Browser windows have back, forward and address
     suggestions, but nothing browses, searches or clears history.
     `chrome://history` is blocked like every `chrome://` page (patch 0083). No
     design doc yet.
 
-14. **A Settings app.** Extensions and config values can only be set by editing
+13. **A Settings app.** Extensions and config values can only be set by editing
     the config. A Settings app would manage both. It would also hold the
     *Known gaps* that need a place to store state: a persistent theme choice,
     and the cookies, site data and permissions that `chrome://settings`
@@ -254,14 +246,6 @@ Understood and not scheduled.
   menus get the page menu. Each needs a field on `WebViewContextMenu` in
   `web_view_guest.mojom`.
 - **Client-drawn cursor surfaces show a plain arrow.**
-- **Perspective transforms on a window are reported, not corrected.**
-  `defaultMeasure` uses the flattened 2D part of the transform and logs that
-  pointer mapping ignores the projection. A fix needs a projective map through
-  `surface-coordinates`. A bare `perspective()` in an ancestor's transform,
-  carried up by `preserve-3d`, is not even detected.
-- **Zoomed windows are tested only by unit tests.** `defaultMeasure` handles
-  `zoom` through `currentCSSZoom`. A click guard like `guard-webview-click.sh`
-  would test it in a browser.
 
 ### Displays
 
