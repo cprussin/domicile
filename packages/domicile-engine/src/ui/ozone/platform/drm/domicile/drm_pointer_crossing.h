@@ -83,6 +83,25 @@ gfx::PointF PointerInWindow(const std::vector<PointerScreen>& screens,
                             const gfx::PointF& location,
                             gfx::AcceleratedWidget window);
 
+// Where a pointer is heard: the window its events go to, and the place in that
+// window's panel pixels.
+struct PointerHeard {
+  gfx::AcceleratedWidget window = gfx::kNullAcceleratedWidget;
+  gfx::PointF location;
+};
+
+// Which window hears a pointer at `location` on the engine's desktop, and
+// where.
+//
+// The desk's host, which hears the pointer on every monitor (see
+// `PointerInWindow`), or the window under the pointer where there is no host
+// or its window has gone. Nothing when no screen holds the pointer.
+std::optional<PointerHeard> PointerHeardAt(
+    const std::vector<PointerScreen>& screens,
+    const std::vector<DomicileDisplayLayout>& layout,
+    gfx::AcceleratedWidget desk_host,
+    const gfx::PointF& location);
+
 // Whether a window at `bounds_in_screen` takes a key, with the pointer at
 // `pointer` on the engine's desktop.
 //

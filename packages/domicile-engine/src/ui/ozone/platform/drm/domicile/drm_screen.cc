@@ -7,6 +7,7 @@
 #include <stdint.h>
 
 #include <algorithm>
+#include <optional>
 #include <vector>
 
 #include "base/check.h"
@@ -15,7 +16,9 @@
 #include "ui/display/types/display_constants.h"
 #include "ui/display/types/display_mode.h"
 #include "ui/display/util/edid_parser.h"
+#include "ui/ozone/platform/drm/domicile/drm_pointer_crossing.h"
 #include "ui/ozone/platform/drm/domicile/edid_name.h"
+#include "ui/ozone/platform/drm/host/drm_cursor.h"
 #include "ui/ozone/platform/drm/host/drm_window_host.h"
 #include "ui/ozone/platform/drm/host/drm_window_host_manager.h"
 
@@ -260,8 +263,8 @@ size_t PrimaryIndexForLayout(
   return 0u;
 }
 
-DrmScreen::DrmScreen(DrmWindowHostManager* window_manager)
-    : window_manager_(window_manager) {}
+DrmScreen::DrmScreen(DrmWindowHostManager* window_manager, DrmCursor* cursor)
+    : window_manager_(window_manager), cursor_(cursor) {}
 
 DrmScreen::~DrmScreen() = default;
 
@@ -355,11 +358,16 @@ display::Display DrmScreen::GetDisplayForAcceleratedWidget(
 }
 
 gfx::Point DrmScreen::GetCursorScreenPoint() const {
-  // The cursor position lives in DrmCursor, which the screen is not given.
-  // Headless answers the same way, and this becomes real with the input half
-  // of docs/architecture/A-DESKTOP-ON-A-TTY.md rather than with the display
-  // list.
-  return gfx::Point();
+  // aura synthesizes a mouse move here after a window changes or the cursor is
+  // warped, so the answer is where the window that hears the pointer would
+  // put an event: the desk's host, wherever on the desk the pointer is.
+  // A cursor no window hears yet has nowhere to be.
+  const std::optional<PointerHeard> heard = cursor_->Heard();
+  if (!heard.has_value() || !window_manager_->HasWindow(heard->window)) {
+    return gfx::Point();
+  }
+  return window_manager_->GetWindow(heard->window)
+      ->ToScreenInDIP(heard->location);
 }
 
 gfx::AcceleratedWidget DrmScreen::GetAcceleratedWidgetAtScreenPoint(

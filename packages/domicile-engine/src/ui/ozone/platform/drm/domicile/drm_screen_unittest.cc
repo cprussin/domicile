@@ -361,7 +361,7 @@ gfx::Rect BoundsOf(const DrmScreen& screen, int64_t id) {
 
 TEST(DrmScreenTest, TheFirstSnapshotIsThePrimaryDisplay) {
   DrmWindowHostManager window_manager;
-  DrmScreen screen(&window_manager);
+  DrmScreen screen(&window_manager, nullptr);
   std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
   snapshots.push_back(SnapshotBuilder().Id(11).Build());
   snapshots.push_back(
@@ -381,7 +381,7 @@ TEST(DrmScreenTest, TheFirstSnapshotIsThePrimaryDisplay) {
 // with every log line saying the modeset succeeded.
 TEST(DrmScreenTest, ThePrimaryIsTheFirstDisplayTheLayoutLights) {
   DrmWindowHostManager window_manager;
-  DrmScreen screen(&window_manager);
+  DrmScreen screen(&window_manager, nullptr);
   std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
   snapshots.push_back(SnapshotBuilder().Id(11).Build());
   snapshots.push_back(SnapshotBuilder().Id(12).Build());
@@ -406,7 +406,7 @@ TEST(DrmScreenTest, ThePrimaryIsTheFirstDisplayTheLayoutLights) {
 // primary off snapshot zero.
 TEST(DrmScreenTest, TheListArrivesPrimaryFirst) {
   DrmWindowHostManager window_manager;
-  DrmScreen screen(&window_manager);
+  DrmScreen screen(&window_manager, nullptr);
   std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
   snapshots.push_back(SnapshotBuilder().Id(11).Build());
   snapshots.push_back(SnapshotBuilder().Id(12).Build());
@@ -434,7 +434,7 @@ TEST(DrmScreenTest, WithNoLayoutThePrimaryIsStillTheFirstDisplay) {
 // makes, including the one that sizes a fullscreen window.
 TEST(DrmScreenTest, ADisplayTakesTheCornerTheLayoutGivesIt) {
   DrmWindowHostManager window_manager;
-  DrmScreen screen(&window_manager);
+  DrmScreen screen(&window_manager, nullptr);
   std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
   snapshots.push_back(SnapshotBuilder()
                           .Id(11)
@@ -528,7 +528,7 @@ display::Display DisplayOf(const DrmScreen& screen, int64_t id) {
 // `rotate-270` to the one and ROTATE_90 to the other.
 TEST(DrmScreenTest, ADisplayTakesTheTurnAndScaleTheLayoutGivesIt) {
   DrmWindowHostManager window_manager;
-  DrmScreen screen(&window_manager);
+  DrmScreen screen(&window_manager, nullptr);
   std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
   snapshots.push_back(
       SnapshotBuilder().Id(11).NativeMode(gfx::Size(3840, 2160), 60.f).Build());
@@ -567,7 +567,7 @@ TEST(DrmScreenTest, ADisplayTakesTheTurnAndScaleTheLayoutGivesIt) {
 
 TEST(DrmScreenTest, ADisplayTheLayoutSaysNothingAboutIsUprightAndUnscaled) {
   DrmWindowHostManager window_manager;
-  DrmScreen screen(&window_manager);
+  DrmScreen screen(&window_manager, nullptr);
   std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
   snapshots.push_back(
       SnapshotBuilder().Id(11).NativeMode(gfx::Size(3840, 2160), 60.f).Build());
@@ -583,7 +583,7 @@ TEST(DrmScreenTest, ADisplayTheLayoutSaysNothingAboutIsUprightAndUnscaled) {
 // display's rotation changes, and rescales it when its scale does.
 TEST(DrmScreenTest, AProfileThatTurnsAMonitorTellsItsObservers) {
   DrmWindowHostManager window_manager;
-  DrmScreen screen(&window_manager);
+  DrmScreen screen(&window_manager, nullptr);
   std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
   snapshots.push_back(
       SnapshotBuilder().Id(11).NativeMode(gfx::Size(3840, 2160), 60.f).Build());
@@ -611,7 +611,7 @@ TEST(DrmScreenTest, AProfileThatTurnsAMonitorTellsItsObservers) {
 // and what every connector on crux reports besides.
 TEST(DrmScreenTest, AScreenToldOfNoDisplaysStillAnswersWithAPrimary) {
   DrmWindowHostManager window_manager;
-  DrmScreen screen(&window_manager);
+  DrmScreen screen(&window_manager, nullptr);
 
   screen.OnDisplaysChanged({}, {});
 
@@ -622,7 +622,7 @@ TEST(DrmScreenTest, AScreenToldOfNoDisplaysStillAnswersWithAPrimary) {
 // has to leave the list with it.
 TEST(DrmScreenTest, AHotplugReplacesTheListRatherThanAppendingToIt) {
   DrmWindowHostManager window_manager;
-  DrmScreen screen(&window_manager);
+  DrmScreen screen(&window_manager, nullptr);
   std::vector<std::unique_ptr<display::DisplaySnapshot>> unplugged;
   unplugged.push_back(SnapshotBuilder().Id(11).Build());
   screen.OnDisplaysChanged(Pointers(unplugged), {});
@@ -639,7 +639,7 @@ TEST(DrmScreenTest, AHotplugReplacesTheListRatherThanAppendingToIt) {
 // observer code here. This is the test that says so.
 TEST(DrmScreenTest, AHotplugReachesADisplayObserver) {
   DrmWindowHostManager window_manager;
-  DrmScreen screen(&window_manager);
+  DrmScreen screen(&window_manager, nullptr);
   RecordingObserver observer;
   screen.AddObserver(&observer);
   std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
@@ -653,7 +653,7 @@ TEST(DrmScreenTest, AHotplugReachesADisplayObserver) {
 
 TEST(DrmScreenTest, APointBelongsToTheDisplayItFallsOn) {
   DrmWindowHostManager window_manager;
-  DrmScreen screen(&window_manager);
+  DrmScreen screen(&window_manager, nullptr);
   std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
   snapshots.push_back(
       SnapshotBuilder().Id(11).NativeMode(gfx::Size(1920, 1080), 60.f).Build());
@@ -669,7 +669,7 @@ TEST(DrmScreenTest, APointBelongsToTheDisplayItFallsOn) {
 
 TEST(DrmScreenTest, ARectBelongsToTheDisplayItOverlapsMost) {
   DrmWindowHostManager window_manager;
-  DrmScreen screen(&window_manager);
+  DrmScreen screen(&window_manager, nullptr);
   std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
   snapshots.push_back(
       SnapshotBuilder().Id(11).NativeMode(gfx::Size(1920, 1080), 60.f).Build());
@@ -688,7 +688,7 @@ TEST(DrmScreenTest, ARectBelongsToTheDisplayItOverlapsMost) {
 // what keeps that a lookup rather than a crash in the browser process.
 TEST(DrmScreenTest, AWidgetWithNoWindowGetsThePrimaryRatherThanACrash) {
   DrmWindowHostManager window_manager;
-  DrmScreen screen(&window_manager);
+  DrmScreen screen(&window_manager, nullptr);
   std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
   snapshots.push_back(SnapshotBuilder().Id(11).Build());
   screen.OnDisplaysChanged(Pointers(snapshots), {});
@@ -707,14 +707,14 @@ TEST(DrmScreenTest, AWidgetWithNoWindowGetsThePrimaryRatherThanACrash) {
 // nothing, has to change a test that says why it should not.
 TEST(DrmScreenTest, NoOtherClientIsHoldingTheScreen) {
   DrmWindowHostManager window_manager;
-  DrmScreen screen(&window_manager);
+  DrmScreen screen(&window_manager, nullptr);
 
   EXPECT_FALSE(screen.IsScreenSaverActive());
 }
 
 TEST(DrmScreenTest, IdleIsTheCompositorsToMeasureAndSoIsReportedAsNone) {
   DrmWindowHostManager window_manager;
-  DrmScreen screen(&window_manager);
+  DrmScreen screen(&window_manager, nullptr);
 
   EXPECT_TRUE(screen.CalculateIdleTime().is_zero());
 }

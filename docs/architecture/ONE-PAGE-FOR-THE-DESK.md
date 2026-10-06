@@ -74,6 +74,9 @@ enters a gap, because pointer crossing follows `desk`.
 - A warp is requested in host pixels. It lands on the monitor that holds that
   desk position (`DrmCursor::MoveCursorTo` via `PointerCrossingFor`). The
   cursor is then drawn with that monitor's rotation and density (`WarpLandsOn`).
+- `DrmScreen::GetCursorScreenPoint` answers where the host hears the pointer
+  (`PointerHeardAt`), so a mouse move aura synthesizes after a window change
+  or a warp lands where the cursor is.
 - Each CRTC keeps its own cursor (`DrmCursor`). The host sets the cursor shape
   on every monitor.
 

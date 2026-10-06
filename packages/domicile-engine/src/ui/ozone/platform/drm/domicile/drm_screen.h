@@ -21,6 +21,7 @@
 
 namespace ui {
 
+class DrmCursor;
 class DrmWindowHostManager;
 
 // The display a screen answers with when DRM has told it about none.
@@ -145,7 +146,7 @@ size_t PrimaryIndexForLayout(
 // nothing, and DRM is that shape with real snapshots in place of the fiction.
 class DrmScreen : public PlatformScreen {
  public:
-  explicit DrmScreen(DrmWindowHostManager* window_manager);
+  DrmScreen(DrmWindowHostManager* window_manager, DrmCursor* cursor);
 
   DrmScreen(const DrmScreen&) = delete;
   DrmScreen& operator=(const DrmScreen&) = delete;
@@ -180,6 +181,7 @@ class DrmScreen : public PlatformScreen {
 
  private:
   const raw_ptr<DrmWindowHostManager> window_manager_;
+  const raw_ptr<DrmCursor> cursor_;
   display::DisplayList display_list_;
 };
 
