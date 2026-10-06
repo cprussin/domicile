@@ -264,6 +264,7 @@ if wanted engine; then
     scripts/engine-guard-shortcuts-inhibitor.sh \
     scripts/engine-guard-client-window.sh \
     scripts/engine-guard-two-windows.sh \
+    scripts/engine-guard-app-survives-load-shell.sh \
     scripts/engine-guard-shell.sh \
     scripts/engine-guard-shell-manganese.sh \
     scripts/engine-guard-shell-shortcuts.sh &&
