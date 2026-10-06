@@ -1,0 +1,52 @@
+{
+  "dependencies": {
+    "@cprussin/option-result": "catalog:",
+    "@domicile-desktop/sdk": "workspace:*",
+    "zod": "catalog:"
+  },
+  "description": "Volume, mute, devices, streams and level meters for a Domicile shell, through pactl and parec.",
+  "devDependencies": {
+    "@cprussin/tsconfig": "catalog:",
+    "@types/bun": "catalog:",
+    "typescript": "catalog:"
+  },
+  "exports": {
+    "./asked": {
+      "types": "./dist/asked.d.ts",
+      "default": "./dist/asked.js"
+    },
+    "./audio": {
+      "types": "./dist/audio.d.ts",
+      "default": "./dist/audio.js"
+    },
+    "./audio-error": {
+      "types": "./dist/audio-error.d.ts",
+      "default": "./dist/audio-error.js"
+    },
+    "./sound-server": {
+      "types": "./dist/sound-server.d.ts",
+      "default": "./dist/sound-server.js"
+    }
+  },
+  "files": [
+    "dist/**"
+  ],
+  "license": "MIT",
+  "name": "@domicile-desktop/system-audio",
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test:types": "tsc --noEmit",
+    "test:unit": "bun test"
+  },
+  "type": "module",
+  "version": "0.1.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cprussin/domicile.git",
+    "directory": "packages/system-audio"
+  }
+}

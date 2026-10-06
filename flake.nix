@@ -477,10 +477,10 @@
         #
         # - `DOMICILE_PNP_IDS`: hwdata's EDID vendor table. Read at run time,
         #   not vendored, because it is GPL-2+.
-        # - `DOMICILE_PACTL`, `DOMICILE_PAREC`: volume control and meters.
-        #   PipeWire systems may have no `pactl` on `PATH`.
-        # - `curl`, after the user's `PATH`: shells spawn it to fetch bookmark
-        #   icons (`@domicile-desktop/system-apps/curl`).
+        # - `PATH`, after the user's own: PulseAudio's `pactl` and `parec`,
+        #   which the shell's mixer spawns (PipeWire systems may have none),
+        #   and `curl`, which shells spawn to fetch bookmark icons
+        #   (`@domicile-desktop/system-apps/curl`).
         #
         # `--set-default` and `--suffix` so a user's own value wins.
         postFixup = ''
@@ -492,9 +492,7 @@
           wrapProgram "$out/bin/domicile-compositor" \
             --prefix LD_LIBRARY_PATH : "/run/opengl-driver/lib" \
             --set-default DOMICILE_PNP_IDS "${pkgs.hwdata}/share/hwdata/pnp.ids" \
-            --set-default DOMICILE_PACTL "${pkgs.pulseaudio}/bin/pactl" \
-            --set-default DOMICILE_PAREC "${pkgs.pulseaudio}/bin/parec" \
-            --suffix PATH : "${pkgs.lib.makeBinPath [ pkgs.curl ]}"
+            --suffix PATH : "${pkgs.lib.makeBinPath [ pkgs.pulseaudio pkgs.curl ]}"
         '';
       };
 
@@ -549,7 +547,7 @@
         dontFixup = true;
         outputHashMode = "recursive";
         outputHashAlgo = "sha256";
-        outputHash = "sha256-AXJxwcvJb+Ro9tgfiOoIfFtUTH54J+eLEhEhoTPE/UU=";
+        outputHash = "sha256-zL7xIoC18DjnKUn6P28ViOAQTDF/Y2tJ4p/WVFUAoOk=";
       };
 
 

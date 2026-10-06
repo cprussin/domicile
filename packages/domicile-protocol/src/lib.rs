@@ -176,42 +176,6 @@ pub enum ChromeMessage {
     /// panels off. See `domicile_host::backlight`.
     SetBrightness { level: f64 },
 
-    /// Set a device's or stream's volume.
-    ///
-    /// `id` is an [`AudioDevice::id`] or [`AudioStream::id`]; `volume` is a
-    /// fraction of the server's normal, 1.0 being 100%. Sets every channel
-    /// alike. Answered with the next [`HostMessage::Audio`] to every chrome.
-    SetAudioVolume { id: String, volume: f64 },
-
-    /// Mute or unmute a device or stream, named and answered as for
-    /// [`ChromeMessage::SetAudioVolume`].
-    SetAudioMuted { id: String, muted: bool },
-
-    /// Make an [`AudioDevice`] the default for new streams. Answered with the
-    /// next [`HostMessage::Audio`].
-    SetDefaultAudioDevice { id: String },
-
-    /// Move a stream to another device of the same direction: playback to an
-    /// output, recording to an input.
-    MoveAudioStream { id: String, device: String },
-
-    /// Switch a device to one of its [`AudioDevice::ports`], such as speakers
-    /// to headphones.
-    SetAudioPort { id: String, port: String },
-
-    /// Switch a sound card to one of its [`AudioCard::profiles`], for example
-    /// to enable HDMI output or a headset microphone.
-    SetAudioProfile { card: String, profile: String },
-
-    /// Meter these devices and streams and send [`HostMessage::AudioLevels`].
-    ///
-    /// A lease: the mixer resends it every second, and the compositor stops
-    /// metering ids nobody renewed for a few seconds. Metering a microphone
-    /// records it, so a page that disappears must not leave it recording. An
-    /// empty list stops at once. The compositor meters the union of every
-    /// chrome's ids and tells every chrome.
-    WatchAudioLevels { ids: Vec<String> },
-
     /// This page has captured its old frame for `theme`; the windows may now
     /// switch.
     ///
@@ -525,26 +489,6 @@ pub enum HostMessage {
     /// in `domicile-compositor`. Pushed as the full list on any change and on
     /// connect. The shell works out which are new.
     Notifications { items: Vec<Notification> },
-
-    /// All audio devices, streams and sound cards, for a mixer.
-    ///
-    /// Read from the sound server with `pactl`; see `domicile_host::audio`.
-    /// Pushed as the full state on any change and on connect. Not sent without
-    /// a sound server. Lists keep the server's order; `inputs` includes output
-    /// monitors, flagged.
-    Audio {
-        outputs: Vec<AudioDevice>,
-        inputs: Vec<AudioDevice>,
-        playback: Vec<AudioStream>,
-        recording: Vec<AudioStream>,
-        cards: Vec<AudioCard>,
-    },
-
-    /// Peak levels for the ids in [`ChromeMessage::WatchAudioLevels`].
-    ///
-    /// About twenty times a second while anything is metered. Ids with no
-    /// data yet are omitted rather than reported as silence.
-    AudioLevels { levels: Vec<AudioLevel> },
 
     /// The evdev key for each keysym name the keyboard can type.
     ///
@@ -970,77 +914,6 @@ pub struct TrayItem {
     /// attention. Absent when none could be drawn.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub icon: Option<String>,
-}
-
-/// An audio output (sink) or input (source).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct AudioDevice {
-    /// Opaque id for requests, stable across server restarts.
-    pub id: String,
-    /// Human-readable name.
-    pub description: String,
-    /// The loudest channel as a fraction of the server's normal (1.0 = 100%);
-    /// can exceed 1.0.
-    pub volume: f64,
-    pub muted: bool,
-    /// Whether new streams use it.
-    pub default: bool,
-    /// Whether this input is an output's monitor. Always `false` for outputs.
-    pub monitor: bool,
-    /// Selectable ports, such as speakers or headphones. Often empty.
-    pub ports: Vec<AudioChoice>,
-    /// The [`AudioChoice::name`] of the active port, if any.
-    pub port: Option<String>,
-}
-
-/// One meter reading in [`HostMessage::AudioLevels`].
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct AudioLevel {
-    /// The [`AudioDevice::id`] or [`AudioStream::id`] it meters.
-    pub id: String,
-    /// The peak since the last message, linear, 0.0 through 1.0 of full scale.
-    pub peak: f64,
-}
-
-/// A port of an [`AudioDevice`] or a profile of an [`AudioCard`].
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct AudioChoice {
-    /// The name [`ChromeMessage::SetAudioPort`] and
-    /// [`ChromeMessage::SetAudioProfile`] use.
-    pub name: String,
-    pub description: String,
-    /// `false` for an unplugged port, or a profile that needs one. Still
-    /// selectable, as in other mixers.
-    pub available: bool,
-}
-
-/// A playback stream (sink input) or recording stream (source output).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct AudioStream {
-    /// Opaque id for requests, valid while the stream exists.
-    pub id: String,
-    /// The application's own name.
-    pub application: String,
-    /// The media title, if the application set one.
-    pub title: Option<String>,
-    /// As [`AudioDevice::volume`].
-    pub volume: f64,
-    pub muted: bool,
-    /// The [`AudioDevice::id`] it uses. `None` when the server listed the
-    /// device after the stream; the next message fills it in.
-    pub device: Option<String>,
-}
-
-/// A sound card and its profiles.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct AudioCard {
-    /// The id [`ChromeMessage::SetAudioProfile`] uses.
-    pub id: String,
-    pub description: String,
-    /// In the server's priority order, best first.
-    pub profiles: Vec<AudioChoice>,
-    /// The [`AudioChoice::name`] of the active profile.
-    pub profile: Option<String>,
 }
 
 /// Which StatusNotifierItem action a tray click requests.

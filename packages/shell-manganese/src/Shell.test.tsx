@@ -29,8 +29,6 @@ import { Shell } from "./Shell";
 import { hostDisplays } from "./screens/host-displays";
 import { BarClock, BarLauncher, BarWorkspaces } from "./top-bar/bar-items";
 import type { TopBarLayout } from "./top-bar/layout";
-import { laptop } from "./volume/fixture";
-import type { Audio } from "./volume/watch-audio";
 import { TITLE_BAR } from "./window-management/rect";
 import {
   movingStyles,
@@ -820,12 +818,23 @@ describe("Shell", () => {
       ).toBeVisible();
     });
 
-    it("shows the volume the host says", () => {
+    it("reads the volume from the sound server", async () => {
       renderShell();
 
-      domicile.set(engineAudio(laptop));
-
-      expect(screen.getByRole("button", { name: "Volume 50%" })).toBeVisible();
+      await waitFor(() => {
+        expect(
+          domicile.calls.flatMap(([method, , request]) =>
+            method === "callSystem" && typeof request === "string"
+              ? [JSON.parse(request)]
+              : [],
+          ),
+        ).toContainEqual(
+          expect.objectContaining({
+            argv: ["pactl", "-f", "json", "subscribe"],
+            call: "spawn",
+          }),
+        );
+      });
     });
 
     it("draws no meter until UPower answers", () => {
@@ -2616,35 +2625,3 @@ describe("the launcher", () => {
     expect(barFor(container, "app:two").dataset.focus).toBe("focused");
   });
 });
-
-/** The desk's sound as the engine holds it: `audio`, in its spellings. */
-const engineAudio = (audio: Audio): Partial<DomicileState> => {
-  const device = ({
-    default: isDefault,
-    port,
-    ...rest
-  }: Audio["outputs"][number]) => ({
-    ...rest,
-    isDefault,
-    port: port ?? "",
-  });
-  const stream = ({
-    device: on,
-    title,
-    ...rest
-  }: Audio["playback"][number]) => ({
-    ...rest,
-    device: on ?? "",
-    title: title ?? "",
-  });
-  return {
-    audioCards: audio.cards.map(({ profile, ...rest }) => ({
-      ...rest,
-      profile: profile ?? "",
-    })),
-    audioInputs: audio.inputs.map(device),
-    audioOutputs: audio.outputs.map(device),
-    audioPlayback: audio.playback.map(stream),
-    audioRecording: audio.recording.map(stream),
-  };
-};

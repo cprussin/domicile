@@ -331,56 +331,6 @@ export const shellConfigSchema = z.looseObject({
   type: z.literal("shell_config"),
 });
 
-// The full audio state: devices, streams and cards. Pushed on change and on
-// connect. Not sent without a sound server.
-const audioChoiceSchema = z.looseObject({
-  available: z.boolean(),
-  description: z.string(),
-  name: z.string(),
-});
-
-const audioDeviceSchema = z.looseObject({
-  default: z.boolean(),
-  description: z.string(),
-  id: z.string(),
-  monitor: z.boolean(),
-  muted: z.boolean(),
-  port: z.string().nullable(),
-  ports: z.array(audioChoiceSchema),
-  volume: z.number(),
-});
-
-const audioStreamSchema = z.looseObject({
-  application: z.string(),
-  device: z.string().nullable(),
-  id: z.string(),
-  muted: z.boolean(),
-  title: z.string().nullable(),
-  volume: z.number(),
-});
-
-const audioSchema = z.looseObject({
-  cards: z.array(
-    z.looseObject({
-      description: z.string(),
-      id: z.string(),
-      profile: z.string().nullable(),
-      profiles: z.array(audioChoiceSchema),
-    }),
-  ),
-  inputs: z.array(audioDeviceSchema),
-  outputs: z.array(audioDeviceSchema),
-  playback: z.array(audioStreamSchema),
-  recording: z.array(audioStreamSchema),
-  type: z.literal("audio"),
-});
-
-// Meter peaks, about 20 times a second while any meter is watched.
-const audioLevelsSchema = z.looseObject({
-  levels: z.array(z.looseObject({ id: z.string(), peak: z.number() })),
-  type: z.literal("audio_levels"),
-});
-
 const systemErrorSchema = z.looseObject({
   kind: z.enum([
     "not_found",
@@ -490,8 +440,6 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   foundFilesSchema,
   filePreviewSchema,
   brightnessSchema,
-  audioSchema,
-  audioLevelsSchema,
   clipboardSchema,
   traySchema,
   notificationsSchema,

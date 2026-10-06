@@ -36,8 +36,8 @@ A config module exports `Shell = runManganese(options)` (see
   volume, notifications and tray.
 - [The launcher](docs/LAUNCHER.md), [the clipboard](docs/CLIPBOARD.md) and
   [the wallpaper](docs/WALLPAPER.md).
-- [Host readouts](docs/HOST-READOUTS.md): how the compositor reads the
-  backlight and audio.
+- [Host readouts](docs/HOST-READOUTS.md): how the backlight and audio are
+  read.
 - [Custom bar items](docs/CUSTOM-BAR-ITEMS.md): styling your own bar items.
 - [Focus internals](docs/FOCUS-INTERNALS.md).
 - [Source layout](docs/SOURCE.md).

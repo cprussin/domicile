@@ -1,8 +1,9 @@
 # Host readouts
 
-How the compositor reads the backlight and audio that the
-[top bar](TOP-BAR.md) shows. The compositor pushes changes to the page. The
-battery comes from a library instead; see [TOP-BAR.md](TOP-BAR.md#battery).
+How the backlight and audio that the [top bar](TOP-BAR.md) shows are read.
+The compositor pushes backlight changes to the page; the page reads audio
+itself. The battery comes from a library too; see
+[TOP-BAR.md](TOP-BAR.md#battery).
 
 ## Brightness
 
@@ -13,9 +14,12 @@ battery comes from a library instead; see [TOP-BAR.md](TOP-BAR.md#battery).
 
 ## Volume
 
-- Runs `pactl subscribe` and re-reads `pactl -f json info` and `list` on
-  changes (`domicile_host::audio`).
-- `DOMICILE_PACTL` names the `pactl` binary. The flake's wrapper sets it.
-- **Meters**: the mixer renews each meter every second. The compositor runs
-  one `parec` per meter (`DOMICILE_PAREC` names the binary) and stops it when
-  it is not renewed.
+- `@domicile-desktop/system-audio` runs `pactl` and `parec` through
+  `@domicile-desktop/sdk/system`. See its
+  [README](/packages/system-audio/README.md).
+- Holds `pactl -f json subscribe` open and rereads `pactl -f json info` and
+  `list` once a burst of changes settles.
+- **Meters**: one `parec` per metered device or stream, only while the mixer
+  shows it. They stop when the mixer closes or the page goes away.
+- `pactl` and `parec` come from the compositor's `PATH`. The flake's wrapper
+  adds PulseAudio's.

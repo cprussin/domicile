@@ -11,7 +11,6 @@ use std::collections::BTreeMap;
 
 use domicile_protocol::{ChromeMessage, DisplayInfo, HostMessage, Notification, Theme, TrayItem};
 
-pub mod audio;
 pub mod backlight;
 pub mod base64;
 pub mod clipboard;
@@ -118,8 +117,6 @@ pub struct Host {
     tray: Option<Vec<TrayItem>>,
     /// The desktop's notifications. `None` until set, as for `tray`.
     notifications: Option<Vec<Notification>>,
-    /// The sound server's state. `None` until read, as for `tray`.
-    audio: Option<audio::Audio>,
     /// Handles clients exported their windows under, for a portal's
     /// `parent_window`.
     exports: xdg_foreign::Exports,
@@ -263,20 +260,6 @@ impl Host {
         self.notifications
             .clone()
             .map(|items| HostMessage::Notifications { items })
-    }
-
-    /// Set the audio state and return the message to broadcast, or `None` if
-    /// it did not change.
-    pub fn set_audio(&mut self, audio: audio::Audio) -> Option<HostMessage> {
-        (self.audio.as_ref() != Some(&audio)).then(|| {
-            self.audio = Some(audio.clone());
-            audio.message()
-        })
-    }
-
-    /// The audio message, or `None` if no audio state was set.
-    pub fn describe_audio(&self) -> Option<HostMessage> {
-        self.audio.clone().map(audio::Audio::message)
     }
 
     /// Register a newly-mapped Wayland toplevel. Returns its assigned id and
@@ -526,13 +509,6 @@ impl Host {
             | ChromeMessage::InvokeNotificationAction { .. }
             | ChromeMessage::SetTheme { .. }
             | ChromeMessage::SetBrightness { .. }
-            | ChromeMessage::SetAudioVolume { .. }
-            | ChromeMessage::SetAudioMuted { .. }
-            | ChromeMessage::SetDefaultAudioDevice { .. }
-            | ChromeMessage::MoveAudioStream { .. }
-            | ChromeMessage::SetAudioPort { .. }
-            | ChromeMessage::SetAudioProfile { .. }
-            | ChromeMessage::WatchAudioLevels { .. }
             | ChromeMessage::ThemeCaptured { .. }
             | ChromeMessage::PointerMotion { .. }
             | ChromeMessage::PointerLeave { .. }

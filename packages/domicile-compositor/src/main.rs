@@ -109,7 +109,6 @@ use smithay::{
 use tracing::{debug, error, info, warn};
 
 mod appearance;
-mod audio;
 mod backlight;
 mod clipboard;
 mod coalesce;
@@ -127,7 +126,6 @@ mod idle;
 mod keymap;
 mod latency;
 mod lock;
-mod meters;
 mod modifiers;
 mod notifications;
 mod outbound;
@@ -177,7 +175,6 @@ use crate::which_engine::another_engine;
 use domicile_config::{
     Config, ConfigError, ConfigStore, ExtensionsConfig, IdleConfig, KeyboardConfig, Omit, ThemeMode,
 };
-use domicile_host::audio::Request as AudioRequest;
 use domicile_host::backlight::{
     announces_a_backlight, reading as backlight_reading, Brightness, RealBacklights,
 };
@@ -387,18 +384,6 @@ enum ClientRequest {
     SetBrightness {
         level: f64,
     },
-    /// A mixer request for the sound server. Routed here so a locked desktop
-    /// can refuse it.
-    Audio {
-        request: domicile_host::audio::Request,
-    },
-    /// A chrome's mixer asked to meter these ids, as a renewable lease. Routed
-    /// here so a locked desktop can refuse it, since metering a microphone
-    /// records it.
-    WatchAudioLevels {
-        chrome: usize,
-        ids: Vec<String>,
-    },
 }
 
 /// A chrome request answered on its own connection thread.
@@ -461,11 +446,6 @@ struct ChromeHub {
     /// The notification server's worker. Set once, like `tray`. See
     /// [`crate::notifications`].
     notifications: OnceLock<notifications::NotificationServer>,
-    /// The sound server request runner. Set once, like `tray`. See
-    /// [`crate::audio`].
-    audio: OnceLock<audio::AudioServer>,
-    /// The mixer's level meters. Set once, like `tray`. See [`crate::meters`].
-    meters: OnceLock<meters::Meters>,
     /// Opens EIS contexts for the RemoteDesktop and InputCapture portals. Set
     /// once, when the Wayland loop starts serving. See [`crate::eis`].
     eis: OnceLock<eis::Eis>,
@@ -493,8 +473,6 @@ impl ChromeHub {
             appearance,
             tray: OnceLock::new(),
             notifications: OnceLock::new(),
-            audio: OnceLock::new(),
-            meters: OnceLock::new(),
             eis: OnceLock::new(),
         });
         (hub, outbound_rx)
@@ -1080,51 +1058,6 @@ fn read_chrome_messages(
             // uevent.
             Ok(ChromeMessage::SetBrightness { level }) => {
                 hub.send_request(ClientRequest::SetBrightness { level });
-                Vec::new()
-            }
-            // Sent to the Wayland thread so a locked desktop can refuse it. The
-            // response is the next `audio` broadcast.
-            Ok(ChromeMessage::SetAudioVolume { id, volume }) => {
-                hub.send_request(ClientRequest::Audio {
-                    request: AudioRequest::Volume { id, volume },
-                });
-                Vec::new()
-            }
-            Ok(ChromeMessage::SetAudioMuted { id, muted }) => {
-                hub.send_request(ClientRequest::Audio {
-                    request: AudioRequest::Muted { id, muted },
-                });
-                Vec::new()
-            }
-            Ok(ChromeMessage::SetDefaultAudioDevice { id }) => {
-                hub.send_request(ClientRequest::Audio {
-                    request: AudioRequest::Default { id },
-                });
-                Vec::new()
-            }
-            Ok(ChromeMessage::MoveAudioStream { id, device }) => {
-                hub.send_request(ClientRequest::Audio {
-                    request: AudioRequest::Move { id, device },
-                });
-                Vec::new()
-            }
-            Ok(ChromeMessage::SetAudioPort { id, port }) => {
-                hub.send_request(ClientRequest::Audio {
-                    request: AudioRequest::Port { id, port },
-                });
-                Vec::new()
-            }
-            Ok(ChromeMessage::WatchAudioLevels { ids }) => {
-                hub.send_request(ClientRequest::WatchAudioLevels {
-                    chrome: chrome_key(writer),
-                    ids,
-                });
-                Vec::new()
-            }
-            Ok(ChromeMessage::SetAudioProfile { card, profile }) => {
-                hub.send_request(ClientRequest::Audio {
-                    request: AudioRequest::Profile { card, profile },
-                });
                 Vec::new()
             }
             // The chrome's density sets the output scale, which is Wayland
@@ -4147,17 +4080,6 @@ impl DomicileCompositor {
                 }
             }
             ClientRequest::SetBrightness { level } => self.set_the_brightness(level),
-            // Forward to the sound server's runner.
-            ClientRequest::Audio { request } => {
-                if let Some(server) = self.hub.audio.get() {
-                    server.ask(request);
-                }
-            }
-            ClientRequest::WatchAudioLevels { chrome, ids } => {
-                if let Some(meters) = self.hub.meters.get() {
-                    meters.watch(chrome, ids);
-                }
-            }
             ClientRequest::TurnTheWindows { theme, chromes } => {
                 // Replace any turnover in progress; its windows are about to
                 // get a newer theme.
@@ -6046,25 +5968,6 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
         },
     ));
-    // Sound, published like the tray but not pre-set: without a sound server
-    // there is no mixer to show. See `audio`.
-    //
-    // Meters broadcast directly: levels change twenty times a second and new
-    // chromes need no catch-up.
-    let publishing = Arc::clone(&hub);
-    let _ = hub.meters.set(meters::serve(move |levels| {
-        publishing.broadcast(HostMessage::AudioLevels { levels });
-    }));
-    let publishing = Arc::clone(&hub);
-    let _ = hub.audio.set(audio::serve(move |audio| {
-        if let Some(meters) = publishing.meters.get() {
-            meters.take_up(audio.meters.clone());
-        }
-        let told = publishing.host.lock().unwrap().set_audio(audio);
-        if let Some(message) = told {
-            publishing.broadcast(message);
-        }
-    }));
     // Bind here so a failure ends the run. Nothing can connect yet: the shell
     // waits for the session document, published much later.
     let chrome_listener = bind_chrome_socket(&arguments.chrome_socket)?;

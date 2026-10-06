@@ -232,63 +232,6 @@ export type DomicileNotification = {
   readonly time: number;
 };
 
-/** A port of a device, or a profile of a card. */
-export type DomicileAudioChoice = {
-  readonly name: string;
-  readonly description: string;
-  readonly available: boolean;
-};
-
-/** An audio output or input device. */
-export type DomicileAudioDevice = {
-  readonly id: string;
-  readonly description: string;
-  readonly volume: number;
-  readonly muted: boolean;
-  /** Whether new streams go to it. Not `default`, a C++ keyword. */
-  readonly isDefault: boolean;
-  readonly monitor: boolean;
-  readonly ports: readonly DomicileAudioChoice[];
-  /** The port in use, or empty if none. */
-  readonly port: string;
-};
-
-/** An audio playback or recording stream. */
-export type DomicileAudioStream = {
-  readonly id: string;
-  readonly application: string;
-  /** Empty if the application set none. */
-  readonly title: string;
-  readonly volume: number;
-  readonly muted: boolean;
-  /** Empty until a later `audiochanged` assigns the device. */
-  readonly device: string;
-};
-
-/** One audio level meter reading. */
-export type DomicileAudioLevel = {
-  readonly id: string;
-  /** Peak since the last event, 0 through 1 of full scale. */
-  readonly peak: number;
-};
-
-/**
- * Levels for what {@link DomicileHost.watchAudioLevels} requested, about 20
- * times a second.
- */
-export type DomicileAudioLevelsEvent = Event & {
-  readonly levels: readonly DomicileAudioLevel[];
-};
-
-/** A sound card. */
-export type DomicileAudioCard = {
-  readonly id: string;
-  readonly description: string;
-  readonly profiles: readonly DomicileAudioChoice[];
-  /** The profile in use, or empty. */
-  readonly profile: string;
-};
-
 /**
  * A browser window, drawn with `<webview window={id}>`.
  *
@@ -357,7 +300,6 @@ export type DomicileHostEventMap = {
    */
   focusrequested: DomicileAppEvent;
   shortcut: DomicileShortcutEvent;
-  audiolevels: DomicileAudioLevelsEvent;
   /**
    * An answer to {@link DomicileHost.callSystem}: `data` is the compositor's
    * `system_reply`, `system_event` or `system_end` line. See the `system`
@@ -401,8 +343,6 @@ export type DomicileHostEventMap = {
   notificationschanged: Event;
   /** Bare: the attribute it names moved. */
   extensionschanged: Event;
-  /** Bare: the attributes it names moved. */
-  audiochanged: Event;
   /** Bare: the attribute it names moved. */
   idlechanged: Event;
   /** Bare: the attribute it names moved. */
@@ -535,30 +475,6 @@ export type DomicileHost = {
   setBrightness(level: number): void;
 
   /**
-   * Mixer controls. Ids come from the `audio*` attributes; volume is a
-   * fraction of the sound server's 100%.
-   *
-   * Answered with `audiochanged` to every chrome. Unknown ids are logged and
-   * ignored.
-   */
-  setAudioVolume(id: string, volume: number): void;
-  setAudioMuted(id: string, muted: boolean): void;
-  setDefaultAudioDevice(id: string): void;
-  moveAudioStream(id: string, device: string): void;
-  setAudioPort(id: string, port: string): void;
-  setAudioProfile(card: string, profile: string): void;
-
-  /**
-   * Meter these devices and streams (ids from the `audio*` attributes) and
-   * fire `audiolevels`.
-   *
-   * This is a lease: call it again every second while the meters are visible.
-   * The compositor stops metering anything not renewed, because metering a
-   * microphone records it. An empty list stops at once.
-   */
-  watchAudioLevels(ids: readonly string[]): void;
-
-  /**
    * Tell the compositor this page has captured its old frame for a `theme`
    * transition, so client windows can switch theme now.
    *
@@ -672,12 +588,6 @@ export type DomicileHost = {
   readonly notifications: readonly DomicileNotification[] | null;
   /** The extensions with an action, from this browser rather than the compositor. */
   readonly extensions: readonly DomicileExtension[] | null;
-  /** The desk's sound, each list in the sound server's order. */
-  readonly audioOutputs: readonly DomicileAudioDevice[] | null;
-  readonly audioInputs: readonly DomicileAudioDevice[] | null;
-  readonly audioPlayback: readonly DomicileAudioStream[] | null;
-  readonly audioRecording: readonly DomicileAudioStream[] | null;
-  readonly audioCards: readonly DomicileAudioCard[] | null;
   /**
    * Whether anybody is at this desktop. **Not `document.visibilityState`**: a
    * shell's document stays visible while the glass is off. `null` on a desktop

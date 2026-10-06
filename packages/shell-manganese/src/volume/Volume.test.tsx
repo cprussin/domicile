@@ -6,13 +6,7 @@ import { device, heldSound, laptop } from "./fixture";
 import { Volume } from "./Volume";
 
 const shown = (sound: ReturnType<typeof heldSound>) => {
-  render(
-    <Volume
-      domicile={sound.domicile}
-      watch={sound.watch}
-      watchLevels={sound.watchLevels}
-    />,
-  );
+  render(<Volume server={sound.server} />);
   sound.report(laptop);
 };
 
@@ -26,13 +20,7 @@ describe("Volume", () => {
     it("shows nothing on a desk with no sound server", () => {
       const sound = heldSound();
 
-      render(
-        <Volume
-          domicile={sound.domicile}
-          watch={sound.watch}
-          watchLevels={sound.watchLevels}
-        />,
-      );
+      render(<Volume server={sound.server} />);
 
       expect(screen.queryByRole("button")).not.toBeInTheDocument();
     });
@@ -62,9 +50,7 @@ describe("Volume", () => {
         deltaY: -100,
       });
 
-      expect(sound.asked).toEqual([
-        ["setAudioVolume", "output:speakers", 0.55],
-      ]);
+      expect(sound.asked).toEqual([["setVolume", "output:speakers", 0.55]]);
     });
   });
 
@@ -89,7 +75,7 @@ describe("Volume", () => {
       screen.getByRole("slider", { name: "Microphone" }).focus();
       await userEvent.keyboard("{ArrowRight}");
 
-      expect(sound.asked).toEqual([["setAudioVolume", "input:mic", 0.31]]);
+      expect(sound.asked).toEqual([["setVolume", "input:mic", 0.31]]);
     });
 
     it("mutes and unmutes", async () => {
@@ -108,8 +94,8 @@ describe("Volume", () => {
       );
 
       expect(sound.asked).toEqual([
-        ["setAudioMuted", "output:speakers", true],
-        ["setAudioMuted", "input:mic", false],
+        ["setMuted", "output:speakers", true],
+        ["setMuted", "input:mic", false],
       ]);
     });
 

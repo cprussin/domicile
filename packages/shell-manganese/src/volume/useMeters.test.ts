@@ -1,31 +1,26 @@
 import { describe, expect, it } from "bun:test";
 import { renderHook } from "@testing-library/react";
 
-import { heldSound } from "./fixture";
+import { heldSound, laptop } from "./fixture";
 import { useMeters } from "./useMeters";
 
-/** A short renewal, so a test can wait one out. */
-const RENEW = 20;
-
 describe("useMeters", () => {
-  it("asks for the ids at once, renews the ask, and lets go", async () => {
+  it("meters what can be metered of the ids, and stops when unmounted", () => {
     const sound = heldSound();
     const { unmount } = renderHook(() =>
-      useMeters(sound.domicile, ["input:mic"], sound.watchLevels, RENEW),
+      useMeters(sound.server, ["input:mic", "recording:7"], laptop.meters),
     );
 
-    expect(sound.metered).toEqual([["input:mic"]]);
-    await new Promise((resolve) => setTimeout(resolve, RENEW * 2.5));
-    expect(sound.metered.length).toBeGreaterThanOrEqual(2);
+    expect(sound.metered.at(-1)).toEqual(["input:mic"]);
 
     unmount();
     expect(sound.metered.at(-1)).toEqual([]);
   });
 
-  it("asks again when what is shown changes", () => {
+  it("meters again when what is shown changes", () => {
     const sound = heldSound();
     const { rerender } = renderHook(
-      ({ ids }) => useMeters(sound.domicile, ids, sound.watchLevels, RENEW),
+      ({ ids }) => useMeters(sound.server, ids, laptop.meters),
       { initialProps: { ids: ["input:mic"] } },
     );
 
@@ -37,7 +32,7 @@ describe("useMeters", () => {
   it("reads each level in decibels, the bottom of the meter at -60", () => {
     const sound = heldSound();
     const { result } = renderHook(() =>
-      useMeters(sound.domicile, ["input:mic"], sound.watchLevels, RENEW),
+      useMeters(sound.server, ["input:mic"], laptop.meters),
     );
 
     sound.levels(

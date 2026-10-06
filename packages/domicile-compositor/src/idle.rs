@@ -240,8 +240,6 @@ pub fn somebody_is_here(request: &ClientRequest) -> bool {
         | ClientRequest::DismissNotifications { .. }
         | ClientRequest::InvokeNotificationAction { .. }
         | ClientRequest::SetBrightness { .. }
-        | ClientRequest::Audio { .. }
-        | ClientRequest::WatchAudioLevels { .. }
         // The lock chord landed on the shell, and locking must not light the
         // screens.
         | ClientRequest::Lock => false,
@@ -834,15 +832,6 @@ mod tests {
                 },
             ),
             ("the shell locking the desk", ClientRequest::Lock),
-            (
-                "the shell's mixer",
-                ClientRequest::Audio {
-                    request: domicile_host::audio::Request::Muted {
-                        id: "output:speakers".into(),
-                        muted: true,
-                    },
-                },
-            ),
         ] {
             assert!(
                 !somebody_is_here(&request),

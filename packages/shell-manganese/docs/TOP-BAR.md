@@ -116,9 +116,8 @@ To style your own items with manganese's Panda CSS, see
 - Sliders stop at 100%. A device set higher elsewhere shows its value.
 - Level meters run only while the mixer is open, for the devices it shows.
   They show -60 to 0 dB.
-- See [Host readouts](HOST-READOUTS.md#volume) for how the compositor reads
-  audio.
-- A locked desktop rejects mixer requests and meters.
+- See [Host readouts](HOST-READOUTS.md#volume) for how audio is read.
+- A locked desktop rejects mixer requests and new meters.
 
 ## Notifications
 

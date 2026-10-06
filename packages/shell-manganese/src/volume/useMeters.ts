@@ -1,53 +1,50 @@
-import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
+import type { Meter } from "@domicile-desktop/system-audio/audio";
+import type {
+  Levels,
+  Meters,
+  SoundServer,
+} from "@domicile-desktop/system-audio/sound-server";
 import { useEffect, useState } from "react";
-
-import { watchAudioLevels } from "./watch-audio-levels";
-
-/** Renewal interval in ms; shorter than the compositor's metering lease. */
-const RENEW_EVERY = 1000;
 
 /** The lowest level a meter shows, in dB. Quieter reads as empty. */
 const FLOOR_DB = -60;
 
 /**
  * Meters `ids` while mounted and returns each one's level from 0 to 1, on a dB
- * scale from {@link FLOOR_DB} to full scale.
+ * scale from {@link FLOOR_DB} to full scale. Ids with no entry in `sources`
+ * are not metered.
  *
- * The request is a lease: it is renewed every `renewEvery` ms and released on
- * unmount or when `ids` change. Metering a microphone records it, so a closed
- * panel must not leave metering on. See `DomicileHost.watchAudioLevels`.
+ * Metering a microphone records it, so the meters stop on unmount.
  */
 export const useMeters = (
-  domicile: DomicileHost,
+  server: SoundServer,
   ids: readonly string[],
-  watch: typeof watchAudioLevels = watchAudioLevels,
-  renewEvery: number = RENEW_EVERY,
-): ReadonlyMap<string, number> => {
-  const [levels, setLevels] = useState<ReadonlyMap<string, number>>(
-    () => new Map(),
-  );
-  useEffect(
-    () =>
-      watch(domicile, (peaks) => {
-        setLevels(
-          new Map([...peaks].map(([id, peak]) => [id, onTheMeter(peak)])),
-        );
-      }),
-    [domicile, watch],
-  );
-  // Joined so a new array with the same ids does not re-run the effect.
-  const asked = ids.join("\n");
+  sources: ReadonlyMap<string, Meter>,
+): Levels => {
+  const [levels, setLevels] = useState<Levels>(() => new Map());
+  const [meters, setMeters] = useState<Meters | undefined>(undefined);
   useEffect(() => {
-    const watched = asked === "" ? [] : asked.split("\n");
-    domicile.watchAudioLevels(watched);
-    const renewal = setInterval(() => {
-      domicile.watchAudioLevels(watched);
-    }, renewEvery);
+    const running = server.meters((peaks) => {
+      setLevels(
+        new Map([...peaks].map(([id, peak]) => [id, onTheMeter(peak)])),
+      );
+    });
+    setMeters(running);
     return () => {
-      clearInterval(renewal);
-      domicile.watchAudioLevels([]);
+      running.stop();
     };
-  }, [domicile, asked, renewEvery]);
+  }, [server]);
+  // Runs each render: `meter` changes nothing when nothing changed.
+  useEffect(() => {
+    meters?.meter(
+      new Map(
+        ids.flatMap((id) => {
+          const source = sources.get(id);
+          return source === undefined ? [] : [[id, source] as const];
+        }),
+      ),
+    );
+  });
   return levels;
 };
 

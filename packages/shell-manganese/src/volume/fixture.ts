@@ -1,9 +1,18 @@
-import type { AudioDevice, AudioStream } from "@domicile-desktop/sdk/audio";
-import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
+import type { Result } from "@cprussin/option-result";
+import { Ok } from "@cprussin/option-result";
+import { Asked } from "@domicile-desktop/system-audio/asked";
+import type {
+  Audio,
+  AudioDevice,
+  AudioStream,
+} from "@domicile-desktop/system-audio/audio";
+import { Meter } from "@domicile-desktop/system-audio/audio";
+import type { AudioError } from "@domicile-desktop/system-audio/audio-error";
+import type {
+  Levels,
+  SoundServer,
+} from "@domicile-desktop/system-audio/sound-server";
 import { act } from "@testing-library/react";
-
-import type { Audio } from "./watch-audio";
-import type { AudioLevels } from "./watch-audio-levels";
 
 /** An audio device with test overrides. */
 export const device = (overrides: Partial<AudioDevice>): AudioDevice => ({
@@ -60,6 +69,13 @@ export const laptop: Audio = {
       volume: 0.3,
     }),
   ],
+  meters: new Map<string, Meter>([
+    ["output:speakers", Meter.Source("speakers.monitor")],
+    ["output:hdmi", Meter.Source("hdmi.monitor")],
+    ["input:speakers.monitor", Meter.Source("speakers.monitor")],
+    ["input:mic", Meter.Source("mic")],
+    ["playback:42", Meter.Stream(42)],
+  ]),
   outputs: [
     device({
       default: true,
@@ -90,42 +106,54 @@ export const laptop: Audio = {
   ],
 };
 
-/** One audio request the shell made: method name and arguments. */
-export type Asked = readonly [method: string, ...args: unknown[]];
+/** One request the shell made: method name and arguments. */
+export type Request = readonly [method: string, ...args: unknown[]];
 
 /**
- * A fake audio host for tests.
+ * A fake sound server for tests.
  *
- * - `watch` and `watchLevels` replace the real watchers.
- * - `report` and `levels` send host messages.
+ * - `report` and `levels` stand in for the server.
  * - `asked` and `metered` record the shell's requests.
  */
 export const heldSound = () => {
   const listeners: ((audio: Audio) => void)[] = [];
-  const meters: ((levels: AudioLevels) => void)[] = [];
-  const asked: Asked[] = [];
-  /** Each set of ids the shell asked to meter, in order. */
+  const meters: ((levels: Levels) => void)[] = [];
+  const asked: Request[] = [];
+  /** Each set of ids the shell metered, in order; empty once it stopped. */
   const metered: (readonly string[])[] = [];
   const record =
     (method: string) =>
-    (...args: unknown[]) => {
+    (...args: unknown[]): Promise<Result<Asked, AudioError>> => {
       asked.push([method, ...args]);
+      return Promise.resolve(Ok(Asked.Done));
     };
+  const server: SoundServer = {
+    meters: (onLevels) => {
+      meters.push(onLevels);
+      return {
+        meter: (wanted) => {
+          metered.push([...wanted.keys()]);
+        },
+        stop: () => {
+          metered.push([]);
+        },
+      };
+    },
+    moveStream: record("moveStream"),
+    setDefault: record("setDefault"),
+    setMuted: record("setMuted"),
+    setPort: record("setPort"),
+    setProfile: record("setProfile"),
+    setVolume: record("setVolume"),
+    watch: (onAudio) => {
+      listeners.push(onAudio);
+      return () => undefined;
+    },
+  };
   return {
     asked,
-    domicile: {
-      moveAudioStream: record("moveAudioStream"),
-      setAudioMuted: record("setAudioMuted"),
-      setAudioPort: record("setAudioPort"),
-      setAudioProfile: record("setAudioProfile"),
-      setAudioVolume: record("setAudioVolume"),
-      setDefaultAudioDevice: record("setDefaultAudioDevice"),
-      watchAudioLevels: (ids: readonly string[]) => {
-        metered.push(ids);
-      },
-    } as unknown as DomicileHost,
     /** Sends a level for each metered id. */
-    levels: (levels: ReadonlyMap<string, number>) => {
+    levels: (levels: Levels) => {
       act(() => {
         for (const onLevels of meters) {
           onLevels(levels);
@@ -140,16 +168,6 @@ export const heldSound = () => {
         }
       });
     },
-    watch: (_domicile: DomicileHost, onAudio: (audio: Audio) => void) => {
-      listeners.push(onAudio);
-      return () => undefined;
-    },
-    watchLevels: (
-      _domicile: DomicileHost,
-      onLevels: (levels: AudioLevels) => void,
-    ) => {
-      meters.push(onLevels);
-      return () => undefined;
-    },
+    server,
   };
 };

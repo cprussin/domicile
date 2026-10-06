@@ -76,7 +76,6 @@ compare() { # interface, idl file
 
 compare DomicileAppEvent domicile_app_event.idl
 compare DomicileShortcutEvent domicile_shortcut_event.idl
-compare DomicileAudioLevelsEvent domicile_audio_levels_event.idl
 
 if [ "$FAILED" -gt 0 ]; then
   echo "$FAILED failed"

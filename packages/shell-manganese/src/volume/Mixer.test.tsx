@@ -8,14 +8,7 @@ import { Mixer } from "./Mixer";
 const mixer = (
   sound: ReturnType<typeof heldSound>,
   audio: typeof laptop = laptop,
-) =>
-  render(
-    <Mixer
-      audio={audio}
-      domicile={sound.domicile}
-      watchLevels={sound.watchLevels}
-    />,
-  );
+) => render(<Mixer audio={audio} server={sound.server} />);
 
 /** Pick `name` from the `Select` called `label`. */
 const choose = async (label: string, name: string) => {
@@ -70,7 +63,7 @@ describe("Mixer", () => {
       await choose("Speakers port", "Headphones (unplugged)");
 
       expect(sound.asked).toEqual([
-        ["setAudioPort", "output:speakers", "analog-output-headphones"],
+        ["setPort", "output:speakers", "analog-output-headphones"],
       ]);
     });
 
@@ -142,8 +135,8 @@ describe("Mixer", () => {
       );
 
       expect(sound.asked).toEqual([
-        ["setAudioVolume", "output:hdmi", 0.99],
-        ["setDefaultAudioDevice", "output:hdmi"],
+        ["setVolume", "output:hdmi", 0.99],
+        ["setDefault", "output:hdmi"],
       ]);
     });
   });
@@ -175,8 +168,8 @@ describe("Mixer", () => {
       await choose("Firefox: A song output", "HDMI");
 
       expect(sound.asked).toEqual([
-        ["setAudioMuted", "playback:42", true],
-        ["moveAudioStream", "playback:42", "output:hdmi"],
+        ["setMuted", "playback:42", true],
+        ["moveStream", "playback:42", "output:hdmi"],
       ]);
     });
 
@@ -188,7 +181,7 @@ describe("Mixer", () => {
       await choose("Recorder input", "Monitor of Speakers");
 
       expect(sound.asked).toEqual([
-        ["moveAudioStream", "recording:7", "input:speakers.monitor"],
+        ["moveStream", "recording:7", "input:speakers.monitor"],
       ]);
     });
 
@@ -210,9 +203,7 @@ describe("Mixer", () => {
 
       await choose("Built-in Audio profile", "Off");
 
-      expect(sound.asked).toEqual([
-        ["setAudioProfile", "alsa_card.pci", "off"],
-      ]);
+      expect(sound.asked).toEqual([["setProfile", "alsa_card.pci", "off"]]);
     });
   });
 });
