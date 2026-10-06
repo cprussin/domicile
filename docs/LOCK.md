@@ -23,7 +23,7 @@ desktop treats it.
 
 | Category | Examples | Effect |
 |---|---|---|
-| Input | `Key`, pointer motion, buttons, axis, leave | Dropped (`debug` log) |
+| Input | `Key`, pointer motion, buttons, axis, leave; the same from EIS clients (`crate::eis`) | Dropped (`debug` log) |
 | Commands | `CloseApp`, `Spawn`, `CopyClipboardEntry`, tray, notifications, audio | Refused (`warn` log) |
 | Reads on the connection | `SearchFiles`, `PreviewFile`, `SearchApps` | Answered with nothing (`warn` log) |
 | System calls | `SystemRequest`, except reads under `/sys` and calls that stop something running | A call that starts something is answered `locked`; `stdin` is dropped (`warn` log) |

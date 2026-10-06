@@ -33,6 +33,7 @@ One request channel carries all dialogs. Each interface's backend builds on it.
 | Request kinds, parsed with Zod | `@domicile-desktop/sdk/portal` |
 | Ready-made dialogs for any shell | `@domicile-desktop/component-library/PortalDialogs` |
 | `parent_window` to window lookup | `zxdg_exporter_v2` / `v1` in the compositor |
+| EIS server: devices per grant, regions, translation to seat input | `packages/domicile-compositor/src/eis.rs` |
 | Interface routing | `nix/domicile.portal`, `nix/domicile-portals.conf` |
 
 ## Key decisions
@@ -72,6 +73,11 @@ One request channel carries all dialogs. Each interface's backend builds on it.
 - **Input uses EIS.** RemoteDesktop and InputCapture hand out a libei socket
   (`ConnectToEIS`) served by the compositor (`reis`). Emulated input takes the
   engine's input injection path, so the lock screen still blocks it.
+  - A point lands on the window under it by the page's last window bounds;
+    overlaps go to the focused window, then the smallest. A point over the
+    shell reaches nothing: only the engine can deliver to the page.
+  - The seat has no touchscreen, so a touch is the left button, one finger
+    at a time.
 - **Grants live in the frontend's `PermissionStore`.** Domicile stores only
   ScreenCast and RemoteDesktop restore tokens, under
   `$XDG_STATE_HOME/domicile/`.
@@ -145,7 +151,7 @@ Phase 2: capture.
 
 Phase 3: input.
 
-- [ ] EIS server in the compositor
+- [x] EIS server in the compositor
 - [ ] RemoteDesktop, Clipboard, InputCapture
 - [ ] `ext-data-control-v1`
 
