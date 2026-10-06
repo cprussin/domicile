@@ -113,6 +113,32 @@ describe("useTileDrag", () => {
       expect(calls.onDrop).toHaveBeenCalledTimes(1);
     });
 
+    it("drops nowhere when the pointer barely moves, as in a click", () => {
+      // A tab's strip is inside the open tab's window, so a click's jitter
+      // would otherwise drop the tab beside it.
+      const { calls, grab } = dragging();
+      grab(520, 200);
+      act(() => {
+        moveTo(523, 203);
+        release();
+      });
+      // Only the drop's clearing of the aim.
+      expect(calls.onAim.mock.calls).toEqual([[undefined]]);
+      expect(calls.onDropOn).not.toHaveBeenCalled();
+      expect(calls.onDrop).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps aiming once pulled away, even back where it was pressed", () => {
+      const { calls, grab } = dragging();
+      grab(520, 200);
+      act(() => {
+        moveTo(750, 200);
+        moveTo(520, 200);
+        release();
+      });
+      expect(calls.onDropOn).toHaveBeenCalledWith(OTHER.id, Direction.Left);
+    });
+
     it("drops only once when a release and a cancel both arrive", () => {
       const { calls, grab } = dragging();
       grab(100, 100);
