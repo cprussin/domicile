@@ -1,7 +1,7 @@
 // A preview of a path's contents, as a launcher draws it.
 //
-// `host-message.ts` parses the engine's `filepreview` event into one.
-// `filePreviewKindSchema` maps the engine's `kind` strings to the enum.
+// `filePreviewKindSchema` maps the `kind` of `previewFile`'s answer to the
+// enum.
 
 import { z } from "zod";
 

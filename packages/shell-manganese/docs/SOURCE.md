@@ -22,7 +22,7 @@ The engine serves this page over `domicile://` and exposes `window.domicile`.
 | `window-management/floating/` | Floating windows: drag, resize, edge borders, shadow. |
 | `window-management/tiled/` | Dragging and edge-resizing tiled windows. |
 | `window-management/browser/` | Browser window chrome: address bar, connection indicator, find bar, zoom, file picker. |
-| `screens/` | Screen sources (host or plain browser), the per-screen bar (`Monitor.tsx`), and screen adjacency. |
+| `screens/` | The screen source, the per-screen bar (`Monitor.tsx`), and screen adjacency. |
 | `keyboard/` | Commands, default bindings, `bindKeys` wiring, held modifiers. |
 | `address/` | Parsing typed text as a URL or search, shared by the launcher and address bar. |
 | `top-bar/` | Bar columns, default layout, and bar items. |
@@ -31,7 +31,7 @@ The engine serves this page over `domicile://` and exposes `window.domicile`.
 | `lock/` | Lock screen. |
 | `theme/` | Theme from the host or the last session. |
 | `wallpaper/` | Wallpaper and its photo list. |
-| `host/` | Shared helper for watching host messages. |
+| `host/` | Helpers for `window.domicile`: watching an attribute, and spotting a superseded search. |
 
 ## Custom elements
 

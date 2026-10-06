@@ -1,30 +1,18 @@
 import { describe, expect, it } from "bun:test";
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
-import type { HostMessageOf } from "@domicile-desktop/sdk/host-message";
+import type { DomicileClipboardEntry } from "@domicile-desktop/sdk/domicile-host";
+import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import { act, renderHook } from "@testing-library/react";
 
 import { useClipboard } from "./useClipboard";
 
-/**
- * A minimal client: it captures the hook's one handler and lets a test emit
- * messages. Narrower than `DomicileClient` because the hook uses one member.
- */
+/** A fake host whose clipboard a test sets. */
 const client = () => {
-  let handler: ((message: HostMessageOf<"clipboard">) => void) | undefined;
-  const domicile = {
-    on: (
-      _type: "clipboard",
-      registered: (message: HostMessageOf<"clipboard">) => void,
-    ) => {
-      handler = registered;
-    },
-  } as unknown as DomicileClient;
-
+  const fake = new FakeDomicileHost();
   return {
-    domicile,
-    says: (entries: HostMessageOf<"clipboard">["entries"]) => {
+    domicile: fake.host,
+    says: (entries: readonly DomicileClipboardEntry[]) => {
       act(() => {
-        handler?.({ entries });
+        fake.set({ clipboard: entries });
       });
     },
   };

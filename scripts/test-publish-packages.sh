@@ -57,7 +57,7 @@ if [ -n "$manganese" ]; then
 fi
 sdk="$(ls "$OUT"/domicile-desktop-sdk-*.tgz 2>/dev/null | head -1)"
 if [ -n "$sdk" ]; then
-  tar -tzf "$sdk" | grep -q '^package/dist/domicile-client.js$' &&
+  tar -tzf "$sdk" | grep -q '^package/dist/domicile-host.js$' &&
     ok "the sdk ships its built dist" ||
     fail "the sdk ships its built dist" "$(tar -tzf "$sdk" | head)"
 fi

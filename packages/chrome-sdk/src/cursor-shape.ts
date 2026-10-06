@@ -9,8 +9,8 @@
 // SDK ship separately. Parsing catches a version skew that would otherwise
 // fail silently, since CSS ignores an unknown `cursor` keyword.
 //
-// A separate module because `protocol.ts` (the wire) and
-// `domicile-client.ts` (DOM events) both parse it.
+// A separate module because the e2e harness's `protocol.ts` (the wire) parses
+// it and `DomicileHost` types it.
 
 import { z } from "zod";
 

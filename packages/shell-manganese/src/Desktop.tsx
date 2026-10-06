@@ -1,6 +1,6 @@
 import { useDisplays } from "@domicile-desktop/component-library/DisplayProvider";
 import { createToastManager } from "@domicile-desktop/component-library/Toaster";
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
 import { useCallback, useMemo, useState } from "react";
 
@@ -10,8 +10,10 @@ import { popupShown } from "./extensions/shown";
 import { useExtensions } from "./extensions/useExtensions";
 import { useKeybindings } from "./keyboard/useKeybindings";
 import { useModifiers } from "./keyboard/useModifiers";
+import { foundAppsOf } from "./launcher/found-apps";
 import { Launcher } from "./launcher/Launcher";
 import { LaunchKind } from "./launcher/launch";
+import { previewOf } from "./launcher/preview-of";
 import { useOpeningApps } from "./launcher/useOpeningApps";
 import { Lock } from "./lock/Lock";
 import { useLocked } from "./lock/useLocked";
@@ -36,7 +38,7 @@ import { useWindows } from "./window-management/useWindows";
 import { WindowAction } from "./window-management/window-state";
 
 type Props = {
-  domicile: DomicileClient;
+  domicile: DomicileHost;
   /** The keys this desktop binds, merged under the config's. */
   keybindings: ShellKeybindings;
   /** The layout of every monitor's bar. */
@@ -70,7 +72,7 @@ export const Desktop = ({ domicile, keybindings, topBar }: Props) => {
   );
   // Installed apps, read by the compositor from desktop entries.
   const searchApps = useCallback(
-    (query: string) => domicile.searchApps(query),
+    (query: string) => domicile.searchApps(query).then(foundAppsOf),
     [domicile],
   );
   // Fetched while the launcher is closed so its rows render with it rather
@@ -78,7 +80,7 @@ export const Desktop = ({ domicile, keybindings, topBar }: Props) => {
   const opening = useOpeningApps(searchApps, windows.launcherOpen);
   // File previews, from the same index.
   const preview = useCallback(
-    (path: string) => domicile.previewFile(path),
+    (path: string) => domicile.previewFile(path).then(previewOf),
     [domicile],
   );
 
@@ -86,8 +88,7 @@ export const Desktop = ({ domicile, keybindings, topBar }: Props) => {
   // panel opens.
   const clipboard = useClipboard(domicile);
 
-  // Subscribed once for the desk, not per bar: `on` has a single slot and
-  // there is a bar per monitor.
+  // Subscribed once for the desk, not per bar: there is a bar per monitor.
   const extensions = useExtensions(domicile);
 
   // Tray icons, subscribed once for the desk.

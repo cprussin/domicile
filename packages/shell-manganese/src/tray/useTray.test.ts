@@ -1,37 +1,24 @@
 import { describe, expect, it } from "bun:test";
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
-import type { HostMessageOf } from "@domicile-desktop/sdk/host-message";
-import type { TrayItem } from "@domicile-desktop/sdk/tray";
+import type { DomicileTrayItem } from "@domicile-desktop/sdk/domicile-host";
+import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import { act, renderHook } from "@testing-library/react";
 
 import { useTray } from "./useTray";
 
-/**
- * A client stub that captures the hook's handler and lets a test send
- * compositor messages.
- */
+/** A fake host whose tray a test sets. */
 const client = () => {
-  let handler: ((message: HostMessageOf<"tray">) => void) | undefined;
-  const domicile = {
-    on: (
-      _type: "tray",
-      registered: (message: HostMessageOf<"tray">) => void,
-    ) => {
-      handler = registered;
-    },
-  } as unknown as DomicileClient;
-
+  const fake = new FakeDomicileHost();
   return {
-    domicile,
-    says: (items: readonly TrayItem[]) => {
+    domicile: fake.host,
+    says: (items: readonly DomicileTrayItem[]) => {
       act(() => {
-        handler?.({ items });
+        fake.set({ tray: items });
       });
     },
   };
 };
 
-const icon = (id: string): TrayItem => ({ icon: undefined, id, title: id });
+const icon = (id: string): DomicileTrayItem => ({ icon: "", id, title: id });
 
 describe("useTray", () => {
   it("has no icons until the compositor has said", () => {

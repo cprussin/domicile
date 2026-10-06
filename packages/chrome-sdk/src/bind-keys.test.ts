@@ -1,29 +1,9 @@
 import { afterEach, describe, expect, it } from "bun:test";
 
+import type { KeyHost } from "./bind-keys";
 import { bindKeys } from "./bind-keys";
-import type { DomicileShortcut } from "./domicile-host";
-import type {
-  HostMessageOf,
-  HostMessageType,
-  ShellConfigMessage,
-  ShortcutMessage,
-} from "./host-message";
 import { KeyAction } from "./key-action";
 import type { ShellKeybindings } from "./own-keybindings";
-
-/** A chord of Meta plus `keycode`. */
-const meta = (keycode: number, shiftKey = false): ShortcutMessage => ({
-  altKey: false,
-  ctrlKey: false,
-  keycode,
-  metaKey: true,
-  shiftKey,
-});
-
-// Evdev codes, written out so the test does not share `input.ts`'s table.
-const ENTER = 28;
-const ESCAPE = 1;
-const R = 19;
 
 /** The shell's keybindings. */
 const DESK: ShellKeybindings = {
@@ -34,49 +14,24 @@ const DESK: ShellKeybindings = {
   modes: {
     resize: {
       "Meta+Escape": KeyAction.Mode("default"),
-      "Meta+Return": KeyAction.SendShell(["resize", "grow", "right"]),
+      "Super+Return": KeyAction.SendShell(["resize", "grow", "right"]),
     },
   },
 };
 
-/** A keymap with the keys above. */
-const KEYBOARD: ShellConfigMessage = {
-  keys: new Map([
-    ["Escape", ESCAPE],
-    ["Return", ENTER],
-    ["r", R],
-  ]),
-};
+/**
+ * A host that records grabs and dispatches `shortcut` events. The engine
+ * resolves presses, so `pressed` sends any chord.
+ */
+class FakeHost extends EventTarget {
+  readonly grabbed: string[] = [];
 
-/** A client with single-slot handlers and a recorded `grabShortcut`. */
-class FakeClient {
-  readonly grabbed: DomicileShortcut[] = [];
-  readonly #handlers = new Map<string, (message: never) => void>();
-
-  on<T extends HostMessageType>(
-    type: T,
-    handler: (message: HostMessageOf<T>) => void,
-  ): this {
-    this.#handlers.set(type, handler as (message: never) => void);
-    return this;
+  grabShortcut(chord: string): void {
+    this.grabbed.push(chord);
   }
 
-  off<T extends HostMessageType>(
-    type: T,
-    handler: (message: HostMessageOf<T>) => void,
-  ): this {
-    if (this.#handlers.get(type) === handler) {
-      this.#handlers.delete(type);
-    }
-    return this;
-  }
-
-  grabShortcut(shortcut: DomicileShortcut): void {
-    this.grabbed.push(shortcut);
-  }
-
-  emit<T extends HostMessageType>(type: T, message: HostMessageOf<T>): void {
-    this.#handlers.get(type)?.(message as never);
+  pressed(chord: string): void {
+    this.dispatchEvent(Object.assign(new Event("shortcut"), { chord }));
   }
 }
 
@@ -92,9 +47,9 @@ afterEach(() => {
 });
 
 const bound = (own: ShellKeybindings = DESK) => {
-  const client = new FakeClient();
+  const host = new FakeHost();
   const heard: Heard[] = [];
-  const binding = bindKeys(client, own, {
+  const binding = bindKeys(host as unknown as KeyHost, own, {
     onCommand: (args) => {
       heard.push(["command", args]);
     },
@@ -103,123 +58,73 @@ const bound = (own: ShellKeybindings = DESK) => {
     },
   });
   unbind = binding.unbind;
-  return { client, heard, setMode: binding.setMode };
-};
-
-/** Dispatch a Meta `keydown` with `code` on the document. */
-const pressing = (
-  code: string,
-  init: KeyboardEventInit = {},
-): KeyboardEvent => {
-  const event = new KeyboardEvent("keydown", {
-    cancelable: true,
-    code,
-    metaKey: true,
-    ...init,
-  });
-  document.dispatchEvent(event);
-  return event;
+  return { heard, host, setMode: binding.setMode };
 };
 
 describe("bindKeys", () => {
-  describe("the keyboard arriving", () => {
-    it("claims every chord of every mode, each once, on its keys", () => {
-      const { client } = bound();
-
-      client.emit("shell_config", KEYBOARD);
-
-      expect(client.grabbed).toStrictEqual([
-        meta(ENTER),
-        meta(R),
-        meta(ESCAPE),
-      ]);
+  it("grabs every chord of every mode, each once, in its one spelling", () => {
+    const { host } = bound({
+      keybindings: { "Meta+Return": KeyAction.Mode("x") },
+      modes: { x: { "Super+Return": KeyAction.Mode("default") } },
     });
 
-    it("claims the keys again where a new layout put them", () => {
-      // A chord names a keysym, so another layout moves it to another key.
-      const { client } = bound();
-      client.emit("shell_config", KEYBOARD);
-
-      client.emit("shell_config", {
-        keys: new Map([...KEYBOARD.keys, ["Return", 96]]),
-      });
-
-      expect(client.grabbed).toContainEqual(meta(96));
-    });
-
-    it("refuses a chord whose keysym the keyboard cannot type, naming it", () => {
-      const { client } = bound({
-        keybindings: { "Meta+Greek_alpha": KeyAction.Mode("x") },
-      });
-
-      expect(() => {
-        client.emit("shell_config", KEYBOARD);
-      }).toThrow("Greek_alpha");
-    });
+    expect(host.grabbed).toStrictEqual(["Meta+Return"]);
   });
 
-  describe("a press on the page", () => {
-    it("runs the command bound to it, and takes the key from the page", () => {
-      const { client, heard } = bound();
-      client.emit("shell_config", KEYBOARD);
-
-      const event = pressing("Enter");
-
-      expect(heard).toContainEqual(["command", ["terminal"]]);
-      expect(event.defaultPrevented).toBe(true);
-    });
-
-    it("leaves a chord nobody bound alone", () => {
-      const { client, heard } = bound();
-      client.emit("shell_config", KEYBOARD);
-
-      const event = pressing("Enter", { shiftKey: true });
-
-      expect(heard.filter(([kind]) => kind === "command")).toStrictEqual([]);
-      expect(event.defaultPrevented).toBe(false);
-    });
-
-    it("takes a held key's repeats without running them again", () => {
-      const { client, heard } = bound();
-      client.emit("shell_config", KEYBOARD);
-
-      const event = pressing("Enter", { repeat: true });
-
-      expect(heard.filter(([kind]) => kind === "command")).toStrictEqual([]);
-      expect(event.defaultPrevented).toBe(true);
-    });
-
-    it("stops listening once unbound", () => {
-      const { client, heard } = bound();
-      client.emit("shell_config", KEYBOARD);
-
-      unbind();
-      pressing("Enter");
-
-      expect(heard.filter(([kind]) => kind === "command")).toStrictEqual([]);
-    });
+  it("refuses a chord written wrong before grabbing anything", () => {
+    const host = new FakeHost();
+    expect(() =>
+      bindKeys(
+        host as unknown as KeyHost,
+        { keybindings: { "Hyper+l": KeyAction.Mode("x") } },
+        { onCommand: () => undefined, onModeChanged: () => undefined },
+      ),
+    ).toThrow("Hyper+l");
+    expect(host.grabbed).toStrictEqual([]);
   });
 
-  describe("a press the host hands back", () => {
-    it("runs the command bound to it", () => {
-      const { client, heard } = bound();
-      client.emit("shell_config", KEYBOARD);
+  it("runs the command bound to a press", () => {
+    const { heard, host } = bound();
 
-      client.emit("shortcut", meta(ENTER));
+    host.pressed("Meta+Return");
 
-      expect(heard).toContainEqual(["command", ["terminal"]]);
-    });
+    expect(heard).toStrictEqual([["command", ["terminal"]]]);
+  });
+
+  it("leaves a press grabbed as a keycode, or by somebody else, alone", () => {
+    const { heard, host } = bound();
+
+    host.pressed("");
+    host.pressed("Ctrl+q");
+
+    expect(heard).toStrictEqual([]);
+  });
+
+  it("stops listening once unbound", () => {
+    const { heard, host } = bound();
+
+    unbind();
+    host.pressed("Meta+Return");
+
+    expect(heard).toStrictEqual([]);
   });
 
   describe("modes", () => {
     it("enters the mode a binding names, tells the shell and reads the keys in it", () => {
-      const { client, heard } = bound();
-      client.emit("shell_config", KEYBOARD);
+      const { heard, host } = bound({
+        ...DESK,
+        modes: {
+          resize: {
+            "Meta+Escape": KeyAction.Mode("default"),
+            "Super+Return": KeyAction.SendShell(["resize", "grow", "right"]),
+          },
+        },
+      });
 
-      client.emit("shortcut", meta(R));
-      pressing("Enter");
-      pressing("Escape");
-      pressing("Enter");
+      host.pressed("Meta+r");
+      host.pressed("Meta+Return");
+      host.pressed("Meta+Escape");
+      host.pressed("Meta+Return");
 
       expect(heard).toStrictEqual([
         ["mode", "resize"],
@@ -231,50 +136,37 @@ describe("bindKeys", () => {
 
     it("reads the keys in a mode the shell sets, without telling it back", () => {
       // Another page entered the mode, so the shell already knows.
-      const { client, heard, setMode } = bound();
-      client.emit("shell_config", KEYBOARD);
+      const { heard, host, setMode } = bound({
+        ...DESK,
+        modes: { resize: { "Meta+Return": KeyAction.SendShell(["grow"]) } },
+      });
 
       setMode("resize");
-      pressing("Enter");
+      host.pressed("Meta+Return");
 
-      expect(heard).toStrictEqual([["command", ["resize", "grow", "right"]]]);
+      expect(heard).toStrictEqual([["command", ["grow"]]]);
     });
 
     it("does nothing for the mode the keys are already in", () => {
-      const { client, heard, setMode } = bound();
-      client.emit("shell_config", KEYBOARD);
-      pressing("KeyR");
+      const { heard, host, setMode } = bound();
+      host.pressed("Meta+r");
 
       setMode("resize");
 
-      expect(heard.filter(([kind]) => kind === "mode")).toStrictEqual([
-        ["mode", "resize"],
-      ]);
+      expect(heard).toStrictEqual([["mode", "resize"]]);
     });
 
     it("goes back to the default mode for one the shell does not have", () => {
-      const { client, heard, setMode } = bound();
-      client.emit("shell_config", KEYBOARD);
-      pressing("KeyR");
+      const { heard, host, setMode } = bound();
+      host.pressed("Meta+r");
 
       setMode("move");
-      pressing("Enter");
+      host.pressed("Meta+Return");
 
       expect(heard.slice(1)).toStrictEqual([
         ["mode", "default"],
         ["command", ["terminal"]],
       ]);
-    });
-
-    it("keeps a mode set before the keyboard arrives, and checks it then", () => {
-      // A page can learn the mode before the keymap arrives.
-      const { client, heard, setMode } = bound();
-
-      setMode("resize");
-      client.emit("shell_config", KEYBOARD);
-      pressing("Enter");
-
-      expect(heard).toStrictEqual([["command", ["resize", "grow", "right"]]]);
     });
   });
 });

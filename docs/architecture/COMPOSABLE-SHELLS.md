@@ -151,10 +151,9 @@ runManganese({
 - A binding maps a chord to a typed command from the shell's package
   (`focus("right")`, `workspace("3")`).
 - `shell_config` carries `keys`: each keysym the keyboard can type and its
-  evdev key (`Keyboard::keys`, same rule as `key_for`). `bindKeys` resolves the
-  shell's chords against it on each config, so layout changes move them. This
-  needs no new message and no engine change, since `shell_config` crosses the
-  engine as a string.
+  evdev key (`Keyboard::keys`, same rule as `key_for`). The engine resolves
+  the chords `bindKeys` grabs against it on each config, so layout changes
+  move them.
 - Manganese ships sway's bindings on Meta (`DEFAULT_KEYBINDINGS`,
   `DEFAULT_MODES`), so the JSON config has keys.
 

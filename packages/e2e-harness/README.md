@@ -6,7 +6,8 @@ A headless mock chrome for testing the chrome protocol, plus checks on how
 | Module | What it does |
 |---|---|
 | `src/mock-chrome.ts` | Connects to the chrome socket, handshakes, and prints every message the host sends. |
-| `src/chrome-socket.ts` | Shared socket client: newline-delimited JSON framing from [`@domicile-desktop/sdk/newline-frames`](../chrome-sdk/README.md), the handshake, and decoding with the SDK's protocol schemas. |
+| `src/chrome-socket.ts` | Shared socket client: newline-delimited JSON framing (`src/newline-frames.ts`), the handshake, and decoding with `src/protocol.ts`'s schemas. |
+| `src/protocol.ts`, `src/chrome-message.ts`, `src/newline-frames.ts`, `src/host-stream.ts` | The compositor's JSON wire in TypeScript. Changes with `packages/domicile-protocol`. |
 | `src/verdicts.ts` | Checks that `scripts/*.sh` report failures through `scripts/lib/harness.sh`. See [Script verdicts](docs/SCRIPT-VERDICTS.md). |
 | `src/skips.ts` | Checks that a script exiting 77 prints `SKIP: <reason>`, the format `check.sh` reads. Without it, `DOMICILE_CHECK_STRICT=1` fails the skip. |
 

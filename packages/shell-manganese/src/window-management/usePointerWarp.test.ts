@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "bun:test";
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import { act, fireEvent, renderHook } from "@testing-library/react";
 
 import type { Focus, Spot } from "./pointer-warp";
@@ -18,10 +18,10 @@ let warps: Spot[] = [];
 
 /** The part of the host client this hook uses. */
 const recordingDomicile = {
-  warpPointer: (to: Spot) => {
-    warps.push(to);
+  warpPointer: (x: number, y: number) => {
+    warps.push([x, y]);
   },
-} as unknown as DomicileClient;
+} as unknown as DomicileHost;
 
 /** One render's inputs: the focused window and the open windows. */
 type Desktop = {

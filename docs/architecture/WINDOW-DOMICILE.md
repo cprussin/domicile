@@ -100,8 +100,8 @@ domicile.addEventListener("shortcut", (event) => event.chord); // "Meta+Shift+l"
 - `shortcut` carries the chord, whether pressed in a `<webview>` or on the
   page (taken from the page).
 - `shell_config` no longer reaches the page.
-- Modes stay in the shell. A pure `@domicile-desktop/sdk/keybindings` helper
-  maps a chord in a mode to an action.
+- Modes stay in the shell. `bindKeys` grabs each chord and maps a `shortcut`
+  in the current mode to an action.
 
 ### The SDK is types and helpers
 
@@ -110,12 +110,13 @@ domicile.addEventListener("shortcut", (event) => event.chord); // "Meta+Shift+l"
 | `domicile-host` | types: `DomicileHost`, its events, `Window.domicile` |
 | `shell` | type: `Shell` |
 | `app-element`, `webview-element` | types |
-| `keybindings`, `key-action`, `own-keybindings` | pure helpers: chord grammar, modes |
+| `bind-keys`, `key-action`, `own-keybindings` | helpers: chord grammar, modes |
 | `matrix`, `cursor-shape`, `theme`, … | pure helpers |
 
-- Deleted: `domicile-client`, `connect-to-host`, `register-elements`,
-  `host-message`, `bind-keys`, `measure`, `element-transform`,
-  `surface-coordinates`, `pointer-input`, `keyboard-input`.
+- Deleted: `domicile-client`, `connect-to-host`, `host-message`,
+  `keybindings`, `shortcut-claims`; with `<app>` input, `register-elements`,
+  `measure`, `element-transform`, `surface-coordinates`, `pointer-input`,
+  `keyboard-input`.
 - Moved to `@domicile-desktop/e2e-harness`, their only user: `protocol`,
   `chrome-message`, `newline-frames`, `host-stream`.
 
@@ -157,14 +158,14 @@ Each step ships alone.
 - [x] search and preview return promises (`guard-asks-promise.sh`)
 - [x] chords resolved by the engine: `grabShortcut(chord)` and
       `shortcut.chord` (`guard-shortcut-chords.sh`)
-- [ ] `<app>` routes its own input; `registerElements` and the routing modules go
-- [ ] the shells, `examples/minimal-shell`, WRITING-A-SHELL.md and the SDK
+- [x] the shells, `examples/minimal-shell`, WRITING-A-SHELL.md and the SDK
       README move to `window.domicile`; `bindKeys` becomes a pure helper over
-      `grabShortcut` and `shortcut`, and `shell_config` leaves the page; the
-      events the attributes replace
-      (`appappeared` and the other seven `app*`, `focuschanged`, …),
-      `DomicileClient` and `connect-to-host` go; the wire modules move to
-      `e2e-harness`
+      `grabShortcut` and `shortcut`; `DomicileClient` and `connect-to-host`
+      go; the wire modules move to `e2e-harness`
+- [ ] the engine drops what nothing reads now: the events the attributes and
+      promises replace (`appappeared` and the other seven `app*`,
+      `focuschanged`, `files`, …) and `shellconfig`
+- [ ] `<app>` routes its own input; `registerElements` and the routing modules go
 
 ## Open questions
 

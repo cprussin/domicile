@@ -1,10 +1,9 @@
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
-import type { BatteryMessage } from "@domicile-desktop/sdk/host-message";
+import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import { LightningIcon } from "@phosphor-icons/react/dist/ssr/Lightning";
 import { useEffect, useState } from "react";
-
 import { css, cva } from "../../styled-system/css";
 import { hstack } from "../../styled-system/patterns";
+import type { BatteryReading } from "./watch-battery";
 import { watchBattery } from "./watch-battery";
 
 /** At or below this percentage the readout turns red. */
@@ -15,7 +14,7 @@ const FLASHING_PERCENT = 5;
 
 type Props = {
   /** The host that reports the charge. */
-  domicile: DomicileClient;
+  domicile: DomicileHost;
   /** Injectable so tests can drive their own battery. */
   watch?: typeof watchBattery | undefined;
 };
@@ -31,7 +30,7 @@ type Props = {
  * get no report, so they show nothing rather than a false empty meter.
  */
 export const Battery = ({ domicile, watch = watchBattery }: Props) => {
-  const [reading, setReading] = useState<BatteryMessage | undefined>(undefined);
+  const [reading, setReading] = useState<BatteryReading | undefined>(undefined);
 
   useEffect(() => watch(domicile, setReading), [domicile, watch]);
 
@@ -39,7 +38,7 @@ export const Battery = ({ domicile, watch = watchBattery }: Props) => {
 };
 
 /** The readout once there is a reading. */
-const Meter = ({ reading }: { reading: BatteryMessage }) => {
+const Meter = ({ reading }: { reading: BatteryReading }) => {
   const percent = Math.round(reading.charge * 100);
   return (
     <div

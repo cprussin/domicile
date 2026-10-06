@@ -3,8 +3,8 @@
 The smallest working Domicile shell: every window full-screen, newest on top.
 It is the worked example from [WRITING-A-SHELL.md](/docs/WRITING-A-SHELL.md).
 
-- `src/index.ts` exports `Shell`, which mounts an `<app>` for each announced
-  app. That file is the whole shell.
+- `src/index.ts` exports `Shell`, which mounts an `<app>` for each window in
+  `window.domicile.windows`. That file is the whole shell.
 - For fuller shells, see
   [`@domicile-desktop/shell-simple`](/packages/shell-simple/README.md) (drag,
   resize, terminal shortcut) and

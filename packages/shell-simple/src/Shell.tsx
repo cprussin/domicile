@@ -3,7 +3,10 @@
 
 import { APP_TAG_NAME } from "@domicile-desktop/sdk/app-element";
 import { bindKeys } from "@domicile-desktop/sdk/bind-keys";
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import type {
+  DomicileHost,
+  DomicileWindow,
+} from "@domicile-desktop/sdk/domicile-host";
 import { focusApp } from "@domicile-desktop/sdk/focus-app";
 import { KeyAction } from "@domicile-desktop/sdk/key-action";
 import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
@@ -108,7 +111,7 @@ export const Shell = ({
   keybindings = SIMPLE_KEYS,
   report = logToConsole,
 }: {
-  domicile: DomicileClient;
+  domicile: DomicileHost;
   /** Key bindings. Defaults to Alt+Enter for a terminal. */
   keybindings?: ShellKeybindings | undefined;
   /** Reports unknown commands. Injectable for tests. */
@@ -116,12 +119,6 @@ export const Shell = ({
 }) => {
   const [windows, setWindows] = useState<readonly ShellWindow[]>([]);
   const [popups, setPopups] = useState<readonly Popup[]>([]);
-  // Open ids, updated synchronously. Otherwise two announcements in one tick
-  // would both see empty state and open the same window.
-  const open = useRef(new Set<string>());
-  // A chrome first gets a replay of running windows, then `focus_changed`. Only
-  // windows announced after that were just opened by the user.
-  const caughtUp = useRef(false);
   const drag = useRef<Drag | undefined>(undefined);
 
   // Handles the shell's one command. An effect event, so it reads current props
@@ -135,48 +132,51 @@ export const Shell = ({
   });
 
   useEffect(() => {
-    domicile.on("app_appeared", ({ app_id, size }) => {
-      if (!open.current.has(app_id)) {
-        open.current.add(app_id);
-        setWindows((all) => [...all, opened(app_id, size, all)]);
-        if (caughtUp.current) {
-          focusApp(domicile, app_id);
+    // A page first lists the running windows, then gets `focusedwindowchanged`.
+    // Only windows listed after that were just opened by the user.
+    let caughtUp = false;
+    // Open ids, updated synchronously, since the state updater runs later and
+    // the focus decision is made now.
+    const open = new Set<string>();
+
+    const listed = () => {
+      const all = domicile.windows;
+      const toplevels = all.filter((window) => window.parent === null);
+      for (const window of toplevels) {
+        if (!open.has(window.appId)) {
+          open.add(window.appId);
+          if (caughtUp) {
+            focusApp(domicile, window.appId);
+          }
         }
       }
-    });
-    domicile.on("popup_placed", ({ app_id, parent, position, size }) => {
-      setPopups((all) => [
-        ...all.filter((popup) => popup.appId !== app_id),
-        { appId: app_id, parent, position, size },
-      ]);
-    });
-    domicile.on("app_closed", ({ app_id }) => {
-      open.current.delete(app_id);
-      setWindows((all) => all.filter((window) => window.appId !== app_id));
-      setPopups((all) => all.filter((popup) => popup.appId !== app_id));
-    });
-    // The SDK records the size. Here it only marks the window as drawn.
-    domicile.on("app_resized", ({ app_id }) => {
-      setWindows((all) =>
-        withWindow(all, app_id, (window) => ({ ...window, drawn: true })),
-      );
-    });
-    domicile.on("app_cursor", ({ app_id, cursor }) => {
-      setWindows((all) =>
-        withWindow(all, app_id, (window) => ({ ...window, cursor })),
-      );
-    });
-    domicile.on("focus_changed", () => {
-      caughtUp.current = true;
-    });
+      for (const appId of open) {
+        if (!toplevels.some((window) => window.appId === appId)) {
+          open.delete(appId);
+        }
+      }
+      setWindows((shown) => kept(shown, toplevels));
+      setPopups(all.flatMap(popupOf));
+    };
+    const focused = () => {
+      caughtUp = true;
+    };
 
-    // The SDK resolves the chord against the compositor's keymap and handles
-    // the press whether it reaches the page or the compositor.
-    return bindKeys(domicile, keybindings, {
+    listed();
+    domicile.addEventListener("windowschanged", listed);
+    domicile.addEventListener("focusedwindowchanged", focused);
+    // The engine finds the chord's key and sends its press whether it reaches
+    // the page or a `<webview>`.
+    const keys = bindKeys(domicile, keybindings, {
       onCommand,
       // This shell has no modes to show.
       onModeChanged: () => undefined,
-    }).unbind;
+    });
+    return () => {
+      domicile.removeEventListener("windowschanged", listed);
+      domicile.removeEventListener("focusedwindowchanged", focused);
+      keys.unbind();
+    };
   }, [domicile, keybindings]);
 
   const startDrag = (event: PointerEvent<HTMLDivElement>) => {
@@ -263,26 +263,57 @@ const Keys = () => (
 );
 
 /**
- * The initial placement of a newly announced window.
+ * The windows to show for `listed`: shown ones keep their place and take the
+ * client's latest state; new ones are opened.
+ */
+const kept = (
+  shown: readonly ShellWindow[],
+  listed: readonly DomicileWindow[],
+): readonly ShellWindow[] =>
+  listed.reduce<readonly ShellWindow[]>((all, window) => {
+    const was = shown.find((candidate) => candidate.appId === window.appId);
+    const drawn = window.width !== null;
+    return [
+      ...all,
+      was === undefined
+        ? opened(window, all)
+        : { ...was, cursor: window.cursor, drawn },
+    ];
+  }, []);
+
+/** `window` as a popup, or none for a toplevel. */
+const popupOf = (window: DomicileWindow): readonly Popup[] =>
+  window.parent === null
+    ? []
+    : [
+        {
+          appId: window.appId,
+          parent: window.parent,
+          position: [window.x ?? 0, window.y ?? 0],
+          size: [window.width ?? 0, window.height ?? 0],
+        },
+      ];
+
+/**
+ * The initial placement of a newly listed window.
  *
  * A Wayland client gives no position, and no size until it draws. Windows
  * cascade off the open ones and take a size only from a replay to a
  * reconnecting chrome.
  */
 const opened = (
-  appId: string,
-  size: readonly [width: number, height: number] | undefined,
+  { appId, cursor, height: drawnHeight, width: drawnWidth }: DomicileWindow,
   windows: readonly ShellWindow[],
 ): ShellWindow => {
   const step = CASCADE_STEP * (windows.length % CASCADE_LENGTH);
-  const [width, height] = size ?? OPENING_SIZE;
+  const [width, height] =
+    drawnWidth === null || drawnHeight === null
+      ? OPENING_SIZE
+      : [drawnWidth, drawnHeight];
   return {
     appId,
-    cursor: undefined,
-    // A size means the client has drawn, and no frame will say so: the
-    // hand-over skips natively drawn windows, and `app_resized` fires only when
-    // the size changes.
-    drawn: size !== undefined,
+    cursor,
+    drawn: drawnWidth !== null,
     height,
     left: step,
     top: step,

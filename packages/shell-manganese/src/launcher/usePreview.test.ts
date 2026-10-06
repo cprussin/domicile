@@ -1,16 +1,14 @@
 import { describe, expect, it } from "bun:test";
 import { FilePreview } from "@domicile-desktop/sdk/file-preview";
-import type { FilePreviewMessage } from "@domicile-desktop/sdk/host-message";
 import { act, renderHook } from "@testing-library/react";
 
 import { usePreview } from "./usePreview";
 
 /** Fake host preview that a test answers in any order. */
 const host = () => {
-  const asked: { path: string; settle: (found: FilePreviewMessage) => void }[] =
-    [];
+  const asked: { path: string; settle: (found: FilePreview) => void }[] = [];
   const preview = (path: string) =>
-    new Promise<FilePreviewMessage>((settle) => {
+    new Promise<FilePreview>((settle) => {
       asked.push({ path, settle });
     });
   return {
@@ -20,10 +18,7 @@ const host = () => {
         throw new Error(`nothing was asked at ${at.toString()}`);
       } else {
         await act(async () => {
-          asking.settle({
-            path: asking.path,
-            preview: FilePreview.Text(text),
-          });
+          asking.settle(FilePreview.Text(text));
           await Promise.resolve();
         });
       }

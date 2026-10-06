@@ -113,7 +113,7 @@ Details: [DISPLAY-TILINGS.md](DISPLAY-TILINGS.md).
 An `<app>` is one element wherever it is. The client draws at the scale of
 the display holding most of it, as in sway. Other monitors resample its buffer.
 
-- The shell reports each window's box with `DomicileClient.setAppBounds`
+- The shell reports each window's box with `window.domicile.setAppBounds`
   (`set_app_bounds` on the wire). Manganese's `AppWindow` sends it whenever the
   box changes.
 - The compositor enters the window on every display the box overlaps and sends

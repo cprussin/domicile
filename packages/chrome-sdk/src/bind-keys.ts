@@ -1,25 +1,15 @@
-// Resolves, grabs and handles a shell's keybindings.
+// Grabs and handles a shell's keybindings.
 //
-// A press arrives by one of two paths. In a `<webview>`, the browser process
-// matches the grab and sends a `shortcut` message. Everywhere else, including
-// over an `<app>`, it is a `keydown` on this document; the grab stops the SDK
-// forwarding it to the window. Both are handled here.
+// `grabShortcut` takes each chord by name; the engine finds its key and sends
+// every press, from a `<webview>` or the page, as a `shortcut` event carrying
+// the chord.
 //
-// Binding modes are tracked here; the compositor does not know about them. See
+// Binding modes are tracked here; the engine does not know about them. See
 // docs/architecture/KEYBINDINGS.md.
 
-import type { DomicileClient } from "./domicile-client";
-import type {
-  HostMessageOf,
-  HostMessageType,
-  KeybindingsByMode,
-  ShellConfigMessage,
-  ShortcutMessage,
-} from "./host-message";
-import { evdevFromCode } from "./input";
+import type { DomicileHost } from "./domicile-host";
 import { KeyActionKind } from "./key-action";
-import { actionFor, sameChord } from "./keybindings";
-import type { ShellKeybindings } from "./own-keybindings";
+import type { KeybindingsByMode, ShellKeybindings } from "./own-keybindings";
 import { ownKeybindings } from "./own-keybindings";
 
 /** The initial binding mode. */
@@ -41,47 +31,30 @@ export type KeyBinding = {
   unbind: () => void;
 };
 
-/** The part of a {@link DomicileClient} that `bindKeys` uses. */
-type KeyClient = {
-  grabShortcut: DomicileClient["grabShortcut"];
-  on<T extends HostMessageType>(
-    type: T,
-    handler: (message: HostMessageOf<T>) => void,
-  ): unknown;
-  off<T extends HostMessageType>(
-    type: T,
-    handler: (message: HostMessageOf<T>) => void,
-  ): unknown;
-};
+/** The part of `window.domicile` that `bindKeys` uses. */
+export type KeyHost = Pick<
+  DomicileHost,
+  "addEventListener" | "grabShortcut" | "removeEventListener"
+>;
 
 /**
  * Handle the keybindings `own` for a shell.
  *
- * - `own` is resolved against each `shell_config` keymap, so a layout change
- *   moves the keys. An invalid chord, or a keysym the layout cannot type,
- *   throws then.
- * - This takes the `shell_config` and `shortcut` handler slots; registering
- *   either elsewhere replaces it.
- * - Grabs are never released, because the protocol cannot release one. A key
- *   bound in any mode is grabbed from all clients for the whole session, and a
- *   key a layout change moved stays grabbed until the page reloads.
+ * - Every chord in every mode is grabbed once. Grabs are never released, so a
+ *   key bound in any mode is grabbed from all clients for the whole session.
  * - `setMode` syncs the mode across pages without calling `onModeChanged`. An
- *   unknown mode falls back to `default` and is reported. Before the first
- *   keymap, the mode is checked once one arrives.
- * - Bind once per client. The keymap is sent only on connect and on change, so
- *   a rebind after `unbind` does nothing until the next change.
+ *   unknown mode falls back to `default` and is reported.
  *
- * @returns `unbind`, which stops handling keys but keeps the grabs, and
- *   `setMode`.
+ * @throws for an invalid chord (see `ownKeybindings`), before anything is
+ *   grabbed. A keysym the layout cannot type is logged, so the other keys
+ *   still work.
  */
 export const bindKeys = (
-  domicile: KeyClient,
+  domicile: KeyHost,
   own: ShellKeybindings,
   { onCommand, onModeChanged }: KeyHandlers,
 ): KeyBinding => {
-  // `undefined` until the first keymap, so an early `setMode` cannot be
-  // checked.
-  let bindings: KeybindingsByMode | undefined;
+  const bindings: KeybindingsByMode = ownKeybindings(own);
   let mode = DEFAULT_MODE;
 
   const enter = (next: string) => {
@@ -91,94 +64,44 @@ export const bindKeys = (
     }
   };
 
-  /** Run a press's action. Returns whether the press was bound. */
-  const answer = (press: ShortcutMessage, repeat: boolean): boolean => {
-    const action =
-      bindings === undefined ? undefined : actionFor(bindings, mode, press);
-    // Ignore repeats so both paths act once per press; the compositor never
-    // sends repeats.
-    if (action !== undefined && !repeat) {
-      switch (action.kind) {
-        case KeyActionKind.SendShell: {
-          onCommand(action.args);
-          break;
-        }
-        case KeyActionKind.Mode: {
-          enter(action.name);
-          break;
-        }
+  const onShortcut = ({ chord }: { readonly chord: string }) => {
+    const action = bindings.get(mode)?.get(chord);
+    switch (action?.kind) {
+      case KeyActionKind.SendShell: {
+        onCommand(action.args);
+        break;
+      }
+      case KeyActionKind.Mode: {
+        enter(action.name);
+        break;
+      }
+      case undefined: {
+        break;
       }
     }
-    return action !== undefined;
   };
 
-  const onConfig = (config: ShellConfigMessage) => {
-    const bound = ownKeybindings(own, config.keys);
-    bindings = bound;
-    for (const chord of chordsOf(bound)) {
+  for (const chord of new Set(
+    [...bindings.values()].flatMap((byChord) => [...byChord.keys()]),
+  )) {
+    try {
       domicile.grabShortcut(chord);
+    } catch (error) {
+      // biome-ignore lint/suspicious/noConsole: the user fixes a keysym the layout cannot type, so the shell reports it
+      console.error(error);
     }
-    if (!bound.has(mode)) {
-      enter(DEFAULT_MODE);
-    }
-  };
-
-  const onShortcut = (press: ShortcutMessage) => {
-    answer(press, false);
-  };
-
-  const onKeyDown = (event: KeyboardEvent) => {
-    const press = pressOf(event);
-    // Prevent the default even for repeats, so a bound Tab does not move page
-    // focus away from the window.
-    if (press !== undefined && answer(press, event.repeat)) {
-      event.preventDefault();
-    }
-  };
-
-  domicile.on("shell_config", onConfig);
-  domicile.on("shortcut", onShortcut);
-  document.addEventListener("keydown", onKeyDown);
+  }
+  domicile.addEventListener("shortcut", onShortcut);
   return {
     setMode: (name) => {
-      if (bindings !== undefined && !bindings.has(name)) {
-        enter(DEFAULT_MODE);
-      } else {
+      if (bindings.has(name)) {
         mode = name;
+      } else {
+        enter(DEFAULT_MODE);
       }
     },
     unbind: () => {
-      document.removeEventListener("keydown", onKeyDown);
-      domicile.off("shortcut", onShortcut);
-      domicile.off("shell_config", onConfig);
+      domicile.removeEventListener("shortcut", onShortcut);
     },
   };
-};
-
-/** Every chord bound in any mode, each once. */
-const chordsOf = (bindings: KeybindingsByMode): readonly ShortcutMessage[] =>
-  [...bindings.values()]
-    .flat()
-    .map(({ shortcut }) => shortcut)
-    .filter(
-      (chord, at, all) =>
-        all.findIndex((other) => sameChord(other, chord)) === at,
-    );
-
-/**
- * Convert a `keydown` to a chord, or `undefined` for a key with no evdev code.
- */
-const pressOf = (event: KeyboardEvent): ShortcutMessage | undefined => {
-  const keycode = evdevFromCode(event.code);
-  if (keycode === undefined) {
-    return undefined;
-  } else {
-    return {
-      altKey: event.altKey,
-      ctrlKey: event.ctrlKey,
-      keycode,
-      metaKey: event.metaKey,
-      shiftKey: event.shiftKey,
-    };
-  }
 };

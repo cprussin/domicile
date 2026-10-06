@@ -1,8 +1,10 @@
 // Context for bar items, so items in a user's layout need no props.
 
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import type {
+  DomicileHost,
+  DomicileTrayItem,
+} from "@domicile-desktop/sdk/domicile-host";
 import type { Extension } from "@domicile-desktop/sdk/extension";
-import type { TrayItem } from "@domicile-desktop/sdk/tray";
 import { createContext, useContext } from "react";
 
 import type { TrayOrder } from "../tray/useTrayOrder";
@@ -15,7 +17,7 @@ export type Bar = {
    * The source of battery and brightness readings, and the target for extension
    * actions and brightness changes.
    */
-  domicile: DomicileClient;
+  domicile: DomicileHost;
   /** The extensions with an action, shown in the tray. */
   extensions: readonly Extension[];
   /** Whether this screen has keyboard focus. */
@@ -34,7 +36,7 @@ export type Bar = {
   /** The monitor this bar is on, which the mixer opens over. */
   screen: string;
   /** The applications' tray icons. */
-  tray: readonly TrayItem[];
+  tray: readonly DomicileTrayItem[];
   /** The tray order and how to change it by dragging. */
   trayOrder: TrayOrder;
   /** How many notifications arrived since the drawer was last opened. */

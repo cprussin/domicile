@@ -1,37 +1,22 @@
 import { describe, expect, it } from "bun:test";
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
-import type { HostMessageOf } from "@domicile-desktop/sdk/host-message";
+import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import { act, renderHook } from "@testing-library/react";
 
 import { useLocked } from "./useLocked";
 
-/**
- * A client stub that captures the hook's handler, lets a test send compositor
- * messages and records submitted passphrases.
- *
- * Only the two members the hook uses, like `useClipboard`'s test.
- */
+/** A fake host whose lock a test sets. Records submitted passphrases. */
 const client = () => {
-  let handler: ((message: HostMessageOf<"locked">) => void) | undefined;
-  const offered: string[] = [];
-  const domicile = {
-    on: (
-      _type: "locked",
-      registered: (message: HostMessageOf<"locked">) => void,
-    ) => {
-      handler = registered;
-    },
-    unlock: (passphrase: string) => {
-      offered.push(passphrase);
-    },
-  } as unknown as DomicileClient;
-
+  const fake = new FakeDomicileHost();
   return {
-    domicile,
-    offered,
+    domicile: fake.host,
+    get offered() {
+      return fake.calls
+        .filter(([method]) => method === "unlock")
+        .map(([, passphrase]) => passphrase);
+    },
     says: (locked: boolean) => {
       act(() => {
-        handler?.({ locked });
+        fake.set({ locked });
       });
     },
   };

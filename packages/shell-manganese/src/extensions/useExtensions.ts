@@ -1,24 +1,32 @@
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import type { Extension } from "@domicile-desktop/sdk/extension";
+import { extensionSchema } from "@domicile-desktop/sdk/extension";
 import { useEffect, useState } from "react";
+import { z } from "zod";
+
+import { watchHost } from "../host/watch-host";
 
 /**
  * The extensions with an action, as the engine last reported them.
  *
- * The engine pushes the full list on every change and on connect. Registered
- * once per page, not per bar, because `on` holds one handler and a page can
- * draw a bar per monitor.
+ * Reads the full list from the host, once per page rather than per bar, and
+ * again on every change.
+ *
+ * Parsed because the engine and this shell ship separately; an action this
+ * shell cannot draw should throw, not draw a blank button.
  */
-export const useExtensions = (
-  domicile: DomicileClient,
-): readonly Extension[] => {
+export const useExtensions = (domicile: DomicileHost): readonly Extension[] => {
   const [extensions, setExtensions] = useState<readonly Extension[]>([]);
 
-  useEffect(() => {
-    domicile.on("extensions", (message) => {
-      setExtensions(message.extensions);
-    });
-  }, [domicile]);
+  useEffect(
+    () => watchHost(domicile, "extensionschanged", extensionsOf, setExtensions),
+    [domicile],
+  );
 
   return extensions;
 };
+
+const extensionsOf = ({
+  extensions,
+}: DomicileHost): readonly Extension[] | undefined =>
+  extensions === null ? undefined : z.array(extensionSchema).parse(extensions);

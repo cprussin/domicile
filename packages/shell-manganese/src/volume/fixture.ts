@@ -1,10 +1,9 @@
 import type { AudioDevice, AudioStream } from "@domicile-desktop/sdk/audio";
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
-import type {
-  AudioLevelsMessage,
-  AudioMessage,
-} from "@domicile-desktop/sdk/host-message";
+import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import { act } from "@testing-library/react";
+
+import type { Audio } from "./watch-audio";
+import type { AudioLevels } from "./watch-audio-levels";
 
 /** An audio device with test overrides. */
 export const device = (overrides: Partial<AudioDevice>): AudioDevice => ({
@@ -31,7 +30,7 @@ export const stream = (overrides: Partial<AudioStream>): AudioStream => ({
 });
 
 /** Laptop audio: speakers, headphones, a microphone and one playing stream. */
-export const laptop: AudioMessage = {
+export const laptop: Audio = {
   cards: [
     {
       description: "Built-in Audio",
@@ -102,8 +101,8 @@ export type Asked = readonly [method: string, ...args: unknown[]];
  * - `asked` and `metered` record the shell's requests.
  */
 export const heldSound = () => {
-  const listeners: ((audio: AudioMessage) => void)[] = [];
-  const meters: ((levels: AudioLevelsMessage) => void)[] = [];
+  const listeners: ((audio: Audio) => void)[] = [];
+  const meters: ((levels: AudioLevels) => void)[] = [];
   const asked: Asked[] = [];
   /** Each set of ids the shell asked to meter, in order. */
   const metered: (readonly string[])[] = [];
@@ -124,33 +123,30 @@ export const heldSound = () => {
       watchAudioLevels: (ids: readonly string[]) => {
         metered.push(ids);
       },
-    } as unknown as DomicileClient,
+    } as unknown as DomicileHost,
     /** Sends a level for each metered id. */
     levels: (levels: ReadonlyMap<string, number>) => {
       act(() => {
         for (const onLevels of meters) {
-          onLevels({ levels });
+          onLevels(levels);
         }
       });
     },
     metered,
-    report: (audio: AudioMessage) => {
+    report: (audio: Audio) => {
       act(() => {
         for (const onAudio of listeners) {
           onAudio(audio);
         }
       });
     },
-    watch: (
-      _domicile: DomicileClient,
-      onAudio: (audio: AudioMessage) => void,
-    ) => {
+    watch: (_domicile: DomicileHost, onAudio: (audio: Audio) => void) => {
       listeners.push(onAudio);
       return () => undefined;
     },
     watchLevels: (
-      _domicile: DomicileClient,
-      onLevels: (levels: AudioLevelsMessage) => void,
+      _domicile: DomicileHost,
+      onLevels: (levels: AudioLevels) => void,
     ) => {
       meters.push(onLevels);
       return () => undefined;

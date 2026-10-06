@@ -16,7 +16,7 @@ More:
 - [SHELL-CONFIG.md](SHELL-CONFIG.md): the config file that describes a
   desktop.
 - [SHELL-BROWSER-WINDOWS.md](SHELL-BROWSER-WINDOWS.md): browser windows
-  (`<webview>`) and `browser_windows`.
+  (`<webview>`) and `browserWindows`.
 - [SHELL-EXTENSIONS.md](SHELL-EXTENSIONS.md): Chrome extensions' toolbar
   buttons and popups.
 - [SHELL-DESKTOP-EVENTS.md](SHELL-DESKTOP-EVENTS.md): displays, theme, system
@@ -71,45 +71,65 @@ in a terminal inside the desktop. Any shell works, and windows stay put
 ## The connection
 
 ```ts
-import { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
-import { connectToHost } from "@domicile-desktop/sdk/connect-to-host";
-
-const domicile = new DomicileClient(connectToHost(window));
+const domicile = window.domicile;
+if (domicile === null || domicile === undefined) {
+  return; // a plain browser: no desktop
+}
 ```
 
-- `connectToHost` reads `window.domicile`, the control channel the engine adds
-  to the page. There is nothing to configure. `navigator.domicile` is the same
-  object.
+- `window.domicile` is the control channel the engine adds to the page. Its
+  type is `DomicileHost`, from `@domicile-desktop/sdk/domicile-host`. There is
+  nothing to configure. `navigator.domicile` is the same object.
 - There is nothing to await and no version handshake. The browser process
-  checks the protocol version and logs a mismatch.
-- Do not call `addEventListener` on `window.domicile` yourself.
-  `DomicileClient` registers its listeners in its constructor and buffers
-  messages until your `on` handler exists. A listener added later misses every
-  window that was already open.
-- `domicile.displays` returns the current displays at any time.
-  `domicile.on("displays", …)` is for changes.
-- With no compositor, `connectToHost` returns a no-op stand-in and logs one
-  console warning. `<app>` is then an `HTMLUnknownElement`: it takes a box and
-  shows nothing. Use `hasHost(window)` to check. Develop against a real
-  desktop.
+  checks the protocol version and logs a mismatch. The first call binds the
+  channel.
+- State is attributes: `windows`, `focusedWindow`, `displays`, `theme`,
+  `locked`, `idle`, `extensions`, `tray`, `notifications`, `browserWindows`
+  and more. Each change dispatches a bare `<name>changed` event.
+  `audiochanged`, `batterychanged` and `modifierschanged` each cover a group.
+  Read, then listen:
+
+  ```ts
+  const show = () => draw(domicile.displays);
+  show();
+  domicile.addEventListener("displayschanged", show);
+  ```
+
+- An attribute is `null` until the compositor has sent it; `windows` starts
+  empty.
+- Moments (`focusrequested`, `shortcut`) are events. The engine holds each
+  type until its first listener exists, so a listener added in React's first
+  effect misses none. `audiolevels` is not held.
+- `searchFiles`, `previewFile` and `searchApps` return promises. A newer call
+  rejects the older with an `AbortError`.
+- A plain browser has no `window.domicile`, and `<app>` is an
+  `HTMLUnknownElement` there: it takes a box and shows nothing. Develop
+  against a real desktop.
 
 **Errors:** log to the console. Page logs reach the terminal Domicile started
-from. Invalid calls (an empty argv, a keycode of zero, a non-positive device
-pixel ratio) throw, because they are bugs in the page.
+from. Invalid calls (an empty argv, a keycode of zero, a malformed chord)
+throw, because they are bugs in the page.
 
 ## The SDK
 
 `@domicile-desktop/sdk`, on npm, provides:
 
-- `DomicileClient` (the control channel) and `connectToHost` (finding it)
+- `DomicileHost` (the type of `window.domicile`) and `Shell`
 - `registerElements` (input routing over your `<app>` elements)
 - `focusApp`, `focusChrome`, `bindKeys`
+- `windowOf`, `surfaceSizeOf` (questions about `domicile.windows`)
+- `FakeDomicileHost` (`./fake-host`), a `window.domicile` for your tests
 - types and event names for `<app>` and `<webview>`
 
-The SDK is optional. You can drive `window.domicile` directly; its types are
-in `@domicile-desktop/sdk/domicile-host` and its IDL in
+`window.domicile` is the API; the SDK is its types plus helpers. The IDL is in
 `packages/domicile-engine/src/third_party/blink/renderer/modules/domicile/`.
-You then handle registration order and input mapping yourself.
+`registerElements` is the one helper a shell needs: it forwards the pointer
+and keyboard to clients until the engine does.
+
+**Tests:** hand `FakeDomicileHost`'s `host` to your shell. `set` changes
+attributes and dispatches their change events, `appear`, `change` and `close`
+edit `windows`, `dispatch` fires a moment, and `calls` records every method
+the shell called.
 
 `@domicile-desktop/component-library` is the React and Panda CSS design
 system this repo's shells use. Shells do not need it.
@@ -117,28 +137,38 @@ system this repo's shells use. Shells do not need it.
 ## The smallest shell
 
 ```ts
-import { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
-import { connectToHost } from "@domicile-desktop/sdk/connect-to-host";
 import { registerElements } from "@domicile-desktop/sdk/register-elements";
 import type { Shell as ShellModule } from "@domicile-desktop/sdk/shell";
 
 export const Shell: ShellModule = (root) => {
-  const domicile = new DomicileClient(connectToHost(window));
+  const domicile = window.domicile;
+  if (domicile === null || domicile === undefined) {
+    return;
+  }
   registerElements(domicile);
 
   const mounted = new Map<string, HTMLElement>();
 
-  domicile.on("app_appeared", ({ app_id }) => {
-    const element = document.createElement("app");
-    element.setAttribute("app-id", app_id);
-    root.append(element);
-    mounted.set(app_id, element);
-  });
+  const show = () => {
+    const windows = domicile.windows;
+    for (const [appId, element] of mounted) {
+      if (!windows.some((window) => window.appId === appId)) {
+        element.remove();
+        mounted.delete(appId);
+      }
+    }
+    for (const { appId } of windows) {
+      if (!mounted.has(appId)) {
+        const element = document.createElement("app");
+        element.setAttribute("app-id", appId);
+        root.append(element);
+        mounted.set(appId, element);
+      }
+    }
+  };
 
-  domicile.on("app_closed", ({ app_id }) => {
-    mounted.get(app_id)?.remove();
-    mounted.delete(app_id);
-  });
+  show();
+  domicile.addEventListener("windowschanged", show);
 };
 ```
 
@@ -147,10 +177,8 @@ This is a working desktop: every window full-screen, newest on top.
 - Domicile imports the module and then calls `Shell` once. Do no work at
   import time except CSS. Other exports are ignored. A missing or throwing
   `Shell` is reported on screen.
-- Handle `app_closed`, or every closed window leaks an element. The example
-  throws on a close for an app it never mounted, since that means the page and
-  compositor disagree.
-- Events can arrive for windows you have already removed. Ignore them.
+- Remove the elements `windows` no longer lists, or every closed window leaks
+  an element.
 - Domicile writes the document: a charset, a viewport, and a `<body>` with no
   margin that fills the window. You cannot supply one.
 - `root` is the empty `<body>`. Create your own container in it and render
@@ -164,34 +192,39 @@ This is a working desktop: every window full-screen, newest on top.
 
 ### Popups
 
-A client's menus and tooltips arrive as `popup_placed`:
+A client's menus and tooltips are entries in `windows` with `parent` set:
 
-- `app_id`: the popup's own id
+- `appId`: the popup's own id
 - `parent`: the window or popup (for a submenu) it belongs to
-- `position` and `size`: CSS pixels from the top-left of the parent's box
+- `x`, `y`: CSS pixels from the top-left of the parent's box; `width`,
+  `height`: its size
+- `grab`: `true` for a menu, `false` for a tooltip
 
 To show one:
 
 - Mount an `<app>` for it at that position, above its parent.
 - Give it no frame and do not tile it. Draw it only where its window is drawn.
-- Remove it on `app_closed`.
-- The SDK routes clicks on it to its window (`DomicileClient.windowOf`).
+- Remove it when `windows` drops it.
+- The SDK routes clicks on it to its window (`windowOf`, from
+  `@domicile-desktop/sdk/windows`).
 - The compositor closes a menu when the keyboard leaves its window.
 - A popup placed near a screen edge is not moved back on screen.
 
 ## Windows
 
-- **Cursor:** `app_cursor` gives the CSS cursor a client wants over its
-  window. Set it with `element.style.cursor = cursor` (in React,
-  `<app style={{ cursor }}>`).
+Each entry in `domicile.windows` describes one client window.
+
+- **Cursor:** `cursor` is the CSS cursor a client wants over its window. Set it
+  with `element.style.cursor = cursor` (in React, `<app style={{ cursor }}>`).
 - **Size:** the `<app>` element's layout box is the window size. The engine
   sends it to the client. Resize a window by styling its element.
-- **Drawn size:** `app_resized` reports the size the client drew at. The SDK
-  already uses it for pointer mapping, so you only need it for your own UI
-  (`shell-simple` uses it to remove a placeholder).
-- **Limits:** `app_min_size` and `app_max_size` give the client's limits per
-  axis (`undefined` for none). Outside them, the client's frame is cut off or
-  stretched. `shell-manganese` keeps floating windows within them.
+- **Drawn size:** `width` and `height` are the size the client drew at, `null`
+  until it draws. The SDK already uses them for pointer mapping
+  (`surfaceSizeOf`), so you only need them for your own UI (`shell-simple`
+  uses them to remove a placeholder).
+- **Limits:** `minWidth`, `minHeight`, `maxWidth` and `maxHeight` give the
+  client's limits (`null` for none). Outside them, the client's frame is cut
+  off or stretched. `shell-manganese` keeps floating windows within them.
 - **Multiple monitors:** the page spans every monitor, so a window across two
   monitors is one `<app>`, and dragging across the edge is one drag.
 
@@ -273,23 +306,24 @@ ref. The same applies to `<webview>` events.
 
 ### A client asking for focus
 
-`domicile.on("focus_requested", ({ app_id }) => …)` is `xdg-activation`: an app
-asking to come forward (for example, a browser asked to open a link). The
-compositor does not grant it. Call `focusApp(domicile, app_id)` to grant it, or
-ignore it.
+The `focusrequested` event, with the window's `appId`, is `xdg-activation`: an
+app asking to come forward (for example, a browser asked to open a link). The
+compositor does not grant it. Call `focusApp(domicile, event.appId)` to grant
+it, or ignore it.
 
 ### Where focus is
 
-`focus_changed` reports which client holds the keyboard. Use it, not your own
-idea of the active window, to know where keys go. If a focused client crashes,
-the compositor gives the keyboard to the page; you receive `app_closed` first
-and can focus another window.
+`domicile.focusedWindow` is the client that holds the keyboard, `null` while
+the page holds it; `focusedwindowchanged` reports changes. Use it, not your
+own idea of the active window, to know where keys go. If a focused client
+crashes, the compositor gives the keyboard to the page; `windows` drops the
+window first, so you can focus another.
 
 ### Focus follows the mouse
 
 If focus follows the pointer, a keyboard focus change can be undone at once:
 the old window is still under the pointer. Move the pointer with
-`domicile.warpPointer([x, y])`, in page coordinates (`clientX`/`clientY`).
+`domicile.warpPointer(x, y)`, in page coordinates (`clientX`/`clientY`).
 
 - Points outside the page are clamped.
 - In a nested run inside another compositor, nothing moves.
@@ -335,18 +369,22 @@ bindKeys(
 
 - A chord is modifiers (`Meta`, `Shift`, `Ctrl`, `Alt`) plus an xkb keysym
   name, joined by `+`.
-- The compositor maps keysyms to keys in the configured layout
-  (`shell_config`), so `Meta+parenleft` works on any layout.
-- A malformed chord, or one the keyboard cannot type, throws.
-- `bindKeys` claims every chord, matches presses in the page and in
-  `<webview>`s, handles `Mode` itself, and passes every `SendShell` to
+- The engine finds the key each keysym is on in the configured layout, so
+  `Meta+parenleft` works on any layout and follows layout changes.
+- A malformed chord throws before anything is grabbed. A keysym the keyboard
+  cannot type is logged, and the other keys still work.
+- `bindKeys` grabs every chord by name (`domicile.grabShortcut`), handles each
+  `shortcut` event by its `chord` whether the press landed on the page or in a
+  `<webview>`, handles `Mode` itself, and passes every `SendShell` to
   `onCommand`.
-- `domicile.grabShortcut` claims a chord that `bindKeys` does not.
+- It returns `{ setMode, unbind }`. `setMode` keeps one mode across a desktop
+  of several pages.
 - Command meanings are yours. Document them in your README, as
   [manganese does](/packages/shell-manganese/README.md). Manganese takes keys
   from `runManganese({ keybindings })`, defaulting to sway's.
-- Claims are never released. A key moved off by a layout change stays claimed
-  until restart. Design: [KEYBINDINGS.md](/docs/architecture/KEYBINDINGS.md).
+- Grabs are never released, so a key bound in any mode is taken from every
+  client for the session. Design:
+  [KEYBINDINGS.md](/docs/architecture/KEYBINDINGS.md).
 
 ## The configuration
 

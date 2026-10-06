@@ -1,6 +1,8 @@
 import { Button } from "@domicile-desktop/component-library/Button";
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
-import type { TrayItem } from "@domicile-desktop/sdk/tray";
+import type {
+  DomicileHost,
+  DomicileTrayItem,
+} from "@domicile-desktop/sdk/domicile-host";
 
 import { css } from "../../styled-system/css";
 import { center } from "../../styled-system/patterns";
@@ -10,9 +12,9 @@ const MIDDLE_BUTTON = 1;
 
 type Props = {
   /** Where clicks are sent. */
-  domicile: DomicileClient;
+  domicile: DomicileHost;
   /** The icon, as the compositor last described it. */
-  item: TrayItem;
+  item: DomicileTrayItem;
 };
 
 /**
@@ -43,7 +45,7 @@ export const TrayIcon = ({ domicile, item: { icon, id, title } }: Props) => (
     size="sm"
     variant="ghost"
   >
-    {icon === undefined ? (
+    {icon === "" ? (
       <span className={letterStyles}>{title.slice(0, 1)}</span>
     ) : (
       <img

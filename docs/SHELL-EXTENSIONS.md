@@ -27,11 +27,11 @@ Part of [WRITING-A-SHELL.md](WRITING-A-SHELL.md). Design:
 
 ## The list
 
-`extensions` arrives with the full list on every change and on connect:
+`domicile.extensions` is the full list; `extensionschanged` reports changes:
 
 ```ts
-domicile.on("extensions", ({ extensions }) => {
-  drawTray(extensions.filter(({ enabled }) => enabled));
+domicile.addEventListener("extensionschanged", () => {
+  drawTray((domicile.extensions ?? []).filter(({ enabled }) => enabled));
 });
 ```
 
@@ -42,10 +42,11 @@ domicile.on("extensions", ({ extensions }) => {
 | `title` | The action's tooltip and the icon's accessible name |
 | `icon` | A `data:image/png` URL at the page's device pixel ratio |
 | `badgeText`, `badgeColor` | The badge. `badgeColor` is `#rrggbbaa`, transparent when unset |
-| `popup` | The popup's `chrome-extension://` URL, or `undefined` |
+| `popup` | The popup's `chrome-extension://` URL, or `null` |
 | `enabled` | `false` after `action.disable()` |
 
-The row type is `Extension`, from `@domicile-desktop/sdk/extension`.
+The row type is `DomicileExtension`. `extensionSchema`, from
+`@domicile-desktop/sdk/extension`, parses one into an `Extension`.
 
 ## A click
 
@@ -92,7 +93,7 @@ The browser carries out some extension calls. Others fire an event on a
 
 | Extension call | What happens |
 |---|---|
-| `tabs.create({url})` | A browser window opens and appears in the next `browser_windows` |
+| `tabs.create({url})` | A browser window opens and appears in the next `browserwindowschanged` |
 | `windows.create({type: "popup", url})` | A browser window opens as that popup window's tab (below) |
 | `tabs.remove(id)` | That browser window closes. A view of your own fires `domicile-close` ([Close requests](SHELL-BROWSER-WINDOWS.md#close-requests)) |
 | `tabs.update(id, {active: true})`, `windows.update(id, {focused: true})` | `domicile-focus-request` (`WEBVIEW_FOCUS_REQUEST_EVENT`): raise that window |
