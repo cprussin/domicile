@@ -558,7 +558,7 @@
         dontFixup = true;
         outputHashMode = "recursive";
         outputHashAlgo = "sha256";
-        outputHash = "sha256-kW+zl6d3SHh5TEylwlIC6FJA2Jj/YWRnGtDfLlyx2XA=";
+        outputHash = "sha256-AV1GD3R3i2+xeLtBFA4RFb0/3HzolnjJ4VdNbm34b1M=";
       };
 
 

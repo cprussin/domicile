@@ -12,6 +12,8 @@ import type { DomicileHost } from "./domicile-host";
 export enum PortalKind {
   /** A yes/no question, such as whether an application may use the camera. */
   Access,
+  /** Pick an application to open a file or URI with. */
+  AppChooser,
   /** A kind this SDK cannot parse. Answer it with {@link PortalAnswer.Refused}. */
   Unknown,
 }
@@ -35,11 +37,29 @@ export type AccessBody = {
   denyLabel: string | undefined;
 };
 
+/** What an app chooser opens, and the applications it offers. */
+export type AppChooserBody = {
+  /** Desktop file IDs without `.desktop`. May change while the dialog is up. */
+  choices: readonly string[];
+  /** The application chosen last time for this content type. */
+  lastChoice: string | undefined;
+  /** The MIME type being opened. */
+  contentType: string | undefined;
+  uri: string | undefined;
+  /** The file's name, without its directory. */
+  filename: string | undefined;
+};
+
 export const PortalRequest = {
   Access: (base: PortalRequestBase, body: AccessBody) => ({
     ...base,
     body,
     kind: PortalKind.Access as const,
+  }),
+  AppChooser: (base: PortalRequestBase, body: AppChooserBody) => ({
+    ...base,
+    body,
+    kind: PortalKind.AppChooser as const,
   }),
   Unknown: (base: PortalRequestBase, wireKind: string) => ({
     ...base,
@@ -55,6 +75,8 @@ export type PortalRequest = ReturnType<
 export enum PortalAnswerKind {
   /** The user allowed an {@link PortalKind.Access} request. */
   Access,
+  /** The application the user picked in an {@link PortalKind.AppChooser}. */
+  AppChooser,
   /** The user dismissed or denied the dialog. */
   Canceled,
   /** The shell has no dialog for this kind. */
@@ -63,6 +85,11 @@ export enum PortalAnswerKind {
 
 export const PortalAnswer = {
   Access: () => ({ kind: PortalAnswerKind.Access as const }),
+  /** `choice` must be one of the request's `choices`. */
+  AppChooser: (choice: string) => ({
+    choice,
+    kind: PortalAnswerKind.AppChooser as const,
+  }),
   Canceled: () => ({ kind: PortalAnswerKind.Canceled as const }),
   Refused: () => ({ kind: PortalAnswerKind.Refused as const }),
 };
@@ -111,7 +138,7 @@ export const answerPortalRequest = (
   id: number,
   answer: PortalAnswer,
 ): void => {
-  host.answerPortalRequest(id, JSON.stringify({ kind: wireAnswer(answer) }));
+  host.answerPortalRequest(id, JSON.stringify(wireAnswer(answer)));
 };
 
 const accessSchema = z
@@ -132,15 +159,37 @@ const accessSchema = z
     }),
   );
 
+const appChooserSchema = z
+  .object({
+    choices: z.array(z.string()),
+    content_type: z.string().optional(),
+    filename: z.string().optional(),
+    last_choice: z.string().optional(),
+    uri: z.string().optional(),
+  })
+  .transform(
+    (body): AppChooserBody => ({
+      choices: body.choices,
+      contentType: body.content_type,
+      filename: body.filename,
+      lastChoice: body.last_choice,
+      uri: body.uri,
+    }),
+  );
+
+/** Reads one kind's body into a request. */
+type ReadKind = (base: PortalRequestBase, body: unknown) => PortalRequest;
+
 /** Each kind's wire name, and how to read its body into a request. */
-const KINDS: ReadonlyMap<
-  string,
-  (base: PortalRequestBase, body: unknown) => PortalRequest
-> = new Map([
+const KINDS: ReadonlyMap<string, ReadKind> = new Map<string, ReadKind>([
   [
     "access",
-    (base: PortalRequestBase, body: unknown) =>
-      PortalRequest.Access(base, accessSchema.parse(body)),
+    (base, body) => PortalRequest.Access(base, accessSchema.parse(body)),
+  ],
+  [
+    "app_chooser",
+    (base, body) =>
+      PortalRequest.AppChooser(base, appChooserSchema.parse(body)),
   ],
 ]);
 
@@ -169,13 +218,16 @@ const parseRequest = (item: z.infer<typeof itemSchema>): PortalRequest => {
     : parse(base, item.body);
 };
 
-const wireAnswer = (answer: PortalAnswer): string => {
+/** `answer` as the compositor reads it. */
+const wireAnswer = (answer: PortalAnswer): object => {
   switch (answer.kind) {
     case PortalAnswerKind.Access:
-      return "access";
+      return { kind: "access" };
+    case PortalAnswerKind.AppChooser:
+      return { choice: answer.choice, kind: "app_chooser" };
     case PortalAnswerKind.Canceled:
-      return "canceled";
+      return { kind: "canceled" };
     case PortalAnswerKind.Refused:
-      return "refused";
+      return { kind: "refused" };
   }
 };

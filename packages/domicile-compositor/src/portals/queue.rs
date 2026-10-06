@@ -6,7 +6,7 @@
 
 use std::sync::{Arc, Mutex, OnceLock};
 
-use domicile_host::portals::Portals;
+use domicile_host::portals::{Portals, Unknown};
 use domicile_protocol::{PortalAnswer, PortalKind, PortalRequest};
 use tracing::{debug, warn};
 use zbus::object_server::ObjectServer;
@@ -55,12 +55,17 @@ impl Queue {
     }
 
     /// The shell's answer to `id`. An answer for a request already answered
-    /// or closed is dropped.
+    /// or closed is dropped, and so is one that does not fit the request.
     pub fn answer(&self, id: u32, answer: PortalAnswer) {
-        match self.change(|held| held.answer(id)) {
+        match self.change(|held| held.answer(id, &answer)) {
             Ok(replier) => replier.send(answer),
-            Err(why) => debug!(%id, %why, "a portal answer came too late"),
+            Err(why) => debug!(%id, %why, "a portal answer was dropped"),
         }
+    }
+
+    /// Change `id`'s body while it waits. `Unknown` once it is answered.
+    pub fn revise(&self, id: u32, revise: impl FnOnce(&mut PortalKind)) -> Result<(), Unknown> {
+        self.change(|held| held.revise(id, revise))
     }
 
     /// The application closed `id`'s `Request`: the dialog goes, and the call
@@ -71,7 +76,8 @@ impl Queue {
         }
     }
 
-    /// Queue a request, or hand the replier back when nobody listens.
+    /// Queue a request unpublished, or hand the replier back when nobody
+    /// listens. [`ask`] publishes it once its `Request` is exported.
     fn submit(
         &self,
         app_id: String,
@@ -80,12 +86,18 @@ impl Queue {
         replier: Replier<PortalAnswer>,
     ) -> Result<u32, Replier<PortalAnswer>> {
         match self.listener.get() {
-            Some(listener) => self.change(|held| {
+            Some(listener) => {
+                let mut held = self.held.lock().unwrap();
                 held.set_listening((listener.listening)());
                 held.submit(app_id, (listener.parent)(parent_window), kind, replier)
-            }),
+            }
             None => Err(replier),
         }
+    }
+
+    /// Publish the queue as it is.
+    fn publish(&self) {
+        self.change(|_| ());
     }
 
     /// Apply `change` and publish the result. Publishing under the lock keeps
@@ -123,6 +135,9 @@ pub async fn ask(
             if let Err(why) = server.at(&handle, request).await {
                 warn!(%why, %handle, "a portal request cannot be closed by its application");
             }
+            // Not before: a dialog the shell shows must have a `Request` for
+            // `Close` and `UpdateChoices` to find.
+            queue.publish();
             let answer = answered.await.unwrap_or(PortalAnswer::Refused);
             // Gone already when a `Close` raced the answer.
             let _ = server.remove::<Request, _>(&handle).await;

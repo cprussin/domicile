@@ -105,8 +105,12 @@ import { PortalDialogs } from "@domicile-desktop/component-library/PortalDialogs
 <PortalDialogs host={domicile} screen={focusedScreen} />;
 ```
 
-- `PortalDialogs` draws every kind it knows and refuses the rest. Only
-  `Access` (a yes/no question) exists so far.
+- `PortalDialogs` draws every kind it knows and refuses the rest: `Access` (a
+  yes/no question) and `AppChooser` (an app list for "Open with" and
+  `OpenURI`).
+- The app list reads desktop entries and `mimeapps.list` through
+  `@domicile-desktop/sdk/system`, so `host` must take system calls.
+  `domicile` does.
 - Without React, `watchPortalRequests` and `answerPortalRequest` in
   `@domicile-desktop/sdk/portal` give the requests, parsed, and send answers.
 - A shell must answer every request. One left unanswered keeps its application

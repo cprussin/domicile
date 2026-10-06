@@ -28,6 +28,7 @@ const editors = findApps(apps, "edit", 50);
 | `./installed` | Every desktop entry under them; an earlier directory hides a later one's ID. |
 | `./desktop-entry` | One entry parsed: name, comment, argv, icon and `X-Domicile-Preview`. |
 | `./find-apps`, `./bookmark` | The launcher's matching and ranking; bookmarks and their Zod schema. |
+| `./mime-apps` | A content type's default applications from every `mimeapps.list`, the desktop's own (`domicile-mimeapps.list`) first. |
 | `./omit` | Desktop file IDs left out, as globs. |
 | `./app-icons` | Icon names resolved in `hicolor` and `pixmaps` to `data:` URLs (PNG, SVG, 128 KiB at most). |
 | `./favicon`, `./curl`, `./favicons` | A bookmark's icon: picked from the page, fetched with `curl`, kept and retried. |

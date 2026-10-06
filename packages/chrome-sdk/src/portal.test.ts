@@ -81,6 +81,39 @@ describe("watchPortalRequests", () => {
     ]);
   });
 
+  it("parses an app chooser's body, absent fields as undefined", async () => {
+    const host = new FakeHost();
+    const requests = watched(host);
+    host.push([
+      {
+        app_id: "org.example.App",
+        body: {
+          choices: ["org.gnome.Evince", "firefox"],
+          content_type: "application/pdf",
+          filename: "report.pdf",
+        },
+        id: 4,
+        kind: "app_chooser",
+      },
+    ]);
+
+    expect(await requests).toEqual([
+      {
+        appId: "org.example.App",
+        body: {
+          choices: ["org.gnome.Evince", "firefox"],
+          contentType: "application/pdf",
+          filename: "report.pdf",
+          lastChoice: undefined,
+          uri: undefined,
+        },
+        id: 4,
+        kind: PortalKind.AppChooser,
+        parentAppId: undefined,
+      },
+    ]);
+  });
+
   it("keeps a kind it does not know, to be refused", async () => {
     const host = new FakeHost();
     const requests = watched(host);
@@ -135,11 +168,13 @@ describe("answerPortalRequest", () => {
     answerPortalRequest(host, 1, PortalAnswer.Access());
     answerPortalRequest(host, 2, PortalAnswer.Canceled());
     answerPortalRequest(host, 3, PortalAnswer.Refused());
+    answerPortalRequest(host, 4, PortalAnswer.AppChooser("firefox"));
 
     expect(host.answers).toEqual([
       [1, { kind: "access" }],
       [2, { kind: "canceled" }],
       [3, { kind: "refused" }],
+      [4, { choice: "firefox", kind: "app_chooser" }],
     ]);
   });
 });
