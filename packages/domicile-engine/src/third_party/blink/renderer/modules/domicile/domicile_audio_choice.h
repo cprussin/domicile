@@ -10,8 +10,8 @@
 
 namespace blink {
 
-// A port of a device or a profile of a card, as the compositor described it.
-// Immutable, for DomicileTrayItem's reason.
+// A device port or card profile, as reported by the compositor. Immutable:
+// the compositor resends the whole state on any change.
 class MODULES_EXPORT DomicileAudioChoice final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 

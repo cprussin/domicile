@@ -13,8 +13,7 @@ namespace domicile {
 namespace {
 
 TEST(ExtensionTrayEntryTest, ABadgeColorIsCssWithItsAlpha) {
-  // #rrggbbaa, the CSS Color 4 hex form, so a shell can hand it straight to a
-  // style. SkColor is ARGB, so the alpha moves from the front to the back.
+  // CSS Color 4 hex form. SkColor is ARGB, so alpha moves to the end.
   EXPECT_EQ(BadgeColorAsCss(SkColorSetARGB(0xFF, 0x1C, 0x3A, 0x2E)),
             "#1c3a2eff");
   EXPECT_EQ(BadgeColorAsCss(SkColorSetARGB(0x80, 0x00, 0x0A, 0xB0)),
@@ -22,9 +21,7 @@ TEST(ExtensionTrayEntryTest, ABadgeColorIsCssWithItsAlpha) {
 }
 
 TEST(ExtensionTrayEntryTest, ABadgeWithNoColorIsTransparent) {
-  // ExtensionAction answers an unset color with SkColor's zero, which is
-  // transparent black -- a badge a shell then draws in its own color, rather
-  // than a black one nobody chose.
+  // ExtensionAction returns zero for an unset color, so the shell uses its own.
   EXPECT_EQ(BadgeColorAsCss(SK_ColorTRANSPARENT), "#00000000");
 }
 

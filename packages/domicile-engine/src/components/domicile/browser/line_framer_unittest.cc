@@ -21,9 +21,7 @@ TEST(LineFramerTest, SeveralLinesInOneReadAreEachTheirOwn) {
 }
 
 TEST(LineFramerTest, ALineCutAcrossReadsIsHeldUntilItEnds) {
-  // The socket is read sixteen kilobytes at a time and a line is as long as
-  // the compositor made it, so most of a long one arrives with no newline in
-  // it at all.
+  // The socket is read 16 KiB at a time, so long lines span many reads.
   LineFramer framer;
 
   EXPECT_EQ(framer.Take("{\"type\":"), Lines{});
@@ -39,12 +37,8 @@ TEST(LineFramerTest, AnEmptyLineIsALineAndTheCallerDecidesWhatItMeans) {
 }
 
 TEST(LineFramerTest, ALineOfManyReadsComesOutWhole) {
-  // THE CASE THIS EXISTS FOR. The reader this replaced searched everything it
-  // was holding for a newline on every read, so a line of N reads cost N
-  // searches of up to N reads each: tens of megabytes of file list, sixteen
-  // kilobytes at a time, was seconds of the IO thread per message. What is
-  // asserted is the line; that each byte is looked at once is the
-  // implementation's to keep.
+  // Large messages, such as file lists, can be tens of megabytes. The test
+  // checks the result; linear scanning is up to the implementation.
   LineFramer framer;
   const std::string chunk(16 * 1024, 'x');
 

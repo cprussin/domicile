@@ -13,49 +13,46 @@
 
 namespace domicile {
 
-// What chrome.tabs sees of a desk, decided with no browser: which <webview> is
-// the active tab, which calls are refused, and which tabs a query names.
-// docs/architecture/EXTENSIONS.md's slice 2. Carrying it out -- the window
-// controller, the guests, the events -- is //chrome/browser/domicile/
-// domicile_desk.h.
+// The browser-free logic behind chrome.tabs on a desk: the active <webview>
+// tab, refused calls, and query matching. See
+// docs/architecture/EXTENSIONS.md#tabs. The window controller is in
+// //chrome/browser/domicile/domicile_desk.h.
 
-// The error every refused call answers with.
+// The error message for every refused call.
 inline constexpr char kNotOnADesk[] = "not supported on a Domicile desk";
 
-// `windowId: chrome.windows.WINDOW_ID_CURRENT`, which is extension_misc's and
-// spelled again here because this target depends on nothing of //extensions.
+// chrome.windows.WINDOW_ID_CURRENT. Copied from extension_misc because this
+// target does not depend on //extensions.
 inline constexpr int kCurrentWindowId = -2;
 
-// The chrome.tabs calls a desk refuses rather than fakes, by the name
-// ExtensionFunctionRegistry knows them under.
+// The chrome.tabs calls a desk refuses, by ExtensionFunctionRegistry name.
 //
-// A move, a group, a split, a duplicate, a discard: none has a desktop
-// meaning, and a call that answered success and did nothing would be a bug the
-// extension cannot see.
+// Moves, groups, splits, duplicates and discards have no desktop meaning.
+// Reporting success without acting would hide the failure from the extension.
 base::span<const char* const> RefusedOnDesk();
 bool IsRefusedOnDesk(std::string_view function_name);
 
-// tabs.setZoom's `zoomFactor` as the factor a desk tab is zoomed to, or
-// nothing where the desk refuses it. 0 or less is `default_factor`, as in
-// Chrome. Outside [minimum, maximum] -- blink's browser zoom range, which the
-// <webview> element holds its own setZoom to -- is refused rather than stored.
+// The zoom factor to apply for tabs.setZoom's `zoomFactor`, or nothing if
+// refused. 0 or less means `default_factor`, as in Chrome. Values outside
+// [minimum, maximum] (Blink's zoom range, which <webview> setZoom also uses)
+// are refused.
 std::optional<double> DeskZoomFactor(double asked,
                                      double default_factor,
                                      double minimum,
                                      double maximum);
 
-// Whether a desk tab takes tabs.setZoomSettings' `mode` and `scope`, each ""
-// where left out. A guest's zoom is HostZoomMap's, per site: Chrome's
-// automatic, per-origin mode, and the only one a desk has.
+// Whether a desk tab accepts tabs.setZoomSettings' `mode` and `scope` ("" when
+// omitted). Guests zoom per site through HostZoomMap, so only automatic,
+// per-origin is supported.
 bool DeskTakesZoomSettings(std::string_view mode, std::string_view scope);
 
-// Whether a guest showing a page of `scheme` becomes the active tab when it is
-// focused. Not an extension's page: a popup is in a <webview> like any window,
-// and one that took the active tab would answer its own tabs.query with itself.
+// Whether a focused guest showing `scheme` becomes the active tab. Extension
+// pages do not: a popup is also a <webview>, and would otherwise find itself
+// in its own tabs.query.
 bool TakesActiveOnFocus(std::string_view scheme);
 
-// windows.create's createData, as much of it as decides whether a desk opens
-// the window. Each string is "" where it was left out.
+// The windows.create fields that decide whether a desk opens the window. Each
+// string is "" when omitted.
 struct DeskWindowCreate {
   std::string type;
   int urls = 0;
@@ -65,20 +62,17 @@ struct DeskWindowCreate {
   bool set_self_as_opener = false;
 };
 
-// Whether a desk opens the window `create` asks for: a popup -- `popup`, or
-// Chrome's deprecated `panel`, which it opens as one -- at one address, in a
-// normal state. That is what an extension opens for a page of its own, like
-// Bitwarden's sign-in, and the shell draws it as a window of its own.
+// Whether a desk opens the window `create` asks for. Only a popup (`popup` or
+// the deprecated `panel`) with one address in the normal state, as extensions
+// use for their own pages such as Bitwarden's sign-in.
 //
-// Not a normal window: the shell's browser windows are the desk's tabs, and
-// tabs.create already asks for one. Not a tab moved into it, an opener, a
-// second address or an incognito profile, none of which the shell can make.
-// Its bounds decide nothing: a size is the shell's to honor, and a position
-// is the shell's to choose, as it is on a Wayland desktop in Chrome itself.
+// Normal windows are refused because tabs.create covers them. Tab moves,
+// openers, multiple addresses and incognito are refused because the shell
+// cannot create them. Bounds are ignored; the shell decides size and position.
 bool DeskOpensWindow(const DeskWindowCreate& create);
 
-// The desk's tabs, by the id SessionTabHelper gave each: in creation order,
-// which is their index, and in order of focus, which is what the active one is.
+// The desk's tabs by SessionTabHelper id. Creation order gives the index;
+// focus order gives the active tab.
 class DeskTabs {
  public:
   DeskTabs();
@@ -86,13 +80,12 @@ class DeskTabs {
   DeskTabs& operator=(const DeskTabs&) = delete;
   ~DeskTabs();
 
-  // A tab nobody has focused goes behind every tab somebody has.
+  // A new tab is ordered behind every focused tab.
   void Add(int tab_id);
   void Remove(int tab_id);
   void Focus(int tab_id);
 
-  // The tab that last had focus, the first made when none has, or nothing on
-  // a desk with no tabs.
+  // The last focused tab, else the first created, else nothing.
   std::optional<int> Active() const;
 
   int IndexOf(int tab_id) const;
@@ -104,8 +97,8 @@ class DeskTabs {
   std::vector<int> focused_;
 };
 
-// A tab, as much of it as a query compares. `active` and `index` are within
-// its own window: the desk's, or a popup window an extension opened.
+// The tab fields a query compares. `active` and `index` are relative to the
+// tab's window: the desk, or an extension's popup window.
 struct DeskTabFacts {
   bool active = false;
   int index = -1;
@@ -115,14 +108,14 @@ struct DeskTabFacts {
   std::string status;
   // `normal` for the desk's, `popup` for a popup window's.
   std::string window_type;
-  // Whether the tab's window is the asker's current one, and the one that last
-  // had focus.
+  // Whether the tab's window is the caller's current window, and the last
+  // focused window.
   bool in_current_window = false;
   bool in_last_focused_window = false;
 };
 
-// chrome.tabs.query's queryInfo, less `url` and `title`: matching those needs
-// URLPatternSet and a scrub decision, and both are //chrome's.
+// chrome.tabs.query's queryInfo without `url` and `title`, which need
+// URLPatternSet and scrubbing from //chrome.
 struct DeskTabQuery {
   DeskTabQuery();
   DeskTabQuery(const DeskTabQuery&);
@@ -147,8 +140,8 @@ struct DeskTabQuery {
   std::optional<std::string> window_type;
 };
 
-// Whether `query` names `tab`. A desk tab is highlighted exactly when it is
-// active, and is never pinned, grouped, split, frozen or discarded.
+// Whether `query` matches `tab`. A desk tab is highlighted when active, and is
+// never pinned, grouped, split, frozen or discarded.
 bool DeskTabMatches(const DeskTabQuery& query, const DeskTabFacts& tab);
 
 }  // namespace domicile

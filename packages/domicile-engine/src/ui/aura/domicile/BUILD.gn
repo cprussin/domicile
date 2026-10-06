@@ -1,9 +1,9 @@
 # Copyright 2026 Connor Prussin
 # SPDX-License-Identifier: MIT
 
-# What aura targets a pointer at when it is on a monitor the desk's host window
-# does not cover. Linked from //chrome/browser/domicile, which is also what
-# makes GN load this file; tested from //components/domicile:unit_tests.
+# Routes pointer events on monitors outside the desk's host window to the
+# page. Linked from //chrome/browser/domicile, which makes GN load this file;
+# tested from //components/domicile:unit_tests.
 source_set("desk_targeter") {
   sources = [
     "desk_targeter.cc",

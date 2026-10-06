@@ -1,39 +1,31 @@
 #!/usr/bin/env bash
-# chrome://history, asked for in a browser window.
+# Checks that chrome://history in a browser window is refused, not fatal.
 #
 #   nix develop .#full --command \
 #     ./packages/domicile-engine/scripts/guard-webview-browser-page.sh /build/chromium/src
 #
-# Headless and software-composited, like guard-webview-escape.sh: nothing here
-# is measured in pixels.
+# Headless and software-composited, like guard-webview-escape.sh: nothing is
+# measured in pixels.
 #
-# WHY THIS EXISTS. It killed a desktop. HistoryUI looks its tab up
-# unconditionally -- "HistoryUI should always be in a tab" -- and a <webview>'s
-# guest is in no tab strip, so `tabs::TabInterface::GetFromContents` took the
-# browser process down the moment the page asked for its Journeys handler.
-# chrome://history is one of many such pages and none of them means anything
-# on a desk, so patch 0083 refuses a guest all of them: BrowserPageThrottle, in
-# //components/domicile.
+# HistoryUI assumes it is in a tab. A <webview> guest is not, so without patch
+# 0083 `tabs::TabInterface::GetFromContents` crashes the browser process. Many
+# chrome:// pages behave like this and none is useful on a desktop, so patch
+# 0083's BrowserPageThrottle (//components/domicile) refuses them all in
+# guests.
 #
-# WHAT IT ASSERTS, in order, because each answer is only worth anything if the
-# one before it holds:
+# Asserts, in order (each only meaningful if the previous holds):
 #
-#   there is a page in the window     an ordinary one, first, so a guest was
-#                                      made, attached and navigated -- and a
-#                                      run that never got that far is not read
-#                                      as a refusal
-#   nothing dumped a signal           the crash this guard is about
-#   the throttle refused it           its own line, so the page failing for
-#                                      any other reason is not read as the
-#                                      fork's doing
-#   the browser still answers         because a process that died without
-#                                      dumping a signal is just as gone
+#   there is a page in the window     an ordinary page loaded first, so a
+#                                      guest works and a failure is not read as
+#                                      a refusal
+#   nothing dumped a signal           the crash this guards against
+#   the throttle refused it           its own log line, so an unrelated failure
+#                                      is not credited to the fork
+#   the browser still answers         it may die without dumping a signal
 #
-# HOW IT CAN FAIL. NEGATIVE=1 runs the same shell, the same first page and the
-# same second navigation, to the same page under another host instead of
-# chrome://history. That page must load, and the refusal must NOT appear: a
-# throttle that refused every second navigation, or a log line that printed
-# whatever happened, would pass the run and fail here.
+# NEGATIVE=1 navigates to the same page under another host instead. It must
+# load and the refusal must not appear, which catches a throttle that refuses
+# everything.
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
@@ -59,13 +51,12 @@ PROFILE="${PROFILE:-/tmp/domicile-webview-browser-page-profile}"
 WIDTH="${WIDTH:-1024}"
 HEIGHT="${HEIGHT:-768}"
 
-# How long the shell is given to load, ask for a guest, have one attached and
-# navigated twice. Generous, because every one of those is asynchronous and
-# this machine is shared.
+# How long the shell gets to load, attach a guest and navigate twice. Generous:
+# each step is asynchronous and the machine is shared.
 FOR_SECONDS="${FOR_SECONDS:-90}"
 
-# How long the browser is given to dump a stack after the second navigation.
-# guard-webview-escape.sh says why five is a flush and not a guess.
+# How long the browser gets to dump a stack after the second navigation. See
+# guard-webview-escape.sh.
 SETTLE_SECONDS="${SETTLE_SECONDS:-5}"
 
 WHICH=""
@@ -123,8 +114,7 @@ PORT="$(served_port "$HTTP_LOG")" || {
 SUBJECT="http://127.0.0.1:$PORT/page"
 
 # 2. The second address: the one under test, or in the control the same page
-#    under another host, so it is a new document and not a same-document hop
-#    a throttle never sees.
+#    under another host, so it is a new document the throttle sees.
 if [ "$NEGATIVE" = "1" ]; then
   THEN="http://localhost:$PORT/page"
 else
@@ -132,8 +122,8 @@ else
 fi
 echo "a browser window on $SUBJECT, then $THEN"
 
-# 3. The engine, on a domicile:// document. `--remote-debugging-port` is how
-#    the browser is asked whether it is still there.
+# 3. The engine, on a domicile:// document. `--remote-debugging-port` lets
+#    the guard check the browser is still alive.
 rm -f "$ENGINE_LOG"
 "$CHROMIUM/$OUT/chrome" \
   --ozone-platform=headless \
@@ -158,8 +148,8 @@ DEBUG_PORT="$(devtools_port "$PROFILE" "$TRIES")" || {
   exit 1
 }
 
-# 4. The second navigation's outcome: the refusal in the run, a second load in
-#    the control, or a signal in either. Then the settle, for a stack to land.
+# 4. Wait for the outcome (refusal in the run, a second load in the control,
+#    or a signal in either), then settle so a stack can land.
 for _ in $(seq 1 "$TRIES"); do
   grep -qF "$REFUSED" "$ENGINE_LOG" 2>/dev/null && break
   grep -qF "Received signal" "$ENGINE_LOG" 2>/dev/null && break
@@ -182,8 +172,8 @@ echo
 echo "guest=$SAW_GUEST second=$SAW_SECOND refusal=$SAW_REFUSAL crash=$SAW_CRASH answered=$ANSWERED"
 echo
 
-# WHICH END TO BLAME. `scripts/test-webview-browser-page-guard.sh` runs this
-# block directly.
+# The verdict. `scripts/test-webview-browser-page-guard.sh` runs this block
+# directly.
 FAILURE=""
 PASSED=""
 if [ "$SAW_GUEST" != "1" ]; then
@@ -230,9 +220,8 @@ if [ -n "$PASSED" ]; then
 fi
 
 annotate "guard-webview-browser-page: $FAILURE"
-# The fatal message and the top of its stack, which a tail of the log cuts off:
-# the bottom forty lines of a crash are the message loop, and the first run of
-# this guard reported nothing but those.
+# The fatal message and the top of its stack. A plain tail of the log shows
+# only the message loop.
 echo "what the engine died of, if it did:" >&2
 grep -n -A45 -E "FATAL|Check failed|Received signal" "$ENGINE_LOG" | head -150 >&2
 echo "the engine's last words:" >&2

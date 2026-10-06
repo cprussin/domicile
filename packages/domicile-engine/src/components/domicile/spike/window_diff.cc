@@ -90,8 +90,7 @@ RectDiff DiffRects(const WindowCapture& capture,
         for (int dx = -edge_radius; dx <= edge_radius; ++dx) {
           const int nx = x + dx;
           const int ny = y + dy;
-          // A mismatch running off the edge of the compared rect is not
-          // evidence of an interior, so out of bounds counts as mismatching.
+          // Neighbors outside the rect count as mismatching.
           if (nx < 0 || ny < 0 || nx >= w || ny >= h) {
             continue;
           }

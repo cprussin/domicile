@@ -1,19 +1,20 @@
-// What guard-webview-active-tab.sh is about: a click on this extension's
-// action paints the tab it names, with scripting.executeScript.
+// Fixture for guard-webview-active-tab.sh: clicking this extension's action
+// paints the tab it names via scripting.executeScript.
 //
-// THE MANIFEST ASKS FOR NO HOST, only `activeTab` and `scripting`. So the
-// injection works only on a page the extension was granted by a click, and
-// the click is the tray's `activateExtension` -- that grant is the claim.
+// The manifest requests no host permissions, only `activeTab` and
+// `scripting`, so injection works only after a click grants the tab. The click
+// is the tray's `activateExtension`; that grant is what the guard checks.
 //
-// The color is the guard's `COLOR`, and scripts/test-webview-active-tab-guard.sh
-// holds the two together. `!important`, so the page's own background cannot
-// win.
+// The color must match the guard's `COLOR`
+// (scripts/test-webview-active-tab-guard.sh checks this). `!important` beats
+// the page's own background.
 //
-// Off `globalThis` because `chrome` is an extension's global, which the linter
-// this repository runs over every script does not know.
+// Read from `globalThis` because the repo's linter does not know the
+// extension global `chrome`.
 const { action, scripting } = globalThis.chrome;
 
-// Run in the page, so it closes over nothing: executeScript sends its source.
+// Runs in the page, so it must not close over anything: executeScript sends
+// its source.
 const paint = () => {
   const mark = document.createElement("style");
   mark.textContent = "html, body { background: #00897B !important; }";
@@ -21,7 +22,7 @@ const paint = () => {
 };
 
 action.onClicked.addListener((tab) => {
-  // A refusal is the finding when the guard fails, so it goes to the log.
+  // Log refusals; they explain a failing guard.
   scripting
     .executeScript({ func: paint, target: { tabId: tab.id } })
     .catch((error) => {
@@ -29,10 +30,9 @@ action.onClicked.addListener((tab) => {
     });
 });
 
-// And only then says it is listening, on its action: the shell's click waits
-// for this badge. The tray row arrives at install, before this worker has run,
-// and an event dispatched with no listener registered is dropped -- so a click
-// on the row alone could be granted and never reach onClicked.
+// Set the badge only after registering the listener: the shell waits for it
+// before clicking. The tray row appears at install, before this worker runs,
+// and a click dispatched with no listener is dropped.
 action.setBadgeText({ text: "on" }).catch((error) => {
   console.error(`GUARD refused ${error.message}`);
 });

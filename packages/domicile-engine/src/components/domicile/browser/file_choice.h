@@ -16,32 +16,24 @@
 
 namespace domicile {
 
-// What a shell's answer to a <webview>'s file chooser means to the browser.
+// Helpers for interpreting the shell's answer to a file chooser.
 //
-// THE SHELL PICKS AND THE BROWSER READS. A picker is desktop UI, so a page's
-// `<input type="file">` and a download's "where to?" are asked of the shell --
-// see FileChooserRequested in components/domicile/mojom/web_view_guest.mojom --
-// and what comes back is paths. These are the three questions the browser
-// asks of them, kept here because they can be answered with no browser at all.
+// The shell draws file pickers, for both `<input type="file">` and downloads
+// (see FileChooserRequested in components/domicile/mojom/web_view_guest.mojom),
+// and returns paths. These helpers need no browser, so they live here.
 
-// `path`, as a shell named it, as the path it means.
+// Resolves a path from the shell.
 //
-// ABSOLUTE, OR RELATIVE TO THE HOME. Relative is the vocabulary a shell
-// already has -- the compositor's `found_files` names every file that way --
-// and absolute is how a picker walking the whole filesystem names the rest.
-// The empty path is the home. A directory may end in `/`, which is how both
-// that answer and DirectoryEntries below spell one.
-//
-// Nothing for a path that climbs with `..`. The element refuses one before
-// sending, so one arriving here did not come from it.
+// `path` is absolute or relative to `home`; empty means `home`. A trailing `/`
+// is allowed. Returns nothing for a path containing `..`: the element rejects
+// those, so one arriving here is untrusted.
 std::optional<base::FilePath> ResolvedPath(const base::FilePath& home,
                                            std::string_view path);
 
-// The names in `directory`, each a directory's ending in `/` -- the spelling
-// `found_files` uses -- in no order. Nothing for a path that is not a
-// directory this process can read.
+// The unordered names in `directory`, with a trailing `/` on directories as in
+// `found_files`. Returns nothing if `directory` is not a readable directory.
 //
-// Blocking, so it runs on the thread pool.
+// Blocking, so call it on the thread pool.
 std::optional<std::vector<std::string>> DirectoryEntries(
     const base::FilePath& directory);
 
@@ -49,29 +41,25 @@ std::optional<std::vector<std::string>> DirectoryEntries(
 // kOpenMultiple, which takes at least one.
 bool IsAnswerFor(mojom::WebViewFileChooserMode mode, size_t count);
 
-// The file extensions an `accept` list names, lower case and without the dot.
+// The file extensions an `accept` list names, lowercase and without the dot.
 //
-// A picker has a name to go on and nothing else, so `image/*` is turned into
-// the names an image has here rather than there. A MIME type the browser knows
-// no extension for adds nothing -- which leaves a list that named only such
-// types empty, and empty is "anything". That is Chrome's own answer too: its
-// dialog falls back to all files when no filter survives.
+// The picker filters by file name, so MIME types such as `image/*` become
+// extensions. Unknown MIME types add nothing; an empty result means any file,
+// matching Chrome's dialog.
 std::vector<std::string> AcceptedExtensions(
     const std::vector<std::u16string>& accept_types);
 
-// The picker that answers a dialog of `type`: the same four a page's
-// `<input type="file">` is asked as. See
-// //chrome/browser/domicile/domicile_file_dialogs.h for which dialogs.
+// The picker mode for a dialog of `type`. See
+// //chrome/browser/domicile/domicile_file_dialogs.h for which dialogs use it.
 //
-// SELECT_NONE is no dialog, and nothing opens one.
+// `type` must not be SELECT_NONE.
 mojom::WebViewFileChooserMode ModeForDialog(ui::SelectFileDialog::Type type);
 
-// The file extensions a dialog's `types` name, lower case, as
-// AcceptedExtensions spells them.
+// The file extensions a dialog's `types` name, lowercase, as in
+// AcceptedExtensions.
 //
-// Empty -- anything -- when there are no types, and when the dialog keeps its
-// "all files" filter: a picker has no filters to switch between, so a dialog
-// that would let the user pick any file is one whose picker shows every file.
+// Empty, meaning any file, when there are no types or the dialog includes
+// "all files". The picker has no filter switcher, so it must show every file.
 std::vector<std::string> DialogExtensions(
     const ui::SelectFileDialog::FileTypeInfo* types);
 

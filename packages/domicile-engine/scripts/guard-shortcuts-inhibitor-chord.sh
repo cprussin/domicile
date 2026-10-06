@@ -1,91 +1,54 @@
 #!/usr/bin/env bash
-# A Meta chord pressed into the nested session, and which side took it.
+# Presses a Meta chord into the nested session and checks which side took it.
 #
 #   nix develop .#full --command \
 #     ./packages/domicile-engine/scripts/under-wayland.sh /build/chromium/src \
 #     ./packages/domicile-engine/scripts/guard-shortcuts-inhibitor-chord.sh /build/chromium/src
 #
-# WHAT THIS PROVES. With `--domicile-inhibit-host-shortcuts`, a chord the host
-# compositor has a binding for, pressed while the desktop's window has the
-# keyboard, reaches the page and does not fire the host's binding. Without the
-# switch, the same chord fires the binding and does not reach the page. So the
-# host honored the inhibitor patch `0038` asked for, and the switch is what
-# decides which side a chord lands on.
+# With `--domicile-inhibit-host-shortcuts`, a chord the host binds reaches the
+# page and does not fire the host binding. Without it, the binding fires and
+# the page gets nothing. So sway honors the inhibitor patch `0038` requests.
 #
-# WHAT IT DOES NOT PROVE: that any host other than sway honors the inhibitor,
-# that a physical keyboard's keys go the way a virtual one's do, that a shell's
-# SDK does anything useful with the key once it has it, or that the window
-# keeps the chords once another client has had the keyboard. And it is the
-# engine alone under sway, as `guard-shortcuts-inhibitor.sh` is, with the
-# switch passed by hand; `domicile-launch` is what passes it in a desktop.
+# Not covered: hosts other than sway, physical keyboards, what a shell's SDK
+# does with the key, or focus changes between clients. `domicile-launch`
+# passes the switch in a real desktop; here it is passed by hand.
 #
-# A GUARD OF ITS OWN, NOT MORE OF `guard-shortcuts-inhibitor.sh`, for three
-# reasons. That guard's claim is the request on the wire, and it is kept narrow
-# on purpose: a pass there says the engine ASKED, and a pass here says the host
-# did what it was asked. One exit status cannot carry both, and when the two
-# disagree — the request made and the chord still taken — that disagreement is
-# the finding, and it is only readable if they are two checks. Second, this
-# needs sway: the host's side of the reading is a binding installed over sway's
-# IPC, and the request guard runs under any host that carries the protocol,
-# including a person's own session. Third, that guard's instrument is
-# `WAYLAND_DEBUG=1`, which puts every key and frame on the wire into the log
-# this guard reads the page's console out of.
+# Separate from `guard-shortcuts-inhibitor.sh`, which checks only that the
+# engine sends the request. This checks that the host acts on it, needs sway's
+# IPC, and cannot use that guard's `WAYLAND_DEBUG=1` log, which floods the
+# engine log this reads.
 #
-# TWO OBSERVERS, ONE ON EACH SIDE, because the question is WHICH side took the
-# key and a reading on one side alone answers "not here" in the same voice for
-# "the other side took it" and "it went nowhere":
+# Two observers, one per side, so "not here" can be told apart from "nowhere":
 #
-#   the host   a sway binding on the chord, installed over IPC, whose command
-#              appends a line to `$HOST_LOG`. sway matches its bindings before
-#              it sends a key to the focused client and sends a matched key to
-#              nobody, so a line there is the host having taken it
+#   the host   a sway binding on the chord that appends a line to `$HOST_LOG`.
+#              sway does not forward a key that matched a binding
 #   the page   `guard-shortcuts-inhibitor-chord.js`, which logs every keydown
-#              that reaches its document to the console, which the engine
-#              writes to its own log
+#              to the console (the engine writes it to its log)
 #
-# AND EACH IS SHOWN TO SEE BEFORE IT IS BELIEVED NOT TO. Both claims rest on an
-# absence, and an absence is what a blind observer reports:
+# Each observer is calibrated first, since both claims rest on an absence:
 #
-#   the host's binding fires   the chord is pressed once BEFORE the engine is
-#     with nothing focused     started, at a compositor with no client in it and
-#                              so nothing to inhibit anything. It must write its
-#                              line, or the binding is not installed, not
-#                              matched for this keyboard, or cannot run its
-#                              command — and "the host did not take it" would be
-#                              true of every run
-#   a plain key reaches the    a key sway has no binding for, pressed once the
-#     page                     window is up. It must arrive, or the window does
-#                              not have the keyboard or the listener hears
-#                              nothing — and "the page did not get it" would be
-#                              true of every run
+#   host binding fires with    the chord pressed before the engine starts must
+#     nothing focused          write its line
+#   a plain key reaches the    a key sway does not bind, pressed once the window
+#     page                     is up, must arrive
 #
-# THE KEYS. `$CHORD_KEY` with Mod4 is the chord, and `$PLAIN_KEY` alone is the
-# plain key — a different key, so the page's reading of the chord cannot be
-# satisfied by the key that proved it could hear. Neither is a key sway's
-# default config binds with Mod4, because this also runs under a person's own
-# sway session, where the binding is taken out again on the way out.
+# `$CHORD_KEY` with Mod4 is the chord; `$PLAIN_KEY` is a different key so the
+# calibration cannot satisfy the chord check. Neither is bound by sway's
+# default config, since this can run in a person's own session.
 #
-# WHAT IT READS, each only worth anything if the one above it holds:
+# Readings, each meaningful only if the ones above it hold:
 #
-#   the engine is still running   or every reading after it died is a dead
-#                                 page's silence, and read as a cause
-#   a virtual keyboard came up    or nothing was pressed at all
-#   the binding was installed     swaymsg said so
-#   the binding fired, unfocused  the calibration above
+#   the engine is still running
+#   a virtual keyboard came up
+#   the binding was installed
+#   the binding fired, unfocused
 #   the page is listening         `GUARD listening`
-#   the plain key reached it      the other calibration; `GUARD focused` names
-#                                 which half is missing when it did not
-#   the chord went somewhere      one side or the other, or a key that went
-#                                 nowhere is not read as the host declining it
-#   which side took it            THE CLAIM
+#   the plain key reached it      `GUARD focused` shows which half failed
+#   the chord went somewhere
+#   which side took it            the claim
 #
-# HOW IT CAN FAIL. `NEGATIVE=1` is the same run with
-# `--domicile-inhibit-host-shortcuts` left off, and the chord must then fire the
-# binding and NOT reach the page. It passes through the same gates first,
-# because a control that could not have seen the page get the key has
-# established nothing by the page not getting it. One switch is the whole
-# difference between the runs, so a page that gets the chord only with it is a
-# page that gets it because of it.
+# `NEGATIVE=1` omits `--domicile-inhibit-host-shortcuts`; the chord must then
+# fire the binding and not reach the page. It passes the same gates first.
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
@@ -100,7 +63,7 @@ if [ -z "$CHROMIUM" ]; then
   exit 1
 fi
 
-# NEGATIVE=1 runs the same thing without the switch. See the header.
+# NEGATIVE=1 runs without the switch. See the header.
 NEGATIVE="${NEGATIVE:-0}"
 
 OUT="${OUT:-out/Domicile}"
@@ -109,47 +72,39 @@ PROFILE="${PROFILE:-/tmp/domicile-shortcuts-inhibitor-chord-profile}"
 WIDTH="${WIDTH:-1024}"
 HEIGHT="${HEIGHT:-768}"
 
-# How long the engine is given to load its page and the window to be given the
-# keyboard. Generous, because a cold start on a shared machine is most of it and
-# each wait ends the moment its line lands.
+# How long to wait for the page to load and the window to get the keyboard.
+# Generous for cold starts; each wait ends as soon as its line appears.
 FOR_SECONDS="${FOR_SECONDS:-90}"
 
-# How long a key is given to land. A key is a message to sway and one from it,
-# so this is slack for a busy machine rather than a budget.
+# Slack for a key to land on a busy machine.
 KEY_SECONDS="${KEY_SECONDS:-15}"
 
-# How long the side that did NOT take the chord is given to say otherwise. One
-# of the two readings is always an absence, and an absence can only be given
-# time.
+# How long the side that did not take the chord gets to report it.
 SETTLE_SECONDS="${SETTLE_SECONDS:-5}"
 
-# The keyboard outlives the run for the reason `guard-shortcuts-inhibitor.sh`
-# gives: the seat's keyboard capability goes with it, and the engine decides
-# whether to ask for an inhibitor once, where the window is set up.
+# Keep the keyboard alive for the whole run. See
+# `guard-shortcuts-inhibitor.sh`.
 KEYBOARD_LIVES_FOR_MS="${KEYBOARD_LIVES_FOR_MS:-300000}"
 
-# The chord and the plain key. See the header.
+# See the header.
 CHORD_KEY="y"
 PLAIN_KEY="u"
 CHORD="Mod4+$CHORD_KEY"
 
-# A run and its own control are two measurements, so they get two sets of logs.
+# A run and its control write separate logs.
 WHICH=""
 [ "$NEGATIVE" = "1" ] && WHICH="-negative"
 ENGINE_LOG="${ENGINE_LOG:-/tmp/domicile-shortcuts-inhibitor-chord$WHICH-engine.log}"
 KEYBOARD_LOG="${KEYBOARD_LOG:-/tmp/domicile-shortcuts-inhibitor-chord$WHICH-keyboard.log}"
 HOST_LOG="${HOST_LOG:-/tmp/domicile-shortcuts-inhibitor-chord$WHICH-host.log}"
 
-# EVERYTHING THIS STARTS IS GONE BEFORE IT RETURNS, for the reason
-# `guard-shortcuts-inhibitor.sh` gives at length: the keyboard is `wtype`
-# behind a `nix shell` wrapper and the engine a browser with children, so
-# neither pid a `&` hands back is the one that lives. Both carry
-# `lib-compositor-cleanup.sh`'s marker naming this guard.
+# Kill everything this starts before returning. The keyboard (`wtype` behind
+# `nix shell`) and the browser both fork, so the `&` pids are not the live ones;
+# both carry `lib-compositor-cleanup.sh`'s marker instead.
 #
-# AND SO IS THE BINDING. Under `under-wayland.sh` the sway it went into dies
-# after this returns, but a person's own session does not, and a Mod4 chord
-# left bound to a line in a log is a key taken off them.
-# `scripts/test-the-shortcuts-guards-leave-nothing-running.sh` holds both.
+# Also remove the binding: in a person's own session it would otherwise
+# capture a Mod4 chord.
+# `scripts/test-the-shortcuts-guards-leave-nothing-running.sh` checks both.
 BOUND=0
 cleanup() {
   if [ "$BOUND" = "1" ]; then
@@ -170,9 +125,8 @@ trap cleanup EXIT
   exit 1
 }
 
-# `wtype` and `swaymsg` live in nixpkgs rather than in either dev shell, and
-# are fetched the way `under-wayland.sh` fetches sway. `swaymsg` from the same
-# package, so it speaks the IPC of the sway that script started.
+# `wtype` and `swaymsg` come from nixpkgs, like sway in `under-wayland.sh`.
+# `swaymsg` from the same package speaks that sway's IPC.
 if command -v wtype >/dev/null; then
   WTYPE=(wtype)
 elif command -v nix >/dev/null; then
@@ -191,16 +145,13 @@ fi
 rm -f "$BROKER"
 rm -rf "$PROFILE"
 mkdir -p "$PROFILE"
-# Empty rather than absent, so that a count of its lines is a count and not an
-# error, and so that a line in it is this run's.
+# Truncate so the line count is this run's firings.
 : >"$HOST_LOG"
 
 # Whether the page said `$1`, as `1` or `0`.
 #
-# THE QUOTES ARE LOAD-BEARING. Chromium writes a console line as
-# `[...:INFO:CONSOLE:48] "GUARD keydown key=y meta=true", source: ...`, so a
-# message never ends where the line does — and without the closing quote,
-# `key=y` would match a key whose name begins with `y`.
+# Match the closing quote: Chromium logs `"GUARD keydown key=y meta=true",
+# source: ...`, and without it `key=y` would match any key starting with `y`.
 page_saw() { # $1 extended regular expression over one GUARD message
   grep -aqE "\"GUARD $1\"" "$ENGINE_LOG" 2>/dev/null && echo 1 || echo 0
 }
@@ -234,19 +185,16 @@ chord_landed() {
     page_said "keydown key=$CHORD_KEY meta=(true|false)"
 }
 
-# Whether the engine is still running, as opposed to gone or a zombie nobody
-# has reaped yet: field 3 of stat. `ENGINE_PID` is the browser's own pid,
-# because `env` execs it.
+# Whether the engine is running and not a zombie (field 3 of stat).
+# `ENGINE_PID` is the browser itself because `env` execs it.
 engine_running() {
   local stat
   stat="$( { cat "/proc/$ENGINE_PID/stat"; } 2>/dev/null )"
   [ -n "$stat" ] && [ "$(printf '%s\n' "${stat##*) }" | awk '{ print $1 }')" != Z ]
 }
 
-# How the engine ended, and where the guard was when it first found it so. A
-# later check does not move that. `wait` hands back the status of a child bash
-# has already reaped, which is what makes the signal a reading rather than a
-# line bash prints and the verdict never sees.
+# Records how the engine ended and where the guard first noticed. `wait`
+# returns an already-reaped child's status, so the signal is captured.
 engine_check() { # $1 where the guard is
   local status
   if [ -z "$ENGINE_EXIT" ] && ! engine_running; then
@@ -261,17 +209,9 @@ engine_check() { # $1 where the guard is
   fi
 }
 
-# The sway this is a client of, by its IPC socket.
-#
-# A session exports `SWAYSOCK` to what it starts, and a person's own does.
-# `under-wayland.sh` starts sway rather than being started by it, so the socket
-# is found where sway makes it — `$XDG_RUNTIME_DIR/sway-ipc.<uid>.<pid>.sock` —
-# and only one whose sway is still running counts: a sway killed outright leaves
-# its socket behind. Two live ones is two sessions, and picking one would be
-# installing the binding in a compositor this guard may not be a client of.
-# Its own lines and the pid-less ones. From the signal to the end of the stack
-# when there is one, whole: crux's stack was 32 frames and a tail of 30 lines
-# kept the bottom of it, so the frame naming what crashed was the one missing.
+# The engine's own lines plus pid-less ones (crashpad's). Prints from the
+# signal to the end of the stack trace when there is one, since a fixed tail
+# can cut off the crashing frame.
 engine_last_words() { # $1 the engine's pid, $2 its log
   local own
   own="$(awk -v own="[$1:" '!/^\[[0-9]+:[0-9]+:/ || index($0, own) == 1' "$2")"
@@ -282,6 +222,13 @@ engine_last_words() { # $1 the engine's pid, $2 its log
   fi
 }
 
+# The IPC socket of the sway this is a client of.
+#
+# Use `SWAYSOCK` if set. `under-wayland.sh` starts sway rather than being
+# started by it, so otherwise look for
+# `$XDG_RUNTIME_DIR/sway-ipc.<uid>.<pid>.sock` with a live pid (a killed sway
+# leaves its socket). Refuse if there is not exactly one, to avoid binding in
+# the wrong compositor.
 host_ipc_socket() {
   local candidate pid live=()
   if [ -n "${SWAYSOCK:-}" ]; then
@@ -300,17 +247,14 @@ host_ipc_socket() {
   echo "${live[0]}"
 }
 
-# Presses keys through a virtual keyboard of their own, under this guard's
-# marker like everything else it starts.
+# Presses keys through a separate virtual keyboard, under this guard's marker.
 press() { # wtype arguments
   env "$(compositor_env)" "${WTYPE[@]}" "$@" >>"$KEYBOARD_LOG" 2>&1
 }
 
-# 1. A keyboard on the host's seat, before the engine is started, exactly as
-#    `guard-shortcuts-inhibitor.sh` puts one there and for its reasons: without
-#    it a headless sway announces no keyboard, and the engine asks for no
-#    inhibitor against a seat without one. Here it is also the only way a key
-#    gets in at all, so the verdict refuses a run where it did not come up.
+# 1. Put a keyboard on the host seat before starting the engine. A headless
+#    sway has none otherwise, and the engine requests no inhibitor without one.
+#    See `guard-shortcuts-inhibitor.sh`.
 KEYBOARD_UP=0
 : >"$KEYBOARD_LOG"
 if [ ${#WTYPE[@]} -eq 0 ]; then
@@ -326,9 +270,8 @@ else
   echo "a virtual keyboard is on the host's seat"
 fi
 
-# 2. The host's observer: a binding on the chord whose command writes a line.
-#    `echo` because it is the shell's own, so the command sway runs needs
-#    nothing on its PATH but the `sh` it runs it with.
+# 2. The host observer: a binding whose command writes a line. `echo` is a
+#    shell builtin, so the command needs nothing on sway's PATH.
 if [ ${#SWAYMSG[@]} -eq 0 ]; then
   echo "no swaymsg and no nix to fetch one, so no binding can be installed" >&2
 elif ! SOCKET="$(host_ipc_socket)"; then
@@ -343,9 +286,8 @@ else
   fi
 fi
 
-# 3. THE HOST'S CALIBRATION: the chord, with no client on the host at all. The
-#    binding must fire, and what it wrote is the count the chord proper is read
-#    against.
+# 3. Host calibration: press the chord with no client. The binding must fire;
+#    later firings are counted from here.
 HOST_CALIBRATED=0
 if [ "$KEYBOARD_UP" = "1" ] && [ "$BOUND" = "1" ]; then
   press -M logo -k "$CHORD_KEY" -m logo
@@ -358,23 +300,19 @@ if [ "$KEYBOARD_UP" = "1" ] && [ "$BOUND" = "1" ]; then
 fi
 HOST_BEFORE="$(host_fired)"
 
-# 3b. THE SEAT'S KEYBOARD, AGAIN. That press was a wtype of its own, and when it
-#    exited sway's seat was left with no active keyboard: a client binding the
-#    keyboard then gets no keymap before its first modifiers, and the engine
-#    segfaulted on exactly that, in `xkb_state_update_mask` under
-#    `WaylandKeyboard::OnModifiers` (crux run 36232746099). The request guard
-#    never presses, which is why it never crashed. A hold presses Shift_L
-#    first, which makes it the seat's keyboard, keymap and all, and it outlives
-#    the engine; under the marker, so cleanup takes it with the rest.
+# 3b. Restore a seat keyboard. The calibration's wtype exited and left the
+#    seat with no active keyboard, so a new client gets modifiers before a
+#    keymap; the engine then segfaults in `xkb_state_update_mask` under
+#    `WaylandKeyboard::OnModifiers` (crux run 36232746099). A held Shift_L
+#    makes this wtype the seat keyboard for the rest of the run.
 if [ "$KEYBOARD_UP" = "1" ]; then
   env "$(compositor_env)" \
     "${WTYPE[@]}" -k Shift_L -s "$KEYBOARD_LIVES_FOR_MS" >>"$KEYBOARD_LOG" 2>&1 &
   sleep 1
 fi
 
-# 4. The engine, nested, on a domicile:// document, with the switch or without
-#    it. `--app` for the reason every guard here repeats: a tab strip above the
-#    shell is the difference between a desktop and a browser looking at a page.
+# 4. The engine, nested, on a domicile:// document, with or without the
+#    switch. `--app` avoids a tab strip above the shell.
 if [ "$NEGATIVE" = "1" ]; then
   SWITCH=()
   echo "starting the engine WITHOUT --domicile-inhibit-host-shortcuts"
@@ -398,15 +336,15 @@ ENGINE_PID=$!
 ENGINE_EXIT=""
 ENGINE_FOUND_DEAD=""
 
-# 5. The page's observer, and the window having the keyboard. Neither is fatal
-#    here: the verdict says what a run without them measured, and says it once.
+# 5. Wait for the page observer and for focus. Not fatal here; the verdict
+#    reports what is missing.
 wait_until "$FOR_SECONDS" page_said "listening" ||
   echo "the page never said it was listening" >&2
 wait_until "$FOR_SECONDS" page_said "focused" ||
   echo "the page never had focus" >&2
 engine_check "before the plain key"
 
-# 6. THE PAGE'S CALIBRATION: a key the host has no binding for.
+# 6. Page calibration: a key the host does not bind.
 if [ "$KEYBOARD_UP" = "1" ]; then
   press -k "$PLAIN_KEY"
   wait_until "$KEY_SECONDS" page_said "keydown key=$PLAIN_KEY meta=(true|false)" ||
@@ -414,8 +352,8 @@ if [ "$KEYBOARD_UP" = "1" ]; then
 fi
 engine_check "before the chord"
 
-# 7. THE CHORD. Waited for until one side has it, and then the other side is
-#    given its time to say it has it too.
+# 7. The chord. Wait until one side has it, then give the other side time to
+#    report it too.
 if [ "$KEYBOARD_UP" = "1" ]; then
   press -M logo -k "$CHORD_KEY" -m logo
   wait_until "$KEY_SECONDS" chord_landed ||
@@ -424,7 +362,7 @@ if [ "$KEYBOARD_UP" = "1" ]; then
 fi
 engine_check "after the chord"
 
-# THE READINGS, in the order the header lists them.
+# The readings, in header order.
 LISTENING=$(page_saw "listening")
 FOCUSED=$(page_saw "focused")
 PLAIN_ARRIVED=$(page_saw "keydown key=$PLAIN_KEY meta=(true|false)")
@@ -438,12 +376,9 @@ echo "keyboard=$KEYBOARD_UP bound=$BOUND calibrated=$HOST_CALIBRATED listening=$
 echo "the chord: host=$HOST_TOOK page=$PAGE_TOOK meta=$PAGE_META"
 echo
 
-# WHICH SIDE, and it is the whole of this script's judgment — decided here, in
-# a block `scripts/test-shortcuts-inhibitor-chord-guard.sh` runs directly,
-# rather than inferred from two logs by whoever opens the job. Every gate above
-# the mode is one both runs pass through, because each of them is an observer
-# that could not have seen, and a blind observer's "not here" is the cheapest
-# pass either run has.
+# The verdict. `scripts/test-shortcuts-inhibitor-chord-guard.sh` runs this
+# block directly. Both modes pass the same gates first, so a blind observer
+# cannot produce a pass.
 FAILURE=""
 PASSED=""
 if [ -n "$ENGINE_EXIT" ]; then
@@ -532,12 +467,9 @@ if [ -n "$PASSED" ]; then
 fi
 
 annotate "guard-shortcuts-inhibitor-chord: $FAILURE"
-# A DEAD ENGINE'S OWN LAST WORDS. Its children outlive it and go on writing to
-# the same log — on crux one wrote TLS errors for seventeen seconds after the
-# browser segfaulted, and they were all the log's tail showed — so these are
-# the browser's own lines and the ones with no pid on them, which is how
-# crashpad writes. The core is where a stack would be: crashpad's handler
-# replaces base's in-process one, and on crux it failed to read the process.
+# A dead engine's own last lines. Its children keep writing to the same log
+# after it dies, so filter to the browser's lines and crashpad's pid-less ones.
+# Show where the core went, since crashpad may fail to capture a stack.
 if [ -n "$ENGINE_EXIT" ]; then
   echo "what the engine (pid $ENGINE_PID) wrote before it died:" >&2
   engine_last_words "$ENGINE_PID" "$ENGINE_LOG" | cut -c1-200 | sed 's/^/  /' >&2

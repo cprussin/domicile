@@ -14,9 +14,8 @@
 namespace domicile {
 namespace {
 
-// Semaphore semantics rather than a counter: one read clears it, which is what
-// "drain everything and go back to sleep" wants. Non-blocking so that a drain
-// racing an empty queue returns instead of parking the compositor's thread.
+// Non-blocking so a drain of an empty queue does not block the compositor's
+// thread.
 int CreateEventFd() {
   const int fd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
   if (fd < 0) {
@@ -43,26 +42,21 @@ void EngineEventQueue::Push(const EngineEvent& event) {
   if (fd_ < 0) {
     return;
   }
-  // The write happens outside the lock: the reader may wake the moment this
-  // lands, and it takes the same lock to drain.
+  // Write outside the lock: the woken reader takes the same lock to drain.
   const uint64_t one = 1;
   if (HANDLE_EINTR(write(fd_, &one, sizeof(one))) != sizeof(one)) {
-    // EAGAIN means the counter is saturated at UINT64_MAX-1, which needs 2^64
-    // undrained events and cannot happen; anything else is a broken fd. Either
-    // way the event is queued and the next successful write wakes the reader
-    // for both.
+    // The event is still queued; the next successful write wakes the reader.
     PLOG(ERROR) << "domicile: could not signal the event fd";
   }
 }
 
 std::vector<EngineEvent> EngineEventQueue::Drain() {
   if (fd_ >= 0) {
-    // Read first, then take the queue. The other order would drop an event
-    // pushed between the two: the push would land in a vector already emptied,
-    // and its wakeup would be cleared by a read that came after it.
+    // Read before taking the queue. In the other order, a push between the
+    // two would have its wakeup cleared while its event stays queued.
     uint64_t count = 0;
     if (HANDLE_EINTR(read(fd_, &count, sizeof(count))) != sizeof(count)) {
-      // EAGAIN is the ordinary case for a caller that polls and finds nothing.
+      // EAGAIN is normal when nothing was queued.
     }
   }
   base::AutoLock locked(lock_);

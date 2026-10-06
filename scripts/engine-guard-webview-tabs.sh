@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
-# An extension's popup asking tabs.query for the active tab, and naming the
-# <webview> the shell focused -- every <webview> a tab to chrome.tabs.
+# Guard: an extension popup's tabs.query for the active tab names the
+# <webview> the shell focused. Every <webview> is a tab to chrome.tabs.
 #
-# Headless, with a stand-in for the compositor's end of the control socket, as
-# the extension-tray guard.
+# Headless, with a stand-in for the compositor's end of the control socket.
 #
-# Its control is the same run with the other window focused: the popup must
-# name that one, and not the claim's.
+# Control: the same run with the other window focused. The popup must name
+# that window.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

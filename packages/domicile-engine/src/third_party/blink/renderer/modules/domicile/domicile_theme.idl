@@ -1,31 +1,18 @@
 // Copyright 2026 Connor Prussin
 // SPDX-License-Identifier: MIT
 
-// Which way round the desktop is drawn.
+// The desktop's light or dark theme.
 //
-// The fourth writing of one closed set: `domicile_protocol::Theme` is what the
-// compositor serializes, `components/domicile/common/theme.h` is what the
-// browser process parses that against, this is what the page's own type system
-// knows, and `themeSchema` in `@domicile/chrome-sdk` is what a shell reads.
+// One of four copies of this set: `domicile_protocol::Theme`,
+// `components/domicile/common/theme.h`, this enum, and `themeSchema` in
+// `@domicile/chrome-sdk`.
 //
-// AN ENUM RATHER THAN A `DOMString` BECAUSE IT CROSSES IN BOTH DIRECTIONS,
-// which is what makes it different from `DomicileDisplay.transform` next door.
-// That one is read; this one is also *written* -- `setTheme()` takes it -- and
-// a `DOMString` parameter would let a shell hand the compositor a word no
-// desktop can be, which would travel all the way to the socket before anything
-// asked. The bindings refuse it here instead, at the call.
+// An enum rather than a `DOMString` because `setTheme()` takes it, so the
+// bindings reject an invalid value at the call. There is no `system` value:
+// the compositor owns the theme.
 //
-// THERE ARE TWO AND THERE IS NO `system`. A page under this engine has no
-// system to follow: Domicile is it. `prefers-color-scheme` still answers, as
-// it answers in any browser, and a shell that read it would be asking the
-// engine what the engine was told -- so the theme is a fact on this interface
-// rather than a media query.
-//
-// ORDER. WebIDL attaches no meaning to it; it is written in the X-macro's
-// order anyway, because `scripts/test-themes-agree.sh` compares all four
-// writings as sequences -- `mojom::Theme` is an `enum class : int32_t`
-// numbered by position, so two lists that agree on membership and disagree on
-// order fail nowhere and paint the desk the wrong way round.
+// Keep the order in sync with the other copies. `mojom::Theme` is numbered by
+// position, and `scripts/test-themes-agree.sh` compares the order.
 
 enum DomicileTheme {
   "dark",

@@ -23,7 +23,7 @@
 namespace domicile {
 namespace {
 
-// What Chrome's lookups reach through domicile_desk_hooks.h.
+// Answers Chrome's tab lookups through domicile_desk_hooks.h.
 class DeskHooks final : public extensions::domicile_desk::Desk {
  public:
   extensions::WindowController* WindowFor(
@@ -55,8 +55,8 @@ class DeskHooks final : public extensions::domicile_desk::Desk {
     return true;
   }
 
-  // CreateTabObject found no tab strip for a guest, so it said index -1 and
-  // inactive. The window it is a tab of knows both.
+  // CreateTabObject finds no tab strip for a guest, so it reports index -1
+  // and inactive. Fill both in from the guest's window.
   void AmendTab(content::WebContents& contents,
                 extensions::api::tabs::Tab& tab) override {
     DomicileWindowController* desk =
@@ -85,18 +85,15 @@ class DeskHooks final : public extensions::domicile_desk::Desk {
 }  // namespace
 
 void StartDesk(Profile* profile) {
-  // The process-wide half, once: the hooks, and the functions over Chrome's.
-  // PostProfileInit is after BrowserProcessImpl set the ExtensionsBrowserClient
-  // that ExtensionFunctionRegistry's first use registers Chrome's own
-  // functions from, so these land over them rather than under.
+  // Process-wide setup, once. By PostProfileInit, Chrome's own functions are
+  // registered, so these replace them rather than being replaced.
   static const bool installed = [] {
     static base::NoDestructor<DeskHooks> hooks;
     extensions::domicile_desk::Install(*hooks);
     RegisterDeskFunctions();
-    // The browser windows: the desk's tabs, opened and closed by guests and
-    // shown by <webview window>.
+    // Browser windows: tabs opened by guests and shown by <webview window>.
     StartBrowserWindows();
-    // DevTools, for a context menu's "inspect" and <webview>.inspect().
+    // DevTools for the context menu's "inspect" and <webview>.inspect().
     WebViewGuest::SetInspect(base::BindRepeating(&OpenDevTools));
     return true;
   }();
@@ -115,9 +112,9 @@ void AddToDesk(content::WebContents& guest) {
     desk.Add(guest);
     return;
   }
-  // A browser window opened as a popup window's tab. If the popup window no
-  // longer awaits a tab (windows.remove ran first), the guest still needs a
-  // window, so it joins the desk's and logs a warning.
+  // A browser window opened as a popup window's tab. If the popup is no
+  // longer waiting (windows.remove ran first), the guest joins the desk's
+  // window instead.
   DomicileWindowController* popup = desk.PopupAwaitingTab(*popup_window);
   if (popup == nullptr) {
     LOG(WARNING) << "domicile: a <webview> named popup window " << *popup_window

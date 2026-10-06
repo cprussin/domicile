@@ -20,14 +20,13 @@ DEFINE_UI_CLASS_PROPERTY_TYPE(display::ScreenInfos*)
 namespace content {
 namespace {
 
-// On the contents' own window, and read from any window under it: every
-// RenderWidgetHostView the contents makes -- one per renderer the page goes
-// through -- puts its own window there. Walked by hand, because aura::Window
-// does not cascade properties to its children.
+// Set on the contents' window and read from its descendants, since each
+// RenderWidgetHostView (one per renderer) adds a child window. Looked up by
+// walking parents because aura::Window does not inherit properties.
 DEFINE_OWNED_UI_CLASS_PROPERTY_KEY(display::ScreenInfos,
                                    kDomicileDeskScreenInfosKey)
 
-// gfx::Rect* is aura's property type (aura_constants.h), not defined again.
+// aura_constants.h already defines the gfx::Rect* property type.
 DEFINE_OWNED_UI_CLASS_PROPERTY_KEY(gfx::Rect, kDomicileDeskPageBoundsKey)
 
 struct Desk {
@@ -40,11 +39,10 @@ Desk& TheDesk() {
   return *desk;
 }
 
-// Not a frame sink parent of the page. viz gives a sink the BeginFrameSource of
-// its first parent, and after a detach reattaches from sources ordered by
-// pointer, so a presenter as a second parent could leave the page ticking at a
-// slower monitor. The mirrored surface layer references the page's surface,
-// which is all viz needs to draw it here.
+// Not a frame sink parent of the page. viz gives a sink its first parent's
+// BeginFrameSource and, after a detach, picks by pointer order, so a second
+// parent could leave the page ticking at a slower monitor. Referencing the
+// page's surface is enough for viz to draw it here.
 class Mirror : public DomicileDeskMirror {
  public:
   explicit Mirror(RenderWidgetHostViewBase* view)
@@ -120,10 +118,9 @@ std::optional<display::ScreenInfos> DomicileDeskScreenInfosFor(
     const display::ScreenInfos* infos =
         window->GetProperty(kDomicileDeskScreenInfosKey);
     if (infos != nullptr) {
-      // Where the page is on the engine's screen, which is where every
-      // widget in it is told it is: so a monitor's rect, from the page's
-      // corner, is put on that screen too, and a <webview> finds its own
-      // place among the monitors by its own rect.
+      // Offset each monitor's rect by the page's screen position, so widgets
+      // in the page (including a <webview>) can find their monitor from their
+      // own screen rect.
       display::ScreenInfos placed = *infos;
       const gfx::Vector2d corner =
           window->GetBoundsInScreen().origin().OffsetFromOrigin();

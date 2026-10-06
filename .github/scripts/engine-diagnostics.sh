@@ -1,18 +1,15 @@
 #!/usr/bin/env bash
-# Everything a failed engine run wrote down, in the order it is read: from the
-# end.
+# Prints the logs of a failed engine run, most useful summary last.
 #
-# A script rather than an inline `run:` block because GitHub echoes a step's
-# script into the log before running it, and a long one buries the failure
-# above it under its own source.
+# A separate script because GitHub echoes an inline `run:` block into the log,
+# which would bury the failure under the script's source.
 set -u
 
 # shellcheck source=packages/domicile-engine/scripts/lib-last-words.sh
 . "$(dirname "$0")/../../packages/domicile-engine/scripts/lib-last-words.sh"
 
-# A glob rather than a list: each guard writes its own file and its negative
-# control writes a `-negative` one beside it, and a list is a thing to forget
-# to update when a guard is added.
+# A glob covers each guard's log and its negative control's `-negative` log
+# without a list to update.
 for log in /tmp/domicile-under-wayland.log \
            /tmp/domicile-*-compositor.log \
            /tmp/domicile-*-bridge.log; do
@@ -25,15 +22,13 @@ for log in /tmp/domicile-under-wayland.log \
   echo "::endgroup::"
 done
 
-# The browser's side, which is where the page's own account of what it embedded
-# is. `domicile:` covers both the page's console lines and the embedder's, so
-# which element asked for which app and which SurfaceId it got back are in one
-# place with the browser's errors.
+# Engine logs. `domicile:` matches both the page's console lines and the
+# embedder's, so embeds and browser errors appear together.
 for log in /tmp/domicile-*-engine.log; do
   [ -f "$log" ] || continue
   echo "::group::$log"
   grep -aE 'domicile:|CONSOLE|:FATAL:|ERROR:' "$log" | cut -c1-300 | tail -40 || true
-  # Whole, and uncut: the frames under the fatal line name the failed check.
+  # Uncut: the stack frames under the fatal line name the failed check.
   crash="$(crash_of "$log")"
   if [ -n "$crash" ]; then
     echo "--- the crash:"
@@ -47,8 +42,7 @@ done
 echo "the render node:"
 ls -l /dev/dri 2>&1 | sed 's/^/  /' || true
 
-# Dead last: a failed job's log is read from the end, and how far down the
-# sequence it got is four numbers rather than four hundred lines.
+# Summaries go last because a failed job's log is read from the end.
 echo "counts, per log:"
 for log in /tmp/domicile-*-compositor.log; do
   [ -f "$log" ] || continue
@@ -61,13 +55,9 @@ for log in /tmp/domicile-*-compositor.log; do
     "$(grep -ac 'never released' "$log" || true)"
 done
 
-# Which app, not which element: the embedder logs the app id it was asked for
-# and the SurfaceId it got, and the element that asked is not in the line.
-#
-# With the filename, and not deduplicated across files. Each guard and each of
-# its negative controls writes its own log, so a bare `sort -u` over all of
-# them puts the control's embeds in the same list as the run that failed with
-# nothing to say which was which.
+# The embedder logs the app id and the SurfaceId it got, not the element.
+# Deduplicated per file so a negative control's embeds stay apart from the run
+# that failed.
 echo "which app embedded which surface:"
 for log in /tmp/domicile-*-engine.log; do
   [ -f "$log" ] || continue
@@ -75,19 +65,15 @@ for log in /tmp/domicile-*-engine.log; do
     cut -c1-200 | sort -u | sed "s|^|  $(basename "$log"): |" || true
 done
 
-# A window that maps, is brokered a sink and is configured has still shown
-# nothing until it commits a buffer the engine accepts. Two windows and one
-# line here is a different failure from two lines and one color on screen.
+# A window shows nothing until it commits a buffer the engine accepts, even
+# after it maps, gets a frame sink and is configured.
 echo "whose frames the engine took:"
 sed 's/\x1b\[[0-9;]*m//g' /tmp/domicile-*-compositor.log 2>/dev/null |
   grep -a "first frame" | sed 's/.*the engine took/  the engine took/' |
   cut -c1-200 | sort -u || true
 
-# Per file, because this is the block that separates "the color is in the
-# wrong place" from "the color is not on screen" from "nothing could be read",
-# and a run and its negative control give opposite answers on purpose. All
-# three of the probe's answers are matched: a summary that showed two of them
-# would merge the pair the third state was added to keep apart.
+# The probe's three answers: color found, color not drawn, window unreadable.
+# Per file, because a run and its negative control expect opposite answers.
 echo "what was looked for and found, if anything:"
 for log in /tmp/domicile-*-compositor.log; do
   [ -f "$log" ] || continue
@@ -96,16 +82,13 @@ for log in /tmp/domicile-*-compositor.log; do
     sort -u | sed "s|^|  $(basename "$log"): |" || true
 done
 
-# The latency run's own numbers, which are the whole of what that guard
-# measured and are four lines out of a log with thousands in it. Per file, so a
-# run and its negative control — which is meant to have measured nothing — are
-# not read as one.
+# The latency guard's measurements. Per file, so the negative control (which
+# measures nothing) is not mixed with the run.
 echo "what a keystroke cost, if it was measured:"
 for log in /tmp/domicile-*-compositor.log; do
   [ -f "$log" ] || continue
-  # Capped like every other loop here. A run reports about eight lines, but a
-  # `press_went_nowhere` warns once per round, and sixty of those would bury
-  # the numbers this section exists to show.
+  # Capped because `press_went_nowhere` warns once per round and would bury
+  # the measurements.
   sed 's/\x1b\[[0-9;]*m//g' "$log" 2>/dev/null |
     grep -aE 'latency( |:)' | tail -20 | cut -c1-200 |
     sed "s|^|  $(basename "$log"): |" || true

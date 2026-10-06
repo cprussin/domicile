@@ -1,47 +1,38 @@
 #!/usr/bin/env bash
-# An `<input type="file">` clicked inside a browser window, and the file the
-# shell answers with arriving in the page.
+# Checks that clicking an `<input type="file">` in a browser window asks the
+# shell, and that the file the shell picks reaches the page.
 #
 #   nix develop .#full --command \
 #     ./packages/domicile-engine/scripts/guard-webview-upload.sh /build/chromium/src
 #
-# Headless, like the other webview guards: nothing here is measured in pixels.
+# Runs headless. The guest's RunFileChooser dispatches `domicile-file-chooser`
+# on the element. The shell lists a directory with the event's `list()`, then
+# answers with an absolute path.
 #
-# WHY THIS EXISTS. A file input in a browser window did nothing: the guest's
-# WebContentsDelegate had content's default RunFileChooser, which cancels. The
-# guest now asks the element, the element dispatches `domicile-file-chooser`,
-# and the shell answers with a path. That path is ABSOLUTE here, and the shell
-# LISTS its directory first with the event's `list()`, as a picker walking the
-# filesystem rather than the home's index does.
+# Asserts, in order (each step depends on the previous one):
 #
-# WHAT IT ASSERTS, in order, because each answer is only worth anything if the
-# one before it holds:
-#
-#   the shell page ran                or nothing here was ever set up
-#   a press reached the shell's        the harness can deliver a click at all
+#   the shell page ran
+#   a press reached the shell's        the harness can deliver clicks
 #     document
-#   the page in the window ran         a guest was made, attached, navigated
+#   the page in the window ran         a guest was created and navigated
 #   the press landed in the guest      on the input, which fills the page
 #   the browser was asked              WebViewGuest::RunFileChooser ran
-#   the shell was asked                the question crossed to the element
-#   the shell listed the directory     `list()` crossed to the browser and
-#                                      back with the picked file's name
+#   the shell was asked                the event reached the element
+#   the shell listed the directory     `list()` returned the picked file
 #   the shell answered                 its answer did not throw
-#   the page READ the file             THE CLAIM: the name, and the contents --
-#                                      which a renderer can read only if the
-#                                      browser granted it the file
+#   the page read the file             the assertion: name and contents; a
+#                                      renderer can read the contents only if
+#                                      the browser granted it the file
 #
-# A UNIT TEST CANNOT MAKE THIS CLAIM: the shell's own tests dispatch the event
-# themselves, and happy-dom has no guest and no browser to grant a file.
+# Unit tests cannot check this: happy-dom has no guest and no browser to grant
+# a file.
 #
-# HOW IT CAN FAIL. NEGATIVE=1 runs the same click with a shell that takes the
-# question and CANCELS. The page must get no file and must hear the cancel --
-# which separates "the answer reached the page" from "the page is handed this
-# file whatever the shell says".
+# NEGATIVE=1 runs the control: the shell cancels, and the page must get no
+# file and must see the cancel event. This shows the page receives the shell's
+# answer rather than a fixed file.
 #
-# THE HOME IS THIS GUARD'S OWN. `HOME` points the engine at a directory made
-# here, with the file in it, so the path the shell answers with names a file
-# this guard wrote and nothing of the machine's.
+# `HOME` points at a directory this script creates, so the picked path never
+# names a file on the machine.
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
@@ -66,8 +57,7 @@ PROFILE="${PROFILE:-/tmp/domicile-webview-upload-profile}"
 HOME_DIR="${HOME_DIR:-/tmp/domicile-webview-upload-home}"
 WIDTH="${WIDTH:-1024}"
 HEIGHT="${HEIGHT:-768}"
-# Not `STRIP`, which a build shell exports as a program -- see
-# guard-webview-new-window.sh.
+# Not `STRIP`: build shells export that as the strip program.
 STRIP_HEIGHT="${STRIP_HEIGHT:-64}"
 CHROME_X=$((WIDTH / 2))
 CHROME_Y=$((STRIP_HEIGHT / 2))
@@ -77,9 +67,8 @@ WINDOW_Y=$((STRIP_HEIGHT + (HEIGHT - STRIP_HEIGHT) / 2))
 
 FOR_SECONDS="${FOR_SECONDS:-90}"
 
-# What the shell picks -- absolute, under this guard's home -- the directory it
-# lists first, relative to the `home` the event reports, and what is in the
-# file.
+# LISTED is the directory the shell lists, relative to the event's `home`.
+# PICK is the absolute path it answers with. TEXT is the file's contents.
 LISTED="picked"
 PICK="$HOME_DIR/$LISTED/guard-upload.txt"
 TEXT="a file the shell picked"
@@ -164,14 +153,14 @@ DEBUG_PORT="$(devtools_port "$PROFILE" "$TRIES")" || {
   exit 1
 }
 
-# 3. A page in the window, and a settle for its first frame -- a press is hit
-#    tested against frames, not against a page having run.
+# 3. Wait for the guest page, then for its first frame: hit testing uses
+#    frames, so a loaded page is not enough.
 wait_for_line "$TRIES" "GUARD upload-loaded" "$ENGINE_LOG" ||
   echo "nothing ever loaded in the window" >&2
 sleep 3
 
-# 4. THE BEFORE: a press on the shell's own strip, which turns the absences
-#    below into measurements.
+# 4. Click the shell's strip first. If that click arrives, a missing event
+#    below means a real failure, not a broken harness.
 python3 "$SCRIPTS/guard-webview-click-mouse.py" \
   --port "$DEBUG_PORT" --x "$CHROME_X" --y "$CHROME_Y" \
   >"$CLICK_LOG" 2>&1 ||
@@ -179,14 +168,14 @@ python3 "$SCRIPTS/guard-webview-click-mouse.py" \
 wait_for_line 20 "GUARD chrome-mousedown" "$ENGINE_LOG" ||
   echo "the shell's document never reported the first click" >&2
 
-# 5. THE CLICK THIS GUARD IS ABOUT, on the input. A real press, because a file
-#    input opens a chooser only for a user's gesture.
+# 5. Click the input. It must be real input: a file input opens a chooser
+#    only on a user gesture.
 python3 "$SCRIPTS/guard-webview-click-mouse.py" \
   --port "$DEBUG_PORT" --x "$WINDOW_X" --y "$WINDOW_Y" \
   >>"$CLICK_LOG" 2>&1 ||
   echo "the click into the window could not be driven; see $CLICK_LOG" >&2
 
-# A fixed wait, because the control's readings are absences.
+# A fixed wait: the control checks for events that must not arrive.
 sleep 10
 
 saw() { # $1 pattern
@@ -197,14 +186,14 @@ SAW_SHELL=$(saw "GUARD shell-loaded")
 SAW_PAGE=$(saw "GUARD upload-loaded")
 SAW_CHROME=$(saw "GUARD chrome-mousedown")
 SAW_GUEST=$(saw "GUARD guest-mousedown")
-# The browser's own line, from WebViewGuest::RunFileChooser: it separates "the
-# page opened no chooser" from "it did, and the shell was never told".
+# Logged by WebViewGuest::RunFileChooser. Tells "no chooser opened" apart from
+# "the shell was never told".
 SAW_BROWSER=$(saw "domicile: a <webview>'s page asked for a file; asking the shell.")
 SAW_ASKED=$(saw "GUARD file-chooser mode=open ")
 SAW_LISTED=$(saw "GUARD listed $(basename "$PICK")")
 SAW_ANSWERED=$(saw "GUARD answered")
-# Name and contents as one string: the contents are what say the browser
-# granted this renderer the file.
+# Matches the contents too: reading them proves the browser granted the
+# renderer the file.
 SAW_PICKED=$(saw "GUARD picked name=$(basename "$PICK") text=$TEXT")
 SAW_ANY_PICK=$(saw "GUARD picked name=")
 SAW_NOTHING=$(saw "GUARD picked-nothing")
@@ -215,7 +204,8 @@ echo "the browser was asked=$SAW_BROWSER; the shell was asked=$SAW_ASKED, listed
 echo "the page got: the file=$SAW_PICKED any file=$SAW_ANY_PICK nothing=$SAW_NOTHING"
 echo
 
-# WHICH END TO BLAME, run directly by `scripts/test-webview-upload-guard.sh`.
+# Map the readings to a verdict. `scripts/test-webview-upload-guard.sh` runs
+# this block directly.
 FAILURE=""
 PASSED=""
 if [ "$SAW_SHELL" != "1" ]; then

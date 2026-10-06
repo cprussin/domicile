@@ -56,37 +56,30 @@
 namespace domicile {
 namespace {
 
-// One at a time is what this is: a command is typed, answered and over. The
-// backlog is what a second `domicile load-shell` racing the first waits in
-// rather than being refused by the kernel.
+// Commands are served one at a time. The backlog lets a concurrent
+// `domicile load-shell` wait instead of being refused by the kernel.
 constexpr int kBacklog = 4;
 
 constexpr int kReadBufferSize = 4 * 1024;
 
-// A request is a path and a filename. Anything past this is not one, and a
-// peer that never sends a newline must not be able to grow this process's
-// heap by holding a socket open.
+// Caps a request line so a peer that never sends a newline cannot grow the
+// heap.
 constexpr size_t kMaxRequestSize = 64 * 1024;
 
-// How long viz may take to read the desk back. Under the supervisor's wait
-// for the engine, so a timeout here reaches the terminal as this engine's
-// refusal.
+// How long viz may take to read the desk back. Shorter than the supervisor's
+// wait, so a timeout reaches the terminal as this engine's refusal.
 constexpr base::TimeDelta kCaptureTimeout = base::Seconds(5);
 
-// Whoever can open the path may command the desktop, and this is the belt to
-// that brace: the socket lives in the supervisor's own runtime directory, and
-// this says in one line that a process running as somebody else is not the
-// supervisor even if it gets there.
+// Accepts only peers running as this user. The socket's directory already
+// limits access; this is a second check.
 bool ConnectedByUs(const net::UnixDomainServerSocket::Credentials& peer) {
   return peer.user_id == getuid();
 }
 
 // The shell's window, or null when this browser has none.
 //
-// By scheme rather than by counting windows: a desktop's shell is the page
-// served over domicile://, and a `<webview>` guest is not a window of its own,
-// so this names the thing it means. In creation order, so the answer does not
-// depend on which window the user touched last.
+// Matched by the domicile:// scheme. Searched in creation order so the result
+// does not depend on which window was last focused.
 content::WebContents* FindShellContents() {
   content::WebContents* shell = nullptr;
   GlobalBrowserCollection::GetInstance()->ForEach(
@@ -104,17 +97,10 @@ content::WebContents* FindShellContents() {
   return shell;
 }
 
-// Serve this shell from now on, and put it on the screen.
+// Serves the shell at `root`/`module` and reloads the shell window.
 //
-// The source first and the navigation second, because the navigation is what
-// reads the source: ShellURLLoaderFactory is rebuilt per navigation by the
-// embedder and `ServeDocument` reads the module per request, so the document
-// this reload gets is written against the shell that was just set.
-//
-// BYPASSING_CACHE, and that is the case this exists for rather than
-// fastidiousness. A rebuilt shell is the same URL -- `domicile://shell/` and
-// the `shell.js` under it -- with different bytes behind it, which is exactly
-// the shape a cache is entitled to answer from memory.
+// The source is set before the reload because the reload reads it.
+// BYPASSING_CACHE because a rebuilt shell has the same URLs with new content.
 bool LoadShellIntoTheShellWindow(const base::FilePath& root,
                                  const std::string& module) {
   CHECK_CURRENTLY_ON(content::BrowserThread::UI);
@@ -175,10 +161,9 @@ void OnDeskCopied(const base::FilePath& file,
 
 // Writes a PNG of the shell page to `file`.
 //
-// The page is the whole desk: on a tty it spans every monitor
-// (docs/architecture/ONE-PAGE-FOR-THE-DESK.md), and a copy of its surface is
-// aggregated with every `<app>` embedded in it. It is copied at the page's
-// own scale, unrotated.
+// The page spans every monitor on a tty
+// (docs/architecture/ONE-PAGE-FOR-THE-DESK.md). The copy includes every
+// embedded `<app>`, at the page's scale, unrotated.
 void ScreenshotTheDesk(const base::FilePath& file, ScreenshotDone done) {
   CHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
@@ -196,13 +181,9 @@ void ScreenshotTheDesk(const base::FilePath& file, ScreenshotDone done) {
 
 // One request line, answered from the UI thread.
 //
-// THE HOP IS HERE BECAUSE THE SEQUENCE IS. `ShellSource` takes no lock: it is
-// read where the shell's URLLoaderFactory is built and asked, which is the UI
-// thread, and applying a shell has to navigate a window, which is the UI
-// thread's too. So whatever carries a command in is what posts -- and this
-// posts the line rather than the parse, which costs a JSON read of one short
-// line on the UI thread and buys one function that is the whole protocol.
-// `reply` is bound to the IO thread, so a screenshot may answer from any.
+// Runs on the UI thread because `ShellSource` is unlocked and UI-thread only,
+// and loading a shell navigates a window. `reply` is bound to the IO thread,
+// so it may be called from any thread.
 void AnswerOnUIThread(const std::string& line, CommandReply reply) {
   CHECK_CURRENTLY_ON(content::BrowserThread::UI);
   AnswerCommand(line, &LoadShellIntoTheShellWindow, &OpenUrlInABrowserWindow,
@@ -211,10 +192,8 @@ void AnswerOnUIThread(const std::string& line, CommandReply reply) {
 
 // The socket the supervisor dials, on the browser's IO thread.
 //
-// One connection at a time, because one connection is one request: a second
-// client waits in the backlog rather than interleaving with the first. Built
-// once and never torn down -- a desktop that stopped taking commands halfway
-// through its life would be a state nothing here can report.
+// Serves one connection at a time; each connection carries one request. Lives
+// for the life of the browser.
 class CommandSocket {
  public:
   CommandSocket()
@@ -230,12 +209,9 @@ class CommandSocket {
 
   void Listen(const std::string& path) {
     CHECK_CURRENTLY_ON(content::BrowserThread::IO);
-    // Loudly, rather than logging and carrying on. --domicile-command-socket
-    // is explicit: somebody asked for a socket at this path, and a desktop
-    // that quietly has not got one looks from the outside exactly like a
-    // `load-shell` that did nothing, which is the wrong thing to go and debug.
-    // A leftover file from a dead engine lands here too -- the path belongs to
-    // the supervisor, which makes a fresh one per run.
+    // Crash on failure: the socket was asked for, and a missing one would
+    // look like a `load-shell` that did nothing. The supervisor makes a fresh
+    // path per run, so a stale file here is a bug too.
     const int result = listener_.BindAndListen(path, kBacklog);
     CHECK_EQ(result, net::OK)
         << "domicile: could not listen on " << path << ": "
@@ -256,10 +232,8 @@ class CommandSocket {
 
   void OnAccept(int result) {
     if (result != net::OK) {
-      // Not a retry, and that is deliberate. `Accept` fails here only when the
-      // listener itself is broken, and an error that repeats synchronously
-      // would spin this thread for the life of the browser -- which is worse
-      // than a socket that says, once, that it has stopped.
+      // No retry: `Accept` fails only when the listener is broken, and a
+      // synchronous error would spin this thread forever.
       LOG(ERROR) << "domicile: the command socket stopped accepting: "
                  << net::ErrorToString(result)
                  << ". This desktop will not take further commands.";
@@ -280,8 +254,7 @@ class CommandSocket {
 
   void OnRead(int result) {
     if (result <= 0) {
-      // Zero is the peer closing before it finished a line. There is nothing
-      // to answer and nobody to answer to.
+      // The peer closed or failed before sending a full line.
       Close();
       return;
     }
@@ -299,9 +272,8 @@ class CommandSocket {
       return;
     }
 
-    // ONE CONNECTION IS ONE REQUEST, so whatever follows the first newline is
-    // not a second command -- it is a client that does not speak this
-    // protocol, and it is dropped with the connection.
+    // One request per connection: anything after the first newline is
+    // dropped.
     content::GetUIThreadTaskRunner({})->PostTask(
         FROM_HERE,
         base::BindOnce(
@@ -341,9 +313,7 @@ class CommandSocket {
     }
   }
 
-  // The answer is over when the reply is on the wire: the supervisor reads
-  // until end of stream, so closing is how it learns the line was the whole
-  // answer.
+  // Closing ends the reply: the supervisor reads until end of stream.
   void Close() {
     connection_.reset();
     request_.clear();
@@ -377,10 +347,8 @@ void StartCommandSocket() {
     return;
   }
 
-  // The IO thread, because a net socket needs a sequence with an IO message
-  // pump and the browser already has one. A thread of its own would be more
-  // machinery than the traffic justifies: one bind at startup, and one short
-  // line per command a person types.
+  // A net socket needs an IO message pump; the IO thread has one, and the
+  // traffic is too light for a dedicated thread.
   content::GetIOThreadTaskRunner({})->PostTask(
       FROM_HERE,
       base::BindOnce(&ListenOnIOThread, command_line.GetSwitchValueASCII(

@@ -21,7 +21,7 @@ std::optional<DeskGeometry> DeskGeometryOf(const std::vector<DeskPlace>& lit) {
   for (const DeskPlace& place : lit) {
     desk.box.Union(place.desk);
     desk.scale = std::max(desk.scale, place.scale);
-    // Strictly faster, so the first of equals keeps it.
+    // Strictly faster, so ties keep the first.
     if (place.refresh_hz > fastest) {
       fastest = place.refresh_hz;
       desk.host = place.id;
@@ -48,8 +48,8 @@ display::ScreenInfos DeskScreenInfos(const DeskGeometry& desk,
           ? display::mojom::ScreenOrientation::kLandscapePrimary
           : display::mojom::ScreenOrientation::kPortraitPrimary;
   display::ScreenInfos infos(told);
-  // Ids of their own: a ScreenInfos holds each once, and the page's screen
-  // already has the host's. Negative, which no display's is.
+  // ScreenInfos needs unique ids and the host's is taken. Real display ids
+  // are never negative.
   int64_t id = -1000;
   for (const DeskPlace& place : lit) {
     display::ScreenInfo shown;

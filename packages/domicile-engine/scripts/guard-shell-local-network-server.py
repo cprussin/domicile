@@ -1,15 +1,13 @@
 #!/usr/bin/env python3
-"""The pages guard-shell-local-network.sh measures Local Network Access with.
+"""HTTP server for guard-shell-local-network.sh's Local Network Access check.
 
-`/picture` is the subject: an image of one flat color, which the probe looks
-for. `/shows?src=` is the control's page: an ordinary http document with that
-image in it, on the witness color, so the control can show the same picture
-from a page Local Network Access does apply to.
+- `/picture`: a flat-color image the probe looks for.
+- `/shows?src=`: a plain http page showing that image on the witness color,
+  for the control, where Local Network Access applies.
 
-The guard runs two of these. The engine is told one of them is public
-(`--ip-address-space-overrides`), so a picture fetched from the other is a
-request into the loopback space -- what a bookmark on localhost is to the
-shell.
+The guard runs two servers and marks one public with
+`--ip-address-space-overrides`, so fetching from the other is a loopback
+request, like a shell favicon for a bookmark on localhost.
 """
 
 import argparse
@@ -21,13 +19,12 @@ from urllib.parse import parse_qs, urlsplit
 PICTURE = "/picture"
 SHOWS = "/shows"
 
-# Stretched over the whole box, so every pixel of the <img> is the color.
+# Stretches over the whole <img>, so every pixel is the color.
 SVG = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1" \
 preserveAspectRatio="none"><rect width="1" height="1" fill="#{color}"/></svg>
 """
 
-# Inset the way the shell module insets its <img>, so both runs put the
-# picture in the same place.
+# Same inset as the shell module's <img>, so both runs place it alike.
 SHOWER = """<!doctype html>
 <html lang="en">
   <head>
@@ -59,7 +56,7 @@ SHOWER = """<!doctype html>
 
 
 class Pictures(BaseHTTPRequestHandler):
-    """Answers the two paths above, and everything else with a 404."""
+    """Serves the two paths above; anything else is a 404."""
 
     # Set by main(): BaseHTTPRequestHandler is instantiated per request.
     color = "000000"
@@ -71,8 +68,8 @@ class Pictures(BaseHTTPRequestHandler):
             self.send(SVG.format(color=self.color), "image/svg+xml")
         elif split.path == SHOWS:
             src = parse_qs(split.query).get("src", [])
-            # An empty <img> renders what a blocked one renders, so serving one
-            # would hand the control a pass it has no right to.
+            # An empty <img> looks like a blocked one and would pass the
+            # control falsely.
             if len(src) == 1:
                 self.send(
                     SHOWER.format(
@@ -90,15 +87,15 @@ class Pictures(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
-        # So no run is answered out of another's cache: LNA retries a cached
-        # response over the network rather than reading the cache's verdict.
+        # Keep runs from sharing a cache: LNA re-checks a cached response over
+        # the network.
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(body)
 
     def log_message(self, fmt, *args):
-        # To stderr, which the guard keeps: whether the picture was ever
-        # requested tells "blocked before it left" from "never asked for".
+        # The guard keeps stderr. A request here tells "blocked" from "never
+        # asked for".
         sys.stderr.write("%s - %s\n" % (self.address_string(), fmt % args))
 
 
@@ -114,7 +111,7 @@ def main():
 
     Pictures.color = arguments.color
     Pictures.witness = arguments.witness
-    # 127.0.0.1, not 0.0.0.0: nothing off this machine has any business here.
+    # Loopback only.
     server = ThreadingHTTPServer(("127.0.0.1", arguments.port), Pictures)
     print(
         "serving %s and %s on 127.0.0.1:%d"

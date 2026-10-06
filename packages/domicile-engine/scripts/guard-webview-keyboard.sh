@@ -1,81 +1,49 @@
 #!/usr/bin/env bash
-# A desktop chord, pressed while a browser window holds the keyboard.
+# Checks that a desktop chord pressed while a browser window holds the
+# keyboard still reaches the shell. See packages/domicile-engine/docs/GUARDS.md.
 #
 #   nix develop .#full --command \
 #     ./packages/domicile-engine/scripts/guard-webview-keyboard.sh /build/chromium/src
 #
-# No nested compositor and no Wayland client, exactly as guard-webview-framing.sh
-# runs: nothing here is measured in pixels, so `--ozone-platform=headless` with
-# software compositing is the whole of the environment.
+# Runs headless with software compositing: nothing here is measured in pixels.
 #
-# WHY THIS EXISTS. All desktop input enters through the chrome page, and a
-# browser window takes DOM focus out of it. `BrowserWindow.tsx` calls `view.focus()`, the shell's document then
-# receives no key events at all, and both of the shell's shortcut paths die with
-# it — the page's own `keydown` listener because there is no keydown, and the
-# compositor's claim because the compositor only ever sees the keys the chrome
-# forwards. So the chord that would put another window on screen is the one the
-# user can no longer press, and Alt-dragging a float stops working for the same
-# reason. The fix is a hook in the browser process, on the guest's own
-# WebContentsDelegate, and this is the assertion that it works.
+# A browser window's `view.focus()` moves DOM focus out of the shell document,
+# so the shell sees no keys and the compositor sees none to match. The guest's
+# WebContentsDelegate matches claimed chords in the browser process instead.
+# A unit test cannot check this: jsdom has no nested browsing context, so focus
+# never leaves the shell there.
 #
-# A UNIT TEST CANNOT MAKE THIS CLAIM. There is no nested browsing context in
-# jsdom, so `view.focus()` steals no keydown and `Alt+Tab` passes in
-# `Shell.test.tsx` today — and would keep passing with the whole path removed.
-# The claim is "a key pressed at the browser, while a page inside a window has
-# the keyboard, reaches the shell", and only a real engine can be asked it.
+# Checks, in order, since each depends on the one before:
 #
-# WHAT IT ASSERTS, in order, because each answer is only worth anything if the
-# one before it holds:
+#   the shell claimed a chord
+#   there is a page in the window       a guest was made, attached and navigated
+#   the element has the keyboard        or keys go to the shell
+#   nothing was relayed                 `grab_shortcut` never reaches the
+#                                        control socket: the browser process
+#                                        holds the claims
+#   the chord reached the shell         the main claim
+#   the modifiers reached the shell     needed for Alt-dragging a float
+#   an ungrabbed key reached the guest  seen as a modifier change only the
+#     and not the shell's document      guest's hook reports
+#   an unclaimed chord came back        Ctrl+R returns to the shell as
+#     and a plain key did not           `domicile-guest-keydown`
+#   the requested zoom arrives          the shell answers Ctrl+R with
+#                                        setZoom(1.5); the element reports it
+#                                        and the page's width changes
 #
-#   the shell claimed a chord           or nothing was ever asked for
-#   there is a page in the window       in the positive run, that a guest was
-#                                        made, attached and navigated
-#   the element has the keyboard        or the keystroke is being driven at the
-#                                        shell and the question is not the one
-#                                        this guard asks
-#   nothing was relayed                 `grab_shortcut` never crosses the control
-#                                        socket: the browser process holds the
-#                                        claims now
-#   the chord reached the shell         THE CLAIM
-#   the modifiers reached the shell     Alt-dragging a float needs exactly this
-#   an ungrabbed key reached the guest  measured on the browser side, by the
-#     and not the shell's document      modifiers it changed: only the guest's
-#                                        own hook can report that
-#   an unclaimed chord came back        Ctrl+R, which the page leaves alone,
-#     and a plain key did not           handed back to the shell as
-#                                        `domicile-guest-keydown` — how a
-#                                        browser window's chrome binds it
-#   the zoom it asks for arrives        the shell answers that chord with
-#                                        setZoom(1.5): the element reports the
-#                                        factor, and the page's own width moves
+# One key is pressed before the window takes the keyboard, and the shell
+# document must report it. Without that, "the shell did not see the second key"
+# could mean no page receives key events. If the first key is missing too, the
+# guard says so; the chord checks are browser-side and still count.
 #
-# BEFORE AND AFTER, WHICH IS WHAT MAKES THE LAST ONE A MEASUREMENT. "The shell's
-# document did not see the key" is worth nothing on its own — a page that never
-# receives a key event at all reads exactly the same. So a key is pressed BEFORE
-# the window takes the keyboard, and the shell's document must report it; the
-# window is handed the keyboard by that keystroke; and the second key must then
-# reach the guest and not this document. Where the first key does not arrive
-# either, the harness cannot deliver a DOM key event to any page in it and the
-# guard says so and decides nothing about the second — the claims about the
-# chord are browser-side and do not depend on it.
+# NEGATIVE=1 is the control: an <iframe> in place of the <webview>, with the
+# same keys. It takes the keyboard but has no guest delegate, so no chord may
+# fire. This separates the delegate's matching from a harness that drives no
+# key at all.
 #
-# HOW IT CAN FAIL, which is the part a guard is worth nothing without. NEGATIVE=1
-# lays out an <iframe> in place of the <webview>, identically, pointed at the
-# same page and driven with the same keystrokes. It takes the keyboard just as
-# thoroughly — that is the defect, not the guest — and it has no guest delegate
-# behind it, so no chord may fire. That pair separates "the browser process is
-# matching the chord" from "this harness is not driving a key at a focused
-# window at all", which are the two ways the positive run could be wrong and are
-# indistinguishable from inside it.
-#
-# THE CONTROL'S WINDOW IS EMPTY, and that is measured rather than intended: an
-# <iframe> on a domicile:// document does not load the http page the <webview>
-# loads happily, so the control demonstrates a focused subframe that is not a
-# guest rather than a focused *page* that is not a guest. It is enough for what
-# the control is for — the chord is the only reading it decides, and the element
-# has the keyboard either way — but it is a difference between the two runs
-# beyond the guest, so it is written down here rather than left to be
-# rediscovered. `$HTTP_LOG` says whether the page was ever even asked for.
+# The control's <iframe> stays empty: it does not load the http page on a
+# domicile:// document. The control only decides whether the chord fires, so
+# this does not matter. `$HTTP_LOG` shows whether the page was requested.
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
@@ -92,23 +60,19 @@ if [ -z "$CHROMIUM" ]; then
   exit 1
 fi
 
-# NEGATIVE=1 puts an <iframe> where the <webview> goes. See the header.
+# NEGATIVE=1 puts an <iframe> in place of the <webview>. See the header.
 NEGATIVE="${NEGATIVE:-0}"
 KIND="webview"
 [ "$NEGATIVE" = "1" ] && KIND="iframe"
 
-# Alt+Tab, the chord `Shell.tsx` claims, in every numbering the path needs it
-# in: evdev for the claim and for the guard's own arithmetic, a DOM code and key
-# for the event, and a VKEY because a keystroke with no `windowsVirtualKeyCode`
-# is one Blink cannot name.
+# Alt+Tab, the chord `Shell.tsx` claims: evdev for the claim, a DOM code and
+# key for the event, and a VKEY, without which Blink cannot name the key.
 CHORD_EVDEV="${CHORD_EVDEV:-15}"
 CHORD_CODE="Tab"
 CHORD_KEY="Tab"
 CHORD_VKEY=9
 
-# And two keys nobody claimed. `b` is pressed before the window has the
-# keyboard and `a` after, so the pair is a before and an after. 48 and 30 are
-# their evdev codes.
+# Two unclaimed keys: `b` before the window has the keyboard, `a` after.
 BEFORE_EVDEV=48
 BEFORE_CODE="KeyB"
 BEFORE_KEY="b"
@@ -118,8 +82,8 @@ PLAIN_CODE="KeyA"
 PLAIN_KEY="a"
 PLAIN_VKEY=65
 
-# And a chord nobody claimed and the page does not take, which the guest's
-# delegate must hand back to the shell: Ctrl+R, a browser window's reload.
+# Ctrl+R: unclaimed and unhandled by the page, so the guest's delegate must
+# return it to the shell.
 UNCLAIMED_EVDEV=19
 UNCLAIMED_CODE="KeyR"
 UNCLAIMED_KEY="r"
@@ -132,15 +96,11 @@ PROFILE="${PROFILE:-/tmp/domicile-webview-keyboard-profile}"
 WIDTH="${WIDTH:-1024}"
 HEIGHT="${HEIGHT:-768}"
 
-# How long the shell is given to load, ask for a guest, have one attached and
-# navigated, and hand it the keyboard. Generous, because every one of those is
-# asynchronous and this machine is shared.
+# Time for the shell to load, get a guest attached and navigated, and focus
+# it. Generous because each step is asynchronous and the machine is shared.
 FOR_SECONDS="${FOR_SECONDS:-90}"
 
-# A run and its own negative control are two measurements, so they get two sets
-# of logs. Sharing one file means the control's output overwrites the run's and
-# the diagnostics print whichever went last — which, when the two disagree, is
-# exactly the pair worth reading side by side.
+# Separate logs for the control, so it does not overwrite the positive run's.
 WHICH=""
 [ "$NEGATIVE" = "1" ] && WHICH="-negative"
 ENGINE_LOG="${ENGINE_LOG:-/tmp/domicile-webview-keyboard$WHICH-engine.log}"
@@ -168,9 +128,7 @@ command -v python3 >/dev/null || {
 
 rm -f "$BROKER" "$CONTROL"; rm -rf "$PROFILE"; mkdir -p "$PROFILE"
 
-# Waits for `$2` to appear in `$3`, for `$1` deciseconds' worth of quarter
-# seconds. Every gate in this script is a line in a log, because every one of
-# them is something a page or a browser says rather than a file it creates.
+# Waits for `$2` to appear in `$3`, for `$1` quarter seconds.
 wait_for_line() { # $1 tries, $2 pattern, $3 file
   for _ in $(seq 1 "$1"); do
     grep -qF "$2" "$3" 2>/dev/null && return 0
@@ -179,9 +137,8 @@ wait_for_line() { # $1 tries, $2 pattern, $3 file
   return 1
 }
 
-# 1. The page a browser window shows. Its own server rather than a real site,
-#    for the reason the framing guard has one: `crux` reaches no arbitrary host.
-#    Shared with guard-webview-click.sh, which needs the same thing of it.
+# 1. The guest page, from a local server: `crux` cannot reach arbitrary hosts.
+#    Shared with guard-webview-click.sh.
 rm -f "$HTTP_LOG"
 python3 "$SCRIPTS/guard-webview-guest-page.py" --port 0 \
   >"$HTTP_LOG" 2>&1 &
@@ -199,11 +156,10 @@ PORT="$(served_port "$HTTP_LOG")" || {
 SUBJECT="http://127.0.0.1:$PORT/page"
 echo "serving a browser window's page at $SUBJECT"
 
-# 2. The compositor's end of the control channel, which here is a stand-in.
-#    Without something listening, `ControlChannel` gives up after thirty seconds
-#    and closes the page's end — and the claim, the press and the modifiers all
-#    travel on it. It is also where "the claim is no longer relayed" is
-#    measured: `grab_shortcut` must never appear in its log.
+# 2. A stand-in for the compositor's end of the control channel. Without a
+#    listener, `ControlChannel` closes after thirty seconds, and the claim,
+#    press and modifiers travel on it. `grab_shortcut` must never appear in
+#    its log.
 rm -f "$SOCKET_LOG"
 python3 "$SCRIPTS/guard-webview-keyboard-socket.py" --socket "$CONTROL" \
   >"$SOCKET_LOG" 2>&1 &
@@ -214,14 +170,12 @@ wait_for_line 240 "listening on" "$SOCKET_LOG" || {
   exit 1
 }
 
-# 3. The engine, on a domicile:// document, because the browser binds both the
-#    control channel and WebViewGuestHost for that origin and no other. `--app`
-#    for the reason `domicile` uses it and every guard here repeats: the guard
-#    runs the configuration the product runs, or it is guarding something else.
+# 3. The engine, on a domicile:// document: the browser binds the control
+#    channel and WebViewGuestHost only for that origin. `--app` matches how
+#    `domicile` runs the engine.
 #
-#    `--remote-debugging-port` is how the keystroke gets in. There is no
-#    keyboard on this machine; see guard-webview-keyboard-key.py for why the
-#    path it takes is the same one a real key would.
+#    Keys are sent over `--remote-debugging-port`, since there is no keyboard.
+#    See guard-webview-keyboard-key.py.
 rm -f "$ENGINE_LOG"
 "$CHROMIUM/$OUT/chrome" \
   --ozone-platform=headless \
@@ -251,28 +205,19 @@ DEBUG_PORT="$(devtools_port "$PROFILE" "$TRIES")" || {
 }
 echo "the shell claimed Alt+Tab, showing a <$KIND>"
 
-# 4. There has to be a page in the window before any of this means anything.
+# 4. Wait for a page in the window.
 #
-#    NOT WAITED FOR IN THE CONTROL, and that is not a shortcut. The control
-#    replaces the <webview> with an <iframe>, which has no guest -- and
-#    `GUARD guest-loaded` comes from the guest page's own console. So the
-#    control waits the full `$TRIES` for a line its own setup removed, and
-#    then does not read the result: the verdict below reaches the `NEGATIVE`
-#    branch before it ever consults `SAW_PAGE`. Ninety seconds of a 1m45 step,
-#    measured on engine run 35496858205, spent establishing nothing.
-#
-#    The readings the control DOES rest on are waited for on their own: the
-#    claim at step 3 above and the focus at step 6 below, both of which an
-#    <iframe> reaches exactly as a <webview> does. That is the point of the
-#    control.
+#    Skipped in the control: an <iframe> has no guest, so `GUARD guest-loaded`
+#    never appears, and the verdict does not read `SAW_PAGE` in the control.
+#    Waiting would cost the full `$TRIES`. The control's readings, the claim
+#    (step 3) and the focus (step 6), are waited for separately.
 if [ "$NEGATIVE" != "1" ]; then
   wait_for_line "$TRIES" "GUARD guest-loaded" "$ENGINE_LOG" ||
     echo "nothing ever loaded in the window" >&2
 fi
 
-# 5. THE BEFORE. A key while the shell still has the keyboard, which the shell's
-#    own document must report — and which is also what hands the window the
-#    keyboard, so the ordering here is the experiment rather than a convenience.
+# 5. A key while the shell still has the keyboard. The shell document must
+#    report it, and it triggers focusing the window.
 python3 "$SCRIPTS/guard-webview-keyboard-key.py" \
   --port "$DEBUG_PORT" --code "$BEFORE_CODE" --key "$BEFORE_KEY" \
   --evdev "$BEFORE_EVDEV" --windows-key-code "$BEFORE_VKEY" \
@@ -282,15 +227,14 @@ python3 "$SCRIPTS/guard-webview-keyboard-key.py" \
 wait_for_line 20 "GUARD document-keydown code=$BEFORE_CODE" "$ENGINE_LOG" ||
   echo "the shell's document never reported the first key" >&2
 
-# 6. Then the keyboard moves. The shell takes it on that keystroke, and on a
-#    timer besides, so a harness that delivered no key event still gets here.
+# 6. The window takes the keyboard, on that key or on a timer if no key
+#    arrived.
 wait_for_line "$TRIES" "GUARD window-focused" "$ENGINE_LOG" ||
   echo "the element never became the shell document's activeElement" >&2
 
-# 7. THE AFTER: the chord, and then a key nobody claimed. In that order, so that
-#    the modifiers the chord reports are a change from nothing held and the
-#    plain key's are a change back — which is what says the guest's hook ran for
-#    a key it did not match, and is the only witness of that available here.
+# 7. The chord, then an unclaimed key. In that order, the plain key reports
+#    the modifiers changing back, which is the only sign that the guest's hook
+#    ran for a key it did not match.
 python3 "$SCRIPTS/guard-webview-keyboard-key.py" \
   --port "$DEBUG_PORT" --code "$CHORD_CODE" --key "$CHORD_KEY" \
   --evdev "$CHORD_EVDEV" --windows-key-code "$CHORD_VKEY" --alt \
@@ -309,11 +253,8 @@ python3 "$SCRIPTS/guard-webview-keyboard-key.py" \
   >>"$KEY_LOG" 2>&1 ||
   echo "the unclaimed chord could not be driven; see $KEY_LOG" >&2
 
-# The press is answered before it is handled: `Input.dispatchKeyEvent` comes
-# back when the event has been forwarded, and what this reads is what the page
-# logged afterward. A fixed wait rather than a poll on the line that must
-# appear, because two of the four readings below are ABSENCES, and an absence
-# cannot be waited for — it can only be given time.
+# `Input.dispatchKeyEvent` returns once the event is forwarded, before it is
+# handled. A fixed wait, because some readings below are absences.
 sleep 5
 
 saw() { # $1 pattern
@@ -325,9 +266,8 @@ SAW_PAGE=$(saw "GUARD guest-loaded")
 SAW_FOCUS=$(saw "GUARD window-focused")
 SAW_SHORTCUT=$(saw "GUARD shortcut keycode=$CHORD_EVDEV alt=true ctrl=false shift=false meta=false")
 SAW_MODIFIERS=$(saw "GUARD modifiers alt=true ctrl=false shift=false meta=false")
-# The guest's hook running for a key it did NOT match. Nothing else in the
-# process reports a modifier set with Alt let go, so this line can only have
-# come from PreHandleKeyboardEvent on the guest's delegate.
+# The guest's hook running for a key it did not match. Only
+# PreHandleKeyboardEvent on the guest's delegate reports Alt released here.
 SAW_HOOK=$(saw "GUARD modifiers alt=false ctrl=false shift=false meta=false")
 SAW_SHELL_KEY=$(saw "GUARD document-keydown code=$BEFORE_CODE")
 SAW_DOCUMENT_KEY=$(saw "GUARD document-keydown code=$PLAIN_CODE")
@@ -346,16 +286,9 @@ echo "the page in the window saw: after=$SAW_GUEST_KEY"
 echo "handed back: chord=$SAW_GUEST_CHORD plain=$SAW_PLAIN_CHORD; zoom=$SAW_ZOOM drawn=$SAW_ZOOM_DRAWN"
 echo
 
-# WHICH END TO BLAME, and it is the whole of this script's judgment. Nine
-# readings and two modes make far more answers than a person reading an
-# annotation can be expected to reconstruct, and most of the failures read alike
-# and mean different things — so they are decided here, in a block
-# `scripts/test-webview-keyboard-guard.sh` runs directly, rather than inferred
-# from a grep by whoever opens the job.
-#
-# The order is the order the readings depend on each other in: a run that never
-# claimed anything has established nothing about what fires, and a run where the
-# window never took the keyboard is not a run about browser windows at all.
+# The verdict. `scripts/test-webview-keyboard-guard.sh` runs this block
+# directly. Checks are ordered by dependency, so each failure names the first
+# layer that broke.
 FAILURE=""
 PASSED=""
 if [ "$SAW_CLAIM" != "1" ]; then
@@ -424,13 +357,10 @@ in its own comment, and it is good news rather than a regression: the shell's \
 own non-grabbed keys still work over a browser window. Update that, then this \
 arm"
 elif [ "$SAW_SHELL_KEY" != "1" ]; then
-  # NOT A FAILURE, AND SAYING WHY IS THE POINT. Every claim above is measured
-  # in the browser process, where a key is routed and offered to a delegate.
-  # Whether it then becomes a DOM event in a page is a layer below, and this
-  # browser has no display for its window to be activated on -- so a run where
-  # no page receives one is a harness fact rather than a finding. What it costs
-  # is the *shell's* half of the last reading: with nothing arriving here
-  # before focus moved, nothing arriving after it is not a measurement.
+  # Not a failure. The claims above are measured in the browser process. A
+  # headless browser may deliver no DOM key events, which is a harness limit.
+  # It only means the shell document's absence of the second key decides
+  # nothing.
   PASSED="a desktop chord reached the shell while a browser window held the \
 keyboard, the modifiers came with it, Ctrl+R came back to the shell with the \
 zoom it asked for drawn, and an ungrabbed key reached the guest's \

@@ -19,18 +19,17 @@
 namespace ui {
 namespace {
 
-// `DrmMaster` owns the descriptors it is handed and closes them, so a test has
-// to hand it real ones. /dev/null is the cheapest that always opens, and two
-// opens of it are two distinct numbers -- which is what lets a case say the
-// call reached the card it was recorded against and not another.
+// `DrmMaster` closes the descriptors it holds, so tests need real ones. Each
+// open of /dev/null gets a distinct number, which lets a test check which card
+// a call reached.
 base::ScopedFD OpenScratchFd() {
   base::ScopedFD fd(open("/dev/null", O_RDONLY | O_CLOEXEC));
   CHECK(fd.is_valid());
   return fd;
 }
 
-// Stands in for `drmSetMaster` or `drmDropMaster`: records every descriptor it
-// was called on, in order, and refuses the ones it was told to refuse.
+// Fakes `drmSetMaster` or `drmDropMaster`: records each descriptor in order
+// and fails the ones passed to `Refuse`.
 class RecordedCall {
  public:
   DrmMasterCall Bind() {
@@ -53,8 +52,8 @@ class RecordedCall {
   std::vector<int> refused_;
 };
 
-// The sysfs paths `DrmDisplayHostManager` keys its devices by, which is what
-// a device removal carries and therefore what `Forget` is given.
+// Sysfs paths, which `DrmDisplayHostManager` keys devices by and `Forget`
+// receives.
 constexpr char kCard0[] = "/sys/class/drm/card0";
 constexpr char kCard1[] = "/sys/class/drm/card1";
 constexpr char kCard2[] = "/sys/class/drm/card2";
@@ -72,11 +71,10 @@ TEST(DrmMasterTest, DropsMasterOnEveryCardItHolds) {
   master.Add(base::FilePath(kCard1), std::move(second));
 
   EXPECT_TRUE(master.Drop());
-  // The browser's own descriptors, which is the whole point: the GPU's copies
-  // of them are the same `struct drm_file` and cannot be dropped from there.
+  // The drops go through the browser's descriptors, which share the GPU
+  // process's `struct drm_file`.
   EXPECT_EQ(drop.calls(), std::vector<int>({first_fd, second_fd}));
-  // The two arrivals, and nothing else: taking master on a card as it arrives
-  // is the only reason a set ever runs before a console switch.
+  // Only the takes from `Add`.
   EXPECT_EQ(set.calls(), std::vector<int>({first_fd, second_fd}));
 }
 
@@ -93,8 +91,7 @@ TEST(DrmMasterTest, TakesMasterBackOnEveryCardItHolds) {
   master.Add(base::FilePath(kCard1), std::move(second));
 
   EXPECT_TRUE(master.Take());
-  // The two arrivals and then the retake: a card is mastered when it arrives
-  // and every card held is asked again on the way back from a console switch.
+  // One take per `Add`, then one per card from `Take`.
   EXPECT_EQ(set.calls(),
             std::vector<int>({first_fd, second_fd, first_fd, second_fd}));
   EXPECT_TRUE(drop.calls().empty());
@@ -109,12 +106,8 @@ TEST(DrmMasterTest, ACardIsMasteredAsItArrives) {
   const int arrived_fd = arrived.get();
   master.Add(base::FilePath(kCard0), std::move(arrived));
 
-  // THE SCREEN THAT LIT ONLY AFTER A TRIP TO ANOTHER CONSOLE AND BACK. The
-  // browser's `open` of a card takes master only if the card was free, and
-  // nothing checked: off ChromeOS there is no `DisplayConfigurator` and so no
-  // `TakeDisplayControl` before the first modeset, and the only `drmSetMaster`
-  // in the tree sat behind a VT switch. A first atomic commit that the kernel
-  // answers `EACCES` is what that looks like from the GPU process.
+  // The browser's `open` takes master only if the card had none, and nothing
+  // else takes it at startup. Without this the first commit fails with EACCES.
   EXPECT_EQ(set.calls(), std::vector<int>({arrived_fd}));
   EXPECT_TRUE(drop.calls().empty());
 }
@@ -133,13 +126,10 @@ TEST(DrmMasterTest, ACardThatArrivesOnSomebodyElsesConsoleIsNotMastered) {
   const int arrived_fd = arrived.get();
   master.Add(base::FilePath(kCard1), std::move(arrived));
 
-  // THE TWO-OWNER BUG BY THE THIRD DOOR. A display plugged in while the user
-  // is on another console would otherwise be mastered by a desktop nobody can
-  // see, on a console this process handed over.
+  // A card added while another console is active must not be taken.
   EXPECT_EQ(set.calls(), std::vector<int>({held_fd}));
 
-  // And it is not forgotten either: the console coming back asks for every
-  // card, including the one that arrived while it was away.
+  // Switching back takes it along with the others.
   EXPECT_TRUE(master.Take());
   EXPECT_EQ(set.calls(), std::vector<int>({held_fd, held_fd, arrived_fd}));
 }
@@ -161,9 +151,7 @@ TEST(DrmMasterTest, ACardThatRefusesFailsTheDropAndTheRestAreStillAsked) {
   drop.Refuse(second_fd);
 
   EXPECT_FALSE(master.Drop());
-  // NOT A SHORT CIRCUIT. Stopping at the refusal would leave card2 mastered
-  // while card0 is not, which is a worse state than either end of the
-  // operation and one nothing else knows how to unwind.
+  // Stopping at the failure would leave the cards in different states.
   EXPECT_EQ(drop.calls(), std::vector<int>({first_fd, second_fd, third_fd}));
 }
 
@@ -197,9 +185,8 @@ TEST(DrmMasterTest, ADeadGpuProcessCardsAreLetGoOf) {
 
   master.ForgetEvery();
 
-  // CLOSED, NOT JUST UNLISTED. A held descriptor is a card's master kept open
-  // after the GPU process drawing through it died, and while it is open the
-  // card the new GPU process is handed opens without master and cannot take it.
+  // The descriptors must be closed. While one is open, the new GPU process's
+  // `open` of that card cannot get master.
   EXPECT_EQ(fcntl(first_fd, F_GETFD), -1);
   EXPECT_EQ(fcntl(second_fd, F_GETFD), -1);
   EXPECT_FALSE(master.Drop());
@@ -211,10 +198,9 @@ TEST(DrmMasterTest, ADropWithNothingHeldIsARefusal) {
   RecordedCall drop;
   DrmMaster master(set.Bind(), drop.Bind());
 
-  // Not a vacuous success. The browser opens the primary card before the GPU
-  // process is handed anything, so the only way to arrive here empty is that
-  // the card was never recorded -- and answering yes to that tells the VT
-  // switcher a display was released that is still being scanned out on.
+  // The primary card is always added before the GPU process starts, so an
+  // empty set means a card was missed. Reporting success would tell the VT
+  // switcher a display was released while it is still scanning out.
   EXPECT_FALSE(master.Drop());
   EXPECT_TRUE(drop.calls().empty());
 }

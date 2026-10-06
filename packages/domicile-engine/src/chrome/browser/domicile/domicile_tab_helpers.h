@@ -10,45 +10,28 @@ class WebContents;
 
 namespace domicile {
 
-// Make a <webview>'s guest the tab an extension expects it to be.
+// Makes a <webview>'s guest the tab extensions expect, then adds it to its
+// profile's desk (domicile_desk.h).
 //
-// Two of the helpers Chrome's TabHelpers::AttachTabHelpers gives every tab,
-// and only these two, which is docs/architecture/EXTENSIONS.md's slice 1:
+// Attaches two of the helpers Chrome's TabHelpers::AttachTabHelpers adds,
+// SessionTabHelper first because other helpers rely on its tab id:
 //
-//   SessionTabHelper        the tab's id. It is what chrome.tabs names a tab
-//                           by, and what declarativeNetRequest's `tabIds` and
-//                           webRequest's `tabId` read -- without it every
-//                           request from a guest is tab -1, which is "not a
-//                           tab" to both
-//   extensions::TabHelper   activeTab grants, scripting.executeScript, and the
-//                           content rules registries a tab is watched by
+//   SessionTabHelper        the tab id. chrome.tabs, declarativeNetRequest's
+//                           `tabIds` and webRequest's `tabId` use it; without
+//                           it every guest request is tab -1
+//   extensions::TabHelper   activeTab grants, scripting.executeScript and the
+//                           content rules registries
 //
-// In that order, which is Chrome's: SessionTabHelper first "because it sets up
-// the tab ID, and other helpers may rely on that" (chrome/browser/ui/
-// tab_helpers.cc). TabHelper would make one itself if it were missing, but a
-// helper attached as a side effect of another is a dependency nobody wrote down.
+// Skips the rest of Chrome's helpers, which are browser-tab UI the shell draws
+// itself. Also watches for DevTools' front end loading in the guest
+// (domicile_devtools.h).
 //
-// NOT the rest of AttachTabHelpers, which is a browser tab's worth of UI --
-// infobars, the find bar, translate, a hundred more -- for a window this
-// desktop's shell draws. What the guest already has is what every WebContents
-// gets: `AttachUniversalWebContentsObservers` gives it an
-// ExtensionWebContentsObserver, which TabHelper's constructor needs.
+// An extension action popup (WebViewGuest::extension_popup) gets only the
+// popup view type and is not a tab, as in Chrome. Extensions that check for a
+// popup to size themselves (such as Bitwarden) depend on this.
 //
-// Then it adds the guest to its profile's desk -- domicile_desk.h, slice 2 --
-// which is what makes it a tab chrome.tabs can find.
-// It also watches for DevTools' front end loading in the guest (see
-// domicile_devtools.h).
-//
-// EXCEPT AN EXTENSION'S ACTION POPUP: a <webview> with `extensionpopup` (see
-// WebViewGuest::extension_popup). That guest gets the popup view type and
-// none of the rest, as Chrome's toolbar bubble is an ExtensionHost and no tab.
-// An extension that asks whether it is in a tab -- Bitwarden's, which sizes
-// its body only in a popup, and otherwise fills whatever it is given -- gets
-// Chrome's answer.
-//
-// Run by WebViewGuest on each guest it makes, as the GuestCreatedCallback the
-// frame binders hand BindWebViewGuestHost -- here and not in
-// //components/domicile because both helpers are //chrome's.
+// WebViewGuest calls this for each guest it creates. It lives in //chrome
+// because both helpers do.
 void AttachTabHelpers(content::WebContents& guest);
 
 }  // namespace domicile

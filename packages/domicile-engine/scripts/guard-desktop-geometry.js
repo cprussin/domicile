@@ -1,7 +1,5 @@
-// The shell guard-desktop-geometry.sh drives: a page that binds the control
-// channel and NEVER calls setDesktopSize or setDevicePixelRatio. The engine
-// reports both itself; this page only says what it measures, so the guard can
-// hold the compositor's lines up against the page's own numbers.
+// Shell module for guard-desktop-geometry.sh. It binds the control channel and
+// logs its own size and density, but never reports them; the engine must.
 //
 //   GUARD listening                     the channel is bound
 //   GUARD geometry width=… height=… ratio=…
@@ -16,7 +14,7 @@ export const Shell = (_root, desktop) => {
         " was not served by the forked engine",
     );
   }
-  // Listening is what binds the channel -- see DomicileHost::AddedEventListener.
+  // Adding a listener binds the channel (DomicileHost::AddedEventListener).
   host.addEventListener("displayschanged", () => undefined);
   // Again on every resize: a startup infobar can shrink the window after the
   // first line, and the engine reports the new size too.

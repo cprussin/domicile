@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
-# The inverse of apply.sh: take what is in a Chromium checkout and write it back
-# into this series, so the repo is the source of truth rather than the machine.
+# Write the commits on top of the pin in a Chromium checkout back to patches/.
+# The inverse of apply.sh.
 #
 #   ./scripts/extract.sh /build/chromium/src
 #
-# New files (untracked by Chromium) go to src/; commits on top of the pin go to
-# patches/. Run this before every push, or the work only exists on one box.
+# New files for src/ must be copied by hand. Run this before every push.
 set -u
 
 SERIES="$(cd "$(dirname "$0")/.." && pwd)"

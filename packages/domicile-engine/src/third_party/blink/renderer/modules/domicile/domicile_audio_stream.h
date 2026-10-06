@@ -10,8 +10,7 @@
 
 namespace blink {
 
-// Something playing or recording, as the compositor described it.
-// Immutable, for DomicileTrayItem's reason.
+// Something playing or recording, as the compositor described it. Immutable.
 class MODULES_EXPORT DomicileAudioStream final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 

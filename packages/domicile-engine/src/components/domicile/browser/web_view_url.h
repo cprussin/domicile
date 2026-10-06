@@ -10,13 +10,12 @@ namespace domicile {
 
 // Whether a <webview> may show `url`.
 //
-// ANYTHING BUT DOMICILE://. A document on it holds the shell's origin, and that
-// origin is the whole of the access control on the compositor's control channel
-// and on asking for guests -- so a guest on it would be a second shell, and
-// whatever handed the shell the address (a page's `target="_blank"`, an
-// extension's `tabs.update`) would be the one steering it. Read off the origin
-// rather than the scheme, so a blob the shell minted is refused too, and
-// through view-source:, which commits the source's own.
+// Anything but domicile://. A document there has the shell's origin, which is
+// the only access control on the compositor's control channel and on guest
+// creation, so a guest on it would act as a second shell steered by whatever
+// supplied the URL (e.g. `target="_blank"` or an extension's `tabs.update`).
+// The check reads the origin, not the scheme, so shell-minted blobs and
+// view-source: URLs are refused too.
 bool MayShowInWebView(const GURL& url);
 
 }  // namespace domicile

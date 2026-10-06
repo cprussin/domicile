@@ -13,23 +13,19 @@
 
 namespace ui {
 
-// Two-finger scrolling that goes further the faster the fingers move.
+// Accelerates two-finger touchpad scrolling by finger speed.
 //
-// libinput accelerates pointer motion and never scroll: a touchpad's scroll
-// is the finger's distance times a constant, so the distance a page moves is
-// the distance the fingers do, however they move. Across a long page that is
-// a dozen swipes. This is the pointer's curve applied to scroll -- slow is
-// one to one, so reading a line at a time is untouched, and fast is up to
-// four times further.
+// libinput accelerates pointer motion but not scrolling, so a long page takes
+// many swipes. Slow scrolling stays 1:1; fast scrolling goes up to 4x.
 //
-// One per converter, fed every finger-scroll event in order. A gesture starts
-// over at libinput's scroll stop (a zero delta) or after a pause, so a flick
-// never borrows the speed of the one before it.
+// Use one per converter and feed it every finger-scroll event in order. A
+// zero delta (libinput's scroll stop) or a pause starts a new gesture, so one
+// flick's speed never carries into the next.
 class COMPONENT_EXPORT(EVDEV) ScrollAccelerator {
  public:
-  // `delta` is libinput's, in Chromium's sign. Returns the whole units to
-  // dispatch; the fraction is carried to the next event rather than dropped,
-  // because a slow finger moves less than a unit per event.
+  // Returns the whole units to dispatch for libinput's `delta`, in Chromium's
+  // sign. Carries the fraction to the next event, because a slow finger moves
+  // less than a unit per event.
   gfx::Vector2d Scroll(const gfx::Vector2dF& delta, base::TimeTicks time);
 
  private:

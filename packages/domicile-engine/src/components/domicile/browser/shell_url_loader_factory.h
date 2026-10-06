@@ -20,26 +20,16 @@ namespace domicile {
 // Serves `domicile://shell/...` out of a directory on disk, and
 // `domicile://home/...` out of the user's home for the shell's previews.
 //
-// This is the half of the scheme that reads bytes; registering the scheme so it
-// has an origin is the other half, and lives in the content client. Modeled on
-// content::AboutURLLoaderFactory for its lifetime and on
-// content::CreateFileURLLoaderBypassingSecurityChecks for the reading, because
-// the reading is the same reading -- the file-handling in
-// FileURLLoaderFactory, ContentURLLoaderFactory and ExtensionURLLoaderFactory
-// is already three copies of it, and this does not add a fourth.
+// The content client registers the scheme. Lifetime follows
+// content::AboutURLLoaderFactory; file reading reuses
+// content::CreateFileURLLoaderBypassingSecurityChecks.
 //
-// The security property is the whole point and it is narrow: a request is
-// answered only if it names the one host and resolves to a path inside the
-// shell root. Nothing else on the machine is reachable through it, and no page
-// that is not the shell can ask -- the scheme is not web-safe, so ordinary web
-// content cannot navigate to or fetch it at all.
+// A request is served only if it names a known host and resolves inside that
+// host's root. The scheme is not web-safe, so web content cannot reach it.
 class ShellURLLoaderFactory : public network::SelfDeletingURLLoaderFactory {
  public:
   // A self-owned factory serving `shell_root`. Deletes itself once every
-  // receiver disconnects. An empty `shell_root` yields a factory that refuses
-  // everything, which is what should happen when the engine was started without
-  // --domicile-shell-root: there is no shell to serve, and guessing a directory
-  // would be worse than saying so.
+  // receiver disconnects. An empty `shell_root` refuses every request.
   static mojo::PendingRemote<network::mojom::URLLoaderFactory> Create(
       const base::FilePath& shell_root);
 
@@ -52,38 +42,33 @@ class ShellURLLoaderFactory : public network::SelfDeletingURLLoaderFactory {
   ShellURLLoaderFactory(const ShellURLLoaderFactory&) = delete;
   ShellURLLoaderFactory& operator=(const ShellURLLoaderFactory&) = delete;
 
-  // The document Domicile writes for a shell, given the module it should load.
-  // Exposed for testing: what is in it is not negotiable and a test is how that
-  // stays true.
+  // The HTML document that loads the shell's `module`. Exposed for testing.
   static std::string ShellDocument(const std::string& module);
 
-  // Resolve a domicile:// URL to a file under `shell_root`, or fail. Exposed
-  // for testing, because the refusals are the part worth testing and they do
-  // not need a mojo pipe to exercise.
+  // Resolves a domicile:// URL to a file under `shell_root`, or fails. Exposed
+  // for testing.
   static bool ResolveShellPath(const base::FilePath& shell_root,
                                const GURL& url,
                                base::FilePath* out_path);
 
-  // Resolve a domicile://home/ URL to a file under `home`, or fail. The same
-  // containment as the shell's, and one refusal more: no path with a dotfile
-  // anywhere in it, which is the line the compositor's file index draws, and
-  // what keeps ~/.ssh and every token under ~/.config out of reach.
+  // Resolves a domicile://home/ URL to a file under `home`, or fails. Also
+  // refuses any path containing a dotfile, matching the compositor's file
+  // index, so ~/.ssh and ~/.config stay unreachable.
   static bool ResolveHomePath(const base::FilePath& home,
                               const GURL& url,
                               base::FilePath* out_path);
 
-  // Whether a request from `initiator` may read the home. Only the shell's own
-  // document: this factory is every frame's -- a site in a <webview> too --
-  // and a site that could name domicile://home/ in an <img> would learn which
-  // files exist from load and error alone. And never while the desk is
-  // locked, which is the compositor's rule for its own reads of the home.
+  // Whether a request from `initiator` may read the home: only the shell
+  // origin, and never while the desk is locked. Every frame, including sites
+  // in a <webview>, uses this factory, and a site could probe which files
+  // exist from load errors.
   static bool MayReadHome(const std::optional<url::Origin>& initiator,
                           bool desk_locked);
 
  private:
   ~ShellURLLoaderFactory() override;
 
-  // Answer with the generated document rather than a file on disk.
+  // Responds with the generated shell document.
   void ServeDocument(
       mojo::PendingRemote<network::mojom::URLLoaderClient> client);
 

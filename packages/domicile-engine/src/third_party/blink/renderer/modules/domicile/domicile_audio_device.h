@@ -13,8 +13,8 @@
 
 namespace blink {
 
-// An output or an input, as the compositor described it. Immutable, for
-// DomicileTrayItem's reason.
+// An audio output or input, as reported by the compositor. Immutable: the
+// compositor resends the whole state on any change.
 class MODULES_EXPORT DomicileAudioDevice final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 

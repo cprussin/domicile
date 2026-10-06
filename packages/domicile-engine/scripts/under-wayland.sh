@@ -1,30 +1,20 @@
 #!/usr/bin/env bash
-# Run another script under a nested Wayland compositor, on the GPU.
+# Runs a script under a nested Wayland compositor, on the GPU.
 #
 #   NIX_SHELL_RUN=".../scripts/under-wayland.sh /build/chromium/src \
 #     ./scripts/guard-css-and-resize.sh" \
 #     nix-shell /build/chromium/src/tools/nix/shell.nix
 #
-# WHY THIS EXISTS. `--ozone-platform=headless` cannot import a dmabuf:
-# HeadlessSurfaceFactory::CreateNativePixmap returns a stub TestPixmap and
-# CreateNativePixmapFromHandle is not implemented at all, so there is nothing
-# for an imported buffer to become. Only the drm, wayland, x11 and flatland
-# platforms implement it. Wayland is the cheap one — the build already sets
-# ozone_platform_wayland — and this is the compositor to nest under.
+# `--ozone-platform=headless` cannot import a dmabuf:
+# HeadlessSurfaceFactory does not implement CreateNativePixmapFromHandle. Of
+# the platforms that do (drm, wayland, x11, flatland), wayland is already
+# enabled in the build.
 #
-# WHY NOT WESTON, which is in the full dev shell. Weston's headless backend
-# advertises wl_shm and nothing else; measured on crux, its globals contain no
-# zwp_linux_dmabuf_v1. Chromium's WaylandBufferManagerGpu::GetGbmDevice()
-# returns null unless the host supports dmabuf, so under weston the GBM device
-# is never created and native pixmaps stay unsupported. A wlroots compositor's
-# headless backend does advertise it, because it builds a renderer on the
-# render node whether or not anything is on screen.
-#
-# WHAT THIS PROVED ON CRUX. Under sway, Chromium binds zwp_linux_dmabuf_v1,
-# picks /dev/dri/renderD128 ("picking nvidia-drm"), and creates its GBM device
-# on it — the NVIDIA proprietary driver ships nvidia-drm_gbm.so and its EGL
-# advertises EGL_EXT_image_dma_buf_import. Chromium's GBM path does not require
-# Mesa.
+# Uses sway, not weston. Weston's headless backend advertises only wl_shm, not
+# zwp_linux_dmabuf_v1, so Chromium's WaylandBufferManagerGpu::GetGbmDevice()
+# returns null. wlroots' headless backend still builds a renderer on the render
+# node and advertises dmabuf. On crux's NVIDIA proprietary driver, Chromium
+# creates its GBM device on /dev/dri/renderD128 without Mesa.
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
@@ -43,8 +33,7 @@ if [ $# -eq 0 ]; then
   exit 1
 fi
 
-# An already-running compositor is used as-is, which is what a machine with a
-# session wants. Otherwise one is brought up for the run.
+# Use an existing compositor if there is one; otherwise start one.
 if [ -n "${WAYLAND_DISPLAY:-}" ] && [ -n "${XDG_RUNTIME_DIR:-}" ] &&
    [ -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ]; then
   echo "using the compositor already on $WAYLAND_DISPLAY"
@@ -60,25 +49,18 @@ command -v nix >/dev/null || {
 export XDG_RUNTIME_DIR="${UNDER_WAYLAND_RUNTIME_DIR:-/tmp/domicile-under-wayland-rt}"
 mkdir -p "$XDG_RUNTIME_DIR"
 chmod 700 "$XDG_RUNTIME_DIR"
-# A step that is killed outright — a `timeout-minutes` expiring, a job
-# canceled — never reaches the trap below, so its compositor outlives it and
-# nothing else on the machine is going to collect it. This is where that one
-# goes.
+# Collect compositors from runs that were killed before their trap ran (e.g.
+# `timeout-minutes` or a canceled job).
 kill_compositors
-# A compositor that was killed leaves its socket behind, and the wait below
-# takes the first one it finds — which would be the dead one, and every client
-# then fails with "Connection refused" against a compositor that is running
-# perfectly well next to it. The sweep above is what makes that sentence true:
-# before it, the compositor behind a stale socket was usually still running.
+# Remove stale sockets: the wait below takes the first socket it finds, and a
+# dead one makes every client fail with "Connection refused".
 rm -f "$XDG_RUNTIME_DIR"/wayland-* 2>/dev/null || true
-# The virtual output has to be bigger than the largest page any check drives,
-# or the compositor clamps the window and the page does not fit. wlroots'
-# headless output defaults to 1280x720, which is smaller than step 4's grid.
+# The output must fit the largest page any check uses, or the compositor
+# clamps the window. wlroots' default of 1280x720 is smaller than step 4's grid.
 OUTPUT_MODE="${OUTPUT_MODE:-1600x1200@60Hz}"
 CONFIG="$(mktemp)"
-# No borders and no gaps: the measurement finds the page by looking for the
-# first row of the window that is the page's background all the way across, and
-# a tiling compositor's border puts a pixel of its own at each end of every row.
+# No borders or gaps: the measurement finds the page by the first row that is
+# the page's background edge to edge, and a border adds a pixel at each end.
 cat > "$CONFIG" <<CONFIG_EOF
 output HEADLESS-1 mode $OUTPUT_MODE
 default_border none
@@ -87,17 +69,11 @@ gaps inner 0
 gaps outer 0
 CONFIG_EOF
 
-# wlroots' headless backend needs to be told which render node to build its
-# renderer on; without it, it picks the first card and on a machine whose only
-# GPU is behind nvidia-drm that is the wrong answer often enough to be worth
-# pinning.
-# `nixpkgs#dbus` for `dbus-daemon`, which is not sway's own binary and is the
-# difference between this working at a terminal and not working in CI.
-# nixpkgs' sway wrapper execs `dbus-run-session`, and that looks `dbus-daemon`
-# up on PATH rather than by store path — so in a login session it finds the
-# one the session already has, and under a systemd service it finds nothing and
-# says `failed to execute message bus daemon`. sway then never starts, and the
-# only symptom out here is "no compositor came up".
+# WLR_RENDER_DRM_DEVICE pins the render node; wlroots otherwise picks the
+# first card, which is often wrong when the GPU is behind nvidia-drm.
+# `nixpkgs#dbus` provides `dbus-daemon`: nixpkgs' sway wrapper runs
+# `dbus-run-session`, which finds `dbus-daemon` on PATH. Under a systemd
+# service (CI) there is none, and sway never starts.
 nix shell nixpkgs#sway nixpkgs#dbus --command env \
   "$(compositor_env)" \
   XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" \
@@ -107,18 +83,16 @@ nix shell nixpkgs#sway nixpkgs#dbus --command env \
   sway -c "$CONFIG" >/tmp/domicile-under-wayland.log 2>&1 &
 COMPOSITOR=$!
 cleanup() {
-  # Not `kill "$COMPOSITOR"`: that pid is dbus-run-session's, and killing it
-  # leaves the bus, sway and swaybg behind. By the same name it was started
-  # under, so this takes this run's compositor and no concurrent run's. See
-  # lib-compositor-cleanup.sh.
+  # Not `kill "$COMPOSITOR"`: that pid is dbus-run-session, and killing it
+  # orphans the bus, sway and swaybg. Kill by this run's owner marker instead,
+  # so concurrent runs are spared. See lib-compositor-cleanup.sh.
   kill_compositors "$(compositor_owner)"
   wait "$COMPOSITOR" 2>/dev/null
   rm -f "$CONFIG"
 }
 trap cleanup EXIT
 
-# Fetching sway from the binary cache on a cold machine is slower than starting
-# it, so this waits generously.
+# Long timeout: on a cold machine, fetching sway takes longer than starting it.
 for _ in $(seq 1 240); do
   for candidate in "$XDG_RUNTIME_DIR"/wayland-*; do
     case "$candidate" in

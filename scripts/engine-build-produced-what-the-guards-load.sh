@@ -1,15 +1,9 @@
 #!/usr/bin/env bash
-# That the build left behind the files and the symbols the guards then load.
+# Checks that the build produced the files and symbols the guards load.
 #
-# `autoninja` can succeed having relinked nothing, and the failure that
-# produces is not a build error: the compositor's `dlsym` for an entry point
-# returns nothing, and the guard reports that a client's window did not appear.
-# That has happened — the `libdomicile_engine.so` the guards loaded had been
-# built before the probe grew a coordinate — and it reads as a code error from
-# every angle except this one.
-#
-# So this runs between the build and the guards, and it is the cheapest check
-# in the group: a stat and a grep.
+# `autoninja` can succeed without relinking, and a stale
+# `libdomicile_engine.so` then shows up as a guard failure (no client window)
+# rather than a build error. Runs between the build and the guards.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -25,9 +19,8 @@ ARTIFACTS=(
   domicile_color_probe
 )
 
-# The entry points the compositor looks up by name. Matched as bytes rather
-# than with `nm`, which is not on the runner's PATH: a name absent from the
-# file is certainly not exported from it, which is the direction that matters.
+# The entry points the compositor looks up by name. Matched as bytes because
+# `nm` is not on the runner's PATH; a missing name is certainly not exported.
 SYMBOLS=(
   domicile_engine_connect
   domicile_engine_spike_sample_window_center

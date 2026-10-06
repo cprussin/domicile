@@ -1,26 +1,24 @@
 #!/usr/bin/env bash
-# The iframe-parity cell of step 4's measurement: is an <app> the same thing as
-# an out-of-process <iframe>?
+# Measures whether an <app> renders like an out-of-process <iframe> under CSS.
+# Results:
+# docs/architecture/ENGINE-FORK-MEASUREMENTS.md#app-compared-to-an-out-of-process-iframe.
 #
 #   NIX_SHELL_RUN=".../scripts/spike-iframe.sh /build/chromium/src" \
 #     nix-shell /build/chromium/src/tools/nix/shell.nix
 #
-# ENGINE-FORK.md's CSS claim rests on one argument that was read off
-# child_frame_compositing_helper.cc rather than measured: that an <app> under
-# `transform` differs from a <div> only the way any surface-backed element
-# does, an OOPIF included. This measures it.
+# ENGINE-FORK.md's CSS claim, read from child_frame_compositing_helper.cc, is
+# that an <app> under `transform` differs from a <div> only as any
+# surface-backed element does, an OOPIF included. This checks it.
 #
-# Two things this needs that no other check does:
+# Extra requirements:
 #
-#   an HTTP server   the <iframe> has to be CROSS-SITE or --site-per-process
-#                    keeps it in the parent's renderer, where it paints into
-#                    the parent's own layer tree like a <div> and the
-#                    comparison is a tautology. localhost and 127.0.0.1 are
-#                    different sites; two ports of one host are not, so a
-#                    second port would not have done
-#   a renderer count the pixels cannot tell "not out of process" from "out of
-#                    process but re-rasterized". Counting renderers can, so the
-#                    run fails if the iframe did not get one of its own
+#   an HTTP server   the <iframe> must be cross-site, or --site-per-process
+#                    keeps it in the parent's renderer and the comparison is
+#                    meaningless. localhost and 127.0.0.1 are different sites;
+#                    two ports on one host are not
+#   a renderer count pixels cannot tell "in process" from "out of process but
+#                    re-rasterized", so the run fails unless the iframe got its
+#                    own renderer
 set -u
 
 CHROMIUM="${1:-}"
@@ -34,12 +32,9 @@ COLOR="${COLOR:-00C853}"
 WINDOW="${WINDOW:-1200,1000}"
 PORT="${PORT:-8730}"
 
-# On by default here, unlike every other check. This one asks whether an <app>
-# is pixel-identical to an ordinary element, and software rasterization is not
-# pixel-identical to itself across two layers: run it with GPU=0 and the first
-# row differs on a one-pixel outline that the same run on hardware does not
-# have. The requirement is about what a user sees, so the GPU is the honest
-# configuration and the software result is the artifact.
+# GPU on by default, unlike other checks. Software rasterization differs
+# across two layers (GPU=0 shows a one-pixel outline in the first row), and
+# the check is about what users see on hardware.
 export GPU="${GPU:-1}"
 
 command -v python3 >/dev/null || {
@@ -64,12 +59,9 @@ if ! curl -fsS "http://localhost:$PORT/spike-iframe-page.html" >/dev/null 2>&1; 
   exit 1
 fi
 
-# Counted while the engine is up, and sampled rather than snapshotted: the
-# pixels below cannot tell "the iframe is not out of process" from "it is, and
-# it re-rasterized", and only one of those makes the comparison meaningful. A
-# cross-site <iframe> gets a renderer of its own, so the floor is the main
-# frame plus one for 127.0.0.1 — two. Chromium reuses one process per site, so
-# framing it twice does not make it three.
+# Sample the peak renderer count while the engine runs. A cross-site <iframe>
+# needs its own renderer, so the minimum is two: the main frame and 127.0.0.1.
+# Chromium uses one process per site, so a second iframe adds none.
 PEAK_FILE="$(mktemp)"
 echo 0 >"$PEAK_FILE"
 ( PEAK=0

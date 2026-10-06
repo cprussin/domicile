@@ -19,15 +19,15 @@ namespace api::tabs {
 struct Tab;
 }  // namespace api::tabs
 
-// Where Chrome's own tab lookups ask Domicile's desk, which is every <webview>
-// as a tab of one window. docs/architecture/EXTENSIONS.md's slice 2.
+// Hooks that let Chrome's extension tab lookups see Domicile's desk, which
+// exposes every <webview> as a tab of one window. See
+// docs/architecture/EXTENSIONS.md#tabs. Each hook is called from one of
+// Chrome's tab lookups by a line in the patch series.
 //
-// A SEAM IN //chrome/browser/extensions RATHER THAN A CALL INTO
-// //chrome/browser/domicile, because that target depends on this one and GN
-// allows no cycle. The desk installs itself here once, at startup -- see
-// //chrome/browser/domicile/domicile_desk.h -- and every hook below does
-// nothing until it has. Each is one call from one of Chrome's lookups, added by
-// the patch series; this file is the whole of what those lines reach.
+// This lives in //chrome/browser/extensions because
+// //chrome/browser/domicile depends on this target, and GN forbids cycles.
+// The desk installs itself at startup (see
+// //chrome/browser/domicile/domicile_desk.h).
 namespace domicile_desk {
 
 class Desk {
@@ -44,8 +44,8 @@ class Desk {
                        content::WebContents** contents,
                        int* index) = 0;
 
-  // What a tab object built with no tab strip gets wrong about a desk tab:
-  // its index, and whether it is active.
+  // Fixes the index and active state of a desk tab, which a tab object built
+  // without a tab strip gets wrong.
   virtual void AmendTab(content::WebContents& contents,
                         api::tabs::Tab& tab) = 0;
 
@@ -53,10 +53,10 @@ class Desk {
       const base::RepeatingCallback<void(content::WebContents*)>& callback) = 0;
 };
 
-// Installed once and for the life of the process.
+// Installs `desk` for the life of the process. Call once.
 void Install(Desk& desk);
 
-// The hooks. Each is inert until Install.
+// Each hook does nothing until Install.
 WindowController* WindowFor(content::BrowserContext* context);
 bool FindTab(int tab_id,
              content::BrowserContext* context,

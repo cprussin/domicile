@@ -238,7 +238,7 @@ fi
 # Check only the unplug arm of the "gone" branch. A release this session
 # requested also gets a "gone", and that one must not forget the device. The
 # range starts at the comment naming the unplug case.
-if grep -q 'names_.erase(number)'   <(sed -n '/The node is unplugged/,/kNothingToSay;/p' "$DOMICILE/drm_input_devices.cc"); then
+if grep -q 'names_.erase(number)'   <(sed -n '/Unplugged: forget the device and its name/,/kNothingToSay;/p' "$DOMICILE/drm_input_devices.cc"); then
   ok "a device whose node is gone is forgotten by name too"
 else
   fail "a device whose node is gone is forgotten by name too"     "a resume for an unplugged device would be answered with a path that is not there any more"

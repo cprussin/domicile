@@ -12,22 +12,17 @@ class Profile;
 
 namespace domicile {
 
-// The pref holding the ids `InstallExtensionsInto` added, which is how it
-// knows what it may take away.
+// Registers the pref of extension ids `InstallExtensionsInto` added, so it
+// only uninstalls extensions it installed.
 void RegisterExtensionInstallerPrefs(PrefRegistrySimple* registry);
 
-// Make `profile`'s extensions what the desk's config names: a Web Store id is
-// installed from the Store and updates from it, a directory is loaded
-// unpacked, and what this added that `wanted` no longer names is uninstalled.
-// No prompt: naming it in the config is the consent.
+// Installs the extensions in `wanted` into `profile` and uninstalls ones it
+// added earlier that `wanted` no longer lists. Web Store ids install from the
+// Store; directories load unpacked. There is no prompt: the config is the
+// consent. The diff is `ReconcileExtensions`, which has the tests.
 //
-// WHAT TO DO is `ReconcileExtensions`, where the tests are; this is the half
-// that needs a profile, which is why it lives in //chrome.
-//
-// By weak pointer because the call arrives from the IO thread, and a profile
-// that is gone by then is a desktop ending, with nothing left to install into.
-//
-// Must be called on the UI thread.
+// Must be called on the UI thread. `profile` is weak because the request comes
+// from the IO thread and the profile may be gone at shutdown.
 void InstallExtensionsInto(base::WeakPtr<Profile> profile,
                            const ExtensionList& wanted);
 

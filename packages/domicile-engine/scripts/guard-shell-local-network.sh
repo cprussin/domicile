@@ -1,34 +1,24 @@
 #!/usr/bin/env bash
-# The shell fetching a picture from this machine, and nothing asking whether
-# it may.
+# Checks that the shell can fetch a picture from this machine without a Local
+# Network Access prompt.
 #
 #   nix develop .#full --command \
 #     ./packages/domicile-engine/scripts/guard-shell-local-network.sh /build/chromium/src
 #
-# WHY THIS EXISTS. The launcher draws a bookmark's tile from its site's
-# /favicon.ico, and every time it opened, a bookmark on the LAN or on localhost
-# had the desk ask to "access other devices on your network" and "apps and
-# services on this device". domicile:// has no IP address, so Local Network
-# Access read the shell as public and every such fetch as a request for the
-# permission. Patch 0066 classes the shell loopback; this asserts it.
+# The launcher fetches bookmark favicons, including from LAN and localhost.
+# domicile:// has no IP address, so LNA would treat the shell as public and
+# prompt. Patch 0066 classes the shell as loopback.
 #
-# Headless and software-composited, like guard-webview-framing.sh: the color
-# is a page's own, so there is no client and nothing to import.
+# Headless and software-composited, like guard-webview-framing.sh.
 #
-# WHAT IT ASSERTS. That the picture's flat color is on the shell's page.
+# Asserts that the picture's color is on the shell's page.
 #
-# HOW IT CAN FAIL. NEGATIVE=1 runs the control, two runs on an ordinary http
-# page the engine is told is public (`--ip-address-space-overrides`):
+# NEGATIVE=1 runs two legs on a plain http page marked public
+# (`--ip-address-space-overrides`):
 #
-#   1. the page showing a picture from its own server. It MUST show: same
-#      address space, so no permission is involved, and this is the run that
-#      says the harness can see the picture at all.
-#   2. the same page showing the picture from the other server, which is
-#      loopback. It MUST show nothing: LNA is live in this engine and holds a
-#      public page's request into this machine.
-#
-# Without the second leg, a shell that shows the picture says nothing: an
-# engine with LNA off would show it too.
+#   1. a picture from the page's own server must show, proving the harness
+#      can see it
+#   2. a picture from the loopback server must not, proving LNA is active
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
@@ -49,8 +39,7 @@ fi
 
 NEGATIVE="${NEGATIVE:-0}"
 
-# The picture's color, and the color of the page showing it. Neither is any
-# other guard's, and neither is a browser background.
+# Unique to this guard and unlike any browser background.
 COLOR="${COLOR:-2E8B57}"
 WITNESS="${WITNESS:-4A3020}"
 
@@ -62,8 +51,7 @@ PROFILE="${PROFILE:-/tmp/domicile-shell-local-network-profile}"
 WIDTH="${WIDTH:-1024}"
 HEIGHT="${HEIGHT:-768}"
 
-# Two servers: PAGES is the one the engine is told is public, PICTURES stays
-# the loopback address it is.
+# PAGES is marked public; PICTURES stays loopback.
 PAGES_LOG="${PAGES_LOG:-/tmp/domicile-shell-local-network-pages.log}"
 PICTURES_LOG="${PICTURES_LOG:-/tmp/domicile-shell-local-network-pictures.log}"
 
@@ -91,8 +79,8 @@ command -v python3 >/dev/null || {
   exit 77
 }
 
-# One browser, one page, one answer: the probe's status. Every run gets the
-# same switches, so the runs differ in the URL and nothing else.
+# Runs the engine on one URL and returns the probe's status. Runs differ only
+# in the URL.
 measure() { # $1 which run, $2 the URL to open
   local which="$1" url="$2"
   local engine_log="/tmp/domicile-shell-local-network-$which-engine.log"
@@ -173,8 +161,8 @@ PAGES="http://127.0.0.1:$PAGES_PORT"
 PICTURES="http://127.0.0.1:$PICTURES_PORT"
 echo "pages at $PAGES (public), pictures at $PICTURES (loopback)"
 
-# 2. The runs. The control's order is the experiment: the second leg's absence
-#    is a reading only because the first leg's presence came first.
+# 2. The runs. The control's first leg must pass before the second means
+#    anything.
 if [ "$NEGATIVE" = "1" ]; then
   LEG_STARTED="$(date +%s)"
   measure same-space "$PAGES/shows?src=$PAGES/picture"
@@ -195,8 +183,7 @@ fi
 echo
 echo "measured: $MEASURED"
 
-# WHICH END TO BLAME. Run directly by
-# `scripts/test-shell-local-network-guard.sh`.
+# scripts/test-shell-local-network-guard.sh runs this block directly.
 FAILURE=""
 PASSED=""
 case "$MEASURED" in

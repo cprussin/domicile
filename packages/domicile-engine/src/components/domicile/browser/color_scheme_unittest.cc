@@ -14,7 +14,7 @@ namespace {
 
 using ui::NativeTheme;
 
-// The override is process-wide, so each test puts back what it found.
+// The override is process-wide, so each test clears it.
 class ColorSchemeTest : public testing::Test {
  protected:
   ~ColorSchemeTest() override {
@@ -29,7 +29,7 @@ TEST_F(ColorSchemeTest, ADarkDeskIsADarkWeb) {
 }
 
 TEST_F(ColorSchemeTest, ALightDeskIsALightWeb) {
-  // After a dark one, because a toggle is a change and not a first setting.
+  // Starts dark to test a change rather than an initial setting.
   SetProcessColorScheme(mojom::Theme::kDark);
   SetProcessColorScheme(mojom::Theme::kLight);
   EXPECT_EQ(NativeTheme::GetPreferredColorSchemeOverride(),

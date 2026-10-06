@@ -31,8 +31,8 @@
 namespace content {
 namespace {
 
-// What every method here is built on: the browser window as viz drew it. An
-// empty bitmap means there was no window, or nothing had been drawn yet.
+// Receives the browser window as viz drew it. An empty bitmap means there was
+// no window or nothing drawn yet.
 using CapturedCallback = base::OnceCallback<void(const SkBitmap&)>;
 
 class DomicileSpikeProbe : public domicile::mojom::SpikeProbe {
@@ -82,9 +82,8 @@ class DomicileSpikeProbe : public domicile::mojom::SpikeProbe {
     Capture(base::BindOnce(
         [](gfx::Point point, SamplePixelCallback callback,
            const SkBitmap& bitmap) {
-          // Out of bounds fails rather than clamping. A latency measurement
-          // that silently polls the wrong pixel would report the wrong number
-          // instead of stopping.
+          // Fail rather than clamp, so a latency measurement on the wrong pixel
+          // stops instead of reporting a wrong number.
           if (bitmap.drawsNothing() || point.x() < 0 || point.y() < 0 ||
               point.x() >= bitmap.width() || point.y() >= bitmap.height()) {
             std::move(callback).Run(false, 0);
@@ -95,12 +94,9 @@ class DomicileSpikeProbe : public domicile::mojom::SpikeProbe {
         point, std::move(callback)));
   }
 
-  // A copy request on the window's root layer is answered out of the display
-  // compositor's draw, after the aggregator has resolved every SurfaceDrawQuad
-  // in the tree — including the one the page's cc::SurfaceLayer produces for
-  // the brokered surface. So a color that comes back is a color viz
-  // aggregated, and if it is the producer's then the aggregation happened
-  // through the page.
+  // A copy request on the root layer is answered after viz aggregates every
+  // SurfaceDrawQuad, including the page's brokered surface. So the producer's
+  // color in the result proves aggregation went through the page.
   static void Capture(CapturedCallback callback) {
 #if defined(USE_AURA)
     ui::Layer* window = FirstWindowLayer();
@@ -134,8 +130,7 @@ class DomicileSpikeProbe : public domicile::mojom::SpikeProbe {
   }
 
 #if defined(USE_AURA)
-  // The browser window's own root layer. Everything the page draws is under it,
-  // which is what makes its pixels the page's to fill.
+  // The browser window's root layer. Everything the page draws is under it.
   static ui::Layer* FirstWindowLayer() {
     for (aura::WindowTreeHost* host :
          aura::Env::GetInstance()->window_tree_hosts()) {

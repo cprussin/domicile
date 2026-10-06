@@ -21,12 +21,8 @@
 namespace ui {
 namespace {
 
-// The same builder drm_screen_unittest.cc uses, and for the same reason:
-// `ui/display/manager/test/fake_display_snapshot.h` is ChromeOS-only, so the
-// 27-argument constructor gets filled once here too. Duplicated rather than
-// shared because the two suites are the only callers and a header for two
-// callers in one directory is the wrong trade -- if a third arrives, that is
-// when it moves.
+// Builds snapshots without the ChromeOS-only `fake_display_snapshot.h`.
+// Duplicated in drm_screen_unittest.cc; share it if a third suite needs it.
 class SnapshotBuilder {
  public:
   SnapshotBuilder& Id(int64_t id) {
@@ -88,9 +84,7 @@ std::vector<raw_ptr<display::DisplaySnapshot, VectorExperimental>> Pointers(
 }
 
 TEST(DrmModesetTest, AReadingSaysWhatEveryConnectorReported) {
-  // THREE RUNS ON REAL HARDWARE WERE SPENT INFERRING THIS FROM ABSENT LINES.
-  // The mode matters twice over: it is what the CRTC is set to, and it is what
-  // the browser window has to match exactly or nothing is ever scanned out.
+  // The mode must be logged: the browser window has to match it exactly.
   std::vector<std::unique_ptr<display::DisplaySnapshot>> owned;
   owned.push_back(SnapshotBuilder()
                       .Id(7)
@@ -108,8 +102,7 @@ TEST(DrmModesetTest, AReadingSaysWhatEveryConnectorReported) {
 }
 
 TEST(DrmModesetTest, AReadingOfNothingSaysSo) {
-  // A machine with nothing plugged in is an ordinary state, and a log line
-  // that goes missing entirely is indistinguishable from one that never ran.
+  // An empty reading is normal and still gets a log line.
   EXPECT_EQ(DescribeSnapshots({}), "0 connector(s)");
 }
 
@@ -129,10 +122,9 @@ TEST(DrmModesetTest, AModesetAsksForTheSnapshotsNativeMode) {
   EXPECT_EQ(params[0].mode->size(), gfx::Size(2560, 1440));
 }
 
-// NOT AT THE SNAPSHOT'S ORIGIN, which is (0, 0) for every connector ozone has
-// not read before: three identical monitors arriving on one hub were lit on
-// one rectangle. And where the display list puts them, or a window sized to
-// its display is on no CRTC's rectangle.
+// The snapshot's own origin is (0, 0) for any connector ozone has not read
+// before, so identical monitors would overlap. The modeset must use the display
+// list's origins, or a window sized to its display matches no CRTC.
 TEST(DrmModesetTest, WithNoLayoutTheModesetLightsWhereTheDisplayListSays) {
   std::vector<std::unique_ptr<display::DisplaySnapshot>> owned;
   for (const int64_t id : {11, 12, 13}) {
@@ -156,10 +148,9 @@ TEST(DrmModesetTest, WithNoLayoutTheModesetLightsWhereTheDisplayListSays) {
   }
 }
 
-// The opposite of what DisplaysFromSnapshots does with the same input, and the
-// difference is the point: a display list must answer for every connector
-// because a window has to land somewhere, and a modeset must not invent a mode
-// the hardware never advertised.
+// `DisplaysFromSnapshots` gives this connector a fallback, since a window needs
+// somewhere to land. A modeset must not invent a mode the hardware never
+// advertised.
 TEST(DrmModesetTest, AConnectorWithNoModeIsNotGivenOne) {
   std::vector<std::unique_ptr<display::DisplaySnapshot>> owned;
   owned.push_back(SnapshotBuilder().Id(4).NoNativeMode().Build());
@@ -181,12 +172,9 @@ TEST(DrmModesetTest, AReadableConnectorSurvivesAnUnreadableOneBesideIt) {
   EXPECT_EQ(params[0].id, 5);
 }
 
-// A LAYOUT IS THE COMPOSITOR'S ANSWER ABOUT WHAT THE GLASS DOES, and it
-// arrives over the engine's C ABI because the compositor is the process
-// holding the config and this one is the process holding DRM master. Without
-// it a profile reaches the desktop the compositor advertises and nothing
-// else: the connector a profile turned off goes on being lit, and the
-// monitors are laid out in the order the card enumerated them.
+// The layout carries the compositor's display profile. Without it, a
+// connector the profile turns off stays lit and monitors are ordered as the
+// card enumerates them.
 TEST(DrmModesetTest, ALayoutSaysWhereAConnectorGoes) {
   std::vector<std::unique_ptr<display::DisplaySnapshot>> owned;
   owned.push_back(
@@ -201,9 +189,7 @@ TEST(DrmModesetTest, ALayoutSaysWhereAConnectorGoes) {
 }
 
 TEST(DrmModesetTest, ALayoutCanLeaveAConnectorDark) {
-  // `enabled: false` in a profile, which is how a laptop panel is named so
-  // that closing the lid on a full desk still matches the desk's profile and
-  // is turned off so that nothing is drawn on a panel behind a shut lid.
+  // For example, a laptop panel behind a closed lid.
   std::vector<std::unique_ptr<display::DisplaySnapshot>> owned;
   owned.push_back(SnapshotBuilder().Id(1).Build());
   owned.push_back(SnapshotBuilder().Id(2).Build());
@@ -217,10 +203,8 @@ TEST(DrmModesetTest, ALayoutCanLeaveAConnectorDark) {
 }
 
 TEST(DrmModesetTest, AConnectorNoLayoutNamesIsLeftDark) {
-  // A monitor plugged in between the reading the compositor answered and this
-  // one. It lights on the next round trip -- the modeset makes the kernel
-  // emit a CHANGE, the display list goes over the ABI again, and the answer
-  // that comes back names it.
+  // A monitor plugged in after the compositor's last answer. It lights once
+  // the compositor answers the hotplug this modeset triggers.
   std::vector<std::unique_ptr<display::DisplaySnapshot>> owned;
   owned.push_back(SnapshotBuilder().Id(1).Build());
   owned.push_back(SnapshotBuilder().Id(8).Build());
@@ -233,10 +217,7 @@ TEST(DrmModesetTest, AConnectorNoLayoutNamesIsLeftDark) {
 }
 
 TEST(DrmModesetTest, ALayoutStillDoesNotInventAModeForAConnectorWithNone) {
-  // The layout says where a connector goes, not what it can do. A profile
-  // naming a monitor that reports no mode is a profile the compositor matched
-  // against a display list that named it, and asking a CRTC for a mode the
-  // hardware never advertised is how a screen goes black rather than wrong.
+  // The layout places a connector; it does not supply a mode.
   std::vector<std::unique_ptr<display::DisplaySnapshot>> owned;
   owned.push_back(SnapshotBuilder().Id(4).NoNativeMode().Build());
 
@@ -262,13 +243,9 @@ TEST(DrmModesetTest, EveryReadableConnectorIsAskedFor) {
   EXPECT_EQ(params[1].id, 2);
 }
 
-// THE LOOP, AND WHY THESE FOUR CASES ARE THE WHOLE OF IT. The first run of
-// this driver on real hardware re-modeset a CRTC to the mode it was already in,
-// for as long as it was left running. Every `Configure` makes the kernel emit a
-// udev CHANGE; the browser turns that into `OnConfigurationChanged`; this
-// driver read the displays and configured them again. A screen that
-// re-modesets on a loop never settles enough to show anything, which is what
-// "it goes black and nothing draws" was.
+// Each `Configure` makes the kernel emit a udev CHANGE, which triggers another
+// reading. Repeating an unchanged modeset would loop and the screen would never
+// settle.
 TEST(DrmModesetTest, TheSameReadingTwiceIsNotWorthAModeset) {
   std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
   snapshots.push_back(
@@ -292,10 +269,7 @@ TEST(DrmModesetTest, TheFirstReadingIsAlwaysWorthAModeset) {
       << "nothing has been asked for yet, so everything is a change";
 }
 
-// A REAL HOTPLUG MUST ALWAYS GET THROUGH, which is the half of this that a
-// too-eager guard would break. A monitor unplugged, a mode changed, a second
-// screen arriving: each changes the reading, and each has to reach the
-// hardware.
+// A real hotplug changes the reading and must always modeset.
 TEST(DrmModesetTest, ADisplayArrivingIsWorthAModeset) {
   std::vector<std::unique_ptr<display::DisplaySnapshot>> one;
   one.push_back(
@@ -328,9 +302,7 @@ TEST(DrmModesetTest, AModeChangingOnOneDisplayIsWorthAModeset) {
       << "the same connector at a different mode is a different request";
 }
 
-// A delegate that answers when the test says so, and remembers what it was
-// asked. THE WIRING IS WHAT WENT WRONG TWICE, so the wiring is what this tests:
-// the arithmetic above was right both times and neither bug was in it.
+// A delegate that records each `Configure` and answers when the test says so.
 class FakeDelegate : public display::NativeDisplayDelegate {
  public:
   // display::NativeDisplayDelegate, the parts these tests drive:
@@ -349,18 +321,16 @@ class FakeDelegate : public display::NativeDisplayDelegate {
     pending_ = std::move(callback);
   }
 
-  // What the hardware says back, when the test decides.
+  // Answers the pending `Configure` as the DRM thread would.
   void Answer(bool status) {
     ASSERT_TRUE(pending_) << "nothing was asked, so there is nothing to answer";
     std::move(pending_).Run({}, status);
   }
-  // An answer that comes back out of `Configure` itself, which is what
-  // `DrmDisplayHostManager::ConfigureDisplays` does for a dummy display: it
-  // reads `is_dummy()` and runs the callback with `true` without leaving the
-  // browser process.
+  // Answers from inside `Configure`, as
+  // `DrmDisplayHostManager::ConfigureDisplays` does for dummy displays.
   void AnswersFromInsideConfigure(bool status) { inline_answer_ = status; }
-  // An ask that reaches nothing: the GPU thread has no DRM device yet, so the
-  // callback never comes. This is the case the first fix got wrong.
+  // Drops the pending `Configure`, as when the GPU process has no DRM device
+  // yet.
   void NeverAnswers() { pending_.Reset(); }
 
   bool was_asked() const { return !pending_.is_null(); }
@@ -371,7 +341,7 @@ class FakeDelegate : public display::NativeDisplayDelegate {
     snapshots_ = std::move(s);
   }
 
-  // The rest of the interface, which these tests do not drive.
+  // Unused by these tests.
   void Initialize() override {}
   void TakeDisplayControl(display::DisplayControlCallback callback) override {
     std::move(callback).Run(true);
@@ -425,12 +395,9 @@ class FakeDelegate : public display::NativeDisplayDelegate {
   std::optional<bool> inline_answer_;
 };
 
-// THE BUG THIS EXISTS FOR, and it is the one the first fix introduced. The
-// driver's first `Configure` goes out before the GPU thread has added a DRM
-// device, so it reaches nothing and never answers. Three seconds later the udev
-// ADD arrives with the same reading. If the first ask was remembered, that
-// second one -- the one that would have worked -- is suppressed, and the
-// machine never modesets at all. Which is exactly what it did.
+// The first `Configure` goes out before the GPU process has a DRM device, so
+// it never answers. The udev ADD that follows carries the same reading and must
+// still modeset.
 TEST(DrmModesetTest, AnAskThatReachedNothingDoesNotSuppressTheNextOne) {
   auto owned = std::make_unique<FakeDelegate>();
   FakeDelegate* fake = owned.get();
@@ -445,15 +412,14 @@ TEST(DrmModesetTest, AnAskThatReachedNothingDoesNotSuppressTheNextOne) {
 
   modeset.Start();
   ASSERT_EQ(fake->asks(), 1u) << "the first reading must be asked for";
-  fake->NeverAnswers();  // The GPU thread had no device to send it to.
+  fake->NeverAnswers();  // The GPU process has no DRM device yet.
 
   modeset.OnConfigurationChanged();
   EXPECT_EQ(fake->asks(), 2u)
       << "an ask nothing confirmed must not suppress the ask that follows it";
 }
 
-// The other half, and the loop this whole guard exists for: once the hardware
-// HAS confirmed, the hotplug that confirmation causes must not be answered.
+// After a confirmed modeset, the hotplug it causes must not modeset again.
 TEST(DrmModesetTest, AConfirmedModesetSuppressesTheHotplugItCauses) {
   auto owned = std::make_unique<FakeDelegate>();
   FakeDelegate* fake = owned.get();
@@ -475,8 +441,8 @@ TEST(DrmModesetTest, AConfirmedModesetSuppressesTheHotplugItCauses) {
       << "the CHANGE a successful Configure emits is this driver's own echo";
 }
 
-// A refusal is not a state either. The hardware is in something this process
-// did not choose, so the next reading has to reach it.
+// After a refused modeset the hardware state is unknown, so the next reading
+// must modeset.
 TEST(DrmModesetTest, ARefusedModesetDoesNotSuppressTheNextOne) {
   auto owned = std::make_unique<FakeDelegate>();
   FakeDelegate* fake = owned.get();
@@ -496,17 +462,10 @@ TEST(DrmModesetTest, ARefusedModesetDoesNotSuppressTheNextOne) {
   EXPECT_EQ(fake->asks(), 2u);
 }
 
-// A YES FROM INSIDE THE BROWSER PROCESS IS NOT A CONFIRMATION EITHER, and it
-// is the one that got through. `Start()` runs at `InitScreen` time, before a
-// GPU process exists; `DrmDisplayHostManager::UpdateDisplays` therefore answers
-// with the dummy snapshots its constructor built from its own read of the
-// primary card, and `ConfigureDisplays` reads `is_dummy()` on those and runs
-// the callback with `true` without leaving the process. On the machine this was
-// found on, "the DRM thread confirmed the modeset" was logged three
-// microseconds after "configuring 2 display(s)" -- no hardware commit had
-// happened, and recording that yes is what suppresses the first REAL reading
-// when it matches. A single-card machine whose dummy reading matches its real
-// one would never modeset at all.
+// `Start()` runs before the GPU process exists, so `DrmDisplayHostManager`
+// answers from its dummy snapshots without reaching hardware. Recording that
+// answer would suppress a matching first real reading, and a machine whose
+// dummy reading matches its real one would never modeset.
 TEST(DrmModesetTest, AnAnswerFromInsideTheAskIsNotAConfirmation) {
   auto owned = std::make_unique<FakeDelegate>();
   FakeDelegate* fake = owned.get();
@@ -523,7 +482,7 @@ TEST(DrmModesetTest, AnAnswerFromInsideTheAskIsNotAConfirmation) {
   modeset.Start();
   ASSERT_EQ(fake->asks(), 1u) << "the first reading must be asked for";
 
-  // The GPU thread is up now, and it reports what the dummies already said.
+  // The GPU process is up and reports the same displays as the dummies.
   modeset.OnConfigurationChanged();
   EXPECT_EQ(fake->asks(), 2u)
       << "a yes that arrived before the ask returned reached no hardware, so "
@@ -531,14 +490,8 @@ TEST(DrmModesetTest, AnAnswerFromInsideTheAskIsNotAConfirmation) {
 }
 
 
-// THE ONE A HOTPLUG CANNOT STAND IN FOR. logind pauses no session device and
-// drops no DRM master across a suspend -- both are VT paths in its sources, and
-// the session never leaves `Active` -- so the only thing lost to a sleep is the
-// state inside the GPU. The connectors come back reporting exactly what they
-// reported going down: same panels, same modes, same origins. Which means the
-// loop guard above, whose entire job is to answer "the report has not changed,
-// so asking again cannot help", is wrong for precisely this one event and would
-// leave every panel dark.
+// After a resume the GPU state is lost but the connectors report the same as
+// before, so the loop guard alone would leave every panel dark.
 TEST(DrmModesetTest, AWakeLightsTheScreensAgainThoughTheyReadTheSame) {
   auto owned = std::make_unique<FakeDelegate>();
   FakeDelegate* fake = owned.get();
@@ -561,9 +514,8 @@ TEST(DrmModesetTest, AWakeLightsTheScreensAgainThoughTheyReadTheSame) {
          "before, so the reading cannot be what decides";
 }
 
-// And the relight does not cost the loop guard. Forgetting one confirmation is
-// the whole mechanism; forgetting it permanently would put this driver back to
-// answering its own hotplugs forever, which is the bug the guard exists for.
+// `Relight` clears one confirmation, not the guard: the hotplug its own
+// modeset causes is still suppressed.
 TEST(DrmModesetTest, ARelitScreenStillSuppressesTheHotplugItCauses) {
   auto owned = std::make_unique<FakeDelegate>();
   FakeDelegate* fake = owned.get();

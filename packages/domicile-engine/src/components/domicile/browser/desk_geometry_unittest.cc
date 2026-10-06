@@ -16,8 +16,8 @@
 namespace domicile {
 namespace {
 
-// `home-office-right-two`: a 1.5 laptop under the left edge of two 1.2 4K
-// monitors turned on their sides, in the desk's logical pixels.
+// `home-office-right-two`: a 1.5x laptop below the left edge of two rotated
+// 1.2x 4K monitors, in desk logical pixels.
 constexpr DeskPlace kLaptop{.id = 1,
                             .desk = gfx::Rect(0, 1920, 1920, 1280),
                             .scale = 1.5f,
@@ -37,24 +37,24 @@ TEST(DeskGeometryTest, ThePageIsTheBoxAroundEveryDisplay) {
 }
 
 TEST(DeskGeometryTest, TheBoxStartsAtTheDesksCorner) {
-  // A profile need not put anything at 0,0. The page's origin is the box's.
+  // A profile need not use 0,0; the page's origin is the box's.
   const DeskPlace left{.id = 1, .desk = gfx::Rect(-100, 50, 800, 600)};
   const DeskPlace right{.id = 2, .desk = gfx::Rect(700, 80, 800, 600)};
   EXPECT_EQ(DeskGeometryOf({left, right})->box, gfx::Rect(-100, 50, 1600, 630));
 }
 
 TEST(DeskGeometryTest, ThePageIsLaidOutAtTheLargestScale) {
-  // The denser display has the most to lose from an edge snapped for another.
+  // The densest display would lose the most sharpness at a lower scale.
   EXPECT_EQ(DeskGeometryOf({kCenter, kLaptop, kRight})->scale, 1.5f);
 }
 
 TEST(DeskGeometryTest, TheFastestDisplayHostsThePage) {
-  // Its BeginFrames drive the page, and a slower one would stutter it.
+  // Its BeginFrames drive the page; a slower one would make it stutter.
   EXPECT_EQ(DeskGeometryOf({kLaptop, kCenter, kRight})->host, kCenter.id);
 }
 
 TEST(DeskGeometryTest, OfEquallyFastDisplaysTheFirstHosts) {
-  // The first is the primary, the one startup's window is already on.
+  // The first is the primary, where the startup window already is.
   EXPECT_EQ(DeskGeometryOf({kRight, kLaptop})->host, kRight.id);
 }
 
@@ -63,8 +63,8 @@ TEST(DeskGeometryTest, NoDisplaysIsNoDesk) {
 }
 
 TEST(DeskGeometryTest, EachDisplayShowsThePageFromItsOwnCorner) {
-  // In that display's logical pixels, which is what its window's layers are
-  // in: the page's origin sits up and to the left of the display's own.
+  // In the display's logical pixels, so the page's origin is above and left
+  // of the display's.
   const gfx::Rect box(0, 0, 5520, 3200);
   EXPECT_EQ(PageBoundsOn(kLaptop, box), gfx::Rect(0, -1920, 5520, 3200));
   EXPECT_EQ(PageBoundsOn(kRight, box), gfx::Rect(-3720, 0, 5520, 3200));
@@ -85,15 +85,15 @@ TEST(DeskGeometryTest, ThePageIsToldOneScreenTheSizeOfTheDesk) {
   EXPECT_EQ(desk.available_rect, gfx::Rect(0, 0, 5520, 3200));
   EXPECT_EQ(desk.device_scale_factor, 1.5f);
   EXPECT_EQ(desk.display_id, kCenter.id);
-  // What the page is on is not turned: every turn is a presenter's.
+  // The page's screen is upright; presenters apply rotation.
   EXPECT_EQ(desk.orientation_angle, 0);
-  // The rest is the host display's.
+  // Other fields come from the host display.
   EXPECT_EQ(desk.depth, 30);
 }
 
 TEST(DeskGeometryTest, ThePageIsToldEveryMonitorItIsShownOn) {
-  // Each at its own density, from the desk's corner, so that the page can
-  // raster its part of every one natively: see cc/domicile/display_regions.h.
+  // Each at its own scale, offset from the desk's corner, so the page can
+  // raster each region natively. See cc/domicile/display_regions.h.
   const DeskPlace left{
       .id = 1, .desk = gfx::Rect(-100, 50, 800, 600), .scale = 1.0f};
   const DeskPlace right{
@@ -110,7 +110,7 @@ TEST(DeskGeometryTest, ThePageIsToldEveryMonitorItIsShownOn) {
   EXPECT_EQ(shows_right.rect, gfx::Rect(800, 30, 800, 600));
   EXPECT_EQ(shows_right.device_scale_factor, 2.0f);
   EXPECT_EQ(shows_right.label, cc::kDomicileDisplayLabel);
-  // Not the screen the page is on, which has the host's id: every id once.
+  // Ids are unique, so this differs from the page screen's host id.
   EXPECT_NE(shows_left.display_id, told.current_display_id);
   EXPECT_NE(shows_right.display_id, told.current_display_id);
   EXPECT_NE(shows_left.display_id, shows_right.display_id);
@@ -123,16 +123,14 @@ TEST(DeskGeometryTest, AWarpOnTheHostLandsOnTheHost) {
 }
 
 TEST(DeskGeometryTest, AWarpPastTheHostsEdgeLandsOnTheMonitorThere) {
-  // From the laptop's corner, up and to the right: on the turned monitors,
-  // whose arrow is drawn turned and at their density, not the laptop's.
+  // Up and right of the laptop's corner is a rotated monitor.
   const std::vector<DeskPlace> lit{kLaptop, kCenter, kRight};
   EXPECT_EQ(WarpLandsOn(lit, kLaptop.id, gfx::Point(3000, -1000)), kCenter.id);
   EXPECT_EQ(WarpLandsOn(lit, kLaptop.id, gfx::Point(4000, -1000)), kRight.id);
 }
 
 TEST(DeskGeometryTest, AWarpOntoNoMonitorStaysOnTheHost) {
-  // Above the laptop and left of the center monitor is no screen at all, and
-  // the cursor does not cross onto nothing.
+  // Above the laptop and left of the center monitor there is no screen.
   EXPECT_EQ(WarpLandsOn({kLaptop, kCenter, kRight}, kLaptop.id,
                         gfx::Point(100, -100)),
             kLaptop.id);

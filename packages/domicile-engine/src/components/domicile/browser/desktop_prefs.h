@@ -8,15 +8,14 @@ class PrefService;
 
 namespace domicile {
 
-// Turn off what Chrome offers a profile's user: saving and filling passwords,
-// filling addresses and cards, and translating a page.
+// Turns off password saving and filling, address and card autofill, and
+// translate offers.
 //
-// Each offer is a bubble or a dropdown the browser draws over the page -- over
-// the shell, on a desktop, where a lock screen's password field is a "save
-// password?" prompt. None of it is the desktop's UI.
+// Chrome draws these as bubbles over the page, which on a desktop is the shell;
+// a lock screen's password field would prompt to save the password.
 //
-// Every start rather than once, because the profile outlives a run and
-// nothing here has a settings page to turn one back on from.
+// Runs on every start because the profile persists and has no settings page to
+// change them.
 void TurnOffBrowserOffers(PrefService& prefs);
 
 }  // namespace domicile

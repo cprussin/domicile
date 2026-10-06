@@ -1,12 +1,10 @@
 #!/usr/bin/env bash
-# The shell showing a picture from this machine with nothing asking whether it
-# may — patch 0066, which classes domicile:// loopback for Local Network
-# Access.
+# Checks that the shell loads an image from this machine without a Local
+# Network Access prompt (patch 0066 treats domicile:// loopback as local).
 #
-# Headless, no compositor and no client. Its control is two runs on an
-# ordinary page the engine is told is public: a picture from its own address
-# space, which MUST show, then one from loopback, which must NOT — so LNA is
-# shown live in the engine whose shell it exempts.
+# Headless, with no compositor or client. The control is a page marked public:
+# an image from its own address space must load, and one from loopback must
+# not, which shows LNA is active.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

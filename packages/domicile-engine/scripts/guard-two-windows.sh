@@ -1,34 +1,20 @@
 #!/usr/bin/env bash
-# Two Wayland clients, two windows, one page — the claim nothing had ever made.
+# Checks that two Wayland clients appear as two windows on one page.
 #
 #   nix develop .#full --command \
 #     ./packages/domicile-engine/scripts/under-wayland.sh /build/chromium/src \
 #     ./packages/domicile-engine/scripts/guard-two-windows.sh /build/chromium/src
 #
-# From Domicile's full shell, not Chromium's, for the reason
-# guard-client-window.sh gives: `engineRuntimeLibs` puts Chromium's runtime
-# libraries beside the GL stack and this needs both.
+# Run it in the `.#full` dev shell: it needs Chromium's runtime libraries and
+# the GL stack (`engineRuntimeLibs`; see guard-client-window.sh).
 #
-# WHY THIS EXISTS. frame_sink_broker_unittest asserts that two apps get two
-# sinks and that a waiting embed takes only its own app's. That is the broker's
-# bookkeeping. Whether viz then resolves two SurfaceDrawQuads in one
-# aggregation — two processes' buffers composited into one page — is a
-# different question, and until this script existed nothing had asked it. A
-# shell is a desktop of windows, so it is the question that decides whether the
-# seam is finished.
+# frame_sink_broker_unittest covers the broker's bookkeeping. This checks that
+# viz composites two clients' surfaces into one page. The negative control
+# catches a broker that gives every embed the same surface.
 #
-# The one-window heuristic this replaced (`MostRecentlyBrokeredSink`) would
-# pass a test that only checked the first window. That is what the negative
-# control below is built to catch: with one client running, that client's
-# window must cover its own half of the page and not the whole of it.
-#
-# WHAT IT ASSERTS. Where each client's color *is*, as a box, and that the two
-# boxes are side by side and do not overlap. Not what color is at a named
-# point: those points were computed from the window size the browser was asked
-# for, the capture came back half again as large, and three quarters of the
-# asked-for width landed inside the left canvas of the real one. The guard read
-# the first client's color twice and reported the seam broken while the seam
-# was working.
+# It asserts where each client's color is, as a box: the two boxes must sit
+# side by side without overlapping. It does not sample named points, because
+# the captured window is larger than `--window-size` asked for.
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
@@ -43,38 +29,25 @@ fi
 
 ROOT="$(cd "$SCRIPTS/../../.." && pwd)"
 
-# Two colors, neither of them either canvas's fallback (#3f51b5, #00796b) and
-# neither the other's. A guard where the two windows could be confused for each
-# other is the guard not being run.
+# Distinct from each other and from the canvas fallbacks (#3f51b5, #00796b).
 COLOR_A="${COLOR_A:-3366CC}"
 COLOR_B="${COLOR_B:-CC6633}"
 APP_A="${APP_A:-app-1}"
 APP_B="${APP_B:-app-2}"
 
-# NEGATIVE=1 runs one client instead of two. That client must fill its own
-# half and no more — a broker that dispatches on nothing gives both canvases
-# the same surface, and with only one client running that shows as one color
-# across the whole page. It is the failure a two-client run cannot tell apart
-# from success.
+# NEGATIVE=1 runs one client instead of two. It must fill its own half and no
+# more; a broker that ignores app ids would show it across the whole page.
 NEGATIVE="${NEGATIVE:-0}"
 
-# How long a client is given. Longer than everything that can happen after it
-# starts — a wait for the second client's sink at 60s, then 90s of polling —
-# because the search runs on the submit path, so a client reaped mid-poll stops
-# the measurement and the guard reports "it never settled", which points at the
-# wrong thing entirely. 420 is that with room, not a number tuned against
-# anything else.
+# How long a client lives. It must outlast the 60s wait for the second sink
+# plus 90s of polling, because the search runs on the submit path and stops
+# when the client exits. 420 leaves room.
 CLIENT_LIVES_FOR="${CLIENT_LIVES_FOR:-420}"
 
-# What the compositor is asked to look for. The negative run does not ask for
-# the second color, and that is what lets it settle: settling means "every
-# color I was asked for was found and none of them moved", so asking for one
-# nobody is drawing means never settling, and a guard that cannot wait for a
-# settled measurement asserts on whatever it caught mid-paint.
-#
-# Nothing is lost. "The second color is nowhere" was never the control —
-# nobody draws it either way — and the claim that does the work is how much of
-# the page the one running client covers.
+# Colors the compositor searches for. The negative run omits the second color:
+# "settled" means every requested color was found and none moved, so asking
+# for an undrawn color would never settle. The control checks how much of the
+# page the one client covers instead.
 FIND_COLORS="$COLOR_A;$COLOR_B"
 [ "$NEGATIVE" = "1" ] && FIND_COLORS="$COLOR_A"
 
@@ -84,10 +57,8 @@ PROFILE="${PROFILE:-/tmp/domicile-two-windows-profile}"
 RUNTIME="${XDG_RUNTIME_DIR:-/tmp}"
 COMPOSITOR="$ROOT/target/debug/domicile-compositor"
 
-# What the browser is asked for. NOT what the assertion is computed from —
-# see the box comparison at the bottom. The window this produced came back from
-# a CopyOutputRequest as 1620x1220, so any coordinate derived from these two
-# numbers is a coordinate in a space that does not exist.
+# The requested window size. Assertions do not use it: the capture comes back
+# larger (1620x1220 on this harness). See the box comparison below.
 WIDTH="${WIDTH:-1024}"
 HEIGHT="${HEIGHT:-768}"
 
@@ -95,17 +66,13 @@ ENGINE_LOG=$(mktemp)
 COMP_LOG=$(mktemp)
 CLI_LOG=$(mktemp)
 STARTED=()
-# A run and its own negative control are two different measurements, so they
-# get two different files. Sharing one meant the control's logs overwrote the
-# run's and the diagnostics printed whichever went last — which, when the two
-# disagree, is exactly the pair worth reading side by side.
+# A run and its negative control write separate log files so both can be
+# read side by side.
 WHICH=""
 [ "$NEGATIVE" = "1" ] && WHICH="-negative"
 LOG_COPY="${LOG_COPY:-/tmp/domicile-two-windows$WHICH-compositor.log}"
-# The browser's own log, which used to be thrown away with the tempfile. It is
-# where the page's console lines are — which app was embedded, at which
-# SurfaceId, and which was refused — and a run where the page showed the wrong
-# window cannot be told apart from one where a client never drew without them.
+# Keep the browser's log: its console lines say which app was embedded at
+# which SurfaceId and which was refused.
 ENGINE_LOG_COPY="${ENGINE_LOG_COPY:-/tmp/domicile-two-windows$WHICH-engine.log}"
 cleanup() {
   cp "$COMP_LOG" "$LOG_COPY" 2>/dev/null
@@ -166,10 +133,8 @@ for _ in $(seq 1 120); do [ -S "$BROKER" ] && break; sleep 0.5; done
 }
 echo "the engine is listening on $BROKER"
 
-# The compositor, told which colors to look for. No DOMICILE_SPIKE_PROBE:
-# this guard names no points, so it needs no coordinate space to name them in,
-# and the center — which on this page is the seam between the two canvases and
-# inside neither — is not sampled either.
+# The compositor, told which colors to find. No DOMICILE_SPIKE_PROBE: the
+# guard names no points.
 export XDG_RUNTIME_DIR="$RUNTIME"
 COMP_SOCK="$RUNTIME/domicile-two-windows.sock"
 rm -f "$COMP_SOCK" "$COMP_SOCK.session"
@@ -198,25 +163,14 @@ fi
 CLIENT_DISPLAY=$(grep -oE "wayland-[0-9]+" "$COMP_LOG" | head -1)
 CLIENT_DISPLAY="${CLIENT_DISPLAY:-wayland-1}"
 
-# One client at a time, and the second only once the first has been brokered.
-# The app ids are the compositor's own, minted in the order windows appear, so
-# starting both at once would make which client is app-1 a race — and the page
-# named app-1 and app-2 before either existed.
+# Start the second client only after the first is brokered. The compositor
+# assigns app ids in mapping order, and the page names app-1 and app-2 up front.
 start_client() {
   local color="$1"
   echo "driving kitty, drawing #$color"
-  # Prints, rather than sitting idle. The probe runs on the submit
-  # path — it is called when a client commits a frame the engine
-  # takes — so a client that stops drawing stops the measurement
-  # dead, and a guard waiting for a box to hold still would then be
-  # measuring the client's idleness. kitty redraws for its cursor
-  # blink and gives up on that after about fifteen seconds; a
-  # character every fifth of a second keeps it committing for as
-  # long as the guard is watching.
-  #
-  # The dots are foreground pixels and the box is the background
-  # color's extent, so they cost nothing the measurement cares
-  # about.
+  # Keep the client printing. The probe runs only when a client commits a
+  # frame, and kitty stops redrawing after its cursor blink times out (~15s).
+  # The dots are foreground pixels; the probe measures the background color.
   NO_COLOR=1 WAYLAND_DISPLAY="$CLIENT_DISPLAY" timeout "$CLIENT_LIVES_FOR" \
     "${KITTY[@]}" --config NONE -o confirm_os_window_close=0 \
           -o "background=#$color" \
@@ -225,10 +179,8 @@ start_client() {
   STARTED+=($!)
 }
 
-# Two greps rather than one pattern: tracing colors its field names, so
-# `app_id=app-1` is not contiguous in the file even though it looks it on a
-# terminal. The message is one format string and has no escapes inside it, and
-# the value does not either, so matching them separately is what works.
+# Two greps: tracing colors its field names, so `app_id=app-1` is not
+# contiguous in the file.
 await_broker() {
   local app="$1"
   for _ in $(seq 1 60); do
@@ -253,57 +205,31 @@ else
   await_broker "$APP_B" || exit 1
 fi
 
-# WHERE each color is, not what is at a named point.
-#
-# The points were the original assertion and they were wrong — not about the
-# seam, about arithmetic. They were computed from the `--window-size` the
-# browser was asked for, and what SamplePixel indexes is the bitmap a
-# CopyOutputRequest returns, which on this harness came back 1620x1220 for a
-# window asked for at 1024x768. Three quarters of 1024 is 768, and 768 is
-# inside the LEFT canvas of a 1620-wide capture. So the guard read the first
-# client's color twice and called the seam broken, and the seam was fine.
-#
-# Boxes have no such assumption in them, and they assert something stronger
-# than two points ever did: two clients' windows, side by side, not overlapping
-# — which is exactly "viz aggregated two surfaces from a process outside the
-# browser into one page's layer tree" and is the whole question this script
-# exists to ask.
+# The box the compositor last logged for color $1.
 box_of() {
-  # The geometry only. `grep -o` on the whole line would hand the caller the
-  # color too, and `#FF3366CC` contains the digit run `3366` — which is what
-  # the first version of this did, so its comparison was a function of the
-  # color strings rather than of where anything was drawn. Two boxes covering
-  # the identical region passed it.
+  # Return only the geometry: the color string (e.g. `#FF3366CC`) contains
+  # digit runs that would otherwise be read as coordinates.
   grep -aoE "engine found #FF$1 over \([0-9]+,[0-9]+\) [0-9]+x[0-9]+" "$COMP_LOG" \
     2>/dev/null | tail -1 | grep -oE "\([0-9]+,[0-9]+\) [0-9]+x[0-9]+"
 }
 
-# How big the window the boxes are in is, so a box can be compared against it
-# rather than against a number this script made up.
+# The captured window's size, to compare boxes against.
 window_size() {
   grep -aoE "of the browser's [0-9]+x[0-9]+ window" "$COMP_LOG" 2>/dev/null |
     tail -1 | grep -oE "[0-9]+x[0-9]+"
 }
 
-# `(x,y) WxH` -> x y w h, space separated. Only ever given the geometry.
+# `(x,y) WxH` -> x y w h, space separated.
 numbers_in() {
   echo "$1" | grep -oE "[0-9]+" | tr '\n' ' '
 }
 
-# Wait for the COMPOSITOR to say it looked again and nothing had moved.
+# Wait for the compositor to log `engine settled`: a round found every
+# requested color and no box moved since the last round.
 #
-# Not for the log to stop changing, which is what two equal looks measure and
-# is not the same thing. A box is written down only when it *moves*, so a log
-# that is not changing is equally consistent with a settled page and with a
-# search that has stopped — and the search does stop, because it runs on the
-# submit path and a client that quietens down takes it with it. Two readings
-# of a frozen file agree with each other forever.
-#
-# So the compositor says it: `engine settled` is logged when a round finds
-# every color it was asked for and none of their boxes moved since the round
-# before. That is the two-measurement rule, made where the measurements are,
-# and both runs wait for it — which is why the negative run is careful to ask
-# only for a color that exists.
+# A log that stops changing is not enough: boxes are logged only when they
+# move, and the search stops when clients stop submitting. Both runs wait for
+# this, which is why the negative run asks only for a color that exists.
 POLL_EVERY=3
 LOOKS=30
 
@@ -322,15 +248,12 @@ BOX_A=$(box_of "$COLOR_A")
 BOX_B=$(box_of "$COLOR_B")
 WINDOW=$(window_size)
 
-# The three ways this can have measured nothing, told apart. Before the
-# assertions, because each of them is a different fact from "the boxes are
-# wrong" and reporting one as another is what sent the last several runs
-# chasing the wrong thing.
+# Distinguish the ways the run can have measured nothing before asserting on
+# boxes, so the failure names the right cause.
 #
-# The first of them is unreachable at today's numbers — the compositor looks
-# for 300s (`FIND_FOR`) and this polls for at most 150 from the first frame —
-# and is kept for the day someone lengthens the poll, so that doing so cannot
-# quietly turn "we stopped looking" into "it is not there".
+# The first is unreachable today (the compositor searches for 300s, `FIND_FOR`;
+# this polls at most 150s after the first frame). It guards against someone
+# lengthening the poll.
 if grep -aq "giving up looking" "$COMP_LOG" 2>/dev/null; then
   annotate "guard-two-windows: the compositor stopped searching before" \
        "this poll ran out, so 'not found' here means 'not looked for'"
@@ -363,8 +286,7 @@ fi
 
 echo
 echo "#$COLOR_A: ${BOX_A:-nowhere in the window}"
-# Not looked for in the negative run, so saying "nowhere" would read as a
-# finding about the page rather than as a fact about what was asked.
+# The negative run never searches for it, so do not report it as missing.
 if [ "$NEGATIVE" = "1" ]; then
   echo "#$COLOR_B: not searched for — no client is drawing it"
 else
@@ -376,22 +298,16 @@ grep -aoE "engine (found|has not drawn|could not read the window at all looking 
   "$COMP_LOG" 2>/dev/null | sed 's/^/  /'
 
 if [ "$NEGATIVE" = "1" ]; then
-  # "The other color is nowhere" is not the control. Nobody is drawing
-  # #$COLOR_B, so it is nowhere whether the broker dispatches correctly or not
-  # — the check would pass on the very heuristic it exists to catch.
-  #
-  # What tells them apart is how much of the page the ONE running client
-  # covers. Dispatched on app id, canvas B waits for a producer that never
-  # arrives and client A fills its own half. Dispatched on nothing, canvas B
-  # embeds client A's surface too and A's color spans the whole width. So the
-  # control is an upper bound on A's box.
+  # The other color being absent proves nothing: nobody draws it. What
+  # matters is how much of the page client A covers. With dispatch by app id,
+  # canvas B stays empty and A fills its half. Without it, canvas B embeds A
+  # too and A spans the page. So the control bounds A's width from above.
   read -r A_X A_Y A_W A_H <<EOF
 $(numbers_in "$BOX_A")
 EOF
   WINDOW_W=$(echo "$WINDOW" | cut -dx -f1)
-  # Both bounds, because the claim has two halves: the one client covers its
-  # own half (so the run measured a window rather than a sliver) and not the
-  # page (so the other canvas is not showing it too).
+  # Lower bound: A covers its half, not a sliver. Upper bound: canvas B is
+  # not showing it too.
   LEAST=$((WINDOW_W * 45 / 100))
   MOST=$((WINDOW_W * 55 / 100))
   echo
@@ -418,13 +334,8 @@ if [ -z "$BOX_B" ]; then
   exit 1
 fi
 
-# Disjoint, and each about half the page.
-#
-# Disjointness alone is not enough: a stray pixel of each color in opposite
-# corners is disjoint, and so is one window drawn beside a sliver of another.
-# The claim is that the page put two windows side by side, so each has to be
-# most of its half — and "half" is measured against the window the probe
-# reported, not against a number this script chose.
+# Disjoint, and each about half the window the probe reported. Disjointness
+# alone would pass on stray pixels or one window beside a sliver.
 read -r A_X A_Y A_W A_H <<EOF
 $(numbers_in "$BOX_A")
 EOF
@@ -434,16 +345,13 @@ EOF
 A_RIGHT=$((A_X + A_W))
 B_RIGHT=$((B_X + B_W))
 WINDOW_W=$(echo "$WINDOW" | cut -dx -f1)
-# 45%, not a third. The measured half is 800 of a 1620 capture — 49.4%, the
-# missing 0.6% being about ten pixels of window border per side. Browser chrome
-# costs height, not width. A third would admit a box a third narrower than the
-# truth, which is most of the way to a sliver.
+# 45%: the measured half is 800 of 1620 (49.4%), the rest being window
+# border. Browser chrome costs height, not width.
 LEAST=$((WINDOW_W * 45 / 100))
 
 FAILURE=""
-# Overlap in either order, rather than "A ends before B begins": two disjoint
-# windows in the other order is a page laying its canvases out right to left,
-# which is not this guard's business and is not a failure of the seam.
+# Check overlap in either order: a right-to-left layout is not a seam
+# failure.
 if [ "$A_RIGHT" -gt "$B_X" ] && [ "$B_RIGHT" -gt "$A_X" ]; then
   FAILURE="the two windows overlap, so the page is not showing two of them"
 elif [ "$A_W" -lt "$LEAST" ] || [ "$B_W" -lt "$LEAST" ]; then

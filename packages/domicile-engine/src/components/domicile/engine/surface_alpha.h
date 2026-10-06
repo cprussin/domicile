@@ -8,10 +8,10 @@
 
 namespace domicile {
 
-// Whether a client's buffer in `fourcc` says how see-through each pixel is.
-// One that does is blended over what the page draws under it -- a menu's
-// rounded corners, a translucent terminal. One that does not is drawn opaque,
-// which is what lets viz skip drawing whatever it covers.
+// Whether the `fourcc` pixel format has an alpha channel.
+//
+// Buffers with alpha are blended over the page; others are drawn opaque so viz
+// can skip drawing what they cover.
 bool FourccHasAlpha(uint32_t fourcc);
 
 }  // namespace domicile

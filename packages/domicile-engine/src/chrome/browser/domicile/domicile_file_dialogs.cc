@@ -25,12 +25,10 @@
 namespace domicile {
 namespace {
 
-// The <webview> guest `contents` is, or is inside.
+// Returns the <webview> guest that is or contains `contents`.
 //
-// INSIDE as well as is: a page's own frames are the guest's WebContents, but
-// an inner WebContents -- a MimeHandlerViewGuest, which is how the PDF viewer
-// is embedded where it is not an out-of-process frame -- is a WebContents of
-// its own, attached to the guest's.
+// Walks outer WebContents because an inner one, such as the PDF viewer's
+// MimeHandlerViewGuest, is attached to the guest rather than part of it.
 WebViewGuest* GuestAround(content::WebContents* contents) {
   for (; contents != nullptr; contents = contents->GetOuterWebContents()) {
     if (WebViewGuest* guest = WebViewGuest::FromWebContents(contents)) {
@@ -40,7 +38,7 @@ WebViewGuest* GuestAround(content::WebContents* contents) {
   return nullptr;
 }
 
-// A file dialog as a question to the shell. See UseTheShellForFileDialogs.
+// A file dialog answered by the shell. See UseTheShellForFileDialogs.
 class ShellFileDialog : public ui::SelectFileDialog {
  public:
   ShellFileDialog(Listener* listener,
@@ -64,8 +62,8 @@ class ShellFileDialog : public ui::SelectFileDialog {
                       gfx::NativeWindow owning_window,
                       const GURL* caller) override {
     const mojom::WebViewFileChooserMode mode = ModeForDialog(type);
-    // No policy is a dialog nobody said a page for, which is a dialog for no
-    // <webview> as surely as one for the shell's own page.
+    // Without a policy there is no source page, so treat it as in no
+    // <webview>.
     WebViewGuest* guest =
         GuestAround(select_file_policy() == nullptr
                         ? nullptr
@@ -73,16 +71,16 @@ class ShellFileDialog : public ui::SelectFileDialog {
     if (guest == nullptr) {
       LOG(WARNING) << "domicile: refused a file dialog for a page in no "
                       "<webview>; a desk draws no dialog of its own.";
-      // Posted: a listener is told after SelectFile returns, as Chromium's
-      // own refusal in SelectFileDialog::SelectFile tells it.
+      // Post so the listener hears after SelectFile returns, as Chromium's
+      // own refusal in SelectFileDialog::SelectFile does.
       base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
           FROM_HERE,
           base::BindOnce(&ShellFileDialog::Answered, base::WrapRefCounted(this),
                          mode, std::nullopt));
       return;
     }
-    // Before the ask, so the line means "the shell was asked" whether or not
-    // it answers. The save-picker guard greps for it.
+    // Logged before asking so it appears even if the shell never answers.
+    // The save-picker guard greps for it.
     LOG(INFO) << "domicile: a file dialog asked the shell instead of drawing.";
     asking_ = true;
     guest->ChooseFiles(mode, DialogExtensions(file_types), default_path,
@@ -97,8 +95,7 @@ class ShellFileDialog : public ui::SelectFileDialog {
   void Answered(mojom::WebViewFileChooserMode mode,
                 std::optional<std::vector<base::FilePath>> paths) {
     asking_ = false;
-    // The caller went away while the shell was deciding -- a page closed with
-    // its picker open -- and there is nobody left to tell.
+    // The caller is gone, for example a page closed with its picker open.
     if (listener_ == nullptr) {
       return;
     }

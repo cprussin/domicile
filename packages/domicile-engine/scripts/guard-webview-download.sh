@@ -1,43 +1,34 @@
 #!/usr/bin/env bash
-# A download started inside a browser window, the shell asked where it goes,
-# and the file arriving there.
+# Guard: a download in a browser window asks the shell where to save, and the
+# file lands there.
 #
 #   nix develop .#full --command \
 #     ./packages/domicile-engine/scripts/guard-webview-download.sh /build/chromium/src
 #
-# Headless, like the other webview guards: nothing here is measured in pixels.
+# Runs headless; nothing here is measured in pixels.
 #
-# WHY THIS EXISTS. Chrome's answer to "where does this download go?" is a save
-# dialog it draws through the desktop portal, which is desktop UI the shell did
-# not choose. Patch 0053 hands a guest's download to
-# WebViewGuest::ChooseDownloadPath instead, which asks the element the same
-# question an `<input type="file">` does, in save mode -- and turns on
-# `download.prompt_for_download`, so every download asks.
+# Patch 0053 routes a guest's download to WebViewGuest::ChooseDownloadPath,
+# which asks the element in save mode like an `<input type="file">`, instead of
+# Chrome's portal save dialog. It also sets `download.prompt_for_download` so
+# every download asks.
 #
-# WHAT IT ASSERTS, in order:
+# Assertions, in order:
 #
-#   the shell page ran                or nothing here was ever set up
-#   a press reached the shell's        the harness can deliver a click at all
-#     document
-#   the page in the window ran         a guest was made, attached, navigated
-#   the press landed in the guest      on the link, which fills the page
-#   the file was fetched               the link started a download
-#   the browser asked                  ChromeDownloadManagerDelegate reached
-#                                      ChooseDownloadPath -- patch 0053
-#   the shell was asked, in save mode  the question crossed to the element,
-#     with the site's file name        carrying the name the site gave it
-#   the shell answered                 its answer did not throw
-#   the file is where it said          THE CLAIM: on the disk, at the path the
-#                                      shell chose, with the bytes the site sent
+#   the shell page ran
+#   a press on the strip reached the shell's document (the harness works)
+#   the guest page loaded
+#   the press landed on the guest's link
+#   the file was fetched
+#   the browser called ChooseDownloadPath
+#   the shell was asked in save mode with the site's file name
+#   the shell answered without throwing
+#   the file is at the shell's path with the site's bytes (the claim)
 #
-# HOW IT CAN FAIL. NEGATIVE=1 runs the same download with a shell that CANCELS.
-# Nothing may land anywhere in the home -- which separates "the file went where
-# the shell said" from "the browser saves it somewhere whatever the shell says".
+# NEGATIVE=1 runs a shell that cancels. Nothing may be saved anywhere in the
+# home, proving the browser does not save regardless of the answer.
 #
-# THE HOME IS THIS GUARD'S OWN, and it starts with nothing in it but the folder
-# the shell picks. So the site's bytes found anywhere in it after the run are
-# this run's download. The browser's own files there -- its NSS database -- are
-# not, and are told apart by what is in them.
+# The guard uses its own empty home, so any file there with the site's bytes
+# is this run's download.
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
@@ -62,8 +53,7 @@ PROFILE="${PROFILE:-/tmp/domicile-webview-download-profile}"
 HOME_DIR="${HOME_DIR:-/tmp/domicile-webview-download-home}"
 WIDTH="${WIDTH:-1024}"
 HEIGHT="${HEIGHT:-768}"
-# Not `STRIP`, which a build shell exports as a program -- see
-# guard-webview-new-window.sh.
+# Not `STRIP`: `nix develop .#full` exports STRIP=strip.
 STRIP_HEIGHT="${STRIP_HEIGHT:-64}"
 CHROME_X=$((WIDTH / 2))
 CHROME_Y=$((STRIP_HEIGHT / 2))
@@ -73,8 +63,8 @@ WINDOW_Y=$((STRIP_HEIGHT + (HEIGHT - STRIP_HEIGHT) / 2))
 
 FOR_SECONDS="${FOR_SECONDS:-90}"
 
-# What the site calls the file and what is in it -- guard-webview-file-chooser-
-# server.py's FILE_NAME and FILE_TEXT -- and where the shell puts it.
+# Must match FILE_NAME and FILE_TEXT in guard-webview-file-chooser-server.py.
+# PICK is where the shell saves it.
 NAME="guard-download.txt"
 TEXT="a file the shell was asked where to put"
 PICK="saved/renamed-by-the-shell.txt"
@@ -117,7 +107,7 @@ wait_for_line() { # $1 tries, $2 pattern, $3 file
   return 1
 }
 
-# 1. The page in the window.
+# 1. Serve the window's page.
 rm -f "$HTTP_LOG"
 python3 "$SCRIPTS/guard-webview-file-chooser-server.py" --port 0 \
   >"$HTTP_LOG" 2>&1 &
@@ -132,7 +122,7 @@ PORT="$(served_port "$HTTP_LOG")" || {
 }
 SITE="http://127.0.0.1:$PORT"
 
-# 2. The engine, on a domicile:// document, with this guard's home.
+# 2. Start the engine on a domicile:// page with this guard's home.
 rm -f "$ENGINE_LOG"
 HOME="$HOME_DIR" "$CHROMIUM/$OUT/chrome" \
   --ozone-platform=headless \
@@ -158,12 +148,12 @@ DEBUG_PORT="$(devtools_port "$PROFILE" "$TRIES")" || {
   exit 1
 }
 
-# 3. A page in the window, and a settle for its first frame.
+# 3. Wait for the guest page, then settle for its first frame.
 wait_for_line "$TRIES" "GUARD download-loaded" "$ENGINE_LOG" ||
   echo "nothing ever loaded in the window" >&2
 sleep 3
 
-# 4. THE BEFORE: a press on the shell's own strip.
+# 4. Click the shell's strip to check the harness.
 python3 "$SCRIPTS/guard-webview-click-mouse.py" \
   --port "$DEBUG_PORT" --x "$CHROME_X" --y "$CHROME_Y" \
   >"$CLICK_LOG" 2>&1 ||
@@ -171,14 +161,14 @@ python3 "$SCRIPTS/guard-webview-click-mouse.py" \
 wait_for_line 20 "GUARD chrome-mousedown" "$ENGINE_LOG" ||
   echo "the shell's document never reported the first click" >&2
 
-# 5. THE CLICK THIS GUARD IS ABOUT, on the link.
+# 5. Click the link in the guest.
 python3 "$SCRIPTS/guard-webview-click-mouse.py" \
   --port "$DEBUG_PORT" --x "$WINDOW_X" --y "$WINDOW_Y" \
   >>"$CLICK_LOG" 2>&1 ||
   echo "the click into the window could not be driven; see $CLICK_LOG" >&2
 
-# A fixed wait, because the control's readings are absences -- long enough for
-# the fetch, the question, the answer and a few bytes written and renamed.
+# A fixed wait, because the control checks for absences. Long enough to fetch,
+# ask, answer and write the file.
 sleep 10
 
 saw() { # $1 pattern
@@ -190,21 +180,16 @@ SAW_PAGE=$(saw "GUARD download-loaded")
 SAW_CHROME=$(saw "GUARD chrome-mousedown")
 SAW_GUEST=$(saw "GUARD guest-mousedown")
 SAW_FETCHED=$(grep -qF "GET /file " "$HTTP_LOG" && echo 1 || echo 0)
-# The browser's own line, from WebViewGuest::ChooseDownloadPath: it separates
-# "the download never asked" from "it asked and the shell was never told".
+# Logged by WebViewGuest::ChooseDownloadPath. Tells "never asked" from "asked
+# but the shell was not told".
 SAW_BROWSER=$(saw "domicile: a <webview>'s download asked the shell where to go.")
 SAW_ASKED=$(saw "GUARD file-chooser mode=save ")
 SAW_SUGGESTED=$(saw "GUARD file-chooser mode=save suggested=$NAME ")
 SAW_ANSWERED=$(saw "GUARD answered")
 SAVED=$([ "$(cat "$HOME_DIR/$PICK" 2>/dev/null)" = "$TEXT" ] && echo 1 || echo 0)
-# The download anywhere in the home: a file holding the site's bytes, or a
-# `.crdownload` partial of one -- saved somewhere the shell did not say, or saved
-# at all after a cancel.
-#
-# BY WHAT IS IN IT, NOT BY WHETHER ANYTHING IS THERE. The browser writes its own
-# files under `HOME` whatever the shell answers -- `~/.pki/nssdb` among them --
-# and engine run 36494493835's control read those as a download. What that run
-# found is printed below, so the next reading can be checked against it.
+# The download anywhere in the home: a file with the site's bytes, or a
+# `.crdownload` partial. Matched by content, because the browser writes its own
+# files under `HOME` (such as `~/.pki/nssdb`) regardless of the answer.
 FOUND="$(
   {
     grep -rlF -- "$TEXT" "$HOME_DIR" 2>/dev/null
@@ -222,7 +207,8 @@ echo "everything in the home, for the record:"
 find "$HOME_DIR" -type f 2>/dev/null | sed 's/^/  /'
 echo
 
-# WHICH END TO BLAME, run directly by `scripts/test-webview-download-guard.sh`.
+# Turn the readings into a verdict. `scripts/test-webview-download-guard.sh`
+# tests this block.
 FAILURE=""
 PASSED=""
 if [ "$SAW_SHELL" != "1" ]; then

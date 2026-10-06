@@ -18,23 +18,21 @@ class WebContents;
 
 namespace domicile {
 
-// One display showing the page it does not host.
+// A display that shows the page hosted on another display.
 struct Presented {
   int64_t display = 0;
-  // The display's CRTC rectangle: its window must be exactly this, or no
+  // The display's CRTC rectangle. The window must match it exactly or no
   // controller scans it out (`ScreenManager::FindWindowAt`).
   gfx::Rect pixels;
-  // Where the page sits in the display's logical pixels (`PageBoundsOn`).
+  // The page's bounds in the display's logical pixels (`PageBoundsOn`).
   gfx::Rect page;
 };
 
-// A window on every display but the host's, each showing the host's page.
+// Windows that show the host's page on every other display.
 //
-// See docs/architecture/ONE-PAGE-FOR-THE-DESK.md. Each window's root layer
-// holds a mirror of the page's surface layer, so it shows the surface the host
-// shows, and viz scales the page's frame to this window's own scale
-// (`SurfaceAggregator::EmitSurfaceContent`). Input never reaches these
-// windows: ozone sends it all to the host.
+// Each window mirrors the page's surface layer; viz scales the frame to the
+// window's scale. Input goes only to the host. See
+// docs/architecture/ONE-PAGE-FOR-THE-DESK.md.
 class DeskPresenters {
  public:
   DeskPresenters();
@@ -44,9 +42,8 @@ class DeskPresenters {
 
   ~DeskPresenters();
 
-  // Shows `page` on each of `displays`, and nothing anywhere else. Windows are
-  // kept per display across calls; a mirror is remade when the page's view is
-  // another (a new renderer).
+  // Shows `page` on exactly `displays`. Windows persist per display across
+  // calls; a mirror is rebuilt when the page's view changes (new renderer).
   void Present(content::WebContents* page,
                const std::vector<Presented>& displays);
 

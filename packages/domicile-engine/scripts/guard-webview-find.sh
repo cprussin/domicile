@@ -1,59 +1,32 @@
 #!/usr/bin/env bash
-# What a browser window's find bar can drive and can know: `find()` and
-# `stopFinding()` on a <webview>, run on the guest behind it, and the count the
-# element holds of what they found.
+# Guard: `find()` and `stopFinding()` on a <webview> search the guest page,
+# and the element reports the match count.
 #
 #   nix develop .#full --command \
 #     ./packages/domicile-engine/scripts/guard-webview-find.sh /build/chromium/src
 #
-# No nested compositor and no Wayland client, exactly as
-# guard-webview-history.sh runs: nothing here is measured in pixels, so
-# `--ozone-platform=headless` with software compositing is the whole of the
-# environment.
+# Runs headless with software compositing; nothing here is measured in pixels.
 #
-# WHY THIS EXISTS. A <webview>'s page is a guest — an inner WebContents in the
-# browser process — and the renderer the element lives in can see none of its
-# frames. So a find is the browser's: the element sends it down the
-# WebViewGuest pipe, the guest's own FindRequestManager searches every frame in
-# the guest, and the count comes back as FindChanged. Every link of that is
-# what this asserts.
+# The element's renderer cannot see the guest's frames. The element sends find
+# over the WebViewGuest pipe, the guest's FindRequestManager searches every
+# frame, and the count returns as FindChanged. `BrowserWindow.test.tsx` only
+# checks that the find bar calls `find()`; jsdom has no nested page to search.
 #
-# A UNIT TEST CANNOT MAKE THIS CLAIM. There is no nested browsing context in
-# jsdom, so there is no page to search; `BrowserWindow.test.tsx` asserts that
-# the find bar calls `find()` on the element and would keep passing with this
-# whole path removed. The claim is "the window's page holds three of these and
-# the second is selected", and only a real engine can be asked it.
+# The page holds the word three times: twice in its text and once in a
+# cross-site (out-of-process) frame. Readings after each step, as
+# matches/active:
 #
-# THE POSITIVE IS ESTABLISHED FIRST. A guard that measured only "a new page
-# ends a find" would pass against an element that never found anything. So the
-# page holds the word three times — twice in its own text and once in a
-# CROSS-SITE frame, which is out of process and so is the part of the count the
-# element's own renderer could never have made — and what is asserted is the
-# element's reading after each step, as matches/active:
-#
-#   found      3/1   THE CLAIM: every frame counted, and the first selected
-#   next       3/2   the same text again is the next match, not a new search
-#   previous   3/1   and backward is the one before
+#   found      3/1   every frame counted, first selected (the claim)
+#   next       3/2   the same text again moves to the next match
+#   previous   3/1   backward moves to the previous match
 #   stopped    0/0   stopFinding() ended it
-#   refound    3/…   a find again, for the navigation below to end. Which match
-#                    a search begun from a kept selection lands on is Blink's
-#                    business, so only that one is selected is asserted
-#   navigated  0/0   a new page ends a find, with nothing called
+#   refound    3/…   find again so `navigated` has a find to end; which match
+#                    is active is up to Blink
+#   navigated  0/0   navigating ends a find
 #
-# HOW IT CAN FAIL. NEGATIVE=1 runs the same shell, the same element, the same
-# guest and the same two pages, and CALLS NOTHING. Not an <iframe> in the
-# element's place: an <iframe> has no find() at all, so that run would end on
-# a TypeError rather than on a reading. What it decides:
-#
-#   every reading must stay 0/0   or the element reports a count nobody asked
-#                                  for, and the positive run's need not be the
-#                                  find's
-#   no event may arrive           or something announces a find with nothing
-#                                  driving it, and the positive run's events
-#                                  are noise
-#   the second page must arrive   or the positive run's `navigated` is read on
-#                                  a page that never changed, and says nothing
-#                                  about a new page ending a find
+# NEGATIVE=1 runs the same pages and calls nothing (an <iframe> is no control:
+# it has no find()). It must read 0/0 throughout, see no find events, and still
+# reach the second page, so `navigated` in the positive run is meaningful.
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
@@ -70,7 +43,7 @@ if [ -z "$CHROMIUM" ]; then
   exit 1
 fi
 
-# NEGATIVE=1 calls no find. See the header.
+# NEGATIVE=1 runs the control; see the header.
 NEGATIVE="${NEGATIVE:-0}"
 DRIVE="find"
 [ "$NEGATIVE" = "1" ] && DRIVE="none"
@@ -81,29 +54,26 @@ PROFILE="${PROFILE:-/tmp/domicile-webview-find-profile}"
 WIDTH="${WIDTH:-1024}"
 HEIGHT="${HEIGHT:-768}"
 
-# What the pages hold, and how many: twice on /words and once in its frame. One
-# word no page says by accident, and long enough that content searches for it
-# without the delay it gives a find typed a letter at a time.
+# A word no page contains by accident, long enough that content searches it
+# without the short-query delay. Twice on /words, once in its frame.
 WORD="quokkaish"
 MATCHES=3
 
-# THE NUMBERS THE EXPERIMENT IS MADE OF. Each step advances as soon as what it
-# waits for has happened; SETTLE and STEP only bound a step that never does.
+# Timeouts. Steps advance as soon as they are satisfied.
 #
-#   SETTLE   bounds the first page: the guest has to be asked for, attached and
-#            navigated, and its frame loaded
-#   STEP     bounds each step after it
-#   QUIET    how long the control watches a step it does not drive, since an
-#            absence has no event to wait for. Longer than a healthy step
+#   SETTLE   the first page: attach, navigate and load its frame
+#   STEP     each later step
+#   QUIET    how long the control watches each step, since an absence has no
+#            event. Longer than a healthy step
 SETTLE_MS="${SETTLE_MS:-25000}"
 STEP_MS="${STEP_MS:-8000}"
 QUIET_MS="${QUIET_MS:-3000}"
 
-# Every bound sat out is SETTLE + six STEPs, and the engine has to start before
-# any of it. Generous on top: this machine is shared.
+# At least SETTLE + six STEPs plus engine startup. Generous because the build
+# machine is shared.
 FOR_SECONDS="${FOR_SECONDS:-180}"
 
-# A run and its own control are two measurements, so they get two sets of logs.
+# Separate logs for the control run.
 WHICH=""
 [ "$NEGATIVE" = "1" ] && WHICH="-negative"
 ENGINE_LOG="${ENGINE_LOG:-/tmp/domicile-webview-find$WHICH-engine.log}"
@@ -129,7 +99,7 @@ command -v python3 >/dev/null || {
 
 rm -f "$BROKER"; rm -rf "$PROFILE"; mkdir -p "$PROFILE"
 
-# Waits for `$2` to appear in `$3`, for `$1` quarter seconds.
+# Waits up to `$1` quarter seconds for `$2` to appear in `$3`.
 wait_for_line() { # $1 tries, $2 pattern, $3 file
   for _ in $(seq 1 "$1"); do
     grep -qF "$2" "$3" 2>/dev/null && return 0
@@ -138,8 +108,7 @@ wait_for_line() { # $1 tries, $2 pattern, $3 file
   return 1
 }
 
-# 1. The pages. Their own server rather than real sites: `crux` reaches no
-#    arbitrary host.
+# 1. Serve the pages locally; `crux` cannot reach external hosts.
 rm -f "$HTTP_LOG"
 python3 "$SCRIPTS/guard-webview-find-server.py" \
   --port 0 --word "$WORD" >"$HTTP_LOG" 2>&1 &
@@ -154,14 +123,13 @@ PORT="$(served_port "$HTTP_LOG")" || {
   annotate_from "guard-webview-find: its page server never said which port it took" "$HTTP_LOG"
   exit 1
 }
-# 127.0.0.1, because the server frames its page as `localhost`: two sites, so
-# the frame is out of process. See the server's docstring.
+# 127.0.0.1, because the frame is served as `localhost`: a different site, so
+# out of process.
 SUBJECT="http://127.0.0.1:$PORT"
 echo "serving a browser window's pages under $SUBJECT"
 
-# 2. The engine, on a domicile:// document, because the browser binds
-#    WebViewGuestHost for that origin and no other. `--app` for the reason
-#    `domicile` uses it: the guard runs the configuration the product runs.
+# 2. Start the engine on a domicile:// page, the only origin WebViewGuestHost
+#    is bound for. `--app` matches how `domicile` runs it.
 rm -f "$ENGINE_LOG"
 "$CHROMIUM/$OUT/chrome" \
   --ozone-platform=headless \
@@ -185,14 +153,12 @@ wait_for_line "$TRIES" "GUARD driving" "$ENGINE_LOG" || {
 }
 echo "the shell is driving mode=$DRIVE"
 
-# 3. The whole schedule, which the module owns. Waiting on its last line rather
-#    than sleeping for the arithmetic.
+# 3. Wait for the module to finish its schedule.
 wait_for_line "$TRIES" "GUARD done" "$ENGINE_LOG" ||
   echo "the schedule never finished; what follows is a run cut short" >&2
 
-# WHAT THE ELEMENT SAID THE FIND FOUND, at each point the module reads it, as
-# matches/active. `head -1` because a point is read once, and a log that
-# somehow holds two should be decided by the first.
+# The element's matches/active at each point. `head -1`: if a point is logged
+# twice, the first decides.
 STATES="$(grep -o 'GUARD find-state at=[^ ]* find=[^ ]* events=[0-9]*' \
   "$ENGINE_LOG")"
 find_at() { # $1 point
@@ -215,8 +181,8 @@ NAVIGATED_EVENTS="$(events_at navigated)"
 SAW_MODULE=$(grep -qF "GUARD driving" "$ENGINE_LOG" && echo 1 || echo 0)
 SAW_WORDS=$(grep -qF "GUARD guest-shown path=/words" "$ENGINE_LOG" && echo 1 || echo 0)
 SAW_ELSEWHERE=$(grep -qF "GUARD guest-shown path=/elsewhere" "$ENGINE_LOG" && echo 1 || echo 0)
-# Asked for, out of the server's log: the frame's own page says nothing, so
-# this is what tells "the count missed the frame" from "there was no frame".
+# Whether the frame was requested. Tells "the count missed the frame" from
+# "there was no frame".
 SAW_FRAMED_ASKED=$(grep -qF "GET /framed " "$HTTP_LOG" && echo 1 || echo 0)
 
 echo
@@ -225,11 +191,8 @@ echo "the element said: found=$FOUND next=$NEXT previous=$PREVIOUS stopped=$STOP
 echo "find events: at found=$FOUND_EVENTS at navigated=$NAVIGATED_EVENTS"
 echo
 
-# WHICH END TO BLAME, decided here in a block
-# `scripts/test-webview-find-guard.sh` runs directly, rather than inferred from
-# a grep by whoever opens the job. The order is the order the readings depend
-# on each other in: a run with no page has nothing to count, and a find that
-# never counted has nothing for a navigation to end.
+# Turn the readings into a verdict. `scripts/test-webview-find-guard.sh` tests
+# this block. Checks run in dependency order.
 FAILURE=""
 PASSED=""
 if [ "$SAW_MODULE" != "1" ]; then

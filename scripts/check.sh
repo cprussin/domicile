@@ -1,34 +1,20 @@
 #!/usr/bin/env bash
-# Everything that can be checked here, in one command.
+# Runs every check in this repository, in one command.
 #
 #   nix develop .#full -c ./scripts/check.sh
 #   ./scripts/check.sh e2e            # one group
 #
-# The groups are `shell`, `rust`, `typescript`, `e2e`, `engine` and `nix`.
-# Every one of them is what a workflow runs — `.github/workflows/` names
-# groups and nothing else, which is what
-# `scripts/test-the-workflows-delegate-their-checks.sh` is there to keep true.
-# The last two need something most machines do not have and say so rather than
-# failing: `engine` a warm Chromium tree, `nix` a `nix` on PATH.
+# Groups: `shell`, `rust`, `typescript`, `e2e`, `engine` and `nix`. Workflows
+# run groups only; `scripts/test-the-workflows-delegate-their-checks.sh`
+# asserts that. `engine` needs a warm Chromium tree and `nix` needs `nix` on
+# PATH; without them they skip.
 #
-# `DOMICILE_CHECK_STRICT=1` turns a skip into a failure. Locally a missing
-# tool is a fact about the machine; in CI it is a check that silently stopped
-# running, which is the worst outcome a check can have.
+# `DOMICILE_CHECK_STRICT=1` turns a skip into a failure, for CI.
 #
-# There are a dozen checks across two languages and a handful of e2e scripts,
-# and until this existed each one was something the person working had to
-# remember, set up and run. That went wrong in the ordinary ways: a worktree
-# with no `node_modules` failing three suites that looked like regressions, a
-# stale X socket with no server behind it reading as a crash in the code. None
-# of those are findings, and all of them cost more than the checks did.
+# It sets up what the checks need (dependencies, tools, a display) and reports
+# any check it could not run as skipped, never as passed.
 #
-# So this owns the environment as well as the running: it installs what is
-# missing, finds what is not on `PATH`, and takes a display of its own. What it
-# cannot arrange, it says it skipped and why — a check that did not run must
-# never read as one that passed.
-#
-# Serial on purpose. The e2e scripts each take a fixed `XDG_RUNTIME_DIR` and a
-# fixed socket name inside it, so two at once fight over the same paths.
+# Serial because the e2e scripts share fixed socket paths.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -36,19 +22,13 @@ cd "$ROOT"
 
 PASSED=(); FAILED=(); SKIPPED=()
 
-# Which groups to run. Naming none runs them all — the thing to reach for by
-# default, and what a bare `check` means.
+# Which groups to run; none means all.
 #
-# Not `GROUPS`: bash owns that name (it is the caller's group ids) and assigning
-# to it does nothing, silently, so every group read as unwanted and the script
-# cheerfully checked nothing at all.
+# Not `GROUPS`: bash reserves that name and ignores assignments to it.
 KNOWN=(shell rust typescript e2e engine nix)
 SELECTED=("$@")
 [ "${#SELECTED[@]}" -eq 0 ] && SELECTED=("${KNOWN[@]}")
-# Named but unknown is a typo, and a typo that silently selects nothing is the
-# `GROUPS` bug with a different trigger: the run checks nothing and exits 0,
-# which is the same answer as checking everything and finding it well. CI names
-# a group, so this is one rename away from a permanently green job.
+# An unknown group is an error, so a typo cannot check nothing and exit 0.
 for group in "${SELECTED[@]}"; do
   case " ${KNOWN[*]} " in
     *" $group "*) ;;
@@ -62,30 +42,16 @@ wanted() {
 
 STRICT="${DOMICILE_CHECK_STRICT:-0}"
 
-# Checks the caller already knows cannot run here, space separated. Only
-# meaningful under `STRICT`, where it is the difference between "we know this
-# runner has no GPU" and "something stopped working" — a blanket strict-off
-# cannot tell those apart, and a blanket strict-on makes the first one fatal
-# forever. Naming them is what keeps a *new* skip loud.
+# Checks known not to run here, space separated. Under `STRICT`, these may
+# skip and any other skip fails.
 EXPECTED_SKIPS="${DOMICILE_CHECK_ALLOW_SKIP:-}"
 
-# The status a script exits with to say it could not run — automake's
-# convention, and the only way a script can tell us apart from a check that ran
-# and passed. Without it a skip is exit 0, which this counted as `ok`: a CI run
-# reported `10 passed, 0 failed, 0 skipped` where nine had run and `e2e-dmabuf`
-# had bailed in 0.21s for want of a DRM render node.
+# The exit status a script uses to say it could not run (automake's
+# convention). It distinguishes a skip from a pass.
 readonly SKIPPED_STATUS=77
 
-# Everything a check prints goes to a file, and the file is only shown when it
-# fails. A green run is a table; a red one is a table and the output of exactly
-# the thing that broke.
-#
-# EXCEPT A PASS'S OWN WORDS. A check that says what it established does it on a
-# `PASS:` line, and those — and nothing else of its log — are printed under its
-# `ok`. Without them a pass was one word: PR #586's backdrop-filter run went
-# green as `engine-guard-css-and-resize ok`, and nothing in the job said the
-# run had happened at all. Every one of them, not the last: a guard and its
-# control are two claims, and the css guard's is three.
+# A check's output goes to a file, shown only when it fails. A passing check's
+# `PASS:` lines are printed under its `ok`, so a pass says what it established.
 run() {
   local name="$1"; shift
   local log; log="$(mktemp)"
@@ -94,9 +60,9 @@ run() {
   verdict "$name" "$?" "$log"
 }
 
-# The engine group's scripts at once, as noise, then their verdicts in order.
-# Waits on its own PIDs only: a bare `wait` would also wait on the e2e group's
-# Xvfb.
+# Runs the given engine scripts at once, as noise, then prints their verdicts
+# in order. Waits on its own PIDs only: a bare `wait` would also wait on the
+# e2e group's Xvfb.
 run_together() {
   local dir script pids=(); dir="$(mktemp -d)"
   for script in "$@"; do
@@ -120,20 +86,14 @@ verdict() {
     sed -n 's/^ *PASS: /    PASS: /p' "$log"
     PASSED+=("$name")
   elif [ "$status" -eq "$SKIPPED_STATUS" ]; then
-    # Its own words for why, because it is the only thing that knows. Printed
-    # even though it did not fail: a skip nobody sees is the failure this is
-    # here to prevent.
+    # Its own reason, printed so a skip is visible.
     skip "$name" "$(sed -n 's/^ *SKIP: *//p' "$log" | head -1)"
   else
     echo "FAILED"
     FAILED+=("$name")
     echo "--- $name ---" >>"$FAILURES"
     tail -100 "$log" >>"$FAILURES"
-    # And where the rest of it is. A tail is the wrong instrument for a log
-    # whose interesting line is at an unknown offset: measured, a TypeScript
-    # diagnostic sat behind 105 lines of *passing* output and never appeared.
-    # It fits only when turbo's cache is warm, which is never in CI — so the
-    # whole log is kept and named rather than trimmed to a guess.
+    # Keeps the whole log too: a failure's key line can sit above the tail.
     KEPT="$KEEP_LOGS/$name.log"
     cp "$log" "$KEPT"
     echo "  (the whole log: $KEPT)" >>"$FAILURES"
@@ -142,10 +102,7 @@ verdict() {
   rm -f "$log"
 }
 
-# The verdict only — `label` has already written the name, whether that was
-# `run` before starting the check or a caller that knew before starting it.
-# Writing the name here too put it twice on every skipped line: `\r` erases
-# nothing in a redirected log, which is where CI reads this.
+# Prints the verdict only; `label` already printed the name.
 skip() {
   case " $EXPECTED_SKIPS " in
     *" $1 "*)
@@ -166,24 +123,16 @@ skip() {
   fi
 }
 
-# The name, with the verdict still to come on the same line — so a long check
-# says what it is doing while it does it.
+# Prints the name and leaves the line open for the verdict, so a long check
+# shows what is running.
 label() {
   printf '  %-24s ' "$1"
 }
 
 FAILURES="$(mktemp)"
-# Where a failing check's whole log is kept. Deliberately not cleaned up: it is
-# the thing a reader needs after the run ends, and its whole point is to
-# outlive the trap that removes everything else.
-# `DOMICILE_CHECK_LOG_DIR` because $TMPDIR is not always somewhere a reader can
-# get back to. `engine.yml` runs this as `nix develop .#full --command
-# ./scripts/check.sh engine`, and nix gives every `--command` a $TMPDIR of its
-# own -- `export NIX_BUILD_TOP="$(mktemp -d ...)"` in makeRcScript -- so the one
-# path printed below would name a directory nothing else in that job has. That
-# is the mistake lib-control-budget.sh made with the control budgets and paid
-# for over two engine runs: a file written where nothing reads it, silently.
-# The default is unchanged for every other caller.
+# Where a failing check's whole log is kept. Not cleaned up, so it outlives the
+# run. `DOMICILE_CHECK_LOG_DIR` lets engine.yml choose a shared path: inside
+# `nix develop --command`, $TMPDIR is private to that command.
 KEEP_LOGS="${DOMICILE_CHECK_LOG_DIR:-${TMPDIR:-/tmp}}/domicile-check-logs"
 rm -rf "$KEEP_LOGS"; mkdir -p "$KEEP_LOGS"
 cleanup() {
@@ -196,21 +145,12 @@ trap cleanup EXIT
 
 echo "== environment =="
 
-# A fresh worktree has no `node_modules`, and the failure that produces is a
-# module-resolution error from inside a harness, which reads as a broken
-# harness rather than as a missing install.
+# Installs dependencies on every run: a missing or stale `node_modules` fails
+# in ways that look like broken harnesses. `--frozen-lockfile` on a satisfied
+# tree is fast.
 #
-# Every run, not only when the directory is absent. A `node_modules` left over
-# from another branch is present and wrong, which is the same staleness the e2e
-# scripts rebuild the compositor every run to avoid — and `--frozen-lockfile`
-# against an already-satisfied tree is a few hundred milliseconds.
-#
-# Only for the groups that read `node_modules`, and that is not fastidiousness:
-# `cargo-test.yml` and `nix-build.yml` run on `ubuntu-latest` with no bun set
-# up, because nothing they check needs one. An unconditional install there is
-# an `exit 1` before a single check has run, and the words it exits with —
-# "dependencies would not install" — describe a broken lockfile rather than a
-# runner that was never going to have bun on it.
+# Only for groups that read `node_modules`. `cargo-test.yml` and
+# `nix-build.yml` run without bun.
 needs_node_modules() {
   for group in typescript e2e engine shell; do wanted "$group" && return 0; done
   return 1
@@ -224,9 +164,7 @@ fi
 
 # ---- the checks -----------------------------------------------------------
 
-# Every `test-*.sh`, for the
-# reason the e2e loop takes every `e2e-*.sh` — a check added and not run is the
-# same as one that was never written.
+# Every `test-*.sh`, so a new check cannot be left out.
 if wanted shell; then
   echo
   echo "== shell =="
@@ -240,22 +178,16 @@ if wanted rust; then
   echo "== rust =="
   run "cargo fmt" cargo fmt --all --check
   run "cargo clippy" cargo clippy --workspace --all-targets -- -D warnings
-  # The one step in this group that LINKS, which is the one that can fail for
-  # a reason that is nothing to do with the code — see `lib/rust-check.sh`.
+  # The only step here that links, so it can fail for reasons outside the
+  # code; see `lib/rust-check.sh`.
   #
-  # A SUBSHELL BODY, `( )` and not `{ }`, because `require_linkable_libraries`
-  # ends its caller and `run` calls what it is given in this shell. A `{ }`
-  # here would exit `check.sh` itself, taking every later group with it and
-  # printing no table at all.
+  # A subshell `( )`, not `{ }`: `require_linkable_libraries` exits its
+  # caller, and `run` calls this in the current shell.
   cargo_test() (
     . "$ROOT/scripts/lib/rust-check.sh"
     require_linkable_libraries
-    # `--no-fail-fast`, because without it cargo stops at the first failing
-    # target and says nothing about the rest. A tree that breaks two test
-    # binaries then reports whichever sorts first, and the second failure is
-    # invisible until the first is fixed — which is how a mutation measurement
-    # taken with this gate came out reading "killed by one file" when two
-    # killed it.
+    # `--no-fail-fast` so every failing test binary is reported, not only the
+    # first.
     cargo test --workspace --no-fail-fast
   )
   run "cargo test" cargo_test
@@ -268,13 +200,8 @@ if wanted typescript; then
   run "turbo test" bun run turbo test
 fi
 
-# Every `nix-*.sh`, for the reason the other globs take everything they match.
-# A group of its own rather than more `test-*.sh` because these need `nix` and
-# the `shell` group must not: `e2e.yml` runs that group on `ubuntu-latest`
-# under `DOMICILE_CHECK_STRICT=1`, where a skip is fatal, so one check in there
-# that cannot run without nix would make six expected skips the price of
-# keeping the job green — and a long allow-list is how a real skip stops being
-# noticed.
+# Every `nix-*.sh`. A separate group because these need `nix`, and the `shell`
+# group runs strict on `ubuntu-latest` without it.
 if wanted nix; then
   echo
   echo "== nix =="
@@ -283,44 +210,29 @@ if wanted nix; then
   done
 fi
 
-# THE ONE GROUP WITH AN ORDER AND A FAIL-FAST, and both are about the same
-# thing: every check in it wants the Chromium tree on `crux`, which is one
-# machine with one job slot and a build measured in hours. The cheap checks go
-# first — a stat, then two gtest runs — because a run that has already found
-# the symbol missing should not then spend the ten minutes of guards that
-# follow photographing pixels to say so again, which is what the workflow steps
-# this replaced did by aborting the job.
+# Ordered and fail-fast: every check here uses the one Chromium tree on
+# `crux`, so the cheap checks run first and a failure stops the expensive
+# guards.
 #
-# Written out rather than globbed, which every other group here refuses to do.
-# The reason a glob is right elsewhere is that a check added and not run is the
-# same as one never written — and that is still true, so
-# `scripts/test-the-workflows-delegate-their-checks.sh` asserts this list holds
-# every `scripts/engine-*.sh` there is. The order is the thing a glob cannot
-# carry; completeness is the thing a list cannot, so each is kept where it
-# works.
+# Listed rather than globbed, to keep the order.
+# `scripts/test-the-workflows-delegate-their-checks.sh` asserts the list holds
+# every `scripts/engine-*.sh`.
 if wanted engine; then
   echo
   echo "== engine =="
-  # A skip is not a stop: on a machine with no tree every one of these skips,
-  # and bailing on the first would report one skip where there are nineteen —
-  # which under STRICT is one failure naming one check instead of the list of
-  # what is not running.
+  # A skip does not stop the group, so a machine with no tree reports every
+  # check that did not run.
   engine_stop() {
     [ "${#FAILED[@]}" -eq 0 ] && return 1
     echo "  (stopping: the tree is one slot, and the rest would measure a build already known bad)"
   }
-  # AS NOISE, every check but latency: another run's latency guard waits until
-  # none of this is running rather than timing a machine it loads. Only when
-  # the job names itself -- `engine.yml` sets `CARD_OWNER` -- because the
-  # registry is on `crux`'s /build, which a person's machine has no reason to
-  # have. Latency itself is not noise, or it would wait out its own run.
+  # Every check but latency runs as noise, so another run's latency guard
+  # waits for it. Only when `CARD_OWNER` is set (engine.yml), since the lock
+  # registry lives on `crux`. Latency is not noise, or it would wait for itself.
   #
-  # AND TIMED. A check that never returns held engine run 36820989982 for seven
-  # hours as noise, and run 36820571967's latency guard waited on it from the
-  # other runner, so both of `crux`'s slots sat idle until they were canceled.
-  # The longest check is a minute; the budget is a cold cargo build's. Inside
-  # `noisy`, so a wait for the card is not spent from it, and `timeout` kills
-  # the check's whole process group, so nothing it started outlives it.
+  # Each check has a timeout, so a hung check cannot hold `crux`. The budget
+  # is a cold cargo build's. The timeout runs inside `noisy`, so waiting for
+  # the card does not count, and it kills the check's whole process group.
   ENGINE_CHECK_TIMEOUT="${DOMICILE_ENGINE_CHECK_TIMEOUT:-1800}"
   engine_noisy() {
     local status
@@ -342,9 +254,8 @@ if wanted engine; then
     done
     return 0
   }
-  # TOGETHER: headless, no card, and no port, broker, profile or log in
-  # common, so they overlap; serially they were most of this group's time.
-  # Latency stays after them because it times things.
+  # These run together: they are headless and share no card, port, broker,
+  # profile or log. Latency runs after them because it measures time.
   engine_serial \
     scripts/engine-build-produced-what-the-guards-load.sh \
     scripts/engine-unit-tests.sh \
@@ -395,22 +306,16 @@ if wanted engine; then
   engine_serial scripts/engine-guard-css-and-resize.sh &&
   run engine-guard-latency scripts/engine-guard-latency.sh &&
   engine_serial scripts/engine-guard-shortcuts-inhibitor-chord.sh
-  # The chord last, because what it can fail on is the host honoring the
-  # inhibitor rather than the build, and a failure here is no reason to stop
-  # the guards that read the build — which a place above them would do.
+  # The chord runs last: it can fail because of the host compositor, not the
+  # build, and that should not stop the other guards.
 fi
 
 if wanted e2e; then
 echo
 echo "== end to end =="
-# Every `e2e-*.sh` there is, rather than a list to keep in step with the
-# directory. A check added and not run is the same as one that was never
-# written.
+# Every `e2e-*.sh`, so a new check cannot be left out.
 for script in scripts/e2e-*.sh; do
   name="$(basename "$script" .sh)"
-  # No display case any more: the two checks that needed one were the two that
-  # drove `--present`, and both went with it. What is left runs headless, which
-  # is what the compositor now is.
   run "$name" "$script"
 done
 fi
@@ -423,9 +328,7 @@ if [ "${#FAILED[@]}" -gt 0 ]; then
   cat "$FAILURES"
 fi
 echo "== ${#PASSED[@]} passed, ${#FAILED[@]} failed, ${#SKIPPED[@]} skipped =="
-# A run that checked nothing is never a pass, whatever the reason — a glob that
-# matched no scripts, a group that selected none, an early exit that skipped
-# the lot. "Nothing failed" is not the same claim as "something passed".
+# A run that checked nothing fails.
 if [ $(( ${#PASSED[@]} + ${#FAILED[@]} + ${#SKIPPED[@]} )) -eq 0 ]; then
   echo "  and that is a failure: nothing ran."
   exit 1

@@ -12,18 +12,11 @@ namespace blink {
 
 // One screen of the desktop, as the compositor described it.
 //
-// A ScriptWrappable rather than a dictionary: WebIDL will not have a dictionary
-// as the type of an attribute, and these are read off
-// `DomicileHost.displays`.
+// A ScriptWrappable because WebIDL does not allow a dictionary as an attribute
+// type. See domicile_display.idl for the meaning of each field.
 //
-// Its geometry is logical -- the CSS pixels a shell lays out in -- but for
-// `modeWidth`/`modeHeight`, which are the pixels the panel scans out. `scale`
-// is what *clients* on this screen draw at, not the shell's own density.
-//
-// Immutable. The compositor re-describes the whole desktop when any of it
-// changes -- a resize, a density change, a config reload -- so a display is
-// replaced rather than edited, and a shell holding one from a previous
-// description is holding a fact about a desktop that no longer exists.
+// Immutable. The compositor sends a new set of displays on every change, so a
+// display held from an earlier set is stale.
 class MODULES_EXPORT DomicileDisplay final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
@@ -58,8 +51,8 @@ class MODULES_EXPORT DomicileDisplay final : public ScriptWrappable {
   uint32_t width_ = 0;
   uint32_t height_ = 0;
   uint32_t scale_ = 1;
-  // Zero, and deliberately not the logical size: a mode nobody stated is not
-  // a mode.
+  // Zero means the compositor sent no mode. Do not default to the logical
+  // size.
   uint32_t mode_width_ = 0;
   uint32_t mode_height_ = 0;
   String transform_;

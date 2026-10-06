@@ -12,11 +12,10 @@
 namespace domicile {
 namespace {
 
-// The nearest pixel to `at` that is still between `from` and `to`.
+// The nearest pixel to `at` within [`from`, `to`].
 //
-// `base::ClampRound` rather than a cast: a double large enough to be outside
-// an int is a value a cast cannot carry and this one saturates, which the
-// clamp below then pulls back to the window's own edge.
+// `base::ClampRound` saturates values outside the int range, where a cast
+// would be undefined.
 int Pinned(double at, int from, int to) {
   return std::clamp(base::ClampRound(at), from, to);
 }
@@ -29,9 +28,8 @@ std::optional<gfx::Point> PointerWarpTarget(const gfx::Rect& page,
   if (page.IsEmpty() || !std::isfinite(x) || !std::isfinite(y)) {
     return std::nullopt;
   }
-  // `right()` and `bottom()` are one past the window, so the last pixel of it
-  // is one less -- and on a desk of two monitors the pixel they name is the
-  // other screen's.
+  // `right()` and `bottom()` are one past the edge, which may be on another
+  // monitor.
   return gfx::Point(Pinned(page.x() + x, page.x(), page.right() - 1),
                     Pinned(page.y() + y, page.y(), page.bottom() - 1));
 }

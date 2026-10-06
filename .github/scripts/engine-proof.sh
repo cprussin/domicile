@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# Whether this exact tree has already passed engine.yml.
+# Record and check whether this exact tree has passed engine.yml.
 #
 #   engine-proof.sh key            the tree's key
 #   engine-proof.sh has <key>      0 proved, 1 not, anything else an error
 #   engine-proof.sh record <key>   tag HEAD as proved
 #   engine-proof.sh gate           key= and proved= to $GITHUB_OUTPUT
 #
-# The key is the whole tree, not just the engine: the checks also build the
-# compositor and the shells. `engine-release.nix` is left out because the run
-# itself writes it back, and markdown because nothing reads it.
+# The key hashes the whole tree, since the checks also build the compositor
+# and shells. It skips `engine-release.nix`, which the run writes back, and
+# markdown.
 set -u
 
 usage() { echo "usage: $(basename "$0") <key|has|record|gate> [key]" >&2; exit 2; }
@@ -31,14 +31,13 @@ case "${1:-}" in
     ;;
   record)
     [ -n "${2:-}" ] || usage
-    # Already proved (a dispatch, or the same tree from another commit) is done.
+    # A tag that already exists also counts as success.
     if out="$(git push -q origin "HEAD:refs/tags/$(tag "$2")" 2>&1)"; then
       exit 0
     fi
     printf '%s\n' "$out" >&2
-    # GitHub refuses the job's token any ref whose commit edits a workflow, so
-    # a pull request that changes one cannot tag its proof. The engine passed
-    # all the same; the tree is proved again once it is on main.
+    # The job's token cannot push a ref to a commit that edits a workflow.
+    # The tree is proved again on main.
     case "$out" in
       *'without `workflows` permission'*)
         echo "::warning::$(tag "$2") not recorded: this commit edits a workflow, which GitHub will not let the job's token tag"
@@ -51,8 +50,8 @@ case "${1:-}" in
     : "${GITHUB_OUTPUT:?}"
     key="$("$0" key)"
     echo "key=$key" >>"$GITHUB_OUTPUT"
-    # Proved AND engine-release.nix names the series: the key leaves that file
-    # out, so a proof alone would skip a branch whose write-back never landed.
+    # Also require engine-release.nix to name this series, since the key
+    # ignores that file and its write-back may not have landed.
     proved=false
     if [ "${GITHUB_EVENT_NAME:-}" != workflow_dispatch ]; then
       "$0" has "$key"

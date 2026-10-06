@@ -20,92 +20,28 @@
 
 namespace ui {
 
-// The evdev descriptors, taken from logind rather than opened.
+// Takes evdev descriptors from logind's `Session.TakeDevice` instead of
+// opening the nodes.
 //
-// WHY THE `open` CANNOT WORK. logind's `70-uaccess.rules` puts an ACL on `drm
-// card*` and `renderD*` for the user of the active session, and among input
-// devices it tags only `ID_INPUT_JOYSTICK`. A keyboard or a mouse keeps its
-// group-owned mode, so on an ordinary desktop the card opens and every
-// `/dev/input/event*` is `Permission denied`. Putting the user in the `input`
-// group would make the bare `open` work and is rejected twice over: it is a
-// standing keyboard grant to every process that user runs, and it revokes
-// nothing on a console switch. No other Wayland compositor asks for it --
-// every one of them takes the descriptor from
-// `org.freedesktop.login1.Session.TakeDevice`, which is what this does.
+// logind's uaccess rules don't grant the session user keyboards or mice, and
+// the `input` group would give every process of that user permanent keyboard
+// access. Other Wayland compositors use `TakeDevice` too. Failure is fatal:
+// the `open` fallback would fail anyway. Only the DRM platform uses this.
 //
-// NO FALLBACK TO `open`. A session that is missing, or a `TakeControl` some
-// other process already holds, is a real failure and is fatal here. A desktop
-// that quietly comes up deaf is the bug this exists to remove, and the `open`
-// it would fall back to is the one that cannot work. Nested and headless runs
-// do not use evdev at all, so the DRM platform is the only caller.
+// logind revokes devices on a console switch; `DrmTakenDevices` reopens them.
+// This follows the session's `Active` property as well as `ResumeDevice`,
+// which may never arrive. `DrmVtSwitcher` watches the same property, but on
+// its own bus on the UI thread; this needs it on the evdev thread.
 //
-// A CONSOLE SWITCH ROUND TRIP KEEPS INPUT ALIVE, and that costs more than
-// swapping the descriptor. logind `EVIOCREVOKE`s what it paused, the converter
-// answers the resulting `ENODEV` read by stopping its watch, and only
-// `InputDeviceFactoryEvdev::AttachInputDevice` ever starts one -- so a
-// `ResumeDevice` parks its descriptor and asks the factory to close the device
-// and open it again. See `DrmTakenDevices`.
-//
-// AND THE WAY BACK HANGS OFF `Active`, NOT OFF `ResumeDevice`. A resume is
-// not promised: on a seat with VTs logind revokes the whole set with a
-// `PauseDevice` of type "force" and resumes only out of a real seat
-// transition, so a desktop that waits for a resume can wait forever with
-// every keyboard and every trackpad dead at once. The session's `Active`
-// property going true is the edge that is there either way, so this follows
-// `PropertiesChanged` and answers it by giving each revoked device back and
-// taking it again.
-//
-// A SECOND SUBSCRIPTION, DELIBERATELY. `DrmVtSwitcher` follows the same
-// property for the display, and it is not shareable: it holds its own PRIVATE
-// `dbus::Bus` whose origin thread is the browser's UI thread, a D-Bus match
-// is per connection, and the work here -- blocking `ReleaseDevice` and
-// `TakeDevice` round trips against tables this thread owns -- has to happen
-// on the evdev thread. Reusing its subscription would mean a thread hop and a
-// lifetime seam through `ozone_platform_drm.cc` for a match rule that costs
-// logind one extra signal to route.
-//
-// THE BRIDGE, NAMED. `InputDeviceOpener::OpenInputDevice` is synchronous and
-// runs on the evdev thread; `TakeDevice` is a D-Bus call, which Chromium's
-// `dbus::Bus` will only issue from the thread that owns the connection. The
-// bus is therefore created HERE, on the evdev thread, with a thread-pool
-// single-thread runner of its own. That makes the evdev thread the bus's
-// ORIGIN thread, so `ConnectToSignal` and every signal callback land on it
-// with no hop and no lock, and leaves exactly one crossing:
-// `CallMethodAndBlock` must run on the D-Bus thread, so it is posted there and
-// this thread waits on a `base::WaitableEvent` for the answer.
-//
-// THAT RUNNER IS `DEDICATED` AND NOT `SHARED`, WHICH COST A DESKTOP. Shared is
-// what `dbus_thread_linux` builds the browser's own buses with, and it was
-// copied from there -- but the buses it builds do not block. This one does,
-// and a blocking call holds libdbus inside the socket read until logind
-// answers, so every other bus on that thread goes unread for the duration.
-// `DrmVtSwitcher`'s is the one that mattered: its `PropertiesChanged` is what
-// says the session went inactive, a console switch costs three blocking round
-// trips here per input device, and a relinquish delayed behind forty-five of
-// them is a GPU process that keeps flipping into somebody else's console until
-// `PageFlipWatchdog` kills it. See `drm_logind_input.cc`.
-//
-// WHAT A THREAD OF ITS OWN DOES NOT FIX is this one: the evdev thread is still
-// stopped for the length of the storm, so a console switch costs the desktop
-// its input either way. Ending that means `OpenInputDevice` answering later
-// than it is asked, which is Chromium's contract rather than this fork's --
-// patch `0020` priced it as re-plumbing `OpenInputDeviceParams`,
-// `EventFactoryEvdev` and the factory proxy, and it is still the open item.
-//
-// The evdev thread is where a `base::Thread` runs a `MessagePumpType::UI`
-// pump, so `CurrentIOThread::IsSet()` is false there and `base::Thread` gives
-// it no `FileDescriptorWatcher` (`base/threading/thread.cc`) -- which is why
-// the bus cannot simply be run on this thread with no D-Bus thread at all,
-// and why the crossing is a real one rather than a choice. Blocking is what
-// this call already did: upstream's `open` and the four `EVIOCG*` ioctls
-// behind `EventDeviceInfo::Initialize` are synchronous on this same thread.
+// The bus is created on the evdev thread, so signals arrive there without
+// locks. Method calls block on the bus's own `DEDICATED` thread; a shared one
+// would delay other buses' signals and crash the GPU process on a console
+// switch. See docs/TTY-SESSION.md#the-d-bus-thread.
 class DrmLogindInput : public InputDeviceOpenerEvdev {
  public:
-  // CONSTRUCTED ON THE EVDEV THREAD, which is what makes that thread the
-  // bus's origin. Finds this process's session, takes control of it, and
-  // subscribes to the pause half before taking anything -- in that order,
-  // because a pause that arrives between the take and the subscribe is one
-  // this session would never answer.
+  // Must run on the evdev thread, which becomes the bus's origin thread.
+  // Takes control of this process's session and subscribes to pauses before
+  // taking any device, so no pause is missed.
   DrmLogindInput();
 
   DrmLogindInput(const DrmLogindInput&) = delete;
@@ -114,20 +50,19 @@ class DrmLogindInput : public InputDeviceOpenerEvdev {
   ~DrmLogindInput() override;
 
  private:
-  // The one thing this changes about opening an evdev node.
+  // Takes the device from logind instead of opening it.
   base::ScopedFD OpenDeviceFd(const OpenInputDeviceParams& params) override;
 
-  // Runs the factory's own reopen, which it hands over after construction --
-  // so this is an indirection rather than the callback itself: `devices_` is
-  // built in the member list, before the factory this belongs to exists.
+  // Runs the factory's reopen callback. An indirection because `devices_` is
+  // built before the factory hands that callback over.
   void ReopenDevice(int id, const base::FilePath& path);
 
   // Runs `call` on the bus's thread and blocks this one until it answers.
   std::unique_ptr<dbus::Response> CallAndBlock(dbus::ObjectProxy* proxy,
                                                dbus::MethodCall* call);
 
-  // Subscribes on the bus's thread and blocks this one until it is done, so
-  // that a signal cannot be missed between subscribing and taking a device.
+  // Subscribes on the bus's thread and blocks until done, so no signal is
+  // missed between subscribing and taking a device.
   bool ConnectAndBlock(const std::string& interface,
                        const std::string& signal,
                        dbus::ObjectProxy::SignalCallback callback);
@@ -135,13 +70,11 @@ class DrmLogindInput : public InputDeviceOpenerEvdev {
   void OnPauseDevice(dbus::Signal* signal);
   void OnResumeDevice(dbus::Signal* signal);
 
-  // Any property of the session changed; the one that matters is `Active`.
+  // Handles a session property change; only `Active` matters.
   void OnPropertiesChanged(dbus::Signal* signal);
 
-  // Whether logind says this session is the one in front of the user. Read
-  // rather than remembered: a `PropertiesChanged` names the changed property
-  // in the dictionary or in the invalidated list depending on which property
-  // it is, and asking for the value is cheaper than being right about that.
+  // Asks logind whether this session is active. Queried, because
+  // `PropertiesChanged` may list a property as invalidated without a value.
   bool SessionIsActive();
 
   bool ReleaseDevice(DeviceNumber number);
@@ -149,8 +82,7 @@ class DrmLogindInput : public InputDeviceOpenerEvdev {
   scoped_refptr<dbus::Bus> bus_;
   raw_ptr<dbus::ObjectProxy> session_ = nullptr;
 
-  // Declared last so that the descriptors are given back before the bus that
-  // has to carry the giving back is torn down.
+  // Declared last so devices are released before the bus is torn down.
   DrmTakenDevices devices_;
 };
 

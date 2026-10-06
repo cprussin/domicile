@@ -1,16 +1,9 @@
-// The shell guard-shell-web-apis.sh drives: the shell's own page asking the
-// two things a widget on its bar needs -- whether it may show a notification,
-// and whether it may read an answer from another origin -- and painting a box
-// only when both say yes.
-//
-// No <webview>: this is the shell's origin, `domicile://shell`, asking for
-// itself, which is what a mail counter on manganese's bar would be.
-//
-// Everything is inside `Shell`, which the document Domicile writes calls once
-// the module has loaded.
+// Shell module for guard-shell-web-apis.sh. Paints a box only if the shell's
+// own origin has notification permission and can read a cross-origin fetch,
+// as a bar widget such as a mail counter would need.
 
 export const Shell = (root) => {
-  /** A query parameter this cannot run without. */
+  /** Reads a required query parameter. */
   const required = (parameters, name) => {
     const value = parameters.get(name);
     if (value === null) {
@@ -23,8 +16,8 @@ export const Shell = (root) => {
   const parameters = new URLSearchParams(location.search);
   const box = document.createElement("div");
 
-  // Inset, so the witness color stays visible around it, and in whole
-  // percentages, so the flat color lands on integer pixels.
+  // Inset so the witness shows around it. Whole percentages keep the color on
+  // integer pixels.
   box.style.position = "absolute";
   box.style.left = "10%";
   box.style.top = "10%";
@@ -37,8 +30,8 @@ export const Shell = (root) => {
     box.style.background = `#${required(parameters, "color")}`;
   };
 
-  // `unasked` is the control's first leg: the box painted without a
-  // question, which says the harness can see it at all.
+  // `unasked=1` is the control's first leg: paint without checking, to prove
+  // the harness can see the box.
   if (parameters.get("unasked") === "1") {
     paint();
   } else {

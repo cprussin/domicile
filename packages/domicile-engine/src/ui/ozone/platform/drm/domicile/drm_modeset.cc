@@ -24,11 +24,7 @@
 namespace ui {
 namespace {
 
-// What `layout` says about the connector `id`, or nothing where it is silent.
-//
-// A pointer into the caller's vector rather than a copy, and `nullptr` for the
-// two cases the caller tells apart itself: a layout that says nothing about
-// anything, and one that says nothing about this connector.
+// Returns `layout`'s entry for connector `id`, or `nullptr` if it has none.
 const DomicileDisplayLayout* WantedFor(
     const std::vector<DomicileDisplayLayout>& layout,
     int64_t id) {
@@ -46,8 +42,7 @@ std::vector<display::DisplayConfigurationParams> ModesetParamsFromSnapshots(
     const std::vector<raw_ptr<display::DisplaySnapshot,
                               VectorExperimental>>& snapshots,
     const std::vector<DomicileDisplayLayout>& layout) {
-  // The display list's corners, from the one place both read them. See
-  // `OriginsForLayout` for why they are never the snapshot's own.
+  // Shared with the display list so both agree on each display's origin.
   const std::vector<gfx::Point> origins = OriginsForLayout(snapshots, layout);
   std::vector<display::DisplayConfigurationParams> params;
   params.reserve(snapshots.size());
@@ -55,21 +50,17 @@ std::vector<display::DisplayConfigurationParams> ModesetParamsFromSnapshots(
     const display::DisplaySnapshot* snapshot = snapshots[index];
     const display::DisplayMode* native_mode = snapshot->native_mode();
     if (!native_mode) {
-      // Connected and unreadable. See the header: a connector that advertised
-      // no mode gets none invented for it, whatever a layout says about where
-      // it goes.
+      // No advertised mode, so none is invented. See the header.
       continue;
     }
     const DomicileDisplayLayout* wanted =
         layout.empty() ? nullptr : WantedFor(layout, snapshot->display_id());
     if (!layout.empty() && (!wanted || !wanted->enabled)) {
-      // Dark: either the compositor turned this connector off, or it has not
-      // heard of it yet. The header argues why the second is not lit at all.
+      // Turned off by the compositor, or not in its layout yet.
       continue;
     }
-    // The mode is passed as a borrowed pointer: DisplayConfigurationParams'
-    // constructor clones it into its own `mode`, so cloning here as well would
-    // leak one DisplayMode per display on every hotplug.
+    // Pass the mode borrowed: the params constructor clones it, so cloning
+    // here too would leak a DisplayMode per display on every hotplug.
     params.emplace_back(snapshot->display_id(), origins[index], native_mode);
   }
   return params;
@@ -82,8 +73,7 @@ std::string DescribeSnapshots(
   described.reserve(snapshots.size());
   for (const display::DisplaySnapshot* snapshot : snapshots) {
     const display::DisplayMode* native_mode = snapshot->native_mode();
-    // Truncated to whole hertz: this is a log line, and 119.88 tells nobody
-    // anything 120 does not.
+    // Whole hertz is precise enough for a log line.
     const std::string mode =
         native_mode
             ? base::StrCat({native_mode->size().ToString(), "@",
@@ -120,73 +110,58 @@ void DrmModeset::SetLayout(std::vector<DomicileDisplayLayout> layout) {
   VLOG(1) << "domicile: the compositor wants " << layout.size()
           << " connector(s) laid out its way";
   layout_ = std::move(layout);
-  // The displays again, rather than the last reading: this holds no snapshots
-  // between callbacks, and the header says why the two halves of an answer
-  // come from one reading.
+  // Re-read the displays; see the header.
   delegate_->GetDisplays(
       base::BindOnce(&DrmModeset::OnDisplaysReceived, base::Unretained(this)));
 }
 
 void DrmModeset::Relight() {
-  // The header argues the whole of it: what the hardware confirmed before a
-  // sleep is not a state the reading after one can be compared to.
+  // The confirmation from before a resume or VT switch no longer describes
+  // the hardware. See the header.
   confirmed_.clear();
   delegate_->GetDisplays(
       base::BindOnce(&DrmModeset::OnDisplaysReceived, base::Unretained(this)));
 }
 
 void DrmModeset::OnConfigurationChanged() {
-  // A hotplug. Read the list again and light whatever is there now; the two
-  // must come from one reading, which is why this does not reuse the last one.
+  // A hotplug. Re-read so the screen and modeset share one reading.
   delegate_->GetDisplays(
       base::BindOnce(&DrmModeset::OnDisplaysReceived, base::Unretained(this)));
 }
 
 void DrmModeset::OnDisplaySnapshotsInvalidated() {
-  // The snapshots this holds pointers to are about to be destroyed. It holds
-  // none between callbacks -- `OnDisplaysReceived` consumes them and keeps
-  // nothing -- so there is nothing to drop here, and saying so is worth more
-  // than an empty body with no comment.
+  // Nothing to drop: `OnDisplaysReceived` keeps no snapshots.
 }
 
 bool ModesetWouldChangeAnything(
     const std::vector<display::DisplayConfigurationParams>& asked,
     const std::vector<display::DisplayConfigurationParams>& wanted) {
-  // `DisplayConfigurationParams::operator==` compares the id, the origin, the
-  // mode and the VRR flag, which is every field a modeset request carries. So
-  // equal vectors are the same request, and the same request against an
-  // unchanged report is the loop.
+  // `operator==` compares every field a modeset request carries.
   return asked != wanted;
 }
 
 void DrmModeset::OnDisplaysReceived(
     const std::vector<raw_ptr<display::DisplaySnapshot,
                               VectorExperimental>>& snapshots) {
-  // Every reading, whatever is decided about it. This is the line that says
-  // what the hardware reported and, crucially, at which mode -- see
-  // `DescribeSnapshots`.
+  // Log every reading, including its modes. See `DescribeSnapshots`.
   VLOG(1) << "domicile: DRM reports " << DescribeSnapshots(snapshots);
 
-  // The screen first: a window needs somewhere to land whether or not the
-  // modeset succeeds, and `DrmScreen` answers for an empty list by design.
+  // Update the screen first: a window needs somewhere to land even if the
+  // modeset fails.
   screen_->OnDisplaysChanged(snapshots, layout_);
 
   std::vector<display::DisplayConfigurationParams> params =
       ModesetParamsFromSnapshots(snapshots, layout_);
   if (params.empty()) {
-    // Nothing to light. Not an error: it is what every connector on a machine
-    // with no panel reports, and `DrmScreen` has already been told. A layout
-    // that turns every connector off cannot get here -- the compositor refuses
-    // a profile that leaves no desktop to put a window on -- so this stays the
-    // reading it always was.
+    // Not an error: a machine with no panel reports this. The compositor
+    // rejects a layout that turns every connector off.
     VLOG(1) << "domicile: nothing readable is plugged in; not modesetting";
     return;
   }
 
   if (!ModesetWouldChangeAnything(confirmed_, params)) {
-    // A hotplug this driver caused by answering the last one. Nothing is wrong
-    // and nothing is skipped: the screen has already been told, and the CRTCs
-    // are already in the modes this would ask for.
+    // The CRTCs already match. This is usually the udev CHANGE from our own
+    // last modeset.
     VLOG(1) << "domicile: the displays read the same as last time; not "
                "modesetting again";
     return;
@@ -202,11 +177,8 @@ void DrmModeset::OnDisplaysReceived(
              const std::vector<display::DisplayConfigurationParams>&,
              bool status) {
             if (!status) {
-              // Loud, and deliberately NOT recorded. An ask that the hardware
-              // did not confirm is not a state to compare the next reading
-              // against -- the first one this driver sends goes out before the
-              // GPU thread has a DRM device to send it to, and remembering
-              // that one is how a machine ends up never modesetting at all.
+              // Not recorded: only a confirmed modeset is compared against.
+              // See `ModesetWouldChangeAnything`.
               LOG(ERROR) << "domicile: the DRM thread refused the modeset; the "
                             "displays it reported are connected but nothing is "
                             "lit";
@@ -216,21 +188,12 @@ void DrmModeset::OnDisplaysReceived(
               return;
             }
             if (self->inside_configure_) {
-              // A YES THAT NEVER LEFT THIS PROCESS, and it is the one that got
-              // through the guard above. `Start()` runs at `InitScreen` time,
-              // before a GPU process exists, so `DrmDisplayHostManager` has
-              // only the dummy snapshots its constructor built from its own
-              // read of the primary card -- and `ConfigureDisplays` reads
-              // `is_dummy()` on those and runs this callback with `true`
-              // without asking anything. On the machine this was found on, the
-              // confirmation was logged three microseconds after the ask.
-              //
-              // A real modeset is committed on the DRM thread and answered on
-              // a later task, so an answer that arrives before `Configure` has
-              // returned is by construction one no hardware saw. Recording it
-              // would make the first REAL reading look like a repeat, and on a
-              // single-card machine whose dummy reading matches its real one
-              // nothing would ever modeset.
+              // Answered before `Configure` returned, so no hardware saw it.
+              // `Start()` runs before the GPU process exists, and
+              // `DrmDisplayHostManager` answers from its dummy snapshots
+              // synchronously. Recording this would make the first real
+              // reading look like a repeat, so a machine whose dummy reading
+              // matches its real one would never modeset.
               VLOG(1) << "domicile: the modeset was answered from inside the "
                          "browser process; no hardware saw it, so it is not a "
                          "confirmation";
