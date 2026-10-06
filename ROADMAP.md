@@ -141,8 +141,18 @@ Evidence is in [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md),
     backlight, audio) is a compositor module, a host message and an engine
     member, so the set of features grows inside Domicile. Plan: files,
     processes and D-Bus for the shell, and features as libraries on them,
-    starting with wifi and bluetooth bar modules. Not started.
-    [SYSTEM-ACCESS.md](docs/architecture/SYSTEM-ACCESS.md).
+    starting with wifi and bluetooth bar modules. Done: the wire types, the
+    compositor serving files, watches, processes and D-Bus, the engine relay
+    (`callSystem()` and the `system` event) and `@domicile-desktop/sdk/system`.
+    Left:
+    - `script-src 'self'` on `domicile://shell`.
+    - Battery, backlight and audio as libraries, deleting their host modules,
+      messages and IDL members.
+    - Apps and bookmarks as libraries, deleting `search_apps` and `found_apps`.
+    - `system-network` and `system-bluetooth`, with bar items in manganese.
+    - The file chooser reads directories with `readDir`.
+
+    [SYSTEM-ACCESS.md](docs/architecture/SYSTEM-ACCESS.md#plan).
 
 12. **A History app.** Browser windows have back, forward and address
     suggestions, but nothing browses, searches or clears history.
@@ -214,6 +224,21 @@ Evidence is in [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md),
    the launch steps. Do this last, so a mistake there cannot block what
    ordinary CI covers. [THE-DOMICILE-BINARY.md](docs/architecture/THE-DOMICILE-BINARY.md).
 
+8. **A compositor restart breaks every embed.** App ids restart with the
+   compositor, so `app-1` gets a new `FrameSinkId` while the page holds the
+   old token, and every embed of it is refused.
+   `FrameSinkBroker::OnProducerDisconnected` drops the sinks but does not tell
+   the renderer. Plan: invalidate the renderer's tokens on disconnect. Needed
+   before item 2's compositor restart can work.
+   [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md#open-questions).
+
+9. **The renderer's parent frame sink is not checked.**
+   `ExternalSurfaceProvider` is bound as a free function, so the browser does
+   not verify that the renderer owns the parent frame sink it names
+   (`EmbeddedFrameSinkProviderImpl` does). Plan: bind through
+   `RenderProcessHostImpl` to get the renderer's child process id.
+   [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md#open-questions).
+
 ## Needs a machine with a screen
 
 No agent or CI runner here has a lit panel.
@@ -246,6 +271,10 @@ Understood and not scheduled.
   menus get the page menu. Each needs a field on `WebViewContextMenu` in
   `web_view_guest.mojom`.
 - **Client-drawn cursor surfaces show a plain arrow.**
+- **Unknown: whether viz hit testing must agree with Domicile's.** Domicile
+  routes input itself from the box the page reports. If viz's hit-test data
+  disagrees, the engine may swallow events.
+  [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md#open-questions).
 
 ### Displays
 
@@ -266,11 +295,22 @@ Understood and not scheduled.
 - **A non-panel `wl_output` reports zero physical size and refresh.** That is
   what `wl_output` specifies for unknown values. On a tty they come from the
   panel's `DisplaySnapshot`.
+- **Engine popups are kept inside their window, not their CRTC.** A
+  `<select>`, context menu or extension popup is its own widget (patch 0051).
+  Plan: open it on the display under the anchor, kept inside that CRTC.
+- **Filter quality on lower-density displays is unmeasured.** The desk draws
+  once for all displays. If a blurred bar or shadow looks soft on the
+  lower-density one, the fix is a render pass per display.
+- **No guard runs two CRTCs.** Headless has one screen. gtests cover the
+  logic, and [Several monitors](docs/HARDWARE-CHECKS.md#several-monitors) the
+  rest. [ONE-PAGE-FOR-THE-DESK.md](docs/architecture/ONE-PAGE-FOR-THE-DESK.md#open-questions).
 
 ### Browser windows
 
 - **Browser windows deny permission requests and dialogs.** A `<webview>`
-  guest's `WebContentsDelegate` gives the default answer. `window.open` is the
+  guest's `WebContentsDelegate` gives the default answer: camera, microphone,
+  location and the like are denied, and `alert`, `confirm` and `prompt` show
+  nothing and return at once. `window.open` is the
   exception: the engine opens a browser window at the address. But
   `window.open` returns `null`, the opener and target name are dropped, and a
   form POST to a new target arrives as a GET.
@@ -282,8 +322,13 @@ Understood and not scheduled.
   - Download progress is not reported.
 - **No settings page.** Browser windows block every `chrome://` page (patch
   0083), so nothing can clear cookies and site data or change site
-  permissions. The Settings app (item 14) will cover this. Printing is also
+  permissions. The Settings app (item 13) will cover this. Printing is also
   blocked: `window.print()` opens `chrome://print`.
+- **Some extension calls are refused.** `tabs.move`, `group`, `ungroup`,
+  `discard`, `duplicate` and splits; `tabs.update`'s `pinned`, `openerTabId`
+  and `autoDiscardable`; `windows.update` bounds and state; and any
+  `windows.create` but a one-`url` popup fail with `not supported on a
+  Domicile desk`. [EXTENSIONS.md](docs/architecture/EXTENSIONS.md).
 - **Resize cost is unmeasured.** Patch 0054 stops the shell's frame waiting
   for a `<webview>` to draw at each new size, matching `<app>`. No guard times
   a resize of either.
@@ -317,7 +362,7 @@ Understood and not scheduled.
 - **A theme picked from the toggle lasts only until restart.** `theme.mode` is
   the startup value. The config file is generated (by a shell, or by
   home-manager on NixOS), so the desktop does not write to it. Persisting the
-  choice needs a separate store for desktop state; the Settings app (item 14)
+  choice needs a separate store for desktop state; the Settings app (item 13)
   needs the same.
 - **Unmeasured: whether Wayland windows are in the theme transition's old
   frame.** Windows change theme inside the shell's view transition, after it
@@ -355,6 +400,12 @@ Understood and not scheduled.
   tools) and the Screenshot portal ([PORTALS.md](docs/architecture/PORTALS.md)
   phase 2), on the same engine readback. Draw the picker in the shell. Then
   remove the command.
+
+### Shell API
+
+- **`window.domicile`'s types are written by hand.** `domicile-host.ts`
+  mirrors the IDL. Plan: generate them from the `.idl` files once the API
+  settles. [WINDOW-DOMICILE.md](docs/architecture/WINDOW-DOMICILE.md#open-questions).
 
 ### Shell reload
 
