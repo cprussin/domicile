@@ -65,6 +65,11 @@
         # Resizes Domicile's window under Xvfb, which has no window manager.
         # `e2e-chrome-fills-a-window.sh` skips without it.
         xdotool
+        # libpipewire for screen casting, and the daemon
+        # `e2e-a-window-casts-to-pipewire.sh` starts.
+        pipewire
+        # libclang, which the `pipewire` crate's bindings are generated with.
+        rustPlatform.bindgenHook
       ];
 
       # Runtime libraries for the prebuilt Chromium engine
@@ -453,10 +458,16 @@
         };
         cargoLock.lockFile = ./Cargo.lock;
 
-        nativeBuildInputs = [ pkgs.pkg-config pkgs.makeWrapper ];
-        # Only libxkbcommon is linked. Smithay's winit and EGL code probes for
-        # the rest at build time; `postFixup` makes them loadable at run time.
-        buildInputs = with pkgs; [ libxkbcommon wayland libGL libgbm ];
+        nativeBuildInputs = [
+          pkgs.pkg-config
+          pkgs.makeWrapper
+          # libclang, for the `pipewire` crate's bindings.
+          pkgs.rustPlatform.bindgenHook
+        ];
+        # libxkbcommon and libpipewire are linked. Smithay's winit and EGL code
+        # probes for the rest at build time; `postFixup` makes them loadable at
+        # run time.
+        buildInputs = with pkgs; [ libxkbcommon wayland libGL libgbm pipewire ];
 
         # `domicile-compositor` must be named because `default-members` omits
         # it. Binaries are named too, so the test-only `domicile-test-client`

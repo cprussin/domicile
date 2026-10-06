@@ -44,6 +44,30 @@ toplevel mapped -> Host::app_appeared app_id=app-1
 - A slow first launch with fast later ones means a cold machine (page cache,
   fontconfig, Mesa shader cache). The time shows up in spawn → connected.
 
+## Window casts
+
+`DOMICILE_CAST_WINDOW=<title>` casts the first window that takes that title to
+PipeWire, without the ScreenCast portal. Use it to check the producer
+(`src/casting/`) with any PipeWire consumer.
+
+```sh
+DOMICILE_CAST_WINDOW=kitty domicile …
+pw-link domicile-cast:capture_1 <consumer>:input_1   # without a session manager
+```
+
+- `cast ready … node=N`: the stream's node. A consumer connects to it.
+- `cast format … settled=…`: what the consumer picked: `Shm`, `Dmabuf`, or a
+  modifier the producer fixed.
+- `cast ended … why=…`: `ConsumerLeft` when the last link goes,
+  `SourceGone` when the window closes.
+- A stream offers dmabufs only when the compositor has an EGL renderer and
+  libgbm; otherwise shm only.
+- The pointer is the built-in arrow. The engine draws the desk's pointer from
+  its theme, so the compositor has no image of it.
+
+`scripts/e2e-a-window-casts-to-pipewire.sh` runs this against its own
+`pipewire` daemon.
+
 ## Rendering pitfalls
 
 - **Output orientation cannot be tested without a screen.** Offscreen

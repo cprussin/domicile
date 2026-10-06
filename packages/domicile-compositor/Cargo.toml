@@ -19,6 +19,12 @@ path = "src/main.rs"
 name = "domicile-test-client"
 path = "src/bin/domicile-test-client.rs"
 
+# A PipeWire consumer for `scripts/e2e-a-window-casts-to-pipewire.sh`. Here so
+# the check builds it with the compositor, and links nothing new.
+[[bin]]
+name = "domicile-test-cast-reader"
+path = "src/bin/domicile-test-cast-reader.rs"
+
 [dependencies]
 # The matrix type Smithay's renderer API uses, at Smithay's version.
 cgmath = "0.18"
@@ -38,6 +44,8 @@ libc = "0.2"
 # (Smithay treats a missing library as fatal), and loads libpam only when the
 # lock names a PAM service (see `src/pam.rs`), so neither is linked.
 libloading = "0.9"
+# Screen casting: a PipeWire video producer per stream (see `src/casting/`).
+pipewire = { version = "0.10", features = ["v0_3_34"] }
 # Watches the home directory for the file index (see `src/file_indexing.rs`).
 notify.workspace = true
 # A shell's `options` reach the chrome as JSON (see `src/shell_config.rs`).
