@@ -268,14 +268,6 @@ const FrozenArray<DomicileAudioCard>* DomicileHost::audioCards() const {
   return audio_cards_.Get();
 }
 
-std::optional<double> DomicileHost::batteryCharge() const {
-  return battery_charge_;
-}
-
-std::optional<bool> DomicileHost::batteryCharging() const {
-  return battery_charging_;
-}
-
 std::optional<bool> DomicileHost::idle() const {
   return idle_;
 }
@@ -1403,24 +1395,15 @@ void DomicileHost::Apps(const String& query,
   Settle(app_search_, app_search_query_, query, answer);
 }
 
-// Pushed, so there is no ask for this to be the answer to. The compositor
-// polls the kernel's files and sends one of these when the reading moves far
-// enough to draw -- see `domicile_host::battery`, which is also where the
-// reason a page cannot read this for itself is written down.
-void DomicileHost::Battery(double charge, bool charging) {
-  battery_charge_ = charge;
-  battery_charging_ = charging;
-  DispatchEvent(*Event::Create(domicile_event_names::Batterychanged()));
-}
-
-// Kept, like Displays: the event says the brightness moved and the attribute
-// says where it is, so a slider that mounts later still has a reading.
+// Pushed, so there is no ask for this to be the answer to. Kept, like
+// Displays: the event says the brightness moved and the attribute says where
+// it is, so a slider that mounts later still has a reading.
 void DomicileHost::Brightness(double level) {
   brightness_ = level;
   DispatchEvent(*Event::Create(domicile_event_names::Brightnesschanged()));
 }
 
-// Pushed, like Battery and unlike Files: the compositor hears a copy without
+// Pushed, like Brightness and unlike Files: the compositor hears a copy without
 // anybody asking. The rows are built here rather than carried as two arrays
 // because what a panel draws is a row -- see `domicile_clipboard_entry.h`.
 void DomicileHost::Clipboard(
@@ -1473,7 +1456,7 @@ void DomicileHost::Notifications(
   DispatchEvent(*Event::Create(domicile_event_names::Notificationschanged()));
 }
 
-// Pushed, like Battery, and the one pushed message this page can cause:
+// Pushed, like Brightness, and the one pushed message this page can cause:
 // `setTheme` above is answered with it, to every chrome on the desk rather
 // than to the one that called. Through the wire name, for `AppCursor`'s
 // reason and with `AppCursor`'s unreachable CHECK.
@@ -1489,7 +1472,7 @@ void DomicileHost::WindowsThemeChanged(domicile::mojom::blink::Theme theme) {
   DispatchEvent(*Event::Create(domicile_event_names::Windowsthemechanged()));
 }
 
-// Pushed like Battery, and a state rather than an edge -- the compositor
+// Pushed like Brightness, and a state rather than an edge -- the compositor
 // decides the edge, because lighting a connector is a modeset and a dark desk
 // must not ask for one per tick, and then sends where the desk stands so that
 // a page which has only just loaded is not left drawing a desktop somebody is
