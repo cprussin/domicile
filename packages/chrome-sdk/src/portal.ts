@@ -45,6 +45,8 @@ export enum PortalKind {
    * {@link PortalAnswer.Access}.
    */
   Wallpaper,
+  /** A source picker: what an application may record. */
+  ScreenCast,
   /** A kind this SDK cannot parse. Answer it with {@link PortalAnswer.Refused}. */
   Unknown,
 }
@@ -259,6 +261,49 @@ export type UsbDevice = {
 
 /** The USB devices an application would open. */
 export type UsbBody = { devices: readonly UsbDevice[] };
+export enum CastSourceKind {
+  Window,
+}
+
+export const CastSource = {
+  Window: (window: {
+    /** The window's id, as `DomicileHost.windows` lists it. */
+    id: string;
+    /** Empty until the client names it. */
+    title: string;
+    /** Its application's name, from its desktop entry. */
+    appName: string | undefined;
+    /** Its application's icon, as a `data:` URL. */
+    icon: string | undefined;
+  }) => ({ ...window, kind: CastSourceKind.Window as const }),
+};
+
+/** One source a screen cast picker offers. */
+export type CastSource = ReturnType<
+  (typeof CastSource)[keyof typeof CastSource]
+>;
+
+/** A screen cast picker's choices. */
+export type ScreenCastBody = {
+  /** Whether the user may pick more than one source. */
+  multiple: boolean;
+  sources: readonly CastSource[];
+};
+
+export enum CapturedKind {
+  Window,
+}
+
+export const Captured = {
+  /** A window, with its title when the cast started. */
+  Window: (window: { id: string; title: string }) => ({
+    ...window,
+    kind: CapturedKind.Window as const,
+  }),
+};
+
+/** One source a running screen cast records. */
+export type Captured = ReturnType<(typeof Captured)[keyof typeof Captured]>;
 
 export const PortalRequest = {
   Access: (base: PortalRequestBase, body: AccessBody) => ({
@@ -306,6 +351,11 @@ export const PortalRequest = {
     body,
     kind: PortalKind.RemoteDesktop as const,
   }),
+  ScreenCast: (base: PortalRequestBase, body: ScreenCastBody) => ({
+    ...base,
+    body,
+    kind: PortalKind.ScreenCast as const,
+  }),
   Unknown: (base: PortalRequestBase, wireKind: string) => ({
     ...base,
     kind: PortalKind.Unknown as const,
@@ -341,6 +391,8 @@ export enum PortalAnswerKind {
   RemoteDesktop,
   /** The user allowed a {@link PortalKind.InputCapture} request. */
   InputCapture,
+  /** The user picked sources in a {@link PortalKind.ScreenCast} request. */
+  ScreenCast,
   /** The user stopped a {@link Capturing} session. */
   Stop,
   /** The chords the user chose in a {@link PortalKind.GlobalShortcuts} review. */
@@ -381,6 +433,10 @@ export const PortalAnswer = {
     devices,
     kind: PortalAnswerKind.RemoteDesktop as const,
   }),
+  ScreenCast: (sources: readonly CastSource[]) => ({
+    kind: PortalAnswerKind.ScreenCast as const,
+    sources,
+  }),
   Stop: () => ({ kind: PortalAnswerKind.Stop as const }),
 };
 
@@ -393,6 +449,8 @@ export enum CapturingKind {
   RemoteDesktop,
   /** An application takes the user's input once it crosses a screen edge. */
   InputCapture,
+  /** An application records windows. */
+  ScreenCast,
   /** A kind this SDK cannot parse. It can still be stopped. */
   Unknown,
 }
@@ -415,6 +473,14 @@ export const Capturing = {
     ...base,
     ...body,
     kind: CapturingKind.RemoteDesktop as const,
+  }),
+  ScreenCast: (
+    base: CapturingBase,
+    body: { sources: readonly Captured[] },
+  ) => ({
+    ...base,
+    ...body,
+    kind: CapturingKind.ScreenCast as const,
   }),
   Unknown: (base: CapturingBase, wireKind: string) => ({
     ...base,
@@ -646,6 +712,39 @@ const inputCaptureSchema = z.object({ devices: devicesSchema });
 const accountSchema = z
   .object({ reason: z.string().optional() })
   .transform((body): AccountBody => ({ reason: body.reason }));
+const castSourceSchema = z
+  .discriminatedUnion("type", [
+    z.object({
+      app_name: z.string().optional(),
+      icon: z.string().optional(),
+      id: z.string(),
+      title: z.string(),
+      type: z.literal("window"),
+    }),
+  ])
+  .transform((source) =>
+    CastSource.Window({
+      appName: source.app_name,
+      icon: source.icon,
+      id: source.id,
+      title: source.title,
+    }),
+  );
+
+const screenCastSchema = z.object({
+  multiple: z.boolean(),
+  sources: z.array(castSourceSchema),
+});
+
+const capturedSchema = z
+  .discriminatedUnion("type", [
+    z.object({ id: z.string(), title: z.string(), type: z.literal("window") }),
+  ])
+  .transform((source) =>
+    Captured.Window({ id: source.id, title: source.title }),
+  );
+
+const screenCastingSchema = z.object({ sources: z.array(capturedSchema) });
 
 const shortcutsSchema = z
   .object({
@@ -787,6 +886,11 @@ const KINDS: ReadonlyMap<string, ReadKind> = new Map<string, ReadKind>([
       PortalRequest.DynamicLauncher(base, launcherSchema.parse(body)),
   ],
   ["usb", (base, body) => PortalRequest.Usb(base, usbSchema.parse(body))],
+  [
+    "screen_cast",
+    (base, body) =>
+      PortalRequest.ScreenCast(base, screenCastSchema.parse(body)),
+  ],
 ]);
 
 type ReadCapturing = (base: CapturingBase, body: unknown) => Capturing;
@@ -805,6 +909,10 @@ const CAPTURING_KINDS: ReadonlyMap<string, ReadCapturing> = new Map<
     "input_capture",
     (base, body) =>
       Capturing.InputCapture(base, inputCaptureSchema.parse(body)),
+  ],
+  [
+    "screen_cast",
+    (base, body) => Capturing.ScreenCast(base, screenCastingSchema.parse(body)),
   ],
 ]);
 
@@ -893,6 +1001,11 @@ const wireAnswer = (answer: PortalAnswer): object => {
       };
     case PortalAnswerKind.InputCapture:
       return { kind: "input_capture" };
+    case PortalAnswerKind.ScreenCast:
+      return {
+        kind: "screen_cast",
+        sources: answer.sources.map((source) => wireSource(source)),
+      };
     case PortalAnswerKind.Stop:
       return { kind: "stop" };
     case PortalAnswerKind.Canceled:
@@ -915,5 +1028,12 @@ const wireAnswer = (answer: PortalAnswer): object => {
       };
     case PortalAnswerKind.Refused:
       return { kind: "refused" };
+  }
+};
+
+const wireSource = (source: CastSource): object => {
+  switch (source.kind) {
+    case CastSourceKind.Window:
+      return { id: source.id, type: "window" };
   }
 };

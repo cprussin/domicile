@@ -18,7 +18,8 @@
 //! `docs/architecture/PORTALS.md`.
 //!
 //! A monitor or region is filled from the engine's display captures; see
-//! [`captures`] and [`region`].
+//! [`captures`] and [`region`]. [`Casting::list`] lists what can be cast as
+//! [`Candidate`]s.
 
 mod captured;
 mod captures;
@@ -38,6 +39,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 use smithay::reexports::calloop::channel::Sender;
+
+use crate::reply::{reply, Replier, Reply};
 
 pub use captures::Capturer;
 pub use cursor::CursorMode;
@@ -62,6 +65,20 @@ pub enum Source {
 pub struct Region {
     pub position: (i32, i32),
     pub size: (i32, i32),
+}
+
+/// A source that can be cast now, as a picker lists it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Candidate {
+    pub source: Source,
+    /// A window's title. Empty until the client names it.
+    pub title: String,
+    /// A window's client app id (`xdg_toplevel.set_app_id`), which names its
+    /// desktop entry. Empty when the client set none.
+    pub app_id: String,
+    /// Where it is on the desktop, and its size, in logical pixels. `None`
+    /// before the page has placed it.
+    pub bounds: Option<Region>,
 }
 
 /// One stream, as long as it lives.
@@ -89,8 +106,13 @@ pub enum Request {
         cursor: CursorMode,
         listener: Listener,
     },
-    #[allow(dead_code)] // Sent by `Casting::stop`.
-    Stop { stream: StreamId },
+    Stop {
+        stream: StreamId,
+    },
+    /// What can be cast now.
+    List {
+        reply: Replier<Vec<Candidate>>,
+    },
 }
 
 /// Starts and stops streams. Cheap to clone, and usable from any thread.
@@ -109,24 +131,36 @@ impl Casting {
         }
     }
 
-    /// Starts a stream of `source`. `listener` hears `Ready` with the node,
-    /// then `Ended` once.
-    pub fn start(&self, source: Source, cursor: CursorMode, listener: Listener) -> StreamId {
+    /// Starts a stream of `source`. `listener` makes the stream's listener
+    /// from its id, before the stream can end; the listener hears `Ready`
+    /// with the node, then `Ended` once.
+    pub fn start(
+        &self,
+        source: Source,
+        cursor: CursorMode,
+        listener: impl FnOnce(StreamId) -> Listener,
+    ) -> StreamId {
         let stream = StreamId(self.next.fetch_add(1, Ordering::Relaxed));
         self.send(Request::Start {
             stream,
             source,
             cursor,
-            listener,
+            listener: listener(stream),
         });
         stream
     }
 
     /// Stops `stream`. Its listener hears `Ended(Stopped)`, unless it had
     /// already ended.
-    #[allow(dead_code)] // Called by the ScreenCast backend; see PORTALS.md.
     pub fn stop(&self, stream: StreamId) {
         self.send(Request::Stop { stream });
+    }
+
+    /// What can be cast now, in the order the windows opened.
+    pub fn list(&self) -> Reply<Vec<Candidate>> {
+        let (replier, listed) = reply();
+        self.send(Request::List { reply: replier });
+        listed
     }
 
     fn send(&self, request: Request) {

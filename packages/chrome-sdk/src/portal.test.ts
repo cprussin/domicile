@@ -8,7 +8,9 @@ import type {
 } from "./portal";
 import {
   answerPortalRequest,
+  Captured,
   CapturingKind,
+  CastSource,
   FileChooserMode,
   Inhibited,
   LauncherType,
@@ -416,6 +418,57 @@ describe("watchPortalRequests", () => {
     ]);
   });
 
+  it("parses a screen cast request's sources", async () => {
+    const host = new FakeHost();
+    const requests = watched(host);
+    host.push([
+      {
+        app_id: "us.zoom.Zoom",
+        body: {
+          multiple: true,
+          sources: [
+            {
+              app_name: "Text Editor",
+              icon: "data:image/png;base64,AA==",
+              id: "app-3",
+              title: "Notes",
+              type: "window",
+            },
+            { id: "app-4", title: "", type: "window" },
+          ],
+        },
+        id: 4,
+        kind: "screen_cast",
+      },
+    ]);
+
+    expect(await requests).toEqual([
+      {
+        appId: "us.zoom.Zoom",
+        body: {
+          multiple: true,
+          sources: [
+            CastSource.Window({
+              appName: "Text Editor",
+              icon: "data:image/png;base64,AA==",
+              id: "app-3",
+              title: "Notes",
+            }),
+            CastSource.Window({
+              appName: undefined,
+              icon: undefined,
+              id: "app-4",
+              title: "",
+            }),
+          ],
+        },
+        id: 4,
+        kind: PortalKind.ScreenCast,
+        parentAppId: undefined,
+      },
+    ]);
+  });
+
   it("parses a USB grant's devices", async () => {
     const host = new FakeHost();
     const requests = watched(host);
@@ -531,7 +584,7 @@ describe("watchCapturing", () => {
           id: 6,
           kind: "input_capture",
         },
-        { app_id: "", body: {}, id: 7, kind: "screen_cast" },
+        { app_id: "", body: {}, id: 7, kind: "screenshot" },
       ],
     );
 
@@ -553,7 +606,34 @@ describe("watchCapturing", () => {
         appId: "",
         id: 7,
         kind: CapturingKind.Unknown,
-        wireKind: "screen_cast",
+        wireKind: "screenshot",
+      },
+    ]);
+  });
+
+  it("parses what a screen cast records", async () => {
+    const host = new FakeHost();
+    const sessions = new Promise<readonly Capturing[]>((resolve) => {
+      watchCapturing(host, resolve);
+    });
+    host.push(
+      [],
+      [
+        {
+          app_id: "us.zoom.Zoom",
+          body: { sources: [{ id: "app-3", title: "Notes", type: "window" }] },
+          id: 5,
+          kind: "screen_cast",
+        },
+      ],
+    );
+
+    expect(await sessions).toEqual([
+      {
+        appId: "us.zoom.Zoom",
+        id: 5,
+        kind: CapturingKind.ScreenCast,
+        sources: [Captured.Window({ id: "app-3", title: "Notes" })],
       },
     ]);
   });
@@ -712,6 +792,26 @@ describe("answerPortalRequest", () => {
           triggers: [{ id: "talk", trigger: "Ctrl+Alt+t" }, { id: "mute" }],
         },
       ],
+    ]);
+  });
+
+  it("writes the windows picked for a screen cast", () => {
+    const host = new FakeHost();
+    answerPortalRequest(
+      host,
+      4,
+      PortalAnswer.ScreenCast([
+        CastSource.Window({
+          appName: undefined,
+          icon: undefined,
+          id: "app-3",
+          title: "Notes",
+        }),
+      ]),
+    );
+
+    expect(host.answers).toEqual([
+      [4, { kind: "screen_cast", sources: [{ id: "app-3", type: "window" }] }],
     ]);
   });
 });

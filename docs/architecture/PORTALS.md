@@ -9,8 +9,8 @@ Make Domicile the session's only `xdg-desktop-portal` backend:
 Today the compositor implements `Settings`, `Access`, `AppChooser`,
 `FileChooser`, `Notification`, `Inhibit`, `RemoteDesktop`, `Clipboard`,
 `InputCapture`, `Account`, `Email`, `Lockdown`, `GlobalShortcuts`,
-`Background`, `Wallpaper`, `DynamicLauncher` and `Usb`, and routes the rest to
-gtk. Screen sharing has no backend.
+`Background`, `Wallpaper`, `DynamicLauncher`, `Usb` and `ScreenCast` of
+windows, and routes the rest to gtk. Sharing a monitor has no backend.
 
 ## Design
 
@@ -137,6 +137,8 @@ One request channel carries all dialogs. Each interface's backend builds on it.
   instance): the user already chose once. `GetAppState` comes from each
   window's `app_id`; an application with no window is absent, which the
   frontend reads as background.
+- **Restore tokens name windows by app id and title.** Host ids do not
+  survive a restart. A window whose title changed matches by app id alone.
 
 - **The frontend installs launchers.** `Install`, `Uninstall`,
   `LaunchDesktopFile`, `GetDesktopEntry` and `GetIcon` are frontend methods:
@@ -206,7 +208,8 @@ Phase 2: capture.
 
 - [x] PipeWire producer in the compositor; window sources from client buffers
 - [x] engine: `FrameSinkVideoCapturer` per display, dmabufs over the broker socket; monitor and region `Source`s
-- [ ] ScreenCast, with restore tokens and the sharing indicator
+- [x] ScreenCast of windows, with restore tokens and the sharing indicator
+- [ ] ScreenCast of monitors and regions: offer the engine's display `Source`s in the picker and `AvailableSourceTypes`
 - [ ] Screenshot and `PickColor`
 - [ ] Remove ROADMAP's "no screenshot or screencast portal" item
 

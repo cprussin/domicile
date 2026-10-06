@@ -1,4 +1,5 @@
-//! Locates the engine's persistent profile.
+//! Locates the engine's persistent profile, and Domicile's state directory it
+//! lives in.
 //!
 //! `$XDG_STATE_HOME/domicile/profile`, falling back to
 //! `~/.local/state/domicile/profile`. Cookies and logins are state in the XDG
@@ -20,7 +21,14 @@ const PROFILE: &str = "profile";
 /// `None` when neither `HOME` nor `XDG_STATE_HOME` is set. We don't invent a
 /// place to store logins.
 pub fn profile_directory(env: &dyn Fn(&str) -> Option<String>) -> Option<PathBuf> {
-    state_home(env).map(|home| home.join(DIRECTORY).join(PROFILE))
+    state_directory(env).map(|directory| directory.join(PROFILE))
+}
+
+/// Returns Domicile's directory under the state home, which may not exist yet.
+///
+/// `None` when neither `HOME` nor `XDG_STATE_HOME` is set.
+pub fn state_directory(env: &dyn Fn(&str) -> Option<String>) -> Option<PathBuf> {
+    state_home(env).map(|home| home.join(DIRECTORY))
 }
 
 /// Returns the user's state home.

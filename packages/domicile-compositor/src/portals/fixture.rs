@@ -68,6 +68,7 @@ pub fn served(tokens: Tokens) -> Served {
             Appearance::default(),
             Starting {
                 lockdown: LockdownConfig::default(),
+                screen_cast: super::idle_screen_cast(&serving.queue),
                 open: Box::new(|_| Ok(())),
                 user: Box::new(|| Box::pin(async { Err("no user here".into()) })),
             },

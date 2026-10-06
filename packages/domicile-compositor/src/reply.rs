@@ -1,4 +1,5 @@
-//! A one-shot answer a D-Bus method awaits.
+//! A one-shot answer awaited across threads, such as a D-Bus method waiting
+//! on the shell or on the Wayland thread.
 //!
 //! The backend methods run on zbus's executor and must not block it while the
 //! shell decides, so each awaits a [`Reply`]. Std-only, to add no async

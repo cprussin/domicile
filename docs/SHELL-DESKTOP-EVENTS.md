@@ -118,10 +118,10 @@ import { PortalDialogs } from "@domicile-desktop/component-library/PortalDialogs
   component library's `FilePicker`), `RemoteDesktop` (which devices and the
   clipboard an application may control), `InputCapture`, `GlobalShortcuts`
   (review the chords an app asks for), `Wallpaper` (a picture to preview),
-  `DynamicLauncher` (an install confirm with an editable name) and `Usb` (a
-  device grant). Answer `Access`, `Account`, `Wallpaper` and `Usb` with
-  `PortalAnswer.Access()` to allow, and `DynamicLauncher` with
-  `PortalAnswer.DynamicLauncher(name)`.
+  `DynamicLauncher` (an install confirm with an editable name), `Usb` (a
+  device grant) and `ScreenCast` (a picker of the windows to share). Answer
+  `Access`, `Account`, `Wallpaper` and `Usb` with `PortalAnswer.Access()` to
+  allow, and `DynamicLauncher` with `PortalAnswer.DynamicLauncher(name)`.
 - The app list, the file picker and the wallpaper preview read the system
   through `@domicile-desktop/sdk/system` (desktop entries, `mimeapps.list`,
   `readDir`, `readFile`), so `host` must take system calls. `domicile` does.
@@ -131,8 +131,9 @@ import { PortalDialogs } from "@domicile-desktop/component-library/PortalDialogs
   or suspend (`body.what`), listed until it lets go. It asks nothing, so a
   shell only shows it ("Editor is preventing logout"). The compositor refuses
   answers to it.
-- It also shows each running remote desktop or input capture session, with a
-  Stop button.
+- It also shows each running screen cast, remote desktop or input capture
+  session, with a Stop button. Manganese's bar also has a `Sharing` item for
+  screen casts.
 - `PortalDialogs` also fires the chords apps hold. `shellChords` are the
   shell's own, which a review flags as taken.
 - Without React, `watchPortalRequests` and `answerPortalRequest` in

@@ -23,7 +23,9 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 
 use domicile_config::{LockdownConfig, ThemeConfig};
+use domicile_host::cast_grants::Grants;
 use domicile_host::data_dirs::data_dirs;
+use domicile_host::desktop_entries::DesktopEntries;
 use domicile_host::mime_apps::{default_handler, lists};
 use domicile_host::portal_notifications::Invoked;
 use domicile_protocol::{
@@ -54,9 +56,9 @@ mod lockdown;
 mod notification;
 mod queue;
 mod remote_desktop;
-mod reply;
 mod request;
 mod restore;
+mod screencast;
 mod session;
 mod settings;
 #[cfg(test)]
@@ -82,9 +84,12 @@ use notification::Notification;
 use queue::Queue;
 use remote_desktop::{RemoteDesktop, Remotes};
 use restore::Tokens;
+use screencast::ScreenCast;
 use settings::{color_scheme, Appearance, Settings};
 use usb::Usb;
 use wallpaper::{Pictures, Wallpaper};
+
+use crate::casting::Casting;
 
 /// The object path the frontend calls backends at.
 const OBJECT_PATH: &str = "/org/freedesktop/portal/desktop";
@@ -377,13 +382,25 @@ impl Backends {
     }
 }
 
-/// What the Account, Email and Lockdown interfaces start from.
+/// What the Account, Email, Lockdown and ScreenCast interfaces start from.
 struct Starting {
     lockdown: LockdownConfig,
+    screen_cast: ScreenCast,
     /// Opens a `mailto:` URL.
     open: Open,
     /// Who the user is, for `Account`.
     user: LookUp,
+}
+
+/// What the capture portals need from the rest of the compositor.
+pub struct ScreenCasting {
+    /// Starts and stops streams on the Wayland thread.
+    pub casting: Casting,
+    /// Where saved ScreenCast restore tokens are kept; `None` keeps them in
+    /// memory.
+    pub grants: Option<PathBuf>,
+    /// The XDG data directories, for each window's desktop entry.
+    pub data_dirs: Vec<PathBuf>,
 }
 
 /// Starts the portal thread with `theme` as the current theme and the
@@ -394,6 +411,7 @@ struct Starting {
 /// `$XDG_STATE_HOME/domicile/`.
 ///
 /// Returns without waiting for the bus, so startup never blocks on D-Bus.
+#[allow(clippy::too_many_arguments)] // Each from a different part of the compositor.
 pub fn serve(
     theme: Theme,
     look: &ThemeConfig,
@@ -402,6 +420,7 @@ pub fn serve(
     nested_in: Option<&OsStr>,
     notifications: NotificationServer,
     spawn: impl Fn(&[String]) + Send + Sync + 'static,
+    casting: ScreenCasting,
 ) -> Portals {
     let environment = activation_environment(ours, nested_in);
     let (mut backends, changes) = Backends::new(
@@ -430,12 +449,14 @@ pub fn serve(
         backends: backends.clone(),
     };
     let appearance = Appearance::from(look);
-    let starting = Starting {
-        lockdown,
-        open: mail_client(spawn),
-        user: account::the_user(),
-    };
+    let open = mail_client(spawn);
     thread::spawn(move || {
+        let starting = Starting {
+            lockdown,
+            screen_cast: screen_cast(&backends.queue, casting),
+            open,
+            user: account::the_user(),
+        };
         // Every failure has the same effect: clients do not follow the theme,
         // and their dialogs go unanswered.
         if let Err(why) = answer(
@@ -754,7 +775,40 @@ fn export<'a>(
                 queue: Arc::clone(&backends.queue),
                 udev_data: PathBuf::from("/run/udev/data"),
             },
-        )
+        )?
+        .serve_at(OBJECT_PATH, starting.screen_cast)
+}
+
+/// A ScreenCast backend for tests that cast nothing.
+#[cfg(test)]
+fn idle_screen_cast(queue: &Arc<Queue>) -> ScreenCast {
+    let (requests, _) = smithay::reexports::calloop::channel::channel();
+    screen_cast(
+        queue,
+        ScreenCasting {
+            casting: Casting::new(requests),
+            grants: None,
+            data_dirs: Vec::new(),
+        },
+    )
+}
+
+/// The ScreenCast backend, with the restore tokens saved before. Unreadable
+/// tokens are set aside: applications ask again.
+fn screen_cast(queue: &Arc<Queue>, casting: ScreenCasting) -> ScreenCast {
+    let grants = match casting.grants {
+        Some(file) => Grants::load(file.clone()).unwrap_or_else(|why| {
+            warn!(%why, file = %file.display(), "saved screen cast grants are unreadable; applications will ask again");
+            Grants::default()
+        }),
+        None => Grants::default(),
+    };
+    ScreenCast::new(
+        Arc::clone(queue),
+        casting.casting,
+        grants,
+        DesktopEntries::new(casting.data_dirs),
+    )
 }
 
 /// Opens a `mailto:` URL with the desk's default `x-scheme-handler/mailto`
@@ -907,6 +961,7 @@ mod tests {
                     disable_camera: true,
                     ..LockdownConfig::default()
                 },
+                screen_cast: idle_screen_cast(&backends.queue),
                 open,
                 user: Box::new(|| {
                     Box::pin(async {

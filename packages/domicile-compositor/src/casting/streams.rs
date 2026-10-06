@@ -34,7 +34,7 @@ use crate::casting::pacing::{within, Due, Pacing, Rect};
 use crate::casting::producer::{self, BufferId, StreamFormat, Target, ToPipewire, ToWayland};
 use crate::casting::region::{self, damage_in_stream, in_frame, Layout, Screen};
 use crate::casting::shm_copy::{copy, Client};
-use crate::casting::{Event, Listener, Request, Source, StreamId};
+use crate::casting::{Candidate, Event, Listener, Request, Source, StreamId};
 use crate::engine::{CaptureId, CapturedFrame};
 
 /// A window's frame, as its commit brought it.
@@ -162,12 +162,12 @@ impl Streams {
         }
     }
 
-    /// Handles a caller's request. `window_open` says whether a window is
-    /// open; `capturer` is the engine, if one is connected.
+    /// Handles a caller's request. `open` lists the windows that can be cast
+    /// now; `capturer` is the engine, if one is connected.
     pub fn request(
         &mut self,
         request: Request,
-        window_open: impl Fn(&str) -> bool,
+        open: impl FnOnce() -> Vec<Candidate>,
         capturer: Option<&mut (dyn Capturer + 'static)>,
     ) {
         match request {
@@ -176,7 +176,16 @@ impl Streams {
                 source,
                 cursor,
                 listener,
-            } => self.start(stream, source, cursor, listener, window_open, capturer),
+            } => {
+                let open = open();
+                let window_open = |app_id: &str| {
+                    open.iter().any(
+                        |candidate| matches!(&candidate.source, Source::Window(id) if id == app_id),
+                    )
+                };
+                self.start(stream, source, cursor, listener, window_open, capturer);
+            }
+            Request::List { reply } => reply.send(open()),
             Request::Stop { stream } => {
                 if self.casts.contains_key(&stream) {
                     self.send(ToPipewire::End {

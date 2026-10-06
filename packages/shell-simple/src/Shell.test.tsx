@@ -295,6 +295,7 @@ describe("Shell", () => {
       act(() => {
         host.fake.dispatch("portalrequests", {
           data: JSON.stringify({
+            capturing: [],
             items: [
               {
                 app_id: "org.example.App",

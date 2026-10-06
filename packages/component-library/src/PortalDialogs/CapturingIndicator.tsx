@@ -1,5 +1,5 @@
-import type { Capturing } from "@domicile-desktop/sdk/portal";
-import { CapturingKind } from "@domicile-desktop/sdk/portal";
+import type { Captured, Capturing } from "@domicile-desktop/sdk/portal";
+import { CapturedKind, CapturingKind } from "@domicile-desktop/sdk/portal";
 import { css } from "../../styled-system/css";
 import { flex, hstack } from "../../styled-system/patterns";
 import { Button } from "../Button/Button";
@@ -14,14 +14,14 @@ type Props = {
 };
 
 /**
- * A row per session that controls or captures input, naming its application
- * and what it holds, with a button that ends it.
+ * A row per session that records the screen or controls or captures input,
+ * naming its application and what it holds, with a button that ends it.
  */
 export const CapturingIndicator = ({ screen, sessions, stop }: Props) => {
   const region = useScreenRegion(screen);
   return sessions.length === 0 ? undefined : (
     <div className={regionStyles} style={region}>
-      <ul aria-label="Input sessions" className={listStyles}>
+      <ul aria-label="Sharing and remote control" className={listStyles}>
         {sessions.map((session) => (
           <li className={itemStyles} key={session.id}>
             <span>{summary(session)}</span>
@@ -87,7 +87,17 @@ const summary = (session: Capturing): string => {
       ].join(", ")}`;
     case CapturingKind.InputCapture:
       return `Input capture: ${name} — ${deviceNames(session.devices).join(", ")}`;
+    case CapturingKind.ScreenCast:
+      return `Sharing: ${name} — ${session.sources.map((source) => sourceName(source)).join(", ")}`;
     case CapturingKind.Unknown:
       return `${session.wireKind}: ${name}`;
+  }
+};
+
+/** How a row names a recorded source. */
+const sourceName = (source: Captured): string => {
+  switch (source.kind) {
+    case CapturedKind.Window:
+      return source.title === "" ? "Untitled window" : source.title;
   }
 };

@@ -9,12 +9,11 @@
 # Domicile implements `Settings`, `Access`, `AppChooser`, `FileChooser`,
 # `Notification`, `Inhibit`, `RemoteDesktop`, `Clipboard`, `InputCapture`,
 # `Account`, `Email`, `Lockdown`, `GlobalShortcuts`, `Background`,
-# `Wallpaper`, `DynamicLauncher` and `Usb`. Every interface not listed here
-# goes to another backend, mostly `xdg-desktop-portal-gtk`. Listing an
-# interface Domicile does not implement would take it from the backend that
-# does.
-# Screenshot and ScreenCast have no backend: gtk does not implement them and the
-# wlroots backends need protocols Domicile does not serve.
+# `Wallpaper`, `DynamicLauncher`, `Usb` and `ScreenCast`. Every interface not
+# listed here goes to another backend, mostly `xdg-desktop-portal-gtk`.
+# Listing an interface Domicile does not implement would take it from the
+# backend that does. Screenshot has no backend: gtk does not implement it and
+# the wlroots backends need protocols Domicile does not serve.
 #
 # `Settings` carries `org.freedesktop.appearance`'s `color-scheme`, which GTK4,
 # Qt6, Electron and Firefox read to follow the theme, and its accent color,
@@ -28,10 +27,11 @@
 # section. `GlobalShortcuts` binds chords the shell reviews and grabs.
 # `Background` reports windows and writes autostart entries; `Wallpaper` hands
 # the shell a picture. `DynamicLauncher` and `Usb` are an install confirm
-# and a device grant the shell draws. See
+# and a device grant the shell draws. `ScreenCast` casts windows to PipeWire,
+# picked in a dialog the shell draws. See
 # `packages/domicile-compositor/src/portals/` and
 # `docs/architecture/PORTALS.md`.
 [portal]
 DBusName=org.freedesktop.impl.portal.desktop.domicile
-Interfaces=org.freedesktop.impl.portal.Settings;org.freedesktop.impl.portal.Access;org.freedesktop.impl.portal.AppChooser;org.freedesktop.impl.portal.FileChooser;org.freedesktop.impl.portal.Notification;org.freedesktop.impl.portal.Inhibit;org.freedesktop.impl.portal.RemoteDesktop;org.freedesktop.impl.portal.Clipboard;org.freedesktop.impl.portal.InputCapture;org.freedesktop.impl.portal.Account;org.freedesktop.impl.portal.Email;org.freedesktop.impl.portal.Lockdown;org.freedesktop.impl.portal.GlobalShortcuts;org.freedesktop.impl.portal.Background;org.freedesktop.impl.portal.Wallpaper;org.freedesktop.impl.portal.DynamicLauncher;org.freedesktop.impl.portal.Usb;
+Interfaces=org.freedesktop.impl.portal.Settings;org.freedesktop.impl.portal.Access;org.freedesktop.impl.portal.AppChooser;org.freedesktop.impl.portal.FileChooser;org.freedesktop.impl.portal.Notification;org.freedesktop.impl.portal.Inhibit;org.freedesktop.impl.portal.RemoteDesktop;org.freedesktop.impl.portal.Clipboard;org.freedesktop.impl.portal.InputCapture;org.freedesktop.impl.portal.Account;org.freedesktop.impl.portal.Email;org.freedesktop.impl.portal.Lockdown;org.freedesktop.impl.portal.GlobalShortcuts;org.freedesktop.impl.portal.Background;org.freedesktop.impl.portal.Wallpaper;org.freedesktop.impl.portal.DynamicLauncher;org.freedesktop.impl.portal.Usb;org.freedesktop.impl.portal.ScreenCast;
 UseIn=domicile

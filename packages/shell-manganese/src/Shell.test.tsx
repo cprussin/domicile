@@ -964,6 +964,7 @@ describe("Shell", () => {
       renderShell();
       domicile.dispatch("portalrequests", {
         data: JSON.stringify({
+          capturing: [],
           items: [
             {
               app_id: "org.example.App",

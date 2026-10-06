@@ -52,6 +52,7 @@ export {
   BarMode as Mode,
   BarNetwork as Network,
   BarNotifications as Notifications,
+  BarSharing as Sharing,
   BarThemeSelector as ThemeSelector,
   BarTray as Tray,
   BarVolume as Volume,
