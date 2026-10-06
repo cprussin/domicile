@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# The desk's state attributes on the desktop -- battery, idle, lock, both
-# themes, clipboard, tray, modifiers -- say what the compositor said, to a
-# shell that reads them late.
+# The desk's state attributes on the desktop -- idle, lock, both themes,
+# clipboard, tray, modifiers -- say what the compositor said, to a shell that
+# reads them late.
 #
 #   nix develop .#full --command \
 #     ./packages/domicile-engine/scripts/guard-desk-state.sh /build/chromium/src
@@ -9,7 +9,7 @@
 # WHY THIS EXISTS. Each of these used to reach a page only as an event, gone if
 # nobody was listening yet. Each is now the last thing the compositor said,
 # null until it has said anything, so a shell reads and then listens. The
-# notifications, extensions and audio attributes are the same code -- the last
+# notifications and extensions attributes are the same code -- the last
 # event's payload -- and are left to the shells that read them.
 # See docs/architecture/WINDOW-DOMICILE.md.
 set -u
@@ -105,8 +105,6 @@ if not line:
 state = json.loads(line[len('"GUARD state '):-1])
 wanted = {
     "altKey": True,
-    "batteryCharge": 0.5,
-    "batteryCharging": True,
     "clipboard": [{"id": 7, "preview": "hello"}],
     "ctrlKey": False,
     "idle": True,

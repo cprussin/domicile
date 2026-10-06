@@ -19,22 +19,18 @@ The engine has two channels to the rest of Domicile:
 
 ### Members
 
-- **Outbound:** `spawn`, `search_files`, `preview_file`,
-  `search_apps`, `call_system`, `copy_clipboard_entry`, `activate_tray_item`,
-  `dismiss_notifications`, `invoke_notification_action`, `focus_app`,
-  `focus_chrome`, `close_app`, `resize_app`, `set_app_bounds`,
-  `set_desktop_size`, `set_device_pixel_ratio`, `set_theme`, `theme_captured`,
-  `unlock`, `lock`, `set_brightness`, `set_audio_volume`, `set_audio_muted`,
-  `set_default_audio_device`, `move_audio_stream`, `set_audio_port`,
-  `set_audio_profile`, `watch_audio_levels`, `key`, `pointer_motion`,
-  `pointer_leave`, `pointer_button`, `pointer_axis`. The browser also sends
-  `hello` on connect.
+- **Outbound:** `spawn`, `search_files`, `preview_file`, `call_system`,
+  `copy_clipboard_entry`, `activate_tray_item`, `dismiss_notifications`,
+  `invoke_notification_action`, `focus_app`, `focus_chrome`, `close_app`,
+  `resize_app`, `set_app_bounds`, `set_desktop_size`,
+  `set_device_pixel_ratio`, `set_theme`, `theme_captured`, `unlock`, `lock`,
+  `key`, `pointer_motion`, `pointer_leave`, `pointer_button`, `pointer_axis`.
+  The browser also sends `hello` on connect.
 - **Inbound:** `welcome`, `app_appeared`, `app_titled`, `app_resized`,
   `app_min_size`, `app_max_size`, `popup_placed`, `app_closed`, `app_cursor`,
-  `shortcut`, `modifiers`, `found_files`, `file_preview`, `found_apps`,
-  `battery`, `brightness`, `clipboard`, `theme`, `focus_changed`,
-  `focus_requested`, `displays`, `keymap`, `extensions`, `tray`,
-  `notifications`, `shell_config`, `audio`, `audio_levels`, `idle`, `locked`,
+  `shortcut`, `modifiers`, `found_files`, `file_preview`, `clipboard`,
+  `theme`, `focus_changed`, `focus_requested`, `displays`, `keymap`,
+  `extensions`, `tray`, `notifications`, `shell_config`, `idle`, `locked`,
   `system`.
 - **Handled in the browser, never sent to the compositor:** `grab_shortcut`,
   `warp_pointer`.
@@ -55,7 +51,7 @@ The engine has two channels to the rest of Domicile:
   `system_reply`, `system_event` and `system_end` lines whole, as a
   `MessageEvent`. It reads nothing else of them; the compositor checks each
   call. See `components/domicile/browser/system_call.h` and
-  [SYSTEM-ACCESS.md](/docs/architecture/SYSTEM-ACCESS.md).
+  [SHELL-SYSTEM-ACCESS.md](/docs/SHELL-SYSTEM-ACCESS.md).
 - **`resize_app`** is implemented but unused. An `<app>`'s layout box already
   sets the client's size through `LayoutAppSurface` and
   `ExternalSurfaceProvider::Embed`. Removing it from the IDL needs an engine

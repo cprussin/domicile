@@ -5,7 +5,7 @@
 //! caller: file calls run on a thread each, and a process has threads for its
 //! output and its exit. The lock is the compositor's to check before calling;
 //! [`reach`] tells it what a request touches. See
-//! `docs/architecture/SYSTEM-ACCESS.md`.
+//! `docs/SHELL-SYSTEM-ACCESS.md`.
 
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;

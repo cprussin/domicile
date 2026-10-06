@@ -1158,7 +1158,7 @@ fn answer_on_the_connection(hub: &ChromeHub, request: ConnectionRequest) -> Vec<
 /// Run a system call for the page, unless the desktop is locked.
 ///
 /// Answers go straight to the page from `system`'s threads. The only response
-/// returned here is a refusal. See `docs/architecture/SYSTEM-ACCESS.md`.
+/// returned here is a refusal. See `docs/SHELL-SYSTEM-ACCESS.md`.
 fn call_the_system(
     hub: &ChromeHub,
     system: &System,

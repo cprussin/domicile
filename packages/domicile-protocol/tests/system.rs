@@ -1,7 +1,7 @@
 //! Wire shapes for the shell's system access: files, processes and watches.
 //!
 //! Pinned as JSON because the SDK hard-codes them. See
-//! `docs/architecture/SYSTEM-ACCESS.md`.
+//! `docs/SHELL-SYSTEM-ACCESS.md`.
 
 use std::collections::BTreeMap;
 

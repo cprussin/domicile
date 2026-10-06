@@ -236,7 +236,7 @@ pub enum ChromeMessage {
     /// `id` is the page's, and names the call in every answer. A watch or a
     /// process keeps its id until [`HostMessage::SystemEnd`], and the page
     /// drives it by sending further requests under the same id. See
-    /// `docs/architecture/SYSTEM-ACCESS.md`.
+    /// `docs/SHELL-SYSTEM-ACCESS.md`.
     SystemRequest { id: u32, request: SystemRequest },
 }
 

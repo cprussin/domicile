@@ -1,5 +1,5 @@
 // BlueZ over the system bus: adapters and connected devices, kept current.
-// See docs/architecture/SYSTEM-ACCESS.md.
+// See docs/SHELL-SYSTEM-ACCESS.md.
 
 import type { Result } from "@cprussin/option-result";
 import { Err } from "@cprussin/option-result";

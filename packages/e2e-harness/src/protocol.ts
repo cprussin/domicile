@@ -342,7 +342,7 @@ const systemErrorSchema = z.looseObject({
 const fileTypeSchema = z.enum(["file", "directory", "symlink", "other"]);
 
 // The answer to a `system_request`. Bytes are base64. See
-// `docs/architecture/SYSTEM-ACCESS.md`.
+// `docs/SHELL-SYSTEM-ACCESS.md`.
 const systemReplySchema = z.looseObject({
   id: z.number(),
   reply: z.discriminatedUnion("kind", [
