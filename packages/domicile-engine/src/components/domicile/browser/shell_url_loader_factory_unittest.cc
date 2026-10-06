@@ -5,6 +5,8 @@
 
 #include "base/files/file_path.h"
 #include "components/domicile/common/domicile_scheme.h"
+#include "net/http/http_response_headers.h"
+#include "services/network/public/mojom/url_response_head.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 #include "url/origin.h"
@@ -205,6 +207,17 @@ TEST(ShellDocumentTest, RunsNoScriptOfItsOwn) {
   const std::string document = ShellURLLoaderFactory::ShellDocument("shell.js");
   EXPECT_EQ(document.find("<script"), std::string::npos);
   EXPECT_EQ(document.find("navigator.domicile"), std::string::npos);
+}
+
+TEST(ShellDocumentTest, RunsScriptOnlyFromTheShellRoot) {
+  // Markup injected through a notification body, window title or file name
+  // must not run with the desktop.
+  const network::mojom::URLResponseHeadPtr head =
+      ShellURLLoaderFactory::ShellDocumentHead();
+  ASSERT_TRUE(head->headers);
+  EXPECT_EQ(head->headers->GetNormalizedHeader("Content-Security-Policy")
+                .value_or(""),
+            "script-src 'self'");
 }
 
 TEST(ShellDocumentTest, HandsTheShellAnEmptyBody) {
