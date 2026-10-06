@@ -4,9 +4,8 @@
 //! pinned because the JS client hard-codes them.
 
 use domicile_protocol::{
-    negotiate, AudioCard, AudioChoice, AudioDevice, AudioLevel, AudioStream, ChromeMessage,
-    ClipboardEntry, CursorShape, DisplayInfo, DisplayTransform, FilePreview, HostMessage,
-    Passphrase, PROTOCOL_VERSION,
+    negotiate, ChromeMessage, ClipboardEntry, CursorShape, DisplayInfo, DisplayTransform,
+    FilePreview, HostMessage, Passphrase, PROTOCOL_VERSION,
 };
 
 fn chrome_round_trip(msg: &ChromeMessage) {
@@ -74,29 +73,6 @@ fn chrome_messages_round_trip() {
     });
     chrome_round_trip(&ChromeMessage::Lock);
     chrome_round_trip(&ChromeMessage::SetBrightness { level: 0.25 });
-    chrome_round_trip(&ChromeMessage::SetAudioVolume {
-        id: "output:speakers".into(),
-        volume: 0.5,
-    });
-    chrome_round_trip(&ChromeMessage::SetAudioMuted {
-        id: "input:mic".into(),
-        muted: true,
-    });
-    chrome_round_trip(&ChromeMessage::SetDefaultAudioDevice {
-        id: "output:speakers".into(),
-    });
-    chrome_round_trip(&ChromeMessage::MoveAudioStream {
-        id: "playback:42".into(),
-        device: "output:headphones".into(),
-    });
-    chrome_round_trip(&ChromeMessage::SetAudioPort {
-        id: "output:speakers".into(),
-        port: "analog-output-headphones".into(),
-    });
-    chrome_round_trip(&ChromeMessage::SetAudioProfile {
-        card: "alsa_card.pci".into(),
-        profile: "output:hdmi-stereo".into(),
-    });
 }
 
 /// A file search carries a query and no path, so a page cannot choose which
@@ -537,111 +513,5 @@ fn a_resize_the_chrome_no_longer_sends_is_not_a_message() {
     assert!(
         serde_json::from_str::<ChromeMessage>(line).is_err(),
         "the host still reads a resize the chrome no longer sends"
-    );
-}
-
-/// The audio state lists every device and stream by the id the chrome's
-/// requests use.
-#[test]
-fn the_audio_round_trips() {
-    host_round_trip(&HostMessage::Audio {
-        outputs: vec![AudioDevice {
-            id: "output:speakers".into(),
-            description: "Speakers".into(),
-            volume: 0.5,
-            muted: false,
-            default: true,
-            monitor: false,
-            ports: vec![AudioChoice {
-                name: "analog-output-speaker".into(),
-                description: "Speakers".into(),
-                available: true,
-            }],
-            port: Some("analog-output-speaker".into()),
-        }],
-        inputs: Vec::new(),
-        playback: vec![AudioStream {
-            id: "playback:42".into(),
-            application: "Firefox".into(),
-            title: Some("A song".into()),
-            volume: 1.0,
-            muted: false,
-            device: Some("output:speakers".into()),
-        }],
-        recording: Vec::new(),
-        cards: vec![AudioCard {
-            id: "alsa_card.pci".into(),
-            description: "Built-in Audio".into(),
-            profiles: Vec::new(),
-            profile: None,
-        }],
-    });
-}
-
-/// The exact JSON the SDK sends for each of the mixer's requests.
-#[test]
-fn the_mixers_requests_parse_as_the_sdk_sends_them() {
-    let parse = |sent: &str| serde_json::from_str::<ChromeMessage>(sent).unwrap();
-    assert_eq!(
-        parse(r#"{"type":"set_audio_volume","id":"output:s","volume":0.5}"#),
-        ChromeMessage::SetAudioVolume {
-            id: "output:s".into(),
-            volume: 0.5
-        }
-    );
-    assert_eq!(
-        parse(r#"{"type":"set_audio_muted","id":"input:m","muted":true}"#),
-        ChromeMessage::SetAudioMuted {
-            id: "input:m".into(),
-            muted: true
-        }
-    );
-    assert_eq!(
-        parse(r#"{"type":"set_default_audio_device","id":"output:s"}"#),
-        ChromeMessage::SetDefaultAudioDevice {
-            id: "output:s".into()
-        }
-    );
-    assert_eq!(
-        parse(r#"{"type":"move_audio_stream","id":"playback:4","device":"output:s"}"#),
-        ChromeMessage::MoveAudioStream {
-            id: "playback:4".into(),
-            device: "output:s".into()
-        }
-    );
-    assert_eq!(
-        parse(r#"{"type":"set_audio_port","id":"output:s","port":"p"}"#),
-        ChromeMessage::SetAudioPort {
-            id: "output:s".into(),
-            port: "p".into()
-        }
-    );
-    assert_eq!(
-        parse(r#"{"type":"set_audio_profile","card":"c","profile":"off"}"#),
-        ChromeMessage::SetAudioProfile {
-            card: "c".into(),
-            profile: "off".into()
-        }
-    );
-}
-
-/// Meters are requested by id and answered with each id's peak.
-#[test]
-fn the_meters_round_trip() {
-    chrome_round_trip(&ChromeMessage::WatchAudioLevels {
-        ids: vec!["output:speakers".into(), "input:mic".into()],
-    });
-    host_round_trip(&HostMessage::AudioLevels {
-        levels: vec![AudioLevel {
-            id: "output:speakers".into(),
-            peak: 0.5,
-        }],
-    });
-    assert_eq!(
-        serde_json::from_str::<ChromeMessage>(r#"{"type":"watch_audio_levels","ids":["input:m"]}"#)
-            .unwrap(),
-        ChromeMessage::WatchAudioLevels {
-            ids: vec!["input:m".into()]
-        }
     );
 }

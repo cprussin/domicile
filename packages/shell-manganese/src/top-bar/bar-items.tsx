@@ -2,6 +2,9 @@
 // only names them.
 
 import { ThemeSwitch } from "@domicile-desktop/component-library/ThemeSwitch";
+import { system } from "@domicile-desktop/sdk/system";
+import { soundServer } from "@domicile-desktop/system-audio/sound-server";
+import { useMemo } from "react";
 
 import { css } from "../../styled-system/css";
 import { Battery } from "../battery/Battery";
@@ -93,7 +96,8 @@ export const BarBluetooth = () => {
 /** The volume control, whose panel holds the mixer. */
 export const BarVolume = () => {
   const { domicile } = useBar();
-  return <Volume domicile={domicile} />;
+  const server = useMemo(() => soundServer(system(domicile)), [domicile]);
+  return <Volume server={server} />;
 };
 
 /** The screen brightness. */

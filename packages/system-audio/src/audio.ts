@@ -1,12 +1,12 @@
-// Audio state types shared by the client and host halves of the SDK.
+// The sound server's state, as `watchAudio` reports it.
 //
-// The compositor reads the sound server (PulseAudio or PipeWire) through
-// `pactl`; see `domicile_host::audio`. Ids are opaque compositor ids taken from
-// the last `audio` message.
+// Ids are opaque. A device id is `output:` or `input:` plus the device name,
+// which survives a server restart. A stream id is `playback:` or `recording:`
+// plus the stream index, which lasts as long as the stream.
 
 /** A port of a device, or a profile of a card: something to switch it to. */
 export type AudioChoice = {
-  /** What `setAudioPort` and `setAudioProfile` name it by. */
+  /** What `setPort` and `setProfile` name it by. */
   name: string;
   description: string;
   /**
@@ -20,9 +20,7 @@ export type AudioChoice = {
 export type AudioDevice = {
   id: string;
   description: string;
-  /**
-   * The loudest channel's volume as a fraction of 100%. Can exceed 1.
-   */
+  /** The loudest channel's volume as a fraction of 100%. Can exceed 1. */
   volume: number;
   muted: boolean;
   /** Whether new streams go to it. */
@@ -47,10 +45,7 @@ export type AudioStream = {
   title: string | undefined;
   volume: number;
   muted: boolean;
-  /**
-   * The {@link AudioDevice.id} it plays to or records from, or `undefined`
-   * until the next message reports it.
-   */
+  /** The {@link AudioDevice.id} it plays to or records from, if listed. */
   device: string | undefined;
 };
 
@@ -62,4 +57,30 @@ export type AudioCard = {
   profiles: readonly AudioChoice[];
   /** The {@link AudioChoice.name} of the profile in use. */
   profile: string | undefined;
+};
+
+export enum MeterKind {
+  /** A source by name: an input, or an output's monitor. */
+  Source,
+  /** A playback stream by index, as pavucontrol meters one. */
+  Stream,
+}
+
+/** Where a level meter records from. */
+export const Meter = {
+  Source: (name: string) => ({ kind: MeterKind.Source as const, name }),
+  Stream: (index: number) => ({ index, kind: MeterKind.Stream as const }),
+};
+
+export type Meter = ReturnType<(typeof Meter)[keyof typeof Meter]>;
+
+/** Every output, input, stream and card. */
+export type Audio = {
+  outputs: readonly AudioDevice[];
+  inputs: readonly AudioDevice[];
+  playback: readonly AudioStream[];
+  recording: readonly AudioStream[];
+  cards: readonly AudioCard[];
+  /** Where each meterable device or stream id is metered from. */
+  meters: ReadonlyMap<string, Meter>;
 };

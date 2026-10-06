@@ -329,10 +329,7 @@ pub fn refused(asked: Asked) -> Option<Refusal> {
             | ClientRequest::CopyClipboardEntry { .. }
             | ClientRequest::ActivateTrayItem { .. }
             | ClientRequest::DismissNotifications { .. }
-            | ClientRequest::InvokeNotificationAction { .. }
-            // Changes what the user's applications play and record.
-            | ClientRequest::Audio { .. }
-            | ClientRequest::WatchAudioLevels { .. },
+            | ClientRequest::InvokeNotificationAction { .. },
         )
         | Asked::OnTheConnection(
             ConnectionRequest::SearchFiles { .. }
@@ -695,22 +692,6 @@ mod tests {
                 ClientRequest::InvokeNotificationAction {
                     id: 7,
                     action: "default".into(),
-                },
-            ),
-            (
-                "a microphone metered",
-                ClientRequest::WatchAudioLevels {
-                    chrome: 1,
-                    ids: vec!["input:mic".into()],
-                },
-            ),
-            (
-                "a stream turned down",
-                ClientRequest::Audio {
-                    request: domicile_host::audio::Request::Volume {
-                        id: "playback:42".into(),
-                        volume: 0.5,
-                    },
                 },
             ),
         ] {

@@ -52,7 +52,7 @@ misses nothing, so nothing needs buffering.
 | `displays`, `brightness` | already attributes, with `displayschanged` and `brightnesschanged` |
 | `theme`, `windowsTheme` | `theme`, `windowstheme` |
 | `locked`, `idle` | `locked`, `idle` |
-| `batteryCharge`, `batteryCharging`; `audioOutputs`, `audioInputs`, `audioPlayback`, `audioRecording`, `audioCards` | `battery`, `audio` |
+| `batteryCharge`, `batteryCharging` | `battery` |
 | `extensions`, `tray`, `notifications`, `clipboard` | the events of those names |
 | `altKey`, `ctrlKey`, `shiftKey`, `metaKey` | `modifiers` |
 
@@ -65,8 +65,7 @@ strings: `size?: { width, height }`, `title`, `minSize?`, `maxSize?`, `cursor`,
 Some messages have no current value: `focusrequested`, `shortcut`.
 The engine queues each type until its first listener is attached, then
 delivers the queue on a task of its own. One rule replaces
-`DomicileClient.#held`. `audiolevels` is not held: it is a meter that flows
-only while something listens, and a stale sample is worth nothing.
+`DomicileClient.#held`.
 
 ### Requests return promises
 

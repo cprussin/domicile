@@ -86,7 +86,7 @@ export const Shell: ShellModule = (root, domicile) => {
 - State is attributes: `windows`, `focusedWindow`, `displays`, `theme`,
   `locked`, `idle`, `extensions`, `tray`, `notifications`, `browserWindows`
   and more. Each change dispatches a bare `<name>changed` event.
-  `audiochanged` and `modifierschanged` each cover a group.
+  `modifierschanged` covers a group.
   Read, then listen:
 
   ```ts
@@ -99,7 +99,7 @@ export const Shell: ShellModule = (root, domicile) => {
   empty.
 - Moments (`focusrequested`, `shortcut`) are events. The engine holds each
   type until its first listener exists, so a listener added in React's first
-  effect misses none. `audiolevels` is not held.
+  effect misses none.
 - `searchFiles`, `previewFile` and `searchApps` return promises. A newer call
   rejects the older with an `AbortError`.
 - Only Domicile calls a shell, so there is no plain-browser case to check

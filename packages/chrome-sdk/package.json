@@ -15,10 +15,6 @@
       "types": "./dist/app-element.d.ts",
       "default": "./dist/app-element.js"
     },
-    "./audio": {
-      "types": "./dist/audio.d.ts",
-      "default": "./dist/audio.js"
-    },
     "./bind-keys": {
       "types": "./dist/bind-keys.d.ts",
       "default": "./dist/bind-keys.js"

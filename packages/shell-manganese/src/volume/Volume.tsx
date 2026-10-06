@@ -1,6 +1,6 @@
 import { Popover } from "@domicile-desktop/component-library/Popover";
-import type { AudioDevice } from "@domicile-desktop/sdk/audio";
-import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
+import type { Audio, AudioDevice } from "@domicile-desktop/system-audio/audio";
+import type { SoundServer } from "@domicile-desktop/system-audio/sound-server";
 import { SpeakerSimpleHighIcon } from "@phosphor-icons/react/dist/ssr/SpeakerSimpleHigh";
 import { SpeakerSimpleLowIcon } from "@phosphor-icons/react/dist/ssr/SpeakerSimpleLow";
 import { SpeakerSimpleNoneIcon } from "@phosphor-icons/react/dist/ssr/SpeakerSimpleNone";
@@ -10,39 +10,29 @@ import type { WheelEvent } from "react";
 import { useEffect, useState } from "react";
 
 import { css } from "../../styled-system/css";
+import { ask } from "./ask";
 import { Mixer } from "./Mixer";
-import type { Audio } from "./watch-audio";
-import { watchAudio } from "./watch-audio";
-import type { watchAudioLevels } from "./watch-audio-levels";
 
 /** How far one notch of the wheel over the icon moves the volume. */
 const WHEEL_STEP = 0.05;
 
 type Props = {
   /** Source of audio state and target of volume changes. */
-  domicile: DomicileHost;
-  /** Injected so tests can drive the audio state. */
-  watch?: typeof watchAudio | undefined;
-  /** Injected so tests can drive the meters. */
-  watchLevels?: typeof watchAudioLevels | undefined;
+  server: SoundServer;
 };
 
 /**
  * Top bar volume item: a speaker icon that opens the {@link Mixer}. The wheel
  * over the icon changes the default output's volume.
  *
- * Renders nothing until the host reports audio, so it stays hidden without a
+ * Renders nothing until the server reports, so it stays hidden without a
  * sound server. The mixer meters only while open, because metering a
  * microphone records it.
  */
-export const Volume = ({
-  domicile,
-  watch = watchAudio,
-  watchLevels,
-}: Props) => {
+export const Volume = ({ server }: Props) => {
   const [audio, setAudio] = useState<Audio | undefined>(undefined);
 
-  useEffect(() => watch(domicile, setAudio), [domicile, watch]);
+  useEffect(() => server.watch(setAudio), [server]);
 
   if (audio === undefined) {
     return undefined;
@@ -59,7 +49,7 @@ export const Volume = ({
             className={triggerStyles}
             onWheel={(event) => {
               if (output !== undefined) {
-                domicile.setAudioVolume(output.id, stepped(output, event));
+                ask(server.setVolume(output.id, stepped(output, event)));
               }
             }}
             type="button"
@@ -69,7 +59,7 @@ export const Volume = ({
         }
         wide
       >
-        <Mixer audio={audio} domicile={domicile} watchLevels={watchLevels} />
+        <Mixer audio={audio} server={server} />
       </Popover>
     );
   }

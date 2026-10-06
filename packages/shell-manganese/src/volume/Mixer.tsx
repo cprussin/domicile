@@ -2,30 +2,28 @@ import { Accordion } from "@domicile-desktop/component-library/Accordion";
 import type { SelectOption } from "@domicile-desktop/component-library/Select";
 import { Select } from "@domicile-desktop/component-library/Select";
 import type {
+  Audio,
   AudioCard,
   AudioChoice,
   AudioDevice,
   AudioStream,
-} from "@domicile-desktop/sdk/audio";
-import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
+} from "@domicile-desktop/system-audio/audio";
+import type { SoundServer } from "@domicile-desktop/system-audio/sound-server";
 import { CheckCircleIcon } from "@phosphor-icons/react/dist/ssr/CheckCircle";
 import type { ReactNode } from "react";
 import { createContext, useContext, useState } from "react";
 
 import { css, cx } from "../../styled-system/css";
 import { flex, hstack } from "../../styled-system/patterns";
+import { ask } from "./ask";
 import type { Direction } from "./Level";
 import { Level } from "./Level";
 import { useMeters } from "./useMeters";
-import type { Audio } from "./watch-audio";
-import type { watchAudioLevels } from "./watch-audio-levels";
 
 type Props = {
   audio: Audio;
   /** Where changes are requested and meters read. */
-  domicile: DomicileHost;
-  /** How meters are watched; injected for tests. */
-  watchLevels?: typeof watchAudioLevels | undefined;
+  server: SoundServer;
 };
 
 /** A drawer under the sliders. */
@@ -49,7 +47,7 @@ type Drawer = "outputs" | "inputs" | "apps" | "cards";
  * Output monitors are hidden from the inputs, as in pavucontrol, but remain
  * targets for moving a recording.
  */
-export const Mixer = ({ audio, domicile, watchLevels }: Props) => {
+export const Mixer = ({ audio, server }: Props) => {
   const [open, setOpen] = useState<readonly Drawer[]>([]);
   const [panel, setPanel] = useState<HTMLElement | null>(null);
   const output = primary(audio.outputs);
@@ -60,7 +58,7 @@ export const Mixer = ({ audio, domicile, watchLevels }: Props) => {
   );
   const apps = byApp(audio.playback, audio.recording);
   const levels = useMeters(
-    domicile,
+    server,
     [
       ...[output, input].flatMap((device) =>
         device === undefined ? [] : [device.id],
@@ -69,7 +67,7 @@ export const Mixer = ({ audio, domicile, watchLevels }: Props) => {
       ...(open.includes("inputs") ? inputs : []).map(({ id }) => id),
       ...(open.includes("apps") ? audio.playback : []).map(({ id }) => id),
     ],
-    watchLevels,
+    audio.meters,
   );
   const drawer = (
     value: Drawer,
@@ -97,9 +95,9 @@ export const Mixer = ({ audio, domicile, watchLevels }: Props) => {
             <Default
               device={output}
               direction="output"
-              domicile={domicile}
               label="Volume"
               meter={levels.get(output.id)}
+              server={server}
             />
             {outputs.length > 0 && (
               <div className={nestedStyles}>
@@ -109,8 +107,8 @@ export const Mixer = ({ audio, domicile, watchLevels }: Props) => {
                   <Devices
                     devices={outputs}
                     direction="output"
-                    domicile={domicile}
                     levels={levels}
+                    server={server}
                   />,
                   "sm",
                 )}
@@ -123,9 +121,9 @@ export const Mixer = ({ audio, domicile, watchLevels }: Props) => {
             <Default
               device={input}
               direction="input"
-              domicile={domicile}
               label="Microphone"
               meter={levels.get(input.id)}
+              server={server}
             />
             {inputs.length > 0 && (
               <div className={nestedStyles}>
@@ -135,8 +133,8 @@ export const Mixer = ({ audio, domicile, watchLevels }: Props) => {
                   <Devices
                     devices={inputs}
                     direction="input"
-                    domicile={domicile}
                     levels={levels}
+                    server={server}
                   />,
                   "sm",
                 )}
@@ -151,10 +149,10 @@ export const Mixer = ({ audio, domicile, watchLevels }: Props) => {
               "Apps",
               <Apps
                 apps={apps}
-                domicile={domicile}
                 inputs={audio.inputs}
                 levels={levels}
                 outputs={audio.outputs}
+                server={server}
               />,
             )}
           </div>
@@ -164,7 +162,7 @@ export const Mixer = ({ audio, domicile, watchLevels }: Props) => {
             {drawer(
               "cards",
               "Cards",
-              <Cards cards={audio.cards} domicile={domicile} />,
+              <Cards cards={audio.cards} server={server} />,
             )}
           </div>
         )}
@@ -214,24 +212,18 @@ const primary = (devices: readonly AudioDevice[]) =>
 type DefaultProps = {
   device: AudioDevice;
   direction: Direction;
-  domicile: DomicileHost;
+  server: SoundServer;
   /** The slider's label: its purpose, not the device name. */
   label: string;
   meter: number | undefined;
 };
 
 /** One of the two default sliders, titled with its device, with its port. */
-const Default = ({
-  device,
-  direction,
-  domicile,
-  label,
-  meter,
-}: DefaultProps) => (
+const Default = ({ device, direction, server, label, meter }: DefaultProps) => (
   <div className={rowStyles}>
     <span className={cx(headStyles, captionLineStyles)}>
       <span className={captionStyles}>{device.description}</span>
-      <Port device={device} domicile={domicile} />
+      <Port device={device} server={server} />
     </span>
     <Level
       direction={direction}
@@ -240,10 +232,10 @@ const Default = ({
       meter={meter}
       muted={device.muted}
       onLevel={(level) => {
-        domicile.setAudioVolume(device.id, level);
+        ask(server.setVolume(device.id, level));
       }}
       onMuted={(muted) => {
-        domicile.setAudioMuted(device.id, muted);
+        ask(server.setMuted(device.id, muted));
       }}
     />
   </div>
@@ -252,12 +244,12 @@ const Default = ({
 type DevicesProps = {
   devices: readonly AudioDevice[];
   direction: Direction;
-  domicile: DomicileHost;
+  server: SoundServer;
   levels: ReadonlyMap<string, number>;
 };
 
 /** The non-default devices, each of which can be made the default. */
-const Devices = ({ devices, direction, domicile, levels }: DevicesProps) =>
+const Devices = ({ devices, direction, levels, server }: DevicesProps) =>
   devices.length > 0 && (
     <ul className={listStyles}>
       {devices.map((device) => (
@@ -267,7 +259,7 @@ const Devices = ({ devices, direction, domicile, levels }: DevicesProps) =>
               aria-label={`Make ${device.description} the default`}
               className={iconButtonStyles}
               onClick={() => {
-                domicile.setDefaultAudioDevice(device.id);
+                ask(server.setDefault(device.id));
               }}
               title="Make it the default"
               type="button"
@@ -275,7 +267,7 @@ const Devices = ({ devices, direction, domicile, levels }: DevicesProps) =>
               <CheckCircleIcon size={14} />
             </button>
             <span className={nameStyles}>{device.description}</span>
-            <Port device={device} domicile={domicile} />
+            <Port device={device} server={server} />
           </span>
           <Level
             direction={direction}
@@ -284,10 +276,10 @@ const Devices = ({ devices, direction, domicile, levels }: DevicesProps) =>
             meter={levels.get(device.id)}
             muted={device.muted}
             onLevel={(level) => {
-              domicile.setAudioVolume(device.id, level);
+              ask(server.setVolume(device.id, level));
             }}
             onMuted={(muted) => {
-              domicile.setAudioMuted(device.id, muted);
+              ask(server.setMuted(device.id, muted));
             }}
           />
         </li>
@@ -297,7 +289,7 @@ const Devices = ({ devices, direction, domicile, levels }: DevicesProps) =>
 
 type AppsProps = {
   apps: readonly App[];
-  domicile: DomicileHost;
+  server: SoundServer;
   /** Where a recording can go: every input, monitors included. */
   inputs: readonly AudioDevice[];
   levels: ReadonlyMap<string, number>;
@@ -309,7 +301,7 @@ type AppsProps = {
  * Each app, named, with its streams: volume, mute, meter when playing, and the
  * device it plays to or records from.
  */
-const Apps = ({ apps, domicile, inputs, levels, outputs }: AppsProps) => (
+const Apps = ({ apps, inputs, levels, outputs, server }: AppsProps) => (
   <ul className={appsStyles}>
     {apps.map((app) => (
       <li className={appEntryStyles} key={app.name}>
@@ -333,7 +325,7 @@ const Apps = ({ apps, domicile, inputs, levels, outputs }: AppsProps) => (
                   <Choice
                     label={`${name} ${direction}`}
                     onChoose={(device) => {
-                      domicile.moveAudioStream(stream.id, device);
+                      ask(server.moveStream(stream.id, device));
                     }}
                     options={(direction === "output" ? outputs : inputs).map(
                       (device) => ({
@@ -353,10 +345,10 @@ const Apps = ({ apps, domicile, inputs, levels, outputs }: AppsProps) => (
                   }
                   muted={stream.muted}
                   onLevel={(level) => {
-                    domicile.setAudioVolume(stream.id, level);
+                    ask(server.setVolume(stream.id, level));
                   }}
                   onMuted={(muted) => {
-                    domicile.setAudioMuted(stream.id, muted);
+                    ask(server.setMuted(stream.id, muted));
                   }}
                 />
               </li>
@@ -370,10 +362,10 @@ const Apps = ({ apps, domicile, inputs, levels, outputs }: AppsProps) => (
 
 type CardsProps = {
   cards: readonly AudioCard[];
-  domicile: DomicileHost;
+  server: SoundServer;
 };
 
-const Cards = ({ cards, domicile }: CardsProps) => (
+const Cards = ({ cards, server }: CardsProps) => (
   <ul className={listStyles}>
     {cards.map((card) => (
       <li className={headStyles} key={card.id}>
@@ -381,7 +373,7 @@ const Cards = ({ cards, domicile }: CardsProps) => (
         <Choice
           label={`${card.description} profile`}
           onChoose={(profile) => {
-            domicile.setAudioProfile(card.id, profile);
+            ask(server.setProfile(card.id, profile));
           }}
           options={card.profiles.map((profile) =>
             option(profile, "unavailable"),
@@ -395,16 +387,16 @@ const Cards = ({ cards, domicile }: CardsProps) => (
 
 type PortProps = {
   device: AudioDevice;
-  domicile: DomicileHost;
+  server: SoundServer;
 };
 
 /** A device's port picker, when it has more than one. */
-const Port = ({ device, domicile }: PortProps) =>
+const Port = ({ device, server }: PortProps) =>
   device.ports.length > 1 && (
     <Choice
       label={`${device.description} port`}
       onChoose={(port) => {
-        domicile.setAudioPort(device.id, port);
+        ask(server.setPort(device.id, port));
       }}
       options={device.ports.map((port) => option(port, "unplugged"))}
       value={device.port}
