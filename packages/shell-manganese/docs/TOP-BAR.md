@@ -81,10 +81,9 @@ To style your own items with manganese's Panda CSS, see
   with no sound server.
 - Scroll over it to step the output by 5%. Click for the mixer:
   - Default output and default input, each with mute, slider, level meter and
-    port, a quiet `Select` after its name. The default output is the filter in
-    front of the server's default where there is one (e.g. laptop speaker
-    correction). With no default, the first output and the first input that
-    isn't a monitor.
+    port, a quiet `Select` after its name. These are the server's defaults;
+    with no default, the first output and the first input that isn't a
+    monitor.
   - Drawers, shown when non-empty: **More outputs**, **More inputs**, **Apps**
     (per-app streams) and **Cards** (profiles).
   - Names wrap instead of truncating. `Select` lists stay over the panel.

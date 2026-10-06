@@ -293,24 +293,16 @@ pub fn reading(info: &str, list: &str) -> Result<Audio, serde_json::Error> {
         .map(|source| (source.index, Target::Input.id(&source.name)))
         .collect();
     let plumbing = plumbing(&list);
-    let default_sink = info
-        .default_sink_name
-        .map(|name| in_front(name, &list.sinks, &list.sink_inputs, |stream| stream.sink));
-    let default_source = info.default_source_name.map(|name| {
-        in_front(name, &list.sources, &list.source_outputs, |stream| {
-            stream.source
-        })
-    });
     Ok(Audio {
         outputs: list
             .sinks
             .iter()
-            .map(|sink| sink.device(Target::Output, default_sink.as_deref()))
+            .map(|sink| sink.device(Target::Output, info.default_sink_name.as_deref()))
             .collect(),
         inputs: list
             .sources
             .iter()
-            .map(|source| source.device(Target::Input, default_source.as_deref()))
+            .map(|source| source.device(Target::Input, info.default_source_name.as_deref()))
             .collect(),
         playback: list
             .sink_inputs
@@ -327,42 +319,6 @@ pub fn reading(info: &str, list: &str) -> Result<Audio, serde_json::Error> {
         cards: list.cards.iter().map(Card::card).collect(),
         meters: meters(&list),
     })
-}
-
-/// The device to report as default: the server's default, or the filter in
-/// front of it.
-///
-/// A filter such as a laptop's speaker correction is a sink whose stream plays
-/// into the speakers. The session manager routes the default through it while
-/// the speakers stay the server's default, so the filter's volume is the one
-/// that matters. Chained filters are followed to the front; a loop stops after
-/// one pass.
-fn in_front(
-    default: String,
-    devices: &[Device],
-    streams: &[Stream],
-    on: impl Fn(&Stream) -> u32,
-) -> String {
-    let mut name = default;
-    for _ in 0..devices.len() {
-        let Some(device) = devices.iter().find(|device| device.name == name) else {
-            break;
-        };
-        let filter = streams
-            .iter()
-            .filter(|stream| on(stream) == device.index)
-            .filter_map(|stream| stream.properties.get(LINK_GROUP))
-            .find_map(|group| {
-                devices.iter().find(|other| {
-                    other.name != device.name && other.properties.get(LINK_GROUP) == Some(group)
-                })
-            });
-        match filter {
-            Some(filter) => name.clone_from(&filter.name),
-            None => break,
-        }
-    }
-    name
 }
 
 /// Link groups of filter devices, such as PipeWire filter-chains for speaker

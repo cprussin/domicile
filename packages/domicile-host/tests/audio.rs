@@ -553,36 +553,6 @@ mod metering {
     }
 
     #[test]
-    fn the_filter_in_front_of_the_default_is_the_default() {
-        // The speakers stay the server's default; their correction plays
-        // into them, and is what is heard.
-        let list = LIST
-            .replace(
-                r#""sinks": ["#,
-                r#""sinks": [
-    {"index": 76, "name": "audio_effect.laptop-convolver", "description": "Framework Speakers",
-     "mute": false, "volume": {"front-left": {"value": 45875}}, "monitor_source": "audio_effect.laptop-convolver.monitor",
-     "properties": {"node.link-group": "filter-chain-3901-18"}, "ports": [], "active_port": null},"#,
-            )
-            .replace(
-                r#""sink_inputs": ["#,
-                r#""sink_inputs": [
-    {"index": 77, "sink": 51, "mute": false, "volume": {"mono": {"value": 65536}},
-     "properties": {"media.name": "Framework Speakers", "node.link-group": "filter-chain-3901-18"}},"#,
-            );
-
-        let audio = reading(INFO, &list).unwrap();
-
-        let defaults: Vec<_> = audio
-            .outputs
-            .iter()
-            .filter(|output| output.default)
-            .map(|output| output.id.as_str())
-            .collect();
-        assert_eq!(defaults, ["output:audio_effect.laptop-convolver"]);
-    }
-
-    #[test]
     fn the_meters_own_recordings_are_not_listed() {
         let list = LIST.replace(
             r#""source_outputs": ["#,
