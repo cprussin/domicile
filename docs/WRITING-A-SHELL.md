@@ -173,6 +173,9 @@ This is a working desktop: every window full-screen, newest on top.
   an element.
 - Domicile writes the document: a charset, a viewport, and a `<body>` with no
   margin that fills the window. You cannot supply one.
+- Only script files next to your module run: no inline scripts, `on…`
+  attributes or `eval`. See
+  [SHELL-PACKAGING.md](SHELL-PACKAGING.md#scripts).
 - `root` is the empty `<body>`. Create your own container in it and render
   there. Errors are reported by appending to `root`, and a framework that owns
   `root` would wipe them.

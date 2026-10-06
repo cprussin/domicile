@@ -22,14 +22,15 @@ FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRe
 
 # Every suite in the filter, counted rather than estimated: FrameSinkBroker 23,
 # WindowDiff 7, EngineEventQueue 6, ShortcutRegistry 7, ShellURLLoaderFactory
-# 11, ShellDocument 11, ShellSource 3, CursorShape 3, CommandProtocol 14,
+# 11, ShellDocument 12, ShellSource 3, CursorShape 3, CommandProtocol 14,
 # DomicileDisplayList 6, DomicileKeyboardLayout 3, ShellWindows 8,
 # ShellWindowPlaces 7, LineFramer 4, DesktopPrefs 1, SurfaceCrop 3,
 # ExtensionInstaller 3, ExtensionTrayEntry 3, DeskTabs 12, DeskGeometry 13,
 # DomicileDisplayRegions 22, DomicileDeskTargeter 4, PlaceholderStage 3,
 # SystemCall 4.
 #
-# 178, and it was 174 — wrapping a page's system call is four SystemCall
+# 179, and it was 178 — the shell document's script policy is one more
+# ShellDocument case. Before that 178, and it was 174 — wrapping a page's system call is four SystemCall
 # cases. Before that 174, and it was 171 — when a <webview>'s frame is ready for a guest is three
 # PlaceholderStage cases. Before that 171, and it was 168 — a screenshot is three CommandProtocol cases. Before that
 # 168, and it was 164 — the tile memory a widget on monitors asks for is four
@@ -68,7 +69,7 @@ FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRe
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=178
+FLOOR=179
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.
