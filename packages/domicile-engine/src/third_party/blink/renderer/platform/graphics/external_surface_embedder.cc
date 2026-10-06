@@ -31,11 +31,18 @@ namespace {
 //
 // `std::map` rather than `base::flat_map`: callers hold references into the
 // map, and a flat_map insert would invalidate them.
-viz::ParentLocalSurfaceIdAllocator& AllocatorForApp(const String& app_id) {
-  static base::NoDestructor<
-      std::map<std::string, viz::ParentLocalSurfaceIdAllocator>>
-      allocators;
-  return (*allocators)[app_id.Utf8()];
+struct AppSurface {
+  viz::ParentLocalSurfaceIdAllocator allocator;
+  // What the current LocalSurfaceId was allocated for. The producer renders at
+  // the size it was embedded with, and viz rejects a frame of a different size
+  // for a surface that already has one.
+  gfx::Size size;
+  double scale = 0;
+};
+
+AppSurface& SurfaceForApp(const String& app_id) {
+  static base::NoDestructor<std::map<std::string, AppSurface>> surfaces;
+  return (*surfaces)[app_id.Utf8()];
 }
 
 }  // namespace
@@ -58,10 +65,19 @@ void ExternalSurfaceEmbedder::Embed(
 
   // Allocate before the round trip: the browser passes this half of the
   // SurfaceId to the producer, which cannot create one.
-  viz::ParentLocalSurfaceIdAllocator& allocator = AllocatorForApp(app_id);
+  //
+  // An adopt at a different size or scale gets a new id too. A reloaded shell
+  // is a new document in the same renderer, so its first embed is an adopt of
+  // the old document's surface, usually at a new box size. Reusing the id at
+  // that size makes viz close the producer's frame sink.
+  AppSurface& surface = SurfaceForApp(app_id);
+  viz::ParentLocalSurfaceIdAllocator& allocator = surface.allocator;
   if (allocation == Allocation::kReconfigure ||
-      !allocator.HasValidLocalSurfaceId()) {
+      !allocator.HasValidLocalSurfaceId() || surface.size != size ||
+      surface.scale != scale) {
     allocator.GenerateId();
+    surface.size = size;
+    surface.scale = scale;
   }
   const viz::LocalSurfaceId local_surface_id =
       allocator.GetCurrentLocalSurfaceId();
