@@ -5,9 +5,11 @@ import { ThemeSwitch } from "@domicile-desktop/component-library/ThemeSwitch";
 
 import { css } from "../../styled-system/css";
 import { Battery } from "../battery/Battery";
+import { Bluetooth } from "../bluetooth/Bluetooth";
 import { Brightness } from "../brightness/Brightness";
 import { Clock } from "../clock/Clock";
 import { LauncherButton } from "../launcher/LauncherButton";
+import { Network } from "../network/Network";
 import { NotificationBell } from "../notifications/NotificationBell";
 import { Tray } from "../tray/Tray";
 import { Volume } from "../volume/Volume";
@@ -75,6 +77,18 @@ export const BarMode = () => {
  * so there is no system setting above it to follow.
  */
 export const BarThemeSelector = () => <ThemeSwitch />;
+
+/** The primary network connection, from NetworkManager. */
+export const BarNetwork = () => {
+  const { domicile } = useBar();
+  return <Network domicile={domicile} />;
+};
+
+/** The Bluetooth toggle, from BlueZ. */
+export const BarBluetooth = () => {
+  const { domicile } = useBar();
+  return <Bluetooth domicile={domicile} />;
+};
 
 /** The volume control, whose panel holds the mixer. */
 export const BarVolume = () => {
