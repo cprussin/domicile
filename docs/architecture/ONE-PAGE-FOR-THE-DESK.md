@@ -3,7 +3,7 @@
 On a tty, the shell is one page that spans every monitor.
 
 - The page's viewport is the desk's bounding box, in logical pixels.
-- `navigator.domicile.displays` gives each monitor's rectangle in that box.
+- The handed-in `domicile.displays` gives each monitor's rectangle in that box.
 - The engine shows the page on every monitor at that monitor's scale and
   refresh rate.
 - The shell sees one layout and one frame. It never sees rotation, density or
@@ -113,7 +113,7 @@ Details: [DISPLAY-TILINGS.md](DISPLAY-TILINGS.md).
 An `<app>` is one element wherever it is. The client draws at the scale of
 the display holding most of it, as in sway. Other monitors resample its buffer.
 
-- The shell reports each window's box with `window.domicile.setAppBounds`
+- The shell reports each window's box with the desktop's `setAppBounds`
   (`set_app_bounds` on the wire). Manganese's `AppWindow` sends it whenever the
   box changes.
 - The compositor enters the window on every display the box overlaps and sends

@@ -13,7 +13,6 @@ Manganese uses sway's layout model. For the key bindings, see
   windows.
 - A window is either a Wayland client or a browser window the shell opened.
 - Until the compositor reports the screens, only the wallpaper is drawn. A
-  plain browser has no `window.domicile`, so the shell draws nothing. A
   desktop with no screens shows a message.
 
 ## Screens

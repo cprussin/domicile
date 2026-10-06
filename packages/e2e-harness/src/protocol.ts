@@ -2,11 +2,9 @@
 // `domicile-protocol` crate. Host frames are untrusted, so they are parsed, not
 // cast.
 //
-// Pages receive typed events on `window.domicile` instead (see
-// `host-message.ts`). These schemas serve `@domicile-desktop/e2e-harness`,
-// which reads the compositor's socket directly. The exception is
-// {@link shellConfigSchema}, which `host-message.ts` parses because WebIDL
-// cannot type a shell's `options` table.
+// Pages get typed attributes and events on the `DomicileHost` a shell is
+// handed instead. These schemas serve `@domicile-desktop/e2e-harness`, which
+// reads the compositor's socket directly.
 //
 // `wire-fixture.test.ts` checks that these schemas accept what Rust writes.
 // Schemas ignore unknown keys so a newer host can add fields.

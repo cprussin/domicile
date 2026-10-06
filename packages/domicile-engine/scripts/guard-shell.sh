@@ -10,12 +10,13 @@
 # harness can compute a probe point, and name app ids the harness chose. They
 # measure the seam. None of them measures the thing the seam is *for* — a shell
 # nobody wrote for this, built by its own vite config, joined to the compositor
-# through `window.domicile`, mounting `<app>` elements for windows it learns
-# about from the host.
+# through the desktop the document hands `Shell`, mounting `<app>` elements for
+# windows it learns about from the host.
 #
 # That is three things at once and each has failed on its own: the engine
 # serving the shell over `domicile://` and writing the document that loads it,
-# the SDK reaching the compositor through `navigator.domicile`, and `<app>`
+# the shell reaching the compositor through the desktop the document hands
+# `Shell`, and `<app>`
 # calling `embedExternalSurface` for an app id the shell was told about rather
 # than one a query string named.
 #
@@ -214,7 +215,7 @@ rm -rf "$PROFILE"; mkdir -p "$PROFILE"
 # 1. THERE IS NO BRIDGE ANY MORE, and this guard used to be the last thing
 #    holding one up. It started `engine-chrome-host`, waited for it to print a
 #    URL, and asserted the SDK reaching it over a WebSocket. The SDK stopped
-#    speaking that protocol when it moved onto `navigator.domicile`, so the
+#    speaking that protocol when it moved onto the engine's own host, so the
 #    guard was measuring a conversation with nobody at the far end -- it could
 #    not pass, and its zeroes read as a shell that never came up.
 #
@@ -232,10 +233,10 @@ rm -rf "$PROFILE"; mkdir -p "$PROFILE"
 
 # 2. The engine, on the shell. No --enable-logging=stderr flood here beyond
 #    what the guards read: the page's own console lines are the record of
-#    whether the shell found `window.domicile`. That is this guard's second job
-#    now: the SDK reads the alias, so a `WindowDomicile` that never bound lands
+#    whether the shell was handed a desktop. That is this guard's second job
+#    now: a host the document never handed over, or that never bound, lands
 #    here as a shell that connected to nothing and a desktop with no window in
-#    it — which is the only automated proof of the alias there is, because
+#    it — which is the only automated proof of the handover there is, because
 #    nothing in this repo can build the engine.
 #
 #    `--app` for the reason `domicile` uses it: a desktop is not a browser
@@ -307,7 +308,7 @@ CLIENT_DISPLAY=$(grep -aoE "wayland-[0-9]+" "$COMP_LOG" | head -1)
 # This is the first of the three new things this guard measures, and the one
 # that fails on its own. The handshake is the *browser's* now rather than the
 # page's — `ControlChannel` sends `hello` when the shell first binds
-# `window.domicile` — so this line still means what it always did: a chrome
+# the desktop it was handed — so this line still means what it always did: a chrome
 # the compositor will announce windows to. What changed is who spoke, which is
 # the whole point of the scheme.
 JOINED=0

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Checks that navigator.domicile's event names live in the fork's own list,
+# Checks that DomicileHost's event names live in the fork's own list,
 # not Blink's.
 #
 # Blink's core/events/event_type_names.json5 generates a header most of Blink

@@ -73,10 +73,10 @@ on.
 
 `components/domicile/mojom/extension_tray.mojom` carries action state from the
 browser process to the shell. It binds on the shell's origin only, like the
-control channel, and appears on `window.domicile`:
+control channel, and appears on the `DomicileHost` handed to `Shell`:
 
 ```ts
-// window.domicile
+// DomicileHost
 onextensions: (event: DomicileExtensionsEvent) => void;
 activateExtension(id: string): void;
 
@@ -130,7 +130,7 @@ interface DomicileExtension {
   - 0082: use max-content width. Min-content width of a fluid page is its
     longest word.
 
-SDK side: the `window.domicile` client in `packages/chrome-sdk`, and the tray
+SDK side: the `DomicileHost` types in `packages/chrome-sdk`, and the tray
 and popup panel in `packages/shell-manganese/src/extensions/`.
 
 ### Tabs

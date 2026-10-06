@@ -17,8 +17,8 @@ import type { SurfaceSize } from "./windows";
 
 type Call = readonly [kind: string, ...args: unknown[]];
 
-// A fake `window.domicile` that records input calls and lists each client's
-// drawn size. Implements only what input routing uses.
+// A fake desktop that records input calls and lists each client's drawn
+// size. Implements only what input routing uses.
 class FakeDomicile extends EventTarget {
   readonly calls: Call[] = [];
   /** Every client is its own window except `menu`, a popup over `term`. */

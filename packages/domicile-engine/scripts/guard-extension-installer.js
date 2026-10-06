@@ -12,7 +12,7 @@
 // Everything is inside `Shell`, which the document Domicile writes calls once
 // the module has loaded.
 
-export const Shell = () => {
+export const Shell = (_root, desktop) => {
   /**
    * A query parameter this cannot run without. A default would turn a guard
    * invoked wrongly into a measurement of something nobody asked for.
@@ -28,10 +28,10 @@ export const Shell = () => {
 
   const RELOAD_EVERY_MS = 1000;
 
-  const host = navigator.domicile;
+  const host = desktop;
   if (host === null || host === undefined) {
     throw new Error(
-      "guard-extension-installer: navigator.domicile is absent, so this" +
+      "guard-extension-installer: no desktop was handed to Shell, so this" +
         " document was not served by the forked engine",
     );
   }

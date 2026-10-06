@@ -168,8 +168,11 @@ std::string ShellURLLoaderFactory::ShellDocument(const std::string& module) {
   // filename, are encoded rather than read as a fragment, a query or an escape.
   //
   // THE DOCUMENT CALLS THE SHELL. A shell is a module whose `Shell` export is a
-  // function; the document imports it and calls it with the body, and every
-  // other export is ignored. Nothing in the module runs as a side of loading
+  // function; the document imports it and calls it with the body and the
+  // desktop, and every other export is ignored. The desktop is read before the
+  // module loads: `navigator.domicile` answers once per document (see
+  // NavigatorDomicile), so what the shell is handed is the only copy, and a
+  // module that reaches for the global on load finds null. Nothing in the module runs as a side of loading
   // it, so one file can be a config and a shell both.
   //
   // AND IT REPORTS ITS OWN SHELL FAILING. A module that 404s, will not parse,
@@ -227,6 +230,7 @@ std::string ShellURLLoaderFactory::ShellDocument(const std::string& module) {
       "  <body>\n"
       "    <script type=\"module\">\n"
       "      document.body.replaceChildren();\n"
+      "      const desktop = navigator.domicile;\n"
       "      const module = new URL(\"./",
       escaped,
       "\", location.href).href;\n"
@@ -249,14 +253,14 @@ std::string ShellURLLoaderFactory::ShellDocument(const std::string& module) {
       "      if (shell !== undefined) {\n"
       "        if (typeof shell.Shell === \"function\") {\n"
       "          try {\n"
-      "            shell.Shell(document.body);\n"
+      "            shell.Shell(document.body, desktop);\n"
       "          } catch (failure) {\n"
       "            say(\"the shell's Shell threw: \" + failure);\n"
       "          }\n"
       "        } else {\n"
       "          say(\"the shell module at \" + module + \" has no Shell export. "
       "A shell is a module whose Shell export is a function, which Domicile "
-      "calls with the element to draw in.\");\n"
+      "calls with the element to draw in and the desktop.\");\n"
       "        }\n"
       "      }\n"
       "    </script>\n"

@@ -12,7 +12,7 @@
 //
 // The document Domicile writes calls `Shell` once the module loads.
 
-export const Shell = () => {
+export const Shell = (_root, desktop) => {
   const required = (parameters, name) => {
     const value = parameters.get(name);
     if (value === null) {
@@ -58,10 +58,10 @@ export const Shell = () => {
 
   // DevTools' window, which the desk opens and the shell draws. Behind the
   // first, so the press point stays on the page.
-  const host = navigator.domicile;
-  if (host === undefined) {
+  const host = desktop;
+  if (host === null || host === undefined) {
     throw new Error(
-      "guard-webview-context-menu: navigator.domicile is absent, so this" +
+      "guard-webview-context-menu: no desktop was handed to Shell, so this" +
         " document is not a shell the engine serves",
     );
   }

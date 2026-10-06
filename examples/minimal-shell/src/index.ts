@@ -5,14 +5,10 @@
 
 import type { DomicileWindow } from "@domicile-desktop/sdk/domicile-host";
 import { registerElements } from "@domicile-desktop/sdk/register-elements";
+import type { Shell as ShellModule } from "@domicile-desktop/sdk/shell";
 
 /** Draws the desktop into `root`, Domicile's empty `<body>`. */
-export const Shell = (root: HTMLElement): void => {
-  // A plain browser has no `window.domicile`, so there is nothing to draw.
-  const domicile = window.domicile;
-  if (domicile === null || domicile === undefined) {
-    return;
-  }
+export const Shell: ShellModule = (root, domicile) => {
   // Forwards pointer and keyboard input on `<app>` elements to the host.
   registerElements(domicile);
 

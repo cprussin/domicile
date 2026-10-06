@@ -1,6 +1,6 @@
 // One browser extension, as a shell's tray draws it.
 //
-// `extensionSchema` parses the rows of `window.domicile.extensions`. The
+// `extensionSchema` parses the rows of `DomicileHost.extensions`. The
 // engine and the SDK ship separately, so the data is validated rather than
 // trusted.
 

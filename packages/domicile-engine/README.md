@@ -72,7 +72,7 @@ The engine builds only on `crux`, at `/build/chromium/src`.
 
 ## More
 
-- [docs/CONTROL-CHANNEL.md](docs/CONTROL-CHANNEL.md): `window.domicile` and the
+- [docs/CONTROL-CHANNEL.md](docs/CONTROL-CHANNEL.md): `DomicileHost` and the
   command socket
 - [docs/SOURCE-MAP.md](docs/SOURCE-MAP.md): where the surface-embedding code
   lives

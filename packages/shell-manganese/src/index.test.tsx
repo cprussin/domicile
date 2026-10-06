@@ -1,10 +1,10 @@
-import { afterEach, describe, expect, it } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import { act, within } from "@testing-library/react";
 
 import { exec, runManganese } from "./index";
 
-/** A fake host describing one screen. */
+/** A fake desktop describing one screen. */
 const onADesk = (): FakeDomicileHost => {
   const fake = new FakeDomicileHost();
   fake.set({
@@ -22,18 +22,13 @@ const onADesk = (): FakeDomicileHost => {
       },
     ],
   });
-  (window as { domicile?: unknown }).domicile = fake.host;
   return fake;
 };
-
-afterEach(() => {
-  delete (window as { domicile?: unknown }).domicile;
-});
 
 describe("runManganese", () => {
   // A custom bar layout on the stock desktop.
   it("mounts manganese into the root with the bar it is given", async () => {
-    onADesk();
+    const fake = onADesk();
     // Not attached to the document, so it can't leak into later tests.
     const root = document.createElement("div");
 
@@ -44,7 +39,7 @@ describe("runManganese", () => {
           middle: [],
           right: [],
         },
-      })(root);
+      })(root, fake.host);
     });
 
     expect(root).toContainElement(await within(root).findByText("mail 3/12"));
@@ -57,19 +52,11 @@ describe("runManganese", () => {
     act(() => {
       runManganese({
         keybindings: { keybindings: { "Meta+x": exec("kitty") }, modes: {} },
-      })(document.createElement("div"));
+      })(document.createElement("div"), fake.host);
     });
 
     expect(fake.calls.filter(([method]) => method === "grabShortcut")).toEqual([
       ["grabShortcut", "Meta+x"],
     ]);
-  });
-
-  it("draws nothing in a page with no desktop behind it", () => {
-    const root = document.createElement("div");
-
-    runManganese()(root);
-
-    expect(root.childElementCount).toBe(0);
   });
 });

@@ -1,4 +1,4 @@
-// Entry point: `Shell` reads `window.domicile` and mounts the React desktop.
+// Entry point: `Shell` takes the desktop and mounts the React desktop.
 // Importing this module only installs its stylesheet.
 
 import { registerElements } from "@domicile-desktop/sdk/register-elements";
@@ -10,12 +10,7 @@ import { Shell as Desktop } from "./Shell";
 import "./shell.css";
 
 /** The simple desktop, mounted into `root`. */
-export const Shell: ShellModule = (root) => {
-  // A plain browser has no `window.domicile`, so there is nothing to draw.
-  const domicile = window.domicile;
-  if (domicile === null || domicile === undefined) {
-    return;
-  }
+export const Shell: ShellModule = (root, domicile) => {
   registerElements(domicile);
 
   // Mount in a separate container: the document appends failure reports to

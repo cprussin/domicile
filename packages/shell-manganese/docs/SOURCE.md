@@ -1,6 +1,6 @@
 # Source layout
 
-The engine serves this page over `domicile://` and exposes `window.domicile`.
+The engine serves this page over `domicile://` and hands `Shell` the desktop.
 `src/` holds only the page. Paths below are under `src/`.
 
 ## Entry points
@@ -31,7 +31,7 @@ The engine serves this page over `domicile://` and exposes `window.domicile`.
 | `lock/` | Lock screen. |
 | `theme/` | Theme from the host or the last session. |
 | `wallpaper/` | Wallpaper and its photo list. |
-| `host/` | Helpers for `window.domicile`: watching an attribute, and spotting a superseded search. |
+| `host/` | Helpers for the desktop: watching an attribute, and spotting a superseded search. |
 
 ## Custom elements
 

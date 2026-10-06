@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The desk's state attributes on `window.domicile` -- battery, idle, lock, both
+# The desk's state attributes on the desktop -- battery, idle, lock, both
 # themes, clipboard, tray, modifiers -- say what the compositor said, to a
 # shell that reads them late.
 #

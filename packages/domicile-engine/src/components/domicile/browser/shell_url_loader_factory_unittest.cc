@@ -228,13 +228,24 @@ TEST(ShellDocumentTest, HasNoBodyMargin) {
 
 TEST(ShellDocumentTest, ImportsTheModuleAndCallsItsShell) {
   // A shell is a module whose `Shell` export Domicile calls with the element to
-  // draw in. Every other export is ignored, so the module is imported rather
+  // draw in and the desktop. Every other export is ignored, so the module is imported rather
   // than run as a script.
   const std::string document = ShellURLLoaderFactory::ShellDocument("shell.js");
   EXPECT_NE(document.find("<script type=\"module\">"), std::string::npos);
   EXPECT_NE(document.find("new URL(\"./shell.js\""), std::string::npos);
   EXPECT_NE(document.find("await import(module)"), std::string::npos);
-  EXPECT_NE(document.find("shell.Shell(document.body)"), std::string::npos);
+  EXPECT_NE(document.find("shell.Shell(document.body, desktop)"),
+            std::string::npos);
+}
+
+TEST(ShellDocumentTest, HandsTheShellTheDesktopReadBeforeItLoads) {
+  // `navigator.domicile` answers once per document, so the document reads it
+  // before the module can: the shell is handed the only copy, and nothing it
+  // imports finds a global to reach for.
+  const std::string document = ShellURLLoaderFactory::ShellDocument("shell.js");
+  const size_t read = document.find("const desktop = navigator.domicile;");
+  ASSERT_NE(read, std::string::npos);
+  EXPECT_LT(read, document.find("await import(module)"));
 }
 
 TEST(ShellDocumentTest, HandsTheShellAnEmptyBody) {
@@ -244,7 +255,7 @@ TEST(ShellDocumentTest, HandsTheShellAnEmptyBody) {
   // children would otherwise count this script.
   const std::string document = ShellURLLoaderFactory::ShellDocument("shell.js");
   EXPECT_LT(document.find("document.body.replaceChildren()"),
-            document.find("shell.Shell(document.body)"));
+            document.find("shell.Shell(document.body, desktop)"));
 }
 
 TEST(ShellDocumentTest, EncodesTheModuleName) {
@@ -304,7 +315,7 @@ TEST(ShellDocumentTest, SaysNothingAboutAShellThatIsAlreadyRunning) {
   // one call to `Shell`, and nothing listens on the window.
   const std::string document = ShellURLLoaderFactory::ShellDocument("shell.js");
   EXPECT_EQ(document.find("addEventListener"), std::string::npos);
-  EXPECT_NE(document.find("try {\n            shell.Shell(document.body);"),
+  EXPECT_NE(document.find("try {\n            shell.Shell(document.body, desktop);"),
             std::string::npos);
 }
 

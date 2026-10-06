@@ -7,7 +7,7 @@
 #
 # WHY THIS EXISTS. EXTENSIONS.md's tray is two things the engine does and a
 # page cannot fake: the browser telling the shell what an action says --
-# `window.domicile`'s `extensions` event, from ExtensionTray -- and a popup in
+# the desktop's `extensions` event, from ExtensionTray -- and a popup in
 # a <webview> saying it is done, which is `window.close()` becoming
 # `domicile-close` on the element (WebViewGuest::CloseContents). And a popup
 # asking runtime.getContexts, as Bitwarden's does on opening: that call switches

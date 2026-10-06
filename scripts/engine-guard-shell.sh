@@ -3,10 +3,9 @@
 #
 # Every other guard drives a page written for the guard. This one drives
 # shell-simple, built by its own vite config, joined to the compositor through
-# `window.domicile`, and mounting an `<app>` for a window it learned about from
-# the host. Three things
-# that have each failed on their own, and none of which any other guard
-# touches.
+# the desktop the document hands `Shell`, and mounting an `<app>` for a window
+# it learned about from the host. Three things that have each failed on their
+# own, and none of which any other guard touches.
 #
 # It asserts that the client's color is somewhere in the browser's window
 # rather than at a point, because the shell decides where its windows go and a
