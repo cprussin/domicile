@@ -1,4 +1,4 @@
-//! Files, watches and processes for one chrome connection.
+//! Files, watches, processes and D-Bus for one chrome connection.
 //!
 //! [`System::handle`] runs a `ChromeMessage::SystemRequest` and sends every
 //! answer through the callback it was built with. Nothing here blocks the
@@ -20,12 +20,15 @@ use std::thread;
 use std::time::UNIX_EPOCH;
 
 use domicile_protocol::{
-    DirEntry, FileType, HostMessage, Signal, Stream, SystemEnd, SystemError, SystemErrorKind,
+    Bus, DirEntry, FileType, HostMessage, Signal, Stream, SystemEnd, SystemError, SystemErrorKind,
     SystemEvent, SystemReply, SystemRequest,
 };
 use notify::{EventKindMask, RecursiveMode, Watcher};
+use zbus::blocking::{Connection, MessageIterator};
+use zbus::zvariant::{Signature, Structure, StructureBuilder};
 
 use crate::base64::{decoded, encoded};
+use crate::dbus_json::{self, NotABody};
 
 /// How much of a process's output one event carries at most.
 const CHUNK: usize = 64 * 1024;
@@ -45,7 +48,13 @@ pub struct System {
     environment: Environment,
     tell: Tell,
     running: Arc<Mutex<HashMap<u32, Running>>>,
+    connect: Connect,
+    /// The connection each bus's calls share, once one was made.
+    buses: Arc<Mutex<HashMap<Bus, Connection>>>,
 }
+
+/// How a [`System`] reaches a D-Bus bus.
+type Connect = Arc<dyn Fn(Bus) -> zbus::Result<Connection> + Send + Sync>;
 
 /// A call that outlives its reply.
 enum Running {
@@ -56,6 +65,8 @@ enum Running {
         stdin: Option<Sender<Vec<u8>>>,
     },
     Watch(notify::RecommendedWatcher),
+    /// A D-Bus match, on a connection of its own so closing it ends the match.
+    Match(Connection),
 }
 
 /// What [`System::handle`] did with a request.
@@ -111,7 +122,9 @@ pub fn reach(request: &SystemRequest) -> Reach {
         }
         SystemRequest::WriteFile { .. }
         | SystemRequest::Spawn { .. }
-        | SystemRequest::Stdin { .. } => Reach::Acts,
+        | SystemRequest::Stdin { .. }
+        | SystemRequest::DbusCall { .. }
+        | SystemRequest::DbusMatch { .. } => Reach::Acts,
     }
 }
 
@@ -128,7 +141,9 @@ pub fn locked_out(id: u32, request: &SystemRequest) -> Option<HostMessage> {
         | SystemRequest::ReadDir { .. }
         | SystemRequest::Stat { .. }
         | SystemRequest::Watch { .. }
-        | SystemRequest::Spawn { .. } => Some(HostMessage::SystemReply {
+        | SystemRequest::Spawn { .. }
+        | SystemRequest::DbusCall { .. }
+        | SystemRequest::DbusMatch { .. } => Some(HostMessage::SystemReply {
             id,
             reply: SystemReply::Failed {
                 error: SystemError {
@@ -159,7 +174,22 @@ impl System {
             environment,
             tell: Arc::new(tell),
             running: Arc::new(Mutex::new(HashMap::new())),
+            connect: Arc::new(|bus| match bus {
+                Bus::Session => Connection::session(),
+                Bus::System => Connection::system(),
+            }),
+            buses: Arc::default(),
         }
+    }
+
+    /// This system, reaching D-Bus through `connect` instead of the session
+    /// and system buses.
+    pub fn connecting_with(
+        mut self,
+        connect: impl Fn(Bus) -> zbus::Result<Connection> + Send + Sync + 'static,
+    ) -> System {
+        self.connect = Arc::new(connect);
+        self
     }
 
     /// Run `request` under the page's `id`.
@@ -192,7 +222,7 @@ impl System {
                     .collect::<io::Result<_>>()
                     .map(|entries| SystemReply::Entries { entries })
             }),
-            SystemRequest::Stat { path } => self.on_a_thread(id, move |home| {
+            SystemRequest::Stat { path } => self.on_a_thread(id, move |home| -> io::Result<_> {
                 let metadata = std::fs::metadata(home.join(path))?;
                 Ok(SystemReply::Stat {
                     file_type: file_type(metadata.file_type()),
@@ -204,7 +234,9 @@ impl System {
                         .map(|since| since.as_millis() as u64),
                 })
             }),
-            SystemRequest::Watch { path } => self.starting(id, |system| system.watched(id, &path)),
+            SystemRequest::Watch { path } => {
+                self.starting(id, |system| Ok(system.watched(id, &path)?))
+            }
             SystemRequest::Spawn {
                 argv,
                 cwd,
@@ -230,7 +262,69 @@ impl System {
                     .stderr(Stdio::piped())
                     // Its own group, so a kill reaches what it started too.
                     .process_group(0);
-                system.spawned(id, command.spawn()?)
+                Ok(system.spawned(id, command.spawn()?)?)
+            }),
+            SystemRequest::DbusCall {
+                bus,
+                destination,
+                path,
+                interface,
+                member,
+                signature,
+                body,
+            } => {
+                let (connect, buses) = (self.connect.clone(), self.buses.clone());
+                self.on_a_thread(id, move |_| -> Result<SystemReply, Failure> {
+                    let values = dbus_json::read(&signature, &body)?;
+                    let connection = shared(&connect, &buses, bus)?;
+                    let returned = if values.is_empty() {
+                        connection.call_method(
+                            Some(destination.as_str()),
+                            path.as_str(),
+                            Some(interface.as_str()),
+                            member.as_str(),
+                            &(),
+                        )
+                    } else {
+                        let arguments = values
+                            .into_iter()
+                            .fold(StructureBuilder::new(), StructureBuilder::append_field)
+                            .build()?;
+                        connection.call_method(
+                            Some(destination.as_str()),
+                            path.as_str(),
+                            Some(interface.as_str()),
+                            member.as_str(),
+                            &arguments,
+                        )
+                    }?;
+                    let (signature, body) = body_of(&returned)?;
+                    Ok(SystemReply::Returned { signature, body })
+                })
+            }
+            SystemRequest::DbusMatch {
+                bus,
+                sender,
+                path,
+                interface,
+                member,
+            } => self.starting(id, |system| {
+                let rule = [
+                    ("sender", sender),
+                    ("path", path),
+                    ("interface", interface),
+                    ("member", member),
+                ]
+                .into_iter()
+                .filter_map(|(field, value)| value.map(|value| format!(",{field}='{value}'")))
+                .fold("type='signal'".to_string(), |rule, field| rule + &field);
+                let connection = (system.connect)(bus)?;
+                let signals = MessageIterator::for_match_rule(rule.as_str(), &connection, None)?;
+                let (tell, running) = (system.tell.clone(), system.running.clone());
+                let go = move || {
+                    thread::spawn(move || matched(id, signals, &tell, &running));
+                };
+                Ok((Running::Match(connection), Box::new(go)))
             }),
             SystemRequest::Unwatch => {
                 let mut running = self.running.lock().unwrap();
@@ -245,6 +339,17 @@ impl System {
                         // watcher's thread, which may be waiting for the lock.
                         drop(running);
                         drop(watcher);
+                        Handled::Done
+                    }
+                    Some(Running::Match(connection)) => {
+                        (self.tell)(HostMessage::SystemEnd {
+                            id,
+                            end: SystemEnd::Stopped,
+                        });
+                        drop(running);
+                        // Ends the match's iterator, and so its thread. An
+                        // error here is a connection already gone.
+                        let _ = connection.close();
                         Handled::Done
                     }
                     Some(process) => {
@@ -275,7 +380,7 @@ impl System {
                     stdin.take();
                     Handled::Done
                 }
-                Some(Running::Watch(_)) => Handled::Malformed,
+                Some(Running::Watch(_) | Running::Match(_)) => Handled::Malformed,
                 None => Handled::NothingRunning,
             },
             SystemRequest::Kill { signal } => match self.running.lock().unwrap().get(&id) {
@@ -286,7 +391,7 @@ impl System {
                     unsafe { libc::kill(-group, number(signal)) };
                     Handled::Done
                 }
-                Some(Running::Watch(_)) => Handled::Malformed,
+                Some(Running::Watch(_) | Running::Match(_)) => Handled::Malformed,
                 None => Handled::NothingRunning,
             },
         }
@@ -294,17 +399,20 @@ impl System {
 
     /// Answer a one-shot call from its own thread, so a slow disk does not hold
     /// the connection.
-    fn on_a_thread(
+    fn on_a_thread<E>(
         &self,
         id: u32,
-        call: impl FnOnce(&Path) -> io::Result<SystemReply> + Send + 'static,
-    ) -> Handled {
+        call: impl FnOnce(&Path) -> Result<SystemReply, E> + Send + 'static,
+    ) -> Handled
+    where
+        Failure: From<E>,
+    {
         let home = self.home.clone();
         let tell = self.tell.clone();
         thread::spawn(move || {
             tell(HostMessage::SystemReply {
                 id,
-                reply: call(&home).unwrap_or_else(failed),
+                reply: call(&home).unwrap_or_else(|failure| failed(Failure::from(failure).into())),
             })
         });
         Handled::Done
@@ -319,15 +427,15 @@ impl System {
     fn starting(
         &self,
         id: u32,
-        start: impl FnOnce(&System) -> io::Result<(Running, Box<dyn FnOnce()>)>,
+        start: impl FnOnce(&System) -> Result<(Running, Box<dyn FnOnce()>), Failure>,
     ) -> Handled {
         let mut running = self.running.lock().unwrap();
         let (reply, then) = match running.entry(id) {
             Entry::Occupied(_) => (
-                failed(io::Error::new(
+                failed(error_of(io::Error::new(
                     io::ErrorKind::InvalidInput,
                     format!("{id} is already running"),
-                )),
+                ))),
                 None,
             ),
             Entry::Vacant(vacant) => match start(self) {
@@ -335,7 +443,7 @@ impl System {
                     vacant.insert(started);
                     (SystemReply::Started, Some(then))
                 }
-                Err(err) => (failed(err), None),
+                Err(failure) => (failed(failure.into()), None),
             },
         };
         (self.tell)(HostMessage::SystemReply { id, reply });
@@ -451,8 +559,8 @@ impl System {
 }
 
 impl Drop for System {
-    /// Kill every process and end every watch. Each process's waiter still
-    /// reaps it.
+    /// Kill every process and end every watch and match. Each process's waiter
+    /// still reaps it.
     fn drop(&mut self) {
         // Taken out first, so the watches drop outside the lock; see `Unwatch`.
         let ended: Vec<Running> = self
@@ -463,9 +571,18 @@ impl Drop for System {
             .map(|(_, running)| running)
             .collect();
         for running in ended {
-            if let Running::Process { group, .. } = running {
-                // SAFETY: as in `handle`'s `Kill`.
-                unsafe { libc::kill(-group, libc::SIGKILL) };
+            match running {
+                Running::Process { group, .. } => {
+                    // SAFETY: as in `handle`'s `Kill`.
+                    unsafe { libc::kill(-group, libc::SIGKILL) };
+                }
+                Running::Watch(watcher) => drop(watcher),
+                // The match's iterator holds the connection too, so it must be
+                // closed rather than dropped. An error is a connection already
+                // gone.
+                Running::Match(connection) => {
+                    let _ = connection.close();
+                }
             }
         }
     }
@@ -550,9 +667,158 @@ fn number(signal: Signal) -> libc::c_int {
     }
 }
 
-fn failed(err: io::Error) -> SystemReply {
-    SystemReply::Failed {
-        error: error_of(err),
+fn failed(error: SystemError) -> SystemReply {
+    SystemReply::Failed { error }
+}
+
+/// Why a call failed, before it is told to the page.
+enum Failure {
+    Io(io::Error),
+    Dbus(zbus::Error),
+    Body(NotABody),
+}
+
+impl From<io::Error> for Failure {
+    fn from(err: io::Error) -> Failure {
+        Failure::Io(err)
+    }
+}
+
+impl From<zbus::Error> for Failure {
+    fn from(err: zbus::Error) -> Failure {
+        Failure::Dbus(err)
+    }
+}
+
+impl From<zbus::zvariant::Error> for Failure {
+    fn from(err: zbus::zvariant::Error) -> Failure {
+        Failure::Dbus(err.into())
+    }
+}
+
+impl From<NotABody> for Failure {
+    fn from(err: NotABody) -> Failure {
+        Failure::Body(err)
+    }
+}
+
+impl From<Failure> for SystemError {
+    fn from(failure: Failure) -> SystemError {
+        match failure {
+            Failure::Io(err) => error_of(err),
+            Failure::Dbus(zbus::Error::MethodError(name, text, _)) => SystemError {
+                kind: SystemErrorKind::Dbus,
+                message: match text {
+                    Some(text) => format!("{name}: {text}"),
+                    None => name.to_string(),
+                },
+            },
+            // A name that is not a bus, object or member name.
+            Failure::Dbus(err @ (zbus::Error::Names(_) | zbus::Error::Variant(_))) => SystemError {
+                kind: SystemErrorKind::InvalidInput,
+                message: err.to_string(),
+            },
+            Failure::Dbus(err) => SystemError {
+                kind: SystemErrorKind::Other,
+                message: err.to_string(),
+            },
+            Failure::Body(err) => SystemError {
+                kind: SystemErrorKind::InvalidInput,
+                message: err.to_string(),
+            },
+        }
+    }
+}
+
+/// The connection `bus`'s calls share, made on the first call.
+fn shared(
+    connect: &Connect,
+    buses: &Mutex<HashMap<Bus, Connection>>,
+    bus: Bus,
+) -> zbus::Result<Connection> {
+    let mut buses = buses.lock().unwrap();
+    match buses.get(&bus) {
+        Some(connection) => Ok(connection.clone()),
+        None => {
+            let connection = connect(bus)?;
+            buses.insert(bus, connection.clone());
+            Ok(connection)
+        }
+    }
+}
+
+/// A message's body as JSON text, and the signature it is read by.
+///
+/// A body of one structure has the same signature as a body of its fields, so
+/// it is written as its fields.
+fn body_of(message: &zbus::Message) -> zbus::Result<(String, String)> {
+    let body = message.body();
+    let signature = body.signature();
+    let values = match signature {
+        Signature::Unit => Vec::new(),
+        _ => body.deserialize::<Structure>()?.into_fields(),
+    };
+    Ok((signature.to_string_no_parens(), dbus_json::written(&values)))
+}
+
+/// Tell each signal `signals` yields as an event of match `id`, until the
+/// match is stopped or its connection breaks.
+fn matched(id: u32, signals: MessageIterator, tell: &Tell, running: &Mutex<HashMap<u32, Running>>) {
+    for signal in signals {
+        let told = signal.map_err(Failure::from).and_then(|signal| {
+            let header = signal.header();
+            let (signature, body) = body_of(&signal)?;
+            Ok(SystemEvent::Signal {
+                sender: header
+                    .sender()
+                    .map(|name| name.to_string())
+                    .unwrap_or_default(),
+                path: header
+                    .path()
+                    .map(|path| path.to_string())
+                    .unwrap_or_default(),
+                interface: header
+                    .interface()
+                    .map(|name| name.to_string())
+                    .unwrap_or_default(),
+                member: header
+                    .member()
+                    .map(|name| name.to_string())
+                    .unwrap_or_default(),
+                signature,
+                body,
+            })
+        });
+        // Under the lock, so nothing is told after `Unwatch` ends it.
+        let mut running = running.lock().unwrap();
+        if !matches!(running.get(&id), Some(Running::Match(_))) {
+            return;
+        }
+        match told {
+            Ok(event) => tell(HostMessage::SystemEvent { id, event }),
+            Err(failure) => {
+                running.remove(&id);
+                tell(HostMessage::SystemEnd {
+                    id,
+                    end: SystemEnd::Failed {
+                        error: failure.into(),
+                    },
+                });
+                return;
+            }
+        }
+    }
+    // The connection closed without `Unwatch`.
+    if running.lock().unwrap().remove(&id).is_some() {
+        tell(HostMessage::SystemEnd {
+            id,
+            end: SystemEnd::Failed {
+                error: SystemError {
+                    kind: SystemErrorKind::Other,
+                    message: "the bus connection closed".into(),
+                },
+            },
+        });
     }
 }
 

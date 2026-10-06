@@ -7,6 +7,7 @@
 
 import type { Result } from "@cprussin/option-result";
 import { Err, Ok } from "@cprussin/option-result";
+import { z } from "zod";
 
 import type { DomicileHost } from "./domicile-host";
 import type {
@@ -27,6 +28,8 @@ export enum SystemErrorKind {
   InvalidInput,
   /** The desktop is locked. See docs/LOCK.md. */
   Locked,
+  /** A D-Bus method returned an error; the message starts with its name. */
+  Dbus,
   Other,
 }
 
@@ -93,16 +96,63 @@ export type Subprocess = {
   kill: (signal?: Signal) => void;
 };
 
+export enum Bus {
+  Session,
+  System,
+}
+
+/**
+ * A D-Bus method call. `body` holds one JSON value per complete type in
+ * `signature`, written as `domicile_host::dbus_json` describes: `v` is
+ * `{ signature, value }`, `a{KV}` an object, structures and arrays arrays.
+ */
+export type DbusCall = {
+  bus: Bus;
+  destination: string;
+  path: string;
+  interface: string;
+  member: string;
+  /** Empty, the default, for no arguments. */
+  signature?: string;
+  body?: readonly unknown[];
+};
+
+/** A D-Bus body: what a method returned, or a signal carried. */
+export type DbusBody = {
+  signature: string;
+  /** Untyped: parse it with a schema for the signature you expect. */
+  body: unknown[];
+};
+
+/** The signals to report: those matching every field given. */
+export type DbusMatch = {
+  bus: Bus;
+  sender?: string;
+  path?: string;
+  interface?: string;
+  member?: string;
+};
+
+export type DbusSignal = DbusBody & {
+  sender: string;
+  path: string;
+  interface: string;
+  member: string;
+};
+
+export type Listening<T> = {
+  /** Closes when it ends. */
+  items: ReadableStream<T>;
+  stop: () => void;
+  /** `Ok` after {@link Listening.stop}, `Err` if it broke. */
+  ended: Promise<Result<"stopped", SystemError>>;
+};
+
 /** What {@link System.run} collected. */
 export type Ran = Exit & { stdout: string; stderr: string };
 
-export type Watch = {
-  /** The absolute path of each change. Closes when the watch ends. */
-  changes: ReadableStream<string>;
-  stop: () => void;
-  /** `Ok` after {@link Watch.stop}, `Err` if the watch broke. */
-  ended: Promise<Result<"stopped", SystemError>>;
-};
+/** A watch's `items` are the absolute path of each change. */
+export type Watch = Listening<string>;
 
 /**
  * The calls. A relative path starts at the home. The compositor runs each in
@@ -131,6 +181,10 @@ export type System = {
     argv: readonly string[],
     options?: Omit<SpawnOptions, "stdin">,
   ) => Promise<Result<Ran, SystemError>>;
+  dbusCall: (call: DbusCall) => Promise<Result<DbusBody, SystemError>>;
+  dbusMatch: (
+    match: DbusMatch,
+  ) => Promise<Result<Listening<DbusSignal>, SystemError>>;
 };
 
 /** What {@link system} needs of the desktop `Shell` is handed. */
@@ -145,6 +199,47 @@ export type SystemHost = Pick<DomicileHost, "callSystem"> & {
 export const system = (host: SystemHost): System => {
   const calls = callsOn(host);
   return {
+    dbusCall: (request) =>
+      oneShot(
+        calls,
+        {
+          body: JSON.stringify(request.body ?? []),
+          bus: busName(request.bus),
+          call: "dbus_call",
+          destination: request.destination,
+          interface: request.interface,
+          member: request.member,
+          path: request.path,
+          signature: request.signature ?? "",
+        },
+        (reply) =>
+          reply.kind === "returned"
+            ? { body: dbusBody(reply.body), signature: reply.signature }
+            : unexpected(reply),
+      ),
+    dbusMatch: (match) =>
+      listening(
+        calls,
+        {
+          bus: busName(match.bus),
+          call: "dbus_match",
+          ...optional("sender", match.sender),
+          ...optional("path", match.path),
+          ...optional("interface", match.interface),
+          ...optional("member", match.member),
+        },
+        (event) =>
+          event.kind === "signal"
+            ? {
+                body: dbusBody(event.body),
+                interface: event.interface,
+                member: event.member,
+                path: event.path,
+                sender: event.sender,
+                signature: event.signature,
+              }
+            : unexpected(event),
+      ),
     readDir: (path) =>
       oneShot(calls, { call: "read_dir", path }, (reply) =>
         reply.kind === "entries"
@@ -179,7 +274,10 @@ export const system = (host: SystemHost): System => {
             }
           : unexpected(reply),
       ),
-    watch: (path) => watch(calls, path),
+    watch: (path) =>
+      listening(calls, { call: "watch", path }, (event) =>
+        event.kind === "changed" ? event.path : unexpected(event),
+      ),
     writeFile: (path, data, options) =>
       oneShot(
         calls,
@@ -365,48 +463,48 @@ const spawn = (
     );
   });
 
-const watch = (
+/**
+ * A call that streams `item`s from its events until `unwatch` stops it: a
+ * watch or a D-Bus match.
+ */
+const listening = <T>(
   calls: Calls,
-  path: string,
-): Promise<Result<Watch, SystemError>> =>
+  request: object,
+  item: (event: Event) => T,
+): Promise<Result<Listening<T>, SystemError>> =>
   new Promise((resolve) => {
-    const changes = streamed<string>();
+    const items = streamed<T>();
     const ended = settled<Result<"stopped", SystemError>>();
-    const id = call(
-      calls,
-      { call: "watch", path },
-      {
-        end: (end) => {
-          changes.close();
-          ended.settle(stopOf(end));
-        },
-        event: (event) =>
-          event.kind === "changed"
-            ? changes.push(event.path)
-            : unexpected(event),
-        reply: (reply) => {
-          if (reply.kind === "failed") {
-            calls.running.delete(id);
-            resolve(Err(systemError(reply.error)));
-          } else {
-            resolve(
-              reply.kind === "started"
-                ? Ok({
-                    changes: changes.stream,
-                    ended: ended.promise,
-                    stop: () => {
-                      calls.host.callSystem(
-                        id,
-                        JSON.stringify({ call: "unwatch" }),
-                      );
-                    },
-                  })
-                : unexpected(reply),
-            );
-          }
-        },
+    const id = call(calls, request, {
+      end: (end) => {
+        items.close();
+        ended.settle(stopOf(end));
       },
-    );
+      event: (event) => {
+        items.push(item(event));
+      },
+      reply: (reply) => {
+        if (reply.kind === "failed") {
+          calls.running.delete(id);
+          resolve(Err(systemError(reply.error)));
+        } else {
+          resolve(
+            reply.kind === "started"
+              ? Ok({
+                  ended: ended.promise,
+                  items: items.stream,
+                  stop: () => {
+                    calls.host.callSystem(
+                      id,
+                      JSON.stringify({ call: "unwatch" }),
+                    );
+                  },
+                })
+              : unexpected(reply),
+          );
+        }
+      },
+    });
   });
 
 /** A stream fed from outside, for answers that arrive as events. */
@@ -505,11 +603,35 @@ const errorKind = (kind: WireError["kind"]): SystemErrorKind => {
     case "locked": {
       return SystemErrorKind.Locked;
     }
+    case "dbus": {
+      return SystemErrorKind.Dbus;
+    }
     case "other": {
       return SystemErrorKind.Other;
     }
   }
 };
+
+/** A D-Bus body's JSON text, as the array the page reads. */
+const dbusBody = (text: string): unknown[] =>
+  dbusBodySchema.parse(JSON.parse(text));
+
+const dbusBodySchema = z.array(z.unknown());
+
+const busName = (bus: Bus): string => {
+  switch (bus) {
+    case Bus.Session: {
+      return "session";
+    }
+    case Bus.System: {
+      return "system";
+    }
+  }
+};
+
+/** `{ [name]: value }`, or nothing when `value` is absent. */
+const optional = (name: string, value: string | undefined) =>
+  value === undefined ? {} : { [name]: value };
 
 const fileType = (
   type: "file" | "directory" | "symlink" | "other",

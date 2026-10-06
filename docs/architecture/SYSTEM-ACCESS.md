@@ -44,7 +44,8 @@ export const Shell = async (root, domicile) => {
 - `@domicile-desktop/sdk/system` is the API: each call resolves a
   `Result<T, SystemError>`, and a process's output and a watch's changes are
   `ReadableStream`s. Its types are the reference.
-- D-Bus calls and signals are to come.
+- `dbusCall()` and `dbusMatch()` reach the session and system buses. A body
+  is JSON read against its D-Bus signature; see `domicile_host::dbus_json`.
 - Features are packages on these primitives: `@domicile-desktop/system-battery`
   (UPower), `system-audio` (`pactl`), `system-network` (NetworkManager),
   `system-bluetooth` (BlueZ), `system-backlight` (sysfs and logind).
@@ -63,9 +64,9 @@ Everything else moves to libraries on the primitives.
 ### Wire
 
 - Page to compositor: `system_request { id, request }`. `request` starts a
-  call (`read_file`, `write_file`, `read_dir`, `stat`, `watch`, `spawn`) or
-  drives one running under the same `id` (`unwatch`, `stdin`, `close_stdin`,
-  `kill`). D-Bus calls are to come.
+  call (`read_file`, `write_file`, `read_dir`, `stat`, `watch`, `spawn`,
+  `dbus_call`, `dbus_match`) or drives one running under the same `id`
+  (`unwatch`, `stdin`, `close_stdin`, `kill`).
 - Compositor to page: one `system_reply` per call that starts something
   (`failed` included), then for a watch or process any number of
   `system_event` and one `system_end`. Bytes are base64.
@@ -130,7 +131,7 @@ trust from reaching anything else.
       channel's binding (`guard-windows-state.sh`)
 - [ ] `script-src 'self'` on `domicile://shell`
 - [x] `@domicile-desktop/sdk/system`
-- [ ] the compositor serves D-Bus calls and matches
+- [x] the compositor serves D-Bus calls and matches
 - [ ] `system-battery`; delete `domicile_host::battery`, its host message and
       IDL member
 - [ ] `system-backlight`; delete `domicile_host::backlight` and its messages

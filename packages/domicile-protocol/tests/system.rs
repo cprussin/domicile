@@ -6,7 +6,7 @@
 use std::collections::BTreeMap;
 
 use domicile_protocol::{
-    ChromeMessage, DirEntry, FileType, HostMessage, Signal, Stream, SystemEnd, SystemError,
+    Bus, ChromeMessage, DirEntry, FileType, HostMessage, Signal, Stream, SystemEnd, SystemError,
     SystemErrorKind, SystemEvent, SystemReply, SystemRequest,
 };
 
@@ -256,5 +256,73 @@ fn a_stream_sends_events_then_one_end() {
             },
         }),
         r#"{"type":"system_end","id":5,"end":{"kind":"failed","error":{"kind":"other","message":"the watch broke"}}}"#
+    );
+}
+
+/// D-Bus bodies cross as JSON text, read against the D-Bus signature beside
+/// them, so this crate stays serde-only.
+#[test]
+fn a_d_bus_call_names_its_method_and_carries_a_typed_body() {
+    assert_eq!(
+        chrome(
+            r#"{"type":"system_request","id":8,"request":{"call":"dbus_call","bus":"system","destination":"org.freedesktop.UPower","path":"/org/freedesktop/UPower/devices/DisplayDevice","interface":"org.freedesktop.DBus.Properties","member":"GetAll","signature":"s","body":"[\"org.freedesktop.UPower.Device\"]"}}"#
+        ),
+        ChromeMessage::SystemRequest {
+            id: 8,
+            request: SystemRequest::DbusCall {
+                bus: Bus::System,
+                destination: "org.freedesktop.UPower".into(),
+                path: "/org/freedesktop/UPower/devices/DisplayDevice".into(),
+                interface: "org.freedesktop.DBus.Properties".into(),
+                member: "GetAll".into(),
+                signature: "s".into(),
+                body: r#"["org.freedesktop.UPower.Device"]"#.into(),
+            },
+        }
+    );
+    assert_eq!(
+        host(&HostMessage::SystemReply {
+            id: 8,
+            reply: SystemReply::Returned {
+                signature: "a{sv}".into(),
+                body: "[{}]".into(),
+            },
+        }),
+        r#"{"type":"system_reply","id":8,"reply":{"kind":"returned","signature":"a{sv}","body":"[{}]"}}"#
+    );
+}
+
+/// A match names any of the four fields a signal is routed by; the rest are
+/// left open.
+#[test]
+fn a_d_bus_match_streams_the_signals_it_names() {
+    assert_eq!(
+        chrome(
+            r#"{"type":"system_request","id":9,"request":{"call":"dbus_match","bus":"session","interface":"org.freedesktop.DBus.Properties","member":"PropertiesChanged"}}"#
+        ),
+        ChromeMessage::SystemRequest {
+            id: 9,
+            request: SystemRequest::DbusMatch {
+                bus: Bus::Session,
+                sender: None,
+                path: None,
+                interface: Some("org.freedesktop.DBus.Properties".into()),
+                member: Some("PropertiesChanged".into()),
+            },
+        }
+    );
+    assert_eq!(
+        host(&HostMessage::SystemEvent {
+            id: 9,
+            event: SystemEvent::Signal {
+                sender: ":1.4".into(),
+                path: "/org/mpris/MediaPlayer2".into(),
+                interface: "org.freedesktop.DBus.Properties".into(),
+                member: "PropertiesChanged".into(),
+                signature: "sa{sv}as".into(),
+                body: r#"["org.mpris.MediaPlayer2.Player",{},[]]"#.into(),
+            },
+        }),
+        r#"{"type":"system_event","id":9,"event":{"kind":"signal","sender":":1.4","path":"/org/mpris/MediaPlayer2","interface":"org.freedesktop.DBus.Properties","member":"PropertiesChanged","signature":"sa{sv}as","body":"[\"org.mpris.MediaPlayer2.Player\",{},[]]"}}"#
     );
 }

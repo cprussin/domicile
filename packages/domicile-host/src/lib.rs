@@ -19,6 +19,7 @@ pub mod battery;
 pub mod bookmarks;
 pub mod clipboard;
 mod data_url;
+pub mod dbus_json;
 pub mod desktop_entries;
 pub mod favicons;
 pub mod file_changes;
