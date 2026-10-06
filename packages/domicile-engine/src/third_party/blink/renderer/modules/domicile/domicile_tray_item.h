@@ -13,7 +13,7 @@ namespace blink {
 // One icon in the system tray, as the compositor described it.
 //
 // A ScriptWrappable rather than a dictionary, for DomicileClipboardEntry's
-// reason: these are read off a DomicileTrayEvent's array. Immutable, because
+// reason: these are read off DomicileHost.tray. Immutable, because
 // the compositor sends the whole tray whenever any of it changes.
 class MODULES_EXPORT DomicileTrayItem final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();

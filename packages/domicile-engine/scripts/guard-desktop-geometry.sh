@@ -108,7 +108,7 @@ sleep 1
 # The page's own numbers, off its last console line: the window can shrink
 # after load (a startup infobar), and the last size is the one to match. The
 # closing quote is Chromium's and keeps the match on the message: see
-# guard-control-arrival.sh.
+# guard-windows-state.sh.
 GEOMETRY=$(grep -oE '"GUARD geometry width=[0-9.]+ height=[0-9.]+ ratio=[0-9.]+"' "$ENGINE_LOG" | tail -1)
 
 # The verdict, in Python because the lines are JSON and their numbers may be

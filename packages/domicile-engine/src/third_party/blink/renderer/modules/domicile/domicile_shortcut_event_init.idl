@@ -8,5 +8,4 @@ dictionary DomicileShortcutEventInit : EventInit {
   boolean ctrlKey = false;
   boolean shiftKey = false;
   boolean metaKey = false;
-  DOMHighResTimeStamp arrival = 0;
 };

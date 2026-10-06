@@ -6,7 +6,6 @@
 
 #include <optional>
 
-#include "base/time/time.h"
 #include "components/domicile/mojom/browser_windows.mojom-blink.h"
 #include "components/domicile/mojom/control_channel.mojom-blink.h"
 #include "components/domicile/mojom/extension_tray.mojom-blink.h"
@@ -15,7 +14,6 @@
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_theme.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_tray_action.h"
-#include "third_party/blink/renderer/core/dom/dom_high_res_time_stamp.h"
 #include "third_party/blink/renderer/core/dom/events/event_target.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_event_names.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
@@ -37,16 +35,6 @@ class FrozenArray;
 class DomicileBrowserWindow;
 class DomicileDisplay;
 class DomicileShortcut;
-class DomicileAudioEvent;
-class DomicileBatteryEvent;
-class DomicileClipboardEvent;
-class DomicileExtensionsEvent;
-class DomicileIdleEvent;
-class DomicileLockedEvent;
-class DomicileModifiersEvent;
-class DomicileNotificationsEvent;
-class DomicileThemeEvent;
-class DomicileTrayEvent;
 class DomicileClipboardEntry;
 class DomicileTrayItem;
 class DomicileNotification;
@@ -91,21 +79,20 @@ class MODULES_EXPORT DomicileHost final
   // Throws on an empty argv. The browser refuses it too -- this check is a
   // better error message, not the enforcement.
   void spawn(ScriptState*, const Vector<String>& command, ExceptionState&);
-  // Ask what in the home matches `query`; the promise settles with the answer,
-  // which also arrives as a `files`
-  // event. Names no path -- see the IDL, where that is written down as a
-  // property rather than a convenience.
+  // Ask what in the home matches `query`; the promise settles with the answer.
+  // Names no path -- see the IDL, where that is written down as a property
+  // rather than a convenience.
   ScriptPromise<DomicileFileSearch> searchFiles(ScriptState*,
                                                 const String& query,
                                                 ExceptionState&);
-  // Ask what is in one file; the answer arrives as a `filepreview` event.
-  // The path is one a `files` event named -- see the IDL for why that is the
-  // whole of what it may name.
+  // Ask what is in one file; the promise settles with the answer. The path is
+  // one searchFiles() named -- see the IDL for why that is the whole of what
+  // it may name.
   ScriptPromise<DomicileFilePreview> previewFile(ScriptState*,
                                                  const String& path,
                                                  ExceptionState&);
-  // Ask which installed applications match `query`; the answer arrives as an
-  // `apps` event.
+  // Ask which installed applications match `query`; the promise settles with
+  // the answer.
   ScriptPromise<DomicileAppSearch> searchApps(ScriptState*,
                                               const String& query,
                                               ExceptionState&);
@@ -137,26 +124,27 @@ class MODULES_EXPORT DomicileHost final
                     double width,
                     double height,
                     ExceptionState&);
-  // Draw the desktop the other way round. Answered with a `theme` event to
+  // Draw the desktop the other way round. Answered with `themechanged` to
   // every chrome on the desk, this one included.
   //
   // BY VALUE, which is what the bindings hand an enumeration: `blink_v8_bridge`
   // gives an IDL enum `ref_fmt` and `const_ref_fmt` of `{}` alike, and
   // `V8DomicileTheme` is a trivially copyable wrapper over an `enum class`. A
   // `const&` compiles -- the generated call site passes an lvalue -- and is a
-  // pointer where the value is smaller. `DomicileAppCursorEvent`'s ctor takes
-  // its `V8DomicileCursorShape` the same way.
+  // pointer where the value is smaller. `DomicileWindowState` holds its
+  // `V8DomicileCursorShape` the same way.
   void setTheme(ScriptState*, V8DomicileTheme theme, ExceptionState&);
-  // Offer a passphrase at a locked desk. Answered with a `locked` event to
+  // Offer a passphrase at a locked desk. Answered with `lockedchanged` to
   // every chrome, and only when the desk actually opened -- see the IDL,
   // where that is written down as the property it is rather than as a
   // convenience.
   void unlock(ScriptState*, const String& passphrase, ExceptionState&);
-  // Lock the desk now. Answered with a `locked` event to every chrome.
+  // Lock the desk now. Answered with `lockedchanged` to every chrome.
   void lock(ScriptState*, ExceptionState&);
   // Set the backlight. Answered with `brightnesschanged` to every chrome.
   void setBrightness(ScriptState*, double level, ExceptionState&);
-  // The mixer's requests. Each is answered with `audio` to every chrome.
+  // The mixer's requests. Each is answered with `audiochanged` to every
+  // chrome.
   void setAudioVolume(ScriptState*,
                       const String& id,
                       double volume,
@@ -183,7 +171,7 @@ class MODULES_EXPORT DomicileHost final
                         const Vector<String>& ids,
                         ExceptionState&);
   // This page's old frame is held for `theme`: the desk's windows may turn.
-  // Answered with a `windowstheme` event once they have.
+  // Answered with `windowsthemechanged` once they have.
   void themeCaptured(ScriptState*, V8DomicileTheme theme, ExceptionState&);
   void grabShortcut(ScriptState*,
                     const DomicileShortcut* shortcut,
@@ -282,58 +270,33 @@ class MODULES_EXPORT DomicileHost final
   ExecutionContext* GetExecutionContext() const override;
 
   // domicile::mojom::blink::ControlChannelClient:
-  //
-  // EVERY ONE OF THESE CARRIES AN `arrival`, and it is the browser process's
-  // `base::TimeTicks` rather than anything this renderer measured: when that
-  // process took the message off the compositor's socket. `Arrival` below is
-  // what puts it on the clock the page reads.
-  void AppTitled(const String& app_id,
-                 const String& title,
-                 base::TimeTicks arrival) override;
-  void AudioLevels(Vector<domicile::mojom::blink::AudioLevelPtr> levels,
-                   base::TimeTicks arrival) override;
+  void AppTitled(const String& app_id, const String& title) override;
+  void AudioLevels(
+      Vector<domicile::mojom::blink::AudioLevelPtr> levels) override;
   void AppAppeared(const String& app_id,
                    const String& title,
                    bool has_size,
                    double width,
-                   double height,
-                   base::TimeTicks arrival) override;
-  void AppResized(const String& app_id,
-                  double width,
-                  double height,
-                  base::TimeTicks arrival) override;
-  void AppMinSize(const String& app_id,
-                  double width,
-                  double height,
-                  base::TimeTicks arrival) override;
-  void AppMaxSize(const String& app_id,
-                  double width,
-                  double height,
-                  base::TimeTicks arrival) override;
+                   double height) override;
+  void AppResized(const String& app_id, double width, double height) override;
+  void AppMinSize(const String& app_id, double width, double height) override;
+  void AppMaxSize(const String& app_id, double width, double height) override;
   void PopupPlaced(const String& app_id,
                    const String& parent_app_id,
                    double x,
                    double y,
                    double width,
                    double height,
-                   bool grab,
-                   base::TimeTicks arrival) override;
-  void AppClosed(const String& app_id, base::TimeTicks arrival) override;
+                   bool grab) override;
+  void AppClosed(const String& app_id) override;
   void AppCursor(const String& app_id,
-                 domicile::mojom::blink::CursorShape cursor,
-                 base::TimeTicks arrival) override;
-  void ShortcutPressed(domicile::mojom::blink::ShortcutPtr shortcut,
-                       base::TimeTicks arrival) override;
-  void Modifiers(bool alt,
-                 bool ctrl,
-                 bool shift,
-                 bool meta,
-                 base::TimeTicks arrival) override;
+                 domicile::mojom::blink::CursorShape cursor) override;
+  void ShortcutPressed(domicile::mojom::blink::ShortcutPtr shortcut) override;
+  void Modifiers(bool alt, bool ctrl, bool shift, bool meta) override;
   void Files(const String& query,
              const Vector<String>& files,
              uint32_t matched,
-             bool indexing,
-             base::TimeTicks arrival) override;
+             bool indexing) override;
   void FilePreview(const String& path,
                    const String& kind,
                    const String& text,
@@ -342,37 +305,29 @@ class MODULES_EXPORT DomicileHost final
                    const String& artist,
                    const String& album,
                    double duration,
-                   const String& cover,
-                   base::TimeTicks arrival) override;
+                   const String& cover) override;
   void Apps(const String& query,
             Vector<domicile::mojom::blink::DesktopEntryPtr> apps,
-            Vector<domicile::mojom::blink::BookmarkPtr> bookmarks,
-            base::TimeTicks arrival) override;
-  void Battery(double charge,
-               bool charging,
-               base::TimeTicks arrival) override;
+            Vector<domicile::mojom::blink::BookmarkPtr> bookmarks) override;
+  void Battery(double charge, bool charging) override;
   void Brightness(double level) override;
-  void Clipboard(Vector<domicile::mojom::blink::ClipboardEntryPtr> entries,
-                 base::TimeTicks arrival) override;
-  void Tray(Vector<domicile::mojom::blink::TrayItemPtr> items,
-            base::TimeTicks arrival) override;
-  void Notifications(Vector<domicile::mojom::blink::NotificationPtr> items,
-                     base::TimeTicks arrival) override;
-  void ThemeChanged(domicile::mojom::blink::Theme theme,
-                    base::TimeTicks arrival) override;
-  void Idle(bool idle, base::TimeTicks arrival) override;
-  void Locked(bool locked, base::TimeTicks arrival) override;
-  void WindowsThemeChanged(domicile::mojom::blink::Theme theme,
-                           base::TimeTicks arrival) override;
-  void ShellConfig(const String& config, base::TimeTicks arrival) override;
+  void Clipboard(
+      Vector<domicile::mojom::blink::ClipboardEntryPtr> entries) override;
+  void Tray(Vector<domicile::mojom::blink::TrayItemPtr> items) override;
+  void Notifications(
+      Vector<domicile::mojom::blink::NotificationPtr> items) override;
+  void ThemeChanged(domicile::mojom::blink::Theme theme) override;
+  void Idle(bool idle) override;
+  void Locked(bool locked) override;
+  void WindowsThemeChanged(domicile::mojom::blink::Theme theme) override;
+  void ShellConfig(const String& config) override;
   void Audio(Vector<domicile::mojom::blink::AudioDevicePtr> outputs,
              Vector<domicile::mojom::blink::AudioDevicePtr> inputs,
              Vector<domicile::mojom::blink::AudioStreamPtr> playback,
              Vector<domicile::mojom::blink::AudioStreamPtr> recording,
-             Vector<domicile::mojom::blink::AudioCardPtr> cards,
-             base::TimeTicks arrival) override;
-  void FocusChanged(const String& app_id, base::TimeTicks arrival) override;
-  void FocusRequested(const String& app_id, base::TimeTicks arrival) override;
+             Vector<domicile::mojom::blink::AudioCardPtr> cards) override;
+  void FocusChanged(const String& app_id) override;
+  void FocusRequested(const String& app_id) override;
   void Displays(
       Vector<domicile::mojom::blink::DisplayInfoPtr> displays) override;
 
@@ -399,7 +354,7 @@ class MODULES_EXPORT DomicileHost final
   // USE INCLUDES LISTENING, which is why `AddedEventListener` is overridden.
   // The inbound direction opens here -- `SetClient` hands the compositor its
   // way back in the same breath -- so a shell that only reacts, registering
-  // `onappappeared` and calling nothing, would never bind and never hear a
+  // `onwindowschanged` and calling nothing, would never bind and never hear a
   // word, with nothing anywhere to say why. That is most of a shell: the
   // windows a desktop shows are announced, not asked for.
   //
@@ -449,12 +404,6 @@ class MODULES_EXPORT DomicileHost final
   bool Ready(ExceptionState&);
   bool ReadyForApp(const String& app_id, ExceptionState&);
 
-  // The browser's monotonic stamp, on the clock `performance.now()` and
-  // `Event.timeStamp` are on. This document's time origin is what makes the
-  // two comparable, which is why it is asked of the window rather than
-  // computed from `base::TimeTicks` here.
-  DOMHighResTimeStamp Arrival(base::TimeTicks arrival) const;
-
   Member<LocalDOMWindow> window_;
   // Replaced wholesale on every description rather than edited: the compositor
   // sends the whole desktop each time, and a `FrozenArray` is frozen.
@@ -475,18 +424,28 @@ class MODULES_EXPORT DomicileHost final
   String file_preview_path_;
   Member<ScriptPromiseResolver<DomicileAppSearch>> app_search_;
   String app_search_query_;
-  // The last of each stateful event, which its attributes read from.
-  Member<DomicileClipboardEvent> last_clipboard_;
-  Member<DomicileTrayEvent> last_tray_items_;
-  Member<DomicileNotificationsEvent> last_notifications_;
-  Member<DomicileExtensionsEvent> last_extensions_;
-  Member<DomicileAudioEvent> last_audio_;
-  Member<DomicileBatteryEvent> last_battery_;
-  Member<DomicileIdleEvent> last_idle_;
-  Member<DomicileLockedEvent> last_locked_;
-  Member<DomicileThemeEvent> last_theme_;
-  Member<DomicileThemeEvent> last_windows_theme_;
-  Member<DomicileModifiersEvent> last_modifiers_;
+  // The desk's state, which its attributes read: what the compositor -- or,
+  // for `extensions_`, the browser -- last said, and null or nullopt until it
+  // has said anything. Each list replaced wholesale, for `displays_`'s reason.
+  Member<FrozenArray<DomicileClipboardEntry>> clipboard_;
+  Member<FrozenArray<DomicileTrayItem>> tray_items_;
+  Member<FrozenArray<DomicileNotification>> notifications_;
+  Member<FrozenArray<DomicileExtension>> extensions_;
+  Member<FrozenArray<DomicileAudioDevice>> audio_outputs_;
+  Member<FrozenArray<DomicileAudioDevice>> audio_inputs_;
+  Member<FrozenArray<DomicileAudioStream>> audio_playback_;
+  Member<FrozenArray<DomicileAudioStream>> audio_recording_;
+  Member<FrozenArray<DomicileAudioCard>> audio_cards_;
+  std::optional<double> battery_charge_;
+  std::optional<bool> battery_charging_;
+  std::optional<bool> idle_;
+  std::optional<bool> locked_;
+  std::optional<V8DomicileTheme> theme_;
+  std::optional<V8DomicileTheme> windows_theme_;
+  std::optional<bool> alt_key_;
+  std::optional<bool> ctrl_key_;
+  std::optional<bool> shift_key_;
+  std::optional<bool> meta_key_;
   std::optional<double> brightness_;
   // Replaced wholesale, like `displays_`, and for its reason.
   Member<FrozenArray<DomicileBrowserWindow>> browser_windows_;

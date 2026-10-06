@@ -1,10 +1,22 @@
 // Copyright 2026 Connor Prussin
 // SPDX-License-Identifier: MIT
 
-// What `DomicileHost.searchFiles()` resolves with. See DomicileFilesEvent for
-// what each member means; this is the same answer without the event.
+// What `DomicileHost.searchFiles()` resolves with.
 dictionary DomicileFileSearch {
+  // The front of what matched: paths relative to the home directory the
+  // desktop is running as -- `Notes/today.org`, not
+  // `/home/you/Notes/today.org` -- already in the order they go on screen, and
+  // a directory ends in `/`. Empty is a query that matched nothing.
   sequence<DOMString> files = [];
+
+  // How many paths matched, of which `files` is the front.
   unsigned long matched = 0;
+
+  // Whether the compositor is still building the index this was found in.
+  //
+  // THE DIFFERENCE BETWEEN AN INCOMPLETE ANSWER AND A WRONG ONE. The rows are
+  // a launcher's whole evidence that a file exists, so an answer from an index
+  // still being walked has to arrive saying so. A shell draws this as a line
+  // saying the index is being built, and asks again.
   boolean indexing = false;
 };

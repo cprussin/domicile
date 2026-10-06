@@ -93,7 +93,7 @@ wait_for_line "$TRIES" "GUARD heard " "$ENGINE_LOG"
 sleep 1
 
 # The closing quote is Chromium's and keeps each match on the message: see
-# guard-control-arrival.sh.
+# guard-windows-state.sh.
 HEARD=$(grep -oE '"GUARD heard [^"]*"' "$ENGINE_LOG" | head -1)
 
 if [ -z "$HEARD" ]; then

@@ -4,7 +4,6 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_MODULES_DOMICILE_DOMICILE_SHORTCUT_EVENT_H_
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_DOMICILE_DOMICILE_SHORTCUT_EVENT_H_
 
-#include "third_party/blink/renderer/core/dom/dom_high_res_time_stamp.h"
 #include "third_party/blink/renderer/modules/event_modules.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
@@ -35,8 +34,7 @@ class MODULES_EXPORT DomicileShortcutEvent final : public Event {
                         bool alt,
                         bool ctrl,
                         bool shift,
-                        bool meta,
-                        DOMHighResTimeStamp arrival);
+                        bool meta);
   ~DomicileShortcutEvent() override;
 
   const String& chord() const { return chord_; }
@@ -45,15 +43,6 @@ class MODULES_EXPORT DomicileShortcutEvent final : public Event {
   bool ctrlKey() const { return ctrl_; }
   bool shiftKey() const { return shift_; }
   bool metaKey() const { return meta_; }
-
-  // When the browser process had this, on `performance.now()`'s clock.
-  //
-  // This is the one event here whose `arrival` is not always a socket read: a
-  // chord the shell claimed is matched in the browser process and never
-  // crosses the compositor's socket. It is stamped when that match reaches the
-  // control channel, which is the same quantity on the same clock. See
-  // DomicileAppEvent::arrival.
-  DOMHighResTimeStamp arrival() const { return arrival_; }
 
   const AtomicString& InterfaceName() const override;
   void Trace(Visitor*) const override;
@@ -65,7 +54,6 @@ class MODULES_EXPORT DomicileShortcutEvent final : public Event {
   bool ctrl_ = false;
   bool shift_ = false;
   bool meta_ = false;
-  DOMHighResTimeStamp arrival_ = 0;
 };
 
 }  // namespace blink

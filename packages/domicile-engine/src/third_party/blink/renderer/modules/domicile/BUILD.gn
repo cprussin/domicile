@@ -5,22 +5,14 @@ import("//third_party/blink/renderer/modules/modules.gni")
 
 blink_modules_sources("domicile") {
   sources = [
-    "domicile_app_cursor_event.cc",
-    "domicile_app_cursor_event.h",
     "domicile_app_event.cc",
     "domicile_app_event.h",
-    "domicile_app_titled_event.cc",
-    "domicile_app_titled_event.h",
-    "domicile_apps_event.cc",
-    "domicile_apps_event.h",
     "domicile_audio_card.cc",
     "domicile_audio_card.h",
     "domicile_audio_choice.cc",
     "domicile_audio_choice.h",
     "domicile_audio_device.cc",
     "domicile_audio_device.h",
-    "domicile_audio_event.cc",
-    "domicile_audio_event.h",
     "domicile_audio_level.cc",
     "domicile_audio_level.h",
     "domicile_audio_levels_event.cc",
@@ -31,14 +23,10 @@ blink_modules_sources("domicile") {
     "domicile_bookmark.h",
     "domicile_chord.cc",
     "domicile_chord.h",
-    "domicile_battery_event.cc",
-    "domicile_battery_event.h",
     "domicile_browser_window.cc",
     "domicile_browser_window.h",
     "domicile_clipboard_entry.cc",
     "domicile_clipboard_entry.h",
-    "domicile_clipboard_event.cc",
-    "domicile_clipboard_event.h",
     "domicile_desktop_entry.cc",
     "domicile_desktop_entry.h",
     "domicile_display.cc",
@@ -47,34 +35,14 @@ blink_modules_sources("domicile") {
     "domicile_event_names.h",
     "domicile_extension.cc",
     "domicile_extension.h",
-    "domicile_extensions_event.cc",
-    "domicile_extensions_event.h",
-    "domicile_file_preview_event.cc",
-    "domicile_file_preview_event.h",
-    "domicile_files_event.cc",
-    "domicile_files_event.h",
-    "domicile_idle_event.cc",
-    "domicile_idle_event.h",
-    "domicile_locked_event.cc",
-    "domicile_locked_event.h",
-    "domicile_modifiers_event.cc",
-    "domicile_modifiers_event.h",
-    "domicile_shell_config_event.cc",
-    "domicile_shell_config_event.h",
     "domicile_shortcut_event.cc",
     "domicile_shell.cc",
     "domicile_shell.h",
     "domicile_shortcut_event.h",
-    "domicile_theme_event.cc",
-    "domicile_theme_event.h",
     "domicile_notification.cc",
     "domicile_notification.h",
     "domicile_notification_action.cc",
     "domicile_notification_action.h",
-    "domicile_notifications_event.cc",
-    "domicile_notifications_event.h",
-    "domicile_tray_event.cc",
-    "domicile_tray_event.h",
     "domicile_tray_item.cc",
     "domicile_tray_item.h",
     "domicile_window.cc",
@@ -84,16 +52,16 @@ blink_modules_sources("domicile") {
   ]
 
   deps = [
-    # The wire names of the cursor shapes. `DomicileAppCursorEvent.cursor` is a
+    # The scheme and host DomicileShell runs the shell document on.
+    "//components/domicile:common",
+    # The wire names of the cursor shapes. `DomicileWindow.cursor` is a
     # `DomicileCursorShape` and the compositor's is a `mojom::CursorShape`, and
     # the wire name is how one becomes the other -- so the same list the
     # browser parsed the compositor's JSON with is the one that names it here.
-    # The scheme and host DomicileShell runs the shell document on.
-    "//components/domicile:common",
     "//components/domicile:cursor_shape",
     "//components/domicile:display_transform",
     # And the wire names of the themes, for the same reason and in both
-    # directions: `DomicileThemeEvent.theme` is a `DomicileTheme` where the
+    # directions: `DomicileHost.theme` is a `DomicileTheme` where the
     # compositor's is a `mojom::Theme`, and `setTheme()` goes back the other
     # way.
     "//components/domicile:theme",

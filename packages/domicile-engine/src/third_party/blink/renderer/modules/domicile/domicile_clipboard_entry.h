@@ -14,7 +14,7 @@ namespace blink {
 //
 // A ScriptWrappable rather than a dictionary, for DomicileDisplay's reason:
 // WebIDL will not have a dictionary as the element type of an attribute's
-// array, and these are read off a DomicileClipboardEvent.
+// array, and these are read off DomicileHost.clipboard.
 //
 // Immutable, and cheap to replace: the compositor sends the whole history
 // whenever any of it changes, because a copy re-orders the list as often as it

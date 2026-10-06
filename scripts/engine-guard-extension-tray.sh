@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# An extension's action in the shell's tray -- the `extensions` event, with the
+# An extension's action in the shell's tray -- `extensions`, with the
 # badge its service worker set -- and its popup in a <webview> closing itself
 # as `domicile-close`.
 #

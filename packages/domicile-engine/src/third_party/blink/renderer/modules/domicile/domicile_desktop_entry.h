@@ -15,7 +15,7 @@ namespace blink {
 //
 // A ScriptWrappable rather than a dictionary, for DomicileClipboardEntry's
 // reason: WebIDL will not have a dictionary as the element type of an
-// attribute's array, and these are read off a DomicileAppsEvent.
+// attribute's array, and these are read off a DomicileAppSearch.
 class MODULES_EXPORT DomicileDesktopEntry final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 

@@ -1,9 +1,11 @@
 // Copyright 2026 Connor Prussin
 // SPDX-License-Identifier: MIT
 
-// What `DomicileHost.searchApps()` resolves with. See DomicileAppsEvent for
-// what each member means; this is the same answer without the event.
+// What `DomicileHost.searchApps()` resolves with.
 dictionary DomicileAppSearch {
+  // The applications the query matched, best first. Empty is a query that
+  // matched nothing, which is an answer.
   sequence<DomicileDesktopEntry> apps = [];
+  // The desk's bookmarks the query matched, best first.
   sequence<DomicileBookmark> bookmarks = [];
 };

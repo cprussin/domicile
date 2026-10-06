@@ -9,7 +9,7 @@
 #
 # Without a build, this checks that no patch touches the global list, the
 # fork's code names no event through it, and the fork's list, the IDL's
-# `on<name>` handlers and the control-arrival guard's list match. The guard
+# `on<name>` handlers and the windows-state guard's list match. The guard
 # checks that each name fires.
 set -u
 
@@ -52,7 +52,7 @@ expect "and it is built" 0 "$?"
 
 ours="$(sed -n 's/^ *X(\([a-z]*\), *[A-Za-z]*) *\\\?$/\1/p' "$NAMES_H" 2>/dev/null | sorted)"
 idl="$(sed -n 's/^ *attribute EventHandler on\([a-z]*\);.*/\1/p' "$DOMICILE/domicile_host.idl" | sorted)"
-guard="$(sed -n '/^const EVENT_NAMES = \[/,/^\];/p' "$ENGINE/scripts/guard-control-arrival.js" |
+guard="$(sed -n '/^const EVENT_NAMES = \[/,/^\];/p' "$ENGINE/scripts/guard-windows-state.js" |
   grep -o '"[a-z]*"' | tr -d '"' | sorted)"
 
 [ -n "$idl" ]
