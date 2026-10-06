@@ -518,6 +518,17 @@ source_set("system_call") {
   public_deps = [ "//base" ]
 }
 
+# The shell's answers to portal requests, wrapped on their way through
+# :control_channel. Its own target for :system_call's reason. //base only.
+source_set("portal_request") {
+  sources = [
+    "browser/portal_request.cc",
+    "browser/portal_request.h",
+  ]
+
+  public_deps = [ "//base" ]
+}
+
 source_set("control_channel") {
   sources = [
     "browser/control_channel.cc",
@@ -531,6 +542,7 @@ source_set("control_channel") {
     ":display_transform",
     ":extension_installer",
     ":line_framer",
+    ":portal_request",
     ":shortcut_registry",
     ":system_call",
     ":theme",
@@ -560,6 +572,7 @@ source_set("unit_tests") {
     "browser/line_framer_unittest.cc",
     "browser/placeholder_stage_unittest.cc",
     "browser/pointer_warp_unittest.cc",
+    "browser/portal_request_unittest.cc",
     "browser/shell_source_unittest.cc",
     "browser/shell_url_loader_factory_unittest.cc",
     "browser/shell_windows_unittest.cc",
@@ -602,6 +615,7 @@ source_set("unit_tests") {
     ":line_framer",
     ":placeholder_stage",
     ":pointer_warp",
+    ":portal_request",
     ":shell_scheme",
     ":shell_source",
     ":shell_windows",

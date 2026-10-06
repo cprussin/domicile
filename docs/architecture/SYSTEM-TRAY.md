@@ -30,7 +30,7 @@ shell click ─ activateTrayItem(id, action) ─▶ engine ─ activate_tray_ite
 - **StatusNotifierItem**, because it is the only tray protocol Wayland clients
   use. XEmbed needs X11.
 - **The compositor hosts the tray** because it owns the session bus
-  connection; pages have none. The settings portal in `appearance.rs` works the
+  connection; pages have none. The desktop portal in `portals/` works the
   same way.
 - **The compositor sends the full tray** on every change and on connect, as it
   does for `clipboard`. `Host::set_tray` sends nothing when nothing changed.
