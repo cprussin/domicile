@@ -4,8 +4,8 @@
 // One of the desk's browser windows: a page the browser holds, drawn with
 // `<webview window="id">`. See components/domicile/mojom/browser_windows.mojom.
 //
-// An interface for DomicileDisplay's reason: these are read from
-// `navigator.domicile.browserWindows`, and WebIDL forbids a dictionary as an
+// An interface for DomicileDisplay's reason: these are read from the
+// desktop's `browserWindows` attribute, and WebIDL forbids a dictionary as an
 // attribute type.
 
 [
