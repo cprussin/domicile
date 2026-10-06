@@ -1,10 +1,8 @@
 #!/usr/bin/env bash
-# What a download in a browser window does: asks the shell where it goes, and
+# Checks that a download in a browser window asks the shell for a path and
 # lands there.
 #
-# The guard clicks a download link and reads the file off the disk at the path
-# the shell chose. Its control is the same download with a shell that cancels:
-# nothing may land anywhere in the home.
+# The control uses a shell that cancels: no file may land in the home.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

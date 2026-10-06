@@ -6,51 +6,26 @@ module domicile.mojom;
 import "third_party/blink/public/mojom/tokens/tokens.mojom";
 import "url/mojom/url.mojom";
 
-// A <webview> asking the browser for a guest to put behind it.
+// A <webview> requests a guest from the browser.
 //
-// WHY THE ELEMENT HAS TO ASK. Patch 0007 makes <webview> report
-// FrameOwnerElementType::kIframe on purpose, so that the fork stays out of
-// every switch on that enum -- which leaves the browser process unable to tell
-// a <webview> from an <iframe> by looking. Nothing in the frame tree carries
-// the signal, so the element carries it, over this. Keying on an explicit
-// request is also what extensions' <webview> does.
+// The element must ask because <webview> reports
+// FrameOwnerElementType::kIframe, so the browser cannot otherwise tell it from
+// an <iframe>. A guest's main frame has no ancestor for X-Frame-Options or
+// frame-ancestors, keeps its own history, and gets first-party storage. See
+// components/domicile/browser/web_view_guest.h.
 //
-// WHAT A GUEST BUYS, and why it is not a carve-out in AncestorThrottle: a
-// guest's main frame IS a main frame, so it has no ancestor for
-// X-Frame-Options or CSP frame-ancestors to be checked against, history is the
-// guest's own across processes, and its storage is first-party rather than
-// partitioned as a third party. See components/domicile/browser/
-// web_view_guest.h.
-//
-// THE ACCESS CONTROL IS THE BINDER'S, not this file's, and it is the same one
-// ControlChannel has: the browser binds WebViewGuestHost only for a document
-// whose origin is the shell's. domicile:// is neither web-safe nor
-// CORS-enabled, so no ordinary web content can hold that origin. A shell that
-// asks for a guest can already ask for `Spawn`, so there is nothing here to
-// protect it from itself.
+// Bound only for shell-origin documents, as ControlChannel is.
 
-// What the browser is prepared to say about the connection behind the page a
-// <webview> is showing.
+// The guest's security level from security_state::GetSecurityLevel, as
+// Chrome's omnibox lock uses.
 //
-// THE BROWSER'S OWN ANSWER, NARROWED -- not a scheme, and not a second opinion.
-// This is `security_state::GetSecurityLevel` over the guest's visible entry,
-// which is the same function and the same entry Chrome's own omnibox draws its
-// lock from: the certificate the network stack validated, the mixed content
-// the page ran, the cert errors it displayed. A chrome that derived a lock
-// from `https://` instead would be claiming, on every page, a thing nobody
-// checked.
-//
-// AN ENUM OF OUR OWN RATHER THAN security_state::SecurityLevel ON THE WIRE.
-// That enum carries deprecated members and numbering nobody here should depend
-// on, and the mapping between it and this is one explicit switch in
-// web_view_guest.cc with no default arm -- so a level Chromium adds is a
-// compile error in the fork rather than a page that silently reads as neutral.
+// A separate enum so a new Chromium level fails to compile in the mapping
+// switch in web_view_guest.cc.
 enum WebViewSecurity {
-  // Neither secure nor insecure, and the browser is not making a claim:
-  // about:blank, a file, an error page, a scheme that is not a connection.
+  // No claim either way: about:blank, a file, an error page, or a non-network
+  // scheme.
   kNeutral,
-  // HTTPS with a certificate that validated, and nothing on the page that
-  // undoes it.
+  // HTTPS with a valid certificate and nothing on the page that weakens it.
   kSecure,
   // The browser would show a "Not secure" warning: plain HTTP, or an HTTPS
   // page it considers insecure.
@@ -62,9 +37,8 @@ enum WebViewSecurity {
 
 // What a page in a <webview> needs picked.
 //
-// BLINK'S FIVE MODES NARROWED TO THE FOUR A PICKER DRAWS DIFFERENTLY. A folder
-// uploaded and a folder opened are one question to the user -- which folder --
-// and what the browser then does with it is the browser's.
+// Blink's five modes reduced to four: folder upload and folder open look the
+// same to the user.
 enum WebViewFileChooserMode {
   // One existing file.
   kOpen,
@@ -150,48 +124,30 @@ enum WebViewContextMenuAction {
 
 // Renderer -> browser, bound per document.
 interface WebViewGuestHost {
-  // Give `placeholder_frame` a guest page.
+  // Gives `placeholder_frame` a guest page.
   //
-  // `placeholder_frame` is the child frame the <webview>'s frame owner already
-  // created -- the one an <iframe> would navigate. It is what
-  // WebContents::AttachInnerWebContents wants, and it is left on about:blank
-  // because attaching swaps it out and a frame with a beforeunload handler in
-  // it would have to be asked first.
+  // `placeholder_frame` is the child frame the <webview> created. It stays on
+  // about:blank because attaching replaces it, and a beforeunload handler
+  // would block that. The browser refuses a frame that is not a child of the
+  // asking document.
   //
-  // The browser refuses a token that is not a child of the asking document's
-  // own frame: the element may claim a guest for its own placeholder and for
-  // nothing else.
+  // Returns nothing: attaching is asynchronous, and Navigate is safe before it
+  // finishes.
   //
-  // Nothing comes back. Attaching is asynchronous -- the frame has to be
-  // prepared first -- and the element has nothing to do differently either
-  // way; what it does next is Navigate, which is safe before the attach
-  // finishes and is why this is not a callback.
+  // `client` is passed here, not set later, so no history change is missed
+  // between creation and connection.
   //
-  // BOTH ENDS OF THE GUEST ARE NAMED HERE, which is why `client` is a
-  // parameter of this call rather than a SetClient on WebViewGuest. The guest
-  // is created by this message, so a client handed over in a later one would
-  // leave a window in which the guest's history could change with nothing to
-  // report it to -- and the element would have to either replay that change or
-  // lose it. It also costs a second round trip for a pipe the element always
-  // wants.
+  // `window` is the element's `window` attribute, a browser window id
+  // (browser_windows.mojom). The browser attaches that window's page and
+  // ignores `src` on connect; a later `src` navigates it. Null creates a page
+  // owned by the element. An unknown window, or one another element shows, is
+  // refused: the pipes close and the browser logs why.
   //
-  // `window` is the element's `window` attribute: the id of a desk browser
-  // window (browser_windows.mojom). The browser attaches that window's
-  // existing page and does not send `src` on connect. A later `src` navigates
-  // the window, as an address bar does. Null for the shell's own page, which
-  // is created here and dies with the element. An unknown window, or one
-  // another element shows, is refused: the pipes drop and the browser logs
-  // why.
-  //
-  // `extension_popup` IS THE ELEMENT'S `extensionpopup` ATTRIBUTE: the
-  // <webview> is an extension's action popup, which a shell opens from its
-  // tray. Its guest is then that popup, as Chrome's toolbar bubble is, and no
-  // tab: it has the popup view type, no tab id, and is in no window, so
-  // `tabs.getCurrent()` answers nothing and `extension.getViews({type:
-  // "popup"})` finds it. An extension that lays itself out differently in a
-  // tab -- Bitwarden's, which sizes its body only in a popup -- sees what it
-  // sees in Chrome. See //chrome/browser/domicile/domicile_tab_helpers.h.
-  // Ignored with `window`: a browser window's page is a tab.
+  // `extension_popup` is the element's `extensionpopup` attribute. The guest
+  // is then an extension action popup, as in Chrome: popup view type, no tab
+  // id, no window. Extensions that lay out differently in a popup (e.g.
+  // Bitwarden) then work. See //chrome/browser/domicile/domicile_tab_helpers.h.
+  // Ignored with `window`.
   CreateGuest(blink.mojom.LocalFrameToken placeholder_frame,
               pending_receiver<WebViewGuest> guest,
               pending_remote<WebViewGuestClient> client,
@@ -199,165 +155,83 @@ interface WebViewGuestHost {
               bool extension_popup);
 };
 
-// The leg back: what the browser tells a <webview> about the guest behind it.
+// Browser -> renderer: guest state only the browser has.
 //
-// THE ANSWERS ONLY THE BROWSER HAS. A guest's history is a
-// NavigationController in the browser process, so `CanGoBack()` and
-// `CanGoForward()` cannot be read from the renderer at all -- and an address
-// bar that cannot read them cannot gray out a button that would do nothing.
-// This is how they arrive.
-//
-// PUSHED RATHER THAN ASKED FOR, and that is the decision the shape of this
-// interface records. A [Sync] getter would put a blocking browser round trip
-// inside a property read, in a renderer, on whatever path a chrome renders
-// from. So the browser sends the answer when it changes and the element holds
-// it, which makes the read free and always available.
+// Pushed rather than fetched, so reading it on the element never blocks on a
+// browser round trip.
 interface WebViewGuestClient {
-  // What the guest's history can do now.
+  // Whether the guest's history can go back or forward.
   //
-  // SENT ONLY WHEN THE PAIR CHANGES. The browser notices this in
-  // WebContentsDelegate::NavigationStateChanged, which fires for a title, a
-  // favicon and an audio state as well, so an unfiltered forward would be a
-  // message per page load event and an event per message in the page.
-  //
-  // A FRESH GUEST SENDS NOTHING, because it has nowhere to go in either
-  // direction and neither has the element that has not heard from it. The
-  // first message is the first commit that gives the guest an entry to go back
-  // to -- see components/domicile/browser/web_view_guest.cc.
+  // Sent only when the pair changes, because NavigationStateChanged also fires
+  // for titles, favicons and audio. A fresh guest sends nothing until its first
+  // commit gives it an entry to go back to.
   HistoryChanged(bool can_go_back, bool can_go_forward);
 
-  // Whether the guest is fetching a page, so an address bar can say so.
+  // Whether the guest is loading, for an address bar spinner.
   //
-  // THE SAME ANSWER CHROME'S OWN THROBBER IS DRIVEN BY.
-  // WebContentsDelegate::LoadingStateChanged carries `should_show_loading_ui`,
-  // which is false for a same-document navigation -- a fragment, a pushState
-  // -- because neither is a load a browser's UI spins for. So this is not
-  // "the WebContents is busy"; it is "a browser would be showing a spinner",
-  // which is exactly the question an address bar is asking.
-  //
-  // SENT ONLY WHEN IT CHANGES, like HistoryChanged above and for the same
-  // reason: the delegate call it comes from also fires for same-document
-  // navigations, which resolve to the answer already held, and an unfiltered
-  // forward would put a DOM event in the shell's page for each of them.
-  //
-  // A FRESH GUEST SENDS NOTHING. It is not loading, and neither is an element
-  // that has not heard from it -- so a guest's first message is its first
-  // load beginning.
+  // Uses `should_show_loading_ui`, as Chrome's throbber does, so same-document
+  // navigations do not count. Sent only when it changes. A fresh guest sends
+  // nothing until its first load starts.
   LoadingChanged(bool is_loading);
 
-  // WHERE THE PAGE ACTUALLY IS, AND WHAT THE BROWSER SAYS ABOUT GETTING THERE.
+  // The guest's current URL and security level, for an address bar.
   //
-  // THIS IS THE MESSAGE THAT MAKES A BROWSER WINDOW A BROWSER. Before it, a
-  // shell knew only where it had *sent* a window: `src` is the author's
-  // attribute, so a link followed, a redirect taken or a form posted left the
-  // chrome showing an address the page had left, and any lock drawn beside it
-  // was a claim about a different page. An address bar that cannot follow its
-  // own page cannot be trusted with a padlock, which is why the address and
-  // the security travel together in one message rather than in two.
+  // Both come from the same `GetVisibleEntry()`, so the lock always describes
+  // the URL shown; mixing entries enables address bar spoofing. The URL is the
+  // virtual URL, as browsers display (e.g. `view-source:`).
   //
-  // BOTH HALVES COME FROM THE ONE ENTRY -- `GetVisibleEntry()` on the guest's
-  // own NavigationController. That is not a convenience, it is the property
-  // that makes the pair meaningful: a URL taken from one entry beside a level
-  // computed from another is a lock drawn next to an address it does not
-  // describe, which is the shape of every address-bar spoof. `GetVisibleEntry`
-  // is also what decides when a pending navigation may be shown at all --
-  // content only lets a browser-initiated one be visible before it commits,
-  // which is the rule that keeps a page from writing another site's address
-  // into the bar.
-  //
-  // THE VIRTUAL URL, which is the one a browser shows: `view-source:` and the
-  // other rewrites are the entry's virtual URL and not its real one, and a
-  // chrome showing the real one would disagree with every other browser.
-  //
-  // SENT ONLY WHEN THE PAIR CHANGES, like HistoryChanged and LoadingChanged
-  // above. It is driven from two hooks -- NavigationStateChanged for the
-  // address and DidChangeVisibleSecurityState for the level -- and either can
-  // fire for something the other reported, so both go through one comparison
-  // against the last pair sent.
-  //
-  // A FRESH GUEST SENDS NOTHING. It is showing the initial entry, which
-  // GetVisibleSecurityState declines to describe, and an element that has
-  // heard nothing holds exactly that: no address, and a security nobody has
-  // stated.
+  // Sent only when the pair changes. Two hooks drive it,
+  // NavigationStateChanged and DidChangeVisibleSecurityState, so both compare
+  // against the last pair sent. A fresh guest sends nothing.
   PageChanged(url.mojom.Url url, WebViewSecurity security);
 
-  // A key the page was sent and left alone, pressed with Ctrl, Alt or Meta
-  // held -- the chords a browser binds its own commands to.
+  // A key with Ctrl, Alt or Meta that the page did not handle, for browser
+  // shortcuts.
   //
-  // THE ONLY WAY A SHELL HEARS ONE. A key pressed in a guest is delivered to
-  // the guest's own widget, and an unhandled one comes back to the guest's
-  // WebContentsDelegate and stops there: there is no path from it into the
-  // embedder's renderer. So a browser window whose chrome binds Ctrl+R or
-  // Alt+Left has to be sent the press. The page had its turn first -- this is
-  // WebContentsDelegate::HandleKeyboardEvent, which content calls only for an
-  // event the page did not preventDefault -- so a site that binds a chord for
-  // itself keeps it, the way it does in Chrome.
+  // Unhandled guest keys stop at the guest's WebContentsDelegate, so the shell
+  // cannot see them otherwise. Comes from HandleKeyboardEvent, which runs only
+  // if the page did not call preventDefault, so sites keep their own chords.
   //
-  // CHORDS ONLY, and that is a decision about what the shell's document is
-  // shown. A plain key the page did not consume is most of what typing is, and
-  // forwarding it would copy every keystroke -- a password's included -- into
-  // a DOM event in another document for no command that needs it.
+  // Chords only, so ordinary typing, including passwords, is not copied into
+  // the shell's document.
   //
-  // `key` and `code` are the DOM's own spellings, the values a KeyboardEvent
-  // carries, so a shell matches this and a key pressed in its own chrome with
-  // one function.
+  // `key` and `code` are KeyboardEvent values.
   UnhandledKeyDown(string key, string code, bool alt_key, bool ctrl_key,
                    bool shift_key, bool meta_key, bool repeat);
 
-  // The page's zoom, as a factor: 1 is 100%.
+  // The page's zoom factor; 1 is 100%.
   //
-  // THE BROWSER'S ANSWER, from HostZoomMap, which keys it by host the way
-  // Chrome does -- so it moves when the shell sets it, when another window on
-  // the same site does, and when the page navigates to a site zoomed
-  // differently. SENT ONLY WHEN IT CHANGES, like the reports above, and a
-  // fresh guest sends nothing: it is at 100%, and so is an element that has
-  // heard nothing.
+  // From HostZoomMap, keyed by host as in Chrome, so it also changes when
+  // another window on the site zooms or the page navigates. Sent only when it
+  // changes; a fresh guest sends nothing.
   ZoomChanged(double factor);
 
-  // The icon the guest's page names for itself: of the `<link rel="icon">`s
-  // and touch icons it links -- or the `/favicon.ico` the renderer assumes for
-  // one that links none -- the one a launcher would draw best, an SVG before
-  // the biggest. An empty URL is a page that names none it can, and is sent
-  // as each new page commits, before its head has named any.
+  // The best icon the page declares: an SVG, else the largest of its icon and
+  // touch icon links, else `/favicon.ico`. Empty when it has none, and sent
+  // empty on each commit before the head is parsed.
   //
-  // WHAT A SIGNED-IN PAGE SAYS, which is the reason this exists: a site that
-  // shows its icon only to somebody signed in shows it here, where the guest
-  // is the user's own browser, and nowhere a compositor's anonymous fetch
-  // reaches. SENT ONLY WHEN IT CHANGES, like the reports above.
+  // Exists because some sites show their icon only to signed-in users, which
+  // the compositor's anonymous fetch cannot see. Sent only when it changes.
   FaviconChanged(url.mojom.Url icon);
 
-  // The user asked the page to zoom -- Ctrl and the wheel, over the page --
-  // and the page did not take the wheel for itself.
+  // The user pressed Ctrl+wheel and the page did not consume the wheel.
   //
-  // A REQUEST RATHER THAN A ZOOM, which is where this differs from Chrome:
-  // content hands Ctrl+wheel to WebContentsDelegate::ContentsZoomChange and
-  // the browser steps the zoom there. Here the step is the shell's, because
-  // the shell is what shows the user what it did -- so the wheel and Ctrl+plus
-  // take one path, and the indicator a shell draws for one it draws for both.
+  // A request, not a zoom: unlike Chrome, the shell applies the step so
+  // Ctrl+wheel and Ctrl+plus share one path and one indicator.
   ZoomRequested(bool zoom_in);
 
-  // The page needs a file picked: an `<input type="file">` clicked, or a
-  // download that needs somewhere to go.
+  // The page needs a file picked: an `<input type="file">` or a download.
   //
-  // THE SHELL DRAWS THE PICKER, NOT THE BROWSER. Chrome would open a dialog of
-  // its own here -- GTK's, through the desktop portal -- and a dialog the
-  // browser draws is desktop UI the shell did not choose, which is the rule a
-  // right click and a password bubble are already refused under. So the
-  // question travels, and the element turns it into an event a shell answers.
+  // The shell draws the picker, because the shell owns all desktop UI.
   //
-  // `accept` is extensions, lower case and without the dot: the browser has
-  // already turned `image/*` into them, because a picker has a name to match
-  // and nothing else. Empty is anything. `suggested_name` is a save's
-  // suggestion and empty otherwise. `home` is the absolute home directory,
-  // where a picker starts and what its `~` means: the renderer has no other
-  // way to learn it.
+  // `accept` is lower-case extensions without the dot; the browser expands
+  // MIME types like `image/*`. Empty accepts anything. `suggested_name` is set
+  // only for saves. `home` is the absolute home directory, which the renderer
+  // cannot learn otherwise.
   //
-  // `paths` ARE ABSOLUTE OR RELATIVE TO THE HOME -- relative is the vocabulary
-  // `found_files` already speaks, absolute is the rest of the filesystem a
-  // picker walks with WebViewGuest.ListDirectory. See
-  // components/domicile/browser/file_choice.h. Null is a cancel,
-  // and so is a shell that never took the event: the element answers for it.
-  // A pipe that closes first -- the element gone -- is a cancel too.
+  // `paths` are absolute or home-relative. See
+  // components/domicile/browser/file_choice.h. Null cancels, as does an
+  // unhandled event or a closed pipe.
   FileChooserRequested(WebViewFileChooserMode mode,
                        array<string> accept,
                        string suggested_name,
@@ -367,168 +241,121 @@ interface WebViewGuestClient {
   // The page called window.close() and its renderer allowed it, or an
   // extension's tabs.remove named it.
   //
-  // Sent only for the shell's own page, a <webview> with no `window`. The
-  // shell's document owns its guest, so removing the element ends it. An
-  // extension's popup closes itself this way. The browser closes browser
-  // windows itself; see browser_windows.mojom.
+  // Sent only for a shell-owned page (no `window`); the shell closes it by
+  // removing the element. The browser closes browser windows itself; see
+  // browser_windows.mojom.
   //
-  // WHICH CLOSES ARRIVE is the renderer's rule, not this one's: DOMWindow::Close
-  // lets a page not opened by script close only while its history is one
-  // entry long -- the HTML spec's "script-closable". A guest the user has
-  // navigated in is refused there, and nothing is sent.
+  // The renderer allows window.close() only for script-opened pages or ones
+  // with a single history entry, per the HTML spec.
   //
-  // One message per call. An event, so nothing is compared against what was
-  // last sent.
+  // Sent once per call.
   CloseRequested();
 
-  // What a find in the page has found: how many matches, and which of them is
-  // the one selected, counted from 1. Zero and zero is no find at all -- none
-  // asked for, one stopped, or one ended by the page it searched going away.
+  // Find results: the match count and the selected match, from 1. Zero and
+  // zero means no active find.
   //
-  // THE BROWSER'S COUNT, from FindRequestManager, which searches every frame
-  // in the guest -- a cross-site one in another process included -- and adds
-  // them up. The renderer the element lives in can see none of those frames,
-  // so this is the only way it learns the answer.
-  //
-  // SENT ONLY WHEN IT CHANGES, like the reports above. A find answers in
-  // several replies as the count is scoped frame by frame, and each that
-  // moves the pair is one message; a fresh guest sends nothing, because it
-  // has found nothing and neither has the element.
+  // From FindRequestManager, which counts across all frames, including
+  // cross-process ones the renderer cannot see. Sent only when the pair
+  // changes; a fresh guest sends nothing.
   FindChanged(int32 matches, int32 active_match);
 
-  // An extension asked for this browser window to be the one in front:
+  // An extension asked to bring this browser window to the front, via
   // `chrome.tabs.update(id, {active: true})` or `chrome.windows.update(id,
-  // {focused: true})`. Which window is in front is the shell's, so the browser
-  // raises nothing and asks. See //chrome/browser/domicile/domicile_desk.h.
-  //
-  // An event, like CloseRequested.
+  // {focused: true})`. The shell decides window order, so the browser only
+  // asks. See //chrome/browser/domicile/domicile_desk.h.
   FocusRequested();
 
-  // The size the page's content wants, in CSS pixels: its natural width
-  // (max-content, patch 0082) and its document's height at the width it is
-  // laid out at.
-  // What Chrome sizes an extension's popup bubble from, which a <webview>
-  // cannot tell by looking: the element is a box the shell sized, and the
-  // guest's document is laid out inside it.
+  // The content's preferred size in CSS pixels: its max-content width and its
+  // document height at the laid-out width.
   //
-  // SENT ONLY WHEN IT CHANGES, like the reports above; a fresh guest sends its
-  // first page's once that page has laid out.
+  // Used to size extension popups, as Chrome does. Sent only when it changes; a
+  // fresh guest sends it after its first layout.
   ContentSizeChanged(int32 width, int32 height);
 
-  // The user asked for a context menu (right click or menu key) and the page
-  // did not cancel its `contextmenu` event. The browser draws no menu (patch
-  // 0047), so the shell draws one from this. One message per menu.
+  // The user opened a context menu (right click or menu key) and the page did
+  // not cancel `contextmenu`. The browser draws no menu, so the shell draws
+  // one from this. Sent once per menu.
   ContextMenuRequested(WebViewContextMenu menu);
 };
 
-// One guest, for as long as the element that asked for it lives.
+// One guest, for the life of the element that requested it.
 //
-// A pipe of its own rather than more methods on WebViewGuestHost taking a
-// frame token: attaching DESTROYS the placeholder frame, so the token that
-// named the guest stops naming anything the moment the guest exists, and a
-// second src would have nothing to send.
+// A separate pipe because attaching destroys the placeholder frame, so its
+// token no longer identifies the guest.
 interface WebViewGuest {
-  // Load `url` in the guest, as a top-level navigation of the guest's own
-  // page. This is what `src` does, and what it does instead of navigating the
-  // frame the element owns. A domicile:// address is refused -- see
-  // components/domicile/browser/web_view_url.h -- and shows
-  // about:blank#blocked instead.
+  // Navigates the guest's page to `url`, as `src` does. domicile:// URLs are
+  // refused and show about:blank#blocked; see
+  // components/domicile/browser/web_view_url.h.
   Navigate(url.mojom.Url url);
 
-  // The four controls a chrome's address bar has, on the guest's own
-  // NavigationController.
+  // Address bar controls on the guest's NavigationController.
   //
-  // THEY HAVE TO COME OVER THIS PIPE, and that is the whole reason they are
-  // here rather than in the renderer. The element is a frame owner, so it has
-  // a placeholder frame with a History of its own -- and that frame has been
-  // on about:blank since it was made and was swapped out by the attach. The
-  // page the user is looking at is a WebContents in the browser process, whose
-  // history is a NavigationController this process cannot see. So the four
-  // travel, and what they buy by traveling is the half that gets BETTER: a
-  // guest has a history of its own, across process changes, where a frame
-  // shared the whole session's.
+  // They go over this pipe because the guest's history lives in the browser
+  // process. The element's own placeholder frame has a separate, unused
+  // history.
   //
-  // Nothing comes back from any of them, for the reason Navigate returns
-  // nothing: what happens next is a navigation, which is asynchronous however
-  // it was asked for, and there is nothing the element would do differently
-  // with an answer.
-  //
-  // A BACK WITH NOWHERE TO GO IS NOT AN ERROR, in any of the three that can
-  // have one: `NavigationControllerImpl::GoBack` returns without navigating
-  // when `CanGoBack()` is false, and an address bar pressing a button the user
-  // can see is the ordinary way that happens. WHETHER it can is now reportable:
-  // WebViewGuestClient above carries it, and a chrome that grays out a dead
-  // button reads `canGoBack` on the element rather than pressing to find out.
+  // Return nothing; navigation is asynchronous. Going back or forward with no
+  // entry is a no-op, not an error. Read `canGoBack` on the element to gray out
+  // buttons.
   GoBack();
   GoForward();
 
-  // Cancel whatever the guest is loading. `WebContents::Stop`, which is where
-  // a pending navigation lives -- the controller has no Stop of its own.
+  // Stops loading, via `WebContents::Stop`; NavigationController has no Stop.
   Stop();
 
-  // Load the current entry again. The repost warning a POST entry would raise
-  // has no dialog behind it yet: a guest refuses everything an embedder is
-  // asked for, which ROADMAP.md carries as its own gap.
+  // Reloads the current entry. A POST entry's repost warning has no dialog
+  // yet; see ROADMAP.md.
   Reload();
 
-  // Zoom the page to `factor`, where 1 is 100%. Applied through HostZoomMap,
-  // so it is the site's zoom rather than this window's -- Chrome's rule -- and
-  // it comes back as WebViewGuestClient.ZoomChanged.
+  // Sets the zoom factor; 1 is 100%. Applied through HostZoomMap, so it zooms
+  // the whole site, as in Chrome. Reported back as
+  // WebViewGuestClient.ZoomChanged.
   //
-  // WITHIN blink::kMinimumBrowserZoomFactor and kMaximumBrowserZoomFactor, and
-  // the element refuses anything else with a RangeError before it is sent. One
-  // that arrives here anyway did not come from the element, and is a bad
-  // message.
+  // Must be within blink::kMinimumBrowserZoomFactor and
+  // kMaximumBrowserZoomFactor. The element throws a RangeError first, so an
+  // out-of-range value here is a bad message.
   SetZoom(double factor);
 
-  // Find `text` in the page and select a match: the next one after the
-  // selection, or the one before it when `forward` is false. The answer comes
-  // back as WebViewGuestClient.FindChanged.
+  // Finds `text` and selects the next match, or the previous one when
+  // `forward` is false. Reported as WebViewGuestClient.FindChanged.
   //
-  // THE SAME TEXT AGAIN IS "FIND NEXT", and different text is a new search --
-  // Chrome's find bar's rule, kept here in the browser rather than in the
-  // element, because it is the browser that knows whether a session is still
-  // open: the page navigating ends one.
+  // Repeating the same text finds the next match; new text starts a new
+  // search, as in Chrome. The browser tracks this because navigation ends a
+  // find session.
   //
-  // NEVER EMPTY. Content refuses to search for nothing, and the element sends
-  // StopFinding for an empty string instead -- so one that arrives here did
-  // not come from the element, and is a bad message.
+  // Never empty: the element sends StopFinding instead, so an empty string is
+  // a bad message.
   Find(string text, bool forward);
 
-  // End the find: the highlights go, and the page is left with the match that
-  // was selected still selected when `keep_selection` is true -- Escape in a
-  // find bar -- or with nothing selected when it is false -- the text in it
-  // cleared. Reported as FindChanged(0, 0).
+  // Ends the find and clears highlights. `keep_selection` keeps the selected
+  // match (Escape); false clears it (text cleared). Reported as
+  // FindChanged(0, 0).
   StopFinding(bool keep_selection);
 
-  // The names in the directory at `path`, each a directory's ending in `/`,
-  // for the shell's picker to walk -- so a file the index never found is one
-  // it can still reach. `path` is absolute or relative to the home, as
-  // FileChooserRequested's answer is, and one that climbs with `..` is a bad
-  // message: the element refuses it before sending.
+  // Lists the directory at `path` for the shell's picker, directories ending
+  // in `/`. Lets the picker reach files outside the index. `path` is absolute
+  // or home-relative; one containing `..` is a bad message.
   //
-  // ONLY WHILE A FILE CHOOSER IS OPEN. The shell reads nothing of the
-  // filesystem beyond what a search finds except to answer a question a page
-  // asked, so with none waiting this answers null -- and null too for a path
-  // that is not a directory this process can read.
+  // Works only while a file chooser is open, so the shell cannot browse the
+  // filesystem otherwise. Returns null with none open, or if `path` is not a
+  // readable directory.
   ListDirectory(string path) => (array<string>? entries);
 
-  // The element took focus: the shell's `view.focus()`, or a click in the page.
-  // What makes this guest the active tab to chrome.tabs -- the browser has no
-  // notification of its own when an inner WebContents gains focus, and the
-  // element is where the shell's focus lands. See
+  // The element gained focus, by `view.focus()` or a click.
+  //
+  // Makes this guest the active tab for chrome.tabs. The browser gets no
+  // notification when an inner WebContents gains focus. See
   // HTMLWebViewElement::SetFocused.
   Focused();
 
-  // Do `action` for menu `menu`, on that menu's link, image and click.
+  // Runs `action` for context menu `menu`.
   // - An id older than the newest menu is a race and is dropped.
-  // - An id never sent, or an action the menu does not offer (a link action
-  //   with no link), is a bad message. The element refuses both first.
+  // - An unknown id, or an action the menu does not offer (e.g. a link action
+  //   with no link), is a bad message. The element rejects both first.
   RunContextMenuAction(int32 menu, WebViewContextMenuAction action);
 
-  // Open DevTools on the page in a new browser window at DevTools' address,
-  // which the browser attaches to the page. If DevTools is already open, its
-  // window's element gets FocusRequested instead. See
+  // Opens DevTools for the page in a new browser window. If DevTools is
+  // already open, its window's element gets FocusRequested instead. See
   // //chrome/browser/domicile/domicile_devtools.h.
   Inspect();
 };

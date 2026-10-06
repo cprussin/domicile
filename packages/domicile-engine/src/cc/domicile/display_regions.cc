@@ -31,8 +31,7 @@ std::optional<gfx::Rect> InLayer(const gfx::Rect& in_target,
   return to_target.InverseMapRect(in_target);
 }
 
-// What is left of `from` once every one of `cut` is taken out of it, as
-// rectangles apart.
+// `from` minus `cut`, as non-overlapping rectangles.
 std::vector<gfx::Rect> Without(const std::vector<gfx::Rect>& from,
                                const gfx::Rect& cut) {
   std::vector<gfx::Rect> left;
@@ -42,7 +41,7 @@ std::vector<gfx::Rect> Without(const std::vector<gfx::Rect>& from,
       left.push_back(rect);
       continue;
     }
-    // Above and below the cut across the whole width, then beside it.
+    // Full-width bands above and below the cut, then the sides.
     const gfx::Rect bands[] = {
         gfx::Rect(rect.x(), rect.y(), rect.width(), gone.y() - rect.y()),
         gfx::Rect(rect.x(), gone.bottom(), rect.width(),
@@ -154,7 +153,7 @@ std::vector<DomicileCoveragePiece> DomicileCoverage(
       if (!in_layer.has_value()) {
         continue;
       }
-      // What of the region is still unclaimed is the rest's overlap with it.
+      // Earlier regions win overlaps, so only claim what is still in `rest`.
       for (const gfx::Rect& unclaimed : rest) {
         const gfx::Rect piece = gfx::IntersectRects(unclaimed, *in_layer);
         if (!piece.IsEmpty()) {

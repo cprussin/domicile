@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
-"""The page guard-webview-notifications.sh asks its question with.
+"""Serves the page guard-webview-notifications.sh loads.
 
-`/asks?permission=<name>` is a page that asks the Permissions API about
-`<name>` and paints itself the guard's color when the answer is "granted" --
-and white otherwise, which is no color the probe looks for. `none` is the
-control's first leg: a page that paints the color without asking, so the
-harness is shown able to see it at all.
+`/asks?permission=<name>` asks the Permissions API about `<name>`. It paints
+the guard's color if the answer is "granted", and white otherwise. `none`
+paints the color without asking, so the control can show the probe sees it.
 """
 
 import argparse
@@ -15,10 +13,9 @@ from urllib.parse import parse_qs, urlsplit
 
 ASKS = "/asks"
 
-# The answer is painted rather than logged: a probe reading pixels needs no
-# channel back out of the guest. `navigator.permissions.query` is what a site
-# reads before it ever calls Notification.requestPermission(), and it reads the
-# same content setting the request would.
+# The answer is painted, so the probe needs no channel out of the guest.
+# `navigator.permissions.query` reads the same content setting that
+# Notification.requestPermission() would.
 PAGE = """<!doctype html>
 <html lang="en">
   <head>
@@ -55,9 +52,7 @@ PAGE = """<!doctype html>
 </html>
 """
 
-# The names this page will ask about. Anything else is the guard invoking it
-# wrongly, and a page that asked about it would measure something nobody
-# meant to.
+# The names this page asks about. Anything else is a harness bug.
 PERMISSIONS = {"none", "notifications", "geolocation"}
 
 
@@ -98,8 +93,8 @@ def main():
     arguments = parser.parse_args()
 
     Asks.color = arguments.color
-    # 127.0.0.1, which is also what makes the page a secure context: the
-    # Permissions API answers nothing about notifications to an insecure one.
+    # 127.0.0.1 makes the page a secure context, which the Permissions API
+    # requires for notifications.
     server = ThreadingHTTPServer(("127.0.0.1", arguments.port), Asks)
     print("serving %s on 127.0.0.1:%d" % (ASKS, server.server_address[1]), flush=True)
     server.serve_forever()

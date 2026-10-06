@@ -1,30 +1,26 @@
 #!/usr/bin/env bash
-# Chrome's own shortcuts, pressed at a shell that handles none of them.
+# Checks that Chrome's shortcuts do nothing when pressed at a shell that does
+# not handle them.
 #
 #   nix develop .#full --command \
 #     ./packages/domicile-engine/scripts/guard-shell-shortcuts.sh /build/chromium/src
 #
-# Headless and software-composited, like the webview guards: nothing here is
-# measured in pixels.
+# Headless and software-composited; nothing is measured in pixels.
 #
-# WHY THIS EXISTS. A shell runs in a Chrome app window, and a key the shell did
-# not preventDefault fell through to that window's accelerators: Ctrl+R and F5
-# reloaded the desktop, Alt+Left took it back, F11 took a CRTC-sized window out
-# of fullscreen, Ctrl+= zoomed it, Ctrl+W closed it and Ctrl+Shift+Q quit it.
-# Patch 0047 leaves every such key unhandled.
+# Without patch 0047, an unhandled key reaches the app window's accelerators:
+# Ctrl+R and F5 reload the desktop, Alt+Left goes back, F11 leaves fullscreen,
+# Ctrl+= zooms, Ctrl+W closes and Ctrl+Shift+Q quits.
 #
-# WHAT IT ASSERTS, in order:
+# Asserts, in order:
 #
-#   the shell loaded                  or nothing was pressed at a shell
+#   the shell loaded
 #   the browser still answers         Ctrl+W and Ctrl+Shift+Q did nothing
-#   every chord reached the shell     so each one came back unhandled to the
-#                                     delegate the accelerators ran from
+#   every chord reached the shell     each returned unhandled to the delegate
 #   the shell loaded once             Ctrl+R and F5 did nothing
 #   no popstate and no resize         Alt+Left, F11 and Ctrl+= did nothing
 #
-# THE CLAIM IS AN ABSENCE, so NEGATIVE=1 keeps the setup and has the browser
-# reload the shell over the debugging port where the chords would have gone. A
-# guard that cannot see that reload cannot see one a key caused either.
+# NEGATIVE=1 reloads the shell over the debugging port instead of pressing
+# keys, to prove the guard can see a reload.
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
@@ -43,10 +39,9 @@ fi
 
 NEGATIVE="${NEGATIVE:-0}"
 
-# Each chord as `code key evdev vkey modifiers...`: a DOM code and key for the
-# event, evdev for the native keycode (without one content marks the event
-# skip_if_unhandled and it never reaches a delegate), and the VKEY Chrome's
-# accelerator table is keyed on.
+# Each chord is `code key evdev vkey modifiers...`. The evdev code is required:
+# without a native keycode, content marks the event skip_if_unhandled and it
+# never reaches the delegate. Chrome's accelerator table is keyed on the VKEY.
 CHORDS=(
   "Equal = 13 187 --ctrl"
   "F11 F11 87 122"
@@ -56,7 +51,7 @@ CHORDS=(
   "KeyW w 17 87 --ctrl"
   "KeyQ Q 16 81 --ctrl --shift"
 )
-# And a plain key afterward: a browser that answers it is still running.
+# A plain key afterward, to check the browser is still running.
 AFTER="KeyA a 30 65"
 
 OUT="${OUT:-out/Domicile}"
@@ -65,8 +60,7 @@ PROFILE="${PROFILE:-/tmp/domicile-shell-shortcuts-profile}"
 WIDTH="${WIDTH:-1024}"
 HEIGHT="${HEIGHT:-768}"
 FOR_SECONDS="${FOR_SECONDS:-60}"
-# A reload, a history step and a resize are each a task or two away from the
-# key; this is a flush, not a race.
+# Time for any reload, history step or resize to show up.
 SETTLE_SECONDS="${SETTLE_SECONDS:-5}"
 
 WHICH=""
@@ -104,8 +98,7 @@ wait_for_line() { # $1 tries, $2 pattern, $3 file
   return 1
 }
 
-# `--app` because it is what `domicile` runs, and it is the window whose
-# accelerators this is about.
+# `--app`, as `domicile` runs it, since its accelerators are under test.
 rm -f "$ENGINE_LOG"
 "$CHROMIUM/$OUT/chrome" \
   --ozone-platform=headless \
@@ -146,8 +139,8 @@ if [ "$NEGATIVE" = "1" ]; then
 else
   for chord in "${CHORDS[@]}"; do
     echo "pressing $chord"
-    # Not a reading: a chord that closed the browser errors here too, and the
-    # key after them is what tells that apart.
+    # Not a verdict: a chord that closed the browser also errors. The key
+    # pressed afterward tells the two apart.
     press "$chord" || echo "pressing $chord came back an error; see $KEY_LOG" >&2
   done
 fi
@@ -159,8 +152,7 @@ PRESSED_AFTER=0
 press "$AFTER" && PRESSED_AFTER=1
 
 LOADS=$(grep -c "GUARD loaded" "$ENGINE_LOG")
-# From the first key on: a headless window settles its viewport once as the
-# shell loads, and that `resized` is nobody's chord.
+# Count only after the first key: a headless window resizes once on load.
 MOVED=$(awk '/GUARD keydown/ { keyed = 1 } keyed && /GUARD (popstate|resized)/ { n++ } END { print n + 0 }' "$ENGINE_LOG")
 SAW_LOADED=$([ "$LOADS" -ge 1 ] && echo 1 || echo 0)
 HEARD_ALL=$([ "$HEARD" -ge "${#CHORDS[@]}" ] && echo 1 || echo 0)
@@ -169,7 +161,7 @@ echo
 echo "loaded=$SAW_LOADED heard=$HEARD/${#CHORDS[@]} after=$PRESSED_AFTER loads=$LOADS moved=$MOVED"
 echo
 
-# The verdict, run directly by `scripts/test-shell-shortcuts-guard.sh`.
+# scripts/test-shell-shortcuts-guard.sh runs this block directly.
 FAILURE=""
 PASSED=""
 if [ "$SAW_LOADED" != "1" ]; then

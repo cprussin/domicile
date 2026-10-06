@@ -20,24 +20,17 @@ class ExceptionState;
 class HTMLWebViewElement;
 class ScriptState;
 
-// The page inside a <webview> needs a file picked, and waits for the shell to
-// say which.
+// Asks the shell to pick a file for the page inside a <webview>.
 //
-// A QUESTION RATHER THAN A NOTICE, which is what sets it apart from every
-// other event the element dispatches: it carries the browser's reply callback,
-// and the page's `<input type="file">` -- or a download -- is held until
-// `choose()` or `cancel()` runs it. Exactly once: the browser's listener
-// expects one answer, so a second is an InvalidStateError here rather than a
-// message the browser has to decide what to do with.
-//
-// CANCELABLE, AND `preventDefault()` IS HOW A SHELL TAKES IT. One nobody takes
-// is canceled by the element as soon as the dispatch returns -- see
-// HTMLWebViewElement::FileChooserRequested -- so a shell that does not listen
-// is a desktop where uploads are refused, not one where the page hangs.
-//
-// HELD BY THE ELEMENT UNTIL ANSWERED, so that a shell that takes one and puts
-// it aside to draw a picker is not racing the garbage collector: an event
-// collected unanswered would drop the browser's callback without running it.
+// - Carries the browser's reply callback. The page's file input or download
+//   waits until `choose()` or `cancel()` runs it. The browser expects one
+//   answer, so a second throws InvalidStateError.
+// - A shell claims it with `preventDefault()`. The element cancels an
+//   unclaimed one after dispatch (HTMLWebViewElement::FileChooserRequested),
+//   so a shell that does not listen refuses uploads instead of hanging the
+//   page.
+// - The element holds it until answered. Garbage collection would otherwise
+//   drop the callback unrun.
 class CORE_EXPORT DomicileFileChooserEvent final : public Event {
   DEFINE_WRAPPERTYPEINFO();
 
@@ -65,8 +58,7 @@ class CORE_EXPORT DomicileFileChooserEvent final : public Event {
                                              ExceptionState&);
   void cancel(ExceptionState&);
 
-  // Cancel it if nobody has answered, which is what the element does for an
-  // event no shell took.
+  // Called by the element for an event no shell claimed.
   void CancelIfUnanswered();
 
   const AtomicString& InterfaceName() const override;
@@ -80,9 +72,9 @@ class CORE_EXPORT DomicileFileChooserEvent final : public Event {
   Vector<String> accept_;
   String suggested_name_;
   String home_;
-  // Null once run: the answer has been given.
+  // Null once answered.
   Answer answer_;
-  // Told when the answer is given, so it stops holding this.
+  // Notified on answer so it releases this event.
   Member<HTMLWebViewElement> owner_;
 };
 

@@ -10,8 +10,8 @@ namespace domicile {
 namespace {
 
 TEST(BrowserPagesTest, APageChromeServesItselfIsOne) {
-  // chrome://history is the one that took a desktop down: HistoryUI looks its
-  // tab up unconditionally, and a <webview>'s guest is in no tab strip.
+  // chrome://history crashes in a guest: HistoryUI looks up its tab, and a
+  // guest has none.
   EXPECT_TRUE(IsBrowserPage(GURL("chrome://history/")));
   EXPECT_TRUE(IsBrowserPage(GURL("chrome://settings/clearBrowserData")));
   EXPECT_TRUE(IsBrowserPage(GURL("chrome-untrusted://print/")));
@@ -23,9 +23,8 @@ TEST(BrowserPagesTest, ASiteIsNot) {
 }
 
 TEST(BrowserPagesTest, AnExtensionsPageIsNot) {
-  // A tray's popup is one, and so is the PDF viewer -- which loads its own
-  // pieces from chrome://resources, and keeps working because those are
-  // subresources rather than a page in the window.
+  // Covers tray popups and the PDF viewer. The viewer's chrome://resources
+  // loads are subresources, so they are not checked.
   EXPECT_FALSE(IsBrowserPage(
       GURL("chrome-extension://mhjfbmdgcfjbbpaeojofohoemgfcjjof/index.html")));
 }

@@ -1,20 +1,13 @@
 #!/usr/bin/env bash
-# A browser window's back, forward, stop and reload, driven at the guest rather
-# than at the placeholder frame they used to reach.
+# Guard: back, forward, stop and reload on a browser window act on the guest.
 #
-# Headless and software-composited like the other <webview> guards: what this
-# reads is the ORDER of the pages a guest showed, out of the browser's own log,
-# so there are no pixels and no client. Each step waits for the element to say
-# it landed, so a healthy run is seconds; the control is longer, because it has
-# to watch the steps it does not drive and wait out the slow page.
+# Headless and software-composited; it reads the order of the pages the guest
+# showed from the browser log.
 #
-# Its control is not the <iframe> the other two use: an <iframe> has no
-# goBack() at all, so that run would end on a TypeError rather than on a
-# reading. This one runs the same element, the same guest and the same
-# navigations and CALLS NONE OF THE FOUR. Then a third page appearing means a
-# guest moves back on its own — and the positive run's third page need not have
-# been goBack() — and the slow page arriving is what makes the positive run's
-# not showing it a measurement of stop().
+# Control: the same element, guest and navigations with none of the four
+# calls. An <iframe> has no goBack(), so it cannot serve as the control. A
+# third page appearing would mean the guest goes back on its own. The slow page
+# arriving shows that its absence in the positive run is due to stop().
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

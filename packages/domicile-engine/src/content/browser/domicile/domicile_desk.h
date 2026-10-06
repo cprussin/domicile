@@ -13,13 +13,13 @@
 
 namespace content {
 
-// The compositor stated a layout. From `SetDisplayLayout` in
+// Records the compositor's layout. Called from `SetDisplayLayout` in
 // domicile_frame_sink_broker.cc.
 void DomicileDeskLaidOut(std::vector<DomicileDeskDisplay> lit);
 
-// What `SetDomicileDeskScreenInfos` told the contents `view` is in, if
-// anything, moved to where the contents' window is on the engine's screen.
-// Read by `RenderWidgetHostViewBase::GetNewScreenInfosForUpdate`.
+// The screen infos `SetDomicileDeskScreenInfos` set for the contents holding
+// `view`, offset to the contents' window position on screen. Read by
+// `RenderWidgetHostViewBase::GetNewScreenInfosForUpdate`.
 std::optional<display::ScreenInfos> DomicileDeskScreenInfosFor(
     gfx::NativeView view);
 

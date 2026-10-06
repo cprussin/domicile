@@ -21,14 +21,13 @@ void ExternalSurfaceProvider::Bind(
   receivers_.Add(this, std::move(receiver));
 }
 
-// Nothing is checked here, and that is the design rather than an omission. The
-// page names a parent frame sink and allocates a LocalSurfaceId; both are
-// things it gives away rather than things it takes. What is *not* checked, and
-// should be before this is anything but a spike, is that the renderer owns the
-// parent frame sink it names — the check
-// content::EmbeddedFrameSinkProviderImpl makes against its renderer_client_id_.
-// Making it needs the calling renderer's child process id, which means binding
-// this through RenderProcessHostImpl rather than as a free function.
+// The page only grants access here: it names its parent frame sink and
+// allocates the LocalSurfaceId.
+//
+// TODO: check that the renderer owns the parent frame sink, as
+// content::EmbeddedFrameSinkProviderImpl does with renderer_client_id_. This
+// needs the renderer's child process id, so the binding must go through
+// RenderProcessHostImpl.
 void ExternalSurfaceProvider::Embed(
     const std::string& app_id,
     const viz::FrameSinkId& parent_frame_sink_id,

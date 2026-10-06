@@ -15,12 +15,8 @@
 #include "base/posix/eintr_wrapper.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/task/sequenced_task_runner.h"
-// NOT JUST `..._thread_mode.h`. `CreateSingleThreadTaskRunner` answers a
-// `scoped_refptr<base::SingleThreadTaskRunner>` and `Bus::Options` takes a
-// `scoped_refptr<base::SequencedTaskRunner>`; the upcast between the two needs
-// the DERIVED class complete, and every header that would otherwise reach here
-// -- `dbus/bus.h`, `base/task/sequenced_task_runner.h` -- only forward-declares
-// it.
+// Needed for the upcast to `scoped_refptr<base::SequencedTaskRunner>` in
+// `Bus::Options`; other headers only forward-declare it.
 #include "base/task/single_thread_task_runner.h"
 #include "base/task/single_thread_task_runner_thread_mode.h"
 #include "base/task/task_traits.h"
@@ -48,17 +44,15 @@ constexpr char kPauseDeviceComplete[] = "PauseDeviceComplete";
 constexpr char kSignalPauseDevice[] = "PauseDevice";
 constexpr char kSignalResumeDevice[] = "ResumeDevice";
 
-// The session's own properties, which is where the answer to "is this console
-// in front of the user" lives. `DrmVtSwitcher` reads the same one for the
-// display; see the header for why the subscription is not shared.
+// The session's `Active` property. `DrmVtSwitcher` reads it too; see the
+// header for why the subscription is separate.
 constexpr char kPropertiesInterface[] = "org.freedesktop.DBus.Properties";
 constexpr char kPropertiesGet[] = "Get";
 constexpr char kPropertiesChanged[] = "PropertiesChanged";
 constexpr char kActive[] = "Active";
 
-// What a session that could not be taken leaves the desktop as, and what to do
-// about it. Named rather than described, because the machine this fails on is
-// the one with nothing to read the message with.
+// Explains a failure to take the session and how to fix it, for the fatal
+// log.
 constexpr char kNoSession[] =
     "Domicile takes every keyboard and mouse from logind's "
     "org.freedesktop.login1.Session, because no ACL covers an input device "
@@ -69,7 +63,7 @@ constexpr char kNoSession[] =
     "process at a time, so a display manager or another compositor still "
     "running on this VT is enough to refuse it.";
 
-// The two numbers every one of logind's device calls and signals starts with.
+// Reads the major and minor that start every logind device call and signal.
 DeviceNumber ReadDeviceNumber(dbus::MessageReader* reader) {
   DeviceNumber number;
   if (!reader->PopUint32(&number.major) || !reader->PopUint32(&number.minor)) {
@@ -94,39 +88,15 @@ DrmLogindInput::DrmLogindInput()
   dbus::Bus::Options options;
   options.bus_type = dbus::Bus::SYSTEM;
   options.connection_type = dbus::Bus::PRIVATE;
-  // A thread-pool worker installs a `FileDescriptorWatcher` for the scope
-  // tasks run in (`base/task/thread_pool/worker_thread.cc`), which is what the
-  // bus needs to watch its socket and what the evdev thread does not have. The
-  // browser's shared bus is not reused either: its origin is the UI thread,
-  // and taking it over from here would move the thread every other caller's
-  // signals are delivered on.
+  // A thread-pool worker has the `FileDescriptorWatcher` the bus needs, which
+  // the evdev thread lacks. The browser's shared bus has the UI thread as its
+  // origin, so it is not reused.
   //
-  // DEDICATED, AND THIS IS THE ONE BUS THAT MAKES IT NON-NEGOTIABLE. The calls
-  // below are synchronous because `OpenInputDevice` has to answer with a
-  // descriptor, so `CallAndBlock` posts `CallMethodAndBlock` to this thread
-  // and waits -- and libdbus does not return to the message loop until logind
-  // answers. A `SHARED` runner puts every bus with these traits on that one
-  // thread, so for the length of every round trip made here NO OTHER BUS CAN
-  // READ ITS SOCKET.
-  //
-  // What that starves is a console switch. logind force-pauses every device at
-  // once, and each one costs three blocking round trips from the evdev thread
-  // -- `ReleaseDevice`, `TakeDevice`, `Active` -- which on a laptop with
-  // fifteen input devices is some forty-five, back to back. `DrmVtSwitcher`
-  // hears that the session went inactive only through `PropertiesChanged` on
-  // ITS bus, and shared, that signal queues behind the whole storm. A
-  // relinquish that lands late is a GPU process still committing flips into a
-  // card whose console is somebody else's: the commit fails, `PageFlipWatchdog`
-  // arms, and fifteen seconds later it is `LOG(FATAL) ... Crashing GPU
-  // process.` Losing that race depends on how fast logind services forty-five
-  // calls, which is why a desktop wedged sometimes on the way out and
-  // sometimes on the way back rather than every time.
-  //
-  // A thread is the cheap half of the answer and not the whole of it: the
-  // evdev thread still stops for the length of the storm, so input is frozen
-  // across a switch either way. Unblocking THAT means making
-  // `InputDeviceOpener::OpenInputDevice` asynchronous, which is a change to a
-  // contract Chromium owns -- see the header.
+  // `DEDICATED`, not `SHARED`: the blocking calls here hold the thread until
+  // logind answers. On a shared thread, a console switch's ~45 calls would
+  // delay `DrmVtSwitcher`'s `PropertiesChanged`, and the GPU process would
+  // crash on the page-flip watchdog. See
+  // docs/TTY-SESSION.md#the-d-bus-thread.
   options.dbus_task_runner = base::ThreadPool::CreateSingleThreadTaskRunner(
       {base::MayBlock(), base::TaskPriority::USER_BLOCKING},
       base::SingleThreadTaskRunnerThreadMode::DEDICATED);
@@ -136,9 +106,8 @@ DrmLogindInput::DrmLogindInput()
       bus_->GetObjectProxy(kLogind, dbus::ObjectPath(kManagerPath));
   dbus::MethodCall find_session(kManagerInterface, kGetSessionByPID);
   dbus::MessageWriter writer(&find_session);
-  // Zero is logind's word for "whoever is asking", answered from the D-Bus
-  // sender's credentials -- so this needs neither `XDG_SESSION_ID` nor a pid
-  // that means the same thing on both sides of a namespace.
+  // Zero means the caller, resolved from D-Bus credentials, so this needs
+  // neither `XDG_SESSION_ID` nor a namespace-safe pid.
   writer.AppendUint32(0);
 
   std::unique_ptr<dbus::Response> found = CallAndBlock(manager, &find_session);
@@ -155,17 +124,9 @@ DrmLogindInput::DrmLogindInput()
   }
   session_ = bus_->GetObjectProxy(kLogind, session_path);
 
-  // SUBSCRIBED BEFORE CONTROL IS TAKEN. logind starts sending this session's
-  // device signals the moment it has control, and a `PauseDevice` that arrives
-  // before the subscription is one nothing answers -- which holds the console
-  // switch open until logind's own timeout.
-  //
-  // AND THE ACTIVATION IS ONE OF THEM. A "force" pause revokes every
-  // descriptor this session has and no `ResumeDevice` is promised afterwards,
-  // so the session's own `Active` property is what says the devices can be
-  // taken again. Subscribed here for the same reason as the other two: an
-  // activation that arrives before the subscription is one nothing answers,
-  // and nothing else will ask.
+  // Subscribe before taking control, which starts device signals. An
+  // unanswered `PauseDevice` stalls the console switch until logind's timeout,
+  // and a missed `Active` change leaves revoked devices dead.
   if (!ConnectAndBlock(kSessionInterface, kSignalPauseDevice,
                        base::BindRepeating(&DrmLogindInput::OnPauseDevice,
                                            base::Unretained(this))) ||
@@ -183,9 +144,8 @@ DrmLogindInput::DrmLogindInput()
 
   dbus::MethodCall take_control(kSessionInterface, kTakeControl);
   dbus::MessageWriter control_writer(&take_control);
-  // Not forced. Taking control away from whatever holds it would leave two
-  // processes believing they own the session's devices, and the other one is
-  // as likely to be the desktop the user is actually looking at.
+  // Not forced, so we never take devices from another process that thinks it
+  // owns the session.
   control_writer.AppendBool(false);
   if (!CallAndBlock(session_, &take_control)) {
     LOG(FATAL) << "logind refused control of session " << session_path.value()
@@ -194,9 +154,7 @@ DrmLogindInput::DrmLogindInput()
 }
 
 DrmLogindInput::~DrmLogindInput() {
-  // Explicitly, and before the bus: `devices_`' own destructor would release
-  // too, but it runs after this body, and by then `ReleaseDevice` would be
-  // asked to talk over a bus this has already shut down.
+  // Release now: `devices_`' destructor runs after the bus shuts down below.
   devices_.Release();
 
   dbus::MethodCall release_control(kSessionInterface, kReleaseControl);
@@ -210,11 +168,8 @@ DrmLogindInput::~DrmLogindInput() {
 
 base::ScopedFD DrmLogindInput::OpenDeviceFd(
     const OpenInputDeviceParams& params) {
-  // A REOPEN ASKED FOR BY A RESUME, AND IT MUST NOT ASK logind AGAIN.
-  // `TakeDevice` for a device this session already holds is refused, so the
-  // descriptor the `ResumeDevice` signal carried is the only one there will
-  // be. Every ordinary open -- the first scan, a real hotplug -- finds nothing
-  // waiting here and falls through.
+  // A reopen after `ResumeDevice` uses the parked descriptor, since
+  // `TakeDevice` refuses a held device. Ordinary opens find nothing parked.
   base::ScopedFD resumed = devices_.Resumed(params.path);
   if (resumed.is_valid()) {
     VLOG(1) << "domicile: " << params.path.value()
@@ -229,23 +184,12 @@ base::ScopedFD DrmLogindInput::OpenDeviceFd(
     return base::ScopedFD();
   }
 
-  // TWICE AT MOST, AND THE SECOND TIME ONLY FOR A RACE. logind can answer
-  // `TakeDevice` with a descriptor it has already revoked -- the `inactive`
-  // half of the reply below -- and the fix for that is an `Active` edge, which
-  // `OnPropertiesChanged` follows. But logind emits `PropertiesChanged` on a
-  // CHANGE, and a session that was already in front of the user when this scan
-  // ran never changes: there is no edge, `Reclaim` is never called, and every
-  // device stays revoked for the life of the process. That is a desktop that
-  // draws and is deaf from its first frame, with no keyboard to leave the
-  // console with either. So an inactive answer is checked against the session
-  // instead of believed, and a stale one is simply asked again.
+  // At most two tries. An inactive reply is normally fixed by the next
+  // `Active` change, but if the session is already active no change will
+  // come, so check the session and retry once.
   for (int attempt = 0; attempt < 2; ++attempt) {
-    // GIVEN BACK BEFORE IT IS ASKED FOR AGAIN. `TakeDevice` for a device this
-    // session still holds is refused with `Device is taken`, and a descriptor
-    // logind has revoked is replaced by nothing else -- so a device that is
-    // here for a second time (a "force" pause, an activation after one, or
-    // the retry below) has to go back to logind first. An ordinary open holds
-    // nothing and this is a no-op for it.
+    // Release first: `TakeDevice` refuses a held device ("Device is taken").
+    // A no-op on a first open.
     devices_.GiveBack(*number);
 
     dbus::MethodCall take_device(kSessionInterface, kTakeDevice);
@@ -266,15 +210,8 @@ base::ScopedFD DrmLogindInput::OpenDeviceFd(
       return base::ScopedFD();
     }
 
-    // THE REPLY IS `hb` AND THE `b` IS `inactive`, NOT `active`. logind writes
-    // `!sd->active` there, and it is not decoration: for a session that is not
-    // the one in front of the user, `session_device_new` opens the node with
-    // `session_device_open`'s `active` argument false, which `EVIOCREVOKE`s
-    // the descriptor before handing it over. logind's own comment there says
-    // the caller must not trust the descriptor and must read this boolean
-    // instead. Popping only the descriptor is how a startup scan that lands
-    // during an inactive moment ends up with a desktop full of dead devices
-    // and no complaint anywhere.
+    // The reply is `hb`, where `b` is `inactive`. For an inactive session
+    // logind returns an already-revoked descriptor.
     bool inactive = false;
     if (!reader.PopBool(&inactive)) {
       LOG(FATAL) << "logind answered " << kTakeDevice << " for "
@@ -283,10 +220,8 @@ base::ScopedFD DrmLogindInput::OpenDeviceFd(
     }
 
     if (!inactive) {
-      // THE DESCRIPTOR IS ANOTHER PROCESS'S OPEN, so the flags the evdev
-      // converters need are asserted here rather than assumed: a blocking
-      // read on this thread is every input device in the desktop stopping
-      // together.
+      // logind opened this descriptor, so set non-blocking here. A blocking
+      // read would stall every input device.
       if (HANDLE_EINTR(fcntl(fd.get(), F_SETFL, O_NONBLOCK)) < 0) {
         PLOG(ERROR) << "cannot make " << params.path.value()
                     << " non-blocking";
@@ -297,18 +232,12 @@ base::ScopedFD DrmLogindInput::OpenDeviceFd(
       return fd;
     }
 
-    // RECORDED, NOT TRUSTED, AND RECORDED BEFORE THE RETRY. logind holds the
-    // device for this session either way, so it is still owed back; what it
-    // is not is something to build a converter on. Recording it is also what
-    // makes the `GiveBack` at the top of the next turn release it rather than
-    // find nothing. The descriptor goes out of scope here, unread by anyone.
+    // Record it as revoked: logind still holds it for us, and the retry's
+    // `GiveBack` must find it. The descriptor is dropped.
     devices_.Take(*number, params.id, params.path, DeviceLiveness::kRevoked);
 
-    // ASKED, NOT ASSUMED. If logind says this session is in front of the user
-    // right now, the answer above was stale and there is no edge coming to
-    // correct it -- so the one retry is spent here. If the session really is
-    // in the background, the device is correctly parked and the activation
-    // will reclaim it.
+    // If the session is active, the reply was stale and no `Active` change
+    // will fix it, so retry. Otherwise activation reclaims the device.
     if (attempt == 0 && SessionIsActive()) {
       LOG(ERROR) << "logind handed over " << params.path.value() << " ("
                  << number->major << ":" << number->minor
@@ -318,8 +247,7 @@ base::ScopedFD DrmLogindInput::OpenDeviceFd(
       continue;
     }
 
-    // VERBOSE, NOT AN ERROR: every console switch away lands here once per
-    // device, and the activation that follows takes each one back.
+    // Not an error: every switch away lands here once per device.
     VLOG(1) << "domicile: logind handed over " << params.path.value() << " ("
             << number->major << ":" << number->minor
             << ") revoked, because this session is not the one in front of "
@@ -327,8 +255,7 @@ base::ScopedFD DrmLogindInput::OpenDeviceFd(
     return base::ScopedFD();
   }
 
-  // Both turns answered inactive with the session active: logind is saying two
-  // things that cannot both be true, and a third ask would not settle it.
+  // Both tries were inactive while the session is active; give up.
   LOG(ERROR) << "logind kept handing over " << params.path.value()
              << " revoked while saying this session is active, so this device "
                 "stays dead. `loginctl session-status` names what else holds "
@@ -337,10 +264,7 @@ base::ScopedFD DrmLogindInput::OpenDeviceFd(
 }
 
 void DrmLogindInput::ReopenDevice(int id, const base::FilePath& path) {
-  // THE FACTORY OWNS THIS OBJECT, so it is there whenever a signal can be
-  // delivered -- but it hands the callback over after construction, because
-  // an opener is built to be given to the factory and cannot be given the
-  // factory first.
+  // The factory owns this opener and sets the callback after construction.
   reopen_device().Run(id, path);
 }
 
@@ -350,8 +274,7 @@ std::unique_ptr<dbus::Response> DrmLogindInput::CallAndBlock(
   std::unique_ptr<dbus::Response> response;
   base::WaitableEvent answered;
 
-  // Unretained on stack storage is what the wait makes safe: nothing here
-  // returns until the task has signaled, so the pointers outlive it.
+  // Unretained is safe: the wait below outlives the task.
   bus_->GetDBusTaskRunner()->PostTask(
       FROM_HERE,
       base::BindOnce(
@@ -415,10 +338,8 @@ void DrmLogindInput::OnPauseDevice(dbus::Signal* signal) {
       return;
 
     case PauseAnswer::kDeviceIsRevoked:
-      // THE LINE THAT WAS MISSING, AND THE REASON THIS COST A REBOOT. A
-      // desktop whose every keyboard and every trackpad stopped in the same
-      // instant said nothing at all in its own log. Verbose rather than an
-      // error, because every console switch away is one of these per device.
+      // Logged so a loss of all input is visible. Verbose, because every
+      // switch away sends one per device.
       VLOG(1) << "domicile: logind force-paused input device " << number.major
               << ":" << number.minor
               << "; taking it back when the session goes Active";
@@ -428,13 +349,8 @@ void DrmLogindInput::OnPauseDevice(dbus::Signal* signal) {
       break;
   }
 
-  // ONLY A SEAT WITHOUT VTs EVER GETS HERE, and every laptop has VTs -- see
-  // `PauseAnswer::kCompleteIt`. It is a blocking call made from a signal
-  // callback, which is safe and not by luck: `ObjectProxy::HandleMessage`
-  // posts a signal to the bus's ORIGIN thread (this one, the evdev thread)
-  // while `CallMethodAndBlock` asserts it is on the bus's D-BUS thread, so
-  // `CallAndBlock` posts it there and waits. The thread that has to read the
-  // reply is never the thread that is waiting for it.
+  // Only seats without VTs reach this. Blocking in a signal callback is safe:
+  // signals run on the evdev thread and the call runs on the D-Bus thread.
   dbus::MethodCall complete(kSessionInterface, kPauseDeviceComplete);
   WriteDeviceNumber(&complete, number);
   if (!CallAndBlock(session_, &complete)) {
@@ -457,18 +373,11 @@ void DrmLogindInput::OnResumeDevice(dbus::Signal* signal) {
 }
 
 void DrmLogindInput::OnPropertiesChanged(dbus::Signal*) {
-  // The message is not read, for the reason `DrmVtSwitcher` does not read it:
-  // logind names a changed property in the dictionary or in the invalidated
-  // list depending on which property it is, and asking for the one value that
-  // matters is cheaper than being right about that. A property this does not
-  // care about costs one round trip and no decision.
+  // Query `Active` instead of parsing the signal, which may report it only as
+  // invalidated. See `SessionIsActive`.
   const bool active = SessionIsActive();
 
-  // TRACED ON BOTH ARMS. This is the only edge that brings a revoked device
-  // back when no resume is coming, so "did it fire, and what did logind say"
-  // is the first question of any run that came up deaf -- and a handler that
-  // spoke only when it had something to reclaim could not be told apart from
-  // one that was never called.
+  // Log both outcomes, so a run with no input shows whether this fired.
   VLOG(1) << "domicile: logind changed a session property; this session is "
           << (active ? "in front of the user" : "not in front of the user");
 
@@ -476,8 +385,7 @@ void DrmLogindInput::OnPropertiesChanged(dbus::Signal*) {
     return;
   }
 
-  // `Reclaim` says how many it took back, and a console switch back is
-  // routine, so there is nothing to add here.
+  // `Reclaim` logs its own count.
   devices_.Reclaim();
 }
 
@@ -489,10 +397,7 @@ bool DrmLogindInput::SessionIsActive() {
 
   std::unique_ptr<dbus::Response> answered = CallAndBlock(session_, &get);
   if (!answered) {
-    // NOT A FALLBACK, A RETRY. logind emits `PropertiesChanged` on every
-    // property this session has, so the next one asks again; what must not
-    // happen is a revoked device being treated as live on the strength of an
-    // answer nobody got.
+    // Assume inactive; the next `PropertiesChanged` asks again.
     LOG(ERROR) << "logind would not say whether this session is active, so "
                   "any input device it has revoked stays revoked until the "
                   "next time it says so";

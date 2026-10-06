@@ -14,18 +14,14 @@ DrmCursorFactory::~DrmCursorFactory() = default;
 
 scoped_refptr<PlatformCursor> DrmCursorFactory::GetDefaultCursor(
     mojom::CursorType type) {
-  // THE ANSWER IS NOTHING, AND NOTHING IS THE USEFUL ANSWER. `CursorLoader`
-  // reaches `LoadCursorFromAsset` only past a null from here; a typed,
-  // bitmapless cursor is a cursor as far as it is concerned, and a CRTC
-  // handed one draws nothing.
+  // Null makes `CursorLoader` load the cursor from assets. A typed,
+  // bitmapless cursor would draw nothing on a CRTC.
   if (type != mojom::CursorType::kNone) {
     return nullptr;
   }
 
-  // Except for the invisible one, which is not art and cannot be loaded from
-  // any. `DrmCursor` hides on the type, so the object it reads that off has
-  // to exist -- and the base class is where the one that carries a type and
-  // no bitmap is made.
+  // `kNone` has no art. `DrmCursor` hides the cursor based on its type, so
+  // return the base's typed, bitmapless cursor.
   return BitmapCursorFactory::GetDefaultCursor(type);
 }
 

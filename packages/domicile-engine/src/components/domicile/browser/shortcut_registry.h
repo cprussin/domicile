@@ -17,8 +17,8 @@ namespace domicile {
 
 // A key combination the desktop has claimed for itself.
 //
-// `keycode` is a Linux evdev code -- the numbering the control protocol speaks
-// everywhere, not the XKB keycode a Wayland keymap uses, which is this plus 8.
+// `keycode` is a Linux evdev code, as used by the control protocol. The XKB
+// keycode in a Wayland keymap is this plus 8.
 struct Chord {
   uint32_t keycode = 0;
   bool alt = false;
@@ -31,9 +31,8 @@ struct Chord {
 
 // Which modifiers the keyboard holds.
 //
-// Which ones are down, not xkb's four masks: a page asking "is Alt held" cannot
-// answer that from a mask without the keymap as well, and this side has already
-// resolved it.
+// Resolved booleans rather than XKB masks, because a page cannot read a mask
+// without the keymap.
 struct Modifiers {
   bool alt = false;
   bool ctrl = false;
@@ -43,9 +42,9 @@ struct Modifiers {
   friend bool operator==(const Modifiers&, const Modifiers&) = default;
 };
 
-// A shell page, as the browser names its frame: a render process and a frame
-// in it. Plain ints rather than content's id, so this stays a //base target
-// that the unit tests can build without a browser.
+// A shell page, identified by render process id and frame id. Plain ints
+// rather than content's id keep this a //base target that unit tests can build
+// without a browser.
 struct Page {
   int process = 0;
   int frame = 0;
@@ -55,39 +54,28 @@ struct Page {
 
 // The chords the shell claimed for the desktop, and who to tell when one fires.
 //
-// WHY THE BROWSER PROCESS HOLDS THESE. The compositor used to, and it is the
-// layer that should: it sees a key before the client it belongs to does. It
-// cannot any more. A browser window is a `<webview>`, the page inside it is a
-// guest, and DOM focus moves into it -- so its keys never reach the shell's
-// document and are never forwarded to the compositor either. The browser
-// process is the only layer above a focused guest, which makes it the only one
-// that can take a chord out of the stream.
+// This lives in the browser process because a focused `<webview>` guest's keys
+// never reach the shell document or the compositor. The browser process is
+// the only layer above a focused guest.
 // WebViewGuest::PreHandleKeyboardEvent is where a key meets these.
 //
-// TWO SEQUENCES, WHICH IS WHY THERE IS A LOCK. A claim arrives on a
-// `ControlChannel`, which lives on the IO thread because it talks to a unix
-// socket; a keystroke arrives in `WebViewGuest::PreHandleKeyboardEvent`, which
-// is content calling on the UI thread. Neither can be moved to the other's
-// sequence without moving the thing it exists to talk to. A channel's callbacks
-// are therefore expected to be `base::BindPostTask`-wrapped by whoever
-// registers them -- this invokes them on the sequence a press arrived on, and
-// never holds the lock while it does.
+// Claims arrive on a `ControlChannel` on the IO thread; key presses arrive on
+// the UI thread, hence the lock. Callers must wrap callbacks with
+// `base::BindPostTask`: they run on whichever sequence a press arrives on, and
+// never under the lock.
 //
-// THE CLAIMS ARE THE PROCESS'S, the presses are a page's. Every page of a
-// desk claims the same chords, so which page claimed one says nothing; but a
-// press is one keystroke, heard by one `<webview>` in one page, and told to
-// every page it would be run once per monitor. So a channel is registered for
-// its page and a press names the page that heard it.
+// Claims are process-wide, but a press is delivered only to the page that
+// heard it. Every page claims the same chords, so telling every page would run
+// the shortcut once per monitor.
 class ShortcutRegistry {
  public:
   using ShortcutCallback = base::RepeatingCallback<void(Chord)>;
   using ModifiersCallback = base::RepeatingCallback<void(Modifiers)>;
 
-  // A registration's handle, for giving it back. Never zero.
+  // Handle for removing a channel. Never zero.
   using ChannelId = uint64_t;
 
-  // The process's registry: the one a ControlChannel claims into and a guest
-  // matches against. Tests build their own on the stack instead.
+  // The process-wide registry. Tests build their own instead.
   static ShortcutRegistry& Get();
 
   ShortcutRegistry();
@@ -97,37 +85,31 @@ class ShortcutRegistry {
 
   ~ShortcutRegistry();
 
-  // Start delivering to `page`. Both callbacks may be run on any sequence, so
-  // both are expected to be posted back to the caller's own.
+  // Starts delivering to `page`. Callbacks may run on any sequence, so wrap
+  // them to post back to the caller's.
   ChannelId AddChannel(Page page,
                        ShortcutCallback on_shortcut,
                        ModifiersCallback on_modifiers);
 
-  // Stop. `channel` is the id AddChannel returned; the claims it made stay,
-  // because a page that reloads is the same desktop claiming the same keys and
-  // a gap between the two is a chord that reaches the focused window instead.
+  // Stops delivering to `channel`. Its claims stay, so a reloading page leaves
+  // no gap in which a chord reaches the focused window.
   void RemoveChannel(ChannelId channel);
 
-  // Claim `chord` for the desktop. Claiming one twice is not an error -- it is
-  // one claim, which is what the shell's own effect relies on when it re-runs.
+  // Claims `chord` for the desktop. Idempotent, so the shell can re-run its
+  // claims.
   void Grab(const Chord& chord);
 
-  // A key went down in a `<webview>` of `page`. Tells that page's channels
-  // when `chord` is one of the claims, and answers whether it was -- the
-  // caller swallows the key exactly when this is true, so that a window never
-  // sees a key the desktop took.
+  // Handles a key press in a `<webview>` of `page`. If `chord` is claimed,
+  // notifies that page's channels and returns true; the caller must then
+  // swallow the key.
   bool Press(const Chord& chord, const Page& page);
 
-  // The modifiers held now. Delivered only when they differ from the last set
-  // delivered, including the first time: a shell assumes nothing is held until
-  // it is told, and a keystroke typed with Alt down would otherwise report the
-  // same set once per key.
+  // Reports the held modifiers. Delivered only on change (and the first
+  // time), so holding Alt while typing does not repeat it per key.
   void SetModifiers(const Modifiers& modifiers);
 
  private:
-  // Whether `chord` is one of the claims. `base::Contains` is what this would
-  // have been; `base/containers/contains.h` is gone from the tree at our pin,
-  // and `std::ranges::find` is what the tree reaches for in its place.
+  // Whether `chord` is claimed.
   bool IsGrabbed(const Chord& chord) const EXCLUSIVE_LOCKS_REQUIRED(lock_);
 
   struct Channel {

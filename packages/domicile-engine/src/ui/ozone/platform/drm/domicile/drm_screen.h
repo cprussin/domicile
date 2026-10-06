@@ -24,116 +24,78 @@ namespace ui {
 class DrmCursor;
 class DrmWindowHostManager;
 
-// The display a screen answers with when DRM has told it about none.
+// The size of the fallback display used when DRM reports none.
 //
-// PlatformScreen's contract is that a screen always has a primary display --
-// HeadlessScreen CHECKs its primary iterator and aura dereferences the result
-// -- so "no displays" is not an answer this interface can give. A tty with
-// nothing plugged into it is an ordinary state, not an error: it is what every
-// connector on the machine this was written on reports.
+// `PlatformScreen` must always have a primary display: `HeadlessScreen` CHECKs
+// for one and aura dereferences it. A tty with nothing plugged in is normal.
 inline constexpr gfx::Size kDisplaylessBounds{1024, 768};
 
-// One snapshot, as the display list wants it.
+// Converts a snapshot to a `display::Display`.
 //
-// This is the whole of what Domicile takes from `ui/display/manager`, whose
-// DisplayChangeObserver spends 478 lines turning snapshots into
-// ManagedDisplayInfo -- ChromeOS product surface that nothing here reads. The
-// SIZE comes from the snapshot's native mode, which is the mode the modeset
-// driver will configure the CRTC at, so the two cannot disagree.
-//
-// The CORNER is passed in rather than read off the snapshot, because it is not
-// always the snapshot's: a matched output profile places the monitors and the
-// card's own stacking is not that arrangement. `DisplaysFromSnapshots` is
-// where the two are told apart.
+// This replaces ChromeOS's `DisplayChangeObserver`. The size is the native
+// mode, which is what the modeset driver configures, so the two agree.
+// `origin` is passed in because a matched profile can place the monitor
+// somewhere other than the snapshot's own origin.
 display::Display DisplayFromSnapshot(const display::DisplaySnapshot& snapshot,
                                      const gfx::Point& origin);
 
-// What to call this monitor: "<MAKE> <MODEL> <SERIAL>", the identity kanshi
-// and sway match an output profile on.
+// Returns "<MAKE> <MODEL> <SERIAL>", the name kanshi and sway match output
+// profiles on.
 //
-// THE WHOLE REASON THIS EXISTS IS THAT AN ID IS NOT A NAME.
-// `display_id()` is derived from the EDID and is perfectly good identity -- it
-// is stable across a hotplug and it does tell three identical monitors apart.
-// What it cannot do is say WHICH ONE: it is an int64 nobody can look at a desk
-// and predict, so a person writing "put the left-hand monitor here" has to
-// read one off a log first and write down a number that means nothing. This is
-// the same identity, spelled the way the panel is labeled.
+// `display_id()` is stable but is an opaque number, so users could not write
+// a profile without reading it from a log. Any missing part is omitted; with
+// none, this returns "" and `DisplayFromSnapshot` leaves the label unset.
 //
-// Each of the three parts can be missing and the name is what is left --
-// `ManufacturerIdToString` gives "" for a product code nobody set, a panel
-// need not carry a product-name descriptor, and a serial is often absent. A
-// monitor that reports none of the three gets an empty string, and
-// `DisplayFromSnapshot` leaves the label unset rather than naming everything
-// on the desk the same nothing.
-//
-// The make is the three-letter PNP id -- "DEL", not "Dell Inc." -- because
-// that is what the EDID holds. The full vendor name is a lookup table
-// (hwdata's pnp.ids) that libdisplay-info carries and Chromium does not, so a
-// name from here is one word off what sway prints for the same monitor.
+// The make is the EDID's three-letter PNP id ("DEL"). Chromium lacks the PNP
+// table for the full vendor name. See docs/DISPLAYS.md#monitor-names.
 std::string DisplayNameFromSnapshot(const display::DisplaySnapshot& snapshot);
 
-// The snapshot's physical size, in millimeters.
+// Returns the snapshot's physical size, in millimeters.
 //
-// Named rather than inlined because it is the number `wl_output` wants, and it
-// is where the density `DisplayFromSnapshot` sets on the display comes from --
-// display::Display has no millimeters of its own, which is the whole reason
-// that conversion is there. See `drm_screen.cc`.
+// `wl_output` needs it, and `DisplayFromSnapshot` derives the display's
+// density from it because `display::Display` has no physical size. See
+// docs/DISPLAYS.md#physical-size-and-refresh.
 gfx::Size DisplayPhysicalSizeMm(const display::DisplaySnapshot& snapshot);
 
-// Every snapshot, or the displayless fallback above when there are none.
+// Returns a display per snapshot, or the displayless fallback when there are
+// none.
 //
-// EACH TURNED AND SCALED THE WAY THE LAYOUT SAYS, which is how a shell gets
-// out of knowing a monitor is on its side. The rotation and the scale are
-// what views turns this display's window by and what every page on it lays
-// out at, so the page's CSS pixels are the compositor's logical ones, upright.
-// A display the layout does not name is neither.
+// Each display gets the rotation and scale `layout` gives it, so pages lay out
+// in the compositor's upright logical pixels and shells need not handle
+// rotation. Displays the layout does not name get neither.
 //
-// THE BOUNDS STAY THE CRTC'S, in pixels, scale or no scale -- not the DIP
-// rectangle a display's bounds usually are. Everything on this platform reads
-// them that way: a window is bound to a CRTC on an exact match with them, a
-// fullscreen window is sized from them, and the compositor places its
-// connectors in them. What the rotation and the scale change is what is drawn
-// INSIDE the window, which is the only place either belongs.
+// Bounds stay in CRTC pixels, not DIPs. This platform binds windows to CRTCs
+// on an exact bounds match, sizes fullscreen windows from them, and the
+// compositor places connectors in them. Rotation and scale only affect what
+// is drawn inside the window.
 //
-// `layout` IS THE COMPOSITOR'S, and it reaches the display list as well as the
-// modeset because a dark connector is still a connector the browser has to
-// place somewhere. Each display is at the corner `OriginsForLayout` gives it.
+// `layout` applies here as well as to the modeset because the browser must
+// still place dark connectors. Origins come from `OriginsForLayout`.
 std::vector<display::Display> DisplaysFromSnapshots(
     const std::vector<raw_ptr<display::DisplaySnapshot, VectorExperimental>>&
         snapshots,
     const std::vector<DomicileDisplayLayout>& layout);
 
-// Where each of `snapshots` goes on this process's desktop, in the order
-// given. THE ONE ANSWER BOTH THE MODESET AND THE DISPLAY LIST READ: a window is
-// sized to its display and bound to a CRTC on an exact rectangle match, so the
-// two disagreeing is a black screen.
+// Returns each snapshot's origin on this process's desktop, in order. Both
+// the modeset and the display list use it: windows bind to CRTCs on an exact
+// rectangle match, so any disagreement leaves a screen black.
 //
-// A connector the layout names takes the layout's corner, lit or not. EVERY
-// OTHER ONE GOES PAST THE RIGHT EDGE of everything the layout placed, one
-// after another in connector order -- and with no layout at all, that is the
-// whole desk. NEVER THE SNAPSHOT'S OWN ORIGIN: ozone gives a connector it has
-// not read before (0, 0), so three monitors arriving on one hub were three
-// displays on one rectangle. Two displays on one rectangle share one window,
-// the other CRTC stays black, and the first of the two wins every lookup
-// `GetDisplayMatching` makes.
+// A connector the layout names, lit or not, takes the layout's origin. Others
+// are placed in connector order past the right edge of everything the layout
+// placed; with no layout, that is every connector. The snapshot's own origin
+// is never used: ozone reports (0, 0) for a connector it has not read before,
+// and displays sharing a rectangle share a window, leaving a CRTC black.
 std::vector<gfx::Point> OriginsForLayout(
     const std::vector<raw_ptr<display::DisplaySnapshot, VectorExperimental>>&
         snapshots,
     const std::vector<DomicileDisplayLayout>& layout);
 
-// Which of `snapshots` the display list calls primary: the first one the
-// layout lights, or the first there is where it says nothing.
+// Returns the index of the primary display: the first one the layout lights,
+// or the first one when the layout is empty.
 //
-// THIS IS THE DIFFERENCE BETWEEN A DESKTOP AND A BLACK SCREEN. A views browser
-// going fullscreen is sized from the display it is on, and the window it
-// starts at -- 1050x1900 at (10, 10) -- is on whichever display holds that
-// corner. A profile that turns the laptop panel off is the ordinary case on a
-// full desk, and a primary that is dark is a browser drawing correctly onto a
-// screen nobody can see, with every log line saying the modeset succeeded.
-//
-// A free function beside `DisplaysFromSnapshots` so it has a test of its own:
-// "which display is primary" and "where is each display" are two answers, and
-// a suite asserting only the second would not notice the first go wrong.
+// A views browser sizes its fullscreen window from the display holding its
+// initial position. A dark primary, such as a closed laptop panel, would draw
+// the desktop onto a screen nobody sees.
 size_t PrimaryIndexForLayout(
     const std::vector<raw_ptr<display::DisplaySnapshot, VectorExperimental>>&
         snapshots,
@@ -141,9 +103,8 @@ size_t PrimaryIndexForLayout(
 
 // `PlatformScreen` over the displays DRM reports.
 //
-// Modeled on HeadlessScreen rather than WaylandScreen: headless has no
-// window-system output protocol either, so it builds its display list from
-// nothing, and DRM is that shape with real snapshots in place of the fiction.
+// Modeled on `HeadlessScreen`, which also has no window-system output
+// protocol and builds its display list itself.
 class DrmScreen : public PlatformScreen {
  public:
   DrmScreen(DrmWindowHostManager* window_manager, DrmCursor* cursor);
@@ -153,10 +114,8 @@ class DrmScreen : public PlatformScreen {
 
   ~DrmScreen() override;
 
-  // Replaces the whole display list, primary first. Called on startup and
-  // again on every hotplug, because DisplayList notifies its observers from
-  // Add/Update/RemoveDisplay -- which is why hotplug needs no observer code of
-  // its own here.
+  // Replaces the display list, primary first. Called at startup and on every
+  // hotplug. `DisplayList` notifies observers itself.
   void OnDisplaysChanged(
       const std::vector<raw_ptr<display::DisplaySnapshot, VectorExperimental>>&
         snapshots,

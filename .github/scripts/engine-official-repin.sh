@@ -1,32 +1,22 @@
 #!/usr/bin/env bash
-# Put the official engine this run published into `engine-official.nix`, on
-# main, through a pull request.
+# Open and auto-merge a pull request that pins the official engine this run
+# published in `engine-official.nix`.
 #
 #   DOMICILE_ENGINE_TAG=engine-official-s<id> .github/scripts/engine-official-repin.sh
 #
-# THE PRODUCTION ENGINE IS BUILT AFTER THE MERGE. A pull request that moves the
-# fork repins the CHECKED engine (engine-release-repin.sh), because that is
-# the build it proved. engine-release.yml builds main nightly as an
-# official build -- PGO, ThinLTO, no DCHECKs -- for hours, and this lands what
-# it published. The hash is the tarball's and Chromium does not build
-# byte-for-byte twice, so this could not have been written any earlier.
+# engine-release.yml builds the official engine (PGO, ThinLTO, no DCHECKs)
+# from main after merge. Pull requests pin the checked engine instead
+# (engine-release-repin.sh).
 #
-# MAIN TAKES CHANGES ONLY THROUGH A PULL REQUEST, so this pushes a branch of
-# its own, off main's tip, with the one generated file on it, opens a pull
-# request and turns on its auto-merge: merged at once it would be refused,
-# because its required checks have not run. The branch is this job's alone: it
-# is force-pushed, and a pull request a previous run left open is the one set
-# to merge.
+# Main requires pull requests, so this force-pushes its own branch off main and
+# enables auto-merge. It reuses a pull request left open by an earlier run.
 #
-# WITH THE REPOSITORY'S OWN TOKEN, NOT GITHUB_TOKEN. GITHUB_TOKEN may not open
-# a pull request here (a 403, run 36785579403), and one it did open would start
-# no checks, so it could never merge. DOMICILE_WRITEBACK_TOKEN pushes, opens and
-# sets it to merge; packages/domicile-engine/README.md says how it is made.
+# Uses DOMICILE_WRITEBACK_TOKEN, because GITHUB_TOKEN cannot open pull requests
+# here and its pull requests start no checks.
+# packages/domicile-engine/docs/RELEASES.md says how to make the token.
 #
-# NOT WHEN MAIN HAS MOVED ON. If another merge moved the fork while this built,
-# this engine is of a series main no longer is, and engine-pin.nix would pass
-# it over for the checked one anyway. Landing it would be a commit that changes
-# nothing, so it is not made; the release of main's own series will be.
+# Skips the pin if main's series has changed since this build, because
+# engine-pin.nix would ignore it.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -68,8 +58,7 @@ if [ -z "$(git status --porcelain -- "$FILE")" ]; then
   exit 0
 fi
 
-# One file: the checkout is the release job's, and whatever the build left in
-# it is not for main.
+# Only this file: the build may have left other changes in the checkout.
 git add "$FILE"
 git commit -q -m "$(cat <<EOF
 Point the flake at ${DOMICILE_ENGINE_TAG:-the official engine}
@@ -87,9 +76,8 @@ git -c http.https://github.com/.extraheader= \
   -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth" \
   push -q -f origin "$BRANCH"
 
-# The body on stdout; anything but a 2xx fails, saying what GitHub answered,
-# with 3 for a 422 (what opening a pull request already open answers) and 1
-# for the rest.
+# Print the response body. Return 3 on a 422 (pull request already open) and
+# 1 on any other non-2xx status.
 api() {
   local reply code
   reply="$(mktemp)"
@@ -111,9 +99,7 @@ body="Landed by engine-release.yml after publishing the official build of series
 request="$(jq -cn --arg title "$title" --arg head "$BRANCH" --arg body "$body" \
   '{title: $title, head: $head, base: "main", body: $body}')"
 
-# A pull request from this branch that a previous run left open is refused
-# with a 422; it is then the one to merge, found by its head. Any other refusal
-# is the job's failure.
+# On a 422, find the open pull request from this branch and merge that.
 if pr="$(api -X POST -d "$request" "$API/pulls")"; then
   :
 else

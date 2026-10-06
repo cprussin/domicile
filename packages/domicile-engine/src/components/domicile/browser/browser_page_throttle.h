@@ -12,24 +12,19 @@ class NavigationThrottleRegistry;
 
 namespace domicile {
 
-// Refuses a <webview>'s guest every page Chrome serves itself. See
-// IsBrowserPage for which those are and why none of them belongs on a desk.
+// Stops a <webview> guest from loading Chrome's own pages (see IsBrowserPage).
 //
-// A THROTTLE AND NOT A CHECK WHERE `src` IS SET, because `src` is one of
-// several ways in: a link, a redirect, an extension's tabs.create or
-// tabs.update all navigate the guest without passing through it, and every
-// one of them passes through here.
+// A throttle catches every route in: `src`, links, redirects, and extension
+// tabs.create/tabs.update.
 //
-// CANCELED, NOT BLOCKED: the window stays on the page it had. A blocked
-// navigation commits an error page, and committing one for a WebUI address in
-// a guest is a fatal check in the browser process -- the first build of this
-// throttle took the desktop down exactly as the page it refused would have.
+// Cancels rather than blocks, so the guest stays on its current page. Blocking
+// commits an error page, and committing one for a WebUI address in a guest hits
+// a fatal CHECK in the browser process.
 //
-// GUESTS ONLY. The shell's own window is launched by the command line and is
-// trusted, and nothing else in the browser is a page a person navigates.
+// Guests only: the shell's own window is trusted.
 class BrowserPageThrottle : public content::NavigationThrottle {
  public:
-  // Adds one to `registry` when its navigation is in a <webview>'s guest.
+  // Adds a throttle to `registry` if the navigation is in a <webview> guest.
   static void MaybeCreateAndAdd(content::NavigationThrottleRegistry& registry);
 
   explicit BrowserPageThrottle(content::NavigationThrottleRegistry& registry);

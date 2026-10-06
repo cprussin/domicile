@@ -1,14 +1,13 @@
 #!/usr/bin/env bash
-# Chrome's own shortcuts, pressed at a shell that handles none of them.
+# Checks that Chrome's own shortcuts do nothing in a shell that handles none
+# of them (patch 0047).
 #
-# Ctrl+R, F5, Alt+Left, F11, Ctrl+=, Ctrl+W and Ctrl+Shift+Q, each of which
-# Chrome acted on before patch 0047: reloading, navigating, resizing, closing or
-# quitting the desktop. Headless, and the keys go in over the debugging port
-# like the webview guards'.
+# Presses Ctrl+R, F5, Alt+Left, F11, Ctrl+=, Ctrl+W and Ctrl+Shift+Q, which
+# would reload, navigate, resize, close or quit. Headless; keys go in over the
+# debugging port.
 #
-# Its control reloads the shell over that port where the chords would have
-# gone, because the claim is an absence and a guard that cannot read a reload
-# the browser made cannot read one a key caused either.
+# The control reloads the shell over the port instead, to show the guard can
+# detect a reload.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

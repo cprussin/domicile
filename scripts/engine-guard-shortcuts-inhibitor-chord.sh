@@ -1,16 +1,13 @@
 #!/usr/bin/env bash
-# A Meta chord pressed into a nested desktop, and which side took it.
+# Checks which side receives a Meta chord pressed into a nested desktop.
 #
-# `engine-guard-shortcuts-inhibitor.sh` reads that the engine ASKED the host
-# compositor for a shortcuts inhibitor. This reads whether the host honored it:
-# a sway binding on `Mod4+y` and the page's own keydown listener, one chord
-# through a virtual keyboard, and which of the two saw it. Each observer is
-# shown able to see before its absence is believed — the binding fires once at
-# an empty host, a plain key reaches the page — so a key that went nowhere is a
-# failure and not a pass.
+# `engine-guard-shortcuts-inhibitor.sh` checks that the engine requests the
+# inhibitor; this checks that the host honors it. A sway binding on `Mod4+y`
+# and the page's keydown listener both watch one chord sent through a virtual
+# keyboard. Each observer is first shown to work, so a lost key fails.
 #
-# Its control is the same run with `--domicile-inhibit-host-shortcuts` left off,
-# where the host must take the chord and the page must not.
+# The control runs without `--domicile-inhibit-host-shortcuts`: the host must
+# take the chord and the page must not.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

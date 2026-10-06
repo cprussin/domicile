@@ -174,7 +174,7 @@ FLAGS
 # buffer reached the engine.
 # Anchored on a comment, not the `grep`, so weakening the pattern fails the
 # case below instead of reporting moved markers.
-FRAME="$(awk '/^# WHICH FAILURE IT WAS, not whether there was one\. The probe runs inside$/,/^fi$/' "$GUARD")"
+FRAME="$(awk '/^# `engine found` already implies a first frame, since the probe runs in$/,/^fi$/' "$GUARD")"
 [ -n "$FRAME" ] || {
   echo "no first-frame check in $GUARD — its markers moved. Fix this test." >&2
   exit 1

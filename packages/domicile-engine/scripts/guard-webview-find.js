@@ -1,47 +1,27 @@
-// The shell guard-webview-find.sh drives: one browser window on a page with a
-// known count of one word in it, searched with the find a chrome's find bar
-// has.
+// Shell for guard-webview-find.sh: runs the element's find API against a page
+// with a known match count.
 //
-// A module rather than a page, because that is what a shell is here — the
-// engine writes the document and loads exactly one module into it. And a
-// domicile:// document, because the browser binds WebViewGuestHost for the
-// shell's origin and no other. See guard-webview-history.js, whose shape this
-// is.
+// ?drive=find runs the schedule below. ?drive=none is the control: same
+// element and pages, no find calls, so any count it reads did not come from
+// find. (An <iframe> is no control: it has no find() at all.)
 //
-// ?drive= IS THE EXPERIMENT. `find` drives the schedule below; `none` runs the
-// same element, the same guest and the same two pages and CALLS NOTHING. An
-// <iframe> in the element's place would be no control: it has no find() at
-// all, so the run would end on a TypeError rather than on a reading. Then any
-// count the control reads is one nobody asked for, and the positive run's
-// counts need not be the find's.
+// Each step waits for `findMatches`/`findActiveMatch` up to a timeout from the
+// guard, then logs what it sees, so a broken engine still gets every reading.
 //
-// EACH STEP WAITS FOR WHAT IT NEEDS — the element's `findMatches` and
-// `findActiveMatch` — bounded by a timeout the guard passes in. A step that
-// never happens sits out its bound and is read as it stands, so a broken
-// engine still gets every reading.
+// Logs to the console, which the engine writes to its log:
 //
-// WHAT THIS PAGE SAYS, all of it to the console, which the engine writes to
-// its own log:
-//
-//   GUARD driving mode=…       the module ran and which run this is
-//   GUARD navigating path=…    what the HARNESS did
-//   GUARD calling …            a find was driven, in the positive run only
-//   GUARD find-state …         what the element says the find found, at one
-//                              point in the schedule, as matches/active, and
-//                              how many changes it had announced by then
+//   GUARD driving mode=…       which run this is
+//   GUARD navigating path=…    the harness navigated
+//   GUARD calling …            a find call (positive run only)
+//   GUARD find-state …         matches/active and change events so far
 //   GUARD done                 the schedule finished
 //
-// The pages themselves say `GUARD guest-shown path=…`, from the fixture
-// server.
-//
-// Everything is inside `Shell`, which the document Domicile writes calls once
-// the module has loaded.
+// The pages log `GUARD guest-shown path=…`; see the fixture server. Domicile
+// calls `Shell` once the module loads.
 
 export const Shell = () => {
   /**
-   * A query parameter this cannot run without. Missing means the guard invoked
-   * this wrongly, and a default would turn that into a measurement of something
-   * nobody asked for.
+   * Reads a required query parameter. No default, so a misconfigured run fails.
    */
   const required = (parameters, name) => {
     const value = parameters.get(name);
@@ -53,8 +33,7 @@ export const Shell = () => {
   };
 
   /**
-   * A whole number out of the query. Loud rather than NaN, which would schedule
-   * every step at once or wait for a count no page has.
+   * Reads a required integer query parameter. Throws rather than return NaN.
    */
   const requiredNumber = (parameters, name) => {
     const value = Number(required(parameters, name));
@@ -65,7 +44,7 @@ export const Shell = () => {
     }
   };
 
-  /** Whether this run drives a find, or is the control that drives none. */
+  /** Whether this run calls find, or is the control. */
   const drivesFind = (mode) => {
     switch (mode) {
       case "find": {
@@ -89,16 +68,14 @@ export const Shell = () => {
   const parameters = new URLSearchParams(location.search);
   const base = required(parameters, "src");
   const drives = drivesFind(required(parameters, "drive"));
-  // What to find, and how many of it the page holds across its frames.
+  // The word, and its match count across all frames.
   const word = required(parameters, "word");
   const matches = requiredNumber(parameters, "matches");
-  // The bound on the first page, which has to be asked for, attached, navigated
-  // and have its frame load.
+  // Timeout for the first page to attach, navigate and load its frame.
   const settle = requiredNumber(parameters, "settle");
-  // The bound on each step after it.
+  // Timeout for each later step.
   const step = requiredNumber(parameters, "step");
-  // How long the control watches a step it does not drive: an absence has no
-  // event to wait for.
+  // How long the control watches each step, since an absence has no event.
   const quiet = requiredNumber(parameters, "quiet");
 
   const POLL_MS = 50;
@@ -115,9 +92,8 @@ export const Shell = () => {
     view.setAttribute("src", `${base}${path}`);
   };
 
-  // The calls under test. In the control they are not made at all, and the line
-  // says so, so that a log with no `calling` in it is a control rather than a
-  // positive run that lost its schedule.
+  // Makes a call under test, or in the control logs that it did not, so a
+  // control is distinguishable from a positive run that stalled.
   const call = (name, drive) => {
     if (drives) {
       say(`calling ${name}`);
@@ -127,16 +103,13 @@ export const Shell = () => {
     }
   };
 
-  // Every find change the element has announced. A count rather than the values
-  // it carried: the event carries nothing, so what there is to report about it
-  // is that it happened.
+  // Counts `domicile-find-change` events; the event carries no data.
   let announced = 0;
   view.addEventListener("domicile-find-change", () => {
     announced += 1;
   });
 
-  // What the element says at one point in the schedule, read off the element
-  // rather than remembered from an event.
+  // Logs the element's current find state.
   const readFind = (at) => {
     say(
       `find-state at=${at} find=${view.findMatches}/${view.findActiveMatch}` +
@@ -144,14 +117,12 @@ export const Shell = () => {
     );
   };
 
-  // Whether the element says the find stands at `found` matches with `active`
-  // selected. A function of the pair, so each step names the reading it waits
-  // for rather than how to get it.
+  // Predicate: the find shows `found` matches with `active` selected.
   const showing = (found, active) => () =>
     view.findMatches === found && view.findActiveMatch === active;
 
-  // The path the element says the guest is on. An element that has reported
-  // nothing has no address, and `new URL("")` throws.
+  // The guest's path, or "" before the element reports a URL (`new URL("")`
+  // throws).
   const pathShown = () => {
     const url = view.url ?? "";
     return url === "" ? "" : new URL(url).pathname;
@@ -171,8 +142,8 @@ export const Shell = () => {
       poll();
     });
 
-  // Loads seen starting, polled. The address alone cannot say a page arrived:
-  // the engine shows a navigation's address before its load starts.
+  // Counts load starts. The URL alone is not enough: the engine shows a
+  // navigation's URL before its load starts.
   let loadsSeen = 0;
   let wasLoading = false;
   setInterval(() => {
@@ -182,18 +153,17 @@ export const Shell = () => {
     wasLoading = view.loading;
   }, POLL_MS / 5);
 
-  // The guest has loaded `path` since this was made.
+  // Predicate: the guest has loaded `path` since this call.
   const arrived = (path) => {
     const since = loadsSeen;
     return () => loadsSeen > since && pathShown() === path && !view.loading;
   };
 
-  // The bound on a step a find drives. In the control nothing is driven, so the
-  // step is watched for `quiet` and then read as it stands.
+  // Per-step timeout: `step` when driving, `quiet` in the control.
   const driven = drives ? step : quiet;
 
-  // The schedule, in order: each reading is taken once the step before it has
-  // landed, and before the next step drives anything.
+  // The schedule. Each reading is taken after its step settles and before the
+  // next step starts.
   const run = async () => {
     say(`driving mode=${drives ? "find" : "none"}`);
     document.body.append(view);
@@ -201,18 +171,17 @@ export const Shell = () => {
     navigate("/words");
     await until(words, settle);
 
-    // THE POSITIVE: every match counted, the frame's included, and the first
-    // one selected.
+    // All matches counted, including the frame's, with the first selected.
     call("find", (v) => v.find(word));
     await until(showing(matches, 1), driven);
     readFind("found");
 
-    // The same text again is the next match, not a new search.
+    // The same text again moves to the next match.
     call("find again", (v) => v.find(word));
     await until(showing(matches, 2), driven);
     readFind("next");
 
-    // And backward is the one before.
+    // Backward moves to the previous match.
     call("find backward", (v) => v.find(word, true));
     await until(showing(matches, 1), driven);
     readFind("previous");
@@ -221,13 +190,13 @@ export const Shell = () => {
     await until(showing(0, 0), driven);
     readFind("stopped");
 
-    // A find for the navigation to end. Which match a search begun from a kept
-    // selection lands on is Blink's business, so this waits for the count.
+    // Start a find again so the navigation below has one to end. Waits for the
+    // count only: which match is active after a kept selection is up to Blink.
     call("find after stopping", (v) => v.find(word));
     await until(() => view.findMatches === matches, driven);
     readFind("refound");
 
-    // A NEW PAGE ENDS A FIND. Nothing is called here in either run.
+    // Navigating ends the find. Nothing is called here in either run.
     const elsewhere = arrived("/elsewhere");
     navigate("/elsewhere");
     await until(() => elsewhere() && showing(0, 0)(), step);

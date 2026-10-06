@@ -14,75 +14,47 @@
 
 namespace domicile {
 
-// Which shell windows to open and which to close, so that every display this
-// browser scans out to has exactly one.
+// Which shell windows to open and close so that every display has exactly
+// one.
 //
-// ONE WINDOW CANNOT COVER TWO MONITORS, which is why a desk of several needs
-// several. `ScreenManager::FindWindowAt` binds a window to a display
-// controller only on an EXACT rectangle match against
-// `gfx::Rect(controller->origin(), controller->GetModeSize())`, so a window
-// stretched across two CRTCs matches neither and is scanned out by neither.
-// The answer is one browser window per CRTC, and this is the part of it that
-// is a decision rather than plumbing.
-//
-// A RECONCILIATION RATHER THAN A SETUP STEP, because monitors come and go. A
-// function that only opened windows would be correct exactly once -- at
-// startup, on the desk that happened to be plugged in -- and every hotplug
-// after it would leave either a monitor with nothing drawn on it or a window
-// on a display that is gone. So this answers the whole question every time it
-// is asked: what is missing, and what is left over.
+// One window cannot span two monitors: `ScreenManager::FindWindowAt` binds a
+// window to a display controller only on an exact rectangle match, so a window
+// stretched across two CRTCs is scanned out by neither. Monitors come and go,
+// so this is recomputed on every hotplug, not only at startup.
 struct ShellWindowPlan {
-  // Displays with no window, in the order the display list gives them. The
-  // first display is the primary one -- see `PrimaryIndexForLayout` in
-  // ui/ozone/platform/drm/domicile/drm_screen.cc -- so the primary's window is
-  // opened first on a cold start, and the desktop does not spend the
-  // intervening frames on a screen that is about to stop being primary.
+  // Displays with no window, in display-list order. The primary display comes
+  // first (see `PrimaryIndexForLayout` in
+  // ui/ozone/platform/drm/domicile/drm_screen.cc), so its window opens first.
   std::vector<int64_t> open;
-  // Windows whose display is no longer there. Closed rather than left: a
-  // window on a display that is gone has no controller, holds a frame sink and
-  // a renderer for a monitor nobody can see, and would take the shell's
-  // keyboard focus with it if it happened to be the active one.
+  // Windows whose display is gone. Such a window holds a frame sink and a
+  // renderer nobody sees, and can hold the shell's keyboard focus.
   //
-  // NEVER ALL OF THEM AT ONCE. The last browser window closing is the browser
-  // exiting, and the browser exiting is the desktop ending -- so a lid shut on
-  // a laptop with nothing plugged in would log the session out rather than
-  // blank a screen. One window is kept when there is nothing to replace it
-  // with, drawing to a display that is not there until one is, which costs a
-  // frame sink nobody sees and keeps every client and everything the shell
-  // holds alive across the dark.
+  // Never all of them: closing the last browser window exits the browser and
+  // ends the session. With no display left, one window is kept until a display
+  // returns.
   std::vector<int64_t> close;
 };
 
 // `displays` is what `display::Screen` reports now; `windowed` is the display
-// each shell window the browser already has is on.
+// of each existing shell window.
 //
-// A DISPLAY THAT ALREADY HAS A WINDOW IS LEFT ALONE, and that is the rule this
-// is written around rather than an optimization. Closing and reopening would
-// reload the shell on every hotplug -- every embedded page back to where it
-// started, every portal re-created blank -- which is the same cost
-// `<Screen>` keys its regions by position to avoid, and it would be paid on
-// the ordinary act of plugging in a monitor.
+// A display that already has a window keeps it. Reopening it would reload the
+// shell and reset every embedded page on each hotplug.
 //
-// Says nothing about a display whose BOUNDS changed. That is a window that
-// exists and should stay, resized by its caller: the exact-rect rule above
-// makes a stale window a black screen, so a mode change or a profile moving a
-// monitor is a re-fullscreen rather than an open or a close.
+// A display whose bounds changed is not reported. Its window stays, and the
+// caller must resize it to the new bounds, or the exact-rect match fails and
+// the screen goes black.
 //
-// THE CALLER OPENS BEFORE IT CLOSES, and that ordering is this function's to
-// state because the reason for it is here. A desk whose monitors were all
-// swapped at once -- a dock changed, every id new -- is a plan that closes as
-// many windows as it opens, and closing first would pass through zero windows,
-// which is the browser exiting. Opening first never does.
+// The caller must open windows before closing them. If every display id
+// changes at once (e.g. a dock swap), closing first would pass through zero
+// windows and exit the browser.
 ShellWindowPlan ShellWindowsFor(const std::vector<display::Display>& displays,
                                 const std::vector<int64_t>& windowed);
 
-// One shell window the browser has right now: which window it is, and which
-// display its rectangle currently reads as being on.
+// One existing shell window and the display its rectangle is nearest to.
 //
-// `window` is an identity and nothing more -- the browser's own pointer to the
-// window, as a number so that nothing here can dereference one. What it is for
-// is telling this window from that one across a reconciliation, and a
-// `uintptr_t` says so in the type.
+// `window` is the browser's window pointer, stored as a number so it is only
+// used as an identity and never dereferenced.
 struct SightedShellWindow {
   uintptr_t window = 0;
   int64_t nearest = display::kInvalidDisplayId;
@@ -91,26 +63,14 @@ struct SightedShellWindow {
 // Which display each shell window is on: the one it was first seen on, not the
 // one its rectangle reads as now.
 //
-// READING THE RECTANGLE FRESH EVERY TIME IS WRONG, and it is wrong exactly
-// when it matters. A hotplug moves the origins of the displays before the
-// windows on them are resized to follow, so a window still at its old
-// rectangle reads as being on the monitor that has just taken that corner of
-// the desk. The desk then looks like one display with two windows and one with
-// none: `ShellWindowsFor` opens a duplicate on the first, the second stays
-// dark -- `ScreenManager::FindWindowAt` matches a window to a controller on
-// an exact rectangle and nothing matches its -- and each page then names a
-// monitor that is not the one it is on.
+// A hotplug moves display origins before the windows are resized, so a window
+// at its old rectangle can read as being on another monitor. That would make
+// `ShellWindowsFor` open a duplicate on one display and leave another dark.
+// Windows never move between displays, so the first sighting stays correct.
 //
-// A window never moves between displays. Nothing here asks it to: a display
-// that is gone takes its window with it, and a display that moved is a window
-// resized onto the same display. So what a window was opened for is what it
-// is on, for as long as it exists, and remembering that is the whole of this.
-//
-// NOT A MAP THAT HAS TO BE TOLD. A window can close on its own -- a renderer
-// that died, a shell that navigated away -- and a record kept past its window
-// would place the browser's next window at the last one's display, which is a
-// monitor this believes is covered and leaves dark. So every record is
-// re-derived from the windows the browser actually has, on every read.
+// Records are re-derived from the browser's live windows on every read, since
+// a window can close on its own (e.g. a crashed renderer). A stale record would
+// mark its display as covered and leave it dark.
 class ShellWindowPlaces {
  public:
   ShellWindowPlaces();
@@ -120,39 +80,32 @@ class ShellWindowPlaces {
 
   ~ShellWindowPlaces();
 
-  // Record that `window` was opened for `display`, before any reading of the
-  // desk has seen it. What asks is the side that opened it: a window arrives
-  // asynchronously and a monitor can be plugged in during that gap, which is
-  // where a rectangle is least reliable and where the display is least in
-  // doubt.
+  // Records that `window` was opened for `display`, before any `Update` sees
+  // it. Windows open asynchronously, and a hotplug in that gap makes the
+  // rectangle unreliable.
   void Place(uintptr_t window, int64_t display);
 
-  // The display each of `live` is on, in the order given, which is what
-  // `ShellWindowsFor` takes as `windowed`. A window seen for the first time is
-  // recorded where its rectangle is -- there is nothing else to go on, and a
-  // desk is not moving when the window startup opened is first read.
+  // The display of each window in `live`, in order; this is the `windowed`
+  // input to `ShellWindowsFor`. A window seen for the first time is recorded
+  // at its rectangle's display.
   //
-  // `loading` is every other window the browser has: no shell page committed
-  // in it. A window `Place`d and still loading its FIRST shell page keeps its
-  // record, and `Of` still answers for it -- it is a window this side asked
-  // for, and forgetting it in that gap read its display as bare and opened a
-  // second window there. Every other record for a window not in `live` is
-  // forgotten.
+  // `loading` is every other browser window, with no shell page committed yet.
+  // A `Place`d window still loading its first shell page keeps its record, so
+  // its display is not read as bare and given a second window. Every other
+  // record for a window not in `live` is dropped.
   std::vector<int64_t> Update(const std::vector<SightedShellWindow>& live,
                               const std::vector<uintptr_t>& loading);
 
-  // The display `window` is on, or `display::kInvalidDisplayId` for a window
-  // neither `Place`d nor seen by an `Update`. What names a page's screen -- the
-  // same answer the reconciliation works from, because a page told one monitor
-  // and a window opened for another is a monitor showing another monitor's
-  // desktop.
+  // The display `window` is on, or `display::kInvalidDisplayId` if it was
+  // neither `Place`d nor seen by `Update`. Pages use this to name their screen,
+  // so it must match what the reconciliation uses.
   int64_t Of(uintptr_t window) const;
 
  private:
   struct Record {
     int64_t display = display::kInvalidDisplayId;
-    // Whether an `Update` has had it in `live`. Until then it is loading its
-    // first shell page, which is the one gap a record outlives `live` for.
+    // Whether an `Update` has seen it in `live`. Until then it is loading its
+    // first shell page and is kept even when absent from `live`.
     bool seen = false;
   };
 

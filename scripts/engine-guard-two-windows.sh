@@ -1,16 +1,11 @@
 #!/usr/bin/env bash
-# Two clients, two windows, one page — the claim the broker's unit tests cannot
-# make for themselves.
+# Checks that two clients show two windows on one page.
 #
-# They assert that two apps get two sinks. Whether viz then resolves two
-# SurfaceDrawQuads in one aggregation is a different question, and a shell is a
-# desktop of windows.
+# The broker's unit tests check for two sinks; this checks that viz draws two
+# SurfaceDrawQuads in one aggregation.
 #
-# Its control is sharper than `client-window`'s, and it is the one that would
-# have caught the heuristic this replaced: with a single client running, the
-# second canvas must show its own fallback rather than the first client's
-# window. A broker that dispatched on nothing would pass the two-client run and
-# fail this.
+# The control runs one client: the second canvas must show its fallback, not
+# the first client's window. A broker that ignored the app id would fail it.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

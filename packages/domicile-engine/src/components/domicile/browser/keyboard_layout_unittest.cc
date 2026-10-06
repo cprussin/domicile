@@ -15,16 +15,10 @@
 namespace domicile {
 namespace {
 
-// A keymap saying one thing, and that thing is not QWERTY: the key a US
-// keyboard prints `s` on carries an `o`, which is where programmer Dvorak --
-// the layout this engine's user configured -- puts it.
+// A minimal keymap that maps the QWERTY `s` key to `o`, as programmer Dvorak
+// does.
 //
-// Hand-written and tiny rather than the 40 kilobytes xkb writes for a real
-// layout, because what is under test is the seam and not xkbcommon: the one
-// assertion a full keymap would add is that xkb can compile its own output.
-// `39` is the X keycode for KEY_S, which is evdev's 31 plus the 8 every X
-// keycode carries -- the same arithmetic XkbEvdevCodes does to reach it from
-// DomCode::US_S.
+// `39` is the X keycode for KEY_S: evdev's 31 plus X's offset of 8.
 constexpr char kOnWhereQwertyHasS[] = R"(xkb_keymap {
   xkb_keycodes "domicile" {
     minimum = 8;
@@ -45,7 +39,7 @@ constexpr char kOnWhereQwertyHasS[] = R"(xkb_keymap {
 };
 )";
 
-// What a key press asks the layout engine, and what came back.
+// The layout engine's result for one key press.
 struct Decoded {
   bool answered;
   ui::DomKey key;
@@ -59,19 +53,9 @@ Decoded Press(const ui::KeyboardLayoutEngine& engine, ui::DomCode code) {
   return decoded;
 }
 
-// THE BUG, WRITTEN DOWN. Off ChromeOS nothing sets this engine a keymap:
-// SetCurrentLayoutByName is #if BUILDFLAG(IS_CHROMEOS) around a
-// NOTIMPLEMENTED(), and SetCurrentLayoutFromBuffer -- which is not gated --
-// has exactly one caller in the tree, WaylandKeyboard::OnKeymap. A DRM/Ozone
-// browser runs neither, so `xkb_state_` is null for the life of the process
-// and XkbLookup bails with `No current XKB state` at every press.
-//
-// What that costs is only visible on a PRINTABLE key. Lookup still returns
-// true -- it falls back to DomCodeToNonPrintableDomKey, a static table -- so
-// Escape and the function keys carry on working and the desktop looks fine.
-// A letter falls off the end of that table into DomKey::UNIDENTIFIED and the
-// US-QWERTY code for wherever the key physically is, which is a shell that
-// types nothing whatever layout its user configured.
+// Without a keymap, Lookup falls back to a table of non-printable keys. It
+// still succeeds, but a letter decodes to DomKey::UNIDENTIFIED with the
+// US-QWERTY code for its position.
 TEST(DomicileKeyboardLayoutTest, WithNoKeymapAPrintableKeyDecodesToNothing) {
   ui::XkbEvdevCodes evdev_codes;
   ui::XkbKeyboardLayoutEngine engine(evdev_codes);
@@ -98,10 +82,7 @@ TEST(DomicileKeyboardLayoutTest, TheCompositorsKeymapIsWhatAKeyDecodesAs) {
       << "and the keycode a shortcut is matched on with it";
 }
 
-// A keymap xkb will not compile is reported rather than absorbed. The caller
-// is a socket the compositor writes, and a browser that kept its old layout --
-// which is no layout at all -- while saying nothing is the silence this whole
-// change exists to end.
+// A keymap xkb cannot compile is reported as a failure.
 TEST(DomicileKeyboardLayoutTest, AKeymapXkbRefusesIsRefusedHere) {
   ui::XkbEvdevCodes evdev_codes;
   ui::XkbKeyboardLayoutEngine engine(evdev_codes);

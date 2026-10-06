@@ -1,14 +1,11 @@
 // Copyright 2026 Connor Prussin
 // SPDX-License-Identifier: MIT
 
-// A key combination the desktop claims for itself.
+// A key combination the desktop grabs.
 //
-// The same shape `DomicileShortcutEvent` hands back, so a shell writes the
-// combination once and compares against the press with the same field names.
-//
-// `keycode` rather than `key`: this is a Linux evdev code, and `KeyboardEvent`
-// already spends `key` on a string ("Enter"). The modifiers keep the web's
-// names, so a shell that already reads `event.ctrlKey` reads this the same way.
+// Same fields as `DomicileShortcutEvent`, so a shell can compare a press
+// against it directly. `keycode` is a Linux evdev code; `KeyboardEvent.key` is
+// already a string such as "Enter".
 dictionary DomicileShortcut {
   required unsigned long keycode;
   boolean altKey = false;

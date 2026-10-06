@@ -10,12 +10,12 @@
 
 namespace domicile {
 
-// The part of a `buffer`-pixel texture that `crop` names, in the normalized
-// coordinates a TextureDrawQuad samples by. An empty crop is the whole buffer.
+// Converts `crop` to normalized TextureDrawQuad UVs within `buffer`. An empty
+// crop or buffer yields the whole buffer.
 //
-// This is xdg_surface.set_window_geometry: a client that draws its own shadow
-// commits a buffer larger than its window, and only the window fills the
-// <app> element's box.
+// Implements xdg_surface.set_window_geometry: a client that draws its own
+// shadow commits a buffer larger than its window, and only the window fills
+// the <app> element.
 gfx::RectF CropToUv(const gfx::Rect& crop, const gfx::Size& buffer);
 
 }  // namespace domicile

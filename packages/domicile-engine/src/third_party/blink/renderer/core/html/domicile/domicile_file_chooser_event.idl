@@ -1,48 +1,41 @@
 // Copyright 2026 Connor Prussin
 // SPDX-License-Identifier: MIT
 
-// The event a <webview> dispatches when the page inside it needs a file
-// picked -- an `<input type="file">` clicked, or a download that needs
-// somewhere to go. See docs/architecture/ENGINE-FORK.md in the Domicile
-// repository.
+// Dispatched by a <webview> when its page needs a file picked: an
+// `<input type="file">` or a download. The shell answers on the event.
 //
-// Not a web standard and not proposed as one; it exists in Domicile's engine
-// fork only, beside the element that dispatches it. No constructor and no
-// event-init dictionary: only the browser process asks for one.
+// Domicile-only, not a web standard. No constructor: only the browser creates
+// one.
 [
     RuntimeEnabled=DomicileExternalSurface,
     Exposed=Window
 ] interface DomicileFileChooserEvent : Event {
-  // "open", "open-multiple", "open-folder" or "save". A DOMString rather than
-  // an IDL enum for the reason HTMLWebViewElement's `security` is one: an enum
-  // is a generated file per enum, and this element adds none.
+  // "open", "open-multiple", "open-folder" or "save". A DOMString, not an IDL
+  // enum, as for HTMLWebViewElement's `security`.
   readonly attribute DOMString mode;
 
-  // The extensions the page will take, lower case and without the dot. Empty
-  // is anything.
+  // Accepted extensions, lower case without the dot. Empty accepts anything.
   readonly attribute FrozenArray<DOMString> accept;
 
-  // A save's suggested name, and the empty string otherwise.
+  // The suggested name for a save; empty otherwise.
   readonly attribute DOMString suggestedName;
 
-  // The absolute home directory: where a picker starts, and what its `~`
-  // means. The page has no other way to learn it.
+  // The absolute home directory, where a picker starts. The page cannot learn
+  // it otherwise.
   readonly attribute DOMString home;
 
-  // The answer: paths, absolute or relative to the home directory, as many as
-  // `mode` asks for. A wrong count or a path that climbs with `..` is a
-  // TypeError; a second answer is an InvalidStateError.
+  // Answers with paths, absolute or home-relative, as many as `mode` allows.
+  // Throws TypeError for a wrong count or a `..` path, and InvalidStateError
+  // if already answered.
   [RaisesException] undefined choose(sequence<DOMString> paths);
 
-  // The names in the directory at `path` -- absolute or relative to the home,
-  // as `choose` takes -- each a directory's ending in `/`, in no order. How a
-  // picker reaches what the home's index never found. Rejects with a
-  // NotReadableError for a path that is not a directory the browser can read.
-  // A path that climbs with `..` is a TypeError, and a chooser already
-  // answered an InvalidStateError: the listing is for answering it.
+  // Lists the directory at `path` (as for `choose`), unordered, with
+  // subdirectories ending in `/`. Lets a picker browse beyond the home index.
+  // Rejects with NotReadableError for an unreadable directory. Throws
+  // TypeError for a `..` path and InvalidStateError if already answered.
   [CallWith=ScriptState, RaisesException]
   Promise<sequence<DOMString>> list(DOMString path);
 
-  // The other answer: nothing was picked.
+  // Answers that nothing was picked.
   [RaisesException] undefined cancel();
 };

@@ -3,32 +3,17 @@
 #
 #   .github/scripts/engine-sync.sh /build/chromium/src
 #
-# Moving `CHROMIUM_PIN` moves two things, and only one of them is a commit.
-# `engine-reset.sh` fetches the revision and resets the tree onto it; that
-# leaves every third-party checkout under it — the toolchain, the sysroots,
-# everything `DEPS` names — at the *previous* pin's revisions, which is not a
-# tree Chromium builds from. `gclient sync` is what moves the other half, and
-# until this script existed it was a person logging into the build host: all
-# three engine workflows checked that the pin was there and stopped with an
-# instruction when it was not.
+# `engine-reset.sh` moves the Chromium commit; this moves the third-party deps
+# (toolchain, sysroots, everything in DEPS) to match. See
+# packages/domicile-engine/docs/BUILD-MACHINE.md#moving-the-pin.
 #
-# RUN AFTER THE RESET AND BEFORE `apply.sh`. gclient wants a clean tree at the
-# revision it is syncing for — the reset is what makes it one — and the series
-# has to go on afterward, because `apply.sh` refuses a dirty tree and a sync
-# writes into one.
-#
-# WHAT IT COSTS ON AN ORDINARY RUN IS ONE `cat`. A sync in front of every job
-# would be minutes of `gclient` ahead of a ~1m incremental build, on the one
-# machine that has the tree and one job slot to run it in. So the pin the DEPS
-# were last synced to is written down beside the checkout, and a run whose pin
-# matches it does not start `gclient` at all. The run that does pay for it is
-# the repin — which is rebuilding most of Chromium anyway, so a few minutes of
-# sync is not the number that matters in it.
-#
-# The stamp is written only after a sync finishes and only if the tree is still
-# at the pin: a tree half-way between two pins, described as either, is a build
-# against a mixture. That is the same failure `engine-tree-lock.sh` prevents by
-# another route, and it is silent both ways.
+# - Run after the reset and before `apply.sh`. gclient needs a clean tree at the
+#   pin, and `apply.sh` refuses the dirty tree a sync leaves.
+# - A sync takes minutes, so the last synced pin is stamped beside the checkout
+#   and a matching run skips gclient.
+# - The stamp is written only after a sync finishes with the tree still at the
+#   pin. A stamp on a half-synced tree would let the next run build against a
+#   mix of two pins without any error.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -37,10 +22,8 @@ CHROMIUM="${1:-}"
 
 pin="$(grep -v '^#' "$ROOT/packages/domicile-engine/CHROMIUM_PIN" | tr -d '[:space:]')"
 
-# Beside the checkout rather than inside it, for the reason the tree lock is:
-# a file inside `src/` is untracked in Chromium's repository, which is exactly
-# what makes `git status --porcelain` non-empty, which is exactly what
-# `apply.sh` refuses. Override for tests, which have no /build.
+# Outside `src/`: an untracked file there makes the tree dirty, and `apply.sh`
+# refuses a dirty tree. Tests override it because they have no /build.
 STAMP="${DOMICILE_SYNCED_PIN:-$(dirname "$CHROMIUM")/.domicile-synced-pin}"
 
 if [ "$(cat "$STAMP" 2>/dev/null || true)" = "$pin" ]; then
@@ -50,31 +33,22 @@ fi
 
 echo "syncing DEPS to $pin (this is the repin cost; ordinary runs skip it)"
 
-# Cleared before rather than rewritten after: between here and the last line of
-# this script the tree is somewhere between two pins, and nothing that reads
-# this file may be told otherwise if the machine goes away in the middle.
+# Cleared first: the tree is between two pins until the sync finishes, and an
+# interrupted run must not leave a stamp claiming either.
 rm -f "$STAMP"
 
-# The sentinel, for the reason `engine-build.sh` has one. Chromium's toolchain
-# shell is upstream's buildFHSEnv, whose shellHook execs bwrap, and a command
-# run through NIX_SHELL_RUN does not reliably carry its exit status back out —
-# this repository has three steps written around that. A file the inner script
-# touches as its last act is the one thing that distinguishes a sync that ran
-# from a shell that ran nothing.
+# Chromium's toolchain shell is a buildFHSEnv whose shellHook execs bwrap, so
+# NIX_SHELL_RUN does not reliably return the command's exit status. The inner
+# script touches this sentinel as its last step instead.
 #
-# Under $TMPDIR, which on the runner is /build/tmp: bwrap leaves /build visible
-# at the same path, so the inner script's `touch` lands where this can see it.
+# Under $TMPDIR (/build/tmp on the runner), which bwrap exposes at the same
+# path.
 SENTINEL="$(mktemp -u "${TMPDIR:-/tmp}/domicile-sync.XXXXXX")"
 rm -f "$SENTINEL"
 
-# `nix-shell` rather than nix-ld: depot_tools fetches prebuilt,
-# dynamically-linked binaries and runs them, and on NixOS they do not start
-# against the store unaided. Upstream's own shell is the environment that
-# works, and it is already how everything else in this tree is built on this
-# runner. `--command` does not work with it — nix appends its `exec` after the
-# shellHook that never returns — so NIX_SHELL_RUN is upstream's escape hatch,
-# and it takes a path to a script rather than a composed command because the
-# quoting otherwise passes through three shells.
+# Upstream's shell runs the prebuilt binaries depot_tools fetches, which do not
+# start on NixOS unaided. `--command` does not work because the shellHook never
+# returns, so this uses upstream's NIX_SHELL_RUN with a script path.
 NIX_SHELL_RUN="$ROOT/.github/scripts/engine-sync-deps.sh $CHROMIUM $pin $SENTINEL" \
   nix-shell "$CHROMIUM/tools/nix/shell.nix"
 
@@ -86,12 +60,9 @@ NIX_SHELL_RUN="$ROOT/.github/scripts/engine-sync-deps.sh $CHROMIUM $pin $SENTINE
 }
 rm -f "$SENTINEL"
 
-# A `.gclient` whose solution is `managed` — which is what an older
-# depot_tools wrote — syncs the solution itself to the head of its branch, and
-# the series applies to the pin and to nothing else. `--revision` is passed for
-# that reason and this asserts it held, because a sync that quietly moved the
-# tree would be caught three steps later by `apply.sh` saying a patch did not
-# apply, which reads as the series rotting rather than as this.
+# A `managed` solution in `.gclient` syncs to its branch head. `--revision`
+# prevents that; this check catches it here instead of as a confusing patch
+# failure in `apply.sh`.
 head="$(git -C "$CHROMIUM" rev-parse HEAD)"
 [ "$head" = "$pin" ] || {
   echo "::error::the sync moved $CHROMIUM off the pin" >&2

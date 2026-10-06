@@ -47,10 +47,8 @@ void ShortcutRegistry::Grab(const Chord& chord) {
 }
 
 bool ShortcutRegistry::Press(const Chord& chord, const Page& page) {
-  // Copied out under the lock and run outside it. A channel's callback is
-  // whatever the page's end of the pipe wanted to do next, and running it with
-  // this held would make every one of those a place the lock can be taken
-  // twice.
+  // Run callbacks outside the lock, since a callback may re-enter the
+  // registry.
   std::vector<ShortcutCallback> tell;
   {
     base::AutoLock held(lock_);
@@ -64,8 +62,8 @@ bool ShortcutRegistry::Press(const Chord& chord, const Page& page) {
     }
   }
 
-  // Still the desktop's key, and still swallowed: the claim is the process's.
-  // But a press nobody is told about is a key that did nothing, so say so.
+  // The key is still swallowed, since the claim is process-wide. Warn because
+  // nothing handles it.
   LOG_IF(WARNING, tell.empty())
       << "domicile: a claimed chord was pressed in a page with no control "
          "channel; nothing answers it";

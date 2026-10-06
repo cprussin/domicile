@@ -1,18 +1,12 @@
 #!/usr/bin/env bash
-# A browser window's find in page, run on the guest rather than on the shell's
-# own document, and the count the element holds of what it found.
+# Guard: find in page on a browser window searches the guest, not the shell's
+# document, and the element reports the match count.
 #
-# Headless and software-composited like the other <webview> guards: what this
-# reads is the element's own count, out of the browser's own log, so there are
-# no pixels and no client. Each step waits for the element to say it landed, so
-# a healthy run is seconds; the control is longer, because it watches the steps
-# it does not drive.
+# Headless and software-composited; it reads the count from the browser log.
 #
-# Its control is not an <iframe>: an <iframe> has no find() at all, so that run
-# would end on a TypeError rather than on a reading. This one runs the same
-# element, the same guest and the same pages and CALLS NO FIND. Then any count
-# it reads is one nobody asked for, and the positive run's need not have been
-# the find's.
+# Control: the same element, guest and pages with no find() call. An <iframe>
+# has no find(), so it cannot serve as the control. A count read in the control
+# was never requested, which would make the positive count meaningless.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

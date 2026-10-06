@@ -3,8 +3,8 @@
 
 import("//mojo/public/tools/bindings/mojom.gni")
 
-# THROWAWAY. The spike's proof only; deleted when domicile-compositor submits
-# real buffers. See docs/architecture/ENGINE-FORK.md in the Domicile repository.
+# Spike only. Delete when domicile-compositor submits real buffers. See
+# docs/architecture/ENGINE-FORK.md.
 mojom("mojom") {
   sources = [ "spike_probe.mojom" ]
 

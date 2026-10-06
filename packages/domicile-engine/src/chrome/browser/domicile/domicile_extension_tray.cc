@@ -47,7 +47,7 @@ namespace {
 using extensions::Extension;
 using extensions::ExtensionAction;
 
-// `image` at `scale`, as a PNG data: URL -- or nothing, for an image with no
+// Encodes `image` at `scale` as a PNG data: URL, or nothing if it has no
 // pixels at that scale yet.
 std::optional<std::string> Encoded(const gfx::Image& image, float scale) {
   if (image.IsEmpty()) {
@@ -65,10 +65,9 @@ std::optional<std::string> Encoded(const gfx::Image& image, float scale) {
   return PngAsDataUrl(*png);
 }
 
-// The icon the toolbar would draw for tab `tab`: one the extension set with
-// action.setIcon, else the manifest's, else Chrome's placeholder -- the
-// extension name's first letter, drawn synchronously, which is why it is the
-// one that cannot come back empty.
+// Returns the icon the toolbar would draw for `tab`: the setIcon icon, else
+// the manifest icon, else Chrome's placeholder. The placeholder is drawn
+// synchronously, so it is never empty.
 std::string IconOf(ExtensionAction& action, int tab, float scale) {
   const gfx::Image set = action.GetExplicitlySetIcon(tab);
   std::optional<std::string> icon =
@@ -80,14 +79,14 @@ std::string IconOf(ExtensionAction& action, int tab, float scale) {
   return *std::move(icon);
 }
 
-// The id an action keeps `tab`'s state under: the default where there is no
-// tab, which ExtensionAction also falls back to for anything a tab has not set.
+// Returns the id an action stores `tab`'s state under, or the default id if
+// there is no tab.
 int TabIdOf(content::WebContents* tab) {
   return tab == nullptr ? ExtensionAction::kDefaultTabId
                         : sessions::SessionTabHelper::IdForTab(tab).id();
 }
 
-// One row of the tray, as tab `tab` has it. See TrayExtension in the mojom.
+// Builds one tray entry with `tab`'s state. See TrayExtension in the mojom.
 mojom::TrayExtensionPtr EntryFor(const Extension& extension,
                                  ExtensionAction& action,
                                  int tab,
@@ -101,23 +100,18 @@ mojom::TrayExtensionPtr EntryFor(const Extension& extension,
       action.GetIsVisible(tab));
 }
 
-// The tray, for one shell document.
+// The tray for one shell document. A DocumentService, so a reloaded shell
+// binds a new one.
 //
-// A DocumentService, like WebViewGuestHost: it goes with the document, so a
-// shell that reloads binds a new one and is sent the list again.
+// Resends the whole list when any of these fire:
 //
-// FOUR THINGS SAY THE LIST MOVED, and every one of them resends all of it:
-//
-//   ExtensionRegistryObserver       an extension loaded or unloaded -- the
-//                                   installer adding one the config named, or
-//                                   removing one it stopped naming
-//   ExtensionActionDispatcher       an action's state: a title, a badge, a
-//                                   popup, an icon, enable() and disable()
-//   IconImage::Observer             a manifest icon finished loading. Its first
-//                                   image is Chrome's fallback, and nothing
-//                                   else says when the real one arrives
-//   DeskObserver                    the active tab changed, and an action's
-//                                   state is the active tab's
+//   ExtensionRegistryObserver   an extension loaded or unloaded
+//   ExtensionActionDispatcher   an action's title, badge, popup, icon or
+//                               enabled state changed
+//   IconImage::Observer         a manifest icon finished loading; nothing
+//                               else reports it
+//   DeskObserver                the active tab changed, and action state is
+//                               per tab
 class ExtensionTray final
     : public content::DocumentService<mojom::ExtensionTray>,
       public extensions::ExtensionRegistryObserver,
@@ -164,48 +158,42 @@ class ExtensionTray final
             ? nullptr
             : extensions::ExtensionActionManager::Get(context_)
                   ->GetExtensionAction(*extension);
-    // A click that raced an uninstall, not a page that lied: the id was in a
-    // list this sent. Nothing to click.
+    // The click raced an uninstall.
     if (action == nullptr) {
       LOG(WARNING) << "domicile: the tray activated " << id
                    << ", which has no action now.";
       return;
     }
 
-    // THE ACTIVE TAB IS THE TAB THE CLICK IS ABOUT: the <webview> that last
-    // had focus.
+    // The click applies to the active tab: the <webview> last focused.
     content::WebContents* tab = ActiveDeskTab(context_);
 
-    // activeTab FIRST, as ExtensionActionRunner::RunAction grants it before it
-    // dispatches anything or a popup opens: onClicked's listener and the
-    // popup's first line both expect the page to be theirs already. Only a
-    // desk tab's: with none, the page clicked in is the shell's own, and an
-    // extension is granted nothing on the desktop itself.
+    // Grant activeTab first, as ExtensionActionRunner::RunAction does, since
+    // onClicked and the popup expect access already. With no desk tab, the
+    // page is the shell, which gets no grant.
     if (tab != nullptr) {
       extensions::ActiveTabPermissionGranter* granter =
           extensions::ActiveTabPermissionGranter::FromWebContents(tab);
-      // extensions::TabHelper makes one, and AttachTabHelpers gives every
-      // guest a TabHelper before it is a tab.
+      // AttachTabHelpers gives every tab an extensions::TabHelper, which
+      // creates the granter.
       CHECK(granter);
       granter->GrantIfRequested(extension);
-      // Said only when it held: an extension that asks for no activeTab is
-      // granted nothing, and guard-webview-active-tab.sh reads this line.
+      // guard-webview-active-tab.sh reads this line.
       if (granter->IsGranted(extension)) {
         LOG(INFO) << "domicile: the tray granted " << id
                   << " activeTab on tab " << TabIdOf(tab) << ".";
       }
     }
 
-    // A POPUP IS THE SHELL'S TO OPEN, and Chrome dispatches no onClicked for
-    // an action that has one: the click is the grant, and nothing more.
+    // The shell opens popups, and Chrome sends no onClicked for an action
+    // with a popup.
     if (action->HasPopup(TabIdOf(tab))) {
       LOG(INFO) << "domicile: the tray opened " << id << "'s popup.";
       return;
     }
 
-    // With no desk tab, onClicked names the shell's own page, which is the one
-    // that was clicked in -- `DispatchExtensionActionClicked` builds a tab
-    // object out of the WebContents it is handed, so it has to be handed one.
+    // `DispatchExtensionActionClicked` needs a WebContents, so without a desk
+    // tab, pass the shell's page.
     LOG(INFO) << "domicile: the tray activated " << id << ".";
     extensions::ExtensionActionDispatcher::Get(context_)
         ->DispatchExtensionActionClicked(
@@ -229,8 +217,7 @@ class ExtensionTray final
 
   // extensions::ExtensionActionDispatcher::Observer:
   //
-  // The dispatcher is shared with the profile's incognito twin, so a change
-  // there arrives here too, and is not this tray's.
+  // The dispatcher is shared with the incognito profile; ignore its changes.
   void OnExtensionActionUpdated(
       ExtensionAction* extension_action,
       content::WebContents* web_contents,
@@ -252,22 +239,17 @@ class ExtensionTray final
     icons_.RemoveObservation(image);
   }
 
-  // The whole list, to the page. Nothing before the page has said where to:
-  // SetClient sends it the moment it does.
+  // Sends the whole list. Does nothing before SetClient, which sends it then.
   void Send() {
     if (!client_.is_bound()) {
       return;
     }
 
-    // THE PAGE'S DENSITY, read now rather than when the tray was bound: a
-    // shell window moved to a denser screen draws its icons at that screen's
-    // scale from the next change on. A frame with no view yet is drawn nowhere
-    // and gets 1.
+    // Read the scale on each send so icons follow the window across screens.
     content::RenderWidgetHostView* view = render_frame_host().GetView();
     const float scale = view == nullptr ? 1.0f : view->GetDeviceScaleFactor();
 
-    // THE ACTIVE TAB'S STATE, which is what Chrome's toolbar shows: a badge an
-    // extension set for one tab is that tab's.
+    // Show the active tab's state, as Chrome's toolbar does.
     const int tab = TabIdOf(ActiveDeskTab(context_));
 
     extensions::ExtensionActionManager* actions =
@@ -275,9 +257,8 @@ class ExtensionTray final
     std::vector<mojom::TrayExtensionPtr> tray;
     for (const scoped_refptr<const Extension>& extension :
          extensions::ExtensionRegistry::Get(context_)->enabled_extensions()) {
-      // What chrome://extensions lists, which is Chrome's own rule for what
-      // its toolbar offers: not the component extensions that are part of the
-      // browser, like the PDF viewer.
+      // Skip component extensions (such as the PDF viewer), as Chrome's
+      // toolbar does.
       if (!extensions::ui_util::ShouldDisplayInExtensionSettings(*extension)) {
         continue;
       }
@@ -291,7 +272,7 @@ class ExtensionTray final
     client_->ExtensionsChanged(std::move(tray));
   }
 
-  // Hear when `action`'s manifest icon has loaded, once.
+  // Observes `action`'s manifest icon, once per icon.
   void Watch(ExtensionAction& action) {
     extensions::IconImage* icon = action.default_icon_image();
     if (icon != nullptr && !icons_.IsObservingSource(icon)) {
@@ -299,14 +280,12 @@ class ExtensionTray final
     }
   }
 
-  // The shell's profile, which is the one its <webview>s browse in and the one
-  // the installer puts extensions into.
+  // The shell's profile, shared by its <webview>s and the installer.
   const raw_ptr<content::BrowserContext> context_;
 
   mojo::Remote<mojom::ExtensionTrayClient> client_;
 
-  // Whether this profile has a desk this tray observes. A profile the shell
-  // is not in has none, and its tray reports the default tab.
+  // False if the profile has no desk; the tray then uses the default tab.
   bool observing_desk_ = false;
 
   base::ScopedObservation<extensions::ExtensionRegistry,
@@ -324,7 +303,7 @@ class ExtensionTray final
 
 void BindExtensionTray(content::RenderFrameHost* frame,
                        mojo::PendingReceiver<mojom::ExtensionTray> receiver) {
-  // Owns itself and goes with the document, as every DocumentService does.
+  // Self-owned; destroyed with the document.
   new ExtensionTray(*frame, std::move(receiver));
 }
 

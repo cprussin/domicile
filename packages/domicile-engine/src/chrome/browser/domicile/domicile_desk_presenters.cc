@@ -19,14 +19,15 @@ namespace domicile {
 struct DeskPresenters::Presenter {
   int64_t display = 0;
   std::unique_ptr<views::Widget> widget;
-  // After the widget, so it goes first: its layer is in the widget's tree.
+  // Declared after the widget so it is destroyed first: its layer is in the
+  // widget's tree.
   std::unique_ptr<content::DomicileDeskMirror> mirror;
 };
 
 namespace {
 
-// A window on `pixels` that shows nothing of its own and takes no focus: the
-// page it shows is the host's, and so is every key and click.
+// A frameless window on `pixels` that takes no focus or input. The host
+// window owns the page and receives all input.
 std::unique_ptr<views::Widget> PresenterOn(const gfx::Rect& pixels) {
   auto widget = std::make_unique<views::Widget>();
   views::Widget::InitParams params(
@@ -37,9 +38,8 @@ std::unique_ptr<views::Widget> PresenterOn(const gfx::Rect& pixels) {
   params.accept_events = false;
   params.bounds = pixels;
   widget->Init(std::move(params));
-  // In pixels, straight to the host, for `FitTo`'s reason in
-  // domicile_shell_windows.cc: the CRTC's rectangle is in pixels, and
-  // `InitParams::bounds` are DIPs.
+  // Set the bounds in pixels on the host: the CRTC's rect is in pixels and
+  // `InitParams::bounds` are DIPs (see `FitTo` in domicile_shell_windows.cc).
   widget->GetNativeWindow()->GetHost()->SetBoundsInPixels(pixels);
   widget->Show();
   return widget;
@@ -78,7 +78,7 @@ void DeskPresenters::Present(content::WebContents* page,
       presenter.mirror.reset();
       presenter.mirror = content::MirrorDomicileDeskPage(page);
       if (presenter.mirror == nullptr) {
-        // No view yet. The page loading asks again.
+        // No view yet. Called again once the page loads.
         continue;
       }
       presenter.widget->GetNativeWindow()->layer()->Add(

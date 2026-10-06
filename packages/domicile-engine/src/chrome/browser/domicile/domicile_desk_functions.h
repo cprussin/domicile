@@ -6,15 +6,15 @@
 
 namespace domicile {
 
-// Register the desk's chrome.tabs and chrome.windows functions over Chrome's,
-// under the same names. ExtensionFunctionRegistry::Register is public and
-// replaces an entry by name, so this takes no edit to Chrome's own.
+// Registers the desk's chrome.tabs and chrome.windows functions in place of
+// Chrome's. ExtensionFunctionRegistry::Register replaces entries by name, so
+// Chrome's code needs no patch.
 //
-// Mutations go where the thing they change lives (EXTENSIONS.md's table):
+// Each call acts where its target lives (docs/architecture/EXTENSIONS.md#tabs):
 //
 //   tabs.query                    every window's tabs, matched by
 //                                 //components/domicile:desk_tabs
-//   tabs.update {url, muted}      the guest; the browser holds its WebContents
+//   tabs.update {url, muted}      the guest's WebContents
 //   tabs.update {active}          the shell, as `domicile-focus-request`
 //   windows.update {focused}      the same, on that window's active tab
 //   tabs.create {url}             opens a browser window. Answered with the
@@ -36,8 +36,8 @@ namespace domicile {
 //                                 the desk's for a caller in no tab
 //   RefusedOnDesk()               `not supported on a Domicile desk`
 //
-// Anything else -- tabs.get, reload, sendMessage, executeScript, goBack --
-// is Chrome's own, finding a desk tab through the lookups' hooks.
+// Other functions (tabs.get, reload, sendMessage, executeScript, goBack) are
+// Chrome's, which find desk tabs through the lookup hooks.
 void RegisterDeskFunctions();
 
 }  // namespace domicile

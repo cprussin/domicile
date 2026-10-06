@@ -22,16 +22,14 @@ constexpr uint8_t kRangeLimitsTag = 0xFD;
 
 // A 128-byte base EDID block, header and nothing else.
 std::vector<uint8_t> BareEdid() {
-  // The eight-byte header, then zeros. Built as a vector and resized rather
-  // than copied out of a C array: `-Wunsafe-buffer-usage` is an error in this
-  // tree, and subscripting an array by a loop variable is what it is for.
+  // A vector rather than a C array, because `-Wunsafe-buffer-usage` rejects
+  // indexing an array by a loop variable.
   std::vector<uint8_t> edid = {0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00};
   edid.resize(128, 0);
   return edid;
 }
 
-// An 18-byte display descriptor, padded the way a monitor pads one: terminated
-// by a line feed where the text is shorter than the block, then spaces.
+// An 18-byte display descriptor, terminated by a line feed then spaces.
 void PutDescriptor(std::vector<uint8_t>& edid,
                    size_t offset,
                    uint8_t tag,
@@ -59,7 +57,7 @@ TEST(DrmEdidSerialTest, ReadsTheSerialFromTheFirstDescriptor) {
   EXPECT_EQ(SerialNumberFromEdid(edid), "2ZLS413");
 }
 
-// All four slots are searched, and nothing fixes which one a maker uses.
+// Makers may put the serial in any of the four slots.
 TEST(DrmEdidSerialTest, ReadsTheSerialFromTheLastDescriptor) {
   std::vector<uint8_t> edid = BareEdid();
   PutDescriptor(edid, kFourthDescriptor, kSerialTag, "H8KF413");
@@ -67,10 +65,7 @@ TEST(DrmEdidSerialTest, ReadsTheSerialFromTheLastDescriptor) {
   EXPECT_EQ(SerialNumberFromEdid(edid), "H8KF413");
 }
 
-// The ordinary monitor: a product name, a range-limits block, and the serial
-// among them. Only 0xFF is the serial, and picking the first display
-// descriptor instead would return the model for every panel on the desk --
-// which is exactly the collision this exists to break.
+// Only the 0xFF descriptor is the serial, not the first display descriptor.
 TEST(DrmEdidSerialTest, PicksTheSerialOutFromAmongTheOtherDescriptors) {
   std::vector<uint8_t> edid = BareEdid();
   PutDescriptor(edid, kFirstDescriptor, kProductNameTag, "DELL U3219Q");
@@ -80,9 +75,7 @@ TEST(DrmEdidSerialTest, PicksTheSerialOutFromAmongTheOtherDescriptors) {
   EXPECT_EQ(SerialNumberFromEdid(edid), "G3MS413");
 }
 
-// Thirteen characters fill the block, so there is no terminator to find. A
-// parser that searched for one rather than bounding the length would run into
-// the next descriptor.
+// A 13-character serial has no terminator; the read must stop at the block.
 TEST(DrmEdidSerialTest, ASerialThatFillsTheBlockHasNoTerminator) {
   std::vector<uint8_t> edid = BareEdid();
   PutDescriptor(edid, kFirstDescriptor, kSerialTag, "ABCDEFGHIJKLM");
@@ -90,8 +83,7 @@ TEST(DrmEdidSerialTest, ASerialThatFillsTheBlockHasNoTerminator) {
   EXPECT_EQ(SerialNumberFromEdid(edid), "ABCDEFGHIJKLM");
 }
 
-// Padding rather than a terminator, which plenty of monitors do. A name with a
-// space on the end is one nobody can type into a config file.
+// Space padding without a terminator is trimmed.
 TEST(DrmEdidSerialTest, TrailingPaddingIsNotPartOfTheSerial) {
   std::vector<uint8_t> edid = BareEdid();
   const std::string serial = "2ZLS413";
@@ -104,10 +96,7 @@ TEST(DrmEdidSerialTest, TrailingPaddingIsNotPartOfTheSerial) {
   EXPECT_EQ(SerialNumberFromEdid(edid), "2ZLS413");
 }
 
-// A descriptor opening with something other than zeros is a detailed TIMING
-// descriptor: those bytes are a pixel clock, and byte 3 is part of the
-// horizontal active count. Reading a tag out of one is how a resolution turns
-// into a serial number.
+// In a timing descriptor byte 3 is pixel data, not a tag.
 TEST(DrmEdidSerialTest, ADetailedTimingDescriptorIsNotASerial) {
   std::vector<uint8_t> edid = BareEdid();
   PutDescriptor(edid, kFirstDescriptor, kSerialTag, "NOTASERIAL");
@@ -117,10 +106,7 @@ TEST(DrmEdidSerialTest, ADetailedTimingDescriptorIsNotASerial) {
   EXPECT_EQ(SerialNumberFromEdid(edid), "");
 }
 
-// A serial is printable ASCII by the spec, so a control character in one is a
-// misread block or a broken EDID. The whole block is refused rather than the
-// part before it: half a serial is a name that looks plausible and matches
-// nothing.
+// A non-printable byte rejects the whole serial, not just the rest of it.
 TEST(DrmEdidSerialTest, ASerialWithAControlCharacterIsRefused) {
   std::vector<uint8_t> edid = BareEdid();
   PutDescriptor(edid, kFirstDescriptor, kSerialTag, "2ZLS413");
@@ -129,8 +115,7 @@ TEST(DrmEdidSerialTest, ASerialWithAControlCharacterIsRefused) {
   EXPECT_EQ(SerialNumberFromEdid(edid), "");
 }
 
-// Ordinary rather than broken: a projector, a virtual output, or a panel whose
-// maker left the block out. The caller names it by make and model alone.
+// Many monitors carry no serial.
 TEST(DrmEdidSerialTest, AMonitorThatStatesNoSerial) {
   std::vector<uint8_t> edid = BareEdid();
   PutDescriptor(edid, kFirstDescriptor, kProductNameTag, "DELL U3219Q");
@@ -138,11 +123,8 @@ TEST(DrmEdidSerialTest, AMonitorThatStatesNoSerial) {
   EXPECT_EQ(SerialNumberFromEdid(edid), "");
 }
 
-// The base block's own 32-bit serial, which plenty of monitors fill in instead
-// of the descriptor. Without it those panels are named by make and model
-// alone, so two of the same model are one name -- which is the collision this
-// file exists to break. Formatted the way libdisplay-info prints one, because
-// that is the form already written down in a sway or kanshi config.
+// Falls back to the base block's 32-bit serial, formatted as libdisplay-info
+// does.
 TEST(DrmEdidSerialTest, FallsBackToTheNumericSerialInTheBaseBlock) {
   std::vector<uint8_t> edid = BareEdid();
   edid[0x0C] = 0x68;
@@ -153,8 +135,7 @@ TEST(DrmEdidSerialTest, FallsBackToTheNumericSerialInTheBaseBlock) {
   EXPECT_EQ(SerialNumberFromEdid(edid), "0x0001E368");
 }
 
-// The printed one wins. A monitor carrying both is carrying the descriptor for
-// a reason: it is what is on the sticker.
+// The descriptor wins over the numeric serial, since it matches the sticker.
 TEST(DrmEdidSerialTest, ADescriptorSerialWinsOverTheNumericOne) {
   std::vector<uint8_t> edid = BareEdid();
   edid[0x0C] = 0x68;
@@ -166,16 +147,12 @@ TEST(DrmEdidSerialTest, ADescriptorSerialWinsOverTheNumericOne) {
   EXPECT_EQ(SerialNumberFromEdid(edid), "2ZLS413");
 }
 
-// Zero is not a serial: it is the field nobody filled in, which is most
-// monitors that carry a descriptor instead. Naming every one of them
-// `0x00000000` would make them all the same monitor.
+// Zero means unset; otherwise many monitors would share `0x00000000`.
 TEST(DrmEdidSerialTest, AZeroNumericSerialIsNoSerial) {
   EXPECT_EQ(SerialNumberFromEdid(BareEdid()), "");
 }
 
-// A descriptor tagged as a serial and filled with padding states nothing, so
-// the number behind it still gets its turn rather than being shadowed by an
-// answer that is not one.
+// An all-padding serial descriptor falls back to the numeric serial.
 TEST(DrmEdidSerialTest, AnAllPaddingSerialDescriptorFallsThroughToTheNumber) {
   std::vector<uint8_t> edid = BareEdid();
   edid[0x0C] = 0x01;
@@ -187,15 +164,13 @@ TEST(DrmEdidSerialTest, AnAllPaddingSerialDescriptorFallsThroughToTheNumber) {
   EXPECT_EQ(SerialNumberFromEdid(edid), "0x00000001");
 }
 
-// Every offset this reads is past the end, and a connector with no EDID at all
-// is what an unreadable monitor reports.
+// An unreadable monitor reports an empty EDID.
 TEST(DrmEdidSerialTest, AnEdidTooShortToHoldADescriptor) {
   EXPECT_EQ(SerialNumberFromEdid({}), "");
   EXPECT_EQ(SerialNumberFromEdid(std::vector<uint8_t>(64, 0)), "");
 }
 
-// The descriptors read are the base block's; an extension block after it is
-// somebody else's business and changes nothing.
+// Extension blocks are ignored.
 TEST(DrmEdidSerialTest, AnEdidWithAnExtensionBlock) {
   std::vector<uint8_t> edid = BareEdid();
   PutDescriptor(edid, kFirstDescriptor, kSerialTag, "2ZLS413");
@@ -204,11 +179,8 @@ TEST(DrmEdidSerialTest, AnEdidWithAnExtensionBlock) {
   EXPECT_EQ(SerialNumberFromEdid(edid), "2ZLS413");
 }
 
-// `ManufacturerIdToString` is five bits per letter with 1 meaning 'A' and no
-// validation at all, so the codes nobody set decode to characters: zero to
-// "@@@" and kInvalidProductCode to backticks. Both are one character off 'A'
-// and both look like a name, which is how every unnamed monitor on a desk ends
-// up sharing one.
+// `ManufacturerIdToString` does not validate: an unset code decodes to "@@@"
+// and kInvalidProductCode to backticks.
 TEST(DrmEdidSerialTest, IsPnpIdTakesThreeLettersAndNothingElse) {
   EXPECT_TRUE(IsPnpId("DEL"));
   EXPECT_TRUE(IsPnpId("BOE"));
@@ -227,8 +199,7 @@ TEST(DrmEdidSerialTest, ANameIsItsThreeParts) {
             "DEL DELL U3219Q 2ZLS413");
 }
 
-// Every part is optional, and a name with a hole where one should be is worse
-// than a shorter name: it is a string nobody can match and nobody can read.
+// Missing parts are skipped, leaving no double spaces.
 TEST(DrmEdidSerialTest, AMissingPartIsLeftOutRatherThanLeftEmpty) {
   EXPECT_EQ(DisplayNameFrom("DEL", "DELL U3219Q", ""), "DEL DELL U3219Q");
   EXPECT_EQ(DisplayNameFrom("", "DELL U3219Q", "2ZLS413"),
@@ -237,8 +208,7 @@ TEST(DrmEdidSerialTest, AMissingPartIsLeftOutRatherThanLeftEmpty) {
   EXPECT_EQ(DisplayNameFrom("", "", ""), "");
 }
 
-// Two of the three come straight out of an EDID descriptor, which monitors pad
-// with spaces.
+// Parts from EDID descriptors are often space-padded.
 TEST(DrmEdidSerialTest, PaddedPartsAreTrimmedAndEmptyOnesDropped) {
   EXPECT_EQ(DisplayNameFrom("  DEL ", " DELL U3219Q  ", "  2ZLS413"),
             "DEL DELL U3219Q 2ZLS413");

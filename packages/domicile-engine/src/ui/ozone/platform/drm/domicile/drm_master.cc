@@ -14,9 +14,8 @@ namespace ui {
 
 namespace {
 
-// One card, one call, and the refusal said out loud where it happened. No
-// caller of any of these has a remedy the kernel would accept, so the log is
-// the whole of the reporting and it names the card.
+// Runs `call` on one card and logs a failure. Callers have no remedy, so the
+// log, naming the card, is the only report.
 bool Ask(const DrmMasterCall& call,
          const char* verb,
          const base::FilePath& device,
@@ -43,10 +42,9 @@ DrmMaster::DrmMaster(DrmMasterCall set_master, DrmMasterCall drop_master)
 DrmMaster::~DrmMaster() = default;
 
 void DrmMaster::Add(const base::FilePath& device, base::ScopedFD fd) {
-  // See the header: nothing else in this fork ever asks the kernel for master,
-  // and a card is gained before anything can commit on it. Recorded either
-  // way, because a card that refused a take is still one to drop on the way
-  // to another console.
+  // Take master before anything can commit on the card (see the header).
+  // Record the card even if the take fails, so a console switch still drops
+  // it.
   if (display_is_ours_) {
     Ask(set_master_, "take", device, fd.get());
   }

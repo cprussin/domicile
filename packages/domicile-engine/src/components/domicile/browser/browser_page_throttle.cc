@@ -32,8 +32,8 @@ content::NavigationThrottle::ThrottleCheckResult
 BrowserPageThrottle::WillStartRequest() {
   const GURL& url = navigation_handle()->GetURL();
   if (IsBrowserPage(url)) {
-    // The guard greps for this: it says the refusal was this throttle's, and
-    // not a page that failed to load for some other reason.
+    // A guard script greps for this line to tell this refusal apart from an
+    // ordinary load failure.
     LOG(INFO) << "domicile: a <webview> was refused a page Chrome serves "
                  "itself: "
               << url.spec();

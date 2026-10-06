@@ -1,25 +1,23 @@
 #!/usr/bin/env python3
-"""The page guard-webview-passkey-extension.sh asks for a passkey from.
+"""Serves the page guard-webview-passkey-extension.sh asks for a passkey from.
 
-One path, `/page`: a document that first has a sandboxed frame -- an opaque
-origin -- ask isUserVerifyingPlatformAuthenticatorAvailable(), which took the
-browser down until patch 0069; then calls navigator.credentials.create() and
-paints what came back, each in one flat color the guard reads:
+One path, `/page`. It first has a sandboxed frame (an opaque origin) call
+isUserVerifyingPlatformAuthenticatorAvailable(), which patch 0069 keeps from
+crashing the browser. Then it calls navigator.credentials.create() and paints
+the outcome in a flat color:
 
-  --unheld     asked as `/page?conditional`, before anything else: the browser
-               said there is no conditional UI, or answered a conditional
-               get() rather than holding it until it was aborted (patch 0084)
+  --unheld     for `/page?conditional`: the browser reported no conditional
+               UI, or answered a conditional get() instead of holding it until
+               aborted (patch 0084)
+  --answered   the fixture extension's answer, matched by its message
+  --refused    any other refusal. It retries a second later, since the
+               extension attaches after startup and may not be ready
+  --no-api     no PublicKeyCredential, so it never asks
 
-  --answered   the fixture extension's answer, by its message
-  --refused    any other refusal; it asks again a second later, because the
-               extension attaches after startup and may lose the race
-  --no-api     no PublicKeyCredential at all, so it never asks
+and `--color` until then. Each outcome is also logged as a `GUARD` console line.
 
-and `--color` until one of them does. Each outcome is also a `GUARD` console
-line, which the engine's log keeps.
-
-Served from 127.0.0.1 and opened as `localhost`: an IP address is no relying
-party WebAuthn will take, and `localhost` is one that needs no certificate.
+Served from 127.0.0.1 and opened as `localhost`: WebAuthn rejects an IP address
+as a relying party, and `localhost` needs no certificate.
 """
 
 import argparse
@@ -29,8 +27,8 @@ from urllib.parse import urlsplit
 
 PAGE_PATH = "/page"
 
-# The fixture's `ANSWER`: scripts/test-webview-passkey-extension-guard.sh
-# holds the two together.
+# Must match the extension's `ANSWER`;
+# scripts/test-webview-passkey-extension-guard.sh checks this.
 ANSWER = "domicile-guard-passkey-extension"
 
 PAGE = """<!doctype html>
@@ -184,8 +182,8 @@ class OnePage(BaseHTTPRequestHandler):
             self.send_error(404, "this server has one page and that is not it")
 
     def log_message(self, fmt, *args):
-        # To stderr, which the guard keeps: whether the page was requested at
-        # all tells "the guest never asked" from "it loaded and never painted".
+        # To stderr, which the guard keeps: a request shows the guest loaded
+        # the page, so a missing color is the page's.
         sys.stderr.write("%s - %s\n" % (self.address_string(), fmt % args))
 
 
@@ -210,8 +208,8 @@ def main():
         unheld=arguments.unheld,
     ).encode("utf-8")
     server = ThreadingHTTPServer(("127.0.0.1", arguments.port), OnePage)
-    # Before serve_forever, so a guard waiting on this line is not waiting on a
-    # buffer. lib-ports.sh's served_port reads the port off it.
+    # Flushed before serve_forever, since the guard waits for this line.
+    # lib-ports.sh's served_port reads the port from it.
     print("serving %s on 127.0.0.1:%d" % (PAGE_PATH, server.server_address[1]), flush=True)
     server.serve_forever()
 

@@ -11,23 +11,12 @@
 
 namespace domicile {
 
-// Domicile's display list, off the screen ozone built.
+// Converts ozone's displays into the list the compositor advertises as
+// wl_output.
 //
-// The producer is a Wayland compositor and what it is being told is what to
-// advertise as wl_output, so this is where the browser's units become the
-// protocol's: millimeters rather than the density display::Display carries
-// them as, and mHz rather than Hz.
-//
-// The name is carried straight through: `drm_screen.cc` built it from the
-// panel's EDID and put it on `label`, and nothing here is in a position to
-// improve on it. See that file for what it is made of and why the serial in it
-// had to be parsed rather than read off display::EdidParser.
-//
-// Here rather than beside its one caller in //content/browser because the
-// millimeters are arithmetic and arithmetic gets a test. The DENSITY is not
-// this file's choice: display::Display has no physical size, and
-// ui/ozone/platform/drm/domicile/drm_screen.cc says why the panel leaves the
-// snapshot as one.
+// Converts to wl_output units: millimeters instead of density, and mHz instead
+// of Hz. The name is the `label` that
+// ui/ozone/platform/drm/domicile/drm_screen.cc built from the panel's EDID.
 std::vector<mojom::DisplayPtr> DisplayListFor(
     const std::vector<display::Display>& displays);
 

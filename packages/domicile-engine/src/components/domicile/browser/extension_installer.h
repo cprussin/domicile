@@ -11,8 +11,8 @@
 
 namespace domicile {
 
-// The extensions a desk's config names, as the compositor's `extensions`
-// message carries them. See docs/architecture/EXTENSIONS.md.
+// The extensions named in the config, from the compositor's `extensions`
+// message. See docs/architecture/EXTENSIONS.md.
 struct ExtensionList {
   // Chrome Web Store ids.
   std::vector<std::string> web_store;
@@ -20,7 +20,7 @@ struct ExtensionList {
   std::vector<std::string> unpacked;
 };
 
-// What to do to a profile so it holds what an `ExtensionList` names.
+// The changes that bring a profile in line with an `ExtensionList`.
 struct ExtensionChanges {
   // Ids to install from the Web Store.
   std::vector<std::string> install_from_web_store;
@@ -30,19 +30,17 @@ struct ExtensionChanges {
   std::vector<std::string> uninstall;
 };
 
-// The decision half of the installer; carrying it out is
-// chrome/browser/domicile/domicile_extension_installer.h.
+// Decides which extensions to install, load and uninstall.
+// chrome/browser/domicile/domicile_extension_installer.h applies the result.
 //
-// `installed` is every extension the profile has, `unpacked` the directory
-// each unpacked one was loaded from, and `added` what this installer put there.
+// `installed` is every extension in the profile, `unpacked` maps each loaded
+// directory to its id, and `added` is what this installer installed.
 //
-// WHAT IS THERE IS NOT ASKED FOR AGAIN. Every shell window's channel sends the
-// list when it connects, so a desk of three monitors asks three times:
-// installing an installed id again is a DFATAL in PendingExtensionManager, and
-// loading a directory again restarts its extension.
-//
-// ONLY WHAT THIS ADDED IS TAKEN AWAY. The profile is the one browser windows
-// use, and an extension the user put there themselves is not the config's.
+// - Skips what is already present. Each shell window sends the list on
+//   connect, and reinstalling an id is a DFATAL in PendingExtensionManager.
+//   Reloading a directory restarts its extension.
+// - Uninstalls only what this installer added. Browser windows share the
+//   profile, so it may hold extensions the user installed.
 ExtensionChanges ReconcileExtensions(
     const ExtensionList& wanted,
     const std::set<std::string>& installed,

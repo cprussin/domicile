@@ -8,29 +8,19 @@
 
 #include "components/domicile/engine/domicile_engine.h"
 
-// THROWAWAY, and separate from domicile_engine.h so that it is obvious which
-// of the two is the seam.
+// Throwaway test probes for what viz drew, kept apart from domicile_engine.h.
 //
-// The browser's invitation carries a SpikeProbe pipe beside the broker's, and
-// the library is the only thing holding that invitation — one producer per
-// socket, because OutgoingInvitation::Send consumes the server endpoint. So a
-// harness that wants to know what viz actually drew has to ask through here.
-//
-// Deleted with the rest of the spike, when domicile-compositor is the producer
-// and its own output is the evidence.
+// Only the library holds the browser's mojo invitation, which carries the
+// SpikeProbe pipe, so test harnesses query viz through these functions.
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-// The color the display compositor drew at the center of the browser's
-// window, as SkColor (ARGB). False if there is no window yet or nothing has
-// been drawn.
+// The color viz drew at the center of the browser's window, as SkColor
+// (ARGB). False if there is no window yet or nothing has been drawn.
 //
-// The center rather than a coordinate because that is where every spike page
-// puts the <app>, and because it is the same pixel steps 2 and 3 are recorded
-// on. Blocking: it is an assertion in a test, and a test that raced the thing
-// it asserts on would be worse than a slow one.
+// Blocks until the readback completes.
 DOMICILE_ENGINE_EXPORT bool domicile_engine_spike_sample_window_center(
     DomicileEngine* engine,
     uint32_t* argb);
@@ -38,16 +28,9 @@ DOMICILE_ENGINE_EXPORT bool domicile_engine_spike_sample_window_center(
 // The color at `x`, `y` in the browser's window, as SkColor (ARGB). False if
 // there is no window yet, nothing has been drawn, or the point is outside it.
 //
-// The center is not enough once a page holds more than one <app>: two windows
-// side by side have no pixel that is both, and "viz aggregated two surfaces
-// into one page" is exactly the claim the unit tests cannot make -- they
-// exercise the broker's bookkeeping, not the aggregator. So the two-window
-// guard names a point inside each canvas and asserts a different client's
-// color at each.
-//
-// Outside the window fails rather than clamps, the same way SpikeProbe's
-// SamplePixel does: a measurement that silently samples the wrong pixel is
-// worse than one that stops.
+// Used to check that viz composites several surfaces into one page. Points
+// outside the window fail rather than clamp, so a wrong pixel is never
+// sampled silently.
 DOMICILE_ENGINE_EXPORT bool domicile_engine_spike_sample_pixel(
     DomicileEngine* engine,
     int32_t x,
@@ -60,61 +43,32 @@ typedef struct DomicileSpikeCapture {
   int32_t y;
   int32_t width;
   int32_t height;
-  // The captured bitmap's own size, which is not obliged to be the size the
-  // browser's window was asked for.
+  // The captured bitmap's size, which may differ from the requested window
+  // size.
   int32_t window_width;
   int32_t window_height;
 } DomicileSpikeCapture;
 
-// The Rust side mirrors this as a #[repr(C)] struct of six i32. Six int32_t
-// with no padding is what that assumes, and an assertion is cheaper than
-// finding out from a wrong bounding box.
+// The Rust side mirrors this as a #[repr(C)] struct of six i32.
 #ifdef __cplusplus
 static_assert(sizeof(DomicileSpikeCapture) == 6 * sizeof(int32_t),
               "DomicileSpikeCapture must stay six packed int32_t");
 #endif
 
-// Where `argb` is in the browser's window, and how big that window is.
+// Finds the bounding box of the exact color `argb` in the browser's window.
 //
-//   -1  the window could not be captured — no window yet, nothing drawn, or
-//       no probe pipe. Nothing was measured and nothing follows about the
-//       color.
-//    0  captured, and the color is not in it. This is a measurement.
+//   -1  the window could not be captured (no window, nothing drawn, or no
+//       probe pipe). Nothing was measured.
+//    0  captured, and the color is not in it.
 //    1  captured, and the color is in it.
 //
-// Three values rather than a bool, because a guard's negative control turns on
-// exactly this distinction: "the color is not on screen" is the control
-// passing, and "nothing could be read" is the control having measured nothing
-// while looking identical.
+// Tests need -1 and 0 kept apart: a negative control passes only on 0.
 //
-// `out` carries the answer. Its `window_width` and `window_height` are written
-// on 0 and 1; its `x`, `y`, `width` and `height` are written only on 1.
-// Nothing is written on -1.
+// On 0 and 1, writes `out`'s `window_width` and `window_height`; on 1, also
+// its `x`, `y`, `width` and `height`. Writes nothing on -1.
 //
-// A struct rather than an array of six, because this tree builds with
-// `-Wunsafe-buffer-usage` and indexing a bare `int32_t*` is an error under it.
-// Naming the fields is what the warning is asking for anyway.
-//
-// A BOX AND A SIZE RATHER THAN A POINT, because the first matching pixel
-// answers the wrong question. A guard that samples a named point and gets the
-// wrong color needs to know whether the color is elsewhere, *where* the
-// region it belongs to actually is, and what coordinate space the capture is
-// in — the window it was asked for and the bitmap it got back are not
-// obliged to be the same size, and a probe that cannot say so makes a
-// coordinate bug look like a missing surface.
-//
-// A named point is also the wrong question to ask of a shell. The spike pages
-// put their canvases where the harness can compute them; a real shell decides
-// where its windows go, in its own layout, and a guard that hard-coded a pixel
-// would be asserting the shell's CSS rather than the seam.
-//
-// One CaptureWindow rather than a grid of SamplePixel calls, which is a
-// blocking readback each and starves the producer's thread — the reason the
-// point probe is throttled in the first place.
-//
-// Exact match, like every other assertion in the spike: the clients draw one
-// flat color and a near-match would mean the compositor's own background, an
-// anti-aliased edge, or a blend, none of which is a client's window.
+// Uses one capture rather than many SamplePixel calls, each of which is a
+// blocking readback that starves the producer's thread.
 DOMICILE_ENGINE_EXPORT int32_t domicile_engine_spike_find_color(
     DomicileEngine* engine,
     uint32_t argb,

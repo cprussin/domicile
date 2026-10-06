@@ -1,36 +1,16 @@
 #!/usr/bin/env bash
-# Configure and build the engine with the args the spike is measured under.
+# Configure and build the engine.
 #
 #   ./scripts/build.sh /build/chromium/src
 #
-# Small and fast rather than shippable: a component build with no symbols and
-# every Ozone platform off but the three this needs.
+# A release component build with no symbols, for fast builds. Ozone platforms:
 #
-#   wayland   nested in an existing session — a window, like running sway
-#             inside sway. What a developer has, and what CI drives
-#   headless  no display at all, which is what `crux` has
-#   drm       a tty, with no display server underneath at all
+#   wayland   nested in an existing session (developers, CI)
+#   headless  no display; `crux` needs it to run the engine at all
+#   drm       a bare tty; see docs/architecture/A-DESKTOP-ON-A-TTY.md
 #
-# Headless is not part of the design; it is what the measurement machine needs.
-# crux has no display server and no Wayland compositor, so without it the engine
-# cannot be started at all and scripts/spike.sh has nothing to talk to.
-#
-# DRM WAS UNSETTABLE HERE UNTIL RECENTLY, and the road to it is worth keeping
-# because each step was measured rather than read. At this Chromium pin
-# `ui/ozone/platform/drm/BUILD.gn` opened with `assert(is_chromeos, "Ozone DRM
-# platform is ChromeOS-only")`, and `//ui/ozone/BUILD.gn` makes
-# `platform/drm:gbm` a dependency the moment the argument is true, so `gn gen`
-# refused before anything was compiled -- run 34152521286. Patch `0012` relaxed
-# that assert and run 34623575435 measured the result: `gn gen` accepts the
-# argument and `//ui/ozone` compiles and links with it.
-#
-# What kept it out after that was that nothing stood behind the platform:
-# `OzonePlatformDrm::CreateScreen` was `NOTREACHED()` and nothing modesets
-# without `//ui/display/manager`. Patch `0013` answered the first and `0016` the
-# second, so the embedder exists and the argument goes on.
-# `docs/architecture/A-DESKTOP-ON-A-TTY.md` tracks what is left, which is one
-# item: taking the card node from logind rather than opening it. A screen has
-# lit since.
+# The DRM platform needs patches 0012 (relaxes its ChromeOS-only assert), 0013
+# (`DrmScreen`) and 0016 (modeset driver).
 set -u
 
 CHROMIUM="${1:-}"
@@ -43,21 +23,18 @@ fi
 
 cd "$CHROMIUM" || exit 1
 
-# A COMPILER CACHE WHEN THE MACHINE HAS ONE. `gn` bakes `cc_wrapper` into
-# every compile command, so adding or dropping this line is a full rebuild --
-# which is why a named wrapper that cannot be run is refused here rather than
-# skipped, and refused before `gn gen` rewrites out/Domicile.
+# Optional compiler cache. `gn` bakes `cc_wrapper` into every compile command,
+# so adding or dropping it rebuilds everything. A wrapper that cannot run is
+# refused before `gn gen` rewrites the output directory.
 #
-# The value is a stable path and not a store path, so bumping ccache does not
-# rewrite every command. See cprussin/dotfiles chromium-build.nix.
+# Use a stable path, not a store path, so bumping ccache does not change every
+# command. See cprussin/dotfiles chromium-build.nix.
 CACHE_ARG=""
 WRAPPER="${DOMICILE_CC_WRAPPER:-}"
 if [ -n "$WRAPPER" ]; then
-  # `command -v` rather than `[ -x ]`, so `cc_wrapper = "ccache"` -- the form
-  # Chromium's cc_wrapper.gni documents -- is not refused for looking like a
-  # relative path. It answers for a shell builtin too; the worst of that is `:`,
-  # which compiles nothing and exits 0, so the build dies at the first link
-  # rather than the first compile. Still loud, still not a silent rebuild.
+  # `command -v` accepts a bare name like `ccache`, the form Chromium's
+  # cc_wrapper.gni documents. It also accepts shell builtins; a builtin such as
+  # `:` fails the build at the first link, which is still loud.
   if ! command -v "$WRAPPER" >/dev/null 2>&1; then
     echo "DOMICILE_CC_WRAPPER names $WRAPPER, which nothing here can run." >&2
     echo "Carrying on without it would be a silent rebuild of the whole of" >&2
@@ -67,48 +44,25 @@ if [ -n "$WRAPPER" ]; then
   CACHE_ARG="  cc_wrapper = \"$WRAPPER\"
 "
 
-  # ONE CACHE FOR EVERY TREE, which is what Chromium's Linux build instructions
-  # ask for when there is more than one checkout. crux builds in
-  # /build/trees/tree-N/src and picks N per run, so a compile keyed on its
-  # tree misses in every other: run 36236156550 got 0 hits out of 44,033 in
-  # tree-1, minutes after tree-0 had built nearly the same series. BASEDIR
-  # makes ccache hash paths under the tree relative to it, and NOHASHDIR keeps
-  # the working directory out of the hash. Physical, as ccache compares it
-  # with getcwd. Exported, not ccache.conf, so it holds on any machine.
+  # Share one cache across trees. crux builds in /build/trees/tree-N/src with
+  # N picked per run, so hashing absolute paths misses in every other tree.
+  # BASEDIR makes paths relative to the tree (physical, as ccache compares it
+  # with getcwd), and NOHASHDIR keeps the working directory out of the hash.
   CCACHE_BASEDIR="$(pwd -P)"
   export CCACHE_BASEDIR
   export CCACHE_NOHASHDIR=1
 fi
 
-# EVERY TIME, not only when there is no build.ninja. `gn gen` decides for
-# itself whether anything changed by comparing the arguments, so passing them
-# always costs nothing and is what makes editing this file take effect.
+# Run `gn gen` every time. It skips the work when the arguments are unchanged,
+# and `crux` keeps warm trees, so gating it would keep stale arguments.
 #
-# Gated, it did not. `crux` keeps a warm tree on purpose, so a change to these
-# arguments was applied on a machine with no `out/Domicile` and silently
-# skipped on the one that runs the guards — which means CI went green having
-# built with the old arguments and said nothing. The release script has always
-# done it this way and says so; this one is the copy that drifted.
+# `ozone_platform` is unset, so the default platform stays the first in
+# `//ui/ozone/BUILD.gn`'s order: headless. DRM is used only when asked for with
+# `--ozone-platform=drm`.
 #
-# THE DEFAULT PLATFORM IS NOT CHANGED BY ADDING ONE, and that is the whole
-# safety argument for `ozone_platform_drm = true` below. `ozone_platform` is
-# unset here, so `generate_ozone_platform_list.py` never reorders -- it only
-# moves a platform to the front when `--default` names one in the list. What is
-# left is `//ui/ozone/BUILD.gn`'s own order, which appends headless (line 37)
-# before drm (line 43) before wayland (line 56). So headless stays first, stays
-# the default, and drm is a platform `--ozone-platform=drm` can ask for rather
-# than one anything gets by accident.
-#
-# It is ordered after `DrmScreen` (patch 0013) and the modeset driver (patch
-# 0016) on purpose: a platform with no embedder behind it turns a clear refusal
-# into a crash. Both are in the series now.
-#
-# `use_libinput` IS NOT AN OZONE ARGUMENT, and it is here anyway. Without it
-# `CreateConverter` has no touchpad branch off ChromeOS, a pad falls through to
-# `EventConverterEvdevImpl`, and that class has no `EV_ABS` case -- a pointer
-# nothing can move, reported by nothing. libinput's headers and library are
-# already in Chromium's own bullseye sysroot, so this costs a line. Patch 0027
-# is what makes the descriptor logind opened reach it.
+# `use_libinput`: without it, a touchpad off ChromeOS falls through to
+# `EventConverterEvdevImpl`, which ignores `EV_ABS`, so the pointer cannot move.
+# Patch 0027 passes it the device that logind opened.
 gn gen "$OUT" --args="
   is_debug = false
   symbol_level = 0
@@ -121,11 +75,7 @@ gn gen "$OUT" --args="
   use_libinput = true
 $CACHE_ARG" || exit 1
 
-# `domicile_css_parity` alongside the other producer, because `guard-css-and-resize.sh`
-# is a thing a person runs and it cannot without one. The BUILD.gn's own header
-# has named both since it was written; this script named one, so step 4 needed
-# a second command nobody documented here.
-# `domicile_color_probe` for the same reason as `domicile_css_parity`:
-# guard-webview-framing.sh is a thing a person runs and it cannot without one.
+# guard-css-and-resize.sh needs `domicile_css_parity`, and
+# guard-webview-framing.sh needs `domicile_color_probe`.
 exec autoninja -C "$OUT" chrome domicile_solid_color_submitter \
   domicile_css_parity domicile_color_probe

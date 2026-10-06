@@ -1,32 +1,29 @@
-// The shell guard-webview-popup-window.sh drives: one browser window, focused,
-// an extension's popup asking for a popup window with windows.create, and the
-// browser window the engine opens for it.
+// The shell module guard-webview-popup-window.sh loads: one focused browser
+// window, an extension popup that calls windows.create for a popup window, and
+// the browser window the engine opens for it.
 //
-// WHAT THIS PAGE SAYS, all of it to the console, which the engine writes to its
-// own log:
+// Console output, which the engine writes to its log:
 //
-//   GUARD listening              the desktop was handed to Shell and a listener is
-//                                registered -- the harness working
+//   GUARD listening              a listener is registered (harness check)
 //   GUARD page url=…             the browser window is showing its page
 //   GUARD focused                this page focused it
 //   GUARD tray popup=…           the fixture's row arrived, naming its popup
 //   GUARD asked id=… width=… height=…
-//                                a browser window, popup window `id`'s tab,
+//                                a browser window for popup window `id`'s tab
 //                                reached the desk's list at that size
 //   GUARD window current=… type=… found=…
-//                                the claim: what the page in the drawn
-//                                window reports about its own window
-//   GUARD window closed          the drawn window left the list: its
-//                                windows.remove closed it
-//   GUARD created id=… tabs=…    windows.create's answer, read off the
-//                                popup's own address
+//                                what the page in the drawn window reports
+//                                about its own window
+//   GUARD window closed          the drawn window left the list after its
+//                                windows.remove
+//   GUARD created id=… tabs=…    windows.create's result, read from the
+//                                popup's address
 //
 // `?name=1` draws the engine's browser window with `<webview window>`.
-// `?name=0` is the control: it leaves that window undrawn and opens its own at
-// the same page, a tab of the desk's own window.
+// `?name=0` is the negative control: it leaves that window undrawn and opens
+// its own at the same page, as a tab of the desk's own window.
 //
-// Everything is inside `Shell`, which the document Domicile writes calls once
-// the module has loaded.
+// The engine's document calls `Shell` once the module loads.
 
 export const Shell = (_root, desktop) => {
   const say = (what) => {
@@ -34,8 +31,8 @@ export const Shell = (_root, desktop) => {
   };
 
   /**
-   * A query parameter this cannot run without. A default would turn a guard
-   * invoked wrongly into a measurement of something nobody asked for.
+   * Reads a required query parameter. No default, so a misconfigured guard
+   * fails instead of measuring the wrong thing.
    */
   const required = (parameters, name) => {
     const value = parameters.get(name);
@@ -59,14 +56,16 @@ export const Shell = (_root, desktop) => {
   const address = required(parameters, "a");
   const naming = required(parameters, "name") === "1";
 
-  // How long after the focus the popup is opened: the element tells the browser
-  // it was focused over one pipe, and the popup asks over another.
+  // Delay between focusing and opening the popup: focus and the popup's request
+  // reach the browser over different pipes, so they can arrive out of order.
   const SETTLE_MS = 1000;
 
   /**
-   * Makes a <webview> that calls `shown` with each page's address. It shows
-   * `src` or browser window `window`, set before the element enters the
-   * document, when it asks for its page.
+   * Creates a <webview> showing `src` or browser window `window`, and calls
+   * `shown` with each page's address.
+   *
+   * `window` must be set before attaching, since the element requests its page
+   * on attach.
    */
   const view = ({ src, window }, shown) => {
     const element = document.createElement("webview");
@@ -117,8 +116,8 @@ export const Shell = (_root, desktop) => {
   });
 
   // The engine's window for the popup window, from the desk's list. This
-  // document's own `<webview src>` is in no list. The control's own window is
-  // distinguished by its id.
+  // document's own `<webview src>` is in no list. The negative control's
+  // window is told apart by its id.
   let asked;
   let drawn;
   let gone = false;
@@ -144,8 +143,8 @@ export const Shell = (_root, desktop) => {
         drawn = popupWindow.id;
         view({ window: drawn }, reading);
       } else {
-        // The control's window: the same page opened by this shell, so a tab
-        // of the desk's own window. Drawn once it is in the list.
+        // The negative control opens the same page itself, as a tab of the
+        // desk's own window, and draws it once it is in the list.
         const ownUrl = popupWindow.url;
         const ownWindow = () =>
           (host.browserWindows ?? []).find(

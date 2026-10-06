@@ -19,10 +19,9 @@
 namespace domicile::spike {
 namespace {
 
-// Must match content/browser/domicile/domicile_frame_sink_broker.cc. Integer
-// names, and see the comment there: under ipcz an attachment is indexed by the
-// first four bytes of its name, so string-named attachments all collide on
-// index 0.
+// Must match content/browser/domicile/domicile_frame_sink_broker.cc. Names are
+// integers because ipcz indexes an attachment by the first four bytes of its
+// name, so string names all collide on index 0.
 constexpr uint64_t kBrokerPipeName = 0;
 constexpr uint64_t kProbePipeName = 1;
 
@@ -86,9 +85,8 @@ void SurfaceProducer::OnFrameSinkCreated(
   std::move(on_brokered).Run(frame_sink_id);
 }
 
-// The page allocated this LocalSurfaceId and picked this size. Nothing here
-// chose either, and nothing here could have: the embed_token in the id is the
-// embedder's to mint, and the size is its layout box.
+// The embedder allocates the LocalSurfaceId, including its embed_token, and
+// sets the size from its layout box. The producer adopts both.
 void SurfaceProducer::OnSurfaceEmbedded(
     const viz::LocalSurfaceId& local_surface_id,
     const gfx::Size& size,
@@ -98,9 +96,8 @@ void SurfaceProducer::OnSurfaceEmbedded(
   size_ = size;
   submitting_ = true;
 
-  // One frame straight away so the surface activates without waiting on the
-  // BeginFrame that embedding just unblocked. On a resize this is also what
-  // makes the new id current before anything asks what got drawn.
+  // Submit now so the surface activates without waiting for a BeginFrame. On
+  // a resize this makes the new id current before anyone samples the window.
   Submit(viz::BeginFrameAck::CreateManualAckWithDamage());
   if (first) {
     sink_->SetNeedsBeginFrame(true);

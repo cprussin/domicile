@@ -6,9 +6,6 @@
 #include <string>
 #include <utility>
 
-// `LOG` and `as_byte_span` are used below and had never been asked for by name;
-// they arrived through base/command_line.h, which the shell source replaces. An
-// include this file does not use is not allowed to be what keeps it compiling.
 #include "base/containers/span.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
@@ -29,56 +26,43 @@ namespace domicile {
 
 namespace {
 
-// A domicile:// URL naming `host`, resolved to a file under `root`, or fail.
-// What the shell's files and the home's previews share: every refusal below is
-// about the path, and the path rules are the same for both.
+// Resolves a domicile:// URL for `host` to a file under `root`. Returns false
+// if the URL does not resolve inside `root`. Shared by the shell and home
+// hosts.
 bool ResolveUnder(const base::FilePath& root,
                   const char* host,
                   bool refuse_dotfiles,
                   const GURL& url,
                   base::FilePath* out_path) {
-  // No root means the engine was started without --domicile-shell-root, or
-  // without a home. There is nothing to serve and no sensible guess to make.
+  // Empty when the engine started without --domicile-shell-root or a home.
   if (root.empty()) {
     return false;
   }
   if (!url.is_valid() || !url.SchemeIs(kDomicileScheme)) {
     return false;
   }
-  // One host per root. A URL naming any other is refused rather than mapped,
-  // so neither root can be reached through the other's name.
+  // Each root serves only its own host.
   if (url.host() != host) {
     return false;
   }
 
-  // Percent-decoding happens here rather than in the path arithmetic below,
-  // because "%2e%2e%2f" has to be ".." *before* ReferencesParent() is asked
-  // about it, or the check reads an escape and sees nothing wrong.
-  // NORMAL is the only rule this function takes besides plus-for-space, and it
-  // is the right one anyway: UnescapeBinaryURLComponent "leaves nothing
-  // unescaped, including nulls", so %2e%2e%2f really is ".." by the time
-  // ReferencesParent() below is asked about it, and %00 really is a NUL by the
-  // time it is refused. Anything that decodes less would make both checks read
-  // an escape and see nothing wrong.
+  // Decode fully before the checks below, so "%2e%2e%2f" is seen as "../" and
+  // "%00" as NUL. UnescapeBinaryURLComponent leaves nothing escaped.
   std::string path = base::UnescapeBinaryURLComponent(
       url.path(), base::UnescapeRule::NORMAL);
 
-  // A NUL in the decoded path would truncate the name the filesystem is asked
-  // for, so a request for "index.html%00.png" could reach a different file than
-  // the one it appears to name.
+  // A NUL would truncate the filename, so "index.html%00.png" could open a
+  // different file than it names.
   if (path.find('\0') != std::string::npos) {
     return false;
   }
 
-  // GURL always gives an absolute path for a standard scheme. Strip the leading
-  // separator so this is appended to the root rather than replacing it.
+  // Strip the leading separator so the path appends to the root instead of
+  // replacing it.
   while (!path.empty() && path.front() == '/') {
     path.erase(0, 1);
   }
-  // No index fallback. The bare root is the document the engine writes, and
-  // CreateLoaderAndStart answers it before asking this -- so an empty path
-  // reaching here is a URL that resolved to the root some other way, and there
-  // is no file it should mean.
+  // No index fallback: CreateLoaderAndStart serves the bare root itself.
   if (path.empty()) {
     return false;
   }
@@ -87,7 +71,7 @@ bool ResolveUnder(const base::FilePath& root,
   if (relative.IsAbsolute() || relative.ReferencesParent()) {
     return false;
   }
-  // After the unescape above, so `%2essh` is `.ssh` by the time it is looked at.
+  // Runs after decoding, so `%2essh` is seen as `.ssh`.
   if (refuse_dotfiles) {
     for (const std::string& component : relative.GetComponents()) {
       if (!component.empty() && component.front() == '.') {
@@ -98,9 +82,7 @@ bool ResolveUnder(const base::FilePath& root,
 
   base::FilePath candidate = root.Append(relative);
 
-  // The belt to the braces above: whatever the path arithmetic did, the answer
-  // has to be inside the root. This is what makes the refusals a property of
-  // the result rather than of the cleverness of the checks before it.
+  // Final check on the result, independent of the checks above.
   if (!root.IsParent(candidate)) {
     return false;
   }
@@ -139,51 +121,26 @@ bool ShellURLLoaderFactory::MayReadHome(
 
 // static
 std::string ShellURLLoaderFactory::ShellDocument(const std::string& module) {
-  // The same page for every shell, on purpose: nothing here is negotiable and
-  // there is no way to supply a document of your own. What is in it is only
-  // what a desktop cannot do without.
+  // The fixed document every shell loads into. It holds only what a desktop
+  // needs:
   //
-  //   - a charset, because a page without one is decoded by guesswork
-  //   - a viewport, because without it the engine lays out for a phone and
-  //     every coordinate the compositor is told about is wrong by a scale
-  //   - a root that fills the window with no margin. A desktop is the whole
-  //     screen; eight pixels of body margin is eight pixels the compositor
-  //     believes it has and does not, and a client's window drawn in the wrong
-  //     place looks like the seam rather than like a stylesheet
+  //   - a charset
+  //   - a viewport, so layout and compositor coordinates share a scale
+  //   - a full-window root with no margin, so the page and compositor agree on
+  //     where windows are
   //
-  // No stylesheet link, and that is the interesting omission: a shell's CSS
-  // arrives through its module, so nothing paints before the module has run and
-  // the themed-flash problem cannot happen.
+  // The shell's CSS comes from its module, so nothing paints before it runs.
   //
-  // The title is not guessed. The directory a module came out of is as likely
-  // to be `dist` as anything a person would recognize, so it says Domicile
-  // until the shell says otherwise with document.title.
+  // The module is named in a `domicile-shell-module` meta element. Blink's
+  // DomicileShell loads it after the body is parsed and calls its `Shell`
+  // export; see DomicileShell, which also reports load failures.
   //
-  // THE DOCUMENT NAMES THE SHELL; THE ENGINE RUNS IT. The module is named in
-  // a `domicile-shell-module` meta element and nothing on the page loads it:
-  // blink's DomicileShell does, once the body is parsed, and calls its `Shell`
-  // with the body and the desktop. A script here would have had to find the
-  // desktop on a global every other script could find too; see DomicileShell,
-  // which is also where a shell failing to load is reported on the screen.
-  // Every other export of the module is ignored, so one file can be a config
-  // and a shell both.
+  // The module name comes from disk and goes into the most privileged page.
+  // EscapeAllExceptUnreserved makes it safe in a quoted attribute and encodes
+  // `#`, `?` and `%` so they stay part of the filename.
   //
-  // EscapeAllExceptUnreserved on the module name. The name came off somebody's
-  // disk and lands in the most privileged page in this system, so it has to be
-  // safe inside a double-quoted attribute *and* still name the file the author
-  // meant. Its output is unreserved characters and %XX, so no `"`, `<` or `>`
-  // survives it to end the attribute or the element -- and `#`, `?` and `%`,
-  // legal in a POSIX filename, are encoded rather than read as a fragment, a
-  // query or an escape.
-  //
-  // AND IT ADDS NO NAME TO THE BODY, WHICH IS NOT FASTIDIOUSNESS. An earlier
-  // version found its own script by an id -- `domicile-shell` -- and
-  // `shell-manganese`'s `mountPoint` looks up that exact id to decide whether
-  // it has already made its mount point. So it found the script tag, React
-  // mounted the whole desktop inside a <script>, and a <script> is
-  // `display: none`. This document is the one thing every shell is written
-  // against, so every name in it is a name in the shell's namespace: the body
-  // is empty, and the root `Shell` is handed is an empty body.
+  // The body stays empty with no ids: every name in this document is in the
+  // shell's namespace and could collide with the shell's own lookups.
   const std::string escaped = base::EscapeAllExceptUnreserved(module);
   return base::StrCat({
       "<!doctype html>\n"
@@ -216,18 +173,11 @@ void ShellURLLoaderFactory::ServeDocument(
   mojo::Remote<network::mojom::URLLoaderClient> client_remote(
       std::move(client));
 
-  // READ PER REQUEST, AND OUT OF THE SHELL SOURCE RATHER THAN THE COMMAND LINE.
-  // Per request is what makes a reload able to serve a different shell than the
-  // one this window loaded a moment ago, which is the whole of `domicile
-  // load-shell` on this side: the module is whatever the source holds when the
-  // document is asked for. The command line is still where it starts out --
-  // ShellSource is seeded from it -- so an engine nobody has told anything
-  // serves exactly what it was launched with.
+  // Read per request so a reload serves whatever `domicile load-shell` last
+  // set. ShellSource starts with the command-line values.
   const std::string module = ShellSource::Get().Module();
   if (module.empty()) {
-    // No module is no shell. Failing is the honest answer; a document with an
-    // empty src would load, paint nothing, and look like a broken shell rather
-    // than like a missing argument.
+    // Fail instead of serving an empty page that looks like a broken shell.
     LOG(ERROR) << "domicile: the engine was started without --"
                << kDomicileShellModuleSwitch
                << ", so there is no shell to load.";
@@ -286,9 +236,8 @@ void ShellURLLoaderFactory::CreateLoaderAndStart(
     mojo::PendingRemote<network::mojom::URLLoaderClient> client,
     const net::MutableNetworkTrafficAnnotationTag& traffic_annotation) {
   const bool home = request.url.host() == kDomicileHomeHost;
-  // The bare root is the document Domicile writes, not a file on disk. A shell
-  // is a module and a page to load it in; only the module and what it imports
-  // come off the filesystem.
+  // The bare root is the generated document; only the module and its imports
+  // come from disk.
   if (!home && (request.url.path() == "/" || request.url.path().empty())) {
     ServeDocument(std::move(client));
     return;
@@ -307,19 +256,14 @@ void ShellURLLoaderFactory::CreateLoaderAndStart(
     return;
   }
 
-  // Hand the resolved file to content's file loader. "BypassingSecurityChecks"
-  // names the file: URL policy it skips, which is the right thing to skip here:
-  // this request never was a file: URL and has already been checked against the
-  // only policy that applies to it, which is that it resolve inside the shell
-  // root (or, for the home, that the shell asked and it is no dotfile).
+  // Skipping file: URL policy is safe: this was never a file: URL, and the
+  // checks above already confined it to the root.
   network::ResourceRequest file_request = request;
   file_request.url = net::FilePathToFileURL(path);
   content::CreateFileURLLoaderBypassingSecurityChecks(
       file_request, std::move(loader), std::move(client),
       /*observer=*/nullptr,
-      // A shell is a set of files, not a place to browse. A directory URL is a
-      // request for something that is not a document, and answering it with a
-      // listing would publish the shape of the tree.
+      // A listing would expose the tree's layout.
       /*allow_directory_listing=*/false);
 }
 

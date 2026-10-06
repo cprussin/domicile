@@ -12,15 +12,15 @@ namespace blink {
 
 // One extension with an action, as the browser described it.
 //
-// A ScriptWrappable rather than a dictionary, for DomicileClipboardEntry's
-// reason. Immutable and cheap to replace: the browser sends the whole tray
-// whenever any of it changes.
+// A ScriptWrappable because WebIDL does not allow a dictionary as an
+// attribute's array element type. Immutable: the browser resends the whole
+// tray on any change.
 class MODULES_EXPORT DomicileExtension final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  // `popup` is the null String for an action with no popup, which is what the
-  // IDL's `USVString?` reads as null.
+  // `popup` is a null String for an action with no popup, so the IDL's
+  // `USVString?` reads null.
   DomicileExtension(const String& id,
                     const String& name,
                     const String& title,

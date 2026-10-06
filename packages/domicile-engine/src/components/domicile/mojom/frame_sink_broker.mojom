@@ -13,164 +13,116 @@ import "ui/gfx/mojom/buffer_types.mojom";
 
 // Tells a producer which surface to submit to.
 //
-// The embedder allocates and the producer adopts. That is not our invention: it
-// is what RemoteFrame does for every OOPIF, where the embedding side owns the
-// LocalSurfaceId's parent_sequence_number and bumps it whenever its box
-// changes. Here the embedder is the page — a <canvas> pointed at a brokered
-// FrameSinkId — so this call is a compositor telling a client to resize, and
-// the <canvas> element's layout box is the xdg_toplevel.configure.
-//
-// The LocalSurfaceId carries an embed_token the embedder minted, and holding it
-// is the whole of the producer's permission to submit to that surface. Nothing
-// has to decide whether the page *may* embed a window.
+// The embedder allocates the LocalSurfaceId and the producer adopts it, as
+// RemoteFrame does for OOPIFs. Here the embedder is the page, so the
+// embedding element's layout box drives xdg_toplevel.configure. The
+// LocalSurfaceId's embed_token is the producer's permission to submit to that
+// surface. See docs/architecture/ENGINE-FORK.md.
 interface SurfaceObserver {
-  // The embedder is showing `size` of this producer's surface at
-  // `local_surface_id`. Submit to that id, at that size, until told another.
+  // The embedder shows `size` of this producer's surface at
+  // `local_surface_id`. Submit to that id at that size until told otherwise.
   //
-  // This is xdg_toplevel.configure. `size` is in the page's device pixels, and
-  // `scale` is how many of them the page draws one CSS pixel with -- which is
-  // what brings the box back to the logical pixels a client is configured in.
-  // Per embed rather than per desktop: each monitor's page is at its own.
+  // This is xdg_toplevel.configure. `size` is in the page's device pixels and
+  // `scale` is device pixels per CSS pixel, which converts back to the logical
+  // pixels a client is configured in. Per embed, since each monitor's page has
+  // its own scale.
   OnSurfaceEmbedded(viz.mojom.LocalSurfaceId local_surface_id,
                     gfx.mojom.Size size,
                     double scale);
 
-  // Viz asked for a frame. Only sent to a producer whose sink the browser
-  // owns — one that passed no receiver to CreateFrameSink — because a producer
-  // holding its own sink is already viz's client and hears this directly.
+  // Viz requested a frame. Sent only to producers whose sink the browser owns
+  // (no receiver passed to CreateFrameSink); others hear it from viz directly.
   //
   // This is wl_surface.frame.
   OnFrame(int64 deadline_us);
 
-  // Viz has stopped sampling `buffer_id` and the producer may draw into it
-  // again. Without this the compositor reuses a dmabuf viz is still reading,
-  // which is a tear rather than an error.
+  // Viz no longer samples `buffer_id`, so the producer may draw into it.
+  // Reusing a dmabuf viz is still reading causes tearing.
   //
   // This is wl_buffer.release.
   OnBufferReleased(uint64 buffer_id);
 };
 
-// One display the browser can see, as a producer that has to advertise it needs
-// it.
+// One display the browser sees, for the producer to advertise.
 //
-// `bounds` is the display's place on the browser's desktop in DIP, which on the
-// DRM platform is the connector's native mode at its origin: nothing there sets
-// a scale factor, so DIP and pixels are the same number.
+// `bounds` is the display's position on the browser's desktop in DIP. On the
+// DRM platform nothing sets a scale factor, so DIP equals pixels.
 struct Display {
-  // Stable across a hotplug: ozone derives it from the EDID. The producer
-  // names its output after this, so an unplugged-and-replugged monitor keeps
-  // the wl_output its clients are on rather than being handed a new one.
+  // Derived from the EDID, so it is stable across hotplug. The producer names
+  // its wl_output after it, so a replugged monitor keeps the same wl_output.
   int64 id;
   gfx.mojom.Rect bounds;
 
-  // The panel itself, in millimeters, or an empty size for a display that
-  // reports none.
+  // The panel size in millimeters, or empty if the display reports none.
   //
-  // Millimeters because this is what a producer puts in wl_output.geometry,
-  // and a client divides the mode by it to get a DPI. Empty is that protocol's
-  // own word for a screen with no such number -- "the physical size can be set
-  // to zero if it doesn't make sense for this output (e.g. for projectors or
-  // virtual outputs)" -- and a connector reporting no size is ordinary rather
-  // than broken, so it crosses as empty rather than as something invented on
-  // its behalf.
-  //
-  // display::Display has no such field: it carries a DPI, which is where this
-  // is divided back out of. See components/domicile/browser/display_list.cc
-  // and ui/ozone/platform/drm/domicile/drm_screen.cc, which are the two ends
-  // of that one conversion.
+  // The producer puts this in wl_output.geometry, which allows zero for
+  // displays with no physical size. display::Display stores a DPI instead;
+  // components/domicile/browser/display_list.cc and
+  // ui/ozone/platform/drm/domicile/drm_screen.cc convert between the two.
   gfx.mojom.Size physical_size_mm;
 
-  // What to call this monitor: "<MAKE> <MODEL> <SERIAL>", off its EDID, or an
-  // empty string for one that says none of the three.
+  // The monitor's name, "<MAKE> <MODEL> <SERIAL>" from its EDID, or empty if
+  // the EDID gives none.
   //
-  // The id above is identity and this is a NAME, and a producer needs both.
-  // The id is what survives a hotplug and what an output is keyed by; this is
-  // what a person writes in a config file to say which monitor they mean,
-  // because an int64 derived from an EDID is not something anyone can predict
-  // from looking at a desk. It is the same string kanshi and sway match a
-  // profile on.
-  //
-  // display::Display carries it as `label`, and
-  // ui/ozone/platform/drm/domicile/edid_name.cc is what builds it -- including
-  // the serial, which is the one part display::EdidParser keeps only a hash
-  // of.
+  // `id` is identity; this is what a user writes in config to pick a monitor,
+  // and matches what kanshi and sway use. Built by
+  // ui/ozone/platform/drm/domicile/edid_name.cc and carried in
+  // display::Display as `label`. It includes the serial, which
+  // display::EdidParser keeps only as a hash.
   string name;
 
-  // What the CRTC is running at, in mHz, or zero for a display with no mode to
-  // report.
-  //
-  // mHz because that is what wl_output.mode states, and zero for the same
-  // reason an empty physical size is empty. A client is paced by
-  // wl_surface.frame rather than by this, so a screen that does not know its
-  // rate loses nothing by saying so.
+  // The CRTC refresh rate in mHz, as wl_output.mode states it, or zero if
+  // there is no mode. Clients are paced by wl_surface.frame, so zero is
+  // harmless.
   int32 refresh_mhz;
 };
 
-// One display, as the producer wants the connector behind it driven.
+// How the producer wants one display's connector driven.
 //
-// The opposite direction to `Display`, and the opposite kind of fact. That one
-// is what the browser read off the hardware; this is what the compositor's
-// config says to do with it -- which connectors to light, and where each one's
-// mode goes on the browser's own desktop.
-//
-// It has to cross because the two halves live in different processes. The
-// config that says which monitors are on and which side of the desk each one
-// is on is the compositor's; the CRTCs are the browser's, because the browser
-// is the process holding DRM master. See
+// `Display` is what the browser read from the hardware; this is what the
+// compositor's config says to do with it. It crosses processes because the
+// compositor owns the config and the browser holds DRM master. See
 // docs/architecture/A-DESKTOP-ON-A-TTY.md, "Outputs".
 struct DisplayLayout {
-  // Which display, as `Display.id` named it. The producer cannot invent one:
-  // it is the id the browser derived from the EDID and sent.
+  // A `Display.id` the browser sent.
   int64 id;
 
-  // Whether to light this connector at all.
+  // Whether to light this connector.
   //
-  // `false` is a profile's `enabled: false`, which is how a laptop panel is
-  // named so that shutting the lid on a full desk still matches the desk's
-  // profile and is turned off so nothing is drawn behind the lid.
+  // `false` comes from a profile's `enabled: false`, e.g. to turn off a laptop
+  // panel when the lid is shut on a full desk.
   bool enabled;
 
-  // Where its mode goes on the browser's desktop, in physical pixels. Not read
-  // where `enabled` is false, which is why it is a point rather than a
-  // nullable one: a display that is not being lit has no corner, and zero is
-  // the only honest thing to send instead of one.
+  // The mode's position on the browser's desktop, in physical pixels. Ignored
+  // when `enabled` is false.
   gfx.mojom.Point origin;
 
-  // Which way up the monitor is, and how many of its pixels one logical pixel
-  // is worth. THE BROWSER DRAWS BOTH: it turns and scales the window it puts
-  // on this connector, so the page in it lays out upright in the producer's
-  // logical pixels and a shell never has to know the monitor is on its side.
-  // Read for a dark connector too, because its window outlives the dark.
+  // The monitor's rotation and its device pixels per logical pixel. The
+  // browser applies both to the window on this connector, so the page lays out
+  // upright in logical pixels. Read even when `enabled` is false, because the
+  // window persists while the connector is dark.
   DisplayTransform transform;
   double scale;
 
-  // Where the profile put this display on the desktop a shell lays out in, in
-  // its logical pixels. Empty where `enabled` is false: a dark display has no
-  // place there. What a pointer crosses between monitors by, because the row
-  // `origin` is in says nothing about which monitor is above or beside which.
+  // The display's rectangle in the shell's logical desktop, from the profile.
+  // Empty when `enabled` is false. Used to move the pointer between monitors,
+  // since `origin` does not encode which monitor is beside which.
   gfx.mojom.Rect desk;
 };
 
-// Tells a producer what the screens are.
+// Tells a producer what the displays are.
 //
-// There is no Wayland request this answers, because a Wayland compositor is
-// normally the process that read the hardware. Here it is not: on a tty the
-// ENGINE holds DRM master -- the compositor has no card node and deliberately
-// carries no DRM backend -- so the display list is the browser's reading and
-// this is how it crosses. See docs/architecture/A-DESKTOP-ON-A-TTY.md,
+// No Wayland request matches this, because a Wayland compositor normally
+// reads the hardware itself. On a tty the engine holds DRM master and the
+// compositor has no DRM backend. See docs/architecture/A-DESKTOP-ON-A-TTY.md,
 // "Outputs".
 interface DisplayListObserver {
-  // The whole list, primary first, rather than a delta: what is absent from it
-  // has been unplugged. Sent once when the browser has read the displays and
-  // again on every change.
+  // The full list, primary first; a missing display was unplugged. Sent once
+  // the browser has read the displays, and on every change.
   OnDisplaysChanged(array<Display> displays);
 };
 
-// Which of the desktop's two clipboards something is on.
-//
-// The pair every desktop has and neither of which is the other: one is what
-// Ctrl-C puts somewhere, and the other is what selecting a word does for the
-// middle button to paste.
+// Which clipboard: the Ctrl-C clipboard or the primary selection.
 enum Clipboard {
   kCopy,
   kPrimary,
@@ -178,70 +130,49 @@ enum Clipboard {
 
 // Tells a producer what was copied in the browser.
 //
-// WITHOUT THIS THE BROWSER HAS A CLIPBOARD NOTHING ELSE CAN REACH. It is not a
-// Wayland client of the producer -- on a tty there is no display server for it
-// to be one of -- so a copy made in a page reaches no seat on its own, and the
-// desktop ends up with one clipboard inside the browser and another outside
-// it. See ui/ozone/platform/drm/domicile/drm_clipboard.h, which is where a
-// copy made here starts.
+// The browser is not a Wayland client, so without this its copies would not
+// reach the seat. See ui/ozone/platform/drm/domicile/drm_clipboard.h.
 interface ClipboardObserver {
-  // What was copied, as the text of it. The producer is what puts it on the
-  // seat; nothing here waits for it to.
+  // The copied text. The producer puts it on the seat; nothing waits for
+  // that.
   OnCopied(Clipboard clipboard, string text);
 };
 
-// Brokers viz frame sinks to a compositing producer that is not a renderer.
+// Brokers viz frame sinks to a producer that is not a renderer.
 //
-// blink.mojom.EmbeddedFrameSinkProvider is the same thing for renderers, and it
-// requires the caller to name a FrameSinkId it already owns — a renderer may
-// only use ids in the namespace keyed by its own child process id. A producer
-// outside the browser's process tree owns no such namespace, so here the
-// browser allocates the id from its own and tells the caller what it got.
+// blink.mojom.EmbeddedFrameSinkProvider requires a FrameSinkId in the
+// caller's child-process namespace. A producer outside the browser's process
+// tree has none, so the browser allocates the id from its own namespace.
 interface FrameSinkBroker {
-  // Allocates a FrameSinkId, registers it with viz, and binds `receiver` to the
-  // resulting CompositorFrameSink. The returned id is what an embedder needs to
-  // name the surface this sink submits to, and `observer` is how the producer
-  // hears which surface that turned out to be.
+  // Allocates a FrameSinkId, registers it with viz, and binds `receiver` to
+  // the CompositorFrameSink. An embedder names the surface by the returned id;
+  // `observer` tells the producer which surface it got.
   //
-  // The sink is not yet part of any frame sink hierarchy, and nothing embeds
-  // the surface it submits to. Those are two separate things, measured in step
-  // 2 of the spike rather than assumed:
+  // The sink starts outside any frame sink hierarchy and unembedded:
   //
-  //   - Aggregation needs an embedder to name the SurfaceId in a
-  //     SurfaceDrawQuad. Registering the frame sink is not what draws it.
-  //   - Hierarchy registration is what makes BeginFrames arrive. Without it a
-  //     producer can still submit — with a manual BeginFrameAck — and viz still
-  //     aggregates what it submitted.
+  //   - Drawing needs an embedder to name the SurfaceId in a SurfaceDrawQuad.
+  //   - BeginFrames need hierarchy registration. Without it a producer can
+  //     still submit with a manual BeginFrameAck.
   //
-  // Both happen when an embedder turns up, which is what SurfaceObserver
-  // announces. The producer may connect before there is a page to embed it, or
-  // after; neither side waits on the other.
+  // Both happen when an embedder appears, announced by SurfaceObserver. The
+  // producer and page may connect in either order.
   //
-  // `observer` is optional, and a producer that passes none can never submit:
-  // it has no way to learn the LocalSurfaceId, and it may not invent one. That
-  // is a sink with no surface, which is a useful thing to be able to ask for in
-  // a test and nowhere else.
-  // `app_id` is what the producer calls this window. It **is** dispatched on:
-  // a page's <app> element names the app it wants and the broker matches this
-  // string, which is how a desktop of windows embeds a different surface in
-  // each. It also reaches viz as the frame sink's debug label, which is what
-  // it used to be and only be.
+  // Without `observer` the producer cannot learn a LocalSurfaceId and so
+  // cannot submit. This is useful only in tests.
   //
-  // Two producers claiming one app id is a producer bug the broker does not
-  // adjudicate: the first sink found wins the embed. There is one producer per
-  // socket and it is the compositor, which keys its own surfaces by app id, so
-  // a collision means it has two windows under one name.
-  // `client` and `receiver` are how a producer that assembles its own
-  // CompositorFrames talks to viz directly: the receiver is forwarded on and
-  // the two never meet the browser again. That is what the spike's submitters
-  // do, and they can, because a solid color needs no GPU resource.
+  // `app_id` names the window. The broker matches it against an <app>
+  // element's app name to pick the surface to embed. It is also the frame
+  // sink's viz debug label. If two sinks share an app id, the first found wins;
+  // that is a producer bug.
   //
-  // **Pass neither to have the browser own the sink.** A producer with a
-  // dmabuf cannot assemble its own frame — a TransferableResource names a
-  // mailbox, and minting one needs a GPU channel this producer deliberately
-  // does not have — so it imports buffers here and names them in SubmitBuffer,
-  // and the browser puts the matching resource in the frame. It then hears
-  // BeginFrames and releases through SurfaceObserver instead of directly.
+  // A producer that builds its own CompositorFrames passes `client` and
+  // `receiver`, which are forwarded to viz. The spike's submitters do this,
+  // since a solid color needs no GPU resource.
+  //
+  // **Pass neither to have the browser own the sink.** A dmabuf producer has
+  // no GPU channel to mint mailboxes, so it imports buffers with ImportBuffer
+  // and names them in SubmitBuffer, and the browser builds the frame.
+  // BeginFrames and releases then arrive through SurfaceObserver.
   CreateFrameSink(
       pending_remote<viz.mojom.CompositorFrameSinkClient>? client,
       pending_receiver<viz.mojom.CompositorFrameSink>? receiver,
@@ -249,100 +180,71 @@ interface FrameSinkBroker {
       string app_id)
       => (viz.mojom.FrameSinkId frame_sink_id);
 
-  // Imports a dmabuf and returns the id to name it by, or 0.
+  // Imports a dmabuf and returns its id, or 0 on failure.
   //
-  // This is zwp_linux_dmabuf_v1: the fds the client already sent. The browser
-  // does what components/exo/buffer.cc does with them — a NativePixmap, a
-  // SharedImage, a TransferableResource — because it is the process that has
-  // an aura::Env to reach a SharedImageInterface through. The producer never
-  // sees a mailbox.
+  // This is zwp_linux_dmabuf_v1. The browser does what
+  // components/exo/buffer.cc does (NativePixmap, SharedImage,
+  // TransferableResource), since it has the SharedImageInterface. The buffer
+  // lives until DestroyBuffer or until the sink is destroyed.
   //
-  // The buffer is kept until DestroyBuffer or until the sink goes away, so a
-  // client that reuses a buffer imports it once.
-  // `exported` is the SharedImage the browser made, as something another
-  // client can name: a mailbox and a verified sync token, which are bytes once
-  // the browser has verified them. A producer that takes it can build its own
-  // TransferableResource and submit its own CompositorFrame to the sink it
-  // already holds — no mailbox is minted outside the browser and no GPU channel
-  // moves. Null when the browser owns the sink, where nothing outside it needs
-  // to name the resource.
-  // `fourcc` is the DRM format the client allocated in, and it is not
-  // optional: the byte order it names is the difference between a window and
-  // the same window with its red and blue swapped. A real client picks
-  // ARGB8888 where the spike's own producers picked ABGR8888, which is how
-  // this went unnoticed until one was pointed at the seam.
+  // `exported` is the SharedImage as a mailbox and verified sync token. A
+  // producer that owns its sink can use it to build its own
+  // TransferableResource. Null when the browser owns the sink.
+  //
+  // `fourcc` is the client's DRM format. It is required because the byte order
+  // decides whether red and blue are swapped.
   ImportBuffer(viz.mojom.FrameSinkId frame_sink_id,
                gfx.mojom.GpuMemoryBufferHandle buffer_handle,
                gfx.mojom.Size size,
                uint32 fourcc)
       => (uint64 buffer_id, gpu.mojom.ExportedSharedImage? exported);
 
-  // Submits a frame showing `buffer_id`, damaging `damage`.
+  // Submits a frame showing `buffer_id` with `damage`.
   //
-  // This is wl_surface.commit. Only meaningful for a sink the browser owns;
-  // a producer holding its own sink submits to viz itself.
+  // This is wl_surface.commit. Only for sinks the browser owns.
   SubmitBuffer(viz.mojom.FrameSinkId frame_sink_id,
                uint64 buffer_id,
                gfx.mojom.Rect damage);
 
-  // Drops an imported buffer. Every buffer is dropped anyway when its sink is,
-  // so this is for a client that destroys one of its own.
+  // Drops an imported buffer the client destroyed. Buffers are also dropped
+  // with their sink.
   DestroyBuffer(viz.mojom.FrameSinkId frame_sink_id, uint64 buffer_id);
 
-  // Destroys the sink for `frame_sink_id` and invalidates the id. Every sink
-  // this interface brokered is destroyed anyway when the connection drops; this
-  // is for a producer outliving one of its own surfaces.
+  // Destroys the sink and invalidates `frame_sink_id`. All sinks are also
+  // destroyed when the connection drops.
   DestroyFrameSink(viz.mojom.FrameSinkId frame_sink_id);
 
-  // What the connectors behind the displays should be doing.
+  // How to drive the connectors; the reply to `OnDisplaysChanged`.
   //
-  // THE ANSWER TO `OnDisplaysChanged`, and the reason this interface carries
-  // both directions: what the browser reads off DRM is a fact, and what to do
-  // with it is a config only the producer holds.
+  // The browser reads the hardware, but only the producer has the config.
   //
-  // AN EMPTY LIST IS NOT "LIGHT NOTHING". It is the producer having no
-  // opinion, which is what every desktop but a matched profile's has, and the
-  // browser answers it by going back to lighting what the hardware reports.
-  // That is load-bearing rather than tidy: a profile that turned a panel off
-  // stops matching the moment a monitor is unplugged, and something has to say
-  // the panel comes back on.
+  // An empty list means no preference, and the browser lights what the
+  // hardware reports. This matters when a profile that turned a panel off
+  // stops matching after a monitor is unplugged: the panel must come back on.
   //
-  // Nothing comes back. A modeset is committed on the browser's own DRM thread
-  // and answered on a later task, so a reply here would be a lie; what the
-  // producer learns instead is the next `OnDisplaysChanged`, which the modeset
-  // itself provokes.
+  // No reply, because the modeset completes later on the DRM thread. The
+  // modeset triggers the next `OnDisplaysChanged` instead.
   ConfigureDisplays(array<DisplayLayout> layout);
 
-  // What is on one of the desktop's clipboards now.
+  // Sets the contents of one of the desktop's clipboards.
   //
-  // THE BROWSER IS TOLD RATHER THAN ASKED, because the producer already has
-  // the bytes: a selection arriving on the seat is read out of the client that
-  // offered it whether or not anybody pastes, so there is nothing left to
-  // fetch and a page pasting is answered out of this process's memory.
+  // Pushed rather than fetched because the producer reads each selection as it
+  // arrives, so pastes in a page are answered from this process's memory.
   //
-  // An empty string is a clipboard with nothing on it, which is what a desktop
-  // that has just started has, and is said rather than left unsaid: a browser
-  // never told would go on offering whatever it was told last.
+  // An empty string means an empty clipboard. Send it, or the browser keeps
+  // offering the previous contents.
   SetClipboard(Clipboard clipboard, string text);
 
   // Registers `observer` for copies made in the browser.
   //
-  // Nothing is sent on registration, unlike `ObserveDisplays`: what a producer
-  // would be caught up on is a copy it made itself. The clipboard a browser
-  // that has just started should hold is the producer's to state, with
-  // `SetClipboard` above.
+  // Unlike `ObserveDisplays`, nothing is sent on registration. The producer
+  // sets the initial clipboard with `SetClipboard`.
   ObserveClipboard(pending_remote<ClipboardObserver> observer);
 
-  // Registers `observer` for the display list, and sends it the current one.
+  // Registers `observer` for the display list and sends the current list.
   //
-  // Sent on registration rather than only on change, because a producer that
-  // connects after the browser read its displays would otherwise wait for a
-  // hotplug to learn what the screens are -- which on a machine nobody touches
-  // is forever. A browser that has not read them yet sends nothing, and the
-  // first real reading is what arrives.
-  //
-  // On this interface rather than one of its own: a producer already holds
-  // this pipe, and what it is being told is what to advertise the surfaces it
-  // brokers here ON.
+  // Sending on registration means a producer that connects late need not wait
+  // for a hotplug. If the browser has not read the displays yet, nothing is
+  // sent until it has.
   ObserveDisplays(pending_remote<DisplayListObserver> observer);
 };

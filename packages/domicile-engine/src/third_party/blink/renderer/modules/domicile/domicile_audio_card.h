@@ -13,8 +13,8 @@
 
 namespace blink {
 
-// A sound card and its profiles, as the compositor described it. Immutable,
-// for DomicileTrayItem's reason.
+// A sound card and its profiles, as reported by the compositor. Immutable:
+// the compositor resends the whole state on any change.
 class MODULES_EXPORT DomicileAudioCard final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 

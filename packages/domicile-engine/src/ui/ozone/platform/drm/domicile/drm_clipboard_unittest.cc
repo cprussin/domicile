@@ -16,8 +16,8 @@
 namespace ui {
 namespace {
 
-// What a copy of `text` looks like coming out of `ClipboardOzone::WriteText`,
-// which offers one set of bytes under every text spelling there is.
+// A copy of `text` as `ClipboardOzone::WriteText` offers it: the same bytes
+// under every text type.
 PlatformClipboard::DataMap Copy(const std::string& text) {
   PlatformClipboard::DataMap data_map;
   auto bytes = base::MakeRefCounted<base::RefCountedBytes>(
@@ -28,10 +28,8 @@ PlatformClipboard::DataMap Copy(const std::string& text) {
   return data_map;
 }
 
-// What a read of `buffer` produces. The callback is run before
-// `RequestClipboardData` returns -- see the comment there -- so this needs no
-// run loop, and a clipboard that started answering later would fail here
-// rather than somewhere a nested loop hides it.
+// Reads `buffer`. Needs no run loop because `RequestClipboardData` answers
+// synchronously; this fails if it ever stops doing so.
 std::string Read(DrmClipboard& clipboard,
                  ClipboardBuffer buffer,
                  const std::string& mime_type = kMimeTypePlainText) {
@@ -53,7 +51,7 @@ std::string Read(DrmClipboard& clipboard,
   return read;
 }
 
-// The types `buffer` says it can be read as.
+// Returns the types `buffer` offers.
 std::vector<std::string> Types(DrmClipboard& clipboard, ClipboardBuffer buffer) {
   std::vector<std::string> types;
   clipboard.GetAvailableMimeTypes(
@@ -66,9 +64,7 @@ std::vector<std::string> Types(DrmClipboard& clipboard, ClipboardBuffer buffer) 
   return types;
 }
 
-// What the compositor says is on a clipboard is what a page pastes. This is
-// the whole of the direction that was missing: before it, a copy made in a
-// terminal reached the browser not at all.
+// A page pastes what the compositor says is on the clipboard.
 TEST(DrmClipboardTest, WhatTheCompositorSaysIsWhatAPasteProduces) {
   DrmClipboard clipboard;
 
@@ -78,8 +74,7 @@ TEST(DrmClipboardTest, WhatTheCompositorSaysIsWhatAPasteProduces) {
             "copied in a terminal");
 }
 
-// And the two clipboards are two. A desktop that confused them would paste
-// what the pointer brushed past wherever a person pressed Ctrl-V.
+// The clipboard and primary selection stay separate.
 TEST(DrmClipboardTest, TheTwoClipboardsHoldDifferentThings) {
   DrmClipboard clipboard;
 
@@ -90,8 +85,7 @@ TEST(DrmClipboardTest, TheTwoClipboardsHoldDifferentThings) {
   EXPECT_EQ(Read(clipboard, ClipboardBuffer::kSelection), "brushed past");
 }
 
-// A copy made in a page goes to the compositor, which is the other direction
-// and the one that puts it on the seat every other window pastes from.
+// A page's copy goes to the compositor, which puts it on the seat.
 TEST(DrmClipboardTest, ACopyMadeHereReachesTheCompositor) {
   DrmClipboard clipboard;
   std::vector<std::pair<ClipboardBuffer, std::string>> sent;
@@ -107,15 +101,12 @@ TEST(DrmClipboardTest, ACopyMadeHereReachesTheCompositor) {
   ASSERT_EQ(sent.size(), 1u);
   EXPECT_EQ(sent[0].first, ClipboardBuffer::kCopyPaste);
   EXPECT_EQ(sent[0].second, "copied in a page");
-  // And is readable here without waiting for the compositor to say it back,
-  // which it does not: a browser that pasted nothing until a round trip
-  // completed would be a browser that cannot paste what it just copied.
+  // It is readable here at once; the compositor does not echo it back.
   EXPECT_EQ(Read(clipboard, ClipboardBuffer::kCopyPaste), "copied in a page");
 }
 
-// A copy of something that is not text leaves the other windows on this
-// desktop with no text to paste, and says so rather than leaving the last
-// copy where it was.
+// Copying non-text clears the text for other windows instead of leaving the
+// previous copy.
 TEST(DrmClipboardTest, ACopyWithNoTextInItEmptiesTheClipboard) {
   DrmClipboard clipboard;
   clipboard.SetContents(ClipboardBuffer::kCopyPaste, "copied earlier");
@@ -129,9 +120,8 @@ TEST(DrmClipboardTest, ACopyWithNoTextInItEmptiesTheClipboard) {
   EXPECT_TRUE(Types(clipboard, ClipboardBuffer::kCopyPaste).empty());
 }
 
-// Every spelling of text is answered, because which one is asked for is the
-// asking program's to decide -- Blink reads `text/plain` and a GTK program
-// asks for `text/plain;charset=utf-8`.
+// Every text type is answered, since readers differ: Blink reads
+// `text/plain` and GTK asks for `text/plain;charset=utf-8`.
 TEST(DrmClipboardTest, EverySpellingOfTextIsAnswered) {
   DrmClipboard clipboard;
   clipboard.SetContents(ClipboardBuffer::kCopyPaste, "one string");
@@ -145,8 +135,7 @@ TEST(DrmClipboardTest, EverySpellingOfTextIsAnswered) {
             DomicileTextMimeTypes());
 }
 
-// And nothing else is. A program that asked for an image gets nothing rather
-// than a string it cannot use.
+// Non-text types get nothing rather than a string.
 TEST(DrmClipboardTest, AnythingThatIsNotTextIsNotAnswered) {
   DrmClipboard clipboard;
   clipboard.SetContents(ClipboardBuffer::kCopyPaste, "one string");
@@ -154,8 +143,7 @@ TEST(DrmClipboardTest, AnythingThatIsNotTextIsNotAnswered) {
   EXPECT_EQ(Read(clipboard, ClipboardBuffer::kCopyPaste, "image/png"), "");
 }
 
-// A clipboard nothing has been put on offers no types at all, which is what a
-// grayed-out paste menu is read from.
+// An empty clipboard offers no types, so the paste menu is grayed out.
 TEST(DrmClipboardTest, AClipboardWithNothingOnItOffersNothing) {
   DrmClipboard clipboard;
 
@@ -163,9 +151,8 @@ TEST(DrmClipboardTest, AClipboardWithNothingOnItOffersNothing) {
   EXPECT_EQ(Read(clipboard, ClipboardBuffer::kCopyPaste), "");
 }
 
-// Every change says so, whichever side made it. The sequence number this
-// bumps is what every cache above keys on, so a change that said nothing
-// would be a paste that goes on producing the copy before it.
+// Every change notifies, from either side. Clipboard caches key on the
+// sequence number this bumps, so a silent change would paste stale data.
 TEST(DrmClipboardTest, EveryChangeIsAnnounced) {
   DrmClipboard clipboard;
   std::vector<ClipboardBuffer> changed;
@@ -183,9 +170,8 @@ TEST(DrmClipboardTest, EveryChangeIsAnnounced) {
                          ClipboardBuffer::kSelection}));
 }
 
-// This process never owns a selection, whatever it just copied. The answer is
-// `ClipboardOzone` asking whether it may serve a read out of its own cache,
-// and it may not: the next copy can be made in any window on the desktop.
+// Never the selection owner, even after a local copy, so `ClipboardOzone`
+// never serves reads from its own cache.
 TEST(DrmClipboardTest, ThisProcessIsNeverTheSelectionOwner) {
   DrmClipboard clipboard;
   clipboard.OfferClipboardData(ClipboardBuffer::kCopyPaste, Copy("just now"));
@@ -199,8 +185,7 @@ TEST(DrmClipboardTest, ThisProcessIsNeverTheSelectionOwner) {
   EXPECT_FALSE(owner);
 }
 
-// The middle-click clipboard exists on this desktop, so a middle-click paste
-// in a page is asking for something that is there.
+// The primary selection is available.
 TEST(DrmClipboardTest, TheMiddleClickClipboardIsAvailable) {
   EXPECT_TRUE(DrmClipboard().IsSelectionBufferAvailable());
 }

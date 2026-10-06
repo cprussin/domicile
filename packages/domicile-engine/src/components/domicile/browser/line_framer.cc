@@ -12,8 +12,8 @@ LineFramer::~LineFramer() = default;
 
 std::vector<std::string> LineFramer::Take(std::string_view bytes) {
   std::vector<std::string> lines;
-  // Only `bytes` is searched: `pending_` held no newline when it was kept, so
-  // looking through it again would be the quadratic reader over again.
+  // Search only `bytes`; `pending_` has no newline. Rescanning it would make
+  // long lines quadratic.
   size_t newline = bytes.find('\n');
   while (newline != std::string_view::npos) {
     pending_.append(bytes.substr(0, newline));

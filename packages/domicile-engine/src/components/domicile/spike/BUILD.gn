@@ -1,17 +1,15 @@
 # Copyright 2026 Connor Prussin
 # SPDX-License-Identifier: MIT
 
-# THROWAWAY. The spike's producer and its measurements: a viz client in a
-# process the browser did not launch, standing in for domicile-compositor until
-# it submits real buffers, and the two assertions made against it. See
+# Throwaway spike: a viz client in a process the browser did not launch,
+# standing in for domicile-compositor, and measurements against it. See
 # docs/architecture/ENGINE-FORK.md in the Domicile repository.
 #
-# The executables are not in the dependency graph of `chrome`. Build them by
-# name:
+# `chrome` does not depend on these executables. Build them by name:
 #
 #   autoninja -C out/Domicile domicile_solid_color_submitter domicile_css_parity
 
-# Comparing what viz drew with what was submitted, which every step ends in.
+# Compares what viz drew with what was submitted.
 source_set("colors") {
   sources = [
     "spike_color.cc",
@@ -24,9 +22,8 @@ source_set("colors") {
   ]
 }
 
-# The rule that turns a picture of the browser's window into step 4's verdicts.
-# Separate from the process that takes the picture because every "pass" in the
-# measurement is this code's opinion, and an opinion gets a unit test.
+# Turns a screenshot of the browser window into step 4's pass/fail results.
+# Separate from the capture process so it can be unit tested.
 source_set("window_diff") {
   sources = [
     "window_diff.cc",
@@ -41,7 +38,7 @@ source_set("window_diff") {
   ]
 }
 
-# The viz client itself.
+# The viz client.
 source_set("producer") {
   sources = [
     "surface_producer.cc",
@@ -63,8 +60,8 @@ source_set("producer") {
   ]
 }
 
-# Steps 2 and 3: one pixel at the center of the browser's window is the color
-# a process the browser did not launch submitted.
+# Steps 2 and 3: checks that the center pixel of the browser window is the
+# color an external process submitted.
 executable("solid_color_submitter") {
   output_name = "domicile_solid_color_submitter"
 
@@ -81,9 +78,9 @@ executable("solid_color_submitter") {
   ]
 }
 
-# Step 4: the measurement. Seven CSS properties, each read off an <app> against
-# an ordinary element laid out identically beside it, plus the latency from a
-# producer's submit to the display compositor's own output.
+# Step 4: compares seven CSS properties on an <app> against an identical
+# ordinary element, and measures latency from a producer's submit to display
+# compositor output.
 executable("css_parity") {
   output_name = "domicile_css_parity"
 

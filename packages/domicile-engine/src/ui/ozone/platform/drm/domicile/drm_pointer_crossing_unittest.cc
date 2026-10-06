@@ -20,8 +20,8 @@ constexpr gfx::AcceleratedWidget kLeft = 1;
 constexpr gfx::AcceleratedWidget kRight = 2;
 constexpr gfx::AcceleratedWidget kLaptop = 3;
 
-// Two 1920x1080 monitors side by side, with no layout stated: the hardware
-// decides, and the engine's own desktop is the only arrangement there is.
+// Two 1920x1080 monitors side by side, with no layout, so the engine's
+// desktop is used.
 std::vector<PointerScreen> SideBySide() {
   return {
       {kLeft, gfx::Rect(0, 0, 1920, 1080), display::Display::ROTATE_0},
@@ -31,8 +31,8 @@ std::vector<PointerScreen> SideBySide() {
 
 const std::vector<DomicileDisplayLayout> kHardwareDecides;
 
-// One lit connector of a profile: its CRTC's corner on the engine's desktop,
-// and where the profile put it on the desktop a shell lays out in.
+// A lit connector: its CRTC's corner on the engine's desktop, and its
+// rectangle on the shell's desktop.
 DomicileDisplayLayout Lit(const gfx::Point& origin, const gfx::Rect& desk) {
   return {.id = 0, .enabled = true, .origin = origin, .desk = desk};
 }
@@ -53,8 +53,8 @@ TEST(DrmPointerCrossingTest, AMoveInsideTheScreenCrossesNothing) {
 }
 
 TEST(DrmPointerCrossingTest, LeavingTheRightEdgeArrivesOnTheScreenBeside) {
-  // The overshoot is carried: a hand that moved five pixels past the edge is
-  // five pixels into the next screen, at the height it left at.
+  // The overshoot carries over: five pixels past the edge lands five pixels
+  // into the next screen, at the same height.
   ExpectAt(PointerCrossingFor(SideBySide(), kHardwareDecides, kLeft,
                               gfx::PointF(1925, 500)),
            kRight, gfx::PointF(5, 500));
@@ -75,9 +75,9 @@ TEST(DrmPointerCrossingTest, AnEdgeWithNothingBesideItHoldsThePointer) {
                    .has_value());
 }
 
-// `home-office-right-two`: the laptop bottom-aligned to the left of two
-// U3219Qs stood on their sides. The engine steps the CRTCs across one row;
-// the profile is what says the laptop is at the bottom.
+// `home-office-right-two`: the laptop bottom-aligned left of two monitors
+// rotated onto their sides. The engine puts the CRTCs in one row; only the
+// profile places the laptop at the bottom.
 std::vector<PointerScreen> RightTwoScreens() {
   return {
       {kLaptop, gfx::Rect(0, 0, 2880, 1920), display::Display::ROTATE_0},
@@ -95,9 +95,8 @@ std::vector<DomicileDisplayLayout> RightTwoLayout() {
 }
 
 TEST(DrmPointerCrossingTest, APointerArrivesWhereTheProfilePlacedTheScreens) {
-  // Halfway down the laptop is 2560 down the desk, which is 3072 of the
-  // turned monitor's pixels -- not halfway down it, and not the top.
-  // Upright (6, 3072) on a 2160x3840 screen turned `ROTATE_270`.
+  // Halfway down the laptop is y=2560 on the desk, which is y=3072 on the
+  // rotated monitor: upright (6, 3072) on a 2160x3840 screen at `ROTATE_270`.
   ExpectAt(PointerCrossingFor(RightTwoScreens(), RightTwoLayout(), kLaptop,
                               gfx::PointF(2887.5, 960)),
            kLeft, gfx::PointF(3072, 2154));
@@ -110,7 +109,7 @@ TEST(DrmPointerCrossingTest, AndComesBackTheSameWay) {
 }
 
 TEST(DrmPointerCrossingTest, AnEdgeWithNothingPlacedBesideItHoldsThePointer) {
-  // The turned monitor's left edge above the laptop: nothing is there.
+  // Nothing is placed left of the rotated monitor above the laptop.
   EXPECT_FALSE(PointerCrossingFor(RightTwoScreens(), RightTwoLayout(), kLeft,
                                   gfx::PointF(1000, 2166))
                    .has_value());
@@ -121,21 +120,20 @@ void ExpectNear(const gfx::PointF& actual, const gfx::PointF& expected) {
   EXPECT_NEAR(actual.y(), expected.y(), 0.01);
 }
 
-// The desk's host hears the pointer on another monitor where the desk has
-// it, not where the engine's row does: that row puts the turned monitor's
-// pixels straight after the laptop's, sideways, at the top.
+// The host window gets the pointer's desk position, not the engine row's,
+// which puts the rotated monitor's pixels right after the laptop's.
 TEST(DrmPointerCrossingTest, TheHostHearsThePointerWhereTheDeskHasIt) {
-  // Where `APointerArrivesWhereTheProfilePlacedTheScreens` lands, which is
-  // 7.5 of the laptop's pixels past its right edge, halfway down.
+  // The landing point from `APointerArrivesWhereTheProfilePlacedTheScreens`:
+  // 7.5 laptop pixels past its right edge, halfway down.
   ExpectNear(PointerInWindow(RightTwoScreens(), RightTwoLayout(),
                              gfx::PointF(2880 + 3072, 2154), kLaptop),
              gfx::PointF(2887.5, 960));
 }
 
 TEST(DrmPointerCrossingTest, AndOnATurnedWindowByItsTurnedEdge) {
-  // Ten logical pixels onto the right-hand monitor, a thousand down, heard by
-  // the one beside it: twelve of its pixels past its upright right edge, which
-  // on a panel turned `ROTATE_270` is above its top.
+  // Ten logical pixels onto the right monitor, 1000 down, seen from the left
+  // monitor: 12 pixels past its upright right edge, which is above its top on
+  // a `ROTATE_270` panel.
   ExpectNear(PointerInWindow(RightTwoScreens(), RightTwoLayout(),
                              gfx::PointF(6720 + 1200, 2148), kLeft),
              gfx::PointF(1200, -12));
@@ -147,13 +145,12 @@ TEST(DrmPointerCrossingTest, OnItsOwnScreenThePointerIsWhereItIs) {
              gfx::PointF(100, 200));
 }
 
-// The page a desk is asks for a warp in its host window's pixels, and a place
-// on another monitor is past that window's edge: it lands on the monitor that
-// holds it, even one that is not beside the host.
+// The desk page requests warps in its host window's pixels. A target past
+// that window's edge lands on whichever monitor holds it, adjacent or not.
 TEST(DrmPointerCrossingTest, AWarpPastTheHostLandsOnTheMonitorThatHoldsIt) {
-  // (4620, 1600) on the desk, 900 into the right-hand monitor: from the
-  // laptop's corner at (0, 1920) at 1.5, that is (6930, -480) of its pixels.
-  // Upright (1080, 1920) of that 2160x3840 monitor, turned `ROTATE_270`.
+  // Desk (4620, 1600) is 900 into the right monitor. From the laptop's corner
+  // at (0, 1920) at scale 1.5 that is (6930, -480) laptop pixels, and upright
+  // (1080, 1920) on the 2160x3840 monitor at `ROTATE_270`.
   ExpectAt(PointerCrossingFor(RightTwoScreens(), RightTwoLayout(), kLaptop,
                               gfx::PointF(6930, -480)),
            kRight, gfx::PointF(1920, 1080));
@@ -211,7 +208,7 @@ TEST(DrmPointerCrossingTest, AScreenBelowIsReachedByTheBottomEdge) {
 }
 
 TEST(DrmPointerCrossingTest, TheEngineRowSaysNothingAboutWhereAScreenIs) {
-  // The laptop's CRTC is to the right of the monitor's, and the laptop is not.
+  // The laptop's CRTC is right of the monitor's, but the laptop is below.
   EXPECT_FALSE(PointerCrossingFor(CenterScreens(), CenterLayout(), kLeft,
                                   gfx::PointF(3845, 1000))
                    .has_value());
@@ -228,9 +225,8 @@ TEST(DrmPointerCrossingTest, AScreenTheLayoutLeavesDarkIsNeverEntered) {
 }
 
 TEST(DrmPointerCrossingTest, AScreenAPixelAwayIsStillBeside) {
-  // A profile's positions are rounded outward, so two screens meant to touch
-  // can be a logical pixel apart. A hand moving slowly would otherwise never
-  // get across.
+  // Profile positions round outward, so touching screens can be a logical
+  // pixel apart. Without tolerance a slow pointer could not cross.
   const std::vector<DomicileDisplayLayout> layout = {
       Lit(gfx::Point(0, 0), gfx::Rect(0, 0, 1920, 1080)),
       Lit(gfx::Point(1920, 0), gfx::Rect(1921, 0, 1920, 1080)),
@@ -248,8 +244,7 @@ TEST(DrmPointerCrossingTest, TheKeyboardIsOnTheScreenThePointerIsOn) {
 }
 
 TEST(DrmPointerCrossingTest, TheKeyboardEdgeIsTheClickEdge) {
-  // Floored the way a click's location is, so the last column of a screen
-  // takes the keys as it takes the click.
+  // Floored like a click's location, so keys and clicks agree on the edge.
   EXPECT_TRUE(
       HasTheKeyboard(gfx::Rect(0, 0, 1920, 1080), gfx::PointF(1919.9, 500)));
 }

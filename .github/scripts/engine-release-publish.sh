@@ -1,22 +1,19 @@
 #!/usr/bin/env bash
-# Put the tarball on a GitHub release.
+# Publish the engine tarball as a GitHub release.
 #
 #   GITHUB_TOKEN=... .github/scripts/engine-release-publish.sh /build/engine-release name.tar.zst
 #
-# curl and jq rather than an action, because the runner has both and neither is
-# a third party with a token. See config/machines/crux/domicile-ci.nix in
-# cprussin/dotfiles for what is on this unit's PATH.
+# curl and jq rather than an action, so no third-party code gets the token.
+# See config/machines/crux/domicile-ci.nix in cprussin/dotfiles for the
+# runner's PATH.
 #
-# TWO KINDS OF RELEASE, one code path. A tag push publishes that tag. A manual
-# run republishes `engine-nightly`, which is deleted and recreated so that the
-# name always means the newest build rather than the first one anybody made —
-# the assets carry the commit in their filename, so nothing is ambiguous about
-# which build a downloaded file is.
+# A tag push publishes that tag. Otherwise this recreates `engine-nightly` so
+# it always holds the newest build, and also publishes an immutable release
+# named after the series for pins.
 #
-# DOMICILE_ENGINE_BUILD=official publishes the production build, under
-# `engine-official-` rather than `engine-`: it is of the same series as the
-# checked build engine.yml publishes, so a shared name would have each replace
-# the other's engine under one tag.
+# DOMICILE_ENGINE_BUILD=official uses the `engine-official-` prefix, because
+# the checked and official builds share a series and would otherwise share
+# tags.
 set -euo pipefail
 
 case "${DOMICILE_ENGINE_BUILD:-checked}" in
@@ -42,11 +39,9 @@ fi
 API="https://api.github.com/repos/$GITHUB_REPOSITORY"
 UPLOADS="https://uploads.github.com/repos/$GITHUB_REPOSITORY"
 
-# THE API IS TRIED AGAIN ON A 5xx, A RATE LIMIT OR NO ANSWER AT ALL, and only
-# then. Run #76 lost an 87-minute build to one 500 on creating the release, and
-# engine job 110246634707 lost one to a connection timeout. Anything else
-# (404, 422) is an answer, not a bad minute, and fails at once. Five tries,
-# 15s doubling: 3m45s of waiting at most, then a loud failure naming the status.
+# Retry API calls on a 5xx, a rate limit or no response, so a transient error
+# does not waste a finished build. Other errors fail at once. Five tries with
+# backoff from 15s wait at most 3m45s.
 API_ATTEMPTS=5
 
 # Like `curl -f`: the body on stdout on a 2xx, exit 22 otherwise.
@@ -77,9 +72,8 @@ api() {
   done
 }
 
-# A 5xx, a 429, a 000 (curl reached nothing), or a 403 that says it is a
-# (secondary) rate limit: GitHub answers a permission failure 403 too, and that
-# one will not change.
+# A 5xx, a 429, a 000 (no response), or a 403 for a rate limit. A 403 for
+# missing permission is not retried.
 api_retryable() { # status, body file
   case "$1" in
     (5??|429|000) return 0 ;;
@@ -88,71 +82,34 @@ api_retryable() { # status, body file
   esac
 }
 
-# WHICH SERIES THIS BUILD IS OF. Stated in every release's body whichever kind
-# it is, because `update-engine-release.sh` reads it back out of there and
-# writes it into `engine-release.nix` -- which is what lets a checkout say
-# whether the engine it pins was built from the series it carries without
-# downloading anything.
+# Every release body states the series. `update-engine-release.sh` copies it
+# into `engine-release.nix`, so a checkout can verify its pin without
+# downloading the engine.
 IDENTITY="$(.github/scripts/engine-series-stamp.sh identity)"
 
 if [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then
   TAG="$GITHUB_REF_NAME"
   PRERELEASE=false
-  # A pushed tag is already immutable, so there is nothing for the second
-  # release below to add: publishing a copy of it under another name would be
-  # two names for one build with nothing to choose between them.
+  # A pushed tag is already immutable, so no second release is needed.
   PINNABLE=""
 else
   TAG="$PREFIX-nightly"
   PRERELEASE=true
-  # THE ROLLING TAG CANNOT BE PINNED, and that is what the second release is
-  # for. `engine-nightly` is deleted and recreated on every run, so the asset
-  # a checkout is pinned to STOPS EXISTING the moment anybody cuts a release:
-  # `nix run` on main starts 404ing and every open pull request goes red on
-  # `packages` with `cannot download ... from any mirror`. That happened twice
-  # in one afternoon, which is once more than a papercut, and it made
-  # engine-release.nix's own header -- "a flake revision names exactly one
-  # engine" -- false.
-  #
-  # NAMED AFTER THE SERIES, NOT AFTER THE COMMIT, and that is what stopped
-  # most repins from having to happen at all.
-  #
-  # It was `engine-<short sha>`, so every release was a different release as
-  # far as anything downstream could tell: a commit that touched
-  # `packages/domicile-engine` at all -- a script, a BUILD arg, a line in a
-  # patch header -- produced a new tag and a new hash, and therefore a second
-  # pull request to move `engine-release.nix` onto it. Most of those repins
-  # changed which bytes were fetched and nothing whatsoever about what was in
-  # them.
-  #
-  # The series identity is the pin, `patches/` and `src/` hashed by content,
-  # which is precisely what decides whether the shared Chromium checkout has
-  # to be rebuilt. Two commits that do not move the fork are the same engine,
-  # publish to the same tag, and need no repin between them.
-  #
-  # READ OUT OF `engine-series-stamp.sh` RATHER THAN COMPUTED HERE. That
-  # script already answers this question for the checkout, and a second
-  # implementation of "the same series" is a second thing that can drift. The
-  # cheap direction of a drift is a repin that changes nothing; the expensive
-  # one is no repin for a change that needed one, which is #411's failure
-  # with a new cause.
-  #
-  # The same twelve characters the tarball is named after, so the tag and the
-  # filename cannot drift apart.
+  # The nightly is recreated each run, so pins use a second, immutable
+  # release. It is named after the series (a content hash of the pin,
+  # `patches/` and `src/`), so commits that do not change the fork need no
+  # repin. The identity comes from engine-series-stamp.sh, and the tag uses
+  # the same twelve characters as the tarball name.
   PINNABLE="$PREFIX-s${IDENTITY:0:12}"
 fi
 
-# A release for this tag may exist: the nightly always does after the first
-# run, and a tag can be re-pushed. Delete it and its tag so that create below
-# is the only path that makes one — updating in place would leave the previous
-# run's assets beside this run's, under names that differ only by a commit
-# nobody is comparing.
+# Delete any existing release for this tag, so the old assets do not remain
+# beside the new ones.
 if existing=$(api "$API/releases/tags/$TAG" 2>/dev/null); then
   id=$(echo "$existing" | jq -r .id)
   echo "replacing release $TAG ($id)"
   api -X DELETE "$API/releases/$id" >/dev/null
-  # Only the nightly's tag is ours to move. A pushed tag is a fact about the
-  # history and deleting it would rewrite what somebody else is pointing at.
+  # Only move the nightly's tag. A pushed tag belongs to whoever pushed it.
   if [ "$TAG" = "$PREFIX-nightly" ]; then
     api -X DELETE "$API/git/refs/tags/$TAG" >/dev/null 2>&1 || true
   fi
@@ -179,9 +136,8 @@ negative control that fails when nothing draws.
 BODY
 )
 
-# A release for this tag, made here or found. A create GitHub answered 500 may
-# still have landed, and its retry is then 422 `already_exists`: the release
-# that exists is this run's, and the uploads below clear any asset on it first.
+# Create the release, or fetch it if creation failed. A create that returned
+# 500 may still have succeeded, and its retry then returns 422.
 create_release() { # tag, prerelease
   api -X POST "$API/releases" -d "$(
     jq -n --arg tag "$1" --arg sha "$GITHUB_SHA" --arg body "$BODY" \
@@ -197,21 +153,16 @@ echo "creating release $TAG"
 release=$(create_release "$TAG" "$PRERELEASE")
 id=$(echo "$release" | jq -r .id)
 
-# What a release carries: the build, and the digest beside it.
+# The tarball and its digest.
 ASSETS=("$TARBALL" "$TARBALL.sha256")
 
-# How many times one asset is offered before the run gives up. GITHUB'S UPLOAD
-# ENDPOINT 500s, and half a gigabyte is a long time to be exposed to it: run
-# 35252793831 built the engine, packaged it and passed the pixel guard, and then
-# lost all 27 minutes of it to `curl: (22) The requested URL returned error:
-# 500` 28 seconds into the tarball. Rebuilding Chromium to re-attempt an upload
-# is the most expensive no-op this repository has.
+# GitHub's upload endpoint sometimes returns 500, and a failed upload wastes
+# the whole build, so each asset gets several attempts.
 UPLOAD_ATTEMPTS=4
 
-# NOT `curl --retry`: an upload that reached GitHub before it failed leaves the
-# asset on the release, and every later POST for that name answers 422
-# `already_exists` — so the retry that matters is the one that clears the name
-# first, which is what this does on every attempt.
+# Not `curl --retry`: a failed upload can leave the asset on the release, and
+# later uploads of that name then fail with 422. So each attempt deletes it
+# first.
 upload_asset() {
   local into="$1" asset="$2" attempt=1
   while :; do
@@ -221,14 +172,9 @@ upload_asset() {
         echo "  dropping what a failed upload left behind ($stale)"
         api -X DELETE "$API/releases/assets/$stale" >/dev/null
       done
-    # AN UPLOAD WITH NO CEILING IS NOT A RETRY, IT IS A HANG. Run
-    # 35260586435 put both assets on the nightly in seven seconds, then sat on
-    # the next one for a quarter of an hour with nothing to end it, because
-    # curl waits on a stalled socket for as long as the kernel lets it. Ten
-    # minutes is an order of magnitude more than any upload here has honestly
-    # taken, and a flat ceiling rather than `--speed-time` because curl stops
-    # counting bytes while GitHub digests 200MB and answers -- which is
-    # exactly the silence a rate floor would kill a good upload during.
+    # A time limit, so a stalled socket cannot hang the job. A flat limit
+    # rather than `--speed-time`, because no bytes move while GitHub processes
+    # the upload.
     if curl -sS -f -X POST \
          --connect-timeout 30 --max-time 600 \
          -H "Authorization: Bearer $GITHUB_TOKEN" \
@@ -255,17 +201,10 @@ upload_assets() {
   done
 }
 
-# Put on a release only what is not already on it. A RELEASE IS PUBLISHED WHEN
-# ITS ASSETS ARE THERE, NOT WHEN ITS ROW EXISTS: run 35260586435 put both
-# assets on `engine-nightly` in seven seconds, created the immutable release
-# beside it, and then hung with nothing on it, and `already published; leaving
-# it alone` would have meant that tag never got its tarball however many times
-# anybody re-ran the workflow.
-#
-# `uploaded` and not merely present, because the wreck an interrupted upload
-# leaves behind is an asset row in `starter` that nothing can download.
-# Anything already `uploaded` is left exactly as it is: something may be
-# pinned to it, and that is the whole reason this release exists.
+# Upload only the assets a release is missing, so a re-run can finish a
+# release an earlier run created but did not fill. An interrupted upload leaves
+# an asset in state `starter`, so only `uploaded` counts. Uploaded assets are
+# never replaced, since something may pin them.
 complete_assets() {
   local into="$1" landed
   landed="$(api "$API/releases/$into/assets" |
@@ -283,17 +222,11 @@ complete_assets() {
 upload_assets "$id"
 echo "published $(echo "$release" | jq -r .html_url)"
 
-# The release that keeps existing. Every build is ALSO published under a tag
-# naming its commit, and that release is never deleted, so a pin points at a
-# url that does not move. The nightly stays because it is the useful thing to
-# hand somebody who just wants the newest build.
+# The immutable release, which pins point at. It is never deleted.
 if [ -n "$PINNABLE" ]; then
   if pinned=$(api "$API/releases/tags/$PINNABLE" 2>/dev/null); then
-    # Re-running a release for a commit that already has one. Never deleted and
-    # recreated -- something may already be pinned to it, and the whole point of
-    # this release is that what it points at does not move -- but a run that
-    # died between creating it and filling it leaves a tag with nothing behind
-    # it, and only another run can finish that.
+    # Never recreated, since something may pin it. Fill in any assets an
+    # earlier run failed to upload.
     echo "$PINNABLE already exists; adding whatever is missing from it"
     complete_assets "$(echo "$pinned" | jq -r .id)"
   else

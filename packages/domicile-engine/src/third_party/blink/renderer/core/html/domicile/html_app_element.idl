@@ -1,13 +1,10 @@
 // Copyright 2026 Connor Prussin
 // SPDX-License-Identifier: MIT
 
-// <app> — a Wayland client's window, laid out by the page.
-// See docs/architecture/ENGINE-FORK.md in the Domicile repository.
+// <app>: a Wayland client's window, laid out by the page.
+// See docs/architecture/ENGINE-FORK.md.
 //
-// This interface is not a web standard and is not proposed as one. It exists in
-// Domicile's engine fork only, and a shell written against it does not run in
-// stock Chrome -- which is the accepted cost of the tag being <app> rather than
-// a hyphenated custom element.
+// Domicile-only. A shell that uses it does not run in stock Chrome.
 
 [
     RuntimeEnabled=DomicileExternalSurface,
@@ -15,7 +12,6 @@
 ] interface HTMLAppElement : HTMLElement {
   [HTMLConstructor] constructor();
 
-  // Which window. Reflected, so the attribute and the property are one value,
-  // the way <img src> is.
+  // The window to show. Reflects the `app-id` attribute.
   [CEReactions, Reflect=app_id] attribute DOMString appId;
 };

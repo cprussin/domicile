@@ -1,28 +1,23 @@
 // The shell guard-webview-tabs.sh drives: two browser windows, one of them
 // focused, and an extension's popup asking which is the active tab.
 //
-// WHAT THIS PAGE SAYS, all of it to the console, which the engine writes to its
-// own log:
+// It logs to the console, which the engine writes to its own log:
 //
-//   GUARD listening            the desktop was handed to Shell and a listener is
-//                              registered -- the harness working
+//   GUARD listening            the desktop reached Shell and a listener is
+//                              registered
 //   GUARD page name=… url=…    window `a` or `b` is showing a page
 //   GUARD tray popup=…         the fixture's row arrived, naming its popup
 //   GUARD focused name=…       this page focused that window, `?focus=`
-//   GUARD answer active=…      the popup's tabs.query answer, read off the
-//                              popup's own address. THE CLAIM
+//   GUARD answer active=…      the popup's tabs.query answer, read from the
+//                              popup's address. This is what the guard checks
 //   GUARD answer zoom=…        what the popup's tabs.getZoom read after its
 //                              tabs.setZoom on that tab
-//   GUARD zoom name=… factor=… window `a` or `b`'s element heard its zoom
-//                              change, to two places
+//   GUARD zoom name=… factor=… window `a` or `b`'s element saw its zoom
+//                              change, to two decimal places
 //
-// THE ORDER IS THE POINT. Both windows are made first and the popup last, and
-// the popup's <webview> is never focused: so a desk whose active tab were the
-// first made, or the last, answers the same whichever window this focuses --
-// and the guard runs it twice, focusing each.
-//
-// Everything is inside `Shell`, which the document Domicile writes calls once
-// the module has loaded.
+// Both windows are created before the popup, and the popup is never focused.
+// The guard runs twice, focusing each window, so an active tab picked by
+// creation order gives a wrong answer in one of the runs.
 
 export const Shell = (_root, desktop) => {
   const say = (what) => {
@@ -30,8 +25,8 @@ export const Shell = (_root, desktop) => {
   };
 
   /**
-   * A query parameter this cannot run without. A default would turn a guard
-   * invoked wrongly into a measurement of something nobody asked for.
+   * Reads a required query parameter. Throws when missing: a default would
+   * measure a setup the guard did not ask for.
    */
   const required = (parameters, name) => {
     const value = parameters.get(name);
@@ -58,8 +53,8 @@ export const Shell = (_root, desktop) => {
   };
   const focus = required(parameters, "focus");
 
-  // How long after the focus the popup is opened: the element tells the browser
-  // it was focused over one pipe, and the popup asks over another.
+  // Delay before opening the popup. Focus and the popup's query reach the
+  // browser over different pipes, so focus must land first.
   const SETTLE_MS = 1000;
 
   /** A <webview> at `src`, calling `shown` with its address on every page. */
@@ -72,8 +67,7 @@ export const Shell = (_root, desktop) => {
     element.addEventListener("domicile-page-change", () => {
       shown(element.url);
     });
-    // `src` last: it is what asks for a guest, and the element needs a frame
-    // first.
+    // Set `src` after insertion: it asks for a guest, which needs a frame.
     document.body.append(element);
     element.setAttribute("src", src);
     return element;
@@ -116,7 +110,7 @@ export const Shell = (_root, desktop) => {
     ]),
   );
 
-  // Only the popup zooms anything, so a window that hears a zoom heard its.
+  // Only the popup zooms, so any zoom change a window sees came from it.
   for (const [name, element] of Object.entries(windows)) {
     element.addEventListener("domicile-zoom-change", () => {
       say(`zoom name=${name} factor=${element.zoom.toFixed(2)}`);

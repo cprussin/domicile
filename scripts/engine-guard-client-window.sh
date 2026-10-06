@@ -1,13 +1,9 @@
 #!/usr/bin/env bash
-# A real client's own pixels reaching the page, which is the whole claim.
+# Checks that a Wayland client's pixels reach the page.
 #
-# A Wayland client draws a color, the compositor submits its buffer to the
-# engine, and the page's canvas is read back. Every other guard here asserts
-# something around that; this is the one that asserts it.
-#
-# Its control is the same run with no client: nothing drew, and the guard must
-# say so. A guard that cannot fail is not a guard, and this repository has
-# shipped three that could not.
+# A client draws a color, the compositor submits its buffer to the engine, and
+# the test reads back the page's canvas. The control runs with no client and
+# must fail.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

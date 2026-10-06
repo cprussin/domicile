@@ -6,18 +6,16 @@
 
 namespace domicile {
 
-// Whether the desk is locked, as the compositor last said.
+// Whether the desk is locked, as last reported by the compositor.
 //
-// The compositor refuses its own reads of the home while the desk is locked --
-// see `crate::lock::refused` -- but `domicile://home/` is read here, in the
-// browser process, and the compositor never sees it. So the `locked` message
-// every chrome is told is also written down here, where the loader that serves
-// the home can ask it.
+// The compositor blocks its own home reads while locked (see
+// `crate::lock::refused`), but `domicile://home/` is served from the browser
+// process. The control channel records the `locked` message here so that
+// loader can check it.
 //
-// Process-wide and atomic: every control channel hears the same broadcast, and
-// the loader asks from another thread than the one the channel reads on.
-// Unlocked until told otherwise, because a desk with no lock configured never
-// says anything at all.
+// Process-wide and atomic because the loader reads it from a different thread
+// than the channel writes it. Starts unlocked, since a desk with no lock
+// configured never sends the message.
 class DeskLock {
  public:
   static bool IsLocked();

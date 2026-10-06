@@ -11,13 +11,10 @@ namespace blink {
 
 class HTMLAppElement;
 
-// The layout box of an <app>.
+// The layout box of an <app>, a replaced element like <video>.
 //
-// A replaced element, like <canvas> and <video>: the window has a box the page
-// lays out, and content the page does not draw. Its two jobs are to tell the
-// element what size that box became -- which is the configure the client is
-// resized by -- and to record the element's cc::SurfaceLayer as a foreign
-// layer, which is what puts the window in this page's property trees.
+// Reports the box size to the element, which configures the client, and
+// records the element's cc::SurfaceLayer as a foreign layer.
 class CORE_EXPORT LayoutAppSurface final : public LayoutReplaced {
  public:
   explicit LayoutAppSurface(HTMLAppElement*);

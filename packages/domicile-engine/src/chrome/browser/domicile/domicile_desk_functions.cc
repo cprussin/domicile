@@ -43,29 +43,26 @@ namespace tabs = extensions::api::tabs;
 namespace windows = extensions::api::windows;
 using extensions::ExtensionTabUtil;
 
-// Chrome's spelling, so an extension that matches on it still does.
+// Matches Chrome's message, so extensions that match on it still work.
 constexpr char kTabNotFoundError[] = "No tab with id: *.";
 
-// What tabs.create and windows.update ask through when there is nothing to ask
-// through: a desk with no browser window at all.
+// Returned when the desk has no tab to ask the shell through.
 constexpr char kNoWindowToAskError[] =
     "No browser window on this Domicile desk to ask the shell through.";
 
-// A zoom factor outside blink's browser range, which Chrome would store and a
-// desk refuses: the <webview> element holds its own setZoom to that range.
+// Returned for a zoom factor outside blink's browser range, which the
+// <webview> element's own setZoom also enforces.
 constexpr char kZoomOutOfRangeError[] =
     "Zoom factor * is outside the range a Domicile desk zooms to.";
 
-// The desk of the profile `function` was called from, or null where there is
-// none.
+// The desk of the calling profile, or null.
 DomicileWindowController* DeskOf(ExtensionFunction& function) {
   return DomicileWindowController::Find(function.browser_context());
 }
 
-// The window `function` was called from, which is chrome.windows' "current":
-// the window of the tab it was called in -- a popup window's own page is in
-// its popup window -- and the desk's for a caller in no tab, like a
-// background service worker. Null where there is no desk.
+// chrome.windows' "current" window: the caller's tab's window, or the desk's
+// window for a caller with no tab (such as a service worker). Null with no
+// desk.
 DomicileWindowController* CurrentWindowOf(ExtensionFunction& function) {
   DomicileWindowController* desk = DeskOf(function);
   if (desk == nullptr) {
@@ -77,7 +74,7 @@ DomicileWindowController* CurrentWindowOf(ExtensionFunction& function) {
   return window == nullptr ? desk : window;
 }
 
-// The window `window_id` names, the current one included, or null.
+// The window `window_id` names, including kCurrentWindowId, or null.
 DomicileWindowController* WindowNamed(ExtensionFunction& function,
                                       int window_id) {
   DomicileWindowController* desk = DeskOf(function);
@@ -93,9 +90,8 @@ std::string WindowNotFound(int window_id) {
       ExtensionTabUtil::kWindowNotFoundError, base::NumberToString(window_id));
 }
 
-// The tab named, in any window, or with no id the current window's active
-// one: Chrome's default for every tabs call whose id is optional. Null where
-// there is neither.
+// The tab with `tab_id` in any window, or the current window's active tab
+// when `tab_id` is unset (Chrome's default). Null if neither exists.
 content::WebContents* TabOrActive(ExtensionFunction& function,
                                   std::optional<int> tab_id) {
   DomicileWindowController* desk = DeskOf(function);
@@ -120,7 +116,7 @@ WebViewGuest& GuestOf(content::WebContents& tab) {
   return *guest;
 }
 
-// The profile's default zoom, where `tabs.setZoom(id, 0)` puts a tab back.
+// The profile's default zoom, which `tabs.setZoom(id, 0)` restores.
 double DefaultZoomFactor(content::WebContents& tab) {
   return blink::ZoomLevelToZoomFactor(
       content::HostZoomMap::GetForWebContents(&tab)->GetDefaultZoomLevel());
@@ -136,7 +132,7 @@ base::Value TabValue(ExtensionFunction& function, content::WebContents& tab) {
           .ToValue());
 }
 
-// queryInfo as //components/domicile:desk_tabs reads it.
+// Converts queryInfo for //components/domicile:desk_tabs.
 DeskTabQuery AsDeskTabQuery(const tabs::Query::Params::QueryInfo& info) {
   DeskTabQuery query;
   query.active = info.active;
@@ -162,7 +158,7 @@ DeskTabQuery AsDeskTabQuery(const tabs::Query::Params::QueryInfo& info) {
   return query;
 }
 
-// A tab of `window` as much as a query compares, asked from `current`.
+// The facts a query compares about `tab`, relative to `current`.
 DeskTabFacts FactsOf(DomicileWindowController& desk,
                      DomicileWindowController& window,
                      DomicileWindowController& current,
@@ -180,8 +176,8 @@ DeskTabFacts FactsOf(DomicileWindowController& desk,
       .in_last_focused_window = &window == &desk.LastFocused()};
 }
 
-// `title` and `url`, which are privileged: a tab whose data the extension may
-// not see matches neither. TabsQueryFunction::MatchesTab's rule.
+// Matches the privileged `title` and `url` filters. A tab the extension may
+// not read matches neither, as in TabsQueryFunction::MatchesTab.
 bool MatchesPrivileged(ExtensionFunction& function,
                        const tabs::Query::Params::QueryInfo& info,
                        const extensions::URLPatternSet& url_patterns,
@@ -206,7 +202,7 @@ bool MatchesPrivileged(ExtensionFunction& function,
           url_patterns.MatchesURL(pending->GetVirtualURL()));
 }
 
-// Every name in RefusedOnDesk(), answered with kNotOnADesk.
+// Answers every function in RefusedOnDesk() with kNotOnADesk.
 class DeskRefusalFunction : public ExtensionFunction {
  private:
   ~DeskRefusalFunction() override = default;
@@ -227,7 +223,7 @@ class DeskTabsQueryFunction : public ExtensionFunction {
     EXTENSION_FUNCTION_VALIDATE(params);
     const tabs::Query::Params::QueryInfo& info = params->query_info;
 
-    // SCHEME_ALL, as Chrome's: a query sees URLs and grants no access to them.
+    // SCHEME_ALL, as in Chrome: matching grants no access.
     std::vector<std::string> patterns;
     if (info.url && info.url->as_string) {
       patterns.push_back(*info.url->as_string);
@@ -274,8 +270,7 @@ class DeskTabsUpdateFunction : public ExtensionFunction {
     EXTENSION_FUNCTION_VALIDATE(params);
     const auto& update = params->update_properties;
 
-    // What a desk tab has no meaning for, refused before anything is done so
-    // that no update is half made.
+    // Refuse unsupported properties first so no update is half applied.
     if (update.pinned.value_or(false) || update.opener_tab_id ||
         update.auto_discardable) {
       return RespondNow(Error(kNotOnADesk));
@@ -303,8 +298,8 @@ class DeskTabsUpdateFunction : public ExtensionFunction {
     if (url.has_value()) {
       GuestOf(*tab).Navigate(*url);
     }
-    // In front is the shell's to decide. It is asked, and the tab this answers
-    // with is as it is now: active once the shell has focused it.
+    // The shell decides focus. The reply reflects the current state; the tab
+    // becomes active once the shell focuses it.
     if (update.active.value_or(false) || update.highlighted.value_or(false) ||
         update.selected.value_or(false)) {
       GuestOf(*tab).RequestFocus();
@@ -326,9 +321,8 @@ class DeskTabsCreateFunction : public ExtensionFunction {
     EXTENSION_FUNCTION_VALIDATE(params);
     const auto& create = params->create_properties;
 
-    // Where the window goes, and whether it is pinned, split or opened by
-    // another, are the shell's -- and a window with no address is not one the
-    // shell has anywhere to point.
+    // Placement, pinning, splitting and openers belong to the shell, and a
+    // tab needs a URL to open as a browser window.
     DomicileWindowController* desk = DeskOf(*this);
     const bool on_desk =
         !create.window_id || *create.window_id == kCurrentWindowId ||
@@ -350,9 +344,9 @@ class DeskTabsCreateFunction : public ExtensionFunction {
     if (asker == nullptr) {
       return RespondNow(Error(kNoWindowToAskError));
     }
-    // The tab is a browser window, and it is the next tab the desk gains.
-    // Retained until then. RequestWindow opens the window synchronously, so
-    // this usually responds before it returns: hence AlreadyResponded.
+    // The new tab is the next one the desk gains; this function is retained
+    // until then. RequestWindow usually opens it synchronously, so this has
+    // often already responded.
     desk->WhenNextTab(base::BindOnce(&DeskTabsCreateFunction::Created,
                                      base::WrapRefCounted(this)));
     GuestOf(*asker).RequestWindow(*url);
@@ -385,8 +379,7 @@ class DeskTabsRemoveFunction : public ExtensionFunction {
       ids.push_back(*params->tab_ids.as_integer);
     }
 
-    // Every id found before any is asked to close, so that one bad id closes
-    // nothing.
+    // Resolve every id first so one bad id closes nothing.
     std::vector<content::WebContents*> found;
     for (int id : ids) {
       content::WebContents* tab = TabOrActive(*this, id);
@@ -396,8 +389,7 @@ class DeskTabsRemoveFunction : public ExtensionFunction {
       }
       found.push_back(tab);
     }
-    // Not awaited: a browser window's page goes on a later task, and a shell's
-    // own page when the shell removes its element. tabs.onRemoved reports it.
+    // Not awaited: closing is asynchronous, and tabs.onRemoved reports it.
     for (content::WebContents* tab : found) {
       GuestOf(*tab).RequestClose();
     }
@@ -405,9 +397,8 @@ class DeskTabsRemoveFunction : public ExtensionFunction {
   }
 };
 
-// THE ZOOM FOUR. A desk tab's zoom is its guest's -- the one the element's own
-// setZoom sets, per site through HostZoomMap -- so the element hears every
-// change an extension makes, and tabs.onZoomChange is the guest's report too.
+// The zoom functions act on the guest's per-site zoom in HostZoomMap, the same
+// zoom the element's setZoom sets, so the element sees every change.
 class DeskTabsSetZoomFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("tabs.setZoom", TABS_SETZOOM)
@@ -423,7 +414,7 @@ class DeskTabsSetZoomFunction : public ExtensionFunction {
     if (tab == nullptr) {
       return RespondNow(Error(TabNotFound(params->tab_id)));
     }
-    // Chrome's rule: a page no extension may touch is not one it may zoom.
+    // As in Chrome, restricted pages cannot be zoomed.
     std::string error;
     if (extension()->permissions_data()->IsRestrictedUrl(
             tab->GetLastCommittedURL(), &error)) {
@@ -461,8 +452,7 @@ class DeskTabsGetZoomFunction : public ExtensionFunction {
   }
 };
 
-// Answered, and changes nothing, for the one mode a desk tab is already in;
-// refused for any other.
+// Accepts only the mode desk tabs already use, as a no-op; refuses others.
 class DeskTabsSetZoomSettingsFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("tabs.setZoomSettings", TABS_SETZOOMSETTINGS)
@@ -513,13 +503,12 @@ class DeskTabsGetZoomSettingsFunction : public ExtensionFunction {
   }
 };
 
-// The four chrome.windows reads: the desk's window, and the popup windows
-// its extensions opened.
+// Base for the chrome.windows reads over the desk's window and its popups.
 class DeskWindowReadFunction : public ExtensionFunction {
  protected:
   ~DeskWindowReadFunction() override = default;
 
-  // `window`, or the error for having none: no desk at all.
+  // Responds with `window`, or an error when it is null (no desk).
   ResponseAction RespondWithWindow(
       DomicileWindowController* window,
       const std::optional<windows::QueryOptions>& options) {
@@ -603,8 +592,8 @@ class DeskWindowsGetAllFunction : public DeskWindowReadFunction {
     std::optional<windows::GetAll::Params> params =
         windows::GetAll::Params::Create(args());
     EXTENSION_FUNCTION_VALIDATE(params);
-    // `windowTypes` filters, as Chrome's does; without it every window is
-    // one an extension sees.
+    // Filter by `windowTypes` as Chrome does; without it, return every
+    // window.
     const std::optional<std::vector<windows::WindowType>>& types =
         params->query_options ? params->query_options->window_types
                               : std::nullopt;
@@ -636,8 +625,8 @@ class DeskWindowsUpdateFunction : public DeskWindowReadFunction {
     EXTENSION_FUNCTION_VALIDATE(params);
     const auto& update = params->update_info;
 
-    // Bounds, state and attention are the shell's; only "in front" is a
-    // question it can be asked.
+    // Bounds, state and attention belong to the shell; only focus can be
+    // requested.
     if (update.left || update.top || update.width || update.height ||
         update.draw_attention || update.state != windows::WindowState::kNone ||
         !update.focused.value_or(true)) {
@@ -658,13 +647,11 @@ class DeskWindowsUpdateFunction : public DeskWindowReadFunction {
   }
 };
 
-// windows.create, for the one window a desk opens: a popup at one address,
-// which is the shell's to draw. See //components/domicile:desk_tabs's
-// DeskOpensWindow for what is refused.
+// windows.create for a popup at one URL, which the shell draws.
+// DeskOpensWindow in //components/domicile:desk_tabs decides what is refused.
 //
-// Makes the window here with no tab, then opens a browser window as its tab
-// through the active tab's guest, as tabs.create does. Responds with the
-// window once that browser window is its tab.
+// Creates the window with no tab, then asks the shell for a browser window as
+// its tab. Responds once that tab attaches.
 class DeskWindowsCreateFunction : public DeskWindowReadFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("windows.create", WINDOWS_CREATE)
@@ -676,7 +663,7 @@ class DeskWindowsCreateFunction : public DeskWindowReadFunction {
     std::optional<windows::Create::Params> params =
         windows::Create::Params::Create(args());
     EXTENSION_FUNCTION_VALIDATE(params);
-    // No createData at all is a normal window at the new tab page.
+    // No createData means a normal window at the new tab page.
     if (!params->create_data) {
       return RespondNow(Error(kNotOnADesk));
     }
@@ -717,7 +704,7 @@ class DeskWindowsCreateFunction : public DeskWindowReadFunction {
       return RespondNow(Error(kNoWindowToAskError));
     }
     DomicileWindowController& popup = desk->OpenPopup();
-    // Retained until the window has its tab or is removed. Usually responds
+    // Retained until the window gets its tab or is removed. Usually responds
     // before RequestPopupWindow returns, as in tabs.create.
     popup.WhenNextTab(base::BindOnce(&DeskWindowsCreateFunction::Opened,
                                      base::WrapRefCounted(this),
@@ -728,8 +715,7 @@ class DeskWindowsCreateFunction : public DeskWindowReadFunction {
     return did_respond() ? AlreadyResponded() : RespondLater();
   }
 
-  // Populated, as Chrome answers windows.create: the tab is what was asked
-  // for.
+  // Responds with the tabs populated, as Chrome's windows.create does.
   void Opened(int window_id, content::WebContents* tab) {
     if (tab == nullptr) {
       Respond(Error(WindowNotFound(window_id)));
@@ -745,9 +731,8 @@ class DeskWindowsCreateFunction : public DeskWindowReadFunction {
   }
 };
 
-// windows.remove for a popup window: closes its tab as tabs.remove does, and
-// the window goes with it. One with no tab yet goes immediately. The desk's
-// own window is the whole desktop, so it is refused.
+// windows.remove for a popup: closes its tab, which closes the window, or
+// closes a tabless popup at once. The desk's own window cannot be removed.
 class DeskWindowsRemoveFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("windows.remove", WINDOWS_REMOVE)
@@ -768,8 +753,7 @@ class DeskWindowsRemoveFunction : public ExtensionFunction {
     if (!window->IsPopup()) {
       return RespondNow(Error(kNotOnADesk));
     }
-    // Asked, not waited for, as tabs.remove: windows.onRemoved says when the
-    // window has gone.
+    // Not awaited, as in tabs.remove: windows.onRemoved reports it.
     if (window->GetTabCount() == 0) {
       desk->ClosePopup(params->window_id);
     } else {
@@ -801,7 +785,7 @@ void RegisterDeskFunctions() {
   registry.RegisterFunction<DeskWindowsUpdateFunction>();
   registry.RegisterFunction<DeskWindowsCreateFunction>();
   registry.RegisterFunction<DeskWindowsRemoveFunction>();
-  // Histogram UNKNOWN: a refusal is not the call it refused.
+  // Histogram UNKNOWN, so refusals are not counted as the refused calls.
   for (const char* name : RefusedOnDesk()) {
     registry.Register(ExtensionFunctionRegistry::FactoryEntry(
         &NewExtensionFunction<DeskRefusalFunction>, name,

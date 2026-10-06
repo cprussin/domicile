@@ -1,32 +1,23 @@
 #!/usr/bin/env bash
-# The shell's own page, asking what a widget on its bar needs: whether it may
-# show a notification, and whether it may read an answer from another origin.
+# Checks that the shell's own origin, `domicile://shell`, has notification
+# permission and can read a cross-origin fetch, as bar widgets need.
 #
 #   nix develop .#full --command \
 #     ./packages/domicile-engine/scripts/guard-shell-web-apis.sh /build/chromium/src
 #
-# WHY THIS EXISTS. A shell is the place a user's own bar items live -- a mail
-# counter on manganese's bar reads a web API and notifies when mail arrives --
-# and both are the shell's origin, `domicile://shell`, asking for itself rather
-# than a page in a <webview>. Patch 0068 allows notifications for the profile
-# and patch 0066 classes the shell loopback; this asserts that what the shell
-# page reads of both is "yes", and that a cross-origin answer reaches it.
+# Patch 0068 allows notifications for the profile, and patch 0066 classes the
+# shell as loopback.
 #
-# Headless and software-composited, like guard-webview-notifications.sh. Where
-# a notification GOES is the compositor's, tested there.
+# Headless and software-composited, like guard-webview-notifications.sh, which
+# tests where notifications go.
 #
-# WHAT IT ASSERTS. That the shell's box is painted: it paints it only when
-# notifications read as granted AND a fetch of another origin that allows it
-# (`/cors`) hands back the answer.
+# Asserts that the shell paints its box, which it does only when notifications
+# are granted and a fetch of `/cors` on another origin succeeds.
 #
-# HOW IT CAN FAIL. NEGATIVE=1 runs the control, two runs of the same shell:
+# NEGATIVE=1 runs two legs:
 #
-#   1. the box painted without asking. It MUST show: this is the run that says
-#      the harness can see the box at all.
-#   2. the fetch of an origin that does not allow it (`/no-cors`). It MUST show
-#      nothing: the browser refuses the shell an answer the other origin did
-#      not share, so the claim's color is CORS answering, and not a fetch that
-#      reads whatever it is pointed at.
+#   1. the box painted without checking must show, proving the harness sees it
+#   2. a fetch of `/no-cors` must not show, proving CORS is enforced
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
@@ -47,8 +38,7 @@ fi
 
 NEGATIVE="${NEGATIVE:-0}"
 
-# The box's color, and the shell's around it. Neither is any other
-# guard's, and neither is a browser background.
+# Unique to this guard and unlike any browser background.
 COLOR="${COLOR:-2E6F95}"
 WITNESS="${WITNESS:-5C3A21}"
 
@@ -85,9 +75,8 @@ command -v python3 >/dev/null || {
   exit 77
 }
 
-# One browser, one shell, one answer: the probe's status. Every run gets the
-# same switches and a fresh profile, so the runs differ in what the shell reads
-# and nothing else -- a profile left over would be a setting left over.
+# Runs the engine with a fresh profile and returns the probe's status. Runs
+# differ only in what the shell fetches.
 measure() { # $1 which run, $2 what it reads, $3 1 to paint unasked
   local which="$1" api="$2" unasked="$3"
   local engine_log="/tmp/domicile-shell-web-apis-$which-engine.log"
@@ -157,8 +146,8 @@ PORT="$(served_port "$SERVER_LOG")" || {
 PAGES="http://127.0.0.1:$PORT"
 echo "the other origin at $PAGES"
 
-# 2. The runs. The control's order is the experiment: the second leg's absence
-#    is a reading only because the first leg's presence came first.
+# 2. The runs. The control's first leg must pass before the second means
+#    anything.
 if [ "$NEGATIVE" = "1" ]; then
   LEG_STARTED="$(date +%s)"
   measure unasked cors 1
@@ -179,8 +168,7 @@ fi
 echo
 echo "measured: $MEASURED"
 
-# WHICH END TO BLAME. Run directly by
-# `scripts/test-shell-web-apis-guard.sh`.
+# scripts/test-shell-web-apis-guard.sh runs this block directly.
 FAILURE=""
 PASSED=""
 case "$MEASURED" in

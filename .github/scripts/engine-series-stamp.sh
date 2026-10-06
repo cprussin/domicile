@@ -1,54 +1,31 @@
 #!/usr/bin/env bash
-# What series the shared Chromium checkout is already carrying, written down
-# beside it so the next run can skip putting it there again.
+# Records which patch series the shared Chromium checkout already carries, so
+# the next run can skip the reset, apply and rebuild.
 #
 #   .github/scripts/engine-series-stamp.sh carries  <chromium/src>
 #   .github/scripts/engine-series-stamp.sh record   <chromium/src>
 #   .github/scripts/engine-series-stamp.sh identity
 #
-# `carries` writes `carries=true` or `carries=false` to $GITHUB_OUTPUT and
-# exits 0 — it is a question, and a question that cannot be answered answers
-# `false`, because every `false` costs exactly what every run costs today.
-# That includes a checkout too broken to read: the steps it gates are the ones
-# that own those diagnostics, and they are better than anything this could say.
-# `record` is the other way round — it exits non-zero rather than write a stamp
-# it cannot vouch for, because what that would break is the NEXT run.
+# - `carries` writes `carries=true|false` to $GITHUB_OUTPUT and exits 0. Any
+#   doubt answers `false`, which costs only a normal reset and apply.
+# - `record` writes the stamp after `apply.sh`.
+# - `identity` prints the series hash. `engine-release-publish.sh` tags releases
+#   with it.
 #
-# WHAT THIS SAVES. `engine.yml` resets the checkout to `CHROMIUM_PIN` and
-# applies `patches/` over it before every build. `git reset --hard` puts every
-# patched file back to upstream and `git am` then patches it again, so every
-# file the series touches comes out with a new mtime whether or not a byte of
-# it changed — and the build behind that is the most expensive thing in this
-# repository. When the series has not moved, none of that had to happen.
+# Resetting and reapplying gives every patched file a new mtime, which forces a
+# long rebuild even when nothing changed. That is the cost this avoids.
 #
-# `engine-sync.sh` already works exactly this way for the DEPS, down to the
-# file living beside the checkout rather than in it, and its header has the
-# reason: a file inside `src/` is untracked in Chromium's repository, which is
-# what makes `git status --porcelain` non-empty, which is what `apply.sh`
-# refuses.
+# A false `true` would report a build of other code as the pull request's, so
+# the stamp is not trusted alone. `carries` also checks:
 #
-# WHAT IT MUST NEVER DO IS SAY `true` ABOUT A TREE THAT IS NOT THAT TREE. The
-# cost of a false negative is one run paying what every run pays today. The
-# cost of a false positive is a build of something other than the pull request,
-# reported as the pull request — a green check on code nothing compiled, which
-# `scripts/test-engine-series-stamp.sh` spends eleven of its thirteen cases on.
+#   - the series identity (pin, patches and laid-down files, by content);
+#   - HEAD matches the stamped commit, since other workflows and people reset
+#     this tree;
+#   - the only changes in the checkout are the series' untracked files;
+#   - each of those files matches the repository's byte for byte. `git status`
+#     cannot see changes to untracked files.
 #
-# So the stamp is not trusted on its own. It names a series and a commit, and
-# this script checks the checkout against BOTH plus the files themselves:
-#
-#   - the series identity matches (the pin, every patch, every laid-down file,
-#     by content rather than by name or timestamp);
-#   - HEAD is the commit the stamp was written against — `engine-release.yml`
-#     and `engine-drm-probe.yml` reset this same tree, and a person builds in
-#     it by hand;
-#   - the checkout is dirty in exactly the way a finished `apply.sh` leaves it:
-#     the series' own files untracked, and nothing else of any kind;
-#   - and every one of those files is byte-for-byte the repository's. They are
-#     untracked, so `git status` cannot see one of them go missing or change —
-#     only a comparison can.
-#
-# Any of those failing is `false`, which costs a reset and an apply: the
-# ordinary price, not a failure.
+# The stamp lives outside `src/` for the reason given in engine-sync.sh.
 set -euo pipefail
 
 usage() {
@@ -59,10 +36,8 @@ usage() {
 
 action="${1:-}"
 CHROMIUM="${2:-}"
-# `identity` is the odd one out and deliberately so: it is a question about
-# THIS REPOSITORY's series and not about any checkout, which is what lets a job
-# on `ubuntu-latest` — or `update-engine-release.sh` on a laptop — ask it
-# without /build.
+# `identity` describes this repository's series, not a checkout, so it needs no
+# /build.
 [ -n "$action" ] || usage
 case "$action" in
   (identity) ;;
@@ -74,30 +49,18 @@ PACKAGE="$ROOT/packages/domicile-engine"
 SERIES="$PACKAGE/src"
 PATCHES="$PACKAGE/patches"
 
-# Beside the checkout, for engine-sync.sh's reason. Override for tests, which
-# have no /build.
+# Outside `src/`, as in engine-sync.sh. Tests override it because they have no
+# /build.
 STAMP="${DOMICILE_SERIES_STAMP:-$(dirname "$CHROMIUM")/.domicile-series-stamp}"
 
-# Every input that decides what the tree comes out as, hashed by CONTENT.
-#
-# Not mtimes and not a list of names: the whole point is to be right about a
-# tree whose files were rewritten with identical content, which is what the
-# reset-then-apply does to the ones it did not change. `sort` because `find`
-# does not promise an order and a hash over a different order is a different
-# hash for the same series.
-#
-# The pin goes in labeled. Without it, moving `CHROMIUM_PIN` and changing
-# nothing else would leave the identity untouched, and a repin is the one
-# change that rebuilds the most.
+# Hash of every input that determines the tree, by content. The reset-then-apply
+# rewrites unchanged files, so mtimes are useless. `sort` makes the order
+# stable. The pin is included so a repin changes the identity.
 series_identity() {
   {
     printf 'pin %s\n' "$(pin)"
-    # `find | sort | while read` rather than `-print0 | sort -z | xargs -0`.
-    # The NUL form is the careful one and it spends `xargs`, which nothing
-    # else that runs on this machine uses — and an assumption about what is
-    # on that PATH is what `cmp` cost above. `find`, `sort` and `sha256sum`
-    # are all already proven there: engine-reset.sh's own `series_files` is
-    # this same expression, and what it enumerates is this same tree.
+    # A `while read` loop instead of `xargs`, which may not be on the runner's
+    # PATH.
     for dir in "$PATCHES" "$SERIES"; do
       [ -d "$dir" ] || continue
       (cd "$dir" && find . -type f | LC_ALL=C sort |
@@ -111,18 +74,14 @@ series_identity() {
 
 pin() { grep -v '^#' "$PACKAGE/CHROMIUM_PIN" | tr -d '[:space:]'; }
 
-# The files `apply.sh` copies into the checkout, as paths relative to it. Same
-# expression engine-reset.sh uses to decide what to remove, and they have to
-# agree: this asks whether they are all there, that one puts them there.
+# Files `apply.sh` copies into the checkout, relative to it. Must match
+# engine-reset.sh's `series_files`.
 series_files() { (cd "$SERIES" && find . -type f | sed 's|^\./||'); }
 
-# Whether the checkout is dirty in exactly the way a finished `apply.sh` leaves
-# it, and in no other way.
+# Whether the checkout's only changes are the series' untracked files.
 #
-# `--untracked-files=all` rather than the default, which collapses an untracked
-# directory to a single line ending in `/` — engine-reset.sh's diagnostic
-# learned that the hard way, and a collapsed listing here would compare unequal
-# against the file list every time and make this answer `false` forever.
+# `--untracked-files=all` because the default collapses an untracked directory
+# to one line, which would never match the file list.
 tree_is_as_applied() {
   local want got
   want="$(series_files | LC_ALL=C sort)"
@@ -132,9 +91,7 @@ tree_is_as_applied() {
     reason="the checkout is not dirty the way a finished apply leaves it"
     return 1
   }
-  # And nothing tracked has been touched. Separate from the above because the
-  # listing there drops every line that is not `??`, so a modified upstream
-  # file would otherwise pass unnoticed.
+  # The listing above keeps only `??` lines, so check tracked files separately.
   [ -z "$(git -C "$CHROMIUM" status --porcelain --untracked-files=no)" ] || {
     reason="the checkout has modifications to files the series does not own"
     return 1
@@ -144,22 +101,9 @@ tree_is_as_applied() {
 
 # Whether two files hold the same bytes.
 #
-# NOT `cmp`, AND THAT IS THE WHOLE COMMENT. `cmp` is diffutils, and diffutils
-# is not on the runner's PATH: the nixpkgs module supplies bash, coreutils,
-# git, tar, gzip and nix, and cprussin/dotfiles adds curl, gawk, jq,
-# lsb-release, python3, which, xz and zstd. Run 35475442242 is what said so,
-# by failing with `cmp: command not found` after a 35-patch series had applied
-# cleanly.
-#
-# What made that worth more than a one-word fix is the shape of it. A missing
-# command exits 127 and a differing file exits 1, and the `|| return 1` below
-# read both as "differs" — so a tool that was never installed was
-# indistinguishable from a checkout somebody had written into, and the
-# `carries` side of this script would have answered `false` for ever with
-# nobody the wiser. `sha256sum` is coreutils, it is already what computes the
-# identity above, and a failure of it is caught rather than read as an answer.
-#
-# Fed on stdin so the digest is of the bytes and not of the filename.
+# Uses `sha256sum` because `cmp` (diffutils) is not on the runner's PATH, and a
+# missing command would read as "differs". A `sha256sum` failure exits instead
+# of answering. Reads stdin so the output has no filename.
 same_bytes() { # $1, $2
   local a b
   [ -f "$1" ] && [ -f "$2" ] || return 1
@@ -174,9 +118,8 @@ same_bytes() { # $1, $2
   [ "$a" = "$b" ]
 }
 
-# Every laid-down file present and identical. `git status` cannot answer this:
-# these files are untracked, so it sees neither one going missing nor one being
-# edited into something else.
+# Whether every laid-down file is present and identical. `git status` cannot
+# tell, because these files are untracked.
 series_files_are_laid_down() {
   local file
   while IFS= read -r file; do
@@ -199,25 +142,15 @@ case "$action" in
     verdict=false
 
     if [ ! -f "$PACKAGE/CHROMIUM_PIN" ]; then
-      # WHOSE ERROR THIS IS. A checkout with no pin file is broken, and
-      # `engine-reset.sh` is the step that says so properly: it names the
-      # file, says where the value should have come from, and tells the
-      # reader which of the two possible causes it is. This step runs before
-      # that one, and failing here would replace that diagnostic with one
-      # from a script whose only job is to answer a question. So it answers
-      # `false`, the reset runs, and the reset explains.
-      #
-      # Said explicitly rather than left to `grep` failing inside the
-      # identity below. That path does reach `false`, and it reaches it by
-      # leaking grep's own "No such file or directory" onto stderr, which is
-      # an accident that reads like a diagnostic.
+      # `engine-reset.sh` reports a missing pin file properly and runs after
+      # this, so answer `false` and let it explain. Checked here so grep's own
+      # error does not leak onto stderr.
       reason="this checkout has no packages/domicile-engine/CHROMIUM_PIN to read"
     elif [ ! -f "$STAMP" ]; then
       reason="nothing is written down beside this checkout"
     else
-      # Two lines: the identity, then the commit it was written against. Read
-      # positionally rather than parsed, because this file is written by the
-      # `record` below and by nothing else.
+      # Two lines: the identity, then the commit. Only `record` writes this
+      # file.
       stamped_identity="$(sed -n '1p' "$STAMP")"
       stamped_head="$(sed -n '2p' "$STAMP")"
 
@@ -241,29 +174,18 @@ case "$action" in
       echo "Resetting and applying, which is what every run did before this stamp existed."
     fi
 
-    # The workflow's `if:` reads this and nothing else, so it is written
-    # whatever happened above.
+    # The workflow's `if:` reads this, so always write it.
     [ -z "${GITHUB_OUTPUT:-}" ] || printf 'carries=%s\n' "$verdict" >>"$GITHUB_OUTPUT"
     ;;
 
   record)
-    # A stamp is worth exactly what the run that wrote it checked. This is
-    # called straight after the apply step, so the tree should already be what
-    # the apply left — and if it is not, writing the stamp would arm a false
-    # positive for the NEXT run rather than failing this one, which is the
-    # worse of the two places to find out.
+    # A bad stamp would cause a false `true` on the next run, so check the tree
+    # before writing.
     reason=""
     if ! tree_is_as_applied || ! series_files_are_laid_down; then
-      # LOUD, AND NOT FATAL. Not writing the stamp is already the whole of the
-      # protection: the next run resets and applies, which is what every run
-      # did before this existed. Failing the step on top of that skips the
-      # build and all twenty-odd guards behind it, which turns "the saving
-      # does not apply this time" into a red pull request over a series that
-      # applied perfectly.
-      #
-      # Run 35475442242 is why this is a warning. `cmp` was missing, this
-      # refused — correctly, on the information it had — and a 35-patch series
-      # that had just applied cleanly was never compiled.
+      # A warning, not a failure: skipping the stamp already protects the next
+      # run, and failing would skip the build and its guards for a series that
+      # applied fine.
       {
         echo "::warning::not writing down this series: the checkout is not carrying it the way a finished apply leaves it"
         echo "  $reason"
@@ -278,28 +200,16 @@ case "$action" in
       exit 0
     fi
 
-    # Written in one go rather than appended to, so a run that dies in the
-    # middle of this leaves no half-file for the reader above to take
-    # positionally. A stamp is small enough that this is a single write.
+    # One write, so an interrupted run leaves no partial file.
     printf '%s\n%s\n' "$(series_identity)" "$(head_now)" >"$STAMP"
     echo "wrote down the series this checkout carries, over $(pin)"
     ;;
 
   identity)
-    # WHAT THE SERIES IS, NAMED, so that something other than this script can
-    # key on it. `engine-release-publish.sh` tags a published engine after the
-    # series it was built from rather than after the domicile commit that
-    # produced it — two commits that do not touch the fork are the same engine
-    # and need no repin between them, and until releases were keyed this way
-    # every engine change cost a second pull request whether or not the engine
-    # had moved.
-    #
-    # READ OUT OF THIS SCRIPT RATHER THAN COMPUTED AGAIN, and that is the whole
-    # reason it lives here. The tag and the stamp have to mean the same thing
-    # by construction. A second implementation of "the same series" would
-    # drift, and the drift would show up either as a repin that changed nothing
-    # or — the direction that costs something — as no repin for a change that
-    # did, which is #411's failure with a new cause.
+    # Releases are tagged by series rather than by domicile commit, so commits
+    # that do not touch the fork share an engine. The tag must use the same
+    # hash as the stamp; a second implementation could drift and skip a needed
+    # repin (#411).
     series_identity
     ;;
 

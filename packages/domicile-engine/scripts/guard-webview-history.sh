@@ -1,116 +1,58 @@
 #!/usr/bin/env bash
-# What a browser window's address bar can drive and can know: the four history
-# controls of a <webview>, driven at the guest behind it, and the three answers
-# the element holds about that guest.
+# Checks a <webview>'s history controls and the state the element reports
+# about its guest: goBack(), goForward(), reload() and stop() must drive the
+# guest, and canGoBack/canGoForward, loading state, address, security and
+# favicon must follow it. See packages/domicile-engine/docs/GUARDS.md.
 #
 #   nix develop .#full --command \
 #     ./packages/domicile-engine/scripts/guard-webview-history.sh /build/chromium/src
 #
-# No nested compositor and no Wayland client, exactly as guard-webview-framing.sh
-# and guard-webview-keyboard.sh run: nothing here is measured in pixels, so
-# `--ozone-platform=headless` with software compositing is the whole of the
-# environment.
+# Runs headless with software compositing: nothing here is measured in pixels.
 #
-# WHY THIS EXISTS. A <webview> hosts a guest — an inner WebContents attached to
-# a placeholder child frame — and `goBack()`, `goForward()`, `stop()` and
-# `reload()` reached that PLACEHOLDER's History, which has been on about:blank
-# since it was made. So all four did nothing at all, and a shell's address bar
-# drove a page nobody was looking at. The guest's own NavigationController is
-# in the browser process, and wiring the four to it over the WebViewGuest pipe
-# is what this asserts.
+# A unit test cannot check this. jsdom has no nested browsing context, so
+# `BrowserWindow.test.tsx` only shows that Back calls `goBack()`.
 #
-# A UNIT TEST CANNOT MAKE THIS CLAIM. There is no nested browsing context in
-# jsdom, so there is no history for anything to move in and no page to observe
-# moving; `BrowserWindow.test.tsx` asserts that pressing Back calls `goBack()`
-# on the element and would keep passing with this whole path removed. The claim
-# is "the page in the window went back to the page before it", and only a real
-# engine can be asked it.
-#
-# THE POSITIVE IS ESTABLISHED FIRST, which is the lesson the other two guards
-# learned the hard way: a guard that measures only an absence proves nothing,
-# because "nothing happened" and "the harness is broken" read the same from
-# inside. So this navigates somewhere, confirms it, navigates somewhere else,
-# confirms that, and only then goes back — and what it asserts is the ORDER of
-# the pages the guest showed:
+# The guest's pages, in order. Each page logs its name on `pageshow`, so a
+# back/forward-cache restore is reported too (see
+# guard-webview-history-server.py):
 #
 #   /one /two /one /two /two          and no /slow
 #    │    │    │    │    │                  │
-#    │    │    │    │    │                  stop() canceled the pending one
-#    │    │    │    │    reload() fetched the page again
-#    │    │    │    goForward() returned to it
-#    │    │    goBack() — THE CLAIM
-#    │    a second page, so there is a history to move in
-#    the first page, so there is a guest showing anything at all
+#    │    │    │    │    │                  stop() canceled the pending load
+#    │    │    │    │    reload()
+#    │    │    │    goForward()
+#    │    │    goBack()
+#    │    a second page, so there is history to move in
+#    the first page, so the guest exists
 #
-# Each page says its own name on `pageshow`, which is what makes a
-# back/forward-cached restore reportable at all; see
-# guard-webview-history-server.py.
+# canGoBack/canGoForward at four points:
 #
-# AND WHAT THE ELEMENT SAYS BACK AND FORWARD CAN DO, read at four points in the
-# same schedule. That answer lives in the browser process — a guest's history is
-# a NavigationController there — so the browser pushes it down a client pipe and
-# the element holds it as `canGoBack` and `canGoForward`. What is asserted is
-# the pair at each point:
+#   start          false/false
+#   two-pages      true/false    the positive reading; an element answering
+#                                false to everything fails here
+#   after-back     false/true
+#   after-forward  true/false
 #
-#   start          false/false   the first page has nowhere to go either way
-#   two-pages      true/false    THE POSITIVE: a page behind, so back is live
-#   after-back     false/true    spent the back entry and earned a forward one
-#   after-forward  true/false    and spent it again
+# Loading state at three points:
 #
-# THE POSITIVE IS FIRST HERE TOO. An element that answered `false` to everything
-# would satisfy every absence in that table, so the reading that has to hold
-# before any of them means anything is `two-pages`.
+#   settled     false   /two has finished loading
+#   pending     true    the fixture is holding /slow open
+#   after-stop  false   stop() canceled /slow
 #
-# AND WHETHER A PAGE IS STILL ARRIVING, which the same schedule already builds
-# both halves of and which is therefore read here rather than in a guard of its
-# own:
+# `two-pages` is read before the module adds any listener, and must report
+# `events=0`. A React shell adds listeners after the first pages commit, so the
+# state must be readable without having heard an event.
 #
-#   settled     false   /two has finished arriving
-#   pending     true    THE POSITIVE: /slow is a navigation the fixture is
-#                        still holding open, driven one HOLD ago
-#   after-stop  false   stop() canceled it, so nothing is arriving any more
+# NEGATIVE=1 is the control: the same shell, element and navigations, with
+# none of the four calls. (An <iframe> control would fail on a TypeError, since
+# it has no goBack().) The control must show:
 #
-# THAT PAIR SEPARATES INSIDE ONE RUN, which is why the control says less about
-# it than about the four calls: an element answering `true` to everything fails
-# `settled` and one answering `false` to everything fails `pending`. What the
-# control adds is that `pending` is the fixture holding a navigation open
-# rather than anything the four calls did.
-#
-# AND THAT READING IS TAKEN BEFORE THE MODULE EVER LISTENS, which is the second
-# thing this measures. A chrome renders from state, and a React shell registers
-# its listeners in its first effect flush — after the element is in the document
-# and after the guest's first pages have committed. So the module reads
-# `two-pages` with no listener on the element at all and reports `events=0`
-# beside it: a value read that way is a value a late-mounting shell would have
-# had. Only then does it start listening, and the two events it hears over the
-# rest of the run are what says a shell has something to re-render on.
-#
-# HOW IT CAN FAIL, which is the part a guard is worth nothing without.
-# NEGATIVE=1 runs the same shell, the same element, the same guest and the same
-# two navigations, and CALLS NOTHING. Not an <iframe> in the element's place,
-# which is what the other two <webview> guards use: an <iframe> has no goBack()
-# at all, so that run would end on a TypeError rather than on a reading. What
-# this control removes is the four calls, and it decides two things the
-# positive run cannot see from the inside:
-#
-#   a third page must NOT appear    or a guest moves back to a page it has
-#                                    shown without anybody driving it, and the
-#                                    positive run's third line is not goBack()
-#   the slow page MUST appear       or the fixture never answers, and the
-#                                    positive run's not showing it is a
-#                                    measurement of nothing rather than of
-#                                    stop()
-#   back must STAY available        or a guest's history goes dead on its own,
-#                                    and the positive run's dead back need not
-#                                    have been goBack()'s
-#   no event may arrive             or something pushes history state with
-#                                    nothing driving it, and the positive run's
-#                                    two events are noise rather than the two
-#                                    calls
-#   the slow page must still be     or `pending` is reading a navigation that
-#     pending when it is read        had already landed, and the positive run's
-#                                    reading of it is not about a load in
-#                                    flight either
+#   no third page             so the positive run's third page is goBack()'s
+#   /slow arrives             so its absence in the positive run is stop()'s
+#   back stays available      so the positive run's dead back is goBack()'s
+#   no history event          so the positive run's events are the calls'
+#   /slow still pending       so `pending` reads a load in flight
+#     when read
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
@@ -127,7 +69,7 @@ if [ -z "$CHROMIUM" ]; then
   exit 1
 fi
 
-# NEGATIVE=1 drives none of the four. See the header.
+# NEGATIVE=1 drives none of the four calls. See the header.
 NEGATIVE="${NEGATIVE:-0}"
 DRIVE="history"
 [ "$NEGATIVE" = "1" ] && DRIVE="none"
@@ -138,34 +80,28 @@ PROFILE="${PROFILE:-/tmp/domicile-webview-history-profile}"
 WIDTH="${WIDTH:-1024}"
 HEIGHT="${HEIGHT:-768}"
 
-# THE NUMBERS THE EXPERIMENT IS MADE OF, one file's to pick because they only
-# work together. Each step advances as soon as what it waits for has happened;
-# SETTLE and STEP only bound a step that never does.
+# Timings. They depend on each other, so they are set together here. Each step
+# advances as soon as its event arrives; SETTLE and STEP are only timeouts.
 #
-#   SETTLE   bounds the first page (the guest has to be asked for, attached and
-#            navigated) and the last, which must outlast SLOW so that the
-#            control run sees the page it would have shown
-#   STEP     bounds each step in between
-#   QUIET    how long the control watches a step it does not drive, since an
-#            absence has no event to wait for. Longer than a healthy step
-#   HOLD     how long /slow is pending before stop(), so its request is at the
-#            fixture: nothing the page can see says when it arrives
-#   SLOW     how long the fixture sits on /slow. It must outlast HOLD, so that
-#            stop() is driven while the load is still pending
+#   SETTLE   timeout for the first page and the last. Must outlast SLOW so the
+#            control run sees /slow arrive
+#   STEP     timeout for each step in between
+#   QUIET    how long the control waits on a step it does not drive. Longer
+#            than a healthy step
+#   HOLD     how long /slow is pending before stop(), so the request reaches
+#            the fixture first
+#   SLOW     how long the fixture holds /slow. Must outlast HOLD
 SETTLE_MS="${SETTLE_MS:-25000}"
 STEP_MS="${STEP_MS:-8000}"
 QUIET_MS="${QUIET_MS:-3000}"
 HOLD_MS="${HOLD_MS:-2000}"
 SLOW_SECONDS="${SLOW_SECONDS:-6}"
 
-# Every bound sat out is SETTLE + five STEPs + HOLD + SETTLE, and the engine
-# has to start before any of it. Generous on top: this machine is shared.
+# SETTLE + five STEPs + HOLD + SETTLE, plus engine startup, with margin for a
+# shared machine.
 FOR_SECONDS="${FOR_SECONDS:-240}"
 
-# A run and its own control are two measurements, so they get two sets of logs.
-# Sharing one file means the control's output overwrites the run's and the
-# diagnostics print whichever went last — which, when the two disagree, is
-# exactly the pair worth reading side by side.
+# Separate logs for the control, so it does not overwrite the positive run's.
 WHICH=""
 [ "$NEGATIVE" = "1" ] && WHICH="-negative"
 ENGINE_LOG="${ENGINE_LOG:-/tmp/domicile-webview-history$WHICH-engine.log}"
@@ -191,9 +127,7 @@ command -v python3 >/dev/null || {
 
 rm -f "$BROKER"; rm -rf "$PROFILE"; mkdir -p "$PROFILE"
 
-# Waits for `$2` to appear in `$3`, for `$1` quarter seconds. Every gate in this
-# script is a line in a log, because every one of them is something a page or a
-# browser says rather than a file it creates.
+# Waits for `$2` to appear in `$3`, for `$1` quarter seconds.
 wait_for_line() { # $1 tries, $2 pattern, $3 file
   for _ in $(seq 1 "$1"); do
     grep -qF "$2" "$3" 2>/dev/null && return 0
@@ -202,8 +136,7 @@ wait_for_line() { # $1 tries, $2 pattern, $3 file
   return 1
 }
 
-# 1. The three pages. Their own server rather than real sites, for the reason
-#    the framing guard has one: `crux` reaches no arbitrary host.
+# 1. The pages, from a local server: `crux` cannot reach arbitrary hosts.
 rm -f "$HTTP_LOG"
 python3 "$SCRIPTS/guard-webview-history-server.py" \
   --port 0 --slow-seconds "$SLOW_SECONDS" >"$HTTP_LOG" 2>&1 &
@@ -221,11 +154,9 @@ PORT="$(served_port "$HTTP_LOG")" || {
 SUBJECT="http://127.0.0.1:$PORT"
 echo "serving a browser window's pages under $SUBJECT"
 
-# 2. The engine, on a domicile:// document, because the browser binds
-#    WebViewGuestHost for that origin and no other — a <webview> anywhere else
-#    cannot ask for a guest at all. `--app` for the reason `domicile` uses it
-#    and every guard here repeats: the guard runs the configuration the product
-#    runs, or it is guarding something else.
+# 2. The engine, on a domicile:// document: the browser binds
+#    WebViewGuestHost only for that origin. `--app` matches how `domicile`
+#    runs the engine.
 rm -f "$ENGINE_LOG"
 "$CHROMIUM/$OUT/chrome" \
   --ozone-platform=headless \
@@ -249,15 +180,13 @@ wait_for_line "$TRIES" "GUARD driving" "$ENGINE_LOG" || {
 }
 echo "the shell is driving mode=$DRIVE"
 
-# 3. The whole schedule, which the module owns. Waiting on its last line rather
-#    than sleeping for the arithmetic: a browser that started slowly still
-#    finishes, and one that died says so by never getting here.
+# 3. The module runs the schedule. Wait for its last line rather than a fixed
+#    time, so a slow start still finishes.
 wait_for_line "$TRIES" "GUARD done" "$ENGINE_LOG" ||
   echo "the schedule never finished; what follows is a run cut short" >&2
 
-# The slow page's absence is a reading only once it can no longer arrive: the
-# fixture saw the browser hang up, or it came. Bounded past the fixture's own
-# wait by SETTLE, for a page answered and still on its way.
+# /slow's absence counts only once it can no longer arrive: the fixture saw the
+# browser hang up, or the page arrived. Waits up to SLOW + SETTLE.
 slow_settled() {
   grep -qF "abandoned /slow" "$HTTP_LOG" 2>/dev/null ||
     grep -qF "guest-shown path=/slow" "$ENGINE_LOG" 2>/dev/null
@@ -267,10 +196,8 @@ for _ in $(seq 1 $(((SLOW_SECONDS + SETTLE_MS / 1000) * 4))); do
   sleep 0.25
 done
 
-# The pages the guest showed, in the order it showed them. That sequence is the
-# entire measurement: every one of the four controls is read as a position in
-# it, so an extra navigation anywhere would shift the rest and is a failure of
-# its own below.
+# The pages the guest showed, in order. Each call is checked by its position,
+# so an extra navigation is a failure of its own below.
 SEQUENCE="$(grep -o 'GUARD guest-shown path=[^ ]*' "$ENGINE_LOG" |
   sed 's/^.*path=//')"
 at() { # $1 index
@@ -283,21 +210,17 @@ FOURTH="$(at 4)"
 FIFTH="$(at 5)"
 COUNT="$(printf '%s\n' "$SEQUENCE" | grep -c .)"
 
-# WHAT THE ELEMENT SAID BACK AND FORWARD COULD DO, at each of the four points
-# the module reads it. `at=` names the point in the schedule rather than the
-# page: in the control the guest is somewhere else by then, and it is the same
-# point all the same.
-#
-# `head -1` because a point is read once and a log that somehow holds two of
-# them should be decided by the first rather than by whichever sorted last.
+# canGoBack/canGoForward at each point. `at=` names the point in the schedule,
+# not the page, since the control is on a different page by then. `head -1`
+# takes the first reading if a point is logged twice.
 STATES="$(grep -o 'GUARD history-state at=[^ ]* can=[^ ]* events=[0-9]*' \
   "$ENGINE_LOG")"
 can_at() { # $1 point
   printf '%s\n' "$STATES" |
     sed -n "s/^GUARD history-state at=$1 can=\([^ ]*\) .*\$/\1/p" | head -1
 }
-# How many times the element had said its history changed by then. Zero at
-# `two-pages` is a reading, not an absence: see the header.
+# History events heard by that point. Zero at `two-pages` is expected: see the
+# header.
 events_at() { # $1 point
   printf '%s\n' "$STATES" |
     sed -n "s/^GUARD history-state at=$1 .* events=\([0-9]*\)\$/\1/p" | head -1
@@ -309,10 +232,8 @@ BACK_CAN="$(can_at after-back)"
 FORWARD_CAN="$(can_at after-forward)"
 FORWARD_EVENTS="$(events_at after-forward)"
 
-# AND WHETHER IT SAID A PAGE WAS ARRIVING, at the three points the module reads
-# it. Parsed apart from the pair above because they answer different questions:
-# a guest's history can move without a load a browser would spin for, and a
-# guest can load without its history changing at all.
+# Loading state at each point. Separate from history state: either can change
+# without the other.
 LOADINGS="$(grep -o 'GUARD loading-state at=[^ ]* loading=[^ ]* events=[0-9]*' \
   "$ENGINE_LOG")"
 loading_at() { # $1 point
@@ -328,11 +249,7 @@ PENDING_LOADING="$(loading_at pending)"
 PENDING_LOADING_EVENTS="$(loading_events_at pending)"
 STOPPED_LOADING="$(loading_at after-stop)"
 
-# WHERE THE ELEMENT SAID THE PAGE WAS, and what the browser said about the
-# connection behind it, at the same four points. Parsed apart from the pair
-# above because it answers a different question: back and forward are what the
-# element can DO, and this is what it is SHOWING — and the second is the one a
-# chrome puts in front of a user beside a padlock.
+# The address and connection security the element reports at each point.
 PAGES="$(grep -o 'GUARD page-state at=[^ ]* path=[^ ]* security=[^ ]*' \
   "$ENGINE_LOG")"
 path_at() { # $1 point
@@ -345,10 +262,9 @@ security_at() { # $1 point
 }
 TWO_PATH="$(path_at two-pages)"
 TWO_SECURITY="$(security_at two-pages)"
-# AND THE ICON THE PAGE LINKS, by path, which is what a launcher learns a
-# bookmark's icon from. Read where both runs are on /two, which links /two.png.
-# The engine logs a console line as `"GUARD ...", source: ...`, so the path
-# ends at the quote as well as at a space.
+# The favicon the page links, which a launcher uses for a bookmark's icon.
+# Read at /two, which links /two.png. Console lines are logged as
+# `"GUARD ...", source: ...`, so the path ends at a quote or a space.
 favicon_at() { # $1 point
   grep -o "GUARD favicon-state at=$1 path=[^ \"]*" "$ENGINE_LOG" |
     sed -n 's/^.* path=//p' | head -1
@@ -359,10 +275,8 @@ FORWARD_PATH="$(path_at after-forward)"
 
 SAW_MODULE=$(grep -qF "GUARD driving" "$ENGINE_LOG" && echo 1 || echo 0)
 SAW_SLOW_SHOWN=$(printf '%s\n' "$SEQUENCE" | grep -qx "/slow" && echo 1 || echo 0)
-# Asked for, which is not the same as answered: the fixture records a request
-# when it ARRIVES, so this is true in the positive run too — the navigation
-# started and was canceled. Without it, "the slow page never appeared" and
-# "the element never went there" are the same reading.
+# The fixture logs a request on arrival, so this is true in the positive run
+# too. It separates "stop() canceled /slow" from "/slow was never requested".
 SAW_SLOW_ASKED=$(grep -qF "asked /slow" "$HTTP_LOG" && echo 1 || echo 0)
 
 echo
@@ -376,16 +290,10 @@ echo "and it was loading: settled=$SETTLED_LOADING pending=$PENDING_LOADING afte
 echo "loading events: at pending=$PENDING_LOADING_EVENTS"
 echo
 
-# WHICH END TO BLAME, and it is the whole of this script's judgment. Six
-# readings and two modes make far more answers than a person reading an
-# annotation can be expected to reconstruct, and most of the failures read
-# alike and mean different things — so they are decided here, in a block
-# `scripts/test-webview-history-guard.sh` runs directly, rather than inferred
-# from a grep by whoever opens the job.
-#
-# The order is the order the readings depend on each other in: a run where no
-# second page ever loaded has no history for anything to move in, so "the page
-# did not go back" would be a true sentence about the wrong layer.
+# The verdict. `scripts/test-webview-history-guard.sh` runs this block
+# directly. Checks are ordered by dependency, so each failure names the first
+# layer that broke: with no second page, "did not go back" would blame the
+# wrong layer.
 FAILURE=""
 PASSED=""
 if [ "$SAW_MODULE" != "1" ]; then

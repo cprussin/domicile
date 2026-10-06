@@ -18,8 +18,7 @@ CursorColors CursorColorsFor(ui::NativeTheme::PreferredColorScheme scheme) {
     case ui::NativeTheme::PreferredColorScheme::kNoPreference:
       return {.fill = ui::kDefaultCursorColor, .outline = std::nullopt};
   }
-  // Not a fallback, for `ColorSchemeFor`'s reason in
-  // components/domicile/browser/color_scheme.cc: every member is named.
+  // No default case, so `-Wswitch` flags any new member.
   NOTREACHED();
 }
 

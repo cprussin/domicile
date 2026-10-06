@@ -1,41 +1,28 @@
 #!/usr/bin/env bash
-# Does a patched tree accept `ozone_platform_drm = true`, does //ui/ozone
-# compile with it, and does the suite that covers the DRM platform build? Run
-# from inside Chromium's own toolchain shell.
+# Check that a patched tree accepts `ozone_platform_drm = true` and builds
+# //ui/ozone and `ozone_unittests` with it. Runs inside Chromium's toolchain
+# shell.
 #
-# It BUILDS `ozone_unittests` and does not run it: the binary needs Chromium's
-# runtime libraries, which live in the domicile dev shell and not in this one.
-# The workflow runs it in a step of its own.
+# The workflow runs `ozone_unittests` in a later step, because it needs
+# Chromium's runtime libraries from Domicile's dev shell.
 #
 #   NIX_SHELL_RUN=".../engine-drm-probe.sh /build/chromium/src /tmp/domicile-drm-probe" \
 #     nix-shell /build/chromium/src/tools/nix/shell.nix
 #
-# A FILE, NOT A STRING, for the reason engine-build.sh is one: everything in
-# NIX_SHELL_RUN is re-quoted twice on the way in, and a message with a
-# semicolon in it came out the far end as `looked: command not found`.
+# A script rather than an inline command, because NIX_SHELL_RUN re-quotes its
+# contents.
 #
-# ITS OWN OUT DIRECTORY, and that is not tidiness. `out/Domicile` is what every
-# guard in engine.yml loads and what engine-release-build.sh packages, and
-# `gn gen` on an existing directory with different arguments reconfigures it --
-# so a probe pointed at `out/Domicile` would silently leave the next release
-# build configured for DRM, or force a four-hour rebuild of a tree that is warm
-# on purpose. The probe's directory is removed by the caller when it is done.
+# Uses its own out directory: `gn gen` with other arguments would reconfigure
+# the release build's directory and force a full rebuild. The caller removes
+# it afterward.
 #
-# THREE SENTINELS, because each failure is a different question:
+# Chromium's shell does not reliably return the exit status, so progress is
+# reported by sentinel files:
 #
-#   <prefix>-ran      this script started, so Chromium's shell really ran it.
-#                     Without it, a shell that entered nothing and exited 0 is
-#                     indistinguishable from a build that worked -- which is
-#                     what happened twice in engine.yml's first weeks.
+#   <prefix>-ran      this script started.
 #   <prefix>-built    //ui/ozone compiled and linked.
-#   <prefix>-tested   `ozone_unittests` compiled and linked. The LAST one, and
-#                     so the one that means "finished" -- which is what
-#                     engine-drm-probe-report.sh withholds its tail on. When a
-#                     stage is added after this, that gate moves with it.
-#
-# The exit status is not the answer, and cannot be: upstream's shell is a
-# buildFHSEnv whose shellHook execs bwrap, and a command run through it does
-# not reliably carry its status back out.
+#   <prefix>-tested   `ozone_unittests` compiled and linked. This is the last
+#                     stage; engine-drm-probe-report.sh must match it.
 set -uo pipefail
 
 CHROMIUM="${1:?usage: engine-drm-probe.sh <chromium/src> <sentinel prefix>}"
@@ -45,30 +32,16 @@ touch "$PREFIX-ran"
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
-# `gn` and `autoninja` are depot_tools', not the nix shell's, and a systemd
-# service has no shell config to put them on PATH.
-#
-# THIS WAS A COPY OF engine-build.sh's LOOKUP, and its own comment said what
-# would end that: "if a third caller ever wants this, that is when it becomes
-# a file". engine-sync.sh is the fourth, so it is a file —
-# engine-depot-tools.sh, which carries the reasoning all four shared.
+# `gn` and `autoninja` come from depot_tools; engine-depot-tools.sh picks which.
 TOOLS="$("$HERE/engine-depot-tools.sh" "$CHROMIUM")" || exit 127
 echo "depot_tools: $TOOLS"
 export PATH="$TOOLS:$PATH"
 
 cd "$CHROMIUM" || exit 1
 
-# The three non-ozone arguments are build.sh's, and they are here for its
-# reasons: small and fast rather than shippable. They also keep the answer
-# transferable -- a probe configured differently from the engine would be
-# answering about a build nobody makes.
-#
-# The four ozone ones are the question. `ozone_auto_platforms = false` because
-# with it true `is_linux` turns on wayland and x11 as well, which are not what
-# is being asked about and are another twenty minutes; headless because the
-# engine always has it and because `ozone_platform` has to name something that
-# exists; and drm, which is the whole point and which at this pin no Domicile
-# build has ever been able to set.
+# The first three arguments match build.sh, so the result applies to the real
+# engine. `ozone_auto_platforms = false` skips the wayland and x11 platforms
+# that `is_linux` would add. Headless is always on in the engine.
 echo "drm probe: configuring out/DrmProbe"
 if ! gn gen out/DrmProbe --args='
   is_debug = false
@@ -84,13 +57,9 @@ if ! gn gen out/DrmProbe --args='
 fi
 echo "drm probe: gn gen accepted ozone_platform_drm = true"
 
-# `ui/ozone` rather than `chrome`: //ui/ozone:ozone public_deps :platform,
-# whose deps carry ozone_platform_deps, which //ui/ozone/BUILD.gn appends
-# platform/drm:gbm to the moment the argument is true. So this target is
-# exactly the 49 .cc files under test and their dependency closure, and
-# nothing of the browser on top of them. Whether the browser then STARTS under
-# --ozone-platform=drm is a different question and needs a machine with a card
-# node, which crux does not have.
+# `ui/ozone` rather than `chrome`: it pulls in platform/drm when the argument
+# is set, without the rest of the browser. Starting the browser on DRM needs a
+# card node, which crux lacks.
 echo "drm probe: building ui/ozone"
 if ! autoninja -C out/DrmProbe ui/ozone; then
   echo "drm probe: gn gen accepted the arguments and autoninja could not build ui/ozone"
@@ -100,28 +69,10 @@ fi
 touch "$PREFIX-built"
 echo "drm probe: ui/ozone built with ozone_platform_drm = true"
 
-# `ozone_unittests` after it, because compiling the platform is not the same
-# question as exercising it. `DrmScreen` and `DrmModeset` live in that suite
-# and in no other, and when this line was written NO WORKFLOW BUILT IT AT ALL:
-# engine.yml's build named only wayland and headless, so `DrmScreenTest` was
-# not in that binary and could not be, and adding `ozone_platform_drm` to the
-# shipped build was ordered after the modeset driver on purpose.
-#
-# BOTH HALVES OF THAT HAVE SINCE CHANGED. The modeset driver landed, the
-# argument is in `build.sh`, and engine.yml builds and runs these suites on
-# every pull request -- which is where they belong, because a suite that runs
-# on demand runs after the change that broke it has already landed. What this
-# job still uniquely does is run the WHOLE of `ozone_unittests`, upstream's own
-# cases included, which is where a regression this fork caused underneath the
-# DRM platform would show up. engine.yml runs only the two suites this fork
-# wrote. The two jobs ask different questions and this is the thorough one.
-#
-# BUILT HERE, RUN IN THE WORKFLOW. A component build's test binary loads its
-# .so files from beside it and needs Chromium's runtime libraries, and those
-# come from the domicile dev shell rather than from this one -- `nix develop
-# .#full`. engine.yml runs `domicile_unittests` that way for the same reason,
-# and a bare shell fails it on `libglib-2.0.so.0` in a way that reads like a
-# broken test rather than a missing library.
+# The workflow runs all of `ozone_unittests`, including upstream's cases, to
+# catch regressions under the DRM platform. engine.yml runs only the fork's own
+# suites. The binary runs in `nix develop .#full`, which has Chromium's runtime
+# libraries.
 echo "drm probe: building ozone_unittests"
 if ! autoninja -C out/DrmProbe ozone_unittests; then
   echo "drm probe: ui/ozone built and autoninja could not build ozone_unittests"

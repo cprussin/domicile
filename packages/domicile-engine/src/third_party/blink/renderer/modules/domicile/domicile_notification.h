@@ -13,8 +13,8 @@
 
 namespace blink {
 
-// One notification, as the compositor described it. Immutable, because the
-// compositor sends every notification whenever any of them changes.
+// One notification, as the compositor described it. Immutable: the compositor
+// resends every notification whenever any of them changes.
 class MODULES_EXPORT DomicileNotification final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
@@ -54,7 +54,7 @@ class MODULES_EXPORT DomicileNotification final : public ScriptWrappable {
   // A `data:` URL, or empty for nothing to draw.
   String icon_;
   String urgency_;
-  // Frozen because the IDL says so, and never null.
+  // Frozen per the IDL, and never null.
   Member<FrozenArray<DomicileNotificationAction>> actions_;
   bool clickable_;
   int32_t timeout_ms_;

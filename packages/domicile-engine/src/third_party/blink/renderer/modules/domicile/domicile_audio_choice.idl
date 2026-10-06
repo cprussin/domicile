@@ -1,22 +1,20 @@
 // Copyright 2026 Connor Prussin
 // SPDX-License-Identifier: MIT
 
-// A port of a DomicileAudioDevice, or a profile of a DomicileAudioCard:
-// something to switch it to.
-//
-// An interface rather than a dictionary for DomicileTrayItem's reason: these
-// are read off a device's or a card's array.
+// A selectable port of a DomicileAudioDevice or profile of a
+// DomicileAudioCard. An interface because WebIDL does not allow dictionaries as
+// an attribute's array element type.
 
 [
     Exposed=Window,
     RuntimeEnabled=DomicileControlChannel
 ] interface DomicileAudioChoice {
-  // What DomicileHost.setAudioPort() and setAudioProfile() name it by.
+  // The name passed to DomicileHost.setAudioPort() or setAudioProfile().
   readonly attribute DOMString name;
 
   readonly attribute DOMString description;
 
-  // False for a port whose jack is empty, or a profile that needs one. Still
-  // choosable, as every mixer lets it be.
+  // False for an unplugged port or a profile that needs one. Still
+  // selectable, as in other mixers.
   readonly attribute boolean available;
 };

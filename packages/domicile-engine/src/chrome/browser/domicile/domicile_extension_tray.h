@@ -13,21 +13,14 @@ class RenderFrameHost;
 
 namespace domicile {
 
-// Bind ExtensionTray for `frame`: the extensions with an action in the page's
-// profile, sent whole on binding and on every change, and a click on one: the
-// activeTab grant a toolbar click makes, and onClicked for one with no popup.
+// Binds ExtensionTray for `frame`. Sends the profile's extension actions on
+// bind and on every change, and handles clicks the way the toolbar does
+// (activeTab grant, then onClicked if there is no popup).
 //
-// THIS IS NOT THE ACCESS CONTROL, for BindControlChannel's reason. The caller
-// registers it only for a document whose origin is domicile:// -- see
-// PopulateChromeFrameBinders -- and that decision is the whole of the security
-// property: an extension's own popup, a chrome-extension:// page in a
-// <webview>, must not be able to click another extension's action.
-//
-// In //chrome rather than //components/domicile because an action is
-// ExtensionActionManager's and its changes are ExtensionActionDispatcher's,
-// and both are //chrome/browser/extensions. What is spelled rather than read --
-// a badge color as CSS, an icon as a data: URL -- is next door in
-// //components/domicile:extension_tray_entry, which is what has the tests.
+// This function does no access control. PopulateChromeFrameBinders registers
+// it only for domicile:// documents, so an extension page cannot click another
+// extension's action. Entry formatting is in
+// //components/domicile:extension_tray_entry, which has the tests.
 void BindExtensionTray(content::RenderFrameHost* frame,
                        mojo::PendingReceiver<mojom::ExtensionTray> receiver);
 

@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# A passkey extension answering a page's WebAuthn request in a <webview>, in
-# place of the browser's own UI, which patch 0048 does not draw.
+# Guard: a passkey extension answers a page's WebAuthn request in a <webview>.
+# Patch 0048 removes the browser's own WebAuthn UI.
 #
-# Headless, no compositor and no client, as the content-script guard.
+# Headless, with no compositor or client.
 #
-# Its control is the same <webview> without the extension, which must be
-# refused -- and must find PublicKeyCredential to be refused at all.
+# Control: the same <webview> without the extension. The request must be
+# refused, and the page must still find PublicKeyCredential.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

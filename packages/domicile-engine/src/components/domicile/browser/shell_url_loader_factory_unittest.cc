@@ -13,9 +13,8 @@
 namespace domicile {
 namespace {
 
-// The refusals are the point of this function, so they are what is tested.
-// Resolving a path correctly is the easy half; a path resolver that is wrong
-// about what it refuses hands out the filesystem.
+// Most tests cover refusals: a resolver that accepts too much exposes the
+// filesystem.
 
 base::FilePath Root() {
   return base::FilePath("/opt/domicile/shell");
@@ -38,16 +37,12 @@ TEST(ShellURLLoaderFactoryTest, ResolvesANestedFile) {
 }
 
 TEST(ShellURLLoaderFactoryTest, BareRootIsNotAFile) {
-  // The bare root is the document the engine writes, answered before the
-  // resolver is asked. There is no file it should resolve to, and an index.html
-  // fallback here would be a second way to serve a shell that nobody chose.
+  // The bare root is the generated document, never a file such as index.html.
   base::FilePath path;
   EXPECT_FALSE(Resolve("domicile://shell/", &path));
 }
 
 TEST(ShellURLLoaderFactoryTest, RefusesAnotherHost) {
-  // One host. A second would be a second meaning for the scheme, arrived at by
-  // accident.
   base::FilePath path;
   EXPECT_FALSE(Resolve("domicile://elsewhere/main.js", &path));
 }
@@ -58,11 +53,8 @@ TEST(ShellURLLoaderFactoryTest, RefusesAnotherScheme) {
 }
 
 TEST(ShellURLLoaderFactoryTest, PlainTraversalCannotEscape) {
-  // Not a refusal, and the difference is worth stating. GURL normalizes `..`
-  // out of the path while parsing a standard scheme, so this never arrives as
-  // traversal at all -- it arrives as "/etc/passwd" and resolves under the
-  // shell root. The property that matters is containment, not rejection, so
-  // that is what is asserted.
+  // GURL normalizes `..` away, so this resolves to "/etc/passwd" under the
+  // root. The test asserts containment, not refusal.
   base::FilePath path;
   ASSERT_TRUE(Resolve("domicile://shell/../../etc/passwd", &path));
   EXPECT_TRUE(Root().IsParent(path));
@@ -70,10 +62,7 @@ TEST(ShellURLLoaderFactoryTest, PlainTraversalCannotEscape) {
 }
 
 TEST(ShellURLLoaderFactoryTest, AnythingResolvedIsInsideTheRoot) {
-  // The one property everything else is in service of. Whatever the path
-  // arithmetic and GURL's normalization do between them, a path this function
-  // accepts is under the shell root -- so a case nobody thought to write is
-  // still contained.
+  // The core invariant: any accepted path is under the root.
   for (const char* url : {
            "domicile://shell/main.js",
            "domicile://shell/../../etc/passwd",
@@ -90,37 +79,30 @@ TEST(ShellURLLoaderFactoryTest, AnythingResolvedIsInsideTheRoot) {
 }
 
 TEST(ShellURLLoaderFactoryTest, RefusesEscapedTraversal) {
-  // The reason the path is percent-decoded before ReferencesParent() is asked:
-  // a check that runs first reads an escape and sees nothing wrong.
+  // Requires decoding before the ReferencesParent() check.
   base::FilePath path;
   EXPECT_FALSE(Resolve("domicile://shell/%2e%2e%2f%2e%2e%2fetc/passwd", &path));
 }
 
 TEST(ShellURLLoaderFactoryTest, TraversalInTheMiddleCannotEscape) {
-  // Same: GURL collapses it before this is asked. Containment is the invariant.
+  // GURL collapses this too; assert containment.
   base::FilePath path;
   ASSERT_TRUE(Resolve("domicile://shell/assets/../../../etc/passwd", &path));
   EXPECT_TRUE(Root().IsParent(path));
 }
 
 TEST(ShellURLLoaderFactoryTest, RefusesAnEmbeddedNul) {
-  // "index.html\0.png" would reach a different file than it appears to name,
-  // because the filesystem stops at the NUL and a reader of the URL does not.
+  // The filesystem would stop at the NUL and open "index.html".
   base::FilePath path;
   EXPECT_FALSE(Resolve("domicile://shell/index.html%00.png", &path));
 }
 
 TEST(ShellURLLoaderFactoryTest, RefusesEverythingWithoutARoot) {
-  // No --domicile-shell-root. There is nothing to serve, and guessing a
-  // directory would be worse than saying so.
+  // No --domicile-shell-root.
   base::FilePath path;
   EXPECT_FALSE(ShellURLLoaderFactory::ResolveShellPath(
       base::FilePath(), GURL("domicile://shell/main.js"), &path));
 }
-
-// The document. What is in it is not negotiable, so it is pinned rather than
-// described: each of these is something a desktop cannot do without, and each
-// has a failure that looks like something else when it is missing.
 
 base::FilePath Home() {
   return base::FilePath("/home/you");
@@ -131,17 +113,15 @@ bool ResolveHome(const std::string& url, base::FilePath* out) {
 }
 
 TEST(ShellURLLoaderFactoryTest, ResolvesAFileUnderHome) {
-  // What the launcher previews: an image, a video, a PDF, by the path the
-  // compositor's search named it by.
+  // The launcher previews files by the path the compositor's search returned.
   base::FilePath path;
   ASSERT_TRUE(ResolveHome("domicile://home/Pictures/cat%20one.png", &path));
   EXPECT_EQ(path, Home().Append("Pictures").Append("cat one.png"));
 }
 
 TEST(ShellURLLoaderFactoryTest, RefusesADotfileUnderHome) {
-  // The line the compositor's index draws, and the one that keeps keys and
-  // tokens out of reach: nothing under a dot is offered, so nothing under a dot
-  // is served -- escaped or not.
+  // Matches the compositor's index, which skips dotfiles. This keeps keys and
+  // tokens unreachable, escaped or not.
   base::FilePath path;
   EXPECT_FALSE(ResolveHome("domicile://home/.ssh/id_ed25519", &path));
   EXPECT_FALSE(ResolveHome("domicile://home/src/.git/HEAD", &path));
@@ -170,21 +150,12 @@ TEST(ShellURLLoaderFactoryTest, AnythingResolvedUnderHomeIsInsideIt) {
 }
 
 TEST(ShellURLLoaderFactoryTest, OnlyTheShellMayAskForHome) {
-  // THE SUBRESOURCE FACTORY IS EVERY FRAME'S, sites in a browser window's
-  // <webview> included. A site that could put domicile://home/ in an <img>
-  // would learn which files exist from load and error alone.
+  // Every frame uses this factory, including sites in a <webview>. A site that
+  // could load domicile://home/ in an <img> would learn which files exist.
   //
-  // The scheme has to be a standard one for any of that to be askable. An
-  // origin is what a standard scheme buys -- url::Origin::Create reads a
-  // scheme, a host and a port out of a URL whose scheme is registered as
-  // standard, and hands back an *opaque* origin, whose scheme and host are both
-  // empty, for one that is not. Every process of the engine registers it in
-  // ChromeContentClient::AddAdditionalSchemes, which content turns into this
-  // same call; a unit test binary runs none of that, so the registration is
-  // here. Without it the shell's own origin is opaque, so the line below is
-  // false and the three refusals under it pass for the wrong reason -- they
-  // refuse an empty scheme rather than the origin they name. The scoped
-  // registry puts the list back as it found it.
+  // Register the scheme as standard, as ChromeContentClient does in the
+  // engine. Otherwise the shell's origin is opaque and the refusals below
+  // would pass for the wrong reason.
   url::ScopedSchemeRegistryForTests scheme_registry;
   url::AddStandardScheme(kDomicileScheme, url::SCHEME_WITH_HOST);
 
@@ -196,40 +167,32 @@ TEST(ShellURLLoaderFactoryTest, OnlyTheShellMayAskForHome) {
       url::Origin::Create(GURL("domicile://home/")), false));
   EXPECT_FALSE(ShellURLLoaderFactory::MayReadHome(std::nullopt, false));
 
-  // A LOCKED DESK READS NOTHING OUT OF THE HOME, the compositor's rule for
-  // `search_files` and `preview_file` and this host's for the same reason: a
-  // launcher left up over a lock screen would otherwise still draw the home's
-  // pictures, even to the shell that asked.
+  // A locked desk serves nothing from home, matching the compositor's rule for
+  // `search_files` and `preview_file`.
   EXPECT_FALSE(ShellURLLoaderFactory::MayReadHome(shell, /*desk_locked=*/true));
 }
 
 TEST(ShellDocumentTest, DeclaresACharset) {
-  // Without one the page is decoded by guesswork.
   EXPECT_NE(ShellURLLoaderFactory::ShellDocument("shell.js")
                 .find("charset=\"utf-8\""),
             std::string::npos);
 }
 
 TEST(ShellDocumentTest, DeclaresAViewport) {
-  // Without one the engine lays out for a phone and every coordinate the
-  // compositor is told about is wrong by a scale factor.
+  // Without it, layout and compositor coordinates disagree by a scale factor.
   EXPECT_NE(ShellURLLoaderFactory::ShellDocument("shell.js")
                 .find("width=device-width, initial-scale=1"),
             std::string::npos);
 }
 
 TEST(ShellDocumentTest, HasNoBodyMargin) {
-  // Eight pixels of body margin is eight pixels the compositor believes it has
-  // and does not, and a client's window drawn in the wrong place looks like the
-  // seam rather than like a stylesheet.
+  // A body margin would offset every window from where the compositor puts it.
   EXPECT_NE(ShellURLLoaderFactory::ShellDocument("shell.js").find("margin: 0"),
             std::string::npos);
 }
 
 TEST(ShellDocumentTest, NamesTheModuleItsShellIsIn) {
-  // A shell is a module whose `Shell` export Domicile calls with the element to
-  // draw in and the desktop. The document only names it: blink's DomicileShell
-  // reads this element and runs it.
+  // Blink's DomicileShell reads this element and runs the module.
   const std::string document = ShellURLLoaderFactory::ShellDocument("shell.js");
   EXPECT_NE(document.find("<meta content=\"./shell.js\" "
                           "name=\"domicile-shell-module\" />"),
@@ -237,25 +200,21 @@ TEST(ShellDocumentTest, NamesTheModuleItsShellIsIn) {
 }
 
 TEST(ShellDocumentTest, RunsNoScriptOfItsOwn) {
-  // A script on the page would have to find the desktop somewhere, and
-  // anywhere a script can find it is a global every other script can find
-  // too. The engine runs the shell and hands it the desktop instead.
+  // A page script could only reach the desktop through a global that every
+  // script could read. The engine hands the desktop to the shell instead.
   const std::string document = ShellURLLoaderFactory::ShellDocument("shell.js");
   EXPECT_EQ(document.find("<script"), std::string::npos);
   EXPECT_EQ(document.find("navigator.domicile"), std::string::npos);
 }
 
 TEST(ShellDocumentTest, HandsTheShellAnEmptyBody) {
-  // The root a shell is handed holds nothing of Domicile's --
-  // `mount-point.test.ts` builds exactly that body as a fixture.
+  // `mount-point.test.ts` uses the same empty body as a fixture.
   const std::string document = ShellURLLoaderFactory::ShellDocument("shell.js");
   EXPECT_NE(document.find("<body></body>"), std::string::npos);
 }
 
 TEST(ShellDocumentTest, EncodesTheModuleName) {
-  // The name came off somebody's disk and lands in an attribute in the most
-  // privileged page in this system. Nothing in it may end the attribute or
-  // the element.
+  // The name comes from disk; it must not be able to end the attribute.
   const std::string document =
       ShellURLLoaderFactory::ShellDocument("a\"><script>b.js");
   EXPECT_EQ(document.find("<script>b.js"), std::string::npos);
@@ -263,21 +222,15 @@ TEST(ShellDocumentTest, EncodesTheModuleName) {
 }
 
 TEST(ShellDocumentTest, NamesNothingAShellCouldCollideWith) {
-  // THE REGRESSION, AND IT COST AN ENGINE RUN. An earlier document found its
-  // own script by an id, `domicile-shell`. `shell-manganese`'s `mountPoint`
-  // looks up exactly that id to decide whether it has already made its mount
-  // point, so it found the script tag, React mounted the whole desktop inside
-  // a <script>, and a <script> is `display: none`. An id in this document is a
-  // name in the shell's namespace, and this document is the one thing every
-  // shell is written against. So it has none.
+  // Any id here is in the shell's namespace. `shell-manganese`'s `mountPoint`,
+  // for example, looks up the id `domicile-shell`.
   const std::string document = ShellURLLoaderFactory::ShellDocument("shell.js");
   EXPECT_EQ(document.find("id="), std::string::npos);
 }
 
 TEST(ShellDocumentTest, LeavesAHashInAFilenameAlone) {
-  // `#` is legal in a POSIX filename and is not HTML-special, so an HTML
-  // escaper would pass it through -- the browser would then ask for the part
-  // before it and the desktop would be blank with nothing in any log.
+  // An unencoded `#` would start a fragment, so the browser would request
+  // only the part before it.
   const std::string document = ShellURLLoaderFactory::ShellDocument("a#b.js");
   EXPECT_EQ(document.find("a#b.js"), std::string::npos);
   EXPECT_NE(document.find("a%23b.js"), std::string::npos);

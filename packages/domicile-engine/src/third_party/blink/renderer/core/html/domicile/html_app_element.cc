@@ -103,9 +103,8 @@ cc::Layer* HTMLAppElement::ContentsCcLayer() const {
 void HTMLAppElement::ParseAttribute(
     const AttributeModificationParams& params) {
   if (params.name == html_names::kAppIdAttr) {
-    // A different window in the same box. The surface the layer is pointed at
-    // is replaced rather than torn down, so the element keeps its box and its
-    // place in the layer tree across the change.
+    // Re-embed into the existing layer so the element keeps its box and its
+    // place in the layer tree.
     Embed();
     return;
   }
@@ -114,17 +113,14 @@ void HTMLAppElement::ParseAttribute(
 
 Node::InsertionNotificationRequest HTMLAppElement::InsertedInto(
     ContainerNode& insertion_point) {
-  // Nothing to embed into yet -- there is no box until layout runs, and the box
-  // is what the producer is configured at. LayoutAppSurface calls
-  // SurfaceBoxChanged() when there is one.
+  // No box until layout runs. LayoutAppSurface calls SurfaceBoxChanged() then.
   return HTMLElement::InsertedInto(insertion_point);
 }
 
 void HTMLAppElement::RemovedFrom(ContainerNode& insertion_point) {
-  // The layer goes with the layout object. The embedder is kept: an element
-  // moved between parents is the same window, and dropping the embedder would
-  // make the browser hold a fresh reply until the producer reconnected -- which
-  // for a client that is already running it never does.
+  // Keep the embedder: a moved element shows the same window. A new embedder
+  // would wait for the producer to reconnect, which a running client never
+  // does.
   HTMLElement::RemovedFrom(insertion_point);
 }
 
@@ -145,8 +141,7 @@ bool HTMLAppElement::CreateLayer() {
   surface_layer_bridge_ = std::make_unique<::blink::SurfaceLayerBridge>(
       frame->GetPage()->GetChromeClient().GetFrameSinkId(frame), this,
       base::NullCallback());
-  // A placeholder until the surface resolves, so the element has a layer to be
-  // laid out and composited with from its first frame.
+  // Placeholder so the element has a layer from its first frame.
   surface_layer_bridge_->CreateSolidColorLayer();
   SetNeedsCompositingUpdate();
   return true;
@@ -161,9 +156,7 @@ void HTMLAppElement::Embed() {
   if (!frame || !frame->GetPage()) {
     return;
   }
-  // No box yet. Embedding at 0x0 would configure the client at 0x0, and a
-  // Wayland client asked for that draws nothing; the reply is worth waiting for
-  // layout over.
+  // Wait for layout. A Wayland client configured at 0x0 draws nothing.
   if (configured_size_.IsEmpty()) {
     return;
   }
@@ -171,10 +164,9 @@ void HTMLAppElement::Embed() {
     return;
   }
 
-  // One ask at a time. The browser holds the reply until a producer has been
-  // brokered a sink for this app, so asks do not overtake each other and a
-  // second one would simply queue -- against an app id or a size that may
-  // itself be stale by the time it is answered.
+  // One request at a time. The browser holds the reply until a producer
+  // connects, so a second request would queue with possibly stale arguments.
+  // OnEmbedded() retries instead.
   if (embed_in_flight_) {
     embed_stale_ = true;
     return;
@@ -190,10 +182,8 @@ void HTMLAppElement::Embed() {
       app_id,
       frame->GetPage()->GetChromeClient().GetFrameSinkId(frame),
       configured_size_,
-      // THE SCALE THE BOX IS IN, because the box is in device pixels and a
-      // client is configured in logical ones. Said here rather than left to
-      // the compositor to guess: a desk of several monitors is several pages,
-      // each at its own monitor's scale, and only this one knows which.
+      // The box is in device pixels and the client is configured in logical
+      // ones. Each monitor's page has its own scale, so the page sends it.
       frame->LayoutZoomFactor(),
       reconfiguring ? ExternalSurfaceEmbedder::Allocation::kReconfigure
                     : ExternalSurfaceEmbedder::Allocation::kAdopt,
@@ -204,14 +194,12 @@ void HTMLAppElement::OnEmbedded(
     const std::optional<viz::SurfaceId>& surface_id) {
   embed_in_flight_ = false;
   if (surface_id && surface_layer_bridge_) {
-    // SurfaceLayerBridge::EmbedSurface() takes a SurfaceId and does not ask
-    // whose it is, and neither does cc::SurfaceLayer::SetSurfaceId under it.
-    // From here the window is an ordinary layer.
+    // SurfaceLayerBridge accepts any SurfaceId, so the window becomes an
+    // ordinary layer.
     surface_layer_bridge_->EmbedSurface(*surface_id);
   }
   if (embed_stale_) {
-    // app-id or the box moved while this was outstanding, so what just landed
-    // is the answer to a question no longer being asked.
+    // app-id or the box changed while the request was in flight.
     Embed();
   }
 }

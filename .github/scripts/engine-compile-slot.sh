@@ -8,51 +8,30 @@
 #   .github/scripts/engine-compile-slot.sh warm <chromium/src>
 #   .github/scripts/engine-compile-slot.sh built <chromium/src>
 #
-# `warm` writes `warm=true` to $GITHUB_OUTPUT only if `built` last recorded
-# this applied series built by these build scripts: a tree can carry the series
-# with its out/Release cold.
+# `warm` writes `warm=true` to $GITHUB_OUTPUT only if `built` recorded this
+# applied series and these build scripts. A tree can carry the series with a
+# cold out/Release.
 #
-# The tree pool gives two runs two trees so that a repin stops blocking every
-# other engine branch. It does not give them a second machine: `crux` has 62G
-# and `swapDevices = []` (cprussin/dotfiles: config/machines/crux), and a cold
-# Chromium build's link step is most of that. Two at once is an OOM kill on the
-# machine that serves the house its DNS.
+# `crux` has 62G and no swap (cprussin/dotfiles: config/machines/crux), and a
+# cold Chromium link uses most of it. Two at once gets OOM-killed. Only runs
+# that will compile take the slot, so warm runs never wait behind a repin.
 #
-# So this is the memory the pool cannot split, and only a run that is going to
-# compile takes it -- a run whose tree already carries the series compiles
-# nothing and must not queue behind one that does. That pair is the whole
-# design: warm runs keep shipping while a repin builds.
-#
-# IT WAITS, UP TO DOMICILE_COMPILE_SLOT_WAIT SECONDS, then refuses. Refusing
-# outright turned every overlap of two engine PRs into a red job to re-run.
-# The default is 30 minutes, enough for a cached series change; engine.yml
-# waits out a cold repin, because its budget holds that wait and its own
-# repin both (scripts/test-the-engine-budget-holds-both-builds.sh).
-#
-# AND NOTHING STEALS IT ON AGE. A cold build is up to five hours, and clearing
-# this while its holder is linking is the OOM it exists to prevent.
-#
-# ONLY ON WHERE IT WAS TAKEN. A runner runs one job at a time and kills what
-# that job left running before it starts the next, so a runner that finds the
-# slot held by an earlier job on itself is looking at a job that is over. That
-# is how a runner restart leaves it: the `always()` drop never runs. A person's
-# build records no runner, and is never cleared.
-#
-# A HOLDER CAN STEP ASIDE INSTEAD. A waiter leaves a note beside the slot and
-# refreshes it every poll; `wanted` says whether a fresh one names anybody else,
-# and `yield` drops the slot and returns once a waiter has it. That is for the
-# production build, which is hours long and can stop and resume, so that a pull
-# request's minute of compiling never queues behind it. Only a note refreshed
-# in the last DOMICILE_COMPILE_SLOT_FRESH seconds counts: a waiter that was
-# killed cannot write that it stopped waiting, and a holder that yields to it
-# would yield for ever.
-#
-# BY RANK, SO TWO HOLDERS THAT STEP ASIDE CANNOT HAND IT BACK AND FORTH.
-# DOMICILE_COMPILE_SLOT_RANK, a number, goes on a waiter's note, and `wanted`
-# and `yield` count only notes that outrank it. Unset is the highest: a compile
-# that never steps aside. engine-release.yml builds at 0 and engine.yml's cold
-# builds at 1, so the production build steps aside for both and a cold pull
-# request only for a warm one.
+# Rules:
+# - `take` waits up to DOMICILE_COMPILE_SLOT_WAIT seconds (default 30 minutes),
+#   then fails. engine.yml waits longer to outlast a cold repin
+#   (scripts/test-the-engine-budget-holds-both-builds.sh).
+# - Age never frees the slot: a cold build can take five hours.
+# - A runner clears a slot left by an earlier job on itself, since it runs one
+#   job at a time. A person's build records no runner and is never cleared.
+# - Waiters refresh a note beside the slot each poll. `wanted` reports fresh
+#   notes from others, and `yield` drops the slot and waits until a waiter
+#   takes it. The long production build uses this to let PR builds through.
+#   Notes older than DOMICILE_COMPILE_SLOT_FRESH seconds are ignored, since a
+#   killed waiter cannot remove its note.
+# - DOMICILE_COMPILE_SLOT_RANK goes on the note, and `wanted` and `yield` count
+#   only notes that outrank the holder, so two holders cannot pass the slot
+#   back and forth. Unset ranks highest. engine-release.yml uses 0 and
+#   engine.yml's cold builds use 1.
 set -u
 
 usage() {
@@ -65,17 +44,16 @@ action="${1:-}"
 owner="${2:-}"
 [ -n "$action" ] || usage
 
-# Under /build, because `PrivateTmp` gives each runner unit its own /tmp and a
-# lock between two runners cannot be in one of them. Override for tests.
+# Under /build, because `PrivateTmp` gives each runner unit its own /tmp.
+# Override for tests.
 LOCK="${DOMICILE_COMPILE_SLOT:-/build/.domicile-compile-slot}"
-# Beside the slot rather than in it, because the slot is removed on every drop
-# and a waiter's note has to outlive the holder it is waiting on.
+# Beside the slot, because a drop removes the slot and the notes must survive.
 WAITING="$LOCK.waiting"
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 built_stamp() { echo "${DOMICILE_BUILT_STAMP:-$(dirname "$owner")/.domicile-built}"; }
-# The series stamp, not just the series: it names the commit the apply made,
-# so a re-apply whose build died is not warm.
+# The series stamp names the commit the apply made, so a re-apply whose build
+# died is not warm.
 build_identity() {
   { cat "${DOMICILE_SERIES_STAMP:-$(dirname "$owner")/.domicile-series-stamp}" 2>/dev/null
     sha256sum "$HERE/engine-build.sh" "$HERE/engine-release-build.sh" | cut -d' ' -f1
@@ -102,12 +80,12 @@ holder() {
   cat "$LOCK/owner" 2>/dev/null || echo "someone who did not write their name in it"
 }
 
-# The note a waiter leaves, named by a hash because an owner is a sentence.
+# A waiter's note, named by a hash because an owner name is free text.
 note() { echo "$WAITING/$(printf '%s' "$1" | sha256sum | cut -d' ' -f1)"; }
 
-# Every fresh note that is not <owner>'s and outranks this holder, one owner
-# per line. A note's second line is its waiter's rank; no rank outranks every
-# rank, and a holder with none counts every note.
+# Print the owner of each fresh note, other than <owner>'s, that outranks this
+# holder. A note's second line is its rank. A note with no rank outranks every
+# holder, and a holder with no rank counts every note.
 waiters() {
   [ -d "$WAITING" ] || return 0
   find "$WAITING" -type f ! -name '*.tmp' -newermt "-${DOMICILE_COMPILE_SLOT_FRESH:-60} seconds" |
@@ -132,13 +110,10 @@ case "$action" in
     waiting="$(note "$owner")"
     trap 'rm -f "$waiting" "$waiting.tmp"' EXIT
     while :; do
-      # Whether this run is still worth waiting for, when the workflow says
-      # how to tell: exit 0 yes, 1 no, anything else could not ask. A wait
-      # can outlast a cold repin, and a run for a commit its branch has moved
-      # past holds a runner that whole time for nothing. A check that cannot
-      # answer is not a no, so a flaky network never ends a wanted run's wait.
-      # Asked before the first take too: engine.yml queues a compiling run on
-      # GitHub, so its long wait can end with this slot free.
+      # Stop waiting if the run is superseded. The check exits 0 for wanted,
+      # 1 for not wanted, and anything else for unknown, which keeps waiting.
+      # Checked before the first take too, since engine.yml may have queued
+      # this run for a long time already.
       if [ -n "${DOMICILE_COMPILE_SLOT_STILL_WANTED:-}" ] &&
          [ $(($(date +%s) - asked)) -ge "${DOMICILE_COMPILE_SLOT_RECHECK:-60}" ]; then
         asked="$(date +%s)"
@@ -160,11 +135,9 @@ case "$action" in
         rm -rf "$LOCK"
         continue
       fi
-      # AND ON A HOLDER WHOSE RUN IS OVER, wherever it ran: a runner shut down
-      # mid-build never drops, and only it could clear what it left, so a
-      # build on the other runner waited out the whole slot wait for nothing
-      # (run 36923792412, crux-two, 2026-10-01). The workflow says how to ask;
-      # only a yes clears, so a run in progress -- maybe linking -- keeps it.
+      # Clear the slot if the holder's run is over on any runner, since a
+      # runner shut down mid-build never drops it. Only a definite yes clears
+      # it, so a run still in progress keeps it.
       if [ -n "${DOMICILE_COMPILE_SLOT_HOLDER_DONE:-}" ] &&
          [ $(($(date +%s) - holder_asked)) -ge "${DOMICILE_COMPILE_SLOT_RECHECK:-60}" ]; then
         holder_asked="$(date +%s)"
@@ -176,13 +149,11 @@ case "$action" in
         fi
       fi
       [ $(($(date +%s) - started)) -lt "$wait_for" ] || break
-      # Renamed over the last one rather than rewritten in place: a holder
-      # reading it between the truncate and the writes would see no waiter,
-      # or one with no rank, which outranks everybody.
+      # Write and rename, so a holder never reads a partial note. A note
+      # missing its rank would outrank everyone.
       printf '%s\n' "$owner" ${DOMICILE_COMPILE_SLOT_RANK:+"$DOMICILE_COMPILE_SLOT_RANK"} >"$waiting.tmp"
       mv "$waiting.tmp" "$waiting"
-      # Once per holder, not once: a wait can outlast a cold repin, and hours
-      # of one line cannot say whether the slot has changed hands since.
+      # Announce each new holder, so the log shows when the slot changes hands.
       now_held="$(holder)"
       [ "$now_held" = "${announced:-}" ] || {
         echo "waiting up to ${wait_for}s for '$now_held' to finish compiling"
@@ -217,14 +188,12 @@ case "$action" in
 
   drop)
     [ -n "$owner" ] || usage
-    # Idempotent, and it has to be: this runs from an `if: always()` step, so
-    # it is also reached by a warm run that never took it and by one that
-    # failed to.
+    # Idempotent: the `if: always()` step also runs when the slot was never
+    # taken.
     [ -d "$LOCK" ] || { echo "no compile slot to drop"; exit 0; }
     held="$(holder)"
     if [ "$held" != "$owner" ]; then
-      # Unconditional removal here would let a third run start compiling beside
-      # the holder, which is the thing this prevents, reached through it.
+      # Removing another owner's slot would let a second compile start.
       echo "left the compile slot alone: it belongs to '$held', not to '$owner'"
       exit 0
     fi
@@ -246,10 +215,8 @@ case "$action" in
       exit 1
     fi
     rm -rf "$LOCK"
-    # Until a waiter has it, so that the caller's next `take` queues behind
-    # them rather than winning the race for a slot it has just given up. A
-    # waiter polls, so the handover takes up to one of its polls; one that
-    # stopped wanting it in the meantime leaves the slot free.
+    # Wait until a waiter takes it, so the caller's next `take` does not win
+    # it straight back. If the waiters leave, the slot stays free.
     while [ ! -d "$LOCK" ] && [ -n "$(waiters "$owner")" ]; do
       sleep "${DOMICILE_COMPILE_SLOT_POLL:-10}"
     done

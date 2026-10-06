@@ -16,58 +16,51 @@
 
 namespace domicile {
 
-// One lit display, where the profile put it on the desk.
+// One lit display and its position on the desk, from the display profile.
 //
-// See docs/architecture/ONE-PAGE-FOR-THE-DESK.md: on a tty the shell is one
-// page over the whole desk, and every display shows its part of it.
+// On a tty the shell is one page spanning every display. See
+// docs/architecture/ONE-PAGE-FOR-THE-DESK.md.
 struct DeskPlace {
   int64_t id = 0;
-  // In the desk's logical pixels, as the profile's `desk` rectangle.
+  // The profile's `desk` rectangle, in desk logical pixels.
   gfx::Rect desk;
   float scale = 1.0f;
   float refresh_hz = 0.0f;
 };
 
-// The one page a desk is.
+// The shell page that spans the desk.
 struct DeskGeometry {
-  // Around every display, in the desk's logical pixels. The page's viewport.
+  // Bounds of all displays in desk logical pixels; the page's viewport.
   gfx::Rect box;
-  // The largest display scale: what the page lays out and rasters at.
+  // The largest display scale, which the page lays out and rasters at.
   float scale = 1.0f;
-  // The display whose window loads the page: the fastest, because its
-  // BeginFrames drive the page. The first of equals, which is the primary.
+  // The display whose window loads the page. The fastest one, since its
+  // BeginFrames drive the page; ties go to the first (the primary).
   int64_t host = 0;
 };
 
-// `std::nullopt` for a desk with no display lit.
+// The desk page's geometry, or `std::nullopt` if no display is lit.
 std::optional<DeskGeometry> DeskGeometryOf(const std::vector<DeskPlace>& lit);
 
-// Where the page sits in `place`'s logical pixels, which are what that
-// display's window lays its layers out in.
+// The page's bounds in `place`'s logical pixels, which its window's layers use.
 gfx::Rect PageBoundsOn(const DeskPlace& place, const gfx::Rect& box);
 
-// What the page is told it is on: one screen, the size of the desk, at the
-// desk's scale and upright. Everything else -- depth, color space -- is `like`,
-// the host display's.
+// The screens reported to the page. The first is one upright screen the size
+// of the desk at the desk's scale, with other fields copied from `like`.
 //
-// And every monitor in `lit` it is shown on, after that one: where, from the
-// desk's corner, and how dense. Labeled `cc::kDomicileDisplayLabel`, which is
-// what a widget makes the regions it rasters natively for each from.
+// Then one entry per monitor in `lit`, offset from the desk's corner at its
+// own scale and labeled `cc::kDomicileDisplayLabel`. The widget uses these to
+// raster each monitor's region natively.
 display::ScreenInfos DeskScreenInfos(const DeskGeometry& desk,
                                      const std::vector<DeskPlace>& lit,
                                      const display::ScreenInfo& like);
 
-// Which display a pointer warped to `at`, in `host`'s logical pixels, lands
-// on: the one in `lit` holding that place on the desk, or `host` where none
-// does, since the cursor crosses onto nothing. `std::nullopt` for a `host`
-// that is not on the desk.
+// The display in `lit` containing `at` (in `host`'s logical pixels), or `host`
+// if none does. `std::nullopt` if `host` is not on the desk.
 //
-// THE ARROW IS DRAWN FOR THE MONITOR IT IS ON, turned and at its density, and
-// every window shares the one cursor that draws it. A warp is asked of the
-// desk's host and lands anywhere on the desk (`PointerCrossingFor`), but aura
-// draws it for the host's display. The move that follows the warp redraws it
-// only for a pointer that changed monitors, so a warp across a turned monitor
-// left the laptop's arrow drawn on it, sideways.
+// Needed because the cursor is drawn for its monitor's rotation and scale. A
+// warp goes through the host (`PointerCrossingFor`), and aura only redraws the
+// cursor when it changes monitors, so the caller must say where it landed.
 std::optional<int64_t> WarpLandsOn(const std::vector<DeskPlace>& lit,
                                    int64_t host,
                                    const gfx::Point& at);

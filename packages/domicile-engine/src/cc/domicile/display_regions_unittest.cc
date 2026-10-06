@@ -13,8 +13,8 @@
 namespace cc {
 namespace {
 
-// A desk at 2x: a 1.5x monitor on the left, the 2x one beside it and a 1x
-// one under that. The page is the box around all three, in device pixels at 2.
+// A 2x page over a 1.5x monitor, a 2x monitor to its right and a 1x monitor
+// below that. Rects are in device pixels at 2x.
 DomicileDisplayRegions Desk() {
   return {
       {gfx::Rect(0, 0, 2880, 1800), 0.75f},
@@ -23,8 +23,7 @@ DomicileDisplayRegions Desk() {
 }
 
 TEST(DomicileDisplayRegionsTest, EveryLessDenseMonitorIsARegion) {
-  // The desk above, as the browser tells the page: placed at (500, 0) on the
-  // engine's screen, a 1.5x monitor, the 2x one and a 1x one.
+  // Desk()'s monitors in DIPs, with the widget at (500, 0).
   const std::vector<DomicileDisplay> displays = {
       {gfx::Rect(500, 0, 1440, 900), 1.5f},
       {gfx::Rect(1940, 0, 1440, 900), 2.f},
@@ -35,7 +34,7 @@ TEST(DomicileDisplayRegionsTest, EveryLessDenseMonitorIsARegion) {
 }
 
 TEST(DomicileDisplayRegionsTest, AWidgetInThePageHasTheRegionsWhereItIs) {
-  // A <webview> 100 DIPs in and 50 down from the page's corner.
+  // A <webview> offset (100, 50) DIPs from the page's origin.
   const std::vector<DomicileDisplay> displays = {
       {gfx::Rect(0, 0, 1440, 900), 1.5f},
   };
@@ -90,8 +89,8 @@ TEST(DomicileDisplayRegionsTest, ARegionIsFoundInTheLayersOwnSpace) {
   gfx::Transform to_target;
   to_target.Translate(-100, 50);
   to_target.Scale(2, 2);
-  // The 1.5x monitor's (0,0 2880x1800) is (50,-25 1440x900) in a layer at
-  // twice the target's scale, moved left 100 and down 50.
+  // Inverse of translate (-100, 50) then scale 2 maps (0,0 2880x1800) to
+  // (50,-25 1440x900).
   EXPECT_EQ(DomicileRegionInLayer(Desk(), 0.75f, to_target),
             gfx::Rect(50, -25, 1440, 900));
 }
@@ -103,7 +102,7 @@ TEST(DomicileDisplayRegionsTest, ATurnedLayerHasNoRegion) {
 }
 
 TEST(DomicileDisplayRegionsTest, CoverageIsEachMonitorsPartAndTheRest) {
-  // A layer spanning the 1.5x monitor and the 2x one, drawn 1:1.
+  // A layer spanning the 1.5x and 2x monitors, with an identity transform.
   const std::vector<DomicileCoveragePiece> pieces =
       DomicileCoverage(Desk(), gfx::Transform(), gfx::Rect(2000, 0, 2000, 100));
   ASSERT_EQ(pieces.size(), 2u);
@@ -146,9 +145,8 @@ TEST(DomicileDisplayRegionsTest, ALayerInThePageKeepsAndDrawsItsTilings) {
 }
 
 TEST(DomicileDisplayRegionsTest, ALayerInASurfaceOfItsOwnKeepsItsTilings) {
-  // A window being dragged, at an opacity: a surface of its own until it is
-  // dropped. Given up here, its tilings were rebuilt empty on the drop, and
-  // the monitor showed the page's tiles, shrunk, until they were rastered.
+  // E.g. a translucent window mid-drag. Keeping the tilings avoids a flash of
+  // shrunk page tiles when it returns to the page on drop.
   const DomicileLayer layer = {.to_page_is_scale_or_translation = true,
                                .draws_into_page = false,
                                .is_directly_composited_image = false};

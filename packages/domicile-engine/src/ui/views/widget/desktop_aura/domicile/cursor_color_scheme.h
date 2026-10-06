@@ -17,26 +17,19 @@ namespace views {
 // The two colors `wm::CursorLoader` renders its cursor art in.
 struct CursorColors {
   SkColor fill;
-  // The art's own, which is white, when there is none.
+  // Unset keeps the art's own white outline.
   std::optional<SkColor> outline;
 };
 
-// The pointer a desk in `scheme` is drawn with: the art as it is, a black fill
-// in a white outline, unless the desk is dark, where that is a dark arrow on
-// dark panels and it is turned inside out.
+// Returns the pointer colors for `scheme`. Dark schemes invert the default
+// black-on-white art so it stays visible.
 CursorColors CursorColorsFor(ui::NativeTheme::PreferredColorScheme scheme);
 
-// Tells whoever draws the pointer which colors to draw it in, now and each
-// time the desk turns.
+// Reports pointer colors now and whenever the process color scheme changes.
 //
-// What it follows is the process's color scheme, which is the desk's windows
-// theme -- `components/domicile/browser/color_scheme.h` is what sets it. So
-// the pointer turns with the windows, after the shell has, which is the same
-// moment the sites in its browser windows do.
-//
-// Only a cursor drawn from Chromium's own art is recolored, and on a console
-// that is every one of them (patch 0026). A nested desktop draws the host's
-// cursor theme, which is the host's to color.
+// `components/domicile/browser/color_scheme.h` sets that scheme. Only cursors
+// drawn from Chromium's art are recolored: all of them on a console (patch
+// 0026), none in a nested desktop, which uses the host's cursor theme.
 class CursorColorScheme : public ui::NativeThemeObserver {
  public:
   using ColorsChanged = base::RepeatingCallback<void(const CursorColors&)>;
@@ -53,9 +46,8 @@ class CursorColorScheme : public ui::NativeThemeObserver {
   void OnNativeThemeUpdated(ui::NativeTheme* observed_theme) override;
 
  private:
-  // Recoloring throws away every cursor the loader has made, and an update is
-  // as often contrast or forced colors as it is the scheme, so only a turn is
-  // passed on.
+  // Recoloring discards every cached cursor, so only scheme changes are
+  // reported, not contrast or forced-colors updates.
   ui::NativeTheme::PreferredColorScheme scheme_;
   ColorsChanged colors_changed_;
   base::ScopedObservation<ui::NativeTheme, ui::NativeThemeObserver>
