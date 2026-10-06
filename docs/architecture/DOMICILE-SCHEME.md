@@ -31,6 +31,10 @@ and the binding.
   (subresources).
 - `--domicile-shell-root` and `--domicile-shell-module` say what to serve.
 - Requests must resolve inside the shell root. Directory listings are off.
+- The document is served with `Content-Security-Policy: script-src 'self'`.
+  Only files under the shell root run, so markup the shell renders from
+  outside cannot run script with the desktop. See
+  [SHELL-PACKAGING.md](/docs/SHELL-PACKAGING.md#scripts).
 
 The fork writes the shell's HTML document
 (`components/domicile/browser/shell_url_loader_factory.cc`). It sets:

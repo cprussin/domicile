@@ -12,6 +12,7 @@
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "services/network/public/cpp/self_deleting_url_loader_factory.h"
+#include "services/network/public/mojom/url_response_head.mojom.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -44,6 +45,9 @@ class ShellURLLoaderFactory : public network::SelfDeletingURLLoaderFactory {
 
   // The HTML document that loads the shell's `module`. Exposed for testing.
   static std::string ShellDocument(const std::string& module);
+
+  // The response head ShellDocument is served with. Exposed for testing.
+  static network::mojom::URLResponseHeadPtr ShellDocumentHead();
 
   // Resolves a domicile:// URL to a file under `shell_root`, or fails. Exposed
   // for testing.
