@@ -100,6 +100,8 @@ For how warping, browser-window focus and modifier drags work, see
 - **Meta+drag** picks up a tiled window. An overlay shows where it will land:
   half of a target puts it on that side; the center swaps the two. Dropping
   over nothing does nothing. See `tree/drop.ts`.
+- A move aims only once the pointer is 8px from the press, so clicking a tab
+  never drops it beside its container's open tab.
 - **Meta+right-drag** or **Meta+Shift+drag** resizes from the
   corner nearest the pointer. See `tree/stretch.ts`. Unlike a move, a resize
   does not make the window transparent.

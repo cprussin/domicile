@@ -23,11 +23,22 @@ type Drag = {
   onDrop: () => void;
   onDropOn: (target: string, edge: Direction | undefined) => void;
   onStretch: (edge: Direction, by: number) => void;
+  /**
+   * Whether a move has gone {@link SLOP} from the press. Until then it does not
+   * aim, so a click is not a drop.
+   */
+  pulled: boolean;
   targets: readonly Target[];
 };
 
 /** The secondary button, which resizes. */
 const SECONDARY_BUTTON = 2;
+
+/**
+ * How far, in pixels, the pointer must move from the press before a move
+ * aims. Matches GTK's drag threshold.
+ */
+const SLOP = 8;
 
 export type TileDrag = {
   /**
@@ -128,6 +139,7 @@ export const useTileDrag = ({
         onDrop,
         onDropOn,
         onStretch,
+        pulled: false,
         targets,
       };
       setDrag({ corner });
@@ -140,12 +152,10 @@ export const useTileDrag = ({
 const followed = (drag: Drag, x: number, y: number): Drag => {
   const { corner } = drag;
   if (corner === undefined) {
-    const aim = aimAt(drag.targets, drag.id, x, y);
-    // Report only changes, to avoid a redraw on every move.
-    if (aim?.id !== drag.aim?.id || aim?.edge !== drag.aim?.edge) {
-      drag.onAim(aim);
-    }
-    return { ...drag, aim, last: { x, y } };
+    // `last` stays at the press until pulled, so this is measured from it.
+    return drag.pulled || Math.hypot(x - drag.last.x, y - drag.last.y) >= SLOP
+      ? aimed(drag, x, y)
+      : drag;
   } else {
     const dx = x - drag.last.x;
     const dy = y - drag.last.y;
@@ -157,6 +167,16 @@ const followed = (drag: Drag, x: number, y: number): Drag => {
     }
     return { ...drag, last: { x, y } };
   }
+};
+
+/** The move with the pointer at `x`, `y`, aimed at what is under it. */
+const aimed = (drag: Drag, x: number, y: number): Drag => {
+  const aim = aimAt(drag.targets, drag.id, x, y);
+  // Report only changes, to avoid a redraw on every move.
+  if (aim?.id !== drag.aim?.id || aim?.edge !== drag.aim?.edge) {
+    drag.onAim(aim);
+  }
+  return { ...drag, aim, last: { x, y }, pulled: true };
 };
 
 /** Ends a drag, dropping onto its aim if it has one. */
