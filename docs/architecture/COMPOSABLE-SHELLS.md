@@ -116,9 +116,9 @@ error.
 
 | Export (TS) / key (JSON) | Read by |
 |---|---|
-| `output`, `extensions`, `input`, `idle`, `lock`, `theme`, `applications`, `files`, `startup` | Compositor and engine, per `domicile-config`'s schema |
+| `output`, `extensions`, `input`, `idle`, `lock`, `theme`, `files`, `startup` | Compositor and engine, per `domicile-config`'s schema |
 | `Shell` (TS) / `shell` (JSON) | `domicile`, when not given a shell. A JSON `shell` is relative to the config |
-| `keybindings`, `modes`, `shells` | Rejected. These are shell props |
+| `keybindings`, `modes`, `shells`, `applications` | Rejected. These are shell props |
 
 - **TS evaluation:** the builder (`--evaluate`) bundles the config for Bun,
   with `@domicile-desktop/*` and React from the install and stylesheets

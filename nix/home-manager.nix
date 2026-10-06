@@ -217,52 +217,6 @@ in {
       type = lib.types.submodule {
         freeformType = json.type;
         options = {
-          applications.omit = lib.mkOption {
-            description = ''
-              Desktop file IDs the launcher hides, as globs (`firefox.desktop`;
-              a `/` in a subdirectory path reads as `-`). Uses `files.omit`'s
-              rules: a leading `!` re-includes, and the last matching pattern
-              wins. So `["*" "!launcher-*"]` shows only IDs starting with
-              `launcher-`.
-
-              Applied on reload.
-            '';
-            type = lib.types.listOf lib.types.str;
-            default = [];
-            example = ["*" "!launcher-*"];
-          };
-
-          applications.bookmarks = lib.mkOption {
-            description = ''
-              URLs the launcher lists by name alongside applications, each with
-              its site's icon. The shell opens them itself instead of using a
-              browser. Applied on reload.
-            '';
-            type = lib.types.listOf (lib.types.submodule {
-              options = {
-                name = lib.mkOption {
-                  description = "The launcher row's label, also matched by search.";
-                  type = lib.types.str;
-                };
-                url = lib.mkOption {
-                  description = "The `http` or `https` URL to open.";
-                  type = lib.types.str;
-                };
-              };
-            });
-            default = [];
-            example = [
-              {
-                name = "Calendar - Home";
-                url = "https://calendar.google.com?authuser=me@home.example";
-              }
-              {
-                name = "Calendar - Work";
-                url = "https://calendar.google.com?authuser=me@work.example";
-              }
-            ];
-          };
-
           extensions = {
             web_store = lib.mkOption {
               description = ''

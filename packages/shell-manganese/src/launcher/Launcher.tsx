@@ -91,7 +91,7 @@ type Props = {
   preview: Preview;
   /** Asks the host for files in home matching a query. */
   search: Search;
-  /** Asks the host for applications matching a query. */
+  /** Searches the applications and bookmarks for a query. */
   searchApps: SearchApps;
   /** The screen to open on: the one with keyboard focus. */
   screen: string;
@@ -494,7 +494,7 @@ const RowTile = ({ icon: Icon }: { icon: typeof FileIcon }) => (
   </span>
 );
 
-/** An application's icon, or a generic glyph if the host found none. */
+/** An application's icon, or a generic glyph if none was found. */
 const AppTile = ({ icon }: { icon: string | undefined }) =>
   icon === undefined ? (
     <RowTile icon={AppWindowIcon} />
@@ -503,9 +503,9 @@ const AppTile = ({ icon }: { icon: string | undefined }) =>
   );
 
 /**
- * A bookmark's icon: the learned one, else the host's, else a bookmark glyph.
- * Falls back to the host's if the learned icon fails to load (e.g. after the
- * user signs out).
+ * A bookmark's icon: the learned one, else the one its site names, else a
+ * bookmark glyph. Falls back to the site's if the learned icon fails to load
+ * (e.g. after the user signs out).
  */
 const BookmarkTile = ({
   found,

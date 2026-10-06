@@ -47,8 +47,6 @@ globset = { version = "0.4", default-features = false }
 # Reads audio tags and cover art for launcher previews. The shell page cannot
 # read them because it is served from another origin.
 lofty = "0.25"
-# Resolves a bookmark page's icon links against the page URL.
-url = "2"
 tempfile = "3"
 # D-Bus. Pure Rust, so it links nothing. `blocking-api` because nothing here runs
 # an async runtime; no default features to avoid tokio.

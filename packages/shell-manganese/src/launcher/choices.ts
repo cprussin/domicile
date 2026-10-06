@@ -139,9 +139,9 @@ const plainChoicesFor = (
 };
 
 /**
- * Applications and bookmarks merged and ranked as the host ranks each: prefix
- * matches first, then by name. The sort is stable, so equal names keep the
- * host's order.
+ * Applications and bookmarks merged and ranked as
+ * `@domicile-desktop/system-apps` ranks each: prefix matches first, then by
+ * name. The sort is stable, so equal names keep the order they came in.
  */
 const byName = (
   typed: string,

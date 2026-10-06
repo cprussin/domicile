@@ -152,52 +152,6 @@ export type DomicileFilePreview = {
   readonly cover: string;
 };
 
-/** An application from a desktop entry. */
-export type DomicileDesktopEntry = {
-  /** The desktop file ID: its path under `applications/`, with `/` as `-`. */
-  readonly id: string;
-
-  /** `Name`, unlocalized. */
-  readonly name: string;
-
-  /** `Comment`, or empty for an entry that has none. */
-  readonly comment: string;
-
-  /**
-   * `Exec` as an argv, unquoted and without field codes. Pass it to
-   * {@link DomicileHost.spawn}.
-   */
-  readonly command: readonly string[];
-
-  /** The entry's icon as a `data:` URL, or empty if not found. */
-  readonly icon: string;
-
-  /**
-   * The `X-Domicile-Preview` image for a launcher, in the same form as
-   * {@link icon}.
-   */
-  readonly preview: string;
-};
-
-/** A named URL from the config. */
-export type DomicileBookmark = {
-  /** The label a launcher shows. */
-  readonly name: string;
-
-  /** The URL. The shell opens it itself. */
-  readonly url: string;
-
-  /** The site's icon as a `data:` URL, or empty if not found. */
-  readonly icon: string;
-};
-
-/** The answer {@link DomicileHost.searchApps} resolves with, each list best first. */
-export type DomicileAppSearch = {
-  readonly apps: readonly DomicileDesktopEntry[];
-
-  readonly bookmarks: readonly DomicileBookmark[];
-};
-
 /**
  * The answer {@link DomicileHost.searchFiles} resolves with. The home's index
  * never crosses into the page.
@@ -498,13 +452,6 @@ export type DomicileHost = {
    * only read what a search could return. See `domicile_host::file_preview`.
    */
   previewFile(path: string): Promise<DomicileFilePreview>;
-
-  /**
-   * Search installed applications and bookmarks for `query`. Resolves with
-   * the result. A newer call rejects this one, as with {@link searchFiles}.
-   * See `domicile_host::desktop_entries`.
-   */
-  searchApps(query: string): Promise<DomicileAppSearch>;
 
   /**
    * A system call: `request` is the call as JSON, answered with `system`

@@ -16,8 +16,11 @@ layout and keys, under a transparent top bar.
 ## Configure
 
 A config module exports `Shell = runManganese(options)` (see
-[WRITING-A-SHELL.md](/docs/WRITING-A-SHELL.md)). Both options are optional:
+[WRITING-A-SHELL.md](/docs/WRITING-A-SHELL.md)). Every option is optional:
 
+- **`applications`**: `omit`, desktop file IDs the launcher hides, and
+  `bookmarks`, pages it opens by name. See
+  [LAUNCHER.md](/docs/LAUNCHER.md).
 - **`keybindings`**: the key table. Defaults to `DEFAULT_KEYBINDINGS` and
   `DEFAULT_MODES`, sway's keys on Meta.
 - **`topBar`**: the bar's `left`, `middle` and `right` columns. Defaults to

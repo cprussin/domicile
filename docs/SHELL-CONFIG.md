@@ -89,7 +89,6 @@ An edit applies to the running desktop, and windows stay open:
 | `idle.blank_after_seconds` | Idle timer restarts. Dark screens relight |
 | `theme.mode` | Shell and windows repaint |
 | `files.omit` | Launcher file index rebuilt |
-| `applications` | Next launcher search uses the new list |
 | `extensions` | Extensions installed or removed ([EXTENSIONS.md](/docs/architecture/EXTENSIONS.md)) |
 
 - `lock` and `startup` are read only at startup. Rerunning `startup` would
@@ -103,7 +102,7 @@ An edit applies to the running desktop, and windows stay open:
 
 - `startup.commands`: commands run once when the compositor starts. Each is an
   argv: `[["emacs", "--daemon"], ["sh", "-c", "…"]]`.
-- `applications`, `files`: what the launcher lists. See
+- `files`: what the launcher's file index leaves out. See
   [LAUNCHER.md](LAUNCHER.md).
 - `output.max_scale`: the highest scale advertised for the output that
   follows Domicile's window. Applies only when `output.displays` is empty.

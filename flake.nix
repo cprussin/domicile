@@ -479,8 +479,10 @@
         #   not vendored, because it is GPL-2+.
         # - `DOMICILE_PACTL`, `DOMICILE_PAREC`: volume control and meters.
         #   PipeWire systems may have no `pactl` on `PATH`.
+        # - `curl`, after the user's `PATH`: shells spawn it to fetch bookmark
+        #   icons (`@domicile-desktop/system-apps/curl`).
         #
-        # `--set-default` so a user's own value wins.
+        # `--set-default` and `--suffix` so a user's own value wins.
         postFixup = ''
           patchelf --add-rpath "${pkgs.lib.makeLibraryPath (with pkgs; [
             libGL mesa libgbm wayland libxkbcommon
@@ -491,7 +493,8 @@
             --prefix LD_LIBRARY_PATH : "/run/opengl-driver/lib" \
             --set-default DOMICILE_PNP_IDS "${pkgs.hwdata}/share/hwdata/pnp.ids" \
             --set-default DOMICILE_PACTL "${pkgs.pulseaudio}/bin/pactl" \
-            --set-default DOMICILE_PAREC "${pkgs.pulseaudio}/bin/parec"
+            --set-default DOMICILE_PAREC "${pkgs.pulseaudio}/bin/parec" \
+            --suffix PATH : "${pkgs.lib.makeBinPath [ pkgs.curl ]}"
         '';
       };
 
@@ -546,7 +549,7 @@
         dontFixup = true;
         outputHashMode = "recursive";
         outputHashAlgo = "sha256";
-        outputHash = "sha256-ralD7aV18jT9sqrmYwFk927c/bRbgJSmvE3QvnZXPmo=";
+        outputHash = "sha256-AXJxwcvJb+Ro9tgfiOoIfFtUTH54J+eLEhEhoTPE/UU=";
       };
 
 

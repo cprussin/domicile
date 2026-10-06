@@ -237,13 +237,6 @@ pub enum ChromeMessage {
     /// a search could not already show it.
     PreviewFile { path: String },
 
-    /// Search desktop entries and bookmarks for `query`. Answered with
-    /// [`HostMessage::FoundApps`].
-    ///
-    /// The compositor chooses the directories per the XDG base directory spec;
-    /// see `domicile_host::desktop_entries`.
-    SearchApps { query: String },
-
     /// Try to unlock the desktop with a passphrase from the lock screen.
     ///
     /// The compositor checks it, not the page, so editing the page cannot
@@ -453,17 +446,6 @@ pub enum HostMessage {
         path: String,
         #[serde(flatten)]
         preview: FilePreview,
-    },
-
-    /// The results of a [`ChromeMessage::SearchApps`], best first.
-    ///
-    /// `query` echoes the request. Each entry carries its argv, so a shell
-    /// launches it with `spawn` without parsing `Exec`. Bookmarks come from
-    /// `applications.bookmarks`; the shell opens their URLs itself.
-    FoundApps {
-        query: String,
-        apps: Vec<DesktopEntry>,
-        bookmarks: Vec<Bookmark>,
     },
 
     /// Screen brightness, 0.0 through 1.0.
@@ -803,37 +785,6 @@ pub enum SystemErrorKind {
     /// such as `org.freedesktop.DBus.Error.ServiceUnknown`.
     Dbus,
     Other,
-}
-
-/// An application from a desktop entry, for a launcher.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct DesktopEntry {
-    /// The desktop file ID: its path under `applications/`, `/` read as `-`.
-    pub id: String,
-    /// `Name`, unlocalized.
-    pub name: String,
-    /// `Comment`, or empty for an entry that has none.
-    pub comment: String,
-    /// `Exec`, unquoted and with its field codes dropped.
-    pub command: Vec<String>,
-    /// `Icon`, as a `data:` URL so the page need not read files. Absent when
-    /// no icon was found.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub icon: Option<String>,
-    /// `X-Domicile-Preview`, a launcher preview image, encoded as `icon` is.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub preview: Option<String>,
-}
-
-/// A configured bookmark, for a launcher.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Bookmark {
-    /// The label shown in the launcher.
-    pub name: String,
-    pub url: String,
-    /// The site's icon as a `data:` URL, if found.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub icon: Option<String>,
 }
 
 /// One clipboard history entry.

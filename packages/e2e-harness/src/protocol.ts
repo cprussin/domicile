@@ -207,32 +207,6 @@ const foundFilesSchema = z.looseObject({
   type: z.literal("found_files"),
 });
 
-// An application matching `search_apps`. `command` is the argv for `spawn`.
-// `icon` and `preview` are `data:` URLs, absent when not found.
-const desktopEntrySchema = z.looseObject({
-  command: z.array(z.string()),
-  comment: z.string(),
-  icon: z.string().optional(),
-  id: z.string(),
-  name: z.string(),
-  preview: z.string().optional(),
-});
-
-// A bookmark from `applications.bookmarks`. `icon` is the site's icon as a
-// `data:` URL, once fetched.
-const bookmarkSchema = z.looseObject({
-  icon: z.string().optional(),
-  name: z.string(),
-  url: z.string(),
-});
-
-const foundAppsSchema = z.looseObject({
-  apps: z.array(desktopEntrySchema),
-  bookmarks: z.array(bookmarkSchema),
-  query: z.string(),
-  type: z.literal("found_apps"),
-});
-
 // The reply to `preview_file`. `kind` says which optional fields are set;
 // `binary` and `unreadable` set none.
 const filePreviewSchema = z.looseObject({
@@ -514,7 +488,6 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   shortcutMessageSchema,
   modifiersSchema,
   foundFilesSchema,
-  foundAppsSchema,
   filePreviewSchema,
   brightnessSchema,
   audioSchema,
@@ -554,7 +527,6 @@ export type ShortcutMessage = z.infer<typeof shortcutMessageSchema>;
 export type ModifiersMessage = z.infer<typeof modifiersSchema>;
 export type FoundFilesMessage = z.infer<typeof foundFilesSchema>;
 export type FilePreviewMessage = z.infer<typeof filePreviewSchema>;
-export type FoundAppsMessage = z.infer<typeof foundAppsSchema>;
 export type ClipboardMessage = z.infer<typeof clipboardSchema>;
 export type TrayMessage = z.infer<typeof traySchema>;
 export type NotificationsMessage = z.infer<typeof notificationsSchema>;

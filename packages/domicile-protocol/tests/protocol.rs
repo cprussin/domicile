@@ -4,9 +4,9 @@
 //! pinned because the JS client hard-codes them.
 
 use domicile_protocol::{
-    negotiate, AudioCard, AudioChoice, AudioDevice, AudioLevel, AudioStream, Bookmark,
-    ChromeMessage, ClipboardEntry, CursorShape, DesktopEntry, DisplayInfo, DisplayTransform,
-    FilePreview, HostMessage, Passphrase, PROTOCOL_VERSION,
+    negotiate, AudioCard, AudioChoice, AudioDevice, AudioLevel, AudioStream, ChromeMessage,
+    ClipboardEntry, CursorShape, DisplayInfo, DisplayTransform, FilePreview, HostMessage,
+    Passphrase, PROTOCOL_VERSION,
 };
 
 fn chrome_round_trip(msg: &ChromeMessage) {
@@ -69,9 +69,6 @@ fn chrome_messages_round_trip() {
     chrome_round_trip(&ChromeMessage::PreviewFile {
         path: "Notes/today.org".into(),
     });
-    chrome_round_trip(&ChromeMessage::SearchApps {
-        query: "fire".into(),
-    });
     chrome_round_trip(&ChromeMessage::Unlock {
         passphrase: Passphrase::from("open sesame"),
     });
@@ -116,60 +113,14 @@ fn searching_for_something_to_open_names_no_directory() {
     );
 }
 
-/// An app search carries a query, like a file search.
+/// Applications are read by a shell library on the system calls, not asked of
+/// the compositor.
 #[test]
-fn searching_for_an_application_names_no_directory() {
-    let v = serde_json::to_value(ChromeMessage::SearchApps {
-        query: "fire".into(),
-    })
-    .unwrap();
-    assert_eq!(
-        v,
+fn an_app_search_is_not_a_chrome_message() {
+    assert!(serde_json::from_value::<ChromeMessage>(
         serde_json::json!({"type": "search_apps", "query": "fire"})
-    );
-}
-
-/// A desktop entry carries its argv, so a shell passes it to `spawn` without
-/// parsing `Exec`.
-#[test]
-fn a_desktop_entry_carries_the_command_it_runs() {
-    let v = serde_json::to_value(HostMessage::FoundApps {
-        query: "fire".into(),
-        apps: vec![DesktopEntry {
-            id: "firefox.desktop".into(),
-            name: "Firefox".into(),
-            comment: "Browse the web".into(),
-            command: vec!["firefox".into()],
-            icon: Some("data:image/png;base64,cm93".into()),
-            preview: Some("data:image/svg+xml;base64,PHN2Zz4=".into()),
-        }],
-        bookmarks: vec![Bookmark {
-            name: "Firefox Add-ons".into(),
-            url: "https://addons.mozilla.org".into(),
-            icon: Some("data:image/png;base64,aWNv".into()),
-        }],
-    })
-    .unwrap();
-    assert_eq!(
-        v,
-        serde_json::json!({
-            "type": "found_apps",
-            "query": "fire",
-            "apps": [{
-                "id": "firefox.desktop",
-                "name": "Firefox",
-                "comment": "Browse the web",
-                "command": ["firefox"],
-                "icon": "data:image/png;base64,cm93",
-                "preview": "data:image/svg+xml;base64,PHN2Zz4=",
-            }],
-            "bookmarks": [{
-                "name": "Firefox Add-ons",
-                "url": "https://addons.mozilla.org",
-                "icon": "data:image/png;base64,aWNv",
-            }],
-        })
-    );
+    )
+    .is_err());
 }
 
 #[test]

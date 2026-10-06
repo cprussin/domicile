@@ -1,18 +1,15 @@
 import { useEffect, useState } from "react";
 
-import { superseded } from "../host/superseded";
 import type { FoundApps } from "./found-apps";
 
 /**
- * The applications and bookmarks the host found for `query`, re-queried on
- * every change.
+ * The applications and bookmarks matching `query`, searched again on every
+ * change. Stale answers are dropped.
  *
- * Like `useFound` but without polling, since the host reads desktop entries
- * fresh each time. Stale answers are dropped.
- *
- * The empty query is never sent. It uses `opening` (see `useOpeningApps`),
- * fetched before the launcher opened, so the first rows don't shift in late.
- * `opening` is also shown until the first typed query is answered.
+ * The empty query is never searched. It uses `opening` (see
+ * `useOpeningApps`), read before the launcher opened, so the first rows don't
+ * shift in late. `opening` is also shown until the first typed query is
+ * answered.
  */
 export const useFoundApps = (
   searchApps: (query: string) => Promise<FoundApps>,
@@ -31,11 +28,8 @@ export const useFoundApps = (
           }
         })
         .catch((error: unknown) => {
-          // A newer search replaced this one, and is what the box is waiting on.
-          if (!superseded(error)) {
-            // biome-ignore lint/suspicious/noConsole: surfacing a search the host failed
-            console.error("The host could not search the applications", error);
-          }
+          // biome-ignore lint/suspicious/noConsole: surfacing a search that failed
+          console.error("Could not search the applications", error);
         });
     }
     return () => {

@@ -22,12 +22,12 @@ const PAINT: DesktopEntry = {
   preview: undefined,
 };
 
-/** The host's search for applications, answered in whatever order a test says. */
+/** The opening rows, answered in whatever order a test says. */
 const host = () => {
-  const asked: { query: string; settle: (found: FoundApps) => void }[] = [];
-  const searchApps = (query: string) =>
+  const asked: { settle: (found: FoundApps) => void }[] = [];
+  const opening = () =>
     new Promise<FoundApps>((settle) => {
-      asked.push({ query, settle });
+      asked.push({ settle });
     });
   return {
     answers: async (
@@ -44,19 +44,17 @@ const host = () => {
         });
       }
     },
-    asked: () => asked.map(({ query }) => query),
-    searchApps,
+    asked: () => asked.length,
+    opening,
   };
 };
 
 describe("useOpeningApps", () => {
-  it("asks for the empty box while the launcher is shut, and has its answer", async () => {
+  it("asks for the opening rows while the launcher is shut, and has its answer", async () => {
     const machine = host();
-    const { result } = renderHook(() =>
-      useOpeningApps(machine.searchApps, false),
-    );
+    const { result } = renderHook(() => useOpeningApps(machine.opening, false));
 
-    expect(machine.asked()).toStrictEqual([""]);
+    expect(machine.asked()).toBe(1);
     expect(result.current).toStrictEqual({ apps: [], bookmarks: [] });
 
     await machine.answers(0, [EDITOR]);
@@ -67,21 +65,21 @@ describe("useOpeningApps", () => {
   it("asks nothing as the launcher opens, and asks again as it shuts", () => {
     const machine = host();
     const { rerender } = renderHook(
-      ({ open }) => useOpeningApps(machine.searchApps, open),
+      ({ open }) => useOpeningApps(machine.opening, open),
       { initialProps: { open: false } },
     );
 
     rerender({ open: true });
-    expect(machine.asked()).toStrictEqual([""]);
+    expect(machine.asked()).toBe(1);
 
     rerender({ open: false });
-    expect(machine.asked()).toStrictEqual(["", ""]);
+    expect(machine.asked()).toBe(2);
   });
 
   it("keeps the latest answer when an older one arrives after it", async () => {
     const machine = host();
     const { rerender, result } = renderHook(
-      ({ open }) => useOpeningApps(machine.searchApps, open),
+      ({ open }) => useOpeningApps(machine.opening, open),
       { initialProps: { open: false } },
     );
     rerender({ open: true });
@@ -96,7 +94,7 @@ describe("useOpeningApps", () => {
   it("keeps an answer that arrives after the launcher has opened", async () => {
     const machine = host();
     const { rerender, result } = renderHook(
-      ({ open }) => useOpeningApps(machine.searchApps, open),
+      ({ open }) => useOpeningApps(machine.opening, open),
       { initialProps: { open: false } },
     );
     rerender({ open: true });

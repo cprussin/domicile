@@ -8,13 +8,11 @@
 //! The shell generates this JSON file; people do not edit it. See
 //! `docs/SHELL-CONFIG.md`.
 
-mod applications;
 mod desktop;
 mod files;
 mod profile;
 mod startup;
 
-pub use applications::{ApplicationsConfig, Bookmark};
 pub use desktop::{Desktop, Display};
 pub use files::{FilesConfig, Omit};
 pub use profile::{Connected, Desk, DisplayPlacement, Layout, Placed, Profile, Scanout, Transform};
@@ -637,7 +635,6 @@ fn under_home(path: PathBuf, home: Option<&Path>) -> Result<PathBuf, ConfigError
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
-    pub applications: ApplicationsConfig,
     pub extensions: ExtensionsConfig,
     pub files: FilesConfig,
     pub idle: IdleConfig,

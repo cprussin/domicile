@@ -82,7 +82,7 @@ impl Compositor {
             // The file index's source and cache, both private to this run.
             .env("HOME", home.unwrap_or(&empty_home))
             .env("XDG_CACHE_HOME", directory.path().join("cache"))
-            // Read applications from the test home only, not the machine's.
+            // Read icons from the test home only, not the machine's.
             .env_remove("XDG_DATA_HOME")
             .env("XDG_DATA_DIRS", directory.path().join("no-data"))
             // A decoy. The compositor must set `WAYLAND_DISPLAY` for what it

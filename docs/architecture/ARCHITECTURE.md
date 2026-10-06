@@ -133,6 +133,8 @@ Web side:
 - `packages/system-battery`: the battery from UPower, on the SDK's system
   calls.
 - `packages/component-library`: shared components and the Panda preset.
+- `packages/system-apps`: installed applications and bookmarks for a
+  launcher, read through `@domicile-desktop/sdk/system`.
 - `packages/domicile-builder`: builds a shell from a user's TS/JS entry.
 - `packages/shell-manganese`: the reference desktop.
 - `packages/shell-simple`: a desktop with only windows.
