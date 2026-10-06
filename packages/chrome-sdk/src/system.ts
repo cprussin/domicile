@@ -1,5 +1,5 @@
 // Files, watches and processes for a shell: the compositor's system calls,
-// typed. See docs/architecture/SYSTEM-ACCESS.md.
+// typed. See docs/SHELL-SYSTEM-ACCESS.md.
 //
 // Each call goes out through `callSystem` with an id, and its answers come
 // back as `system` events carrying that id. A call that can fail resolves a

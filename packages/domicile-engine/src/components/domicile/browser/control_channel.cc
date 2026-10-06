@@ -239,101 +239,6 @@ std::optional<std::vector<std::string>> Strings(
   return strings;
 }
 
-// The rows of `key` in `message` that `read` makes something of. A row that
-// is not an object, or is missing what it needs, is dropped, as a tray icon
-// missing its id is: one bad device is not a reason to draw no mixer. An
-// absent list is an empty one, for the same reason.
-template <typename Row, typename Read>
-std::vector<Row> Rows(const base::DictValue& message,
-                      std::string_view key,
-                      Read read) {
-  std::vector<Row> rows;
-  const base::ListValue* list = message.FindList(key);
-  if (!list) {
-    return rows;
-  }
-  rows.reserve(list->size());
-  for (const base::Value& entry : *list) {
-    const base::DictValue* row = entry.GetIfDict();
-    if (!row) {
-      continue;
-    }
-    if (std::optional<Row> made = read(*row)) {
-      rows.push_back(std::move(*made));
-    }
-  }
-  return rows;
-}
-
-// `key` in `row` if it is a string, and empty if it is null or absent: the
-// compositor's `None`, spelled the way every other member here spells it.
-std::string OrEmpty(const base::DictValue& row, std::string_view key) {
-  const std::string* text = row.FindString(key);
-  return text ? *text : std::string();
-}
-
-std::optional<mojom::AudioChoicePtr> ReadAudioChoice(
-    const base::DictValue& row) {
-  const std::string* name = row.FindString("name");
-  const std::string* description = row.FindString("description");
-  std::optional<bool> available = row.FindBool("available");
-  if (!name || !description || !available) {
-    return std::nullopt;
-  }
-  return mojom::AudioChoice::New(*name, *description, *available);
-}
-
-std::optional<mojom::AudioDevicePtr> ReadAudioDevice(
-    const base::DictValue& row) {
-  const std::string* id = row.FindString("id");
-  const std::string* description = row.FindString("description");
-  std::optional<double> volume = row.FindDouble("volume");
-  std::optional<bool> muted = row.FindBool("muted");
-  std::optional<bool> is_default = row.FindBool("default");
-  std::optional<bool> monitor = row.FindBool("monitor");
-  if (!id || !description || !volume || !muted || !is_default || !monitor) {
-    return std::nullopt;
-  }
-  return mojom::AudioDevice::New(
-      *id, *description, *volume, *muted, *is_default, *monitor,
-      Rows<mojom::AudioChoicePtr>(row, "ports", ReadAudioChoice),
-      OrEmpty(row, "port"));
-}
-
-std::optional<mojom::AudioStreamPtr> ReadAudioStream(
-    const base::DictValue& row) {
-  const std::string* id = row.FindString("id");
-  const std::string* application = row.FindString("application");
-  std::optional<double> volume = row.FindDouble("volume");
-  std::optional<bool> muted = row.FindBool("muted");
-  if (!id || !application || !volume || !muted) {
-    return std::nullopt;
-  }
-  return mojom::AudioStream::New(*id, *application, OrEmpty(row, "title"),
-                                 *volume, *muted, OrEmpty(row, "device"));
-}
-
-std::optional<mojom::AudioCardPtr> ReadAudioCard(const base::DictValue& row) {
-  const std::string* id = row.FindString("id");
-  const std::string* description = row.FindString("description");
-  if (!id || !description) {
-    return std::nullopt;
-  }
-  return mojom::AudioCard::New(
-      *id, *description,
-      Rows<mojom::AudioChoicePtr>(row, "profiles", ReadAudioChoice),
-      OrEmpty(row, "profile"));
-}
-
-std::optional<mojom::AudioLevelPtr> ReadAudioLevel(const base::DictValue& row) {
-  const std::string* id = row.FindString("id");
-  std::optional<double> peak = row.FindDouble("peak");
-  if (!id || !peak) {
-    return std::nullopt;
-  }
-  return mojom::AudioLevel::New(*id, *peak);
-}
-
 }  // namespace
 
 void ControlChannel::FocusApp(const std::string& app_id) {
@@ -354,14 +259,6 @@ void ControlChannel::SearchFiles(const std::string& query) {
 void ControlChannel::PreviewFile(const std::string& path) {
   base::DictValue message = Typed("preview_file");
   message.Set("path", path);
-  SendMessage(std::move(message));
-}
-
-// Words to match, like SearchFiles: which directories hold the desktop
-// entries is the compositor's to read.
-void ControlChannel::SearchApps(const std::string& query) {
-  base::DictValue message = Typed("search_apps");
-  message.Set("query", query);
   SendMessage(std::move(message));
 }
 
@@ -510,72 +407,6 @@ void ControlChannel::Unlock(const std::string& passphrase) {
 // `locked` to every chrome.
 void ControlChannel::Lock() {
   SendMessage(Typed("lock"));
-}
-
-// Relayed, like Lock: the backlight is the compositor's to set, and what comes
-// back up is `brightness` to every chrome. The page's `double` has already
-// refused a level that is not a number.
-void ControlChannel::SetBrightness(double level) {
-  base::DictValue message = Typed("set_brightness");
-  message.Set("level", level);
-  SendMessage(std::move(message));
-}
-
-// The mixer's, relayed like SetBrightness: the ids are the compositor's to
-// check, and what comes back up is `audio` to every chrome.
-void ControlChannel::SetAudioVolume(const std::string& id, double volume) {
-  base::DictValue message = Typed("set_audio_volume");
-  message.Set("id", id);
-  message.Set("volume", volume);
-  SendMessage(std::move(message));
-}
-
-void ControlChannel::SetAudioMuted(const std::string& id, bool muted) {
-  base::DictValue message = Typed("set_audio_muted");
-  message.Set("id", id);
-  message.Set("muted", muted);
-  SendMessage(std::move(message));
-}
-
-void ControlChannel::SetDefaultAudioDevice(const std::string& id) {
-  base::DictValue message = Typed("set_default_audio_device");
-  message.Set("id", id);
-  SendMessage(std::move(message));
-}
-
-void ControlChannel::MoveAudioStream(const std::string& id,
-                                     const std::string& device) {
-  base::DictValue message = Typed("move_audio_stream");
-  message.Set("id", id);
-  message.Set("device", device);
-  SendMessage(std::move(message));
-}
-
-void ControlChannel::SetAudioPort(const std::string& id,
-                                  const std::string& port) {
-  base::DictValue message = Typed("set_audio_port");
-  message.Set("id", id);
-  message.Set("port", port);
-  SendMessage(std::move(message));
-}
-
-void ControlChannel::SetAudioProfile(const std::string& card,
-                                     const std::string& profile) {
-  base::DictValue message = Typed("set_audio_profile");
-  message.Set("card", card);
-  message.Set("profile", profile);
-  SendMessage(std::move(message));
-}
-
-// A lease the page renews, relayed as it is: the compositor keeps the time.
-void ControlChannel::WatchAudioLevels(const std::vector<std::string>& ids) {
-  base::ListValue listed;
-  for (const std::string& id : ids) {
-    listed.Append(id);
-  }
-  base::DictValue message = Typed("watch_audio_levels");
-  message.Set("ids", std::move(listed));
-  SendMessage(std::move(message));
 }
 
 void ControlChannel::ThemeCaptured(mojom::Theme theme) {
@@ -1002,10 +833,9 @@ void ControlChannel::DispatchLine(const std::string& line) {
     const base::ListValue* found = message.FindList("files");
     const std::optional<int> matched = message.FindInt("matched");
     const std::optional<bool> indexing = message.FindBool("indexing");
-    // All four or nothing, which is what `battery` below does: an answer
-    // without its query cannot be told from the answer to a keystroke ago,
-    // and one without its count or its flag would be drawn as a claim it did
-    // not make.
+    // All four or nothing: an answer without its query cannot be told from
+    // the answer to a keystroke ago, and one without its count or its flag
+    // would be drawn as a claim it did not make.
     if (!query || !found || !matched || *matched < 0 || !indexing) {
       return;
     }
@@ -1063,106 +893,13 @@ void ControlChannel::DispatchLine(const std::string& line) {
     return;
   }
 
-  if (*type == "found_apps") {
-    const std::string* query = message.FindString("query");
-    const base::ListValue* found = message.FindList("apps");
-    // The query or nothing, for `found_files`'s reason above.
-    if (!query || !found) {
-      return;
-    }
-    std::vector<mojom::DesktopEntryPtr> apps;
-    apps.reserve(found->size());
-    for (const base::Value& row : *found) {
-      const base::DictValue* entry = row.GetIfDict();
-      if (!entry) {
-        continue;
-      }
-      // An entry with no id or name is one nothing could draw, and one with
-      // no command is one nothing could run: dropped, like a clipboard row
-      // with no preview. A missing comment, icon or preview is an empty one.
-      const std::string* id = entry->FindString("id");
-      const std::string* name = entry->FindString("name");
-      const std::string* comment = entry->FindString("comment");
-      const std::string* icon = entry->FindString("icon");
-      const std::string* preview = entry->FindString("preview");
-      const base::ListValue* listed = entry->FindList("command");
-      if (!id || !name || !listed) {
-        continue;
-      }
-      std::vector<std::string> command;
-      command.reserve(listed->size());
-      for (const base::Value& argument : *listed) {
-        if (const std::string* word = argument.GetIfString()) {
-          command.push_back(*word);
-        }
-      }
-      if (command.empty()) {
-        continue;
-      }
-      apps.push_back(mojom::DesktopEntry::New(
-          *id, *name, comment ? *comment : std::string(), std::move(command),
-          icon ? *icon : std::string(), preview ? *preview : std::string()));
-    }
-    // A bookmark with no name or URL is one nothing could draw or open, and
-    // is dropped; a missing icon is an empty one. An answer with no list at
-    // all is an answer with none.
-    std::vector<mojom::BookmarkPtr> bookmarks;
-    if (const base::ListValue* marked = message.FindList("bookmarks")) {
-      for (const base::Value& row : *marked) {
-        const base::DictValue* bookmark = row.GetIfDict();
-        if (!bookmark) {
-          continue;
-        }
-        const std::string* name = bookmark->FindString("name");
-        const std::string* url = bookmark->FindString("url");
-        const std::string* icon = bookmark->FindString("icon");
-        if (!name || !url) {
-          continue;
-        }
-        bookmarks.push_back(mojom::Bookmark::New(
-            *name, *url, icon ? *icon : std::string()));
-      }
-    }
-    // Sent even when it is empty, for the reason `found_files` is.
-    client_->Apps(*query, std::move(apps), std::move(bookmarks));
-    return;
-  }
-
-  if (*type == "battery") {
-    // DROPPED RATHER THAN DEFAULTED, which is the opposite of what `displays`
-    // does two blocks up and is deliberate. A monitor the wrong way up is
-    // still a desktop; a charge that defaulted to zero is a reading, and one
-    // the bar would draw in red and flash. The whole reason this message
-    // exists is that a plausible-looking default is indistinguishable from
-    // the truth -- see the note on ControlChannelClient::Battery -- so a
-    // message this cannot read is one to say nothing about.
-    std::optional<double> charge = message.FindDouble("charge");
-    std::optional<bool> charging = message.FindBool("charging");
-    if (!charge || !charging) {
-      return;
-    }
-    client_->Battery(*charge, *charging);
-    return;
-  }
-
-  if (*type == "brightness") {
-    // Dropped rather than defaulted, for `battery`'s reason: a level that
-    // defaulted to zero would draw a slider at the bottom of a lit screen.
-    std::optional<double> level = message.FindDouble("level");
-    if (!level) {
-      return;
-    }
-    client_->Brightness(*level);
-    return;
-  }
-
   if (*type == "theme") {
-    // REFUSED RATHER THAN DEFAULTED, which is `battery` above's answer rather
-    // than `displays`'s, and for a sharper version of its reason. A theme
-    // defaulted to dark is not a missing reading -- it is a *decision*, and one
-    // that would repaint a desk somebody had just put into light. The desk is
-    // already painting in one of the two, which is a better answer than the
-    // other one picked by a name nothing here knows.
+    // REFUSED RATHER THAN DEFAULTED, which is the opposite of what `displays`
+    // does above and is deliberate. A theme defaulted to dark is not a missing
+    // reading -- it is a *decision*, and one that would repaint a desk
+    // somebody had just put into light. The desk is already painting in one
+    // of the two, which is a better answer than the other one picked by a name
+    // nothing here knows.
     const std::string* named = message.FindString("theme");
     if (!named) {
       return;
@@ -1314,7 +1051,7 @@ void ControlChannel::DispatchLine(const std::string& line) {
   }
 
   if (*type == "idle") {
-    // DROPPED RATHER THAN DEFAULTED, for the reason `battery` above is and
+    // DROPPED RATHER THAN DEFAULTED, for the reason `theme` above is and
     // more sharply: a missing field here has no reading to fall back on that
     // is not a guess about which way the desk went, and a guess that came out
     // false would clear a shell's lock screen over a desk nobody is at. A
@@ -1358,24 +1095,6 @@ void ControlChannel::DispatchLine(const std::string& line) {
     // a second reader of that shape. The parse above has already refused a
     // line that is not a JSON object.
     client_->ShellConfig(line);
-    return;
-  }
-
-  if (*type == "audio_levels") {
-    client_->AudioLevels(
-        Rows<mojom::AudioLevelPtr>(message, "levels", ReadAudioLevel));
-    return;
-  }
-
-  if (*type == "audio") {
-    // Sent even when every list is empty, for `clipboard`'s reason: a desk
-    // whose sound server has nothing on it is an answer.
-    client_->Audio(
-        Rows<mojom::AudioDevicePtr>(message, "outputs", ReadAudioDevice),
-        Rows<mojom::AudioDevicePtr>(message, "inputs", ReadAudioDevice),
-        Rows<mojom::AudioStreamPtr>(message, "playback", ReadAudioStream),
-        Rows<mojom::AudioStreamPtr>(message, "recording", ReadAudioStream),
-        Rows<mojom::AudioCardPtr>(message, "cards", ReadAudioCard));
     return;
   }
 

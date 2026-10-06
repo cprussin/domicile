@@ -3,8 +3,6 @@
 
 #include "components/domicile/browser/file_choice.h"
 
-#include "base/files/file_enumerator.h"
-#include "base/files/file_util.h"
 #include "base/notreached.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -24,32 +22,6 @@ std::optional<base::FilePath> ResolvedPath(const base::FilePath& home,
     return named;
   }
   return named.empty() ? home : home.Append(named);
-}
-
-std::optional<std::vector<std::string>> DirectoryEntries(
-    const base::FilePath& directory) {
-  if (!base::DirectoryExists(directory)) {
-    return std::nullopt;
-  }
-  std::vector<std::string> entries;
-  // Without SHOW_SYM_LINKS, links resolve to their targets, so a link to a
-  // directory lists as a directory. STOP_ENUMERATION reports an unreadable
-  // directory as an error instead of an empty listing.
-  base::FileEnumerator walk(
-      directory, /*recursive=*/false,
-      base::FileEnumerator::FILES | base::FileEnumerator::DIRECTORIES,
-      base::FilePath::StringType(),
-      base::FileEnumerator::FolderSearchPolicy::MATCH_ONLY,
-      base::FileEnumerator::ErrorPolicy::STOP_ENUMERATION);
-  for (base::FilePath entry = walk.Next(); !entry.empty();
-       entry = walk.Next()) {
-    const std::string name = entry.BaseName().AsUTF8Unsafe();
-    entries.push_back(walk.GetInfo().IsDirectory() ? name + "/" : name);
-  }
-  if (walk.GetError() != base::File::FILE_OK) {
-    return std::nullopt;
-  }
-  return entries;
 }
 
 bool IsAnswerFor(mojom::WebViewFileChooserMode mode, size_t count) {

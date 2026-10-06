@@ -20,7 +20,8 @@ there, and the symptom is an arrow where a hand should be -- so `second` keeps
 same reading. See components/domicile/common/cursor_shape.h.
 
 A `system_reply` ends the sequence: the engine relays it to the page whole, and
-the page's `system_request` comes back as a `said:` line. See SYSTEM-ACCESS.md.
+the page's `system_request` comes back as a `said:` line. See
+docs/SHELL-SYSTEM-ACCESS.md.
 """
 
 import argparse

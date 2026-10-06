@@ -3,7 +3,6 @@
 // `domicile-file-chooser` events without drawing a picker.
 //
 //   ?answer=choose&pick=<path>   choose <path>, absolute or relative to home
-//     &list=<directory>          list <directory> under `home` first
 //   ?answer=cancel               cancel (the control)
 //
 // Logs to the console, which the engine writes to its log:
@@ -12,7 +11,6 @@
 //   GUARD chrome-mousedown       a press reached the shell's document
 //   GUARD file-chooser mode=…    the element asked, and for what
 //     suggested=…
-//   GUARD listed <names>         what `list` returned, sorted
 //   GUARD answered               the answer did not throw
 //
 // The guest page logs what it received; see
@@ -56,20 +54,7 @@ export const Shell = () => {
       `file-chooser mode=${event.mode} suggested=${event.suggestedName} accept=${event.accept.join(",")}`,
     );
     event.preventDefault();
-    const listing = parameters.get("list");
-    if (listing === null) {
-      answerIt(event);
-    } else {
-      event.list(`${event.home}/${listing}`).then(
-        (entries) => {
-          say(`listed ${entries.toSorted().join(",")}`);
-          answerIt(event);
-        },
-        (error) => {
-          say(`list-refused ${error.name}`);
-        },
-      );
-    }
+    answerIt(event);
   });
 
   /** Answers `event` as `?answer=` says and logs it. */

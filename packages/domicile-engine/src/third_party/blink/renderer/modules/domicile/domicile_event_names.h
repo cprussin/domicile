@@ -24,9 +24,7 @@
 #define DOMICILE_EVENT_NAMES(X)                   \
   X(shortcut, Shortcut)                           \
   X(focusrequested, Focusrequested)               \
-  X(audiolevels, Audiolevels)                     \
   X(displayschanged, Displayschanged)             \
-  X(brightnesschanged, Brightnesschanged)         \
   X(browserwindowschanged, Browserwindowschanged) \
   X(windowschanged, Windowschanged)               \
   X(focusedwindowchanged, Focusedwindowchanged)   \
@@ -34,8 +32,6 @@
   X(traychanged, Traychanged)                     \
   X(notificationschanged, Notificationschanged)   \
   X(extensionschanged, Extensionschanged)         \
-  X(audiochanged, Audiochanged)                   \
-  X(batterychanged, Batterychanged)               \
   X(idlechanged, Idlechanged)                     \
   X(lockedchanged, Lockedchanged)                 \
   X(themechanged, Themechanged)                   \

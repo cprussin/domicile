@@ -16,7 +16,7 @@
 //! | `h` | refused when read; written as `null`, since a page cannot hold one |
 //!
 //! The SDK's `system` module writes and reads these. See
-//! `docs/architecture/SYSTEM-ACCESS.md`.
+//! `docs/SHELL-SYSTEM-ACCESS.md`.
 
 use serde_json::{Map, Number, Value as Json};
 use zbus::zvariant::{Array, Dict, ObjectPath, Signature, Str, StructureBuilder, Value};

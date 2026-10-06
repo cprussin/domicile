@@ -2,9 +2,9 @@
 """The compositor's end of the control socket, for the guard that asks whether
 the desk's state attributes on `DomicileHost` say what the compositor said.
 
-It answers `hello` with a `welcome`, then says the battery, idle, lock, both
-themes, the clipboard, the tray and the modifiers -- and prints every line the
-browser writes. The page reads only after all of it.
+It answers `hello` with a `welcome`, then says the idle, lock, both themes,
+the clipboard, the tray and the modifiers -- and prints every line the browser
+writes. The page reads only after all of it.
 """
 
 import argparse
@@ -15,7 +15,6 @@ import sys
 import time
 
 SEQUENCE = [
-    {"type": "battery", "charge": 0.5, "charging": True},
     {"type": "idle", "idle": True},
     {"type": "locked", "locked": False},
     {"type": "theme", "theme": "light"},

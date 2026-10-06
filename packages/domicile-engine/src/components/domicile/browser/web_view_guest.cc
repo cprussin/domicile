@@ -754,7 +754,7 @@ void WebViewGuest::ChooseDownloadPath(
       suggested_path.BaseName().AsUTF8Unsafe(),
       base::GetHomeDir().AsUTF8Unsafe(),
       mojo::WrapCallbackWithDefaultInvokeIfNotRun(
-          HeldOpen(base::BindOnce(&DownloadPathChosen, std::move(chosen))),
+          base::BindOnce(&DownloadPathChosen, std::move(chosen)),
           std::nullopt));
 }
 
@@ -769,7 +769,7 @@ void WebViewGuest::ChooseFiles(
       mode, accept, suggested_path.BaseName().AsUTF8Unsafe(),
       base::GetHomeDir().AsUTF8Unsafe(),
       mojo::WrapCallbackWithDefaultInvokeIfNotRun(
-          HeldOpen(base::BindOnce(&DialogFilesChosen, mode, std::move(chosen))),
+          base::BindOnce(&DialogFilesChosen, mode, std::move(chosen)),
           std::nullopt));
 }
 
@@ -872,28 +872,6 @@ void WebViewGuest::StopFinding(bool keep_selection) {
                                    ? content::STOP_FIND_ACTION_KEEP_SELECTION
                                    : content::STOP_FIND_ACTION_CLEAR_SELECTION);
   EndFind();
-}
-
-void WebViewGuest::ListDirectory(const std::string& path,
-                                 ListDirectoryCallback callback) {
-  const std::optional<base::FilePath> directory =
-      ResolvedPath(base::GetHomeDir(), path);
-  // The element throws a TypeError first, so this is a bad message.
-  if (!directory.has_value()) {
-    std::move(callback).Run(std::nullopt);
-    receiver_.ReportBadMessage(
-        "domicile: a <webview> asked to list a path that climbs with `..`.");
-    return;
-  }
-  // Not a bad message: the listing and the answer use different pipes, so a
-  // listing can arrive just after the answer.
-  if (open_choosers_ == 0) {
-    std::move(callback).Run(std::nullopt);
-    return;
-  }
-  base::ThreadPool::PostTaskAndReplyWithResult(
-      FROM_HERE, {base::MayBlock()},
-      base::BindOnce(&DirectoryEntries, *directory), std::move(callback));
 }
 
 double WebViewGuest::GetZoomFactor() const {
@@ -1201,28 +1179,8 @@ void WebViewGuest::RunFileChooser(
       params.default_file_name.BaseName().AsUTF8Unsafe(),
       base::GetHomeDir().AsUTF8Unsafe(),
       mojo::WrapCallbackWithDefaultInvokeIfNotRun(
-          HeldOpen(
-              base::BindOnce(&FilesChosen, std::move(listener), params.mode)),
+          base::BindOnce(&FilesChosen, std::move(listener), params.mode),
           std::nullopt));
-}
-
-mojom::WebViewGuestClient::FileChooserRequestedCallback WebViewGuest::HeldOpen(
-    mojom::WebViewGuestClient::FileChooserRequestedCallback answer) {
-  ++open_choosers_;
-  return base::BindOnce(&WebViewGuest::ChooserAnswered,
-                        weak_factory_.GetWeakPtr(), std::move(answer));
-}
-
-// static
-void WebViewGuest::ChooserAnswered(
-    base::WeakPtr<WebViewGuest> guest,
-    mojom::WebViewGuestClient::FileChooserRequestedCallback answer,
-    const std::optional<std::vector<std::string>>& paths) {
-  if (guest) {
-    CHECK_GT(guest->open_choosers_, 0u);
-    --guest->open_choosers_;
-  }
-  std::move(answer).Run(paths);
 }
 
 void WebViewGuest::NavigationStateChanged(
