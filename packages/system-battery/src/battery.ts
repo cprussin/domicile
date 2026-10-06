@@ -28,9 +28,8 @@ export type Battery = {
 };
 
 /**
- * The battery now, or `None` on a machine without one.
- *
- * Fails while the desktop is locked, like every D-Bus call.
+ * The battery now, or `None` on a machine without one. Works while the
+ * desktop is locked.
  */
 export const readBattery = async (
   bus: Pick<System, "dbusCall">,
@@ -40,8 +39,8 @@ export const readBattery = async (
 /**
  * The battery now as the first item, then after each change.
  *
- * Listens before it reads, so no change is missed. Changes keep arriving while
- * the desktop is locked; starting fails then.
+ * Listens before it reads, so no change is missed. Works while the desktop is
+ * locked.
  */
 export const watchBattery = async (
   bus: Pick<System, "dbusCall" | "dbusMatch">,

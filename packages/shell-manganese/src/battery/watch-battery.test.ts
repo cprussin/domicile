@@ -10,8 +10,6 @@ import { watchBattery } from "./watch-battery";
 
 type Watched = Result<Listening<Option<Battery>>, SystemError>;
 
-const LOCKED: SystemError = { kind: SystemErrorKind.Locked, message: "locked" };
-
 /**
  * A battery library that answers each watch with the next of `answers`, and
  * counts the watches it was asked for and stopped.
@@ -109,22 +107,6 @@ describe("watchBattery", () => {
     await settle();
 
     expect(watch.stops.count).toBe(1);
-  });
-
-  it("starts again once a locked desktop unlocks", async () => {
-    const fake = new FakeDomicileHost();
-    fake.set({ locked: true });
-    const battery = library(Err(LOCKED), watching([]).answer);
-    watchBattery(fake.host, () => undefined, {
-      fail: neverFails,
-      watch: battery.watch,
-    });
-    await settle();
-
-    fake.set({ locked: false });
-    await settle();
-
-    expect(battery.counts.started).toBe(2);
   });
 
   it("reports a failure to start, and a watch that breaks", async () => {

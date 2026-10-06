@@ -1,49 +1,9 @@
 import { describe, expect, it } from "bun:test";
-import type { Option } from "@cprussin/option-result";
-import { None, Some } from "@cprussin/option-result";
-import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
-import type { Battery as BatteryReading } from "@domicile-desktop/system-battery/battery";
-import { act, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { css } from "../../styled-system/css";
 import { Battery } from "./Battery";
-
-/**
- * A test-controlled battery: `watch` replaces the UPower watch, and `report`
- * and `absent` send readings.
- */
-const heldBattery = () => {
-  const listeners: ((reading: Option<BatteryReading>) => void)[] = [];
-  const watching = { stopped: 0 };
-  return {
-    absent: () => {
-      act(() => {
-        for (const onReading of listeners) {
-          onReading(None());
-        }
-      });
-    },
-    report: (reading: BatteryReading) => {
-      act(() => {
-        for (const onReading of listeners) {
-          onReading(Some(reading));
-        }
-      });
-    },
-    get stopped() {
-      return watching.stopped;
-    },
-    watch: (
-      _domicile: DomicileHost,
-      onReading: (reading: Option<BatteryReading>) => void,
-    ) => {
-      listeners.push(onReading);
-      return () => {
-        watching.stopped += 1;
-      };
-    },
-  };
-};
+import { heldBattery } from "./held-battery";
 
 /** A host the component never uses, since `watch` is injected. */
 const NO_HOST = new FakeDomicileHost().host;

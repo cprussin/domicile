@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { DisplayProvider } from "@domicile-desktop/component-library/DisplayProvider";
+import { Slider } from "@domicile-desktop/component-library/Slider";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
@@ -138,6 +139,21 @@ describe("Lock", () => {
       expect(document.activeElement).toBe(screen.getByLabelText("Passphrase"));
 
       await user.click(screen.getByRole("button", { name: "Unlock" }));
+      expect(document.activeElement).toBe(screen.getByLabelText("Passphrase"));
+    });
+
+    it("comes back to the field after a readout is used", async () => {
+      // A slider takes focus on a click, and the next key typed would move it.
+      render(
+        <Lock checking={false} locked onUnlock={() => undefined} refusals={0}>
+          <Slider label="Brightness" max={100} min={0} value={50} />
+        </Lock>,
+        { wrapper: OnOneScreen },
+      );
+      const user = userEvent.setup();
+
+      await user.click(screen.getByRole("slider", { name: "Brightness" }));
+
       expect(document.activeElement).toBe(screen.getByLabelText("Passphrase"));
     });
   });

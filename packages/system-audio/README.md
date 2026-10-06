@@ -33,6 +33,9 @@ meters.meter(new Map([[id, audio.meters.get(id)]]));
   microphone records it: call `stop` when the meters are not shown.
 - The library's own meters, other mixers' meters and PipeWire filter streams
   are left out of the stream lists.
+- While the desktop is locked, only `watch`, and `setVolume` and `setMuted` on
+  an output, work ([LOCK.md](/docs/LOCK.md)). Everything else fails with
+  `locked`.
 
 ## Modules
 

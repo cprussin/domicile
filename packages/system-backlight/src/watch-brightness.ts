@@ -43,8 +43,8 @@ export type BrightnessWatch = {
  * - Reports only a move of a whole percent, since the slider shows no finer.
  * - Never called on a machine without a backlight. A backlight that goes away
  *   and comes back is reported again.
- * - Runs `udevadm` from the compositor's `PATH`. It cannot start while the
- *   desktop is locked.
+ * - Runs `udevadm` from the compositor's `PATH`. Works while the desktop is
+ *   locked.
  */
 export const watchBrightness = async (
   host: WatchHost,

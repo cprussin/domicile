@@ -1,14 +1,13 @@
 import { Popover } from "@domicile-desktop/component-library/Popover";
-import { Slider } from "@domicile-desktop/component-library/Slider";
 import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import { SunIcon } from "@phosphor-icons/react/dist/ssr/Sun";
 import { SunDimIcon } from "@phosphor-icons/react/dist/ssr/SunDim";
 import type { WheelEvent } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
 
 import { css } from "../../styled-system/css";
-import { hstack } from "../../styled-system/patterns";
+import { BrightnessSlider } from "./BrightnessSlider";
 import { hostBacklight } from "./host-backlight";
+import { useBrightness } from "./useBrightness";
 
 /** How far one wheel notch over the icon moves the brightness. */
 const WHEEL_STEP = 0.05;
@@ -22,41 +21,15 @@ type Props = {
 
 /**
  * The brightness control on the bar: a sun icon that reflects the level,
- * opens a slider, and responds to the wheel.
- *
- * Changes go to logind, and the slider shows the level `/sys` reports back,
- * as the theme toggle does. During a drag it holds the pointer's value, since
- * readings after earlier requests arrive late.
- *
- * Draws nothing until there is a level, so a desktop with no backlight (such
- * as an external monitor) shows no slider.
+ * opens a slider, and responds to the wheel. See {@link useBrightness}.
  */
 export const Brightness = ({ backlight = hostBacklight, domicile }: Props) => {
-  const [reading, setReading] = useState<number | undefined>(undefined);
-  const [held, setHeld] = useState<number | undefined>(undefined);
-  const dragging = useRef(false);
-  const control = useMemo(() => backlight(domicile), [backlight, domicile]);
+  const control = useBrightness(domicile, backlight);
 
-  useEffect(
-    () =>
-      control.watch((level) => {
-        setReading(level);
-        if (!dragging.current) {
-          setHeld(undefined);
-        }
-      }),
-    [control],
-  );
-
-  if (reading === undefined) {
+  if (control === undefined) {
     return undefined;
   } else {
-    const shown = held ?? reading;
-    const percent = Math.round(shown * 100);
-    const ask = (level: number) => {
-      setHeld(level);
-      control.set(level);
-    };
+    const percent = Math.round(control.shown * 100);
     return (
       <Popover
         align="center"
@@ -66,34 +39,18 @@ export const Brightness = ({ backlight = hostBacklight, domicile }: Props) => {
           <button
             aria-label={`Brightness ${percent}%`}
             className={triggerStyles}
-            data-intensity={intensityOf(shown)}
+            data-intensity={intensityOf(control.shown)}
             onWheel={(event) => {
-              ask(stepped(shown, event));
+              control.ask(stepped(control.shown, event));
             }}
             type="button"
           >
-            <Sun level={shown} />
+            <Sun level={control.shown} />
           </button>
         }
       >
-        <span className={rowStyles}>
-          <SunDimIcon size={13} />
-          <Slider
-            label="Brightness"
-            max={100}
-            min={0}
-            onValueChange={(value) => {
-              dragging.current = true;
-              ask(value / 100);
-            }}
-            onValueCommitted={() => {
-              dragging.current = false;
-            }}
-            step={1}
-            value={percent}
-          />
-          <SunIcon size={15} />
-          <span className={percentStyles}>{percent}%</span>
+        <span className={panelStyles}>
+          <BrightnessSlider control={control} />
         </span>
       </Popover>
     );
@@ -121,17 +78,9 @@ const triggerStyles = css({
   transition: "background-color {durations.fast} {easings.default}",
 });
 
-const rowStyles = hstack({
-  gap: 2,
+const panelStyles = css({
+  display: "block",
   inlineSize: 60,
-});
-
-// 10px to match the bar and the battery figures; no font-size token fits.
-const percentStyles = css({
-  fontSize: "0.625rem",
-  fontVariantNumeric: "tabular-nums",
-  minInlineSize: 6,
-  textAlign: "end",
 });
 
 /** The sun icon's three brightness steps. */

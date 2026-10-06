@@ -26,7 +26,7 @@ desktop treats it.
 | Input | `Key`, pointer motion, buttons, axis, leave; the same from EIS clients (`crate::eis`) | Dropped (`debug` log) |
 | Commands | `CloseApp`, `Spawn`, `CopyClipboardEntry`, tray, notifications, audio | Refused (`warn` log) |
 | Reads on the connection | `SearchFiles`, `PreviewFile`, `SearchApps` | Answered with nothing (`warn` log) |
-| System calls | `SystemRequest`, except reads under `/sys` and calls that stop something running | A call that starts something is answered `locked`; `stdin` is dropped (`warn` log) |
+| System calls | `SystemRequest`, except reads under `/sys`, lock screen readouts and calls that stop something running | A call that starts something is answered `locked`; `stdin` is dropped (`warn` log) |
 | Allowed | `ChromeHello`, `Lock`, `Unlock`, `KeyboardFocus`, output scale and size, window bounds, `ClipboardCopied`, theme | Handled normally |
 
 Why some requests are allowed:
@@ -38,9 +38,33 @@ Why some requests are allowed:
   about focus after unlock. No key reaches the window while locked anyway.
 - `ClipboardCopied`: it is a client's copy, and the history must match pastes.
 - `SetTheme`: it opens and reads nothing.
-- System reads under `/sys`: a lock screen shows the battery. Only an absolute
-  path with no `..` counts, since the user can change nothing under `/sys`.
+- System reads under `/sys`: the user can change nothing there. Only an
+  absolute path with no `..` counts.
+- Lock screen readouts: the calls `system-battery`, `system-backlight` and
+  `system-audio` make, so a lock screen shows the battery and sets the
+  brightness and volume. See [Lock screen readouts](#lock-screen-readouts).
 - `unwatch`, `close_stdin`, `kill`: they stop what the shell started.
+
+## Lock screen readouts
+
+Each call reads state or changes what a laptop's brightness and volume keys
+change, so someone at a locked desktop learns or does nothing more.
+`domicile_host::lock_screen_readouts` lists each one field by field; `reach`
+judges a request `Reach::Readout` only on a full match.
+
+| Library | Call |
+|---|---|
+| `system-battery` | UPower `DisplayDevice` `GetAll` of `org.freedesktop.UPower.Device`; a match on its `PropertiesChanged` with every field set |
+| `system-backlight` | `udevadm monitor --kernel --subsystem-match=backlight`; logind `Session.SetBrightness("backlight", device, level)` on `session/auto` |
+| `system-audio` | `pactl -f json info`, `list` and `subscribe`; `pactl -- set-sink-volume NAME N` and `set-sink-mute NAME 0\|1` |
+
+- D-Bus calls are on the system bus only.
+- A spawn has no `cwd` or `stdin`, and exactly the library's `env`: none for
+  `udevadm`, `LC_ALL=C` for `pactl`.
+- `argv[0]` is looked up on the compositor's `PATH`, like every spawn. The lock
+  trusts whatever `udevadm` and `pactl` that `PATH` finds.
+- Left out: inputs (unmuting a microphone would let a locked desktop record),
+  `parec` meters, and every other `pactl` command.
 
 ## Ordering
 

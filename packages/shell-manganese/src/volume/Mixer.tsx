@@ -18,6 +18,7 @@ import { flex, hstack } from "../../styled-system/patterns";
 import { ask } from "./ask";
 import type { Direction } from "./Level";
 import { Level } from "./Level";
+import { primary } from "./primary";
 import { useMeters } from "./useMeters";
 
 type Props = {
@@ -200,14 +201,6 @@ const byApp = (
   }
   return [...apps].map(([name, flows]) => ({ flows, name }));
 };
-
-/**
- * The device the sliders control: the default, else the first device. The
- * server falls back the same way when its default is filtered out (a
- * monitor) or gone.
- */
-const primary = (devices: readonly AudioDevice[]) =>
-  devices.find((device) => device.default) ?? devices[0];
 
 type DefaultProps = {
   device: AudioDevice;

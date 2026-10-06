@@ -1,7 +1,7 @@
 import type { Option } from "@cprussin/option-result";
 import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import type { Listening } from "@domicile-desktop/sdk/system";
-import { SystemErrorKind, system } from "@domicile-desktop/sdk/system";
+import { system } from "@domicile-desktop/sdk/system";
 import type { Battery } from "@domicile-desktop/system-battery/battery";
 import { watchBattery as watchUPower } from "@domicile-desktop/system-battery/battery";
 
@@ -14,9 +14,6 @@ type Dependencies = {
 /**
  * Watches the battery through UPower: calls `onReading` with the current
  * reading and each change, and returns a function that stops watching.
- *
- * D-Bus calls fail while the desktop is locked, so a watch started then waits
- * for the unlock and starts again. A watch running at lock time keeps running.
  */
 export const watchBattery = (
   domicile: DomicileHost,
@@ -27,24 +24,18 @@ export const watchBattery = (
     stop: () => undefined,
     stopped: false,
   };
-  const start = () => {
-    watch(system(domicile))
-      .then((result) => {
-        if (now.stopped) {
-          result.map(stopNow);
-        } else {
-          now.stop = result.match({
-            Err: (error) =>
-              error.kind === SystemErrorKind.Locked
-                ? whenUnlocked(domicile, start)
-                : failed(fail, error),
-            Ok: (battery) => follow(battery, onReading, fail),
-          });
-        }
-      })
-      .catch(fail);
-  };
-  start();
+  watch(system(domicile))
+    .then((result) => {
+      if (now.stopped) {
+        result.map(stopNow);
+      } else {
+        now.stop = result.match({
+          Err: (error) => failed(fail, error),
+          Ok: (battery) => follow(battery, onReading, fail),
+        });
+      }
+    })
+    .catch(fail);
   return () => {
     now.stopped = true;
     now.stop();
@@ -64,27 +55,6 @@ const follow = (
     })
     .catch(fail);
   return battery.stop;
-};
-
-/**
- * Calls `then` once the desktop is unlocked, which may be now; returns what
- * stops waiting.
- */
-const whenUnlocked = (
-  domicile: DomicileHost,
-  then: () => void,
-): (() => void) => {
-  const heard = () => {
-    if (domicile.locked === false) {
-      domicile.removeEventListener("lockedchanged", heard);
-      then();
-    }
-  };
-  domicile.addEventListener("lockedchanged", heard);
-  heard();
-  return () => {
-    domicile.removeEventListener("lockedchanged", heard);
-  };
 };
 
 /** Calls `onItem` with each item until `items` closes. */
