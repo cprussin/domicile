@@ -1,37 +1,15 @@
 #!/usr/bin/env python3
-"""The compositor's end of the control socket, for the guard that measures the
-hop -- and unlike the keyboard guard's stand-in, this one SENDS.
+"""Stand-in compositor for guard-control-arrival.sh that sends messages to the
+page over the control socket.
 
-`guard-webview-keyboard-socket.py` accepts a connection and reads, which is all
-that guard needs: everything it asserts travels outward from the page. This
-guard's question is the other direction. A line written here is read by
-`ControlChannel::OnRead` in the browser process, which stamps the moment it had
-the bytes, turns it into a mojo message and sends it to the renderer, where
-Blink builds an event and dispatches it. That is the stage `arrival` exists to
-price, and nothing that does not put a line on this socket exercises it.
+It answers with `welcome`, then sends three cursor messages:
 
-THREE LINES, AND THE ORDER IS THE ASSERTION.
+    app_cursor  grab        a known shape
+    app_cursor  pointr      an unknown shape; the engine must drop it
+    app_cursor  zoom-out    a known shape, proving the channel survived
 
-    app_cursor  grab        a shape the engine knows
-    app_cursor  pointr      one it does not
-    app_cursor  zoom-out    a shape it knows, AFTER the one it does not
-
-The middle line is what `components/domicile/common/cursor_shape.h` is for: a
-cursor name that is not one of the shapes must not reach the page, because an
-unknown CSS keyword is a silent no-op there and the symptom is an arrow where a
-hand should be. The third line is why the middle one can be asserted at all --
-without it, "the bad cursor was refused" and "the channel died on the bad
-cursor" are the same reading, which is a guard that passes when the engine has
-stopped working entirely.
-
-ONE LINE PER WRITE, WITH A PAUSE. `arrival` is stamped once per read, not once
-per line: a read carrying three messages gives all three the same stamp, which
-is correct -- it is one moment -- but it would mean this guard measured one hop
-and reported three. Spacing them is what makes each figure its own.
-
-It answers `hello` with a `welcome`, which a real compositor does and which the
-browser checks the version of. Every line it receives is printed, so a run where
-the page said nothing can be told from one where it said something unexpected.
+Messages are spaced out because the browser stamps `arrival` once per read,
+not per line. Every line received is printed.
 """
 
 import argparse
@@ -41,19 +19,15 @@ import socket
 import sys
 import time
 
-# What to send once a channel is up, in order. The names are the wire spelling
-# of `domicile_protocol::CursorShape`, which is the same list the engine parses
-# with; `pointr` is deliberately not one of them and is deliberately in the
-# middle.
+# Wire names from `domicile_protocol::CursorShape`; `pointr` is invalid.
 SEQUENCE = [
     {"type": "app_cursor", "app_id": "guard", "cursor": "grab"},
     {"type": "app_cursor", "app_id": "guard", "cursor": "pointr"},
     {"type": "app_cursor", "app_id": "guard", "cursor": "zoom-out"},
 ]
 
-# Long enough that each line lands in its own read on a loaded machine, short
-# enough that the guard is not mostly this. Measured against nothing: the
-# assertion does not depend on the spacing, only the per-message hop figures do.
+# Seconds between messages, so each lands in its own read. Not tuned; only the
+# per-message hop figures depend on it.
 BETWEEN = 0.25
 
 
@@ -72,15 +46,14 @@ def serve(path, sequence):
     listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     listener.bind(path)
     listener.listen(4)
-    # Before accept, so a guard waiting on this line is not waiting on a buffer.
+    # Printed before accept so the guard sees it while this blocks.
     print("listening on %s" % path, flush=True)
 
     while True:
         connection, _ = listener.accept()
         print("a channel connected", flush=True)
         with connection:
-            # The version the engine speaks; a mismatch is what `welcome`
-            # exists to catch and the browser logs it.
+            # The browser logs a version mismatch.
             send(connection, {"type": "welcome", "protocol_version": 1})
             for message in sequence:
                 time.sleep(BETWEEN)

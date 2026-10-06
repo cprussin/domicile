@@ -17,13 +17,11 @@ namespace blink {
 
 class DomicileAudioEventInit;
 
-// The desk's sound: every output and input, every stream playing or
-// recording, every sound card.
+// The full audio state: outputs, inputs, playback and recording streams, and
+// cards.
 //
-// Pushed, like DomicileNotificationsEvent, so there is nothing on
-// DomicileHost this answers by itself: it is sent whenever the sound server
-// says something moved -- the mixer's own requests included -- and once more
-// to a page that has just connected.
+// Pushed on every sound server change, including ones the shell requested,
+// and once when a page connects.
 class MODULES_EXPORT DomicileAudioEvent final : public Event {
   DEFINE_WRAPPERTYPEINFO();
 
@@ -52,16 +50,14 @@ class MODULES_EXPORT DomicileAudioEvent final : public Event {
   }
   const FrozenArray<DomicileAudioCard>& cards() const { return *cards_; }
 
-  // When the browser process had this, on `performance.now()`'s clock. See
-  // DomicileAppEvent::arrival.
+  // See DomicileAppEvent::arrival.
   DOMHighResTimeStamp arrival() const { return arrival_; }
 
   const AtomicString& InterfaceName() const override;
   void Trace(Visitor*) const override;
 
  private:
-  // Frozen because the IDL says so, and never null: both constructors build
-  // each, empty included.
+  // Never null; both constructors create them.
   Member<FrozenArray<DomicileAudioDevice>> outputs_;
   Member<FrozenArray<DomicileAudioDevice>> inputs_;
   Member<FrozenArray<DomicileAudioStream>> playback_;

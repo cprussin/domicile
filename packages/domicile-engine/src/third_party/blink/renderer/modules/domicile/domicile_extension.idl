@@ -1,14 +1,13 @@
 // Copyright 2026 Connor Prussin
 // SPDX-License-Identifier: MIT
 
-// One extension with an action, as a shell's tray draws it.
+// One extension with an action, as a shell's tray shows it.
 //
-// An interface rather than a dictionary for DomicileClipboardEntry's reason:
-// WebIDL will not have a dictionary as the element type of an attribute's
-// array, and these are read off a DomicileExtensionsEvent.
+// An interface because WebIDL does not allow a dictionary as an attribute's
+// array element type.
 //
-// The state is the active tab's -- the <webview> that last had focus -- or the
-// action's default where there is none. See docs/architecture/EXTENSIONS.md.
+// The state is the active tab's (the <webview> that last had focus), or the
+// action's default if there is none. See docs/architecture/EXTENSIONS.md.
 
 [
     Exposed=Window,
@@ -21,9 +20,9 @@
   // The action's tooltip.
   readonly attribute DOMString title;
 
-  // data:image/png;base64,..., drawn at this page's device pixel ratio. Not a
-  // chrome-extension:// URL: action.setIcon({imageData}) sets an icon that has
-  // none.
+  // A data:image/png;base64 URL at this page's device pixel ratio. Not a
+  // chrome-extension:// URL: an icon set by action.setIcon({imageData}) has
+  // no URL.
   readonly attribute USVString icon;
 
   readonly attribute DOMString badgeText;
@@ -31,9 +30,8 @@
   // A CSS color, #rrggbbaa. Fully transparent when the extension set none.
   readonly attribute DOMString badgeColor;
 
-  // The popup a click opens, in a <webview> the shell draws; null for an
-  // action whose click is its `action.onClicked`. Either way the click is
-  // activateExtension().
+  // The popup a click opens, shown in a <webview> the shell draws; null when a
+  // click fires `action.onClicked`. Either way, call activateExtension().
   readonly attribute USVString? popup;
 
   // False after the extension's action.disable().

@@ -4,10 +4,8 @@
 import("//mojo/public/tools/bindings/mojom.gni")
 
 mojom("mojom") {
-  # The Blink half of the fork links `:mojom_blink`, and since `3d77360` the
-  # template emits that variant only for a target that asks. It used to emit it
-  # for everything that did not opt out, so this line reads as a no-op against
-  # any older Chromium and is load-bearing against this one.
+  # The Blink side of the fork links `:mojom_blink`, which the template emits
+  # only when asked.
   generate_blink = true
 
   sources = [
@@ -22,18 +20,13 @@ mojom("mojom") {
   public_deps = [
     "//gpu/ipc/common:interfaces",
 
-    # control_channel.mojom stamps every inbound event with the moment the
-    # browser process read it off the compositor's socket, which is a
-    # base::TimeTicks. Typemapped by mojo itself, so both the ordinary and the
-    # `-blink` bindings get base::TimeTicks without anything here saying so.
+    # For the base::TimeTicks receive time on control_channel.mojom events.
     "//mojo/public/mojom/base",
     "//services/viz/public/mojom",
     "//services/viz/public/mojom:surfaces",
 
-    # web_view_guest.mojom names the placeholder frame by its LocalFrameToken
-    # and the guest's address by a URL. The mojom template rewrites both of
-    # these per variant, so the Blink half of the fork gets the `-blink`
-    # bindings of each without naming them here.
+    # For web_view_guest.mojom's LocalFrameToken and URL. The template picks
+    # the `-blink` variants for the Blink bindings.
     "//third_party/blink/public/mojom/tokens",
     "//ui/gfx/geometry/mojom",
     "//ui/gfx/mojom",

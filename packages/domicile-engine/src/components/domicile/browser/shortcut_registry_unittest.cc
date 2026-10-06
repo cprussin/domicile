@@ -11,7 +11,7 @@
 namespace domicile {
 namespace {
 
-// Alt+Tab and Alt+Enter, in the evdev codes the shell claims them in.
+// Evdev keycodes.
 constexpr uint32_t kTab = 15;
 constexpr uint32_t kEnter = 28;
 
@@ -20,14 +20,12 @@ Chord AltTab() {
                /*meta=*/false};
 }
 
-// The shell's page on the first monitor, and the one on the second.
+// Shell pages on two monitors.
 constexpr Page kLeft{/*process=*/1, /*frame=*/1};
 constexpr Page kRight{/*process=*/2, /*frame=*/1};
 
-// A channel that keeps what it was told, in order. Registered against a
-// registry built on the stack rather than the process-wide one: what is under
-// test here is the matching and the bookkeeping, and neither wants a singleton
-// to be reset between tests.
+// A channel that records what it receives. Uses a registry on the stack so
+// tests do not share the singleton.
 class RecordingChannel {
  public:
   explicit RecordingChannel(ShortcutRegistry& registry, Page page = kLeft)
@@ -69,10 +67,8 @@ TEST(ShortcutRegistryTest, AClaimedChordFiresOnTheChannelThatClaimedIt) {
   EXPECT_EQ(AltTab(), channel.presses()[0]);
 }
 
-// THE WHOLE COMBINATION IS THE CLAIM, which is the shell's own reading of it:
-// `ALT_ENTER` names every modifier including the three that must not be held,
-// because Ctrl+Alt+Enter is a combination nobody claimed and the page is the
-// only path that should answer it.
+// A claim matches the exact modifier set. Ctrl+Alt+Enter is not claimed by
+// Alt+Enter and must reach the page.
 TEST(ShortcutRegistryTest, AChordIsEveryModifierAndNotJustTheKey) {
   ShortcutRegistry registry;
   RecordingChannel channel(registry);
@@ -93,9 +89,8 @@ TEST(ShortcutRegistryTest, AChordIsEveryModifierAndNotJustTheKey) {
   EXPECT_TRUE(channel.presses().empty());
 }
 
-// The protocol says so in as many words: registering the same combination
-// twice is not an error, it is one claim. A shell re-runs the effect that
-// claims its chords whenever the callbacks it closes over change.
+// The protocol makes duplicate claims one claim. A shell re-runs its claiming
+// effect whenever its callbacks change.
 TEST(ShortcutRegistryTest, ClaimingOneChordTwiceIsOneClaim) {
   ShortcutRegistry registry;
   RecordingChannel channel(registry);
@@ -106,25 +101,21 @@ TEST(ShortcutRegistryTest, ClaimingOneChordTwiceIsOneClaim) {
   EXPECT_EQ(1u, channel.presses().size());
 }
 
-// A page that went away is one nothing may be delivered to. The channel is
-// destroyed with the pipe, and a registry still holding its callback would run
-// it against freed memory on the next keystroke.
+// A removed channel's callback may point at freed memory.
 TEST(ShortcutRegistryTest, AChannelThatLeftIsToldNothing) {
   ShortcutRegistry registry;
   RecordingChannel channel(registry);
   registry.Grab(AltTab());
   registry.RemoveChannel(channel.id());
 
-  // Still the desktop's key -- the claim outlives the channel that made it,
-  // which is what stops a reload from handing chords back to the focused page.
+  // The claim outlives the channel, so a reload does not hand chords back to
+  // the focused page.
   EXPECT_TRUE(registry.Press(AltTab(), kLeft));
   EXPECT_TRUE(channel.presses().empty());
 }
 
-// A DESK OF SEVERAL MONITORS IS SEVERAL PAGES, one channel each, and a press
-// in a browser window is one press: told to every page, every page ran it, and
-// one Meta+Return opened a terminal per monitor. So it goes to the page whose
-// <webview> heard it, which is also the page the keys went to.
+// Each monitor has its own page. Telling every page would run one press once
+// per monitor (e.g. one terminal per monitor).
 TEST(ShortcutRegistryTest, AChordIsToldOnlyToThePageThatHeardIt) {
   ShortcutRegistry registry;
   RecordingChannel left(registry, kLeft);
@@ -136,9 +127,7 @@ TEST(ShortcutRegistryTest, AChordIsToldOnlyToThePageThatHeardIt) {
   EXPECT_EQ(1u, right.presses().size());
 }
 
-// Modifiers are a state, not a stream: the shell re-renders on every one it is
-// told about, and a keystroke a user types with Alt held would otherwise
-// report the same set once per key.
+// The shell re-renders on each report, so a repeated set is not resent.
 TEST(ShortcutRegistryTest, ModifiersAreReportedWhenTheyChangeAndNotOtherwise) {
   ShortcutRegistry registry;
   RecordingChannel channel(registry);
@@ -156,10 +145,8 @@ TEST(ShortcutRegistryTest, ModifiersAreReportedWhenTheyChangeAndNotOtherwise) {
   EXPECT_EQ(nothing_held, channel.modifiers()[1]);
 }
 
-// The first set is a change, and it has to be: a shell assumes nothing is held
-// until it is told otherwise, so a registry that started out believing the
-// same thing would swallow the first Alt of the session -- which is the one
-// that begins the drag.
+// The shell assumes nothing is held until told. Suppressing the first report
+// would drop the first Alt, which starts a drag.
 TEST(ShortcutRegistryTest, TheFirstModifiersAreAlwaysReported) {
   ShortcutRegistry registry;
   RecordingChannel channel(registry);

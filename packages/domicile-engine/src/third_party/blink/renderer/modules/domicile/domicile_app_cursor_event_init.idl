@@ -3,11 +3,8 @@
 
 dictionary DomicileAppCursorEventInit : EventInit {
   DOMString appId = "";
-  // Defaulted rather than left absent, so this event always carries a shape
-  // and `cursor()` has no "no cursor" case to spell. `"default"` is the arrow,
-  // which is what a page constructing one of these without saying otherwise
-  // means. Nothing in the engine comes through here: the compositor's path
-  // uses DomicileAppCursorEvent's other constructor, which is handed a shape.
+  // Defaulted so the event always has a shape. Only script-constructed events
+  // use this; the engine uses the other constructor.
   DomicileCursorShape cursor = "default";
   DOMHighResTimeStamp arrival = 0;
 };

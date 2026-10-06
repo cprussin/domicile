@@ -15,8 +15,8 @@ namespace blink {
 
 class DomicileAudioLevelsEventInit;
 
-// How loud each thing a page asked to meter is: pushed some twenty times a
-// second while anything is metered. See DomicileHost::watchAudioLevels.
+// Levels for each id a page asked to meter, sent about 20 times a second while
+// anything is metered. See DomicileHost::watchAudioLevels.
 class MODULES_EXPORT DomicileAudioLevelsEvent final : public Event {
   DEFINE_WRAPPERTYPEINFO();
 
@@ -34,15 +34,15 @@ class MODULES_EXPORT DomicileAudioLevelsEvent final : public Event {
 
   const FrozenArray<DomicileAudioLevel>& levels() const { return *levels_; }
 
-  // When the browser process had this, on `performance.now()`'s clock. See
-  // DomicileAppEvent::arrival.
+  // When the browser process received this, on `performance.now()`'s clock.
+  // See DomicileAppEvent::arrival.
   DOMHighResTimeStamp arrival() const { return arrival_; }
 
   const AtomicString& InterfaceName() const override;
   void Trace(Visitor*) const override;
 
  private:
-  // Frozen because the IDL says so, and never null.
+  // Frozen per the IDL. Never null.
   Member<FrozenArray<DomicileAudioLevel>> levels_;
   DOMHighResTimeStamp arrival_ = 0;
 };

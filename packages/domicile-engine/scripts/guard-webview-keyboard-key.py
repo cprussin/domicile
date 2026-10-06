@@ -1,26 +1,14 @@
 #!/usr/bin/env python3
-"""Press one key at the engine, from outside it.
+"""Press one key at the engine over the DevTools protocol.
 
-guard-webview-keyboard.sh has to drive a keystroke at a running browser while a
-browser window holds the keyboard, and guard-webview-escape.sh has to drive one
-while the shell still does. There is no keyboard: both guards are headless and
-software-composited, for the reason guard-webview-framing.sh is -- what they
-measure needs no GPU and `crux` has no display. So the key is dispatched over
-the DevTools protocol instead, down the wire in guard_webview_devtools.py,
-which is also where the argument that this is the real path a key takes rather
-than a way around it is written down.
+Used by guard-webview-keyboard.sh and guard-webview-escape.sh, which run
+headless with no keyboard. See guard_webview_devtools.py for why this takes the
+same path as a real key. guard-webview-escape.sh reads a failed press as "the
+browser is gone".
 
-One driver for both, and its name stays the keyboard guard's because renaming a
-file two guards and a README point at buys nothing: what it does is press one
-key at one browser, and neither guard wants anything else of it. A run's exit
-status is a reading in its own right -- guard-webview-escape.sh takes a press
-that cannot be delivered as its answer to "is that browser still there".
-
-`nativeVirtualKeyCode` is required rather than optional, and is not decoration:
-`ForwardKeyboardEventWithCommands` marks an event `skip_if_unhandled` when it
-has no native keycode, and a skipped event is never offered to a delegate at
-all. A run that left it out would report that no chord fired, truthfully and
-about nothing.
+`nativeVirtualKeyCode` is required: without it,
+`ForwardKeyboardEventWithCommands` marks the event `skip_if_unhandled`, and a
+skipped event never reaches a delegate.
 """
 
 import argparse
@@ -54,9 +42,8 @@ def press(connection, identifier, arguments):
             "code": arguments.code,
             "key": arguments.key,
             "windowsVirtualKeyCode": arguments.windows_key_code,
-            # evdev + 8 is the XKB keycode, which is what Chromium calls the
-            # native one on Linux. Computed here so the guard can name the key
-            # in the numbering the desktop's claims use.
+            # Chromium's native keycode on Linux is XKB, which is evdev + 8.
+            # Callers pass evdev, the numbering desktop claims use.
             "nativeVirtualKeyCode": arguments.evdev + 8,
             "modifiers": modifiers,
         },

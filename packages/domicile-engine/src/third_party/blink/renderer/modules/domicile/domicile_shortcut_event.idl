@@ -1,15 +1,12 @@
 // Copyright 2026 Connor Prussin
 // SPDX-License-Identifier: MIT
 
-// A combination claimed with grabShortcut() was pressed.
+// A combination grabbed with grabShortcut() was pressed.
 //
-// Its own type rather than a DomicileAppEvent with the combination in the
-// `title` slot. A shortcut is not a window's name and does not belong to a
-// window at all: it fires whatever holds the keyboard, which is the point of
-// grabbing it.
+// Its own type because a shortcut belongs to no window: it fires regardless of
+// which window has keyboard focus.
 //
-// Only presses. A release changes nothing and would arrive as a second event
-// for one keystroke.
+// Fires on press only, so one keystroke is one event.
 
 [
     Exposed=Window,
@@ -30,14 +27,7 @@
   readonly attribute boolean shiftKey;
   readonly attribute boolean metaKey;
 
-  // When the browser process had this message, on `performance.now()`'s
-  // clock.
-  //
-  // NOT `timeStamp`, which is when this object was constructed -- in this
-  // renderer, at dispatch -- so subtracting it from itself reports a few
-  // microseconds of Blink and calls it the IPC. The difference between the two
-  // IS the stage: the read off the compositor's socket, the mojo message, the
-  // hop into this process and the dispatch. See
-  // components/domicile/mojom/control_channel.mojom.
+  // When the browser process received this, on `performance.now()`'s clock.
+  // See DomicileModifiersEvent.arrival.
   readonly attribute DOMHighResTimeStamp arrival;
 };

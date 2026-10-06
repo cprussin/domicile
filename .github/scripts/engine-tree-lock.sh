@@ -1,42 +1,19 @@
 #!/usr/bin/env bash
 # One writer at a time in /build/chromium/src.
 #
-# The checkout is shared. CI resets it to the pin and applies the series over
-# it on every run; a person or an agent working on the fork builds in it for
-# hours at a time. Those two are not compatible, and the way they collide is
-# not the obvious one.
-#
-# THE FAILURE THIS PREVENTS IS SILENT. A `git reset --hard` that lands on a
-# tree with uncommitted work in it destroys the work, which is loud and which
-# the reset step's own diagnostic now explains. A `git reset --hard` that lands
-# *during a build* does something worse: `siso` keeps going, reads some
-# translation units from before the reset and some from after, and links a
-# binary compiled against a mixture of two trees. Nothing fails. The artifact
-# is wrong in a way no later step looks for, and a clean Chromium build is
-# four hours, so the cost of discovering it later is the whole build again.
-#
-# So: whoever is about to change or compile that tree takes this first.
+# CI resets and patches the shared checkout on every run, and people build in
+# it for hours. A reset during a build does not fail: `siso` links a binary from
+# a mix of two trees. Anyone about to change or compile the tree takes this
+# lock first. See packages/domicile-engine/docs/BUILD-MACHINE.md.
 #
 #   .github/scripts/engine-tree-lock.sh take /build/chromium/src "$WHO"
 #   .github/scripts/engine-tree-lock.sh drop /build/chromium/src "$WHO"
 #   .github/scripts/engine-tree-lock.sh holds /build/chromium/src "$WHO"
 #
-# `mkdir` is the whole mechanism, because it is the one filesystem operation
-# that both creates and tests in the same syscall. A `[ -e ]` followed by a
-# `touch` is two, and two is a race — narrow enough that it would hold for
-# months and then not.
-#
-# The lock lives outside the checkout rather than inside it, and that is not a
-# preference: a file inside `src/` is untracked in Chromium's repository, which
-# is exactly what makes `git status --porcelain` non-empty, which is exactly
-# what `apply.sh` refuses. A lock that fails the build it is protecting is not
-# a lock. Which outside — beside the checkout or at the build root — is a
-# question `engine-tree-pool.sh` changed the answer to; see the LOCK= below.
-#
-# It is advisory. Nothing enforces it, and anything that does not take it wins
-# by ignoring it. That is the correct amount of mechanism here: there are two
-# writers, both cooperating, and the thing worth having is the one that turns a
-# silent corruption into a queue.
+# - `mkdir` creates and tests in one syscall, so taking the lock has no race.
+# - The lock lives outside `src/`: an untracked file there makes `apply.sh`
+#   refuse the tree.
+# - It is advisory. Both writers cooperate, so that is enough.
 set -u
 
 usage() {
@@ -49,29 +26,16 @@ chromium="${2:-}"
 owner="${3:-}"
 [ -n "$action" ] && [ -n "$chromium" ] || usage
 
-# ONE LOCK PER TREE, AT THE BUILD ROOT, KEYED BY THE TREE IT RESOLVES TO.
+# One lock per tree, at the build root, named after the resolved tree.
 #
-# `dirname` of `/build/chromium/src` is `/build/chromium`, a symlink into one
-# of `engine-tree-pool.sh`'s trees -- and `dirname` is textual, so a lock put
-# there would land INSIDE whichever tree the link named at the time. Resolving
-# it instead means `/build/chromium/src` and `/build/trees/tree-0/src` are the
-# same tree and take the same lock, which is what a person building through the
-# convenience path and a job building through the real one need.
-#
-# PER TREE RATHER THAN ONE FOR THE POOL, because two runs in two different
-# trees do not collide: what made one lock right was that every run reached its
-# tree through one symlink, and CI no longer does. The pool hands each run its
-# own path and this keeps two runs out of the same tree.
-#
-# `$chromium` stays an argument. It is what a person types, it is what every
-# message below names, and it is the thing being locked; where the lock is kept
-# is a different question and it is answered here. Override for tests, which
-# have no /build and should not want one.
+# `/build/chromium` is a symlink into one of `engine-tree-pool.sh`'s trees.
+# Resolving it makes `/build/chromium/src` and `/build/trees/tree-0/src` take
+# the same lock. Runs in different trees do not collide, so each tree has its
+# own lock. Tests override the path because they have no /build.
 LOCK="${DOMICILE_TREE_LOCK:-}"
 if [ -z "$LOCK" ]; then
-  # `pwd -P` resolves the symlink; a path that does not exist yet has no tree
-  # to key on and falls back to the single lock, which is the pre-pool answer
-  # and the safe one.
+  # `pwd -P` resolves the symlink. A path that does not exist yet falls back
+  # to a single shared lock.
   slot="$(cd "$(dirname "$chromium")" 2>/dev/null && pwd -P)" || slot=""
   root="${DOMICILE_BUILD_ROOT:-/build}"
   if [ -n "$slot" ]; then
@@ -81,10 +45,7 @@ if [ -z "$LOCK" ]; then
   fi
 fi
 
-# How long, in the units a person reads. The timestamp alone answers "when",
-# which is the question nobody has: the question is whether this has been held
-# for eight minutes (someone is working, wait) or eleven hours (a job died and
-# left it, clear it).
+# The lock's age, so a reader can tell a running build from a stale lock.
 age() {
   local since now secs
   since="$(cat "$LOCK/since" 2>/dev/null || true)"
@@ -93,7 +54,7 @@ age() {
   esac
   now="$(date +%s)"
   secs=$((now - since))
-  # A lock from the future is a clock that moved, not a lock held for -3h.
+  # A negative age means the clock moved.
   [ "$secs" -ge 0 ] || { echo "unknown age (its timestamp is in the future)"; return; }
   if [ "$secs" -lt 3600 ]; then
     echo "held for $((secs / 60))m"
@@ -116,10 +77,7 @@ case "$action" in
       echo "took $chromium as '$owner'"
       exit 0
     fi
-    # Held. Everything a reader needs to decide between waiting and clearing,
-    # in the message rather than in a comment in a workflow file — the last
-    # time this went wrong the cause had to be reconstructed from a shell loop
-    # and a `paths:` filter.
+    # Held. The message gives what a reader needs to wait or clear it.
     {
       echo "::error::$chromium is locked by '$(holder)' ($(age)), so this run will not touch it"
       echo "The lock is at $LOCK, taken $(cat "$LOCK/since-human" 2>/dev/null || echo 'at an unrecorded time')."
@@ -144,16 +102,13 @@ case "$action" in
 
   drop)
     [ -n "$owner" ] || usage
-    # Idempotent, and it has to be: this runs from an `if: always()` step, so
-    # it also runs on the path where taking the lock is what failed.
+    # Idempotent: this runs from an `if: always()` step, including when the
+    # take failed.
     [ -d "$LOCK" ] || { echo "no lock at $LOCK to drop"; exit 0; }
     held="$(holder)"
     if [ "$held" != "$owner" ]; then
-      # THE CASE THAT MAKES THIS A CHECK RATHER THAN AN `rm`. A cleanup step
-      # that runs unconditionally would otherwise delete the lock of whoever
-      # this run failed to take it from — releasing a tree in the middle of
-      # their build, which is the corruption this file exists to prevent,
-      # arrived at through the mechanism meant to prevent it.
+      # Never delete another owner's lock. A cleanup after a failed take would
+      # otherwise release a tree in the middle of someone else's build.
       echo "left $LOCK alone: it belongs to '$held', not to '$owner'"
       exit 0
     fi
@@ -161,9 +116,9 @@ case "$action" in
     echo "dropped $chromium"
     ;;
 
-  # For a job that did not take the tree itself: engine.yml's checks run in the
-  # tree its build job took and kept locked. A tree somebody cleared or took in
-  # the gap may have been reset, and checking it would prove nothing.
+  # For a job that runs in a tree another job took: engine.yml's checks run in
+  # the tree its build job kept locked. If the lock changed hands, the tree may
+  # have been reset.
   holds)
     [ -n "$owner" ] || usage
     [ -d "$LOCK" ] || { echo "::error::$chromium is not locked, so '$owner' does not hold it" >&2; exit 1; }
@@ -183,8 +138,7 @@ case "$action" in
     fi
     ;;
 
-  # So that engine-tree-pool.sh, which takes these locks while it picks a
-  # tree, never has to recompute the name. One formula, one place.
+  # Lets engine-tree-pool.sh find the lock without recomputing its path.
   path) printf '%s\n' "$LOCK" ;;
 
   *) usage ;;

@@ -38,15 +38,14 @@ namespace {
 
 using extensions::ExtensionTabUtil;
 
-// What the desk is kept under on its profile.
+// The profile user data key for the desk.
 constexpr char kDeskUserDataKey[] = "domicile_desk";
 
-// chrome.tabs keys tabs_constants does not name. TabsEventRouter spells them
-// the same way, locally, for the same reason.
+// chrome.tabs keys missing from tabs_constants. TabsEventRouter also defines
+// them locally.
 constexpr char kMutedInfoKey[] = "mutedInfo";
 constexpr char kTabIdKey[] = "tabId";
-// And a windows event listener's filter key, which WindowsEventRouter spells
-// locally too.
+// A windows event filter key, also local in WindowsEventRouter.
 constexpr char kWindowTypesKey[] = "windowTypes";
 
 std::vector<DomicileWindowController*>& Live() {
@@ -54,9 +53,8 @@ std::vector<DomicileWindowController*>& Live() {
   return *live;
 }
 
-// The tab `tab_id` in any window of `context`'s desk, at the moment an event
-// is delivered rather than when it was sent: a lazy listener wakes after the
-// tab may have gone, and a tab that has gone is an event not delivered.
+// Looks up tab `tab_id` at dispatch time rather than send time: a lazy
+// listener may wake after the tab is gone, and then the event is dropped.
 content::WebContents* TabAtDispatch(content::BrowserContext* context,
                                     int tab_id) {
   DomicileWindowController* desk = DomicileWindowController::Find(context);
@@ -65,11 +63,9 @@ content::WebContents* TabAtDispatch(content::BrowserContext* context,
   return window == nullptr ? nullptr : window->TabWithId(tab_id);
 }
 
-// windows.onCreated's and onRemoved's filter, as WindowsEventRouter's
-// WillDispatchWindowEvent sets it: a listener that filtered by windowTypes is
-// told the window's type to match, and one that did not sees every window.
-// WindowsEventRouter itself says nothing of a desk's windows -- it skips a
-// controller with no Browser behind it -- so the desk says it.
+// Sets the windows.onCreated/onRemoved filter as WindowsEventRouter's
+// WillDispatchWindowEvent does. WindowsEventRouter skips controllers with no
+// Browser, so the desk dispatches these events itself.
 bool WillDispatchWindowEvent(
     const std::string& window_type,
     content::BrowserContext* context,
@@ -92,9 +88,9 @@ bool WillDispatchWindowEvent(
   return true;
 }
 
-// tabs.onCreated's argument, scrubbed for each listener as TabsEventRouter's
-// WillDispatchTabCreatedEvent does. `active` and `index` are right because
-// CreateTabObject asks the desk -- see domicile_desk_hooks.h.
+// Builds tabs.onCreated's argument, scrubbed per listener as TabsEventRouter's
+// WillDispatchTabCreatedEvent does. CreateTabObject gets `active` and `index`
+// from the desk (domicile_desk_hooks.h).
 bool WillDispatchCreated(int tab_id,
                          content::BrowserContext* context,
                          extensions::mojom::ContextType target_context,
@@ -117,7 +113,7 @@ bool WillDispatchCreated(int tab_id,
   return true;
 }
 
-// tabs.onUpdated's three arguments, as WillDispatchTabUpdatedEvent builds them.
+// Builds tabs.onUpdated's arguments as WillDispatchTabUpdatedEvent does.
 bool WillDispatchUpdated(int tab_id,
                          const std::set<std::string>& changed,
                          content::BrowserContext* context,
@@ -150,8 +146,8 @@ bool WillDispatchUpdated(int tab_id,
   return true;
 }
 
-// Broadcast `event` in `profile`, as TabsEventRouter::DispatchEvent does: a
-// profile shutting down has no router, and nobody to tell.
+// Broadcasts `event` as TabsEventRouter::DispatchEvent does. A profile
+// shutting down has no router.
 void Broadcast(Profile* profile, std::unique_ptr<extensions::Event> event) {
   if (extensions::EventRouter* router = extensions::EventRouter::Get(profile)) {
     event->user_gesture =
@@ -162,15 +158,15 @@ void Broadcast(Profile* profile, std::unique_ptr<extensions::Event> event) {
 
 }  // namespace
 
-// One guest, heard as a tab: what TabsEventRouter::TabEntry hears of a tab in
-// a strip, from the guest's own WebContents, plus the element taking focus.
+// Observes one guest as a tab, like TabsEventRouter::TabEntry, plus focus and
+// zoom from its element.
 class DomicileWindowController::Tab : public content::WebContentsObserver {
  public:
   Tab(DomicileWindowController& window, content::WebContents& guest, int tab_id)
       : content::WebContentsObserver(&guest), window_(window), tab_id_(tab_id) {
     WebViewGuest* web_view = WebViewGuest::FromWebContents(&guest);
     CHECK(web_view);
-    // Unretained: the subscription is a member, so it goes with this.
+    // Unretained is safe: the subscriptions are members.
     focused_ = web_view->AddFocusedCallback(
         base::BindRepeating(&Tab::OnFocused, base::Unretained(this)));
     zoomed_ = web_view->AddZoomChangedCallback(
@@ -185,8 +181,7 @@ class DomicileWindowController::Tab : public content::WebContentsObserver {
                      ChangedWithUrl(extensions::tabs_constants::kStatusKey));
   }
 
-  // The first stop after a commit is `complete`; the ones a page's frames make
-  // afterward are not news. TabEntry's rule.
+  // Only the first stop after a commit reports `complete`, as in TabEntry.
   void DidStopLoading() override {
     if (complete_waiting_on_load_) {
       complete_waiting_on_load_ = false;
@@ -203,7 +198,7 @@ class DomicileWindowController::Tab : public content::WebContentsObserver {
     window_->Updated(tab_id_, {kMutedInfoKey});
   }
 
-  // Last, because it deletes this.
+  // Deletes this.
   void WebContentsDestroyed() override { window_->Removed(tab_id_); }
 
  private:
@@ -213,7 +208,7 @@ class DomicileWindowController::Tab : public content::WebContentsObserver {
     window_->Zoomed(tab_id_, old_factor, new_factor);
   }
 
-  // `property`, and `url` too if the address moved since it was last said.
+  // Returns `property`, plus `url` if the URL changed since last reported.
   std::set<std::string> ChangedWithUrl(const char* property) {
     std::set<std::string> changed = {property};
     if (web_contents()->GetURL() != url_) {
@@ -289,8 +284,7 @@ DomicileWindowController::~DomicileWindowController() {
 void DomicileWindowController::Add(content::WebContents& guest) {
   const int tab_id = ExtensionTabUtil::GetTabId(&guest);
   CHECK(SessionID::IsValidValue(tab_id));
-  // The window this tab is in, which is what `windowId` on a tab object and
-  // every event's `windowId` are read from.
+  // Sets the `windowId` that tab objects and events report.
   sessions::SessionTabHelper::FromWebContents(&guest)->SetWindowID(session_id_);
 
   const std::optional<int> before = tabs_.Active();
@@ -350,8 +344,7 @@ void DomicileWindowController::ClosePopup(int window_id) {
     last_focused_ = GetWindowId();
   }
   BroadcastWindowEvent(*popup, /*created=*/false);
-  // Whoever waits on a tab this window will never have: windows.create, for
-  // a window removed before the shell opened it.
+  // Tell windows.create callers that the tab will never arrive.
   while (!popup->waiting_for_tab_.empty()) {
     base::OnceCallback<void(content::WebContents*)> gained =
         std::move(popup->waiting_for_tab_.front());
@@ -412,7 +405,7 @@ void DomicileWindowController::PopupFocused(int window_id) {
   last_focused_ = window_id;
 }
 
-// The last thing the popup's Removed does, because it deletes the popup.
+// Called last in the popup's Removed, because it deletes the popup.
 void DomicileWindowController::PopupEmptied(int window_id) {
   ClosePopup(window_id);
 }
@@ -421,8 +414,8 @@ void DomicileWindowController::BroadcastWindowEvent(
     DomicileWindowController& window,
     bool created) {
   base::ListValue args;
-  // Unpopulated, as WindowsEventRouter sends it: who may see which tabs is
-  // per listener, and a window with no tabs in it needs no scrubbing.
+  // Unpopulated, as WindowsEventRouter sends it, so no per-listener
+  // scrubbing is needed.
   if (created) {
     args.Append(window.CreateWindowValueForExtension(
         nullptr, kDontPopulateTabs,
@@ -476,7 +469,7 @@ std::string DomicileWindowController::GetWindowTypeText() const {
                 : extensions::api::tabs::WindowType::kNormal);
 }
 
-// The desk is the whole screen already, and the shell's to change.
+// The shell owns the desk's size, which already fills the screen.
 void DomicileWindowController::SetFullscreenMode(
     bool is_fullscreen,
     const GURL& extension_url) const {}
@@ -507,20 +500,16 @@ base::DictValue DomicileWindowController::CreateWindowValueForExtension(
     const extensions::Extension* extension,
     PopulateTabBehavior populate_tab_behavior,
     extensions::mojom::ContextType context) const {
-  // What BrowserExtensionWindowController says, less the size: the desk's is
-  // the shell's screens, a popup's is where the shell put it, and neither is a
-  // rectangle this process knows. The schema leaves it optional.
+  // Like BrowserExtensionWindowController, minus the size, which only the
+  // shell knows. The schema makes it optional.
   base::DictValue window;
   window.Set(extension_misc::kId, GetWindowId());
   window.Set("type", GetWindowTypeText());
   const DomicileWindowController& desk = IsPopup() ? *desk_ : *this;
   window.Set("focused", desk.last_focused_ == GetWindowId());
-  // THE DESK'S CORNER IS THE DESKTOP'S ORIGIN, which is a position this
-  // process does know. Said because extensions place a popup from it:
-  // Bitwarden's sign-in reads `left` and `top` off the window it was opened
-  // from, and with neither it asks windows.create for NaN. 0 and 0 are also
-  // what tells it, on Linux, that positions are not to be trusted -- which is
-  // the truth on a desk, where a window goes is the shell's.
+  // Report the desk's origin. Extensions such as Bitwarden position popups
+  // from `left` and `top` and pass NaN to windows.create without them. On
+  // Linux, 0,0 also signals that window positions are unreliable.
   if (!IsPopup()) {
     window.Set("left", 0);
     window.Set("top", 0);
@@ -549,15 +538,14 @@ base::ListValue DomicileWindowController::CreateTabList(
   return list;
 }
 
-// A second browser window at the options page, asked of the shell through the
-// active tab's element -- the way a page's `target="_blank"` asks. False with
-// no tab to ask through: nothing opened it.
+// Asks the shell, through the active tab's element, to open the options page
+// as a new window, as `target="_blank"` does. Returns false with no active
+// tab.
 bool DomicileWindowController::OpenOptionsPage(
     const extensions::Extension* extension,
     const GURL& url,
     bool open_in_tab) {
-  // A popup window's tab is an extension's page, which takes no active tab and
-  // is not a browser window to ask through: the desk's is.
+  // A popup's tab is an extension page, so ask through the desk's window.
   if (IsPopup()) {
     return desk_->OpenOptionsPage(extension, url, open_in_tab);
   }
@@ -569,9 +557,8 @@ bool DomicileWindowController::OpenOptionsPage(
   return true;
 }
 
-// A popup window's one tab is its active tab whatever it shows; what its
-// focus moves is the desk's last-focused window. A desk tab takes the active
-// tab by DeskTabs' rule, and the desk's window is last focused when one does.
+// A focused popup tab only updates the desk's last-focused window. A desk tab
+// becomes active per DeskTabs' rule, which also makes the desk last focused.
 void DomicileWindowController::Focused(int tab_id, content::WebContents& tab) {
   if (IsPopup()) {
     desk_->PopupFocused(GetWindowId());
@@ -594,8 +581,8 @@ void DomicileWindowController::Updated(int tab_id,
   Broadcast(profile(), std::move(event));
 }
 
-// tabs.onZoomChange, as TabsEventRouter::OnZoomChanged builds it: the settings
-// without a default factor.
+// Fires tabs.onZoomChange as TabsEventRouter::OnZoomChanged does, without a
+// default factor in the settings.
 void DomicileWindowController::Zoomed(int tab_id,
                                       double old_factor,
                                       double new_factor) {
@@ -618,7 +605,7 @@ void DomicileWindowController::Removed(int tab_id) {
 
   base::DictValue info;
   info.Set(extensions::tabs_constants::kWindowIdKey, GetWindowId());
-  // A popup window goes with its one tab; the desk's never closes.
+  // A popup closes with its tab; the desk's window never closes.
   info.Set(extensions::tabs_constants::kIsWindowClosingKey,
            IsPopup() && GetTabCount() == 0);
   base::ListValue args;
@@ -631,8 +618,7 @@ void DomicileWindowController::Removed(int tab_id) {
 
   ActiveMaybeChanged(before);
 
-  // A popup window is its tab: with it gone, the window goes too. Last,
-  // because it deletes this.
+  // Must be last: it deletes this.
   if (IsPopup() && GetTabCount() == 0) {
     desk_->PopupEmptied(GetWindowId());
   }

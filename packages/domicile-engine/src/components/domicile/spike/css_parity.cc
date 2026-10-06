@@ -1,34 +1,24 @@
 // Copyright 2026 Connor Prussin
 // SPDX-License-Identifier: MIT
 
-// THROWAWAY. The CSS parity measurement in
-// docs/architecture/ENGINE-FORK-MEASUREMENTS.md#css-parity.
+// Spike: measures whether CSS treats an <app> like any other element. Results
+// are in docs/architecture/ENGINE-FORK-MEASUREMENTS.md#css-parity.
 //
-// Steps 1 to 3 were plumbing that either worked or named a blocker. This asks
-// the question the design is for: does CSS treat an <app> — a <canvas> showing
-// a viz surface a process outside the renderer submits to — the way it treats
-// any other element?
+// The page lays out each property twice: on an <app> and on a <div> filled
+// with the producer's color. A property has parity when the two halves of its
+// cell match pixel for pixel in the display compositor's output.
 //
-// The answer is not a judgment. The page lays each property out twice, once
-// on an <app> and once on an ordinary <div> filled with the color the producer
-// submits, so a property behaves "like a <div>" exactly when one half of a cell
-// is a pixel-for-pixel copy of the other. This captures the browser's window
-// out of the display compositor's own draw and does that comparison.
+// Each check needs its own page:
 //
-// Two checks, because they need different pages:
-//
-//   --check=css     the six CSS properties, against spike-css-page.html
-//   --check=resize  the embedder's box changing and the producer being
-//                   reconfigured to match, against spike-resize-page.html.
-//                   That one mutates the LocalSurfaceId every element in the
-//                   document shares, so it cannot share a page with the others
+//   --check=css     the CSS properties, against spike-css-page.html
+//   --check=resize  resizing the <app> and reconfiguring the producer, against
+//                   spike-resize-page.html. It changes the LocalSurfaceId all
+//                   elements share, so it needs a page of its own
 //   --check=iframe  an <app> against an out-of-process <iframe> under the same
-//                   transform, against spike-iframe-page.html. The one part of
-//                   the CSS claim that was read off the mechanism rather than
-//                   measured
+//                   transform, against spike-iframe-page.html
 //
-// packages/domicile-engine/scripts/guard-css-and-resize.sh in the Domicile repository
-// runs both and has the engine flags they need.
+// packages/domicile-engine/scripts/guard-css-and-resize.sh runs the checks with
+// the engine flags they need.
 
 #include <algorithm>
 #include <cinttypes>
@@ -81,48 +71,40 @@ constexpr char kCheckSwitch[] = "check";
 constexpr char kResizeFromSwitch[] = "resize-from";
 constexpr char kResizeToSwitch[] = "resize-to";
 
-// Which page is on the other side, and so what to make of the pixels.
+// Which page the browser loaded, and so how to read the pixels.
 enum class Check {
   kCss,
   kResize,
   kIframe,
 };
 
-// The color the producer submits, and the color the page fills every control
-// element with. One value reaches both halves through the harness — there is no
-// channel from the page to the producer, so the harness is what makes them
-// agree, and guard-css-and-resize.sh derives one from the other.
+// The color the producer submits. The page fills its control elements with the
+// same color; guard-css-and-resize.sh passes it to both, since the page and the
+// producer cannot talk to each other.
 constexpr SkColor kDefaultColor = SkColorSetARGB(0xFF, 0x00, 0xC8, 0x53);
 
 constexpr base::TimeDelta kEmbedTimeout = base::Seconds(60);
 
-// Long enough for the page to have embedded every <app> and for viz to have
-// aggregated a frame containing all of them. Sampling is retried, so this is a
-// floor rather than a guess at the right moment.
+// Time for the page to embed every <app> and for viz to aggregate a frame with
+// all of them. Capture is retried, so this is a minimum.
 constexpr base::TimeDelta kSettleDelay = base::Seconds(2);
 
-// How different two pixels may be before they count as different. Bigger than
-// the tolerance steps 2 and 3 compare one flat color with, because a scaled or
+// Largest per-channel difference at which two pixels still match. A scaled or
 // blurred surface is resampled from a texture while a <div> is rasterized from
-// a vector, and the two round differently in the last bit or two.
+// vectors, so the low bits differ.
 constexpr int kPixelTolerance = 4;
 
-// A mismatching pixel every one of whose neighbors within this radius also
-// mismatches is inside a region that differs, rather than on the boundary of
-// one. That distinction is the whole verdict: a composited surface resamples
-// its edges where a <div> rasterizes them, exactly as a hardware-composited
-// <video> does, so a one-or-two-pixel outline is parity and a filled region is
-// not.
+// A mismatch counts as interior when every pixel within this radius also
+// mismatches. A composited surface resamples its edges, as a composited
+// <video> does, so a thin outline of mismatches is still parity.
 constexpr int kEdgeRadius = 2;
 
-// Latency: how many times to change the color and time how long it takes to
-// appear, and the floor to measure it against.
+// Sample counts for the latency measurement and its probe round-trip floor.
 constexpr int kLatencySamples = 60;
 constexpr int kLatencyFloorSamples = 60;
 constexpr int kMaxLatencyPolls = 200;
 
-// The half of a cell holding the <app>, against the half beside it holding the
-// ordinary element the page laid out identically. This is the measurement.
+// Compares the <app> half of a cell with the <div> half beside it.
 RectDiff DiffHalves(const WindowCapture& capture, const gfx::Rect& left) {
   return DiffRects(
       capture, left,
@@ -163,9 +145,8 @@ std::optional<gfx::Size> ParseSize(const base::CommandLine& command_line,
   return gfx::Size(width, height);
 }
 
-// The median of an already-sorted run, in display frames — the unit that makes
-// these numbers mean anything, since every one of them is a wait for a
-// compositor to draw.
+// The median of a sorted run in display frames, since each sample waits on a
+// compositor draw.
 std::string InIntervals(const std::vector<base::TimeDelta>& sorted,
                         base::TimeDelta interval) {
   if (interval.is_zero()) {
@@ -176,7 +157,7 @@ std::string InIntervals(const std::vector<base::TimeDelta>& sorted,
       sorted[sorted.size() / 2].InMillisecondsF() / interval.InMillisecondsF());
 }
 
-// min / median / max of an already-sorted, non-empty run of samples.
+// Min, median and max of a sorted, non-empty run.
 std::string Spread(const std::vector<base::TimeDelta>& sorted) {
   return base::StringPrintf(
       "min %.2f, median %.2f, max %.2f ms", sorted.front().InMillisecondsF(),
@@ -184,7 +165,7 @@ std::string Spread(const std::vector<base::TimeDelta>& sorted) {
       sorted.back().InMillisecondsF());
 }
 
-// Runs one of the two checks against a producer, and sets the exit code.
+// Runs one check against a producer and reports pass or fail.
 class Measurement {
  public:
   Measurement(SkColor color,
@@ -228,9 +209,9 @@ class Measurement {
            local_surface_id.ToString().c_str(), size.ToString().c_str());
     embedded_sizes_.push_back(size);
 
-    // Every <app> on the CSS page embeds the same surface, so the first
-    // notification is the one that matters and the rest repeat it. The resize
-    // page has one <app> and re-embeds it, so there the second is the point.
+    // Every <app> on the CSS page embeds the same surface, so the first embed
+    // is enough. The resize page re-embeds its one <app>, so it waits for the
+    // second.
     if (check_ == Check::kResize && embeds_ < 2) {
       return;
     }
@@ -306,9 +287,8 @@ class Measurement {
   }
 
   void ReportCss() {
-    // Nothing else in this run means anything if no surface reached the page,
-    // and the diff alone cannot tell "both halves are the producer's color"
-    // from "both halves are missing". One absolute check fixes that.
+    // The diff cannot tell two matching halves from two missing ones, so first
+    // check that the surface reached the page.
     const gfx::Point baseline = AppCenter(0, viewport_top_);
     if (!capture_.Contains(gfx::Rect(baseline, gfx::Size(1, 1)))) {
       printf("the page is not where this expects it: %s is outside the "
@@ -332,9 +312,8 @@ class Measurement {
     for (const domicile::spike::Cell& spec : domicile::spike::kCells) {
       const gfx::Rect cell = CellRect(index, viewport_top_);
       ++index;
-      // Through a std::string because -Wunsafe-buffer-usage will not take a
-      // bare const char* for a %s: it cannot see that a string literal is
-      // null-terminated once it has been through a struct field.
+      // -Wunsafe-buffer-usage rejects a struct's const char* field for %s, so
+      // copy it into a std::string.
       const std::string name(spec.name);
       if (!capture_.Contains(cell) ||
           !capture_.Contains(gfx::Rect(
@@ -348,11 +327,8 @@ class Measurement {
       const RectDiff diff = DiffHalves(capture_, cell);
       const bool matched = diff.interior_mismatched == 0;
 
-      // Whether this cell's <app> looks like the baseline cell's, which is what
-      // it would look like if the property were not in effect at all. A cell
-      // whose property never reached the page leaves both of its halves plain,
-      // and two plain halves match — so without this the run would report
-      // parity for a property it had not applied.
+      // A property that was never applied leaves both halves plain, and they
+      // match. Comparing with the baseline cell catches that.
       const bool in_effect =
           DiffRects(capture_, cell, baseline_cell.origin(), kPixelTolerance,
                     kEdgeRadius)
@@ -388,9 +364,8 @@ class Measurement {
     MeasureLatencyFloor();
   }
 
-  // The floor: what a probe round trip costs when nothing has changed. Every
-  // number below includes it, because the only way to see what the display
-  // compositor drew is to ask it to draw and copy it back.
+  // Measures a probe round trip with nothing changed. Every latency sample
+  // includes this cost, since reading a pixel forces a draw and a readback.
   void MeasureLatencyFloor() {
     latency_point_ = AppCenter(0, viewport_top_);
     floor_started_ = base::TimeTicks::Now();
@@ -428,9 +403,8 @@ class Measurement {
       ReportLatency();
       return;
     }
-    // A color nothing else on the page is, and a different one each time so
-    // that "it was already that color" cannot be mistaken for "it arrived
-    // instantly".
+    // A color unused elsewhere on the page, different each time so a stale
+    // pixel cannot look like an instant arrival.
     const uint8_t step = static_cast<uint8_t>(20 + latency_iteration_ * 7);
     latency_target_ = SkColorSetARGB(0xFF, step, 0x40, 0xC0);
     latency_polls_ = 0;
@@ -468,10 +442,8 @@ class Measurement {
     std::sort(latencies_.begin(), latencies_.end());
     std::sort(polls_.begin(), polls_.end());
 
-    // Both spreads, not one median each. The two overlap, and that overlap is
-    // the finding: what a submitted color costs to reach the display
-    // compositor's output is not separable from what asking the question costs,
-    // which is a forced full-window software composite and a readback.
+    // Print full spreads: latency and floor overlap, so the latency cannot be
+    // separated from the cost of the forced composite and readback.
     printf("latency over %d samples, producer submit to the color appearing "
            "in the display compositor's own output:\n", kLatencySamples);
     const base::TimeDelta interval = producer_.frame_interval();
@@ -487,10 +459,8 @@ class Measurement {
     Finish(css_passed_);
   }
 
-  // The part of the CSS parity claim that was argued rather than
-  // measured: whether an <app> differs from a <div> the way a surface-backed
-  // element must. Three pairs — the requirement, a reference point, and the
-  // control that keeps the comparison honest.
+  // Compares an <app>, a <div> and an out-of-process <iframe> under the same
+  // transform. Each pair in kIframeCells says what it expects.
   void ReportIframe() {
     printf("\n%-16s %8s %8s %10s %8s  %s\n", "pair", "pixels", "differ",
            "interior", "worst", "verdict");
@@ -534,10 +504,9 @@ class Measurement {
     }
   }
 
-  // Descriptive rather than diagnostic where it has to be: a pair that differs
-  // could be a different edge treatment or a different raster scale, and the
-  // pixels cannot tell those apart. What the harness can tell — whether the
-  // iframe got a renderer of its own — it reports separately.
+  // Describes a pair's result. Pixels cannot tell an edge difference from a
+  // raster-scale difference, so the verdict does not guess. The harness
+  // reports separately whether the iframe got its own renderer.
   static std::string Verdict(const domicile::spike::IframeCell& spec,
                              bool identical,
                              const RectDiff& diff) {

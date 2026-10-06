@@ -10,16 +10,13 @@
 
 namespace blink {
 
-// One thing that was copied, as the compositor described it.
+// One clipboard history entry, as the compositor described it.
 //
-// A ScriptWrappable rather than a dictionary, for DomicileDisplay's reason:
-// WebIDL will not have a dictionary as the element type of an attribute's
-// array, and these are read off a DomicileClipboardEvent.
+// A ScriptWrappable because WebIDL does not allow a dictionary as an
+// attribute's array element type.
 //
-// Immutable, and cheap to replace: the compositor sends the whole history
-// whenever any of it changes, because a copy re-orders the list as often as it
-// adds to it and a page reconciling deltas could be wrong about the order
-// forever after missing one.
+// Immutable: the compositor resends the whole history on any change, because
+// a copy can reorder the list and a page applying deltas could lose the order.
 class MODULES_EXPORT DomicileClipboardEntry final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
@@ -33,13 +30,10 @@ class MODULES_EXPORT DomicileClipboardEntry final : public ScriptWrappable {
   void Trace(Visitor*) const override;
 
  private:
-  // What DomicileHost::copyClipboardEntry names this row by. Never reused, so
-  // an id a page is holding either names the row it was told about or names
-  // nothing at all.
+  // The id DomicileHost::copyClipboardEntry takes. Never reused.
   uint32_t id_ = 0;
-  // Enough of what was copied to recognize it by, and not necessarily all of
-  // it: the compositor cuts a long copy down to a row. What goes back on the
-  // clipboard is always the whole thing.
+  // A preview for display, possibly truncated. Copying the entry back restores
+  // the full content.
   String preview_;
 };
 

@@ -15,13 +15,12 @@ namespace blink {
 
 class DomicileFilePreviewEventInit;
 
-// What is in one file, answering DomicileHost::previewFile().
+// The contents of one file, answering DomicileHost::previewFile().
 //
-// An event and not a promise for DomicileFilesEvent's reason: everything else
-// on this channel is one. The path it carries is what lets `DomicileClient`
-// settle the preview that asked for it.
+// An event, not a promise, to match the rest of this channel. The path lets
+// `DomicileClient` resolve the matching request.
 //
-// `kind` says which of `text` and `entries` means anything -- see the IDL.
+// `kind` says which of `text` and `entries` applies; see the IDL.
 class MODULES_EXPORT DomicileFilePreviewEvent final : public Event {
   DEFINE_WRAPPERTYPEINFO();
 
@@ -55,8 +54,8 @@ class MODULES_EXPORT DomicileFilePreviewEvent final : public Event {
   double duration() const { return duration_; }
   const String& cover() const { return cover_; }
 
-  // When the browser process had this, on `performance.now()`'s clock. See
-  // DomicileAppEvent::arrival.
+  // When the browser process received this, on `performance.now()`'s clock.
+  // See DomicileAppEvent::arrival.
   DOMHighResTimeStamp arrival() const { return arrival_; }
 
   const AtomicString& InterfaceName() const override;
@@ -66,10 +65,9 @@ class MODULES_EXPORT DomicileFilePreviewEvent final : public Event {
   String path_;
   String kind_;
   String text_;
-  // Frozen because the IDL says so, and never null: both constructors build
-  // one. Empty for every kind but a directory.
+  // Frozen per the IDL, and never null. Empty for every kind but a directory.
   Member<FrozenArray<IDLString>> entries_;
-  // What a song says of itself. Empty, and zero, for every kind but audio.
+  // Audio tags. Empty, and zero, for every kind but audio.
   String title_;
   String artist_;
   String album_;

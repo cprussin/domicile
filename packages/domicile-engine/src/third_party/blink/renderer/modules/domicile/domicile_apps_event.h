@@ -17,10 +17,8 @@ namespace blink {
 
 class DomicileAppsEventInit;
 
-// The applications a search matched, answering DomicileHost::searchApps().
-//
-// An event and not a promise for DomicileFilesEvent's reason; the query it
-// carries is what lets `DomicileClient` settle the search that asked it.
+// Results of DomicileHost::searchApps(). An event, like the rest of the
+// channel; `query` lets `DomicileClient` resolve the matching search.
 class MODULES_EXPORT DomicileAppsEvent final : public Event {
   DEFINE_WRAPPERTYPEINFO();
 
@@ -43,8 +41,7 @@ class MODULES_EXPORT DomicileAppsEvent final : public Event {
     return *bookmarks_;
   }
 
-  // When the browser process had this, on `performance.now()`'s clock. See
-  // DomicileAppEvent::arrival.
+  // See DomicileAppEvent::arrival.
   DOMHighResTimeStamp arrival() const { return arrival_; }
 
   const AtomicString& InterfaceName() const override;
@@ -52,8 +49,7 @@ class MODULES_EXPORT DomicileAppsEvent final : public Event {
 
  private:
   String query_;
-  // Frozen because the IDL says so, and never null: both constructors build
-  // one, an empty answer included.
+  // Never null; both constructors create them.
   Member<FrozenArray<DomicileDesktopEntry>> apps_;
   Member<FrozenArray<DomicileBookmark>> bookmarks_;
   DOMHighResTimeStamp arrival_ = 0;

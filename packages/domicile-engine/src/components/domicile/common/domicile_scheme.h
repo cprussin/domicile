@@ -8,60 +8,42 @@ namespace domicile {
 
 // The scheme a Domicile shell is served over.
 //
-// It exists so that the shell has a real origin without a TCP port. A shell is
-// a page inside this Chromium, and for its JavaScript to have an origin at all
-// it needs a URL with one -- file: has none, so no WebSocket and a restricted
-// fetch. The answer had been an HTTP server on a loopback port, and a loopback
-// port is reachable by every process on the machine. See
-// docs/architecture/DOMICILE-SCHEME.md.
+// Gives the shell a real origin without a TCP port, which any local process
+// could reach. See docs/architecture/DOMICILE-SCHEME.md.
 //
-// Registered as a *standard* scheme, so it has an origin, and deliberately
-// neither web-safe nor CORS-enabled, so ordinary web content can neither
-// navigate to it nor fetch it.
+// Registered as a standard scheme so it has an origin, but neither web-safe
+// nor CORS-enabled, so web content can neither navigate to it nor fetch it.
 inline constexpr char kDomicileScheme[] = "domicile";
 
-// The shell's host. `domicile://shell/` is the shell's document -- the
-// bare root, which `ShellURLLoaderFactory` answers with the page it writes,
-// and not a file on disk. This said `index.html` and the launcher believed it,
-// asked for that path, and got the file resolver looking for a file no build
-// emits; the desktop came up on an empty window. The one other host is
-// `kDomicileHomeHost`; naming any other is how a request is refused.
+// The shell's host. The bare root `domicile://shell/` is a page that
+// `ShellURLLoaderFactory` generates, not a file on disk. Requests to hosts
+// other than this and `kDomicileHomeHost` are refused.
 inline constexpr char kDomicileShellHost[] = "shell";
 
-// The user's home, for what the shell previews: `domicile://home/Notes/a.png`
-// is `$HOME/Notes/a.png`. Answered only for a request the shell's own document
-// made -- see ShellURLLoaderFactory -- and never for a path with a dotfile in
-// it, which is the line the compositor's file index draws too.
+// The user's home, for shell previews: `domicile://home/Notes/a.png` is
+// `$HOME/Notes/a.png`. Served only to the shell's own document (see
+// ShellURLLoaderFactory) and never for paths containing a dotfile.
 inline constexpr char kDomicileHomeHost[] = "home";
 
-// Where the shell's files are read from. Same shape as
-// --domicile-broker-socket: the engine already takes what it needs on its
-// command line.
+// Directory the shell's files are read from.
 inline constexpr char kDomicileShellRootSwitch[] = "domicile-shell-root";
 
-// The compositor's control socket -- its --chrome-socket. A unix stream
-// carrying newline-delimited JSON, which is the protocol the deleted WebSocket
-// bridge carried byte for byte.
+// The compositor's control socket (its --chrome-socket): a unix stream of
+// newline-delimited JSON.
 inline constexpr char kDomicileControlSocketSwitch[] =
     "domicile-control-socket";
 
-// Where this engine answers commands about the shell it serves -- a unix
-// stream the engine binds and the supervisor dials, one line of JSON in and
-// one out. `components/domicile/browser/command_protocol.h` is the contract.
+// The engine's command socket: a unix stream the engine binds and the
+// supervisor dials, one line of JSON in and one out. See
+// `components/domicile/browser/command_protocol.h`.
 //
-// The supervisor's end, not the compositor's: which shell to serve is
-// supervisor-to-engine information, and routing it through the compositor
-// would put a message on the host<->chrome contract that the page neither
-// sends nor reads. Absent on an engine nobody intends to command, which is
-// every engine until `domicile load-shell` starts one.
+// It talks to the supervisor, not the compositor, because the page never uses
+// these messages. Absent unless `domicile load-shell` started the engine.
 inline constexpr char kDomicileCommandSocketSwitch[] =
     "domicile-command-socket";
 
-// The shell itself: one JavaScript module, a path and nothing else. There is no
-// manifest and there is not going to be one -- everything a manifest could
-// carry is an export the shell hands over once it is running, and the one
-// category that could not be (something Domicile must know *before* running the
-// code) is empty, because Domicile gates nothing.
+// Path to the shell's JavaScript module. There is no manifest: the shell
+// provides everything through its exports once running.
 inline constexpr char kDomicileShellModuleSwitch[] = "domicile-shell-module";
 
 }  // namespace domicile

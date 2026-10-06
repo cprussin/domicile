@@ -13,21 +13,16 @@ namespace blink {
 
 class DomicileBatteryEventInit;
 
-// The machine's battery: how full, and whether a lead is in.
+// The machine's battery: charge level and whether AC power is connected.
 //
-// Pushed and never asked for, where DomicileFilesEvent is both: a charge is
-// one reading rather than a list, so a page that has just loaded is caught up
-// by the next push and there is no member on DomicileHost to answer. The
-// compositor polls the kernel's own files and
-// sends this when the reading moves far enough to draw -- see
-// `domicile_host::battery` on that side.
+// Push-only: a charge is one reading, so the next push catches up a newly
+// loaded page. The compositor polls sysfs and sends this when the reading
+// changes enough to redraw; see `domicile_host::battery`.
 //
-// A page cannot read this for itself. navigator.getBattery() is the obvious
-// route and is a trap here: it answers through UPower over D-Bus, a desktop
-// on a bare tty has neither, and what comes back is Chromium's default
-// BatteryStatus -- charging, and full. That default is a valid-looking reading,
-// so no page can tell it from the truth, and a shell that trusted it drew
-// `100%` on a machine running flat.
+// Pages must not use navigator.getBattery(): it reads UPower over D-Bus, which
+// a bare tty lacks, and Chromium then reports its default of charging and
+// full. That default looks real, so a shell would show 100% on a dying
+// battery.
 class MODULES_EXPORT DomicileBatteryEvent final : public Event {
   DEFINE_WRAPPERTYPEINFO();
 
@@ -47,16 +42,15 @@ class MODULES_EXPORT DomicileBatteryEvent final : public Event {
   double charge() const { return charge_; }
   bool charging() const { return charging_; }
 
-  // When the browser process had this, on `performance.now()`'s clock. See
-  // DomicileAppEvent::arrival.
+  // When the browser process received this, on `performance.now()`'s clock.
+  // See DomicileAppEvent::arrival.
   DOMHighResTimeStamp arrival() const { return arrival_; }
 
   const AtomicString& InterfaceName() const override;
 
  private:
-  // Plain numbers rather than anything nullable: a machine with no battery
-  // sends no message at all, so there is no absent reading for this event to
-  // represent. An empty battery is 0.0, and is a reading.
+  // Plain numbers, not nullable: a machine with no battery sends no event. An
+  // empty battery is 0.0.
   double charge_ = 0;
   bool charging_ = false;
   DOMHighResTimeStamp arrival_ = 0;

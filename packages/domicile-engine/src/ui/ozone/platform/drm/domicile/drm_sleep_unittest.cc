@@ -11,8 +11,7 @@
 namespace ui {
 namespace {
 
-// What logind broadcasts: one boolean, in the signal's own body rather than in
-// the variant a property would arrive in.
+// Builds logind's signal: one boolean in the body, not a variant.
 std::unique_ptr<dbus::Signal> PrepareForSleep(bool start) {
   std::unique_ptr<dbus::Signal> signal = std::make_unique<dbus::Signal>(
       "org.freedesktop.login1.Manager", "PrepareForSleep");
@@ -21,20 +20,16 @@ std::unique_ptr<dbus::Signal> PrepareForSleep(bool start) {
   return signal;
 }
 
-// THE EDGE THE WHOLE FEATURE HANGS ON. `false` is logind saying the machine is
-// back, and it is emitted even when the sleep it announced never happened --
-// so this is "the hardware may have been reset", which is the only thing a
-// display driver can act on.
+// `false` means the machine is back, even if the sleep failed, so the
+// hardware may have been reset.
 TEST(DrmSleepTest, TheWakeIsTheEdgeThatLightsTheScreensAgain) {
   const std::unique_ptr<dbus::Signal> woke = PrepareForSleep(false);
 
   EXPECT_TRUE(SleepEnded(woke.get()));
 }
 
-// And the other half, which costs a screen if it is got wrong the other way:
-// relighting on the way DOWN asks the GPU for a modeset in the window logind
-// is holding open for exactly this kind of work, and the panels are dark a
-// moment later regardless.
+// Relighting on the way down would waste a modeset on panels about to go
+// dark.
 TEST(DrmSleepTest, GoingToSleepLightsNothing) {
   const std::unique_ptr<dbus::Signal> going = PrepareForSleep(true);
 

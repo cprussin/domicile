@@ -15,18 +15,14 @@ namespace blink {
 
 class DomicileClipboardEventInit;
 
-// What has been copied on this desktop, newest first.
+// The clipboard history, newest first.
 //
-// Pushed, so there is nothing on DomicileHost this answers: a copy is
-// wl_data_device.set_selection arriving at the compositor, which is an event
-// it already hears. It is sent whenever the history changes and once more to a
-// page that has just connected.
+// Push-only: the compositor sees every wl_data_device.set_selection, and sends
+// this on each change and once to a newly connected page.
 //
-// A PAGE CANNOT READ THIS FOR ITSELF, and navigator.clipboard is the trap that
-// looks like it can: that API answers out of this browser's own clipboard,
-// which on the platform this engine scans out on is connected to no Wayland
-// client at all. A shell reading it would see what the shell copied and
-// nothing any window did.
+// Pages cannot use navigator.clipboard for this: it reads this browser's own
+// clipboard, which is connected to no Wayland client, so it shows only what
+// the shell copied.
 class MODULES_EXPORT DomicileClipboardEvent final : public Event {
   DEFINE_WRAPPERTYPEINFO();
 
@@ -46,19 +42,16 @@ class MODULES_EXPORT DomicileClipboardEvent final : public Event {
     return *entries_;
   }
 
-  // When the browser process had this, on `performance.now()`'s clock. See
-  // DomicileAppEvent::arrival.
+  // When the browser process received this, on `performance.now()`'s clock.
+  // See DomicileAppEvent::arrival.
   DOMHighResTimeStamp arrival() const { return arrival_; }
 
   const AtomicString& InterfaceName() const override;
   void Trace(Visitor*) const override;
 
  private:
-  // Frozen because the IDL says so, and never null: both constructors build
-  // one, an empty history included. An absent list and an empty one are the
-  // same answer here -- a desktop nothing has been copied on -- which is why
-  // the compositor sends this message with no rows in it rather than not
-  // sending it.
+  // Frozen per the IDL, and never null. An empty history is sent as an empty
+  // list, not omitted.
   Member<FrozenArray<DomicileClipboardEntry>> entries_;
   DOMHighResTimeStamp arrival_ = 0;
 };

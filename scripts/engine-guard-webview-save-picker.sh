@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
-# What a file dialog in a browser window does: asks the shell instead of
-# drawing, and the page's file lands where the shell said.
+# Guard: showSaveFilePicker() in a browser window asks the shell instead of
+# drawing a dialog, and the file lands at the path the shell chose.
 #
-# The guard presses a button that calls showSaveFilePicker() and reads the file
-# off the disk at the path the shell chose. Its control is the same save with a
-# shell that cancels: the page must be told, and nothing may land anywhere in
-# the home.
+# The guard reads the file from disk. Control: the same save with a shell that
+# cancels. The page must see the cancel, and no file may land in the home
+# directory.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

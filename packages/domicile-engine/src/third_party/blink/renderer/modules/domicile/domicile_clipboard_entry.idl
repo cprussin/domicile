@@ -1,29 +1,25 @@
 // Copyright 2026 Connor Prussin
 // SPDX-License-Identifier: MIT
 
-// One thing that was copied, as a row of the clipboard's history.
+// One clipboard history entry.
 //
-// An interface rather than a dictionary because WebIDL will not have a
-// dictionary as the element type of an attribute's array, which is how these
-// are read -- off a DomicileClipboardEvent rather than handed over in a call.
+// An interface because WebIDL does not allow a dictionary as an attribute's
+// array element type.
 
 [
     Exposed=Window,
     RuntimeEnabled=DomicileControlChannel
 ] interface DomicileClipboardEntry {
-  // What DomicileHost.copyClipboardEntry() names this row by.
+  // The id DomicileHost.copyClipboardEntry() takes.
   //
-  // Assigned by the compositor and never reused, so an id a shell is holding
-  // either names the row it was told about or names nothing at all. NOT a
-  // position: the list a copy re-orders keeps every id it had.
+  // Assigned by the compositor and never reused, so a stale id matches
+  // nothing. Not a position: reordering keeps every id.
   readonly attribute unsigned long id;
 
-  // Enough of what was copied to recognize it by, and not necessarily all of
-  // it: a long copy is cut down to a row, because this is what a panel draws
-  // and the rest of a copied file is not a row.
+  // A preview for display, possibly truncated to one row.
   //
-  // What goes back on the clipboard is always the whole thing, which is the
-  // reason a row is an id and a preview rather than the text: the bytes stay
-  // in the compositor, and a password manager's copy is a row in this list.
+  // Copying the entry back restores the full content. The content stays in the
+  // compositor and the page sees only this preview, which matters for copied
+  // passwords.
   readonly attribute DOMString preview;
 };

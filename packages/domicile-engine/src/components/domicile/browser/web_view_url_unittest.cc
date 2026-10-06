@@ -11,10 +11,8 @@
 namespace domicile {
 namespace {
 
-// Registered the way every process of the engine registers it, for
-// shell_url_loader_factory_unittest.cc's reason: unregistered, a domicile://
-// address has an opaque origin, and the refusals below would pass for refusing
-// an empty scheme rather than the one they name.
+// Registers the scheme as the engine does. Unregistered, a domicile:// URL has
+// an opaque origin and the refusals below would pass for the wrong reason.
 class WebViewUrlTest : public testing::Test {
  protected:
   WebViewUrlTest() {
@@ -31,15 +29,15 @@ TEST_F(WebViewUrlTest, AWebPageMayBeShown) {
 }
 
 TEST_F(WebViewUrlTest, NoDomicileAddressMayBeShown) {
-  // A guest on domicile:// would hold the shell's origin, and the origin is
-  // all the control channel's binder asks about.
+  // A guest there would have the shell's origin, which is all the control
+  // channel's binder checks.
   EXPECT_FALSE(MayShowInWebView(GURL("domicile://shell/")));
   EXPECT_FALSE(MayShowInWebView(GURL("domicile://home/Notes/a.png")));
   EXPECT_FALSE(MayShowInWebView(GURL("DOMICILE://shell/")));
 }
 
 TEST_F(WebViewUrlTest, NoAddressInsideADomicileOneMayBeShown) {
-  // The shell can mint a blob, and a blob's document has its maker's origin.
+  // A blob has its creator's origin, and the shell can create blobs.
   EXPECT_FALSE(MayShowInWebView(GURL("blob:domicile://shell/0f1e2d3c")));
   // view-source commits the source's own origin.
   EXPECT_FALSE(MayShowInWebView(GURL("view-source:domicile://shell/")));

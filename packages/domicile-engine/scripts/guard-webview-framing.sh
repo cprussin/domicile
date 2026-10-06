@@ -1,63 +1,31 @@
 #!/usr/bin/env bash
-# A site that refuses to be framed, on the page, in a <domicile-webview>.
+# Guard: a site that refuses framing still shows in a <webview>.
 #
 #   nix develop .#full --command \
 #     ./packages/domicile-engine/scripts/guard-webview-framing.sh /build/chromium/src
 #
-# No nested compositor and no Wayland client, unlike every other pixel guard
-# here: what this measures is a page against itself, so `--ozone-platform=
-# headless` with software compositing is the whole of the environment. That is
-# `guard-css-and-resize.sh`'s configuration, and it runs under Domicile's full
-# shell because that is where Chromium's runtime libraries are.
+# Runs headless with software compositing, like `guard-css-and-resize.sh`, under
+# the full dev shell for Chromium's runtime libraries.
 #
-# WHY THIS EXISTS. `ENGINE-FORK.md`'s patch 0007 shipped <webview> as a frame
-# owner and named the cost in the same breath: "a site that refuses framing
-# refuses to load -- that is the one thing Electron's guest-view <webview>
-# bought that this does not." Most of the web sends X-Frame-Options or CSP
-# frame-ancestors, so that was most of the web. A guest page behind the element
-# instead of a subframe is what closes it -- see `web_view_guest.h` -- and this
-# is the assertion that it is closed.
+# Most sites send X-Frame-Options or CSP frame-ancestors. A <webview> shows its
+# page as a guest main frame rather than a subframe (see `web_view_guest.h`), so
+# those headers do not apply. A unit test cannot check this: jsdom has no
+# nested browsing context and no pixels.
 #
-# A UNIT TEST CANNOT MAKE THIS CLAIM. There is no nested browsing context in
-# jsdom, no ancestor for a header to be checked against, and no pixels. The
-# claim is "the page is on the screen", and the only thing that can say so is a
-# real engine drawing it.
+# Asserts the framed page's color appears somewhere in the window, not where.
 #
-# WHAT IT ASSERTS. That the framed page's flat color is somewhere in the
-# browser's window. Not where: the element's box is this guard's own CSS and
-# asserting a coordinate would be asserting that, which is not the question.
+# NEGATIVE=1 runs the control, two runs in order:
 #
-# HOW IT CAN FAIL, which is the part a guard is worth nothing without.
-# NEGATIVE=1 runs the control, and the control is two runs rather than one:
+#   1. an <iframe> on an http page framing `/permits`. Must show the color,
+#      proving a framed page can reach the screen in this harness.
+#   2. the same, framing `/refuses`. Must show nothing.
 #
-#   1. an <iframe> on an ordinary http page, framing `/permits`. It MUST show
-#      the color. Nothing about the element is being tested here -- this is
-#      the run that establishes that a framed page can reach the screen at all
-#      in this harness, in this position.
-#   2. the same frame on the same page, framing `/refuses`. It MUST show
-#      nothing.
+# The two pages differ only in the headers, so the control proves the site is
+# refused where it has an ancestor. The control cannot use the domicile://
+# shell: an <iframe> there never loads http pages, so it would always be empty.
 #
-# The two framed pages are the same bytes in the same color and differ only in
-# X-Frame-Options and frame-ancestors, so the difference between the runs is a
-# reading of those headers and of nothing else. That is what the positive run
-# needs from a control and cannot get from inside itself: that the site really
-# is refused where it has an ancestor, and that a <webview> shows it anyway.
-#
-# THE CONTROL THIS REPLACES MEASURED NOTHING, and it looked exactly like this
-# one. It put the <iframe> on the guard's own domicile:// document, pointed it
-# at `/refuses`, and required an empty box -- which it always got, because an
-# <iframe> on a domicile:// document does not load an http page at all.
-# `guard-webview-keyboard.sh` found that and wrote it down; the same fact had
-# been quietly holding this control up. It would have gone on passing with both
-# headers deleted from the fixture, which is the one thing a negative control
-# must not do. The lesson is that guard's: a run that measures only an absence
-# proves nothing, because "nothing happened" and "the harness is broken" are
-# the same reading -- so establish a presence first, and let the absence be the
-# difference between them.
-#
-# The witness color is the same separation one layer down. The probe has to
-# find the page's own background before "the framed color is absent" is a
-# measurement rather than a browser that never drew; see engine_color_probe.cc.
+# The probe must also find the witness color, so an absent color means the
+# page drew without it; see engine_color_probe.cc.
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
@@ -76,18 +44,16 @@ if [ -z "$CHROMIUM" ]; then
   exit 1
 fi
 
-# NEGATIVE=1 runs the control's two legs instead of the claim. See the header.
+# NEGATIVE=1 runs the control; see the header.
 NEGATIVE="${NEGATIVE:-0}"
 
-# The framed page's color, and the color of whichever page is doing the
-# framing. Neither is any other guard's -- a color two guards share is a
-# color a stale log can answer for -- and neither is a browser background, so
-# a pixel that matches came from the page it belongs to.
+# The framed page's color and the framing page's color. Unique to this guard
+# and unlike any browser background, so a match comes from the right page.
 COLOR="${COLOR:-D81B60}"
 WITNESS="${WITNESS:-20304A}"
 
-# How long the probe looks. Long enough for a browser to start, load a page,
-# ask for a guest, have one attached and navigated, and paint it.
+# How long the probe looks: enough to start, attach a guest, navigate and
+# paint.
 FOR_SECONDS="${FOR_SECONDS:-60}"
 
 OUT="${OUT:-out/Domicile}"
@@ -98,11 +64,8 @@ HEIGHT="${HEIGHT:-768}"
 
 HTTP_LOG="${HTTP_LOG:-/tmp/domicile-webview-framing-http.log}"
 
-# Set by `measure`, and read by the diagnostics at the foot: with three
-# possible runs in one script, "the engine's last words" has to name which
-# engine. Sharing one file would mean the second leg's output overwriting the
-# first's and the diagnostics printing whichever went last -- which, when the
-# two disagree, is exactly the pair worth reading side by side.
+# Set by `measure` so the diagnostics print the last run's log. Each run has
+# its own log so runs do not overwrite each other.
 LAST_ENGINE_LOG=""
 
 STARTED=()
@@ -127,14 +90,10 @@ command -v python3 >/dev/null || {
   exit 77
 }
 
-# One browser, one page, one answer: starts the engine on `$2`, waits for it to
-# open the socket the probe reads pixels through, asks for the color, and
-# returns the probe's own status. `$1` names the run, in the logs and in the
-# annotation, because three of these can happen in one invocation.
+# Starts the engine on `$2`, runs the color probe against it and returns the
+# probe's status. `$1` names the run in logs and annotations.
 #
-# The engine is killed on the way out rather than left to `cleanup`: the next
-# leg opens the same socket, and a window still up from the last one is a
-# second answer to the question this one is asking.
+# Kills the engine before returning, since the next run reuses the socket.
 measure() { # $1 which run, $2 the URL to open
   local which="$1" url="$2"
   local engine_log="/tmp/domicile-webview-framing-$which-engine.log"
@@ -145,15 +104,8 @@ measure() { # $1 which run, $2 the URL to open
   rm -rf "$PROFILE"
   mkdir -p "$PROFILE"
 
-  # `--app` for the reason `domicile` uses it and guard-shell.sh repeats: the
-  # guard runs the configuration the product runs, or it is guarding something
-  # else. Headless and software-composited, because neither the layout nor the
-  # compositing of a guest needs a GPU and the machine that runs this has no
-  # display.
-  #
-  # The shell's root and module are passed whatever the URL is, so that the
-  # runs differ in the URL and in nothing else. They are what a domicile://
-  # document is served out of; an http one ignores them.
+  # `--app` matches how `domicile` runs it. The shell flags are passed for every
+  # URL so runs differ only in the URL; an http page ignores them.
   rm -f "$engine_log"
   "$CHROMIUM/$OUT/chrome" \
     --ozone-platform=headless \
@@ -181,9 +133,8 @@ measure() { # $1 which run, $2 the URL to open
   }
   echo "the engine is listening on $BROKER, showing $url"
 
-  # One process, two colors: there is one producer per socket --
-  # OutgoingInvitation::Send consumes the server endpoint -- so asking twice is
-  # not available and the witness travels with the subject.
+  # One probe checks both colors: OutgoingInvitation::Send consumes the server
+  # endpoint, so a socket serves only one probe.
   LD_LIBRARY_PATH="$CHROMIUM/$OUT${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
     "$CHROMIUM/$OUT/domicile_color_probe" \
       --domicile-broker-socket="$BROKER" \
@@ -198,9 +149,8 @@ measure() { # $1 which run, $2 the URL to open
   return "$status"
 }
 
-# 1. The pages. Their own server rather than a real site: `crux` reaches no
-#    arbitrary host, and a guard whose subject could change its headers is a
-#    guard that fails for reasons nobody chose.
+# 1. Serve the pages locally; `crux` cannot reach external hosts, and a real
+#    site could change its headers.
 rm -f "$HTTP_LOG"
 python3 "$SCRIPTS/guard-webview-framing-server.py" \
   --port 0 --color "$COLOR" --witness "$WITNESS" >"$HTTP_LOG" 2>&1 &
@@ -223,34 +173,18 @@ PORT="$(served_port "$HTTP_LOG")" || {
 SITE="http://127.0.0.1:$PORT"
 echo "serving a page that refuses framing at $SITE/refuses"
 
-# 2. The runs. The claim is one; the control is two, and the order is the
-#    experiment rather than a convenience -- the second leg's absence is only a
-#    reading because the first leg's presence came first.
-#
-#    The claim's page is a domicile:// document because the browser binds
-#    WebViewGuestHost for that origin and no other: a <webview> anywhere else
-#    cannot ask for a guest at all. The control's is an ordinary http one
-#    because that is what can frame an http page, which is the whole of what
-#    the old control got wrong.
+# 2. Run. The positive run uses a domicile:// page, the only origin
+#    WebViewGuestHost is bound for. The control uses an http page, which can
+#    frame http pages. The control's order matters: the absence in the second
+#    run only means something after the first shows a presence.
 if [ "$NEGATIVE" = "1" ]; then
-  # THE TWO LEGS COST DIFFERENT THINGS, and only one of them is waiting for an
-  # absence. `permitted` is looking for a color that arrives, so the probe
-  # stops when it does. `refused` is looking for one that must not, so the
-  # probe has nothing to stop it and runs out `--for-seconds` in full -- which
-  # is the whole of the 1m05 this control was measured at against the guard's
-  # 3s on engine run 35496858205.
-  #
-  # The first leg is the measurement for the second. Same page server, same
-  # browser, same machine, seconds apart, and it is the same question asked in
-  # the direction that can answer: how long does framing something take to show
-  # up here? A multiple of that is how long the other leg has to watch before
-  # its silence means anything.
+  # `refused` waits for an absence, so it runs its full timeout. Its timeout
+  # is derived from how long `permitted` took to show its color.
   LEG_STARTED="$(date +%s)"
   measure permitted "$SITE/frames?src=/permits"
   PERMITTED_STATUS=$?
 
-  # Only when it worked: a permitted leg that failed did not measure how long
-  # framing takes, it measured how long this script waits.
+  # Only on a pass: a failed run's duration is just the timeout.
   if [ "$PERMITTED_STATUS" -eq 0 ]; then
     budget_note webview-framing "$(($(date +%s) - LEG_STARTED))"
   fi
@@ -267,16 +201,9 @@ fi
 echo
 echo "measured: $MEASURED"
 
-# WHICH END TO BLAME, and it is the whole of this script's judgment. Eleven
-# answers, and most of them are failures that read alike and mean different
-# things -- so they are decided here, in a block
-# `scripts/test-webview-framing-guard.sh` runs directly, rather than inferred
-# from a grep by whoever reads the annotation.
-#
-# One `case` over the whole of what a run measured, rather than a status and a
-# mode in separate variables, because the control is one decision and not two:
-# its second leg means nothing without its first, and a table says that where
-# nested conditionals would only imply it.
+# Turn the statuses into a verdict. `scripts/test-webview-framing-guard.sh`
+# tests this block. One `case` over both control statuses, because the second
+# means nothing without the first.
 FAILURE=""
 PASSED=""
 case "$MEASURED" in

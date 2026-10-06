@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# A page in a browser window that may show notifications, with nothing asking
-# whether it may — patch 0068, which sets the profile's default to allow.
+# Guard: a page in a browser window may show notifications without a prompt.
+# Patch 0068 sets the profile's default to allow.
 #
-# Headless, no compositor and no client. Its control is two runs of the same
-# shell: a guest that paints unasked, which MUST show, then one asking about a
-# permission nothing granted, which must NOT — so the claim's color is the
-# default and not a page that paints whatever it is told.
+# Headless, with no compositor or client. Control: two runs of the same shell.
+# A guest that paints unconditionally must show; a guest that checks a
+# permission nothing grants must not. This proves the claim's color comes from
+# the default.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

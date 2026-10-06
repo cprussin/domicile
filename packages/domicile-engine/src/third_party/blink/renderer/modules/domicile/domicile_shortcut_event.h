@@ -13,12 +13,10 @@ namespace blink {
 
 class DomicileShortcutEventInit;
 
-// A grabbed key combination fired.
+// A grabbed key combination was pressed.
 //
-// Its own type rather than a DomicileAppEvent carrying the combination in the
-// field named `title`. A shortcut has no window: it is delivered whatever holds
-// the keyboard, which is the reason to grab one at all, and an event that says
-// which window it happened to would be answering a question that has no answer.
+// Its own type because a shortcut belongs to no window: it fires regardless of
+// which window has keyboard focus.
 class MODULES_EXPORT DomicileShortcutEvent final : public Event {
   DEFINE_WRAPPERTYPEINFO();
 
@@ -46,13 +44,11 @@ class MODULES_EXPORT DomicileShortcutEvent final : public Event {
   bool shiftKey() const { return shift_; }
   bool metaKey() const { return meta_; }
 
-  // When the browser process had this, on `performance.now()`'s clock.
+  // When the browser process received this, on `performance.now()`'s clock.
   //
-  // This is the one event here whose `arrival` is not always a socket read: a
-  // chord the shell claimed is matched in the browser process and never
-  // crosses the compositor's socket. It is stamped when that match reaches the
-  // control channel, which is the same quantity on the same clock. See
-  // DomicileAppEvent::arrival.
+  // A chord the shell grabbed is matched in the browser process and never
+  // crosses the compositor's socket; it is stamped when the match reaches the
+  // control channel. See DomicileAppEvent::arrival.
   DOMHighResTimeStamp arrival() const { return arrival_; }
 
   const AtomicString& InterfaceName() const override;

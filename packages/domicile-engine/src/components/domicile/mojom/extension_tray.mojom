@@ -3,65 +3,57 @@
 
 module domicile.mojom;
 
-// The extensions with an action, for the shell's tray.
+// Extension actions for the shell's tray.
 //
-// WHY A PIPE OF ITS OWN AND NOT A MESSAGE ON ControlChannel. An action's state
-// lives in the browser process -- ExtensionActionManager, per profile -- and
-// the compositor has never heard of it. ControlChannel is the compositor's
-// socket relayed; this is the browser answering for itself, the way
-// WebViewGuestHost is.
+// A separate interface from ControlChannel because action state lives in the
+// browser process (ExtensionActionManager), not the compositor.
 //
-// THE ACCESS CONTROL IS THE BINDER'S, and it is ControlChannel's: the browser
-// binds this only for a document whose origin is the shell's. An extension's
-// popup is a chrome-extension:// page and cannot reach it, and neither can a
-// site in a <webview>.
+// The browser binds this only for shell-origin documents, as with
+// ControlChannel, so extension popups and <webview> sites cannot reach it.
 //
 // See docs/architecture/EXTENSIONS.md in the Domicile repository.
 
-// One extension, as the tray draws it. The state is the active tab's -- the
-// <webview> that last had focus -- or the action's default where there is
-// none. The list is sent again when the active tab changes.
+// One extension's action as the tray draws it. The state is for the active
+// tab (the last focused <webview>), or the action's default if there is none.
+// The list is resent when the active tab changes.
 struct TrayExtension {
-  // What Activate names it by.
+  // The id Activate takes.
   string id;
   string name;
   // The action's tooltip.
   string title;
-  // data:image/png;base64,..., rendered at the page's device scale factor. Not
-  // a chrome-extension:// URL: action.setIcon({imageData}) sets an icon that
-  // has none.
+  // data:image/png;base64,..., at the page's device scale factor. Not a
+  // chrome-extension:// URL, because action.setIcon({imageData}) icons have no
+  // URL.
   string icon;
   string badge_text;
-  // A CSS color, #rrggbbaa. Fully transparent when the extension set none.
+  // A CSS color, #rrggbbaa. Transparent if the extension set none.
   string badge_color;
-  // The popup's address, or empty for an action whose click is Activate. A
-  // string rather than a nullable url.mojom.Url, so the Blink half needs no
-  // typemap for an optional KURL.
+  // The popup URL, or empty if a click only calls Activate. A string rather
+  // than a nullable url.mojom.Url, so Blink needs no optional KURL typemap.
   string popup;
-  // False after the extension's action.disable().
+  // False after action.disable().
   bool enabled;
 };
 
 // Renderer -> browser, bound per document.
 interface ExtensionTray {
-  // Where the list goes. It is sent AT ONCE, and again whenever any of it
-  // changes -- so a page that reloaded is told, rather than drawing an empty
-  // tray until an extension happens to move. A second client is a bad message.
+  // Sets the list's receiver. The list is sent immediately, so a reloaded page
+  // is not left empty, and again on every change. A second call is a bad
+  // message.
   SetClient(pending_remote<ExtensionTrayClient> client);
 
-  // The action was clicked, whether or not it has a popup: what Chrome's
-  // ExtensionActionRunner::RunAction does for a toolbar click. It grants the
-  // extension activeTab on the active tab, then dispatches `action.onClicked`
-  // -- unless the action has a popup, which the shell opens itself and which
-  // is then the whole of the click. An id that names no enabled extension
-  // with an action is a click that raced an uninstall, and does nothing.
+  // Clicks the action, as ExtensionActionRunner::RunAction does for a toolbar
+  // click. Grants activeTab on the active tab, then dispatches
+  // `action.onClicked` unless the action has a popup, which the shell opens
+  // itself. An unknown or disabled id is ignored; the click may have raced an
+  // uninstall.
   Activate(string id);
 };
 
 // Browser -> renderer.
 interface ExtensionTrayClient {
-  // THE WHOLE LIST, every time. An extension added, removed, or its badge set
-  // are the same message, because a page reconciling deltas is a page that
-  // can be wrong forever after missing one.
+  // The full list on every change, not a delta, so a missed message cannot
+  // leave the page wrong.
   ExtensionsChanged(array<TrayExtension> extensions);
 };

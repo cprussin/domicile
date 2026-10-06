@@ -6,26 +6,17 @@
 
 namespace domicile {
 
-// Keep the shell's one page on the desk, now and on every hotplug: hosted by
-// a window on the fastest display, laid out over the desk's bounding box, and
-// shown on every other display by a presenter window. See
-// docs/architecture/ONE-PAGE-FOR-THE-DESK.md.
+// Keeps the shell's page on the desk across hotplugs: hosted on the fastest
+// display, laid out over the desk's bounding box, and mirrored to the others
+// by presenter windows. See docs/architecture/ONE-PAGE-FOR-THE-DESK.md.
 //
-// A WINDOW PER CRTC, because `ScreenManager::FindWindowAt` binds a window to
-// a display controller only on an exact rectangle match, and one window cannot
-// be two rectangles.
+// Uses one window per CRTC because `ScreenManager::FindWindowAt` binds a
+// window to a controller only on an exact rectangle match. The layout logic is
+// in //components/domicile:shell_windows, which has the tests.
 //
-// WHY THIS LIVES IN //chrome. Making a window is `CreateBrowserWindow` in
-// //chrome/browser/ui/browser_window, the way carrying a `load_shell` out is
-// //chrome/browser/ui's GlobalBrowserCollection -- see
-// domicile_command_socket.h, which is here for the same reason and says it at
-// length. The part that is a decision rather than a window is next door in
-// //components/domicile:shell_windows, which is what has the tests.
-//
-// Must be called on the UI thread, and after the shell's own window exists:
-// ChromeBrowserMainParts::PostBrowserStart, beside StartCommandSocket(). The
-// host this opens, when the fastest display is another, is a copy of that one
-// -- its profile, its URL -- so there is nothing to copy before it is there.
+// Must be called on the UI thread after the shell's window exists
+// (ChromeBrowserMainParts::PostBrowserStart). A new host copies that window's
+// profile and URL.
 void StartShellWindows();
 
 }  // namespace domicile

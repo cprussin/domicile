@@ -14,20 +14,15 @@ namespace blink {
 
 class DomicileIdleEventInit;
 
-// Whether anybody is at this desktop.
+// Whether anyone is at this desktop.
 //
-// Pushed rather than asked for, like DomicileBatteryEvent: the compositor is
-// the process every key and every pointer movement on this desktop passes
-// through, so it is the only thing that can count hands -- see `crate::idle`
-// on that side. A page cannot count them for itself, and the web platform's
-// own idle signals are worse than useless here: a shell is the desktop, so its
-// document stays visible with the glass off and every one of them reads
-// "somebody is here" on a desk nobody has been at for an hour.
+// Push-only. Only the compositor sees every input event, so it tracks idle;
+// see `crate::idle`. The web platform's idle signals do not work here: the
+// shell's document stays visible with the screen off, so they always report
+// activity.
 //
-// The boolean is a state and not an edge, which is the one design decision in
-// this class: a page reloads, and one that has just loaded has missed every
-// edge there was, so the compositor repeats where the desk stands to a chrome
-// that has only just connected.
+// A state, not an edge: the compositor resends the current state to a newly
+// connected page, which has missed any earlier edges.
 class MODULES_EXPORT DomicileIdleEvent final : public Event {
   DEFINE_WRAPPERTYPEINFO();
 
@@ -44,16 +39,14 @@ class MODULES_EXPORT DomicileIdleEvent final : public Event {
 
   bool idle() const { return idle_; }
 
-  // When the browser process had this, on `performance.now()`'s clock. See
-  // DomicileAppEvent::arrival.
+  // When the browser process received this, on `performance.now()`'s clock.
+  // See DomicileAppEvent::arrival.
   DOMHighResTimeStamp arrival() const { return arrival_; }
 
   const AtomicString& InterfaceName() const override;
 
  private:
-  // A plain bool rather than anything nullable: a desktop with no idle timeout
-  // sends no message at all, so there is no "nobody has said" for this event
-  // to represent. Every one of these is an answer.
+  // A plain bool, not nullable: a desktop with no idle timeout sends no event.
   bool idle_ = false;
   DOMHighResTimeStamp arrival_ = 0;
 };

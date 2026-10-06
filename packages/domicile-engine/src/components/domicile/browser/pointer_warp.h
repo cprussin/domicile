@@ -11,28 +11,17 @@
 
 namespace domicile {
 
-// Where the cursor goes for a `warp_pointer` the page asked for.
+// The cursor position for a page's `warp_pointer` request.
 //
-// WHY A SHELL ASKS AT ALL. A desktop whose focus follows the cursor has to
-// take the cursor with it when a key moves the focus, or the first pointer
-// event after the press hands the focus back to whatever the pointer is still
-// over. Every other compositor does this itself -- it is sway's
-// `mouse_warping` -- and here the shell is a page, which can read where the
-// pointer is and cannot put it anywhere. So the page says where, and the
-// engine, which is what draws the cursor, is what moves it.
+// With focus-follows-mouse, the cursor must follow keyboard focus changes, as
+// with sway's `mouse_warping`. A page cannot move the cursor, so the engine
+// does it.
 //
-// `page` is the page's own box in the coordinates the cursor is moved in: its
-// window's root, in DIP. `x` and `y` are the page's own, which is what a
-// `PointerEvent` reports as `clientX`/`clientY` and what a shell lays its
-// windows out in.
+// `page` is the page's bounds in its window's root, in DIP. `x` and `y` are
+// page coordinates, as in `PointerEvent.clientX`/`clientY`.
 //
-// TWO ANSWERS ARE REFUSALS RATHER THAN ARITHMETIC, and both are about what
-// arrives here rather than about what a shell sends. A renderer can put any
-// double on this channel, so a coordinate that is not a number has no nearest
-// pixel and rounding one is undefined behavior; and a page whose window has no
-// box has nowhere to put a cursor. Everything else is answered, CLAMPED INTO
-// `page`: what a page may move is the pointer over itself, and a coordinate
-// outside its own box is a page asking for another window's screen.
+// Returns nothing for a non-finite coordinate or an empty `page`. Otherwise
+// clamps into `page`, so a renderer cannot move the cursor onto another window.
 std::optional<gfx::Point> PointerWarpTarget(const gfx::Rect& page,
                                             double x,
                                             double y);

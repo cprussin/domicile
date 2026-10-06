@@ -11,31 +11,24 @@
   // The query this answers, as DomicileHost.searchFiles() was given it.
   readonly attribute DOMString query;
 
-  // The front of what matched: paths relative to the home directory the
-  // desktop is running as -- `Notes/today.org`, not
-  // `/home/you/Notes/today.org` -- already in the order they go on screen, and
-  // a directory ends in `/`.
+  // The first matches, as paths relative to the home directory
+  // (`Notes/today.org`), in display order. Directories end in `/`.
   //
-  // An empty array is a query that matched nothing, which is an answer. A home
-  // that could not be READ is no event at all -- the compositor logs that and
-  // says nothing, because "you have no files" is not a thing a broken desktop
-  // should be able to say on a working one's behalf.
+  // Empty means nothing matched. If the home cannot be read, the compositor
+  // logs it and sends no event, so a broken desktop never reports "no files".
   readonly attribute FrozenArray<DOMString> files;
 
-  // How many paths matched, of which `files` is the front.
+  // How many paths matched; `files` holds the first of them.
   readonly attribute unsigned long matched;
 
-  // Whether the compositor is still building the index this was found in.
+  // Whether the compositor is still building the index.
   //
-  // THE DIFFERENCE BETWEEN AN INCOMPLETE ANSWER AND A WRONG ONE. The rows are
-  // a launcher's whole evidence that a file exists, so an answer from an index
-  // still being walked has to arrive saying so -- otherwise a person who typed
-  // the name of a file the walk has not reached yet is told, in the only
-  // language the panel has, that they do not have it. A shell draws this as a
-  // line saying the index is being built, and asks again.
+  // A launcher must show that results may be incomplete; otherwise a file the
+  // index has not reached yet looks missing. A shell shows that the index is
+  // being built, and asks again.
   readonly attribute boolean indexing;
 
-  // When the browser process had this message, on `performance.now()`'s clock.
-  // See DomicileModifiersEvent.arrival for what this is and what it is not.
+  // When the browser process received this message, on `performance.now()`'s
+  // clock. See DomicileAppEvent.arrival.
   readonly attribute DOMHighResTimeStamp arrival;
 };

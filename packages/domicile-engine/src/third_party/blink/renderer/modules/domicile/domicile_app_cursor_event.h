@@ -14,16 +14,10 @@ namespace blink {
 
 class DomicileAppCursorEventInit;
 
-// A client asked for a cursor to be shown over its window.
+// A client set the cursor shown over its window.
 //
-// SPLIT OUT OF DomicileAppEvent WHEN THE SHAPE BECAME AN ENUM. The five other
-// events that type carries have nothing to say about a cursor, and while this
-// was a `DOMString` they said it by passing the empty string. A
-// `V8DomicileCursorShape` has no such value, and inventing one -- a nullable
-// attribute, a `kNone` that means "no cursor event" rather than "hide the
-// cursor", which is a shape the compositor really can send -- would put the
-// sentinel back wearing a type. A separate event says it in the type system
-// instead: this one always carries a shape, and the others cannot be asked.
+// Separate from DomicileAppEvent so `cursor` is always a valid shape, with no
+// sentinel for events that carry none.
 class MODULES_EXPORT DomicileAppCursorEvent final : public Event {
   DEFINE_WRAPPERTYPEINFO();
 
@@ -43,8 +37,7 @@ class MODULES_EXPORT DomicileAppCursorEvent final : public Event {
   const String& appId() const { return app_id_; }
   V8DomicileCursorShape cursor() const { return cursor_; }
 
-  // When the browser process had this, on `performance.now()`'s clock. See
-  // DomicileAppEvent::arrival.
+  // See DomicileAppEvent::arrival.
   DOMHighResTimeStamp arrival() const { return arrival_; }
 
   const AtomicString& InterfaceName() const override;

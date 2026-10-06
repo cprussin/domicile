@@ -62,20 +62,16 @@ namespace domicile {
 namespace {
 
 // Must match content/browser/domicile/domicile_frame_sink_broker.cc. Integer
-// names, and see the comment there: under ipcz an attachment is indexed by the
-// first four bytes of its name, so string-named attachments all collide on
-// index 0.
+// names because ipcz indexes attachments by the first four bytes of the name,
+// so string names collide on index 0.
 constexpr uint64_t kBrokerPipeName = 0;
-// THROWAWAY, with domicile_engine_spike.h: the probe the browser attaches
-// beside the broker so a harness can ask what viz drew.
+// Throwaway; see domicile_engine_spike.h.
 constexpr uint64_t kProbePipeName = 1;
 
-// Once per process, however many engines are created and destroyed.
+// Initializes the AtExitManager and mojo core once per process.
 //
-// The compositor is not a Chromium process and has no idea it is hosting one,
-// so the library brings its own AtExitManager and mojo core. Both are
-// process-global and neither can be torn down and re-created, which is why they
-// outlive every engine rather than belonging to one.
+// The compositor is not a Chromium process, so the library provides both. They
+// cannot be torn down and re-created, so they outlive every engine.
 void EnsureMojoInitialized() {
   static base::NoDestructor<base::AtExitManager> at_exit;
   static bool initialized = [] {
@@ -88,14 +84,9 @@ void EnsureMojoInitialized() {
 
 // One brokered frame sink.
 //
-// Everything here runs on the engine's mojo thread. The only thing that leaves
-// it is a push onto the EngineEventQueue, which is what the compositor polls.
-//
-// It holds its own CompositorFrameSink and assembles its own frames, which is
-// what ENGINE-FORK.md#buffer-import decides. It still mints no mailbox and
-// holds no GPU channel: the browser imports the dmabuf and hands back a
-// gpu::ExportedSharedImage — a mailbox and a verified sync token, bytes once
-// verified — and naming one is not authority to make one.
+// Runs entirely on the engine's mojo thread and reports to the compositor only
+// through the EngineEventQueue. It assembles its own CompositorFrames from
+// SharedImages the browser imports; see ENGINE-FORK.md#buffer-import.
 class Surface : public mojom::SurfaceObserver,
                 public viz::mojom::CompositorFrameSinkClient {
  public:
@@ -121,9 +112,8 @@ class Surface : public mojom::SurfaceObserver,
 
   const viz::FrameSinkId& frame_sink_id() const { return frame_sink_id_; }
 
-  // Takes the SharedImage the browser made and keeps it under `buffer_id`, so
-  // a later Submit can name it in a resource list. `has_alpha` is whether the
-  // client's pixels say how see-through they are -- see FourccHasAlpha.
+  // Wraps the browser's SharedImage as a resource for later Submit calls.
+  // `has_alpha` comes from FourccHasAlpha.
   void Adopt(uint64_t buffer_id,
              gpu::ExportedSharedImage exported,
              bool has_alpha) {
@@ -158,8 +148,7 @@ class Surface : public mojom::SurfaceObserver,
       return false;
     }
     const gfx::Rect rect(size_);
-    // Blended where the client's pixels carry alpha: a menu's rounded corners
-    // are transparent, and drawn opaque they are black.
+    // Blend buffers with alpha, such as a menu's transparent rounded corners.
     const bool opaque = !iter->second.has_alpha;
 
     auto pass = viz::CompositorRenderPass::Create();
@@ -173,7 +162,7 @@ class Surface : public mojom::SurfaceObserver,
                        /*sorting_context=*/0, /*layer_id=*/0u,
                        /*fast_rounded_corner=*/false);
 
-    // Only the window fills the box: a client's shadow is outside `crop`.
+    // Sample only the window, excluding any client-drawn shadow.
     const gfx::RectF uv =
         CropToUv(crop, iter->second.shared_image->size());
     viz::TextureDrawQuad* quad =
@@ -207,8 +196,7 @@ class Surface : public mojom::SurfaceObserver,
 
   // mojom::SurfaceObserver:
   //
-  // The page allocated this id and picked this size; nothing here chose either.
-  // For the compositor this is an xdg_toplevel.configure.
+  // The page chose this id and size. Forwarded as xdg_toplevel.configure.
   void OnSurfaceEmbedded(const viz::LocalSurfaceId& local_surface_id,
                          const gfx::Size& size,
                          double scale) override {
@@ -225,7 +213,7 @@ class Surface : public mojom::SurfaceObserver,
                   .scale = scale});
   }
 
-  // Only sent when the browser owns the sink, which this does not ask for.
+  // Sent only when the browser owns the sink, which this does not request.
   void OnFrame(int64_t deadline_us) override {}
   void OnBufferReleased(uint64_t buffer_id) override {}
 
@@ -252,8 +240,8 @@ class Surface : public mojom::SurfaceObserver,
       uint32_t sequence_id) override {}
   void OnSurfaceEvicted(const viz::LocalSurfaceId& local_surface_id) override {}
 
-  // wl_buffer.release: viz has stopped sampling that dmabuf and the client may
-  // draw into it again.
+  // Forwards returned resources as wl_buffer.release, so the client may draw
+  // into the buffer again.
   void Release(const std::vector<viz::ReturnedResource>& resources) {
     for (const viz::ReturnedResource& resource : resources) {
       auto iter = resource_to_buffer_.find(resource.id);
@@ -289,12 +277,10 @@ class Surface : public mojom::SurfaceObserver,
   viz::FrameTokenGenerator next_frame_token_;
 };
 
-// The browser's display list, pushed at the compositor.
+// Forwards the browser's display list to the compositor.
 //
-// Its own receiver rather than a method on Surface, because the screens are a
-// fact about the machine and not about any one window: a producer with no
-// surfaces at all still has to advertise its outputs, and on a tty it has to
-// do so before any window exists to put on them.
+// Separate from Surface because displays must be advertised before any window
+// exists.
 class Displays : public mojom::DisplayListObserver {
  public:
   explicit Displays(EngineEventQueue* queue) : queue_(queue) {}
@@ -308,8 +294,7 @@ class Displays : public mojom::DisplayListObserver {
     return receiver_.BindNewPipeAndPassRemote();
   }
 
-  // Unbound on the thread it was bound on, which is what a mojo receiver
-  // validates. Same reason TearDown resets the broker and the probe by hand.
+  // Mojo receivers must be reset on the thread that bound them.
   void Unbind() { receiver_.reset(); }
 
   // mojom::DisplayListObserver implementation.
@@ -336,11 +321,9 @@ class Displays : public mojom::DisplayListObserver {
   mojo::Receiver<mojom::DisplayListObserver> receiver_{this};
 };
 
-// What the browser copied, pushed at the compositor.
+// Forwards the browser's copies to the compositor.
 //
-// Its own receiver for the reason Displays above has one: a copy is a fact
-// about the desktop rather than about any one window, and a producer with no
-// surfaces at all still has a clipboard.
+// Separate from Surface because a copy can happen before any window exists.
 class Copies : public mojom::ClipboardObserver {
  public:
   explicit Copies(EngineEventQueue* queue) : queue_(queue) {}
@@ -354,7 +337,7 @@ class Copies : public mojom::ClipboardObserver {
     return receiver_.BindNewPipeAndPassRemote();
   }
 
-  // Unbound on the thread it was bound on, like Displays::Unbind.
+  // Reset on the binding thread, like Displays::Unbind.
   void Unbind() { receiver_.reset(); }
 
   // mojom::ClipboardObserver implementation.
@@ -372,14 +355,13 @@ class Copies : public mojom::ClipboardObserver {
   mojo::Receiver<mojom::ClipboardObserver> receiver_{this};
 };
 
-// A client's dmabuf, as mojo wants it. The fds are duplicated: the caller keeps
-// the originals, which is what a compositor holding a wl_buffer expects.
+// Converts a client's dmabuf for mojo. Duplicates the fds; the caller keeps
+// the originals.
 gfx::GpuMemoryBufferHandle ToGpuMemoryBufferHandle(
     const DomicileDmabuf& dmabuf) {
   gfx::NativePixmapHandle pixmap;
   pixmap.modifier = dmabuf.modifier;
-  // Through a span because the ABI carries a fixed C array and a raw index into
-  // one is not something -Wunsafe-buffer-usage will take.
+  // A span because -Wunsafe-buffer-usage rejects indexing a raw C array.
   const auto planes = base::span(dmabuf.planes);
   const uint32_t count = std::min<uint32_t>(dmabuf.plane_count, planes.size());
   for (uint32_t i = 0; i < count; ++i) {
@@ -395,10 +377,10 @@ gfx::GpuMemoryBufferHandle ToGpuMemoryBufferHandle(
   return gfx::GpuMemoryBufferHandle(std::move(pixmap));
 }
 
-// The C ABI's turn, in the mojom's words.
+// Converts the C ABI's transform to the mojom enum.
 //
-// A value the header does not define is the compositor breaking the ABI, and a
-// crash naming it beats a monitor drawn at a turn nobody asked for.
+// An undefined value means the compositor broke the ABI, so crash rather than
+// draw a wrong rotation.
 mojom::DisplayTransform TransformOf(DomicileDisplayTransform transform) {
   switch (transform) {
     case DOMICILE_DISPLAY_TRANSFORM_NORMAL:
@@ -416,9 +398,8 @@ mojom::DisplayTransform TransformOf(DomicileDisplayTransform transform) {
 }  // namespace
 }  // namespace domicile
 
-// The engine itself. Deliberately outside the namespace: the C ABI names this
-// type, and an opaque struct in the global namespace is what a `struct
-// DomicileEngine;` forward declaration in a C header means.
+// The engine. Outside the namespace because the C header forward-declares it
+// as a global opaque struct.
 struct DomicileEngine {
  public:
   explicit DomicileEngine(DomicileEngineCallbacks callbacks)
@@ -429,7 +410,7 @@ struct DomicileEngine {
 
   ~DomicileEngine() {
     if (thread_.IsRunning()) {
-      // The mojo objects were made on that thread and have to die on it.
+      // The mojo objects must be destroyed on the thread that created them.
       RunOnThreadAndWait(base::BindOnce(&DomicileEngine::TearDown,
                                         base::Unretained(this)));
       thread_.Stop();
@@ -455,16 +436,12 @@ struct DomicileEngine {
 
   int fd() { return queue_.fd(); }
 
-  // On the caller's thread, which is the whole point of the fd.
+  // Runs on the caller's thread.
   //
-  // DISABLE_CFI_ICALL because every call below is through a pointer the
-  // compositor handed in, to a function written in Rust. An official build
-  // checks each indirect call against the functions it compiled itself, and a
-  // Rust function is none of them, so without this the first callback is a
-  // trap: production run 36349359457's engine took the compositor down with
-  // "Illegal instruction" as soon as a window was brokered. Every call into
-  // the compositor stays in this function for that reason, and
-  // scripts/test-a-callback-into-the-compositor-is-not-a-cfi-trap.sh says so.
+  // DISABLE_CFI_ICALL because the callbacks are Rust functions, which CFI in
+  // official builds rejects as indirect call targets and traps on. Keep every
+  // call into the compositor in this function; see
+  // scripts/test-a-callback-into-the-compositor-is-not-a-cfi-trap.sh.
   DISABLE_CFI_ICALL void Dispatch() {
     for (const domicile::EngineEvent& event : queue_.Drain()) {
       switch (event.type) {
@@ -491,17 +468,10 @@ struct DomicileEngine {
           break;
         case domicile::EngineEvent::Type::kDisplays:
           if (callbacks_.displays) {
-            // Copied into the ABI's own record rather than handing over the
-            // queue's storage. The two structs no longer even have the same
-            // shape -- `name` is a std::string in one and a `const char*` in
-            // the other -- and a reinterpret_cast across the seam was never
-            // going to survive that.
-            //
-            // THE CHARACTERS BEHIND `name` BELONG TO THE EVENT, not to the
-            // record. `event` is a reference into the vector `Drain()`
-            // returned, which lives until this loop ends, so every pointer
-            // below outlives the callback it is handed to -- which is the
-            // whole contract the header states for this array.
+            // Convert to the ABI's record, whose `name` is a `const char*`.
+            // The strings belong to `event`, which lives in the drained vector
+            // until the loop ends, so they outlive the callback as the header
+            // promises.
             std::vector<DomicileDisplay> records;
             records.reserve(event.displays.size());
             for (const domicile::EngineDisplay& display : event.displays) {
@@ -522,9 +492,7 @@ struct DomicileEngine {
           break;
         case domicile::EngineEvent::Type::kCopied:
           if (callbacks_.copied) {
-            // The characters belong to the event, which lives until this loop
-            // ends -- the same lifetime the display names above have, and the
-            // one the header states for this pointer.
+            // `event` owns the bytes until the loop ends, as for display names.
             callbacks_.copied(callbacks_.user_data, event.clipboard,
                               event.copied.data(), event.copied.size());
           }
@@ -546,8 +514,7 @@ struct DomicileEngine {
                                       base::Unretained(this), surface));
   }
 
-  // Blocking, and only once per buffer rather than once per frame: the caller
-  // cannot attach a buffer that does not exist yet.
+  // Blocks; runs once per buffer, not per frame.
   DomicileBufferId ImportBuffer(DomicileSurfaceId surface,
                                 const DomicileDmabuf& dmabuf) {
     DomicileBufferId imported = 0;
@@ -567,7 +534,7 @@ struct DomicileEngine {
                        base::Unretained(this), surface, buffer, crop, damage));
   }
 
-  // THROWAWAY. See domicile_engine_spike.h.
+  // Throwaway; see domicile_engine_spike.h.
   bool SampleWindowCenter(uint32_t* argb) {
     bool sampled = false;
     RunOnThreadAndWait(base::BindOnce(
@@ -576,7 +543,7 @@ struct DomicileEngine {
     return sampled;
   }
 
-  // THROWAWAY. See domicile_engine_spike.h.
+  // Throwaway; see domicile_engine_spike.h.
   bool SamplePixel(int32_t x, int32_t y, uint32_t* argb) {
     bool sampled = false;
     RunOnThreadAndWait(base::BindOnce(&DomicileEngine::SamplePixelOnThread,
@@ -585,7 +552,7 @@ struct DomicileEngine {
     return sampled;
   }
 
-  // THROWAWAY. See domicile_engine_spike.h.
+  // Throwaway; see domicile_engine_spike.h.
   int32_t FindColor(uint32_t argb, DomicileSpikeCapture* out) {
     int32_t found = -1;
     RunOnThreadAndWait(base::BindOnce(&DomicileEngine::FindColorOnThread,
@@ -601,23 +568,16 @@ struct DomicileEngine {
                        base::Unretained(this), surface, buffer));
   }
 
-  // The records are COPIED OUT BEFORE THE HOP, because the ABI borrows them
-  // for the duration of the call and the call returns before the mojo thread
-  // has run anything. The same rule the display list crossing the other way
-  // states, applied in the other direction.
+  // Copies the records before posting: the ABI borrows them only for the call,
+  // which returns before the mojo thread runs.
   void ConfigureDisplays(const DomicileDisplayLayout* layout, uint32_t count) {
-    // Fully qualified, like every other mojom type here: `DomicileEngine` is
-    // outside `namespace domicile`, because it is the opaque handle the C ABI
-    // hands out and the ABI has no namespaces.
+    // Fully qualified because `DomicileEngine` is outside `namespace domicile`.
     std::vector<domicile::mojom::DisplayLayoutPtr> wanted;
     wanted.reserve(count);
-    // SAFETY: the ABI says `layout` points at `count` records, valid for the
-    // duration of this call, and `domicile_displays_configure` has already
-    // refused a null one carrying a count. A span rather than a subscript for
-    // the reason `edid_name.cc` gives -- Chromium compiles with
-    // `-Wunsafe-buffer-usage` -- and `UNSAFE_BUFFERS` because building one
-    // from a pointer and a length is itself what that warning is about. There
-    // is no safer way to read an array that arrived over a C ABI.
+    // SAFETY: the ABI says `layout` points at `count` records valid for this
+    // call, and `domicile_displays_configure` has refused a null pointer with a
+    // nonzero count. Chromium builds with `-Wunsafe-buffer-usage`, and a span
+    // over an ABI pointer and length requires `UNSAFE_BUFFERS`.
     const auto records =
         UNSAFE_BUFFERS(base::span(layout, static_cast<size_t>(count)));
     for (const DomicileDisplayLayout& display : records) {
@@ -633,9 +593,8 @@ struct DomicileEngine {
                        base::Unretained(this), std::move(wanted)));
   }
 
-  // Copied on the caller's thread rather than borrowed across the post: the
-  // ABI lends these bytes for the duration of the call, and the browser is
-  // told on another thread some time after it returns.
+  // Takes a copy: the ABI lends the bytes only for the call, and the browser is
+  // told later on another thread.
   void SetClipboard(DomicileClipboard clipboard, std::string text) {
     thread_.task_runner()->PostTask(
         FROM_HERE, base::BindOnce(&DomicileEngine::SetClipboardOnThread,
@@ -670,10 +629,9 @@ struct DomicileEngine {
       return;
     }
 
-    // A real invitation over a named socket rather than a
-    // mojo::IsolatedConnection, and that is forced rather than chosen: the
-    // broker forwards our CompositorFrameSink receiver on to the viz process,
-    // and an isolated connection cannot carry a handle that far. See
+    // A real invitation rather than a mojo::IsolatedConnection, because the
+    // broker forwards our CompositorFrameSink receiver to the viz process, and
+    // an isolated connection cannot carry it there. See
     // ENGINE-FORK.md#how-the-producer-reaches-the-broker.
     mojo::IncomingInvitation invitation =
         mojo::IncomingInvitation::Accept(std::move(endpoint));
@@ -688,14 +646,11 @@ struct DomicileEngine {
     probe_.Bind(mojo::PendingRemote<domicile::mojom::SpikeProbe>(
         invitation.ExtractMessagePipe(domicile::kProbePipeName), 0));
     if (broker_.is_bound()) {
-      // Asked for here rather than when a surface is created, because a
-      // desktop has to know what its screens are before it has any windows to
-      // put on them. The browser answers immediately if it has already read
-      // them, and says nothing until it has if it has not.
+      // Observe displays on connect, since a desktop needs its screens before
+      // any window. The browser answers once it has read them.
       broker_->ObserveDisplays(displays_.BindRemote());
-      // And the clipboard, for the same kind of reason: a copy can be made in
-      // a page before this desktop has any windows at all, and the compositor
-      // is what has to put it on the seat.
+      // Observe the clipboard on connect too: a page can copy before any window
+      // exists.
       broker_->ObserveClipboard(copies_.BindRemote());
     }
     *connected = broker_.is_bound();
@@ -711,12 +666,8 @@ struct DomicileEngine {
     domicile::Surface* raw = surface.get();
     surfaces_[id] = std::move(surface);
 
-    // Synchronous because the ABI is: the caller gets a usable surface or a
-    // zero, and a window that does not exist yet is not something the
-    // compositor can hold.
-    // Runs this thread's own loop while the browser answers rather than
-    // blocking it, because the reply arrives on this thread. The caller is
-    // parked on a WaitableEvent in RunOnThreadAndWait meanwhile.
+    // Synchronous because the ABI is. Runs a nested loop because the reply
+    // arrives on this thread; the caller waits in RunOnThreadAndWait.
     base::RunLoop loop(base::RunLoop::Type::kNestableTasksAllowed);
     bool ok = false;
     raw->Create(broker_.get(), app_id,
@@ -734,9 +685,9 @@ struct DomicileEngine {
     *created = id;
   }
 
-  // The broker is told, because closing this end's pipes does not reach it:
-  // the BrokeredFrameSink, and every buffer imported into it, otherwise lives
-  // as long as the connection does.
+  // Tells the broker explicitly: closing our pipes does not reach it, so the
+  // BrokeredFrameSink and its buffers would otherwise live as long as the
+  // connection.
   void DestroySurfaceOnThread(DomicileSurfaceId surface) {
     auto iter = surfaces_.find(surface);
     if (iter == surfaces_.end()) {
@@ -772,9 +723,8 @@ struct DomicileEngine {
             [](base::RunLoop* loop, DomicileBufferId* imported,
                domicile::Surface* surface, bool has_alpha, uint64_t id,
                std::optional<gpu::ExportedSharedImage> exported) {
-              // Naming the browser's SharedImage is what lets this process
-              // build its own TransferableResource. Without it there is
-              // nothing to submit, so the import counts as refused.
+              // Without the SharedImage there is nothing to submit, so treat
+              // the import as refused.
               if (id != 0 && exported.has_value()) {
                 surface->Adopt(id, std::move(exported).value(), has_alpha);
                 *imported = id;
@@ -844,24 +794,20 @@ struct DomicileEngine {
         [](base::RunLoop* loop, uint32_t wanted, int32_t* found,
            DomicileSpikeCapture* out, bool captured, const gfx::Size& size,
            const std::vector<uint32_t>& pixels) {
-          // `captured` already implies a non-empty bitmap: SpikeProbe answers
-          // false for anything `SkBitmap::drawsNothing()` is true of, and that
-          // is exactly an empty or null one. So there is no zero-sized case to
-          // handle here — a branch for it would be a branch nothing can reach.
+          // SpikeProbe returns false for an empty bitmap, so `captured`
+          // implies a non-empty one.
           if (captured) {
             out->window_width = size.width();
             out->window_height = size.height();
             *found = 0;
 
-            // Bounded by the smaller of what arrived and what `size` says: a
-            // short reply must not be read past, and a long one must not
-            // report a row below the bottom of the window.
+            // Bound by both `size` and the reply's length, so a short reply is
+            // not overread and a long one adds no rows.
             const size_t width = static_cast<size_t>(size.width());
             const size_t area = width * static_cast<size_t>(size.height());
             const size_t last = std::min(area, pixels.size());
 
-            // The whole extent, not the first pixel — see the header. Walked
-            // once, row-major, keeping the corners.
+            // Compute the color's bounding box in one row-major pass.
             int32_t left = size.width();
             int32_t top = size.height();
             int32_t right = -1;
@@ -904,10 +850,9 @@ struct DomicileEngine {
   void TearDown() {
     surfaces_.clear();
     broker_.reset();
-    // Bound on this thread, so it has to die on it: a mojo::Remote validates
-    // the sequence it is destroyed on.
+    // Mojo remotes and receivers check they are destroyed on the thread that
+    // bound them.
     probe_.reset();
-    // And a mojo::Receiver validates the same thing.
     displays_.Unbind();
     copies_.Unbind();
   }
@@ -926,14 +871,13 @@ struct DomicileEngine {
 
   const DomicileEngineCallbacks callbacks_;
   domicile::EngineEventQueue queue_;
-  // Bound on the engine's thread, in ConnectOnThread, like every other
-  // receiver here.
+  // Bound on the engine's thread in ConnectOnThread.
   domicile::Displays displays_{&queue_};
   domicile::Copies copies_{&queue_};
   base::Thread thread_;
   std::unique_ptr<mojo::core::ScopedIPCSupport> ipc_support_;
   mojo::Remote<domicile::mojom::FrameSinkBroker> broker_;
-  // THROWAWAY. See domicile_engine_spike.h.
+  // Throwaway; see domicile_engine_spike.h.
   mojo::Remote<domicile::mojom::SpikeProbe> probe_;
   base::flat_map<DomicileSurfaceId, std::unique_ptr<domicile::Surface>>
       surfaces_;
@@ -1027,9 +971,8 @@ void domicile_surface_submit_crop(DomicileEngine* engine,
 void domicile_displays_configure(DomicileEngine* engine,
                                  const DomicileDisplayLayout* layout,
                                  uint32_t count) {
-  // A null array with a count is a caller bug and a read through nothing; a
-  // null array with no count is the ordinary way to say "no opinion", which
-  // `base::span` is happy to build empty.
+  // A null array with a nonzero count is a caller bug. A null array with zero
+  // count means "no preference".
   if (engine && (layout || count == 0)) {
     engine->ConfigureDisplays(layout, count);
   }
@@ -1039,16 +982,13 @@ void domicile_clipboard_set(DomicileEngine* engine,
                             DomicileClipboard clipboard,
                             const char* text,
                             size_t length) {
-  // A null pointer with a length is a caller bug and a read through nothing; a
-  // null pointer with no length is the ordinary way to say "nothing is on this
-  // clipboard", which is an empty string.
+  // A null pointer with a nonzero length is a caller bug. A null pointer with
+  // zero length clears the clipboard.
   if (engine && (text || length == 0)) {
-    // SAFETY: the ABI says `text` points at `length` bytes, valid for the
-    // duration of this call, and the line above has refused a null one
-    // carrying a length. A span for `domicile_displays_configure`'s reason --
-    // Chromium compiles with `-Wunsafe-buffer-usage` -- and `UNSAFE_BUFFERS`
-    // because building one from a pointer and a length is what that warning is
-    // about. The string is copied before this returns.
+    // SAFETY: the ABI says `text` points at `length` bytes valid for this
+    // call, and the check above refused a null pointer with a nonzero length.
+    // `UNSAFE_BUFFERS` is required to span an ABI pointer and length. The
+    // string is copied before this returns.
     const auto bytes = UNSAFE_BUFFERS(base::span(text, length));
     engine->SetClipboard(clipboard, std::string(bytes.begin(), bytes.end()));
   }

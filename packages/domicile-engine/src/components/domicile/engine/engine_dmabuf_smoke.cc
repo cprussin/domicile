@@ -1,26 +1,18 @@
 // Copyright 2026 Connor Prussin
 // SPDX-License-Identifier: MIT
 
-// THROWAWAY. Phase 1's last assertion: a real dmabuf, allocated by something
-// that is not Chromium, reaches the screen through a page.
+// Throwaway smoke test: a dmabuf allocated outside Chromium reaches the screen
+// through a page.
 //
-// It stands in for domicile-compositor with a client attached. It allocates a
-// buffer on the render node, fills it with a color nothing else in the run
-// uses, hands the fds to libdomicile_engine.so, submits it, and then asks the
-// browser what the display compositor actually drew where the page put the
-// <app>. Exits 0 only if that pixel is the buffer's own content — and only if
-// `released` fired, because a buffer viz has not handed back is one the
-// compositor must not draw into again.
+// Stands in for domicile-compositor with one client. Allocates a buffer on the
+// render node, fills it with a unique color, submits it through
+// libdomicile_engine.so, and samples what viz drew at the <app>. Exits 0 only
+// if the pixel matches and the buffer was released.
 //
-// It is C++ where engine_smoke.c is C, and that is not a retreat from the C
-// ABI: it uses the same header, and it is C++ only because allocating a gbm
-// buffer here means using //ui/gfx/linux:gbm rather than shipping a second
-// allocator. The C ABI is still what it calls across.
+// C++ only to use //ui/gfx/linux:gbm for allocation; it still calls the C ABI.
 //
-// Run it with packages/domicile-engine/scripts/spike-dmabuf.sh, which is
-// under-wayland.sh underneath: --ozone-platform=headless has no
-// CreateNativePixmapFromHandle, so this cannot pass there and does not pretend
-// it might.
+// Run it with packages/domicile-engine/scripts/spike-dmabuf.sh. It cannot pass
+// under --ozone-platform=headless, which lacks CreateNativePixmapFromHandle.
 
 #include <fcntl.h>
 #include <poll.h>
@@ -56,29 +48,22 @@ namespace {
 constexpr char kSocketSwitch[] = "domicile-broker-socket";
 constexpr char kRenderNodeSwitch[] = "render-node";
 constexpr char kColorSwitch[] = "color";
-// Diagnostic: allocate a buffer the GPU can render into rather than one the
-// CPU can write, and do not fill it. NVIDIA's gbm gives out one or the other
-// and not both, so this is how to tell "the import path is broken" from "a
-// linear dmabuf is not sampleable on this driver": the pixel is then whatever
-// the buffer happened to contain, and anything other than the fallback proves
-// the texture was sampled.
+// Diagnostic: allocate an unfilled GPU-renderable buffer instead of a
+// CPU-writable one. NVIDIA's gbm offers only one of the two, so this separates
+// a broken import path from a driver that cannot sample linear dmabufs.
 constexpr char kRenderableSwitch[] = "renderable";
 
-// DRM_FORMAT_ABGR8888. Spelled out rather than included, because pulling in
-// libdrm's headers for one constant is not worth it.
+// DRM_FORMAT_ABGR8888, defined here to avoid including libdrm's headers.
 constexpr uint32_t kFormatAbgr8888 = 0x34324241;
 
-// GBM_BO_USE_*, spelled out for the same reason the fourcc is.
+// GBM_BO_USE_*, defined here for the same reason.
 constexpr uint32_t kUseScanout = 1 << 0;
 constexpr uint32_t kUseRendering = 1 << 2;
 constexpr uint32_t kUseWrite = 1 << 3;
 constexpr uint32_t kUseLinear = 1 << 4;
 
-// Tried in order, most useful first. Scanout is what would let viz promote the
-// quad to an overlay, which is the whole reason the buffer is a dmabuf and not
-// a bitmap — but a render node has no KMS behind it and a driver is entitled to
-// refuse, so the run says which combination it got rather than insisting on
-// one. Linear is not negotiable: the CPU has to be able to fill it.
+// Tried in order. Scanout allows overlay promotion, but a render node may
+// refuse it. Linear is required so the CPU can fill the buffer.
 struct Usage {
   const char* name;
   uint32_t flags;
@@ -90,9 +75,8 @@ constexpr Usage kUsages[] = {
     {"linear", kUseLinear | kUseWrite},
 };
 
-// The color the buffer is filled with, and nothing else in the run is. Not the
-// page's background and not a color any other spike producer submits, so a
-// pixel that matches it came from this dmabuf and from nowhere else.
+// A color nothing else in the run draws, so a match proves it came from this
+// dmabuf.
 constexpr uint32_t kDefaultColor = 0xFF3366CC;
 
 constexpr base::TimeDelta kEmbedTimeout = base::Seconds(60);
@@ -137,9 +121,7 @@ void OnReleased(void* user_data,
          surface, static_cast<unsigned long long>(buffer));
 }
 
-// Fills the buffer with one color through the SkSurface gbm hands out for a
-// linear buffer, which is the least machinery that puts known bytes in a
-// dmabuf.
+// Fills a linear buffer with one color through gbm's SkSurface.
 bool Paint(ui::GbmBuffer* buffer, uint32_t argb) {
   sk_sp<SkSurface> surface = buffer->GetSurface();
   if (!surface) {
@@ -150,8 +132,7 @@ bool Paint(ui::GbmBuffer* buffer, uint32_t argb) {
   return true;
 }
 
-// The dmabuf as the C ABI takes it: exactly what a Wayland client would have
-// sent in zwp_linux_buffer_params_v1.
+// The dmabuf as the C ABI takes it, matching zwp_linux_buffer_params_v1.
 DomicileDmabuf Describe(ui::GbmBuffer* buffer) {
   DomicileDmabuf dmabuf;
   memset(&dmabuf, 0, sizeof(dmabuf));
@@ -170,9 +151,8 @@ DomicileDmabuf Describe(ui::GbmBuffer* buffer) {
   return dmabuf;
 }
 
-// One buffer, by whichever usage this driver will give out. NVIDIA's gbm hands
-// out CPU-writable or GPU-renderable and not both, and only the second is
-// sampleable once imported — see spike-dmabuf.sh.
+// Allocates with the first usage the driver accepts. On NVIDIA only
+// GPU-renderable buffers are sampleable after import; see spike-dmabuf.sh.
 std::unique_ptr<ui::GbmBuffer> Allocate(ui::GbmDevice* device,
                                         const gfx::Size& size,
                                         bool renderable,
@@ -288,15 +268,12 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  // The client's window, at the size the page's layout box asked for.
   const gfx::Size window(static_cast<int>(seen.width),
                          static_cast<int>(seen.height));
   const bool renderable = command_line.HasSwitch(kRenderableSwitch);
 
-  // Two of them, because one is not enough to see a release: viz holds the
-  // buffer that is on screen, and hands it back when a later frame replaces
-  // it. That is wl_buffer.release exactly, and it is why a Wayland client
-  // double-buffers rather than drawing into the buffer it just committed.
+  // Two buffers: viz releases the on-screen buffer only when a later frame
+  // replaces it.
   std::unique_ptr<ui::GbmBuffer> buffers[2];
   std::string usage_name;
   for (auto& slot : base::span(buffers)) {
@@ -339,8 +316,7 @@ int main(int argc, char** argv) {
   domicile_surface_submit(engine, surface, imported[0], 0, 0, 0, 0);
   printf("submitted the first\n");
 
-  // The pixel is the point. The page puts the <app> where spike-dmabuf-page
-  // says, and the center of the window is inside it.
+  // The spike page places the <app> over the window's center.
   uint32_t drawn = 0;
   bool matched = false;
   for (int i = 0; i < kSampleTries && !matched; ++i) {
@@ -352,9 +328,7 @@ int main(int argc, char** argv) {
     }
   }
 
-  // The second frame is what frees the first buffer. A compositor that drew
-  // into the buffer it had just committed would tear, which is why viz holds it
-  // until something replaces it — and why this is two submits and not one.
+  // Submitting the second buffer releases the first.
   domicile_surface_submit(engine, surface, imported[1], 0, 0, 0, 0);
   printf("submitted the second, which is what frees the first\n");
 
@@ -364,7 +338,7 @@ int main(int argc, char** argv) {
 
   printf("\n");
   if (renderable) {
-    // Nothing filled it, so any color but the embedder's fallback means the
+    // The buffer is unfilled, so any color but the fallback means the
     // texture was sampled.
     matched = drawn != 0xFF000000u;
     printf("drew #%08X from an unfilled renderable dmabuf — %s\n", drawn,

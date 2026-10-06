@@ -23,104 +23,53 @@ namespace ui {
 
 class DrmScreen;
 
-// What to ask the DRM thread to light, given what it reported is connected.
+// Builds the modeset request for the connected displays. A free function so
+// it can be unit tested.
 //
-// This is the whole of the arithmetic in lighting a screen, and it is a free
-// function so that it has a test: everything around it -- a delegate, two
-// asynchronous callbacks and a thread -- is wiring, and wiring is what the
-// browser exercises.
+// A snapshot with no native mode is skipped. `DisplaysFromSnapshots` gives one
+// a fallback because a window must land somewhere, but a modeset must not ask
+// a CRTC for a mode the hardware never advertised.
 //
-// A snapshot with no native mode is SKIPPED rather than given a fallback. That
-// is the opposite of what `DisplaysFromSnapshots` does with the same input, and
-// deliberately: a display list must answer for every connector because a window
-// has to land somewhere, while a modeset must not invent a mode for a connector
-// that did not report one. Asking a CRTC for a mode the hardware never
-// advertised is how a screen goes black rather than wrong.
-//
-// `layout` IS THE COMPOSITOR'S ANSWER ABOUT WHAT THE GLASS DOES, and it is the
-// whole of why this takes two arguments. The config that says which monitors
-// are on and which side of the desk each is on lives in the compositor; the
-// CRTCs live here, because this is the process holding DRM master. So the
-// answer crosses the engine's C ABI and arrives as this.
-//
-// EMPTY MEANS THE HARDWARE DECIDES WHAT IS LIT, which is what every desktop but
-// a matched profile's says and what this did before a layout could be stated
-// at all: every readable connector. WHERE is `OriginsForLayout`'s, the same
-// corners the display list has -- one row in connector order, never the
-// snapshot's own origin, which is (0, 0) for a connector ozone has not read
-// before.
-//
-// A NON-EMPTY LAYOUT IS THE WHOLE TRUTH. A connector it does not name is left
-// dark. That case is a monitor plugged in between the reading the compositor
-// answered and this one, and it lights on the next round trip: this modeset
-// makes the kernel emit a CHANGE, the display list crosses again, and the
-// answer that comes back names it.
+// `layout` is the compositor's display config, which arrives over the
+// engine's C ABI because this process holds DRM master. When it is empty,
+// every readable connector lights, placed by `OriginsForLayout`. When it is
+// not, connectors it does not name stay dark; a newly plugged monitor lights
+// once the compositor answers the hotplug this modeset triggers. See
+// docs/DISPLAYS.md#which-connectors-light.
 std::vector<display::DisplayConfigurationParams> ModesetParamsFromSnapshots(
     const std::vector<raw_ptr<display::DisplaySnapshot,
                               VectorExperimental>>& snapshots,
     const std::vector<DomicileDisplayLayout>& layout);
 
-// What a reading of the displays says, in one line.
+// Describes a display reading in one log line, including each native mode.
 //
-// THIS EXISTS BECAUSE THREE RUNS ON REAL HARDWARE WERE SPENT INFERRING WHAT
-// THIS DRIVER DID. It logged when it SKIPPED a modeset and said nothing at all
-// when it performed one, so a successful modeset was invisible unless
-// Chromium's own `screen_manager` VLOG was enabled -- and
-// `--vmodule=drm*=1,gbm*=1,ozone*=1`, the incantation everybody was using,
-// does not match `screen_manager`. Absence of evidence read as evidence of
-// absence, twice.
-//
-// The mode is the load-bearing part. It is what the CRTC is set to, and it is
-// what the browser window has to match EXACTLY -- `ScreenManager::FindWindowAt`
-// compares whole rectangles -- or no controller is bound to the window and
-// every page flip is dropped before it reaches the kernel.
-//
-// A free function so it has a test, like the two below.
+// The mode matters because the browser window must match it exactly
+// (`ScreenManager::FindWindowAt` compares whole rectangles); otherwise every
+// page flip is dropped. Chromium's own modeset logging needs
+// `--vmodule=screen_manager=1`; see docs/TTY-DEBUGGING.md#seeing-a-modeset.
 std::string DescribeSnapshots(
     const std::vector<raw_ptr<display::DisplaySnapshot,
                               VectorExperimental>>& snapshots);
 
-// Whether asking for `wanted` could tell us anything `asked` did not.
+// Whether a modeset for `wanted` differs from the last confirmed one, `asked`.
 //
-// THIS EXISTS BECAUSE THE FIRST RUN ON REAL HARDWARE MODESET FOREVER. Every
-// `Configure` makes the kernel emit a udev CHANGE for the card; the browser
-// process turns that into `OnConfigurationChanged`; this driver read the
-// displays and configured them again. The log from that machine is a CRTC
-// being set to the mode it was already in, over and over, seconds apart --
-// and a screen re-modesetting on a loop is a screen that never settles enough
-// to show anything. The driver caused its own hotplugs.
+// Each `Configure` makes the kernel emit a udev CHANGE, which triggers another
+// reading. Skipping a request that matches the last confirmed one stops that
+// loop. A real hotplug changes the reading and gets through.
 //
-// The rule that breaks it is one sentence: the params come from the hardware's
-// own report, so if the report has not changed, asking again cannot produce a
-// different answer. A real hotplug changes the report and always gets through.
-//
-// Compared against what the hardware last CONFIRMED, and the first attempt at
-// this compared against what was last asked for instead. That was wrong, and
-// wrong in a way that showed up only on a real machine: the driver's first
-// `Configure` goes out before the GPU thread has added a DRM device, so it
-// reaches nothing. Recording it anyway made the guard suppress the udev ADD
-// that arrives three seconds later with the same reading -- and the second ask
-// was the one that would have worked. Nothing modeset at all.
-//
-// So an ask that was never confirmed is not a state anything can be compared
-// to. The old code got away with it by re-configuring on every event, which is
-// the loop; the rule is the same one, applied to the right fact.
+// Compare only against confirmed modesets. The first `Configure` goes out
+// before the GPU process has a DRM device, so it reaches nothing; recording it
+// would suppress the identical reading that later does work.
 bool ModesetWouldChangeAnything(
     const std::vector<display::DisplayConfigurationParams>& asked,
     const std::vector<display::DisplayConfigurationParams>& wanted);
 
-// Drives `NativeDisplayDelegate` so that something actually modesets.
+// Drives `NativeDisplayDelegate` to modeset off ChromeOS, where
+// `DisplayConfigurator` is unavailable. See
+// docs/architecture/A-DESKTOP-ON-A-TTY.md#the-modeset-driver.
 //
-// On ChromeOS this is `DisplayConfigurator`, which lives in
-// `//ui/display/manager` behind `assert(is_chromeos)`. Only that CALLER is
-// ChromeOS-only: every seam it drives -- `GetDisplays`, `Configure`,
-// `TakeDisplayControl` -- is ungated and already implemented by
-// `DrmNativeDisplayDelegate`. So this is a caller, not a port, and it skips
-// `DisplayChangeObserver` entirely: those 478 lines produce
-// `ManagedDisplayInfo`, which is ChromeOS product surface nothing here reads.
-//
-// It feeds `DrmScreen` the same snapshots it modesets from, so the display list
-// the browser sees and the CRTCs that are lit come from one reading.
+// It passes `DrmScreen` the same snapshots it modesets from, so the display
+// list and the lit CRTCs come from one reading.
 class DrmModeset : public display::NativeDisplayObserver {
  public:
   DrmModeset(std::unique_ptr<display::NativeDisplayDelegate> delegate,
@@ -131,38 +80,23 @@ class DrmModeset : public display::NativeDisplayObserver {
 
   ~DrmModeset() override;
 
-  // Initializes the delegate and asks for the display list. Lighting happens
-  // when that answer arrives, and again on every hotplug.
+  // Initializes the delegate and requests the displays. Modesets when they
+  // arrive and on every hotplug.
   void Start();
 
-  // What the compositor wants the connectors doing. See
-  // `ModesetParamsFromSnapshots`, which is where it is applied.
+  // Sets the compositor's display layout; see `ModesetParamsFromSnapshots`.
   //
-  // Re-reads the displays rather than reusing the last reading, for the reason
-  // `OnConfigurationChanged` does: this holds no snapshots between callbacks --
-  // they are owned by the host manager and `OnDisplaySnapshotsInvalidated` is
-  // how it says so -- and the two halves of an answer must come from one
-  // reading whichever of them moved.
+  // Re-reads the displays because no snapshots are held between callbacks,
+  // and the screen and the modeset must come from one reading.
   void SetLayout(std::vector<DomicileDisplayLayout> layout);
 
-  // Light every connector again, whatever the hardware reports.
+  // Modesets again even if the reading is unchanged.
   //
-  // FOR THE EVENTS A READING CANNOT DESCRIBE, and there are two of them. A GPU
-  // that has been through a suspend comes back with its CRTCs reset; a console
-  // handed back after a VT switch comes back with its CRTCs programmed by
-  // whoever held it. Either way the connectors report exactly what they
-  // reported going out, so `ModesetWouldChangeAnything` -- which is right
-  // about every hotplug, and exists because this driver used to modeset in a
-  // loop -- answers "nothing changed" and leaves the panels showing somebody
-  // else's frame. What this does is forget the confirmation that comparison is
-  // made against, so the next reading gets through. One confirmation, not the
-  // guard: the modeset this causes is confirmed in its turn and goes on
-  // suppressing its own echo.
-  //
-  // `DrmSleep` and `DrmVtSwitcher` are the callers. See `domicile/drm_sleep.h`
-  // for why a wake is the only part of a suspend this driver has to answer
-  // for, and `domicile/drm_vt_switcher.h` for why taking DRM master back is
-  // not the same thing as having the screens back.
+  // After a resume or a VT switch back, the CRTCs are reset or programmed by
+  // another process, but the connectors report the same as before, so
+  // `ModesetWouldChangeAnything` would skip the modeset. This clears the last
+  // confirmation so the next reading gets through. Called by `DrmSleep` and
+  // `DrmVtSwitcher`.
   void Relight();
 
   // display::NativeDisplayObserver:
@@ -176,19 +110,14 @@ class DrmModeset : public display::NativeDisplayObserver {
 
   const std::unique_ptr<display::NativeDisplayDelegate> delegate_;
   const raw_ptr<DrmScreen> screen_;  // Not owned; outlives this.
-  // What the hardware last CONFIRMED, so a hotplug this driver caused is not
-  // answered with the modeset that caused it -- and so an ask that reached
-  // nothing is not mistaken for one that landed. See
+  // The last modeset the hardware confirmed. See
   // `ModesetWouldChangeAnything`.
   std::vector<display::DisplayConfigurationParams> confirmed_;
-  // What the compositor last said the connectors should be doing, empty until
-  // it has said anything. See `ModesetParamsFromSnapshots`.
+  // The compositor's last layout; empty until it sends one.
   std::vector<DomicileDisplayLayout> layout_;
-  // Whether control is still inside `delegate_->Configure`, which is how a
-  // yes that reached hardware is told from one that did not: a real modeset is
-  // committed on the DRM thread and answered on a later task, so the only
-  // thing that can answer before the call returns is this process itself. See
-  // `OnDisplaysReceived`.
+  // Whether `delegate_->Configure` is still running. A real modeset is
+  // answered on a later task, so an answer that arrives while this is true
+  // came from this process, not the hardware. See `OnDisplaysReceived`.
   bool inside_configure_ = false;
   base::WeakPtrFactory<DrmModeset> weak_factory_{this};
 };

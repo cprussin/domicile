@@ -9,17 +9,16 @@
   constructor(DOMString type,
               optional DomicileShellConfigEventInit eventInitDict = {});
 
-  // The shell's part of the desk's config -- its keybindings, each mode's, and
-  // the options the config keeps for a shell by name -- as the JSON line the
-  // compositor sent, `type` and all.
+  // The shell's part of the desktop config (keybindings per mode, and the
+  // options set for this shell by name), as the compositor's JSON line,
+  // `type` included.
   //
-  // A STRING FOR THE PAGE TO PARSE, and not attributes, because a shell's
-  // options are whatever its config says and WebIDL cannot type a value nobody
-  // has declared. The browser has already parsed it once, so it is a JSON
-  // object; what is in it is the SDK's to read.
+  // A string rather than attributes because a shell's options are arbitrary
+  // and WebIDL cannot type them. The browser has validated it as a JSON
+  // object; the SDK reads it.
   readonly attribute DOMString config;
 
-  // When the browser process had this message, on `performance.now()`'s clock.
-  // See DomicileModifiersEvent.arrival for what this is and what it is not.
+  // When the browser process received this, on `performance.now()`'s clock.
+  // See DomicileModifiersEvent.arrival.
   readonly attribute DOMHighResTimeStamp arrival;
 };

@@ -1,15 +1,12 @@
-// What Bitwarden's sign-in does, and what guard-webview-popup-window.sh is
-// about: a popup window of the extension's own, at a page of its own, at a
-// size.
+// The extension popup for guard-webview-popup-window.sh. Like Bitwarden's
+// sign-in, it opens a sized popup window at its own page.
 //
-// THE ANSWER IS WRITTEN INTO THIS PAGE'S OWN ADDRESS,
-// `?created=<id>&tabs=<n>`, because the address is what the shell can read:
-// the <webview> reports every page it shows as `domicile-page-change`. A
-// windows.create that failed says `created=error-<message>`; one that never
-// answers says nothing, which is what the guard's control reads.
+// The result goes into this page's address, `?created=<id>&tabs=<n>`, which
+// the shell reads from `domicile-page-change`. A failed windows.create writes
+// `created=error-<message>`. One that never answers writes nothing, which is
+// what the control expects.
 //
-// Off `globalThis` because `chrome` is an extension's global, which the linter
-// this repository runs over every script does not know.
+// Read from `globalThis` because the linter does not know the `chrome` global.
 const { windows } = globalThis.chrome;
 
 const say = (answer) => {

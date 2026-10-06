@@ -1,36 +1,19 @@
 #!/usr/bin/env python3
-"""Click at one point of the engine's window, from outside it.
+"""Click at one point of the engine's window over the DevTools protocol.
 
-guard-webview-click.sh has to press the pointer inside a browser window on a
-running desktop. There is no pointer: the guard is headless and
-software-composited, for the reason guard-webview-framing.sh is. So the press
-is dispatched over the DevTools protocol instead, down the wire in
-guard_webview_devtools.py -- which is also where the argument that a press
-dispatched this way is hit-tested exactly as the platform's own would be is
-written down, and that argument is the whole reason this guard is allowed to
-use it.
+The guards are headless and software-composited, so there is no real pointer.
+guard_webview_devtools.py explains why a press dispatched this way is
+hit-tested like a platform one.
 
-THE COORDINATES ARE THE SHELL'S WINDOW, in CSS pixels from its top left, which
-is what makes them the experiment: the guard picks a point inside the element
-and a point outside it, and which widget the press reaches is decided by the
-hit test rather than by anything this says.
+Coordinates are CSS pixels from the shell window's top left; the hit test, not
+this script, decides which widget the press reaches.
 
-A PRESS AND A RELEASE, because a click is both and half of one is a state the
-desktop is left in. The press is what moves focus -- `OnInputEventPreDispatch`
-answers kMouseDown -- so the release changes nothing about what the guard
-reads; it is sent so that the window the guard leaves behind is not one with a
-button held down in it, which every later reading of that run would be taken
-under.
+It sends a press and a release. The press moves focus; the release keeps a
+held button from affecting later readings. The release carries the same
+`button`, because Blink pairs them by button.
 
-WHICH BUTTON IS AN ARGUMENT, AND FOR ONE GUARD IT IS THE EXPERIMENT. A left
-press on a link follows it in place; a MIDDLE press on the same link asks for
-it in a second window, and that difference is decided in the browser process
-rather than in the page. guard-webview-routed-link.sh drives both at one point
-on one link, so the only thing that differs between its run and its control is
-this flag -- which is why the button is named here rather than assumed.
-
-The release carries the same `button` as the press. A middle press answered by
-a left release is not a click anybody makes, and Blink pairs them by button.
+The button is an argument: guard-webview-routed-link.sh compares a left press
+(follows the link in place) with a middle press (opens a second window).
 """
 
 import argparse
@@ -38,12 +21,9 @@ import sys
 
 from guard_webview_devtools import command, connect, shell_target
 
-# What a button looks like in the two ways CDP asks for it: `button` names which
-# one the event is about, and `buttons` is the mask of what is held while it
-# happens. The two are not the same spelling of one fact -- the mask is a
-# bitfield in the DOM's own order, where 1 is primary, 2 secondary and 4
-# auxiliary -- and a press with an empty mask is not a press. The secondary
-# one is what asks for a context menu.
+# `button` names the button the event is about; `buttons` is the mask held
+# during it (1 primary, 2 secondary, 4 auxiliary). A press needs a non-empty
+# mask. Secondary opens a context menu.
 BUTTONS = {"left": 1, "middle": 4, "right": 2}
 NONE_HELD = 0
 
@@ -57,12 +37,12 @@ def click(connection, x, y, button="left"):
 
 
 def pressing(x, y, button="left"):
-    """The button going down at (x, y), and held while it does."""
+    """The button going down at (x, y), held during the event."""
     return mouse_event("mousePressed", x, y, button, BUTTONS[button])
 
 
 def releasing(x, y, button="left"):
-    """And coming back up, with nothing held once it has."""
+    """The button going up at (x, y), with nothing held."""
     return mouse_event("mouseReleased", x, y, button, NONE_HELD)
 
 
@@ -73,8 +53,8 @@ def mouse_event(kind, x, y, button, held):
         "y": y,
         "button": button,
         "buttons": held,
-        # A press that is not the first of a click is one the page can tell
-        # from a click, and `Input.dispatchMouseEvent` defaults this to 0.
+        # Set clickCount: it defaults to 0, and a page can tell a 0-count press
+        # from a click.
         "clickCount": 1,
     }
 

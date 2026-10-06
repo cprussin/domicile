@@ -15,17 +15,15 @@ namespace blink {
 
 class DomicileShellConfigEventInit;
 
-// The shell's part of the desk's config: its keybindings, each mode's, and the
-// options the config keeps for a shell by name.
+// The shell's part of the desktop config: keybindings per mode, and the
+// options set for this shell by name.
 //
-// Carried as the JSON line the compositor sent rather than as attributes, which
-// no other event here does. A shell's options are whatever its config says, and
-// WebIDL cannot type a value nobody has declared -- so the page parses `config`
-// for itself, and the SDK is where its shape is read. See
-// ControlChannelClient::ShellConfig.
+// Carried as the compositor's JSON line rather than as attributes, because a
+// shell's options are arbitrary and WebIDL cannot type them. The SDK parses
+// `config`; see ControlChannelClient::ShellConfig.
 //
-// Pushed like DomicileThemeEvent: once to a page that has only just connected,
-// and again whenever a reload of the compositor's config moved what it carries.
+// Pushed to a newly connected page, and again when a config reload changes
+// it.
 class MODULES_EXPORT DomicileShellConfigEvent final : public Event {
   DEFINE_WRAPPERTYPEINFO();
 
@@ -43,8 +41,8 @@ class MODULES_EXPORT DomicileShellConfigEvent final : public Event {
 
   const String& config() const { return config_; }
 
-  // When the browser process had this, on `performance.now()`'s clock. See
-  // DomicileAppEvent::arrival.
+  // When the browser process received this, on `performance.now()`'s clock.
+  // See DomicileAppEvent::arrival.
   DOMHighResTimeStamp arrival() const { return arrival_; }
 
   const AtomicString& InterfaceName() const override;

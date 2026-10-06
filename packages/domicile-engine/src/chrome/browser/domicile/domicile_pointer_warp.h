@@ -8,28 +8,15 @@
 
 namespace domicile {
 
-// Put the cursor at `x`,`y` of the page in `frame`, in the page's own
-// coordinates.
+// Moves the cursor to `x`,`y` in the coordinates of the page in `frame`.
 //
-// WHY A PAGE ASKS AND WHAT IT MAY ASK FOR are in
-// components/domicile/browser/pointer_warp.h, which is the half with the
-// tests. This is the half that needs a window: which root the page is in, and
-// where in that root the page begins, neither of which is anything
-// //components can be asked.
+// The policy is components/domicile/browser/pointer_warp.h, which has the
+// tests. This half maps the page to its aura root window, which only //chrome
+// has. Whether the pointer moves depends on the platform: the DRM cursor plane
+// on a console, and usually nothing when nested in another compositor.
 //
-// WHY THIS LIVES IN //chrome, like the shell's windows next door: a cursor is
-// moved through the aura WindowTreeHost the page's view belongs to, and
-// nothing below //chrome/browser has one. The platform under it is what
-// actually moves the pointer -- on the console that is the DRM cursor plane,
-// and in a nested run it is somebody else's compositor, which cannot be asked
-// to move a pointer at all. A shell is written the same way either way.
-//
-// By id rather than by pointer, because the call arrives from the IO thread:
-// a RenderFrameHost may not be carried across threads, and a page that closed
-// in the meantime is a lookup that answers nothing rather than a pointer to a
-// frame that is gone.
-//
-// Must be called on the UI thread.
+// Must be called on the UI thread. `frame` is an id because the request comes
+// from the IO thread and the frame may close in the meantime.
 void WarpPointerIn(content::GlobalRenderFrameHostId frame, double x, double y);
 
 }  // namespace domicile

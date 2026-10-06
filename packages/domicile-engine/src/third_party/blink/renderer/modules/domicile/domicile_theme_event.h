@@ -14,20 +14,14 @@ namespace blink {
 
 class DomicileThemeEventInit;
 
-// Which way round the desktop is drawn now.
+// The desktop's current theme.
 //
-// Pushed, like DomicileBatteryEvent, and the one pushed event a page can
-// cause: `setTheme()` on the other direction is answered with this, to every
-// chrome on the desk rather than to the one that called. A desk of three
-// monitors is three pages and the toggle is on one of them, so the page that
-// asked is told along with the rest instead of believing its own click.
+// Pushed by the compositor. `setTheme()` is answered with this event, sent to
+// every chrome on the desktop including the caller, since each monitor is a
+// separate page.
 //
-// A PAGE CANNOT READ THIS FOR ITSELF, and `prefers-color-scheme` is the route
-// that looks like it can. That media query answers out of this engine's own
-// notion of a system preference, which under Domicile is nothing -- there is
-// no desktop above this one to have a preference. The theme is the
-// compositor's, out of `[theme] mode` in its config and whatever the toggle
-// has done to it since, and this is how it arrives.
+// `prefers-color-scheme` does not reflect it: the theme comes from the
+// compositor's `[theme] mode` config and `setTheme()` calls.
 class MODULES_EXPORT DomicileThemeEvent final : public Event {
   DEFINE_WRAPPERTYPEINFO();
 
@@ -44,8 +38,8 @@ class MODULES_EXPORT DomicileThemeEvent final : public Event {
 
   V8DomicileTheme theme() const { return theme_; }
 
-  // When the browser process had this, on `performance.now()`'s clock. See
-  // DomicileAppEvent::arrival.
+  // When the browser process received this, on `performance.now()`'s clock.
+  // See DomicileAppEvent::arrival.
   DOMHighResTimeStamp arrival() const { return arrival_; }
 
   const AtomicString& InterfaceName() const override;
@@ -53,9 +47,7 @@ class MODULES_EXPORT DomicileThemeEvent final : public Event {
   void Trace(Visitor*) const override;
 
  private:
-  // Not nullable and with no member for absence: the compositor tells a chrome
-  // the theme as part of the handshake, so an event carrying "no theme" is a
-  // state this channel does not have.
+  // Not nullable: the compositor sends the theme during the handshake.
   V8DomicileTheme theme_{V8DomicileTheme::Enum::kDark};
   DOMHighResTimeStamp arrival_ = 0;
 };

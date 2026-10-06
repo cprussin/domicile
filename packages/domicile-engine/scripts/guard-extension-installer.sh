@@ -1,30 +1,22 @@
 #!/usr/bin/env bash
-# An extension the compositor names, installed by the engine and running.
+# Checks that an extension named in the compositor's `extensions` message is
+# installed and runs.
 #
 #   nix develop .#full --command \
 #     ./packages/domicile-engine/scripts/guard-extension-installer.sh /build/chromium/src
 #
-# WHY THIS EXISTS. A desk's `[extensions]` reaches the browser as one
-# `extensions` message on the control socket, which the control channel stops
-# and hands to `domicile::InstallExtensionsInto` -- see
-# src/chrome/browser/domicile/domicile_extension_installer.h. What the desk
-# asked for is that the extension RUNS, so that is what this reads: the
-# content-script fixture's mark, in a <webview>, in an engine started without
-# `--load-extension`.
+# The control channel passes the message to `domicile::InstallExtensionsInto`
+# (src/chrome/browser/domicile/domicile_extension_installer.h). The engine
+# starts without `--load-extension`, so the list is the only way in.
 #
-# Headless, with a stand-in for the compositor's end of the control socket, as
-# `guard-control-arrival.sh`; the page, the fixture and the colors are
-# `guard-webview-content-script.sh`'s.
+# Headless, with a stand-in compositor as in guard-control-arrival.sh. The
+# page, fixture and colors come from guard-webview-content-script.sh.
 #
-# WHAT IT ASSERTS. That the stand-in sent the list naming the fixture as
-# `unpacked`, and that `COLOR` is then somewhere in the window, with the
-# shell's background as the witness. The shell reloads the <webview> every
-# second, because only a page loaded after the install is injected.
+# Asserts that the stand-in sent the list naming the fixture as `unpacked`, and
+# that the fixture's `COLOR` then appears in the window.
 #
-# HOW IT CAN FAIL. NEGATIVE=1 runs the control: the same run with `unpacked`
-# empty. It MUST NOT show `COLOR`, and its witness is the served page's own
-# color, so the absence is read off a guest that drew -- after a list that
-# was sent, so the absence is an answer to it.
+# NEGATIVE=1 sends an empty list. `COLOR` must not appear, and the witness is
+# the page's own color, so the guest did draw.
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
@@ -45,12 +37,10 @@ fi
 
 NEGATIVE="${NEGATIVE:-0}"
 
-# The mark. Fixed rather than overridable: the fixture's `content.js` paints
-# it, and `scripts/test-extension-installer-guard.sh` holds the two together.
+# Painted by the fixture's `content.js`, so not overridable.
+# scripts/test-extension-installer-guard.sh keeps the two in sync.
 readonly COLOR="8E24AA"
-# The shell's background, and the served page's own color: not the
-# content-script guard's, so the two can share a machine without reading each
-# other.
+# Differ from the content-script guard's colors, so the two can run together.
 WITNESS="${WITNESS:-1C3A2E}"
 PAGE_COLOR="${PAGE_COLOR:-25A8F9}"
 
@@ -65,9 +55,7 @@ PROFILE="${PROFILE:-/tmp/domicile-extension-installer-profile}"
 ENGINE_LOG="${ENGINE_LOG:-/tmp/domicile-extension-installer-engine.log}"
 SOCKET_LOG="${SOCKET_LOG:-/tmp/domicile-extension-installer-socket.log}"
 PROBE_LOG="${PROBE_LOG:-/tmp/domicile-extension-installer-probe.log}"
-# One per leg. The control runs straight after the claim, and a claim's server
-# still answering its engine's reloads as it dies wrote into the control's log,
-# which then never said which port the control's own server took.
+# One per run: the previous run's dying server can still write to its log.
 HTTP_LOG="${HTTP_LOG:-/tmp/domicile-extension-installer-http-$NEGATIVE.log}"
 WIDTH="${WIDTH:-1024}"
 HEIGHT="${HEIGHT:-768}"
@@ -107,7 +95,7 @@ rm -f "$BROKER" "$CONTROL"
 rm -rf "$PROFILE"
 mkdir -p "$PROFILE"
 
-# 1. The page. Its own server: `crux` reaches no arbitrary host.
+# 1. The page, served locally because `crux` has no general network access.
 rm -f "$HTTP_LOG"
 python3 "$SCRIPTS/guard-webview-content-script-server.py" \
   --port 0 --color "$PAGE_COLOR" >"$HTTP_LOG" 2>&1 &
@@ -142,8 +130,7 @@ wait_for_line 240 "listening on" "$SOCKET_LOG" || {
   exit 1
 }
 
-# 3. The engine. No `--load-extension` and no `--disable-features`: the only
-#    way the fixture gets in is the list.
+# 3. The engine, without `--load-extension`, so only the list can install it.
 STARTED_AT="$(date +%s)"
 rm -f "$ENGINE_LOG"
 "$CHROMIUM/$OUT/chrome" \
@@ -187,7 +174,7 @@ grep -qF "sent the extensions" "$SOCKET_LOG" 2>/dev/null && SENT=1
 if [ "$NEGATIVE" = "1" ]; then
   MEASURED="control $STATUS $SENT"
 else
-  # Only on a pass: a failed run measured this script's patience.
+  # Only on a pass; a failed run's time is the timeout.
   if [ "$STATUS" -eq 0 ]; then
     budget_note extension-installer "$(($(date +%s) - STARTED_AT))"
   fi
@@ -197,8 +184,8 @@ fi
 echo
 echo "measured: $MEASURED"
 
-# WHICH END TO BLAME. `scripts/test-extension-installer-guard.sh` runs this
-# block directly. The last field is whether the stand-in sent the list.
+# Fields: leg, probe status, whether the list was sent.
+# scripts/test-extension-installer-guard.sh runs this block directly.
 FAILURE=""
 PASSED=""
 case "$MEASURED" in

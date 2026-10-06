@@ -23,7 +23,7 @@ constexpr auto kRefused = std::to_array<const char*>({
     "tabs.unsplit",
 });
 
-// Whether `asked` allows `is`: an absent question allows anything.
+// Whether `asked` allows `is`; an absent filter allows anything.
 bool Allows(const std::optional<bool>& asked, bool is) {
   return !asked.has_value() || *asked == is;
 }

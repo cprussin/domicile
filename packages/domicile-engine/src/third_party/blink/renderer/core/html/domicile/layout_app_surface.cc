@@ -16,12 +16,8 @@ void LayoutAppSurface::UpdateAfterLayout() {
   NOT_DESTROYED();
   LayoutReplaced::UpdateAfterLayout();
 
-  // The box the client is configured at. Pixel-snapped, because that is the
-  // size the layer is given below and a producer rendering at a different size
-  // from the quad it lands in is the one way this seam can scale a window.
-  //
-  // The element ignores a size it is already at, so this runs on every layout
-  // and resizes the client on the ones that moved it.
+  // Pixel-snapped to match the layer bounds in PaintReplaced(). A mismatch
+  // would scale the window. The element ignores an unchanged size.
   if (auto* app = DynamicTo<HTMLAppElement>(GetNode())) {
     app->SurfaceBoxChanged(
         ToPixelSnappedRect(ReplacedContentRect()).size());
@@ -30,11 +26,8 @@ void LayoutAppSurface::UpdateAfterLayout() {
 
 PhysicalNaturalSizingInfo LayoutAppSurface::GetNaturalDimensions() const {
   NOT_DESTROYED();
-  // A window has no size of its own to offer. The page's box is what sizes it
-  // -- that is the direction the whole design runs in, the layout box being the
-  // xdg_toplevel.configure -- so an <app> the page gives no size to falls to
-  // the replaced element default rather than to whatever the client happens to
-  // have rendered last.
+  // The page sizes the window, not the reverse. An unsized <app> gets the
+  // replaced element default, not the client's last buffer size.
   return PhysicalNaturalSizingInfo::None();
 }
 
@@ -47,10 +40,7 @@ void LayoutAppSurface::PaintReplaced(const PaintInfo& paint_info,
   }
   cc::Layer* layer = app->ContentsCcLayer();
   if (!layer || paint_info.ShouldOmitCompositingInfo()) {
-    // Nothing to draw and nothing to draw it with. An <app> whose producer has
-    // not connected paints as its background does -- which is the page's, and
-    // is what makes a window that is not there yet look like a gap rather than
-    // like a hole.
+    // No producer yet: show the page background.
     return;
   }
 
@@ -60,15 +50,12 @@ void LayoutAppSurface::PaintReplaced(const PaintInfo& paint_info,
 
   layer->SetBounds(pixel_snapped_rect.size());
   layer->SetIsDrawable(true);
-  // Hit testing stays this page's: Domicile routes input itself and knows which
-  // client owns the pointer, so the layer is hit-testable for the page's sake
-  // and viz is not asked to arbitrate.
+  // Hit-testable for the page. Domicile routes input to clients itself, so viz
+  // does not need to.
   layer->SetHitTestable(true);
 
-  // This is the whole of the CSS-parity claim. RecordForeignLayer puts the
-  // window in the page's own property trees, so transform, clip, opacity,
-  // filter and blend are applied to it by the page's compositor exactly as they
-  // are to any other layer.
+  // Puts the window in the page's property trees, so CSS transform, clip,
+  // opacity, filter and blend apply to it like any other layer.
   RecordForeignLayer(paint_info.context, *this,
                      DisplayItem::kForeignLayerAppSurface, layer,
                      pixel_snapped_rect.origin());

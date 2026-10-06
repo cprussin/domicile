@@ -1,21 +1,16 @@
 #!/usr/bin/env bash
-# Phase 1's library, asserted end to end: libdomicile_engine.so joins the
-# browser's mojo graph, is brokered a frame sink, and delivers a configure and a
-# frame across a pollable fd to a process that is not Chromium.
+# End-to-end check of libdomicile_engine.so: it joins the browser's mojo graph,
+# gets a brokered frame sink, and delivers a configure and a frame over a
+# pollable fd to a non-Chromium process.
 #
 #   NIX_SHELL_RUN=".../scripts/spike-engine.sh /build/chromium/src" \
 #     nix-shell /build/chromium/src/tools/nix/shell.nix
 #
-# The harness is domicile_engine_smoke, and it is C rather than C++ on purpose:
-# the seam is a C ABI because domicile-compositor is Rust and cannot consume a
-# GN-built C++ target any other way, so a header that only compiled as C++ would
-# not be the seam the design calls for. Building it is the compiler checking
-# that claim; running it is everything else.
-#
-# It stands in for the calloop the compositor already runs — poll the fd,
-# dispatch when it wakes — and exits 0 only once both a configure and a frame
-# have arrived. Any page that calls embedExternalSurface() will do; the resize
-# page is used because it is the smallest.
+# The harness, domicile_engine_smoke, is written in C so the build checks that
+# the header is a plain C ABI, which the Rust compositor needs. It polls the fd
+# like the compositor's calloop and exits 0 once a configure and a frame have
+# arrived. Any page that calls embedExternalSurface() works; the resize page is
+# the smallest.
 set -u
 
 CHROMIUM="${1:-}"

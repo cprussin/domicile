@@ -1,32 +1,14 @@
 #!/usr/bin/env python3
-"""The pages guard-webview-find.sh searches, served on loopback.
+"""Serves pages with a known match count for guard-webview-find.sh.
 
-`guard-webview-find.sh` drives `find()` at a `<webview>` and reads how many
-matches the element says the guest's page holds. That needs a page whose count
-is known, and CI has no route to one: `crux` reaches no arbitrary host. So the
-guard brings its own.
+  /words      --word twice, plus a frame holding it once more
+  /framed     that frame: --word once. Loaded as `localhost` while /words is
+              127.0.0.1, so it is cross-site and out of process, and the count
+              must include it. Two ports on one host would be the same site.
+  /elsewhere  a page without --word, to navigate to after a find
 
-  /words      --word twice in its own text, and once more in a frame
-  /framed     that frame: --word once. Linked from /words as `localhost`
-              while /words is opened as 127.0.0.1, so the two are different
-              SITES and the frame is out of process -- which is the claim the
-              element's count makes that its own renderer could not: every
-              frame in the page counted, a cross-site one included. Two ports
-              of one host would be one site and would not have done
-  /elsewhere  where the guest goes after a find, without --word, so the find
-              has a new page to end on
-
-Each top-level page says one line to the console, on `load` -- which waits for
-its frame -- and the engine writes it to its own log:
-
-  GUARD guest-shown path=/words
-
-Served from one server rather than the shared guest page's, because that one
-has one page and says so: what this needs is a count, a frame and somewhere
-else to go.
-
-`no-store` so a second run cannot be answered by the first's page out of the
-HTTP cache.
+Each top-level page logs `GUARD guest-shown path=<path>` on `load`, which waits
+for its frame.
 """
 
 import argparse
@@ -34,17 +16,14 @@ import html
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-# The paths this serves, which are also the names `guard-webview-find.js`
-# navigates to and the guard's verdict compares. Named rather than "/" so a
-# request that arrives by accident is a 404 rather than a page the verdict is
-# about.
+# Also used by `guard-webview-find.js` and the guard's verdict. Not "/", so a
+# stray request gets a 404.
 WORDS = "/words"
 FRAMED = "/framed"
 ELSEWHERE = "/elsewhere"
 
-# Two of the word here and one in the frame: the three the guard counts. Each
-# in a paragraph of its own and between other words, so a match is a match and
-# not a run of them.
+# Two matches here and one in the frame. Each sits between other words so
+# matches cannot merge.
 WORDS_PAGE = """<!doctype html>
 <html lang="en">
   <head>
@@ -95,10 +74,9 @@ ELSEWHERE_PAGE = """<!doctype html>
 
 
 class HasACount(BaseHTTPRequestHandler):
-    """Answers the three paths, and everything else with a 404."""
+    """Serves the three paths; anything else is a 404."""
 
-    # Set by main(), because BaseHTTPRequestHandler is instantiated per request
-    # and there is nowhere else to put it.
+    # Set by main(): BaseHTTPRequestHandler is instantiated per request.
     word = ""
 
     def do_GET(self):  # noqa: N802 - the name is BaseHTTPRequestHandler's
@@ -114,7 +92,7 @@ class HasACount(BaseHTTPRequestHandler):
             self.send_error(404, "this server has three pages: /words /framed /elsewhere")
 
     def send_page(self, page):
-        """One page, never cached."""
+        """Sends an uncached HTML page."""
         body = page.encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -124,9 +102,8 @@ class HasACount(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def log_message(self, fmt, *args):
-        # To stderr, which the guard keeps -- and one of its readings: whether
-        # the frame was ever REQUESTED tells "the count missed the frame" apart
-        # from "there was no frame to count".
+        # The guard reads this: a request for /framed tells "the count missed
+        # the frame" from "there was no frame".
         sys.stderr.write("%s - %s\n" % (self.address_string(), fmt % args))
 
 
@@ -147,11 +124,10 @@ def main():
     arguments = parser.parse_args()
 
     HasACount.word = arguments.word
-    # 127.0.0.1, not 0.0.0.0: nothing outside this machine has any business
-    # reaching a guard's fixture. `localhost` reaches it all the same.
+    # Loopback only: nothing off this machine should reach a test fixture.
+    # `localhost` still reaches it.
     server = ThreadingHTTPServer(("127.0.0.1", arguments.port), HasACount)
-    # Before serve_forever, so a guard waiting on this line is not waiting on a
-    # buffer.
+    # Flushed before serve_forever, because guards wait on this line.
     print(
         "serving %s %s %s on 127.0.0.1:%d"
         % (WORDS, FRAMED, ELSEWHERE, server.server_address[1]),

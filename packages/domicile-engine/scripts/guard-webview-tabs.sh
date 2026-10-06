@@ -1,38 +1,27 @@
 #!/usr/bin/env bash
-# An extension's popup asking tabs.query for the active tab, and hearing the
-# <webview> the shell focused.
+# Checks that an extension popup's tabs.query finds the <webview> the shell
+# focused, and that tabs.setZoom / tabs.getZoom act on that tab.
 #
 #   nix develop .#full --command \
 #     ./packages/domicile-engine/scripts/guard-webview-tabs.sh /build/chromium/src
 #
-# WHY THIS EXISTS. EXTENSIONS.md's slice 2 is every <webview> a tab to
-# chrome.tabs, and the one question nearly every popup opens with is
-# `tabs.query({active: true, currentWindow: true})`. Before the desk, that found
-# nothing: Chrome looks for tabs in browser windows' tab strips, and a guest is
-# in none. What makes it answer is the desk's window controller, the lookups'
-# hooks (patch 0057) and the element telling the browser it took focus.
+# Design: docs/architecture/EXTENSIONS.md#tabs.
 #
-# Headless, with guard-extension-installer.sh's stand-in for the compositor
-# naming the fixture as `unpacked`. The shell opens two browser windows at two
-# addresses on one page server, focuses one with `view.focus()`, and then opens
-# the fixture's popup -- in a third <webview>, never focused -- which writes its
-# answer into its own address.
+# Runs headless with guard-extension-installer.sh's compositor stand-in, which
+# installs the fixture as `unpacked`. The shell opens two browser windows,
+# focuses one with `view.focus()`, then opens the popup in a third, unfocused
+# <webview>. The popup writes its answer into its own address, zooms the tab it
+# found to 1.5 and reads the zoom back. The windows use different sites
+# (127.0.0.1 and localhost) because zoom is per site.
 #
-# The popup then zooms the tab it found with `tabs.setZoom(id, 1.5)` and reads
-# it back with `tabs.getZoom`. The two windows are two sites -- 127.0.0.1 and
-# localhost -- because a desk tab's zoom is its site's, as in Chrome.
+# Asserts:
+# - the popup names window `a`, the focused one
+# - only `a`'s element gets `domicile-zoom-change`
+# - tabs.getZoom reads back 1.5
 #
-# WHAT IT ASSERTS. That the popup's answer is the address of window `a`, the
-# one the shell focused; that `a`'s element, and not `b`'s, heard the zoom
-# (WebViewGuestClient.ZoomChanged, as `domicile-zoom-change`); and that
-# getZoom read back 1.5.
-#
-# HOW IT CAN FAIL. NEGATIVE=1 runs the control: the same run, focusing window
-# `b` instead. The answer must be `b`'s and NOT `a`'s, and so must the zoom.
-# That is what makes the claim's reading focus's: a desk whose active tab were
-# the first window made names `a` both times, and one whose active tab were the
-# last made names the popup's own window, or `b`, in the claim. And a setZoom
-# that zoomed one fixed tab, whichever it was asked for, zooms `a` both times.
+# NEGATIVE=1 runs the control, which focuses `b` instead and expects `b` for
+# both answer and zoom. This rules out an engine that picks the first or last
+# window as active, or zooms a fixed tab.
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
@@ -53,12 +42,12 @@ fi
 
 NEGATIVE="${NEGATIVE:-0}"
 
-# The fixture, as the tray must name it. Fixed rather than overridable:
-# `scripts/test-webview-tabs-guard.sh` holds the id to the manifest's `key`.
+# The fixture's id, derived from the manifest's `key`.
+# `scripts/test-webview-tabs-guard.sh` checks they match.
 readonly ID="almpdkloglkdomnhghbmejhddjoajijj"
 readonly POPUP="chrome-extension://$ID/popup.html"
-# The factor the popup zooms to, as the shell and the popup both print it.
-# `scripts/test-webview-tabs-guard.sh` holds it to the fixture's.
+# The popup's zoom factor as printed. `scripts/test-webview-tabs-guard.sh`
+# checks it matches the fixture.
 readonly ZOOM="1.50"
 
 EXTENSION="$SCRIPTS/guard-webview-tabs-extension"
@@ -71,17 +60,15 @@ CONTROL="${CONTROL:-/tmp/domicile-webview-tabs-control}"
 PROFILE="${PROFILE:-/tmp/domicile-webview-tabs-profile}"
 ENGINE_LOG="${ENGINE_LOG:-/tmp/domicile-webview-tabs-engine.log}"
 SOCKET_LOG="${SOCKET_LOG:-/tmp/domicile-webview-tabs-socket.log}"
-# One per leg, as guard-extension-tray.sh's: the control runs straight after
-# the claim, and a server still answering the claim's engine as it died wrote
-# into the control's log.
+# One log per leg, so a server from the previous leg cannot write into this
+# leg's log.
 HTTP_LOG="${HTTP_LOG:-/tmp/domicile-webview-tabs-http-$NEGATIVE.log}"
 
 STARTED=()
 cleanup() {
   if [ ${#STARTED[@]} -gt 0 ]; then
     kill "${STARTED[@]}" 2>/dev/null
-    # Reaped, so nothing this started outlives the leg -- and a server still
-    # answering cannot write into the next leg's files.
+    # Reap, so no child outlives the leg and writes into the next one's files.
     wait "${STARTED[@]}" 2>/dev/null
   fi
   rm -rf "$PROFILE"
@@ -109,11 +96,9 @@ rm -f "$BROKER" "$CONTROL"
 rm -rf "$PROFILE"
 mkdir -p "$PROFILE"
 
-# 1. The two windows' page: one server, one page, two addresses. The server
-#    answers `/page` whatever its query, and the query is what tells the two
-#    windows -- and so the popup's answer -- apart. Two hosts, because a
-#    zoom is a host's: `localhost` is the browser's own name for loopback,
-#    and the server's 127.0.0.1 is one of the addresses it tries.
+# 1. One page server for both windows. The query (`?a`, `?b`) tells the
+#    windows apart. The hosts differ (127.0.0.1, localhost) because zoom is
+#    per host; both resolve to this server.
 rm -f "$HTTP_LOG"
 python3 "$SCRIPTS/guard-webview-content-script-server.py" \
   --port 0 --color 25A8F9 >"$HTTP_LOG" 2>&1 &
@@ -130,7 +115,6 @@ PORT="$(served_port "$HTTP_LOG")" || {
 A="http://127.0.0.1:$PORT/page?a"
 B="http://localhost:$PORT/page?b"
 
-# The claim focuses `a`; the control, `b`.
 if [ "$NEGATIVE" = "1" ]; then
   FOCUS=b
   LEG=control
@@ -139,8 +123,8 @@ else
   LEG=tabs
 fi
 
-# 2. The compositor's end, naming the fixture in both legs: the control's
-#    difference is the focus and nothing else.
+# 2. The compositor stand-in installs the fixture in both legs, so focus is
+#    the only difference.
 rm -f "$SOCKET_LOG"
 python3 "$SCRIPTS/guard-extension-installer-compositor.py" \
   --socket "$CONTROL" --unpacked "$EXTENSION" >"$SOCKET_LOG" 2>&1 &
@@ -151,9 +135,8 @@ wait_for_line 240 "listening on" "$SOCKET_LOG" || {
   exit 1
 }
 
-# 3. The engine. The addresses go into the shell's query as they are: the
-#    first `?` of a URL is the one that starts its query, so `a=…/page?a` is a
-#    value with a `?` in it.
+# 3. The engine. The addresses need no escaping in the shell's query: only
+#    the first `?` starts a query, so `a=…/page?a` parses as one value.
 STARTED_AT="$(date +%s)"
 rm -f "$ENGINE_LOG"
 "$CHROMIUM/$OUT/chrome" \
@@ -173,9 +156,8 @@ TRIES=$((FOR_SECONDS * 4))
 wait_for_line "$TRIES" '"GUARD listening"' "$ENGINE_LOG" ||
   echo "the shell module never said it was listening; the verdict below says what that means" >&2
 
-# 4. The wait: both legs end on the popup's answer. The control's is bounded
-#    by what the claim's took, which is the same run with the other window
-#    focused.
+# 4. Wait for the popup's answer. The control's wait is bounded by the time
+#    the claim leg took (see lib-control-budget.sh).
 if [ "$NEGATIVE" = "1" ]; then
   wait_for_line "$(($(budget_for webview-tabs "$FOR_SECONDS") * 4))" \
     '"GUARD answer active=' "$ENGINE_LOG"
@@ -185,16 +167,14 @@ else
   fi
 fi
 
-# The zoom reaches the focused window's element over its own pipe, so it may
-# land after the popup's answer. Bounded: the answer has already arrived.
+# The zoom event uses a separate IPC channel and may arrive after the answer.
 wait_for_line 20 "\"GUARD zoom name=$FOCUS factor=" "$ENGINE_LOG"
 
-# A moment for anything already dispatched to be written out -- a zoom on the
-# other window, too.
+# Let in-flight events flush, including a zoom on the wrong window.
 sleep 1
 
-# THE READINGS, each anchored on the quote Chromium puts after a console
-# message -- see guard-control-arrival.sh for the run that learned why.
+# Patterns are anchored on the closing quote Chromium logs after a console
+# message; see guard-control-arrival.sh.
 saw() { # $1 fixed string
   grep -qF -- "$1" "$ENGINE_LOG" 2>/dev/null && echo 1 || echo 0
 }
@@ -222,9 +202,9 @@ echo "measured: $MEASURED"
 echo "what the popup answered, and the zoom the windows heard:"
 grep -F -e '"GUARD answer ' -e '"GUARD zoom ' "$ENGINE_LOG" | tail -6 || true
 
-# WHICH END TO BLAME. `scripts/test-webview-tabs-guard.sh` runs this block
-# directly. MEASURED is "<leg> <sent> <tray> <shown> <focused> <answered>
-# <named-a> <named-b> <zoomed-a> <zoomed-b> <read>".
+# Map the measurement to a verdict. `scripts/test-webview-tabs-guard.sh` runs
+# this block directly. MEASURED is "<leg> <sent> <tray> <shown> <focused>
+# <answered> <named-a> <named-b> <zoomed-a> <zoomed-b> <read>".
 FAILURE=""
 PASSED=""
 case "$MEASURED" in
@@ -276,7 +256,7 @@ reported was not a"
 is the first made, not the focused one, so the claim's pass was an accident \
 of order"
   ;;
-# The right window named. What is left is the zoom.
+# The right window was named; the remaining cases are about zoom.
 "tabs 1 1 1 1 1 1 0 0 0 0" | "control 1 1 1 1 1 0 1 0 0 0")
   FAILURE="the popup named the right window and no window heard a zoom, nor \
 did getZoom read one -- the GUARD answer zoom= line says what: an error is \

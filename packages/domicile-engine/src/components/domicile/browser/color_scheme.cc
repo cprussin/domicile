@@ -16,9 +16,8 @@ ui::NativeTheme::PreferredColorScheme ColorSchemeFor(mojom::Theme theme) {
     case mojom::Theme::kLight:
       return ui::NativeTheme::PreferredColorScheme::kLight;
   }
-  // Not a fallback, for `ThemeToWire`'s reason in common/theme.h: mojo
-  // rejects a value no case names, so one reaching here is a cast in this
-  // repository.
+  // Mojo rejects unknown enum values, so reaching here means a bad cast in
+  // this repository. See `ThemeToWire` in common/theme.h.
   NOTREACHED();
 }
 

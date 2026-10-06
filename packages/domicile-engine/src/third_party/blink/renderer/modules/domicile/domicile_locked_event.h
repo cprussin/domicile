@@ -14,26 +14,17 @@ namespace blink {
 
 class DomicileLockedEventInit;
 
-// Whether this desk is locked.
+// Whether this desktop is locked.
 //
-// Pushed rather than asked for, like DomicileIdleEvent -- and unlike it in the
-// one way that matters: the compositor holds this state, and nothing in this
-// renderer can change it. Every key and every pointer event on this desktop is
-// forwarded by the shell and injected into a Wayland seat by the compositor,
-// and while this is true the injection does not happen. So a page reload does
-// not open the desk, and neither does a page edited in the devtools of the
-// browser drawing it; what a shell draws over a locked desktop is a surface
-// over a desktop that has already stopped listening.
+// Pushed by the compositor, which holds the state; nothing in the renderer can
+// change it. While locked, the compositor drops forwarded input instead of
+// injecting it into the seat, so reloading or editing the page does not unlock
+// the desktop. The page still gets its own keys, so it can draw a lock screen
+// and take a passphrase for DomicileHost::unlock(). unlock() returns nothing;
+// its result arrives as another of these events.
 //
-// The page keeps its own keys throughout, which is what makes a lock screen
-// possible: the page is the thing forwarding, so it can take a passphrase while
-// nothing it forwards reaches a client. DomicileHost::unlock() is how it offers
-// one, and the answer is another one of these rather than a return value.
-//
-// A state and not an edge, for the reason DomicileIdleEvent is one with the
-// stakes the other way up: a page that has just loaded has missed every edge
-// there was, and the edge it missed is the one that would have raised its lock
-// screen.
+// The compositor resends the state to a newly connected page, so a reloaded
+// page still raises its lock screen.
 class MODULES_EXPORT DomicileLockedEvent final : public Event {
   DEFINE_WRAPPERTYPEINFO();
 
@@ -51,16 +42,15 @@ class MODULES_EXPORT DomicileLockedEvent final : public Event {
 
   bool locked() const { return locked_; }
 
-  // When the browser process had this, on `performance.now()`'s clock. See
-  // DomicileAppEvent::arrival.
+  // When the browser process received this, on `performance.now()`'s clock.
+  // See DomicileAppEvent::arrival.
   DOMHighResTimeStamp arrival() const { return arrival_; }
 
   const AtomicString& InterfaceName() const override;
 
  private:
-  // A plain bool rather than anything nullable: a desktop with no passphrase
-  // configured cannot lock and sends no message at all, so there is no "nobody
-  // has said" for this event to represent. Every one of these is an answer.
+  // Not nullable: a desktop with no passphrase cannot lock and sends no
+  // event.
   bool locked_ = false;
   DOMHighResTimeStamp arrival_ = 0;
 };

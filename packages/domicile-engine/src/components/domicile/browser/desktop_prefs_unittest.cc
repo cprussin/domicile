@@ -13,7 +13,7 @@
 namespace domicile {
 namespace {
 
-// Every pref Chrome registers on, as a fresh profile has them.
+// Registers each pref as enabled, as in a fresh profile.
 class DesktopPrefsTest : public testing::Test {
  protected:
   DesktopPrefsTest() {

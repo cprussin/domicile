@@ -5,42 +5,20 @@ module domicile.mojom;
 
 import "mojo/public/mojom/base/time.mojom";
 
-// The shell's control channel to the compositor, as a renderer-to-browser
-// interface rather than a socket the page opens.
+// The shell's control channel to the compositor, relayed by the browser over
+// its unix socket.
 //
-// This replaces a WebSocket to a loopback TCP port. The port was not a page
-// server with a socket beside it -- it was the desktop's control plane, and
-// `Spawn` on it is arbitrary commands on the machine running the desktop. A
-// loopback port is reachable by every process on the box and no header can fix
-// that; what fixes it is not having a port. See
+// The browser binds this only for shell-origin documents. domicile:// is not
+// web-safe or CORS-enabled, so other web content cannot reach it or call
+// `Spawn`. A compromised shell renderer can call any member. See
 // docs/architecture/DOMICILE-SCHEME.md.
 //
-// The browser already holds a unix socket to the compositor. This interface is
-// how the page reaches it without opening one of its own.
-//
-// WHAT MAKES THIS SAFE IS NOT THIS FILE. A renderer that is compromised can
-// call anything here, `Spawn` included. What changed is *which* renderers can:
-// the browser binds this only for a document whose origin is the shell's, so
-// the capability follows the origin instead of following whoever can open a
-// TCP connection. domicile:// is not web-safe and not CORS-enabled, so no
-// ordinary web content has that origin.
-
-// The members the fork keeps. The bands and copy-path protocol -- place_portal,
-// remove_portal, declare_bands, render_band, claim_pointer, app_composited --
-// is absent on purpose: layout positions the layer now and the page has stopped
-// reporting where its own boxes are.
-//
-// Adding a member costs a near-full Blink rebuild, so they are added in
-// batches rather than one at a time.
+// Adding a member costs a near-full Blink rebuild, so batch additions.
 
 // A key combination the desktop claims for itself.
 //
-// A struct rather than a string, because the compositor's protocol takes one:
-// serializing this as text would mean the browser inventing a syntax and the
-// compositor parsing it back, and the two halves are built from one repository
-// with no reason to disagree about a keystroke. `keycode` is a Linux evdev
-// code -- the same numbering `Key` forwards in, not the X keycode the Wayland
-// keymap uses, which is this plus 8.
+// `keycode` is a Linux evdev code, as `Key` uses. The X keycode in the Wayland
+// keymap is this plus 8.
 struct Shortcut {
   uint32 keycode;
   bool alt;
@@ -49,16 +27,11 @@ struct Shortcut {
   bool meta;
 };
 
-// What a client asked the chrome to show over its own surface.
+// The cursor a client asked the chrome to show over its surface.
 //
-// An enum rather than the string it arrives as. `wp_cursor_shape_v1`'s shapes
-// are a closed set, the compositor already has them as one
-// (`domicile_protocol::CursorShape`), and carrying them across here as text
-// meant nothing between the socket and the page ever asked whether a name
-// named anything -- and an unknown CSS keyword is a no-op rather than an
-// error, so the symptom was an arrow where a hand should be with nothing said.
-// The wire names live in components/domicile/common/cursor_shape.h, which is
-// the codec both ends of this go through.
+// The `wp_cursor_shape_v1` shapes, as an enum so an unknown name fails at the
+// codec. An unknown CSS cursor keyword is silently ignored. The wire names are
+// in components/domicile/common/cursor_shape.h.
 enum CursorShape {
   kNone,
   kDefault,
@@ -97,12 +70,10 @@ enum CursorShape {
   kZoomOut,
 };
 
-// Which way up a monitor is bolted to the desk.
+// A monitor's rotation.
 //
-// Named for the turn the CONTENT takes rather than the one the panel did,
-// which is the `wl_output` convention and the config file's: an output rotated
-// a quarter turn counterclockwise needs what is drawn on it turned a quarter turn
-// clockwise to come out upright, and kRotate90 is that clockwise turn.
+// Named for the turn applied to the content, as `wl_output` and the config
+// file do. A panel rotated 90 degrees counterclockwise needs kRotate90.
 enum DisplayTransform {
   kNormal,
   kRotate90,
@@ -110,18 +81,11 @@ enum DisplayTransform {
   kRotate270,
 };
 
-// Which way round the desktop is drawn.
+// The desktop's color theme.
 //
-// An enum rather than the string it arrives as, for the reason CursorShape
-// above is one: the set is closed at both ends of the wire, and carrying it
-// across here as text would mean nothing between the socket and the page ever
-// asked whether a name named anything. The wire names live in
-// components/domicile/common/theme.h, which is the codec both directions go
-// through -- and this is the one type here that crosses in BOTH, because the
-// shell has a toggle on it.
-//
-// TWO MEMBERS, AND NO kSystem. "Follow the system" is what a program running
-// on a desktop offers; this engine paints the desktop.
+// The wire names are in components/domicile/common/theme.h. This type crosses
+// in both directions because the shell can set it. There is no "follow the
+// system" value: this engine is the system.
 enum Theme {
   kDark,
   kLight,
@@ -129,17 +93,13 @@ enum Theme {
 
 // One screen of the desktop.
 //
-// Integers, unlike the sizes above. Those come from a layout box, where a CSS
-// pixel is fractional; a display comes from the desktop's configuration, which
-// names whole ones. Its geometry is logical all the same -- a `wl_output` mode
-// is `width`/`height` times `scale` -- and `scale` is what clients on the
-// screen draw at, not the shell's own density.
+// Geometry is in logical pixels from the config, so integers. `scale` is the
+// integer `wl_output` scale clients draw at, not the shell's density.
 //
-// EXCEPT `mode_width`/`mode_height`, which are the pixels the panel scans out
-// and are not a second spelling of the logical size: a monitor on its side
-// scans out exactly as it did lying down, so a portrait 4K panel is a
-// 3840x2160 mode and an 1800x3200 box. Neither is derivable from the other,
-// because `scale` here is the INTEGER wl_output one and a 1.2 display's is 2.
+// `mode_width`/`mode_height` are the panel's scanout mode, which rotation does
+// not change. A portrait 4K panel is a 3840x2160 mode and an 1800x3200 logical
+// box. Neither is derivable from the other, because a 1.2 display's `scale`
+// is 2.
 struct DisplayInfo {
   string name;
   int32 x;
@@ -152,57 +112,50 @@ struct DisplayInfo {
   DisplayTransform transform;
 };
 
-// One thing that was copied, as a row of the clipboard's history.
+// One row of the clipboard history.
 //
-// A preview and an id rather than the text. The compositor keeps the bytes and
-// a page hands the id back with CopyClipboardEntry, so what crosses into a
-// renderer is enough to draw a row and no more -- which matters because a
-// password manager's copy is a row in this list.
+// Carries a preview and an id, not the copied bytes, because a password
+// manager's copy is a row here. The compositor keeps the bytes;
+// CopyClipboardEntry takes the id back.
 //
-// The id is 32 bits because the compositor's JSON reaches this process through
-// a base::Value, whose whole numbers are a signed int. Two billion copies in
-// one session is a century of copying something every second.
+// The id is 32 bits because the compositor's JSON reaches this process as a
+// base::Value, whose integers are signed 32-bit.
 struct ClipboardEntry {
   uint32 id;
   string preview;
 };
 
-// One icon in the system tray: an application's StatusNotifierItem, as the
-// compositor read it off the session bus.
+// One system tray icon: an application's StatusNotifierItem.
 //
-// `id` is what ActivateTrayItem names it by. `title` is never empty -- the
-// compositor falls back to the item's own id -- and is what a shell labels the
-// icon with. `icon` is a `data:` URL, for DesktopEntry's reason below, and
-// empty for an item whose picture the compositor could not draw.
+// `id` is what ActivateTrayItem takes. `title` is never empty; the compositor
+// falls back to the item's id. `icon` is a `data:` URL, or empty if the
+// compositor could not draw it.
 struct TrayItem {
   string id;
   string title;
   string icon;
 };
 
-// Which button clicked a tray icon, as StatusNotifierItem names the three
-// things an item can be asked to do: Activate, SecondaryActivate and
-// ContextMenu.
+// Which button clicked a tray icon. Maps to StatusNotifierItem's Activate,
+// SecondaryActivate and ContextMenu.
 enum TrayAction {
   kPrimary,
   kSecondary,
   kContext,
 };
 
-// A port of an AudioDevice or a profile of an AudioCard: something to switch
-// it to. `available` is false for a port whose jack is empty, or a profile
-// that needs one; either is still choosable.
+// A port of an AudioDevice or a profile of an AudioCard. `available` is false
+// for an empty jack or a profile that needs one; it can still be selected.
 struct AudioChoice {
   string name;
   string description;
   bool available;
 };
 
-// An output (a sink) or an input (a source). `id` is what the mixer's
-// requests name it by. `volume` is the loudest channel as a fraction of the
-// server's 100%. `is_default` because `default` is C++'s. `monitor` marks an
-// output's monitor among the inputs. `port` is the one in use, or empty for a
-// device with none.
+// An output (sink) or input (source). `id` is what mixer requests take.
+// `volume` is the loudest channel as a fraction of the server's 100%.
+// `is_default` avoids C++'s `default`. `monitor` marks an output's monitor
+// among the inputs. `port` is the active port, or empty for none.
 struct AudioDevice {
   string id;
   string description;
@@ -214,9 +167,9 @@ struct AudioDevice {
   string port;
 };
 
-// Something playing (a sink input) or recording (a source output). `title`
-// is empty where the application said nothing; `device` is the AudioDevice id
-// it goes to, or empty for one the next Audio settles.
+// A playback (sink input) or recording (source output) stream. `title` is
+// empty if the application set none. `device` is the AudioDevice id, or empty
+// until the next Audio resolves it.
 struct AudioStream {
   string id;
   string application;
@@ -226,14 +179,15 @@ struct AudioStream {
   string device;
 };
 
-// One meter of an AudioLevels: the AudioDevice or AudioStream id it meters,
-// and the loudest sample since the last, 0.0 through 1.0 of full scale.
+// One meter in AudioLevels: the device or stream id, and the peak sample since
+// the last report, 0.0 to 1.0 of full scale.
 struct AudioLevel {
   string id;
   double peak;
 };
 
-// A sound card. `profiles` is best first; `profile` the one in use, or empty.
+// A sound card. `profiles` is best first; `profile` is the active one, or
+// empty.
 struct AudioCard {
   string id;
   string description;
@@ -241,29 +195,23 @@ struct AudioCard {
   string profile;
 };
 
-// One button of a Notification.
-//
-// `key` is what InvokeNotificationAction names it by; `label` is what the
-// button says.
+// One notification button. InvokeNotificationAction takes `key`; `label` is
+// the button text.
 struct NotificationAction {
   string key;
   string label;
 };
 
-// One notification: an application's call to org.freedesktop.Notifications,
-// which the compositor serves on the session bus. A page's own Web
-// Notification arrives as one too -- the browser shows it by calling that
-// server.
+// One org.freedesktop.Notifications notification, which the compositor
+// serves. Web Notifications arrive here too, because the browser sends them
+// to that server.
 //
-// `id` is 32 bits for ClipboardEntry's reason. `body` is plain text: the
-// compositor tells senders it takes no markup. `icon` is a `data:` URL, for
-// DesktopEntry's reason below, and empty for nothing to draw. `urgency` is
-// "low", "normal" or "critical", carried as the compositor's word because a
-// page reads it as a word. `actions` leaves out the press on the notification
-// itself, which is `clickable`. `timeout_ms` is -1 where the sender left how
-// long it stays up to the shell, and 0 for until it is dismissed. `time` is
-// milliseconds since the epoch, on the compositor's clock -- a double because
-// a base::Value's whole numbers stop at two billion.
+// `id` is 32 bits for ClipboardEntry's reason. `body` is plain text. `icon`
+// is a `data:` URL or empty. `urgency` is "low", "normal" or "critical".
+// `actions` excludes clicking the notification itself, which is `clickable`.
+// `timeout_ms` is -1 to let the shell decide and 0 for no timeout. `time` is
+// epoch milliseconds on the compositor's clock, a double because base::Value
+// integers are 32-bit.
 struct Notification {
   uint32 id;
   string app_name;
@@ -277,17 +225,11 @@ struct Notification {
   double time;
 };
 
-// An application a desktop entry offers, as a launcher draws and runs it.
+// An application from a desktop entry, for a launcher.
 //
-// `command` is the argv, already unquoted and with its field codes dropped by
-// the compositor, so the page hands it to Spawn and nothing on this side
-// parses an Exec line. `comment` is empty for an entry that has none.
-//
-// `icon` is a `data:` URL, for the reason a song's `cover` is one: the page
-// may draw what the compositor read and cannot read it for itself. Empty for
-// an entry whose icon the compositor did not find. `preview` is the picture
-// the entry names for a launcher's preview, the same way and empty the same
-// way.
+// `command` is the argv, unquoted with field codes removed by the compositor,
+// ready for Spawn. `comment` may be empty. `icon` and `preview` are `data:`
+// URLs because the page cannot read the files, or empty if not found.
 struct DesktopEntry {
   string id;
   string name;
@@ -297,10 +239,8 @@ struct DesktopEntry {
   string preview;
 };
 
-// A URL the desk offers by name, from its config: the page opens `url`
-// itself rather than handing it to a program. `icon` is the one its site
-// names for itself, a `data:` URL as DesktopEntry's is, and empty when the
-// compositor has not found it.
+// A named URL from the config, which the page opens itself. `icon` is the
+// site's icon as a `data:` URL, or empty until the compositor finds it.
 struct Bookmark {
   string name;
   string url;
@@ -309,206 +249,146 @@ struct Bookmark {
 
 // Page -> browser -> compositor.
 interface ControlChannel {
-  // Hand the browser the page's end of the other direction.
+  // Hands the browser the page's ControlChannelClient.
   //
-  // A method here rather than a second interface the page brokers for itself:
-  // the client end means nothing to anyone who does not already hold this
-  // channel, so brokering it separately would be a second place to get the
-  // access control right, for no gain.
+  // A method rather than a separate interface, so access control lives in one
+  // place.
   SetClient(pending_remote<ControlChannelClient> client);
 
-  // Run a command on the machine running the desktop.
+  // Runs a command on the desktop machine.
   //
-  // The argv form rather than a string, and not because it is tidier: a string
-  // would have to be split by somebody, and the somebody would be a shell.
-  // There is no shell in this path and there should not be one.
+  // Takes an argv so no shell parses it.
   Spawn(array<string> command);
 
-  // Ask what in the home matches `query`. Answered with
-  // ControlChannelClient::Files, carrying the same query.
+  // Searches the home directory index for `query`. Answered with
+  // ControlChannelClient::Files.
   //
-  // NO PATH, DELIBERATELY. The note at the top of this file says what makes
-  // the channel safe is which renderers can reach it, not what is on it --
-  // and this member is the one place that would have been untrue if it took a
-  // directory: a compromised shell renderer could then read the disk a
-  // directory at a time. What is searched is decided in the compositor, which
-  // is also where the index lives; the query is words to match, not a place.
-  //
-  // THE COMPOSITOR MATCHES, AND ONLY WHAT MATCHED CROSSES. Its index is the
-  // whole home, and it used to cross this channel whole so the page could
-  // filter it -- tens of megabytes of JSON on a real home, parsed on this
-  // process's IO thread, and a desktop that took no input while it was.
+  // Takes no path, so a compromised renderer cannot read other directories.
+  // The compositor filters, and only matches cross the channel, because a
+  // full index can be tens of megabytes.
   SearchFiles(string query);
 
-  // Ask what is in one file a launcher has reached. Answered with
-  // ControlChannelClient::FilePreview, carrying the same path.
+  // Previews a file a launcher found. Answered with
+  // ControlChannelClient::FilePreview.
   //
-  // THIS ONE DOES NAME A PATH, which SearchFiles above says it deliberately
-  // does not -- and what keeps that note true is where the path is looked up.
-  // It is relative to the home, as a Files answer named it, and the compositor
-  // answers only for a path in its own index of the home: anything else comes
-  // back `unreadable`. So it reads nothing a search could not already have
-  // named, and a renderer that wanted more of the disk than that already has
-  // `Spawn`.
+  // `path` is relative to the home. The compositor answers only for paths in
+  // its index, so this exposes nothing a search could not.
   PreviewFile(string path);
 
-  // Ask which installed applications match `query`. Answered with
-  // ControlChannelClient::Apps, carrying the same query.
-  //
-  // Words, like SearchFiles: which directories hold the desktop entries is
-  // the compositor's to read, and nothing here names one.
+  // Searches installed applications for `query`. Answered with
+  // ControlChannelClient::Apps. The compositor chooses the directories.
   SearchApps(string query);
 
-  // Put a row of the clipboard's history back on the clipboard.
+  // Copies a clipboard history row, by an id from Clipboard, back onto the
+  // clipboard.
   //
-  // IT NAMES A ROW AND CARRIES NO TEXT: what makes this channel safe is which
-  // renderers can reach it, and a member that took bytes would let a
-  // compromised shell renderer write the desktop's clipboard rather than
-  // choose among what is already on it. The id is one a Clipboard message
-  // carried.
+  // Takes no text, so a compromised renderer can only choose an existing row,
+  // not write the clipboard.
   CopyClipboardEntry(uint32 entry);
 
-  // Click an icon in the system tray. `id` is one a Tray message carried.
-  //
-  // NAMES AN ICON AND CARRIES NOTHING ELSE, for CopyClipboardEntry's reason:
-  // what the click does is the application's, and all a page may do is say
-  // which of the icons already in the tray was clicked, and with which button.
+  // Clicks a tray icon, by an id from Tray. Carries nothing else, for
+  // CopyClipboardEntry's reason.
   ActivateTrayItem(string id, TrayAction action);
 
-  // Clear notifications: ids a Notifications message carried. Each
-  // application hears its notification was dismissed.
-  //
-  // NAMES NOTIFICATIONS AND CARRIES NOTHING ELSE, for CopyClipboardEntry's
-  // reason. An id that names none now is one its application closed while the
-  // click was in flight, and is passed over.
+  // Dismisses notifications by ids from Notifications. Each application is
+  // told. An id already closed by its application is ignored.
   DismissNotifications(array<uint32> ids);
 
-  // Press one of a notification's actions -- "default" for the notification
-  // itself. The application hears `action`, if it offered it; what the press
-  // does is the application's.
+  // Invokes a notification's action; "default" is a click on the
+  // notification. The application is told only if it offered `action`.
   InvokeNotificationAction(uint32 id, string action);
 
-  // Which window has the keyboard. FocusChrome takes it back to the page.
+  // Gives keyboard focus to a window. FocusChrome gives it back to the page.
   FocusApp(string app_id);
   FocusChrome();
 
-  // Ask a client to close. Not a kill: the client decides, which is why a
-  // window can refuse and show a save dialog instead.
+  // Asks a client to close. The client may refuse, e.g. to show a save
+  // dialog.
   CloseApp(string app_id);
 
-  // The layout box, as a resize. For an <app> element the box IS the
-  // xdg_toplevel.configure, which is why this exists at all.
+  // Sends an <app> element's layout box size as xdg_toplevel.configure.
   //
-  // Doubles because the compositor's sizes are doubles, and because these come
-  // from a layout box: a CSS pixel is fractional and rounding it here would
-  // make a window's size depend on which half of the channel measured it.
+  // Doubles because CSS pixels are fractional; rounding here would make the
+  // size depend on which side measured it.
   ResizeApp(string app_id, double width, double height);
 
-  // Where the page put an <app>, in the desk's CSS pixels. The compositor
-  // gives the client the scale of the monitor holding most of it. It positions
-  // nothing: layout does that.
+  // Reports an <app>'s bounds in the page's CSS pixels. The compositor gives
+  // the client the scale of the monitor holding most of it. Layout, not the
+  // compositor, positions it.
   SetAppBounds(string app_id, double x, double y, double width, double height);
 
-  // The desktop's own geometry, and the scale the page is drawn at.
+  // The desktop's size and the page's device pixel ratio.
   SetDesktopSize(double width, double height);
   SetDevicePixelRatio(double ratio);
 
-  // The user picked a theme off the shell's toggle.
+  // Sets the desktop theme from the shell's toggle.
   //
-  // THE ONLY MEMBER HERE THAT TELLS THE COMPOSITOR WHAT THE DESKTOP IS rather
-  // than asking it for something. Everything else on this interface is a
-  // request about a window, a device or a process; this is the page saying the
-  // desk is light now.
-  //
-  // It has to go down rather than stay in the renderer, because a theme that
-  // lived in the page would be a desktop whose panels went dark and whose
-  // windows stayed light. The compositor is the process the desk's clients can
-  // hear -- it answers the settings portal GTK, Qt and Electron read their
-  // color scheme from -- and it is the process that read the theme out of the
-  // config file to begin with.
-  //
-  // Answered with ControlChannelClient::ThemeChanged, to every chrome rather
-  // than to this one: a desk of three monitors is three of these channels, and
-  // a toggle clicked on one of them is the whole desktop changing.
+  // The compositor owns the theme so app windows match the shell: it serves
+  // the settings portal GTK, Qt and Electron read. Answered with
+  // ControlChannelClient::ThemeChanged to every chrome, since each monitor
+  // has its own channel.
   SetTheme(Theme theme);
 
-  // Offer a passphrase at a locked desk.
+  // Submits a passphrase to unlock the desktop.
   //
-  // THE ONE MEMBER HERE THAT CARRIES A SECRET, and the note at the top of this
-  // file is what keeps it one: the browser binds this interface only for a
-  // document whose origin is the shell's, so no ordinary web content can reach
-  // it. Nothing in this process logs the argument, and the compositor's own
-  // `Passphrase` type refuses to print itself.
-  //
-  // Answered with ControlChannelClient::Locked, to every chrome rather than to
-  // the one that asked, and only when the desk actually opened -- the same
-  // one-path-that-decides arrangement SetTheme has, for a harder reason: a page
-  // that cleared its own lock screen because it believed its own keystrokes
-  // would be a lock anybody with the devtools could open. A wrong passphrase is
-  // answered with nothing at all.
+  // Carries a secret. Nothing in this process logs it, and the compositor's
+  // `Passphrase` type does not print itself. Answered with
+  // ControlChannelClient::Locked to every chrome, only on success, so a page
+  // cannot unlock itself. A wrong passphrase gets no answer.
   Unlock(string passphrase);
 
-  // Lock the desk now, whoever is at it.
-  //
-  // Answered like Unlock: with ControlChannelClient::Locked to every chrome,
-  // and only when the desk actually shut. A desk with no lock configured has
-  // nothing to shut, and answers nothing.
+  // Locks the desktop. Answered like Unlock. With no lock configured, nothing
+  // happens and nothing is sent.
   Lock();
 
-  // Set the screen's backlight to `level`, a fraction 0.0 through 1.0.
+  // Sets the backlight to `level`, 0.0 to 1.0.
   //
-  // Answered like SetTheme: with ControlChannelClient::Brightness to every
-  // chrome, once the kernel says the backlight moved. The compositor asks
-  // logind to write it and never turns the screen all the way off.
+  // Answered with ControlChannelClient::Brightness to every chrome once the
+  // kernel reports the change. The compositor writes it through logind and
+  // never turns the screen fully off.
   SetBrightness(double level);
 
-  // The shell's mixer. Each names a device or a stream by an id a
-  // ControlChannelClient::Audio carried -- opaque here, and checked by the
-  // compositor, which refuses one it never gave out -- and each is answered
-  // like SetBrightness: with the next Audio to every chrome, once the sound
-  // server says it moved. A volume is a fraction of the server's 100%.
+  // The shell's mixer. Ids come from ControlChannelClient::Audio; the
+  // compositor rejects unknown ones. Each is answered with the next Audio to
+  // every chrome once the sound server reports the change. Volume is a
+  // fraction of the server's 100%.
   SetAudioVolume(string id, double volume);
   SetAudioMuted(string id, bool muted);
-  // Make a device the one new streams go to.
+  // Makes a device the default for new streams.
   SetDefaultAudioDevice(string id);
-  // Move a stream to another device of its own direction.
+  // Moves a stream to another device of the same direction.
   MoveAudioStream(string id, string device);
-  // Switch a device's port -- speakers to headphones -- by the port's name.
+  // Switches a device's port, e.g. speakers to headphones.
   SetAudioPort(string id, string port);
-  // Switch a sound card's profile, by the card's id and the profile's name.
+  // Switches a sound card's profile.
   SetAudioProfile(string card, string profile);
 
-  // Meter these devices and streams, by the ids an Audio carried, and send
-  // their peaks as AudioLevels. A lease: the page asks again every second
-  // while its meters are on screen, and the compositor stops metering what
-  // nobody renewed -- metering a microphone records it. An empty array lets
-  // go at once.
+  // Meters these devices and streams, sending peaks as AudioLevels.
+  //
+  // A lease: the page renews every second while meters are visible, and the
+  // compositor stops metering anything not renewed, because metering a
+  // microphone records it. An empty array releases all at once.
   WatchAudioLevels(array<string> ids);
 
-  // This page's old frame is held for `theme`: the desk's windows may turn.
+  // Reports that the page captured its old frame for the theme transition.
   //
-  // Called from inside the shell's wipe, once the frame it wipes away from is
-  // captured. The compositor waits for every chrome, tells the windows, and
-  // answers with ControlChannelClient::WindowsThemeChanged.
+  // The compositor waits for every chrome, tells the windows, then answers
+  // with ControlChannelClient::WindowsThemeChanged.
   ThemeCaptured(Theme theme);
 
-  // A key combination the compositor should route to the page rather than to
-  // whichever client has focus.
+  // Routes a key combination to the page instead of the focused client.
   GrabShortcut(Shortcut shortcut);
 
-  // Put the cursor where the page says, in the page's own coordinates.
+  // Moves the cursor to a point in the page's coordinates.
   //
-  // THE ONE MESSAGE ABOUT INPUT THAT GOES THE OTHER WAY, and it stops in the
-  // browser process -- the compositor neither draws this pointer nor hears
-  // about it. A shell whose focus follows the cursor has to take the cursor
-  // with the keyboard or have the focus handed back by the next pointer event;
-  // a page can read where the pointer is and cannot put it anywhere, so it
-  // asks. What a page may move is the pointer over itself, which is
-  // `PointerWarpTarget`'s to enforce and not this channel's to promise.
+  // Handled in the browser process; the compositor is not involved. A shell
+  // with focus-follows-mouse needs this to move the cursor with keyboard
+  // focus, and web pages cannot move the pointer. `PointerWarpTarget` limits
+  // it to the pointer over this page.
   WarpPointer(double x, double y);
 
-  // Input forwarding. Coordinates are surface-local and keycodes are evdev,
-  // because that is what a Wayland client expects to be handed.
+  // Input forwarding. Coordinates are surface-local and keycodes are evdev, as
+  // Wayland clients expect.
   Key(string app_id, uint32 keycode, bool pressed);
   PointerMotion(string app_id, double x, double y);
   PointerLeave(string app_id);
@@ -516,34 +396,22 @@ interface ControlChannel {
   PointerAxis(string app_id, double dx, double dy, int32 v120_x, int32 v120_y);
 };
 
-// Compositor -> browser -> page. One method, not a callback on Spawn: these
-// arrive because a client did something, not because the page asked.
+// Compositor -> browser -> page. Messages, not callbacks, because most are
+// caused by clients rather than by page requests.
 //
-// EVERY METHOD HERE CARRIES AN `arrival`, AND IT IS NOT DECORATION. Between
-// the compositor's socket and a listener in the page there is a real stage --
-// a read in the browser process, a mojo message, a hop into the renderer, a
-// dispatch -- and until this parameter existed nothing in a page could price
-// it. `Event.timeStamp` is when the event was *constructed*, in the renderer,
-// at dispatch, so measuring against it reports a few microseconds of Blink and
-// calls it the IPC; that is exactly how the deleted instrument came to print
-// `ipc_ms=0` every interval. `arrival` is `base::TimeTicks::Now()` taken in
-// `ControlChannel::OnRead`, the moment the browser process had the bytes, and
-// Blink turns it into a `DOMHighResTimeStamp` on the same clock as
-// `performance.now()` -- so `event.timeStamp - event.arrival` is the stage.
-// See docs/architecture/ENGINE-FORK-MEASUREMENTS.md#keystroke-to-pixel.
+// `arrival` is `base::TimeTicks::Now()` in `ControlChannel::OnRead`, when the
+// browser received the bytes. Blink exposes it on the `performance.now()`
+// clock, so `event.timeStamp - event.arrival` measures IPC latency. See
+// docs/architecture/ENGINE-FORK-MEASUREMENTS.md#keystroke-to-pixel.
 //
-// `Displays` is the one method without one, because there is nothing to put it
-// on: it dispatches a bare `Event` and the desktop is read off
-// `DomicileHost.displays` rather than carried. A parameter no event
-// class can hold would be a field nothing reads.
+// `Displays` and `Brightness` have no `arrival`, because the page stores them
+// as attributes rather than event fields.
 interface ControlChannelClient {
-  // A window's title changed. `app_id` is the same id an <app> element names.
+  // A window's title changed. `app_id` matches the <app> element's.
   AppTitled(string app_id, string title, mojo_base.mojom.TimeTicks arrival);
 
-  // A window exists. Size is absent until the client has committed a buffer --
-  // a toplevel maps before it draws, and how big a Wayland client wants to be
-  // is something it says by drawing. Believing a zero here is what opened
-  // windows at nothing at all.
+  // A window exists. `has_size` is false until the client commits a buffer,
+  // because a toplevel maps before it draws. Do not treat a zero size as real.
   AppAppeared(string app_id, string title, bool has_size,
               double width, double height,
               mojo_base.mojom.TimeTicks arrival);
@@ -551,97 +419,73 @@ interface ControlChannelClient {
   AppResized(string app_id, double width, double height,
              mojo_base.mojom.TimeTicks arrival);
 
-  // The smallest and largest a client will draw its window, in logical units,
-  // with 0 on an axis for no limit -- xdg-shell's own spelling.
+  // A client's minimum and maximum window size in logical units. 0 means no
+  // limit on that axis, as in xdg-shell.
   AppMinSize(string app_id, double width, double height,
              mojo_base.mojom.TimeTicks arrival);
   AppMaxSize(string app_id, double width, double height,
              mojo_base.mojom.TimeTicks arrival);
 
-  // A popup over the window or popup `parent_app_id`: its box is `width` by
-  // `height` at (`x`, `y`) from that one's, in logical units. Sent again when
-  // the client moves it; it goes with AppClosed.
+  // A popup over `parent_app_id`, at (`x`, `y`) from the parent's box, in
+  // logical units. Resent when the client moves it; removed by AppClosed.
   PopupPlaced(string app_id, string parent_app_id, double x, double y,
               double width, double height, bool grab,
               mojo_base.mojom.TimeTicks arrival);
   AppClosed(string app_id, mojo_base.mojom.TimeTicks arrival);
 
-  // The cursor a client asked for over its own surface.
+  // The cursor a client set over its surface.
   AppCursor(string app_id, CursorShape cursor,
             mojo_base.mojom.TimeTicks arrival);
 
-  // A grabbed shortcut fired. Named for the event rather than the struct,
-  // which would shadow the type inside the generated class.
+  // A grabbed shortcut fired. Not named Shortcut, which would shadow the
+  // struct in the generated class.
   //
-  // Its `arrival` is the one stamp here that is not always a socket read: a
-  // chord claimed by the shell is matched in the browser process by
-  // ShortcutRegistry and never crosses the compositor's socket at all. It is
-  // taken when the match is made, which is the same quantity -- the moment
-  // this process had the message -- measured against the same clock.
+  // Shell-claimed chords are matched in the browser by ShortcutRegistry, so
+  // `arrival` is taken at the match rather than a socket read. It is on the
+  // same clock.
   ShortcutPressed(Shortcut shortcut, mojo_base.mojom.TimeTicks arrival);
 
-  // The seat's modifier state. One seat, outliving every window, which is why
-  // a dropped key release latches modifiers into clients that never saw it.
+  // Which modifiers the seat holds.
   //
-  // Which modifiers are held, not xkb's four masks: the compositor has already
-  // resolved depressed/latched/locked against the keymap, and a shell asking
-  // "is control down" cannot answer that from a mask without the keymap too.
+  // The seat outlives every window, so a dropped key release leaves modifiers
+  // stuck in clients. The compositor resolves xkb's masks against the keymap,
+  // so the shell does not need the keymap.
   Modifiers(bool alt, bool ctrl, bool shift, bool meta,
             mojo_base.mojom.TimeTicks arrival);
 
-  // The whole desktop, whenever any of it changes.
+  // Every screen, sent whenever any changes.
   //
-  // Every screen every time, not a delta: the compositor re-describes the
-  // desktop on a resize, a density change or a config reload, and a page that
-  // had to reconcile deltas could be wrong about a screen forever after
-  // missing one. An empty list is a desktop with no screens on it, which the
-  // compositor does not send -- it describes at least one output -- but which
-  // is an answer rather than a silence, and the page must be able to hold it.
+  // A full list rather than a delta, so a missed message cannot leave the page
+  // wrong. The compositor always sends at least one screen, but the page must
+  // handle an empty list.
   Displays(array<DisplayInfo> displays);
 
-  // What matched a SearchFiles, and only that: `query` is the one answered,
-  // `files` the front of what matched -- paths relative to the home
-  // directory, sorted by the compositor, a directory ending in `/` -- and
-  // `matched` how many there were in all.
+  // The answer to SearchFiles. `files` is the first matches: home-relative
+  // paths, sorted by the compositor, directories ending in `/`. `matched` is
+  // the total count. `query` is echoed so the page can match answers.
   //
-  // One of the two methods here that ARE because the page asked -- FilePreview
-  // below is the other -- which is why the note above says "one method, not a
-  // callback on Spawn" rather than "none". It is still a message and not a
-  // reply: the page has one listener per message type and a callback would be
-  // a second shape of delivery for one answer. The query comes back so the
-  // page can tell answers apart.
-  //
-  // A home that could not be read sends nothing at all -- the compositor logs
-  // it -- because a launcher drawing an empty list is how that failure would
-  // otherwise look.
-  //
-  // `indexing` is whether the compositor's walk of the home is still running,
-  // which is the difference between an incomplete answer and a wrong one: the
-  // rows are a launcher's whole evidence that a file exists, so an answer from
-  // an index still being built has to arrive saying so.
+  // `indexing` is true while the compositor is still walking the home, so the
+  // page can show that results may be incomplete. An unreadable home sends
+  // nothing; the compositor logs it.
   Files(string query,
         array<string> files,
         uint32 matched,
         bool indexing,
         mojo_base.mojom.TimeTicks arrival);
 
-  // What is in the file a PreviewFile named: `path` is the one answered, and
-  // `kind` says which of the rest means anything.
+  // The answer to PreviewFile. `path` is echoed. `kind` says which fields are
+  // set:
   //
-  //   "text"        `text` is the front of the file
-  //   "directory"   `entries` is what is in it, a subdirectory ending in `/`
-  //   "audio"       `title`, `artist`, `album` and `cover` are what a song
-  //                 says of itself, each empty when it does not say, and
-  //                 `duration` is how long it plays, in seconds. `cover` is a
-  //                 `data:` URL, because the page cannot read the file
-  //   "binary"      nothing else: it is a file, and not one to print
+  //   "text"        `text` is the start of the file
+  //   "directory"   `entries` lists it, subdirectories ending in `/`
+  //   "audio"       `title`, `artist`, `album` and `cover` from the file's
+  //                 tags, each empty if absent, and `duration` in seconds.
+  //                 `cover` is a `data:` URL
+  //   "binary"      nothing else
   //   "unreadable"  nothing else: not in the index, or not readable
   //
-  // A string rather than an enum, because nothing on the page's side decides
-  // anything with it but which of those to draw -- and the browser refuses a
-  // word that is not one of the five before it gets here. An answer and not a
-  // push, like Files, so the path comes back for the page to tell answers
-  // apart.
+  // A string because the page only uses it to pick a view. The browser
+  // rejects any other value.
   FilePreview(string path,
               string kind,
               string text,
@@ -653,158 +497,108 @@ interface ControlChannelClient {
               string cover,
               mojo_base.mojom.TimeTicks arrival);
 
-  // The applications and bookmarks a SearchApps matched, each best first. An
-  // answer like Files, so the query comes back for the page to tell answers
-  // apart; empty arrays are a query that matched nothing.
+  // The answer to SearchApps, each list best first. `query` is echoed.
   Apps(string query,
        array<DesktopEntry> apps,
        array<Bookmark> bookmarks,
        mojo_base.mojom.TimeTicks arrival);
 
-  // The machine's battery: `charge` is a fraction 0.0 through 1.0, `charging`
-  // is whether a lead is in.
+  // The battery's `charge`, 0.0 to 1.0, and whether it is `charging`.
   //
-  // Pushed, unlike Files, and with no member on ControlChannel to ask for it:
-  // a charge changes on its own. The compositor polls
-  // /sys/class/power_supply and sends this when the reading moves far enough
-  // to draw, and once more to a chrome that has just connected.
+  // The compositor polls /sys/class/power_supply and sends this when the
+  // reading changes visibly, and once to each new chrome. A machine with no
+  // battery sends nothing.
   //
-  // It exists because navigator.getBattery() does not work here. That API
-  // reads UPower over D-Bus and a desktop on a bare tty has neither, so it
-  // resolves with the default BatteryStatus -- charging, and full -- which no
-  // page can distinguish from a real full battery. A machine with no battery
-  // sends nothing rather than a zero, for the same reason.
+  // navigator.getBattery() needs UPower over D-Bus, which a bare tty lacks,
+  // so it always reports a full, charging battery.
   Battery(double charge, bool charging, mojo_base.mojom.TimeTicks arrival);
 
-  // How bright the screen is, 0.0 through 1.0.
+  // The backlight level, 0.0 to 1.0.
   //
-  // Pushed like Battery: when the backlight moves -- a key, another program,
-  // or SetBrightness -- and once more to a chrome that has just connected. A
-  // machine with no backlight sends none. No arrival: the page keeps it as an
-  // attribute, like Displays, rather than handing it out on an event.
+  // Sent when it changes, by any cause, and once to each new chrome. A
+  // machine with no backlight sends nothing.
   Brightness(double level);
 
-  // What has been copied on this desktop, newest first.
+  // The clipboard history, newest first.
   //
-  // Pushed like Battery: the compositor is the process a
-  // wl_data_device.set_selection arrives at, so a copy is an event it already
-  // hears. Sent whenever the history changes and once more to a chrome that
-  // has just connected. An empty array is a desktop nothing has been copied on
-  // yet, which is an answer -- and the ordinary state of one that has just
-  // started, because the history is in memory and never on disk.
+  // Sent whenever it changes and once to each new chrome. The history is in
+  // memory only, so it starts empty.
   //
-  // A page cannot read this for itself, and navigator.clipboard is the trap
-  // that looks like it can: that API answers out of this browser's own
-  // clipboard, which on the platform this engine scans out on is connected to
-  // no Wayland client at all.
+  // navigator.clipboard cannot replace this: it reads the browser's own
+  // clipboard, which no Wayland client is connected to here.
   Clipboard(array<ClipboardEntry> entries, mojo_base.mojom.TimeTicks arrival);
 
-  // The system tray: every application showing an icon, in the order they
-  // registered.
+  // Every tray icon, in registration order.
   //
-  // Pushed like Clipboard, and the whole list every time: sent whenever an
-  // icon arrives, leaves or changes how it looks, and once more to a chrome
-  // that has just connected. The compositor is the StatusNotifierItem host --
-  // the session bus is its, and a page has none. An empty array is a desk no
-  // application has put an icon on, and every desk with no session bus.
+  // The full list, sent whenever an icon is added, removed or changed, and
+  // once to each new chrome. The compositor is the StatusNotifierItem host.
+  // Empty with no session bus.
   Tray(array<TrayItem> items, mojo_base.mojom.TimeTicks arrival);
 
-  // The desk's notifications: every one not yet cleared, oldest first.
+  // Every notification not yet dismissed, oldest first.
   //
-  // Pushed like Tray, and the whole list every time: sent whenever one
-  // arrives, is replaced or goes, and once more to a chrome that has just
-  // connected -- the history is the compositor's, so a page that reloads
-  // keeps it. Which are new is the page's to tell. An empty array is a desk
-  // with nothing to say, and every desk with no session bus.
+  // The full list, sent whenever one is added, replaced or removed, and once
+  // to each new chrome. The compositor keeps the history, so it survives a
+  // page reload; the page decides which are new. Empty with no session bus.
   Notifications(array<Notification> items,
                 mojo_base.mojom.TimeTicks arrival);
 
-  // Which way round the desktop is drawn now.
+  // The current theme. Not named Theme, which would shadow the enum in the
+  // generated class.
   //
-  // Named for the event rather than the enum, which would shadow the type
-  // inside the generated class -- the same reason ShortcutPressed is not
-  // called Shortcut.
-  //
-  // Pushed like Battery, and the one pushed message whose cause can be this
-  // page: it arrives when a chrome has just connected, when a reload of the
-  // compositor's config moved `[theme]`, and when any chrome calls
-  // ControlChannel::SetTheme. The sender is told again as part of that last
-  // one, which is deliberate -- one path sets the theme, rather than a page
-  // that believes its own click.
+  // Sent to each new chrome, when a config reload changes `[theme]`, and when
+  // any chrome calls SetTheme, including the caller, so the compositor is the
+  // single source of truth.
   ThemeChanged(Theme theme, mojo_base.mojom.TimeTicks arrival);
-  // Whether anybody is at this desktop: true is a desk nobody has touched for
-  // as long as its config says, false is somebody back at it.
+
+  // Whether the desktop is idle: true after the configured timeout without
+  // input, false once input resumes.
   //
-  // Pushed like Battery, and a state rather than an edge although the
-  // compositor decides an edge: over there an edge is what a connector can
-  // take, because lighting one is a modeset and a dark desk restating itself
-  // every tick is a modeset a second. A page reloads, so it is sent where the
-  // desk stands -- on the turn that changes, and once more to a chrome that
-  // has just connected.
+  // A state, not an edge, so a reloaded page learns the current value. Sent on
+  // each change and once to each new chrome. Not sent with no idle timeout.
   //
-  // A page cannot count hands for itself. A shell is the desktop, so its
-  // document stays visible while the glass is off: every idle signal the web
-  // platform has says somebody is here on a desk nobody has been at for an
-  // hour. A desktop with no idle timeout sends none of these at all.
+  // The page cannot detect this itself: the shell's document stays visible
+  // with the screen off, so web idle signals never fire.
   //
-  // NOT THE LOCK, and nothing here can be made into one: the seat is the
-  // compositor's, so refusing to deliver what is typed is its decision rather
-  // than the page's. That refusal is Locked below, which is a member of its own
-  // because the two are not the same fact -- a desk can be dark and open, and a
-  // locked desk somebody has just wiggled the mouse at is lit and shut.
+  // Idle is not locked; see Locked. A desktop can be idle and unlocked, or
+  // locked and active.
   Idle(bool idle, mojo_base.mojom.TimeTicks arrival);
 
-  // Whether this desk is locked: true is a desktop that will not deliver a
-  // keystroke or a click to any client until somebody says the passphrase.
+  // Whether the desktop is locked: when true, no client receives input until
+  // the passphrase is entered.
   //
-  // THE COMPOSITOR HOLDS IT, which is what the whole thing is for. Input on
-  // this system does not originate there -- the shell's page owns it and
-  // forwards it over ControlChannel above, and the compositor injects it into a
-  // Wayland seat -- so the lock is that injection not happening. A page reload
-  // does not open the desk, an engine that died and came back does not, and a
-  // page edited in the devtools of the browser drawing it does not either.
+  // The compositor enforces the lock by not injecting the input the page
+  // forwards into the Wayland seat. So a page reload, an engine restart or
+  // devtools edits cannot unlock it. The page still receives its own keys, so
+  // it can draw the lock screen and read the passphrase.
   //
-  // The renderer keeps its own keys throughout, which reads like a hole and is
-  // the opposite: the page is the thing forwarding, so it can draw a lock
-  // screen and take a passphrase while nothing it forwards arrives anywhere.
-  //
-  // Pushed like Idle, and a state rather than an edge for its reason with the
-  // stakes the other way up: the edge a reloaded page missed is the one that
-  // would have raised its lock screen. Sent on the turn the answer changes and
-  // once more to a chrome that has just connected. A desktop with no passphrase
-  // configured sends none of these at all, because it cannot lock.
+  // A state, not an edge, so a reloaded page shows its lock screen. Sent on
+  // each change and once to each new chrome. Not sent with no passphrase
+  // configured.
   Locked(bool locked, mojo_base.mojom.TimeTicks arrival);
 
-  // Which way round the desk's windows are drawn now: ThemeChanged's other
-  // half. It arrives once every chrome has called ThemeCaptured -- or the
-  // compositor stopped waiting -- and the windows have had their chance to
-  // repaint, and again when a chrome connects. The browser has already drawn
-  // its own pages this way by the time it arrives; a shell holding its wipe
-  // lets go on it.
+  // The theme app windows now use; the second half of ThemeChanged.
+  //
+  // Sent once every chrome has called ThemeCaptured, or the compositor timed
+  // out, and windows have had time to repaint. Also sent to each new chrome.
+  // The shell ends its transition on it.
   WindowsThemeChanged(Theme theme, mojo_base.mojom.TimeTicks arrival);
 
-  // The shell's part of the desk's config -- its keybindings, each mode's, and
-  // the options the config keeps for a shell by name -- as the one JSON line
-  // the compositor sent, `type` and all.
+  // The shell's config section (keybindings, modes and named options) as the
+  // compositor's JSON line, `type` included.
   //
-  // A STRING AND NOT A STRUCT, which is the opposite of every other member
-  // here and is deliberate. A shell's `options` are whatever its config says,
-  // and neither mojom nor WebIDL can type a value nobody has declared, so the
-  // page parses the line for itself; a struct for the half that can be typed
-  // would be the same message read in two places. The browser has already
-  // parsed it once, as it does every line, so what arrives is a JSON object in
-  // valid UTF-8 and nothing more is promised.
+  // A string because a shell's `options` are free-form, which neither mojom
+  // nor WebIDL can type, so the page parses it. The browser guarantees only a
+  // valid UTF-8 JSON object.
   //
-  // Pushed like ThemeChanged: once to a chrome that has just connected, and
-  // again whenever a reload of the compositor's config moved what it carries.
+  // Sent to each new chrome and when a config reload changes it.
   ShellConfig(string config, mojo_base.mojom.TimeTicks arrival);
 
-  // The desk's sound: every output and input, every stream playing or
-  // recording, every sound card, each list in the sound server's order.
+  // All audio state: outputs, inputs, playback and recording streams, and
+  // cards, each in the sound server's order.
   //
-  // Pushed like Tray, and the whole of it every time: whenever the sound
-  // server says something moved, and once more to a chrome that has just
-  // connected. A desk with no sound server sends none.
+  // The full state, sent whenever the sound server reports a change and once
+  // to each new chrome. Not sent with no sound server.
   Audio(array<AudioDevice> outputs,
         array<AudioDevice> inputs,
         array<AudioStream> playback,
@@ -812,18 +606,16 @@ interface ControlChannelClient {
         array<AudioCard> cards,
         mojo_base.mojom.TimeTicks arrival);
 
-  // How loud what WatchAudioLevels asked for is: some twenty times a second
-  // while anything is metered, and never otherwise. An id not heard on yet is
-  // left out rather than sent as silence.
+  // Peaks for the ids WatchAudioLevels requested, about 20 times a second
+  // while any are metered. Ids with no reading yet are omitted.
   AudioLevels(array<AudioLevel> levels, mojo_base.mojom.TimeTicks arrival);
 
-  // Focus moved, including to the chrome itself, in which case app_id is empty.
+  // Focus moved. `app_id` is empty when the chrome has focus.
   FocusChanged(string app_id, mojo_base.mojom.TimeTicks arrival);
 
-  // A client asked for the keyboard and has not been given it. The shell
-  // decides: the compositor forwards the request with the seat where it was,
-  // so a page that ignores this is a desktop where a background window cannot
-  // take what its user is typing into. Never empty -- a request comes from a
-  // client, and the chrome asking itself for focus does not cross the wire.
+  // A client requested keyboard focus and has not received it.
+  //
+  // The shell decides whether to grant it with FocusApp; the compositor keeps
+  // focus unchanged. `app_id` is never empty.
   FocusRequested(string app_id, mojo_base.mojom.TimeTicks arrival);
 };

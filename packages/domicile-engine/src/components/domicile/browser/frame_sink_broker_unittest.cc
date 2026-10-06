@@ -33,27 +33,22 @@
 namespace domicile {
 namespace {
 
-// The client id the browser allocates its own frame sinks from. Renderers get
-// their child process id, and those start at 1, so this namespace is the
-// browser's alone — see content::AllocateFrameSinkId and
+// The browser's own frame sink client id. Renderer ids start at 1. See
+// content::AllocateFrameSinkId and
 // content/browser/compositor/viz_process_transport_factory.cc.
 constexpr uint32_t kBrowserClientId = 0u;
 
-// The FrameSinkId a page embeds under: its own renderer's, which is the parent
-// BeginFrames travel down from. Client id 1 because a renderer's is its child
-// process id and those start at 1.
+// The embedding page's renderer frame sink, the parent BeginFrames come from.
 constexpr viz::FrameSinkId kPageFrameSinkId(1u, 1u);
 
 
-// The app the test's sinks are brokered for. `BrokerASink` passes it to
-// CreateFrameSink, and an Embed naming it is what matches.
+// The app id `BrokerASink` passes to CreateFrameSink.
 constexpr char kTestApp[] = "test-app";
 constexpr gfx::Size kEmbeddedSize(320, 240);
-// The page's device pixels per CSS pixel: a monitor at 1.5.
+// The page's device scale factor.
 constexpr double kEmbeddedScale = 1.5;
 
-// Stands in for the producer's half: the callback that tells it which surface
-// the embedder chose for it.
+// Fake producer observer, told which surface the embedder chose.
 class FakeSurfaceObserver : public mojom::SurfaceObserver {
  public:
   mojo::PendingRemote<mojom::SurfaceObserver> BindRemote() {
@@ -70,18 +65,15 @@ class FakeSurfaceObserver : public mojom::SurfaceObserver {
     }
   }
 
-  // Only sent to a producer whose sink the browser owns, which these tests
-  // never ask for: brokering a sink and embedding it is what they are about,
-  // and neither needs a GPU to import into.
+  // Unused here: these tests need no GPU.
   void OnFrame(int64_t deadline_us) override { frames_++; }
   void OnBufferReleased(uint64_t buffer_id) override {
     released_.push_back(buffer_id);
   }
 
-  // The first embed, for the tests that are about one.
+  // The first embed.
   base::test::TestFuture<viz::LocalSurfaceId, gfx::Size, double> embedded_;
-  // Every LocalSurfaceId the producer was told, in order. The last is the one
-  // it submits to.
+  // Every LocalSurfaceId sent, in order. The producer submits to the last.
   std::vector<viz::LocalSurfaceId> told_;
   int frames_ = 0;
   std::vector<uint64_t> released_;
@@ -90,8 +82,7 @@ class FakeSurfaceObserver : public mojom::SurfaceObserver {
   mojo::Receiver<mojom::SurfaceObserver> receiver_{this};
 };
 
-// Stands in for the producer's other half: the compositor being told what the
-// screens are.
+// Fake producer display observer.
 class FakeDisplayListObserver : public mojom::DisplayListObserver {
  public:
   mojo::PendingRemote<mojom::DisplayListObserver> BindRemote() {
@@ -103,17 +94,14 @@ class FakeDisplayListObserver : public mojom::DisplayListObserver {
     lists_.push_back(std::move(displays));
   }
 
-  // Every list this observer was sent, in order. A list rather than a count
-  // because "told once" and "told twice with the same thing" are different
-  // facts about a desktop that re-reads its displays.
+  // Every list sent, in order. A list so tests can detect duplicates.
   std::vector<std::vector<mojom::DisplayPtr>> lists_;
 
  private:
   mojo::Receiver<mojom::DisplayListObserver> receiver_{this};
 };
 
-// Stands in for the producer's other half again: the compositor being told
-// what was copied in the browser.
+// Fake producer clipboard observer.
 class FakeClipboardObserver : public mojom::ClipboardObserver {
  public:
   mojo::PendingRemote<mojom::ClipboardObserver> BindRemote() {
@@ -125,22 +113,16 @@ class FakeClipboardObserver : public mojom::ClipboardObserver {
     copies_.emplace_back(clipboard, text);
   }
 
-  // Every copy this observer was told about, in order. A list for the reason
-  // FakeDisplayListObserver keeps one: copying the same thing twice is a
-  // different fact from copying it once.
+  // Every copy sent, in order. A list so tests can detect duplicates.
   std::vector<std::pair<mojom::Clipboard, std::string>> copies_;
 
  private:
   mojo::Receiver<mojom::ClipboardObserver> receiver_{this};
 };
 
-// A display list of one: a named 597x336mm panel at the origin, at a hair
-// under 60Hz.
+// One named 597x336mm panel at the origin, at just under 60Hz.
 //
-// Every field after `bounds` is filled in rather than left at its zero,
-// because the broker is a pipe and what a pipe drops it drops silently. Each
-// of them was added to the mojom after `id` and `bounds`, and a fixture that
-// never sets one would pass whether or not it crosses.
+// Every field is nonzero so tests catch a field dropped in transit.
 std::vector<mojom::DisplayPtr> OneDisplay(int64_t id, const gfx::Size& size) {
   std::vector<mojom::DisplayPtr> displays;
   displays.push_back(mojom::Display::New(id, gfx::Rect(size),
@@ -155,25 +137,22 @@ class FrameSinkBrokerTest : public testing::Test {
  public:
   FrameSinkBroker* broker() { return broker_.get(); }
 
-  // Whether viz has a CompositorFrameSink for `frame_sink_id`. This is the
-  // whole question the step asks: a sink exists in the viz service for a
-  // producer that is not a renderer.
+  // Whether viz has a CompositorFrameSink for `frame_sink_id`.
   bool VizHasFrameSink(const viz::FrameSinkId& frame_sink_id) {
     return frame_sink_manager_->GetFrameSinkForId(frame_sink_id) != nullptr;
   }
 
   void RunUntilIdle() { base::RunLoop().RunUntilIdle(); }
 
-  // Whether viz has `child` registered as a child of `parent`. Hierarchy is
-  // what makes BeginFrames arrive; step 2 established it is not what gets the
-  // surface drawn.
+  // Whether viz has `child` registered under `parent`. The hierarchy delivers
+  // BeginFrames.
   bool VizHasHierarchy(const viz::FrameSinkId& parent,
                        const viz::FrameSinkId& child) {
     return frame_sink_manager_->GetChildrenByParent(parent).contains(child);
   }
 
-  // Allocates a LocalSurfaceId the way an embedder does. The page runs this
-  // allocator in production; the point is that the producer never does.
+  // Allocates a LocalSurfaceId as the embedding page does. The producer never
+  // allocates one.
   viz::LocalSurfaceId AllocateLocalSurfaceId() {
     local_surface_id_allocator_.GenerateId();
     return local_surface_id_allocator_.GetCurrentLocalSurfaceId();
@@ -196,16 +175,15 @@ class FrameSinkBrokerTest : public testing::Test {
   void SetUp() override {
     host_frame_sink_manager_ = std::make_unique<viz::HostFrameSinkManager>();
 
-    // FrameSinkManagerImpl is the viz service side. In production it is in the
-    // viz process; in-process here, which is what the equivalent renderer test
-    // does too (embedded_frame_sink_provider_impl_unittest.cc).
+    // The viz service side, in-process as in
+    // embedded_frame_sink_provider_impl_unittest.cc.
     frame_sink_manager_ = std::make_unique<viz::FrameSinkManagerImpl>(
         viz::FrameSinkManagerImpl::InitParams());
     host_frame_sink_manager_->SetLocalManager(frame_sink_manager_.get());
     frame_sink_manager_->SetLocalClient(host_frame_sink_manager_.get());
 
-    // The page's own frame sink. Registering it is the browser's job in
-    // production; without it there is no parent for a hierarchy to hang off.
+    // The page's frame sink, the parent for the hierarchy. The browser
+    // registers it in production.
     host_frame_sink_manager_->RegisterFrameSinkId(
         kPageFrameSinkId, &page_frame_sink_client_,
         viz::ReportFirstSurfaceActivation::kNo);
@@ -224,14 +202,12 @@ class FrameSinkBrokerTest : public testing::Test {
                             base::Unretained(this)));
   }
 
-  // Stands in for the ozone platform that owns the CRTCs, which is what a real
-  // embedder injects and which this target deliberately cannot reach.
+  // Fake for the ozone platform that owns the CRTCs.
   void RecordLayout(std::vector<mojom::DisplayLayoutPtr> layout) {
     layouts_.push_back(std::move(layout));
   }
 
-  // Stands in for the ozone platform that owns the clipboard, injected for the
-  // same reason.
+  // Fake for the ozone platform that owns the clipboard.
   void RecordClipboard(mojom::Clipboard clipboard, const std::string& text) {
     clipboards_.emplace_back(clipboard, text);
   }
@@ -246,16 +222,13 @@ class FrameSinkBrokerTest : public testing::Test {
     frame_sink_manager_.reset();
   }
 
-  // Every layout the producer stated, in order. A list rather than a count
-  // because "stated once" and "stated twice the same way" are different facts
-  // about a desktop whose config can be reloaded.
+  // Every layout the producer sent, in order.
   std::vector<std::vector<mojom::DisplayLayoutPtr>> layouts_;
 
-  // Every clipboard the producer stated, in order.
+  // Every clipboard the producer sent, in order.
   std::vector<std::pair<mojom::Clipboard, std::string>> clipboards_;
 
-  // Stands in for the browser's own allocator, which is what a real embedder
-  // injects.
+  // Fake for the browser's frame sink id allocator.
   viz::FrameSinkIdAllocator allocator_{kBrowserClientId};
   viz::ParentLocalSurfaceIdAllocator local_surface_id_allocator_;
   viz::FakeHostFrameSinkClient page_frame_sink_client_;
@@ -266,8 +239,8 @@ class FrameSinkBrokerTest : public testing::Test {
   std::unique_ptr<FrameSinkBroker> broker_;
 };
 
-// The step, stated as a test: a caller that names no FrameSinkId and belongs to
-// no renderer gets one allocated and a live CompositorFrameSink bound to it.
+// A non-renderer caller gets an allocated FrameSinkId and a live
+// CompositorFrameSink.
 TEST_F(FrameSinkBrokerTest, BrokersASinkToACallerThatIsNotARenderer) {
   mojo::Remote<mojom::FrameSinkBroker> remote;
   broker()->Bind(remote.BindNewPipeAndPassReceiver());
@@ -289,8 +262,8 @@ TEST_F(FrameSinkBrokerTest, BrokersASinkToACallerThatIsNotARenderer) {
   EXPECT_TRUE(sink.is_connected());
 }
 
-// Two calls get two ids, from the injected allocator rather than a private one,
-// so a brokered sink cannot collide with a browser sink.
+// Ids come from the injected allocator, so they cannot collide with browser
+// sinks.
 TEST_F(FrameSinkBrokerTest, AllocatesADistinctIdPerSink) {
   mojo::Remote<mojom::FrameSinkBroker> remote;
   broker()->Bind(remote.BindNewPipeAndPassReceiver());
@@ -311,8 +284,7 @@ TEST_F(FrameSinkBrokerTest, AllocatesADistinctIdPerSink) {
 
   EXPECT_NE(first.Get(), second.Get());
 
-  // The id the browser's own allocator hands out next is distinct from both,
-  // which is the collision the injection exists to prevent.
+  // The browser's next id differs from both.
   const viz::FrameSinkId browser_own = allocator_.NextFrameSinkId();
   EXPECT_NE(first.Get(), browser_own);
   EXPECT_NE(second.Get(), browser_own);
@@ -322,7 +294,7 @@ TEST_F(FrameSinkBrokerTest, AllocatesADistinctIdPerSink) {
   EXPECT_TRUE(VizHasFrameSink(second.Get()));
 }
 
-// A producer that closes one of its surfaces takes the sink out of viz.
+// DestroyFrameSink removes the sink from viz.
 TEST_F(FrameSinkBrokerTest, DestroyFrameSinkRemovesTheSinkFromViz) {
   mojo::Remote<mojom::FrameSinkBroker> remote;
   broker()->Bind(remote.BindNewPipeAndPassReceiver());
@@ -343,9 +315,8 @@ TEST_F(FrameSinkBrokerTest, DestroyFrameSinkRemovesTheSinkFromViz) {
   EXPECT_FALSE(VizHasFrameSink(frame_sink_id));
 }
 
-// A producer that goes away takes every sink it was brokered with it. Nothing
-// else notices the producer died, so this is the only thing that unregisters
-// the ids.
+// A disconnect destroys all the producer's sinks. Nothing else unregisters
+// their ids.
 TEST_F(FrameSinkBrokerTest, DroppingTheConnectionDestroysEverySink) {
   auto remote = std::make_unique<mojo::Remote<mojom::FrameSinkBroker>>();
   broker()->Bind((*remote).BindNewPipeAndPassReceiver());
@@ -366,9 +337,8 @@ TEST_F(FrameSinkBrokerTest, DroppingTheConnectionDestroysEverySink) {
   EXPECT_FALSE(VizHasFrameSink(frame_sink_id));
 }
 
-// Step 3, stated as a test: the page brings a LocalSurfaceId it allocated
-// itself and gets back the FrameSinkId to pair it with. The two halves of the
-// SurfaceId come from opposite sides, which is the split RemoteFrame uses.
+// The page supplies the LocalSurfaceId and gets back the FrameSinkId, as with
+// RemoteFrame.
 TEST_F(FrameSinkBrokerTest, EmbedAnswersWithTheBrokeredFrameSinkId) {
   mojo::Remote<mojom::FrameSinkBroker> remote;
   broker()->Bind(remote.BindNewPipeAndPassReceiver());
@@ -386,9 +356,7 @@ TEST_F(FrameSinkBrokerTest, EmbedAnswersWithTheBrokeredFrameSinkId) {
   EXPECT_EQ(frame_sink_id, embedded.Get());
 }
 
-// An <app> element exists before the window behind it does. A page that embeds
-// before any producer has connected waits rather than failing, and is answered
-// when one turns up.
+// An embed before its producer connects waits and is answered on connect.
 TEST_F(FrameSinkBrokerTest, EmbedWaitsForAProducer) {
   mojo::Remote<mojom::FrameSinkBroker> remote;
   broker()->Bind(remote.BindNewPipeAndPassReceiver());
@@ -407,13 +375,7 @@ TEST_F(FrameSinkBrokerTest, EmbedWaitsForAProducer) {
   EXPECT_EQ(frame_sink_id, embedded.Get());
 }
 
-// A desktop is several windows, and each <app> element has to get its own.
-//
-// This is the whole reason an app id crosses the seam. The broker used to hand
-// every embedder the sink brokered most recently, which is correct for exactly
-// one window and silently wrong for two: a shell showing a terminal and an
-// editor would draw the same client in both, and nothing anywhere would report
-// an error.
+// Each <app> element gets the surface for its own app id.
 TEST_F(FrameSinkBrokerTest, EachAppEmbedsItsOwnSurface) {
   mojo::Remote<mojom::FrameSinkBroker> remote;
   broker()->Bind(remote.BindNewPipeAndPassReceiver());
@@ -443,18 +405,12 @@ TEST_F(FrameSinkBrokerTest, EachAppEmbedsItsOwnSurface) {
 
   EXPECT_EQ(terminal.Get(), for_terminal.Get());
   EXPECT_EQ(editor.Get(), for_editor.Get());
-  // Said out loud: the two windows are two surfaces. Both assertions above
-  // would pass if every id were the same one.
+  // The assertions above would also pass if both ids were equal.
   EXPECT_NE(for_terminal.Get(), for_editor.Get());
 }
 
-// An element waiting on one window is not answered with another.
-//
-// The reload case: the shell lays out every window it remembers before any
-// client has reconnected, so several embeds are outstanding at once and the
-// producers arrive one at a time. Answering the first waiter with the first
-// producer would put whichever client connected first into whichever element
-// mounted first.
+// A waiting embed is answered only by its own app's producer. On shell reload,
+// several embeds wait while producers reconnect one at a time.
 TEST_F(FrameSinkBrokerTest, AWaitingEmbedTakesOnlyItsOwnApp) {
   mojo::Remote<mojom::FrameSinkBroker> remote;
   broker()->Bind(remote.BindNewPipeAndPassReceiver());
@@ -486,9 +442,8 @@ TEST_F(FrameSinkBrokerTest, AWaitingEmbedTakesOnlyItsOwnApp) {
   EXPECT_EQ(editor.Get(), for_editor.Get());
 }
 
-// The other direction of the same exchange: the producer is told which
-// LocalSurfaceId the embedder allocated for it, because it cannot invent one —
-// the embed_token in it is the embedder's to mint and the producer's to adopt.
+// The producer learns the embedder's LocalSurfaceId, since only the embedder
+// can mint its embed_token.
 TEST_F(FrameSinkBrokerTest, EmbedTellsTheProducerWhichSurfaceToSubmitTo) {
   mojo::Remote<mojom::FrameSinkBroker> remote;
   broker()->Bind(remote.BindNewPipeAndPassReceiver());
@@ -506,15 +461,13 @@ TEST_F(FrameSinkBrokerTest, EmbedTellsTheProducerWhichSurfaceToSubmitTo) {
 
   EXPECT_EQ(local_surface_id, observer.embedded_.Get<viz::LocalSurfaceId>());
   EXPECT_EQ(kEmbeddedSize, observer.embedded_.Get<gfx::Size>());
-  // And the scale that box is in, which is what the producer divides it by:
-  // each monitor's page is at its own.
+  // Each monitor's page has its own scale.
   EXPECT_EQ(kEmbeddedScale, observer.embedded_.Get<double>());
 }
 
-// Two <app> elements showing one window share its allocator, and each asks
-// the browser over its own pipe, so an older LocalSurfaceId can arrive after a
-// newer one. Passed on, the producer submits to it, viz calls that a decrease
-// and closes the sink -- and the window never draws again.
+// Two <app> elements showing one window share its allocator but use separate
+// pipes, so an older LocalSurfaceId can arrive late. Submitting to it would
+// make viz close the sink, and the window would stop drawing.
 TEST_F(FrameSinkBrokerTest, AnOlderSurfaceArrivingLateIsNotPassedOn) {
   mojo::Remote<mojom::FrameSinkBroker> remote;
   broker()->Bind(remote.BindNewPipeAndPassReceiver());
@@ -537,7 +490,7 @@ TEST_F(FrameSinkBrokerTest, AnOlderSurfaceArrivingLateIsNotPassedOn) {
                               viz::MakeDefaultCompositorFrame(), std::nullopt,
                               0);
 
-  // The late one is still answered: the element needs a FrameSinkId either way.
+  // The late embed is still answered: the element needs a FrameSinkId.
   base::test::TestFuture<const std::optional<viz::FrameSinkId>&> for_older;
   broker()->Embed(kTestApp, kPageFrameSinkId, older, kEmbeddedSize,
                   kEmbeddedScale, for_older.GetCallback());
@@ -552,9 +505,8 @@ TEST_F(FrameSinkBrokerTest, AnOlderSurfaceArrivingLateIsNotPassedOn) {
   EXPECT_TRUE(sink.is_connected());
 }
 
-// Embedding is also what puts the producer under the page in the frame sink
-// hierarchy, which is what makes BeginFrames arrive. Nothing could do this
-// earlier: until a page embeds, there is no parent to name.
+// Embedding registers the producer under the page so BeginFrames arrive.
+// Before an embed, there is no parent.
 TEST_F(FrameSinkBrokerTest, EmbedRegistersTheHierarchyUnderThePage) {
   mojo::Remote<mojom::FrameSinkBroker> remote;
   broker()->Bind(remote.BindNewPipeAndPassReceiver());
@@ -575,8 +527,7 @@ TEST_F(FrameSinkBrokerTest, EmbedRegistersTheHierarchyUnderThePage) {
   EXPECT_TRUE(VizHasHierarchy(kPageFrameSinkId, frame_sink_id));
 }
 
-// A producer that goes away unregisters the hierarchy as well as the sink,
-// leaving the page's frame sink with no dangling child.
+// Destroying a sink also unregisters it from the hierarchy.
 TEST_F(FrameSinkBrokerTest, DestroyingTheSinkUnregistersTheHierarchy) {
   mojo::Remote<mojom::FrameSinkBroker> remote;
   broker()->Bind(remote.BindNewPipeAndPassReceiver());
@@ -599,9 +550,8 @@ TEST_F(FrameSinkBrokerTest, DestroyingTheSinkUnregistersTheHierarchy) {
 }
 
 TEST_F(FrameSinkBrokerTest, AnObserverIsToldTheDisplaysAlreadyRead) {
-  // The order a tty comes up in: the browser modesets, and the compositor
-  // connects afterwards. Without this it would wait for a hotplug to learn
-  // what it is drawing on, which on a machine nobody touches is forever.
+  // On a tty the browser reads displays before the compositor connects.
+  // Without this, the compositor would wait for a hotplug.
   broker()->OnDisplaysChanged(OneDisplay(7, gfx::Size(2880, 1920)));
 
   mojo::Remote<mojom::FrameSinkBroker> remote;
@@ -620,9 +570,8 @@ TEST_F(FrameSinkBrokerTest, AnObserverIsToldTheDisplaysAlreadyRead) {
 }
 
 TEST_F(FrameSinkBrokerTest, AProducerSaysWhichConnectorsToLight) {
-  // The answer to OnDisplaysChanged, and the reason this interface carries
-  // both directions: what the browser reads off DRM is a fact, and what to do
-  // with it is a config only the producer holds.
+  // The browser reads displays from DRM; only the producer has the config
+  // that says how to lay them out.
   mojo::Remote<mojom::FrameSinkBroker> remote;
   broker()->Bind(remote.BindNewPipeAndPassReceiver());
 
@@ -641,22 +590,18 @@ TEST_F(FrameSinkBrokerTest, AProducerSaysWhichConnectorsToLight) {
   EXPECT_EQ(layouts_[0][0]->id, 7);
   EXPECT_TRUE(layouts_[0][0]->enabled);
   EXPECT_EQ(layouts_[0][0]->origin, gfx::Point(1920, 0));
-  // The turn and the scale the browser draws this connector's window at, so
-  // the page in it lays out upright and logical.
+  // The rotation and scale the window is drawn at.
   EXPECT_EQ(layouts_[0][0]->transform, mojom::DisplayTransform::kRotate270);
   EXPECT_EQ(layouts_[0][0]->scale, 1.2);
-  // Where the profile placed it, which is what the pointer crosses by.
+  // The position in the desk layout, used for pointer movement.
   EXPECT_EQ(layouts_[0][0]->desk, gfx::Rect(1920, 0, 1800, 3200));
   EXPECT_EQ(layouts_[0][1]->id, 9);
   EXPECT_FALSE(layouts_[0][1]->enabled);
 }
 
 TEST_F(FrameSinkBrokerTest, AProducerWithNoOpinionSaysSoRatherThanNothing) {
-  // An empty layout is not "light nothing" and is not a message to swallow: it
-  // is the producer having no opinion, which is what every desktop but a
-  // matched profile's has. It has to get through because it is what UNDOES a
-  // profile -- one that turned a panel off stops matching the moment a monitor
-  // is unplugged, and something has to say the panel comes back on.
+  // An empty layout means "no profile matched" and must be forwarded: it
+  // restores panels that a previous profile turned off.
   mojo::Remote<mojom::FrameSinkBroker> remote;
   broker()->Bind(remote.BindNewPipeAndPassReceiver());
 
@@ -668,11 +613,8 @@ TEST_F(FrameSinkBrokerTest, AProducerWithNoOpinionSaysSoRatherThanNothing) {
 }
 
 TEST_F(FrameSinkBrokerTest, AnEmbedderWithNoCrtcDropsTheLayout) {
-  // Every embedder but a tty: a browser window inside somebody else's session
-  // has no connector to lay out, and a producer states its layout whatever it
-  // is running on, because whether there is one is not a fact it has.
-  // Named for what it is rather than `broker`, which is the fixture's own
-  // accessor: the point of this one is that nothing was wired to it.
+  // Outside a tty there are no connectors. The producer cannot tell, so it
+  // sends a layout anyway.
   FrameSinkBroker unwired(host_frame_sink_manager_.get(),
                           base::BindRepeating(
                               [](viz::FrameSinkIdAllocator* allocator) {
@@ -693,9 +635,8 @@ TEST_F(FrameSinkBrokerTest, AnEmbedderWithNoCrtcDropsTheLayout) {
 }
 
 TEST_F(FrameSinkBrokerTest, AProducerSaysWhatIsOnEachClipboard) {
-  // The direction that makes a copy made in a terminal pasteable in a page.
-  // Both clipboards, because the desktop has two and confusing them would
-  // paste what the pointer brushed past wherever Ctrl-V was pressed.
+  // Lets a copy in a Wayland client be pasted in a page. The copy and primary
+  // clipboards must stay separate.
   mojo::Remote<mojom::FrameSinkBroker> remote;
   broker()->Bind(remote.BindNewPipeAndPassReceiver());
 
@@ -711,9 +652,7 @@ TEST_F(FrameSinkBrokerTest, AProducerSaysWhatIsOnEachClipboard) {
 }
 
 TEST_F(FrameSinkBrokerTest, AnEmptyClipboardIsSaidRatherThanSwallowed) {
-  // A clipboard with nothing on it is an answer, not a message to drop: a
-  // browser never told would go on offering whatever it was told last, which
-  // is a paste producing something a person has already cleared.
+  // Forwarded so the browser stops pasting cleared content.
   mojo::Remote<mojom::FrameSinkBroker> remote;
   broker()->Bind(remote.BindNewPipeAndPassReceiver());
 
@@ -725,10 +664,8 @@ TEST_F(FrameSinkBrokerTest, AnEmptyClipboardIsSaidRatherThanSwallowed) {
 }
 
 TEST_F(FrameSinkBrokerTest, AnEmbedderWithNoClipboardDropsWhatWasSaid) {
-  // Every embedder that is a window inside somebody else's session, which
-  // reads that session's clipboard. A producer states its clipboard whatever
-  // it is running on, because whose clipboard the browser reads is not a fact
-  // it has.
+  // Inside another session, the browser reads that session's clipboard. The
+  // producer cannot tell, so it sends its clipboard anyway.
   FrameSinkBroker unwired(host_frame_sink_manager_.get(),
                           base::BindRepeating(
                               [](viz::FrameSinkIdAllocator* allocator) {
@@ -745,9 +682,8 @@ TEST_F(FrameSinkBrokerTest, AnEmbedderWithNoClipboardDropsWhatWasSaid) {
 }
 
 TEST_F(FrameSinkBrokerTest, ACopyMadeInTheBrowserReachesEveryObserver) {
-  // The other direction, and the one nothing else can do: a copy made in a
-  // page reaches no seat on its own, because the browser is not a Wayland
-  // client of the producer.
+  // The browser is not a Wayland client of the producer, so this is the only
+  // way a copy in a page reaches the seat.
   mojo::Remote<mojom::FrameSinkBroker> first_remote;
   mojo::Remote<mojom::FrameSinkBroker> second_remote;
   broker()->Bind(first_remote.BindNewPipeAndPassReceiver());
@@ -768,10 +704,8 @@ TEST_F(FrameSinkBrokerTest, ACopyMadeInTheBrowserReachesEveryObserver) {
 }
 
 TEST_F(FrameSinkBrokerTest, AnObserverIsNotCaughtUpOnCopiesItMissed) {
-  // The opposite of ObserveDisplays, deliberately: what a producer connecting
-  // afterward would be caught up on is a copy it made itself, and the
-  // clipboard a browser that has just started should hold is the producer's to
-  // state with SetClipboard.
+  // Unlike displays, copies are not replayed: the producer owns the clipboard
+  // state and sets it with SetClipboard.
   mojo::Remote<mojom::FrameSinkBroker> remote;
   broker()->Bind(remote.BindNewPipeAndPassReceiver());
   broker()->OnCopied(mojom::Clipboard::kCopy, "copied before it connected");
@@ -784,9 +718,7 @@ TEST_F(FrameSinkBrokerTest, AnObserverIsNotCaughtUpOnCopiesItMissed) {
 }
 
 TEST_F(FrameSinkBrokerTest, AnObserverHearsNothingUntilTheDisplaysAreRead) {
-  // The other order, and the reason the broker remembers a reading rather than
-  // a list: an empty list is a screen nobody has read yet, and a producer told
-  // "no displays" would advertise a desktop with nothing on it.
+  // An empty list means the screen is unread, so nothing is sent.
   mojo::Remote<mojom::FrameSinkBroker> remote;
   broker()->Bind(remote.BindNewPipeAndPassReceiver());
   FakeDisplayListObserver observer;

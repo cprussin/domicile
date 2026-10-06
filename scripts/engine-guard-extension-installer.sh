@@ -1,12 +1,10 @@
 #!/usr/bin/env bash
-# An extension named only by the compositor's `extensions` message, installed
-# by the engine and running: its content script marks a page in a <webview>.
+# Checks that an extension named only in the compositor's `extensions` message
+# is installed and runs: its content script marks a page in a <webview>.
 #
-# Headless, with a stand-in for the compositor's end of the control socket, as
-# the control-arrival guard.
+# Headless, with a stand-in for the compositor's end of the control socket.
 #
-# Its control is the same run with the list empty, which must leave the page
-# unmarked -- so the mark is the list's and nothing else's.
+# The control runs with an empty list and must leave the page unmarked.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

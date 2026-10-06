@@ -3,16 +3,16 @@
 
 // One button of a notification.
 //
-// An interface rather than a dictionary for DomicileTrayItem's reason: these
-// are read off a DomicileNotification's array.
+// An interface rather than a dictionary because these are read off a
+// DomicileNotification's array; see DomicileTrayItem.
 
 [
     Exposed=Window,
     RuntimeEnabled=DomicileControlChannel
 ] interface DomicileNotificationAction {
-  // What DomicileHost.invokeNotificationAction() names this button by.
+  // The id DomicileHost.invokeNotificationAction() takes.
   readonly attribute DOMString key;
 
-  // What the button says.
+  // The button's label.
   readonly attribute DOMString label;
 };

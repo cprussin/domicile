@@ -12,18 +12,16 @@
 
 namespace domicile {
 
-// How an action's state is spelled for the page, in the two places that is a
-// decision rather than a copy. Carrying the tray out is //chrome/browser/
-// domicile/domicile_extension_tray.cc, which is where an ExtensionAction is;
-// these are here, where a test reaches them with no profile.
+// Formats extension action state for the shell page. The tray itself is
+// //chrome/browser/domicile/domicile_extension_tray.cc; these helpers live
+// here so tests need no profile.
 
-// A badge's background as CSS: `#rrggbbaa`, lower case. An unset color is
-// SkColor's zero, which comes out fully transparent -- a badge the shell colors
-// itself -- rather than as a black nobody chose.
+// A badge's background as lowercase CSS `#rrggbbaa`. An unset color is
+// transparent, so the shell picks its own color.
 std::string BadgeColorAsCss(SkColor color);
 
-// An encoded PNG as a `data:` URL, which is what an icon crosses as: an icon an
-// extension set from `imageData` has no chrome-extension:// URL to send.
+// An encoded PNG as a `data:` URL. Icons set from `imageData` have no
+// chrome-extension:// URL.
 std::string PngAsDataUrl(base::span<const uint8_t> png);
 
 }  // namespace domicile

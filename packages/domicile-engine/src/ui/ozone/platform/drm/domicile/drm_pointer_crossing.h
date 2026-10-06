@@ -20,8 +20,8 @@ struct PointerScreen {
   gfx::AcceleratedWidget window = gfx::kNullAcceleratedWidget;
   // The CRTC's rectangle on the engine's desktop, in pixels.
   gfx::Rect bounds_in_screen;
-  // Which way the monitor is turned; what `CursorController` turns a hand's
-  // motion by on this window.
+  // The monitor's rotation. `CursorController` rotates pointer motion on
+  // this window by it.
   display::Display::Rotation rotation = display::Display::ROTATE_0;
 };
 
@@ -32,87 +32,63 @@ struct PointerCrossing {
   gfx::PointF location;
 };
 
-// Which screen a pointer moved to `location` crosses onto, if any.
+// Returns the screen a pointer moved to `location` crosses onto, if any.
 //
-// WHY THE ENGINE AND NOT THE SHELL. A desk of several monitors is a browser
-// window per CRTC (see `ShellWindowsFor`), and upstream `DrmCursor` holds the
-// pointer inside whichever window it is on: ash is what moves it to the next
-// display (`ExtendedMouseWarpController`), and a views browser has no ash. So
-// the pointer is carried across here, below every page, and a shell never
-// learns there is more than one monitor under it.
+// - views has no ash `ExtendedMouseWarpController`, so the engine moves the
+//   pointer between CRTC windows. Shells see one desk.
+// - `from` is the pointer's window. `location` is in its panel pixels,
+//   unclamped, or a host-requested warp target anywhere on the desk.
+// - Crossings use the `layout` desk rectangles, not the engine's CRTC row.
+//   The pointer leaves by any edge onto the screen placed there, as in sway.
+//   Dark connectors are never entered. An empty layout uses the engine's
+//   desktop.
+// - Edges are judged upright, then mapped back to the target's panel pixels.
 //
-// `from` is the window the pointer is on, and `location` is where the hand's
-// motion took it in that window's panel pixels, before it is clamped in -- or
-// where the desk's host asked for it to be warped to, which is anywhere on the
-// desk and so anywhere past the host's edge.
-//
-// ACROSS THE DESKTOP A PROFILE PLACES, NOT THE ENGINE'S. The compositor steps
-// the CRTCs across one row whatever the profile says, so the row knows
-// nothing about a laptop at the bottom-left or centered under a monitor.
-// `layout` is what does: each lit connector's rectangle on the desktop a
-// shell lays out in. The pointer leaves by any edge, onto whichever screen is
-// placed there, at the place it is placed there -- sway's rule. A connector
-// the layout leaves dark has no place and is never entered, and a layout that
-// says nothing (the hardware decides) is the engine's own desktop.
-//
-// BY THE UPRIGHT EDGE, NOT THE PANEL'S. A monitor stood on its side still has
-// a landscape CRTC, and a hand moving right on it moves along the panel's y.
-// So a pointer is read the way the person sees the screen, and turned back
-// onto the panel it lands on.
+// See docs/DISPLAYS.md#pointer-crossing.
 std::optional<PointerCrossing> PointerCrossingFor(
     const std::vector<PointerScreen>& screens,
     const std::vector<DomicileDisplayLayout>& layout,
     gfx::AcceleratedWidget from,
     const gfx::PointF& location);
 
-// Where a pointer at `location` on the engine's desktop is in `window`'s
-// panel pixels, which is where the desk's host is told it is.
+// Returns a pointer at `location` on the engine's desktop in `window`'s panel
+// pixels, as the desk's host should receive it.
 //
-// THE HOST HEARS THE POINTER ON EVERY MONITOR. Upstream tells a window the
-// pointer's place on the engine's desktop less its own corner, and the
-// engine's desktop is the row the compositor steps the CRTCs across: it knows
-// nothing of where a profile put the monitors, how they are turned or how
-// dense each is. So the place is read off the screen the pointer is on, onto
-// the desk, and back onto `window` -- unclamped, since a pointer past its edge
-// is the point.
-//
-// On `window` itself, or where the layout places either screen nowhere, it is
-// the engine's arithmetic as upstream does it.
+// - The host window gets desk-relative positions from every monitor, using
+//   the layout's placement, rotation and scale. Upstream uses the CRTC row.
+// - Unclamped, so the host sees positions past its edge.
+// - Falls back to upstream's arithmetic on `window` itself, or when the
+//   layout does not place either screen.
 gfx::PointF PointerInWindow(const std::vector<PointerScreen>& screens,
                             const std::vector<DomicileDisplayLayout>& layout,
                             const gfx::PointF& location,
                             gfx::AcceleratedWidget window);
 
-// Where a pointer is heard: the window its events go to, and the place in that
-// window's panel pixels.
+// The window that receives a pointer's events, and the location in its panel
+// pixels.
 struct PointerHeard {
   gfx::AcceleratedWidget window = gfx::kNullAcceleratedWidget;
   gfx::PointF location;
 };
 
-// Which window hears a pointer at `location` on the engine's desktop, and
-// where.
+// Returns which window receives a pointer at `location` on the engine's
+// desktop, and where.
 //
-// The desk's host, which hears the pointer on every monitor (see
-// `PointerInWindow`), or the window under the pointer where there is no host
-// or its window has gone. Nothing when no screen holds the pointer.
+// The desk's host if it exists, otherwise the window under the pointer.
+// Nothing when no screen holds the pointer.
 std::optional<PointerHeard> PointerHeardAt(
     const std::vector<PointerScreen>& screens,
     const std::vector<DomicileDisplayLayout>& layout,
     gfx::AcceleratedWidget desk_host,
     const gfx::PointF& location);
 
-// Whether a window at `bounds_in_screen` takes a key, with the pointer at
-// `pointer` on the engine's desktop.
+// Returns whether a window at `bounds_in_screen` receives keys, with the
+// pointer at `pointer` on the engine's desktop.
 //
-// THE KEYBOARD IS ON THE MONITOR THE POINTER IS ON. Upstream a key is offered
-// to every `DrmWindowHost` and each says yes -- "For non-ash builds we would
-// need smarter keyboard focus" -- so the window added first took every key,
-// and a page on any other monitor could draw a focused box it would never
-// hear a key in. Nothing below a page knows which monitor a shell means the
-// keyboard to be on, and the pointer is the one thing both agree about: it is
-// what a click is routed by, and what a shell warps when a key moves the
-// focus.
+// Keys go to the screen under the pointer. Upstream offers each key to every
+// `DrmWindowHost` and the first one added accepts all of them, since non-ash
+// builds lack keyboard focus logic. The pointer is the one signal both the
+// engine and the shell agree on.
 bool HasTheKeyboard(const gfx::Rect& bounds_in_screen,
                     const gfx::PointF& pointer);
 

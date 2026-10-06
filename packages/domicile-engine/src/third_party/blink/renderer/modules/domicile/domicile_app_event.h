@@ -14,20 +14,12 @@ namespace blink {
 
 class DomicileAppEventInit;
 
-// Something happened to a window: it appeared, resized or closed, said how
-// small or big it will be, or the keyboard moved to it or was asked for by it
-// -- or a popup was placed over one. One type for the eight because
-// they carry the same thing -- which window -- and differ only in what else
-// they carry.
+// A window lifecycle event: appeared, resized, closed, size hints, keyboard
+// focus or request, or popup placed. Cursor changes use
+// DomicileAppCursorEvent.
 //
-// A cursor is NOT one of them, and used to be. See DomicileAppCursorEvent:
-// what a client asks to be shown is a `DomicileCursorShape`, and a closed set
-// has no member to mean "this event is not about a cursor".
-//
-// `size` is genuinely optional rather than zero-when-absent. A toplevel maps
-// before it draws, so a window that has appeared may not yet have said how big
-// it wants to be, and a shell that reads a zero as a size opens the window at
-// nothing at all. Absence is carried so it cannot be mistaken for a number.
+// The size is optional because a toplevel maps before it draws. A shell that
+// read zero as a size would open the window at 0x0.
 class MODULES_EXPORT DomicileAppEvent final : public Event {
   DEFINE_WRAPPERTYPEINFO();
 
@@ -43,8 +35,8 @@ class MODULES_EXPORT DomicileAppEvent final : public Event {
                    std::optional<double> width,
                    std::optional<double> height,
                    DOMHighResTimeStamp arrival);
-  // A popup, placed at (x, y) from `parent_app_id`'s box, `width` by
-  // `height`, which always has a size: it is announced once it has drawn.
+  // A popup at (x, y) relative to `parent_app_id`'s box. Always sized: it is
+  // reported after it draws.
   DomicileAppEvent(const AtomicString& type,
                    const String& app_id,
                    const String& parent_app_id,
@@ -59,9 +51,8 @@ class MODULES_EXPORT DomicileAppEvent final : public Event {
   const String& appId() const { return app_id_; }
   const String& title() const { return title_; }
 
-  // When the browser process had this, on `performance.now()`'s clock.
-  // `timeStamp` is when this object was constructed at dispatch; the
-  // difference is the stage between the compositor's socket and this page.
+  // When the browser process received the message, on `performance.now()`'s
+  // clock. `timeStamp - arrival` measures the IPC to this renderer.
   DOMHighResTimeStamp arrival() const { return arrival_; }
 
   bool hasSize() const { return width_.has_value(); }

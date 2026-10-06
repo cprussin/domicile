@@ -15,14 +15,11 @@
 namespace domicile {
 namespace {
 
-// One display as `DrmScreen` hands it over: 1920x1080 on a 597x336mm panel at
-// a hair under 60Hz.
+// A 1920x1080 display on a 597x336mm panel at just under 60Hz, as `DrmScreen`
+// builds it.
 //
-// The density is spelled as the division that produced it rather than as
-// 81.688, because that division is the seam: `drm_screen.cc` does exactly this
-// with the snapshot's own millimeters, and what is asserted below is that
-// dividing it back out returns the panel. Its own test asserts the same panel
-// from the other end.
+// The density is written as the division `drm_screen.cc` performs, so the
+// tests check that inverting it returns the panel's size.
 display::Display Panel() {
   display::Display screen(7, gfx::Rect(0, 0, 1920, 1080));
   screen.set_pixels_per_inch(display::kInchInMm * 1920 / 597,
@@ -40,9 +37,7 @@ TEST(DomicileDisplayListTest, ADisplayIsItsIdAndWhereItIsOnTheDesktop) {
   EXPECT_EQ(list[0]->bounds, gfx::Rect(0, 0, 1920, 1080));
 }
 
-// The millimeters the panel reported, recovered from the only field
-// display::Display had to carry them in. Exact at this size, and it has to be:
-// a wl_output physical size is millimeters and a client divides the mode by it.
+// The result must be exact: clients divide the mode by the wl_output size.
 TEST(DomicileDisplayListTest, ThePanelsMillimetersComeBackOutOfItsDensity) {
   const std::vector<mojom::DisplayPtr> list = DisplayListFor({Panel()});
 
@@ -50,10 +45,7 @@ TEST(DomicileDisplayListTest, ThePanelsMillimetersComeBackOutOfItsDensity) {
   EXPECT_EQ(list[0]->physical_size_mm, gfx::Size(597, 336));
 }
 
-// display::Display counts in Hz and wl_output counts in mHz, so the thousand
-// is applied once, here, where the list is built -- rather than by whoever
-// reads it, which is a compositor in another process that would have to be
-// told which unit it was given.
+// display::Display uses Hz and wl_output uses mHz.
 TEST(DomicileDisplayListTest, ARefreshRateCrossesInMillihertz) {
   const std::vector<mojom::DisplayPtr> list = DisplayListFor({Panel()});
 
@@ -61,11 +53,8 @@ TEST(DomicileDisplayListTest, ARefreshRateCrossesInMillihertz) {
   EXPECT_EQ(list[0]->refresh_mhz, 59997);
 }
 
-// The name is the producer's only way to let a person say which monitor a
-// layout means: the id beside it is EDID-derived and stable, and it is also an
-// int64 nobody can predict from looking at a desk. Carried through untouched
-// -- `drm_screen.cc` built it out of the panel's EDID and nothing here is in a
-// position to improve on it.
+// The name lets a user identify a monitor in a layout; the id is not
+// human-readable.
 TEST(DomicileDisplayListTest, APanelsNameCrossesAsItWasBuilt) {
   const std::vector<mojom::DisplayPtr> list = DisplayListFor({Panel()});
 
@@ -73,9 +62,8 @@ TEST(DomicileDisplayListTest, APanelsNameCrossesAsItWasBuilt) {
   EXPECT_EQ(list[0]->name, "DEL DELL U3219Q 2ZLS413");
 }
 
-// A monitor that states no make, no model and no serial. Empty rather than
-// invented: the id still identifies it, and a list where every entry is named
-// the same nothing looks like an answer.
+// A monitor with no make, model or serial gets an empty name, not an invented
+// one.
 TEST(DomicileDisplayListTest, ADisplayWithNoNameCrossesAsEmpty) {
   const display::Display unnamed(9, gfx::Rect(0, 0, 1280, 800));
 
@@ -85,10 +73,8 @@ TEST(DomicileDisplayListTest, ADisplayWithNoNameCrossesAsEmpty) {
   EXPECT_EQ(list[0]->name, "");
 }
 
-// A display with no density and no rate is a projector, a virtual output, or a
-// connector with no readable mode, and every one of those is an ordinary
-// reading. Zero is what wl_output states for a screen with no such number, so
-// it crosses as zero rather than as a size divided by nothing.
+// Projectors and virtual outputs report no density or rate. wl_output uses
+// zero for unknown.
 TEST(DomicileDisplayListTest, ADisplayThatReportedNeitherSaysSo) {
   const display::Display unknown(9, gfx::Rect(0, 0, 1280, 800));
 

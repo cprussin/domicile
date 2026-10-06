@@ -15,12 +15,11 @@ namespace blink {
 
 class DomicileNotificationsEventInit;
 
-// The desk's notifications: every one not yet cleared, oldest first.
+// Every uncleared notification, oldest first.
 //
-// Pushed, so there is nothing on DomicileHost this answers: a notification is
-// a call to org.freedesktop.Notifications, which the compositor serves. It is
-// sent whenever one arrives, is replaced or goes, and once more to a page that
-// has just connected.
+// The compositor serves org.freedesktop.Notifications and pushes the list
+// whenever a notification arrives, is replaced or closes, and to a newly
+// connected page.
 class MODULES_EXPORT DomicileNotificationsEvent final : public Event {
   DEFINE_WRAPPERTYPEINFO();
 
@@ -38,17 +37,15 @@ class MODULES_EXPORT DomicileNotificationsEvent final : public Event {
 
   const FrozenArray<DomicileNotification>& items() const { return *items_; }
 
-  // When the browser process had this, on `performance.now()`'s clock. See
-  // DomicileAppEvent::arrival.
+  // When the browser process received this, on `performance.now()`'s clock.
+  // See DomicileAppEvent::arrival.
   DOMHighResTimeStamp arrival() const { return arrival_; }
 
   const AtomicString& InterfaceName() const override;
   void Trace(Visitor*) const override;
 
  private:
-  // Frozen because the IDL says so, and never null: both constructors build
-  // one, an empty list included. An absent list and an empty one are the same
-  // answer here -- a desk with nothing to say.
+  // Frozen per the IDL, and never null: an absent list is an empty one.
   Member<FrozenArray<DomicileNotification>> items_;
   DOMHighResTimeStamp arrival_ = 0;
 };

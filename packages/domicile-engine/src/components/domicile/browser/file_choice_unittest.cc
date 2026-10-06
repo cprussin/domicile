@@ -25,8 +25,7 @@ using ::testing::UnorderedElementsAre;
 
 using FileExtensions = ui::SelectFileDialog::FileTypeInfo::FileExtensionList;
 
-// A string rather than a FilePath: a file-scope object with a destructor is an
-// exit-time destructor, which this build refuses.
+// A string, not a FilePath: the build forbids exit-time destructors.
 constexpr char kHome[] = "/home/someone";
 
 TEST(FileChoiceTest, ARelativePathIsUnderTheHome) {
@@ -35,20 +34,18 @@ TEST(FileChoiceTest, ARelativePathIsUnderTheHome) {
 }
 
 TEST(FileChoiceTest, TheEmptyPathIsTheHome) {
-  // What a picker lists first, and what a save into the home is made under.
   EXPECT_EQ(ResolvedPath(base::FilePath(kHome), ""),
             base::FilePath("/home/someone"));
 }
 
 TEST(FileChoiceTest, AnAbsolutePathIsItself) {
-  // A picker walks the whole filesystem, not only what the index found.
+  // A picker can browse the whole filesystem.
   EXPECT_EQ(ResolvedPath(base::FilePath(kHome), "/mnt/usb/photo.png"),
             base::FilePath("/mnt/usb/photo.png"));
 }
 
 TEST(FileChoiceTest, ADirectoryMayEndInASlash) {
-  // How a `found_files` answer and a listing spell one, and so how a picker
-  // built on them hands one back.
+  // `found_files` and DirectoryEntries both mark directories this way.
   EXPECT_EQ(ResolvedPath(base::FilePath(kHome), "Documents/"),
             base::FilePath("/home/someone/Documents"));
   EXPECT_EQ(ResolvedPath(base::FilePath(kHome), "/etc/"),
@@ -56,8 +53,7 @@ TEST(FileChoiceTest, ADirectoryMayEndInASlash) {
 }
 
 TEST(FileChoiceTest, NoPathClimbs) {
-  // A renderer can put any string on the pipe; the element refuses these
-  // before sending, so one that arrives did not come from it.
+  // The element rejects these, so one arriving here is untrusted.
   EXPECT_EQ(ResolvedPath(base::FilePath(kHome), "../other/secret"),
             std::nullopt);
   EXPECT_EQ(ResolvedPath(base::FilePath(kHome), "/etc/../root"), std::nullopt);
@@ -101,7 +97,6 @@ TEST(FileChoiceTest, AnExtensionIsTakenAsWritten) {
 }
 
 TEST(FileChoiceTest, AMimeTypeBecomesItsExtensions) {
-  // What `accept="image/*"` means to a picker that can only read a name.
   const std::vector<std::string> images = AcceptedExtensions({u"image/*"});
   EXPECT_THAT(images, Contains("png"));
   EXPECT_THAT(images, Contains("jpg"));
@@ -112,9 +107,8 @@ TEST(FileChoiceTest, NoAcceptListIsAnything) {
 }
 
 TEST(FileChoiceTest, EachDialogIsThePickerThatAnswersIt) {
-  // A dialog the browser would have drawn -- the PDF viewer's save, a page's
-  // showSaveFilePicker() -- asked of the shell as the picker a page's own
-  // `<input type="file">` is.
+  // Browser dialogs, such as the PDF viewer's save or showSaveFilePicker(), use
+  // the same picker modes as `<input type="file">`.
   EXPECT_EQ(ModeForDialog(ui::SelectFileDialog::SELECT_OPEN_FILE),
             mojom::WebViewFileChooserMode::kOpen);
   EXPECT_EQ(ModeForDialog(ui::SelectFileDialog::SELECT_OPEN_MULTI_FILE),
@@ -130,15 +124,14 @@ TEST(FileChoiceTest, EachDialogIsThePickerThatAnswersIt) {
 }
 
 TEST(FileChoiceTest, ADialogsFileTypesAreItsExtensions) {
-  // Spelled out, because `{{"pdf"}}` is also a list of strings.
+  // Typed explicitly because `{{"pdf"}}` is ambiguous.
   ui::SelectFileDialog::FileTypeInfo types(
       std::vector<FileExtensions>{{"PDF"}, {"htm", "html"}});
   EXPECT_THAT(DialogExtensions(&types), ElementsAre("pdf", "htm", "html"));
 }
 
 TEST(FileChoiceTest, ADialogThatAlsoTakesAllFilesTakesAnything) {
-  // The PDF viewer's save names `pdf` and keeps "all files" -- and a picker
-  // with no filter to switch to has only the one answer that keeps it.
+  // The PDF viewer's save names `pdf` and also allows all files.
   ui::SelectFileDialog::FileTypeInfo types(
       std::vector<FileExtensions>{{"pdf"}});
   types.include_all_files = true;

@@ -10,8 +10,7 @@
 
 namespace blink {
 
-// One meter, as the compositor described it. Immutable, for DomicileTrayItem's
-// reason.
+// One meter reading, as the compositor described it. Immutable.
 class MODULES_EXPORT DomicileAudioLevel final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 

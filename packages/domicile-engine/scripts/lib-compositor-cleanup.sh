@@ -1,117 +1,80 @@
 #!/usr/bin/env bash
-# Stopping a nested compositor means stopping all of it.
+# Stops every process of a nested compositor, not only the one `$!` names.
 #
 #   . "$SCRIPTS/lib-compositor-cleanup.sh"
-#   compositor_env                          # what to exec the compositor through
+#   compositor_env                          # env to exec the compositor through
 #   kill_compositors "$(compositor_owner)"  # this run's, at exit
-#   kill_compositors                        # at startup: whatever is left over
+#   kill_compositors                        # at startup: leftovers
 #
-# WHAT LEAKED, AND WHY IT IS NOT THE PID THE SHELL HAS. `kill "$COMPOSITOR"`
-# reaches exactly one process, and it is not sway. nixpkgs' sway wrapper execs
-# `dbus-run-session`, and that *forks* both the bus and sway so that it can
-# shut the bus down once sway is gone — so the pid a `&` hands back here
-# belongs to the bookkeeper, and SIGTERM to the bookkeeper orphans the work.
-# Measured on crux mid-job, the compositor that was in use looked like this:
+# nixpkgs' sway wrapper execs `dbus-run-session`, which forks dbus-daemon and
+# sway. `kill $!` stops only dbus-run-session and orphans sway, swaybg and the
+# bus. Leaked compositors hold memory and EGL contexts on the render node that
+# later guards measure.
 #
-#   ├─1477006 bash .../under-wayland.sh /build/chromium/src …guard-latency.sh
-#   ├─1477034 dbus-run-session .../sway -c /build/tmp/nix-shell.pM8I4W/tmp.…
-#   ├─1477058 dbus-daemon --nofork --print-address 4 --session
-#   ├─1477061 .../sway -c /build/tmp/nix-shell.pM8I4W/tmp.…
-#   └─1477066 .../swaybg
+# Processes are found by environment: `DOMICILE_COMPOSITOR=<pid>:<start time>`
+# is set on the compositor's `env` only, so the bus, sway and swaybg inherit it
+# and the caller's other children do not. /proc/<pid>/environ holds the exec
+# environment, so it cannot change while read. Child walks miss orphans, and
+# process group ids can be reused.
 #
-# — with no `nix` and no `env` in it, because `nix shell --command` execs —
-# and above it sat eight {dbus-daemon, sway, swaybg} triples with no
-# dbus-run-session over any of them. Eight is exactly the number of
-# under-wayland.sh steps that job had already finished. So this leaked one
-# compositor per step, every step, whether the step passed or failed: eight
-# idle compositors by the end, 11.9G resident on the unit, each still holding
-# an EGL context on the render node the guards are measured against — and the
-# step running beside them was guard-latency.sh, whose whole output is a
-# number of milliseconds.
+# The owner is a pid plus its start time, read from /proc, because a pid alone
+# can be reused. Variables exported by the running shell do not appear in its
+# /proc environ, so they cannot mark ownership.
 #
-# HOW THE REST OF IT IS FOUND. Not by walking children: the processes worth
-# killing are the ones with no parent left. Not by process group either — a
-# group kill wants a group of this run's own, and a dead group's id can belong
-# to somebody else by the time anything looks. What is left is the environment:
-# `DOMICILE_COMPOSITOR` goes on the `env` that becomes the compositor and on
-# nothing else, so the bus, sway and swaybg inherit it and the guard the
-# calling script goes on to run does not. /proc/<pid>/environ is what a process
-# was exec'd with, so it cannot drift while this reads it.
+# XDG_RUNTIME_DIR alone does not separate runs: crux's two runners share a user
+# and, through PrivateTmp, the same XDG_RUNTIME_DIR path. A sweep that ignored
+# owner liveness would kill the other job's live compositor.
 #
-# WHAT NAMES A RUN, AND WHY IT IS NOT A VARIABLE THE RUN EXPORTS. This used to ask
-# whether the starter still carried `DOMICILE_UNDER_WAYLAND=<its own pid>`, and
-# that question could never be answered yes: /proc/<pid>/environ is what a
-# process was exec'd with, and under-wayland.sh exports that marker and goes on
-# as the same shell, so the variable is in its environment and not in its
-# `environ`. So the sweep read every live run as a run that had gone, and
-# collected its compositor. crux hosts two runners as one user, and
-# `PrivateTmp` gives them the same XDG_RUNTIME_DIR path over two different
-# directories, so that did not separate them either: one job's startup sweep
-# SIGTERMed the other job's compositor mid-run, and the engine died on a broken
-# pipe forty seconds in, before its client had appeared. What names a run here
-# is its pid and the moment that pid started, which is read from outside the
-# process — so there is nothing left for the process to have failed to publish.
+# Each rule protects a compositor that may be in use; each has a case in
+# `scripts/test-under-wayland-cleanup.sh`:
 #
-# EVERY WAY THIS CAN BE WRONG IS A COMPOSITOR SOMEBODY IS USING, so each of
-# them has a rule and `scripts/test-under-wayland-cleanup.sh` has a case:
-#
-#   - the marker names the run that started the compositor, so a run only ever
-#     collects its own by name;
-#   - the leftover sweep spares anything whose starter is still running, which
-#     it decides by the pid *and* the start time the marker names — a pid alone
-#     answers yes for whatever process inherited that number next;
-#   - it is scoped to one XDG_RUNTIME_DIR, so a run pointed somewhere else is
-#     none of its business;
-#   - and SIGTERM first, because sway takes swaybg with it and the bus goes on
-#     its own. The second pass exists only so that one that will not go cannot
-#     turn cleanup into a hang.
+#   - a run kills its own compositor only by its owner marker;
+#   - the leftover sweep spares compositors whose owner (pid and start time)
+#     is still running;
+#   - only compositors with this XDG_RUNTIME_DIR are considered;
+#   - SIGTERM first (sway takes swaybg with it; the bus exits on its own),
+#     then SIGKILL so cleanup cannot hang.
 
-# How many processes a newline-separated list of pids is.
+# Counts a newline-separated list of pids.
 compositor_count() {
   printf '%s\n' "$1" | grep -c .
 }
 
-# When the process holding a pid started, in clock ticks since boot, and
-# nothing at all for a pid no process holds. Field 22 of /proc/<pid>/stat.
+# A pid's start time in clock ticks since boot (field 22 of /proc/<pid>/stat),
+# or empty if no process holds the pid.
 #
-# Everything through the last `) ` goes first because field 2 is the
-# executable's name, and a name is allowed a space or a parenthesis of its own
-# — which would shift every field after it. What is left begins at field 3, so
-# field 22 is the twentieth word of it.
+# Strips through the last `) ` first, because field 2 (the executable name) may
+# contain spaces or parentheses. The rest starts at field 3, so field 22 is
+# word 20.
 #
-# The brace group so that the shell's own "no such process" for a pid that went
-# away mid-scan is suppressed too: a `2>` on `cat` does not cover a redirection
-# the shell could not open in the first place.
+# The brace group also silences the shell's own error when the pid exits
+# mid-scan; `2>` on `cat` does not cover a failed redirection.
 process_start_time() {
   local stat
   stat="$( { cat "/proc/$1/stat"; } 2>/dev/null )"
   printf '%s\n' "${stat##*) }" | awk '{ print $20 }'
 }
 
-# What names this run: its pid, and the moment that pid started. It goes on the
-# compositor's marker and it is what collects that compositor again, so a run
-# is told apart from every other run on the machine — living or dead — by one
-# string that nothing else can hold.
+# This run's owner marker: `<pid>:<start time>`, unique across live and dead
+# runs.
 compositor_owner() {
   printf '%s:%s\n' "$$" "$(process_start_time "$$")"
 }
 
-# The environment a compositor is started through, as words for a command line.
-# `DOMICILE_COMPOSITOR` is what everything below recognizes it by; the caller
-# adds whatever else the compositor needs.
+# The `env` words that mark a compositor as this run's. The caller adds the
+# rest of the compositor's environment.
 compositor_env() {
   printf '%s\n' "DOMICILE_COMPOSITOR=$(compositor_owner)"
 }
 
-# Whether the run a marker names is still there to want its compositor: the pid
-# is held, and by the same process that started the compositor rather than by
-# whatever took the number next.
+# Whether the marker's owner is alive: its pid exists with the same start
+# time, so a reused pid does not count.
 owner_is_running() {
   [ "$(process_start_time "${1%%:*}")" = "${1#*:}" ]
 }
 
-# With a pid: the compositor that pid started. Without one: every compositor
-# whose starter is gone, and none that a live one is still using.
+# With an owner marker: that owner's compositor processes. Without one: every
+# compositor process whose owner has exited.
 compositor_pids() {
   local want="${1:-}" entry pid environ owner
   for entry in /proc/[0-9]*; do
@@ -132,8 +95,7 @@ compositor_pids() {
   done
 }
 
-# Stop them, and say so: a line in the step log is the difference between this
-# working and looking like it works, which is how the leak above survived.
+# Stops the matching compositors and logs it, so a leak shows in the step log.
 kill_compositors() {
   local want="${1:-}" pids left="" attempt
   pids="$(compositor_pids "$want")"
@@ -145,7 +107,7 @@ kill_compositors() {
   fi
   # shellcheck disable=SC2086 # a list of pids is exactly what kill takes
   kill -TERM $pids 2>/dev/null
-  # Five seconds, a fifth at a time.
+  # Up to five seconds.
   for attempt in $(seq 1 25); do
     left="$(compositor_pids "$want")"
     [ -n "$left" ] || return 0

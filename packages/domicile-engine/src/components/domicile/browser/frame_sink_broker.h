@@ -28,23 +28,17 @@ class HostFrameSinkManager;
 
 namespace domicile {
 
-// Brokers viz frame sinks to a compositing producer that is not a renderer, and
-// introduces each one to the page that embeds it.
+// Brokers viz frame sinks to a non-renderer producer (the compositor) and
+// connects each one to the page that embeds it.
 //
-// content::EmbeddedFrameSinkProviderImpl is the same service for renderers, and
-// every entry point it has begins by rejecting a FrameSinkId whose client id is
-// not the calling renderer's. That check is namespace ownership, not privilege:
-// a renderer may name only ids keyed by its own child process id, because that
-// is the namespace the browser handed it. A producer outside the process tree
-// owns no namespace at all, so instead of validating an id the caller supplies,
-// this allocates one and returns it. `allocate_frame_sink_id` is how the
-// embedder passes in its own allocator — the ids must come from the same source
-// as every other frame sink the browser owns, or two of them collide.
+// The renderer equivalent, content::EmbeddedFrameSinkProviderImpl, validates
+// that a FrameSinkId is in the caller's namespace. A producer outside the
+// process tree has no namespace, so this allocates ids itself with
+// `allocate_frame_sink_id`. That must be the browser's own allocator, or ids
+// collide.
 //
-// Producers reach this over mojo. Embedders — pages — do not: they get the
-// narrow mojom::ExternalSurfaceProvider, which can ask to embed and nothing
-// else. Holding a FrameSinkBroker pipe is unrestricted authority to allocate
-// frame sinks in viz, and that is not authority a renderer may hold.
+// Pages do not get this interface: it can allocate any frame sink. They use
+// mojom::ExternalSurfaceProvider instead.
 class FrameSinkBroker : public mojom::FrameSinkBroker {
  public:
   using FrameSinkIdAllocator = base::RepeatingCallback<viz::FrameSinkId()>;
@@ -52,27 +46,19 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
       BrokeredFrameSink::SharedImageInterfaceGetter;
   using EmbedCallback =
       base::OnceCallback<void(const std::optional<viz::FrameSinkId>&)>;
-  // How the producer's answer about the connectors reaches the platform that
-  // owns them. Injected for the reason the allocator and the shared image
-  // interface above are: the only route to a CRTC is //ui/ozone, and this
-  // target deliberately depends on neither that nor //content. An empty
-  // callback is every embedder that has no CRTC -- which is every one but a
-  // tty -- and the answer is dropped.
+  // Applies the producer's display layout to the connectors. Injected because
+  // this target does not depend on //ui/ozone or //content. Empty when the
+  // embedder has no CRTC (anything but a tty); the layout is then dropped.
   using DisplayLayoutSetter =
       base::RepeatingCallback<void(std::vector<mojom::DisplayLayoutPtr>)>;
-  // How what the producer says is on a clipboard reaches the clipboard this
-  // process pastes out of. Injected for the reason above: the clipboard the
-  // browser reads is `ui::OzonePlatform`'s, and this target depends on neither
-  // //ui/ozone nor //content. An empty callback is an embedder with no
-  // clipboard of the desktop's -- which is every one that is a window inside
-  // somebody else's session -- and what the producer said is dropped.
+  // Writes the producer's clipboard into `ui::OzonePlatform`'s clipboard.
+  // Injected for the same reason. Empty when the embedder runs inside another
+  // session; the text is then dropped.
   using ClipboardSetter =
       base::RepeatingCallback<void(mojom::Clipboard, const std::string&)>;
 
-  // `get_shared_image_interface` is how an imported dmabuf reaches a GPU, and
-  // is injected for the same reason the allocator is: the only route to one is
-  // aura::Env, and this deliberately does not depend on //ui/aura. It may
-  // return null, which is what every headless run does.
+  // `get_shared_image_interface` gives imported dmabufs a GPU. Injected because
+  // this target does not depend on //ui/aura. It returns null when headless.
   FrameSinkBroker(
       viz::HostFrameSinkManager* host_frame_sink_manager,
       FrameSinkIdAllocator allocate_frame_sink_id,
@@ -88,26 +74,16 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
 
   void Bind(mojo::PendingReceiver<mojom::FrameSinkBroker> receiver);
 
-  // An embedder has allocated `local_surface_id` and will show `size` of a
-  // brokered surface under `parent_frame_sink_id`. Registers the hierarchy,
-  // tells the producer which surface that is, and runs `callback` with the
-  // FrameSinkId to pair the LocalSurfaceId with.
+  // Embeds the surface for `app_id` under `parent_frame_sink_id`. Registers
+  // the hierarchy, tells the producer its LocalSurfaceId, and runs `callback`
+  // with the FrameSinkId.
   //
-  // The two halves of the SurfaceId come from opposite sides on purpose. The
-  // browser owns the FrameSinkId because it owns the namespace; the page owns
-  // the LocalSurfaceId because it is the embedder, and the embed_token in it is
-  // the capability the producer needs. This is RemoteFrame's split.
+  // As with RemoteFrame, the browser owns the FrameSinkId and the page owns
+  // the LocalSurfaceId, whose embed_token the producer needs.
   //
-  // `app_id` names which producer's surface to embed. It is the same string
-  // the producer passed to CreateFrameSink, which is how a page with several
-  // <app> elements gets a different window in each: without it every embedder
-  // would land on whichever sink happened to be brokered last, and a desktop
-  // of windows would show one window several times.
-  //
-  // `callback` is deferred until a producer has been brokered a sink *for that
-  // app*. An <app> element exists before the client window behind it does, so
-  // a page that embeds early waits rather than failing, and is answered when
-  // that app's producer turns up.
+  // `app_id` matches the one the producer passed to CreateFrameSink. If that
+  // app has no sink yet, `callback` waits until it does: an <app> element can
+  // exist before its client window.
   void Embed(const std::string& app_id,
              const viz::FrameSinkId& parent_frame_sink_id,
              const viz::LocalSurfaceId& local_surface_id,
@@ -115,21 +91,16 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
              double scale,
              EmbedCallback callback);
 
-  // The browser's displays, as the embedder has just read them. Forwarded to
-  // every producer watching, and remembered so that one connecting afterwards
-  // is told without waiting for the next change.
+  // Forwards the browser's displays to observers and stores them for
+  // observers that connect later.
   //
-  // An EMPTY list is a screen that has not been read yet rather than a desktop
-  // with no displays -- DrmScreen answers with its displayless display instead
-  // of nothing -- so it is not a reading and is not stored or forwarded. A
-  // producer told "no displays" would advertise a desktop no window can land
-  // on, which is worse than one it has not been told about yet.
+  // Ignores an empty list, which means the screen has not been read yet
+  // (DrmScreen never reports zero displays). Advertising no displays would
+  // leave windows nowhere to go.
   void OnDisplaysChanged(std::vector<mojom::DisplayPtr> displays);
 
-  // Something was copied in this browser. Forwarded to every producer
-  // watching, and not remembered: what a producer connecting afterward would
-  // be caught up on is a copy it made itself, and the clipboard it should hold
-  // is its own to state.
+  // Forwards a copy in this browser to clipboard observers. Not stored: a
+  // producer that connects later owns its own clipboard state.
   void OnCopied(mojom::Clipboard clipboard, const std::string& text);
 
   // mojom::FrameSinkBroker implementation.
@@ -160,7 +131,7 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
       mojo::PendingRemote<mojom::DisplayListObserver> observer) override;
 
  private:
-  // A page that asked to embed before any producer had connected.
+  // A page's embed request waiting for its producer.
   struct PendingEmbed {
     PendingEmbed(const std::string& app_id,
                  const viz::FrameSinkId& parent_frame_sink_id,
@@ -180,15 +151,13 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
     EmbedCallback callback;
   };
 
-  // The sink brokered for `app_id`, or null if that app has no producer yet.
+  // The sink for `app_id`, or null if that app has no producer yet.
   //
-  // A linear scan: one desktop holds a handful of windows, and a second map
-  // from app id to FrameSinkId would be a second thing to keep honest when a
-  // producer disconnects.
+  // A linear scan: there are few windows, and a second map would need updating
+  // on disconnect.
   BrokeredFrameSink* SinkForApp(const std::string& app_id);
 
-  // Destroys every sink brokered to the connection that just went away. Nothing
-  // else is watching the producer, so this is what unregisters its ids.
+  // Destroys and unregisters every sink of the disconnected producer.
   void OnProducerDisconnected();
 
   // The sink `frame_sink_id` names, if this producer owns one.
@@ -197,10 +166,9 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
   const raw_ptr<viz::HostFrameSinkManager> host_frame_sink_manager_;
   const FrameSinkIdAllocator allocate_frame_sink_id_;
   const SharedImageInterfaceGetter get_shared_image_interface_;
-  // Empty on every embedder with no CRTC of its own. See DisplayLayoutSetter.
+  // See DisplayLayoutSetter.
   const DisplayLayoutSetter set_display_layout_;
-  // Empty on every embedder with no clipboard of the desktop's. See
-  // ClipboardSetter.
+  // See ClipboardSetter.
   const ClipboardSetter set_clipboard_;
 
   mojo::ReceiverSet<mojom::FrameSinkBroker> receivers_;
@@ -214,7 +182,7 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
 
   mojo::RemoteSet<mojom::ClipboardObserver> clipboard_observers_;
 
-  // The last reading, or empty for "not read yet". See OnDisplaysChanged.
+  // The last display list, or empty if none yet. See OnDisplaysChanged.
   std::vector<mojom::DisplayPtr> displays_;
 };
 

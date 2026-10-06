@@ -14,13 +14,10 @@ class CommandLine;
 
 namespace domicile::spike {
 
-// THROWAWAY, with the rest of the spike. Comparing what viz drew against what
-// was submitted, which every step of the spike ends in.
+// Spike only: compares the colors viz drew with the colors submitted.
 
-// Per-channel with slack: the display's color space is not necessarily the one
-// the quad was authored in, and SkiaRenderer may round through it. An exact
-// match is not the claim; "the color we submitted, not the page's background"
-// is.
+// Per-channel tolerance. SkiaRenderer may convert through the display's color
+// space, so the drawn color can differ from the submitted one in the low bits.
 inline constexpr int kChannelTolerance = 4;
 
 // True if every channel of `a` is within `tolerance` of `b`'s.

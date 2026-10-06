@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
-# A click in the shell's tray granting an extension activeTab on the focused
-# <webview>: the extension's scripting.executeScript paints it, with no host
-# permission of its own.
+# Checks that a click in the shell's tray grants an extension activeTab on the
+# focused <webview>: its scripting.executeScript paints the page without host
+# permissions.
 #
-# Headless, with a stand-in for the compositor's end of the control socket, as
-# the extension-installer guard.
+# Headless, with a stand-in for the compositor's end of the control socket.
 #
-# Its control is the same run with no click: the page must stay unpainted.
+# The control runs with no click: the page must stay unpainted.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

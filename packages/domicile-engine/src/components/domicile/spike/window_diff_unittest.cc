@@ -15,10 +15,8 @@
 namespace domicile::spike {
 namespace {
 
-// Step 4's verdicts are this code's opinion, so these are tests of the opinion
-// rather than of the picture. See
-// docs/architecture/ENGINE-FORK-MEASUREMENTS.md#css-parity in the Domicile
-// repository.
+// Tests the comparison behind the CSS parity verdicts. See
+// docs/architecture/ENGINE-FORK-MEASUREMENTS.md#css-parity.
 
 constexpr SkColor kBackground = SkColorSetARGB(0xFF, 0x10, 0x14, 0x18);
 constexpr SkColor kApp = SkColorSetARGB(0xFF, 0x00, 0xC8, 0x53);
@@ -47,8 +45,8 @@ class Painter {
   std::vector<uint32_t> pixels_;
 };
 
-// The two halves the measurement compares: the same 20x20 rect at x=0 and at
-// x=40 of a 60x20 window.
+// The two halves to compare: a 20x20 rect at x=0 and at x=40 of a 60x20
+// window.
 constexpr gfx::Rect kLeft(0, 0, 20, 20);
 constexpr gfx::Point kRightOrigin(40, 0);
 
@@ -69,9 +67,7 @@ TEST(WindowDiffTest, TwoHalvesPaintedTheSameDoNotDiffer) {
   EXPECT_EQ(diff.interior_mismatched, 0);
 }
 
-// The reason a tolerance exists: a surface is resampled from a texture where
-// an ordinary element is rasterized from a vector, and the two round
-// differently in the last bit or two.
+// A resampled surface and a rasterized element differ in the low bits.
 TEST(WindowDiffTest, ChannelsWithinToleranceDoNotCountAsDiffering) {
   Painter painter(60, 20, kBackground);
   painter.Fill(gfx::Rect(5, 5, 10, 10), kApp);
@@ -84,8 +80,7 @@ TEST(WindowDiffTest, ChannelsWithinToleranceDoNotCountAsDiffering) {
   EXPECT_EQ(diff.worst_delta, kTolerance);
 }
 
-// The `transform` cell: the two halves differ along the boundary of the box
-// and nowhere inside it, which is parity rather than a gap.
+// As in the `transform` cell: differences only along the box's boundary.
 TEST(WindowDiffTest, AnOutlineOfDifferencesHasNoInterior) {
   Painter painter(60, 20, kBackground);
   painter.Fill(gfx::Rect(5, 5, 10, 10), kApp);
@@ -102,9 +97,7 @@ TEST(WindowDiffTest, AnOutlineOfDifferencesHasNoInterior) {
   EXPECT_EQ(diff.interior_mismatched, 0);
 }
 
-// What a property that does not apply to an <app> looks like: a region that
-// differs, not an edge that does. This is the case every "pass" in the
-// measurement is a claim about the absence of.
+// A property that does not apply to an <app> leaves a whole region different.
 TEST(WindowDiffTest, AFilledRegionOfDifferencesHasAnInterior) {
   Painter painter(60, 20, kBackground);
   painter.Fill(gfx::Rect(5, 5, 10, 10), kApp);
@@ -113,13 +106,12 @@ TEST(WindowDiffTest, AFilledRegionOfDifferencesHasAnInterior) {
   const RectDiff diff = Diff(painter);
 
   EXPECT_EQ(diff.mismatched, 100);
-  // A 10x10 block of mismatches, minus the two-pixel border of it that has a
-  // matching neighbor within kEdgeRadius.
+  // The 10x10 block minus its two-pixel border.
   EXPECT_EQ(diff.interior_mismatched, 36);
 }
 
-// A difference exactly kEdgeRadius across is still an edge; one pixel wider is
-// not. This is where the verdict actually turns.
+// A difference 2 * kEdgeRadius pixels across is all edge; one pixel wider has
+// an interior.
 TEST(WindowDiffTest, InteriorBeginsBeyondTheEdgeRadius) {
   Painter painter(60, 20, kBackground);
   painter.Fill(gfx::Rect(5, 5, 2 * kEdgeRadius + 1, 2 * kEdgeRadius + 1),
@@ -134,17 +126,15 @@ TEST(WindowDiffTest, InteriorBeginsBeyondTheEdgeRadius) {
 
 TEST(WindowDiffTest, TheViewportStartsAtTheFirstFullyBackgroundRow) {
   Painter painter(60, 20, kBackground);
-  // Browser chrome: rows 0 to 2 are something else, and row 3 is background
-  // except for one pixel, so the page cannot start there either.
+  // Rows 0 to 2 are browser chrome, and row 3 has one non-background pixel.
   painter.Fill(gfx::Rect(0, 0, 60, 3), SK_ColorWHITE);
   painter.Fill(gfx::Rect(59, 3, 1, 1), SK_ColorWHITE);
 
   EXPECT_EQ(painter.Capture().FindViewportTop(kBackground, kTolerance), 4);
 }
 
-// A page that never loaded, or whose colors are not what the measurement
-// expects. Reporting a row that is not the page's would misalign every cell,
-// so there is no nearest-match answer to give.
+// A page that did not load, or has unexpected colors. A nearest match would
+// misalign every cell, so there is no fallback.
 TEST(WindowDiffTest, NoBackgroundRowIsNotAViewport) {
   Painter painter(60, 20, SK_ColorWHITE);
 

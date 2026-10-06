@@ -15,15 +15,13 @@ namespace blink {
 
 class DomicileFilesEventInit;
 
-// What a search of the home found, answering DomicileHost::searchFiles().
+// Results of a home directory search, answering DomicileHost::searchFiles().
 //
-// The one event on this channel that answers a question at all. It is an event
-// and not a promise because everything else here is; the query it carries is
-// what lets `DomicileClient` settle the search that asked it.
+// An event, not a promise, to match the rest of this channel. The query lets
+// `DomicileClient` resolve the matching search.
 //
-// The paths are relative to the home directory and already sorted -- see the
-// IDL, and `domicile_host::file_search` in the compositor, which is where the
-// matching is done.
+// Paths are relative to the home directory and already sorted; see the IDL
+// and `domicile_host::file_search` in the compositor.
 class MODULES_EXPORT DomicileFilesEvent final : public Event {
   DEFINE_WRAPPERTYPEINFO();
 
@@ -45,12 +43,11 @@ class MODULES_EXPORT DomicileFilesEvent final : public Event {
   const FrozenArray<IDLString>& files() const { return *files_; }
   uint32_t matched() const { return matched_; }
 
-  // Whether the index this was found in is still being built. See the IDL: an
-  // incomplete answer that did not say so would read as a complete one.
+  // Whether the index is still being built. See the IDL.
   bool indexing() const { return indexing_; }
 
-  // When the browser process had this, on `performance.now()`'s clock. See
-  // DomicileAppEvent::arrival.
+  // When the browser process received this, on `performance.now()`'s clock.
+  // See DomicileAppEvent::arrival.
   DOMHighResTimeStamp arrival() const { return arrival_; }
 
   const AtomicString& InterfaceName() const override;
@@ -58,10 +55,7 @@ class MODULES_EXPORT DomicileFilesEvent final : public Event {
 
  private:
   String query_;
-  // Frozen because the IDL says so, and never null: both constructors build
-  // one, an empty answer included. An absent list and an empty one are the
-  // same answer here -- nothing matched -- because the compositor does not
-  // send this message at all when it has nothing to say.
+  // Frozen per the IDL, and never null. Empty means nothing matched.
   Member<FrozenArray<IDLString>> files_;
   uint32_t matched_ = 0;
   bool indexing_ = false;

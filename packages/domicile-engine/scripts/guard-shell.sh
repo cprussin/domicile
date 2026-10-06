@@ -1,35 +1,21 @@
 #!/usr/bin/env bash
-# A real shell, on the fork, with a real client's window in it.
+# Checks that a real shell (shell-simple by default, built by its own vite
+# config) embeds a real client's window via `<app>`.
 #
 #   nix develop .#full --command \
 #     ./packages/domicile-engine/scripts/under-wayland.sh /build/chromium/src \
 #     ./packages/domicile-engine/scripts/guard-shell.sh /build/chromium/src
 #
-# WHY THIS EXISTS. Every guard before it drives a page written for the guard:
-# spike-page.html and guard-two-windows.html put their canvases where the
-# harness can compute a probe point, and name app ids the harness chose. They
-# measure the seam. None of them measures the thing the seam is *for* — a shell
-# nobody wrote for this, built by its own vite config, joined to the compositor
-# through the desktop the document hands `Shell`, mounting `<app>` elements for
-# windows it learns about from the host.
+# It tests three parts, each of which has failed on its own:
 #
-# That is three things at once and each has failed on its own: the engine
-# serving the shell over `domicile://` and writing the document that loads it,
-# the shell reaching the compositor through the desktop the document hands
-# `Shell`, and `<app>`
-# calling `embedExternalSurface` for an app id the shell was told about rather
-# than one a query string named.
+# - the engine serving the shell over `domicile://` and writing its document
+# - the shell reaching the compositor through the desktop handed to `Shell`
+# - `<app>` calling `embedExternalSurface` for an app id the host announced
 #
-# The first two used to be a bridge process serving the page and a session on
-# one TCP port, with the SDK reaching it over a WebSocket. Both are gone -- see
-# `docs/architecture/DOMICILE-SCHEME.md` -- and this guard held the last
-# reference to them.
+# See `docs/architecture/DOMICILE-SCHEME.md`.
 #
-# WHAT IT ASSERTS, AND WHY NOT A PIXEL. The shell decides where its windows go.
-# A guard that named a coordinate would be asserting shell-simple's CSS, and
-# would fail the day someone moved a window — which is not this guard's
-# question. So it asks the engine where the client's color *is*, over the
-# whole window, and asserts only that it is somewhere. See
+# Asserts the client's color appears anywhere in the window, not at a
+# coordinate, since the shell's CSS decides layout. See
 # `domicile_engine_spike_find_color`.
 set -u
 
@@ -53,28 +39,20 @@ SHELL_DIR="$ROOT/packages/shell-$SHELL_NAME"
   exit 1
 }
 
-# Not either spike canvas's fallback and not either two-window color, so a log
-# left over from another guard cannot be mistaken for this one's answer.
+# Differs from other guards' colors, so a stale log from another guard cannot
+# match.
 COLOR="${COLOR:-19B36B}"
 
-# The negative control's client draws this instead. A control with no client at
-# all would prove nothing here: the probe only runs when a client commits, so a
-# run with nothing to submit never measures anything and "did not find it"
-# would be true of a completely broken pipeline. A client drawing the *wrong*
-# color exercises every step and still fails if the guard matches whatever
-# happens to be on screen.
+# The negative control's client draws this. The probe runs only when a client
+# commits, so a control with no client at all would pass on a broken pipeline.
 OTHER_COLOR="${OTHER_COLOR:-B3196B}"
 
 # NEGATIVE=1 runs the client with OTHER_COLOR. COLOR must never turn up.
 NEGATIVE="${NEGATIVE:-0}"
 
-# How long a client is given. Longer than everything that can happen after it
-# starts — 60s waiting for the page to embed it, then 90s looking for its
-# color — because the search runs on the submit path, so a client reaped
-# mid-poll stops the measurement dead and the guard would report "not found",
-# which points at the wrong thing entirely. 150s against 420s, and the
-# compositor's own FIND_FOR budget is clocked from the first submit rather than
-# from its start, so the embed stage does not eat into it.
+# How long the client lives. It must outlast the 60s embed wait plus 90s of
+# polling, because the search runs on the submit path and stops when the
+# client exits.
 CLIENT_LIVES_FOR="${CLIENT_LIVES_FOR:-420}"
 
 OUT="${OUT:-out/Domicile}"
@@ -89,17 +67,12 @@ ENGINE_LOG=$(mktemp)
 COMP_LOG=$(mktemp)
 CLI_LOG=$(mktemp)
 STARTED=()
-# A run and its own negative control are two different measurements, so they
-# get two different files. Sharing one meant the control's logs overwrote the
-# run's and the diagnostics printed whichever went last — which, when the two
-# disagree, is exactly the pair worth reading side by side.
+# A run and its negative control write separate logs, so both can be read side
+# by side.
 WHICH=""
 [ "$NEGATIVE" = "1" ] && WHICH="-negative"
-# The shell's name is in the log's, because more than one shell is driven now
-# and the diagnostics glob picks these up by name. Without it, two runs write
-# over each other and a failure is read against whichever went last — which is
-# the "logs from another guard entirely" problem the two-window guard already
-# had once.
+# Include the shell's name: the diagnostics glob picks logs up by name, and
+# runs for different shells must not overwrite each other.
 WHOSE="shell-$SHELL_NAME$WHICH"
 LOG_COPY="${LOG_COPY:-/tmp/domicile-$WHOSE-compositor.log}"
 ENGINE_LOG_COPY="${ENGINE_LOG_COPY:-/tmp/domicile-$WHOSE-engine.log}"
@@ -139,39 +112,17 @@ command -v bun >/dev/null || {
   exit 77
 }
 
-# The shell's page, built the way the repository builds a shell: turbo's
-# `build:vite`, filtered to this shell. Twelve scripts in `scripts/` already
-# spell it that way, and that is the point: a guard that built the page its own
-# way would be measuring a page nobody ships.
+# Build the page the way the repository does (turbo `build:vite`), so the guard
+# tests the page that ships. `build:vite` depends on `^prepare` and `^build`,
+# which generate `styled-system/` and the workspace packages' `dist/`; neither
+# is in the checkout.
 #
-# It matters because two generated things have to exist and neither is in the
-# checkout. `styled-system/` is gitignored and made by a package's own
-# `prepare` (panda codegen). And the workspace packages the shell imports are
-# published from `dist/`: `@domicile-desktop/sdk`'s exports map every entry
-# point to `./dist/*.js`, so on a checkout where nothing has been built,
-# `@domicile-desktop/sdk/bridge` does not resolve.
+# `CI=1` stops turbo's `//#build:install-modules` from running a non-frozen
+# `bun install`. A cached turbo run can still restore `bun.lock`, because that
+# task declares it an output and `CI` is not in `globalEnv`. That needs fixing
+# in `turbo.json`.
 #
-# `CI=1` because turbo's `//#build:install-modules` runs a NON-frozen
-# `bun install` when it is unset, one line after the frozen one above asked for
-# the opposite. `flake.nix` sets it too, for its own reason — there is no
-# network in that sandbox.
-#
-# It closes the execution path and not the other one: that task declares
-# `bun.lock` an output and `CI` is not in `globalEnv`, so a cache entry a
-# developer populated is replayed here and the restore writes a lockfile over
-# the tree's whatever this is set to. That is a property of `turbo.json` and
-# wants fixing there.
-#
-# `build:vite` has both edges — `^prepare` and `^build` — which is why it is
-# the whole answer and `turbo build` plus a `prepare` here was not: it built
-# the packages that publish a `dist/`, and missed `@domicile-desktop/component-library`
-# entirely. That one is consumed as source and imports the `styled-system/`
-# only its own `prepare` generates, so `shell-manganese` would still have
-# failed, one package over, on eleven unresolved imports.
-#
-# Kept, not discarded. Every other failure in this file prints what it read;
-# swallowing this one leaves "the page did not build" as the whole account of
-# a build that had plenty to say.
+# Print the build log on failure.
 echo "building $SHELL_NAME's page"
 BUILD_LOG=$(mktemp)
 SHELL_PKG="./packages/shell-$SHELL_NAME"
@@ -187,20 +138,8 @@ fi
 rm -f "$BUILD_LOG"
 PAGE_DIR="$SHELL_DIR/.vite/renderer/main_window"
 
-# WHAT A SHELL IS, AND WHAT IT STOPPED BEING. A shell in this workspace builds
-# to one JavaScript module — `shellBuild` emits `shell.js` and no document,
-# because Domicile writes the document — so requiring an `index.html` here
-# refused a build that had succeeded, in fourteen seconds, with all three of
-# this guard's logs empty.
-#
-# It had been wrong since the shells stopped emitting one. The runner and
-# `test-out-of-tree-shell.sh` were both updated in that change and this, the
-# third caller, was not — and nothing said so, because `engine.yml` runs only
-# on `packages/domicile-engine/**` and that change touched none of it. The
-# first thing to run this guard afterward was an unrelated pull request.
-#
-# `shell.js` by the name `shellBuild` pins, as `domicile` does it and for its
-# reasons.
+# A shell builds to one module, `shell.js` (the name `shellBuild` pins).
+# Domicile writes the document, so there is no `index.html`.
 MODULE="$PAGE_DIR/shell.js"
 if [ ! -f "$MODULE" ]; then
   annotate "guard-shell: $SHELL_NAME built no shell.js in $PAGE_DIR"
@@ -212,38 +151,18 @@ COMP_SOCK="$RUNTIME/domicile-shell.sock"
 rm -f "$BROKER" "$COMP_SOCK" "$COMP_SOCK.session"
 rm -rf "$PROFILE"; mkdir -p "$PROFILE"
 
-# 1. THERE IS NO BRIDGE ANY MORE, and this guard used to be the last thing
-#    holding one up. It started `engine-chrome-host`, waited for it to print a
-#    URL, and asserted the SDK reaching it over a WebSocket. The SDK stopped
-#    speaking that protocol when it moved onto the engine's own host, so the
-#    guard was measuring a conversation with nobody at the far end -- it could
-#    not pass, and its zeroes read as a shell that never came up.
+# 1. The engine serves the shell from `--domicile-shell-root` and writes the
+#    document itself, as `spawn::engine` does.
 #
-#    The engine serves the shell now. Chrome is handed the directory and the
-#    module and writes the document itself, exactly as `spawn::engine` does it,
-#    so this guard runs the configuration the product runs rather than one
-#    built for the guard.
-#
-# The order below is chrome, then the compositor, and it is the only order
-# available: the compositor connects to the broker socket *chrome* creates. The
-# browser's end of the control channel expects the compositor's socket to be
-# missing when it first tries -- see `ControlChannel`, which retries rather
-# than failing on the first ENOENT, because this launch order is the normal one
-# and not a fault.
+# Start chrome first: the compositor connects to the broker socket chrome
+# creates. `ControlChannel` retries while the compositor's socket is missing.
 
-# 2. The engine, on the shell. No --enable-logging=stderr flood here beyond
-#    what the guards read: the page's own console lines are the record of
-#    whether the shell was handed a desktop. That is this guard's second job
-#    now: a host the document never handed over, or that never bound, lands
-#    here as a shell that connected to nothing and a desktop with no window in
-#    it — which is the only automated proof of the handover there is, because
-#    nothing in this repo can build the engine.
+# 2. The engine, on the shell. The page's console lines in the engine log show
+#    whether the shell was handed a desktop. This is the only automated check
+#    of that handover.
 #
-#    `--app` for the reason `domicile` uses it: a desktop is not a browser
-#    looking at a page, and a tab strip above the shell is the difference
-#    between something a person would use and something they would call broken.
-#    The guard runs the configuration the product runs, or it is guarding
-#    something else.
+#    `--app` hides the tab strip, as `domicile` does, so the guard runs the
+#    product's configuration.
 "$CHROMIUM/$OUT/chrome" \
   --ozone-platform=wayland \
   --app=domicile://shell/ \
@@ -289,10 +208,8 @@ if ! kill -0 $COMP 2>/dev/null; then
   tail -20 "$COMP_LOG" >&2
   exit 1
 fi
-# No fallback: `wayland-1` is as likely to be the compositor this whole guard
-# is running inside as it is to be ours, and a client that connected to sway
-# instead would draw a window nobody is measuring and fail as "the color is
-# not on screen".
+# No fallback to `wayland-1`: that may be the compositor this guard runs
+# inside, and a client there would draw a window nobody measures.
 CLIENT_DISPLAY=$(grep -aoE "wayland-[0-9]+" "$COMP_LOG" | head -1)
 [ -n "$CLIENT_DISPLAY" ] || {
   annotate "guard-shell: the compositor never named its Wayland display"
@@ -301,16 +218,9 @@ CLIENT_DISPLAY=$(grep -aoE "wayland-[0-9]+" "$COMP_LOG" | head -1)
   exit 1
 }
 
-# The shell has to be joined to the compositor before a window it is told about
-# can mean anything: the host announces nothing until a chrome has agreed the
-# protocol, so a client started before that is announced to nobody.
-#
-# This is the first of the three new things this guard measures, and the one
-# that fails on its own. The handshake is the *browser's* now rather than the
-# page's — `ControlChannel` sends `hello` when the shell first binds
-# the desktop it was handed — so this line still means what it always did: a chrome
-# the compositor will announce windows to. What changed is who spoke, which is
-# the whole point of the scheme.
+# Wait for the shell to join. The host announces windows only after a chrome
+# agrees the protocol, so a client started earlier is announced to nobody.
+# `ControlChannel` sends `hello` when the shell first binds its desktop.
 JOINED=0
 for _ in $(seq 1 90); do
   if grep -aq "chrome agreed the protocol" "$COMP_LOG" 2>/dev/null; then
@@ -336,18 +246,9 @@ echo "the shell joined the compositor"
 DRAWN="$COLOR"
 [ "$NEGATIVE" = "1" ] && DRAWN="$OTHER_COLOR"
 echo "driving kitty, drawing #$DRAWN"
-# Prints, rather than sitting idle. The probe runs on the submit
-# path — it is called when a client commits a frame the engine
-# takes — so a client that stops drawing stops the measurement
-# dead, and a guard waiting for a box to hold still would then be
-# measuring the client's idleness. kitty redraws for its cursor
-# blink and gives up on that after about fifteen seconds; a
-# character every fifth of a second keeps it committing for as
-# long as the guard is watching.
-#
-# The dots are foreground pixels and the box is the background
-# color's extent, so they cost nothing the measurement cares
-# about.
+# Keep the client printing. The probe runs only when a client commits a
+# frame, and kitty stops redrawing after its cursor blink times out (~15s).
+# The dots are foreground pixels; the probe measures the background color.
 NO_COLOR=1 WAYLAND_DISPLAY="$CLIENT_DISPLAY" timeout "$CLIENT_LIVES_FOR" \
   "${KITTY[@]}" --config NONE -o confirm_os_window_close=0 \
         -o "background=#$DRAWN" \
@@ -355,35 +256,20 @@ NO_COLOR=1 WAYLAND_DISPLAY="$CLIENT_DISPLAY" timeout "$CLIENT_LIVES_FOR" \
         sh -c 'while :; do printf .; sleep 0.2; done' >>"$CLI_LOG" 2>&1 &
 STARTED+=($!)
 
-# Before the pixels, the seam: the page has to hear about the client at all.
+# Check that the page heard about the client before checking pixels.
+# Otherwise "the color is not on screen" cannot tell a misplaced window from a
+# page that was never told about the client.
 #
-# Split out because "the color is not on screen" is the same sentence for a
-# window in the wrong place, a window drawn the wrong color, and a page that
-# was never told a client exists — and the third is the one this guard exists
-# to find. It is also the one with no other evidence anywhere: the page joins,
-# its handshake reaches the compositor, a frame sink is brokered for the
-# client, and the only sign that nothing arrived back is a window that does
-# not open. That is exactly how a WebSocket delivering Blobs the transport
-# could not read presented, for a full poll, with nothing in any log.
+# `domicile: embedding` comes from the renderer when a mounted `<app>` calls
+# `embedExternalSurface`, so read the engine log, not the page's console.
 #
-# `domicile: embedding` is a renderer-process line, from the embedder, so this
-# reads the engine's own log rather than the page's console: a shell that heard
-# the announcement mounts an <app>, and mounting one calls embedExternalSurface.
-#
-# BOTH HALVES ARE CHECKED, because "the page never heard" and "there was
-# nothing to hear" produce the same absence. The compositor logs
-# `Host::app_appeared` when a toplevel maps, so a kitty that never started —
-# or a client that mapped on the wrong Wayland display — is a different
-# sentence from a page that was told and did nothing. Asserting the second
-# without establishing the first is how a guard blames the wrong end.
+# Also check that the compositor logged `app_appeared`, so a client that never
+# mapped is not blamed on the page.
 EMBEDDED=0
 ANNOUNCED=0
-# And a third end, which arrived with the first shell that has one. A chrome
-# that lays its windows out on a screen renders nothing at all until the host
-# has described a desktop — manganese's `OnTheFirstScreen` is exactly that —
-# so "told about a client, embedded nothing" is true of a page that heard
-# everything and simply had nowhere to put a window. Blaming the announcement
-# path for that sends whoever reads it to the wrong protocol.
+# A shell that lays windows out on a screen (manganese's `OnTheFirstScreen`)
+# renders nothing until the host describes a desktop. Track that separately so
+# the failure names the desktop, not the announcement.
 DESKTOP=0
 for _ in $(seq 1 60); do
   grep -aq 'app_appeared' "$COMP_LOG" 2>/dev/null && ANNOUNCED=1
@@ -395,11 +281,8 @@ for _ in $(seq 1 60); do
   kill -0 $COMP 2>/dev/null || break
   sleep 1
 done
-# Once more, after the loop. The flag is read at the top of each pass, so an
-# announcement written during the last `sleep 1` — or between that grep and the
-# compositor dying — would be missed, and the guard would report "no client
-# ever mapped" about a client that did. Which is the same wrong sentence this
-# stage exists to stop printing, pointed the other way.
+# Check once more after the loop, so an announcement logged during the last
+# `sleep 1` is not missed.
 grep -aq 'app_appeared' "$COMP_LOG" 2>/dev/null && ANNOUNCED=1
 grep -aqE 'told the chrome about [1-9]' "$COMP_LOG" 2>/dev/null && DESKTOP=1
 if [ "$EMBEDDED" != "1" ]; then
@@ -429,17 +312,9 @@ if [ "$EMBEDDED" != "1" ]; then
 fi
 echo "the shell embedded the client it was announced"
 
-# HOW LONG TO WATCH, which is a different question for the two runs. The guard
-# stops when the color turns up and spends 90 only on a machine that is having
-# a bad day. The control is looking for an absence, so it spends all 90 every
-# time -- 1m41 against the guard's 12s, measured on engine run 35496858205, and
-# twice over because manganese runs this again.
-#
-# A multiple of what the guard just measured is the better number: same job,
-# same build, same machine, minutes apart. Per shell, because `simple` and
-# `manganese` are different pages with different amounts of work in front of
-# the first frame, and one's timing is not a statement about the other. No
-# measurement to hand means the full 90, as before. See lib-control-budget.sh.
+# How long to watch. The guard stops when the color appears. The control looks
+# for an absence, so it always waits its full budget, which is scaled from this
+# shell's last guard timing (or 90 without one). See lib-control-budget.sh.
 LOOKS="${LOOKS:-90}"
 [ "$NEGATIVE" = "1" ] && LOOKS="$(budget_for "shell-$SHELL_NAME" "$LOOKS")"
 
@@ -454,9 +329,8 @@ for _ in $(seq 1 "$LOOKS"); do
   WAITED=$((WAITED + 1))
 done
 
-# The guard's reading, and only when it read something. A run that gave up
-# measured its own patience, and a control that inherited that would be
-# watching for a multiple of the wrong number.
+# Record the timing only when the guard found the color. A run that timed out
+# measured nothing.
 if [ "$NEGATIVE" != "1" ] && [ -n "$FOUND" ]; then
   budget_note "shell-$SHELL_NAME" "$WAITED"
 fi
@@ -468,19 +342,16 @@ if [ "$NEGATIVE" = "1" ]; then
          "#$OTHER_COLOR — the guard is matching something other than the client's pixels"
     exit 1
   fi
-  # A control that passes because the whole run fell over proves nothing. The
-  # client has to have got as far as a frame the engine took, and the probe has
-  # to have run and answered "not yet".
+  # A control that passes because the run fell over proves nothing. The engine
+  # must have taken a frame from the client.
   if ! grep -aq "first frame" "$COMP_LOG" 2>/dev/null; then
     annotate "guard-shell negative control: the engine never took a frame" \
          "from the client, so nothing was measured"
     grep -aE "engine|frame sink|chrome|ERROR" "$COMP_LOG" | tail -12 | sed 's/^/  /' >&2
     exit 1
   fi
-  # "has not drawn" is only logged when the window was actually captured and
-  # searched. A probe that could not read the window at all says something
-  # else — see spike_find's three answers — so this cannot go green on a
-  # measurement that never happened.
+  # `has not drawn` is logged only after the window was captured and searched.
+  # A probe that could not read the window logs something else.
   if ! grep -aq "has not drawn" "$COMP_LOG" 2>/dev/null; then
     annotate "guard-shell negative control: the probe never read the" \
          "window, so nothing was measured"
@@ -491,17 +362,12 @@ if [ "$NEGATIVE" = "1" ]; then
   exit 0
 fi
 
-# WHICH FAILURE IT WAS, not whether there was one. The probe runs inside
-# `publish_frame`, so a color is only ever searched for on a client submit and
-# `engine found` therefore implies this line — it cannot make the pass stricter
-# and does not claim to. What it does is split the failure: "the client never
-# got a frame to the engine" and "the client drew and its window is not on the
-# page" are different ends, and the guard used to print the second about both.
+# `engine found` already implies a first frame, since the probe runs in
+# `publish_frame`. This check only names the failure: no frame reached the
+# engine, or the window is missing from the page.
 #
-# The vacuity this does NOT close is the shell's own chrome painting the search
-# color. Nothing on this side can: the engine reports one bounding box over
-# the whole browser window, and a page painting that color anywhere satisfies
-# it. `NEGATIVE=1` is what closes it, which is why manganese has one too.
+# It cannot catch the shell's own chrome painting the search color, because the
+# engine reports one box over the whole window. `NEGATIVE=1` catches that.
 if ! grep -aq "first frame" "$COMP_LOG" 2>/dev/null; then
   annotate "guard-shell: the engine never took a frame from $SHELL_NAME's" \
        "client, so whatever is on the page is not the client's window"

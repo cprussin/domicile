@@ -13,11 +13,7 @@ namespace blink {
 
 class DomicileAppTitledEventInit;
 
-// A window's title changed.
-//
-// A real event type rather than a CustomEvent carrying a detail bag: the point
-// of the typed surface is that a shell parses nothing, and a detail bag would
-// put the parsing back where it was.
+// A window's title changed. A typed event so shells parse nothing.
 class MODULES_EXPORT DomicileAppTitledEvent final : public Event {
   DEFINE_WRAPPERTYPEINFO();
 
@@ -37,8 +33,7 @@ class MODULES_EXPORT DomicileAppTitledEvent final : public Event {
   const String& appId() const { return app_id_; }
   const String& title() const { return title_; }
 
-  // When the browser process had this, on `performance.now()`'s clock. See
-  // DomicileAppEvent::arrival.
+  // See DomicileAppEvent::arrival.
   DOMHighResTimeStamp arrival() const { return arrival_; }
 
   const AtomicString& InterfaceName() const override;

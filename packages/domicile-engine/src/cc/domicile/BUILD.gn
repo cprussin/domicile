@@ -1,9 +1,9 @@
 # Copyright 2026 Connor Prussin
 # SPDX-License-Identifier: MIT
 
-# Where a page shown on several monitors is drawn at each one's own density.
-# Linked into //cc by patch 0072, which is also what makes GN load this file;
-# tested from //components/domicile:unit_tests.
+# Per-monitor raster regions for a page shown on several monitors.
+# Patch 0072 links this into //cc; //components/domicile:unit_tests runs the
+# tests.
 source_set("display_regions") {
   sources = [
     "display_regions.cc",

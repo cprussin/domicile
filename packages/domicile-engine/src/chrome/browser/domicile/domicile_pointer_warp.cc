@@ -27,13 +27,13 @@
 namespace domicile {
 namespace {
 
-// Has the cursor drawn for the display a warp to `at`, in `root`'s DIPs,
+// Draws the cursor on the display that a warp to `at` (in `root`'s DIPs)
 // landed on. See `WarpLandsOn`.
 void DrawForWhereItLanded(aura::Window* root, const gfx::Point& at) {
   const display::Screen* screen = display::Screen::Get();
   const std::vector<display::Display>& displays = screen->GetAllDisplays();
-  // Only what the screen has, as the shell's windows read the desk: mid-hotplug
-  // the layout can name a display the screen has not been told about.
+  // Skip displays the screen does not know yet; the layout can be ahead of it
+  // during hotplug.
   std::vector<DeskPlace> lit;
   for (const content::DomicileDeskDisplay& place : content::GetDomicileDesk()) {
     if (std::ranges::find(displays, place.id, &display::Display::id) !=
@@ -44,7 +44,7 @@ void DrawForWhereItLanded(aura::Window* root, const gfx::Point& at) {
   }
   const std::optional<int64_t> landed =
       WarpLandsOn(lit, screen->GetDisplayNearestWindow(root).id(), at);
-  // No desk: the window is its own display's, and aura's choice is right.
+  // No desk: aura already picked the right display.
   if (!landed.has_value()) {
     return;
   }
@@ -63,38 +63,30 @@ void WarpPointerIn(content::GlobalRenderFrameHostId frame_id,
   CHECK_CURRENTLY_ON(content::BrowserThread::UI);
   content::RenderFrameHost* frame =
       content::RenderFrameHost::FromID(frame_id);
-  // A page that has gone between asking and this running -- a reload, a
-  // monitor unplugged and its window closed. Nothing to say: the cursor is
-  // wherever it was, and there is no longer anybody who wanted it moved.
+  // The frame closed before this ran, for example on reload or unplug.
   if (frame == nullptr) {
     return;
   }
   gfx::NativeView view = frame->GetNativeView();
   aura::Window* root = view == gfx::NativeView() ? nullptr : view->GetRootWindow();
   if (root == nullptr) {
-    // A frame that never made it to a window: a unit test, or a view
-    // detached on its way out.
+    // The frame has no window, as in unit tests or during teardown.
     return;
   }
 
-  // THE PAGE'S OWN BOX, IN THE COORDINATES A CURSOR IS MOVED IN. A page's
-  // coordinates start at the page and a root window's start at the window, and
-  // between them is whatever the browser draws above the contents -- which for
-  // a shell's window is nothing, and is not something this has to know.
+  // Convert from page coordinates to root window coordinates.
   const std::optional<gfx::Point> at =
       PointerWarpTarget(view->GetBoundsInRootWindow(), x, y);
   if (!at.has_value()) {
-    // Only a coordinate that is not a place, or a page with no box at all --
-    // see `PointerWarpTarget`. Blink refuses the first before it reaches the
-    // browser, so one arriving here is a renderer that is not the one we
-    // built, and it is worth a line rather than a silent nothing.
+    // Blink rejects invalid coordinates first, so reaching here suggests an
+    // unexpected renderer. See `PointerWarpTarget`.
     LOG(WARNING) << "domicile: a page asked for the pointer to be put at " << x
                  << "," << y << ", which is nowhere in its window";
     return;
   }
   root->GetHost()->MoveCursorToLocationInDIP(*at);
-  // Which draws the arrow for the host's display, wherever on the desk the
-  // pointer went.
+  // The move above draws the cursor on the host's display; redraw it on the
+  // display the pointer reached.
   DrawForWhereItLanded(root, *at);
 }
 

@@ -1,30 +1,24 @@
 #!/usr/bin/env bash
-# Reading a latency run out of the compositor's log.
+# Parses a latency run from the compositor's log.
 #
-# Its own file, sourced by `guard-latency.sh` and by
-# `scripts/test-latency-report.sh`, for the reason `lib-annotate.sh` is its own
-# file: what a guard concludes from a log is the guard's actual behavior, and
-# behavior that can only be exercised by starting a browser is behavior
-# nobody exercises. Everything here is a string in and a string out.
+# Sourced by `guard-latency.sh` and `scripts/test-latency-report.sh`, so the
+# parsing is testable without starting a browser. Each function takes strings
+# and returns a string.
 #
-# The lines these read are built by `Spread::line` in the compositor's
-# `latency.rs` and asserted whole by its unit tests, so the two ends of this
-# contract are pinned from both sides.
+# The lines come from `Spread::line` in the compositor's `latency.rs`, whose
+# unit tests assert their exact format.
 
-# The median, in milliseconds, off one `latency <what>:` line.
+# The median in milliseconds from the last `latency <what>:` line.
 #
-# Empty when the line is absent or says "nothing measured", which are different
-# facts about a run but the same fact about this: there is no number to compare.
-# The caller decides what that means; every caller here treats it as failure.
+# Empty when the line is absent or says "nothing measured"; callers treat that
+# as failure.
 #
-# The LAST line for this label, whatever it says, and then a number out of it —
-# rather than the last line that happens to have a number in it. The difference
-# shows up on a run that measured something and then measured nothing: anchored
-# on `min `, "nothing measured" is invisible and the stale earlier number is
-# what comes back, which is a reading presented for a run that had none.
+# Reads the last line for the label, then extracts the number. Matching the
+# last line that has a number would return a stale value when a later line
+# says "nothing measured".
 #
-# The median is bounded by `, max ` on the way out because the line ends
-# `(median 1.0 frames)` and an unbounded `median [0-9.]*` takes that instead.
+# `, max ` bounds the match: the line ends `(median 1.0 frames)`, which an
+# unbounded `median [0-9.]*` would match instead.
 latency_median() {
   local what="$1" log="$2"
   grep -a "latency $what: " "$log" 2>/dev/null |
@@ -32,19 +26,15 @@ latency_median() {
     sed -n 's/.*median \([0-9.]*\), max .*/\1/p'
 }
 
-# One display frame, in milliseconds, as the run reported it. Empty when the
-# run never said, which every caller here treats as failure.
+# One display frame in milliseconds, as the run reported it. Empty when
+# missing; callers treat that as failure.
 #
-# THIS IS WHAT THE GUARD'S ASSERTION IS A MULTIPLE OF, and the floor is not.
-# Both are the same quantity -- a probe round trip is one display frame,
-# because asking what color a pixel is forces the draw it then reads -- but
-# only one of them is measured while the browser is busy starting. `floor` has
-# come back at 48.71 ms on a run whose own `commit to pixel` was 29.18, and a
-# denominator larger than a number quantized to it is not that number's floor.
+# The guard's threshold is a multiple of this, not of `floor`. Both should be
+# one frame, but `floor` is measured while the browser is starting and runs
+# high (48.71 ms on a run whose `commit to pixel` was 29.18).
 #
-# It is the interval `Spread::line` divides by for its `(median N frames)`
-# column, so the guard's ratio and the compositor's own frame counts are the
-# same arithmetic on the same number.
+# `Spread::line` divides by the same interval for its `(median N frames)`
+# column.
 latency_display_frame() {
   local log="$1"
   grep -a "latency: the display frame is " "$log" 2>/dev/null |
@@ -52,12 +42,9 @@ latency_display_frame() {
     sed -n 's/.*the display frame is \([0-9.]*\) ms.*/\1/p'
 }
 
-# How a run ended, as one word: `completed`, `unsettled`, `dark`, or empty when
-# the run never said.
+# How a run ended: `completed`, `unsettled`, `dark`, or empty if not reported.
 #
-# Three outcomes rather than a boolean because they blame different things —
-# see `Ended` in `latency.rs` — and a guard that collapsed them would report a
-# blinking cursor and a broken probe with the same sentence.
+# Each outcome points at a different cause; see `Ended` in `latency.rs`.
 latency_ended() {
   local log="$1"
   if grep -aq "latency: the run completed" "$log" 2>/dev/null; then
@@ -69,7 +56,7 @@ latency_ended() {
   fi
 }
 
-# How many rounds the client left unanswered. Empty when the run never said.
+# Rounds the client left unanswered. Empty when not reported.
 latency_abandoned() {
   local log="$1"
   grep -a "round(s) abandoned by the client" "$log" 2>/dev/null |
@@ -77,12 +64,11 @@ latency_abandoned() {
     sed -n 's/.*latency: \([0-9]*\) round(s).*/\1/p'
 }
 
-# How many rounds the client answered with more than one frame. Empty when the
-# run never said.
+# Rounds the client answered with more than one frame. Empty when not
+# reported.
 #
-# Not a fault, and not read as one. It qualifies `commit to pixel`, which is
-# timed from the first of those frames, and it is the number that tells an
-# abandoned round apart from a starved one: see `step_the_latency`.
+# Not a fault. `commit to pixel` is timed from the first of those frames. This
+# count tells an abandoned round from a starved one; see `step_the_latency`.
 latency_redrew() {
   local log="$1"
   grep -a "round(s) where the client drew again while polling" "$log" 2>/dev/null |
@@ -90,14 +76,11 @@ latency_redrew() {
     sed -n 's/.*latency: \([0-9]*\) round(s).*/\1/p'
 }
 
-# How many rounds were given up because the probe point changed color before
-# the client answered. Empty when the run never said.
+# Rounds dropped because the probe pixel changed before the client answered,
+# i.e. a frame from before the key reached it. Empty when not reported.
 #
-# Its own reader, and its own accusation again: the client was asked and the
-# screen moved anyway, which means a frame from before the key reached it. The
-# round is not a measurement and is not counted as one — so a guard that read
-# only `abandoned` would report a run as whole while it measured fewer rounds
-# than it set out to.
+# Read separately because these rounds are not counted as measurements; a guard
+# reading only `abandoned` would miss them.
 latency_moved() {
   local log="$1"
   grep -a "round(s) whose pixel moved before the client answered" "$log" 2>/dev/null |
@@ -105,13 +88,10 @@ latency_moved() {
     sed -n 's/.*latency: \([0-9]*\) round(s).*/\1/p'
 }
 
-# How many rounds were given up because the client's commit came too long after
-# the key to be its answer. Empty when the run never said.
+# Rounds dropped because the client's commit came too long after the key to be
+# its answer. Empty when not reported.
 #
-# Its own reader, and the accusation that reads least like one: the client
-# committed, in order, and the pixel followed. What is wrong with the round is
-# the size of the wait — a client redrawing on its own committed whatever it
-# was doing, and the round still waiting took it for an answer.
+# Typically a client redrawing on its own: the commit was unrelated to the key.
 latency_late() {
   local log="$1"
   grep -a "round(s) whose commit came too late to be the key's answer" "$log" 2>/dev/null |
@@ -119,12 +99,11 @@ latency_late() {
     sed -n 's/.*latency: \([0-9]*\) round(s).*/\1/p'
 }
 
-# How many commits were passed over for coming too soon after the key to be its
-# answer. Empty when the run never said.
+# Commits skipped for arriving too soon after the key to be its answer. Empty
+# when not reported.
 #
-# Not a round given up: a commit 0.82 ms after a key is a frame the client
-# already had in flight, and the round waits on past it for the key's answer.
-# Counted in commits, not rounds, for that reason.
+# Counted in commits, not rounds: such a commit (e.g. 0.82 ms after the key)
+# was already in flight, and the round keeps waiting for the real answer.
 latency_soon() {
   local log="$1"
   grep -a "commit(s) passed over for coming too soon to be the key's answer" "$log" 2>/dev/null |
@@ -132,13 +111,10 @@ latency_soon() {
     sed -n 's/.*latency: \([0-9]*\) commit(s).*/\1/p'
 }
 
-# How many rounds this compositor failed to deliver a key for. Empty when the
-# run never said.
+# Rounds whose key the compositor never delivered. Empty when not reported.
 #
-# Its own reader because it is its own accusation: an abandoned round is the
-# client not answering, and one of these is us never asking. A guard that read
-# only `abandoned` would pass a run where most rounds measured and the rest
-# never happened, over a median of whatever was left.
+# Read separately from `abandoned` (client did not answer): without it, a run
+# where some rounds never happened would pass on the remaining median.
 latency_undelivered() {
   local log="$1"
   grep -a "round(s) whose key was never delivered" "$log" 2>/dev/null |
@@ -146,15 +122,13 @@ latency_undelivered() {
     sed -n 's/.*latency: \([0-9]*\) round(s).*/\1/p'
 }
 
-# Whether `$1` is at most `$2` times `$3`, in floating point.
+# Whether `$1` <= `$2` * `$3`, in floating point.
 #
-# `awk` because these are milliseconds with two decimals and `[` compares
-# integers: `[ 16.68 -le 33.34 ]` is not a comparison, it is a syntax error,
-# and the shape that silently is not one — `${x%.*}` — throws away exactly the
-# precision this is about.
+# `awk` because `[` compares integers only, and truncating with `${x%.*}`
+# loses the precision being compared.
 #
-# False for an empty or unparseable operand rather than true. A threshold check
-# that passes when it could not read the numbers is worse than no check.
+# False for an empty or unparseable operand, so an unreadable number fails the
+# check.
 latency_within() {
   local got="$1" times="$2" of="$3"
   awk -v got="$got" -v times="$times" -v of="$of" 'BEGIN {
@@ -163,23 +137,14 @@ latency_within() {
   }'
 }
 
-# The flags that ask for the engine's window on `$1`.
+# The engine's window flags for platform `$1`.
 #
-# The one thing that differs between the two readings of this run. A nested run
-# gets a window of a stated size, because it is a window in somebody else's
-# session and nothing else decides how big it is.
-#
-# THE SCANOUT PLATFORM GETS NO SIZE AT ALL, and that is not a preference.
-# `ScreenManager::UpdateControllerToWindowMapping` pairs a window with a
-# controller through `FindWindowAt`, which compares an EXACT rectangle against
-# the controller's origin and mode size (`screen_manager.cc:1001`). No match
-# means the window is given no controller, every page flip is dropped before it
-# reaches the kernel, and the CRTC keeps the blank buffer the modeset put up —
-# a black screen with a clean log, which is how the first desktop on real
-# hardware came up. `--start-fullscreen` is what makes the window the CRTC's
-# rectangle; `domicile-launch`'s `spawn.rs` adds it on the same platform for
-# the same reason, and this is the guard agreeing with that rather than
-# deciding it a second time.
+# Nested runs get a fixed size. The `drm` platform must get
+# `--start-fullscreen` instead: `ScreenManager::UpdateControllerToWindowMapping`
+# matches a window to a controller only on an exact rectangle
+# (`FindWindowAt`, `screen_manager.cc:1001`). Without a match, page flips are
+# dropped and the screen stays black with a clean log. `domicile-launch`'s
+# `spawn.rs` adds the same flag for the same reason.
 latency_window_flags() { # platform
   case "$1" in
     (drm) printf -- '--start-fullscreen' ;;
@@ -187,20 +152,12 @@ latency_window_flags() { # platform
   esac
 }
 
-# Why this platform cannot be run from where this is being run from, or
-# nothing.
+# Why this platform cannot run in the current environment, or nothing.
 #
-# Each of the two readings is wrong in the other's place, and neither says so
-# on its own. `drm` inside a session cannot take DRM master, because the
-# session already holds it — what that looks like is a GPU process dying,
-# minutes into a run that had already started a browser and a compositor.
-# `wayland` with no session has no compositor to be a client of, which is
-# `under-wayland.sh` having been forgotten and is the ordinary way this gets
-# run wrongly.
-#
-# Refused before anything starts rather than diagnosed afterwards, for the
-# reason `ERRORS.md` gives: the alternative is a run that fails somewhere else
-# and says something about a socket.
+# `drm` inside a session cannot take DRM master; the GPU process dies minutes
+# later. `wayland` without a session has no compositor; usually
+# `under-wayland.sh` was forgotten. Refuse up front instead of failing later
+# with an unrelated socket error (see `docs/guidelines/ERRORS.md`).
 latency_platform_refusal() { # platform, WAYLAND_DISPLAY
   local platform="$1" session="${2:-}"
   if [ "$platform" = "drm" ] && [ -n "$session" ]; then

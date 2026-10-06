@@ -1,29 +1,18 @@
 // Copyright 2026 Connor Prussin
 // SPDX-License-Identifier: MIT
 
-// Is this color on the browser's page? Asked from outside the browser, of the
-// pixels the display compositor actually drew.
+// Checks whether a color appears in the pixels viz drew for the browser's
+// page. Used by guard-webview-framing.sh, which has no Wayland client.
 //
-// It exists because every other pixel guard in this series needs a Wayland
-// client to have committed a frame -- the search runs on the submit path -- and
-// guard-webview-framing.sh has no client at all. What it measures is a page
-// against itself: a <webview> that shows a site refusing to be framed, and an
-// <iframe> that must not.
-//
-// TWO COLORS, and the second is what makes an answer of "no" mean anything.
-// `--witness` is a color the page paints on its own; a run that cannot find
-// it has not measured the page, and reporting "the color is absent" from such
-// a run would be a negative control that passes on a browser that never
-// started. So the exit status distinguishes them:
+// `--witness` is a color the page always paints. If it never appears, nothing
+// was measured, so "absent" would be meaningless. Exit status:
 //
 //   0  the subject color is on the page
-//   1  the witness is, the subject is not -- a measurement, and a real "no"
+//   1  the witness is on the page and the subject is not
 //   2  the witness never appeared, so nothing was measured
-//   3  this could not run at all
+//   3  the probe could not run
 //
-// Both are matched exactly, like every other assertion built on
-// domicile_engine_spike_find_color: a page draws flat colors here and a near
-// match would be an edge, a blend, or the browser's own background.
+// Colors match exactly; a near match would be an edge or a blend.
 
 #include <poll.h>
 
@@ -45,16 +34,14 @@ constexpr char kColorSwitch[] = "color";
 constexpr char kWitnessSwitch[] = "witness";
 constexpr char kForSecondsSwitch[] = "for-seconds";
 
-// Long enough for a browser to start, load a page over a loopback HTTP server
-// and paint it, and short enough that a guard which is never going to pass says
-// so inside a CI step rather than at its timeout.
+// Long enough for the browser to start and paint, short enough to fail before
+// the CI step's timeout.
 constexpr int kDefaultSeconds = 60;
 
-// How often to look. A CaptureWindow is a blocking readback of the whole
-// window, so this is not free and does not want to be a tight loop.
+// Each capture is a blocking readback of the whole window, so do not spin.
 constexpr base::TimeDelta kLookEvery = base::Milliseconds(500);
 
-// What the exit statuses above are, spelled once.
+// The exit statuses listed above.
 enum class Verdict {
   kFound = 0,
   kAbsent = 1,
@@ -72,9 +59,7 @@ bool ParseColor(const base::CommandLine& command_line,
   return base::HexStringToUInt(value, out);
 }
 
-// Sleeps by polling the engine's fd, which is the loop the compositor runs and
-// the only one this has any business running. There is no surface here, so
-// nothing is expected to wake it; the point is to wait without spinning.
+// Waits by polling the engine's fd, dispatching anything that arrives.
 void WaitABit(DomicileEngine* engine) {
   pollfd descriptor = {
       .fd = domicile_engine_fd(engine), .events = POLLIN, .revents = 0};
@@ -83,10 +68,8 @@ void WaitABit(DomicileEngine* engine) {
   }
 }
 
-// `what` by value and printed through c_str(), which is not fussiness: this
-// tree builds with -Wunsafe-buffer-usage-in-libc-call as an error, and a bare
-// `const char*` handed to %s is "not guaranteed to be null-terminated". A
-// std::string is.
+// Takes a std::string because -Wunsafe-buffer-usage-in-libc-call rejects a
+// bare `const char*` passed to %s.
 void Describe(const std::string& what,
               uint32_t argb,
               const DomicileSpikeCapture& box) {
@@ -117,8 +100,7 @@ int main(int argc, char** argv) {
     if (!base::StringToInt(command_line.GetSwitchValueASCII(kForSecondsSwitch),
                            &seconds) ||
         seconds <= 0) {
-      // A literal through %s, like the usage above: the switch name is an
-      // array and the libc-call check will not take one.
+      // Passed through %s to satisfy the libc-call check.
       fprintf(stderr, "%s",
               "--for-seconds wants a positive number of seconds\n");
       return static_cast<int>(Verdict::kUnusable);
@@ -155,8 +137,8 @@ int main(int argc, char** argv) {
       return static_cast<int>(Verdict::kFound);
     }
 
-    // Only until it has been seen once. The witness is the page's own paint
-    // and does not move, and each look is a full readback.
+    // Stop looking once seen: the witness does not move, and each look is a
+    // full readback.
     if (!witnessed &&
         domicile_engine_spike_find_color(engine, witness, &witness_box) == 1) {
       witnessed = true;

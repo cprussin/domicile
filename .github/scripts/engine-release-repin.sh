@@ -1,29 +1,18 @@
 #!/usr/bin/env bash
-# Put the engine this run published into `engine-release.nix`, on the branch.
+# Commit the engine this run published to `engine-release.nix` on the branch.
 #
 #   .github/scripts/engine-release-repin.sh <branch>
 #
-# THIS IS THE SECOND PULL REQUEST, REPLACED BY A COMMIT. An engine change used
-# to be two: one that moved the fork, and one that moved `engine-release.nix`
-# onto the tarball a manually dispatched release produced. That second one ran
-# this repository's most expensive job twice more, and — being manual — is the
-# one that got skipped, so changes needing a release shipped without one.
+# `engine.yml` publishes the release from the branch, and this writes it back,
+# so the pull request that changes the fork also repins it.
 #
-# `engine.yml` publishes the release from the branch head now, under a tag
-# naming the SERIES rather than the commit, and this writes the result back.
-# The pull request that moves the fork is the pull request that repins it.
+# A `pull_request` run checks out `refs/pull/N/merge`. Pushing from there would
+# merge main into the branch, so this commits the generated file onto the
+# branch tip instead.
 #
-# THE BRANCH TIP, NOT THE MERGE REF, AND THAT IS MOST OF THIS SCRIPT. A
-# `pull_request` run is checked out at `refs/pull/N/merge`: the head merged
-# into main as main was when the event fired. Committing there and pushing to
-# the branch would quietly merge main into somebody else's branch — invisible
-# in the pull request's diff, and not a thing CI may do to a person's work. So
-# the tip is fetched and the generated file is put on it, alone.
-#
-# If main moved the fork while this ran, the identity written here is the
-# merge's rather than the tip's. `scripts/test-the-pinned-engine-is-this-series.sh`
-# goes red, the next run fixes it, and that is the cheap direction to be wrong
-# in — the expensive one is a branch that looks repinned and is not.
+# If main changed the fork during the run, the identity written is the
+# merge's. `scripts/test-the-pinned-engine-is-this-series.sh` then fails and
+# the next run fixes it.
 set -euo pipefail
 
 BRANCH="${1:-}"
@@ -34,25 +23,16 @@ cd "$ROOT"
 
 FILE=packages/domicile-engine/engine-release.nix
 
-# Generated first, while the checkout is still the merge ref — the generator
-# reads nothing from the working tree but the output path, and running it
-# before the branch is checked out keeps a failure from leaving a half-switched
-# checkout behind.
+# Generate before switching branches, so a failure leaves the checkout intact.
 ./scripts/update-engine-release.sh
 generated="$(mktemp)"
 cp "$FILE" "$generated"
 
-# And put the merge ref's copy back, because a checkout refuses to walk over a
-# modified file whose content it has to change — which is what this is as soon
-# as main has repinned since the branch was cut, and `engine-release.nix` is
-# the only file the generator writes. Nothing is lost in the discard: the bytes
-# it produced are in "$generated" and go onto the tip below. Without this the
-# job fell over here having already built Chromium and published the engine.
+# Restore the file so `git checkout` cannot refuse to overwrite it. The new
+# content is saved in "$generated".
 git checkout -q -- "$FILE"
 
-# Its own identity, so a `git am` or a `commit` here cannot fail on a runner
-# whose HOME is deleted on every start. See engine.yml, where this failed the
-# apply step in zero seconds and looked like the patches not applying.
+# Set an identity, since the runner's HOME (and git config) is wiped on start.
 export GIT_AUTHOR_NAME="domicile CI"
 export GIT_AUTHOR_EMAIL="ci@domicile.invalid"
 export GIT_COMMITTER_NAME="domicile CI"
@@ -63,18 +43,13 @@ git checkout -q -B "$BRANCH" "origin/$BRANCH"
 cp "$generated" "$FILE"
 rm -f "$generated"
 
-# NOTHING TO SAY IS NOT A COMMIT. A re-run of a green job reaches here with the
-# file already holding what the generator produces, and an empty commit pushed
-# to somebody's branch on every re-run would re-trigger every check on the pull
-# request for no change.
+# Skip an empty commit, which would re-run every check on the pull request.
 if git diff --quiet -- "$FILE"; then
   echo "$FILE already names ${DOMICILE_ENGINE_TAG:-this series}; nothing to push"
   exit 0
 fi
 
-# One file. Anything else in this commit is CI editing somebody's branch, and
-# the checkout it is standing in is a merge ref's working tree — so `-A` here
-# would sweep up whatever the build left lying around.
+# Only this file: the build may have left other changes in the checkout.
 git add "$FILE"
 git commit -q -m "$(cat <<EOF
 Point the flake at ${DOMICILE_ENGINE_TAG:-the engine this branch built}
@@ -87,9 +62,9 @@ be a second pull request.
 EOF
 )"
 
-# A push with the workflow's GITHUB_TOKEN starts runs that wait for a person to
-# approve them. A token of the repository's own, when there is one, does not.
-# The empty value clears the checkout's header before this one is added.
+# Runs started by a GITHUB_TOKEN push wait for manual approval, so use
+# DOMICILE_WRITEBACK_TOKEN when set. The empty value clears the checkout's
+# header before this one is added.
 if [ -n "${DOMICILE_WRITEBACK_TOKEN:-}" ]; then
   auth="$(printf 'x-access-token:%s' "$DOMICILE_WRITEBACK_TOKEN" | base64 | tr -d '\n')"
   git -c http.https://github.com/.extraheader= \

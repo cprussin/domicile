@@ -1,36 +1,32 @@
 #!/usr/bin/env bash
-# A click in the shell's tray granting an extension activeTab on the focused
-# <webview>, read as the color the extension then paints into it.
+# Checks that a tray click grants an extension activeTab on the focused
+# <webview>, by reading the color the extension then paints.
 #
 #   nix develop .#full --command \
 #     ./packages/domicile-engine/scripts/guard-webview-active-tab.sh /build/chromium/src
 #
-# WHY THIS EXISTS. In Chrome, clicking an extension's action grants it
-# `activeTab` on the active tab: host access to that page until it navigates
-# away, so `scripting.executeScript` works there. Chrome grants it in
-# ExtensionActionRunner, which the tray never reaches -- the shell draws the
-# icon -- so `ExtensionTray::Activate` grants it itself. Without that, the
-# fixture's onClicked is dispatched and its executeScript is refused.
+# Chrome grants activeTab in ExtensionActionRunner, which the shell-drawn tray
+# never reaches, so `ExtensionTray::Activate` grants it itself. Without that,
+# the fixture's executeScript is refused.
 #
-# Headless, with guard-extension-installer.sh's stand-in for the compositor
-# naming the fixture as `unpacked`. The fixture asks for `activeTab` and
-# `scripting` and no host; a click on its action paints the tab it is handed
-# `COLOR`. The shell shows one <webview> on its witness, focuses it once its
-# page says it loaded, and once the fixture is in the tray wearing the badge its
-# worker sets once it listens, `?activate=1` clicks it with activateExtension.
-# The page is served `--still`: a reload would wipe the paint. And it says it
-# loaded by moving to `#ready`, because a click on a page that has not
-# committed grants the wrong page, and is refused (cprussin/domicile#797).
+# Setup, headless:
 #
-# WHAT IT ASSERTS. That `COLOR` is then in the window, with the shell's
-# background as the witness -- and that the shell clicked and the tray
-# granted, which the logs say.
+# - guard-extension-installer.sh's compositor stand-in names the fixture as
+#   `unpacked`.
+# - The fixture has only `activeTab` and `scripting`, and paints the tab
+#   `COLOR` when its action is clicked.
+# - The page is served `--still`, since a reload would wipe the paint. It moves
+#   to `#ready` once loaded, because clicking before commit grants the wrong
+#   page (cprussin/domicile#797).
+# - The shell focuses the <webview> on `#ready`, then clicks the fixture
+#   (`?activate=1`) once its badge shows.
 #
-# HOW IT CAN FAIL. NEGATIVE=1 runs the control: the same run, the fixture
-# installed and in the tray, and no click. It MUST NOT show `COLOR`, and its
-# witness is the served page's own color, so the absence is read off a guest
-# that drew. That is what makes the claim's color the click's: nothing else in
-# the run paints it.
+# Asserts `COLOR` appears in the window, with the shell background as witness,
+# and that the logs show the click and the grant.
+#
+# NEGATIVE=1 runs the same setup without the click. `COLOR` must not appear,
+# and the witness is the served page's color, so the guest is known to have
+# drawn.
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
@@ -51,12 +47,12 @@ fi
 
 NEGATIVE="${NEGATIVE:-0}"
 
-# The fixture, as the tray must name it, and the color its onClicked paints.
-# Fixed rather than overridable: `scripts/test-webview-active-tab-guard.sh`
-# holds the id to the manifest's `key` and the color to `background.js`.
+# The fixture id and the color its onClicked paints. Fixed:
+# `scripts/test-webview-active-tab-guard.sh` checks them against the
+# manifest's `key` and `background.js`.
 readonly ID="hbnfdakjdmmlmbpllmlphpingenajmci"
 readonly COLOR="00897B"
-# The shell's background, and the served page's own color. No other guard's.
+# The shell's background and the served page's color, unique to this guard.
 WITNESS="${WITNESS:-3A1C2E}"
 PAGE_COLOR="${PAGE_COLOR:-FDD835}"
 
@@ -71,9 +67,8 @@ PROFILE="${PROFILE:-/tmp/domicile-webview-active-tab-profile}"
 ENGINE_LOG="${ENGINE_LOG:-/tmp/domicile-webview-active-tab-engine.log}"
 SOCKET_LOG="${SOCKET_LOG:-/tmp/domicile-webview-active-tab-socket.log}"
 PROBE_LOG="${PROBE_LOG:-/tmp/domicile-webview-active-tab-probe.log}"
-# One per leg, as guard-extension-tray.sh's: the control runs straight after
-# the claim, and a server still answering the claim's engine as it died wrote
-# into the control's log.
+# One server per leg, as in guard-extension-tray.sh: the control runs right
+# after the claim, and a shared server could write into the control's log.
 HTTP_LOG="${HTTP_LOG:-/tmp/domicile-webview-active-tab-http-$NEGATIVE.log}"
 WIDTH="${WIDTH:-1024}"
 HEIGHT="${HEIGHT:-768}"
@@ -82,8 +77,7 @@ STARTED=()
 cleanup() {
   if [ ${#STARTED[@]} -gt 0 ]; then
     kill "${STARTED[@]}" 2>/dev/null
-    # Reaped, so nothing this started outlives the leg -- and a server still
-    # answering cannot write into the next leg's files.
+    # Reap it so nothing outlives the leg or writes into the next leg's files.
     wait "${STARTED[@]}" 2>/dev/null
   fi
   rm -rf "$PROFILE"
@@ -115,7 +109,8 @@ rm -f "$BROKER" "$CONTROL"
 rm -rf "$PROFILE"
 mkdir -p "$PROFILE"
 
-# 1. The page, still. Its own server: `crux` reaches no arbitrary host.
+# 1. Serve the page, still. Use a local server: `crux` cannot reach arbitrary
+#    hosts.
 rm -f "$HTTP_LOG"
 python3 "$SCRIPTS/guard-webview-content-script-server.py" \
   --port 0 --color "$PAGE_COLOR" --still >"$HTTP_LOG" 2>&1 &
@@ -131,7 +126,7 @@ PORT="$(served_port "$HTTP_LOG")" || {
 }
 PAGE="http://127.0.0.1:$PORT/page"
 
-# The claim clicks; the control does not, and its witness is the page's.
+# The claim clicks; the control does not, and uses the page as witness.
 if [ "$NEGATIVE" = "1" ]; then
   ACTIVATE=0
   LEG=control
@@ -143,8 +138,8 @@ else
   WITNESSED="$WITNESS"
 fi
 
-# 2. The compositor's end, naming the fixture in both legs: the control's
-#    difference is the click and nothing else.
+# 2. The compositor stand-in names the fixture in both legs; the only
+#    difference is the click.
 rm -f "$SOCKET_LOG"
 python3 "$SCRIPTS/guard-extension-installer-compositor.py" \
   --socket "$CONTROL" --unpacked "$EXTENSION" >"$SOCKET_LOG" 2>&1 &
@@ -183,7 +178,7 @@ done
 }
 echo "the engine is listening on $BROKER, showing $PAGE in a <webview>"
 
-# 4. The reading: the probe watches until it sees `COLOR`, or gives up.
+# 4. The probe watches until it sees `COLOR` or gives up.
 LD_LIBRARY_PATH="$CHROMIUM/$OUT${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
   "$CHROMIUM/$OUT/domicile_color_probe" \
     --domicile-broker-socket="$BROKER" \
@@ -193,13 +188,13 @@ LD_LIBRARY_PATH="$CHROMIUM/$OUT${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
 STATUS="${PIPESTATUS[0]}"
 echo "the probe exited $STATUS"
 
-# Only on a pass: a failed run measured this script's patience.
+# Record timing only on a pass; a failed run measured only the timeout.
 if [ "$NEGATIVE" != "1" ] && [ "$STATUS" -eq 0 ]; then
   budget_note webview-active-tab "$(($(date +%s) - STARTED_AT))"
 fi
 
-# THE READINGS, each anchored on the quote Chromium puts after a console
-# message -- see guard-control-arrival.sh for the run that learned why.
+# The readings, each anchored on the quote Chromium puts after a console
+# message. See guard-control-arrival.sh.
 saw() { # $1 fixed string
   grep -qF -- "$1" "$ENGINE_LOG" 2>/dev/null && echo 1 || echo 0
 }
@@ -216,10 +211,10 @@ echo "measured: $MEASURED"
 echo "what the fixture was refused, if anything:"
 grep -F 'GUARD refused' "$ENGINE_LOG" | tail -3 || true
 
-# WHICH END TO BLAME. `scripts/test-webview-active-tab-guard.sh` runs this
-# block directly. MEASURED is "<leg> <probe status> <sent> <tray> <activated>
-# <granted>"; the probe's status is 0 for the color seen, 1 for the witness
-# alone, 2 for neither.
+# The verdict. `scripts/test-webview-active-tab-guard.sh` runs this block
+# directly. MEASURED is "<leg> <probe status> <sent> <tray> <activated>
+# <granted>"; probe status is 0 for the color seen, 1 for the witness only, 2
+# for neither.
 FAILURE=""
 PASSED=""
 case "$MEASURED" in

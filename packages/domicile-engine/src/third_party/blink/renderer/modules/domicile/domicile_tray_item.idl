@@ -3,24 +3,23 @@
 
 // One icon in the system tray.
 //
-// An interface rather than a dictionary for DomicileClipboardEntry's reason:
-// WebIDL will not have a dictionary as the element type of an attribute's
-// array, and these are read off a DomicileTrayEvent.
+// An interface rather than a dictionary because WebIDL does not allow
+// dictionaries as an attribute's array element type.
 
 [
     Exposed=Window,
     RuntimeEnabled=DomicileControlChannel
 ] interface DomicileTrayItem {
-  // What DomicileHost.activateTrayItem() names this icon by: the bus name the
-  // application answers on and the object path it answers at, written together.
+  // The id DomicileHost.activateTrayItem() takes: the item's bus name and
+  // object path together.
   readonly attribute DOMString id;
 
-  // What the icon is, in words: its tooltip's title, its title, or its id, the
-  // first the application said. Never empty.
+  // The icon's label: its tooltip title, title or id, whichever the
+  // application set first. Never empty.
   readonly attribute DOMString title;
 
-  // The picture, as a `data:` URL to draw, or empty for one the compositor
-  // could not draw. A URL rather than a path for DomicileDesktopEntry.icon's
-  // reason: the page may draw what the compositor read and cannot read it.
+  // The image, as a `data:` URL, or empty if the compositor could not read
+  // it. A URL rather than a path because the page cannot read the
+  // compositor's files.
   readonly attribute DOMString icon;
 };

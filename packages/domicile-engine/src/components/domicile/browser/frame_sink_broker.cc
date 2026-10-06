@@ -69,11 +69,8 @@ void FrameSinkBroker::Embed(const std::string& app_id,
                             EmbedCallback callback) {
   BrokeredFrameSink* frame_sink = SinkForApp(app_id);
   if (!frame_sink) {
-    // The <app> element is in the page before the client window behind it
-    // exists, which is the ordinary case on a reload: the shell lays out every
-    // window it remembers and the clients connect afterward. Held against the
-    // app id rather than answered with whatever is brokered next, so an
-    // element waiting for one window is not handed another.
+    // The <app> element can exist before its client connects, as on a shell
+    // reload. Wait for this app's sink, not whichever is brokered next.
     pending_embeds_.emplace_back(app_id, parent_frame_sink_id, local_surface_id,
                                  size, scale, std::move(callback));
     return;
@@ -105,10 +102,8 @@ void FrameSinkBroker::CreateFrameSink(
 
   std::move(callback).Run(frame_sink_id);
 
-  // Pages that embedded this app before its client existed have been waiting
-  // for exactly this. Only this app's: an element waiting on another window is
-  // left waiting, because handing it this one is the bug the app id was added
-  // to prevent.
+  // Answer embeds that were waiting for this app. Embeds for other apps keep
+  // waiting.
   std::vector<PendingEmbed> still_waiting;
   for (PendingEmbed& embed : pending_embeds_) {
     if (embed.app_id != app_id) {
@@ -135,8 +130,7 @@ void FrameSinkBroker::DestroyFrameSink(const viz::FrameSinkId& frame_sink_id) {
   frame_sink_map_.erase(iter);
 }
 
-// A producer may only name a sink it was brokered, which is the same rule
-// DestroyFrameSink has and for the same reason: a FrameSinkId is guessable.
+// A producer may only use its own sinks, because a FrameSinkId is guessable.
 BrokeredFrameSink* FrameSinkBroker::OwnedFrameSink(
     const viz::FrameSinkId& frame_sink_id) {
   auto iter = frame_sink_map_.find(frame_sink_id);
@@ -187,10 +181,8 @@ void FrameSinkBroker::DestroyBuffer(const viz::FrameSinkId& frame_sink_id,
 void FrameSinkBroker::ConfigureDisplays(
     std::vector<mojom::DisplayLayoutPtr> layout) {
   if (!set_display_layout_) {
-    // An embedder with no CRTC to lay out, which is every one but a tty. Not
-    // an error and not worth a line: a producer states its layout whatever it
-    // is running on, because whether there is a connector behind a display is
-    // not a fact it has.
+    // No CRTC outside a tty. Not an error: the producer cannot know whether a
+    // connector backs a display.
     return;
   }
   set_display_layout_.Run(std::move(layout));
@@ -199,10 +191,8 @@ void FrameSinkBroker::ConfigureDisplays(
 void FrameSinkBroker::SetClipboard(mojom::Clipboard clipboard,
                                   const std::string& text) {
   if (!set_clipboard_) {
-    // An embedder with no clipboard of the desktop's, which is every one that
-    // is a window inside somebody else's session. Not an error and not worth a
-    // line: a producer states its clipboard whatever the browser is running
-    // on, because whose clipboard the browser reads is not a fact it has.
+    // No desktop clipboard inside another session. Not an error: the producer
+    // cannot know which clipboard the browser reads.
     return;
   }
   set_clipboard_.Run(clipboard, text);
@@ -241,10 +231,8 @@ void FrameSinkBroker::OnDisplaysChanged(
 }
 
 BrokeredFrameSink* FrameSinkBroker::SinkForApp(const std::string& app_id) {
-  // An empty app id matches nothing rather than matching the first sink with
-  // no label. A page that names no window is asking for a window that does not
-  // exist, and answering it with somebody else's is the failure this lookup
-  // replaced.
+  // An empty app id matches nothing, so a page never gets another app's
+  // window.
   if (app_id.empty()) {
     return nullptr;
   }

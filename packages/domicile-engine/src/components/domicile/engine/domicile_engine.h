@@ -7,33 +7,25 @@
 #include <stddef.h>
 #include <stdint.h>
 
-// libdomicile_engine.so: the seam between domicile-compositor and the browser.
+// libdomicile_engine.so: the C ABI between domicile-compositor and the
+// browser.
 //
-// The library owns the mojo, domicile-compositor owns the Wayland. Everything
-// behind this header is C++ built by GN — the invitation, the FrameSinkBroker
-// pipe, and in time the SharedImage import and CompositorFrame assembly. None
-// of it reaches cargo and none of it needs to. See
-// docs/architecture/ENGINE-FORK.md#the-c-abi in the Domicile repository, which
-// is the design this implements.
+// The library owns the mojo side; domicile-compositor owns Wayland. See
+// docs/architecture/ENGINE-FORK.md#the-c-abi in the Domicile repository.
 //
-// IT DOES NOT OWN THE THREAD. domicile-compositor runs Smithay's calloop and
-// mojo wants a task runner of its own, so the library keeps mojo on a thread of
-// its own and hands the compositor an fd to poll:
+// Mojo runs on the library's own thread. The compositor polls an fd and calls
+// dispatch, like wl_display_get_fd and wl_display_dispatch:
 //
 //   int  domicile_engine_fd(engine);        // add to calloop
 //   void domicile_engine_dispatch(engine);  // run pending work, fire callbacks
 //
-// which is the shape of wl_display_get_fd and wl_display_dispatch, the loop the
-// compositor already runs. Callbacks fire from inside dispatch, on the caller's
-// thread, and never from anywhere else.
+// Callbacks fire only from inside dispatch, on the caller's thread.
 //
-// IT NEVER SEES A MAILBOX AND NEVER HOLDS A GPU CHANNEL. A dmabuf is sent over
-// the socket already held and the browser imports it, because the browser is
-// the process with an aura::Env to reach a SharedImageInterface through — which
-// is where components/exo/buffer.cc already lives. What comes back is an opaque
-// BufferId. See docs/architecture/ENGINE-FORK.md#buffer-import.
+// The browser imports dmabufs and returns opaque BufferIds, so the compositor
+// never handles mailboxes or GPU channels. See
+// docs/architecture/ENGINE-FORK.md#buffer-import.
 
-// Chromium builds with -fvisibility=hidden, so every entry point says so.
+// Chromium builds with -fvisibility=hidden.
 #define DOMICILE_ENGINE_EXPORT __attribute__((visibility("default")))
 
 #ifdef __cplusplus
@@ -42,25 +34,17 @@ extern "C" {
 
 typedef struct DomicileEngine DomicileEngine;
 
-// Which of the desktop's two clipboards something is on.
-//
-// The pair every desktop has and neither of which is the other: one is what
-// Ctrl-C puts somewhere, and the other is what selecting a word puts somewhere
-// else for the middle button to paste. A plain integer rather than an `enum`,
-// like every other scalar here, so that what crosses is a width both sides
-// spell out.
+// Which of the desktop's two clipboards. A fixed-width integer rather than an
+// `enum` so both sides agree on its size.
 typedef uint32_t DomicileClipboard;
 
-// Ctrl-C and Ctrl-V, which on the Wayland side is wl_data_device.
+// Ctrl-C and Ctrl-V (wl_data_device).
 #define DOMICILE_CLIPBOARD_COPY 0u
-// Selecting a word and the middle button, which on the Wayland side is
-// zwp_primary_selection_device_v1.
+// Select and middle-click paste (zwp_primary_selection_device_v1).
 #define DOMICILE_CLIPBOARD_PRIMARY 1u
 
-// Which way up a monitor is bolted to the desk, as the turn what is drawn on it
-// takes to come out upright -- the `wl_output.transform` rotations, in that
-// order, which count counterclockwise. A plain integer for the reason
-// DomicileClipboard above is one.
+// A monitor's rotation: the turn content takes to appear upright. Values follow
+// `wl_output.transform` order.
 typedef uint32_t DomicileDisplayTransform;
 
 #define DOMICILE_DISPLAY_TRANSFORM_NORMAL 0u
@@ -68,12 +52,12 @@ typedef uint32_t DomicileDisplayTransform;
 #define DOMICILE_DISPLAY_TRANSFORM_ROTATE_180 2u
 #define DOMICILE_DISPLAY_TRANSFORM_ROTATE_270 3u
 
-// A surface, as the compositor names one. Zero is never valid, so it doubles as
-// the failure return of domicile_surface_create.
+// A surface id. Zero is never valid and is domicile_surface_create's failure
+// return.
 typedef uint32_t DomicileSurfaceId;
 
-// An imported buffer. Zero is never valid, so it doubles as the failure return
-// of domicile_surface_import.
+// An imported buffer id. Zero is never valid and is domicile_surface_import's
+// failure return.
 typedef uint64_t DomicileBufferId;
 
 // One plane of a dmabuf, as zwp_linux_buffer_params_v1.add sends it.
@@ -83,10 +67,10 @@ typedef struct DomicileDmabufPlane {
   uint32_t stride;
 } DomicileDmabufPlane;
 
-// A client's buffer, exactly as the compositor already has it.
+// A client's dmabuf.
 //
-// The fds are borrowed for the duration of the call: the library duplicates
-// what it sends and the caller keeps ownership of the originals.
+// The fds are borrowed for the call: the library duplicates what it sends and
+// the caller keeps the originals.
 typedef struct DomicileDmabuf {
   uint32_t width;
   uint32_t height;
@@ -97,43 +81,23 @@ typedef struct DomicileDmabuf {
   DomicileDmabufPlane planes[4];
 } DomicileDmabuf;
 
-// One display the browser is scanning out on.
+// One display the browser scans out to.
 //
-// THIS EXISTS BECAUSE THE ENGINE IS THE PROCESS THAT HOLDS DRM MASTER. A
-// Wayland compositor normally reads its own hardware; Domicile's does not and
-// carries no DRM backend at all, so on a tty the display list is the browser's
-// reading and this is how it crosses. Nested, nothing sends these: the screen
-// there is the host's monitors, which are not this desktop's displays.
+// The engine holds DRM master, so on a tty this is the compositor's only source
+// of displays. Nested sessions never send these.
 //
-// `x`, `y`, `width` and `height` are the display's place on the browser's
-// desktop, in pixels.
-//
-// `physical_width_mm`, `physical_height_mm` and `refresh_mhz` are the panel
-// itself, in the units wl_output states them in, and any of the three may be
-// zero — which is that protocol's own word for a screen with no such number,
-// and what a projector, a virtual output or a connector with no readable mode
-// reports. They are a reading rather than a constant: the browser divides them
-// back out of the DisplaySnapshot's own physical size, which is the only place
-// on the machine those millimeters exist, because the engine is the process
-// holding DRM master.
+// `x`, `y`, `width` and `height` place the display on the browser's desktop, in
+// pixels. `physical_width_mm`, `physical_height_mm` and `refresh_mhz` use
+// wl_output's units; any may be zero when the display does not report it.
 typedef struct DomicileDisplay {
-  // Stable across a hotplug: ozone derives it from the EDID. The compositor
-  // names its wl_output after this, so a monitor unplugged and plugged back in
-  // keeps the output its clients are on.
+  // Derived from the EDID, so stable across a hotplug. The compositor names
+  // its wl_output after it, so a replugged monitor keeps its clients.
   int64_t id;
-  // What to call this monitor: "<MAKE> <MODEL> <SERIAL>", off its EDID, or an
-  // empty string -- never null -- for one that states none of the three.
+  // "<MAKE> <MODEL> <SERIAL>" from the EDID, or "" (never null) if it has
+  // none. A human-readable name for config matching, like kanshi and sway use;
+  // `id` is the identity.
   //
-  // The id above is identity and this is a NAME, and the compositor needs
-  // both. An int64 derived from an EDID cannot be predicted from looking at a
-  // desk, so it is no use to somebody writing down which monitor a layout
-  // means; this is the string kanshi and sway match on.
-  //
-  // BORROWED FOR THE DURATION OF THE CALL, like the array itself: the library
-  // owns the characters and may free them once the callback returns, so a
-  // caller that keeps one copies it.  (It in fact holds them a little longer
-  // -- they live in the event the engine is draining -- but that is an
-  // implementation detail and not something to write a caller against.)
+  // Borrowed for the call; copy it to keep it.
   const char* name;
   int32_t x;
   int32_t y;
@@ -144,50 +108,34 @@ typedef struct DomicileDisplay {
   int32_t refresh_mhz;
 } DomicileDisplay;
 
-// One display, as the compositor wants the connector behind it driven.
+// How the compositor wants one display's connector driven.
 //
-// THE OPPOSITE DIRECTION TO DomicileDisplay, and the opposite kind of fact.
-// That one is what the browser read off the hardware; this is what the
-// compositor's config says to do with it -- which connectors to light, and
-// where each one's mode goes on the browser's own desktop. The two halves are
-// in different processes because the config is the compositor's and DRM master
-// is the browser's, which is the whole reason this crosses at all.
+// The reverse of DomicileDisplay: the compositor's config decides, but the
+// browser holds DRM master and applies it.
 typedef struct DomicileDisplayLayout {
-  // Which display, as DomicileDisplay::id named it. The compositor cannot
-  // invent one: it is the id the browser derived from the EDID and sent.
+  // DomicileDisplay::id, as the browser sent it.
   int64_t id;
-  // Nonzero to light this connector. Zero leaves it dark, which is what a
-  // profile's `enabled: false` says -- the way a laptop panel is named so that
-  // shutting the lid on a full desk still matches the desk's profile, and
-  // turned off so nothing is drawn behind the lid.
+  // Nonzero to light this connector; zero leaves it dark (a profile's
+  // `enabled: false`, such as a closed laptop lid).
   int32_t enabled;
-  // Where its mode goes on the browser's desktop, in physical pixels. Not read
-  // where `enabled` is zero: a display that is not being lit has no corner, and
-  // zero is what to send instead of one.
+  // Position on the browser's desktop, in physical pixels. Zero and ignored
+  // when `enabled` is zero.
   int32_t x;
   int32_t y;
-  // Which way up the monitor is, and how many of its pixels one logical pixel
-  // is worth. THE BROWSER DRAWS BOTH: it turns and scales the window it puts
-  // on this connector, so the page in it lays out upright in the logical
-  // pixels the desktop is described in, and a shell never has to know the
-  // monitor is on its side. Read for a dark connector too, because its window
-  // outlives the dark.
+  // Rotation and scale. The browser applies both to the window on this
+  // connector, so the page always lays out upright in logical pixels. Read
+  // even when dark, because the window outlives that state.
   DomicileDisplayTransform transform;
   double scale;
-  // Where the profile put this display on the desktop the compositor lays
-  // out, in its logical pixels -- what a pointer crosses between monitors by,
-  // because the row x and y are in says nothing about which monitor is above
-  // or beside which. Zeros where `enabled` is zero: a dark display has no
-  // place there.
+  // Position on the compositor's logical desktop, used to move the pointer
+  // between monitors. Zero when `enabled` is zero.
   int32_t desk_x;
   int32_t desk_y;
   int32_t desk_width;
   int32_t desk_height;
 } DomicileDisplayLayout;
 
-// What the browser has to tell the compositor. Each maps onto a Wayland request
-// the compositor already speaks, which is why this is a translation table
-// rather than a protocol:
+// Events from the browser, each mapped to a Wayland request:
 //
 //   configure  xdg_toplevel.configure — the page's layout box changed
 //   frame      wl_surface.frame       — viz asked for a frame
@@ -196,24 +144,16 @@ typedef struct DomicileDisplayLayout {
 //   displays   wl_output              — the whole display list, primary first
 //   copied     wl_data_device.set_selection — something was copied in a page
 //
-// All five fire from domicile_engine_dispatch, on the thread that calls it.
-// `user_data` is passed back untouched. A null function pointer means that
-// event is dropped.
+// All fire from domicile_engine_dispatch, on the calling thread. `user_data`
+// is passed back untouched. A null function pointer drops that event.
 //
-// THIS STRUCT GROWS AT THE END AND NOWHERE ELSE, which is what makes a
-// compositor newer than the engine it loaded safe: the library reads the
-// prefix it knows and ignores the rest. The reverse — an engine newer than the
-// compositor that loaded it — is not safe and is not guarded here, because it
-// is not a configuration this repository ships: `engine-release.nix` pins the
-// engine into the checkout the compositor is built from, and
-// `scripts/test-the-pinned-engine-meets-the-compositor.sh` is what keeps that
-// pair honest.
+// Only append fields, so a newer compositor works with an older engine: the
+// library reads the prefix it knows. A newer engine with an older compositor is
+// unsupported; `engine-release.nix` pins the pair and
+// `scripts/test-the-pinned-engine-meets-the-compositor.sh` checks it.
 //
-// `displays` is the only one carrying an array. It points at `count` records
-// borrowed for the duration of the call — the library owns them and frees them
-// when the callback returns, so a caller that keeps one copies it. `count` is
-// never zero: an empty list is a screen nobody has read yet rather than a
-// desktop with no displays, and the browser does not send one.
+// `displays` points at `count` records borrowed for the call; copy any you
+// keep. `count` is never zero.
 typedef struct DomicileEngineCallbacks {
   void* user_data;
   void (*configure)(void* user_data,
@@ -227,32 +167,21 @@ typedef struct DomicileEngineCallbacks {
   void (*displays)(void* user_data,
                    const DomicileDisplay* displays,
                    uint32_t count);
-  // Something was copied in a page or a browser window, on its way to the
-  // seat. WITHOUT THIS THE BROWSER HAS A CLIPBOARD NOTHING ELSE CAN REACH: it
-  // is not a Wayland client of the compositor — on a tty there is no display
-  // server for it to be one of — so a copy made in a page reaches no seat on
-  // its own.
+  // A copy in a page or browser window. The browser is not a Wayland client,
+  // so this is how its copies reach a seat.
   //
-  // `text` points at `length` bytes borrowed for the duration of the call, and
-  // an empty one is a clipboard with nothing on it — which is what copying
-  // something that is not text leaves behind, because nothing but text crosses
-  // here. LENGTH-CARRIED RATHER THAN NUL-TERMINATED, which is the one place
-  // this ABI differs from itself and is about clipboards rather than taste:
-  // what a person copies is arbitrary bytes and may hold a nul, which a C
-  // string cannot say and would cut short.
+  // `text` is `length` bytes borrowed for the call; empty when the copy was
+  // not text. Length-delimited because copied bytes may contain a NUL.
   void (*copied)(void* user_data,
                  DomicileClipboard clipboard,
                  const char* text,
                  size_t length);
-  // `configure`, and the scale the box was laid out at: how many of the
-  // page's device pixels one of its CSS pixels is. A desk of several monitors
-  // is several pages, each drawn at its own monitor's scale, so the box of one
-  // window comes back down to logical pixels by its own page's scale and not
-  // by whichever page last said what its ratio was.
+  // Like `configure`, plus the page's device pixels per CSS pixel. Each
+  // monitor is its own page at its own scale, so the compositor needs the
+  // scale of the page this box is in.
   //
-  // Called INSTEAD of `configure` where it is set, and last in the struct for
-  // the reason stated above it: an engine that predates it reads the prefix
-  // and goes on calling `configure`.
+  // Called instead of `configure` when set. An older engine ignores it and
+  // keeps calling `configure`.
   void (*configure_at)(void* user_data,
                        DomicileSurfaceId surface,
                        uint32_t width,
@@ -260,13 +189,10 @@ typedef struct DomicileEngineCallbacks {
                        double scale);
 } DomicileEngineCallbacks;
 
-// Joins the browser's mojo graph over the named socket the browser is
-// listening on, and returns an engine or null.
+// Connects to the browser's mojo socket. Returns null on failure, and the
+// library logs why.
 //
-// Null means the socket was not there or the invitation was refused; the
-// library logs why. This blocks until the connection is established or fails,
-// which is bounded by the browser answering an invitation it is already
-// listening for.
+// Blocks until the browser accepts or refuses the invitation.
 DOMICILE_ENGINE_EXPORT DomicileEngine* domicile_engine_connect(
     const char* socket_path,
     DomicileEngineCallbacks callbacks);
@@ -275,28 +201,19 @@ DOMICILE_ENGINE_EXPORT DomicileEngine* domicile_engine_connect(
 // after this returns.
 DOMICILE_ENGINE_EXPORT void domicile_engine_destroy(DomicileEngine* engine);
 
-// The fd to poll. Readable exactly when domicile_engine_dispatch has something
-// to do, so a compositor that adds it to calloop is woken for every event and
-// for nothing else. Valid until domicile_engine_destroy. -1 if the engine
-// could not create it.
+// The fd to poll; readable when domicile_engine_dispatch has work. Valid until
+// domicile_engine_destroy. -1 if the engine could not create it.
 DOMICILE_ENGINE_EXPORT int domicile_engine_fd(DomicileEngine* engine);
 
-// Runs the work the fd woke you for, firing callbacks on this thread. Cheap
-// and harmless when there is nothing to do, which is what a spurious wakeup
-// looks like.
+// Runs pending work, firing callbacks on this thread. Safe to call on a
+// spurious wakeup.
 DOMICILE_ENGINE_EXPORT void domicile_engine_dispatch(DomicileEngine* engine);
 
-// Asks the browser to broker a frame sink, and returns the surface to name in
-// every later call about it — or zero if the browser refused.
+// Asks the browser to broker a frame sink for a new window. Returns the surface
+// id, or zero if the browser refused.
 //
-// This is a window appearing. The browser holds the page's
-// embedExternalSurface() until a producer has been brokered a sink, so a page
-// that got there first is waiting for exactly this call.
-//
-// `app_id` is what the compositor calls the window. It reaches viz as the
-// frame sink's debug label, which is where a name is useful and where a
-// mistaken one is harmless; which surface a given <app> element shows is the
-// chrome protocol's to decide and is not settled here.
+// A page's embedExternalSurface() waits until this call brokers a sink.
+// `app_id` becomes the frame sink's debug label only.
 DOMICILE_ENGINE_EXPORT DomicileSurfaceId
 domicile_surface_create(DomicileEngine* engine, const char* app_id);
 
@@ -304,26 +221,18 @@ domicile_surface_create(DomicileEngine* engine, const char* app_id);
 DOMICILE_ENGINE_EXPORT void domicile_surface_destroy(DomicileEngine* engine,
                                                      DomicileSurfaceId surface);
 
-// Imports a client's dmabuf and returns the id to name it by, or zero.
+// Imports a client's dmabuf (zwp_linux_dmabuf_v1). Returns the buffer id, or
+// zero if the browser refused.
 //
-// This is zwp_linux_dmabuf_v1: the fds the client already sent. Blocking,
-// because a buffer that does not exist is not something the compositor can
-// attach — and it happens once per buffer, not once per frame.
-//
-// Zero means the browser refused it. The commonest reason by far is that there
-// is no GPU to import into: an ozone platform that does not implement
-// CreateNativePixmapFromHandle — headless is one — cannot do this at all.
+// Blocks; it runs once per buffer, not per frame. The usual failure is an
+// ozone platform without CreateNativePixmapFromHandle, such as headless.
 DOMICILE_ENGINE_EXPORT DomicileBufferId
 domicile_surface_import(DomicileEngine* engine,
                         DomicileSurfaceId surface,
                         const DomicileDmabuf* dmabuf);
 
-// Submits a frame showing `buffer`, damaging the given rectangle. An empty
-// rectangle — zero width or height — means the whole surface.
-//
-// This is wl_surface.commit. The browser puts the matching
-// TransferableResource in the CompositorFrame; the producer never names a
-// mailbox because it never has one.
+// Submits a frame showing `buffer` (wl_surface.commit), damaging the given
+// rectangle. An empty rectangle means the whole surface.
 DOMICILE_ENGINE_EXPORT void domicile_surface_submit(DomicileEngine* engine,
                                                     DomicileSurfaceId surface,
                                                     DomicileBufferId buffer,
@@ -332,15 +241,12 @@ DOMICILE_ENGINE_EXPORT void domicile_surface_submit(DomicileEngine* engine,
                                                     int32_t damage_width,
                                                     int32_t damage_height);
 
-// domicile_surface_submit, showing only the `crop` of `buffer` -- a rectangle
-// in the buffer's pixels, where an empty one is the whole buffer.
+// Like domicile_surface_submit, but shows only `crop` of `buffer`, in buffer
+// pixels. An empty crop is the whole buffer.
 //
-// This is xdg_surface.set_window_geometry. A client that draws its own shadow
-// commits a buffer larger than its window, and only the window is the <app>
-// element's box; the shadow drawn into it is dead space and every click lands
-// off by the shadow's width. A new symbol rather than new arguments on the old
-// one, so a compositor newer than its engine fails to find it rather than
-// calling it with arguments it does not read.
+// Implements xdg_surface.set_window_geometry, so a client's own shadow is not
+// part of the <app> box. A separate symbol so a newer compositor fails to
+// resolve it against an older engine instead of passing ignored arguments.
 DOMICILE_ENGINE_EXPORT void domicile_surface_submit_crop(
     DomicileEngine* engine,
     DomicileSurfaceId surface,
@@ -354,52 +260,35 @@ DOMICILE_ENGINE_EXPORT void domicile_surface_submit_crop(
     int32_t damage_width,
     int32_t damage_height);
 
-// Tells the browser which connectors to light and where.
+// Tells the browser which connectors to light and where, in answer to the
+// `displays` callback.
 //
-// THE ANSWER TO the `displays` callback, and the reason this ABI carries both
-// directions: what the browser reads off DRM is a fact, and what to do with it
-// is a config only the compositor holds.
+// An empty list means the compositor has no preference, and the browser lights
+// what the hardware reports. This turns a panel back on when a monitor unplug
+// stops a profile from matching.
 //
-// AN EMPTY LIST IS NOT "LIGHT NOTHING". It is the compositor having no
-// opinion, which is what every desktop but a matched profile's has, and the
-// browser answers it by going back to lighting what the hardware reports. That
-// is load-bearing rather than tidy: a profile that turned a panel off stops
-// matching the moment a monitor is unplugged, and something has to say the
-// panel comes back on.
-//
-// The records are borrowed for the duration of the call -- the library copies
-// what it needs before it returns.
-//
-// Nothing comes back, and not for want of trying: a modeset is committed on
-// the browser's own DRM thread and answered on a later task, so anything this
-// returned would be a guess. What the caller learns instead is the next
-// `displays` callback, which the modeset itself provokes.
+// The records are borrowed for the call. Nothing is returned because the
+// modeset completes asynchronously; the resulting `displays` callback reports
+// the outcome.
 DOMICILE_ENGINE_EXPORT void domicile_displays_configure(
     DomicileEngine* engine,
     const DomicileDisplayLayout* layout,
     uint32_t count);
 
-// Tells the browser what is on one of the desktop's two clipboards.
+// Sets the contents of one of the desktop's clipboards.
 //
-// THE BROWSER IS TOLD RATHER THAN ASKED, because the compositor already has
-// the bytes: a selection arriving on the seat is read out of the client that
-// offered it whether or not anybody pastes, so there is nothing left to fetch
-// and a page pasting is answered out of the browser's own memory.
+// The compositor reads every seat selection eagerly, so it pushes the bytes
+// and the browser serves pastes from memory. Send empty `text` to clear the
+// clipboard, or the browser keeps offering the last value.
 //
-// An empty `text` is a clipboard with nothing on it, which is what a desktop
-// that has just started has, and is worth saying: a browser never told would
-// go on offering whatever it was told last.
-//
-// `text` is borrowed for the duration of the call and carries its length for
-// the reason the `copied` callback does. Nothing comes back; what the browser
-// does with it is put it where a page pasting reads.
+// `text` is borrowed for the call and length-delimited, like `copied`.
 DOMICILE_ENGINE_EXPORT void domicile_clipboard_set(DomicileEngine* engine,
                                                    DomicileClipboard clipboard,
                                                    const char* text,
                                                    size_t length);
 
-// Drops an imported buffer. Every buffer goes when its surface does, so this is
-// for a client that destroys one of its own.
+// Drops an imported buffer. Destroying a surface drops its buffers, so this is
+// for a client that destroys a single buffer.
 DOMICILE_ENGINE_EXPORT void domicile_buffer_destroy(DomicileEngine* engine,
                                                     DomicileSurfaceId surface,
                                                     DomicileBufferId buffer);

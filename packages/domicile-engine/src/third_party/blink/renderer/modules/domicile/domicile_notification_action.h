@@ -10,8 +10,8 @@
 
 namespace blink {
 
-// One button of a notification, as the compositor described it. Immutable,
-// for DomicileTrayItem's reason.
+// One button of a notification, as the compositor described it. Immutable;
+// see DomicileTrayItem.
 class MODULES_EXPORT DomicileNotificationAction final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 

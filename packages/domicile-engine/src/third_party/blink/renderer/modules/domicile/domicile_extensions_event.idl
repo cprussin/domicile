@@ -10,12 +10,10 @@
 
   // The extensions with an action in this page's profile.
   //
-  // The whole tray every time rather than the row that changed, for the
-  // clipboard's reason: a page reconciling deltas could be wrong forever after
-  // missing one. It arrives once as soon as the page is listening, so a shell
-  // that reloaded is told rather than drawing an empty tray.
+  // Sent whole on every change, so a page never applies deltas. Also sent as
+  // soon as the page listens, so a reloaded shell is caught up.
   //
-  // No `arrival`, unlike the compositor's events: an action's state lives in
-  // the browser process, and there is no socket read to stamp.
+  // No `arrival`: action state lives in the browser process, so there is no
+  // socket read to timestamp.
   readonly attribute FrozenArray<DomicileExtension> extensions;
 };

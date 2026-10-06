@@ -11,11 +11,10 @@
 
 namespace blink {
 
-// An application a desktop entry offers, as the compositor described it.
+// An application from a desktop entry, as the compositor described it.
 //
-// A ScriptWrappable rather than a dictionary, for DomicileClipboardEntry's
-// reason: WebIDL will not have a dictionary as the element type of an
-// attribute's array, and these are read off a DomicileAppsEvent.
+// A ScriptWrappable because WebIDL does not allow a dictionary as an
+// attribute's array element type.
 class MODULES_EXPORT DomicileDesktopEntry final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
@@ -42,12 +41,11 @@ class MODULES_EXPORT DomicileDesktopEntry final : public ScriptWrappable {
   String name_;
   // Empty for an entry that has none.
   String comment_;
-  // The argv, never empty: the browser drops an entry with no command before
-  // it gets here.
+  // The argv. Never empty: the browser drops entries with no command.
   Member<FrozenArray<IDLString>> command_;
   // A `data:` URL, or empty for an entry whose icon was not found.
   String icon_;
-  // The same, for the picture the entry names for a launcher's preview.
+  // The same, for the entry's launcher preview image.
   String preview_;
 };
 

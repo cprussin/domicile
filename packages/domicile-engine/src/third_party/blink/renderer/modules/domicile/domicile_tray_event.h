@@ -15,13 +15,11 @@ namespace blink {
 
 class DomicileTrayEventInit;
 
-// The system tray: every application showing an icon, in the order they
-// registered.
+// The system tray: every application showing an icon, in registration order.
 //
-// Pushed, so there is nothing on DomicileHost this answers: an icon is a
-// StatusNotifierItem on the session bus, which the compositor hosts. It is
-// sent whenever an icon arrives, leaves or changes how it looks, and once more
-// to a page that has just connected.
+// The compositor hosts StatusNotifierItems on the session bus and pushes the
+// tray whenever an icon arrives, leaves or changes, and to a newly connected
+// page.
 class MODULES_EXPORT DomicileTrayEvent final : public Event {
   DEFINE_WRAPPERTYPEINFO();
 
@@ -38,17 +36,15 @@ class MODULES_EXPORT DomicileTrayEvent final : public Event {
 
   const FrozenArray<DomicileTrayItem>& items() const { return *items_; }
 
-  // When the browser process had this, on `performance.now()`'s clock. See
-  // DomicileAppEvent::arrival.
+  // When the browser process received this, on `performance.now()`'s clock.
+  // See DomicileAppEvent::arrival.
   DOMHighResTimeStamp arrival() const { return arrival_; }
 
   const AtomicString& InterfaceName() const override;
   void Trace(Visitor*) const override;
 
  private:
-  // Frozen because the IDL says so, and never null: both constructors build
-  // one, an empty tray included. An absent list and an empty one are the same
-  // answer here -- a desk with no icons on it.
+  // Frozen per the IDL, and never null: an absent list is an empty one.
   Member<FrozenArray<DomicileTrayItem>> items_;
   DOMHighResTimeStamp arrival_ = 0;
 };

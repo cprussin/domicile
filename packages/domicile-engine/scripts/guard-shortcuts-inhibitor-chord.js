@@ -1,44 +1,30 @@
-// The shell guard-shortcuts-inhibitor-chord.sh drives: a desktop's window that
-// says which keys reached it.
+// Shell module for guard-shortcuts-inhibitor-chord.sh. Logs which keys reach
+// the window.
 //
-// A module rather than a page, because that is what a shell is here — the
-// engine writes the document and loads exactly one module into it, so a guard
-// that shipped its own HTML would be running a configuration the product does
-// not have. See ShellURLLoaderFactory::ShellDocument.
+// It is a module because the engine writes the shell's document and loads one
+// module into it. See ShellURLLoaderFactory::ShellDocument.
 //
-// THIS IS ONE OF THE GUARD'S TWO OBSERVERS. The other is a sway binding that
-// writes a line when it fires; between them they say which side of the
-// inhibitor a Meta chord landed on. A plain DOM listener rather than
-// `domicile.grabShortcut`, because what is under test is whether the key
-// reached the page at all, and a claim would put the browser process's
-// matching between the key and the reading.
+// The guard also watches a sway binding; together they show which side of the
+// inhibitor a Meta chord reached. This uses a plain DOM listener, not
+// `domicile.grabShortcut`, so browser-side matching cannot affect the result.
 //
-// WHAT THIS PAGE SAYS, to the console, which the engine writes to its own log:
+// Console lines (the engine writes them to its log):
 //
-//   GUARD listening          the listener below is attached, so a key that
-//                            reaches this document will be reported. Without
-//                            it, "the page did not get the chord" is true of a
-//                            page that could not have said so
-//   GUARD focused            this document has focus, which it has only while
-//                            the host has given the window the keyboard
+//   GUARD listening          the keydown listener is attached
+//   GUARD focused            the document has keyboard focus
 //   GUARD keydown key=… meta=…
-//                            a key reached this document. `key` rather than
-//                            `code`: the virtual keyboard uploads a keymap of
-//                            its own with its keys at codes it chose, so the
-//                            code names whatever key sits there on a real
-//                            keyboard and the key is what was asked for
+//                            a key reached the document. Logs `key`, not
+//                            `code`: the virtual keyboard uploads its own
+//                            keymap, so `code` does not name the requested key
 //
-// Everything is inside `Shell`, which the document Domicile writes calls once
-// the module has loaded.
+// The document Domicile writes calls `Shell` once the module loads.
 
 export const Shell = () => {
   const say = (what) => {
     console.log(`GUARD ${what}`);
   };
 
-  // Capture, on the window, so that nothing in the document can stop a key before
-  // it is reported. There is nothing else in the document, but a reading that
-  // depended on that would be a reading about the document.
+  // Capture on the window so nothing in the document can stop a key first.
   window.addEventListener(
     "keydown",
     (event) => {
@@ -48,9 +34,8 @@ export const Shell = () => {
   );
   say("listening");
 
-  // Asked on an interval rather than on `focus`, because the window can be
-  // activated before this module runs, and a `focus` event that fired first is
-  // one this would wait on for ever.
+  // Poll instead of waiting for `focus`: the window may be activated before
+  // this module runs.
   const watchingFocus = setInterval(() => {
     if (document.hasFocus()) {
       say("focused");

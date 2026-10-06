@@ -10,20 +10,21 @@ namespace ui {
 
 namespace {
 
-// Speeds are libinput units per millisecond. A unit is roughly a tenth of a
-// millimeter of finger travel, so the threshold is about 5 cm/s: below it a
-// scroll is somebody reading, and above it somebody traveling.
+// Speeds are in libinput units per millisecond. A unit is about 0.1 mm of
+// finger travel, so the threshold is about 5 cm/s: slower is reading, faster
+// is moving through the page.
 constexpr double kThreshold = 0.5;
-// How much gain each unit per millisecond past the threshold adds.
+// Gain added per unit/ms above the threshold.
 constexpr double kSlope = 1.5;
-// Reached at 2.5 units per millisecond, a brisk flick.
+// Reached at 2.5 units/ms, a brisk flick.
 constexpr double kMaxGain = 4.0;
 // Longer than any pad's report interval, shorter than a person pausing.
 constexpr base::TimeDelta kGestureGap = base::Milliseconds(100);
-// Two reports inside one millisecond are one report as far as speed goes.
+// Floor on the interval between reports, so close reports don't spike the
+// speed.
 constexpr double kMinIntervalMs = 1.0;
 
-// The first event of a gesture has nothing to measure a speed against.
+// Returns 1 for the first event of a gesture, which has no speed yet.
 float Gain(const gfx::Vector2dF& delta,
            std::optional<base::TimeTicks> last,
            base::TimeTicks time) {
@@ -50,7 +51,7 @@ gfx::Vector2d ScrollAccelerator::Scroll(const gfx::Vector2dF& delta,
   remainder_ += gfx::ScaleVector2d(delta, Gain(delta, last_, time));
   last_ = time;
 
-  // Toward zero, which is what the converter's `gfx::Vector2d(h, v)` did.
+  // Truncate toward zero; the fraction carries to the next event.
   const gfx::Vector2d whole(static_cast<int>(remainder_.x()),
                             static_cast<int>(remainder_.y()));
   remainder_ -= gfx::Vector2dF(static_cast<float>(whole.x()),

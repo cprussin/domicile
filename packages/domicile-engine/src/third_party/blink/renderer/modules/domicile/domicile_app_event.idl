@@ -10,27 +10,20 @@
   readonly attribute DOMString appId;
   readonly attribute DOMString title;
 
-  // When the browser process had this message, on `performance.now()`'s
-  // clock.
-  //
-  // NOT `timeStamp`, which is when this object was constructed -- in this
-  // renderer, at dispatch -- so subtracting it from itself reports a few
-  // microseconds of Blink and calls it the IPC. The difference between the two
-  // IS the stage: the read off the compositor's socket, the mojo message, the
-  // hop into this process and the dispatch. See
+  // When the browser process received the message, on `performance.now()`'s
+  // clock. `timeStamp - arrival` measures the IPC to this renderer. See
   // components/domicile/mojom/control_channel.mojom.
   readonly attribute DOMHighResTimeStamp arrival;
 
-  // False until the client has committed a buffer. A shell that treats width
-  // and height as meaningful while this is false opens the window at nothing.
+  // False until the client commits a buffer. Ignore width and height until
+  // then.
   readonly attribute boolean hasSize;
   readonly attribute double width;
   readonly attribute double height;
 
-  // `popupplaced` only: the window or popup this popup is over, and where its
-  // box goes from that one's top-left, in CSS pixels; and whether it grabbed,
-  // which a menu does and a tooltip does not. Empty, zero and false on every
-  // other event.
+  // `popupplaced` only: the parent window or popup, the offset from its
+  // top-left in CSS pixels, and whether the popup grabs input (menus do,
+  // tooltips do not). Empty, zero and false on other events.
   readonly attribute DOMString parentAppId;
   readonly attribute double x;
   readonly attribute double y;

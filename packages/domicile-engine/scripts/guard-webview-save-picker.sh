@@ -1,43 +1,40 @@
 #!/usr/bin/env bash
-# A page in a browser window asking showSaveFilePicker() for a file, the shell
-# asked instead of a dialog drawn, and the bytes arriving where it said.
+# Checks that showSaveFilePicker() in a browser window asks the shell instead
+# of drawing a dialog, and that the bytes land where the shell chose (patch
+# 0086). See packages/domicile-engine/docs/GUARDS.md.
 #
 #   nix develop .#full --command \
 #     ./packages/domicile-engine/scripts/guard-webview-save-picker.sh /build/chromium/src
 #
-# Headless, like the other webview guards: nothing here is measured in pixels.
+# Runs headless: nothing here is measured in pixels.
 #
-# WHY THIS EXISTS. The PDF viewer's download button froze a desk on a console:
-# its save opened Chrome's portal dialog, which stops the input of the window
-# it is parented to -- and on a console that window is the desk. Patch 0086
-# makes every file dialog the browser opens a question to the shell
-# (`UseTheShellForFileDialogs`). showSaveFilePicker() is one of those dialogs
-# that a page can open; the PDF viewer's chrome.fileSystem.chooseEntry is made
-# by the same factory, and a PDF's toolbar is not something this harness can
-# press.
+# Chromium's portal file dialog blocks input to its parent window, which on a
+# console is the desk, so a save from the PDF viewer froze the desktop. Patch
+# 0086 (`UseTheShellForFileDialogs`) sends every browser file dialog to the
+# shell. This guard uses showSaveFilePicker(), which a page can open; the PDF
+# viewer's chrome.fileSystem.chooseEntry uses the same factory, but the
+# harness cannot press a PDF toolbar.
 #
-# WHAT IT ASSERTS, in order:
+# Checks, in order:
 #
-#   the shell page ran                or nothing here was ever set up
-#   a press reached the shell's        the harness can deliver a click at all
+#   the shell page ran
+#   a press reached the shell's        the harness can deliver a click
 #     document
-#   the page in the window ran         a guest was made, attached, navigated
+#   the page in the window ran         a guest was made, attached and navigated
 #   the press landed in the guest      on the button, which fills the page
-#   the browser asked                  the dialog factory found the guest --
-#                                      patch 0086
-#   the shell was asked, in save mode  the question crossed to the element,
-#     with the page's file name        carrying the name the page suggested
+#   the browser asked                  the dialog factory found the guest
+#   the shell was asked, in save mode  with the name the page suggested
+#     with the page's file name
 #   the shell answered                 its answer did not throw
-#   the file is where it said          THE CLAIM: on the disk, at the path the
-#                                      shell chose, with the bytes the page wrote
+#   the file is where it said          the main claim: the page's bytes at the
+#                                      path the shell chose
 #
-# HOW IT CAN FAIL. NEGATIVE=1 runs the same save with a shell that CANCELS. The
-# page must be told -- `AbortError`, which is a dialog answered rather than one
-# left open -- and nothing may land anywhere in the home.
+# NEGATIVE=1 is the control: the shell cancels. The page must get `AbortError`
+# (the dialog was answered, not left open), and nothing may land in the home.
 #
-# THE HOME IS THIS GUARD'S OWN, and it starts with nothing in it but the folder
-# the shell picks. See guard-webview-download.sh for how the browser's own
-# files there are told apart.
+# The guard uses its own home, empty except for the folder the shell picks.
+# See guard-webview-download.sh for how the browser's own files there are told
+# apart.
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
@@ -62,19 +59,19 @@ PROFILE="${PROFILE:-/tmp/domicile-webview-save-picker-profile}"
 HOME_DIR="${HOME_DIR:-/tmp/domicile-webview-save-picker-home}"
 WIDTH="${WIDTH:-1024}"
 HEIGHT="${HEIGHT:-768}"
-# Not `STRIP`, which a build shell exports as a program -- see
+# Not `STRIP`, which the build shell exports as a program. See
 # guard-webview-new-window.sh.
 STRIP_HEIGHT="${STRIP_HEIGHT:-64}"
 CHROME_X=$((WIDTH / 2))
 CHROME_Y=$((STRIP_HEIGHT / 2))
-# The middle of the guest, which the button fills.
+# The center of the guest, which the button fills.
 WINDOW_X=$((WIDTH / 2))
 WINDOW_Y=$((STRIP_HEIGHT + (HEIGHT - STRIP_HEIGHT) / 2))
 
 FOR_SECONDS="${FOR_SECONDS:-90}"
 
-# What the page calls the file and what it writes -- guard-webview-file-chooser-
-# server.py's SAVE_NAME and SAVE_TEXT -- and where the shell puts it.
+# The page's file name and contents (SAVE_NAME and SAVE_TEXT in
+# guard-webview-file-chooser-server.py), and where the shell puts it.
 NAME="guard-save.txt"
 TEXT="a file a page saved where the shell said"
 PICK="saved/renamed-by-the-shell.txt"
@@ -163,7 +160,7 @@ wait_for_line "$TRIES" "GUARD save-loaded" "$ENGINE_LOG" ||
   echo "nothing ever loaded in the window" >&2
 sleep 3
 
-# 4. THE BEFORE: a press on the shell's own strip.
+# 4. A press on the shell's strip, to show clicks arrive.
 python3 "$SCRIPTS/guard-webview-click-mouse.py" \
   --port "$DEBUG_PORT" --x "$CHROME_X" --y "$CHROME_Y" \
   >"$CLICK_LOG" 2>&1 ||
@@ -171,15 +168,15 @@ python3 "$SCRIPTS/guard-webview-click-mouse.py" \
 wait_for_line 20 "GUARD chrome-mousedown" "$ENGINE_LOG" ||
   echo "the shell's document never reported the first click" >&2
 
-# 5. THE CLICK THIS GUARD IS ABOUT, on the button. A click and not a script,
-# because showSaveFilePicker() needs the user's gesture.
+# 5. The click under test, on the button. A real click, because
+#    showSaveFilePicker() requires a user gesture.
 python3 "$SCRIPTS/guard-webview-click-mouse.py" \
   --port "$DEBUG_PORT" --x "$WINDOW_X" --y "$WINDOW_Y" \
   >>"$CLICK_LOG" 2>&1 ||
   echo "the click into the window could not be driven; see $CLICK_LOG" >&2
 
-# A fixed wait, because the control's readings are absences -- long enough for
-# the question, the answer and a few bytes written and renamed.
+# A fixed wait, because the control's readings are absences. Long enough for
+# the question, the answer and the write.
 sleep 10
 
 saw() { # $1 pattern
@@ -190,21 +187,18 @@ SAW_SHELL=$(saw "GUARD shell-loaded")
 SAW_PAGE=$(saw "GUARD save-loaded")
 SAW_CHROME=$(saw "GUARD chrome-mousedown")
 SAW_GUEST=$(saw "GUARD guest-mousedown")
-# The browser's own line, from the dialog UseTheShellForFileDialogs makes: it
-# separates "the dialog never asked" from "it asked and the shell was never
-# told".
+# Logged by the dialog UseTheShellForFileDialogs creates. Separates "the
+# dialog never asked" from "it asked and the shell was not told".
 SAW_BROWSER=$(saw "domicile: a file dialog asked the shell instead of drawing.")
 SAW_ASKED=$(saw "GUARD file-chooser mode=save ")
 SAW_SUGGESTED=$(saw "GUARD file-chooser mode=save suggested=$NAME ")
 SAW_ANSWERED=$(saw "GUARD answered")
-# What the page was told: a cancel the dialog passed on, which a picker left
-# open -- the freeze this guard is about, in its headless form -- never is.
+# The page received the cancel. A picker left open, the headless form of the
+# freeze, never sends one.
 SAW_REFUSED=$(saw "GUARD save-refused AbortError")
 SAVED=$([ "$(cat "$HOME_DIR/$PICK" 2>/dev/null)" = "$TEXT" ] && echo 1 || echo 0)
-# The save anywhere in the home: a file holding the page's bytes, or a
-# `.crswap` the page was writing through -- saved somewhere the shell did not
-# say, or saved at all after a cancel. By what is in it, for the reason
-# guard-webview-download.sh gives.
+# Any file in the home holding the page's bytes, or a `.crswap` write file.
+# Matched by content, as in guard-webview-download.sh.
 FOUND="$(
   {
     grep -rlF -- "$TEXT" "$HOME_DIR" 2>/dev/null
@@ -222,7 +216,8 @@ echo "everything in the home, for the record:"
 find "$HOME_DIR" -type f 2>/dev/null | sed 's/^/  /'
 echo
 
-# WHICH END TO BLAME, run directly by `scripts/test-webview-save-picker-guard.sh`.
+# The verdict. `scripts/test-webview-save-picker-guard.sh` runs this block
+# directly.
 FAILURE=""
 PASSED=""
 if [ "$SAW_SHELL" != "1" ]; then

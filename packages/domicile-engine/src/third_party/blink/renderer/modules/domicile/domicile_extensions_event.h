@@ -16,10 +16,9 @@ class DomicileExtensionsEventInit;
 
 // The extensions with an action, for the shell's tray.
 //
-// Pushed, so there is nothing on DomicileHost this answers: the browser sends
-// the whole tray when the page binds and again whenever an extension is added,
-// removed, or its action changes. See components/domicile/mojom/
-// extension_tray.mojom.
+// Push-only: the browser sends the whole tray when the page binds and on any
+// extension or action change. See
+// components/domicile/mojom/extension_tray.mojom.
 class MODULES_EXPORT DomicileExtensionsEvent final : public Event {
   DEFINE_WRAPPERTYPEINFO();
 
@@ -42,9 +41,8 @@ class MODULES_EXPORT DomicileExtensionsEvent final : public Event {
   void Trace(Visitor*) const override;
 
  private:
-  // Frozen because the IDL says so, and never null: both constructors build
-  // one, an empty tray included -- which is an answer, a profile with no
-  // extension that has an action.
+  // Frozen per the IDL, and never null. Empty means no extension in the
+  // profile has an action.
   Member<FrozenArray<DomicileExtension>> extensions_;
 };
 

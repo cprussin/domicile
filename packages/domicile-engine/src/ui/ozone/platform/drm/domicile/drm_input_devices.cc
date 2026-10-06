@@ -16,7 +16,7 @@ namespace ui {
 
 namespace {
 
-// logind's three, spelled as it spells them.
+// logind's `PauseDevice` types.
 constexpr char kPauseTypePause[] = "pause";
 constexpr char kPauseTypeForce[] = "force";
 constexpr char kPauseTypeGone[] = "gone";
@@ -58,11 +58,8 @@ void DrmTakenDevices::Take(DeviceNumber number,
                            DeviceLiveness liveness) {
   devices_[number] = Device{id, path, liveness};
 
-  // RECORDED WHERE A RELEASE DOES NOT REACH. `devices_` answers "is this
-  // device held right now", and a `GiveBack` empties the entry on the way
-  // into every re-take. `names_` answers "what does the factory call this
-  // number", which stays true for as long as the node is there and is what a
-  // `ResumeDevice` arriving in that window has to be answered from.
+  // `names_` survives `GiveBack`, so a `ResumeDevice` between a release and
+  // the re-take can still find the device.
   names_[number] = Device{id, path, liveness};
 
   VLOG(1) << "domicile: took input device " << number.major << ":"
@@ -77,9 +74,7 @@ base::ScopedFD DrmTakenDevices::Resumed(const base::FilePath& path) {
     return base::ScopedFD();
   }
 
-  // ERASED AS IT IS HANDED OVER. A descriptor left behind would be given to
-  // the next open of this path -- a real hotplug months later -- instead of
-  // the one logind would hand out then.
+  // Erase it, or a later hotplug of this path would get a stale descriptor.
   base::ScopedFD descriptor = std::move(waiting->second);
   resumed_.erase(waiting);
   return descriptor;
@@ -88,25 +83,13 @@ base::ScopedFD DrmTakenDevices::Resumed(const base::FilePath& path) {
 PauseAnswer DrmTakenDevices::Pause(DeviceNumber number,
                                    std::string_view type) {
   if (type == kPauseTypeGone) {
-    // A "gone" THIS SESSION ASKED FOR IS NOT THE NODE GOING AWAY, and telling
-    // those two apart is the difference between a console switch and a
-    // desktop with no keyboard. `ReleaseDevice` frees the `SessionDevice`
-    // logind was holding, and logind reports that freeing the way it reports
-    // any other: a `PauseDevice` of type "gone" for the number. Every
-    // `GiveBack` therefore buys one, and `GiveBack` is on the way into every
-    // re-take -- so the echo lands AFTER the `TakeDevice` that replaced the
-    // device it names, and forgetting the name there strands a device logind
-    // is about to resume.
-    //
-    // MEASURED ON A CONSOLE SWITCH: thirteen devices force-paused, thirteen
-    // "gone" pauses in the 141 microseconds after them, `reclaimed 0 of 0` on
-    // the way back, and thirteen `logind resumed device N, which this session
-    // never took`. Keyboard and trackpad among them, and no chord left to
-    // leave the console with.
+    // logind answers each `ReleaseDevice` with a "gone", which can arrive
+    // after the re-take. Treating that echo as an unplug would forget a
+    // device logind is about to resume, losing all input on a console
+    // switch.
     const auto echo = released_.find(number);
     if (echo != released_.end()) {
-      // ONE PER RELEASE. A second "gone" with nothing outstanding is the node
-      // really going away, and it is answered below.
+      // One echo per release. A "gone" beyond those is a real unplug.
       echo->second -= 1;
       if (echo->second == 0) {
         released_.erase(echo);
@@ -118,11 +101,8 @@ PauseAnswer DrmTakenDevices::Pause(DeviceNumber number,
       return PauseAnswer::kNothingToSay;
     }
 
-    // The node is unplugged. There is nothing left to give back, and udev's
-    // own removal is what takes the converter down -- so forgetting it is the
-    // whole of the handling. The name goes with it: this is the one pause
-    // that says the device is not coming back, so a later resume for this
-    // number really would be one nothing could reopen.
+    // Unplugged: forget the device and its name. udev's removal stops the
+    // converter.
     devices_.erase(number);
     names_.erase(number);
     VLOG(1) << "domicile: input device " << number.major << ":" << number.minor
@@ -132,10 +112,8 @@ PauseAnswer DrmTakenDevices::Pause(DeviceNumber number,
 
   const auto taken = devices_.find(number);
   if (taken == devices_.end()) {
-    // logind pauses only what it handed over, so this is an invariant
-    // violation and says so. It is still answered below: silence here leaves
-    // the console wedged until logind's own timeout, which is worse than an
-    // answer about a device nobody holds.
+    // logind pauses only devices it gave us, so log this. Still answer a
+    // "pause", or the console switch waits for logind's timeout.
     LOG(ERROR) << "logind paused device " << number.major << ":" << number.minor
                << ", which this session never took";
     return type == kPauseTypePause ? PauseAnswer::kCompleteIt
@@ -143,26 +121,18 @@ PauseAnswer DrmTakenDevices::Pause(DeviceNumber number,
   }
 
   if (type == kPauseTypeForce) {
-    // THE DEVICE IS KEPT AND THE DESCRIPTOR IS WRITTEN OFF. logind has
-    // already `EVIOCREVOKE`d it -- `session_device_pause_all` stops every
-    // device in the session before it says a word -- but `s->devices` still
-    // has this session down as the holder, so the device is still owed back
-    // and still cannot be taken again until it has been given back.
+    // logind has already revoked the descriptor but still counts this session
+    // as the holder, so keep the device until it is released.
     taken->second.liveness = DeviceLiveness::kRevoked;
 
-    // COPIED OUT BEFORE THE REOPEN, for the reason `Resume` copies one: the
-    // reopen runs `OpenInputDevice` synchronously and that comes straight
-    // back here, so nothing may be standing on an iterator into `devices_`
-    // when it is called.
+    // Copy before the reopen: it re-enters this class synchronously and can
+    // invalidate the iterator.
     const int id = taken->second.id;
     const base::FilePath path = taken->second.path;
 
-    // THE DETACH, AND THE FIRST TRY AT THE WAY BACK. The reopen closes the
-    // device -- which is what takes the converter off a descriptor whose every
-    // read is `ENODEV` -- and then opens it again. That open succeeds only if
-    // this session is already in front of the user again, which a force pause
-    // usually means it is not; when it is not, the device comes back recorded
-    // as revoked and `Reclaim` is what finishes the job.
+    // Close the dead converter and try to reopen. While the session is
+    // inactive the reopen yields a revoked device, which `Reclaim` fixes
+    // later.
     reopen_.Run(id, path);
     return PauseAnswer::kDeviceIsRevoked;
   }
@@ -172,14 +142,8 @@ PauseAnswer DrmTakenDevices::Pause(DeviceNumber number,
 }
 
 bool DrmTakenDevices::Resume(DeviceNumber number, base::ScopedFD descriptor) {
-  // ANSWERED FROM THE NAMES AND NOT FROM THE HOLD. logind sends this only for
-  // a device in `s->devices`, so a resume is logind saying it holds this
-  // device for this session and has just re-opened it live -- a fact about
-  // logind's table, which is the one that decides. Asking `devices_` whether
-  // to believe it is how thirteen live descriptors were dropped on the floor
-  // in a measured run: every device came up revoked, logind force-paused the
-  // whole set a moment later, and by the time the activation's resumes
-  // arrived the held table no longer named any of them.
+  // Look up `names_`, not `devices_`: logind resumes only devices it holds
+  // for this session, even if `devices_` has dropped them.
   const auto named = names_.find(number);
   if (named == names_.end()) {
     LOG(ERROR) << "logind resumed device " << number.major << ":"
@@ -187,21 +151,15 @@ bool DrmTakenDevices::Resume(DeviceNumber number, base::ScopedFD descriptor) {
     return false;
   }
 
-  // COPIED OUT BEFORE ANYTHING ELSE, because `Take` writes `names_` and the
-  // reopen below runs `OpenInputDevice` synchronously, which comes straight
-  // back here for `Resumed` -- so nothing may be standing on an iterator into
-  // any of the three tables from here down.
+  // Copy now: `Take` writes `names_`, and the reopen re-enters this class
+  // synchronously.
   const int id = named->second.id;
   const base::FilePath path = named->second.path;
 
-  // A RESUME logind SENT BEFORE A RELEASE THIS SESSION HAS SINCE MADE, and so
-  // a descriptor that is already dead. logind signals in order, so a release
-  // whose "gone" has not arrived yet was made after this resume was sent --
-  // and the release freed the `SessionDevice` this descriptor belonged to,
-  // revoking it. It happens on every activation: `Reclaim` gives each revoked
-  // device back and takes it again, live, before the activation's own resumes
-  // are read. Reopening on one of those closes the live converter `Reclaim`
-  // just built and fails on `ENODEV`.
+  // An outstanding release means this resume was sent before it, so the
+  // release revoked its descriptor. This happens on every activation, since
+  // `Reclaim` re-takes devices before their resumes are read. Reopening would
+  // replace `Reclaim`'s live converter with a dead one.
   if (released_.contains(number)) {
     VLOG(1) << "domicile: dropping logind's resume of input device "
             << number.major << ":" << number.minor
@@ -219,25 +177,20 @@ bool DrmTakenDevices::Resume(DeviceNumber number, base::ScopedFD descriptor) {
                   "leaves this device dead for the rest of the run";
   }
 
-  // THE DESCRIPTOR A RESUME CARRIES IS A LIVE ONE, so the device stops being
-  // one an activation has to give back and take again.
+  // A resumed descriptor is live, so `Reclaim` can skip this device.
   Take(number, id, path, DeviceLiveness::kLive);
 
   resumed_[path] = std::move(descriptor);
 
-  // A resume for a device that was never paused lands here too, and is taken
-  // rather than refused: logind resumes every device on session activation
-  // whether or not it paused that one, and the descriptor it sends is the
-  // authoritative one.
+  // Also reopen devices that were never paused: logind resumes every device
+  // on activation, and its descriptor wins.
   reopen_.Run(id, path);
   return true;
 }
 
 size_t DrmTakenDevices::Reclaim() {
-  // COPIED OUT BEFORE THE FIRST REOPEN, and a whole list this time rather
-  // than one device: each reopen runs `OpenInputDevice` synchronously and
-  // that comes straight back here to `GiveBack` and `Take`, both of which
-  // change `devices_` under any iterator standing in it.
+  // Copy the list first: each reopen re-enters `GiveBack` and `Take`, which
+  // modify `devices_`.
   std::vector<Device> revoked;
   for (const auto& taken : devices_) {
     if (taken.second.liveness == DeviceLiveness::kRevoked) {
@@ -245,9 +198,7 @@ size_t DrmTakenDevices::Reclaim() {
     }
   }
 
-  // A LIVE DEVICE IS LEFT ALONE. The reopen stops a converter and builds
-  // another one, so asking for every device on every activation would take
-  // the desktop's input apart and put it together again for nothing.
+  // Skip live devices; reopening them would rebuild converters for nothing.
   for (const Device& device : revoked) {
     reopen_.Run(device.id, device.path);
   }
@@ -264,10 +215,7 @@ bool DrmTakenDevices::GiveBack(DeviceNumber number) {
   }
 
   if (release_.Run(number)) {
-    // WHAT logind IS ABOUT TO SAY ABOUT IT, recorded before it says it. A
-    // release it agreed to frees the device on its side, and it reports that
-    // with a `PauseDevice` of type "gone" -- which arrives after the
-    // `TakeDevice` this release is making room for. See `Pause`.
+    // Expect logind's "gone" echo for this release. See `Pause`.
     released_[number] += 1;
   } else {
     LOG(ERROR) << "logind refused to take back " << taken->second.path.value()
@@ -275,11 +223,8 @@ bool DrmTakenDevices::GiveBack(DeviceNumber number) {
                << "), so it cannot be taken again and this device stays dead";
   }
 
-  // FORGOTTEN EVEN WHEN THE RELEASE WAS REFUSED. A device logind would not
-  // take back is one this session cannot take again either, and leaving it in
-  // the table would have the shutdown name it a second time. `names_` is left
-  // alone: the node has not gone anywhere, and a `ResumeDevice` that lands
-  // between this and the `TakeDevice` that follows is answered from it.
+  // Forget it even if the release failed, so shutdown doesn't release it
+  // twice. Keep `names_` for a `ResumeDevice` before the re-take.
   devices_.erase(taken);
   VLOG(2) << "domicile: gave back input device " << number.major << ":"
           << number.minor << "; holding " << devices_.size();
@@ -287,10 +232,8 @@ bool DrmTakenDevices::GiveBack(DeviceNumber number) {
 }
 
 bool DrmTakenDevices::Release() {
-  // EVERY DEVICE IS ASKED EVEN AFTER ONE REFUSES, for the reason
-  // `DrmMaster::ApplyToEveryCard` gives: logind hands a device to the next
-  // session only once every holder has let go of it, so stopping at the first
-  // refusal strands the rest with this session on its way out.
+  // Release every device even after a failure, so none stays with this
+  // session after it exits.
   bool every_device_agreed = true;
   for (const auto& [number, device] : devices_) {
     if (!release_.Run(number)) {
@@ -300,16 +243,11 @@ bool DrmTakenDevices::Release() {
     }
   }
 
-  // Emptied rather than left, because the destructor releases too and a
-  // shutdown that releases explicitly is the ordinary path. The names go with
-  // them: this is the session letting go of every device it has, so there is
-  // nothing left for a resume to be about.
+  // Clear everything, since the destructor calls this again.
   devices_.clear();
   names_.clear();
   resumed_.clear();
-  // Nothing is owed an answer any more: the tables a stale "gone" could have
-  // damaged are empty, and holding the expectation past them would make the
-  // first real unplug after a shutdown that did not finish look like an echo.
+  // Drop pending echoes, or a later real unplug would look like one.
   released_.clear();
   return every_device_agreed;
 }

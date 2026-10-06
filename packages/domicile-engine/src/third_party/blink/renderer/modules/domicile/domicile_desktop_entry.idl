@@ -1,10 +1,10 @@
 // Copyright 2026 Connor Prussin
 // SPDX-License-Identifier: MIT
 
-// An application a desktop entry offers, as a launcher draws and runs it.
+// An application from a desktop entry, as a launcher shows and runs it.
 //
-// An interface rather than a dictionary for DomicileClipboardEntry's reason:
-// these are read off a DomicileAppsEvent's array attribute.
+// An interface because WebIDL does not allow a dictionary as an attribute's
+// array element type.
 
 [
     Exposed=Window,
@@ -19,16 +19,15 @@
   // `Comment`, or empty for an entry that has none.
   readonly attribute DOMString comment;
 
-  // `Exec`, as the argv it runs -- unquoted and with its field codes dropped
-  // by the compositor. A shell hands it to DomicileHost.spawn().
+  // `Exec` as an argv, unquoted and with field codes removed by the
+  // compositor. Pass it to DomicileHost.spawn().
   readonly attribute FrozenArray<DOMString> command;
 
-  // The icon the entry names, as a `data:` URL to draw, or empty for one the
-  // compositor did not find. A URL rather than a path: the page may draw what
-  // the compositor read and has no way to read it for itself.
+  // The entry's icon as a `data:` URL, or empty if the compositor found none.
+  // A URL, not a path, because the page cannot read the file itself.
   readonly attribute DOMString icon;
 
-  // The picture the entry names for a launcher's preview, `X-Domicile-Preview`,
-  // as `icon` is: a `data:` URL, or empty.
+  // The entry's `X-Domicile-Preview` image for a launcher, as a `data:` URL,
+  // or empty.
   readonly attribute DOMString preview;
 };

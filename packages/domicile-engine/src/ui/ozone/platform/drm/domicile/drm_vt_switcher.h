@@ -26,96 +26,65 @@ namespace ui {
 
 class DrmModeset;
 
-// The console this chord asks for, or nothing.
+// Returns the console a `Ctrl+Alt+F<n>` press asks for, or nothing.
 //
-// `Ctrl+Alt+F<n>` and exactly that: both modifiers and neither more nor less,
-// on the press rather than the release. A shell is free to grab
-// `Ctrl+Alt+Shift+F1`, and finding the console switch out from under it would
-// be the kind of collision a desktop cannot explain.
+// Matches exactly Ctrl and Alt, so shells can still bind chords such as
+// `Ctrl+Alt+Shift+F1`.
 std::optional<uint32_t> VtForChord(const KeyEvent& event);
 
-// The seat this session is on, out of the `(so)` logind answers a `Get` of
-// `org.freedesktop.login1.Session.Seat` with: the seat's id and its object
-// path. Nothing is answered for a session that is on no seat.
+// Parses the seat path from logind's `(so)` reply to a `Get` of
+// `Session.Seat`. Returns nothing for a session on no seat.
 //
-// READ RATHER THAN SPELLED, AND THAT IS THE WHOLE POINT OF IT.
-// `/org/freedesktop/login1/seat/self` is what `Seat.SwitchTo` used to be sent
-// to, and on a real tty logind answered `UnknownObject`: `self` is not a name
-// it stores anywhere, it is a lookup -- `seat_object_find` resolves it through
-// the sending connection's own credentials to a session and then to that
-// session's seat, and answers "no such object" whichever half comes up empty.
-// The session object is already in hand from `GetSessionByPID`, so its own
-// `Seat` names the seat this session is actually on, off a path logind gave
-// us rather than one we guessed. `seat0` written out here would be the other
-// way to be wrong, on the second seat of any machine that has one.
+// The seat is read from the session, not hardcoded. logind resolves
+// `seat/self` through the caller's credentials and answers `UnknownObject`
+// on a real tty, and `seat0` is wrong on multi-seat machines.
 //
-// A SESSION ON NO SEAT IS ANSWERED `("", "/")`, and `/` is a perfectly
-// well-formed object path -- so it would travel all the way to a `SwitchTo`
-// and fail there as cryptically as the alias did. It is not a seat, and this
-// says so instead.
+// logind reports "no seat" as `("", "/")`. `/` is a valid object path, so
+// it is rejected here rather than failing later in `SwitchTo`.
 std::optional<dbus::ObjectPath> SeatOfSession(dbus::MessageReader* reader);
 
-// What logind said, or what an asynchronous answer brought back.
+// An input to the switch state machine.
 enum class VtEvent {
-  // The session's `Active` went false: somebody switched to another console
-  // and logind has already handed it over. This is a statement, not a
-  // question -- unlike the kernel's `relsig`, which this used to answer, there
-  // is nothing left to refuse.
+  // The session's `Active` went false. logind has already switched away, so
+  // there is nothing to refuse.
   kSessionDeactivated,
   // `NativeDisplayDelegate::RelinquishDisplayControl` answered.
   kRelinquishFinished,
-  // The session's `Active` went true: this console is in front of the user
-  // again.
+  // The session's `Active` went true.
   kSessionActivated,
   // `NativeDisplayDelegate::TakeDisplayControl` answered.
   kTakeFinished,
 };
 
-// Where the switcher is between having the display and not.
+// Whether the switcher holds the display.
 enum class VtState {
-  // In front of the user with DRM master, which is the ordinary running state.
+  // Active and holding DRM master. The normal state.
   kForeground,
-  // A drop was asked for and the delegate has not answered yet.
+  // Waiting for the delegate to drop DRM master.
   kRelinquishing,
-  // Somebody else's console is on the panel.
+  // Another console is active.
   kBackground,
-  // The console came back and the delegate has not answered yet.
+  // Waiting for the delegate to take DRM master back.
   kTaking,
-  // THE STATE THAT KEEPS A USER OFF A BLACK SCREEN. The session is in front of
-  // the user and DRM master is not ours, because taking it back failed.
-  // Nothing will draw, so what this state is for is that the next activation
-  // asks again rather than believing a display it does not have -- and that
-  // the next deactivation asks for nothing, since a drop of what we do not
-  // hold is a round trip that can only fail.
+  // Active, but taking DRM master back failed, so nothing draws. The next
+  // activation retries the take, and the next deactivation skips the drop.
   kForegroundWithoutDisplay,
 };
 
-// What to do about it.
+// What the switcher does in response to a `VtEvent`.
 enum class VtAction {
   kNothing,
   // Ask the delegate to drop DRM master.
   kRelinquishDisplay,
   // Ask the delegate to take DRM master back.
   kTakeDisplay,
-  // Modeset every connector again, because the console this session is back on
-  // is not the one it left.
+  // Modeset every connector again after taking DRM master back.
   //
-  // THE TAKE IS NOT ENOUGH AND THAT IS WHAT LOCKED A DESKTOP UP. Master says
-  // who may program the card; it says nothing about what the card is
-  // programmed to. Whoever had the panel in between programmed it -- the
-  // kernel restores its own framebuffer the moment the last master goes -- so
-  // the controller state this process resumes with describes hardware that
-  // has since been reconfigured, and every page flip into it is refused.
-  // `PageFlipWatchdog` answers a refused commit with a fifteen-second timer
-  // that ends in `LOG(FATAL) << "Failed to modeset ... Crashing GPU process."`
-  // and only a modeset disarms it.
-  //
-  // NOTHING ELSE WOULD SEND ONE. The connectors report exactly what they
-  // reported on the way out, so `ModesetWouldChangeAnything` -- right about
-  // every hotplug, and the reason this driver no longer modesets in a loop --
-  // reads the next reading as "asking again cannot help". That is the same
-  // wall a wake from suspend hits, and `DrmModeset::Relight` is the way past
-  // it: see `domicile/drm_modeset.h`.
+  // Whoever held the console meanwhile reprogrammed the CRTCs, so page flips
+  // against the old state are refused. `PageFlipWatchdog` then crashes the
+  // GPU process after 15 seconds unless a modeset happens. The connectors
+  // look unchanged, so only `DrmModeset::Relight` forces one. See
+  // `domicile/drm_modeset.h`.
   kRelightDisplay,
 };
 
@@ -124,84 +93,40 @@ struct VtStep {
   VtAction action;
 };
 
-// One step of following the session, as arithmetic rather than as D-Bus.
+// Advances the switch state machine by one event.
 //
-// This is a free function for the reason `ModesetParamsFromSnapshots` is one:
-// what surrounds it -- a bus, a session proxy and an asynchronous delegate --
-// is wiring that only a real console exercises, while the order is where a
-// mistake costs somebody their screen. Every decision worth arguing about is
-// in this table and every one of them has a test.
+// A free function so the ordering can be unit tested without D-Bus or a
+// real console.
 //
-// THE TWO RACES ARE THE WHOLE REASON THIS IS A TABLE. `Active` can flip twice
-// before the display delegate answers once -- a console switched away from and
-// straight back to does exactly that -- so an answer has to be read against
-// where the session is now rather than where it was when the question was
-// asked. A take that lands after the session left gives the display straight
-// back; a drop that lands after it returned asks for it again.
+// `Active` can flip twice before the delegate answers once, so each answer
+// is read against the current state. A take that finishes after the session
+// left drops the display again; a drop that finishes after it returned takes
+// it again.
 //
-// `succeeded` is read only for `kTakeFinished`. A relinquish that failed
-// changes nothing here: logind owns the handshake and hands the console over
-// on its own schedule, so there is no refusing a switch, and the way out of a
-// display that would not drop is the take on the way back.
+// `succeeded` is read only for `kTakeFinished`. A failed drop changes
+// nothing, since logind switches regardless and the next take recovers.
 //
-// A TAKE THAT SUCCEEDED IS THE ONE CELL THAT LIGHTS ANYTHING, and it is the
-// only one that may: a modeset is a commit on the card, so asking for one
-// from any state that does not hold the console is a commit over somebody
-// else's frame. See `VtAction::kRelightDisplay`.
+// Only a successful take relights. A modeset from any other state would
+// commit over another console's frame.
 VtStep StepVtSwitch(VtState state, VtEvent event, bool succeeded);
 
-// Ctrl+Alt+F<n>, and the display following the console it moves.
+// Handles `Ctrl+Alt+F<n>` and drops or retakes the display as the session's
+// `Active` property changes. Design: docs/TTY-SESSION.md#console-switching.
 //
-// LOGIND OWNS THE VT AND THIS DOES NOT ARGUE WITH IT. `TakeControl` -- which
-// `DrmLogindInput` calls, and must, because no ACL covers a keyboard -- runs
-// logind's `session_prepare_vt`: `K_OFF`, `KD_GRAPHICS` and `VT_PROCESS` with
-// logind's own signals. Two consequences, and this class exists for both.
+// logind's `TakeControl` disables the kernel's own chord (`K_OFF`), so this
+// binds it and calls `Seat.SwitchTo`. It must not call `VT_SETMODE`: that
+// silently replaces logind's VT handshake and breaks switching.
 //
-// The first is that the kernel's own `Ctrl+Alt+F<n>` is off, because `K_OFF`
-// is what turns it off. From that moment the only process that can start a
-// console switch is this one, which is why every Wayland compositor binds the
-// chord itself and calls `Seat.SwitchTo`. Until it was bound here the chord
-// did nothing at all.
+// The chord is read in `WillProcessEvent` because the compositor reads no
+// evdev nodes; all keys arrive here first, ahead of any dispatcher or nested
+// run loop.
 //
-// The second is that a `VT_SETMODE` of our own would be a theft rather than a
-// conflict. The kernel overwrites `vt_mode` and `vt_pid` without an `EBUSY`,
-// so the handshake logind installed would simply stop being logind's: it would
-// never get its release signal, never pause the devices it lent this session,
-// and never hand the console over. That is what this used to do, and removing
-// it is half of what makes the switch work.
-//
-// WHERE THE CHORD IS READ, AND WHY IT IS HERE RATHER THAN IN THE COMPOSITOR.
-// The compositor advertises a `wl_seat` to its clients and reads no evdev node
-// at all -- it pulls neither libinput nor a session backend, by a decision its
-// `Cargo.toml` records -- so every key in the desktop arrives through this
-// process's evdev thread and is dispatched by `EventFactoryEvdev`, which is a
-// `PlatformEventSource`. `WillProcessEvent` is the first thing that runs on a
-// key, ahead of every dispatcher and of any nested run loop's override, which
-// is what makes it the one place a console switch cannot be starved out of.
-//
-// THE DISPLAY FOLLOWS `Active`, AND NOT A SIGNAL OF OURS. The card is not one
-// of logind's devices -- the browser opens `/dev/dri/card*` itself, through
-// the ACL `70-uaccess.rules` does put on it -- so no `PauseDevice` ever
-// arrives for it and there is nothing to answer with `PauseDeviceComplete`.
-// What is left is the session's own `Active` property, which is a statement
-// about a switch logind has already made. So the drop is late by the width of
-// one D-Bus round trip, and the console is stale for that long rather than
-// black: the kernel restores its own framebuffer when the last master goes.
-// Taking the card from logind too is what would close that gap, and
-// `A-DESKTOP-ON-A-TTY.md` carries it as its own item.
-//
-// AND THE WAY BACK IS A MODESET, NOT A TAKE. That framebuffer the kernel
-// restored is the reason: the console this session comes back to has been
-// programmed by whoever held it, so master alone leaves the desktop flipping
-// into controller state the hardware no longer matches. The take answers
-// first and then the screens are lit again -- see `VtAction::kRelightDisplay`
-// for what a desktop that skips it does instead, which is lock up.
+// The card is not a logind device, so no `PauseDevice` arrives for it. The
+// display follows `Active` instead, one D-Bus round trip after the switch.
 class DrmVtSwitcher : public PlatformEventObserver {
  public:
-  // `events` and `modeset` must both outlive this, and do: `OzonePlatformDrm`
-  // builds the event factory in `InitializeUI`, and the modeset driver ahead
-  // of this in `InitScreen`, so this is destroyed before either. Everything
-  // else is asynchronous and starts here.
+  // `events` and `modeset` must outlive this. `OzonePlatformDrm` creates both
+  // before this switcher.
   DrmVtSwitcher(std::unique_ptr<display::NativeDisplayDelegate> delegate,
                 PlatformEventSource* events,
                 DrmModeset* modeset);
@@ -216,18 +141,15 @@ class DrmVtSwitcher : public PlatformEventObserver {
   void DidProcessEvent(const PlatformEvent& event) override;
 
  private:
-  // logind answered `GetSessionByPID`; from here on there is a session to
-  // follow.
+  // Handles logind's `GetSessionByPID` reply.
   void OnSessionFound(dbus::Response* response);
-  // Which seat that session is on, which is the object a chord is sent to.
+  // Looks up the session's seat, which receives `SwitchTo`.
   void ReadSeat();
   void OnSeatFound(dbus::Response* response);
-  // Ask logind for the console the chord named.
+  // Asks logind to switch to `console`.
   void SwitchTo(uint32_t console);
-  // Every property of the session, because `Active` is the only one worth
-  // reading and reading it is cheaper than deciding whether this message
-  // carried it -- logind may name a changed property in either the dictionary
-  // or the invalidated list.
+  // Rereads `Active` on any change, since logind may report it in either the
+  // changed dictionary or the invalidated list.
   void OnPropertiesChanged(dbus::Signal* signal);
   void OnSubscribed(const std::string& interface,
                     const std::string& signal,
@@ -235,7 +157,7 @@ class DrmVtSwitcher : public PlatformEventObserver {
   void ReadActive();
   void OnActive(dbus::Response* response);
 
-  // One event, and whatever the table says to do about it.
+  // Steps the state machine and performs the resulting action.
   void Handle(VtEvent event, bool succeeded);
   void Perform(VtAction action);
 
@@ -244,12 +166,9 @@ class DrmVtSwitcher : public PlatformEventObserver {
   const raw_ptr<DrmModeset> modeset_;  // Not owned; outlives this.
   scoped_refptr<dbus::Bus> bus_;
   raw_ptr<dbus::ObjectProxy> session_ = nullptr;
-  // Null until logind has answered which seat this session is on, which is two
-  // round trips after construction and cannot be waited for on this thread.
+  // Null until logind reports the seat, two round trips after construction.
   raw_ptr<dbus::ObjectProxy> seat_ = nullptr;
-  // THE CHORD THAT BEAT THE ANSWER. A console asked for before the seat is
-  // known is remembered rather than dropped: the user pressed the keys, and
-  // the console they named is still the one they want a round trip later.
+  // A console requested before the seat was known; sent once it is.
   std::optional<uint32_t> pending_console_;
   VtState state_ = VtState::kForeground;
   base::WeakPtrFactory<DrmVtSwitcher> weak_factory_{this};

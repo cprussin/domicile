@@ -11,25 +11,24 @@
   // The path this answers, as DomicileHost.previewFile() was given it.
   readonly attribute DOMString path;
 
-  // Which of the rest means anything: "text", "directory", "audio", "binary"
-  // or "unreadable". "unreadable" is also what a path outside the compositor's
-  // index of the home gets -- see previewFile().
+  // Which fields apply: "text", "directory", "audio", "binary" or
+  // "unreadable". A path outside the compositor's home index is also
+  // "unreadable"; see previewFile().
   //
-  // A DOMString rather than an enum, because it is only ever read: the
-  // browser drops a message whose kind is not one of the five, so there is
-  // nothing left for the bindings to refuse. DomicileDisplay.transform is the
-  // same choice.
+  // A DOMString, not an enum, because it is only read and the browser already
+  // drops messages with any other kind. DomicileDisplay.transform does the
+  // same.
   readonly attribute DOMString kind;
 
   // The front of the file, for "text". Empty for every other kind.
   readonly attribute DOMString text;
 
-  // What is in it, for "directory": names, a subdirectory ending in `/`.
-  // Empty for every other kind.
+  // The directory listing, for "directory"; subdirectories end in `/`. Empty
+  // for every other kind.
   readonly attribute FrozenArray<DOMString> entries;
 
-  // What a song says of itself, for "audio": each tag empty when it does not
-  // say it. Empty for every other kind.
+  // The audio tags, for "audio"; each is empty when the file lacks it. Empty
+  // for every other kind.
   readonly attribute DOMString title;
   readonly attribute DOMString artist;
   readonly attribute DOMString album;
@@ -37,12 +36,11 @@
   // How long it plays, in seconds, for "audio". Zero for every other kind.
   readonly attribute double duration;
 
-  // The picture it carries of itself, for "audio", as a `data:` URL -- the
-  // page cannot read the file to draw one of its own. Empty when there is
-  // none, and for every other kind.
+  // The embedded cover art, for "audio", as a `data:` URL, since the page
+  // cannot read the file. Empty when there is none, and for every other kind.
   readonly attribute DOMString cover;
 
-  // When the browser process had this message, on `performance.now()`'s clock.
-  // See DomicileModifiersEvent.arrival for what this is and what it is not.
+  // When the browser process received this message, on `performance.now()`'s
+  // clock. See DomicileAppEvent.arrival.
   readonly attribute DOMHighResTimeStamp arrival;
 };

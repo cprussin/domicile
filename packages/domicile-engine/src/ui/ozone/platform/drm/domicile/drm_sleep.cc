@@ -41,14 +41,10 @@ DrmSleep::DrmSleep(DrmModeset* modeset) : modeset_(modeset) {
   dbus::Bus::Options options;
   options.bus_type = dbus::Bus::SYSTEM;
   options.connection_type = dbus::Bus::PRIVATE;
-  // The recipe `DrmVtSwitcher` uses, for the same reasons: a thread-pool worker
-  // installs the `FileDescriptorWatcher` the bus needs to watch its socket,
-  // while the ORIGIN thread stays this one -- the browser's UI thread, which
-  // is where `DrmModeset` lives and where a modeset may be asked for. Nothing
-  // on this class blocks, and DEDICATED because a bus that shares a thread
-  // with `DrmLogindInput`'s cannot read its socket while that one is waiting
-  // on logind. A wake is not as tight a deadline as a console switch, but the
-  // shape is the same and there is no reason to be the exception.
+  // Same setup as `DrmVtSwitcher`. The bus runs on a dedicated worker, which
+  // installs the `FileDescriptorWatcher` it needs; the origin thread stays the
+  // UI thread, where `DrmModeset` lives. Dedicated, because a shared thread
+  // could not read this socket while `DrmLogindInput` waits on logind.
   options.dbus_task_runner = base::ThreadPool::CreateSingleThreadTaskRunner(
       {base::MayBlock(), base::TaskPriority::USER_BLOCKING},
       base::SingleThreadTaskRunnerThreadMode::DEDICATED);
@@ -63,18 +59,14 @@ DrmSleep::DrmSleep(DrmModeset* modeset) : modeset_(modeset) {
 }
 
 DrmSleep::~DrmSleep() {
-  // Blocking, on the thread that forbids it everywhere except here, for the
-  // reason `DrmVtSwitcher`'s destructor blocks: this runs as the ozone
-  // platform comes down, which is where the browser's own buses are closed the
-  // same way.
+  // Blocking is allowed here: this runs during ozone platform shutdown, where
+  // the browser closes its own buses the same way.
   bus_->ShutdownOnDBusThreadAndBlock();
 }
 
 void DrmSleep::OnPrepareForSleep(dbus::Signal* signal) {
   if (!SleepEnded(signal)) {
-    // The way down, and there is nothing to do on it: logind leaves this
-    // session's devices and this process's DRM master exactly where they are.
-    // See the header.
+    // Nothing to do before sleep. See the header.
     VLOG(1) << "domicile: the machine is going to sleep";
     return;
   }

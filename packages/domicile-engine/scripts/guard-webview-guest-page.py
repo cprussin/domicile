@@ -1,53 +1,24 @@
 #!/usr/bin/env python3
-"""The page a browser window shows, for the guards that put one in a window.
+"""Serves the page shown in the window for guard-webview-keyboard.sh and
+guard-webview-click.sh.
 
-One fixture rather than one per guard: what both of them need from it is a
-page that is unmistakably *in the window* and says what it was given, and a
-second copy of an HTTP server would be a second place for that to drift.
-`guard-webview-keyboard.sh` presses a key at it; `guard-webview-click.sh`
-clicks in it.
+The page logs to the console, which the engine writes to its log:
 
-Four lines, all to the console, which the engine writes to its own log:
+  GUARD guest-loaded             a guest was created, attached and navigated
+  GUARD guest-keydown code=…     a key reached the page
+  GUARD guest-mousedown x=… y=…  a press reached the page, at these coordinates
+  GUARD guest-window-focus       the page's window took focus
 
-  GUARD guest-loaded             there is a page in the window at all. In a
-                                 positive run that is a guest, so this is also
-                                 the line that says one was created, attached
-                                 and navigated
-  GUARD guest-keydown code=…     a key became a DOM event in the window's page
-  GUARD guest-mousedown x=… y=…  a press became one, at the point in the page
-                                 it landed on
-  GUARD guest-window-focus       this page's window took focus, which is the
-                                 far side of the question the click guard asks:
-                                 whether a press in here moved focus at all
-
-None of the last three is asserted, and why differs between them. Where these
-guards run there is no display for the browser's window to be activated on, and
-a page in an unactivated window may be sent no *key* events at all -- so
-`guest-keydown`'s absence says nothing about the hook the keyboard guard is
-about, which is in the browser process one layer above where a key becomes a
-DOM event. `guest-window-focus` is in the same position for the same reason,
-and is read as what it is: a reason a run found nothing, rather than a verdict
-on anything.
-
-`guest-mousedown` is not in that position. A press is routed by hit test
-rather than by focus, so it reaches the widget under it whatever the window's
-activation, and the click guard reads it as the fact its whole verdict rests
-on: that the press landed in the guest rather than in the shell around it.
-
-Served over HTTP rather than written as a `data:` URL, for the reason
-guard-webview-framing-server.py serves its own subject: `crux` reaches no
-arbitrary host, and a fixture the guard brings with it cannot change under it.
-
-The page has no color and no layout worth the name. Nothing here is measured
-in pixels; the whole verdict is in the engine's log.
+Only guest-mousedown is asserted (by the click guard). A headless window may
+get no key or focus events, so guest-keydown and guest-window-focus are
+diagnostics only. A press is routed by hit test, so it arrives regardless.
 """
 
 import argparse
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-# The one path this serves. Named rather than "/" so a request that arrives by
-# accident is a 404 rather than the page the verdict is about.
+# Not "/", so a stray request gets a 404.
 PATH = "/page"
 
 PAGE = """<!doctype html>
@@ -112,16 +83,13 @@ class ShowsWhatItWasGiven(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
-        # So a second run cannot be answered by the first run's page out of the
-        # HTTP cache, which would make a failure depend on run order.
+        # So one run is not served from another's HTTP cache.
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(body)
 
     def log_message(self, fmt, *args):
-        # To stderr, which the guard keeps: whether the page was ever
-        # *requested* tells "the element never asked for it" apart from "it
-        # asked and the page did not run".
+        # Logged so a failure shows whether the guest requested the page.
         sys.stderr.write("%s - %s\n" % (self.address_string(), fmt % args))
 
 
@@ -135,11 +103,9 @@ def main():
     )
     arguments = parser.parse_args()
 
-    # 127.0.0.1, not 0.0.0.0: nothing outside this machine has any business
-    # reaching a guard's fixture.
+    # Loopback only: nothing off this machine should reach a test fixture.
     server = ThreadingHTTPServer(("127.0.0.1", arguments.port), ShowsWhatItWasGiven)
-    # Before serve_forever, so a guard waiting on this line is not waiting on a
-    # buffer.
+    # Flushed before serve_forever, because guards wait on this line.
     print("serving %s on 127.0.0.1:%d" % (PATH, server.server_address[1]), flush=True)
     server.serve_forever()
 

@@ -23,8 +23,7 @@ KeyEvent Pressed(KeyboardCode key, int flags) {
 
 constexpr int kChord = EF_CONTROL_DOWN | EF_ALT_DOWN;
 
-// What logind answers a `Get` of the session's `Seat` with: the seat's id and
-// its object path, as a `(so)` inside the variant every property comes in.
+// Builds logind's reply to a `Get` of `Session.Seat`: a variant holding `(so)`.
 std::unique_ptr<dbus::Response> SeatAnswer(const std::string& id,
                                            const std::string& path) {
   std::unique_ptr<dbus::Response> answer = dbus::Response::CreateEmpty();
@@ -40,9 +39,7 @@ std::unique_ptr<dbus::Response> SeatAnswer(const std::string& id,
   return answer;
 }
 
-// The whole of what a user does: one chord per console, and the number on the
-// key is the number of the console. `Seat.SwitchTo` takes that number, so
-// there is nothing between this and logind.
+// F<n> maps to console n, the number `Seat.SwitchTo` takes.
 TEST(DrmVtSwitcherTest, EveryFunctionKeyNamesItsOwnConsole) {
   for (uint32_t vt = 1; vt <= 12; vt++) {
     const KeyboardCode key = static_cast<KeyboardCode>(VKEY_F1 + vt - 1);
@@ -52,27 +49,21 @@ TEST(DrmVtSwitcherTest, EveryFunctionKeyNamesItsOwnConsole) {
   }
 }
 
-// A chord is a press. Switching on the release as well would ask logind for
-// the same console twice, and a release arriving after the switch is one this
-// session no longer has the device to see.
+// Switching on release too would request the same console twice.
 TEST(DrmVtSwitcherTest, AReleaseIsNotASwitch) {
   const KeyEvent released(EventType::kKeyReleased, VKEY_F3, kChord);
 
   EXPECT_FALSE(VtForChord(released).has_value());
 }
 
-// Alt+F4 closes a window and Ctrl+F5 reloads a page. Both halves of the chord
-// are what makes it a console switch rather than somebody's shortcut.
+// Alt+F4 and Ctrl+F5 are ordinary shortcuts; both modifiers are required.
 TEST(DrmVtSwitcherTest, HalfTheChordIsNotTheChord) {
   EXPECT_FALSE(VtForChord(Pressed(VKEY_F4, EF_ALT_DOWN)).has_value());
   EXPECT_FALSE(VtForChord(Pressed(VKEY_F5, EF_CONTROL_DOWN)).has_value());
   EXPECT_FALSE(VtForChord(Pressed(VKEY_F2, EF_NONE)).has_value());
 }
 
-// AND MORE THAN THE CHORD IS NOT THE CHORD EITHER, which is the half that
-// would be a bug rather than a papercut: a shell that grabs Ctrl+Alt+Shift+F1
-// would find the console switching out from under it. `Ctrl+Alt+F<n>` means
-// exactly those two modifiers.
+// Extra modifiers leave the chord free for shells, e.g. Ctrl+Alt+Shift+F1.
 TEST(DrmVtSwitcherTest, AnExtraModifierIsSomebodyElsesShortcut) {
   for (const int extra : {EF_SHIFT_DOWN, EF_COMMAND_DOWN, EF_ALTGR_DOWN}) {
     EXPECT_FALSE(VtForChord(Pressed(VKEY_F1, kChord | extra)).has_value());
@@ -85,8 +76,7 @@ TEST(DrmVtSwitcherTest, AKeyThatIsNotAFunctionKeyNamesNoConsole) {
   EXPECT_FALSE(VtForChord(Pressed(VKEY_DELETE, kChord)).has_value());
 }
 
-// The happy path away: logind says the session is no longer in front of the
-// user, the display goes back, and that is the whole handshake this end has.
+// Deactivation drops the display.
 TEST(DrmVtSwitcherTest, ASessionGoingAwayDropsTheDisplay) {
   const VtStep told =
       StepVtSwitch(VtState::kForeground, VtEvent::kSessionDeactivated, false);
@@ -99,12 +89,8 @@ TEST(DrmVtSwitcherTest, ASessionGoingAwayDropsTheDisplay) {
   EXPECT_EQ(answered.state, VtState::kBackground);
 }
 
-// THE HAPPY PATH BACK, AND TAKING THE DISPLAY IS ONLY HALF OF IT. Master says
-// who may program the card and nothing about what the card is programmed to:
-// whoever had the panel in between programmed it, so what this session
-// resumes with is controller state describing hardware that has moved. The
-// screens are lit again rather than flipped into, which is what
-// `VtAction::kRelightDisplay` argues in full.
+// Activation takes the display back, then relights it because another console
+// reprogrammed the CRTCs. See `VtAction::kRelightDisplay`.
 TEST(DrmVtSwitcherTest, ASessionComingBackTakesTheDisplayAndLightsIt) {
   const VtStep told =
       StepVtSwitch(VtState::kBackground, VtEvent::kSessionActivated, false);
@@ -117,11 +103,8 @@ TEST(DrmVtSwitcherTest, ASessionComingBackTakesTheDisplayAndLightsIt) {
   EXPECT_EQ(answered.state, VtState::kForeground);
 }
 
-// AND EXACTLY ONE CELL ASKS FOR IT, which is the half a relight can get
-// wrong. A modeset is a commit on the card: asked for anywhere this session
-// does not hold the console it is a commit over somebody else's frame, and
-// asked for on an edge that repeats it is the modeset loop this driver
-// already had once. Only the take that succeeded lights anything.
+// Only a successful take relights. A relight elsewhere would commit over
+// another console's frame or modeset repeatedly.
 TEST(DrmVtSwitcherTest, NothingButTheConsoleComingBackLightsTheScreens) {
   constexpr VtState kStates[] = {
       VtState::kForeground, VtState::kRelinquishing, VtState::kBackground,
@@ -144,13 +127,8 @@ TEST(DrmVtSwitcherTest, NothingButTheConsoleComingBackLightsTheScreens) {
   }
 }
 
-// THE DIFFERENCE BETWEEN THIS TABLE AND THE ONE IT REPLACES, in one case. A
-// switch used to be refusable: `VT_RELDISP(0)` told the kernel to leave the
-// console where it was, and a relinquish that failed said exactly that. logind
-// owns the handshake now and hands the console over on its own schedule, so
-// there is nothing to refuse -- a drop that failed leaves a display nobody can
-// paint on and a session that is in the background regardless, and the only
-// way out is the take on the way back.
+// logind switches regardless of the drop's result, so a failed drop still
+// ends in the background. The next take recovers.
 TEST(DrmVtSwitcherTest, ARelinquishCannotRefuseTheSwitch) {
   for (const bool succeeded : {false, true}) {
     const VtStep step = StepVtSwitch(VtState::kRelinquishing,
@@ -160,10 +138,8 @@ TEST(DrmVtSwitcherTest, ARelinquishCannotRefuseTheSwitch) {
   }
 }
 
-// A take that fails must not say the display came back with the session: the
-// next thing that happens is a deactivation, and relinquishing a display we do
-// not have is a round trip that can only fail. What the state does carry is
-// that another activation should try again.
+// A failed take skips the next drop, which could only fail, and retries on the
+// next activation.
 TEST(DrmVtSwitcherTest, ATakeThatFailsLeavesTheDisplayToBeTakenAgain) {
   const VtStep failed =
       StepVtSwitch(VtState::kTaking, VtEvent::kTakeFinished, false);
@@ -181,11 +157,8 @@ TEST(DrmVtSwitcherTest, ATakeThatFailsLeavesTheDisplayToBeTakenAgain) {
   EXPECT_EQ(again.action, VtAction::kTakeDisplay);
 }
 
-// THE FIRST OF THE TWO RACES, AND THEY ARE REAL. A console switched away from
-// and straight back to answers `PropertiesChanged` twice before the display
-// delegate has answered once. A drop that lands after the session returned
-// leaves the desktop in front of the user with no display, so it asks for it
-// back rather than believing the state it started in.
+// Switching away and straight back flips `Active` twice before the delegate
+// answers. A drop that finishes after the session returned takes it back.
 TEST(DrmVtSwitcherTest, ARelinquishThatLandsAfterTheSessionReturnedTakesItBack) {
   const VtStep returned = StepVtSwitch(VtState::kRelinquishing,
                                        VtEvent::kSessionActivated, false);
@@ -199,10 +172,8 @@ TEST(DrmVtSwitcherTest, ARelinquishThatLandsAfterTheSessionReturnedTakesItBack) 
   EXPECT_EQ(dropped.state, VtState::kTaking);
 }
 
-// THE MIRROR, and the one that matters more: a take that lands after the
-// session left would leave this process holding DRM master on a console
-// somebody else is looking at, which is the two-owner bug the whole file
-// exists to remove.
+// A take that finishes after the session left gives master straight back, so
+// this process never holds it on another console.
 TEST(DrmVtSwitcherTest, ATakeThatLandsAfterTheSessionLeftGivesItStraightBack) {
   const VtStep left =
       StepVtSwitch(VtState::kTaking, VtEvent::kSessionDeactivated, false);
@@ -220,9 +191,7 @@ TEST(DrmVtSwitcherTest, ATakeThatLandsAfterTheSessionLeftGivesItStraightBack) {
   EXPECT_EQ(never.state, VtState::kBackground);
 }
 
-// logind emits `PropertiesChanged` for every property a session has, and this
-// end answers all of them by reading `Active` -- so the same answer arrives
-// repeatedly and only the edges may act.
+// Every `PropertiesChanged` rereads `Active`, so repeats must be no-ops.
 TEST(DrmVtSwitcherTest, BeingToldTheSameThingTwiceAsksForNothing) {
   const VtStep again = StepVtSwitch(VtState::kRelinquishing,
                                     VtEvent::kSessionDeactivated, false);
@@ -239,9 +208,7 @@ TEST(DrmVtSwitcherTest, BeingToldTheSameThingTwiceAsksForNothing) {
   }
 }
 
-// A delegate answering a question nobody is waiting on. Acting on it would
-// take or drop a display on the strength of a round trip that has already been
-// superseded.
+// A delegate answer for a superseded request is ignored.
 TEST(DrmVtSwitcherTest, AnAnswerNobodyIsWaitingForChangesNothing) {
   for (const VtState state :
        {VtState::kBackground, VtState::kForegroundWithoutDisplay}) {
@@ -260,11 +227,8 @@ TEST(DrmVtSwitcherTest, AnAnswerNobodyIsWaitingForChangesNothing) {
   }
 }
 
-// THE POSITIVE CONTROL THIS TABLE WOULD BE WORTHLESS WITHOUT. A state machine
-// that falls off the end of its enum on an input it did not anticipate is how
-// a desktop ends up holding DRM master forever. This asserts the table is
-// total rather than that any particular cell is right -- the cells are the
-// tests above.
+// Every (state, event) pair yields a valid state. Individual cells are tested
+// above.
 TEST(DrmVtSwitcherTest, EveryStateAnswersEveryEvent) {
   constexpr VtState kStates[] = {
       VtState::kForeground, VtState::kRelinquishing, VtState::kBackground,
@@ -286,11 +250,8 @@ TEST(DrmVtSwitcherTest, EveryStateAnswersEveryEvent) {
   }
 }
 
-// NO DISPLAY IS EVER HELD IN THE BACKGROUND, walked rather than argued. From
-// every state, a deactivation followed by whatever the delegate says must end
-// somewhere that is either done with the display or on its way to being: a
-// path that settles in `kForeground` is this process scanning out over
-// somebody else's console.
+// From any state, a deactivation and the delegate's answer never settle in a
+// foreground state, which would scan out over another console.
 TEST(DrmVtSwitcherTest, NoPathLeavesTheDisplayHeldInTheBackground) {
   constexpr VtState kStates[] = {
       VtState::kForeground, VtState::kRelinquishing, VtState::kBackground,
@@ -316,14 +277,8 @@ TEST(DrmVtSwitcherTest, NoPathLeavesTheDisplayHeldInTheBackground) {
   }
 }
 
-// THE ONE THE CHORD WAS SHIPPED BROKEN ON. `SwitchTo` went to
-// `/org/freedesktop/login1/seat/self` and logind answered `UnknownObject` on a
-// real tty: `self` is not a name it stores, it is a lookup through the
-// caller's own bus credentials, and `seat_object_find` answers "no such
-// object" for every way that lookup can come up empty. The session object
-// `GetSessionByPID` already handed over carries the seat it is on, and reading
-// that needs nobody's credentials -- nor a `seat0` spelled out here, which is
-// the wrong seat on the second seat of a machine that has two.
+// The seat comes from the session, not `seat/self` (which logind rejects on a
+// real tty) or a hardcoded `seat0`.
 TEST(DrmVtSwitcherTest, TheSeatIsWhicheverOneTheSessionIsOn) {
   for (const std::string id : {"seat0", "seat1"}) {
     const std::string path = "/org/freedesktop/login1/seat/" + id;
@@ -336,11 +291,7 @@ TEST(DrmVtSwitcherTest, TheSeatIsWhicheverOneTheSessionIsOn) {
   }
 }
 
-// `/` IS logind's WORD FOR "NO SEAT", and it is a perfectly well-formed object
-// path -- so a `SwitchTo` sent there fails exactly as cryptically as the alias
-// did, and nothing between here and the panel would catch it. A session on no
-// seat has no console to switch to at all, which is a thing to say out loud
-// rather than a round trip to watch fail.
+// logind reports "no seat" as the valid object path `/`, which is rejected.
 TEST(DrmVtSwitcherTest, ASessionOnNoSeatNamesNoSeat) {
   const std::unique_ptr<dbus::Response> answer = SeatAnswer("", "/");
   dbus::MessageReader reader(answer.get());
