@@ -18,6 +18,8 @@
 #include "content/public/browser/file_url_loader.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "net/base/filename_util.h"
+#include "net/http/http_response_headers.h"
+#include "net/http/http_version.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
 #include "url/gurl.h"
@@ -25,6 +27,11 @@
 namespace domicile {
 
 namespace {
+
+// Only scripts from the shell root run, so markup the shell renders from a
+// notification body, window title or file name cannot run with the desktop.
+// Styles stay open: shells inline their CSS. See docs/SHELL-PACKAGING.md.
+constexpr char kShellContentSecurityPolicy[] = "script-src 'self'";
 
 // Resolves a domicile:// URL for `host` to a file under `root`. Returns false
 // if the URL does not resolve inside `root`. Shared by the shell and home
@@ -168,6 +175,18 @@ std::string ShellURLLoaderFactory::ShellDocument(const std::string& module) {
       "</html>\n"});
 }
 
+// static
+network::mojom::URLResponseHeadPtr ShellURLLoaderFactory::ShellDocumentHead() {
+  auto head = network::mojom::URLResponseHead::New();
+  head->mime_type = "text/html";
+  head->charset = "utf-8";
+  head->headers =
+      net::HttpResponseHeaders::Builder(net::HttpVersion(1, 1), "200 OK")
+          .AddHeader("Content-Security-Policy", kShellContentSecurityPolicy)
+          .Build();
+  return head;
+}
+
 void ShellURLLoaderFactory::ServeDocument(
     mojo::PendingRemote<network::mojom::URLLoaderClient> client) {
   mojo::Remote<network::mojom::URLLoaderClient> client_remote(
@@ -188,9 +207,7 @@ void ShellURLLoaderFactory::ServeDocument(
 
   const std::string document = ShellDocument(module);
 
-  auto response = network::mojom::URLResponseHead::New();
-  response->mime_type = "text/html";
-  response->charset = "utf-8";
+  network::mojom::URLResponseHeadPtr response = ShellDocumentHead();
 
   mojo::ScopedDataPipeProducerHandle producer;
   mojo::ScopedDataPipeConsumerHandle consumer;
