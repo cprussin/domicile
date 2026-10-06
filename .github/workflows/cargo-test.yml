@@ -31,9 +31,10 @@ jobs:
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
       # Mesa's EGL and libgbm: `shm_upload`'s test draws on llvmpipe, and
-      # `gbm`'s loads the real libgbm. Neither needs a GPU.
+      # `gbm`'s loads the real libgbm. Neither needs a GPU. `wl-clipboard`: the
+      # selection tests run `wl-copy` and `wl-paste`.
       - name: Install the libraries the compositor links and loads
-        run: .github/scripts/apt-install.sh libxkbcommon-dev libwayland-dev libegl1 libegl-mesa0 libgles2 libgl1-mesa-dri libgbm1
+        run: .github/scripts/apt-install.sh libxkbcommon-dev libwayland-dev libegl1 libegl-mesa0 libgles2 libgl1-mesa-dri libgbm1 wl-clipboard
 
       # This group needs no node_modules, so bun is not set up.
       - run: ./scripts/check.sh rust

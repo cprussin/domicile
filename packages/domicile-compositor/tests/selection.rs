@@ -4,11 +4,19 @@
 //! fills the primary selection (`zwp_primary_selection_device_v1`) for
 //! middle-click paste. Each has its own contents.
 //!
+//! Clipboard managers use `ext-data-control-v1` or `zwlr_data_control_v1`,
+//! which need no focused window. Those checks run `wl-copy` and `wl-paste`
+//! from `wl-clipboard`.
+//!
 //! A paste is the source client writing into a pipe the pasting client reads,
 //! so this needs real clients. The compositor's own state is unit-tested in
 //! `domicile_host::clipboard` and `crate::clipboard`.
 
 mod running;
+
+use std::io::Read;
+use std::process::{Child, Stdio};
+use std::time::{Duration, Instant};
 
 use domicile_protocol::{ChromeMessage, HostMessage};
 
@@ -63,6 +71,50 @@ fn the_middle_click_selection_and_the_clipboard_are_two_clipboards() {
     );
 }
 
+/// A clipboard manager's copy reaches the history, and a row the shell
+/// restores reaches the clipboard manager, with no window focused.
+///
+/// The row is restored after `wl-copy` exits, so the paste can only come from
+/// the compositor's copy.
+#[test]
+fn a_clipboard_manager_copies_into_the_history_and_pastes_from_it() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let mut chrome = compositor.chrome();
+
+    let mut copying = compositor
+        .command("wl-copy")
+        .args(["--foreground", "--", "kept after the copier left"])
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("wl-copy starts; it is in `nix develop .#full`");
+    let history = chrome
+        .wait_for(|message| {
+            matches!(message, HostMessage::Clipboard { entries }
+                if entries.iter().any(|entry| entry.preview == "kept after the copier left"))
+        })
+        .expect("a copy with no window focused reaches the shell's history");
+    copying.kill().expect("wl-copy stops");
+    copying.wait().expect("wl-copy is reaped");
+
+    let HostMessage::Clipboard { entries } = history else {
+        unreachable!("the wait matched on this variant")
+    };
+    let row = entries
+        .iter()
+        .find(|entry| entry.preview == "kept after the copier left")
+        .expect("the wait matched on this row");
+    chrome
+        .say(&ChromeMessage::CopyClipboardEntry { entry: row.id })
+        .expect("the chrome socket takes a restore");
+
+    assert_eq!(
+        paste(&compositor),
+        "kept after the copier left",
+        "wl-paste, with no window focused, reads the row the shell restored"
+    );
+}
+
 /// Give the keyboard to the window with this title, and wait until it has it.
 ///
 /// Selections are offered to the client with the keyboard, so the move must
@@ -86,4 +138,68 @@ fn focus(chrome: &mut domicile_test_chrome::Chrome, title: &str) {
             matches!(message, HostMessage::FocusChanged { app_id: Some(moved) } if *moved == app_id)
         })
         .expect("the keyboard moves to the window the chrome named");
+}
+
+/// What `wl-paste` reads from the clipboard.
+///
+/// Fails rather than hangs: a `wl-paste` without data control waits for
+/// focus that never comes.
+fn paste(compositor: &Compositor) -> String {
+    let pasting = compositor
+        .command("wl-paste")
+        .arg("--no-newline")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("wl-paste starts; it is in `nix develop .#full`");
+    let said = finished(pasting, Duration::from_secs(10));
+    assert!(
+        said.status.success(),
+        "wl-paste failed: {}\nthe compositor said:\n{}",
+        said.stderr,
+        compositor.complaint()
+    );
+    said.stdout
+}
+
+/// A finished process's status and output.
+struct Finished {
+    status: std::process::ExitStatus,
+    stdout: String,
+    stderr: String,
+}
+
+/// Wait for `child` to exit, killing it and failing after `patience`.
+fn finished(mut child: Child, patience: Duration) -> Finished {
+    let until = Instant::now() + patience;
+    let status = loop {
+        if let Some(status) = child.try_wait().expect("the child can be waited on") {
+            break status;
+        }
+        if Instant::now() >= until {
+            child.kill().expect("the child stops");
+            child.wait().expect("the child is reaped");
+            panic!("the child did not finish in {patience:?}");
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    };
+    let mut stdout = String::new();
+    let mut stderr = String::new();
+    child
+        .stdout
+        .take()
+        .expect("stdout was piped")
+        .read_to_string(&mut stdout)
+        .expect("stdout is text");
+    child
+        .stderr
+        .take()
+        .expect("stderr was piped")
+        .read_to_string(&mut stderr)
+        .expect("stderr is text");
+    Finished {
+        status,
+        stdout,
+        stderr,
+    }
 }

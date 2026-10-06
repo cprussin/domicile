@@ -50,7 +50,7 @@ jobs:
             libxkbcommon-dev libwayland-dev \
             libegl1-mesa-dev libgles2-mesa-dev libgbm-dev mesa-utils \
             libgl1-mesa-dri libegl-mesa0 \
-            weston wayland-utils \
+            weston wayland-utils wl-clipboard \
             libdrm2 libxkbcommon0
 
 
@@ -58,7 +58,7 @@ jobs:
       # its dependencies.
       - name: What is here
         run: |
-          for tool in wayland-info eglinfo; do
+          for tool in wayland-info eglinfo wl-copy; do
             printf '%-16s %s\n' "$tool" "$(command -v "$tool" || echo MISSING)"
           done
 
