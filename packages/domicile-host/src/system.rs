@@ -29,6 +29,7 @@ use zbus::zvariant::{Signature, Structure, StructureBuilder};
 
 use crate::base64::{decoded, encoded};
 use crate::dbus_json::{self, NotABody};
+use crate::lock_screen_readouts::is_a_readout;
 
 /// How much of a process's output one event carries at most.
 const CHUNK: usize = 64 * 1024;
@@ -90,6 +91,9 @@ pub enum Reach {
     Stops,
     /// It only reads the kernel's state under `/sys`.
     ReadsTheKernel,
+    /// A lock screen's battery, brightness or volume readout. See
+    /// `crate::lock_screen_readouts`.
+    Readout,
     /// Anything else.
     Acts,
 }
@@ -101,6 +105,9 @@ pub enum Reach {
 /// can be swapped between this judgment and the read. Any other spelling, such
 /// as a symlink in the home that points into `/sys`, is judged
 /// [`Reach::Acts`].
+///
+/// A spawn or D-Bus call is a [`Reach::Readout`] only when it is one of the
+/// calls `crate::lock_screen_readouts` lists.
 pub fn reach(request: &SystemRequest) -> Reach {
     match request {
         SystemRequest::Unwatch | SystemRequest::CloseStdin | SystemRequest::Kill { .. } => {
@@ -120,11 +127,13 @@ pub fn reach(request: &SystemRequest) -> Reach {
                 false => Reach::Acts,
             }
         }
-        SystemRequest::WriteFile { .. }
-        | SystemRequest::Spawn { .. }
-        | SystemRequest::Stdin { .. }
+        SystemRequest::Spawn { .. }
         | SystemRequest::DbusCall { .. }
-        | SystemRequest::DbusMatch { .. } => Reach::Acts,
+        | SystemRequest::DbusMatch { .. } => match is_a_readout(request) {
+            true => Reach::Readout,
+            false => Reach::Acts,
+        },
+        SystemRequest::WriteFile { .. } | SystemRequest::Stdin { .. } => Reach::Acts,
     }
 }
 

@@ -6,6 +6,7 @@ import {
 import { Input } from "@domicile-desktop/component-library/Input";
 import { ArrowRightIcon } from "@phosphor-icons/react/dist/ssr/ArrowRight";
 import { LockIcon } from "@phosphor-icons/react/dist/ssr/Lock";
+import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 
 import { css, cva } from "../../styled-system/css";
@@ -29,6 +30,8 @@ type Props = {
    * going up.
    */
   onUnlock: (passphrase: string) => void;
+  /** Shown under the field, such as `LockReadouts`. */
+  children?: ReactNode;
 };
 
 /**
@@ -46,12 +49,19 @@ type Props = {
  * It stays mounted and is `inert` while unlocked so it can fade in and out;
  * once faded it is `display: none`, so it never catches clicks on the desktop.
  *
- * While locked, focus stays in the field, since nothing else accepts input.
+ * While locked, focus stays in the field, since nothing else takes keys. A
+ * control in `children` works by pointer and gives the focus back.
  *
  * Nothing dismisses it except unlocking: not Escape, an outside click or
  * submit. That is why it does not use `ModalDialog`.
  */
-export const Lock = ({ checking, locked, onUnlock, refusals }: Props) => {
+export const Lock = ({
+  checking,
+  children,
+  locked,
+  onUnlock,
+  refusals,
+}: Props) => {
   const displays = useDisplays();
   const [typed, setTyped] = useState("");
   const [wrong, setWrong] = useState(false);
@@ -85,6 +95,12 @@ export const Lock = ({ checking, locked, onUnlock, refusals }: Props) => {
     <div
       className={sheetStyles}
       inert={!locked}
+      // Take the focus back from a slider, which focuses itself on a click.
+      onFocus={(event) => {
+        if (event.target !== field.current) {
+          field.current?.focus();
+        }
+      }}
       // Keep focus in the field. The button still submits on click, and Tab has
       // nowhere else to go.
       onKeyDown={(event) => {
@@ -156,6 +172,7 @@ export const Lock = ({ checking, locked, onUnlock, refusals }: Props) => {
             </p>
           ) : undefined}
         </div>
+        {children}
       </div>
     </div>
   );

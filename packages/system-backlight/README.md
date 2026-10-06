@@ -33,8 +33,8 @@ await set(0.5);
 
 - `udevadm` on the compositor's `PATH` (systemd).
 - A logind session.
-- While the desktop is locked, setting fails with `locked` and a watch cannot
-  start ([LOCK.md](/docs/LOCK.md)).
+- Watching and setting work while the desktop is locked, so a lock screen can
+  adjust the brightness ([LOCK.md](/docs/LOCK.md)).
 
 ## Testing
 

@@ -93,9 +93,12 @@ trust from reaching anything else.
   does not run.
 - **argv only:** no shell string. A shell that wants `sh -c` passes it.
 - **Lock:** `crate::lock::refused` covers every system call. While locked:
-  - a call that starts something fails with `locked`, except a read, stat,
-    listing or watch of an absolute path under `/sys` with no `..`, so a lock
-    screen can show the battery
+  - a call that starts something fails with `locked`, except:
+    - a read, stat, listing or watch of an absolute path under `/sys` with no
+      `..`
+    - the calls `system-battery`, `system-backlight` and `system-audio` make,
+      matched field by field, so a lock screen shows the battery and sets the
+      brightness and volume ([LOCK.md](/docs/LOCK.md#lock-screen-readouts))
   - `stdin` is dropped; `unwatch`, `close_stdin` and `kill` are allowed
   - processes and watches started before the lock keep running
 - **Lifetime:** a page's processes, watches and matches end when its

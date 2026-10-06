@@ -31,8 +31,8 @@ watched.match({
   UPower change. `stop()` ends it.
 - `charge` is 0 through 1. `charging` is true unless the battery is draining
   (discharging, empty or pending discharge), so a full battery on AC counts.
-- **Lock:** D-Bus calls fail with `Locked` while the desktop is locked, so
-  both fail to start then. A watch started before the lock keeps reporting.
+- **Lock:** both work while the desktop is locked, so a lock screen can show
+  the battery ([LOCK.md](/docs/LOCK.md)).
 
 ## Dependencies
 

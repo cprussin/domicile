@@ -85,9 +85,7 @@ To style your own items with manganese's Panda CSS, see
 - Hidden on machines without a battery, and until UPower answers.
 - Read from UPower by
   [`@domicile-desktop/system-battery`](../../system-battery/README.md).
-- Started while the desktop is locked, it waits for the unlock: D-Bus calls
-  fail while locked. A watch running at lock time keeps reporting. The lock
-  screen shows no battery.
+- Works while the desktop is locked. The lock screen shows it too.
 
 ## Brightness
 
@@ -98,6 +96,7 @@ To style your own items with manganese's Panda CSS, see
   pointer.
 - The popover closes on an outside click or focus loss, including a click in
   a `<webview>`.
+- The lock screen shows the same slider.
 
 ## Volume
 
@@ -117,7 +116,8 @@ To style your own items with manganese's Panda CSS, see
 - Level meters run only while the mixer is open, for the devices it shows.
   They show -60 to 0 dB.
 - See [Host readouts](HOST-READOUTS.md#volume) for how audio is read.
-- A locked desktop rejects mixer requests and new meters.
+- A locked desktop rejects mixer requests and new meters. The lock screen
+  sets the default output's volume and mute.
 
 ## Notifications
 

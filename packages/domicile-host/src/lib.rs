@@ -25,6 +25,7 @@ pub mod home_watch;
 pub mod index_file;
 pub mod index_location;
 pub mod ipc;
+mod lock_screen_readouts;
 pub mod notifications;
 mod png;
 pub mod system;

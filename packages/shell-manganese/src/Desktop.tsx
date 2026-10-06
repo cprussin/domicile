@@ -18,6 +18,7 @@ import { LaunchKind } from "./launcher/launch";
 import { previewOf } from "./launcher/preview-of";
 import { useOpeningApps } from "./launcher/useOpeningApps";
 import { Lock } from "./lock/Lock";
+import { LockReadouts } from "./lock/LockReadouts";
 import { useLocked } from "./lock/useLocked";
 import { NotificationDrawer } from "./notifications/NotificationDrawer";
 import { NotificationToasts } from "./notifications/NotificationToasts";
@@ -384,7 +385,9 @@ export const Desktop = ({
         locked={lock.locked}
         onUnlock={lock.unlock}
         refusals={lock.refusals}
-      />
+      >
+        <LockReadouts domicile={domicile} />
+      </Lock>
       <NoScreens />
     </>
   );

@@ -311,8 +311,9 @@ pub enum Asked<'a> {
 ///   the disk.
 /// - **Theme changes** are allowed. They open and read nothing, and keep the
 ///   lock screen's colors current.
-/// - **System calls** are refused, except reads under `/sys`, so a lock screen
-///   can show the battery, and calls that stop what the shell already started.
+/// - **System calls** are refused, except reads under `/sys`, the calls a lock
+///   screen makes to show and adjust the battery, brightness and volume
+///   (`Reach::Readout`), and calls that stop what the shell already started.
 ///   Processes and watches started before the lock keep running.
 pub fn refused(asked: Asked) -> Option<Refusal> {
     match asked {
@@ -350,7 +351,7 @@ pub fn refused(asked: Asked) -> Option<Refusal> {
             | ClientRequest::ThemeCaptured { .. },
         )
         | Asked::OnTheConnection(ConnectionRequest::SetTheme { .. })
-        | Asked::System(Reach::ReadsTheKernel | Reach::Stops) => None,
+        | Asked::System(Reach::ReadsTheKernel | Reach::Readout | Reach::Stops) => None,
     }
 }
 
@@ -727,11 +728,13 @@ mod tests {
         }
     }
 
-    /// The lock screen may still read the battery under `/sys`, and stop what
-    /// the shell started. See `domicile_host::system::reach`.
+    /// The lock screen may still read `/sys`, show and adjust the battery,
+    /// brightness and volume, and stop what the shell started. See
+    /// `domicile_host::system::reach`.
     #[test]
-    fn a_locked_desk_lets_the_shell_read_the_kernel_and_stop_things() {
+    fn a_locked_desk_lets_the_shell_read_the_kernel_show_readouts_and_stop_things() {
         assert_eq!(refused(Asked::System(Reach::ReadsTheKernel)), None);
+        assert_eq!(refused(Asked::System(Reach::Readout)), None);
         assert_eq!(refused(Asked::System(Reach::Stops)), None);
         assert_eq!(
             refused(Asked::System(Reach::Acts)),

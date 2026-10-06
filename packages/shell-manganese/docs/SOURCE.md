@@ -29,7 +29,7 @@ The engine serves this page over `domicile://` and hands `Shell` the desktop.
 | `launcher/`, `clipboard/`, `notifications/`, `tray/`, `extensions/` | Those features. |
 | `battery/`, `brightness/`, `volume/`, `clock/` | Bar readouts and where each reads from. |
 | `network/`, `bluetooth/` | Bar items on `@domicile-desktop/system-network` and `system-bluetooth`. |
-| `lock/` | Lock screen. |
+| `lock/` | Lock screen, with the battery, brightness and volume. |
 | `theme/` | Theme from the host or the last session. |
 | `wallpaper/` | Wallpaper and its photo list. |
 | `host/` | Helpers for the desktop: watching an attribute, and spotting a superseded search. |

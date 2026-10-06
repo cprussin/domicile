@@ -1,7 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import {
-  act,
   fireEvent,
   render,
   screen,
@@ -10,35 +8,7 @@ import {
 import userEvent from "@testing-library/user-event";
 
 import { Brightness } from "./Brightness";
-
-/**
- * A test-controlled backlight: `backlight` replaces the system's, `report`
- * sends a level, and `asked` records every level the shell requested.
- */
-const heldBacklight = () => {
-  const listeners: ((level: number) => void)[] = [];
-  const asked: number[] = [];
-  return {
-    asked,
-    backlight: () => ({
-      set: (level: number) => {
-        asked.push(level);
-      },
-      watch: (onLevel: (level: number) => void) => {
-        listeners.push(onLevel);
-        return () => undefined;
-      },
-    }),
-    domicile: new FakeDomicileHost().host,
-    report: (level: number) => {
-      act(() => {
-        for (const onLevel of listeners) {
-          onLevel(level);
-        }
-      });
-    },
-  };
-};
+import { heldBacklight } from "./held-backlight";
 
 const opened = async (backlight: ReturnType<typeof heldBacklight>) => {
   render(
