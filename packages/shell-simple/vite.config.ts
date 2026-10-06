@@ -1,3 +1,4 @@
+import pandacssPostcssPlugin from "@pandacss/dev/postcss";
 import react from "@vitejs/plugin-react";
 import type { Plugin } from "vite";
 import { defineConfig } from "vite";
@@ -49,6 +50,14 @@ export default defineConfig({
       preserveEntrySignatures: "exports-only",
     },
     sourcemap: true,
+  },
+  css: {
+    postcss: {
+      // @pandacss/dev bundles another postcss version than Vite, so the
+      // plugin types differ; the runtime shapes are the same. See
+      // shell-manganese's vite.config.ts.
+      plugins: [pandacssPostcssPlugin as never],
+    },
   },
   plugins: [react(), cssInTheModule()],
 });

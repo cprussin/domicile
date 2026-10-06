@@ -4,6 +4,11 @@
 // in. See /docs/WRITING-A-SHELL.md.
 
 import type { DomicileWindow } from "@domicile-desktop/sdk/domicile-host";
+import {
+  answerPortalRequest,
+  PortalAnswer,
+  watchPortalRequests,
+} from "@domicile-desktop/sdk/portal";
 import type { Shell as ShellModule } from "@domicile-desktop/sdk/shell";
 
 /** Draws the desktop into `root`, Domicile's empty `<body>`. */
@@ -41,6 +46,15 @@ export const Shell: ShellModule = (root, domicile) => {
 
   show();
   domicile.addEventListener("windowschanged", show);
+
+  // This shell draws no dialogs, so it refuses what applications ask through
+  // the desktop portal rather than leave them waiting. A React shell mounts
+  // `PortalDialogs` from `@domicile-desktop/component-library` instead.
+  watchPortalRequests(domicile, (requests) => {
+    for (const request of requests) {
+      answerPortalRequest(domicile, request.id, PortalAnswer.Refused());
+    }
+  });
 };
 
 /**

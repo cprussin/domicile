@@ -955,6 +955,35 @@ describe("Shell", () => {
     });
   });
 
+  describe("an application's dialog", () => {
+    it("is asked over the desktop, and answered", async () => {
+      renderShell();
+      domicile.dispatch("portalrequests", {
+        data: JSON.stringify({
+          items: [
+            {
+              app_id: "org.example.App",
+              body: { body: "", subtitle: "", title: "Use the camera?" },
+              id: 1,
+              kind: "access",
+            },
+          ],
+          type: "portal_requests",
+        }),
+      });
+
+      await userEvent.click(
+        await screen.findByRole("button", { name: "Allow" }),
+      );
+
+      expect(domicile.calls).toContainEqual([
+        "answerPortalRequest",
+        1,
+        '{"kind":"access"}',
+      ]);
+    });
+  });
+
   describe("the notifications", () => {
     /** A notification as the engine holds one. */
     const arrived = (id: number, summary: string) => ({

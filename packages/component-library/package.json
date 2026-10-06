@@ -1,6 +1,7 @@
 {
   "dependencies": {
     "@base-ui/react": "catalog:",
+    "@domicile-desktop/sdk": "workspace:*",
     "@phosphor-icons/react": "catalog:"
   },
   "description": "React components and the Panda CSS design system that Domicile's shells are built from.",
@@ -44,6 +45,7 @@
     "./list-walk": "./src/list-walk.ts",
     "./ModalDialog": "./src/ModalDialog/ModalDialog.tsx",
     "./Popover": "./src/Popover/Popover.tsx",
+    "./PortalDialogs": "./src/PortalDialogs/PortalDialogs.tsx",
     "./Provider": "./src/Provider/Provider.tsx",
     "./pandacss-preset": "./src/pandacss-preset.ts",
     "./Screen": "./src/Screen/Screen.tsx",

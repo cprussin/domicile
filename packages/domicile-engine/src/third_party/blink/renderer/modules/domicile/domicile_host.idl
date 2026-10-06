@@ -67,6 +67,13 @@
   [CallWith=ScriptState, RaisesException] undefined callSystem(
       unsigned long id, DOMString request);
 
+  // Answer portal request `id`, which a `portalrequests` event listed.
+  // `answer` is JSON with a string `kind`, such as `{"kind":"access"}`. One
+  // that is not is dropped in the browser. The compositor checks the rest. See
+  // docs/architecture/PORTALS.md.
+  [CallWith=ScriptState, RaisesException] undefined answerPortalRequest(
+      unsigned long id, DOMString answer);
+
   // Put a row of the clipboard's history back on the clipboard.
   //
   // IT NAMES A ROW AND CARRIES NO TEXT: a shell is served over domicile:// so
@@ -401,4 +408,10 @@
   // An answer to callSystem(), as a MessageEvent whose `data` is the
   // compositor's `system_reply`, `system_event` or `system_end` line.
   attribute EventHandler onsystem;
+
+  // Every unanswered portal request, as a MessageEvent whose `data` is the
+  // compositor's `portal_requests` line. Fired on every change. A listener
+  // added later is sent the latest line, so a shell that listens late still
+  // sees pending dialogs.
+  attribute EventHandler onportalrequests;
 };
