@@ -208,6 +208,15 @@ describe("Launcher", () => {
     expect(screen.getByRole("dialog").getAttribute("data-size")).toBe("xl");
   });
 
+  it("sizes its rows to its own screen, not the page every monitor shares", () => {
+    // Otherwise a short screen beside a tall one overflows.
+    using _panel = launcher();
+
+    expect(screen.getByRole("listbox").parentElement).toHaveStyle({
+      blockSize: "60cqh",
+    });
+  });
+
   it("offers what the host found, each name under the directory it is in", async () => {
     // Directory and name are separate lines, so `textContent` has no
     // separator.
@@ -921,10 +930,14 @@ describe("Launcher", () => {
       ).toBe(picture);
     });
 
-    it("is most of the screen tall, so there is room to see what it shows", () => {
+    it("is most of its screen tall, so there is room to see what it shows", () => {
+      // Relative to the dialog's screen, not the page, which spans every
+      // monitor and would overflow a short one.
       using _panel = launcher();
 
-      expect(globalThis.getComputedStyle(previewPane()).blockSize).toBe("60vh");
+      expect(globalThis.getComputedStyle(previewPane()).blockSize).toBe(
+        "60cqh",
+      );
     });
 
     it("says what to do while there is no row to highlight", async () => {

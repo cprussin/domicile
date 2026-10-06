@@ -1005,9 +1005,9 @@ const resultsStyles = css({
   // A slightly different background marks the empty space as part of the
   // list.
   backgroundColor: "color-mix(in oklab, {colors.foreground} 4%, transparent)",
-  // Relative to the screen, leaving room for the box, footer and top offset on
-  // any monitor.
-  blockSize: "60vh",
+  // Relative to the dialog's screen, not the page, which spans every monitor.
+  // Leaves room for the box, footer and top offset on any monitor.
+  blockSize: "60cqh",
   borderRadius: "md",
   overflowY: "auto",
   padding: 1,
@@ -1022,7 +1022,7 @@ const resultsStyles = css({
 // since the document default is unreadable on the glass surface.
 const previewStyles = css({
   backgroundColor: "color-mix(in oklab, {colors.foreground} 4%, transparent)",
-  blockSize: "60vh",
+  blockSize: "60cqh",
   borderRadius: "md",
   color: "foreground",
   overflowY: "auto",
