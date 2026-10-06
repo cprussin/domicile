@@ -21,6 +21,8 @@ import { loadEmittedStylesheet } from "../emitted-stylesheet";
 import { BrowserWindow } from "./BrowserWindow";
 
 const silentDomicile = {
+  // Taken by the window's system calls, which these tests never answer.
+  addEventListener: () => undefined,
   focusApp: () => undefined,
   focusChrome: () => undefined,
 } as unknown as DomicileHost;
@@ -95,8 +97,6 @@ const asksForAFile = (element: HTMLWebViewElement, answers: string[]): void => {
         answers.push(`choose ${paths.join(",")}`);
       },
       home: "/home/someone",
-      // One file in the home directory is enough for these tests.
-      list: () => Promise.resolve(["notes.txt"]),
       mode: "open",
       suggestedName: "",
     }),
@@ -502,6 +502,8 @@ describe("BrowserWindow", () => {
       dragging: false,
       frame: FRAME,
       fullscreen: false,
+      // One file in the home directory is enough for these tests.
+      listDirectory: () => Promise.resolve(["notes.txt"]),
       motion: "resting",
       onMotionEnded: nothingEnded,
       onReach: () => undefined,

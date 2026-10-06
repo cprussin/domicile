@@ -238,8 +238,9 @@ frame.addEventListener(WEBVIEW_FILE_CHOOSER_EVENT, (event) => {
 - **`preventDefault()`:** claims it. Unclaimed choosers are canceled when
   dispatch returns.
 - **`event.home`** is the absolute home directory.
-- **`event.list(path)`** lists a directory while the chooser is open.
-  Directories end in `/`. It rejects for an unreadable path.
+- **Listing directories:** `readDir` and `stat` from
+  `@domicile-desktop/sdk/system` ([SYSTEM-ACCESS.md](/docs/architecture/SYSTEM-ACCESS.md)).
+  They are refused while the desktop is locked.
 - **Paths** are absolute or relative to home (`""` is home). `..` throws a
   `TypeError`.
 - **`mode`** is `open`, `open-multiple`, `open-folder` or `save`. `accept`

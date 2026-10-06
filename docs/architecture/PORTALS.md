@@ -29,7 +29,7 @@ One request channel carries all dialogs. Each interface's backend builds on it.
 | Wire types: `HostMessage::PortalRequests`, `ChromeMessage::AnswerPortalRequest`, `PortalRequest`, `PortalAnswer` | `packages/domicile-protocol` |
 | Queue: pending requests, their apps, answer validation | `packages/domicile-host/src/portals/` |
 | D-Bus service: one name, one object, all interfaces; `Request`/`Session` objects | `packages/domicile-compositor/src/portals/` (`Settings` moves here from `appearance.rs`) |
-| `portalrequests` event, `answerPortalRequest()`, `listDirectory()` | `control_channel.mojom`, `modules/domicile/`, one engine patch |
+| `portalrequests` event, `answerPortalRequest()` | `control_channel.mojom`, `modules/domicile/`, one engine patch |
 | Request kinds, parsed with Zod | `@domicile-desktop/sdk/portal` |
 | Ready-made dialogs for any shell | `@domicile-desktop/component-library/PortalDialogs` |
 | `parent_window` to window lookup | `zxdg_exporter_v2` / `v1` in the compositor |
@@ -126,7 +126,7 @@ Phase 0: request channel.
 - [ ] `PortalRequest`, `PortalAnswer`, the two messages; protocol round-trip tests
 - [ ] `domicile_host::portals`: queue, first answer wins, refuse when no listener
 - [ ] `src/portals/`: one name, `Request` and `Session` objects, `Settings` moved from `appearance.rs`
-- [ ] engine patch: `portalrequests`, `answerPortalRequest`, `listDirectory` (`file_choice.cc`'s `DirectoryEntries`); guard against a stand-in compositor
+- [ ] engine patch: `portalrequests`, `answerPortalRequest`; guard against a stand-in compositor
 - [ ] SDK: `portal_requests`, kinds parsed with Zod
 - [x] `zxdg_exporter_v2` and `v1`; resolve a handle to an app id (`domicile_host::xdg_foreign`; no importer)
 - [ ] `<PortalDialogs />` in component-library; mounted in manganese, shell-simple, `examples/minimal-shell`
@@ -134,7 +134,7 @@ Phase 0: request channel.
 
 Phase 1: dialogs.
 
-- [ ] FileChooser, with `FilePicker` moved to component-library
+- [ ] FileChooser, with `FilePicker` moved to component-library; it lists directories with `readDir` ([SYSTEM-ACCESS.md](SYSTEM-ACCESS.md))
 - [ ] AppChooser
 - [ ] Access, Account, Email, Lockdown
 - [ ] Notification v2

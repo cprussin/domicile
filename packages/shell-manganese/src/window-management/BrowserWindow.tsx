@@ -1,5 +1,6 @@
 import { FilePicker } from "@domicile-desktop/component-library/FilePicker";
 import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
+import { system } from "@domicile-desktop/sdk/system";
 import {
   WEBVIEW_FOCUS_REQUEST_EVENT,
   WEBVIEW_GUEST_FOCUS_EVENT,
@@ -8,12 +9,13 @@ import {
   WEBVIEW_ZOOM_OUT_REQUEST_EVENT,
 } from "@domicile-desktop/sdk/webview-element";
 import type { FocusEvent } from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { css, cx } from "../../styled-system/css";
 import { flex } from "../../styled-system/patterns";
 import { AddressBar } from "./browser/AddressBar";
 import { BrowserCommand, browserCommandFor } from "./browser/browser-command";
 import { FindBar } from "./browser/FindBar";
+import { listDirectory as defaultListDirectory } from "./browser/list-directory";
 import { PageMenu } from "./browser/PageMenu";
 import { choosePageCommand, pageMenuFor } from "./browser/page-menu";
 import { useFileRequest } from "./browser/useFileRequest";
@@ -44,8 +46,9 @@ import {
 
 type Props = {
   /**
-   * Used to tell the host that no client holds the keyboard. The page lives in
-   * the shell's own window, so focusing it takes focus from any client.
+   * Used to tell the host that no client holds the keyboard, and to list
+   * directories for the file picker. The page lives in the shell's own window,
+   * so focusing it takes focus from any client.
    */
   domicile: DomicileHost;
   /** Whether the pointer passes through this window, as during a drag. */
@@ -68,6 +71,8 @@ type Props = {
   frame: Rect | undefined;
   /** Whether this window is fullscreen, which removes its edge and corners. */
   fullscreen: boolean;
+  /** Lists a directory for the file picker. */
+  listDirectory?: typeof defaultListDirectory;
   /**
    * The window's current animation, if any.
    *
@@ -130,6 +135,7 @@ export const BrowserWindow = ({
   focused,
   frame,
   fullscreen,
+  listDirectory = defaultListDirectory,
   motion,
   onMotionEnded,
   onReach,
@@ -162,9 +168,14 @@ export const BrowserWindow = ({
   // True while `focusOwn` is calling `focus()`. Focus events fire
   // synchronously inside that call, so this marks them as not user reaches.
   const focusing = useRef(false);
+  const files = useMemo(() => system(domicile), [domicile]);
+  const list = useCallback(
+    (path: string) => listDirectory(files, path),
+    [files, listDirectory],
+  );
   // A pending file request from the page. The engine draws no dialog; see
   // `useFileRequest`.
-  const asking = useFileRequest(view);
+  const asking = useFileRequest(view, list);
   // The file picker's input. While open it takes the window's keyboard.
   const [pickerBox, setPickerBox] = useState<HTMLInputElement | null>(null);
   // Whether the find bar is open, and its input.

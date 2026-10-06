@@ -166,7 +166,8 @@ export const WEBVIEW_CONTENT_SIZE_CHANGE_EVENT = "domicile-content-size-change";
  * answer with {@link DomicileFileChooserEvent.choose} or
  * {@link DomicileFileChooserEvent.cancel}. If no listener calls
  * `preventDefault()`, the request is canceled, so uploads and downloads fail.
- * Every download asks for a path.
+ * Every download asks for a path. A picker lists directories with `readDir`
+ * from `@domicile-desktop/sdk/system`.
  */
 export const WEBVIEW_FILE_CHOOSER_EVENT = "domicile-file-chooser";
 
@@ -402,12 +403,6 @@ declare global {
      * throws an `InvalidStateError`.
      */
     choose(paths: readonly string[]): void;
-    /**
-     * The unordered entries of the directory at `path`, with directories
-     * ending in `/`. Rejects with `NotReadableError` if `path` is not a
-     * readable directory, and with `InvalidStateError` after an answer.
-     */
-    list(path: string): Promise<string[]>;
     /** Answer that nothing was picked. */
     cancel(): void;
   }
