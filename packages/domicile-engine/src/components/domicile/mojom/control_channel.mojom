@@ -636,31 +636,17 @@ interface ControlChannelClient {
        array<DesktopEntry> apps,
        array<Bookmark> bookmarks);
 
-  // The machine's battery: `charge` is a fraction 0.0 through 1.0, `charging`
-  // is whether a lead is in.
-  //
-  // Pushed, unlike Files, and with no member on ControlChannel to ask for it:
-  // a charge changes on its own. The compositor polls
-  // /sys/class/power_supply and sends this when the reading moves far enough
-  // to draw, and once more to a chrome that has just connected.
-  //
-  // It exists because navigator.getBattery() does not work here. That API
-  // reads UPower over D-Bus and a desktop on a bare tty has neither, so it
-  // resolves with the default BatteryStatus -- charging, and full -- which no
-  // page can distinguish from a real full battery. A machine with no battery
-  // sends nothing rather than a zero, for the same reason.
-  Battery(double charge, bool charging);
-
   // How bright the screen is, 0.0 through 1.0.
   //
-  // Pushed like Battery: when the backlight moves -- a key, another program,
-  // or SetBrightness -- and once more to a chrome that has just connected. A
-  // machine with no backlight sends none.
+  // Pushed, unlike Files, with no member on ControlChannel to ask for it. Sent
+  // when the backlight moves (a key, another program, or SetBrightness) and
+  // once more to a chrome that has just connected. A machine with no backlight
+  // sends none.
   Brightness(double level);
 
   // What has been copied on this desktop, newest first.
   //
-  // Pushed like Battery: the compositor is the process a
+  // Pushed like Brightness: the compositor is the process a
   // wl_data_device.set_selection arrives at, so a copy is an event it already
   // hears. Sent whenever the history changes and once more to a chrome that
   // has just connected. An empty array is a desktop nothing has been copied on
@@ -698,7 +684,7 @@ interface ControlChannelClient {
   // inside the generated class -- the same reason ShortcutPressed is not
   // called Shortcut.
   //
-  // Pushed like Battery, and the one pushed message whose cause can be this
+  // Pushed like Brightness, and the one pushed message whose cause can be this
   // page: it arrives when a chrome has just connected, when a reload of the
   // compositor's config moved `[theme]`, and when any chrome calls
   // ControlChannel::SetTheme. The sender is told again as part of that last
@@ -708,7 +694,7 @@ interface ControlChannelClient {
   // Whether anybody is at this desktop: true is a desk nobody has touched for
   // as long as its config says, false is somebody back at it.
   //
-  // Pushed like Battery, and a state rather than an edge although the
+  // Pushed like Brightness, and a state rather than an edge although the
   // compositor decides an edge: over there an edge is what a connector can
   // take, because lighting one is a modeset and a dark desk restating itself
   // every tick is a modeset a second. A page reloads, so it is sent where the

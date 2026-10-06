@@ -14,14 +14,12 @@ export const Shell = (_root, desktop) => {
     );
   }
   // Listening is what binds the channel -- see DomicileHost::AddedEventListener.
-  host.addEventListener("batterychanged", () => undefined);
+  host.addEventListener("idlechanged", () => undefined);
   console.log("GUARD listening");
 
   setTimeout(() => {
     const state = {
       altKey: host.altKey,
-      batteryCharge: host.batteryCharge,
-      batteryCharging: host.batteryCharging,
       clipboard: host.clipboard?.map(({ id, preview }) => ({ id, preview })),
       ctrlKey: host.ctrlKey,
       idle: host.idle,

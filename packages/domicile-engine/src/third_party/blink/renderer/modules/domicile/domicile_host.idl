@@ -350,9 +350,6 @@
   readonly attribute FrozenArray<DomicileAudioStream>? audioRecording;
   readonly attribute FrozenArray<DomicileAudioCard>? audioCards;
   attribute EventHandler onaudiochanged;
-  readonly attribute double? batteryCharge;
-  readonly attribute boolean? batteryCharging;
-  attribute EventHandler onbatterychanged;
   readonly attribute boolean? idle;
   attribute EventHandler onidlechanged;
   readonly attribute boolean? locked;
