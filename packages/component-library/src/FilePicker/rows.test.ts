@@ -56,8 +56,8 @@ describe("rowsIn", () => {
     ]);
   });
 
-  // The browser has already expanded `image/*` into lowercase extensions.
-  it("offers only the files the page will take, whatever their case", () => {
+  // The caller has already expanded `image/*` into lowercase extensions.
+  it("offers only the files the request takes, whatever their case", () => {
     expect(
       listed(ChooserMode.Open, { accept: ["png"] }).filter((name) =>
         name.includes("."),

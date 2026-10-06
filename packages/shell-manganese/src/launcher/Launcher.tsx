@@ -1,5 +1,11 @@
 import { Input } from "@domicile-desktop/component-library/Input";
 import { Kbd } from "@domicile-desktop/component-library/Kbd";
+import {
+  highlightIn,
+  keepInView,
+  stepOf,
+  steppedTo,
+} from "@domicile-desktop/component-library/list-walk";
 import { ModalDialog } from "@domicile-desktop/component-library/ModalDialog";
 import type { FilePreview } from "@domicile-desktop/sdk/file-preview";
 import { FilePreviewKind } from "@domicile-desktop/sdk/file-preview";
@@ -29,7 +35,6 @@ import {
   useRef,
   useState,
 } from "react";
-
 import { css } from "../../styled-system/css";
 import { flex, hstack, vstack } from "../../styled-system/patterns";
 import { Engine } from "../address/search";
@@ -53,7 +58,6 @@ import { usePreview } from "./usePreview";
 import { useSettled } from "./useSettled";
 import { VideoPreview } from "./VideoPreview";
 import { WikipediaLogoIcon } from "./WikipediaLogoIcon";
-import { highlightIn, keepInView, stepOf, steppedTo } from "./walk";
 
 /** The box's placeholder and accessible name. */
 const PROMPT = "Open an app, a file, a URL, or search";

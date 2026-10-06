@@ -38,13 +38,13 @@ type Answer = readonly string[] | undefined;
  */
 const picker = (
   mode: ChooserMode,
-  { accept = [], suggestedName = "" }: Partial<FileRequest> = {},
+  request: Partial<FileRequest> = {},
 ): Promise<Answer> =>
   new Promise((resolve) => {
     render(
       <FilePicker
         request={{
-          accept,
+          accept: [],
           cancel: () => {
             resolve(undefined);
           },
@@ -52,7 +52,8 @@ const picker = (
           home: HOME,
           list,
           mode,
-          suggestedName,
+          suggestedName: "",
+          ...request,
         }}
       />,
     );
@@ -223,6 +224,16 @@ describe("FilePicker", () => {
       await cancel(answered);
     });
 
+    it("starts in the folder the request names", async () => {
+      const answered = picker(ChooserMode.Open, {
+        currentFolder: `${HOME}/Pictures`,
+      });
+
+      expect(await rows()).toStrictEqual(["..", "trips", "cat.png", "dog.png"]);
+      expect(where()).toStrictEqual(["~", "Pictures"]);
+      await cancel(answered);
+    });
+
     it("says so when a directory cannot be read, and still goes up", async () => {
       const answered = picker(ChooserMode.Open);
       await rows();
@@ -236,13 +247,52 @@ describe("FilePicker", () => {
   });
 
   describe("opening a file", () => {
-    it("offers only the files the page will take", async () => {
+    it("offers only the files the request takes", async () => {
       const answered = picker(ChooserMode.Open, { accept: ["pdf"] });
       await rows();
 
       await userEvent.type(box(), "Documents/");
 
       expect(await rows()).toStrictEqual(["..", "report.pdf"]);
+      await cancel(answered);
+    });
+
+    // The first group applies until another is picked.
+    it("offers the files of the filter group picked", async () => {
+      const answered = picker(ChooserMode.Open, {
+        filters: [
+          { extensions: ["png"], name: "Images" },
+          { extensions: ["pdf", "txt"], name: "Text" },
+        ],
+      });
+
+      expect(await rows()).toStrictEqual([
+        "..",
+        "Documents",
+        "Pictures",
+        "Scratch",
+      ]);
+      await userEvent.click(
+        screen.getByRole("combobox", { name: "File type" }),
+      );
+      await userEvent.click(screen.getByRole("option", { name: "Text" }));
+      expect(await rows()).toStrictEqual([
+        "..",
+        "Documents",
+        "Pictures",
+        "Scratch",
+        "notes.txt",
+      ]);
+      await cancel(answered);
+    });
+
+    it("has no filter groups to pick unless the request names some", async () => {
+      const answered = picker(ChooserMode.Open);
+      await rows();
+
+      expect(
+        screen.queryByRole("combobox", { name: "File type" }),
+      ).not.toBeInTheDocument();
       await cancel(answered);
     });
 
@@ -388,6 +438,16 @@ describe("FilePicker", () => {
       await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
       expect(await answered).toBeUndefined();
     });
+  });
+
+  it("takes its title from the request", async () => {
+    const answered = picker(ChooserMode.Open, { title: "Attach a photo" });
+    await rows();
+
+    expect(
+      screen.getByRole("dialog", { name: "Attach a photo" }),
+    ).toBeInTheDocument();
+    await cancel(answered);
   });
 
   it.each([

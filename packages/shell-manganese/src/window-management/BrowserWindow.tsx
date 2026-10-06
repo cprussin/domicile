@@ -1,3 +1,4 @@
+import { FilePicker } from "@domicile-desktop/component-library/FilePicker";
 import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import {
   WEBVIEW_FOCUS_REQUEST_EVENT,
@@ -8,12 +9,10 @@ import {
 } from "@domicile-desktop/sdk/webview-element";
 import type { FocusEvent } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
-
 import { css, cx } from "../../styled-system/css";
 import { flex } from "../../styled-system/patterns";
 import { AddressBar } from "./browser/AddressBar";
 import { BrowserCommand, browserCommandFor } from "./browser/browser-command";
-import { FilePicker } from "./browser/FilePicker";
 import { FindBar } from "./browser/FindBar";
 import { PageMenu } from "./browser/PageMenu";
 import { choosePageCommand, pageMenuFor } from "./browser/page-menu";

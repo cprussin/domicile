@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
+import { ChooserMode } from "@domicile-desktop/component-library/file-request";
 import { WEBVIEW_FILE_CHOOSER_EVENT } from "@domicile-desktop/sdk/webview-element";
-
-import { ChooserMode, fileRequestOf } from "./file-request";
+import { fileRequestOf } from "./file-request";
 
 /**
  * A fake engine file chooser event, recording its answers in order. Built by
