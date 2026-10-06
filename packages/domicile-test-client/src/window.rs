@@ -14,7 +14,7 @@ use wayland_client::backend::ObjectId;
 use wayland_client::protocol::{
     wl_buffer, wl_callback, wl_compositor, wl_data_device, wl_data_device_manager, wl_data_offer,
     wl_data_source, wl_keyboard, wl_output, wl_pointer, wl_registry, wl_seat, wl_shm, wl_shm_pool,
-    wl_surface,
+    wl_subcompositor, wl_subsurface, wl_surface,
 };
 use wayland_client::{
     delegate_noop, event_created_child, Connection, Dispatch, Proxy as _, QueueHandle, WEnum,
@@ -72,6 +72,14 @@ const SIZE: (u32, u32) = (320, 240);
 /// The `--popup` geometry as `(x, y, width, height)` in window surface
 /// pixels. Public so checks can compare it with what the compositor reports.
 pub const POPUP: (i32, i32, i32, i32) = (10, 20, 120, 80);
+
+/// The `--bubble` geometry as `(x, y, width, height)` in window surface
+/// pixels, when it opens.
+pub const BUBBLE: (i32, i32, i32, i32) = (40, 30, 100, 60);
+
+/// The `--bubble` geometry after its first frame. It grows and moves, as an
+/// extension popup does once its page has laid out.
+pub const BUBBLE_GROWN: (i32, i32, i32, i32) = (30, 25, 150, 90);
 
 /// The popup's fill color, distinct from [`COLORS`] so checks can tell the
 /// popup from the window.
@@ -173,6 +181,12 @@ struct Client {
     /// See [`crate::arguments::Arguments::popup_grab`].
     popup_grab: bool,
     popup: Option<Popup>,
+    /// Whether to open a bubble once the window is up. See
+    /// [`crate::arguments::Arguments::bubble`].
+    wants_bubble: bool,
+    bubble: Option<Bubble>,
+    /// The surface the pointer is over, so a press can be told apart.
+    pointer_over: Option<wl_surface::WlSurface>,
     /// See [`crate::arguments::Arguments::min_size`].
     min_size: Option<(i32, i32)>,
     max_size: Option<(i32, i32)>,
@@ -268,6 +282,20 @@ struct Popup {
     drawn: Option<(wl_buffer::WlBuffer, std::fs::File)>,
 }
 
+/// User data for a bubble's objects. See [`PopupRole`].
+struct BubbleRole;
+
+/// An open `--bubble`: a surface drawn in [`POPUP_COLOR`] as a desync
+/// subsurface of the window, as Chromium's `WaylandBubble` is.
+struct Bubble {
+    surface: wl_surface::WlSurface,
+    /// `None` once hidden. Chromium hides a bubble by destroying its
+    /// `wl_subsurface` and keeps the surface.
+    subsurface: Option<wl_subsurface::WlSubsurface>,
+    /// Its buffers and backing files, kept until the client exits.
+    drawn: Vec<(wl_buffer::WlBuffer, std::fs::File)>,
+}
+
 /// The window's surface and its buffers.
 struct Window {
     surface: wl_surface::WlSurface,
@@ -310,6 +338,8 @@ struct Pixels {
 struct Globals {
     compositor: Option<wl_compositor::WlCompositor>,
     shm: Option<wl_shm::WlShm>,
+    /// For `--bubble`.
+    subcompositor: Option<wl_subcompositor::WlSubcompositor>,
     wm_base: Option<xdg_wm_base::XdgWmBase>,
     cursor: Option<wp_cursor_shape_manager_v1::WpCursorShapeManagerV1>,
     activation: Option<xdg_activation_v1::XdgActivationV1>,
@@ -338,6 +368,9 @@ impl Client {
             wants_popup: asked.popup,
             popup_grab: asked.popup_grab,
             popup: None,
+            wants_bubble: asked.bubble,
+            bubble: None,
+            pointer_over: None,
             min_size: asked.min_size,
             max_size: asked.max_size,
             translucent: asked.translucent,
@@ -377,6 +410,10 @@ impl Client {
                 }
                 "wl_shm" => {
                     self.globals.shm = Some(registry.bind(name, version.min(1), handle, ()));
+                }
+                "wl_subcompositor" => {
+                    self.globals.subcompositor =
+                        Some(registry.bind(name, version.min(1), handle, ()));
                 }
                 "xdg_wm_base" => {
                     self.globals.wm_base = Some(registry.bind(name, version.min(3), handle, ()));
@@ -895,6 +932,25 @@ fn draw_popup_or_stop(client: &mut Client, handle: &QueueHandle<Client>) {
         return;
     }
     let (_, _, width, height) = POPUP;
+    let (buffer, file) = solid_or_stop(shm, handle, (width, height), PopupRole);
+    popup.surface.attach(Some(&buffer), 0, 0);
+    popup.surface.damage(0, 0, width, height);
+    popup.surface.commit();
+    popup.drawn = Some((buffer, file));
+}
+
+/// A buffer of `size` filled with [`POPUP_COLOR`], or exit with the error.
+///
+/// Returns its backing file too, which must outlive the buffer.
+fn solid_or_stop<Role: Send + Sync + 'static>(
+    shm: &wl_shm::WlShm,
+    handle: &QueueHandle<Client>,
+    (width, height): (i32, i32),
+    role: Role,
+) -> (wl_buffer::WlBuffer, std::fs::File)
+where
+    Client: Dispatch<wl_buffer::WlBuffer, Role>,
+{
     let bytes = (width * height * 4) as usize;
     let pixels: Vec<u8> = POPUP_COLOR
         .to_ne_bytes()
@@ -912,20 +968,94 @@ fn draw_popup_or_stop(client: &mut Client, handle: &QueueHandle<Client>) {
         }
     };
     let pool = shm.create_pool(file.as_fd(), bytes as i32, handle, ());
-    let buffer = pool.create_buffer(
-        0,
-        width,
-        height,
-        width * 4,
-        shm_format(false),
-        handle,
-        PopupRole,
-    );
+    let buffer = pool.create_buffer(0, width, height, width * 4, shm_format(false), handle, role);
     pool.destroy();
-    popup.surface.attach(Some(&buffer), 0, 0);
-    popup.surface.damage(0, 0, width, height);
-    popup.surface.commit();
-    popup.drawn = Some((buffer, file));
+    (buffer, file)
+}
+
+/// Open the `--bubble` over the window, once.
+///
+/// As Chromium does: a desync subsurface of the window, positioned, then
+/// drawn. It grows on its first frame; see [`grow_bubble`].
+fn open_bubble(client: &mut Client, handle: &QueueHandle<Client>) {
+    if !client.wants_bubble {
+        return;
+    }
+    client.wants_bubble = false;
+    let (Some(compositor), Some(window)) =
+        (client.globals.compositor.as_ref(), client.window.as_ref())
+    else {
+        unreachable!("open() refuses a compositor without these, and made the window");
+    };
+    let subcompositor = client
+        .globals
+        .subcompositor
+        .as_ref()
+        .expect("--bubble needs a compositor that advertises wl_subcompositor");
+    let surface = compositor.create_surface(handle, BubbleRole);
+    let subsurface = subcompositor.get_subsurface(&surface, &window.surface, handle, ());
+    subsurface.set_desync();
+    // Traced with its surface, which input events name.
+    crate::say!(subsurface.id(), "opened({})", surface.id());
+    client.bubble = Some(Bubble {
+        surface,
+        subsurface: Some(subsurface),
+        drawn: Vec::new(),
+    });
+    draw_bubble(client, handle, BUBBLE);
+}
+
+/// Grow the bubble after its first frame, once.
+fn grow_bubble(client: &mut Client, handle: &QueueHandle<Client>) {
+    let grown_already = client
+        .bubble
+        .as_ref()
+        .is_some_and(|bubble| bubble.drawn.len() > 1);
+    if !grown_already {
+        draw_bubble(client, handle, BUBBLE_GROWN);
+    }
+}
+
+/// Place and draw the bubble at `(x, y, width, height)`.
+///
+/// The position applies on the window's next commit, which comes with its
+/// next frame.
+fn draw_bubble(
+    client: &mut Client,
+    handle: &QueueHandle<Client>,
+    (x, y, width, height): (i32, i32, i32, i32),
+) {
+    let shm = client
+        .globals
+        .shm
+        .as_ref()
+        .expect("open() refuses a compositor without wl_shm");
+    let bubble = client
+        .bubble
+        .as_mut()
+        .expect("only a bubble this client opened is drawn");
+    let (buffer, file) = solid_or_stop(shm, handle, (width, height), BubbleRole);
+    if let Some(subsurface) = &bubble.subsurface {
+        subsurface.set_position(x, y);
+    }
+    bubble.surface.attach(Some(&buffer), 0, 0);
+    bubble.surface.damage(0, 0, width, height);
+    bubble.surface.frame(handle, BubbleRole);
+    bubble.surface.commit();
+    bubble.drawn.push((buffer, file));
+}
+
+/// Hide the bubble as Chromium does: destroy its `wl_subsurface` and keep
+/// the surface.
+fn hide_bubble(client: &mut Client) {
+    let subsurface = client
+        .bubble
+        .as_mut()
+        .and_then(|bubble| bubble.subsurface.take());
+    if let Some(subsurface) = subsurface {
+        crate::say!(subsurface.id(), "hid()");
+        subsurface.destroy();
+    }
 }
 
 /// Draw a frame, or exit with the error.
@@ -1058,6 +1188,7 @@ impl Dispatch<xdg_surface::XdgSurface, ()> for Client {
                 ask_for_focus_or_stop(client, handle);
                 // A popup needs a mapped parent.
                 open_popup(client, handle);
+                open_bubble(client, handle);
             }
         }
     }
@@ -1492,6 +1623,49 @@ impl Dispatch<wl_buffer::WlBuffer, PopupRole> for Client {
     ) {
     }
 }
+delegate_noop!(Client: ignore wl_subcompositor::WlSubcompositor);
+delegate_noop!(Client: ignore wl_subsurface::WlSubsurface);
+
+// Bubble surface and buffer events are ignored, as a popup's are.
+impl Dispatch<wl_surface::WlSurface, BubbleRole> for Client {
+    fn event(
+        _: &mut Client,
+        _: &wl_surface::WlSurface,
+        _: wl_surface::Event,
+        _: &BubbleRole,
+        _: &Connection,
+        _: &QueueHandle<Client>,
+    ) {
+    }
+}
+
+impl Dispatch<wl_buffer::WlBuffer, BubbleRole> for Client {
+    fn event(
+        _: &mut Client,
+        _: &wl_buffer::WlBuffer,
+        _: wl_buffer::Event,
+        _: &BubbleRole,
+        _: &Connection,
+        _: &QueueHandle<Client>,
+    ) {
+    }
+}
+
+/// The bubble's first frame is done: grow it.
+impl Dispatch<wl_callback::WlCallback, BubbleRole> for Client {
+    fn event(
+        client: &mut Client,
+        _: &wl_callback::WlCallback,
+        event: wl_callback::Event,
+        _: &BubbleRole,
+        _: &Connection,
+        handle: &QueueHandle<Client>,
+    ) {
+        if let wl_callback::Event::Done { .. } = event {
+            grow_bubble(client, handle);
+        }
+    }
+}
 delegate_noop!(Client: ignore wp_cursor_shape_manager_v1::WpCursorShapeManagerV1);
 delegate_noop!(Client: ignore wp_cursor_shape_device_v1::WpCursorShapeDeviceV1);
 
@@ -1686,6 +1860,7 @@ impl Dispatch<wl_pointer::WlPointer, ()> for Client {
                     surface_x,
                     surface_y
                 );
+                client.pointer_over = Some(surface);
                 // The cursor shape request is how the compositor learns which
                 // cursor to pass to the chrome.
                 client
@@ -1721,6 +1896,15 @@ impl Dispatch<wl_pointer::WlPointer, ()> for Client {
                     button,
                     number(state)
                 );
+                // A press on the bubble hides it, as choosing something in an
+                // extension popup closes it.
+                let on_the_bubble = client
+                    .bubble
+                    .as_ref()
+                    .is_some_and(|bubble| client.pointer_over.as_ref() == Some(&bubble.surface));
+                if on_the_bubble && state == WEnum::Value(wl_pointer::ButtonState::Pressed) {
+                    hide_bubble(client);
+                }
             }
             _ => {}
         }

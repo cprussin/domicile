@@ -68,6 +68,12 @@ pub struct Arguments {
     /// Whether the popup calls `xdg_popup.grab` before its first commit, as a
     /// menu does. Implies `popup`.
     pub popup_grab: bool,
+
+    /// Whether to open a bubble over the window once it is up: a desync
+    /// `wl_subsurface`, as Chromium draws an extension popup.
+    ///
+    /// See [`crate::window::BUBBLE`] for its placement.
+    pub bubble: bool,
     /// Size limits for `xdg_toplevel.set_min_size` and `set_max_size`, in
     /// surface pixels. `0` on an axis means no limit.
     pub min_size: Option<(i32, i32)>,
@@ -119,6 +125,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
     let mut paste = None;
     let mut popup = None;
     let mut popup_grab = None;
+    let mut bubble = None;
     let mut min_size = None;
     let mut max_size = None;
 
@@ -173,6 +180,9 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
             "--popup-grab" => {
                 take(&mut popup_grab, &flag, true)?;
             }
+            "--bubble" => {
+                take(&mut bubble, &flag, true)?;
+            }
             "--min-size" => {
                 take(&mut min_size, &flag, size(&mut args, &flag)?)?;
             }
@@ -196,6 +206,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
         paste: paste.unwrap_or(false),
         popup: popup.unwrap_or(false) || popup_grab.unwrap_or(false),
         popup_grab: popup_grab.unwrap_or(false),
+        bubble: bubble.unwrap_or(false),
         min_size,
         max_size,
     })

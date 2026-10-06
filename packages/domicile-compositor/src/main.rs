@@ -55,8 +55,9 @@ use smithay::wayland::viewporter::{ViewportCachedState, ViewporterState};
 use smithay::wayland::{
     buffer::BufferHandler,
     compositor::{
-        with_states, BufferAssignment, CompositorClientState, CompositorHandler, CompositorState,
-        Damage, SurfaceAttributes, SurfaceData,
+        get_children, get_parent, with_states, BufferAssignment, CompositorClientState,
+        CompositorHandler, CompositorState, Damage, SubsurfaceCachedState, SurfaceAttributes,
+        SurfaceData,
     },
     content_type::ContentTypeState,
     cursor_shape::CursorShapeManagerState,
@@ -1575,6 +1576,12 @@ struct DomicileCompositor {
     /// They have the keyboard while open. Focus moving anywhere but their
     /// window dismisses them all; see `ClientRequest::KeyboardFocus`.
     grabbing: Vec<PopupSurface>,
+    /// Every announced bubble: a subsurface of a window or popup, placed as a
+    /// popup is.
+    ///
+    /// Chromium draws its bubbles this way, extension popups among them.
+    /// Announced once it has a buffer; see `place_the_bubbles`.
+    bubbles: Vec<Bubble>,
     /// The app the pointer is currently over, so a `set_cursor` request can be
     /// attributed to the element the chrome should restyle.
     pointer_app: Option<String>,
@@ -1778,6 +1785,12 @@ impl DomicileCompositor {
                     .find(|(id, _)| id == app_id)
                     .map(|(_, popup)| popup.wl_surface().clone())
             })
+            .or_else(|| {
+                self.bubbles
+                    .iter()
+                    .find(|bubble| bubble.app_id == app_id)
+                    .map(|bubble| bubble.surface.clone())
+            })
     }
 
     fn now_ms(&self) -> u32 {
@@ -1808,6 +1821,12 @@ impl DomicileCompositor {
                     .map(|(app_id, popup)| {
                         (Committer::App(app_id.clone()), Role::Popup(popup.clone()))
                     })
+            })
+            .or_else(|| {
+                self.bubbles
+                    .iter()
+                    .find(|bubble| bubble.surface == *surface)
+                    .map(|bubble| (Committer::App(bubble.app_id.clone()), Role::Bubble))
             })
     }
 
@@ -1859,6 +1878,89 @@ impl DomicileCompositor {
             debug!(%app_id, %parent, "popup mapped -> Host::popup_placed");
             self.popups.push((app_id, popup));
             self.hub.broadcast(message);
+        }
+    }
+
+    /// Announce, move or forget the bubbles a commit of `surface` changes.
+    ///
+    /// That is `surface` itself, which may be a bubble, and the bubbles over
+    /// it, since a parent's commit applies their positions.
+    fn place_the_bubbles(&mut self, surface: &WlSurface) {
+        let drawn = drawn_size(surface);
+        let over_it = self
+            .bubbles
+            .iter()
+            .filter(|bubble| bubble.parent == *surface)
+            .map(|bubble| bubble.surface.clone());
+        let children: Vec<WlSurface> = get_children(surface).into_iter().chain(over_it).collect();
+        self.place_a_bubble(surface, drawn);
+        for child in children {
+            self.place_a_bubble(&child, None);
+        }
+    }
+
+    /// Announce a subsurface of an app as a bubble once it has drawn, place it
+    /// again when it moves or resizes, and forget it once it is no longer a
+    /// subsurface.
+    ///
+    /// `drawn` is the size of a buffer it just committed. Chromium hides a
+    /// bubble by destroying its `wl_subsurface` and keeping the surface.
+    fn place_a_bubble(&mut self, surface: &WlSurface, drawn: Option<(f64, f64)>) {
+        let tracked = self
+            .bubbles
+            .iter()
+            .position(|bubble| bubble.surface == *surface);
+        let parent = get_parent(surface)
+            .and_then(|parent| self.app_id_of(&parent).map(|app_id| (parent, app_id)));
+        match (tracked, parent) {
+            (Some(at), None) => {
+                let bubble = self.bubbles.remove(at);
+                debug!(app_id = %bubble.app_id, "bubble hidden -> Host::app_closed");
+                self.forget(&bubble.app_id);
+            }
+            (Some(at), Some((parent, _))) => {
+                let bubble = &mut self.bubbles[at];
+                let placed = (
+                    bubble_position(surface, &parent),
+                    drawn.unwrap_or(bubble.placed.1),
+                );
+                if placed == bubble.placed {
+                    return;
+                }
+                bubble.placed = placed;
+                let moved =
+                    self.hub
+                        .host
+                        .lock()
+                        .unwrap()
+                        .popup_moved(&bubble.app_id, placed.0, placed.1);
+                if let Some(message) = moved {
+                    self.hub.broadcast(message);
+                }
+            }
+            (None, Some((parent, parent_id))) => {
+                let Some(size) = drawn else {
+                    return;
+                };
+                let position = bubble_position(surface, &parent);
+                let placed = self
+                    .hub
+                    .host
+                    .lock()
+                    .unwrap()
+                    .popup_placed(&parent_id, position, size, false);
+                if let Some((app_id, message)) = placed {
+                    debug!(%app_id, parent = %parent_id, "bubble mapped -> Host::popup_placed");
+                    self.bubbles.push(Bubble {
+                        app_id,
+                        surface: surface.clone(),
+                        parent,
+                        placed: (position, size),
+                    });
+                    self.hub.broadcast(message);
+                }
+            }
+            (None, None) => {}
         }
     }
 
@@ -2030,6 +2132,12 @@ impl DomicileCompositor {
                     .iter()
                     .find(|(_, popup)| popup.wl_surface() == surface)
                     .map(|(app_id, _)| app_id.clone())
+            })
+            .or_else(|| {
+                self.bubbles
+                    .iter()
+                    .find(|bubble| bubble.surface == *surface)
+                    .map(|bubble| bubble.app_id.clone())
             })
     }
 
@@ -4300,6 +4408,18 @@ fn chrome_key(writer: &Arc<Mutex<UnixStream>>) -> usize {
 enum Role {
     Toplevel(ToplevelSurface),
     Popup(PopupSurface),
+    Bubble,
+}
+
+/// An announced bubble. See `DomicileCompositor::bubbles`.
+struct Bubble {
+    app_id: String,
+    surface: WlSurface,
+    /// The surface it was announced over. Kept because a hidden bubble is
+    /// no longer its child.
+    parent: WlSurface,
+    /// Its position and size as the chrome was last told them, logical.
+    placed: ((f64, f64), (f64, f64)),
 }
 
 /// Which of the two kinds of client committed a buffer.
@@ -4577,6 +4697,7 @@ impl CompositorHandler for DomicileCompositor {
 
     fn commit(&mut self, surface: &WlSurface) {
         self.announce_a_new_popup(surface);
+        self.place_the_bubbles(surface);
         let Some((committer, role)) = self.committer(surface) else {
             return;
         };
@@ -4691,6 +4812,8 @@ impl CompositorHandler for DomicileCompositor {
                         Role::Popup(popup) => popup.with_pending_state(|state| {
                             Some((state.geometry.size.w, state.geometry.size.h))
                         }),
+                        // Sized by its own buffer.
+                        Role::Bubble => None,
                     };
                     let crop = committed_buffer(&buffer).map_or((0, 0, 0, 0), |committed| {
                         let size = committed.size();
@@ -4740,6 +4863,19 @@ impl CompositorHandler for DomicileCompositor {
                 .commit
                 .record(done - started);
             self.last_commit = Some(done);
+        }
+    }
+
+    /// A destroyed bubble goes at once: no commit will come to notice it.
+    fn destroyed(&mut self, surface: &WlSurface) {
+        if let Some(at) = self
+            .bubbles
+            .iter()
+            .position(|bubble| bubble.surface == *surface)
+        {
+            let bubble = self.bubbles.remove(at);
+            debug!(app_id = %bubble.app_id, "bubble destroyed -> Host::app_closed");
+            self.forget(&bubble.app_id);
         }
     }
 }
@@ -5667,6 +5803,44 @@ fn shm_allocator(importer: &DmabufImporter) -> Option<Gbm> {
     }
 }
 
+/// The logical size of the buffer `surface` is committing, or `None` if it
+/// commits none.
+fn drawn_size(surface: &WlSurface) -> Option<(f64, f64)> {
+    with_states(surface, |states| {
+        let destination = states
+            .cached_state
+            .get::<ViewportCachedState>()
+            .current()
+            .dst
+            .map(|size| (size.w, size.h));
+        let mut attributes = states.cached_state.get::<SurfaceAttributes>();
+        let attributes = attributes.current();
+        let Some(BufferAssignment::NewBuffer(buffer)) = &attributes.buffer else {
+            return None;
+        };
+        let (width, height) = surface_size(
+            committed_buffer(buffer)?.size(),
+            attributes.buffer_scale,
+            destination,
+        );
+        Some((f64::from(width), f64::from(height)))
+    })
+}
+
+/// Where a bubble is over `parent`, logical: its subsurface position from
+/// the corner of the parent's window geometry, as a popup's is.
+fn bubble_position(surface: &WlSurface, parent: &WlSurface) -> (f64, f64) {
+    let location = with_states(surface, |states| {
+        states
+            .cached_state
+            .get::<SubsurfaceCachedState>()
+            .current()
+            .location
+    });
+    let (x, y) = with_states(parent, window_geometry).map_or((0, 0), |(x, y, _, _)| (x, y));
+    (f64::from(location.x - x), f64::from(location.y - y))
+}
+
 /// The surface's committed `xdg_surface.set_window_geometry`, as `(x, y, width,
 /// height)` in logical units.
 fn window_geometry(states: &SurfaceData) -> Option<(i32, i32, i32, i32)> {
@@ -6106,6 +6280,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         app_bounds: HashMap::new(),
         popups: Vec::new(),
         grabbing: Vec::new(),
+        bubbles: Vec::new(),
         pointer_app: None,
         start: Instant::now(),
         last_frame: HashMap::new(),
