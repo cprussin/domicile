@@ -267,8 +267,6 @@ class MODULES_EXPORT DomicileHost final
   const FrozenArray<DomicileAudioStream>* audioPlayback() const;
   const FrozenArray<DomicileAudioStream>* audioRecording() const;
   const FrozenArray<DomicileAudioCard>* audioCards() const;
-  std::optional<double> batteryCharge() const;
-  std::optional<bool> batteryCharging() const;
   std::optional<bool> idle() const;
   std::optional<bool> locked() const;
   std::optional<V8DomicileTheme> theme() const;
@@ -322,7 +320,6 @@ class MODULES_EXPORT DomicileHost final
   void Apps(const String& query,
             Vector<domicile::mojom::blink::DesktopEntryPtr> apps,
             Vector<domicile::mojom::blink::BookmarkPtr> bookmarks) override;
-  void Battery(double charge, bool charging) override;
   void Brightness(double level) override;
   void Clipboard(
       Vector<domicile::mojom::blink::ClipboardEntryPtr> entries) override;
@@ -484,8 +481,6 @@ class MODULES_EXPORT DomicileHost final
   Member<FrozenArray<DomicileAudioStream>> audio_playback_;
   Member<FrozenArray<DomicileAudioStream>> audio_recording_;
   Member<FrozenArray<DomicileAudioCard>> audio_cards_;
-  std::optional<double> battery_charge_;
-  std::optional<bool> battery_charging_;
   std::optional<bool> idle_;
   std::optional<bool> locked_;
   std::optional<V8DomicileTheme> theme_;

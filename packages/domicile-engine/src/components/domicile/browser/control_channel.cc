@@ -1002,10 +1002,9 @@ void ControlChannel::DispatchLine(const std::string& line) {
     const base::ListValue* found = message.FindList("files");
     const std::optional<int> matched = message.FindInt("matched");
     const std::optional<bool> indexing = message.FindBool("indexing");
-    // All four or nothing, which is what `battery` below does: an answer
-    // without its query cannot be told from the answer to a keystroke ago,
-    // and one without its count or its flag would be drawn as a claim it did
-    // not make.
+    // All four or nothing: an answer without its query cannot be told from
+    // the answer to a keystroke ago, and one without its count or its flag
+    // would be drawn as a claim it did not make.
     if (!query || !found || !matched || *matched < 0 || !indexing) {
       return;
     }
@@ -1128,26 +1127,10 @@ void ControlChannel::DispatchLine(const std::string& line) {
     return;
   }
 
-  if (*type == "battery") {
-    // DROPPED RATHER THAN DEFAULTED, which is the opposite of what `displays`
-    // does two blocks up and is deliberate. A monitor the wrong way up is
-    // still a desktop; a charge that defaulted to zero is a reading, and one
-    // the bar would draw in red and flash. The whole reason this message
-    // exists is that a plausible-looking default is indistinguishable from
-    // the truth -- see the note on ControlChannelClient::Battery -- so a
-    // message this cannot read is one to say nothing about.
-    std::optional<double> charge = message.FindDouble("charge");
-    std::optional<bool> charging = message.FindBool("charging");
-    if (!charge || !charging) {
-      return;
-    }
-    client_->Battery(*charge, *charging);
-    return;
-  }
-
   if (*type == "brightness") {
-    // Dropped rather than defaulted, for `battery`'s reason: a level that
-    // defaulted to zero would draw a slider at the bottom of a lit screen.
+    // Dropped rather than defaulted, unlike `displays`. A monitor the wrong
+    // way up is still a desktop, but a level defaulted to zero is a false
+    // reading: a slider at the bottom of a lit screen.
     std::optional<double> level = message.FindDouble("level");
     if (!level) {
       return;
@@ -1157,12 +1140,12 @@ void ControlChannel::DispatchLine(const std::string& line) {
   }
 
   if (*type == "theme") {
-    // REFUSED RATHER THAN DEFAULTED, which is `battery` above's answer rather
-    // than `displays`'s, and for a sharper version of its reason. A theme
-    // defaulted to dark is not a missing reading -- it is a *decision*, and one
-    // that would repaint a desk somebody had just put into light. The desk is
-    // already painting in one of the two, which is a better answer than the
-    // other one picked by a name nothing here knows.
+    // REFUSED RATHER THAN DEFAULTED, which is `brightness` above's answer
+    // rather than `displays`'s, and for a sharper version of its reason. A
+    // theme defaulted to dark is not a missing reading -- it is a *decision*,
+    // and one that would repaint a desk somebody had just put into light. The
+    // desk is already painting in one of the two, which is a better answer
+    // than the other one picked by a name nothing here knows.
     const std::string* named = message.FindString("theme");
     if (!named) {
       return;
@@ -1314,7 +1297,7 @@ void ControlChannel::DispatchLine(const std::string& line) {
   }
 
   if (*type == "idle") {
-    // DROPPED RATHER THAN DEFAULTED, for the reason `battery` above is and
+    // DROPPED RATHER THAN DEFAULTED, for the reason `brightness` above is and
     // more sharply: a missing field here has no reading to fall back on that
     // is not a guess about which way the desk went, and a guess that came out
     // false would clear a shell's lock screen over a desk nobody is at. A
