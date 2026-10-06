@@ -32,7 +32,7 @@ The engine has two channels to the rest of Domicile:
 - **Inbound:** `welcome`, `app_appeared`, `app_titled`, `app_resized`,
   `app_min_size`, `app_max_size`, `popup_placed`, `app_closed`, `app_cursor`,
   `shortcut`, `modifiers`, `found_files`, `file_preview`, `found_apps`,
-  `battery`, `brightness`, `clipboard`, `theme`, `focus_changed`,
+  `brightness`, `clipboard`, `theme`, `focus_changed`,
   `focus_requested`, `displays`, `keymap`, `extensions`, `tray`,
   `notifications`, `shell_config`, `audio`, `audio_levels`, `idle`, `locked`,
   `system`.
