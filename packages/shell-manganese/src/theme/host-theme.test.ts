@@ -102,6 +102,7 @@ class Host implements DomicileHost {
   readonly moveAudioStream = ignored;
   readonly searchFiles = unanswered;
   readonly searchApps = unanswered;
+  readonly callSystem = ignored;
   readonly setAudioMuted = ignored;
   readonly setAudioPort = ignored;
   readonly setAudioProfile = ignored;

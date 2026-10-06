@@ -115,6 +115,10 @@ class FakeHost implements DomicileHost {
     this.calls.push(["previewFile", path]);
     return Promise.reject(new DOMException("superseded", "AbortError"));
   }
+  callSystem(id: number, request: string): void {
+    this.calls.push(["callSystem", id, request]);
+  }
+
   searchApps(query: string): Promise<never> {
     this.calls.push(["searchApps", query]);
     return Promise.reject(new DOMException("superseded", "AbortError"));

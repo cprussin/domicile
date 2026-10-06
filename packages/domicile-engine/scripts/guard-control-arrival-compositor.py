@@ -10,7 +10,8 @@ the bytes, turns it into a mojo message and sends it to the renderer, where
 Blink builds an event and dispatches it. That is the stage `arrival` exists to
 price, and nothing that does not put a line on this socket exercises it.
 
-THREE LINES, AND THE ORDER IS THE ASSERTION.
+THREE CURSORS, AND THE ORDER IS THE ASSERTION. A `system_reply` follows them,
+for the relay of the shell's system calls; see SYSTEM-ACCESS.md.
 
     app_cursor  grab        a shape the engine knows
     app_cursor  pointr      one it does not
@@ -49,6 +50,8 @@ SEQUENCE = [
     {"type": "app_cursor", "app_id": "guard", "cursor": "grab"},
     {"type": "app_cursor", "app_id": "guard", "cursor": "pointr"},
     {"type": "app_cursor", "app_id": "guard", "cursor": "zoom-out"},
+    # An answer to a system call, which the engine relays to the page whole.
+    {"type": "system_reply", "id": 1, "reply": {"kind": "written"}},
 ]
 
 # Long enough that each line lands in its own read on a loaded machine, short

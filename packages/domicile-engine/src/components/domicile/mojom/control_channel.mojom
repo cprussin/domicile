@@ -359,6 +359,13 @@ interface ControlChannel {
   // the compositor's to read, and nothing here names one.
   SearchApps(string query);
 
+  // A system call: a file, a directory, a watch or a process. `request` is the
+  // call as JSON, `{"call":"read_file","path":"..."}`; `id` names it in every
+  // answer, ControlChannelClient::System. The browser wraps it as a
+  // `system_request` line and reads nothing else of it; the compositor checks
+  // it, the lock included. See docs/architecture/SYSTEM-ACCESS.md.
+  CallSystem(uint32 id, string request);
+
   // Put a row of the clipboard's history back on the clipboard.
   //
   // IT NAMES A ROW AND CARRIES NO TEXT: what makes this channel safe is which
@@ -826,4 +833,8 @@ interface ControlChannelClient {
   // take what its user is typing into. Never empty -- a request comes from a
   // client, and the chrome asking itself for focus does not cross the wire.
   FocusRequested(string app_id, mojo_base.mojom.TimeTicks arrival);
+
+  // An answer to a CallSystem: a `system_reply`, `system_event` or
+  // `system_end` line, as the compositor wrote it. The page parses it.
+  System(string message);
 };
