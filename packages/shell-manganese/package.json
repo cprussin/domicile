@@ -5,6 +5,7 @@
     "@domicile-desktop/sdk": "workspace:*",
     "@domicile-desktop/system-apps": "workspace:*",
     "@domicile-desktop/system-audio": "workspace:*",
+    "@domicile-desktop/system-backlight": "workspace:*",
     "@domicile-desktop/system-battery": "workspace:*",
     "@domicile-desktop/system-bluetooth": "workspace:*",
     "@domicile-desktop/system-network": "workspace:*",

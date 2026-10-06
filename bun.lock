@@ -97,6 +97,7 @@
         "@domicile-desktop/sdk": "workspace:*",
         "@domicile-desktop/system-apps": "workspace:*",
         "@domicile-desktop/system-audio": "workspace:*",
+        "@domicile-desktop/system-backlight": "workspace:*",
         "@domicile-desktop/system-battery": "workspace:*",
         "@domicile-desktop/system-bluetooth": "workspace:*",
         "@domicile-desktop/system-network": "workspace:*",
@@ -159,6 +160,20 @@
     },
     "packages/system-audio": {
       "name": "@domicile-desktop/system-audio",
+      "version": "0.1.0",
+      "dependencies": {
+        "@cprussin/option-result": "catalog:",
+        "@domicile-desktop/sdk": "workspace:*",
+        "zod": "catalog:",
+      },
+      "devDependencies": {
+        "@cprussin/tsconfig": "catalog:",
+        "@types/bun": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
+    "packages/system-backlight": {
+      "name": "@domicile-desktop/system-backlight",
       "version": "0.1.0",
       "dependencies": {
         "@cprussin/option-result": "catalog:",
@@ -353,6 +368,8 @@
     "@domicile-desktop/system-apps": ["@domicile-desktop/system-apps@workspace:packages/system-apps"],
 
     "@domicile-desktop/system-audio": ["@domicile-desktop/system-audio@workspace:packages/system-audio"],
+
+    "@domicile-desktop/system-backlight": ["@domicile-desktop/system-backlight@workspace:packages/system-backlight"],
 
     "@domicile-desktop/system-battery": ["@domicile-desktop/system-battery@workspace:packages/system-battery"],
 

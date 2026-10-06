@@ -31,9 +31,8 @@ domicile-launch = { path = "../domicile-launch" }
 # use dev-dependencies. Adds no crates: Smithay already pulls in
 # `wayland-client` and `wayland-protocols`.
 domicile-test-client = { path = "../domicile-test-client" }
-# Raw syscalls, including the kernel's uevent netlink socket (see
-# `src/uevents.rs`). Used instead of libudev so the binary links nothing but
-# libc and libxkbcommon.
+# Raw syscalls, such as reading a peer's credentials (see
+# `src/peer_process.rs`).
 libc = "0.2"
 # The dlopen crate Smithay uses. Probes for libEGL before Smithay loads it
 # (Smithay treats a missing library as fatal), and loads libpam only when the

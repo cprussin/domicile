@@ -16,7 +16,7 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
 
 # Dependencies first, so a package is never on npm before what it needs.
-PACKAGES=(chrome-sdk system-apps system-audio system-battery component-library system-network system-bluetooth shell-manganese)
+PACKAGES=(chrome-sdk system-apps system-audio system-backlight system-battery component-library system-network system-bluetooth shell-manganese)
 VERSION="0.0.0-alpha-$(git rev-parse --short=12 HEAD)"
 OUT="${DOMICILE_PUBLISH_DRY_RUN:-$(mktemp -d)}"
 
@@ -48,7 +48,7 @@ bun install --ignore-scripts
 # Panda `styled-system/` the component library and manganese import.
 bun run turbo run prepare build \
   --filter @domicile-desktop/sdk --filter @domicile-desktop/system-audio \
-  --filter @domicile-desktop/system-battery \
+  --filter @domicile-desktop/system-backlight --filter @domicile-desktop/system-battery \
   --filter @domicile-desktop/component-library \
   --filter @domicile-desktop/system-network --filter @domicile-desktop/system-bluetooth \
   --filter @domicile-desktop/manganese

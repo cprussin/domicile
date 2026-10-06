@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
+import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import {
   act,
   fireEvent,
@@ -12,7 +12,7 @@ import userEvent from "@testing-library/user-event";
 import { Brightness } from "./Brightness";
 
 /**
- * A test-controlled backlight: `watch` replaces the host listener, `report`
+ * A test-controlled backlight: `backlight` replaces the system's, `report`
  * sends a level, and `asked` records every level the shell requested.
  */
 const heldBacklight = () => {
@@ -20,11 +20,16 @@ const heldBacklight = () => {
   const asked: number[] = [];
   return {
     asked,
-    domicile: {
-      setBrightness: (level: number) => {
+    backlight: () => ({
+      set: (level: number) => {
         asked.push(level);
       },
-    } as unknown as DomicileHost,
+      watch: (onLevel: (level: number) => void) => {
+        listeners.push(onLevel);
+        return () => undefined;
+      },
+    }),
+    domicile: new FakeDomicileHost().host,
     report: (level: number) => {
       act(() => {
         for (const onLevel of listeners) {
@@ -32,15 +37,16 @@ const heldBacklight = () => {
         }
       });
     },
-    watch: (_domicile: DomicileHost, onLevel: (level: number) => void) => {
-      listeners.push(onLevel);
-      return () => undefined;
-    },
   };
 };
 
 const opened = async (backlight: ReturnType<typeof heldBacklight>) => {
-  render(<Brightness domicile={backlight.domicile} watch={backlight.watch} />);
+  render(
+    <Brightness
+      backlight={backlight.backlight}
+      domicile={backlight.domicile}
+    />,
+  );
   backlight.report(0.42);
   await userEvent.click(screen.getByRole("button", { name: "Brightness 42%" }));
   return screen.getByRole("slider", { name: "Brightness" });
@@ -51,7 +57,10 @@ describe("Brightness", () => {
     const backlight = heldBacklight();
 
     render(
-      <Brightness domicile={backlight.domicile} watch={backlight.watch} />,
+      <Brightness
+        backlight={backlight.backlight}
+        domicile={backlight.domicile}
+      />,
     );
 
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
@@ -88,7 +97,10 @@ describe("Brightness", () => {
   it("steps by a twentieth from wherever the wheel left it", () => {
     const backlight = heldBacklight();
     render(
-      <Brightness domicile={backlight.domicile} watch={backlight.watch} />,
+      <Brightness
+        backlight={backlight.backlight}
+        domicile={backlight.domicile}
+      />,
     );
     backlight.report(0.42);
     const icon = screen.getByRole("button", { name: "Brightness 42%" });
@@ -102,7 +114,10 @@ describe("Brightness", () => {
   it("never asks past either end", () => {
     const backlight = heldBacklight();
     render(
-      <Brightness domicile={backlight.domicile} watch={backlight.watch} />,
+      <Brightness
+        backlight={backlight.backlight}
+        domicile={backlight.domicile}
+      />,
     );
     backlight.report(0.98);
 
@@ -114,7 +129,10 @@ describe("Brightness", () => {
   it("draws a plain sun that dims with the level", () => {
     const backlight = heldBacklight();
     render(
-      <Brightness domicile={backlight.domicile} watch={backlight.watch} />,
+      <Brightness
+        backlight={backlight.backlight}
+        domicile={backlight.domicile}
+      />,
     );
     const icon = () => screen.getByRole("button", { name: /^Brightness/ });
 

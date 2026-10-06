@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "declaration": true,
+    // Off for the reason in `packages/chrome-sdk/tsconfig.build.json`.
+    "incremental": false,
+    "noEmit": false,
+    "outDir": "dist",
+    "rootDir": "src",
+    "types": []
+  },
+  "exclude": ["src/**/*.test.ts", "src/fake-system.ts"],
+  "extends": "./tsconfig.json"
+}

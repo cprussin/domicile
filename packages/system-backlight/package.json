@@ -1,0 +1,48 @@
+{
+  "dependencies": {
+    "@cprussin/option-result": "catalog:",
+    "@domicile-desktop/sdk": "workspace:*",
+    "zod": "catalog:"
+  },
+  "description": "Screen brightness for a Domicile shell: reads /sys/class/backlight, watches it and sets it through logind, on @domicile-desktop/sdk/system.",
+  "devDependencies": {
+    "@cprussin/tsconfig": "catalog:",
+    "@types/bun": "catalog:",
+    "typescript": "catalog:"
+  },
+  "exports": {
+    "./read-backlight": {
+      "types": "./dist/read-backlight.d.ts",
+      "default": "./dist/read-backlight.js"
+    },
+    "./set-brightness": {
+      "types": "./dist/set-brightness.d.ts",
+      "default": "./dist/set-brightness.js"
+    },
+    "./watch-brightness": {
+      "types": "./dist/watch-brightness.d.ts",
+      "default": "./dist/watch-brightness.js"
+    }
+  },
+  "files": [
+    "dist/**"
+  ],
+  "license": "MIT",
+  "name": "@domicile-desktop/system-backlight",
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "directory": "packages/system-backlight",
+    "type": "git",
+    "url": "git+https://github.com/cprussin/domicile.git"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test:types": "tsc --noEmit",
+    "test:unit": "bun test"
+  },
+  "type": "module",
+  "version": "0.1.0"
+}

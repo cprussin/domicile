@@ -239,7 +239,6 @@ pub fn somebody_is_here(request: &ClientRequest) -> bool {
         | ClientRequest::ActivateTrayItem { .. }
         | ClientRequest::DismissNotifications { .. }
         | ClientRequest::InvokeNotificationAction { .. }
-        | ClientRequest::SetBrightness { .. }
         // The lock chord landed on the shell, and locking must not light the
         // screens.
         | ClientRequest::Lock => false,

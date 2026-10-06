@@ -23,6 +23,7 @@ import {
 import userEvent from "@testing-library/user-event";
 
 import { css } from "../styled-system/css";
+import { answerSystemCalls, THINKPAD_BACKLIGHT } from "./brightness/fixture";
 import { DEFAULT_KEYBINDINGS, DEFAULT_MODES } from "./keyboard/commands";
 import type { ApplicationsConfig } from "./launcher/applications-config";
 import { Shell } from "./Shell";
@@ -808,10 +809,10 @@ describe("Shell", () => {
       expect(screen.getByText("resize")).toBeInTheDocument();
     });
 
-    it("shows the brightness the host says", () => {
+    it("shows the brightness /sys says", async () => {
       renderShell();
 
-      domicile.set({ brightness: 0.6 });
+      await act(() => answerSystemCalls(domicile.fake, THINKPAD_BACKLIGHT));
 
       expect(
         screen.getByRole("button", { name: "Brightness 60%" }),

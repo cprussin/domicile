@@ -191,7 +191,7 @@ How to use, configure and debug Domicile. No authority level.
 | [/packages/shell-manganese/docs/FOCUS-INTERNALS.md](/packages/shell-manganese/docs/FOCUS-INTERNALS.md) | How pointer warping, browser-window focus and modifier drags over clients work. |
 | [/packages/shell-manganese/docs/KEYS.md](/packages/shell-manganese/docs/KEYS.md) | Default bindings, resize mode, commands, keysym rules, a sample config, differences from sway. |
 | [/packages/shell-manganese/docs/TOP-BAR.md](/packages/shell-manganese/docs/TOP-BAR.md) | The `topBar` option and its items: workspaces, clock, network, Bluetooth, battery, brightness, volume, notifications, tray. |
-| [/packages/shell-manganese/docs/HOST-READOUTS.md](/packages/shell-manganese/docs/HOST-READOUTS.md) | How the compositor reads backlight and audio for the top bar. |
+| [/packages/shell-manganese/docs/HOST-READOUTS.md](/packages/shell-manganese/docs/HOST-READOUTS.md) | How backlight and audio are read for the top bar. |
 | [/packages/shell-manganese/docs/CUSTOM-BAR-ITEMS.md](/packages/shell-manganese/docs/CUSTOM-BAR-ITEMS.md) | Using manganese's Panda CSS in custom bar items. |
 | [/packages/shell-manganese/docs/LAUNCHER.md](/packages/shell-manganese/docs/LAUNCHER.md) | Launcher row order, sources and previews. |
 | [/packages/shell-manganese/docs/CLIPBOARD.md](/packages/shell-manganese/docs/CLIPBOARD.md) | Clipboard history and the browser-window clipboard on tty vs nested. |

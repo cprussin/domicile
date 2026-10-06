@@ -222,13 +222,6 @@ const filePreviewSchema = z.looseObject({
   type: z.literal("file_preview"),
 });
 
-// Screen brightness as an unclamped fraction. Pushed on change and on
-// connect. Not sent without a backlight.
-const brightnessSchema = z.looseObject({
-  level: z.number(),
-  type: z.literal("brightness"),
-});
-
 // Clipboard history, newest first. Pushed on change and on connect.
 //
 // Entries carry a preview and an id, not the full text, which limits exposure
@@ -439,7 +432,6 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   modifiersSchema,
   foundFilesSchema,
   filePreviewSchema,
-  brightnessSchema,
   clipboardSchema,
   traySchema,
   notificationsSchema,

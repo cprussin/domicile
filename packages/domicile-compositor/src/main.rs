@@ -109,7 +109,6 @@ use smithay::{
 use tracing::{debug, error, info, warn};
 
 mod appearance;
-mod backlight;
 mod clipboard;
 mod coalesce;
 mod dmabuf_descriptor;
@@ -139,7 +138,6 @@ mod shell_config;
 mod shm_upload;
 mod timing_window;
 mod tray;
-mod uevents;
 mod uploads;
 mod viewport;
 mod which_engine;
@@ -174,9 +172,6 @@ use crate::viewport::{source_pixels, surface_size, Viewport};
 use crate::which_engine::another_engine;
 use domicile_config::{
     Config, ConfigError, ConfigStore, ExtensionsConfig, IdleConfig, KeyboardConfig, Omit, ThemeMode,
-};
-use domicile_host::backlight::{
-    announces_a_backlight, reading as backlight_reading, Brightness, RealBacklights,
 };
 use domicile_host::clipboard::{text_mime, History, LONGEST_COPY, TEXT_MIMES};
 use domicile_host::data_dirs::data_dirs;
@@ -380,10 +375,6 @@ enum ClientRequest {
     },
     /// The shell asked to lock now. See [`DomicileCompositor::shut_the_desk`].
     Lock,
-    /// Set the screen's backlight to a fraction 0.0 through 1.0.
-    SetBrightness {
-        level: f64,
-    },
 }
 
 /// A chrome request answered on its own connection thread.
@@ -743,12 +734,6 @@ struct FrameReport {
     submit_worst_ms: u32,
 }
 
-/// How often the backlight is read without a change event.
-///
-/// A fallback for firmware brightness keys that send no uevent (see
-/// `uevents.rs`).
-const BRIGHTNESS_BACKSTOP: Duration = Duration::from_secs(120);
-
 /// Maximum file search results sent. `matched` still reports the full count.
 const FOUND: usize = 200;
 
@@ -1051,13 +1036,6 @@ fn read_chrome_messages(
             // is the `locked` broadcast.
             Ok(ChromeMessage::Lock) => {
                 hub.send_request(ClientRequest::Lock);
-                Vec::new()
-            }
-            // Handled on the Wayland thread, which reads the backlight it sets.
-            // The response is the `brightness` broadcast from the resulting
-            // uevent.
-            Ok(ChromeMessage::SetBrightness { level }) => {
-                hub.send_request(ClientRequest::SetBrightness { level });
                 Vec::new()
             }
             // The chrome's density sets the output scale, which is Wayland
@@ -1516,10 +1494,6 @@ struct DomicileCompositor {
     chrome_frame_shape: Option<((f64, f64), bool, bool)>,
     /// Which modifiers the chrome was last told are held.
     modifiers: Held,
-    /// What the chromes were last told about the brightness, and the writer
-    /// that sets it. See `domicile_host::backlight`.
-    brightness: Brightness,
-    backlight: backlight::Backlight,
     /// Set when the user closes the desktop window. The event loop reads it and
     /// stops.
     stop: Arc<AtomicBool>,
@@ -3731,42 +3705,6 @@ impl DomicileCompositor {
         }
     }
 
-    /// Tell every chrome the brightness, if it changed enough to show.
-    fn tell_the_chromes_the_brightness(&mut self) {
-        let now = backlight_reading(&RealBacklights).map(|read| read.level());
-        if let Some(level) = self.brightness.moved_to(now) {
-            self.hub.broadcast(HostMessage::Brightness { level });
-        }
-    }
-
-    /// Send the current brightness to a newly connected chrome.
-    fn tell_a_new_chrome_the_brightness(&self) {
-        if let Some(level) = self.brightness.again() {
-            self.hub.broadcast(HostMessage::Brightness { level });
-        }
-    }
-
-    /// Ask logind to set the backlight to `level`.
-    ///
-    /// Reads the device fresh, since the raw scale is the device's and it may
-    /// have gone away.
-    fn set_the_brightness(&self, level: f64) {
-        let Some(backlight) = backlight_reading(&RealBacklights) else {
-            warn!("a chrome asked to set the brightness of a desktop with no backlight");
-            return;
-        };
-        match backlight.raw_for(level) {
-            Some(raw) => self.backlight.set(backlight::Request {
-                device: backlight.device,
-                raw,
-            }),
-            None => warn!(
-                level,
-                "a chrome asked for a brightness that is not a number"
-            ),
-        }
-    }
-
     /// Send every chrome the clipboard history.
     ///
     /// The whole list each time, since copies reorder it and a page applying
@@ -4079,7 +4017,6 @@ impl DomicileCompositor {
                     warn!("a chrome asked to lock a desktop that has no lock");
                 }
             }
-            ClientRequest::SetBrightness { level } => self.set_the_brightness(level),
             ClientRequest::TurnTheWindows { theme, chromes } => {
                 // Replace any turnover in progress; its windows are about to
                 // get a newer theme.
@@ -4109,9 +4046,8 @@ impl DomicileCompositor {
                 // Catch up the new page on state it would otherwise only learn
                 // on the next change.
                 announce_open_apps(&self.hub);
-                self.tell_a_new_chrome_the_brightness();
-                // Unlike brightness, an empty clipboard is a valid message, so
-                // the normal broadcast works.
+                // An empty clipboard is a valid message, so the normal
+                // broadcast works.
                 self.tell_the_chromes_the_clipboard();
                 // A shell that reloaded while the screens were dark would
                 // otherwise assume someone is present.
@@ -6146,8 +6082,6 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         screens,
         device_pixel_ratio: 1.0,
         modifiers: Held::default(),
-        brightness: Brightness::default(),
-        backlight: backlight::serve(),
         stop: Arc::new(AtomicBool::new(false)),
         engine,
         // Armed below, and re-armed by `rejoin_the_engine`.
@@ -6223,41 +6157,6 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
         })?;
     }
-
-    // Backlight changes, from kernel uevents.
-    //
-    // Level-triggered and drained each turn, since one change can produce
-    // several uevents.
-    //
-    // A failed subscribe is not fatal: the backstop poll still runs, so
-    // readings are at worst a few minutes stale. Logged.
-    match uevents::subscribe() {
-        Ok(socket) => {
-            handle.insert_source(
-                Generic::new(socket, Interest::READ, Mode::Level),
-                |_, socket, data: &mut CalloopData| {
-                    let brightness = uevents::drain(socket, announces_a_backlight);
-                    // A brightness key, another program, or logind all produce
-                    // a `SOURCE=` uevent.
-                    if brightness {
-                        data.state.tell_the_chromes_the_brightness();
-                    }
-                    Ok(PostAction::Continue)
-                },
-            )?;
-        }
-        Err(err) => error!(
-            %err,
-            "no netlink socket for device changes, so the brightness will only \
-             update on its backstop"
-        ),
-    }
-
-    // The backstop poll, which also takes the first reading.
-    handle.insert_source(Timer::immediate(), |_, _, data: &mut CalloopData| {
-        data.state.tell_the_chromes_the_brightness();
-        TimeoutAction::ToDuration(BRIGHTNESS_BACKSTOP)
-    })?;
 
     // Build the file index from the home directory on a thread at startup, then
     // keep it updated by a watch.
