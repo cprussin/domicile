@@ -7,8 +7,9 @@
 import type { Rect } from "../rect";
 import { barOf, surfaceOf, TITLE_BAR } from "../rect";
 import type { Container, LayoutNode } from "./node";
-import { Layout, NodeKind } from "./node";
+import { Layout, NodeKind, showsOneChild, windowsIn } from "./node";
 import type { Path } from "./path";
+import { nodeAt } from "./path";
 import type { Tiling } from "./tiling";
 import { focusedWindowIn, focusPathOf } from "./tiling";
 
@@ -108,6 +109,36 @@ export const areaOf = (
     } else {
       return areaOf(child, rest, childArea(root, area, gap, index), gap);
     }
+  }
+};
+
+/** The box focus lights in a tiling, and the windows inside it. */
+export type FocusBox = {
+  rect: Rect;
+  windows: readonly string[];
+};
+
+/**
+ * The box of the node commands target, laid out as {@link framesOf} does, or
+ * `undefined` on an empty tiling.
+ *
+ * A window or group shown as a tab gives the box of its tab group instead,
+ * since the tabs belong to the group.
+ */
+export const focusBoxOf = (
+  tiling: Tiling,
+  area: Rect,
+  gap: number,
+): FocusBox | undefined => {
+  const { root } = tiling;
+  if (root === undefined) {
+    return undefined;
+  } else {
+    const path = tabGroupAround(root, focusPathOf(root, tiling.depth));
+    return {
+      rect: areaOf(root, path, area, gap),
+      windows: windowsIn(nodeAt(root, path)),
+    };
   }
 };
 
@@ -308,6 +339,17 @@ const contentsOf = (container: Container, area: Rect): Rect => {
     height: Math.max(0, area.height - TITLE_BAR * bars),
     y: area.y + TITLE_BAR * bars,
   };
+};
+
+/** `path`, or its parent's path when the parent shows it as a tab. */
+const tabGroupAround = (root: LayoutNode, path: Path): Path => {
+  const parentPath = path.slice(0, -1);
+  const parent = nodeAt(root, parentPath);
+  return path.length > 0 &&
+    parent.kind === NodeKind.Container &&
+    showsOneChild(parent.layout)
+    ? parentPath
+    : path;
 };
 
 const joined = (placements: readonly Tiled[]): Tiled => ({

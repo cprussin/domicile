@@ -943,14 +943,14 @@ describe("the pointer", () => {
   });
 
   it("drags a tiled window's edge by a share of the screen it is on", () => {
-    // Two windows share a 1020px screen minus a 20px gap, so 100px is a tenth
-    // of their share.
+    // Two windows share a 1060px screen minus three 20px gaps, one between
+    // them and one at each edge, so 100px is a tenth of their share.
     const state = reduce(
       desktop("kitty", "editor"),
       WindowAction.LayoutSet(Layout.SplitH),
       WindowAction.WindowStretched(APP("kitty"), Direction.Right, 100, {
         height: 800,
-        width: 1020,
+        width: 1060,
         x: 0,
         y: 0,
       }),

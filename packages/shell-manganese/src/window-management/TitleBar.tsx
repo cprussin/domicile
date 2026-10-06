@@ -186,9 +186,9 @@ export const TitleBar = ({
 /**
  * Bar colors for sway's three client states plus `leaf`.
  *
- * The scrim on other windows is the main focus indicator (see `Scrim`), so
- * the bar only adds the card background and a heavier weight. No state uses
- * an accent edge.
+ * The glow around the focused window is the main focus indicator (see
+ * `FocusGlow`), so the bar only adds the card background and a heavier
+ * weight. No state uses an accent edge.
  *
  * Each state sets all its colors instead of overriding one: two rules on one
  * property would depend on Panda's emit order.

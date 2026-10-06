@@ -506,23 +506,27 @@ const addressesShowing = (): string[] =>
     .map((field) => field.value);
 
 /**
- * The scrim over window or tab `id` that dims it while commands target
- * something else; see `Scrim`.
- *
- * Throws if there is none.
+ * The glow around the window or group commands target; see `FocusGlow`.
+ * Not one fading out after focus left it.
  */
-const scrimOver = (container: HTMLElement, id: string): HTMLElement => {
-  const scrim = container.querySelector<HTMLElement>(`[data-scrim="${id}"]`);
-  if (scrim === null) {
-    throw new Error(`test: no scrim over ${id}`);
+const glowOf = (container: HTMLElement): HTMLElement | undefined =>
+  container.querySelector<HTMLElement>(
+    "[data-focus-box]:not([data-leaving])",
+  ) ?? undefined;
+
+/** {@link glowOf}, throwing if nothing is lit. */
+const glowing = (container: HTMLElement): HTMLElement => {
+  const glow = glowOf(container);
+  if (glow === undefined) {
+    throw new Error("test: nothing is lit");
   } else {
-    return scrim;
+    return glow;
   }
 };
 
-/** Whether window or tab `id` is dimmed. */
-const dimmed = (container: HTMLElement, id: string): boolean =>
-  scrimOver(container, id).dataset.dimmed !== undefined;
+/** The windows inside the lit box, or `undefined` when nothing is lit. */
+const lit = (container: HTMLElement): readonly string[] | undefined =>
+  glowOf(container)?.dataset.focusBox?.split(" ");
 
 /**
  * Whether `focus parent` targets a group: the focused window's bar marks
@@ -1126,18 +1130,19 @@ describe("Shell", () => {
     });
 
     it("splits the workspace between two windows, with the config's gap", () => {
-      // `gaps.inner = 20`: 1900 of the 1920 is shared out.
+      // `gaps.inner = 20` between and around them: 1860 of the 1920 is shared
+      // out.
       const { container } = renderShell();
       clientAppears("one");
       clientAppears("two");
       press("e");
 
       expect(boxOf(appElement(container, "one"))).toMatchObject({
-        width: "950px",
-        x: "0px",
+        width: "930px",
+        x: "20px",
       });
       expect(boxOf(appElement(container, "two"))).toMatchObject({
-        width: "950px",
+        width: "930px",
         x: "970px",
       });
     });
@@ -1293,8 +1298,8 @@ describe("Shell", () => {
       expect(moving(container)).toContain("arriving-from-start");
     });
 
-    // Scrims move with their windows.
-    it("brings the scrims on with the workspace", () => {
+    // The glow moves with its windows.
+    it("brings the glow on with the workspace", () => {
       const { container } = renderShell();
       clientAppears("term");
       clientAppears("shell");
@@ -1304,7 +1309,7 @@ describe("Shell", () => {
 
       press("parenleft");
 
-      expect(scrimOver(container, "app:term").className).toContain(
+      expect(glowing(container).className).toContain(
         movingStyles({ motion: "arriving-from-start" }),
       );
     });
@@ -1465,15 +1470,14 @@ describe("Shell", () => {
       ]);
     });
 
-    it("sinks every window but the one being worked in, and rings none", () => {
+    it("lights the window being worked in, and rings no window's edge", () => {
       // Checked by declarations because Panda hashes class names.
       const { container } = renderShell();
       clientAppears("one");
       clientAppears("two");
       press("e");
 
-      expect(dimmed(container, "app:one")).toBe(true);
-      expect(dimmed(container, "app:two")).toBe(false);
+      expect(lit(container)).toEqual(["app:two"]);
       expect(container.querySelector("[data-selection]")).toBeNull();
       for (const id of ["one", "two"]) {
         expect(appElement(container, id).className).toContain(
@@ -1482,26 +1486,23 @@ describe("Shell", () => {
       }
     });
 
-    it("sinks nothing while the desk shows one tab group alone", () => {
+    it("lights nothing while the desk shows one tab group alone", () => {
       // There is nothing else on the desk to set the open tab apart from.
       const { container } = renderShell();
       clientAppears("one");
       clientAppears("two");
 
-      expect(dimmed(container, "app:one")).toBe(false);
-      expect(dimmed(container, "app:two")).toBe(false);
+      expect(lit(container)).toBeUndefined();
     });
 
-    it("sinks a screen's only window while another screen is worked in", () => {
-      // Alone on its screen, but the commands could target the window on the
-      // other screen.
+    it("lights only the screen being worked in", () => {
+      // Each screen shows one window, but the commands target only one.
       const { container } = renderShell([LEFT, RIGHT]);
       clientAppears("one");
       clientAppears("two");
       press("parenright", true);
 
-      expect(dimmed(container, "app:one")).toBe(false);
-      expect(dimmed(container, "app:two")).toBe(true);
+      expect(lit(container)).toEqual(["app:one"]);
     });
   });
 
@@ -1555,7 +1556,7 @@ describe("Shell", () => {
 
       press("h", true);
 
-      expect(boxOf(appElement(container, "two"))).toMatchObject({ x: "0px" });
+      expect(boxOf(appElement(container, "two"))).toMatchObject({ x: "20px" });
       expect(boxOf(appElement(container, "one"))).toMatchObject({ x: "970px" });
     });
 
@@ -1572,12 +1573,12 @@ describe("Shell", () => {
 
       // One column of two full-width windows, not a swap.
       expect(boxOf(appElement(container, "one"))).toMatchObject({
-        width: "1920px",
-        y: `${(TOP_BAR + TITLE_BAR).toString()}px`,
+        width: "1880px",
+        y: `${(TOP_BAR + 20 + TITLE_BAR).toString()}px`,
       });
       expect(boxOf(appElement(container, "two"))).toMatchObject({
-        width: "1920px",
-        y: `${(TOP_BAR + 514 + 20 + TITLE_BAR).toString()}px`,
+        width: "1880px",
+        y: `${(TOP_BAR + 20 + 494 + 20 + TITLE_BAR).toString()}px`,
       });
     });
 
@@ -1591,8 +1592,8 @@ describe("Shell", () => {
       // One tab each across the top. Both contents share a box, the focused
       // one on top, so the other is ready when its tab is picked.
       expect(boxOf(barFor(container, "app:one"))).toMatchObject({
-        width: "958px",
-        x: "0px",
+        width: "938px",
+        x: "20px",
       });
       expect(boxOf(appElement(container, "one"))).toEqual(
         boxOf(appElement(container, "two")),
@@ -1609,18 +1610,18 @@ describe("Shell", () => {
       clientAppears("one");
       clientAppears("two");
       press("e");
-      expect(dimmed(container, "app:one")).toBe(true);
+      expect(lit(container)).toEqual(["app:two"]);
 
       press("a");
 
-      // Every window in it is undimmed and every bar raised, the focused one
-      // marked apart.
-      expect(dimmed(container, "app:one")).toBe(false);
+      // The glow takes in every window in it and every bar is raised, the
+      // focused one marked apart.
+      expect(lit(container)).toEqual(["app:one", "app:two"]);
       expect(barFor(container, "app:one").dataset.focus).toBe("selected");
       expect(barFor(container, "app:two").dataset.focus).toBe("leaf");
       // `mod+Shift+a` returns to the window.
       press("a", true);
-      expect(dimmed(container, "app:one")).toBe(true);
+      expect(lit(container)).toEqual(["app:two"]);
       expect(barFor(container, "app:two").dataset.focus).toBe("focused");
     });
 
@@ -1637,8 +1638,7 @@ describe("Shell", () => {
 
       press("a");
 
-      expect(dimmed(container, "app:one")).toBe(true);
-      expect(dimmed(container, "app:two")).toBe(false);
+      expect(lit(container)).toEqual(["app:two", "app:three"]);
       expect(barFor(container, "app:two").dataset.focus).toBe("resting");
       expect(barFor(container, "app:three").dataset.focus).toBe("leaf");
     });
@@ -1662,14 +1662,14 @@ describe("Shell", () => {
       );
     });
 
-    it("grows each scrim in with the window it is over", () => {
-      // A full-size scrim over a growing window would stick out past it.
+    it("grows the glow in with the window that opened", () => {
+      // A full-size glow around a growing window would stick out past it.
       const { container } = renderShell();
       clientAppears("one");
       press("e");
       clientAppears("two");
 
-      expect(scrimOver(container, "app:two").className).toContain(
+      expect(glowing(container).className).toContain(
         movingStyles({ motion: "opening" }),
       );
     });
@@ -1961,8 +1961,8 @@ describe("Shell", () => {
       ).toBe(was + 40);
     });
 
-    it("keeps a float's scrim on it while it is dragged rather than easing after it", () => {
-      // A transitioning scrim would trail the window during a drag.
+    it("keeps a float's glow on it while it is dragged rather than easing after it", () => {
+      // A transitioning glow would trail the window during a drag.
       const { container } = renderShell();
       clientAppears("shell");
       clientAppears("term");
@@ -1972,7 +1972,7 @@ describe("Shell", () => {
       fireEvent.pointerDown(bar, { clientX: 100, clientY: 100 });
       fireEvent.pointerMove(window, { clientX: 140, clientY: 100 });
 
-      expect(scrimOver(container, "app:term").className).toContain(
+      expect(glowing(container).className).toContain(
         settlingStyles({ dragging: true }),
       );
     });
@@ -2171,12 +2171,11 @@ describe("Shell", () => {
       const raised = [
         appElement(container, "two"),
         barFor(container, "app:two"),
-        scrimOver(container, "app:two"),
+        glowing(container),
       ];
       const covered = [
         appElement(container, "one"),
         barFor(container, "app:one"),
-        scrimOver(container, "app:one"),
       ];
       for (const element of [...raised, ...covered]) {
         expect(element.style.getPropertyValue("--restack-x")).not.toBe("");
@@ -2205,8 +2204,8 @@ describe("Shell", () => {
       ).not.toContain("");
     });
 
-    it("starts a scrim's shuffle over with its window's", () => {
-      // Each press restarts the animation, for scrims as well as windows.
+    it("starts the glow's shuffle over with its window's", () => {
+      // Each press restarts the animation, for the glow as well as windows.
       const { container } = renderShell();
       clientAppears("one");
       clientAppears("two");
@@ -2226,7 +2225,7 @@ describe("Shell", () => {
       expect(appElement(container, "one").dataset.motion).toBe(
         "restacking-again",
       );
-      expect(scrimOver(container, "app:one").className).toContain(
+      expect(glowing(container).className).toContain(
         movingStyles({ motion: "restacking-again" }),
       );
     });
@@ -2260,12 +2259,12 @@ describe("Shell", () => {
 
       clientAppears("two");
 
-      expect(domicile.calls).toContainEqual(["warpPointer", 1445, 571]);
+      expect(domicile.calls).toContainEqual(["warpPointer", 1435, 571]);
       expect(boxOf(appElement(container, "two"))).toMatchObject({
-        height: "1018px",
-        width: "950px",
+        height: "978px",
+        width: "930px",
         x: "970px",
-        y: "62px",
+        y: "82px",
       });
     });
 
@@ -2282,12 +2281,12 @@ describe("Shell", () => {
       press("h");
 
       expect(domicile.calls).toContainEqual(["focusApp", "one"]);
-      expect(domicile.calls).toContainEqual(["warpPointer", 475, 571]);
+      expect(domicile.calls).toContainEqual(["warpPointer", 485, 571]);
       expect(boxOf(appElement(container, "one"))).toMatchObject({
-        height: "1018px",
-        width: "950px",
-        x: "0px",
-        y: "62px",
+        height: "978px",
+        width: "930px",
+        x: "20px",
+        y: "82px",
       });
     });
 

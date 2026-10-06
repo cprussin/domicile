@@ -11,9 +11,8 @@ type Props = {
 /**
  * Shows where a dragged tiled window would land, like sway's drop indicator.
  *
- * Nothing retiles until the drop, so this is the only preview. Like `Scrim`,
- * it is drawn after every window at the tiling's depth and ignores the
- * pointer.
+ * Nothing retiles until the drop, so this is the only preview. It is drawn
+ * after every window at the tiling's depth and ignores the pointer.
  */
 export const DropIndicator = ({ rect }: Props) => (
   <div

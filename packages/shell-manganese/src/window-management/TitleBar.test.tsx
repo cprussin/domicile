@@ -189,7 +189,7 @@ describe("TitleBar", () => {
   });
 
   it("draws no bar's edge in the accent, whatever it says about the keyboard", () => {
-    // The scrim on other windows marks focus instead. See `Scrim`.
+    // The glow around the window marks focus instead. See `FocusGlow`.
     for (const focus of ["focused", "leaf", "resting", "selected"] as const) {
       const { container } = render(<TitleBar {...barProps} focus={focus} />);
 
