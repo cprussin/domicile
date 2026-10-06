@@ -137,17 +137,18 @@ Evidence is in [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md),
     tray, mixer and window management into their own packages, with manganese
     the shell that composes them. No design doc yet.
 
-11. **System access for the shell.** Each system readout (battery,
-    backlight, audio) is a compositor module, a host message and an engine
-    member, so the set of features grows inside Domicile. Plan: files,
-    processes and D-Bus for the shell, and features as libraries on them,
-    starting with wifi and bluetooth bar modules. Done: the wire types, the
+11. **System access for the shell.** Each system readout (backlight,
+    audio) is a compositor module, a host message and an engine member, so
+    the set of features grows inside Domicile. Plan: files, processes and
+    D-Bus for the shell, and features as libraries on them, starting with
+    wifi and bluetooth bar modules. Done: the wire types, the
     compositor serving files, watches, processes and D-Bus, the engine relay
-    (`callSystem()` and the `system` event) and `@domicile-desktop/sdk/system`.
+    (`callSystem()` and the `system` event), `@domicile-desktop/sdk/system` and
+    `@domicile-desktop/system-battery`.
     Left:
     - `script-src 'self'` on `domicile://shell`.
-    - Battery, backlight and audio as libraries, deleting their host modules,
-      messages and IDL members.
+    - Backlight and audio as libraries, deleting their host modules, messages
+      and IDL members.
     - Apps and bookmarks as libraries, deleting `search_apps` and `found_apps`.
     - `system-network` and `system-bluetooth`, with bar items in manganese.
     - The file chooser reads directories with `readDir`.

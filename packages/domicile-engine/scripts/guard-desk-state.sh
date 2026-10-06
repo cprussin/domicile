@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# The desk's state attributes on the desktop -- battery, idle, lock, both
-# themes, clipboard, tray, modifiers -- say what the compositor said, to a
-# shell that reads them late.
+# The desk's state attributes on the desktop -- idle, lock, both themes,
+# clipboard, tray, modifiers -- say what the compositor said, to a shell that
+# reads them late.
 #
 #   nix develop .#full --command \
 #     ./packages/domicile-engine/scripts/guard-desk-state.sh /build/chromium/src
@@ -105,8 +105,6 @@ if not line:
 state = json.loads(line[len('"GUARD state '):-1])
 wanted = {
     "altKey": True,
-    "batteryCharge": 0.5,
-    "batteryCharging": True,
     "clipboard": [{"id": 7, "preview": "hello"}],
     "ctrlKey": False,
     "idle": True,
