@@ -2,7 +2,7 @@
 
 Screen brightness for a Domicile shell, on the system calls of
 [`@domicile-desktop/sdk/system`](/packages/chrome-sdk/src/system.ts). See
-[SYSTEM-ACCESS.md](/docs/architecture/SYSTEM-ACCESS.md).
+[SHELL-SYSTEM-ACCESS.md](/docs/SHELL-SYSTEM-ACCESS.md).
 
 ## Usage
 

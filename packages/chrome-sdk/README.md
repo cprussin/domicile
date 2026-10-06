@@ -56,7 +56,7 @@ See [docs/ELEMENTS.md](docs/ELEMENTS.md) for `<app>` input and focus, and the
 | `./app-element`, `./webview-element` | Types and event names for `<app>` and `<webview>`. |
 | `./bind-keys` | `bindKeys`: grab a shell's own chords by name and handle them by mode. `./key-action` and `./own-keybindings` are its parts. |
 | `./fake-host` | `FakeDomicileHost`: a desktop for a shell's tests. |
-| `./system` | `system(domicile)`: files, watches, processes and D-Bus. Calls resolve a `Result`; the compositor refuses most while the desktop is locked. See [SYSTEM-ACCESS.md](/docs/architecture/SYSTEM-ACCESS.md). |
+| `./system` | `system(domicile)`: files, watches, processes and D-Bus. Calls resolve a `Result`; the compositor refuses most while the desktop is locked. See [SHELL-SYSTEM-ACCESS.md](/docs/SHELL-SYSTEM-ACCESS.md). |
 | `./extension`, `./tray`, `./notification`, `./theme`, `./file-preview`, `./display-transform` | Data types and Zod schemas for what the desktop holds. |
 
 Internal, not needed by shells: `./cursor-shape`.

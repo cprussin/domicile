@@ -26,7 +26,7 @@ await setPowered(host, "/org/bluez/hci0", false);
   blocked by rfkill.
 - A bug or an unexpected reply shape throws, logged to the console.
 
-See [SYSTEM-ACCESS.md](/docs/architecture/SYSTEM-ACCESS.md).
+See [SHELL-SYSTEM-ACCESS.md](/docs/SHELL-SYSTEM-ACCESS.md).
 
 ## Test
 
