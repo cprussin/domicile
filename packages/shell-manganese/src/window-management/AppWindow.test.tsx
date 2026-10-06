@@ -1,15 +1,17 @@
 import { beforeEach, describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
-import { APP_TAG_NAME } from "@domicile-desktop/sdk/app-element";
+import {
+  APP_FOCUS_REQUESTED_EVENT,
+  APP_TAG_NAME,
+} from "@domicile-desktop/sdk/app-element";
 import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
-import type { Measure } from "@domicile-desktop/sdk/measure";
-import { registerElements } from "@domicile-desktop/sdk/register-elements";
 import { fireEvent, render } from "@testing-library/react";
 
 import { css } from "../../styled-system/css";
 import { AppWindow } from "./AppWindow";
 
-// Records `focusApp` calls. Pointer mapping is the SDK's and tested there.
+// Records `focusApp` calls. Pointer mapping is the engine's, checked by
+// `guard-app-routes-input.sh`.
 const host = new FakeDomicileHost();
 
 /** The windows this case asked the host to focus. */
@@ -21,12 +23,6 @@ const placed = (): unknown[] =>
   host.calls
     .filter(([method]) => method === "setAppBounds")
     .map(([, id, x, y, width, height]) => [id, { height, width, x, y }]);
-
-// The test DOM performs no layout, so measurement is injected.
-const stubMeasure: Measure = () => ({
-  size: [100, 100],
-  transform: [1, 0, 0, 1, 0, 0],
-});
 
 /** An arbitrary on-screen box. */
 const ON_SCREEN = { height: 800, width: 1200, x: 0, y: 32 };
@@ -94,7 +90,6 @@ const portal = (container: HTMLElement): Element => {
 
 beforeEach(() => {
   host.calls.length = 0;
-  registerElements(host.host, { measure: stubMeasure });
 });
 
 describe("AppWindow", () => {
@@ -135,19 +130,24 @@ describe("AppWindow", () => {
     expect(portal(container).getAttribute("app-id")).toBe("term");
   });
 
-  it("answers a click on the window itself rather than letting the SDK", () => {
-    // The shell owns focus. If the SDK moved the keyboard, the shell would
+  it("answers a click on the window itself rather than letting the engine", () => {
+    // The shell owns focus. If the engine moved the keyboard, the shell would
     // still draw the previous window as focused.
     const { container } = render(
       <AppWindow {...windowProps} focused={false} />,
     );
 
-    portal(container).dispatchEvent(
-      new MouseEvent("pointerdown", { bubbles: true, button: 0 }),
+    // What the engine dispatches for a press, and grants if it stands.
+    const stood = portal(container).dispatchEvent(
+      new CustomEvent(APP_FOCUS_REQUESTED_EVENT, {
+        bubbles: true,
+        cancelable: true,
+        detail: { appId: "term" },
+      }),
     );
 
     // Focus moves only when the `focused` prop changes.
-    expect(focused()).toStrictEqual([]);
+    expect(stood).toBe(false);
   });
 
   it("hides the element when the window is not on screen", () => {

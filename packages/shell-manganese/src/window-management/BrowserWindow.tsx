@@ -1,5 +1,4 @@
 import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
-import { focusChrome } from "@domicile-desktop/sdk/focus-chrome";
 import {
   WEBVIEW_FOCUS_REQUEST_EVENT,
   WEBVIEW_GUEST_FOCUS_EVENT,
@@ -318,16 +317,16 @@ export const BrowserWindow = ({
 
   // Gives the keyboard to the focused window's page.
   //
-  // - Calls the SDK's `focusChrome` so the compositor stops sending keys to
-  //   the last client and the SDK stops forwarding to it. The SDK does this
-  //   for `<app>` but not for `<webview>`.
+  // - Calls `focusChrome` so the compositor stops sending keys to the last
+  //   client and the engine stops forwarding this document's keys to it. The
+  //   engine does this for `<app>` but not for `<webview>`.
   // - Skips the page if focus is already in this window. Otherwise a click in
   //   the address bar would have its focus pulled into the page.
   // - Focuses the file picker instead while one is open, since the page is
   //   waiting on it.
   useEffect(() => {
     if (holdsKeyboard && view !== null) {
-      focusChrome(domicile);
+      domicile.focusChrome();
       if (pickerBox !== null) {
         focusOwn(pickerBox);
       } else if (!holdsFocus(element.current)) {
@@ -336,7 +335,7 @@ export const BrowserWindow = ({
     }
   }, [domicile, focusOwn, holdsKeyboard, pickerBox, view]);
 
-  // Releases focus when the window loses it. The SDK forwards keys from this
+  // Releases focus when the window loses it. The engine forwards keys from this
   // document to clients, but keys sent to a focused guest never reach the
   // document. A guest left focused would block typing into every client.
   useEffect(() => {
@@ -544,9 +543,9 @@ const holdsFocus = (frame: HTMLElement | null): boolean =>
 /**
  * Blurs the focused element if it is in this window.
  *
- * Blurring returns focus to the document, where the SDK listens for keys to
- * forward to clients. Blink's `Element::blur` also moves the browser process's
- * focused frame off the guest.
+ * Blurring returns focus to the document, where the engine listens for keys
+ * to forward to clients. Blink's `Element::blur` also moves the browser
+ * process's focused frame off the guest.
  */
 const releaseFocus = (frame: HTMLElement | null): void => {
   const held = document.activeElement;

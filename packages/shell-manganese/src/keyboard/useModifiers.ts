@@ -43,7 +43,7 @@ type HeldModifiers = {
 /**
  * The modifiers the shell should act on, read from this page's own key events.
  *
- * - The compositor only sees keys the SDK forwards while a client has the
+ * - The compositor only sees keys the engine forwards while a client has the
  *   keyboard, so its modifier attributes miss keys pressed while the shell had
  *   focus. This page's events are the source of truth (see
  *   docs/architecture/A-DESKTOP-ON-A-TTY.md for input from DRM).

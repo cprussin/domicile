@@ -34,10 +34,12 @@ expect "no patch adds to Blink's global event names" "" "$touching"
 
 # Platform events the fork listens to are Blink's to name: `resize` on the
 # shell's window reports desktop size changes (DomicileHost::ReportGeometry),
-# `keydown` a chord grabbed by name (DomicileHost::PageKeyDown), and
-# `DOMContentLoaded` when DomicileShell runs the shell.
+# `keydown` a chord grabbed by name (DomicileHost::PageKeyDown),
+# `DOMContentLoaded` when DomicileShell runs the shell, and the page input it
+# routes (DomicileHost::RouteInput): `keyup`, `pointerdown`, `blur`,
+# `pagehide`, `focusin` and `wheel`.
 # Listed individually so a fork event dispatched through Blink's list fails.
-LISTENED_TO="kResize kKeydown kDOMContentLoaded"
+LISTENED_TO="kResize kKeydown kDOMContentLoaded kKeyup kPointerdown kBlur kPagehide kFocusin kWheel"
 global="$(grep -oE 'event_type_names::k[A-Za-z]+' "$DOMICILE"/* 2>/dev/null |
   grep -vE "::($(echo "$LISTENED_TO" | tr ' ' '|'))\$" |
   cut -d: -f1 | xargs -r -n1 basename | sort -u | tr '\n' ' ')"

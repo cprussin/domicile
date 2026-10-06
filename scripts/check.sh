@@ -389,6 +389,7 @@ if wanted engine; then
       scripts/engine-guard-held-moments.sh \
       scripts/engine-guard-asks-promise.sh \
       scripts/engine-guard-shortcut-chords.sh \
+      scripts/engine-guard-app-routes-input.sh \
       scripts/engine-guard-shell-handover.sh
     ! engine_stop; } &&
   engine_serial scripts/engine-guard-css-and-resize.sh &&

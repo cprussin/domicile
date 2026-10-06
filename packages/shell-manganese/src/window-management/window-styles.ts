@@ -76,8 +76,8 @@ export const clickThroughStyles = css({ pointerEvents: "none" });
  * its whole `frame`.
  *
  * The bar and contents are separate elements; scaling both about one point
- * keeps them together. Pointer mapping is unaffected (see the chrome SDK's
- * `element-transform.ts`).
+ * keeps them together. Pointer mapping is unaffected: the engine maps a
+ * pointer through the `<app>`'s whole transform, origin included.
  */
 export const scaledAbout = (frame: Rect, rect: Rect): CSSProperties => ({
   transformOrigin: `${(frame.x + frame.width / 2 - rect.x).toString()}px ${(frame.y + frame.height / 2 - rect.y).toString()}px`,

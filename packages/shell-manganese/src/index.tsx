@@ -8,7 +8,6 @@ import {
   DEFAULT_THEME,
 } from "@domicile-desktop/component-library/theme-core";
 import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
-import { registerElements } from "@domicile-desktop/sdk/register-elements";
 import type { Shell as ShellModule } from "@domicile-desktop/sdk/shell";
 import { createRoot } from "react-dom/client";
 
@@ -81,7 +80,6 @@ export const runManganese =
     // Built once here, not per render, because a source holds the connection.
     const displays = hostDisplays(domicile);
     const theme = hostTheme(domicile);
-    registerElements(domicile);
 
     createRoot(mountPoint(root)).render(
       <Chrome

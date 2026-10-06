@@ -49,9 +49,6 @@ Exceptions:
   window.
 - `backdrop-filter` over an `<app>` renders but is not pixel-verified; see
   [WINDOW-COMPOSITING.md](/docs/architecture/WINDOW-COMPOSITING.md).
-- **perspective:** clicks land in the wrong place on an `<app>` under
-  `perspective` or a `perspective()` transform. The SDK logs a warning. Other
-  transforms work.
 
 ## Running it
 
@@ -117,16 +114,16 @@ throw, because they are bugs in the page.
 `@domicile-desktop/sdk`, on npm, provides:
 
 - `DomicileHost` (the type of the desktop `Shell` is handed) and `Shell`
-- `registerElements` (input routing over your `<app>` elements)
-- `focusApp`, `focusChrome`, `bindKeys`
-- `windowOf`, `surfaceSizeOf` (questions about `domicile.windows`)
+- `bindKeys`
 - `FakeDomicileHost` (`./fake-host`), a desktop for your tests
 - types and event names for `<app>` and `<webview>`
 
-The desktop `Shell` is handed is the API; the SDK is its types plus helpers. The IDL is in
+The desktop `Shell` is handed is the API; the SDK is its types plus helpers.
+The IDL is in
 `packages/domicile-engine/src/third_party/blink/renderer/modules/domicile/`.
-`registerElements` is the one helper a shell needs: it forwards the pointer
-and keyboard to clients until the engine does.
+The engine routes the pointer and keyboard over an `<app>` to its client, in
+the client's own coordinates through every CSS transform, so no helper is
+required.
 
 **Tests:** hand `FakeDomicileHost`'s `host` to your shell. `set` changes
 attributes and dispatches their change events, `appear`, `change` and `close`
@@ -139,12 +136,9 @@ system this repo's shells use. Shells do not need it.
 ## The smallest shell
 
 ```ts
-import { registerElements } from "@domicile-desktop/sdk/register-elements";
 import type { Shell as ShellModule } from "@domicile-desktop/sdk/shell";
 
 export const Shell: ShellModule = (root, domicile) => {
-  registerElements(domicile);
-
   const mounted = new Map<string, HTMLElement>();
 
   const show = () => {
@@ -203,8 +197,7 @@ To show one:
 - Mount an `<app>` for it at that position, above its parent.
 - Give it no frame and do not tile it. Draw it only where its window is drawn.
 - Remove it when `windows` drops it.
-- The SDK routes clicks on it to its window (`windowOf`, from
-  `@domicile-desktop/sdk/windows`).
+- The engine routes a click on it to its window's keyboard.
 - The compositor closes a menu when the keyboard leaves its window.
 - A popup placed near a screen edge is not moved back on screen.
 
@@ -217,9 +210,9 @@ Each entry in `domicile.windows` describes one client window.
 - **Size:** the `<app>` element's layout box is the window size. The engine
   sends it to the client. Resize a window by styling its element.
 - **Drawn size:** `width` and `height` are the size the client drew at, `null`
-  until it draws. The SDK already uses them for pointer mapping
-  (`surfaceSizeOf`), so you only need them for your own UI (`shell-simple`
-  uses them to remove a placeholder).
+  until it draws. The engine already uses them for pointer mapping, so you
+  only need them for your own UI (`shell-simple` uses them to remove a
+  placeholder).
 - **Limits:** `minWidth`, `minHeight`, `maxWidth` and `maxHeight` give the
   client's limits (`null` for none). Outside them, the client's frame is cut
   off or stretched. `shell-manganese` keeps floating windows within them.
@@ -234,28 +227,28 @@ ignored.
 
 ### A click on a window
 
-The SDK fires a cancelable, bubbling `domicile-focus-requested`
+The engine fires a cancelable, bubbling `domicile-focus-requested`
 (`APP_FOCUS_REQUESTED_EVENT`) on the clicked `<app>`. Unhandled, it focuses
-that client. To apply your own policy:
+that client. A popup's press asks for its window. A `preventDefault()` on the
+`pointerdown` itself takes the whole press: the client gets none of it and
+nothing is asked. To apply your own policy:
 
 ```ts
 import type { AppFocusRequest } from "@domicile-desktop/sdk/app-element";
 import { APP_FOCUS_REQUESTED_EVENT } from "@domicile-desktop/sdk/app-element";
-import { focusApp } from "@domicile-desktop/sdk/focus-app";
 
 document.addEventListener(APP_FOCUS_REQUESTED_EVENT, (event) => {
   const { appId } = (event as CustomEvent<AppFocusRequest>).detail;
   event.preventDefault();
   if (myPolicySays(appId)) {
-    focusApp(domicile, appId);
+    domicile.focusApp(appId);
   }
 });
 ```
 
-Use `focusApp(domicile, id)`, not `domicile.focusApp(id)`. Key events go to
-`document`, and the SDK forwards them to the focused client. `focusApp` tells
-both the compositor and the SDK. `domicile.focusApp` tells only the
-compositor, so keystrokes stay in the page.
+Key events go to `document`, and the engine forwards them to the focused
+client. `domicile.focusApp` moves both the compositor's seat and where the
+page's keys go.
 
 ### Taking the keyboard for your own UI
 
@@ -263,23 +256,20 @@ Something always holds the keyboard. It leaves a window when another window
 takes it, when a click lands on the shell's own UI, or when you call:
 
 ```ts
-import { focusChrome } from "@domicile-desktop/sdk/focus-chrome";
-
-focusChrome(domicile);
+domicile.focusChrome();
 ```
 
 - Call it when you open a panel to type into (launcher, switcher, palette).
   Otherwise the window underneath keeps receiving the keystrokes.
-- As with `focusApp`, use the SDK function, not `domicile.focusChrome()`.
 - Give focus back from whatever normally assigns it. In `shell-manganese`, an
   effect in `AppWindow` asks for the keyboard whenever it is elsewhere, which
   also restores it when a panel closes.
 
 ### A click on your window decorations
 
-The SDK treats a press outside every `<app>` as the page taking the keyboard.
-That is wrong for a title bar or drag handle you drew for a window. Before
-taking it, the SDK fires a cancelable `domicile-focus-release-requested` on the
+The engine treats a press outside every `<app>` as the page taking the
+keyboard. That is wrong for a title bar or drag handle you drew for a window.
+Before taking it, the engine fires a cancelable `domicile-focus-release-requested` on the
 `<app>` that holds the keyboard. Cancel it to keep focus on the window:
 
 ```ts
@@ -306,7 +296,7 @@ ref. The same applies to `<webview>` events.
 
 The `focusrequested` event, with the window's `appId`, is `xdg-activation`: an
 app asking to come forward (for example, a browser asked to open a link). The
-compositor does not grant it. Call `focusApp(domicile, event.appId)` to grant
+compositor does not grant it. Call `domicile.focusApp(event.appId)` to grant
 it, or ignore it.
 
 ### Where focus is

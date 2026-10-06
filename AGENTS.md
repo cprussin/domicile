@@ -144,7 +144,7 @@ not rules, and carry no authority level. Read the one for the area you work in.
 | [/docs/architecture/KEYBINDINGS.md](/docs/architecture/KEYBINDINGS.md) | A shell's keybindings as props: sway-style chords resolved against the compositor's keyboard layout and dispatched by the SDK. |
 | [/docs/architecture/COMPOSABLE-SHELLS.md](/docs/architecture/COMPOSABLE-SHELLS.md) | The config as a TS, JS or JSON module whose `Shell` export is the shell; `domicile` builds it; manganese as a library; packages on npm. |
 | [/docs/architecture/PORTALS.md](/docs/architecture/PORTALS.md) | Proposal: Domicile as the only `xdg-desktop-portal` backend, with the shell drawing every dialog. Not started. |
-| [/docs/architecture/WINDOW-DOMICILE.md](/docs/architecture/WINDOW-DOMICILE.md) | The desktop handed to `Shell` as the whole shell API, and `DomicileClient` deleted. Left: `<app>` routing its own input. |
+| [/docs/architecture/WINDOW-DOMICILE.md](/docs/architecture/WINDOW-DOMICILE.md) | The desktop handed to `Shell` as the whole shell API, and `DomicileClient` deleted. Done. |
 | [/docs/architecture/SYSTEM-ACCESS.md](/docs/architecture/SYSTEM-ACCESS.md) | Proposal: files, processes and D-Bus for the shell; desktop features as libraries on them. Not started. |
 
 [`/ROADMAP.md`](/ROADMAP.md) lists open work and known gaps, each pointing at
@@ -178,7 +178,7 @@ How to use, configure and debug Domicile. No authority level.
 
 | Doc | Covers |
 |---|---|
-| [/packages/chrome-sdk/docs/ELEMENTS.md](/packages/chrome-sdk/docs/ELEMENTS.md) | SDK input routing for `<app>` and `<webview>`: sizing, pointer and keyboard forwarding, focus, context menu, popups, held modifiers. |
+| [/packages/chrome-sdk/docs/ELEMENTS.md](/packages/chrome-sdk/docs/ELEMENTS.md) | `<app>` and `<webview>` for shells: sizing, the engine's pointer and keyboard forwarding, focus, context menu, popups, held modifiers. |
 | [/packages/domicile-engine/docs/BUILDING-CHROMIUM.md](/packages/domicile-engine/docs/BUILDING-CHROMIUM.md) | A Chromium checkout from scratch, the gn args, pitfalls, and rolling the pin. |
 | [/packages/domicile-engine/docs/BUILD-MACHINE.md](/packages/domicile-engine/docs/BUILD-MACHINE.md) | `crux`: the shared checkout and tree lock, the toolchain shell, moving the pin, the tree pool, build cost. |
 | [/packages/domicile-engine/docs/RELEASES.md](/packages/domicile-engine/docs/RELEASES.md) | The pinned engines, release names, the write-back flow, `DOMICILE_WRITEBACK_TOKEN`. |

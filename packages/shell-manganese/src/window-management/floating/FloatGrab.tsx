@@ -56,7 +56,7 @@ export const FloatGrab = ({
     <div
       aria-hidden
       className={cx(grabStyles, grabCursorStyles[cursor])}
-      // Read by the SDK, not for styling: a press here lands outside every
+      // Read by `AppWindow`, not for styling: a press here lands outside every
       // `<app>`, so the window is named for the focus handling in
       // `AppWindow`.
       data-window={window}

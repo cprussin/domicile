@@ -81,10 +81,20 @@ The renderer side of `DomicileHost` sends `innerWidth`, `innerHeight` and
 
 ### `<app>` routes its own input
 
-`HTMLAppElement` forwards pointer, wheel and key events to its client in
-surface coordinates. It computes them from its own layout and transform, which
-the engine knows exactly. This replaces the script math in `measure.ts` and
-`element-transform.ts`. The cancelable focus events are unchanged.
+| Input | Where |
+|---|---|
+| pointer, wheel, `contextmenu` over an `<app>` | `HTMLAppElement::DefaultEventHandler`, through its layout box and every transform above it (`AbsoluteToLocalPoint`) |
+| scaling to what the client drew; a popup's window | `DomicileHost`, which has `windows` |
+| keys | `DomicileHost`: a key reaches `document`, never an `<app>` |
+
+- The element reaches `DomicileHost` through `AppInputClient`, a core
+  interface, because core cannot call modules.
+- Default handling, not a listener, so a page's `preventDefault()` takes the
+  event and script cannot click into a client.
+- The focus events keep their names, `detail` and cancelability; the engine
+  dispatches them.
+- `focusApp()` and `focusChrome()` move both the seat and the page's keys, so
+  the SDK's wrappers go, and so do `key` and the `pointer*` methods.
 
 ### The engine resolves chords
 
@@ -109,12 +119,13 @@ domicile.addEventListener("shortcut", (event) => event.chord); // "Meta+Shift+l"
 | `shell` | type: `Shell` |
 | `app-element`, `webview-element` | types |
 | `bind-keys`, `key-action`, `own-keybindings` | helpers: chord grammar, modes |
-| `matrix`, `cursor-shape`, `theme`, … | pure helpers |
+| `cursor-shape`, `theme`, … | pure helpers |
 
 - Deleted: `domicile-client`, `connect-to-host`, `host-message`,
-  `keybindings`, `shortcut-claims`; with `<app>` input, `register-elements`,
-  `measure`, `element-transform`, `surface-coordinates`, `pointer-input`,
-  `keyboard-input`.
+  `keybindings`, `shortcut-claims`, `register-elements`, `measure`,
+  `element-transform`, `surface-coordinates`, `matrix`, `pointer-input`,
+  `keyboard-input`, `element-context`, `focus-app`, `focus-chrome`, `input`,
+  `wheel-axis`, `windows`.
 - Moved to `@domicile-desktop/e2e-harness`, their only user: `protocol`,
   `chrome-message`, `newline-frames`, `host-stream`.
 
@@ -172,7 +183,8 @@ Each step ships alone.
       promises replace (`appappeared` and the other seven `app*`,
       `focuschanged`, `files`, …), `shellconfig` and the `arrival` stamp
       (`guard-windows-state.sh` fires every name left)
-- [ ] `<app>` routes its own input; `registerElements` and the routing modules go
+- [x] `<app>` routes its own input; `registerElements` and the routing modules
+      go (`guard-app-routes-input.sh`)
 
 ## Open questions
 
