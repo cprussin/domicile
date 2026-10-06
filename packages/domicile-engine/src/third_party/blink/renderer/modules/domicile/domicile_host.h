@@ -64,7 +64,7 @@ class MediaQueryList;
 class MediaQueryListListener;
 class NativeEventListener;
 
-// navigator.domicile — the shell's control channel to the compositor.
+// The desktop a shell is handed — the shell's control channel to the compositor.
 //
 // The page calls methods and listens for events; the wire protocol lives in the
 // browser process. That is the whole design decision, and its cost is that

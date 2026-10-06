@@ -31,6 +31,7 @@ Under `under-wayland.sh` unless marked headless.
 | `guard-client-window.sh` | a Wayland client's window appears on the page in the color it drew |
 | `guard-two-windows.sh` | two clients' windows on one page, in one aggregation |
 | `guard-shell.sh` | a real shell, built with vite and the SDK, showing a client's window |
+| `guard-shell-handover.sh` | the engine calls `Shell` with the body and a working desktop, and no `navigator.domicile` or `window.domicile` exists (patch 0094) |
 | `guard-css-and-resize.sh` | CSS parity of `<app>` against `<div>`, with and without `backdrop-filter`, plus resize and latency. Headless; `GPU=1` uses the GPU |
 | `guard-latency.sh` | keystroke to pixel with a real client, from the compositor's `latency` lines |
 | `guard-control-arrival.sh` | delay from the compositor's socket to the page, from each event's `arrival` stamp; and that every CSS cursor keyword reaches the page. Headless |

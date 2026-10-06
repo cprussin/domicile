@@ -78,8 +78,9 @@ See [ONE-PAGE-FOR-THE-DESK.md](ONE-PAGE-FOR-THE-DESK.md).
   page reports what is under the pointer and which window has focus. The
   compositor routes events to the client's seat.
 - **Control:** the page calls the compositor through the `domicile` handed to
-  its `Shell`. The fork binds it on the shell's origin, answers it once per
-  document, and forwards calls to the compositor's control socket. See [WINDOW-DOMICILE.md](WINDOW-DOMICILE.md).
+  its `Shell`. The engine makes it when it runs the shell on the shell's
+  origin, and forwards calls to the compositor's control socket. See
+  [WINDOW-DOMICILE.md](WINDOW-DOMICILE.md).
 - **Serving:** the engine serves the shell over `domicile://`, so no port is
   bound. See [DOMICILE-SCHEME.md](DOMICILE-SCHEME.md).
 

@@ -534,7 +534,7 @@ interface ControlChannel {
 //
 // `Displays` is the one method without one, because there is nothing to put it
 // on: it dispatches a bare `Event` and the desktop is read off
-// `navigator.domicile.displays` rather than carried. A parameter no event
+// `DomicileHost.displays` rather than carried. A parameter no event
 // class can hold would be a field nothing reads.
 interface ControlChannelClient {
   // A window's title changed. `app_id` is the same id an <app> element names.
