@@ -159,54 +159,31 @@ std::string ShellURLLoaderFactory::ShellDocument(const std::string& module) {
   // to be `dist` as anything a person would recognize, so it says Domicile
   // until the shell says otherwise with document.title.
   //
-  // EscapeAllExceptUnreserved on the module name is one escape doing two jobs.
-  // The name came off somebody's disk and lands in the most privileged page in
-  // this system, so it has to be safe inside a double-quoted JavaScript string
-  // in a <script> *and* still name the file the author meant. Its output is
-  // unreserved characters and %XX, so no `"`, `\`, `<` or `>` survives it to
-  // end the string or the element -- and `#`, `?` and `%`, legal in a POSIX
-  // filename, are encoded rather than read as a fragment, a query or an escape.
+  // THE DOCUMENT NAMES THE SHELL; THE ENGINE RUNS IT. The module is named in
+  // a `domicile-shell-module` meta element and nothing on the page loads it:
+  // blink's DomicileShell does, once the body is parsed, and calls its `Shell`
+  // with the body and the desktop. A script here would have had to find the
+  // desktop on a global every other script could find too; see DomicileShell,
+  // which is also where a shell failing to load is reported on the screen.
+  // Every other export of the module is ignored, so one file can be a config
+  // and a shell both.
   //
-  // THE DOCUMENT CALLS THE SHELL. A shell is a module whose `Shell` export is a
-  // function; the document imports it and calls it with the body and the
-  // desktop, and every other export is ignored. The desktop is read before the
-  // module loads: `navigator.domicile` answers once per document (see
-  // NavigatorDomicile), so what the shell is handed is the only copy, and a
-  // module that reaches for the global on load finds null. Nothing in the module runs as a side of loading
-  // it, so one file can be a config and a shell both.
+  // EscapeAllExceptUnreserved on the module name. The name came off somebody's
+  // disk and lands in the most privileged page in this system, so it has to be
+  // safe inside a double-quoted attribute *and* still name the file the author
+  // meant. Its output is unreserved characters and %XX, so no `"`, `<` or `>`
+  // survives it to end the attribute or the element -- and `#`, `?` and `%`,
+  // legal in a POSIX filename, are encoded rather than read as a fragment, a
+  // query or an escape.
   //
-  // AND IT REPORTS ITS OWN SHELL FAILING. A module that 404s, will not parse,
-  // throws on its first line, has no `Shell`, or whose `Shell` throws, leaves
-  // this page blank and completely silent: the engine served exactly what it
-  // was asked for, so it logs nothing; the compositor is waiting for a page
-  // that will never say hello, so it knows only that it is waiting; and the
-  // shell never ran, so it cannot report either. A blank window with nothing
-  // anywhere was the symptom of four separate startup bugs, and a day went into
-  // telling them apart by hand. A dynamic `import()` rejects for the first
-  // three, so one `try` covers what used to take three listeners.
-  //
-  // ONLY UNTIL `Shell` RETURNS, which is the half that keeps this harmless.
-  // After that the page belongs to the shell: a shell that throws an hour
-  // later is the shell's own error to handle, and a full-screen report painted
-  // over a working desktop would be worse than the blank window this exists to
-  // replace.
-  //
-  // Said on the screen as well as on the console. `--app` is the whole point of
-  // the window, so there is no tab strip to open devtools from and nobody is
-  // looking at a console. `textContent` rather than markup, because the text
-  // has a filename and an exception message in it, both from outside.
-  //
-  // AND IT ADDS NO NAME TO THE DOCUMENT, WHICH IS NOT FASTIDIOUSNESS. An
-  // earlier version found its own script by an id -- `domicile-shell` -- and
+  // AND IT ADDS NO NAME TO THE BODY, WHICH IS NOT FASTIDIOUSNESS. An earlier
+  // version found its own script by an id -- `domicile-shell` -- and
   // `shell-manganese`'s `mountPoint` looks up that exact id to decide whether
-  // it has already made its mount point. It picked the name for the same
-  // obvious reason this did. So it found the script tag, React mounted the
-  // whole desktop inside a <script>, and a <script> is `display: none`: the
-  // shell connected, embedded its window and logged its diagnostics every five
-  // seconds while not one pixel of it was laid out. This document is the one
-  // thing every shell is written against, so every name in it is a name in the
-  // shell's namespace. The script empties the body before anything else, so
-  // the root `Shell` is handed is an empty body.
+  // it has already made its mount point. So it found the script tag, React
+  // mounted the whole desktop inside a <script>, and a <script> is
+  // `display: none`. This document is the one thing every shell is written
+  // against, so every name in it is a name in the shell's namespace: the body
+  // is empty, and the root `Shell` is handed is an empty body.
   const std::string escaped = base::EscapeAllExceptUnreserved(module);
   return base::StrCat({
       "<!doctype html>\n"
@@ -215,6 +192,9 @@ std::string ShellURLLoaderFactory::ShellDocument(const std::string& module) {
       "    <meta charset=\"utf-8\" />\n"
       "    <meta content=\"width=device-width, initial-scale=1\" "
       "name=\"viewport\" />\n"
+      "    <meta content=\"./",
+      escaped,
+      "\" name=\"domicile-shell-module\" />\n"
       "    <title>Domicile</title>\n"
       "    <style>\n"
       "      html,\n"
@@ -227,44 +207,7 @@ std::string ShellURLLoaderFactory::ShellDocument(const std::string& module) {
       "      }\n"
       "    </style>\n"
       "  </head>\n"
-      "  <body>\n"
-      "    <script type=\"module\">\n"
-      "      document.body.replaceChildren();\n"
-      "      const desktop = navigator.domicile;\n"
-      "      const module = new URL(\"./",
-      escaped,
-      "\", location.href).href;\n"
-      "      const say = (what) => {\n"
-      "        console.error(\"domicile: \" + what);\n"
-      "        const said = document.createElement(\"pre\");\n"
-      "        said.textContent = \"domicile: \" + what;\n"
-      "        said.setAttribute(\"style\", \"position:fixed;inset:0;margin:0;"
-      "padding:16px;overflow:auto;white-space:pre-wrap;font:13px/1.5 "
-      "monospace;background:#2b0b0b;color:#ffd7d7;z-index:2147483647\");\n"
-      "        document.body.append(said);\n"
-      "      };\n"
-      "      const shell = await import(module).catch((failure) => {\n"
-      "        say(\"the shell module at \" + module + \" did not load: \" + "
-      "failure + \". The engine serves it out of --domicile-shell-root under "
-      "the name --domicile-shell-module gave; a module that imports a file "
-      "which is not there, will not parse, or throws while it loads fails "
-      "here too.\");\n"
-      "      });\n"
-      "      if (shell !== undefined) {\n"
-      "        if (typeof shell.Shell === \"function\") {\n"
-      "          try {\n"
-      "            shell.Shell(document.body, desktop);\n"
-      "          } catch (failure) {\n"
-      "            say(\"the shell's Shell threw: \" + failure);\n"
-      "          }\n"
-      "        } else {\n"
-      "          say(\"the shell module at \" + module + \" has no Shell export. "
-      "A shell is a module whose Shell export is a function, which Domicile "
-      "calls with the element to draw in and the desktop.\");\n"
-      "        }\n"
-      "      }\n"
-      "    </script>\n"
-      "  </body>\n"
+      "  <body></body>\n"
       "</html>\n"});
 }
 

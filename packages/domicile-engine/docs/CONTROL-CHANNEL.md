@@ -8,10 +8,10 @@ The engine has two channels to the rest of Domicile:
 
 ## Control channel
 
-- `DomicileHost` is the shell's API. The engine answers `navigator.domicile`
-  once per document: the document Domicile writes reads it and passes it to
-  `Shell(root, domicile)`, and every later read is `null`. `window.domicile`
-  is the same object.
+- `DomicileHost` is the shell's API. No page script can find it:
+  `DomicileShell` runs the module the shell document names and passes the
+  host into `Shell(root, domicile)`. There is no `navigator.domicile` or
+  `window.domicile`.
 - The browser process speaks the wire protocol (JSON lines to the
   compositor). The page sees typed WebIDL values, so it cannot send a
   malformed message.

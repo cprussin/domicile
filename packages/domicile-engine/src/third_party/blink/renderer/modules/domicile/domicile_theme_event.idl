@@ -1,7 +1,7 @@
 // Copyright 2026 Connor Prussin
 // SPDX-License-Identifier: MIT
 
-// The event behind navigator.domicile.ontheme.
+// The event behind DomicileHost.ontheme.
 //
 // Its own interface rather than a field on DomicileAppEvent, which carries the
 // events that differ only in which window they name: this one names no window.

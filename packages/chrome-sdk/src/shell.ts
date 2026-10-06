@@ -10,8 +10,8 @@ import type { DomicileHost } from "./domicile-host";
  * Importing the module should only install its stylesheet. See
  * `docs/WRITING-A-SHELL.md`.
  *
- * `domicile` is the only copy: the engine hands the desktop out once per
- * document, so there is no global. Keep it however the shell likes (a React
- * context, a variable) and pass it to what needs it.
+ * `domicile` is the only copy: the engine calls this itself and makes the
+ * desktop for the call, so there is no global. Keep it however the shell
+ * likes (a React context, a variable) and pass it to what needs it.
  */
 export type Shell = (root: HTMLElement, domicile: DomicileHost) => void;

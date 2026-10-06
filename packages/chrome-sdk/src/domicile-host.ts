@@ -6,9 +6,9 @@
 // If they disagree, the IDL is correct. See
 // `docs/architecture/WINDOW-DOMICILE.md`.
 //
-// The engine answers `navigator.domicile` once per document: the document
-// Domicile writes reads it and passes it to `Shell`, and every later read is
-// `null`. So no global is declared here; a shell keeps what it was handed. See
+// The engine runs the shell module and passes the host into its `Shell`
+// (`DomicileShell`). There is no `navigator.domicile` or `window.domicile`, so
+// no global is declared here; a shell keeps what it was handed. See
 // `shell.ts`.
 //
 // Sizes and coordinates are fractional CSS pixels, except in
