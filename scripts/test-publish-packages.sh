@@ -26,7 +26,7 @@ if ! DOMICILE_PUBLISH_DRY_RUN="$OUT" "$PUBLISH" >"$OUT/log" 2>&1; then
   fail "the dry run succeeds" "$(tail -20 "$OUT/log")"
 fi
 
-for name in sdk system-battery component-library manganese; do
+for name in sdk system-battery component-library system-network system-bluetooth manganese; do
   tarball="$(ls "$OUT"/domicile-desktop-"$name"-*.tgz 2>/dev/null | head -1)"
   if [ -z "$tarball" ]; then
     fail "@domicile-desktop/$name is packed" "no tarball in $OUT"

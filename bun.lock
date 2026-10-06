@@ -96,6 +96,8 @@
         "@domicile-desktop/component-library": "workspace:*",
         "@domicile-desktop/sdk": "workspace:*",
         "@domicile-desktop/system-battery": "workspace:*",
+        "@domicile-desktop/system-bluetooth": "workspace:*",
+        "@domicile-desktop/system-network": "workspace:*",
         "@phosphor-icons/react": "catalog:",
         "lowlight": "catalog:",
         "react": "catalog:",
@@ -140,6 +142,34 @@
     },
     "packages/system-battery": {
       "name": "@domicile-desktop/system-battery",
+      "version": "0.1.0",
+      "dependencies": {
+        "@cprussin/option-result": "catalog:",
+        "@domicile-desktop/sdk": "workspace:*",
+        "zod": "catalog:",
+      },
+      "devDependencies": {
+        "@cprussin/tsconfig": "catalog:",
+        "@types/bun": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
+    "packages/system-bluetooth": {
+      "name": "@domicile-desktop/system-bluetooth",
+      "version": "0.1.0",
+      "dependencies": {
+        "@cprussin/option-result": "catalog:",
+        "@domicile-desktop/sdk": "workspace:*",
+        "zod": "catalog:",
+      },
+      "devDependencies": {
+        "@cprussin/tsconfig": "catalog:",
+        "@types/bun": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
+    "packages/system-network": {
+      "name": "@domicile-desktop/system-network",
       "version": "0.1.0",
       "dependencies": {
         "@cprussin/option-result": "catalog:",
@@ -290,6 +320,10 @@
     "@domicile-desktop/shell-simple": ["@domicile-desktop/shell-simple@workspace:packages/shell-simple"],
 
     "@domicile-desktop/system-battery": ["@domicile-desktop/system-battery@workspace:packages/system-battery"],
+
+    "@domicile-desktop/system-bluetooth": ["@domicile-desktop/system-bluetooth@workspace:packages/system-bluetooth"],
+
+    "@domicile-desktop/system-network": ["@domicile-desktop/system-network@workspace:packages/system-network"],
 
     "@domicile-desktop/test-support": ["@domicile-desktop/test-support@workspace:packages/test-support"],
 

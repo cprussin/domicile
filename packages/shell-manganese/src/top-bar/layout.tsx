@@ -4,10 +4,12 @@ import type { ReactNode } from "react";
 
 import {
   BarBattery,
+  BarBluetooth,
   BarBrightness,
   BarClock,
   BarLauncher,
   BarMode,
+  BarNetwork,
   BarNotifications,
   BarThemeSelector,
   BarTray,
@@ -41,6 +43,8 @@ export const DEFAULT_TOP_BAR: TopBarLayout = {
   right: [
     <BarMode key="mode" />,
     <BarThemeSelector key="theme" />,
+    <BarNetwork key="network" />,
+    <BarBluetooth key="bluetooth" />,
     <BarVolume key="volume" />,
     <BarBrightness key="brightness" />,
     <BarBattery key="battery" />,

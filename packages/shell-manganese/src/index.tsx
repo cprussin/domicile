@@ -43,10 +43,12 @@ export {
 } from "./keyboard/commands";
 export {
   BarBattery as Battery,
+  BarBluetooth as Bluetooth,
   BarBrightness as Brightness,
   BarClock as Clock,
   BarLauncher as Launcher,
   BarMode as Mode,
+  BarNetwork as Network,
   BarNotifications as Notifications,
   BarThemeSelector as ThemeSelector,
   BarTray as Tray,

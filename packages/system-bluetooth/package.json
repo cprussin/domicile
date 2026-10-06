@@ -1,0 +1,40 @@
+{
+  "dependencies": {
+    "@cprussin/option-result": "catalog:",
+    "@domicile-desktop/sdk": "workspace:*",
+    "zod": "catalog:"
+  },
+  "description": "BlueZ for a Domicile shell: whether each adapter is powered and which devices are connected, kept current, and turning adapters on and off.",
+  "devDependencies": {
+    "@cprussin/tsconfig": "catalog:",
+    "@types/bun": "catalog:",
+    "typescript": "catalog:"
+  },
+  "exports": {
+    "./bluetooth": {
+      "types": "./dist/bluetooth.d.ts",
+      "default": "./dist/bluetooth.js"
+    }
+  },
+  "files": [
+    "dist/**"
+  ],
+  "license": "MIT",
+  "name": "@domicile-desktop/system-bluetooth",
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "directory": "packages/system-bluetooth",
+    "type": "git",
+    "url": "git+https://github.com/cprussin/domicile.git"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test:types": "tsc --noEmit",
+    "test:unit": "bun test"
+  },
+  "type": "module",
+  "version": "0.1.0"
+}

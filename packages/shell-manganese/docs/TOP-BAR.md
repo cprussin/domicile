@@ -10,7 +10,7 @@ below it.
 own. Manganese's items take no props:
 
 `Launcher`, `Tray`, `WorkspaceSwitcher`, `Clock`, `Mode`, `ThemeSelector`,
-`Volume`, `Brightness`, `Battery`, `Notifications`.
+`Network`, `Bluetooth`, `Volume`, `Brightness`, `Battery`, `Notifications`.
 
 ```tsx
 import { Clock, runManganese, Tray, WorkspaceSwitcher } from "@domicile-desktop/manganese";
@@ -31,8 +31,8 @@ To style your own items with manganese's Panda CSS, see
 
 - **left**: launcher button, tray, workspaces
 - **middle**: clock
-- **right**: binding mode (when not `default`), theme selector, volume,
-  brightness, battery, notification bell
+- **right**: binding mode (when not `default`), theme selector, network,
+  Bluetooth, volume, brightness, battery, notification bell
 
 ## Readability over the wallpaper
 
@@ -55,6 +55,26 @@ To style your own items with manganese's Panda CSS, see
 - Reads like `Wednesday 2026-09-16 20:53:40` and ticks every second.
 - Centered on the bar, so it does not shift as other items change.
 - A fixed English day and ISO date keep the width stable.
+
+## Network
+
+- The primary connection from NetworkManager
+  ([`@domicile-desktop/system-network`](../../system-network/README.md)).
+- Wi-Fi: a signal icon graded strong, fair or weak by thirds, and the SSID.
+  Wired: a network icon. Any other kind, such as a VPN: a network icon and its
+  name. No connection: a crossed-out Wi-Fi icon.
+- Turns `warning` when NetworkManager reports limited connectivity or a
+  captive portal.
+- Hidden without NetworkManager.
+
+## Bluetooth
+
+- From BlueZ ([`@domicile-desktop/system-bluetooth`](../../system-bluetooth/README.md)).
+- An icon for off, on, or on with a device connected. Its name lists the
+  connected devices.
+- Click turns every adapter off if any is on, and on otherwise. A refusal,
+  such as an rfkill block, is logged.
+- Hidden without BlueZ or without an adapter.
 
 ## Battery
 

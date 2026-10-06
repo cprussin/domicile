@@ -1,0 +1,40 @@
+{
+  "dependencies": {
+    "@cprussin/option-result": "catalog:",
+    "@domicile-desktop/sdk": "workspace:*",
+    "zod": "catalog:"
+  },
+  "description": "NetworkManager for a Domicile shell: connectivity and the primary connection, with its Wi-Fi network and signal, kept current.",
+  "devDependencies": {
+    "@cprussin/tsconfig": "catalog:",
+    "@types/bun": "catalog:",
+    "typescript": "catalog:"
+  },
+  "exports": {
+    "./network": {
+      "types": "./dist/network.d.ts",
+      "default": "./dist/network.js"
+    }
+  },
+  "files": [
+    "dist/**"
+  ],
+  "license": "MIT",
+  "name": "@domicile-desktop/system-network",
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "directory": "packages/system-network",
+    "type": "git",
+    "url": "git+https://github.com/cprussin/domicile.git"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test:types": "tsc --noEmit",
+    "test:unit": "bun test"
+  },
+  "type": "module",
+  "version": "0.1.0"
+}
