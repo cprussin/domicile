@@ -37,8 +37,22 @@ lower monitor scale the layer appears on, so each monitor gets tiles rastered
 Viz then scales by `s_i/S`, so a tile rastered at `s_i` maps 1:1 to display
 `i`'s pixels.
 
-Cost: the high-res tiling still covers the whole layer, so a lower-density
-monitor adds raster work and activation latency.
+## Cost
+
+- The high-res tiling still covers the whole layer, so a lower-density monitor
+  adds raster work and activation latency.
+- **Tile size.** cc sizes GPU tiles from a viewport: its full width, a quarter
+  of its height. Patch 0097 gives it the largest part of the widget one monitor
+  shows (`DomicileTileViewportFor`) in place of the desk.
+  - GPU raster runs on the GPU main thread, which also draws every monitor. A
+    desk-wide tile (8288x1216 on `home-office-right-two`) is one task long
+    enough to miss a frame there; sized for one monitor it is ~1376x1216.
+  - A widget on no monitor keeps upstream's sizing.
+- **Gaps.** The high-res tiling rasters the parts of the desk no monitor shows.
+  A display tiling's clip is the bounds of every region at its ratio, so two
+  monitors at one density raster what lies between them too. Clipping either
+  to the regions themselves needs a per-tile check: a rect clip cannot leave
+  a gap out.
 
 ## Fallback to S
 
@@ -74,8 +88,10 @@ moving layer draws from its tilings.
     5520x3200 desk): 39.7 Mpx + 2 × 8.3 Mpx = 56.3 Mpx, ~1.7 GiB. Upstream
     gives ~583 MB.
   - `CommitState`'s copy keeps the regions and the budget for the next commit.
-- Over budget, required tiles are marked OOM and drawn as solid color. So
-  when memory is tight, a display tiling is worse than resampling.
+- Over budget, required tiles are marked OOM so activation can go ahead.
+  Upstream draws an OOM tile as solid color. A display tiling's OOM tile is
+  passed over instead (`DomicileDrawsTile`, patch 0098), and the high-res tile
+  is drawn there, resampled. It is rastered again once memory frees up.
 - **Eviction order**: display tilings are NON_IDEAL, so in each eviction phase
   their tiles go before high-res tiles, even inside a region where high res is
   only fallback.

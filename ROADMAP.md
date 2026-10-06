@@ -301,6 +301,9 @@ Understood and not scheduled.
 - **Filter quality on lower-density displays is unmeasured.** The desk draws
   once for all displays. If a blurred bar or shadow looks soft on the
   lower-density one, the fix is a render pass per display.
+- **The desk rasters what no monitor shows.** The high-res tiling covers the
+  gaps between monitors, and a display tiling the bounds of its monitors.
+  [DISPLAY-TILINGS.md](docs/architecture/DISPLAY-TILINGS.md#cost).
 - **No guard runs two CRTCs.** Headless has one screen. gtests cover the
   logic, and [Several monitors](docs/HARDWARE-CHECKS.md#several-monitors) the
   rest. [ONE-PAGE-FOR-THE-DESK.md](docs/architecture/ONE-PAGE-FOR-THE-DESK.md#open-questions).

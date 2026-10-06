@@ -1,0 +1,124 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Tue, 6 Oct 2026 12:00:00 +0000
+Subject: [PATCH] domicile: the desk's tiles are sized for one monitor
+
+cc sizes GPU tiles from the viewport: its full width, a quarter of its
+height. The desk's viewport spans every monitor, so on a 5520x3200 desk
+at 1.5 a tile is an 8280x1200 row, ~10 Mpx, and a layer narrower than a
+quarter of the desk is a single tile. GPU raster runs on the GPU main
+thread, which also draws every monitor, so one such tile costs them a
+frame.
+
+- A widget shown on monitors sends the largest part of it one monitor
+  shows, in device pixels (DomicileTileViewportFor).
+- A picture layer sizes its tiles from that in place of the viewport.
+  A widget on no monitor sends nothing, and keeps upstream's sizing.
+- Every layer pushes its properties when it changes, so one that never
+  repaints still picks it up.
+- CommitState's copy keeps it for the next commit.
+
+See cc/domicile/display_regions.h; the series is read for this by
+scripts/test-the-desk-tiles-are-sized-for-one-monitor.sh.
+---
+ cc/layers/picture_layer.cc                          |  6 +++++-
+ cc/trees/commit_state.cc                            |  1 +
+ cc/trees/commit_state.h                             |  1 +
+ cc/trees/layer_tree_host.cc                         | 13 +++++++++++++
+ cc/trees/layer_tree_host.h                          |  3 +++
+ .../blink/renderer/platform/widget/widget_base.cc   |  2 ++
+ 6 files changed, 25 insertions(+), 1 deletion(-)
+
+diff --git a/cc/layers/picture_layer.cc b/cc/layers/picture_layer.cc
+index 9537cc5e0e..e2575764a1 100644
+--- a/cc/layers/picture_layer.cc
++++ b/cc/layers/picture_layer.cc
+@@ -59,8 +59,12 @@ void PictureLayer::PushDirtyPropertiesTo(LayerImpl* base_layer,
+       layer_impl->set_has_non_animated_image_update_rect();
+     }
+ 
++    // DOMICILE: on monitors, tiles sized for the largest one, not for a
++    // viewport spanning all of them. See cc/domicile/display_regions.h.
+     layer_impl->set_gpu_raster_max_texture_size(
+-        commit_state.device_viewport_rect.size());
++        commit_state.domicile_tile_viewport.IsEmpty()
++            ? commit_state.device_viewport_rect.size()
++            : commit_state.domicile_tile_viewport);
+     layer_impl->SetIsBackdropFilterMask(is_backdrop_filter_mask());
+ 
+     layer_impl->StageNewRasterSourceForCommit(
+diff --git a/cc/trees/commit_state.cc b/cc/trees/commit_state.cc
+index d5980ce7ec..ea368fe0b4 100644
+--- a/cc/trees/commit_state.cc
++++ b/cc/trees/commit_state.cc
+@@ -33,6 +33,7 @@ CommitState::CommitState(const CommitState& prev)
+       // DOMICILE: kept, like the color spaces, until the widget sets new ones.
+       domicile_display_regions(prev.domicile_display_regions),
+       domicile_tile_bytes(prev.domicile_tile_bytes),
++      domicile_tile_viewport(prev.domicile_tile_viewport),
+       display_transform_hint(prev.display_transform_hint),
+       device_viewport_rect(prev.device_viewport_rect),
+       visual_device_viewport_size(prev.visual_device_viewport_size),
+diff --git a/cc/trees/commit_state.h b/cc/trees/commit_state.h
+index 9d1a849498..3163701e6b 100644
+--- a/cc/trees/commit_state.h
++++ b/cc/trees/commit_state.h
+@@ -103,6 +103,7 @@ struct CC_EXPORT CommitState {
+   // DOMICILE: see cc/domicile/display_regions.h.
+   DomicileDisplayRegions domicile_display_regions;
+   size_t domicile_tile_bytes = 0;
++  gfx::Size domicile_tile_viewport;
+   // Display transform hint to tag generated compositor frames.
+   gfx::OverlayTransform display_transform_hint = gfx::OVERLAY_TRANSFORM_NONE;
+   gfx::Rect device_viewport_rect;
+diff --git a/cc/trees/layer_tree_host.cc b/cc/trees/layer_tree_host.cc
+index b6c7c10d68..c5ed4621b3 100644
+--- a/cc/trees/layer_tree_host.cc
++++ b/cc/trees/layer_tree_host.cc
+@@ -1662,6 +1662,19 @@ void LayerTreeHost::SetDomicileTileBytes(size_t bytes) {
+   SetNeedsCommit();
+ }
+ 
++void LayerTreeHost::SetDomicileTileViewport(const gfx::Size& viewport) {
++  if (pending_commit_state()->domicile_tile_viewport == viewport) {
++    return;
++  }
++  pending_commit_state()->domicile_tile_viewport = viewport;
++  // A picture layer reads it when it pushes its properties, and one that never
++  // repaints would keep tiles sized for the old one.
++  for (auto* layer : *this) {
++    layer->SetNeedsPushProperties();
++  }
++  SetNeedsCommit();
++}
++
+ void LayerTreeHost::SetDisplayColorSpaces(
+     const gfx::DisplayColorSpaces& display_color_spaces) {
+   if (pending_commit_state()->display_color_spaces == display_color_spaces)
+diff --git a/cc/trees/layer_tree_host.h b/cc/trees/layer_tree_host.h
+index b7db51e2db..4baf605422 100644
+--- a/cc/trees/layer_tree_host.h
++++ b/cc/trees/layer_tree_host.h
+@@ -672,6 +672,9 @@ class CC_EXPORT LayerTreeHost : public MutatorHostDelegate {
+   // DOMICILE: the tile memory those monitors need, which the compositor's
+   // budget is raised to. See cc/domicile/display_regions.h.
+   void SetDomicileTileBytes(size_t bytes);
++  // DOMICILE: the largest part of the page one monitor shows, which GPU tiles
++  // are sized from in place of the viewport. See cc/domicile/display_regions.h.
++  void SetDomicileTileViewport(const gfx::Size& viewport);
+ 
+   bool HasCompositorDrivenScrollAnimationForTesting() const {
+     DCHECK(IsMainThread());
+diff --git a/third_party/blink/renderer/platform/widget/widget_base.cc b/third_party/blink/renderer/platform/widget/widget_base.cc
+index b0e20db6be..103931242c 100644
+--- a/third_party/blink/renderer/platform/widget/widget_base.cc
++++ b/third_party/blink/renderer/platform/widget/widget_base.cc
+@@ -1985,6 +1985,8 @@ void WidgetBase::UpdateDomicileDisplayRegions() {
+   }
+   LayerTreeHost()->SetDomicileDisplayRegions(cc::DomicileDisplayRegionsOf(
+       displays, widget_screen_rect_.origin(), GetOriginalDeviceScaleFactor()));
++  LayerTreeHost()->SetDomicileTileViewport(cc::DomicileTileViewportFor(
++      displays, widget_screen_rect_, GetOriginalDeviceScaleFactor()));
+   // A budget named on the command line is the budget, as upstream has it.
+   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+           switches::kForceGpuMemAvailableMb)) {

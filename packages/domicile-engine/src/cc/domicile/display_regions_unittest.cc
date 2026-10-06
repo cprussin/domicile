@@ -221,5 +221,35 @@ TEST(DomicileDisplayRegionsTest, AWidgetOnNoMonitorAsksForNoTileMemory) {
             0u);
 }
 
+TEST(DomicileDisplayRegionsTest, TheDesksTilesAreSizedForItsLargestMonitor) {
+  // A 1.2 monitor, 1800x3200 at 1.5, not the 8280x4800 desk.
+  EXPECT_EQ(DomicileTileViewportFor(HomeOfficeRightTwo(),
+                                    gfx::Rect(0, 0, 5520, 3200), 1.5f),
+            gfx::Size(2700, 4800));
+}
+
+TEST(DomicileDisplayRegionsTest, AWidgetOnOneMonitorSizesTilesForItself) {
+  // A <webview> on the center monitor, 400x300 at 1.5.
+  EXPECT_EQ(DomicileTileViewportFor(HomeOfficeRightTwo(),
+                                    gfx::Rect(2000, 100, 400, 300), 1.5f),
+            gfx::Size(600, 450));
+}
+
+TEST(DomicileDisplayRegionsTest, AWidgetOnNoMonitorHasNoTileViewport) {
+  // An ordinary page: cc sizes its tiles from its viewport, as upstream does.
+  EXPECT_TRUE(
+      DomicileTileViewportFor({}, gfx::Rect(0, 0, 1920, 1080), 2.f).IsEmpty());
+}
+
+TEST(DomicileDisplayRegionsTest, AMonitorsTileOutOfMemoryIsNotDrawn) {
+  EXPECT_FALSE(DomicileDrawsTile(/*display_ratio=*/0.8f, /*out_of_memory=*/true));
+}
+
+TEST(DomicileDisplayRegionsTest, AMonitorsRasteredTileAndThePagesAreDrawn) {
+  EXPECT_TRUE(DomicileDrawsTile(/*display_ratio=*/0.8f, /*out_of_memory=*/false));
+  // The page's own: nothing finer to fall back to, so drawn as upstream does.
+  EXPECT_TRUE(DomicileDrawsTile(/*display_ratio=*/0.f, /*out_of_memory=*/true));
+}
+
 }  // namespace
 }  // namespace cc
