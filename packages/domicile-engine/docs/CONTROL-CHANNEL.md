@@ -125,6 +125,11 @@ The engine has two channels to the rest of Domicile:
      header, so a change there recompiles most of Blink.
    - `scripts/test-engine-event-names.sh` checks that this list, the IDL and
      the events `guard-windows-state` fires agree.
+4. Run `bun run generate` in `packages/chrome-sdk` to regenerate the SDK's
+   `domicile-host.ts` from the IDL. An event dispatched as anything but a
+   plain `Event` also needs its type in `EVENT_TYPES` in
+   `codegen/generate-domicile-host.ts`, since `EventHandler` does not say.
+   `scripts/test-host-types-match-the-idl.sh` fails until the file is current.
 
 ## Command socket
 

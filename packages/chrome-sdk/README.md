@@ -51,7 +51,7 @@ See [docs/ELEMENTS.md](docs/ELEMENTS.md) for `<app>` input and focus, and the
 
 | Module | What it is |
 | --- | --- |
-| `./domicile-host` | `DomicileHost`: the type of the desktop `Shell` is handed, mirroring the engine's IDL. |
+| `./domicile-host` | `DomicileHost`: the type of the desktop `Shell` is handed. Generated from the engine's IDL; see [Generated types](#generated-types). |
 | `./shell` | `Shell`: the export a shell module must provide. Domicile calls it once with the element to draw in. |
 | `./app-element`, `./webview-element` | Types and event names for `<app>` and `<webview>`. |
 | `./bind-keys` | `bindKeys`: grab a shell's own chords by name and handle them by mode. `./key-action` and `./own-keybindings` are its parts. |
@@ -65,6 +65,22 @@ Internal, not needed by shells: `./cursor-shape`.
 The compositor's JSON socket protocol lives in
 [`@domicile-desktop/e2e-harness`](../e2e-harness/README.md); a page never
 speaks it.
+
+## Generated types
+
+`src/domicile-host.ts` is generated from the engine's WebIDL in
+`packages/domicile-engine/src/third_party/blink/renderer/modules/domicile/`,
+with the IDL's comments as its docs. Do not edit it.
+
+```sh
+bun run generate    # after changing the IDL
+```
+
+- `codegen/` holds the generator: a parser for the IDL subset the engine uses,
+  and the TypeScript it emits. It throws on syntax outside that subset.
+- `EVENT_TYPES` in `codegen/generate-domicile-host.ts` names the event type
+  each `on<name>` handler dispatches, which WebIDL cannot express.
+- `scripts/test-host-types-match-the-idl.sh` fails when the file is stale.
 
 ## Dependencies
 

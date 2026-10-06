@@ -5,5 +5,5 @@
     "types": ["bun", "@domicile-desktop/test-support"]
   },
   "extends": "@cprussin/tsconfig/dom.json",
-  "include": ["src"]
+  "include": ["codegen", "src"]
 }

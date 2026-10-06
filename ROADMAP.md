@@ -390,12 +390,6 @@ Understood and not scheduled.
   phase 2), on the same engine readback. Draw the picker in the shell. Then
   remove the command.
 
-### Shell API
-
-- **`window.domicile`'s types are written by hand.** `domicile-host.ts`
-  mirrors the IDL. Plan: generate them from the `.idl` files once the API
-  settles. [WINDOW-DOMICILE.md](docs/architecture/WINDOW-DOMICILE.md#open-questions).
-
 ### Shell reload
 
 - **Hot-swapping the shell reloads the page.** `domicile load-shell` triggers
