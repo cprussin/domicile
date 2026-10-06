@@ -3,6 +3,7 @@
     "@cprussin/option-result": "catalog:",
     "@domicile-desktop/component-library": "workspace:*",
     "@domicile-desktop/sdk": "workspace:*",
+    "@domicile-desktop/system-battery": "workspace:*",
     "@phosphor-icons/react": "catalog:",
     "lowlight": "catalog:",
     "react": "catalog:",

@@ -466,22 +466,10 @@ pub enum HostMessage {
         bookmarks: Vec<Bookmark>,
     },
 
-    /// The battery's charge and whether external power is connected.
-    ///
-    /// Pushed when the kernel reports a change and on connect; there is no
-    /// request. Read from `/sys/class/power_supply` because
-    /// `navigator.getBattery` needs UPower over D-Bus, and without it Chromium
-    /// reports a full, charging battery. See `domicile_host::battery`.
-    ///
-    /// `charge` is a fraction 0.0 through 1.0 so the shell rounds it once,
-    /// where it draws it. `charging` means external power is connected, even
-    /// when full. Not sent on machines with no battery.
-    Battery { charge: f64, charging: bool },
-
     /// Screen brightness, 0.0 through 1.0.
     ///
-    /// Pushed when the backlight changes and on connect, like
-    /// [`HostMessage::Battery`]. Not sent on machines with no backlight. See
+    /// Pushed when the backlight changes and on connect; there is no request.
+    /// Not sent on machines with no backlight. See
     /// `domicile_host::backlight`.
     Brightness { level: f64 },
 

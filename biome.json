@@ -241,7 +241,8 @@
       },
       "includes": [
         "packages/chrome-sdk/package.json",
-        "packages/shell-manganese/package.json"
+        "packages/shell-manganese/package.json",
+        "packages/system-battery/package.json"
       ]
     },
     {

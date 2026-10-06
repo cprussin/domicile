@@ -14,8 +14,8 @@ export type Bar = {
   /** The workspace on screen. */
   current: string;
   /**
-   * The source of battery and brightness readings, and the target for extension
-   * actions and brightness changes.
+   * The desktop: the source of brightness readings and system calls, and the
+   * target for extension actions and brightness changes.
    */
   domicile: DomicileHost;
   /** The extensions with an action, shown in the tray. */

@@ -95,6 +95,7 @@
         "@cprussin/option-result": "catalog:",
         "@domicile-desktop/component-library": "workspace:*",
         "@domicile-desktop/sdk": "workspace:*",
+        "@domicile-desktop/system-battery": "workspace:*",
         "@phosphor-icons/react": "catalog:",
         "lowlight": "catalog:",
         "react": "catalog:",
@@ -135,6 +136,20 @@
         "@vitejs/plugin-react": "catalog:",
         "typescript": "catalog:",
         "vite": "catalog:",
+      },
+    },
+    "packages/system-battery": {
+      "name": "@domicile-desktop/system-battery",
+      "version": "0.1.0",
+      "dependencies": {
+        "@cprussin/option-result": "catalog:",
+        "@domicile-desktop/sdk": "workspace:*",
+        "zod": "catalog:",
+      },
+      "devDependencies": {
+        "@cprussin/tsconfig": "catalog:",
+        "@types/bun": "catalog:",
+        "typescript": "catalog:",
       },
     },
     "packages/test-support": {
@@ -273,6 +288,8 @@
     "@domicile-desktop/sdk": ["@domicile-desktop/sdk@workspace:packages/chrome-sdk"],
 
     "@domicile-desktop/shell-simple": ["@domicile-desktop/shell-simple@workspace:packages/shell-simple"],
+
+    "@domicile-desktop/system-battery": ["@domicile-desktop/system-battery@workspace:packages/system-battery"],
 
     "@domicile-desktop/test-support": ["@domicile-desktop/test-support@workspace:packages/test-support"],
 

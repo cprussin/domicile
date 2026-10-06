@@ -86,7 +86,7 @@ export const Shell: ShellModule = (root, domicile) => {
 - State is attributes: `windows`, `focusedWindow`, `displays`, `theme`,
   `locked`, `idle`, `extensions`, `tray`, `notifications`, `browserWindows`
   and more. Each change dispatches a bare `<name>changed` event.
-  `audiochanged`, `batterychanged` and `modifierschanged` each cover a group.
+  `audiochanged` and `modifierschanged` each cover a group.
   Read, then listen:
 
   ```ts

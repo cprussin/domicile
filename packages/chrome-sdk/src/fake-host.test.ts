@@ -24,19 +24,19 @@ describe("FakeDomicileHost", () => {
   it("sets state and dispatches its change event", () => {
     const fake = new FakeDomicileHost();
     const heard: string[] = [];
-    fake.host.addEventListener("batterychanged", () => {
-      heard.push("battery");
+    fake.host.addEventListener("idlechanged", () => {
+      heard.push("idle");
     });
     fake.host.addEventListener("focusedwindowchanged", () => {
       heard.push("focus");
     });
 
-    fake.set({ batteryCharge: 0.5, batteryCharging: true });
+    fake.set({ idle: true });
     fake.set({ focusedWindow: "term" });
 
-    expect(fake.host.batteryCharge).toBe(0.5);
+    expect(fake.host.idle).toBe(true);
     expect(fake.host.focusedWindow).toBe("term");
-    expect(heard).toStrictEqual(["battery", "focus"]);
+    expect(heard).toStrictEqual(["idle", "focus"]);
   });
 
   it("records every call a shell makes", () => {

@@ -1,21 +1,21 @@
-//! A netlink socket for kernel uevents, used to see battery and charger
-//! changes as they happen instead of polling.
+//! A netlink socket for kernel uevents, used to see backlight changes as they
+//! happen instead of polling.
 //!
 //! - **Netlink, not libudev.** The crate links no C library beyond
 //!   libxkbcommon, and libudev's monitor wraps this same socket.
-//! - **Group 1, the kernel's.** udevd's group would make the battery readout
+//! - **Group 1, the kernel's.** udevd's group would make the brightness readout
 //!   depend on udevd, which a bare tty may not run (see
 //!   `docs/architecture/A-DESKTOP-ON-A-TTY.md`).
 //! - **No sender check.** A uevent only triggers a re-read of `/sys`, so a
 //!   forged one cannot make the readout wrong. See
-//!   `domicile_host::battery::announces_a_power_supply`.
+//!   `domicile_host::backlight::announces_a_backlight`.
 
 use std::io;
 use std::os::fd::{FromRawFd, OwnedFd};
 
 /// The kernel's maximum uevent size.
 ///
-/// A longer datagram is truncated and reads as "not a power supply". The
+/// A longer datagram is truncated and reads as "not a backlight". The
 /// backstop timer covers that missed notification.
 const BIGGEST_UEVENT: usize = 8192;
 
@@ -68,8 +68,8 @@ pub fn subscribe() -> io::Result<OwnedFd> {
 
 /// Drains the socket and returns whether any datagram was `interesting`.
 ///
-/// Drains instead of reading one datagram because one plug sends events for
-/// both charger and battery, and each would cost a `/sys` re-read.
+/// Drains instead of reading one datagram because one change can send several
+/// events, and each would cost a `/sys` re-read.
 ///
 /// Any failed read ends the drain. The source is level-triggered, so data left
 /// after an interrupted read wakes the loop again.

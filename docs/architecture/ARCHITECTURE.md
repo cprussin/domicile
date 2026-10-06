@@ -127,6 +127,8 @@ Web side:
 
 - `packages/chrome-sdk`: the shell API (elements, the types of the desktop a
   shell is handed, measurement, input).
+- `packages/system-battery`: the battery from UPower, on the SDK's system
+  calls.
 - `packages/component-library`: shared components and the Panda preset.
 - `packages/domicile-builder`: builds a shell from a user's TS/JS entry.
 - `packages/shell-manganese`: the reference desktop.

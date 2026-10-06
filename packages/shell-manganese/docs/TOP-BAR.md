@@ -62,8 +62,12 @@ To style your own items with manganese's Panda CSS, see
 - At 10% or less it turns `danger`. At 5% or less it also flashes
   (`chargeFlashing`). Both thresholds use the displayed percentage. Neither
   applies on AC.
-- Hidden on machines without a battery.
-- The compositor reads the battery. See [Host readouts](HOST-READOUTS.md#battery).
+- Hidden on machines without a battery, and until UPower answers.
+- Read from UPower by
+  [`@domicile-desktop/system-battery`](../../system-battery/README.md).
+- Started while the desktop is locked, it waits for the unlock: D-Bus calls
+  fail while locked. A watch running at lock time keeps reporting. The lock
+  screen shows no battery.
 
 ## Brightness
 

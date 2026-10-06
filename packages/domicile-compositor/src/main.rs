@@ -176,7 +176,6 @@ use domicile_host::audio::Request as AudioRequest;
 use domicile_host::backlight::{
     announces_a_backlight, reading as backlight_reading, Brightness, RealBacklights,
 };
-use domicile_host::battery::{announces_a_power_supply, reading, Charge, RealPowerSupplies};
 use domicile_host::bookmarks::find as find_bookmarks;
 use domicile_host::clipboard::{text_mime, History, LONGEST_COPY, TEXT_MIMES};
 use domicile_host::desktop_entries::{application_dirs, data_dirs, find, installed};
@@ -784,12 +783,11 @@ struct FrameReport {
     submit_worst_ms: u32,
 }
 
-/// How often the battery is read without a change event.
+/// How often the backlight is read without a change event.
 ///
-/// A fallback: the kernel announces charge changes (see `uevents.rs`), but some
-/// drivers skip capacity steps. A percent takes minutes to move, so polling
-/// faster gains nothing.
-const BATTERY_BACKSTOP: Duration = Duration::from_secs(120);
+/// A fallback for firmware brightness keys that send no uevent (see
+/// `uevents.rs`).
+const BRIGHTNESS_BACKSTOP: Duration = Duration::from_secs(120);
 
 /// Maximum file search results sent. `matched` still reports the full count.
 const FOUND: usize = 200;
@@ -1663,11 +1661,6 @@ struct DomicileCompositor {
     chrome_frame_shape: Option<((f64, f64), bool, bool)>,
     /// Which modifiers the chrome was last told are held.
     modifiers: Held,
-    /// What the chromes were last told about the battery.
-    ///
-    /// Polled: a timer reads `/sys/class/power_supply` and this decides which
-    /// readings are news. See `domicile_host::battery`.
-    charge: Charge,
     /// What the chromes were last told about the brightness, and the writer
     /// that sets it. See `domicile_host::backlight`.
     brightness: Brightness,
@@ -3863,31 +3856,6 @@ impl DomicileCompositor {
         }
     }
 
-    /// Tell every chrome the battery charge, if it changed enough to show.
-    ///
-    /// Read here, not in the page: `navigator.getBattery` needs UPower over
-    /// D-Bus, which a bare tty lacks, and Chromium then reports "charging,
-    /// full". See `domicile_host::battery`.
-    fn tell_the_chromes_the_charge(&mut self) {
-        if let Some(read) = self.charge.moved_to(reading(&RealPowerSupplies)) {
-            self.hub.broadcast(HostMessage::Battery {
-                charge: read.charge,
-                charging: read.charging,
-            });
-        }
-    }
-
-    /// Send the current charge to a newly connected chrome, which would
-    /// otherwise wait minutes for the next change.
-    fn tell_a_new_chrome_the_charge(&self) {
-        if let Some(read) = self.charge.again() {
-            self.hub.broadcast(HostMessage::Battery {
-                charge: read.charge,
-                charging: read.charging,
-            });
-        }
-    }
-
     /// Tell every chrome the brightness, if it changed enough to show.
     fn tell_the_chromes_the_brightness(&mut self) {
         let now = backlight_reading(&RealBacklights).map(|read| read.level());
@@ -4277,10 +4245,9 @@ impl DomicileCompositor {
                 // Catch up the new page on state it would otherwise only learn
                 // on the next change.
                 announce_open_apps(&self.hub);
-                self.tell_a_new_chrome_the_charge();
                 self.tell_a_new_chrome_the_brightness();
-                // Unlike battery, an empty clipboard is a valid message, so the
-                // normal broadcast works.
+                // Unlike brightness, an empty clipboard is a valid message, so
+                // the normal broadcast works.
                 self.tell_the_chromes_the_clipboard();
                 // A shell that reloaded while the screens were dark would
                 // otherwise assume someone is present.
@@ -6305,7 +6272,6 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         screens,
         device_pixel_ratio: 1.0,
         modifiers: Held::default(),
-        charge: Charge::default(),
         brightness: Brightness::default(),
         backlight: backlight::serve(),
         stop: Arc::new(AtomicBool::new(false)),
@@ -6384,11 +6350,10 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         })?;
     }
 
-    // Battery and backlight changes, from kernel uevents
-    // (`power_supply_changed()` sends one immediately).
+    // Backlight changes, from kernel uevents.
     //
-    // Level-triggered and drained each turn, since one plug event produces two
-    // uevents (charger and battery).
+    // Level-triggered and drained each turn, since one change can produce
+    // several uevents.
     //
     // A failed subscribe is not fatal: the backstop poll still runs, so
     // readings are at worst a few minutes stale. Logged.
@@ -6397,15 +6362,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             handle.insert_source(
                 Generic::new(socket, Interest::READ, Mode::Level),
                 |_, socket, data: &mut CalloopData| {
-                    let (mut charge, mut brightness) = (false, false);
-                    uevents::drain(socket, |datagram| {
-                        charge |= announces_a_power_supply(datagram);
-                        brightness |= announces_a_backlight(datagram);
-                        false
-                    });
-                    if charge {
-                        data.state.tell_the_chromes_the_charge();
-                    }
+                    let brightness = uevents::drain(socket, announces_a_backlight);
                     // A brightness key, another program, or logind all produce
                     // a `SOURCE=` uevent.
                     if brightness {
@@ -6417,21 +6374,15 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         }
         Err(err) => error!(
             %err,
-            "no netlink socket for device changes, so the charge will only \
-             update on its backstop rather than when a lead moves"
+            "no netlink socket for device changes, so the brightness will only \
+             update on its backstop"
         ),
     }
 
     // The backstop poll, which also takes the first reading.
-    //
-    // Armed everywhere: a machine without a battery reads nothing and says
-    // nothing (see `domicile_host::battery::reading`), and a battery may appear
-    // later.
     handle.insert_source(Timer::immediate(), |_, _, data: &mut CalloopData| {
-        data.state.tell_the_chromes_the_charge();
-        // Also catches firmware brightness keys that send no uevent.
         data.state.tell_the_chromes_the_brightness();
-        TimeoutAction::ToDuration(BATTERY_BACKSTOP)
+        TimeoutAction::ToDuration(BRIGHTNESS_BACKSTOP)
     })?;
 
     // Build the file index from the home directory on a thread at startup, then

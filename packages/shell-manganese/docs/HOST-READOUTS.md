@@ -1,20 +1,8 @@
 # Host readouts
 
-How the compositor reads the battery, backlight and audio that the
-[top bar](TOP-BAR.md) shows. The compositor pushes changes to the page.
-
-## Battery
-
-- Reads `/sys/class/power_supply` and sums all batteries
-  (`domicile_host::battery`, tested in
-  `packages/domicile-host/tests/battery.rs`).
-- Counts USB-C chargers as AC.
-- Re-reads on the kernel's `NETLINK_KOBJECT_UEVENT` messages, with a slow poll
-  as backup.
-- Pushes a reading on each whole-percent or AC change, and once to a newly
-  connected page.
-- It doesn't use `navigator.getBattery`. That API needs UPower over D-Bus,
-  which a tty desktop lacks, so it always reports "charging, 100%".
+How the compositor reads the backlight and audio that the
+[top bar](TOP-BAR.md) shows. The compositor pushes changes to the page. The
+battery comes from a library instead; see [TOP-BAR.md](TOP-BAR.md#battery).
 
 ## Brightness
 

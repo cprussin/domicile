@@ -449,8 +449,6 @@ export type DomicileHostEventMap = {
   extensionschanged: Event;
   /** Bare: the attributes it names moved. */
   audiochanged: Event;
-  /** Bare: the attributes it names moved. */
-  batterychanged: Event;
   /** Bare: the attribute it names moved. */
   idlechanged: Event;
   /** Bare: the attribute it names moved. */
@@ -733,13 +731,6 @@ export type DomicileHost = {
   readonly audioPlayback: readonly DomicileAudioStream[] | null;
   readonly audioRecording: readonly DomicileAudioStream[] | null;
   readonly audioCards: readonly DomicileAudioCard[] | null;
-  /**
-   * The machine's battery: how full, 0 through 1, and whether a lead is in.
-   * **Not `navigator.getBattery`**, which on a bare tty reports full and
-   * charging whatever the battery says. `null` on a machine with none.
-   */
-  readonly batteryCharge: number | null;
-  readonly batteryCharging: boolean | null;
   /**
    * Whether anybody is at this desktop. **Not `document.visibilityState`**: a
    * shell's document stays visible while the glass is off. `null` on a desktop
