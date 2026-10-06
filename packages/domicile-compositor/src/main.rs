@@ -146,6 +146,7 @@ mod uploads;
 mod viewport;
 mod which_engine;
 mod window_geometry;
+mod xdg_foreign;
 
 use crate::dmabuf_descriptor::DmabufDescriptor;
 use crate::engine::{Bounds, Capture, Clipboard};
@@ -6008,6 +6009,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     // Always advertised, even without an idle timeout, so a reload never
     // removes a global a client has bound.
     IdleInhibitManagerState::new::<DomicileCompositor>(&dh);
+    // `parent_window` handles for portal dialogs.
+    xdg_foreign::advertise(&dh);
 
     let mut seat_state = SeatState::new();
     let data_device_state = DataDeviceState::new::<DomicileCompositor>(&dh);

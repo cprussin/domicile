@@ -122,7 +122,7 @@ Phase 0: request channel.
 - [ ] `src/portals/`: one name, `Request` and `Session` objects, `Settings` moved from `appearance.rs`
 - [ ] engine patch: `portalrequests`, `answerPortalRequest`, `listDirectory` (`file_choice.cc`'s `DirectoryEntries`); guard against a stand-in compositor
 - [ ] SDK: `portal_requests`, kinds parsed with Zod
-- [ ] `zxdg_exporter_v2` and `v1`; resolve a handle to an app id
+- [x] `zxdg_exporter_v2` and `v1`; resolve a handle to an app id (`domicile_host::xdg_foreign`; no importer)
 - [ ] `<PortalDialogs />` in component-library; mounted in manganese, shell-simple, `examples/minimal-shell`
 - [ ] `domicile.portal` lists each interface as it lands; the conf routes it here
 
