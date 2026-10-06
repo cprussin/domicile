@@ -255,6 +255,20 @@ export const workspaceHolding = (
 ): Workspace | undefined =>
   state.workspaces.find((workspace) => holds(workspace, id));
 
+/**
+ * The screen showing the client `appId`'s window, or `undefined` while none
+ * is.
+ */
+export const screenOfApp = (
+  state: WindowState,
+  appId: string,
+): string | undefined => {
+  const workspace = workspaceHolding(state, appWindowId(appId));
+  return workspace === undefined
+    ? undefined
+    : screenShowing(state, workspace.name);
+};
+
 /** The focused window, or `undefined` on an empty workspace. */
 export const activeIdOf = (state: WindowState): string | undefined =>
   focusedOn(workspaceHere(state));

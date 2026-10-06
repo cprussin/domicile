@@ -130,8 +130,8 @@ Evidence is in [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md),
    [COMPOSABLE-SHELLS.md](docs/architecture/COMPOSABLE-SHELLS.md).
 
 9. **Domicile answers every portal.** The compositor answers `Settings`,
-    `Access` and `AppChooser`, over the request channel to the shell; gtk
-    answers the rest. So file dialogs are GTK windows, and screen sharing, remote desktop and global
+    `Access`, `AppChooser` and `FileChooser`, over the request channel to the
+    shell; gtk answers the rest. Screen sharing, remote desktop and global
     shortcuts have no backend. Next: every other interface except `Secret` on
     the channel, then drop gtk. [PORTALS.md](docs/architecture/PORTALS.md).
 

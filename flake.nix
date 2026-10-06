@@ -929,7 +929,7 @@
             }
 
             # `domicile-portals.conf` routes portal calls to Domicile first
-            # (it implements only `Settings`), then gtk.
+            # (for the interfaces `domicile.portal` lists), then gtk.
             found=
             for package in ${toString machine.config.xdg.portal.configPackages}; do
               conf="$package/share/xdg-desktop-portal/domicile-portals.conf"

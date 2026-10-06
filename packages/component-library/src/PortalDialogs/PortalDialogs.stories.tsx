@@ -65,8 +65,53 @@ const installed = () =>
     }),
   );
 
+const fileChooser = {
+  app_id: "org.example.Editor",
+  body: {
+    choices: [
+      {
+        id: "encoding",
+        initial: "utf8",
+        label: "Encoding",
+        options: [
+          { id: "utf8", label: "UTF-8" },
+          { id: "latin1", label: "Latin-1" },
+        ],
+      },
+      { id: "readonly", initial: "false", label: "Read only", options: [] },
+    ],
+    directory: false,
+    files: [],
+    filters: [
+      { extensions: ["txt", "md"], name: "Text" },
+      { extensions: [], name: "All files" },
+    ],
+    home: "/home/me",
+    mode: "open",
+    multiple: true,
+    title: "Open Notes",
+  },
+  id: 3,
+  kind: "file_chooser",
+};
+
+/** A small home for the file chooser to list. */
+const home = () =>
+  fakeSystem({
+    "/home/me/Documents/letter.txt": "",
+    "/home/me/Documents/report.pdf": "",
+    "/home/me/notes.txt": "",
+    "/home/me/Pictures/cat.png": "",
+    "/home/me/todo.md": "",
+  });
+
 const meta = {
-  args: { host: pending(access), screen: undefined, systemOf: undefined },
+  args: {
+    host: pending(access),
+    screen: undefined,
+    screenOf: undefined,
+    systemOf: undefined,
+  },
   argTypes: {
     host: {
       control: false,
@@ -74,6 +119,10 @@ const meta = {
     },
     screen: {
       control: "text",
+      table: { category: "Appearance" },
+    },
+    screenOf: {
+      control: false,
       table: { category: "Appearance" },
     },
     systemOf: {
@@ -99,9 +148,28 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Access: Story = {
-  args: { host: pending(access), screen: undefined, systemOf: undefined },
+  args: {
+    host: pending(access),
+    screen: undefined,
+    screenOf: undefined,
+    systemOf: undefined,
+  },
 };
 
 export const AppChooser: Story = {
-  args: { host: pending(appChooser), screen: undefined, systemOf: installed },
+  args: {
+    host: pending(appChooser),
+    screen: undefined,
+    screenOf: undefined,
+    systemOf: installed,
+  },
+};
+
+export const FileChooser: Story = {
+  args: {
+    host: pending(fileChooser),
+    screen: undefined,
+    screenOf: undefined,
+    systemOf: home,
+  },
 };

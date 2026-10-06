@@ -286,6 +286,39 @@ describe("FilePicker", () => {
       await cancel(answered);
     });
 
+    it("starts with the filter group the request names, and says which chose", async () => {
+      const chosen = new Promise<[Answer, number | undefined]>((resolve) => {
+        render(
+          <FilePicker
+            request={{
+              accept: [],
+              cancel: () => {
+                resolve([undefined, undefined]);
+              },
+              choose: (paths, filter) => {
+                resolve([paths, filter]);
+              },
+              currentFilter: 1,
+              filters: [
+                { extensions: ["png"], name: "Images" },
+                { extensions: ["txt"], name: "Text" },
+              ],
+              home: HOME,
+              list,
+              mode: ChooserMode.Open,
+              suggestedName: "",
+            }}
+          />,
+        );
+      });
+
+      expect(await rows()).toContain("notes.txt");
+      await userEvent.dblClick(
+        screen.getByRole("option", { name: "notes.txt" }),
+      );
+      expect(await chosen).toStrictEqual([[`${HOME}/notes.txt`], 1]);
+    });
+
     it("has no filter groups to pick unless the request names some", async () => {
       const answered = picker(ChooserMode.Open);
       await rows();
@@ -446,6 +479,26 @@ describe("FilePicker", () => {
 
     expect(
       screen.getByRole("dialog", { name: "Attach a photo" }),
+    ).toBeInTheDocument();
+    await cancel(answered);
+  });
+
+  it("labels its confirm button as the request asks", async () => {
+    const answered = picker(ChooserMode.Open, { acceptLabel: "Attach" });
+    await rows();
+
+    expect(screen.getByRole("button", { name: "Attach" })).toBeInTheDocument();
+    await cancel(answered);
+  });
+
+  it("shows the controls the request adds", async () => {
+    const answered = picker(ChooserMode.Open, {
+      controls: <button type="button">Read only</button>,
+    });
+    await rows();
+
+    expect(
+      screen.getByRole("button", { name: "Read only" }),
     ).toBeInTheDocument();
     await cancel(answered);
   });

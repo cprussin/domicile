@@ -1,5 +1,7 @@
 // What `FilePicker` asks for and how it answers, independent of who asked.
 
+import type { ReactNode } from "react";
+
 /** The kind of file chooser. */
 export enum ChooserMode {
   Open,
@@ -23,12 +25,19 @@ export type FileFilter = {
 export type FileRequest = {
   /** Accepted extensions, lowercase and without the dot; empty accepts any. */
   accept: readonly string[];
+  /** The confirm button's label; one for `mode` if unset. */
+  acceptLabel?: string | undefined;
   cancel: () => void;
-  choose: (paths: readonly string[]) => void;
+  /** `filter` is the index in `filters` in use, if any. */
+  choose: (paths: readonly string[], filter?: number | undefined) => void;
+  /** Shown beside the buttons, such as an application's extra questions. */
+  controls?: ReactNode | undefined;
+  /** The index in `filters` to start with; the first if unset. */
+  currentFilter?: number | undefined;
   /** The absolute folder to start in; the home if unset. */
   currentFolder?: string | undefined;
   /**
-   * Groups the user switches between, in place of `accept`. The first
+   * Groups the user switches between, in place of `accept`. `currentFilter`
    * applies until another is picked.
    */
   filters?: readonly FileFilter[] | undefined;
