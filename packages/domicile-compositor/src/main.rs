@@ -115,6 +115,7 @@ mod clipboard;
 mod coalesce;
 mod dmabuf_descriptor;
 mod dmabuf_import;
+mod eis;
 mod engine;
 mod engine_buffers;
 mod engine_session;
@@ -269,6 +270,10 @@ struct CalloopData {
 
 /// A chrome request that must run on the Wayland thread, where the seat and
 /// surfaces live.
+///
+/// Emulated input from [`crate::eis`] becomes these too, so it takes the same
+/// path and the lock refuses it the same way.
+#[derive(Debug, PartialEq)]
 enum ClientRequest {
     /// Every chrome in `chromes` was told `theme`. Switch the windows once
     /// they have captured. See [`chrome_key`].
@@ -475,6 +480,9 @@ struct ChromeHub {
     audio: OnceLock<audio::AudioServer>,
     /// The mixer's level meters. Set once, like `tray`. See [`crate::meters`].
     meters: OnceLock<meters::Meters>,
+    /// Opens EIS contexts for the RemoteDesktop and InputCapture portals. Set
+    /// once, when the Wayland loop starts serving. See [`crate::eis`].
+    eis: OnceLock<eis::Eis>,
 }
 
 impl ChromeHub {
@@ -522,6 +530,7 @@ impl ChromeHub {
             notifications: OnceLock::new(),
             audio: OnceLock::new(),
             meters: OnceLock::new(),
+            eis: OnceLock::new(),
         });
         (hub, outbound_rx)
     }
@@ -1783,6 +1792,29 @@ impl ClientData for ClientState {
 }
 
 // ---- input injection (runs on the Wayland thread via the calloop channel) ---
+
+impl eis::Compositor for CalloopData {
+    fn desk(&self) -> eis::Desk {
+        let state = &self.state;
+        let focused = state.seat.get_keyboard().unwrap().current_focus();
+        let windows = state
+            .app_bounds
+            .iter()
+            .filter_map(|(app_id, bounds)| {
+                state.toplevel_for(app_id).map(|toplevel| eis::Window {
+                    app_id: app_id.clone(),
+                    bounds: *bounds,
+                    focused: focused.as_ref() == Some(toplevel.wl_surface()),
+                })
+            })
+            .collect();
+        eis::Desk::new(state.screens.outputs().cloned().collect(), windows)
+    }
+
+    fn inject(&mut self, request: ClientRequest) {
+        self.state.handle_client_request(request);
+    }
+}
 
 impl DomicileCompositor {
     fn toplevel_for(&self, app_id: &str) -> Option<ToplevelSurface> {
@@ -6510,6 +6542,13 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     // comes from `Idle::next_check`. Shares `arm_the_idle_clock` with reloads,
     // but a failure here is fatal since nothing is running yet.
     data.state.arm_the_idle_clock(config.idle.blank_after())?;
+
+    // Emulated input, served on this thread like the engine's.
+    data.state
+        .hub
+        .eis
+        .set(eis::serve(&handle)?)
+        .unwrap_or_else(|_| unreachable!("EIS is served once, at startup"));
 
     // Chrome requests, handled on the Wayland thread.
     handle.insert_source(request_rx, |event, _, data: &mut CalloopData| {

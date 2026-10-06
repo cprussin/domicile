@@ -122,6 +122,9 @@ Outside the default members (needs Smithay and native Wayland; build in
   - `appearance.rs` serves `org.freedesktop.impl.portal.Settings` on the
     session bus, so GTK, Qt, Electron and Firefox apps follow the desktop's
     color scheme.
+  - `eis.rs` serves EIS, the emulated input the RemoteDesktop and
+    InputCapture portals hand out. Its input takes the engine's input path,
+    so the lock refuses it.
 
 Web side:
 

@@ -46,6 +46,9 @@ serde_json.workspace = true
 thiserror.workspace = true
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+# Serves EIS, the emulated input the RemoteDesktop and InputCapture portals
+# hand out (see `src/eis.rs`). Its calloop sources run on the Wayland loop.
+reis = { version = "0.7", features = ["calloop"] }
 # D-Bus, for the settings portal (see `src/appearance.rs`) and logind.
 zbus.workspace = true
 ureq = { version = "3", default-features = false, features = ["rustls", "platform-verifier", "gzip"] }
