@@ -35,7 +35,7 @@ Under `under-wayland.sh` unless marked headless.
 | `guard-css-and-resize.sh` | CSS parity of `<app>` against `<div>`, with and without `backdrop-filter`, plus resize and latency. Headless; `GPU=1` uses the GPU |
 | `guard-latency.sh` | keystroke to pixel with a real client, from the compositor's `latency` lines |
 | `guard-control-arrival.sh` | delay from the compositor's socket to the page, from each event's `arrival` stamp; and that every CSS cursor keyword reaches the page. Headless |
-| `guard-desktop-geometry.sh` | the engine reports desktop size and density to the compositor without the page's help. Headless |
+| `guard-desktop-geometry.sh` | the engine reports desktop size and density to the compositor without the page's help, and the page has the whole window (patch 0095). Headless |
 | `guard-shortcuts-inhibitor.sh` | a nested engine sends `inhibit_shortcuts` to the host (patch 0038) |
 | `guard-shortcuts-inhibitor-chord.sh` | sway honors it: `Mod4+y` reaches the page, not sway. Needs a reachable sway |
 
