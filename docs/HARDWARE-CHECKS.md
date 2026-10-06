@@ -77,6 +77,18 @@ until its middle passes the edge.
   pointer crossed CRTCs. See
   [ONE-PAGE-FOR-THE-DESK.md](architecture/ONE-PAGE-FOR-THE-DESK.md#input).
 
+## Monitors at different densities
+
+With a less dense monitor beside the host (`home-office-right-two`), resize a
+window on it, then drag a float across onto it.
+
+- Expect no flash of solid color on that monitor. A region may go soft for a
+  frame, then sharp.
+- Expect no `tile memory limits exceeded` in the engine log.
+- With `--show-composited-layer-borders`, expect tiles about one monitor wide
+  or narrower, never a row across the desk.
+- See [DISPLAY-TILINGS.md](architecture/DISPLAY-TILINGS.md#tile-memory).
+
 ## Idle blanking
 
 Set `idle.blank_after_seconds = 60`, leave the machine for a minute, then

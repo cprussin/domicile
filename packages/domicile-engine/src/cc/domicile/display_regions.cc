@@ -99,6 +99,20 @@ size_t DomicileTileBytesFor(const std::vector<DomicileDisplay>& displays,
       ceiling_bytes);
 }
 
+gfx::Size DomicileTileViewportFor(const std::vector<DomicileDisplay>& displays,
+                                  const gfx::Rect& widget_rect,
+                                  float page_scale) {
+  gfx::Size largest;
+  for (const DomicileDisplay& display : displays) {
+    const gfx::Size shown =
+        gfx::IntersectRects(display.rect, widget_rect).size();
+    if (shown.Area64() > largest.Area64()) {
+      largest = shown;
+    }
+  }
+  return gfx::ScaleToCeiledSize(largest, page_scale);
+}
+
 std::vector<float> DomicileRatiosMeeting(const DomicileDisplayRegions& regions,
                                          const gfx::Rect& rect_in_target) {
   std::vector<float> ratios;
@@ -139,6 +153,10 @@ gfx::Rect DomicileRegionInLayer(const DomicileDisplayRegions& regions,
     around.Union(*in_layer);
   }
   return around;
+}
+
+bool DomicileDrawsTile(float display_ratio, bool out_of_memory) {
+  return display_ratio == 0.f || !out_of_memory;
 }
 
 std::vector<DomicileCoveragePiece> DomicileCoverage(
