@@ -112,10 +112,11 @@ import { PortalDialogs } from "@domicile-desktop/component-library/PortalDialogs
 ```
 
 - `PortalDialogs` draws every kind it knows and refuses the rest: `Access` (a
-  yes/no question), `AppChooser` (an app list for "Open with" and `OpenURI`),
-  `FileChooser` (the component library's `FilePicker`), `RemoteDesktop`
-  (which devices and the clipboard an application may control) and
-  `InputCapture`.
+  yes/no question), `Account` (share the user's name and picture),
+  `AppChooser` (an app list for "Open with" and `OpenURI`), `FileChooser` (the
+  component library's `FilePicker`), `RemoteDesktop` (which devices and the
+  clipboard an application may control) and `InputCapture`. Answer `Access`
+  and `Account` with `PortalAnswer.Access()` to allow.
 - The app list and the file picker read the system through
   `@domicile-desktop/sdk/system` (desktop entries, `mimeapps.list`, `readDir`),
   so `host` must take system calls. `domicile` does.

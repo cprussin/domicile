@@ -6,6 +6,7 @@ use std::sync::mpsc::{channel, Receiver};
 use std::thread;
 use std::time::Duration;
 
+use domicile_config::LockdownConfig;
 use domicile_protocol::{Capturing, PortalRequest, Theme};
 use zbus::zvariant::{ObjectPath, OwnedValue, Value};
 
@@ -13,7 +14,7 @@ use super::clipboard::Selection;
 use super::restore::Tokens;
 use super::settings::Appearance;
 use super::socket_pair::connected;
-use super::{export, heard, Backends, OBJECT_PATH};
+use super::{export, heard, Backends, Starting, OBJECT_PATH};
 use crate::eis::recorded::in_the_background;
 use crate::notifications::NotificationServer;
 use crate::ClientRequest;
@@ -60,6 +61,11 @@ pub fn served(tokens: Tokens) -> Served {
             builder,
             Theme::Dark,
             Appearance::default(),
+            Starting {
+                lockdown: LockdownConfig::default(),
+                open: Box::new(|_| Ok(())),
+                user: Box::new(|| Box::pin(async { Err("no user here".into()) })),
+            },
             &serving,
             Vec::new(),
             "/home/me".into(),

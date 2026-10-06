@@ -3613,6 +3613,9 @@ impl DomicileCompositor {
                 told.expect("a host that has just been given extensions has them to state"),
             );
         }
+        if let Some(lockdown) = &restated.lockdown {
+            self.hub.portals.lock_down(lockdown.clone());
+        }
         if let Some(theme) = restated.theme {
             // The config overrides the shell's toggle. The toggle writes
             // nothing back because the config is generated, so a `theme` edit
@@ -6140,9 +6143,14 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         portals::serve(
             theme_on_the_wire(config.theme.mode),
             &config.theme,
+            config.lockdown.clone(),
             &socket_name.to_string_lossy(),
             std::env::var_os("WAYLAND_DISPLAY").as_deref(),
             notification_server.clone(),
+            {
+                let display = socket_name.clone();
+                move |command| spawn_client(command, &display)
+            },
         ),
     );
     // Before any chrome connects, so the handshake carries the desktop.

@@ -152,6 +152,13 @@ const inputCapture = (id: number) => ({
   kind: "input_capture",
 });
 
+const account = (id: number, body: object = { reason: "To sign you in" }) => ({
+  app_id: "org.example.Mail",
+  body,
+  id,
+  kind: "account",
+});
+
 describe(PortalDialogs, () => {
   describe("rendering", () => {
     it("draws nothing while no application asks", () => {
@@ -180,6 +187,28 @@ describe(PortalDialogs, () => {
 
       expect(screen.getByRole("button", { name: "Sure" })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Never" })).toBeInTheDocument();
+    });
+
+    it("asks to share the user's name, naming the application and its reason", () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host} />);
+      host.push([account(1)]);
+
+      expect(screen.getByRole("dialog")).toHaveTextContent(
+        "Share your name and picture?",
+      );
+      expect(screen.getByText("org.example.Mail asks")).toBeInTheDocument();
+      expect(screen.getByText("To sign you in")).toBeInTheDocument();
+    });
+
+    it("asks to share the user's name without a reason", () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host} />);
+      host.push([account(1, {})]);
+
+      expect(screen.getByRole("dialog")).toHaveTextContent(
+        "Share your name and picture?",
+      );
     });
 
     it("names an application it cannot identify", () => {
@@ -455,6 +484,26 @@ describe(PortalDialogs, () => {
       render(<PortalDialogs host={host} />);
       host.push([access(1)]);
       await userEvent.click(screen.getByRole("button", { name: "Deny" }));
+
+      expect(host.answers).toEqual([[1, { kind: "canceled" }]]);
+    });
+
+    it("shares the user's name", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host} />);
+      host.push([account(1)]);
+      await userEvent.click(screen.getByRole("button", { name: "Share" }));
+
+      expect(host.answers).toEqual([[1, { kind: "access" }]]);
+    });
+
+    it("keeps the user's name", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host} />);
+      host.push([account(1)]);
+      await userEvent.click(
+        screen.getByRole("button", { name: "Don't share" }),
+      );
 
       expect(host.answers).toEqual([[1, { kind: "canceled" }]]);
     });

@@ -16,6 +16,7 @@ import { system } from "@domicile-desktop/sdk/system";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { listDirectory } from "../FilePicker/list-directory";
 import { AccessDialog } from "./AccessDialog";
+import { AccountDialog } from "./AccountDialog";
 import { AppChooserDialog } from "./AppChooserDialog";
 import { appName } from "./app-name";
 import { CapturingIndicator } from "./CapturingIndicator";
@@ -159,6 +160,15 @@ const Dialog = ({
           screen={screen}
         />
       );
+    case PortalKind.Account:
+      return (
+        <AccountDialog
+          answer={answer}
+          asker={appName(request.appId)}
+          body={request.body}
+          screen={screen}
+        />
+      );
     case PortalKind.Inhibit:
     case PortalKind.Unknown:
       return undefined;
@@ -186,6 +196,7 @@ const isAsked = (request: PortalRequest): boolean => {
     case PortalKind.FileChooser:
     case PortalKind.RemoteDesktop:
     case PortalKind.InputCapture:
+    case PortalKind.Account:
       return true;
     case PortalKind.Inhibit:
     case PortalKind.Unknown:

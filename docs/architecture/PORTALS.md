@@ -7,9 +7,9 @@ Make Domicile the session's only `xdg-desktop-portal` backend:
 - `xdg-desktop-portal-gtk` is removed from the session.
 
 Today the compositor implements `Settings`, `Access`, `AppChooser`,
-`FileChooser`, `Notification`, `Inhibit`, `RemoteDesktop`, `Clipboard` and
-`InputCapture`, and routes the rest to gtk. Screen sharing and global
-shortcuts have no backend.
+`FileChooser`, `Notification`, `Inhibit`, `RemoteDesktop`, `Clipboard`,
+`InputCapture`, `Account`, `Email` and `Lockdown`, and routes the rest to gtk.
+Screen sharing and global shortcuts have no backend.
 
 ## Design
 
@@ -121,11 +121,11 @@ One request channel carries all dialogs. Each interface's backend builds on it.
 | AppChooser | candidates from desktop entries and `mimeapps.list`; `UpdateChoices` | app list | 1 |
 | OpenURI | (frontend) | via AppChooser | 1 |
 | Access | — | yes/no prompt with the app's name | 1 |
-| Account | user name, avatar from `AccountsService` | confirm | 1 |
-| Email | opens the `mailto:` handler with the fields | — | 1 |
+| Account | user name, avatar from `AccountsService`, else passwd | confirm; allowed with the `access` answer | 1 |
+| Email | opens the `mailto:` handler from `mimeapps.list` with the fields; attachments as `attach=`, which Thunderbird ignores | — | 1 |
 | Notification | v2, direct to `domicile_host::notifications` | existing drawer | 1 |
 | Inhibit | idle inhibit through `idle.rs`; logout/suspend inhibitors listed as `inhibit` requests; `QueryEndResponse` on session end (the desk has no session end yet, so no query-end is sent) | "X is preventing logout" | 1 |
-| Lockdown | properties from config | — | 1 |
+| Lockdown | properties from the config's `lockdown`; signaled on reload | — | 1 |
 | ScreenCast | windows, monitors, region; cursor embedded/metadata/hidden; PipeWire streams; restore tokens | source picker, sharing indicator | 2 |
 | Screenshot | one frame from the same sources, PNG to `$XDG_PICTURES_DIR`; `PickColor` | region picker, color picker | 2 |
 | RemoteDesktop | EIS socket; legacy `Notify*` methods use the same path | device grant | 3 |
@@ -159,7 +159,7 @@ Phase 1: dialogs.
 
 - [x] FileChooser, with `FilePicker` moved to component-library; it lists directories with `readDir` ([SHELL-SYSTEM-ACCESS.md](../SHELL-SYSTEM-ACCESS.md))
 - [x] AppChooser
-- [ ] Access, Account, Email, Lockdown
+- [x] Access, Account, Email, Lockdown
 - [x] Notification v2
 - [x] Inhibit
 - [x] Settings: accent color, contrast, reduced motion

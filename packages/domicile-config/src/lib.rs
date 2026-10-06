@@ -665,6 +665,27 @@ fn under_home(path: PathBuf, home: Option<&Path>) -> Result<PathBuf, ConfigError
     }
 }
 
+/// What applications are told not to do, through the
+/// `org.freedesktop.impl.portal.Lockdown` portal. Every switch defaults to
+/// off.
+///
+/// Applications enforce these themselves; the compositor only reports them.
+/// See `docs/SHELL-CONFIG.md#lockdown`.
+///
+/// `PartialEq` lets a reload detect a change; see the compositor's
+/// `Restatement`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct LockdownConfig {
+    pub disable_printing: bool,
+    pub disable_save_to_disk: bool,
+    pub disable_application_handlers: bool,
+    pub disable_location: bool,
+    pub disable_camera: bool,
+    pub disable_microphone: bool,
+    pub disable_sound_output: bool,
+}
+
 /// The full compositor configuration.
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -674,6 +695,7 @@ pub struct Config {
     pub idle: IdleConfig,
     pub input: InputConfig,
     pub lock: LockConfig,
+    pub lockdown: LockdownConfig,
     pub output: OutputConfig,
     pub startup: StartupConfig,
     pub theme: ThemeConfig,
