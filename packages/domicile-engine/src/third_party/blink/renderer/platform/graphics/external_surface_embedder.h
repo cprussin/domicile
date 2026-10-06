@@ -36,9 +36,9 @@ class PLATFORM_EXPORT ExternalSurfaceEmbedder {
 
   // Which LocalSurfaceId to embed at.
   enum class Allocation {
-    // The app's current LocalSurfaceId, allocating one if none exists.
-    // Elements naming the same app share one surface; see the .cc for why
-    // allocation is per app.
+    // The app's current LocalSurfaceId, or a new one if none exists or it was
+    // allocated for another size or scale. Elements naming the same app at
+    // one size share one surface; see the .cc for why allocation is per app.
     kAdopt,
     // A new one with a bumped parent sequence number, so the producer
     // renders at the embedder's new size.
