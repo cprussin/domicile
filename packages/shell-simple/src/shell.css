@@ -1,3 +1,6 @@
+/* The component library's layers, filled by Panda's PostCSS plugin. */
+@layer reset, base, tokens, recipes, utilities;
+
 /* Everything this desktop paints, which is only ever text: an `<app>` is a
    hole in the page, and a background over one hides the window it is there to
    show. Domicile writes the document, so there is nothing else to reset. */

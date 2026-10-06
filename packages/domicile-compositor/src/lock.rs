@@ -330,7 +330,9 @@ pub fn refused(asked: Asked) -> Option<Refusal> {
             | ClientRequest::CopyClipboardEntry { .. }
             | ClientRequest::ActivateTrayItem { .. }
             | ClientRequest::DismissNotifications { .. }
-            | ClientRequest::InvokeNotificationAction { .. },
+            | ClientRequest::InvokeNotificationAction { .. }
+            // Grants an application what its dialog asked for.
+            | ClientRequest::AnswerPortalRequest { .. },
         )
         | Asked::OnTheConnection(
             ConnectionRequest::SearchFiles { .. }
@@ -366,7 +368,7 @@ pub fn announced(locked: bool) -> HostMessage {
 
 #[cfg(test)]
 mod tests {
-    use domicile_protocol::{HostMessage, Passphrase, Theme, TrayAction};
+    use domicile_protocol::{HostMessage, Passphrase, PortalAnswer, Theme, TrayAction};
 
     use std::path::Path;
     use std::sync::mpsc;
@@ -691,6 +693,13 @@ mod tests {
                 ClientRequest::InvokeNotificationAction {
                     id: 7,
                     action: "default".into(),
+                },
+            ),
+            (
+                "an application's dialog answered",
+                ClientRequest::AnswerPortalRequest {
+                    id: 1,
+                    answer: PortalAnswer::Access,
                 },
             ),
         ] {

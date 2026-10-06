@@ -1,6 +1,7 @@
 // A minimal shell: one `<app>` per client the host announces, moved and resized
 // with Alt, and a terminal on Alt+Enter.
 
+import { PortalDialogs } from "@domicile-desktop/component-library/PortalDialogs";
 import { APP_TAG_NAME } from "@domicile-desktop/sdk/app-element";
 import { bindKeys } from "@domicile-desktop/sdk/bind-keys";
 import type {
@@ -246,6 +247,7 @@ export const Shell = ({
           <app app-id={popup.appId} key={popup.appId} style={style} />
         );
       })}
+      <PortalDialogs host={domicile} />
     </div>
   );
 };

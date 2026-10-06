@@ -18,6 +18,7 @@
 #include "base/task/bind_post_task.h"
 #include "base/values.h"
 #include "components/domicile/browser/desk_lock.h"
+#include "components/domicile/browser/portal_request.h"
 #include "components/domicile/browser/system_call.h"
 #include "components/domicile/common/cursor_shape.h"
 #include "components/domicile/common/display_transform.h"
@@ -372,6 +373,19 @@ void ControlChannel::CallSystem(uint32_t id, const std::string& request) {
   if (!line) {
     LOG(WARNING) << "domicile: a page's system call " << id
                  << " is not a JSON object with a `call`; it was dropped.";
+    return;
+  }
+  Send(*line);
+}
+
+// Wrapped rather than read, like CallSystem: the compositor judges the answer.
+// See components/domicile/browser/portal_request.h.
+void ControlChannel::AnswerPortalRequest(uint32_t id,
+                                         const std::string& answer) {
+  std::optional<std::string> line = PortalAnswerLine(id, answer);
+  if (!line) {
+    LOG(WARNING) << "domicile: a page's answer to portal request " << id
+                 << " is not a JSON object with a `kind`; it was dropped.";
     return;
   }
   Send(*line);
@@ -1331,6 +1345,12 @@ void ControlChannel::DispatchLine(const std::string& line) {
   // Relayed as it arrived, like `shell_config`: the page parses it.
   if (IsSystemAnswer(*type)) {
     client_->System(line);
+    return;
+  }
+
+  // Relayed as it arrived: the page parses each request's body.
+  if (*type == "portal_requests") {
+    client_->PortalRequests(line);
     return;
   }
 

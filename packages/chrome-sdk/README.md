@@ -57,6 +57,7 @@ See [docs/ELEMENTS.md](docs/ELEMENTS.md) for `<app>` input and focus, and the
 | `./bind-keys` | `bindKeys`: grab a shell's own chords by name and handle them by mode. `./key-action` and `./own-keybindings` are its parts. |
 | `./fake-host` | `FakeDomicileHost`: a desktop for a shell's tests. |
 | `./system` | `system(domicile)`: files, watches, processes and D-Bus. Calls resolve a `Result`; the compositor refuses most while the desktop is locked. See [SYSTEM-ACCESS.md](/docs/architecture/SYSTEM-ACCESS.md). |
+| `./portal` | `watchPortalRequests` and `answerPortalRequest`: application dialogs from `xdg-desktop-portal`, parsed by kind. `<PortalDialogs />` in component-library draws them. See [PORTALS.md](/docs/architecture/PORTALS.md). |
 | `./extension`, `./tray`, `./notification`, `./theme`, `./file-preview`, `./display-transform` | Data types and Zod schemas for what the desktop holds. |
 
 Internal, not needed by shells: `./cursor-shape`.

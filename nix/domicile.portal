@@ -3,19 +3,20 @@
 # `xdg-desktop-portal` reads this from `share/xdg-desktop-portal/portals/` and
 # matches `UseIn` against its own `XDG_CURRENT_DESKTOP`, not the client's. The
 # compositor exports that variable to the D-Bus and systemd activation
-# environments (`appearance::say_which_desktop`). A portal already running
+# environments (`portals::say_which_desktop`). A portal already running
 # under another desktop's name keeps that name.
 #
-# Domicile implements only `Settings`. Every interface not listed here goes to
+# Domicile implements `Settings` and `Access`. Every interface not listed here goes to
 # another backend, mostly `xdg-desktop-portal-gtk`. Listing an interface
 # Domicile does not implement would take it from the backend that does.
 # Screenshot and ScreenCast have no backend: gtk does not implement them and the
 # wlroots backends need protocols Domicile does not serve.
 #
 # `Settings` carries `org.freedesktop.appearance`'s `color-scheme`, which GTK4,
-# Qt6, Electron and Firefox read to follow the theme. See
-# `packages/domicile-compositor/src/appearance.rs`.
+# Qt6, Electron and Firefox read to follow the theme. `Access` is a yes/no
+# question the shell draws. See `packages/domicile-compositor/src/portals/` and
+# `docs/architecture/PORTALS.md`.
 [portal]
 DBusName=org.freedesktop.impl.portal.desktop.domicile
-Interfaces=org.freedesktop.impl.portal.Settings;
+Interfaces=org.freedesktop.impl.portal.Settings;org.freedesktop.impl.portal.Access;
 UseIn=domicile
