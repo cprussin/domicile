@@ -1,9 +1,9 @@
 // Builders for the chrome->host messages `@domicile-desktop/e2e-harness`
 // writes.
 //
-// Pages do not use these: a shell calls `window.domicile` and the browser
-// process writes the wire. The harness connects to the compositor socket
-// directly to test the compositor. Shapes match `domicile-protocol`.
+// Pages do not use these: a shell calls the `DomicileHost` it is handed and
+// the browser process writes the wire. The harness connects to the compositor
+// socket directly to test the compositor. Shapes match `domicile-protocol`.
 
 import { PROTOCOL_VERSION } from "./protocol";
 

@@ -77,9 +77,9 @@ See [ONE-PAGE-FOR-THE-DESK.md](ONE-PAGE-FOR-THE-DESK.md).
 - **Input:** the engine delivers pointer and keyboard events to the page. The
   page reports what is under the pointer and which window has focus. The
   compositor routes events to the client's seat.
-- **Control:** the page calls the compositor through `window.domicile`. The
-  fork binds it on the shell's origin and forwards calls to the compositor's
-  control socket. See [WINDOW-DOMICILE.md](WINDOW-DOMICILE.md).
+- **Control:** the page calls the compositor through the `domicile` handed to
+  its `Shell`. The fork binds it on the shell's origin, answers it once per
+  document, and forwards calls to the compositor's control socket. See [WINDOW-DOMICILE.md](WINDOW-DOMICILE.md).
 - **Serving:** the engine serves the shell over `domicile://`, so no port is
   bound. See [DOMICILE-SCHEME.md](DOMICILE-SCHEME.md).
 
@@ -124,8 +124,8 @@ Outside the default members (needs Smithay and native Wayland; build in
 
 Web side:
 
-- `packages/chrome-sdk`: the shell API (elements, `window.domicile` client,
-  measurement, input).
+- `packages/chrome-sdk`: the shell API (elements, the types of the desktop a
+  shell is handed, measurement, input).
 - `packages/component-library`: shared components and the Panda preset.
 - `packages/domicile-builder`: builds a shell from a user's TS/JS entry.
 - `packages/shell-manganese`: the reference desktop.

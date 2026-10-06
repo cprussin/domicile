@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# `window.domicile.windows` and `focusedWindow` say what the compositor said,
+# `domicile.windows` and `focusedWindow` say what the compositor said,
 # to a shell that reads them late.
 #
 #   nix develop .#full --command \

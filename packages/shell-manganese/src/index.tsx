@@ -1,7 +1,7 @@
 // Manganese's entry point and library API. `runManganese` builds a `Shell` that
-// reads `window.domicile` and mounts the React chrome; `Shell` is the default
-// build. Bar items are exported for custom layouts. Importing this module only
-// installs its stylesheet.
+// takes the desktop it is handed and mounts the React chrome; `Shell` is the
+// default build. Bar items are exported for custom layouts. Importing this
+// module only installs its stylesheet.
 
 import {
   applyTheme,
@@ -70,13 +70,7 @@ export type ManganeseOptions = {
 /** Build a `Shell` that mounts manganese with `options`. */
 export const runManganese =
   (options: ManganeseOptions = {}): ShellModule =>
-  (root) => {
-    // A plain browser has no `window.domicile`, so there is nothing to draw.
-    const domicile = window.domicile;
-    if (domicile === null || domicile === undefined) {
-      return;
-    }
-
+  (root, domicile) => {
     // Apply the last-seen theme before React mounts to avoid a theme flash on
     // first paint (the stylesheet ships in this module; see
     // `@domicile-desktop/component-library/vite-shell`). The compositor owns the

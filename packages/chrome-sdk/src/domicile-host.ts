@@ -1,12 +1,15 @@
-// Types for `window.domicile`, the shell's channel to the compositor.
+// Types for the desktop a shell is handed (`Shell(root, domicile)`), its
+// channel to the compositor.
 //
 // This mirrors the engine's WebIDL in
 // `packages/domicile-engine/src/third_party/blink/renderer/modules/domicile/`.
 // If they disagree, the IDL is correct. See
 // `docs/architecture/WINDOW-DOMICILE.md`.
 //
-// The host exists only in Domicile's engine, so the globals are optional.
-// A page without it draws nothing.
+// The engine answers `navigator.domicile` once per document: the document
+// Domicile writes reads it and passes it to `Shell`, and every later read is
+// `null`. So no global is declared here; a shell keeps what it was handed. See
+// `shell.ts`.
 //
 // Sizes and coordinates are fractional CSS pixels, except in
 // {@link DomicileDisplay}. Keycodes are Linux evdev codes.
@@ -656,7 +659,7 @@ export type DomicileExtensionsEvent = Event & {
   readonly extensions: readonly DomicileExtension[];
 };
 
-/** Every event `window.domicile` fires, by name. */
+/** Every event the desktop fires, by name. */
 export type DomicileHostEventMap = {
   appappeared: DomicileAppEvent;
   appresized: DomicileAppEvent;
@@ -1054,22 +1057,3 @@ export type DomicileHost = {
     listener: (event: DomicileHostEventMap[T]) => void,
   ): void;
 };
-
-declare global {
-  // biome-ignore lint/style/useConsistentTypeDefinitions: declaration merging onto a built-in type is what `interface` is for and what a type alias cannot do
-  interface Window {
-    /**
-     * The compositor host for this page. Shells use this spelling.
-     *
-     * The same object as {@link Navigator.domicile}. Absent on a stock
-     * browser, and `null` for a document with no frame.
-     */
-    readonly domicile?: DomicileHost | null;
-  }
-
-  // biome-ignore lint/style/useConsistentTypeDefinitions: declaration merging onto a built-in type is what `interface` is for and what a type alias cannot do
-  interface Navigator {
-    /** The same object as {@link Window.domicile}. */
-    readonly domicile?: DomicileHost | null;
-  }
-}

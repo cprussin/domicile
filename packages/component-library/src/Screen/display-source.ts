@@ -17,7 +17,7 @@ export type Display = {
 
 /**
  * Supplies a `DisplayProvider` with display lists, usually adapted from
- * `window.domicile`.
+ * the desktop a shell is handed.
  *
  * `displays` is the latest list so far, for a provider that mounts after it
  * arrived. `onDisplays` delivers later lists. They can overlap: an adapter may

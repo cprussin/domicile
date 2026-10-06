@@ -1,6 +1,5 @@
-// A `window.domicile` for a shell's tests. The test sets state, which
-// dispatches the engine's change events, and every call the shell makes is
-// recorded.
+// A desktop for a shell's tests. The test sets state, which dispatches the
+// engine's change events, and every call the shell makes is recorded.
 //
 // ```ts
 // const fake = new FakeDomicileHost();
@@ -17,7 +16,7 @@ import type {
   DomicileWindow,
 } from "./domicile-host";
 
-/** The attributes of `window.domicile` a test sets. */
+/** The attributes of the desktop a test sets. */
 export type DomicileState = {
   -readonly [K in keyof DomicileHost as DomicileHost[K] extends (
     ...args: never[]
@@ -112,7 +111,7 @@ export class FakeDomicileHost {
   /** Every call the shell made, in order: the method's name, then its arguments. */
   readonly calls: (readonly [method: string, ...args: unknown[]])[] = [];
 
-  /** What the shell is handed as `window.domicile`. */
+  /** What the shell is handed as its desktop. */
   readonly host: DomicileHost;
 
   readonly #target = new EventTarget();

@@ -144,7 +144,7 @@ not rules, and carry no authority level. Read the one for the area you work in.
 | [/docs/architecture/KEYBINDINGS.md](/docs/architecture/KEYBINDINGS.md) | A shell's keybindings as props: sway-style chords resolved against the compositor's keyboard layout and dispatched by the SDK. |
 | [/docs/architecture/COMPOSABLE-SHELLS.md](/docs/architecture/COMPOSABLE-SHELLS.md) | The config as a TS, JS or JSON module whose `Shell` export is the shell; `domicile` builds it; manganese as a library; packages on npm. |
 | [/docs/architecture/PORTALS.md](/docs/architecture/PORTALS.md) | Proposal: Domicile as the only `xdg-desktop-portal` backend, with the shell drawing every dialog. Not started. |
-| [/docs/architecture/WINDOW-DOMICILE.md](/docs/architecture/WINDOW-DOMICILE.md) | `window.domicile` as the whole shell API, and `DomicileClient` deleted. Left: `<app>` routing its own input. |
+| [/docs/architecture/WINDOW-DOMICILE.md](/docs/architecture/WINDOW-DOMICILE.md) | The desktop handed to `Shell` as the whole shell API, and `DomicileClient` deleted. Left: `<app>` routing its own input. |
 | [/docs/architecture/SYSTEM-ACCESS.md](/docs/architecture/SYSTEM-ACCESS.md) | Proposal: files, processes and D-Bus for the shell; desktop features as libraries on them. Not started. |
 
 [`/ROADMAP.md`](/ROADMAP.md) lists open work and known gaps, each pointing at
@@ -182,7 +182,7 @@ How to use, configure and debug Domicile. No authority level.
 | [/packages/domicile-engine/docs/BUILDING-CHROMIUM.md](/packages/domicile-engine/docs/BUILDING-CHROMIUM.md) | A Chromium checkout from scratch, the gn args, pitfalls, and rolling the pin. |
 | [/packages/domicile-engine/docs/BUILD-MACHINE.md](/packages/domicile-engine/docs/BUILD-MACHINE.md) | `crux`: the shared checkout and tree lock, the toolchain shell, moving the pin, the tree pool, build cost. |
 | [/packages/domicile-engine/docs/RELEASES.md](/packages/domicile-engine/docs/RELEASES.md) | The pinned engines, release names, the write-back flow, `DOMICILE_WRITEBACK_TOKEN`. |
-| [/packages/domicile-engine/docs/CONTROL-CHANNEL.md](/packages/domicile-engine/docs/CONTROL-CHANNEL.md) | `window.domicile` members, typed values, adding a message or event, the command socket and dev reload. |
+| [/packages/domicile-engine/docs/CONTROL-CHANNEL.md](/packages/domicile-engine/docs/CONTROL-CHANNEL.md) | `DomicileHost` members, typed values, adding a message or event, the command socket and dev reload. |
 | [/packages/domicile-engine/docs/GUARDS.md](/packages/domicile-engine/docs/GUARDS.md) | One line per guard, helper and spike script in `scripts/`, by area. |
 | [/packages/domicile-engine/docs/SOURCE-MAP.md](/packages/domicile-engine/docs/SOURCE-MAP.md) | Where the surface-embedding code lives under `src/`. |
 | [/packages/domicile-engine/docs/TESTING.md](/packages/domicile-engine/docs/TESTING.md) | Engine unit test suites, their filters and minimum counts, and the command that runs what CI runs. |

@@ -12,7 +12,7 @@ const POINTER = 1;
 const PRIMARY = 0;
 const SECONDARY = 2;
 
-/** A fake `window.domicile` whose changes are applied under React's `act`. */
+/** A fake desktop whose changes are applied under React's `act`. */
 const acting = (fake: FakeDomicileHost) => ({
   appear: (...args: Parameters<FakeDomicileHost["appear"]>) => {
     act(() => {

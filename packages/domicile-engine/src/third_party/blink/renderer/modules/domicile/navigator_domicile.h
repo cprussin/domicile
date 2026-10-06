@@ -12,7 +12,15 @@
 namespace blink {
 
 // Hangs navigator.domicile off Navigator, the way every other navigator.*
-// extension does.
+// extension does -- and hands the host out once per document.
+//
+// ONCE, BECAUSE A SHELL IS HANDED IT RATHER THAN FINDING IT. The document
+// Domicile writes (ShellURLLoaderFactory::ShellDocument) reads this first and
+// calls the shell's `Shell(root, domicile)` with it; every read after that
+// answers null. So the desktop is the shell's to keep however it likes -- a
+// React context, a module's own variable -- and nothing on the page reaches
+// for a global the shell did not hand it. A reload is a new document, and
+// hands it out again.
 class MODULES_EXPORT NavigatorDomicile final
     : public GarbageCollected<NavigatorDomicile>,
       public Supplement<Navigator> {
@@ -29,6 +37,8 @@ class MODULES_EXPORT NavigatorDomicile final
   static NavigatorDomicile& From(Navigator&);
 
   Member<DomicileHost> host_;
+  // Whether this document has been handed the host already.
+  bool handed_ = false;
 };
 
 }  // namespace blink

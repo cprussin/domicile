@@ -23,7 +23,7 @@ protocol and the engine grow without bound.
 ## Design
 
 ```
-shell page ── window.domicile.system ──▶ engine (opaque relay) ──▶ compositor
+shell page ──── domicile.system ──────▶ engine (opaque relay) ──▶ compositor
                                                                    ├─ files
                                                                    ├─ processes
                                                                    └─ D-Bus (session, system)
@@ -97,7 +97,7 @@ The shell is trusted code: `Spawn` already runs any argv. These rules keep that
 trust from reaching anything else.
 
 - **Binding:** only the top-level `domicile://shell` frame gets
-  `window.domicile.system`. `<webview>` guests, extensions and
+  `domicile.system`. `<webview>` guests, extensions and
   `domicile://home` never do. Same check as the control channel.
 - **Content Security Policy:** `domicile://shell` serves `script-src 'self'`.
   A script injected through a notification body, window title or file name

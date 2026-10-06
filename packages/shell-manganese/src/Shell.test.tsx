@@ -80,9 +80,9 @@ const dialogBox = (): { left: string; width: string } => {
 };
 
 /**
- * A fake `window.domicile` that applies the compositor's changes under
- * React's `act` and records the chrome's calls. File searches are answered
- * once {@link holds} sets the index contents.
+ * A fake desktop that applies the compositor's changes under React's `act`
+ * and records the chrome's calls. File searches are answered once
+ * {@link holds} sets the index contents.
  */
 class Desk {
   readonly fake = new FakeDomicileHost();

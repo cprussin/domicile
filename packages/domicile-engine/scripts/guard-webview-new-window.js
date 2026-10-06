@@ -49,7 +49,7 @@
 // Everything is inside `Shell`, which the document Domicile writes calls once
 // the module has loaded.
 
-export const Shell = () => {
+export const Shell = (_root, desktop) => {
   /**
    * A query parameter this cannot run without. Missing means the guard invoked
    * this wrongly, and a default would turn that into a measurement of something
@@ -105,10 +105,10 @@ export const Shell = () => {
   // The claim: a browser window the desk opened, not this page. This
   // document's own `<webview src>` is in no list, so every listed window is one
   // a page asked for.
-  const host = navigator.domicile;
-  if (host === undefined) {
+  const host = desktop;
+  if (host === null || host === undefined) {
     throw new Error(
-      "guard-webview-new-window: navigator.domicile is absent, so this" +
+      "guard-webview-new-window: no desktop was handed to Shell, so this" +
         " document is not a shell the engine serves",
     );
   }

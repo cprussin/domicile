@@ -1,7 +1,8 @@
 # `domicile://`: serving the shell without a port
 
 The engine serves the shell page from a custom scheme, `domicile://`, and the
-page reaches the compositor through `window.domicile`. No TCP port is open.
+page reaches the compositor through the desktop handed to its `Shell`. No TCP
+port is open.
 Patches `0008` and `0009`.
 
 ## Why

@@ -360,8 +360,8 @@ FAILURE=""
 PASSED=""
 if [ "$SAW_CLAIM" != "1" ]; then
   FAILURE="the shell never claimed a chord, so nothing here was ever asked \
-for. This is the harness: the page did not run, or navigator.domicile was \
-absent, and the engine log has its console"
+for. This is the harness: the page did not run, or no desktop was \
+handed to it, and the engine log has its console"
 elif [ "$SAW_FOCUS" != "1" ]; then
   FAILURE="the element never became the shell document's activeElement, so \
 the keyboard never left the shell and the keystrokes below were driven at the \

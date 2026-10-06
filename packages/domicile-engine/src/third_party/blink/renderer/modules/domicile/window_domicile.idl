@@ -6,14 +6,8 @@
     RuntimeEnabled=DomicileControlChannel,
     SecureContext
 ] partial interface Window {
-  // The same host `navigator.domicile` answers with, not a second one: a
-  // shell reaches system state through `window.domicile.<interface>` without
-  // registering anything, and the two spellings must therefore be one object
-  // -- a listener bound through either is bound to the channel both share.
-  //
-  // Null for the reason navigator's is: a shell opened in an ordinary
-  // browser -- a `vite dev` on its page, which is how shells get styled -- has
-  // no desktop behind it, and finding that out by reading a property is better
-  // than finding out when a call throws.
-  [SameObject] readonly attribute DomicileHost? domicile;
+  // `navigator.domicile`, by its other spelling: one object, and one handover
+  // between the two -- whichever is read first answers, and every read after
+  // either is null.
+  readonly attribute DomicileHost? domicile;
 };

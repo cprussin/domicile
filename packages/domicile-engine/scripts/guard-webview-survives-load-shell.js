@@ -21,7 +21,7 @@
 // Everything is inside `Shell`, which Domicile's document calls once the module
 // loads.
 
-export const Shell = () => {
+export const Shell = (_root, desktop) => {
   const say = (what) => {
     console.log(`GUARD ${what}`);
   };
@@ -41,10 +41,10 @@ export const Shell = () => {
     }
   };
 
-  const host = navigator.domicile;
+  const host = desktop;
   if (host === null || host === undefined) {
     throw new Error(
-      "guard-webview-survives-load-shell: navigator.domicile is absent, so" +
+      "guard-webview-survives-load-shell: no desktop was handed to Shell, so" +
         " this document was not served by the forked engine",
     );
   }
