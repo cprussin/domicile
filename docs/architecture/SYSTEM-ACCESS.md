@@ -9,7 +9,7 @@ Domicile stops adding a message for each feature.
 The shell reaches the system only through messages Domicile defines. Each
 feature a desktop wants is a change to Domicile:
 
-- battery, backlight and audio are `domicile_host` modules, host messages and
+- backlight and audio are `domicile_host` modules, host messages and
   engine IDL members ([HOST-READOUTS.md](/packages/shell-manganese/docs/HOST-READOUTS.md))
 - wifi and bluetooth need the compositor to read NetworkManager and BlueZ and
   report them on the host protocol (`ROADMAP.md`, item 13)
@@ -132,7 +132,7 @@ trust from reaching anything else.
 - [ ] `script-src 'self'` on `domicile://shell`
 - [x] `@domicile-desktop/sdk/system`
 - [x] the compositor serves D-Bus calls and matches
-- [ ] `system-battery`; delete `domicile_host::battery`, its host message and
+- [x] `system-battery`; delete `domicile_host::battery`, its host message and
       IDL member
 - [ ] `system-backlight`; delete `domicile_host::backlight` and its messages
 - [ ] `system-audio`; delete `domicile_host::audio`, the meters and their

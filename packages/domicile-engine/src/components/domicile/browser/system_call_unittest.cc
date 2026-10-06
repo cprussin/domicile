@@ -58,7 +58,7 @@ TEST(SystemCallTest, OnlyTheThreeAnswersAreRelayed) {
   EXPECT_TRUE(IsSystemAnswer("system_event"));
   EXPECT_TRUE(IsSystemAnswer("system_end"));
   EXPECT_FALSE(IsSystemAnswer("system_request"));
-  EXPECT_FALSE(IsSystemAnswer("battery"));
+  EXPECT_FALSE(IsSystemAnswer("brightness"));
 }
 
 }  // namespace
