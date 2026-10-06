@@ -108,6 +108,17 @@ class Surface : public mojom::SurfaceObserver,
         observer_receiver_.BindNewPipeAndPassRemote(), app_id,
         base::BindOnce(&Surface::OnCreated, base::Unretained(this),
                        std::move(done)));
+    // Viz closes the sink on a frame it rejects, e.g. one whose size differs
+    // from its surface's. Nothing reconnects it, so every later frame of this
+    // window is lost; say so rather than freeze silently.
+    sink_.set_disconnect_with_reason_handler(base::BindOnce(
+        [](const std::string& app_id, uint32_t reason,
+           const std::string& description) {
+          LOG(ERROR) << "domicile: the frame sink for \"" << app_id
+                     << "\" closed (" << reason << ": " << description
+                     << "); its window will draw nothing more";
+        },
+        app_id));
   }
 
   const viz::FrameSinkId& frame_sink_id() const { return frame_sink_id_; }
