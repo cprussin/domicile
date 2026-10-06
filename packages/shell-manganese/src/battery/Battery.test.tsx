@@ -1,20 +1,20 @@
 import { describe, expect, it } from "bun:test";
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
-import type { BatteryMessage } from "@domicile-desktop/sdk/host-message";
+import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
+import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import { act, render, screen } from "@testing-library/react";
-
 import { css } from "../../styled-system/css";
 import { Battery } from "./Battery";
+import type { BatteryReading } from "./watch-battery";
 
 /**
  * A test-controlled battery: `watch` replaces the host listener, and `report`
  * sends a reading.
  */
 const heldBattery = () => {
-  const listeners: ((reading: BatteryMessage) => void)[] = [];
+  const listeners: ((reading: BatteryReading) => void)[] = [];
   const watching = { stopped: 0 };
   return {
-    report: (reading: BatteryMessage) => {
+    report: (reading: BatteryReading) => {
       act(() => {
         for (const onReading of listeners) {
           onReading(reading);
@@ -25,8 +25,8 @@ const heldBattery = () => {
       return watching.stopped;
     },
     watch: (
-      _domicile: DomicileClient,
-      onReading: (reading: BatteryMessage) => void,
+      _domicile: DomicileHost,
+      onReading: (reading: BatteryReading) => void,
     ) => {
       listeners.push(onReading);
       return () => {
@@ -36,8 +36,8 @@ const heldBattery = () => {
   };
 };
 
-/** A client the component never uses, since `watch` is injected. */
-const NO_HOST = {} as DomicileClient;
+/** A host the component never uses, since `watch` is injected. */
+const NO_HOST = new FakeDomicileHost().host;
 
 /**
  * The readout container, which holds everything that turns red and flashes.

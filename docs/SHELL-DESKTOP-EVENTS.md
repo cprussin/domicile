@@ -9,10 +9,10 @@ The shell is one page covering the bounding box of every display, in logical
 pixels. Each display is a rectangle in it.
 
 ```ts
-domicile.displays; // the current list, or undefined until the first message
-domicile.on("displays", ({ displays }) => {
-  layOut(displays); // DomicileDisplay: { name, x, y, width, height, scale, modeWidth, modeHeight, transform }
-});
+// DomicileDisplay: { name, x, y, width, height, scale, modeWidth, modeHeight, transform }
+const show = () => layOut(domicile.displays); // null until described
+show();
+domicile.addEventListener("displayschanged", show);
 ```
 
 - On a tty the engine shows the page on every monitor, rotated and scaled per
@@ -28,7 +28,7 @@ domicile.on("displays", ({ displays }) => {
 
 `theme.mode` in the config is `"dark"` or `"light"`.
 
-- The shell receives `theme` on connect and on every change.
+- The shell reads `domicile.theme`; `themechanged` reports changes.
 - The compositor also publishes it to the settings portal
   (`org.freedesktop.appearance` `color-scheme`, followed by GTK4, Qt6,
   Electron and Firefox) and applies it to browser windows.
@@ -39,30 +39,30 @@ domicile.on("displays", ({ displays }) => {
 Windows change theme after the shell has captured its old frame, so a shell
 can animate the switch:
 
-1. The shell receives `theme`.
+1. `themechanged` fires.
 2. The shell captures its old frame (for example, starts a view transition)
    and calls `domicile.themeCaptured(theme)`. With no animation, it calls it
    at once.
 3. Once every shell has called it, the compositor repaints the windows and
-   sends `windows_theme`.
+   sets `windowsTheme` and fires `windowsthemechanged`.
 4. If no shell calls it, windows switch after about a second.
 
 In a view transition, call `themeCaptured` inside the update callback and
-return a promise that resolves on `windows_theme`.
+return a promise that resolves on `windowsthemechanged`.
 
 `ThemeProvider` in `@domicile-desktop/component-library` runs the view
 transition. Implement its `ThemeSource.turnWindows` to call
-`domicile.themeCaptured(theme)` and resolve on `windows_theme` (see
+`domicile.themeCaptured(theme)` and resolve on `windowsthemechanged` (see
 manganese's `theme/host-theme.ts`).
 
 ## System tray
 
 Apps' tray icons (StatusNotifierItem, hosted by the compositor on the session
-bus) arrive as `tray`: the full list on every change and on connect.
+bus) are `domicile.tray`, the full list; `traychanged` reports changes.
 
 ```ts
-domicile.on("tray", ({ items }) => {
-  drawTray(items); // { id, title, icon: a data: URL or undefined }
+domicile.addEventListener("traychanged", () => {
+  drawTray(domicile.tray ?? []); // { id, title, icon: a data: URL or "" }
 });
 domicile.activateTrayItem(id, "primary"); // or "secondary", "context"
 ```
@@ -74,12 +74,14 @@ domicile.activateTrayItem(id, "primary"); // or "secondary", "context"
 
 ## Notifications
 
-App notifications, and sites' Web Notifications, arrive as `notifications`:
-every uncleared notification, oldest first, on every change and on connect.
+App notifications, and sites' Web Notifications, are
+`domicile.notifications`: every uncleared notification, oldest first.
+`notificationschanged` reports changes.
 
 ```ts
-domicile.on("notifications", ({ items }) => {
-  draw(items); // { id, appName, summary, body, icon, urgency, actions, clickable, timeoutMs, time }
+domicile.addEventListener("notificationschanged", () => {
+  // { id, appName, summary, body, icon, urgency, actions, clickable, timeoutMs, time }
+  draw(domicile.notifications ?? []);
 });
 domicile.invokeNotificationAction(id, "default"); // a click (if clickable), or an action's key
 domicile.dismissNotifications([id]);              // clear; the app is told

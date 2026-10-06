@@ -12,9 +12,9 @@ Manganese uses sway's layout model. For the key bindings, see
 - There are 10 workspaces for the whole desktop, plus the scratchpad and floating
   windows.
 - A window is either a Wayland client or a browser window the shell opened.
-- Until the compositor reports the screens, only the wallpaper is drawn.
-  With no compositor (a plain browser), the shell uses the browser window as the only
-  screen. A desktop with no screens shows a message.
+- Until the compositor reports the screens, only the wallpaper is drawn. A
+  plain browser has no `window.domicile`, so the shell draws nothing. A
+  desktop with no screens shows a message.
 
 ## Screens
 

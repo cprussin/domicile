@@ -1,6 +1,6 @@
 import type { KeyBinding } from "@domicile-desktop/sdk/bind-keys";
 import { bindKeys } from "@domicile-desktop/sdk/bind-keys";
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
 import { useEffect, useEffectEvent, useRef } from "react";
 
@@ -15,7 +15,7 @@ const logToConsole = (error: string): void => {
 };
 
 type Options = {
-  domicile: DomicileClient;
+  domicile: DomicileHost;
   /** The shell's keybindings. */
   keybindings: ShellKeybindings;
   /** Whether the launcher is open, which blocks every key but its own. */
@@ -33,16 +33,15 @@ type Options = {
 /**
  * Bind the shell's keys and dispatch their commands.
  *
- * The SDK grabs and reads the keys. This hook parses `send-shell` commands
- * (see `command.ts`), blocks keys while the launcher is open, and syncs the
- * binding mode.
+ * The SDK grabs the chords and reads each `shortcut` in the binding mode. This
+ * hook parses `send-shell` commands (see `command.ts`), blocks keys while the
+ * launcher is open, and syncs the binding mode.
  *
  * The mode is desk-wide: each monitor is a separate page, so a mode entered on
  * one page goes out via `onModeChanged` and comes back to every page as
  * `mode`.
  *
- * Binds once per client and keybindings, not per render: the keyboard layout
- * arrives only on change, so a rebinding would miss it.
+ * Binds once per host and keybindings, not per render.
  */
 export const useKeybindings = ({
   domicile,

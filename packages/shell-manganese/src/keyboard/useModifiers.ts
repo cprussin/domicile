@@ -1,5 +1,4 @@
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
-import type { HostMessageOf } from "@domicile-desktop/sdk/host-message";
+import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 /**
@@ -45,17 +44,17 @@ type HeldModifiers = {
  * The modifiers the shell should act on, read from this page's own key events.
  *
  * - The compositor only sees keys the SDK forwards while a client has the
- *   keyboard, so its `modifiers` broadcast misses keys pressed while the
- *   shell had focus. This page's events are the source of truth (see
+ *   keyboard, so its modifier attributes miss keys pressed while the shell had
+ *   focus. This page's events are the source of truth (see
  *   docs/architecture/A-DESKTOP-ON-A-TTY.md for input from DRM).
  * - While a browser window's `<webview>` has focus, this page gets no key
- *   events. The engine then sends the guest's modifiers as `modifiers`, which
- *   this uses only in that case.
+ *   events. The engine then reports the guest's modifiers with
+ *   `modifierschanged`, which this uses only in that case.
  * - After Meta+Shift+Tab floats a window, the still-held Shift would start a
  *   resize. The chord calls {@link HeldModifiers.spendShift} to ignore it until
  *   it is pressed again.
  */
-export const useModifiers = (domicile: DomicileClient): HeldModifiers => {
+export const useModifiers = (domicile: DomicileHost): HeldModifiers => {
   const [held, setHeld] = useState(NOTHING_HELD);
 
   // Keep the same object when nothing changed, to avoid a re-render per
@@ -109,14 +108,17 @@ export const useModifiers = (domicile: DomicileClient): HeldModifiers => {
   }, [settle]);
 
   useEffect(() => {
-    const reported = (held: HostMessageOf<"modifiers">) => {
+    const reported = () => {
       if (guestHasKeyboard()) {
-        settle({ meta: held.metaKey, shift: held.shiftKey });
+        settle({
+          meta: domicile.metaKey === true,
+          shift: domicile.shiftKey === true,
+        });
       }
     };
-    domicile.on("modifiers", reported);
+    domicile.addEventListener("modifierschanged", reported);
     return () => {
-      domicile.off("modifiers", reported);
+      domicile.removeEventListener("modifierschanged", reported);
     };
   }, [domicile, settle]);
 

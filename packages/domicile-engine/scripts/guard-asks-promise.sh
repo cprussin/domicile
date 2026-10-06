@@ -5,9 +5,8 @@
 #   nix develop .#full --command \
 #     ./packages/domicile-engine/scripts/guard-asks-promise.sh /build/chromium/src
 #
-# WHY THIS EXISTS. An ask used to be answered only by an event, and a shell
-# needed `DomicileClient` to match the answer to the ask. The engine now does:
-# it settles the ask the answer is for, and nothing else. The page asks for
+# WHY THIS EXISTS. The engine settles the ask an answer is for, and nothing
+# else. The page asks for
 # `old` and then `new` files, so `old` must reject with an AbortError; the
 # stand-in answers `old` first anyway, which must not settle `new`. See
 # docs/architecture/WINDOW-DOMICILE.md.

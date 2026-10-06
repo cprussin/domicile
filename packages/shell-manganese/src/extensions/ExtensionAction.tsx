@@ -1,6 +1,6 @@
 import { Button } from "@domicile-desktop/component-library/Button";
 import { Popover } from "@domicile-desktop/component-library/Popover";
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import type { Extension } from "@domicile-desktop/sdk/extension";
 import { WEBVIEW_CLOSE_EVENT } from "@domicile-desktop/sdk/webview-element";
 import { useEffect, useState } from "react";
@@ -9,8 +9,8 @@ import { css } from "../../styled-system/css";
 import { useContentSize } from "./useContentSize";
 
 type Props = {
-  /** Client every click goes through. */
-  domicile: DomicileClient;
+  /** Host every click goes through. */
+  domicile: DomicileHost;
   /** Extension this action belongs to. */
   extension: Extension;
   /**

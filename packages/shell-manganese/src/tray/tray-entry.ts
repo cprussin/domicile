@@ -1,5 +1,5 @@
+import type { DomicileTrayItem } from "@domicile-desktop/sdk/domicile-host";
 import type { Extension } from "@domicile-desktop/sdk/extension";
-import type { TrayItem } from "@domicile-desktop/sdk/tray";
 
 import { shownInTray } from "../extensions/shown";
 import { arrange } from "./tray-order";
@@ -23,7 +23,7 @@ export const TrayEntry = {
     key: `extension:${extension.id}`,
     kind: TrayEntryKind.Extension as const,
   }),
-  StatusNotifier: (item: TrayItem) => ({
+  StatusNotifier: (item: DomicileTrayItem) => ({
     item,
     key: `status-notifier:${item.id}`,
     kind: TrayEntryKind.StatusNotifier as const,
@@ -37,7 +37,7 @@ export type TrayEntry = ReturnType<(typeof TrayEntry)[keyof typeof TrayEntry]>;
  * before extensions.
  */
 export const trayEntries = (
-  items: readonly TrayItem[],
+  items: readonly DomicileTrayItem[],
   extensions: readonly Extension[],
   order: readonly string[],
 ): readonly TrayEntry[] =>

@@ -2,7 +2,7 @@ import { DisplayProvider } from "@domicile-desktop/component-library/DisplayProv
 import type { DisplaySource } from "@domicile-desktop/component-library/display-source";
 import { Provider } from "@domicile-desktop/component-library/Provider";
 import type { ThemeSource } from "@domicile-desktop/component-library/theme-source";
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
 
 import { Desktop } from "./Desktop";
@@ -12,14 +12,12 @@ import { DEFAULT_TOP_BAR } from "./top-bar/layout";
 
 type Props = {
   /**
-   * The source of display descriptions: the host, or the window when there is
-   * no host.
+   * The source of display descriptions.
    *
-   * Must be stable: the provider re-registers when its identity changes, and
-   * `DomicileClient.on` has a single slot.
+   * Must be stable: the provider re-registers when its identity changes.
    */
   displays: DisplaySource;
-  domicile: DomicileClient;
+  domicile: DomicileHost;
   /** The keys this desktop binds, under the config's. Defaults to sway's. */
   keybindings?: ShellKeybindings | undefined;
   /**
@@ -34,8 +32,7 @@ type Props = {
 /**
  * The reference shell chrome.
  *
- * Holds the single {@link DisplayProvider} every `<Screen>` reads from, since
- * `on` has a single slot.
+ * Holds the single {@link DisplayProvider} every `<Screen>` reads from.
  */
 export const Shell = ({
   displays,

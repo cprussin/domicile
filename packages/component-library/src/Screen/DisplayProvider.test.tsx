@@ -166,8 +166,7 @@ describe("useDisplays", () => {
   });
 
   it("registers once for a source that does not change", () => {
-    // `DomicileClient.on` holds a single handler, so re-registering on every
-    // render would churn it.
+    // Re-registering on every render would churn the source's listeners.
     const { registrations, source } = toldLater();
     const { rerender } = render(
       <DisplayProvider source={source}>
@@ -197,8 +196,7 @@ describe("useDisplays", () => {
   });
 
   it("survives a source that answers registration immediately", () => {
-    // A `DomicileClient` replays its last value to the first handler, so an
-    // adapter calls back inside `onDisplays`.
+    // An adapter may call back with the current list inside `onDisplays`.
     const eager: DisplaySource = {
       displays: [LEFT],
       onDisplays: (handler) => {

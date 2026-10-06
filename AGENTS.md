@@ -144,7 +144,7 @@ not rules, and carry no authority level. Read the one for the area you work in.
 | [/docs/architecture/KEYBINDINGS.md](/docs/architecture/KEYBINDINGS.md) | A shell's keybindings as props: sway-style chords resolved against the compositor's keyboard layout and dispatched by the SDK. |
 | [/docs/architecture/COMPOSABLE-SHELLS.md](/docs/architecture/COMPOSABLE-SHELLS.md) | The config as a TS, JS or JSON module whose `Shell` export is the shell; `domicile` builds it; manganese as a library; packages on npm. |
 | [/docs/architecture/PORTALS.md](/docs/architecture/PORTALS.md) | Proposal: Domicile as the only `xdg-desktop-portal` backend, with the shell drawing every dialog. Not started. |
-| [/docs/architecture/WINDOW-DOMICILE.md](/docs/architecture/WINDOW-DOMICILE.md) | Proposal: `window.domicile` as the whole shell API, and `DomicileClient` deleted. Not started. |
+| [/docs/architecture/WINDOW-DOMICILE.md](/docs/architecture/WINDOW-DOMICILE.md) | `window.domicile` as the whole shell API, and `DomicileClient` deleted. Left: `<app>` routing its own input. |
 | [/docs/architecture/SYSTEM-ACCESS.md](/docs/architecture/SYSTEM-ACCESS.md) | Proposal: files, processes and D-Bus for the shell; desktop features as libraries on them. Not started. |
 
 [`/ROADMAP.md`](/ROADMAP.md) lists open work and known gaps, each pointing at

@@ -1,5 +1,7 @@
-import type { FoundFilesMessage } from "@domicile-desktop/sdk/host-message";
+import type { DomicileFileSearch } from "@domicile-desktop/sdk/domicile-host";
 import { useEffect, useState } from "react";
+
+import { superseded } from "../host/superseded";
 
 /**
  * How often to repeat a query while the host's index is still building.
@@ -9,8 +11,8 @@ import { useEffect, useState } from "react";
  */
 const ASK_AGAIN_MS = 1000;
 
-/** The host's search result, without its query. */
-export type Found = Omit<FoundFilesMessage, "query">;
+/** The host's search result. */
+export type Found = DomicileFileSearch;
 
 /** The result before the host has answered. */
 const NOTHING_YET: Found = { files: [], indexing: false, matched: 0 };
@@ -27,7 +29,7 @@ const NOTHING_YET: Found = { files: [], indexing: false, matched: 0 };
  * path, URL or search.
  */
 export const useFound = (
-  search: (query: string) => Promise<FoundFilesMessage>,
+  search: (query: string) => Promise<Found>,
   query: string,
 ): Found => {
   const [found, setFound] = useState<Found>(NOTHING_YET);
@@ -46,8 +48,11 @@ export const useFound = (
           }
         })
         .catch((error: unknown) => {
-          // biome-ignore lint/suspicious/noConsole: surfacing a search the host failed
-          console.error("The host could not search the home", error);
+          // A newer search replaced this one, and is what the box is waiting on.
+          if (!superseded(error)) {
+            // biome-ignore lint/suspicious/noConsole: surfacing a search the host failed
+            console.error("The host could not search the home", error);
+          }
         });
     };
     ask();

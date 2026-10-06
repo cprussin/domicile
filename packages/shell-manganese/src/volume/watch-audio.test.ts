@@ -1,36 +1,115 @@
 import { describe, expect, it } from "bun:test";
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
-import type { AudioMessage } from "@domicile-desktop/sdk/host-message";
+import type {
+  DomicileAudioDevice,
+  DomicileAudioStream,
+} from "@domicile-desktop/sdk/domicile-host";
+import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 
-import { laptop } from "./fixture";
+import type { Audio } from "./watch-audio";
 import { watchAudio } from "./watch-audio";
 
-/** The client, as much of it as this touches — see `watch-battery.test.ts`. */
-const heldClient = () => {
-  const handlers = new Map<string, (message: AudioMessage) => void>();
-  return {
-    client: {
-      on: (type: string, handler: (message: AudioMessage) => void) => {
-        handlers.set(type, handler);
-      },
-    } as unknown as DomicileClient,
-    says: (audio: AudioMessage) => {
-      handlers.get("audio")?.(audio);
-    },
-  };
+const SPEAKERS: DomicileAudioDevice = {
+  description: "Speakers",
+  id: "output:speakers",
+  isDefault: true,
+  monitor: false,
+  muted: false,
+  port: "",
+  ports: [],
+  volume: 0.5,
+};
+
+const SONG: DomicileAudioStream = {
+  application: "Firefox",
+  device: "",
+  id: "playback:42",
+  muted: false,
+  title: "",
+  volume: 1,
+};
+
+/** A desk with one output playing one stream, as the engine holds it. */
+const sounding = (fake: FakeDomicileHost) => {
+  fake.set({
+    audioCards: [
+      { description: "Built-in", id: "card", profile: "", profiles: [] },
+    ],
+    audioInputs: [],
+    audioOutputs: [SPEAKERS],
+    audioPlayback: [SONG],
+    audioRecording: [],
+  });
 };
 
 describe("watchAudio", () => {
-  it("reports the sound to every monitor's bar, late ones too", () => {
-    const host = heldClient();
-    const first: AudioMessage[] = [];
-    const late: AudioMessage[] = [];
+  it("reports the sound the host holds, and every change after", () => {
+    const fake = new FakeDomicileHost();
+    sounding(fake);
+    const heard: Audio[] = [];
 
-    watchAudio(host.client, (audio) => first.push(audio));
-    host.says(laptop);
-    watchAudio(host.client, (audio) => late.push(audio));
+    watchAudio(fake.host, (audio) => {
+      heard.push(audio);
+    });
+    fake.set({ audioOutputs: [{ ...SPEAKERS, volume: 0.6 }] });
 
-    expect(first).toEqual([laptop]);
-    expect(late).toEqual([laptop]);
+    expect(heard.map(({ outputs }) => outputs[0]?.volume)).toEqual([0.5, 0.6]);
+  });
+
+  it("reads the engine's empty strings as nothing said", () => {
+    const fake = new FakeDomicileHost();
+    sounding(fake);
+    const heard: Audio[] = [];
+
+    watchAudio(fake.host, (audio) => {
+      heard.push(audio);
+    });
+
+    expect(heard).toEqual([
+      {
+        cards: [
+          {
+            description: "Built-in",
+            id: "card",
+            profile: undefined,
+            profiles: [],
+          },
+        ],
+        inputs: [],
+        outputs: [
+          {
+            default: true,
+            description: "Speakers",
+            id: "output:speakers",
+            monitor: false,
+            muted: false,
+            port: undefined,
+            ports: [],
+            volume: 0.5,
+          },
+        ],
+        playback: [
+          {
+            application: "Firefox",
+            device: undefined,
+            id: "playback:42",
+            muted: false,
+            title: undefined,
+            volume: 1,
+          },
+        ],
+        recording: [],
+      },
+    ]);
+  });
+
+  it("reports nothing on a desk with no sound server", () => {
+    const fake = new FakeDomicileHost();
+    const heard: Audio[] = [];
+
+    watchAudio(fake.host, (audio) => {
+      heard.push(audio);
+    });
+
+    expect(heard).toEqual([]);
   });
 });

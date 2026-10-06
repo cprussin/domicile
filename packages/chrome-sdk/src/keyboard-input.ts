@@ -11,8 +11,6 @@ import type { ElementContext } from "./element-context";
 import { focusedApp } from "./element-context";
 import { focusChrome } from "./focus-chrome";
 import { evdevFromCode } from "./input";
-import type { KeyPress } from "./shortcut-claims";
-import { isClaimed } from "./shortcut-claims";
 
 // The app each forwarded press went to, until its key is released.
 //
@@ -24,6 +22,9 @@ import { isClaimed } from "./shortcut-claims";
 // The compositor delivers a release to the seat's current focus; the app id
 // is informational.
 const heldKeys = new Map<number, string>();
+
+// Keys whose press the engine took as a grabbed chord, until released.
+const takenKeys = new Set<number>();
 
 /** Route the page's keystrokes to whichever window the user reached for. */
 export const installKeyboardInput = (context: ElementContext): void => {
@@ -57,13 +58,13 @@ const forwardPress =
   (event: KeyboardEvent): void => {
     const appId = keyboardTarget(context);
     const keycode = evdevFromCode(event.code);
-    // A claimed shortcut belongs to the shell, so do not forward it. Its
-    // release is skipped too.
-    if (
-      appId !== undefined &&
-      keycode !== undefined &&
-      !isClaimed(press(event, keycode))
-    ) {
+    // The engine took a chord grabbed by name and sends it as `shortcut`, so
+    // do not forward it. Its release is skipped too.
+    if (event.defaultPrevented && keycode !== undefined) {
+      takenKeys.add(keycode);
+      return;
+    }
+    if (appId !== undefined && keycode !== undefined) {
       event.preventDefault();
       // Wayland clients generate key repeat themselves, so forwarding the
       // browser's repeats would double it.
@@ -77,12 +78,16 @@ const forwardPress =
 // Forwards every release, not only those for forwarded presses: a key held
 // across a page reload is released on a page that never saw the press. The
 // compositor ignores releases for keys the seat does not hold, so this is
-// safe. Claimed shortcuts are skipped, as in `forwardPress`.
+// safe. Chords the engine took (`takenKeys`) are skipped, as in
+// `forwardPress`.
 const forwardRelease =
   (context: ElementContext) =>
   (event: KeyboardEvent): void => {
     const keycode = evdevFromCode(event.code);
-    if (keycode !== undefined && !isClaimed(press(event, keycode))) {
+    if (keycode !== undefined && takenKeys.delete(keycode)) {
+      return;
+    }
+    if (keycode !== undefined) {
       const held = heldKeys.get(keycode);
       if (held !== undefined) {
         event.preventDefault();
@@ -146,8 +151,7 @@ const releaseAllowed = (
  * If the focused window's element has left the page, focus returns to the
  * chrome. Otherwise keys would go to a closed client and the page would never
  * get them. The SDK cannot observe element removal (no
- * `disconnectedCallback`), and `DomicileClient.on` belongs to the shell, so
- * this checks on each press.
+ * `disconnectedCallback`), so this checks on each press.
  */
 const keyboardTarget = (context: ElementContext): string | undefined => {
   const appId = focusedApp();
@@ -172,12 +176,3 @@ const appElement = (appId: string): Element | undefined =>
   [...document.querySelectorAll(APP_TAG_NAME)].find(
     (element) => element.getAttribute("app-id") === appId,
   );
-
-/** Converts a key event to the form shortcut claims use. */
-const press = (event: KeyboardEvent, keycode: number): KeyPress => ({
-  altKey: event.altKey,
-  ctrlKey: event.ctrlKey,
-  keycode,
-  metaKey: event.metaKey,
-  shiftKey: event.shiftKey,
-});

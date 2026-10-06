@@ -3,7 +3,7 @@
 // Headless chrome for `scripts/e2e-dmabuf.sh`. It prints every frame the host
 // pushes so the script can assert on frames from a real GPU.
 
-import { setDevicePixelRatioMessage } from "@domicile-desktop/sdk/chrome-message";
+import { setDevicePixelRatioMessage } from "./chrome-message";
 
 import {
   connectChromeSocket,

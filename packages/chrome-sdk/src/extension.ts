@@ -1,6 +1,6 @@
 // One browser extension, as a shell's tray draws it.
 //
-// `host-message.ts` parses the engine's `extensions` event into these. The
+// `extensionSchema` parses the rows of `window.domicile.extensions`. The
 // engine and the SDK ship separately, so the data is validated rather than
 // trusted.
 
@@ -20,13 +20,13 @@ export const extensionSchema = z.object({
   enabled: z.boolean(),
   /** A PNG at the page's device pixel ratio, as a data URL. */
   icon: z.string().startsWith(PNG_DATA_URL),
-  /** The id to pass to {@link DomicileClient.activateExtension}. */
+  /** The id to pass to `DomicileHost.activateExtension`. */
   id: z.string().regex(EXTENSION_ID),
   name: z.string(),
   /**
    * The popup to open in a `<webview>` on click, or `undefined` when the click
    * fires `action.onClicked`. Either way, call
-   * {@link DomicileClient.activateExtension}. The engine sends `null`.
+   * `DomicileHost.activateExtension`. The engine sends `null`.
    */
   popup: z
     .string()

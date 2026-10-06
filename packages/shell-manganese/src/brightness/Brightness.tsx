@@ -1,6 +1,6 @@
 import { Popover } from "@domicile-desktop/component-library/Popover";
 import { Slider } from "@domicile-desktop/component-library/Slider";
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import { SunIcon } from "@phosphor-icons/react/dist/ssr/Sun";
 import { SunDimIcon } from "@phosphor-icons/react/dist/ssr/SunDim";
 import type { WheelEvent } from "react";
@@ -15,7 +15,7 @@ const WHEEL_STEP = 0.05;
 
 type Props = {
   /** The host that reports the level and sets new ones. */
-  domicile: DomicileClient;
+  domicile: DomicileHost;
   /** Injectable so tests can drive their own backlight. */
   watch?: typeof watchBrightness | undefined;
 };

@@ -18,7 +18,7 @@ app ──org.freedesktop.portal.*──▶ xdg-desktop-portal ──impl.portal
                                     HostMessage::PortalRequests { items } ▼
                                          engine: `portalrequests` event (one patch, all kinds)
                                                                          ▼
-                        shell: DomicileClient.on("portal_requests") → <PortalDialogs>
+                        shell: domicile.addEventListener("portalrequests") → <PortalDialogs>
                         ◀── answerPortalRequest(id, answer) ── engine ── compositor ──▶ Response
 ```
 

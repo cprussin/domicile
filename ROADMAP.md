@@ -127,13 +127,10 @@ Evidence is in [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md),
    [COMPOSABLE-SHELLS.md](docs/architecture/COMPOSABLE-SHELLS.md).
 
 9. **`window.domicile` as the whole shell API.** The engine reports desktop
-   size and density. Left:
-   - Windows, focus and other state as attributes with change events.
-   - Events queued until a listener exists.
-   - Search and preview as promises.
-   - Chords resolved by the engine.
+   size and density, state is attributes, and the shells use it directly.
+   Left:
+   - The engine drops the events the attributes and promises replace.
    - `<app>` routing its own input.
-   - Delete `DomicileClient`.
 
    [WINDOW-DOMICILE.md](docs/architecture/WINDOW-DOMICILE.md).
 

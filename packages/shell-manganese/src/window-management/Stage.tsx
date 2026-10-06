@@ -1,4 +1,4 @@
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import type { ReactNode } from "react";
 import { Fragment, useState } from "react";
 
@@ -47,7 +47,7 @@ type Props = {
    * and holds the keyboard.
    */
   behindPanel: boolean;
-  domicile: DomicileClient;
+  domicile: DomicileHost;
   /** The floating window being dragged, if any. */
   draggingId: string | undefined;
   /**

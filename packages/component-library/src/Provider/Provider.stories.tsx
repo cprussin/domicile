@@ -26,7 +26,7 @@ export const Provider: StoryObj<typeof ProviderComponent> = {
     docs: {
       description: {
         story:
-          "A `ThemeSwitch` mounted inside the Provider: it reads the theme from context and clicking it asks the source to flip it — no app-side wiring beyond the one `<Provider>`. Storybook has no desktop behind it, so the source here answers its own request; a shell passes one built on its `DomicileClient` instead.",
+          "A `ThemeSwitch` mounted inside the Provider: it reads the theme from context and clicking it asks the source to flip it — no app-side wiring beyond the one `<Provider>`. Storybook has no desktop behind it, so the source here answers its own request; a shell passes one built on `window.domicile` instead.",
       },
     },
   },
