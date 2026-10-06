@@ -1,0 +1,120 @@
+//! Screen casting: PipeWire video streams of windows.
+//!
+//! [`Casting`] is the API the ScreenCast portal calls. It starts a stream of a
+//! [`Source`], reports the stream's PipeWire node, and reports when it ends.
+//!
+//! Three threads take part:
+//!
+//! - The caller's, which may be any. [`Casting`] only queues requests.
+//! - The Wayland thread, which owns the windows. It routes each request,
+//!   checks the source exists, and fills stream buffers from the window's
+//!   committed buffers (see [`windows`]).
+//! - The PipeWire thread, which owns the streams, their buffers and the
+//!   negotiation (see [`producer`]). It lends empty buffers to the Wayland
+//!   thread and queues the ones it fills.
+//!
+//! Neither thread waits on the other: both directions are queues. See
+//! `docs/architecture/PORTALS.md`.
+//!
+//! A monitor source joins as another [`Source`] variant, filled from the
+//! engine's dmabufs. Callers do not change.
+
+mod cursor;
+mod gpu;
+mod lifecycle;
+mod memory;
+mod negotiation;
+mod pacing;
+mod params;
+mod producer;
+mod shm_copy;
+mod windows;
+
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
+
+use smithay::reexports::calloop::channel::Sender;
+
+pub use cursor::CursorMode;
+pub use lifecycle::Ended;
+pub use producer::ToWayland;
+pub use windows::{Committed, Gpu, Windows};
+
+/// What a stream shows.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum Source {
+    /// A window, by its host app id.
+    Window(String),
+}
+
+/// One stream, as long as it lives.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct StreamId(u64);
+
+/// What a stream's caller hears.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Event {
+    /// The stream's PipeWire node, for the consumer to connect to.
+    Ready { node: u32 },
+    /// The stream is gone. Nothing follows.
+    Ended(Ended),
+}
+
+/// Hears a stream's events. Called on the Wayland or PipeWire thread, so it
+/// must not block.
+pub type Listener = Box<dyn FnMut(Event) + Send>;
+
+/// A request on its way to the Wayland thread.
+pub enum Request {
+    Start {
+        stream: StreamId,
+        source: Source,
+        cursor: CursorMode,
+        listener: Listener,
+    },
+    #[allow(dead_code)] // Sent by `Casting::stop`.
+    Stop { stream: StreamId },
+}
+
+/// Starts and stops streams. Cheap to clone, and usable from any thread.
+#[derive(Clone)]
+pub struct Casting {
+    requests: Sender<Request>,
+    next: Arc<AtomicU64>,
+}
+
+impl Casting {
+    /// A handle that queues requests to the Wayland thread.
+    pub fn new(requests: Sender<Request>) -> Self {
+        Self {
+            requests,
+            next: Arc::new(AtomicU64::new(1)),
+        }
+    }
+
+    /// Starts a stream of `source`. `listener` hears `Ready` with the node,
+    /// then `Ended` once.
+    pub fn start(&self, source: Source, cursor: CursorMode, listener: Listener) -> StreamId {
+        let stream = StreamId(self.next.fetch_add(1, Ordering::Relaxed));
+        self.send(Request::Start {
+            stream,
+            source,
+            cursor,
+            listener,
+        });
+        stream
+    }
+
+    /// Stops `stream`. Its listener hears `Ended(Stopped)`, unless it had
+    /// already ended.
+    #[allow(dead_code)] // Called by the ScreenCast backend; see PORTALS.md.
+    pub fn stop(&self, stream: StreamId) {
+        self.send(Request::Stop { stream });
+    }
+
+    fn send(&self, request: Request) {
+        self.requests
+            .send(request)
+            .expect("the Wayland thread outlives every casting handle");
+    }
+}

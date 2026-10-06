@@ -109,6 +109,7 @@ use smithay::{
 use tracing::{debug, error, info, warn};
 
 mod appearance;
+mod casting;
 mod clipboard;
 mod coalesce;
 mod dmabuf_descriptor;
@@ -1546,6 +1547,13 @@ struct DomicileCompositor {
     /// The theme change in progress, if any, and its current phase's deadline.
     turnover: Option<Turnover<usize>>,
     turnover_deadline: Option<RegistrationToken>,
+    /// Window streams. See [`crate::casting`].
+    casting: casting::Windows,
+    /// When the next paced cast frame is sent, if one waits.
+    cast_deadline: Option<RegistrationToken>,
+    /// `DOMICILE_CAST_WINDOW`: the title of a window to cast as soon as it has
+    /// it, and the handle to start the cast with. Taken when it starts.
+    cast_on_title: Option<(String, casting::Casting)>,
     /// The event loop handle, for adding sources after startup.
     ///
     /// Only the idle timer needs it: a reload may add a timeout the startup
@@ -1988,6 +1996,111 @@ impl DomicileCompositor {
 
     /// Release everything held for an app (window or popup) and tell the
     /// chromes it is gone.
+    /// Starts the `DOMICILE_CAST_WINDOW` cast once a window takes its title.
+    ///
+    /// For checking the producer without the ScreenCast portal; see
+    /// `docs/COMPOSITOR-DEBUGGING.md`. The stream's events are only logged.
+    fn cast_if_asked(&mut self, app_id: &str, title: Option<&str>) {
+        if self
+            .cast_on_title
+            .as_ref()
+            .is_some_and(|(wanted, _)| Some(wanted.as_str()) == title)
+        {
+            let (_, casting) = self.cast_on_title.take().expect("checked above");
+            info!(%app_id, "casting the window DOMICILE_CAST_WINDOW names");
+            casting.start(
+                casting::Source::Window(app_id.to_string()),
+                casting::CursorMode::Embedded,
+                Box::new(|event| info!(?event, "DOMICILE_CAST_WINDOW cast")),
+            );
+        }
+    }
+
+    /// A cast request, from any thread.
+    fn cast_requested(&mut self, request: casting::Request) {
+        let open: HashSet<String> = self.toplevels.iter().map(|(id, _)| id.clone()).collect();
+        self.casting
+            .request(request, |casting::Source::Window(app_id)| {
+                open.contains(app_id)
+            });
+    }
+
+    /// News from the PipeWire thread.
+    fn cast_news(&mut self, news: casting::ToWayland) {
+        let renderer = self.gpu.as_mut().map(Gpu::renderer);
+        let due = self.casting.news(news, renderer, Instant::now());
+        self.arm_the_cast_deadline(due);
+    }
+
+    /// The pointer moved over `at`'s window box, or left every window.
+    fn cast_pointer(&mut self, at: Option<(String, (f64, f64))>) {
+        let renderer = self.gpu.as_mut().map(Gpu::renderer);
+        let due = self.casting.pointer(at, renderer, Instant::now());
+        self.arm_the_cast_deadline(due);
+    }
+
+    /// Hands a window's committed frame to its casts. `crop` is the engine's:
+    /// `(0, 0, 0, 0)` is the whole buffer.
+    fn cast_frame(
+        &mut self,
+        app_id: &str,
+        buffer: &wl_buffer::WlBuffer,
+        crop: (i32, i32, i32, i32),
+        scale: i32,
+        damage: Option<Region>,
+    ) {
+        let crop = match (crop, committed_buffer(buffer)) {
+            ((_, _, 0, 0), Some(committed)) => {
+                let (width, height) = committed.size();
+                (0, 0, width as i32, height as i32)
+            }
+            (crop, _) => crop,
+        };
+        let renderer = self.gpu.as_mut().map(Gpu::renderer);
+        let due = self.casting.committed(
+            casting::Committed {
+                app_id,
+                buffer,
+                crop,
+                scale,
+                damage: damage.map(|region| {
+                    (
+                        region.x as i32,
+                        region.y as i32,
+                        region.width as i32,
+                        region.height as i32,
+                    )
+                }),
+            },
+            renderer,
+            Instant::now(),
+        );
+        self.arm_the_cast_deadline(due);
+    }
+
+    /// Wakes the loop when a paced cast frame is due, unless a wake is armed.
+    fn arm_the_cast_deadline(&mut self, due: Option<Instant>) {
+        let Some(due) = due else {
+            return;
+        };
+        if self.cast_deadline.is_some() {
+            return;
+        }
+        let armed = self
+            .loop_handle
+            .insert_source(Timer::from_deadline(due), |_, _, data: &mut CalloopData| {
+                let state = &mut data.state;
+                state.cast_deadline = None;
+                let due = state.casting.tick(Instant::now());
+                state.arm_the_cast_deadline(due);
+                TimeoutAction::Drop
+            })
+            // Timers register nothing with the kernel, so inserting cannot
+            // fail.
+            .expect("the compositor's own loop takes a timer");
+        self.cast_deadline = Some(armed);
+    }
+
     fn forget(&mut self, app_id: &str) {
         // Take back the engine's held buffers now. No release will come for a
         // gone surface, and the client may still be running.
@@ -2005,6 +2118,7 @@ impl DomicileCompositor {
         // Host ids are never reused, so a stale entry would only leak.
         self.content.remove(app_id);
         self.app_bounds.remove(app_id);
+        self.casting.window_gone(app_id);
         // An app id can return (a reconnecting client), but it then names a
         // different window.
         if self.pointer_app.as_deref() == Some(app_id) {
@@ -3844,6 +3958,7 @@ impl DomicileCompositor {
                     tracing::debug!(%app_id, "pointer motion: no surface");
                     return;
                 };
+                self.cast_pointer(Some((app_id.clone(), (x, y))));
                 // The chrome's box is the window geometry, not the surface, so
                 // offset for client-side shadows.
                 let (x, y) = crate::window_geometry::surface_point(
@@ -3867,6 +3982,7 @@ impl DomicileCompositor {
                 pointer.frame(self);
             }
             ClientRequest::PointerLeave => {
+                self.cast_pointer(None);
                 self.pointer_app = None;
                 let pointer = self.seat.get_pointer().unwrap();
                 let (serial, time) = (SERIAL_COUNTER.next_serial(), self.now_ms());
@@ -4497,7 +4613,7 @@ impl CompositorHandler for DomicileCompositor {
         // Take the new buffer and the frame callbacks. Taking the buffer gives
         // us its release; otherwise Smithay holds it until the next buffer,
         // which the client may need the release to draw.
-        let (attached, callbacks, buffer_scale, viewport, geometry) =
+        let (attached, callbacks, buffer_scale, viewport, geometry, damage) =
             with_states(surface, |states| {
                 // Read with the buffer: the viewport is double-buffered and
                 // applies to this commit.
@@ -4520,8 +4636,8 @@ impl CompositorHandler for DomicileCompositor {
                 let callbacks = std::mem::take(&mut attrs.frame_callbacks);
                 // Clear the accumulated damage, or it grows by a rectangle per
                 // commit for the window's life. The engine uses whole-surface
-                // damage, so the result is unused.
-                take_damage(&mut attrs.damage, attrs.buffer_scale);
+                // damage; casts use the box.
+                let damage = take_damage(&mut attrs.damage, attrs.buffer_scale);
                 // The scale this buffer was drawn at. Read now; a client
                 // mid-scale-change may commit the next one differently.
                 let scale = attrs.buffer_scale;
@@ -4533,6 +4649,7 @@ impl CompositorHandler for DomicileCompositor {
                     scale,
                     viewport,
                     window_geometry(states),
+                    damage,
                 )
             });
 
@@ -4592,6 +4709,7 @@ impl CompositorHandler for DomicileCompositor {
                             source_pixels(size, buffer_scale, viewport.source),
                         )
                     });
+                    self.cast_frame(app_id, &buffer, crop, buffer_scale, damage);
                     let published = self.publish_frame(app_id, &buffer, crop);
                     // After the submit, so there is something to sample, but
                     // timed from `started` so the import and submit count as
@@ -5010,10 +5128,16 @@ impl XdgShellHandler for DomicileCompositor {
         });
         // Separate `let` so the host guard drops at the `;`, before the
         // broadcast. Inside the `if let` it would be held for the whole body.
-        let titled = self.hub.host.lock().unwrap().app_titled(&app_id, title);
+        let titled = self
+            .hub
+            .host
+            .lock()
+            .unwrap()
+            .app_titled(&app_id, title.clone());
         if let Some(titled) = titled {
             self.hub.broadcast(titled);
         }
+        self.cast_if_asked(&app_id, title.as_deref());
     }
 
     fn toplevel_destroyed(&mut self, surface: ToplevelSurface) {
@@ -5953,6 +6077,18 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
+    // Casts allocate dmabufs on the render node, through their own libgbm.
+    let casting_gpu = gpu.as_ref().and_then(|gpu| {
+        gpu.gbm.as_ref()?;
+        let node = gpu.importer.node()?.to_path_buf();
+        Some(casting::Gpu::new(node, |fourcc| {
+            render_modifiers(&gpu.renderer, fourcc)
+        }))
+    });
+    // Cast requests from any thread, and news from the PipeWire thread.
+    let (cast_requests, heard_cast_requests) = channel::<casting::Request>();
+    let (cast_news, heard_cast_news) = channel::<casting::ToWayland>();
+
     let mut dmabuf_state = DmabufState::new();
     let dmabuf_global = gpu.as_mut().map(|gpu| {
         let importer_device = gpu.importer.main_device();
@@ -6097,6 +6233,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         lock,
         turnover: None,
         turnover_deadline: None,
+        casting: casting::Windows::new(cast_news, casting_gpu),
+        cast_deadline: None,
+        cast_on_title: std::env::var("DOMICILE_CAST_WINDOW")
+            .ok()
+            .map(|title| (title, casting::Casting::new(cast_requests))),
         loop_handle: event_loop.handle(),
     };
 
@@ -6198,6 +6339,18 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     handle.insert_source(request_rx, |event, _, data: &mut CalloopData| {
         if let ChannelEvent::Msg(input) = event {
             data.state.handle_client_request(input);
+        }
+    })?;
+
+    // Casts, routed and filled on the thread that has the windows.
+    handle.insert_source(heard_cast_requests, |event, _, data: &mut CalloopData| {
+        if let ChannelEvent::Msg(request) = event {
+            data.state.cast_requested(request);
+        }
+    })?;
+    handle.insert_source(heard_cast_news, |event, _, data: &mut CalloopData| {
+        if let ChannelEvent::Msg(news) = event {
+            data.state.cast_news(news);
         }
     })?;
 

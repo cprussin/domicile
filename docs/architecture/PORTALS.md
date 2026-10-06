@@ -70,6 +70,8 @@ One request channel carries all dialogs. Each interface's backend builds on it.
   output, which only viz has: the engine runs a `FrameSinkVideoCapturer` on
   the display's root frame sink and sends each frame's dmabuf over the broker
   socket. One producer keeps cursor modes and restore tokens in one place.
+  The producer is `src/casting/`: `Casting::start` takes a `Source` and
+  reports the node, and a monitor is another `Source`.
 - **Input uses EIS.** RemoteDesktop and InputCapture hand out a libei socket
   (`ConnectToEIS`) served by the compositor (`reis`). Emulated input takes the
   engine's input injection path, so the lock screen still blocks it.
@@ -143,7 +145,7 @@ Phase 1: dialogs.
 
 Phase 2: capture.
 
-- [ ] PipeWire producer in the compositor; window sources from client buffers
+- [x] PipeWire producer in the compositor; window sources from client buffers
 - [ ] engine: `FrameSinkVideoCapturer` per display, dmabufs over the broker socket
 - [ ] ScreenCast, with restore tokens and the sharing indicator
 - [ ] Screenshot and `PickColor`

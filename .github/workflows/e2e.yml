@@ -51,14 +51,15 @@ jobs:
             libegl1-mesa-dev libgles2-mesa-dev libgbm-dev mesa-utils \
             libgl1-mesa-dri libegl-mesa0 \
             weston wayland-utils wl-clipboard \
-            libdrm2 libxkbcommon0
+            libdrm2 libxkbcommon0 \
+            libpipewire-0.3-dev libclang-dev pipewire pipewire-bin
 
 
       # Shows which tools arrived, to tell a failing suite from one missing
       # its dependencies.
       - name: What is here
         run: |
-          for tool in wayland-info eglinfo wl-copy; do
+          for tool in wayland-info eglinfo wl-copy pipewire pw-link; do
             printf '%-16s %s\n' "$tool" "$(command -v "$tool" || echo MISSING)"
           done
 
