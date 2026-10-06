@@ -36,6 +36,7 @@ mod png;
 pub mod system;
 pub mod theme_turnover;
 pub mod tray;
+pub mod xdg_foreign;
 use domicile_scene::{KeyboardTarget, Scene};
 
 /// Identifier for a connected app (Wayland toplevel), assigned by the host.
@@ -123,11 +124,22 @@ pub struct Host {
     notifications: Option<Vec<Notification>>,
     /// The sound server's state. `None` until read, as for `tray`.
     audio: Option<audio::Audio>,
+    /// Handles clients exported their windows under, for a portal's
+    /// `parent_window`.
+    exports: xdg_foreign::Exports,
 }
 
 impl Host {
     pub fn new() -> Self {
         Host::default()
+    }
+
+    pub fn exports(&self) -> &xdg_foreign::Exports {
+        &self.exports
+    }
+
+    pub fn exports_mut(&mut self) -> &mut xdg_foreign::Exports {
+        &mut self.exports
     }
 
     /// Replace the desktop's displays, for chromes that connect later.
@@ -474,6 +486,7 @@ impl Host {
         if self.popups.remove(app_id).is_none() {
             self.apps.remove(app_id)?;
             self.scene.window_gone(app_id);
+            self.exports.app_closed(app_id);
         }
         Some(HostMessage::AppClosed {
             app_id: app_id.to_string(),

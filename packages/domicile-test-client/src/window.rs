@@ -36,6 +36,8 @@ use wayland_protocols::xdg::activation::v1::client::{xdg_activation_token_v1, xd
 use wayland_protocols::xdg::decoration::zv1::client::{
     zxdg_decoration_manager_v1, zxdg_toplevel_decoration_v1,
 };
+use wayland_protocols::xdg::foreign::zv1::client::{zxdg_exported_v1, zxdg_exporter_v1};
+use wayland_protocols::xdg::foreign::zv2::client::{zxdg_exported_v2, zxdg_exporter_v2};
 use wayland_protocols::xdg::shell::client::{
     xdg_popup, xdg_positioner, xdg_surface, xdg_toplevel, xdg_wm_base,
 };
@@ -355,6 +357,10 @@ struct Globals {
     /// Decoration negotiation as GTK3 does it.
     kde_decoration:
         Option<org_kde_kwin_server_decoration_manager::OrgKdeKwinServerDecorationManager>,
+    /// Window export as GTK3 does it, for `tests/xdg_foreign.rs`.
+    exporter_v1: Option<zxdg_exporter_v1::ZxdgExporterV1>,
+    /// Window export as GTK4, Chromium and Electron do it.
+    exporter_v2: Option<zxdg_exporter_v2::ZxdgExporterV2>,
     /// The scale the compositor prefers for the window, as kitty and GTK 4
     /// read it on a fractional display.
     fractional_scale: Option<wp_fractional_scale_manager_v1::WpFractionalScaleManagerV1>,
@@ -445,6 +451,14 @@ impl Client {
                     self.globals.kde_decoration =
                         Some(registry.bind(name, version.min(1), handle, ()));
                 }
+                "zxdg_exporter_v1" => {
+                    self.globals.exporter_v1 =
+                        Some(registry.bind(name, version.min(1), handle, ()));
+                }
+                "zxdg_exporter_v2" => {
+                    self.globals.exporter_v2 =
+                        Some(registry.bind(name, version.min(1), handle, ()));
+                }
                 "wp_fractional_scale_manager_v1" => {
                     self.globals.fractional_scale =
                         Some(registry.bind(name, version.min(1), handle, ()));
@@ -514,6 +528,14 @@ impl Client {
         if let Some(manager) = &self.globals.kde_decoration {
             let decoration = manager.create(&surface, handle, ());
             decoration.request_mode(org_kde_kwin_server_decoration::Mode::Client);
+        }
+        // Export the window as a toolkit does before a portal call;
+        // `tests/xdg_foreign.rs` checks the handles.
+        if let Some(exporter) = &self.globals.exporter_v1 {
+            exporter.export(&surface, handle, ());
+        }
+        if let Some(exporter) = &self.globals.exporter_v2 {
+            exporter.export_toplevel(&surface, handle, ());
         }
         // Only traced: the window keeps drawing at its integer scale.
         if let Some(manager) = &self.globals.fractional_scale {
@@ -1538,6 +1560,8 @@ delegate_noop!(Client: ignore xdg_activation_v1::XdgActivationV1);
 delegate_noop!(Client: ignore zxdg_decoration_manager_v1::ZxdgDecorationManagerV1);
 delegate_noop!(Client: ignore org_kde_kwin_server_decoration_manager::OrgKdeKwinServerDecorationManager);
 delegate_noop!(Client: ignore wp_fractional_scale_manager_v1::WpFractionalScaleManagerV1);
+delegate_noop!(Client: ignore zxdg_exporter_v1::ZxdgExporterV1);
+delegate_noop!(Client: ignore zxdg_exporter_v2::ZxdgExporterV2);
 
 /// Traces the preferred scale in the protocol's 120ths, so 1.2 reads
 /// `preferred_scale(144)`.
@@ -1569,6 +1593,36 @@ impl Dispatch<zxdg_toplevel_decoration_v1::ZxdgToplevelDecorationV1, ()> for Cli
     ) {
         if let zxdg_toplevel_decoration_v1::Event::Configure { mode } = event {
             crate::say!(decoration.id(), "configure({})", named(mode));
+        }
+    }
+}
+
+impl Dispatch<zxdg_exported_v1::ZxdgExportedV1, ()> for Client {
+    fn event(
+        _: &mut Client,
+        exported: &zxdg_exported_v1::ZxdgExportedV1,
+        event: zxdg_exported_v1::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Client>,
+    ) {
+        if let zxdg_exported_v1::Event::Handle { handle } = event {
+            crate::say!(exported.id(), "handle(\"{handle}\")");
+        }
+    }
+}
+
+impl Dispatch<zxdg_exported_v2::ZxdgExportedV2, ()> for Client {
+    fn event(
+        _: &mut Client,
+        exported: &zxdg_exported_v2::ZxdgExportedV2,
+        event: zxdg_exported_v2::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Client>,
+    ) {
+        if let zxdg_exported_v2::Event::Handle { handle } = event {
+            crate::say!(exported.id(), "handle(\"{handle}\")");
         }
     }
 }
