@@ -2,7 +2,7 @@
 // bar.
 //
 // All paths are absolute. `~` is only typed or displayed, never sent; the
-// home comes from `DomicileFileChooserEvent.home`.
+// home comes from `FileRequest.home`.
 
 import { pathIn } from "./path-in";
 

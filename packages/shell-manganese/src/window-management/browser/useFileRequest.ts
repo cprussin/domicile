@@ -1,7 +1,6 @@
+import type { FileRequest } from "@domicile-desktop/component-library/file-request";
 import { WEBVIEW_FILE_CHOOSER_EVENT } from "@domicile-desktop/sdk/webview-element";
 import { useEffect, useRef, useState } from "react";
-
-import type { FileRequest } from "./file-request";
 import { fileRequestOf } from "./file-request";
 
 /**

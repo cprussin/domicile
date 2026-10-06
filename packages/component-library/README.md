@@ -23,8 +23,11 @@ Each export is `@domicile-desktop/component-library/<name>`.
 | `Card` | Raised surface with optional title and footer. |
 | `Drilldown` | View that slides a second panel in from the side, with a back button. |
 | `Field` | Label, control and validation message. |
+| `FilePicker` | Keyboard-first file picker over its positioned parent. |
+| `file-request` | `FileRequest` and `ChooserMode`: what `FilePicker` asks for and how it answers. |
 | `Input` | Text input with prefix icon, clear button and invalid state. |
 | `Kbd` | Keyboard key cap. |
+| `list-walk` | Arrow-key movement of a highlight through a list while focus stays in an input. |
 | `ModalDialog` | Modal dialog with `title`, `footer` and `trigger` props. |
 | `ContextMenu` | Menu opened at a point, such as a right click's. |
 | `Popover` | Non-modal panel anchored to the control that opened it. |

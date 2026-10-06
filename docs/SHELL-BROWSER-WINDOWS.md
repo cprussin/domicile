@@ -247,6 +247,9 @@ frame.addEventListener(WEBVIEW_FILE_CHOOSER_EVENT, (event) => {
   saves.
 - **Downloads:** every download asks, in `save` mode. Canceling saves
   nothing.
+- **A ready-made picker:** `@domicile-desktop/component-library/FilePicker`
+  takes a `FileRequest`. Manganese builds one from the event in
+  `window-management/browser/file-request.ts`.
 
 ## Not supported yet
 

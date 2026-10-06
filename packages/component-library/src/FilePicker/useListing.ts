@@ -51,7 +51,7 @@ export const useListing = (
           }
         } else {
           // biome-ignore lint/suspicious/noConsole: reports an unexpected listing failure
-          console.error("The browser could not list a directory", error);
+          console.error("The file picker could not list a directory", error);
         }
       });
     return () => {
