@@ -39,7 +39,7 @@ const dragging = (resizes = false) => {
     onDropOn: mock(
       (_target: string, _edge: Direction | undefined) => undefined,
     ),
-    onGrab: mock(() => undefined),
+    onGrab: mock((_resizing: boolean) => undefined),
     onStretch: mock((_edge: Direction, _by: number) => undefined),
   };
   const { result } = renderHook(() =>
@@ -64,7 +64,7 @@ describe("useTileDrag", () => {
     it("grabs the window as soon as it is pressed", () => {
       const { calls, grab } = dragging();
       grab(100, 100);
-      expect(calls.onGrab).toHaveBeenCalledTimes(1);
+      expect(calls.onGrab.mock.calls).toEqual([[false]]);
     });
 
     it("aims at the window under the pointer, and drops it there", () => {
@@ -144,6 +144,12 @@ describe("useTileDrag", () => {
         [Direction.Right, 10],
       ]);
       expect(calls.onAim).not.toHaveBeenCalled();
+    });
+
+    it("grabs the window as a resize, so it does not fade like a move", () => {
+      const { calls, grab } = dragging(true);
+      grab(400, 300);
+      expect(calls.onGrab.mock.calls).toEqual([[true]]);
     });
 
     it("says which corner it is resizing from, for the cursor over it", () => {
