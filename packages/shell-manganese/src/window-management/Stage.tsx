@@ -133,9 +133,13 @@ export const Stage = ({
   const alone = showsOneThing(screens.map(({ screenful }) => screenful));
   // Drawn over every window, not by the dragged one: see `DropIndicator`.
   const [aim, setAim] = useState<Aim | undefined>(undefined);
-  // A border drag resizes in place, so unlike a grab it does not dim the
-  // window. See `stageStyles`.
+  // A border drag or a tiled resize grab resizes in place, so unlike a move it
+  // does not fade the window. See `stageStyles`.
   const [stretching, setStretching] = useState(false);
+  // The window being moved, which fades. A tiled resize grab still sets
+  // `draggingId`, which keeps its `TileGrab` mounted once the modifier is let
+  // go.
+  const movingId = stretching ? undefined : draggingId;
   const targets = screens.flatMap(({ screenful }) =>
     tiledTargets(screenful.placements),
   );
@@ -153,7 +157,7 @@ export const Stage = ({
           <Sliding key={window.id} on={screenNamed(screens, screen)}>
             <FloatShadow
               depth={placement.depth}
-              dragging={window.id === draggingId}
+              dragging={window.id === movingId}
               frame={placement.frame}
               motion={motion}
               restack={restack}
@@ -208,7 +212,7 @@ export const Stage = ({
                   cursor={window.cursor}
                   depth={depth}
                   domicile={domicile}
-                  dragging={window.id === draggingId}
+                  dragging={window.id === movingId}
                   focused={focused}
                   frame={placement?.frame}
                   fullscreen={fillsScreen(screens, window.id)}
@@ -224,7 +228,7 @@ export const Stage = ({
                   covered={placement?.behind !== undefined}
                   depth={depth}
                   domicile={domicile}
-                  dragging={window.id === draggingId}
+                  dragging={window.id === movingId}
                   focused={focused}
                   frame={placement?.frame}
                   fullscreen={fillsScreen(screens, window.id)}
@@ -249,7 +253,7 @@ export const Stage = ({
                 <WindowTitleBar
                   besideOpenTab={placement.openTab !== undefined}
                   depth={placement.depth}
-                  dragging={window.id === draggingId}
+                  dragging={window.id === movingId}
                   float={floating}
                   focus={focus}
                   frame={placement.frame}
@@ -375,11 +379,17 @@ export const Stage = ({
                     frame={placement.frame}
                     id={window.id}
                     onAim={setAim}
-                    onDrop={onDrop}
+                    onDrop={() => {
+                      setStretching(false);
+                      onDrop();
+                    }}
                     onDropOn={(target, edge) => {
                       onDropOn(window.id, target, edge);
                     }}
-                    onGrab={onGrabThis}
+                    onGrab={(resizing) => {
+                      setStretching(resizing);
+                      onGrabThis();
+                    }}
                     onStretch={(edge, by) => {
                       onStretch(window.id, edge, by, on.geometry);
                     }}
@@ -474,7 +484,7 @@ export const Stage = ({
               <Scrim
                 depth={placement.depth}
                 dimmed={sinks(alone, focused, placement.selected)}
-                dragging={window.id === draggingId}
+                dragging={window.id === movingId}
                 frame={placement.frame}
                 // The bar's motion: a tab switch fades the contents but not
                 // the tab.
@@ -517,7 +527,7 @@ export const Stage = ({
 };
 
 /**
- * Disables transitions during a border drag, since easing would open gaps
+ * Disables transitions during a resize drag, since easing would open gaps
  * between the resized window and its neighbors. Covers the whole stage because
  * the neighbors move too.
  */

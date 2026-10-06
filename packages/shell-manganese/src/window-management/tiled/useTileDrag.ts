@@ -48,7 +48,8 @@ type Options = {
   onAim: (aim: Aim | undefined) => void;
   onDrop: () => void;
   onDropOn: (target: string, edge: Direction | undefined) => void;
-  onGrab: () => void;
+  /** The window was taken hold of, to resize it or else to move it. */
+  onGrab: (resizing: boolean) => void;
   /** An edge dragged `by` pixels, rightwards or downwards. */
   onStretch: (edge: Direction, by: number) => void;
   /** Whether a drag started now resizes instead of moves. */
@@ -130,7 +131,7 @@ export const useTileDrag = ({
         targets,
       };
       setDrag({ corner });
-      onGrab();
+      onGrab(corner !== undefined);
     },
   };
 };

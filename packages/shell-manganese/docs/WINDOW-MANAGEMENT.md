@@ -101,7 +101,8 @@ For how warping, browser-window focus and modifier drags work, see
   half of a target puts it on that side; the center swaps the two. Dropping
   over nothing does nothing. See `tree/drop.ts`.
 - **Meta+right-drag** or **Meta+Shift+drag** resizes from the
-  corner nearest the pointer. See `tree/stretch.ts`.
+  corner nearest the pointer. See `tree/stretch.ts`. Unlike a move, a resize
+  does not make the window transparent.
 - **Shared edges resize without a modifier**, over the window's border and the
   gap beside it (`tiled/borders.ts`).
 - Fullscreen windows and hidden tabs cannot be dragged.
