@@ -130,6 +130,15 @@ const fileChooser = (id: number, body: object = {}) => ({
 /** Lets the picker's listings resolve. */
 const listed = () => act(() => Promise.resolve());
 
+/** Lets the applications' desktop entries be read. */
+const named = () =>
+  act(
+    () =>
+      new Promise((resolve) => {
+        setTimeout(resolve, 0);
+      }),
+  );
+
 const remoteDesktop = (id: number, clipboard: boolean) => ({
   app_id: "org.example.Remote",
   body: {
@@ -346,6 +355,14 @@ describe(PortalDialogs, () => {
       expect(screen.getByText("An application asks")).toBeInTheDocument();
     });
 
+    it("names the application by its desktop entry", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} systemOf={desktop()} />);
+      host.push([{ ...access(1), app_id: "firefox" }]);
+
+      expect(await screen.findByText("Firefox asks")).toBeInTheDocument();
+    });
+
     it("puts the dialog over the screen it is given", () => {
       const host = new FakeHost();
       render(
@@ -476,10 +493,11 @@ describe(PortalDialogs, () => {
       ).toStartWith("blob:");
     });
 
-    it("shows a launcher's icon, name and address", () => {
+    it("shows a launcher's icon, name and address", async () => {
       const host = new FakeHost();
       render(<PortalDialogs host={host.host} systemOf={desktop()} />);
       host.push([launcher(1)]);
+      await named();
 
       expect(screen.getByRole("dialog")).toHaveTextContent(
         "org.example.Browser wants to add an app",
@@ -491,18 +509,20 @@ describe(PortalDialogs, () => {
       ).toBe("data:image/png;base64,iVBORw==");
     });
 
-    it("keeps a launcher's name when it may not be changed", () => {
+    it("keeps a launcher's name when it may not be changed", async () => {
       const host = new FakeHost();
       render(<PortalDialogs host={host.host} systemOf={desktop()} />);
       host.push([launcher(1, { editable_name: false })]);
+      await named();
 
       expect(screen.getByLabelText("Name")).toHaveAttribute("readonly");
     });
 
-    it("lists the USB devices an application asks for", () => {
+    it("lists the USB devices an application asks for", async () => {
       const host = new FakeHost();
       render(<PortalDialogs host={host.host} systemOf={desktop()} />);
       host.push([usb(1)]);
+      await named();
 
       expect(screen.getByRole("dialog")).toHaveTextContent(
         "org.example.Keys wants to use USB devices",
@@ -784,7 +804,7 @@ describe(PortalDialogs, () => {
       expect(host.answers).toEqual([[1, { kind: "canceled" }]]);
     });
 
-    it("leaves an inhibitor alone and asks what comes after it", () => {
+    it("leaves an inhibitor alone and asks what comes after it", async () => {
       const host = new FakeHost();
       render(<PortalDialogs host={host.host} systemOf={desktop()} />);
       host.push([
@@ -796,6 +816,7 @@ describe(PortalDialogs, () => {
         },
         access(6),
       ]);
+      await named();
 
       expect(host.answers).toEqual([]);
       expect(screen.getByRole("dialog")).toHaveTextContent("Use the camera?");
@@ -1287,6 +1308,41 @@ describe(PortalDialogs, () => {
         "Sharing: us.zoom.Zoom — Notes, Untitled window, Screen drm-1, Region",
         "screenshot: An application",
       ]);
+    });
+
+    it("names a session's application by its desktop entry, with its icon", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} systemOf={desktop()} />);
+      host.push([], [{ ...inputCapture(6), app_id: "firefox" }]);
+
+      expect(
+        await screen.findByText("Input capture: Firefox — keyboard, pointer"),
+      ).toBeInTheDocument();
+      expect(screen.getByRole("presentation")).toHaveAttribute(
+        "src",
+        "data:image/svg+xml;base64,PHN2Zy8+",
+      );
+    });
+
+    it("leaves screen casts out when the shell shows them", () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} omitScreenCasts />);
+      host.push(
+        [],
+        [
+          inputCapture(6),
+          {
+            app_id: "us.zoom.Zoom",
+            body: { sources: [] },
+            id: 7,
+            kind: "screen_cast",
+          },
+        ],
+      );
+
+      expect(
+        screen.getAllByRole("listitem").map((item) => item.textContent),
+      ).toEqual(["Input capture: org.example.Barrier — keyboard, pointerStop"]);
     });
 
     it("stops a session", async () => {

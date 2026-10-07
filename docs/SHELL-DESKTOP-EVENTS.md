@@ -136,8 +136,13 @@ import { PortalDialogs } from "@domicile-desktop/component-library/PortalDialogs
   shell only shows it ("Editor is preventing logout"). The compositor refuses
   answers to it.
 - It also shows each running screen cast, remote desktop or input capture
-  session, with a Stop button. Manganese's bar also has a `Sharing` item for
-  screen casts.
+  session, with a Stop button. Pass `omitScreenCasts` when the shell shows
+  screen casts itself, as manganese's `Sharing` bar item does.
+- Dialogs and the indicator name an application by its desktop entry, with
+  its icon, else by its app id; no app id is "An application".
+  `useApps` in `@domicile-desktop/component-library/useApps` does the same for
+  a shell's own UI, and `sourceName` in `./source-name` names a screen cast's
+  sources.
 - `PortalDialogs` also fires the chords apps hold. `shellChords` are the
   shell's own, which a review flags as taken.
 - Without React, `watchPortalRequests` and `answerPortalRequest` in
@@ -149,6 +154,8 @@ import { PortalDialogs } from "@domicile-desktop/component-library/PortalDialogs
   waiting until it gives up.
 - The compositor refuses answers while the desktop is locked.
 - `watchPortalWallpaper` gives the pictures applications set for the
-  background and the lock screen, as paths. `usePictureUrl` in
+  background and the lock screen, as paths; `usePortalWallpaper` in
+  `@domicile-desktop/component-library/usePortalWallpaper` is the hook.
+  `usePictureUrl` in
   `@domicile-desktop/component-library/usePictureUrl` turns a path into a URL
   for an `<img>`.

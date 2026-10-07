@@ -1,5 +1,8 @@
 import { Button } from "@domicile-desktop/component-library/Button";
 import { Popover } from "@domicile-desktop/component-library/Popover";
+import { sourceName } from "@domicile-desktop/component-library/source-name";
+import type { App } from "@domicile-desktop/component-library/useApps";
+import { useApps } from "@domicile-desktop/component-library/useApps";
 import type {
   Captured,
   Capturing,
@@ -11,6 +14,7 @@ import {
   stopCapturing,
   watchCapturing,
 } from "@domicile-desktop/sdk/portal";
+import type { System } from "@domicile-desktop/sdk/system";
 import { ScreencastIcon } from "@phosphor-icons/react/dist/ssr/Screencast";
 import { useEffect, useState } from "react";
 
@@ -19,6 +23,8 @@ import { css } from "../../styled-system/css";
 type Props = {
   /** The desktop whose captures to show. */
   host: PortalHost;
+  /** How it reads applications' desktop entries. */
+  system: System;
 };
 
 /** A running screen cast. */
@@ -29,8 +35,12 @@ type ScreenCast = Extract<Capturing, { kind: CapturingKind.ScreenCast }>;
  * through the ScreenCast portal. Its panel lists who records what, each with
  * a button that stops it. Input sessions are left to `<PortalDialogs />`.
  */
-export const Sharing = ({ host }: Props) => {
+export const Sharing = ({ host, system }: Props) => {
   const [capturing, setCapturing] = useState<readonly ScreenCast[]>([]);
+  const apps = useApps(
+    system,
+    capturing.map((capture) => capture.appId),
+  );
 
   useEffect(
     () =>
@@ -47,7 +57,7 @@ export const Sharing = ({ host }: Props) => {
       tone="overPhoto"
       trigger={
         <button
-          aria-label={triggerLabel(capturing)}
+          aria-label={triggerLabel(apps, capturing)}
           className={triggerStyles}
           type="button"
         >
@@ -58,7 +68,7 @@ export const Sharing = ({ host }: Props) => {
       <ul className={listStyles}>
         {capturing.map((capture) => (
           <li className={captureStyles} key={capture.id}>
-            <span className={whoStyles}>{appName(capture.appId)}</span>
+            <Who app={apps(capture.appId)} />
             <ul className={sourcesStyles}>
               {capture.sources.map((source) => (
                 <li key={sourceKey(source)}>{sourceName(source)}</li>
@@ -80,29 +90,28 @@ export const Sharing = ({ host }: Props) => {
   );
 };
 
-const triggerLabel = (capturing: readonly ScreenCast[]): string => {
+/** The recording application's icon, when it has one, and name. */
+const Who = ({ app }: { app: App }) => (
+  <span className={whoStyles}>
+    {app.icon !== undefined && (
+      <img alt="" className={iconStyles} src={app.icon} />
+    )}
+    {app.name}
+  </span>
+);
+
+const triggerLabel = (
+  apps: (appId: string) => App,
+  capturing: readonly ScreenCast[],
+): string => {
   const [only] = capturing;
   return capturing.length === 1 && only !== undefined
-    ? `${appName(only.appId)} is sharing`
+    ? `${apps(only.appId).name} is sharing`
     : `${capturing.length} applications are sharing`;
 };
 
 const isScreenCast = (session: Capturing): session is ScreenCast =>
   session.kind === CapturingKind.ScreenCast;
-
-const appName = (appId: string): string =>
-  appId === "" ? "An application" : appId;
-
-const sourceName = (source: Captured): string => {
-  switch (source.kind) {
-    case CapturedKind.Window:
-      return source.title === "" ? "Untitled window" : source.title;
-    case CapturedKind.Monitor:
-      return `Screen ${source.name}`;
-    case CapturedKind.Region:
-      return "Region";
-  }
-};
 
 const sourceKey = (source: Captured): string => {
   switch (source.kind) {
@@ -151,7 +160,14 @@ const captureStyles = css({
   gap: 1,
 });
 
-const whoStyles = css({ fontWeight: "semibold" });
+const whoStyles = css({
+  alignItems: "center",
+  display: "flex",
+  fontWeight: "semibold",
+  gap: 2,
+});
+
+const iconStyles = css({ blockSize: 4, flexShrink: 0, inlineSize: 4 });
 
 const sourcesStyles = css({
   fontSize: "sm",

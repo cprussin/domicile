@@ -3,6 +3,7 @@ import { fireGlobalShortcuts } from "@domicile-desktop/sdk/global-shortcuts";
 import type { Capturing, PortalRequest } from "@domicile-desktop/sdk/portal";
 import {
   answerPortalRequest,
+  CapturingKind,
   PortalAnswer,
   PortalKind,
   stopCapturing,
@@ -13,10 +14,10 @@ import type { System, SystemHost } from "@domicile-desktop/sdk/system";
 import { system } from "@domicile-desktop/sdk/system";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { listDirectory } from "../FilePicker/list-directory";
+import { useApps } from "../useApps/useApps";
 import { AccessDialog } from "./AccessDialog";
 import { AccountDialog } from "./AccountDialog";
 import { AppChooserDialog } from "./AppChooserDialog";
-import { appName } from "./app-name";
 import { CapturingIndicator } from "./CapturingIndicator";
 import { FileChooserDialog } from "./FileChooserDialog";
 import { GlobalShortcutsDialog } from "./GlobalShortcutsDialog";
@@ -41,6 +42,11 @@ type Props = {
    * `DisplayProvider`; without it, a dialog is centered on the whole page.
    */
   screen?: string | undefined;
+  /**
+   * Leave screen casts out of the capturing indicator, for a shell that shows
+   * them itself.
+   */
+  omitScreenCasts?: boolean | undefined;
   /** How dialogs read the desktop's files, for tests. */
   systemOf?: typeof system | undefined;
   /**
@@ -62,6 +68,7 @@ type Props = {
  */
 export const PortalDialogs = ({
   host,
+  omitScreenCasts = false,
   screen,
   screenOf,
   shellChords = NONE,
@@ -74,6 +81,10 @@ export const PortalDialogs = ({
     [files],
   );
   const [sessions, setSessions] = useState<readonly Capturing[]>([]);
+  const apps = useApps(files, [
+    ...requests.map((request) => request.appId),
+    ...sessions.map((session) => session.appId),
+  ]);
 
   useEffect(() => watchPortalRequests(host, setRequests), [host]);
   useEffect(() => watchCapturing(host, setSessions), [host]);
@@ -91,8 +102,15 @@ export const PortalDialogs = ({
   return (
     <>
       <CapturingIndicator
+        apps={apps}
         screen={screen}
-        sessions={sessions}
+        sessions={
+          omitScreenCasts
+            ? sessions.filter(
+                (session) => session.kind !== CapturingKind.ScreenCast,
+              )
+            : sessions
+        }
         stop={(id) => {
           stopCapturing(host, id);
         }}
@@ -102,6 +120,7 @@ export const PortalDialogs = ({
           answer={(answer) => {
             answerPortalRequest(host, shown.id, answer);
           }}
+          asker={apps(shown.appId).name}
           key={shown.id}
           list={list}
           request={shown}
@@ -117,6 +136,7 @@ export const PortalDialogs = ({
 /** The dialog for `request`'s kind. */
 const Dialog = ({
   answer,
+  asker,
   list,
   request,
   screen,
@@ -124,6 +144,7 @@ const Dialog = ({
   system: files,
 }: {
   answer: (answer: PortalAnswer) => void;
+  asker: string;
   list: (path: string) => Promise<readonly string[]>;
   request: PortalRequest;
   screen: string | undefined;
@@ -135,7 +156,7 @@ const Dialog = ({
       return (
         <AccessDialog
           answer={answer}
-          asker={appName(request.appId)}
+          asker={asker}
           body={request.body}
           screen={screen}
         />
@@ -144,7 +165,7 @@ const Dialog = ({
       return (
         <RemoteDesktopDialog
           answer={answer}
-          asker={appName(request.appId)}
+          asker={asker}
           body={request.body}
           screen={screen}
         />
@@ -153,7 +174,7 @@ const Dialog = ({
       return (
         <InputCaptureDialog
           answer={answer}
-          asker={appName(request.appId)}
+          asker={asker}
           body={request.body}
           screen={screen}
         />
@@ -162,7 +183,7 @@ const Dialog = ({
       return (
         <AppChooserDialog
           answer={answer}
-          asker={appName(request.appId)}
+          asker={asker}
           body={request.body}
           screen={screen}
           system={files}
@@ -181,7 +202,7 @@ const Dialog = ({
       return (
         <AccountDialog
           answer={answer}
-          asker={appName(request.appId)}
+          asker={asker}
           body={request.body}
           screen={screen}
         />
@@ -190,7 +211,7 @@ const Dialog = ({
       return (
         <GlobalShortcutsDialog
           answer={answer}
-          asker={appName(request.appId)}
+          asker={asker}
           body={request.body}
           screen={screen}
           shellChords={shellChords}
@@ -200,7 +221,7 @@ const Dialog = ({
       return (
         <WallpaperDialog
           answer={answer}
-          asker={appName(request.appId)}
+          asker={asker}
           body={request.body}
           files={files}
           screen={screen}
@@ -210,7 +231,7 @@ const Dialog = ({
       return (
         <LauncherDialog
           answer={answer}
-          asker={appName(request.appId)}
+          asker={asker}
           body={request.body}
           screen={screen}
         />
@@ -219,7 +240,7 @@ const Dialog = ({
       return (
         <UsbDialog
           answer={answer}
-          asker={appName(request.appId)}
+          asker={asker}
           body={request.body}
           screen={screen}
         />
@@ -228,7 +249,7 @@ const Dialog = ({
       return (
         <ScreenCastDialog
           answer={answer}
-          asker={appName(request.appId)}
+          asker={asker}
           body={request.body}
           screen={screen}
         />
@@ -237,7 +258,7 @@ const Dialog = ({
       return (
         <PrintDialog
           answer={answer}
-          asker={appName(request.appId)}
+          asker={asker}
           body={request.body}
           screen={screen}
         />
@@ -246,7 +267,7 @@ const Dialog = ({
       return (
         <ScreenshotDialog
           answer={answer}
-          asker={appName(request.appId)}
+          asker={asker}
           body={request.body}
           screen={screen}
         />
@@ -255,7 +276,7 @@ const Dialog = ({
       return (
         <PickColorDialog
           answer={answer}
-          asker={appName(request.appId)}
+          asker={asker}
           body={request.body}
           screen={screen}
         />

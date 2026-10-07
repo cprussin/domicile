@@ -1,9 +1,20 @@
 import { describe, expect, it } from "bun:test";
 import type { PortalHost } from "@domicile-desktop/sdk/portal";
-import { act, render, screen } from "@testing-library/react";
+import { fakeSystem } from "@domicile-desktop/system-apps/fake-system";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { Sharing } from "./Sharing";
+
+// Created outside render, since a new system reads again.
+const SYSTEM = fakeSystem(
+  {
+    "/share/applications/us.zoom.Zoom.desktop":
+      "[Desktop Entry]\nType=Application\nName=Zoom\nExec=zoom\nIcon=zoom\n",
+    "/share/icons/hicolor/scalable/apps/zoom.svg": "<svg/>",
+  },
+  () => ({ code: 0, stderr: "", stdout: "XDG_DATA_DIRS=/share\0" }),
+);
 
 /** A desktop that pushes `portal_requests` lines and records answers. */
 class FakeHost implements PortalHost {
@@ -69,7 +80,7 @@ const REMOTE = {
 describe("Sharing", () => {
   it("shows nothing while nothing records the desktop", () => {
     const host = new FakeHost();
-    render(<Sharing host={host} />);
+    render(<Sharing host={host} system={SYSTEM} />);
     host.capture([]);
 
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
@@ -77,31 +88,34 @@ describe("Sharing", () => {
 
   it("leaves sessions that only take input to the dialogs' indicator", () => {
     const host = new FakeHost();
-    render(<Sharing host={host} />);
+    render(<Sharing host={host} system={SYSTEM} />);
     host.capture([REMOTE]);
 
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 
-  it("says who is recording", () => {
+  it("says who is recording, by the application's desktop entry", async () => {
     const host = new FakeHost();
-    render(<Sharing host={host} />);
+    render(<Sharing host={host} system={SYSTEM} />);
     host.capture([ZOOM]);
 
     expect(
-      screen.getByRole("button", { name: "us.zoom.Zoom is sharing" }),
+      await screen.findByRole("button", { name: "Zoom is sharing" }),
     ).toBeInTheDocument();
   });
 
   it("lists what each application records, and stops it", async () => {
     const host = new FakeHost();
-    render(<Sharing host={host} />);
+    render(<Sharing host={host} system={SYSTEM} />);
     host.capture([ZOOM]);
     await userEvent.click(
-      screen.getByRole("button", { name: "us.zoom.Zoom is sharing" }),
+      await screen.findByRole("button", { name: "Zoom is sharing" }),
     );
 
     expect(await screen.findByText("Notes")).toBeInTheDocument();
+    expect(
+      within(screen.getByText("Zoom")).getByRole("presentation"),
+    ).toHaveAttribute("src", "data:image/svg+xml;base64,PHN2Zy8+");
     expect(screen.getByText("Untitled window")).toBeInTheDocument();
     expect(screen.getByText("Screen drm-1")).toBeInTheDocument();
     expect(screen.getByText("Region")).toBeInTheDocument();
@@ -112,7 +126,7 @@ describe("Sharing", () => {
 
   it("goes away when the capture ends", () => {
     const host = new FakeHost();
-    render(<Sharing host={host} />);
+    render(<Sharing host={host} system={SYSTEM} />);
     host.capture([ZOOM]);
     host.capture([]);
 

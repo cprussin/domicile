@@ -30,7 +30,8 @@ Each export is `@domicile-desktop/component-library/<name>`.
 | `list-walk` | Arrow-key movement of a highlight through a list while focus stays in an input. |
 | `ModalDialog` | Modal dialog with `title`, `footer` and `trigger` props. |
 | `ContextMenu` | Menu opened at a point, such as a right click's. |
-| `PortalDialogs` | Every dialog applications ask for through the desktop portal. Mount one per shell with `host={domicile}`; it refuses kinds it cannot draw. See [PORTALS.md](/docs/architecture/PORTALS.md). |
+| `PortalDialogs` | Every dialog applications ask for through the desktop portal. Mount one per shell with `host={domicile}`; it refuses kinds it cannot draw. `omitScreenCasts` leaves screen casts out of its indicator. See [PORTALS.md](/docs/architecture/PORTALS.md). |
+| `source-name` | `sourceName`: how a screen cast's source is named. |
 | `Popover` | Non-modal panel anchored to the control that opened it. |
 | `Provider` | base-ui `DirectionProvider` wrapper. Every app roots its tree in it. |
 | `Screen` | Renders its children once per selected display. |
@@ -46,7 +47,9 @@ Each export is `@domicile-desktop/component-library/<name>`.
 | `Toaster` | Stack of toasts in a corner. The caller renders each card. |
 | `ThemeProvider` | Light/dark theme state. Sets `data-theme` on `<html>`. |
 | `ThemeSwitch` | Button that flips the theme. |
+| `useApps` | Hook: names and icons of applications by app id, from their desktop entries. |
 | `usePictureUrl` | Hook: a URL an `<img>` can show for a file read through the SDK's `system`. |
+| `usePortalWallpaper` | Hook: the pictures applications set through the Wallpaper portal, as paths. |
 | `theme-core`, `theme-source`, `standalone-theme-source` | Theme types and sources. Use the standalone source where there is no compositor, such as Storybook. |
 | `control-sizes` | `Size` type and `SIZES` array for sized controls. |
 | `spacing` | rem value of one spacing step, for runtime math. |

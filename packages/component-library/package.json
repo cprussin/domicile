@@ -56,6 +56,7 @@
     "./SlideOver": "./src/SlideOver/SlideOver.tsx",
     "./Slider": "./src/Slider/Slider.tsx",
     "./Switch": "./src/Switch/Switch.tsx",
+    "./source-name": "./src/PortalDialogs/source-name.ts",
     "./spacing": "./src/spacing.ts",
     "./standalone-theme-source": "./src/ThemeSwitch/standalone-theme-source.ts",
     "./TabRail": "./src/TabRail/TabRail.tsx",
@@ -66,7 +67,9 @@
     "./Toaster": "./src/Toaster/Toaster.tsx",
     "./theme-core": "./src/ThemeSwitch/theme-core.ts",
     "./theme-source": "./src/ThemeSwitch/theme-source.ts",
+    "./useApps": "./src/useApps/useApps.ts",
     "./usePictureUrl": "./src/usePictureUrl/usePictureUrl.ts",
+    "./usePortalWallpaper": "./src/usePortalWallpaper/usePortalWallpaper.ts",
     "./vite-shell": "./src/vite-shell.ts"
   },
   "files": [

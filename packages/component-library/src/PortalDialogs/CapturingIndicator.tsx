@@ -1,13 +1,15 @@
-import type { Captured, Capturing } from "@domicile-desktop/sdk/portal";
-import { CapturedKind, CapturingKind } from "@domicile-desktop/sdk/portal";
+import type { Capturing } from "@domicile-desktop/sdk/portal";
+import { CapturingKind } from "@domicile-desktop/sdk/portal";
 import { css } from "../../styled-system/css";
 import { flex, hstack } from "../../styled-system/patterns";
 import { Button } from "../Button/Button";
 import { useScreenRegion } from "../Screen/DisplayProvider";
-import { appName } from "./app-name";
+import type { App } from "../useApps/useApps";
 import { deviceNames } from "./device-names";
+import { sourceName } from "./source-name";
 
 type Props = {
+  apps: (appId: string) => App;
   sessions: readonly Capturing[];
   stop: (id: number) => void;
   screen: string | undefined;
@@ -17,14 +19,14 @@ type Props = {
  * A row per session that records the screen or controls or captures input,
  * naming its application and what it holds, with a button that ends it.
  */
-export const CapturingIndicator = ({ screen, sessions, stop }: Props) => {
+export const CapturingIndicator = ({ apps, screen, sessions, stop }: Props) => {
   const region = useScreenRegion(screen);
   return sessions.length === 0 ? undefined : (
     <div className={regionStyles} style={region}>
       <ul aria-label="Sharing and remote control" className={listStyles}>
         {sessions.map((session) => (
           <li className={itemStyles} key={session.id}>
-            <span>{summary(session)}</span>
+            <AppRow app={apps(session.appId)} session={session} />
             <Button
               onClick={() => {
                 stop(session.id);
@@ -62,6 +64,8 @@ const listStyles = flex({
   position: "absolute",
 });
 
+const iconStyles = css({ blockSize: 4, flexShrink: 0, inlineSize: 4 });
+
 const itemStyles = hstack({
   backgroundColor: "card",
   border: "1px solid {colors.warning}",
@@ -76,9 +80,18 @@ const itemStyles = hstack({
   pointerEvents: "auto",
 });
 
+/** A session's application icon, when it has one, and what it holds. */
+const AppRow = ({ app, session }: { app: App; session: Capturing }) => (
+  <>
+    {app.icon !== undefined && (
+      <img alt="" className={iconStyles} src={app.icon} />
+    )}
+    <span>{summary(session, app.name)}</span>
+  </>
+);
+
 /** What a session's row says. */
-const summary = (session: Capturing): string => {
-  const name = appName(session.appId);
+const summary = (session: Capturing, name: string): string => {
   switch (session.kind) {
     case CapturingKind.RemoteDesktop:
       return `Remote control: ${name} — ${[
@@ -91,17 +104,5 @@ const summary = (session: Capturing): string => {
       return `Sharing: ${name} — ${session.sources.map((source) => sourceName(source)).join(", ")}`;
     case CapturingKind.Unknown:
       return `${session.wireKind}: ${name}`;
-  }
-};
-
-/** How a row names a recorded source. */
-const sourceName = (source: Captured): string => {
-  switch (source.kind) {
-    case CapturedKind.Window:
-      return source.title === "" ? "Untitled window" : source.title;
-    case CapturedKind.Monitor:
-      return `Screen ${source.name}`;
-    case CapturedKind.Region:
-      return "Region";
   }
 };

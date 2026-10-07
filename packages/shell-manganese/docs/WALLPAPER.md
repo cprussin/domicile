@@ -20,5 +20,6 @@ A photograph behind the whole desktop, changing every minute. Source:
 - To use other photos, edit `photos.ts`.
 - **A picture an application set** through the Wallpaper portal replaces the
   rotation on every screen, and the lock screen shows its own over the blur.
-  Both come from `usePortalWallpaper` and are read with `usePictureUrl`. See
+  Both come from `usePortalWallpaper` and are read with `usePictureUrl`, both
+  in `@domicile-desktop/component-library`. See
   [PORTALS.md](/docs/architecture/PORTALS.md).
