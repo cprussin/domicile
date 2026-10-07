@@ -242,6 +242,8 @@ impl Asked {
             | PortalAnswer::Stop
             | PortalAnswer::DynamicLauncher { .. }
             | PortalAnswer::GlobalShortcuts { .. }
+            | PortalAnswer::Screenshot { .. }
+            | PortalAnswer::PickColor { .. }
             | PortalAnswer::Pressed
             | PortalAnswer::Refused => (2, HashMap::new()),
         }

@@ -22,9 +22,11 @@ import { FileChooserDialog } from "./FileChooserDialog";
 import { GlobalShortcutsDialog } from "./GlobalShortcutsDialog";
 import { InputCaptureDialog } from "./InputCaptureDialog";
 import { LauncherDialog } from "./LauncherDialog";
+import { PickColorDialog } from "./PickColorDialog";
 import { PrintDialog } from "./PrintDialog";
 import { RemoteDesktopDialog } from "./RemoteDesktopDialog";
 import { ScreenCastDialog } from "./ScreenCastDialog";
+import { ScreenshotDialog } from "./ScreenshotDialog";
 import { UsbDialog } from "./UsbDialog";
 import { WallpaperDialog } from "./WallpaperDialog";
 
@@ -240,6 +242,24 @@ const Dialog = ({
           screen={screen}
         />
       );
+    case PortalKind.Screenshot:
+      return (
+        <ScreenshotDialog
+          answer={answer}
+          asker={appName(request.appId)}
+          body={request.body}
+          screen={screen}
+        />
+      );
+    case PortalKind.PickColor:
+      return (
+        <PickColorDialog
+          answer={answer}
+          asker={appName(request.appId)}
+          body={request.body}
+          screen={screen}
+        />
+      );
     case PortalKind.Inhibit:
     case PortalKind.Unknown:
       return undefined;
@@ -274,6 +294,8 @@ const isAsked = (request: PortalRequest): boolean => {
     case PortalKind.Wallpaper:
     case PortalKind.ScreenCast:
     case PortalKind.Print:
+    case PortalKind.Screenshot:
+    case PortalKind.PickColor:
       return true;
     case PortalKind.Inhibit:
     case PortalKind.Unknown:

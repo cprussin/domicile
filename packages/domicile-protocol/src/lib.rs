@@ -601,6 +601,12 @@ pub enum PortalKind {
     ScreenCast(ScreenCastDialog),
     /// `org.freedesktop.impl.portal.Print`: pick a printer and its options.
     Print(PrintDialog),
+    /// `org.freedesktop.impl.portal.Screenshot`'s interactive `Screenshot`:
+    /// pick the area of a frozen desk to keep.
+    Screenshot(FrozenDesk),
+    /// `org.freedesktop.impl.portal.Screenshot`'s `PickColor`: pick a pixel
+    /// of a frozen desk.
+    PickColor(FrozenDesk),
 }
 
 impl PortalKind {
@@ -641,6 +647,10 @@ impl PortalKind {
                         .iter()
                         .all(|range| 1 <= range.first && range.first <= range.last)
             }
+            (PortalKind::Screenshot(desk), PortalAnswer::Screenshot { area }) => desk.holds(area),
+            (PortalKind::PickColor(desk), PortalAnswer::PickColor { x, y }) => {
+                *x < desk.width && *y < desk.height
+            }
             // A stop answers a running session and a press a bound shortcut,
             // never a request.
             (
@@ -654,6 +664,8 @@ impl PortalKind {
                 | PortalAnswer::DynamicLauncher { .. }
                 | PortalAnswer::ScreenCast { .. }
                 | PortalAnswer::Print { .. }
+                | PortalAnswer::Screenshot { .. }
+                | PortalAnswer::PickColor { .. }
                 | PortalAnswer::Stop
                 | PortalAnswer::Pressed,
             ) => false,
@@ -939,6 +951,52 @@ pub struct TakenChord {
     pub app_id: String,
 }
 
+/// A frame of the whole desk, frozen while the user picks from it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FrozenDesk {
+    /// The frame, as a `data:` URL of a PNG.
+    pub frame: String,
+    /// The frame's size in pixels. Every rectangle here and in the answer is
+    /// in these pixels.
+    pub width: u32,
+    pub height: u32,
+    pub monitors: Vec<ShotArea>,
+    /// The open windows, by title.
+    pub windows: Vec<ShotArea>,
+}
+
+impl FrozenDesk {
+    /// Whether `area` is a non-empty rectangle inside the frame.
+    fn holds(&self, area: &ShotRect) -> bool {
+        area.width > 0
+            && area.height > 0
+            && area
+                .x
+                .checked_add(area.width)
+                .is_some_and(|right| right <= self.width)
+            && area
+                .y
+                .checked_add(area.height)
+                .is_some_and(|bottom| bottom <= self.height)
+    }
+}
+
+/// A named part of a [`FrozenDesk`]: a monitor or a window.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ShotArea {
+    pub name: String,
+    pub area: ShotRect,
+}
+
+/// A rectangle of a [`FrozenDesk`]'s frame, in its pixels.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ShotRect {
+    pub x: u32,
+    pub y: u32,
+    pub width: u32,
+    pub height: u32,
+}
+
 /// The chord the user chose for one shortcut of a [`ShortcutsDialog`].
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ChosenTrigger {
@@ -1148,6 +1206,10 @@ pub enum PortalAnswer {
     Stop,
     /// The chords the user chose in a [`PortalKind::GlobalShortcuts`].
     GlobalShortcuts { triggers: Vec<ChosenTrigger> },
+    /// The area of a [`PortalKind::Screenshot`] the user kept.
+    Screenshot { area: ShotRect },
+    /// The pixel of a [`PortalKind::PickColor`] the user picked.
+    PickColor { x: u32, y: u32 },
     /// The [`BoundShortcut`] with this id fired. Answers no request.
     Pressed,
     /// The user dismissed the dialog, or denied it.
@@ -1170,6 +1232,8 @@ impl PortalAnswer {
             | PortalAnswer::GlobalShortcuts { .. }
             | PortalAnswer::ScreenCast { .. }
             | PortalAnswer::Print { .. }
+            | PortalAnswer::Screenshot { .. }
+            | PortalAnswer::PickColor { .. }
             | PortalAnswer::Stop => 0,
             PortalAnswer::Canceled => 1,
             PortalAnswer::Refused | PortalAnswer::Pressed => 2,

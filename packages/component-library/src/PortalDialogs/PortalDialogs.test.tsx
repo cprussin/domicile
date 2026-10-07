@@ -2,7 +2,14 @@ import { describe, expect, it } from "bun:test";
 import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import type { Node } from "@domicile-desktop/system-apps/fake-system";
 import { fakeSystem } from "@domicile-desktop/system-apps/fake-system";
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { DisplayProvider } from "../Screen/DisplayProvider";
@@ -242,6 +249,29 @@ const screenCast = (multiple = false) => ({
   id: 5,
   kind: "screen_cast",
 });
+
+/** A 300x100 frozen desk with one monitor and one window. */
+const frozen = (id: number, kind: "screenshot" | "pick_color") => ({
+  app_id: "org.example.Shooter",
+  body: {
+    frame: "data:image/png;base64,AA==",
+    height: 100,
+    monitors: [{ area: { height: 100, width: 300, x: 0, y: 0 }, name: "DP-1" }],
+    width: 300,
+    windows: [
+      { area: { height: 40, width: 30, x: 10, y: 20 }, name: "Terminal" },
+    ],
+  },
+  id,
+  kind,
+});
+
+/** Draws `element` 150x50 at (10, 20), as layout would. */
+const drawnAtHalfSize = (element: HTMLElement): HTMLElement => {
+  element.getBoundingClientRect = () =>
+    DOMRect.fromRect({ height: 50, width: 150, x: 10, y: 20 });
+  return element;
+};
 
 describe(PortalDialogs, () => {
   describe("rendering", () => {
@@ -859,7 +889,7 @@ describe(PortalDialogs, () => {
     it("refuses a kind it has no dialog for", () => {
       const host = new FakeHost();
       render(<PortalDialogs host={host.host} />);
-      host.push([{ app_id: "", body: {}, id: 4, kind: "screenshot" }]);
+      host.push([{ app_id: "", body: {}, id: 4, kind: "wobble" }]);
 
       expect(host.answers).toEqual([[4, { kind: "refused" }]]);
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -1059,6 +1089,141 @@ describe(PortalDialogs, () => {
       const host = new FakeHost();
       render(<PortalDialogs host={host.host} />);
       host.push([print(1, twoPrinters)]);
+      await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+      expect(host.answers).toEqual([[1, { kind: "canceled" }]]);
+    });
+  });
+
+  describe("screenshot", () => {
+    it("shows the frozen desk and offers it whole, each monitor and each window", () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} />);
+      host.push([frozen(1, "screenshot")]);
+
+      expect(screen.getByRole("img", { name: "The desk" })).toHaveAttribute(
+        "src",
+        "data:image/png;base64,AA==",
+      );
+      expect(screen.getByRole("dialog")).toHaveTextContent(
+        "org.example.Shooter asks",
+      );
+      expect(
+        screen.getByRole("button", { name: "Whole desk" }),
+      ).toHaveAttribute("aria-pressed", "true");
+      expect(screen.getByRole("button", { name: "DP-1" })).toHaveAttribute(
+        "aria-pressed",
+        "false",
+      );
+      expect(
+        screen.getByRole("button", { name: "Terminal" }),
+      ).toBeInTheDocument();
+    });
+
+    it("saves the whole desk", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} />);
+      host.push([frozen(1, "screenshot")]);
+      await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+      expect(host.answers).toEqual([
+        [
+          1,
+          {
+            area: { height: 100, width: 300, x: 0, y: 0 },
+            kind: "screenshot",
+          },
+        ],
+      ]);
+    });
+
+    it("saves the window picked", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} />);
+      host.push([frozen(1, "screenshot")]);
+      await userEvent.click(screen.getByRole("button", { name: "Terminal" }));
+      await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+      expect(host.answers).toEqual([
+        [
+          1,
+          { area: { height: 40, width: 30, x: 10, y: 20 }, kind: "screenshot" },
+        ],
+      ]);
+    });
+
+    it("saves an area dragged on the desk", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} />);
+      host.push([frozen(1, "screenshot")]);
+      const desk = drawnAtHalfSize(
+        screen.getByRole("group", { name: "Drag to pick an area" }),
+      );
+      fireEvent.pointerDown(desk, { clientX: 60, clientY: 30 });
+      fireEvent.pointerMove(desk, { clientX: 20, clientY: 45 });
+      fireEvent.pointerUp(desk, { clientX: 20, clientY: 45 });
+      await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+      expect(host.answers).toEqual([
+        [
+          1,
+          { area: { height: 31, width: 81, x: 20, y: 20 }, kind: "screenshot" },
+        ],
+      ]);
+    });
+
+    it("cancels", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} />);
+      host.push([frozen(1, "screenshot")]);
+      await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+      expect(host.answers).toEqual([[1, { kind: "canceled" }]]);
+    });
+  });
+
+  describe("pick color", () => {
+    it("starts at the middle of the frozen desk", () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} />);
+      host.push([frozen(1, "pick_color")]);
+
+      expect(
+        screen.getByRole("button", { name: "Pick the pixel at 150, 50" }),
+      ).toBeInTheDocument();
+      expect(screen.getByRole("img", { name: "The desk" })).toBeInTheDocument();
+    });
+
+    it("picks the pixel the arrow keys move to", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} />);
+      host.push([frozen(1, "pick_color")]);
+      screen.getByRole("button", { name: /^Pick the pixel/ }).focus();
+      await userEvent.keyboard("{ArrowRight}{ArrowRight}{ArrowUp}{Enter}");
+
+      expect(host.answers).toEqual([
+        [1, { kind: "pick_color", x: 152, y: 49 }],
+      ]);
+    });
+
+    it("picks the pixel clicked", () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} />);
+      host.push([frozen(1, "pick_color")]);
+      const desk = drawnAtHalfSize(
+        screen.getByRole("button", { name: /^Pick the pixel/ }),
+      );
+      fireEvent.pointerMove(desk, { clientX: 15, clientY: 69 });
+
+      expect(desk).toHaveAccessibleName("Pick the pixel at 10, 98");
+      fireEvent.click(desk, { clientX: 15, clientY: 69 });
+      expect(host.answers).toEqual([[1, { kind: "pick_color", x: 10, y: 98 }]]);
+    });
+
+    it("cancels", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} />);
+      host.push([frozen(1, "pick_color")]);
       await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
       expect(host.answers).toEqual([[1, { kind: "canceled" }]]);

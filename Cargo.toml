@@ -55,3 +55,5 @@ zbus = { version = "5.0", default-features = false, features = [
     "blocking-api",
 ] }
 libc = "0.2"
+# Encodes screenshots (see `domicile_host::screenshot`).
+png = "0.18"

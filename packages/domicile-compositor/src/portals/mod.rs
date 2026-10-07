@@ -61,6 +61,7 @@ mod remote_desktop;
 mod request;
 mod restore;
 mod screencast;
+mod screenshot;
 mod session;
 mod settings;
 #[cfg(test)]
@@ -88,6 +89,7 @@ use queue::Queue;
 use remote_desktop::{RemoteDesktop, Remotes};
 use restore::Tokens;
 use screencast::ScreenCast;
+use screenshot::{Screenshot, Shoot};
 use settings::{color_scheme, Appearance, Settings};
 use usb::Usb;
 use wallpaper::{Pictures, Wallpaper};
@@ -385,11 +387,13 @@ impl Backends {
     }
 }
 
-/// What the Account, Email, Lockdown, ScreenCast and Print interfaces start
-/// from.
+/// What the Account, Email, Lockdown, ScreenCast, Print and Screenshot
+/// interfaces start from.
 struct Starting {
     lockdown: LockdownConfig,
     screen_cast: ScreenCast,
+    /// Takes a frame of the desk, for `Screenshot`.
+    shoot: Shoot,
     /// Opens a `mailto:` URL.
     open: Open,
     /// Who the user is, for `Account`.
@@ -414,7 +418,7 @@ pub struct ScreenCasting {
 /// [`activation_environment`] for `ours` and `nested_in`. Portal notifications
 /// go to `notifications`; `spawn` starts a client, such as the mail client.
 /// Restore tokens and global shortcut choices are kept under
-/// `$XDG_STATE_HOME/domicile/`.
+/// `$XDG_STATE_HOME/domicile/`. Screenshots are taken through `casting`.
 ///
 /// Returns without waiting for the bus, so startup never blocks on D-Bus.
 #[allow(clippy::too_many_arguments)] // Each from a different part of the compositor.
@@ -459,6 +463,7 @@ pub fn serve(
     thread::spawn(move || {
         let starting = Starting {
             lockdown,
+            shoot: screenshot::shooting(casting.casting.clone()),
             screen_cast: screen_cast(&backends.queue, casting),
             open,
             user: account::the_user(),
@@ -791,6 +796,14 @@ fn export<'a>(
                 cups: starting.cups,
                 prepared: Mutex::default(),
             },
+        )?
+        .serve_at(
+            OBJECT_PATH,
+            Screenshot {
+                queue: Arc::clone(&backends.queue),
+                shoot: starting.shoot,
+                save: screenshot::in_pictures(),
+            },
         )
 }
 
@@ -977,6 +990,7 @@ mod tests {
                     ..LockdownConfig::default()
                 },
                 screen_cast: idle_screen_cast(&backends.queue),
+                shoot: Box::new(|| Box::pin(async { Err("no desk here".into()) })),
                 open,
                 user: Box::new(|| {
                     Box::pin(async {

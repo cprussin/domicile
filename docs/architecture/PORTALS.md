@@ -9,8 +9,9 @@ Make Domicile the session's only `xdg-desktop-portal` backend:
 Today the compositor implements `Settings`, `Access`, `AppChooser`,
 `FileChooser`, `Notification`, `Inhibit`, `RemoteDesktop`, `Clipboard`,
 `InputCapture`, `Account`, `Email`, `Lockdown`, `GlobalShortcuts`,
-`Background`, `Wallpaper`, `DynamicLauncher`, `Usb`, `Print` and
-`ScreenCast` of windows, and routes the rest to gtk. Sharing a monitor has no backend.
+`Background`, `Wallpaper`, `DynamicLauncher`, `Usb`, `Print`, `ScreenCast` of
+windows and `Screenshot`, and routes the rest to gtk. Sharing a monitor has no
+backend.
 
 ## Design
 
@@ -119,6 +120,18 @@ One request channel carries all dialogs. Each interface's backend builds on it.
 - **Multi-monitor regions use the highest density.** A stream has one scale,
   so a region spanning monitors is captured at the highest density it
   touches. Lower-density monitors lose nothing.
+- **A screenshot freezes the desk first.** Each `Screenshot` and `PickColor`
+  takes one frame of every monitor from the display captures, composed at the
+  highest density (`Casting::shoot`). The picker and the color picker draw that
+  frame, so they never capture themselves; the shell answers an area or a
+  pixel in frame pixels. Saved as a PNG under
+  `$XDG_PICTURES_DIR/Screenshots/`.
+  - A window is its area on the desk, so it shows what is over it. Its own
+    buffer is kept only while it is cast.
+  - The frontend checks the `PermissionStore` for a non-interactive
+    screenshot (`permission_store_checked`). Without that, the backend asks
+    through an `Access` dialog once per app and keeps the answer in the same
+    `screenshot` table.
 - **No print preview.** The portal sends the document only after the dialog
   closes, so there is nothing to preview. Gtk's backend has none either.
 - **Print speaks IPP itself.** `domicile_host::ipp` encodes the few message
@@ -215,7 +228,7 @@ Phase 2: capture.
 - [x] engine: `FrameSinkVideoCapturer` per display, dmabufs over the broker socket; monitor and region `Source`s
 - [x] ScreenCast of windows, with restore tokens and the sharing indicator
 - [ ] ScreenCast of monitors and regions: offer the engine's display `Source`s in the picker and `AvailableSourceTypes`
-- [ ] Screenshot and `PickColor`
+- [x] Screenshot and `PickColor`
 - [ ] Remove ROADMAP's "no screenshot or screencast portal" item
 
 Phase 3: input.

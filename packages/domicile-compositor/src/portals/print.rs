@@ -199,6 +199,8 @@ impl Print {
             | PortalAnswer::InputCapture
             | PortalAnswer::DynamicLauncher { .. }
             | PortalAnswer::ScreenCast { .. }
+            | PortalAnswer::Screenshot { .. }
+            | PortalAnswer::PickColor { .. }
             | PortalAnswer::GlobalShortcuts { .. }
             | PortalAnswer::Pressed
             | PortalAnswer::Stop => Err(2),

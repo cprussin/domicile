@@ -9,10 +9,10 @@ use domicile_protocol::{
     AccessDialog, AccountDialog, AppChooserDialog, BoundShortcut, Captured, Capturing,
     CapturingKind, CastPick, CastSource, ChosenTrigger, ChromeMessage, Devices, FileChoice,
     FileChoiceOption, FileChooserAnswer, FileChooserDialog, FileChooserMode, FileFilter,
-    HostMessage, Inhibited, Inhibition, InputCaptureDialog, LauncherDialog, LauncherType,
-    PortalAnswer, PortalKind, PortalRequest, PortalWallpaper, ProposedShortcut,
-    RemoteDesktopDialog, ScreenCastDialog, ShortcutsDialog, TakenChord, UsbDevice, UsbDialog,
-    WallpaperDialog, WallpaperTarget,
+    FrozenDesk, HostMessage, Inhibited, Inhibition, InputCaptureDialog, LauncherDialog,
+    LauncherType, PortalAnswer, PortalKind, PortalRequest, PortalWallpaper, ProposedShortcut,
+    RemoteDesktopDialog, ScreenCastDialog, ShortcutsDialog, ShotArea, ShotRect, TakenChord,
+    UsbDevice, UsbDialog, WallpaperDialog, WallpaperTarget,
 };
 
 fn access() -> PortalRequest {
@@ -726,4 +726,95 @@ fn a_running_screen_cast_says_what_it_records() {
         written,
         r#"{"id":5,"app_id":"us.zoom.Zoom","kind":"screen_cast","body":{"sources":[{"type":"window","id":"app-3","title":"Notes"}]}}"#
     );
+}
+/// A frozen 300x100 desk with one monitor and one window.
+fn frozen() -> FrozenDesk {
+    FrozenDesk {
+        frame: "data:image/png;base64,AA==".into(),
+        width: 300,
+        height: 100,
+        monitors: vec![ShotArea {
+            name: "DP-1".into(),
+            area: ShotRect {
+                x: 0,
+                y: 0,
+                width: 300,
+                height: 100,
+            },
+        }],
+        windows: vec![ShotArea {
+            name: "Terminal".into(),
+            area: ShotRect {
+                x: 10,
+                y: 20,
+                width: 30,
+                height: 40,
+            },
+        }],
+    }
+}
+
+#[test]
+fn a_screenshot_picker_carries_the_frozen_desk_and_its_areas() {
+    let written = serde_json::to_string(&PortalKind::Screenshot(frozen())).expect("it serializes");
+
+    assert_eq!(
+        written,
+        r#"{"kind":"screenshot","body":{"frame":"data:image/png;base64,AA==","width":300,"height":100,"monitors":[{"name":"DP-1","area":{"x":0,"y":0,"width":300,"height":100}}],"windows":[{"name":"Terminal","area":{"x":10,"y":20,"width":30,"height":40}}]}}"#
+    );
+}
+
+#[test]
+fn the_screenshot_and_color_answers_the_sdk_sends_parse() {
+    for (sent, answer) in [
+        (
+            r#"{"kind":"screenshot","area":{"x":1,"y":2,"width":3,"height":4}}"#,
+            PortalAnswer::Screenshot {
+                area: ShotRect {
+                    x: 1,
+                    y: 2,
+                    width: 3,
+                    height: 4,
+                },
+            },
+        ),
+        (
+            r#"{"kind":"pick_color","x":5,"y":6}"#,
+            PortalAnswer::PickColor { x: 5, y: 6 },
+        ),
+    ] {
+        let line = format!(r#"{{"type":"answer_portal_request","id":4,"answer":{sent}}}"#);
+        assert_eq!(
+            serde_json::from_str::<ChromeMessage>(&line).expect("the SDK's own wire form"),
+            ChromeMessage::AnswerPortalRequest { id: 4, answer },
+            "{sent}"
+        );
+    }
+}
+
+#[test]
+fn a_frozen_desk_takes_only_its_own_answer_inside_the_frame() {
+    let picker = PortalKind::Screenshot(frozen());
+    let picking = PortalKind::PickColor(frozen());
+    let area = |x, y, width, height| PortalAnswer::Screenshot {
+        area: ShotRect {
+            x,
+            y,
+            width,
+            height,
+        },
+    };
+
+    assert!(picker.accepts(&area(0, 0, 300, 100)));
+    assert!(
+        !picker.accepts(&area(290, 0, 20, 10)),
+        "past the right edge"
+    );
+    assert!(!picker.accepts(&area(0, 0, 0, 10)), "empty");
+    assert!(!picker.accepts(&PortalAnswer::PickColor { x: 1, y: 1 }));
+    assert!(picking.accepts(&PortalAnswer::PickColor { x: 299, y: 99 }));
+    assert!(!picking.accepts(&PortalAnswer::PickColor { x: 300, y: 0 }));
+    assert!(!picking.accepts(&area(0, 0, 1, 1)));
+    assert_eq!(area(0, 0, 1, 1).response(), 0);
+    assert_eq!(PortalAnswer::PickColor { x: 0, y: 0 }.response(), 0);
 }

@@ -131,6 +131,8 @@ fn results(answer: PortalAnswer, activation_token: Option<String>) -> HashMap<St
         | PortalAnswer::Stop
         | PortalAnswer::DynamicLauncher { .. }
         | PortalAnswer::GlobalShortcuts { .. }
+        | PortalAnswer::Screenshot { .. }
+        | PortalAnswer::PickColor { .. }
         | PortalAnswer::Pressed
         | PortalAnswer::Canceled
         | PortalAnswer::Refused => HashMap::new(),
