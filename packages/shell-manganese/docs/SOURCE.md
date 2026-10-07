@@ -10,6 +10,7 @@ The engine serves this page over `domicile://` and hands `Shell` the desktop.
 | `index.tsx` | `runManganese(options)`, the default `Shell`, and the public exports (commands, bar items). |
 | `Shell.tsx` | Providers and the `DisplayProvider` for every screen. |
 | `Desktop.tsx` | Window state, keys, desktop-wide panels, and one `Monitor` per screen. |
+| `mount-manganese.tsx` | Mounts the chrome for `runManganese`'s `Shell`. |
 | `mount-point.ts` | Creates the element the chrome mounts into. |
 | `domicile-elements.d.ts` | JSX type for the engine's `<app>`. React already types `<webview>`. |
 

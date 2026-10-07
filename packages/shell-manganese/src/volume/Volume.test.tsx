@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { device, heldSound, laptop } from "./fixture";
@@ -72,7 +72,9 @@ describe("Volume", () => {
       const sound = heldSound();
       await opened(sound);
 
-      screen.getByRole("slider", { name: "Microphone" }).focus();
+      act(() => {
+        screen.getByRole("slider", { name: "Microphone" }).focus();
+      });
       await userEvent.keyboard("{ArrowRight}");
 
       expect(sound.asked).toEqual([["setVolume", "input:mic", 0.31]]);
