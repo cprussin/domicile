@@ -76,6 +76,7 @@ impl Account {
             | PortalAnswer::GlobalShortcuts { .. }
             | PortalAnswer::DynamicLauncher { .. }
             | PortalAnswer::ScreenCast { .. }
+            | PortalAnswer::Print { .. }
             | PortalAnswer::Stop
             | PortalAnswer::Pressed => (2, HashMap::new()),
         }
@@ -156,6 +157,19 @@ async fn proxy<'a>(
         .await
 }
 
+/// The running user's login name, for CUPS's `requesting-user-name`. From
+/// passwd, else `unknown`, as libcups's `cupsUser` does.
+pub fn login_name() -> String {
+    // SAFETY: `getuid` cannot fail.
+    match from_passwd(unsafe { libc::getuid() }) {
+        Ok(user) => user.id,
+        Err(why) => {
+            warn!(%why, "print jobs go to CUPS as user unknown");
+            "unknown".into()
+        }
+    }
+}
+
 /// User `uid` from the passwd database: the GECOS full name, and no picture.
 fn from_passwd(uid: u32) -> Result<User, String> {
     // SAFETY: `passwd` and `buffer` outlive the call, and `found` points into
@@ -213,6 +227,7 @@ mod tests {
 
         assert_eq!(user.id, String::from_utf8_lossy(&ran.stdout).trim());
         assert_eq!(user.image, None);
+        assert_eq!(login_name(), user.id);
     }
 
     /// A stand-in AccountsService with one user.

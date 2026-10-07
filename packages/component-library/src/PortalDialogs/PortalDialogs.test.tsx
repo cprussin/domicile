@@ -170,6 +170,28 @@ const wallpaper = (id: number) => ({
 
 /** A desktop holding the picture `wallpaper` names. */
 const withPicture = desktop({ "/home/u/sky.jpg": "sky" });
+const printer = (name: string, initial: object = {}) => ({
+  color_modes: ["color", "monochrome"],
+  copies_max: 9,
+  description: `${name} printer`,
+  initial: { copies: 1, media: "iso_a4_210x297mm", pages: [], ...initial },
+  media: [
+    { label: "A4 (210 × 297 mm)", name: "iso_a4_210x297mm" },
+    { label: "Letter (8.5 × 11 in)", name: "na_letter_8.5x11in" },
+  ],
+  name,
+  orientations: ["portrait", "landscape"],
+  page_ranges: true,
+  qualities: [],
+  sides: ["one_sided", "two_sided_long_edge"],
+});
+
+const print = (id: number, printers: readonly object[], start = "office") => ({
+  app_id: "org.example.Editor",
+  body: { accept_label: "Print it", printer: start, printers, title: "Report" },
+  id,
+  kind: "print",
+});
 
 const launcher = (id: number, body: object = {}) => ({
   app_id: "org.example.Browser",
@@ -837,7 +859,7 @@ describe(PortalDialogs, () => {
     it("refuses a kind it has no dialog for", () => {
       const host = new FakeHost();
       render(<PortalDialogs host={host.host} />);
-      host.push([{ app_id: "", body: {}, id: 4, kind: "print" }]);
+      host.push([{ app_id: "", body: {}, id: 4, kind: "screenshot" }]);
 
       expect(host.answers).toEqual([[4, { kind: "refused" }]]);
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -929,6 +951,115 @@ describe(PortalDialogs, () => {
       render(<PortalDialogs host={host.host} />);
       host.push([inputCapture(1)]);
       await userEvent.click(screen.getByRole("button", { name: "Deny" }));
+
+      expect(host.answers).toEqual([[1, { kind: "canceled" }]]);
+    });
+  });
+
+  describe("print", () => {
+    const twoPrinters = [
+      printer("office", { color_mode: "monochrome", sides: "one_sided" }),
+      printer("lab", { media: "na_letter_8.5x11in" }),
+    ];
+
+    it("prints the starting printer's options as they stand", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} />);
+      host.push([print(1, twoPrinters)]);
+
+      expect(screen.getByRole("dialog")).toHaveTextContent(
+        "org.example.Editor prints “Report”",
+      );
+      expect(
+        screen.getByRole("combobox", { name: "Printer" }).textContent,
+      ).toContain("office printer");
+      expect(screen.queryByRole("combobox", { name: "Quality" })).toBeNull();
+      await userEvent.click(screen.getByRole("button", { name: "Print it" }));
+
+      expect(host.answers).toEqual([
+        [
+          1,
+          {
+            kind: "print",
+            options: {
+              color_mode: "monochrome",
+              copies: 1,
+              media: "iso_a4_210x297mm",
+              pages: [],
+              sides: "one_sided",
+            },
+            printer: "office",
+          },
+        ],
+      ]);
+    });
+
+    it("takes another printer's options, copies, pages and paper", async () => {
+      const user = userEvent.setup();
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} />);
+      host.push([print(1, twoPrinters)]);
+
+      await user.click(screen.getByRole("combobox", { name: "Printer" }));
+      await user.click(screen.getByRole("option", { name: "lab printer" }));
+      await user.click(screen.getByRole("combobox", { name: "Orientation" }));
+      await user.click(screen.getByRole("option", { name: "Landscape" }));
+      await user.clear(screen.getByRole("spinbutton", { name: "Copies" }));
+      await user.type(screen.getByRole("spinbutton", { name: "Copies" }), "3");
+      await user.type(screen.getByRole("textbox", { name: "Pages" }), "1-2, 5");
+      await user.click(screen.getByRole("button", { name: "Print it" }));
+
+      expect(host.answers).toEqual([
+        [
+          1,
+          {
+            kind: "print",
+            options: {
+              copies: 3,
+              media: "na_letter_8.5x11in",
+              orientation: "landscape",
+              pages: [
+                { first: 1, last: 2 },
+                { first: 5, last: 5 },
+              ],
+            },
+            printer: "lab",
+          },
+        ],
+      ]);
+    });
+
+    it("will not print pages it cannot read or more copies than allowed", async () => {
+      const user = userEvent.setup();
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} />);
+      host.push([print(1, twoPrinters)]);
+
+      await user.type(screen.getByRole("textbox", { name: "Pages" }), "3-1");
+      expect(screen.getByRole("button", { name: "Print it" })).toBeDisabled();
+      await user.clear(screen.getByRole("textbox", { name: "Pages" }));
+      await user.clear(screen.getByRole("spinbutton", { name: "Copies" }));
+      await user.type(screen.getByRole("spinbutton", { name: "Copies" }), "10");
+      expect(screen.getByRole("button", { name: "Print it" })).toBeDisabled();
+    });
+
+    it("says there are no printers and closes as canceled", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} />);
+      host.push([print(1, [], "")]);
+
+      expect(screen.getByText("No printers are set up.")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Print it" })).toBeNull();
+      await userEvent.click(screen.getByRole("button", { name: "Close" }));
+
+      expect(host.answers).toEqual([[1, { kind: "canceled" }]]);
+    });
+
+    it("cancels", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} />);
+      host.push([print(1, twoPrinters)]);
+      await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
       expect(host.answers).toEqual([[1, { kind: "canceled" }]]);
     });

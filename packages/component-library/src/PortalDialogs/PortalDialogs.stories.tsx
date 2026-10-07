@@ -117,6 +117,36 @@ const usb = {
   kind: "usb",
 };
 
+const officePrinter = {
+  color_modes: ["color", "monochrome"],
+  copies_max: 99,
+  description: "Office laser",
+  initial: {
+    color_mode: "color",
+    copies: 1,
+    media: "iso_a4_210x297mm",
+    orientation: "portrait",
+    pages: [],
+    sides: "one_sided",
+  },
+  media: [
+    { label: "A4 (210 × 297 mm)", name: "iso_a4_210x297mm" },
+    { label: "Letter (8.5 × 11 in)", name: "na_letter_8.5x11in" },
+  ],
+  name: "office",
+  orientations: ["portrait", "landscape"],
+  page_ranges: true,
+  qualities: ["draft", "normal", "high"],
+  sides: ["one_sided", "two_sided_long_edge", "two_sided_short_edge"],
+};
+
+const print = (printers: readonly object[]) => ({
+  app_id: "org.example.Editor",
+  body: { printer: "office", printers, title: "Quarterly report" },
+  id: 9,
+  kind: "print",
+});
+
 const entry = (name: string): string =>
   `[Desktop Entry]\nType=Application\nName=${name}\nExec=true\n`;
 
@@ -354,6 +384,24 @@ export const DynamicLauncher: Story = {
 export const Usb: Story = {
   args: {
     host: pushing([usb]),
+    screen: undefined,
+    screenOf: undefined,
+    systemOf: undefined,
+  },
+};
+
+export const Print: Story = {
+  args: {
+    host: pushing([print([officePrinter])]),
+    screen: undefined,
+    screenOf: undefined,
+    systemOf: undefined,
+  },
+};
+
+export const NoPrinters: Story = {
+  args: {
+    host: pushing([print([])]),
     screen: undefined,
     screenOf: undefined,
     systemOf: undefined,

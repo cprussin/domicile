@@ -11,11 +11,15 @@ import {
   Captured,
   CapturingKind,
   CastSource,
+  ColorMode,
   FileChooserMode,
   Inhibited,
   LauncherType,
+  Orientation,
   PortalAnswer,
   PortalKind,
+  PrintQuality,
+  Sides,
   stopCapturing,
   WallpaperTarget,
   watchBoundShortcuts,
@@ -512,10 +516,102 @@ describe("watchPortalRequests", () => {
     ]);
   });
 
+  it("parses a print dialog's printers and their options", async () => {
+    const host = new FakeHost();
+    const requests = watched(host);
+    host.push([
+      {
+        app_id: "org.example.Editor",
+        body: {
+          printer: "office",
+          printers: [
+            {
+              color_modes: ["color", "monochrome"],
+              copies_max: 99,
+              description: "Office laser",
+              initial: {
+                color_mode: "monochrome",
+                copies: 1,
+                media: "iso_a4_210x297mm",
+                orientation: "reverse_landscape",
+                pages: [{ first: 1, last: 3 }],
+                quality: "high",
+                sides: "two_sided_short_edge",
+              },
+              media: [{ label: "A4 (210 × 297 mm)", name: "iso_a4_210x297mm" }],
+              name: "office",
+              orientations: ["portrait", "landscape"],
+              page_ranges: true,
+              qualities: ["draft", "normal"],
+              sides: ["one_sided", "two_sided_long_edge"],
+            },
+          ],
+          title: "Report",
+        },
+        id: 1,
+        kind: "print",
+      },
+      {
+        app_id: "",
+        body: { printers: [], title: "Report" },
+        id: 2,
+        kind: "print",
+      },
+    ]);
+
+    expect(await requests).toEqual([
+      {
+        appId: "org.example.Editor",
+        body: {
+          acceptLabel: undefined,
+          printer: "office",
+          printers: [
+            {
+              colorModes: [ColorMode.Color, ColorMode.Monochrome],
+              copiesMax: 99,
+              description: "Office laser",
+              initial: {
+                colorMode: ColorMode.Monochrome,
+                copies: 1,
+                media: "iso_a4_210x297mm",
+                orientation: Orientation.ReverseLandscape,
+                pages: [{ first: 1, last: 3 }],
+                quality: PrintQuality.High,
+                sides: Sides.TwoSidedShortEdge,
+              },
+              media: [{ label: "A4 (210 × 297 mm)", name: "iso_a4_210x297mm" }],
+              name: "office",
+              orientations: [Orientation.Portrait, Orientation.Landscape],
+              pageRanges: true,
+              qualities: [PrintQuality.Draft, PrintQuality.Normal],
+              sides: [Sides.OneSided, Sides.TwoSidedLongEdge],
+            },
+          ],
+          title: "Report",
+        },
+        id: 1,
+        kind: PortalKind.Print,
+        parentAppId: undefined,
+      },
+      {
+        appId: "",
+        body: {
+          acceptLabel: undefined,
+          printer: undefined,
+          printers: [],
+          title: "Report",
+        },
+        id: 2,
+        kind: PortalKind.Print,
+        parentAppId: undefined,
+      },
+    ]);
+  });
+
   it("keeps a kind it does not know, to be refused", async () => {
     const host = new FakeHost();
     const requests = watched(host);
-    host.push([{ app_id: "", body: { x: 1 }, id: 2, kind: "print" }]);
+    host.push([{ app_id: "", body: { x: 1 }, id: 2, kind: "screenshot" }]);
 
     expect(await requests).toEqual([
       {
@@ -523,7 +619,7 @@ describe("watchPortalRequests", () => {
         id: 2,
         kind: PortalKind.Unknown,
         parentAppId: undefined,
-        wireKind: "print",
+        wireKind: "screenshot",
       },
     ]);
   });
@@ -812,6 +908,61 @@ describe("answerPortalRequest", () => {
 
     expect(host.answers).toEqual([
       [4, { kind: "screen_cast", sources: [{ id: "app-3", type: "window" }] }],
+    ]);
+  });
+});
+
+describe("answerPortalRequest for a print dialog", () => {
+  it("writes the printer and options, leaving out the printer's defaults", () => {
+    const host = new FakeHost();
+    answerPortalRequest(
+      host,
+      1,
+      PortalAnswer.Print("office", {
+        colorMode: ColorMode.Color,
+        copies: 2,
+        media: "na_letter_8.5x11in",
+        orientation: Orientation.Portrait,
+        pages: [{ first: 2, last: 2 }],
+        quality: PrintQuality.Draft,
+        sides: Sides.OneSided,
+      }),
+    );
+    answerPortalRequest(
+      host,
+      2,
+      PortalAnswer.Print("label", {
+        colorMode: undefined,
+        copies: 1,
+        media: undefined,
+        orientation: undefined,
+        pages: [],
+        quality: undefined,
+        sides: undefined,
+      }),
+    );
+
+    expect(host.answers).toEqual([
+      [
+        1,
+        {
+          kind: "print",
+          options: {
+            color_mode: "color",
+            copies: 2,
+            media: "na_letter_8.5x11in",
+            orientation: "portrait",
+            pages: [{ first: 2, last: 2 }],
+            quality: "draft",
+            sides: "one_sided",
+          },
+          printer: "office",
+        },
+      ],
+      [
+        2,
+        { kind: "print", options: { copies: 1, pages: [] }, printer: "label" },
+      ],
     ]);
   });
 });

@@ -9,8 +9,8 @@ Make Domicile the session's only `xdg-desktop-portal` backend:
 Today the compositor implements `Settings`, `Access`, `AppChooser`,
 `FileChooser`, `Notification`, `Inhibit`, `RemoteDesktop`, `Clipboard`,
 `InputCapture`, `Account`, `Email`, `Lockdown`, `GlobalShortcuts`,
-`Background`, `Wallpaper`, `DynamicLauncher`, `Usb` and `ScreenCast` of
-windows, and routes the rest to gtk. Sharing a monitor has no backend.
+`Background`, `Wallpaper`, `DynamicLauncher`, `Usb`, `Print` and
+`ScreenCast` of windows, and routes the rest to gtk. Sharing a monitor has no backend.
 
 ## Design
 
@@ -121,6 +121,11 @@ One request channel carries all dialogs. Each interface's backend builds on it.
   touches. Lower-density monitors lose nothing.
 - **No print preview.** The portal sends the document only after the dialog
   closes, so there is nothing to preview. Gtk's backend has none either.
+- **Print speaks IPP itself.** `domicile_host::ipp` encodes the few message
+  shapes CUPS needs, rather than adding the `ipp` crate and its HTTP stack. A
+  token's choice lives in memory until `Print` takes it.
+- **No printers ends with `2`.** With CUPS unreachable or empty, the dialog
+  says there are no printers; closing it is a failure, not a cancel.
 - **The shell shows active sharing.** `portal_requests` carries `capturing`:
   each running session (id, app, what it holds). The shell stops one by
   answering its id with `stop`. `<PortalDialogs />` draws the indicator.
@@ -176,7 +181,7 @@ One request channel carries all dialogs. Each interface's backend builds on it.
 | Wallpaper | copies the picture; `set-on` background, lock screen or both | preview dialog, shell wallpaper and lock screen | 4 |
 | DynamicLauncher | `PrepareInstall` asks; no install tokens; `SupportedLauncherTypes` application and web app | install confirm, name editable | 4 |
 | Usb | names each device from its udev properties, else udev's database | device grant, all or none | 4 |
-| Print | printers and options from CUPS over IPP; sends the job to CUPS | print dialog | 5 |
+| Print | printers and options from CUPS over IPP (`domicile_host::cups`, its own IPP codec); GTK `settings`/`page-setup` round-trip; `Print-Job` with the token's choice; no CUPS or no printers ends with `2` | printer, paper, copies, pages, sides, color, orientation, quality | 5 |
 | Secret | keyring, not Domicile | — | — |
 
 Also in scope, outside the portal: `ext-data-control-v1`, so clipboard
@@ -228,5 +233,5 @@ Phase 4: the rest.
 
 Phase 5: printing, and remove gtk.
 
-- [ ] Print over IPP
+- [x] Print over IPP
 - [ ] Remove `xdg-desktop-portal-gtk` from `nix/nixos.nix`, `nix/home-manager.nix` and the flake's checks; the conf names only domicile and the keyring

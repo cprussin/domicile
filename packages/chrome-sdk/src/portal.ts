@@ -47,6 +47,8 @@ export enum PortalKind {
   Wallpaper,
   /** A source picker: what an application may record. */
   ScreenCast,
+  /** Pick a printer and its options. */
+  Print,
   /** A kind this SDK cannot parse. Answer it with {@link PortalAnswer.Refused}. */
   Unknown,
 }
@@ -305,6 +307,85 @@ export const Captured = {
 /** One source a running screen cast records. */
 export type Captured = ReturnType<(typeof Captured)[keyof typeof Captured]>;
 
+/** IPP's `sides`. */
+export enum Sides {
+  OneSided,
+  /** Bound along the long edge, as a book. */
+  TwoSidedLongEdge,
+  /** Bound along the short edge, as a notepad. */
+  TwoSidedShortEdge,
+}
+
+/** IPP's `print-color-mode`, as far as a dialog offers it. */
+export enum ColorMode {
+  Color,
+  Monochrome,
+}
+
+/** IPP's `orientation-requested`. */
+export enum Orientation {
+  Portrait,
+  Landscape,
+  ReverseLandscape,
+  ReversePortrait,
+}
+
+/** IPP's `print-quality`. */
+export enum PrintQuality {
+  Draft,
+  Normal,
+  High,
+}
+
+/** Pages `first` to `last`, counted from 1, both included. */
+export type PageRange = { first: number; last: number };
+
+/** A print job's options. An absent option is the printer's default. */
+export type PrintOptions = {
+  colorMode: ColorMode | undefined;
+  /** At least 1. */
+  copies: number;
+  /** A {@link PrintMedia} `name`. */
+  media: string | undefined;
+  orientation: Orientation | undefined;
+  /** Empty prints every page. */
+  pages: readonly PageRange[];
+  quality: PrintQuality | undefined;
+  sides: Sides | undefined;
+};
+
+/** A paper size: its PWG name, and a label for people. */
+export type PrintMedia = { label: string; name: string };
+
+/** A printer and what it supports. An empty list offers no choice. */
+export type Printer = {
+  colorModes: readonly ColorMode[];
+  copiesMax: number;
+  /** For people. */
+  description: string | undefined;
+  /** What the dialog starts with for this printer. */
+  initial: PrintOptions;
+  media: readonly PrintMedia[];
+  /** The CUPS queue name. */
+  name: string;
+  orientations: readonly Orientation[];
+  /** Whether it prints only some pages. */
+  pageRanges: boolean;
+  qualities: readonly PrintQuality[];
+  sides: readonly Sides[];
+};
+
+/** A print dialog: the document's title and the printers on offer. */
+export type PrintBody = {
+  /** The print button's label; the shell's own when absent. */
+  acceptLabel: string | undefined;
+  /** The printer to start with. */
+  printer: string | undefined;
+  /** Empty when CUPS has none or cannot be reached. */
+  printers: readonly Printer[];
+  title: string;
+};
+
 export const PortalRequest = {
   Access: (base: PortalRequestBase, body: AccessBody) => ({
     ...base,
@@ -345,6 +426,11 @@ export const PortalRequest = {
     ...base,
     body,
     kind: PortalKind.InputCapture as const,
+  }),
+  Print: (base: PortalRequestBase, body: PrintBody) => ({
+    ...base,
+    body,
+    kind: PortalKind.Print as const,
   }),
   RemoteDesktop: (base: PortalRequestBase, body: RemoteDesktopBody) => ({
     ...base,
@@ -399,6 +485,8 @@ export enum PortalAnswerKind {
   GlobalShortcuts,
   /** The name the user installs a {@link PortalKind.DynamicLauncher} under. */
   DynamicLauncher,
+  /** The printer and options the user chose in a {@link PortalKind.Print}. */
+  Print,
   /** The user dismissed or denied the dialog. */
   Canceled,
   /** The shell has no dialog for this kind. */
@@ -427,6 +515,12 @@ export const PortalAnswer = {
     triggers,
   }),
   InputCapture: () => ({ kind: PortalAnswerKind.InputCapture as const }),
+  /** `printer` must be one of the request's `printers`. */
+  Print: (printer: string, options: PrintOptions) => ({
+    kind: PortalAnswerKind.Print as const,
+    options,
+    printer,
+  }),
   Refused: () => ({ kind: PortalAnswerKind.Refused as const }),
   RemoteDesktop: (devices: Devices, clipboard: boolean) => ({
     clipboard,
@@ -833,6 +927,113 @@ const usbSchema = z
     }),
   );
 
+/** Each wire name and the value it stands for. */
+type Pairs<W extends string, V> = readonly (readonly [W, V])[];
+
+const SIDES: Pairs<z.infer<typeof sidesSchema>, Sides> = [
+  ["one_sided", Sides.OneSided],
+  ["two_sided_long_edge", Sides.TwoSidedLongEdge],
+  ["two_sided_short_edge", Sides.TwoSidedShortEdge],
+];
+
+const COLOR_MODES: Pairs<z.infer<typeof colorModeSchema>, ColorMode> = [
+  ["color", ColorMode.Color],
+  ["monochrome", ColorMode.Monochrome],
+];
+
+const ORIENTATIONS: Pairs<z.infer<typeof orientationSchema>, Orientation> = [
+  ["portrait", Orientation.Portrait],
+  ["landscape", Orientation.Landscape],
+  ["reverse_landscape", Orientation.ReverseLandscape],
+  ["reverse_portrait", Orientation.ReversePortrait],
+];
+
+const QUALITIES: Pairs<z.infer<typeof qualitySchema>, PrintQuality> = [
+  ["draft", PrintQuality.Draft],
+  ["normal", PrintQuality.Normal],
+  ["high", PrintQuality.High],
+];
+
+const sidesSchema = z.enum([
+  "one_sided",
+  "two_sided_long_edge",
+  "two_sided_short_edge",
+]);
+const colorModeSchema = z.enum(["color", "monochrome"]);
+const orientationSchema = z.enum([
+  "portrait",
+  "landscape",
+  "reverse_landscape",
+  "reverse_portrait",
+]);
+const qualitySchema = z.enum(["draft", "normal", "high"]);
+
+const printOptionsSchema = z
+  .object({
+    color_mode: colorModeSchema.optional(),
+    copies: z.number(),
+    media: z.string().optional(),
+    orientation: orientationSchema.optional(),
+    pages: z.array(z.object({ first: z.number(), last: z.number() })),
+    quality: qualitySchema.optional(),
+    sides: sidesSchema.optional(),
+  })
+  .transform(
+    (options): PrintOptions => ({
+      colorMode: optionalOf(COLOR_MODES, options.color_mode),
+      copies: options.copies,
+      media: options.media,
+      orientation: optionalOf(ORIENTATIONS, options.orientation),
+      pages: options.pages,
+      quality: optionalOf(QUALITIES, options.quality),
+      sides: optionalOf(SIDES, options.sides),
+    }),
+  );
+
+const printSchema = z
+  .object({
+    accept_label: z.string().optional(),
+    printer: z.string().optional(),
+    printers: z.array(
+      z.object({
+        color_modes: z.array(colorModeSchema),
+        copies_max: z.number(),
+        description: z.string().optional(),
+        initial: printOptionsSchema,
+        media: z.array(z.object({ label: z.string(), name: z.string() })),
+        name: z.string(),
+        orientations: z.array(orientationSchema),
+        page_ranges: z.boolean(),
+        qualities: z.array(qualitySchema),
+        sides: z.array(sidesSchema),
+      }),
+    ),
+    title: z.string(),
+  })
+  .transform(
+    (body): PrintBody => ({
+      acceptLabel: body.accept_label,
+      printer: body.printer,
+      printers: body.printers.map((printer) => ({
+        colorModes: printer.color_modes.map((mode) =>
+          valueFor(COLOR_MODES, mode),
+        ),
+        copiesMax: printer.copies_max,
+        description: printer.description,
+        initial: printer.initial,
+        media: printer.media,
+        name: printer.name,
+        orientations: printer.orientations.map((name) =>
+          valueFor(ORIENTATIONS, name),
+        ),
+        pageRanges: printer.page_ranges,
+        qualities: printer.qualities.map((name) => valueFor(QUALITIES, name)),
+        sides: printer.sides.map((name) => valueFor(SIDES, name)),
+      })),
+      title: body.title,
+    }),
+  );
+
 /** Reads one kind's body into a request. */
 type ReadKind = (base: PortalRequestBase, body: unknown) => PortalRequest;
 
@@ -891,6 +1092,7 @@ const KINDS: ReadonlyMap<string, ReadKind> = new Map<string, ReadKind>([
     (base, body) =>
       PortalRequest.ScreenCast(base, screenCastSchema.parse(body)),
   ],
+  ["print", (base, body) => PortalRequest.Print(base, printSchema.parse(body))],
 ]);
 
 type ReadCapturing = (base: CapturingBase, body: unknown) => Capturing;
@@ -1026,6 +1228,20 @@ const wireAnswer = (answer: PortalAnswer): object => {
           trigger === undefined ? { id } : { id, trigger },
         ),
       };
+    case PortalAnswerKind.Print:
+      return {
+        kind: "print",
+        options: {
+          color_mode: wireOf(COLOR_MODES, answer.options.colorMode),
+          copies: answer.options.copies,
+          media: answer.options.media,
+          orientation: wireOf(ORIENTATIONS, answer.options.orientation),
+          pages: answer.options.pages,
+          quality: wireOf(QUALITIES, answer.options.quality),
+          sides: wireOf(SIDES, answer.options.sides),
+        },
+        printer: answer.printer,
+      };
     case PortalAnswerKind.Refused:
       return { kind: "refused" };
   }
@@ -1037,3 +1253,25 @@ const wireSource = (source: CastSource): object => {
       return { id: source.id, type: "window" };
   }
 };
+
+/** The value `pairs` gives `wire`. Every wire name the schema takes is listed. */
+const valueFor = <W extends string, V>(pairs: Pairs<W, V>, wire: W): V => {
+  const found = pairs.find(([listed]) => listed === wire);
+  if (found === undefined) {
+    throw new Error(`no value for ${wire}`);
+  } else {
+    return found[1];
+  }
+};
+
+/** The value `pairs` gives `wire`, if `wire` is present. */
+const optionalOf = <W extends string, V>(
+  pairs: Pairs<W, V>,
+  wire: W | undefined,
+): V | undefined => (wire === undefined ? undefined : valueFor(pairs, wire));
+
+/** The wire name `pairs` gives `value`, if `value` is present. */
+const wireOf = <W extends string, V>(
+  pairs: Pairs<W, V>,
+  value: V | undefined,
+): W | undefined => pairs.find(([, listed]) => listed === value)?.[0];

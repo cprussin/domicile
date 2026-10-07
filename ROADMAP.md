@@ -133,8 +133,8 @@ Evidence is in [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md),
     `Access`, `AppChooser`, `FileChooser`, `Notification`, `Inhibit`,
     `RemoteDesktop`, `Clipboard`, `InputCapture`, `Account`, `Email`,
     `Lockdown`, `GlobalShortcuts`, `Background`, `Wallpaper`,
-    `DynamicLauncher`, `Usb` and `ScreenCast` of windows, over the request
-    channel to the shell; gtk answers the rest. Sharing a monitor has no
+    `DynamicLauncher`, `Usb`, `Print` and `ScreenCast` of windows, over the
+    request channel to the shell; gtk answers the rest. Sharing a monitor has no
     backend. Next: every other interface except `Secret` on the channel, then
     drop gtk. [PORTALS.md](docs/architecture/PORTALS.md).
 

@@ -119,7 +119,8 @@ import { PortalDialogs } from "@domicile-desktop/component-library/PortalDialogs
   clipboard an application may control), `InputCapture`, `GlobalShortcuts`
   (review the chords an app asks for), `Wallpaper` (a picture to preview),
   `DynamicLauncher` (an install confirm with an editable name), `Usb` (a
-  device grant) and `ScreenCast` (a picker of the windows to share). Answer
+  device grant), `ScreenCast` (a picker of the windows to share) and `Print`
+  (a printer and its options, or "No printers are set up."). Answer
   `Access`, `Account`, `Wallpaper` and `Usb` with `PortalAnswer.Access()` to
   allow, and `DynamicLauncher` with `PortalAnswer.DynamicLauncher(name)`.
 - The app list, the file picker and the wallpaper preview read the system

@@ -302,6 +302,7 @@ impl Shortcuts {
             | PortalAnswer::InputCapture
             | PortalAnswer::DynamicLauncher { .. }
             | PortalAnswer::ScreenCast { .. }
+            | PortalAnswer::Print { .. }
             | PortalAnswer::Stop
             | PortalAnswer::Refused
             | PortalAnswer::Pressed => Err(2),

@@ -599,12 +599,15 @@ pub enum PortalKind {
     Usb(UsbDialog),
     /// `org.freedesktop.impl.portal.ScreenCast`: pick what to share.
     ScreenCast(ScreenCastDialog),
+    /// `org.freedesktop.impl.portal.Print`: pick a printer and its options.
+    Print(PrintDialog),
 }
 
 impl PortalKind {
     /// Whether `answer` can answer a request of this kind: its own kind, or a
-    /// dismissal or refusal. A chosen application must be one offered. An
-    /// inhibitor takes none.
+    /// dismissal or refusal. A chosen application or printer must be one
+    /// offered, and a print job needs a copy and real pages. An inhibitor
+    /// takes none.
     pub fn accepts(&self, answer: &PortalAnswer) -> bool {
         match (self, answer) {
             (PortalKind::Inhibit(_), _) => false,
@@ -627,6 +630,17 @@ impl PortalKind {
             (PortalKind::InputCapture(_), PortalAnswer::InputCapture) => true,
             (PortalKind::GlobalShortcuts(_), PortalAnswer::GlobalShortcuts { .. }) => true,
             (PortalKind::ScreenCast(_), PortalAnswer::ScreenCast { .. }) => true,
+            (PortalKind::Print(dialog), PortalAnswer::Print { printer, options }) => {
+                dialog
+                    .printers
+                    .iter()
+                    .any(|offered| &offered.name == printer)
+                    && options.copies >= 1
+                    && options
+                        .pages
+                        .iter()
+                        .all(|range| 1 <= range.first && range.first <= range.last)
+            }
             // A stop answers a running session and a press a bound shortcut,
             // never a request.
             (
@@ -639,6 +653,7 @@ impl PortalKind {
                 | PortalAnswer::GlobalShortcuts { .. }
                 | PortalAnswer::DynamicLauncher { .. }
                 | PortalAnswer::ScreenCast { .. }
+                | PortalAnswer::Print { .. }
                 | PortalAnswer::Stop
                 | PortalAnswer::Pressed,
             ) => false,
@@ -987,6 +1002,118 @@ pub enum Captured {
     Window { id: String, title: String },
 }
 
+/// A print dialog: the printers CUPS offers, each with what it supports.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PrintDialog {
+    /// The document's title.
+    pub title: String,
+    /// The print button's label; the shell's own when absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub accept_label: Option<String>,
+    /// Empty when CUPS has none or cannot be reached.
+    pub printers: Vec<Printer>,
+    /// The printer to start with: the application's last, else CUPS's
+    /// default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub printer: Option<String>,
+}
+
+/// A CUPS queue and the options it supports. An empty list means the
+/// printer takes no choice of that option.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Printer {
+    /// The CUPS queue name.
+    pub name: String,
+    /// CUPS's `printer-info`, for people.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    pub media: Vec<Media>,
+    pub sides: Vec<Sides>,
+    pub color_modes: Vec<ColorMode>,
+    pub orientations: Vec<Orientation>,
+    pub qualities: Vec<PrintQuality>,
+    /// The most copies one job may ask for.
+    pub copies_max: u32,
+    /// Whether it prints only some pages.
+    pub page_ranges: bool,
+    /// What the dialog starts with for this printer: the application's
+    /// settings where the printer supports them, else its defaults.
+    pub initial: PrintOptions,
+}
+
+/// A paper size.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Media {
+    /// The PWG self-describing name, such as `iso_a4_210x297mm`.
+    pub name: String,
+    /// For people, such as `A4 (210 × 297 mm)`.
+    pub label: String,
+}
+
+/// IPP's `sides`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Sides {
+    OneSided,
+    /// Bound along the long edge, as a book.
+    TwoSidedLongEdge,
+    /// Bound along the short edge, as a notepad.
+    TwoSidedShortEdge,
+}
+
+/// IPP's `print-color-mode`, as far as a dialog offers it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ColorMode {
+    Color,
+    Monochrome,
+}
+
+/// IPP's `orientation-requested`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Orientation {
+    Portrait,
+    Landscape,
+    ReverseLandscape,
+    ReversePortrait,
+}
+
+/// IPP's `print-quality`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PrintQuality {
+    Draft,
+    Normal,
+    High,
+}
+
+/// Pages `first` to `last`, counted from 1, both included.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PageRange {
+    pub first: u32,
+    pub last: u32,
+}
+
+/// A print job's options. An absent option is the printer's default.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PrintOptions {
+    /// A [`Media::name`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub media: Option<String>,
+    pub copies: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sides: Option<Sides>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color_mode: Option<ColorMode>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub orientation: Option<Orientation>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quality: Option<PrintQuality>,
+    /// Empty prints every page.
+    pub pages: Vec<PageRange>,
+}
+
 /// The shell's answer to a [`PortalRequest`].
 ///
 /// Each backend reads only its own kind; any other answer refuses the
@@ -1011,6 +1138,12 @@ pub enum PortalAnswer {
     DynamicLauncher { name: String },
     /// The user picked these sources in a [`PortalKind::ScreenCast`].
     ScreenCast { sources: Vec<CastPick> },
+    /// The printer the user picked in a [`PortalKind::Print`], one of its
+    /// `printers`, and the options.
+    Print {
+        printer: String,
+        options: PrintOptions,
+    },
     /// The user stopped a [`Capturing`] session.
     Stop,
     /// The chords the user chose in a [`PortalKind::GlobalShortcuts`].
@@ -1036,6 +1169,7 @@ impl PortalAnswer {
             | PortalAnswer::InputCapture
             | PortalAnswer::GlobalShortcuts { .. }
             | PortalAnswer::ScreenCast { .. }
+            | PortalAnswer::Print { .. }
             | PortalAnswer::Stop => 0,
             PortalAnswer::Canceled => 1,
             PortalAnswer::Refused | PortalAnswer::Pressed => 2,
