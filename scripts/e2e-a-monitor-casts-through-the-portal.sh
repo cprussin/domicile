@@ -67,14 +67,16 @@ done
 NO_COLOR=1 DOMICILE_CAST_TEST_PATTERN=1 RUST_LOG=info,domicile_compositor=debug \
   "$BIN" --session "$SOCK.session" --chrome-socket "$SOCK" >"$LOG" 2>&1 &
 COMP=$!
-for _ in $(seq 1 200); do grep -q "answers the desktop portal" "$LOG" && break; sleep 0.05; done
+# Taking the portal's name can take seconds on a loaded runner.
+for _ in $(seq 1 600); do grep -q "answers the desktop portal" "$LOG" && break; sleep 0.05; done
 
 mkfifo "$GO"
 "$APP" "$SOCK" --monitor <"$GO" >"$SAID" 2>"$ALOG" &
 ASKING=$!
 exec 3>"$GO"
 
-for _ in $(seq 1 200); do grep -q "^capturing" "$SAID" && break; sleep 0.05; done
+# Until it casts or gives up, with its own deadlines.
+while kill -0 "$ASKING" 2>/dev/null && ! grep -q "^capturing" "$SAID"; do sleep 0.05; done
 NODE="$(sed -n 's/^node \([0-9]*\)$/\1/p' "$SAID")"
 if [ -n "$NODE" ] && grep -q "^capturing" "$SAID"; then
   passed "the picked monitor is PipeWire node $NODE, and the shell lists the capture"

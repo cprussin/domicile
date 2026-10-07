@@ -6,9 +6,10 @@
 //! Connects to the compositor as its shell, and calls the ScreenCast backend
 //! on the session bus as an application's portal frontend would:
 //!
-//! 1. Starts a session that may be restored, picks the window titled `TITLE`
-//!    or the first monitor in the source picker, and prints `node N`,
-//!    `size W H` when the stream has a size, and `capturing ID`.
+//! 1. Waits, as the shell, for the window titled `TITLE`, if one is wanted.
+//!    Then starts a session that may be restored, picks that window or the
+//!    first monitor in the source picker, and prints `node N`, `size W H`
+//!    when the stream has a size, and `capturing ID`.
 //! 2. Waits for a line on standard input, then for the capture to end on its
 //!    own (the check's consumer left), and prints `ended`.
 //! 3. Starts a second session with the first one's restore token, answering
@@ -88,6 +89,11 @@ fn run(socket: &Path, wanted: &Wanted) -> Result<(), String> {
         options
     };
 
+    // The picker lists the windows open when `Start` asks, so the window must
+    // be open, and titled, first.
+    if let Wanted::Window(title) = wanted {
+        titled(&mut chrome, title)?;
+    }
     let session = "/org/freedesktop/portal/desktop/session/1_1/first";
     select(&bus, session, selection(None))?;
     let starting = start(&bus, session);
@@ -192,6 +198,21 @@ fn started(
         (0, results) => Ok(results),
         (response, _) => Err(format!("Start answered {response}")),
     }
+}
+
+/// Returns once the shell hears of a window titled `title`.
+fn titled(chrome: &mut Chrome, title: &str) -> Result<(), String> {
+    chrome
+        .wait_for(|message| {
+            matches!(
+                message,
+                HostMessage::AppAppeared { title: Some(named), .. }
+                | HostMessage::AppTitled { title: Some(named), .. }
+                    if named == title
+            )
+        })
+        .map(|_| ())
+        .map_err(|why| format!("no window titled {title:?} appeared: {why}"))
 }
 
 /// The source picker's request id and the pick of what `wanted` names.
