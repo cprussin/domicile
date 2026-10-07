@@ -29,7 +29,7 @@ domicile --config <path> <shell>  # ...with this compositor config
 domicile which-shell              # ask the running desktop which shell it serves
 domicile load-shell <shell>       # replace the running desktop's shell
 domicile open-url <url>           # open a URL in the running desktop (BROWSER)
-domicile screenshot <file>        # write a PNG of the running desktop
+domicile screenshot <file>        # write a PNG of the running desk
 ```
 
 Config file:
@@ -221,14 +221,17 @@ running one. The first argument decides which.
 - One JSON line in, one back, then the connection closes.
   `domicile_launch::control` is the wire; `domicile_launch::control_socket` is
   the socket.
-- The supervisor answers and routes. `load-shell`, `open-url` and
-  `screenshot` go to the engine; future commands, like listing windows, will go to the compositor.
+- The supervisor answers and routes. `load-shell` and `open-url` go to the
+  engine. `screenshot` goes to the compositor's chrome socket as the
+  `screenshot` system call a page makes, with the file
+  (`domicile_launch::compositor_socket`). The connection never says `hello`,
+  so it is not a chrome.
 
 ```
 domicile which-shell ─▶ $DOMICILE_SOCK ─▶ supervisor
 domicile load-shell  ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ engine ─▶ page
 domicile open-url    ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ engine
-domicile screenshot  ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ engine
+domicile screenshot  ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ compositor
 ```
 
 Several desktops per session:

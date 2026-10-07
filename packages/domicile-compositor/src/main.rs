@@ -882,7 +882,11 @@ fn read_chrome_messages(
                 let _ = writer.flush();
             }
         },
-    );
+    )
+    .screenshotting_with({
+        let portals = hub.portals.clone();
+        move |file| portals.screenshot(file)
+    });
     let mut ready = false;
     // Whether this connection is in the broadcast list. Separate from `ready`
     // because a socket can send `hello` twice, and the writer must not be added

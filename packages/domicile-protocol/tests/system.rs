@@ -326,3 +326,48 @@ fn a_d_bus_match_streams_the_signals_it_names() {
         r#"{"type":"system_event","id":9,"event":{"kind":"signal","sender":":1.4","path":"/org/mpris/MediaPlayer2","interface":"org.freedesktop.DBus.Properties","member":"PropertiesChanged","signature":"sa{sv}as","body":"[\"org.mpris.MediaPlayer2.Player\",{},[]]"}}"#
     );
 }
+
+/// Without a file the shell's dialog picks the area; with one the whole desk
+/// is written there. Either way the reply names the PNG.
+#[test]
+fn a_screenshot_is_answered_with_where_it_was_saved() {
+    assert_eq!(
+        chrome(r#"{"type":"system_request","id":10,"request":{"call":"screenshot"}}"#),
+        ChromeMessage::SystemRequest {
+            id: 10,
+            request: SystemRequest::Screenshot { file: None },
+        }
+    );
+    assert_eq!(
+        chrome(
+            r#"{"type":"system_request","id":11,"request":{"call":"screenshot","file":"/tmp/shot.png"}}"#
+        ),
+        ChromeMessage::SystemRequest {
+            id: 11,
+            request: SystemRequest::Screenshot {
+                file: Some("/tmp/shot.png".into())
+            },
+        }
+    );
+    assert_eq!(
+        host(&HostMessage::SystemReply {
+            id: 10,
+            reply: SystemReply::Saved {
+                path: "/home/me/Pictures/Screenshots/a.png".into(),
+            },
+        }),
+        r#"{"type":"system_reply","id":10,"reply":{"kind":"saved","path":"/home/me/Pictures/Screenshots/a.png"}}"#
+    );
+    assert_eq!(
+        host(&HostMessage::SystemReply {
+            id: 10,
+            reply: SystemReply::Failed {
+                error: SystemError {
+                    kind: SystemErrorKind::Canceled,
+                    message: "the dialog was dismissed".into(),
+                },
+            },
+        }),
+        r#"{"type":"system_reply","id":10,"reply":{"kind":"failed","error":{"kind":"canceled","message":"the dialog was dismissed"}}}"#
+    );
+}

@@ -5,8 +5,8 @@ use std::os::unix::net::UnixListener;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use domicile_launch::command::{load_shell_line, open_url_line, screenshot_line};
-use domicile_launch::command_socket::{load_shell, open_url, screenshot, CommandError};
+use domicile_launch::command::{load_shell_line, open_url_line};
+use domicile_launch::command_socket::{load_shell, open_url, CommandError};
 
 /// Reply timeout: long enough for a loaded machine, short enough for a fast
 /// suite.
@@ -42,19 +42,6 @@ fn the_engine_is_sent_the_address_and_says_it_opened_it() {
     assert_eq!(
         heard.join().expect("the engine was listening"),
         open_url_line("https://example.com/")
-    );
-}
-
-#[test]
-fn the_engine_is_sent_the_path_and_says_it_wrote_the_screenshot() {
-    let (_scratch, path) = scratch();
-    let heard = an_engine(&path, Some("{\"type\":\"captured\"}\n"));
-
-    screenshot(&path, Path::new("/home/me/shot.png"), BRIEFLY).expect("the engine wrote it");
-
-    assert_eq!(
-        heard.join().expect("the engine was listening"),
-        screenshot_line(Path::new("/home/me/shot.png"))
     );
 }
 

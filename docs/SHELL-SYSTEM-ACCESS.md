@@ -28,6 +28,9 @@ export const Shell = async (root, domicile) => {
 - `dbusCall()` and `dbusMatch()` reach the session and system buses. A body is
   JSON read against its D-Bus signature; `domicile_host::dbus_json` documents
   the mapping.
+- `screenshot()` takes an interactive Screenshot portal screenshot as if the
+  shell were the app: `<PortalDialogs />` draws the dialog, and the call
+  resolves with the saved PNG's path, or fails `canceled`.
 - Spawned programs are found on the compositor's `PATH`. The Nix wrapper
   appends `pactl`, `parec` and `curl`, so a user's own copies win.
 - A reload starts every library from nothing: each reads its state again, so a
@@ -65,7 +68,8 @@ recorded output.
 
 - Page to compositor: `system_request { id, request }`. `request` starts a
   call (`read_file`, `write_file`, `read_dir`, `stat`, `watch`, `spawn`,
-  `dbus_call`, `dbus_match`) or drives one running under the same `id`
+  `dbus_call`, `dbus_match`, `screenshot`) or drives one running under the
+  same `id`
   (`unwatch`, `stdin`, `close_stdin`, `kill`).
 - Compositor to page: one `system_reply` per call that starts something
   (`failed` included), then for a watch or process any number of

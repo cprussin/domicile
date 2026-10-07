@@ -3,6 +3,7 @@ import type {
   DomicileHost,
   DomicileWindow,
 } from "@domicile-desktop/sdk/domicile-host";
+import { SystemErrorKind, system } from "@domicile-desktop/sdk/system";
 import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 
 import { openCommand } from "../launcher/open-command";
@@ -59,6 +60,9 @@ export const useWindows = (
       }
       if (action.kind === WindowActionKind.DeskLocked) {
         domicile.lock();
+      }
+      if (action.kind === WindowActionKind.ScreenshotTaken) {
+        takeScreenshot(domicile);
       }
       // `openCommand` runs through a shell because `$HOME` is only known to the
       // spawned process, not to a page served over `domicile://`.
@@ -163,3 +167,26 @@ const placedOf = (displays: readonly Display[]): readonly PlacedScreen[] =>
     box: { height: size[1], width: size[0], x: position[0], y: position[1] },
     name,
   }));
+
+/** Takes a screenshot, logging any failure but a dismissed dialog. */
+const takeScreenshot = (domicile: DomicileHost) => {
+  system(domicile)
+    .screenshot()
+    .then((taken) => {
+      taken.match({
+        Err: (error) => {
+          if (error.kind !== SystemErrorKind.Canceled) {
+            // biome-ignore lint/suspicious/noConsole: surfacing a failed screenshot
+            console.error("The screenshot was not saved", error);
+          }
+        },
+        // The PNG is under `$XDG_PICTURES_DIR/Screenshots/`, as a portal
+        // screenshot's is, which says nothing either.
+        Ok: () => undefined,
+      });
+    })
+    .catch((error: unknown) => {
+      // biome-ignore lint/suspicious/noConsole: surfacing a broken system call
+      console.error("The screenshot was not taken", error);
+    });
+};
