@@ -180,6 +180,7 @@ says "and one with a note says what it read" '3s'
 # guard that asks but never writes a note gives its control the full budget.
 GUARDS="$ROOT/packages/domicile-engine/scripts"
 for guard in guard-client-window guard-shell guard-webview-framing \
+  guard-app-survives-load-shell \
   guard-shell-local-network \
   guard-webview-content-script guard-extension-installer \
   guard-extension-tray guard-webview-tabs guard-webview-active-tab \
