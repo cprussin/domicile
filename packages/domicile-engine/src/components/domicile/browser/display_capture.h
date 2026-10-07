@@ -34,7 +34,8 @@ std::optional<uint32_t> CapturedFourcc(media::VideoPixelFormat format);
 //
 // Viz sends frames only on damage, at most `max_fps` a second. Each frame's
 // buffer goes back to viz when the producer closes its `CapturedFrameHold`.
-// See docs/architecture/PORTALS.md in the Domicile repository.
+// See packages/domicile-compositor/src/portals/README.md
+// in the Domicile repository.
 class DisplayCapture : public mojom::DisplayCapture,
                        public viz::mojom::FrameSinkVideoConsumer {
  public:

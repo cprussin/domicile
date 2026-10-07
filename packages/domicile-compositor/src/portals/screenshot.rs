@@ -4,7 +4,7 @@
 //! Each call takes one frame of the whole desk (see
 //! [`crate::casting::Casting::shoot`]). An interactive screenshot and
 //! `PickColor` freeze that frame in the shell, which answers with the area or
-//! pixel the user picked. See `docs/architecture/PORTALS.md`.
+//! pixel the user picked. See `packages/domicile-compositor/src/portals/README.md`.
 
 use std::collections::HashMap;
 use std::future::Future;

@@ -53,7 +53,7 @@ The engine has two channels to the rest of Domicile:
   call. See `components/domicile/browser/system_call.h` and
   [SHELL-SYSTEM-ACCESS.md](/docs/SHELL-SYSTEM-ACCESS.md).
 - **`portal_requests`** and **`answer_portal_request`** carry portal dialogs.
-  See [PORTALS.md](/docs/architecture/PORTALS.md).
+  See [the portals README](/packages/domicile-compositor/src/portals/README.md).
   - The browser relays `portal_requests` whole, as a `portalrequests`
     `MessageEvent`, and reads nothing but `type`.
   - The renderer keeps the latest line and sends it again to a listener added

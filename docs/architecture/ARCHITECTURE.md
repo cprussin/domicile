@@ -125,7 +125,8 @@ Outside the default members (needs Smithay and native Wayland; build in
     `Access` and `AppChooser`, which the shell draws; RemoteDesktop,
     Clipboard and InputCapture sessions; `ScreenCast`, which casts the
     windows, monitors or region the shell's picker chose; and `Print`, which sends jobs to CUPS
-    over IPP through `domicile_host::cups`. See [PORTALS.md](PORTALS.md).
+    over IPP through `domicile_host::cups`. See
+    [the portals README](/packages/domicile-compositor/src/portals/README.md).
   - `eis.rs` serves EIS, the emulated input the RemoteDesktop and
     InputCapture portals hand out. Its input takes the engine's input path,
     so the lock refuses it.

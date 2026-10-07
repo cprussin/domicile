@@ -2,7 +2,7 @@
 //! color from it, and save it as a PNG under the user's pictures.
 //!
 //! Frames are premultiplied `Bgra`, rows packed, as the compositor composes
-//! them. See `docs/architecture/PORTALS.md`.
+//! them. See `packages/domicile-compositor/src/portals/README.md`.
 
 use std::fs::OpenOptions;
 use std::io::{ErrorKind, Write as _};
