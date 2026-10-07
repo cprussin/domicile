@@ -67,7 +67,7 @@ type Props = {
  * captures input. Requests of a kind it has no dialog for are refused.
  * Inhibitors are not questions, so it leaves them be. It also fires the
  * chords applications hold through the GlobalShortcuts portal. See
- * docs/architecture/PORTALS.md.
+ * packages/domicile-compositor/src/portals/README.md.
  */
 export const PortalDialogs = ({
   host,

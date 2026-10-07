@@ -22,4 +22,4 @@ A photograph behind the whole desktop, changing every minute. Source:
   rotation on every screen, and the lock screen shows its own over the blur.
   Both come from `usePortalWallpaper` and are read with `usePictureUrl`, both
   in `@domicile-desktop/component-library`. See
-  [PORTALS.md](/docs/architecture/PORTALS.md).
+  [the portals README](/packages/domicile-compositor/src/portals/README.md).

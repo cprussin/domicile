@@ -4,7 +4,7 @@
 //! GTK3 exports through v1; GTK4, Chromium and Electron through v2. The
 //! handles live in [`domicile_host::xdg_foreign::Exports`], which resolves them.
 //! No importer: the shell draws portal dialogs, so no client parents a window
-//! to another client's. See `docs/architecture/PORTALS.md`.
+//! to another client's. See `packages/domicile-compositor/src/portals/README.md`.
 
 use smithay::reexports::wayland_protocols::xdg::foreign::{
     zv1::server::{zxdg_exported_v1, zxdg_exporter_v1},

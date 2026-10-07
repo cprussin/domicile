@@ -37,7 +37,7 @@ What works:
   `Lockdown`, `GlobalShortcuts`, `Background`, `Wallpaper`, `DynamicLauncher`,
   `Usb`, `Print`, `ScreenCast` and `Screenshot` over the request channel to
   the shell. `Secret` goes to the keyring, and no other backend is routed
-  ([PORTALS.md](docs/architecture/PORTALS.md)).
+  ([the portals README](packages/domicile-compositor/src/portals/README.md)).
 
 Evidence is in [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md),
 [A-DESKTOP-ON-A-TTY.md](docs/architecture/A-DESKTOP-ON-A-TTY.md),
@@ -416,9 +416,9 @@ Understood and not scheduled.
 - **Wayland capture tools cannot capture the desk.** Portal clients, the
   shell (`system(host).screenshot()`) and `domicile screenshot <file>` all
   take the portal's frame (`Casting::shoot`,
-  [PORTALS.md](docs/architecture/PORTALS.md)). `grim` and `wf-recorder` get
-  nothing. Serve `ext-image-copy-capture-v1` (and `wlr-screencopy` for older tools) on
-  the same display captures.
+  [the portals README](packages/domicile-compositor/src/portals/README.md)).
+  `grim` and `wf-recorder` get nothing. Serve `ext-image-copy-capture-v1` (and
+  `wlr-screencopy` for older tools) on the same display captures.
 
 ### Shell reload
 
