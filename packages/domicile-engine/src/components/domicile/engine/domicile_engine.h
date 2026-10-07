@@ -81,6 +81,46 @@ typedef struct DomicileDmabuf {
   DomicileDmabufPlane planes[4];
 } DomicileDmabuf;
 
+// A display capture id. Zero is never valid and is
+// domicile_display_capture_start's failure return.
+typedef uint32_t DomicileCaptureId;
+
+// Where a captured frame's pixels are.
+typedef uint32_t DomicileCaptureMemory;
+
+// A dmabuf: the browser composites on the GPU.
+#define DOMICILE_CAPTURE_DMABUF 0u
+// Shared memory, one plane at offset 0: the browser composites in software.
+#define DOMICILE_CAPTURE_SHM 1u
+
+// One frame of a display capture, as viz composited it.
+//
+// The fds are lent for the callback: duplicate what you keep. The buffer
+// stays the frame's until domicile_captured_frame_release, so a duplicated fd
+// may be read until then.
+typedef struct DomicileCapturedFrame {
+  DomicileCaptureMemory memory;
+  uint32_t width;
+  uint32_t height;
+  // DRM_FORMAT_ARGB8888 or DRM_FORMAT_ABGR8888, as viz picked.
+  uint32_t fourcc;
+  // Zero for shared memory.
+  uint64_t modifier;
+  uint32_t plane_count;
+  DomicileDmabufPlane planes[4];
+  // The part of the frame that holds the display. Viz letterboxes the rest
+  // when the display's aspect differs from the size asked for.
+  int32_t content_x;
+  int32_t content_y;
+  int32_t content_width;
+  int32_t content_height;
+  // What changed since the capture's previous frame. Empty means all of it.
+  int32_t damage_x;
+  int32_t damage_y;
+  int32_t damage_width;
+  int32_t damage_height;
+} DomicileCapturedFrame;
+
 // One display the browser scans out to.
 //
 // The engine holds DRM master, so on a tty this is the compositor's only source
@@ -143,6 +183,7 @@ typedef struct DomicileDisplayLayout {
 //                                       client may draw into it again
 //   displays   wl_output              — the whole display list, primary first
 //   copied     wl_data_device.set_selection — something was copied in a page
+//   captured   a frame of a display capture, for a screen cast
 //
 // All fire from domicile_engine_dispatch, on the calling thread. `user_data`
 // is passed back untouched. A null function pointer drops that event.
@@ -187,6 +228,16 @@ typedef struct DomicileEngineCallbacks {
                        uint32_t width,
                        uint32_t height,
                        double scale);
+  // A frame of `capture`. `record` is borrowed for the call. Release `frame`
+  // with domicile_captured_frame_release once read: viz keeps a few buffers,
+  // so a capture whose frames are all held stops.
+  void (*captured)(void* user_data,
+                   DomicileCaptureId capture,
+                   uint64_t frame,
+                   const DomicileCapturedFrame* record);
+  // The browser ended `capture`, and no frame follows. Not called after
+  // domicile_display_capture_stop.
+  void (*capture_ended)(void* user_data, DomicileCaptureId capture);
 } DomicileEngineCallbacks;
 
 // Connects to the browser's mojo socket. Returns null on failure, and the
@@ -292,6 +343,39 @@ DOMICILE_ENGINE_EXPORT void domicile_clipboard_set(DomicileEngine* engine,
 DOMICILE_ENGINE_EXPORT void domicile_buffer_destroy(DomicileEngine* engine,
                                                     DomicileSurfaceId surface,
                                                     DomicileBufferId buffer);
+
+// Captures what a display shows, for a screen cast. Returns the capture id, or
+// zero if no browser window shows that display.
+//
+// `display_id` is a DomicileDisplay::id. A nested or headless browser sends no
+// displays; zero names its only window.
+//
+// Frames arrive through `captured`, `width` x `height`, only when the display
+// changed and at most `max_fps` a second. Blocks for the browser's answer.
+DOMICILE_ENGINE_EXPORT DomicileCaptureId
+domicile_display_capture_start(DomicileEngine* engine,
+                               int64_t display_id,
+                               uint32_t width,
+                               uint32_t height,
+                               uint32_t max_fps);
+
+// Captures at `width` x `height` from the next frame on.
+DOMICILE_ENGINE_EXPORT void domicile_display_capture_resize(
+    DomicileEngine* engine,
+    DomicileCaptureId capture,
+    uint32_t width,
+    uint32_t height);
+
+// Stops `capture` and releases every frame of it still held.
+DOMICILE_ENGINE_EXPORT void domicile_display_capture_stop(
+    DomicileEngine* engine,
+    DomicileCaptureId capture);
+
+// Gives a frame's buffer back to viz, which may draw the next frame into it.
+DOMICILE_ENGINE_EXPORT void domicile_captured_frame_release(
+    DomicileEngine* engine,
+    DomicileCaptureId capture,
+    uint64_t frame);
 
 #ifdef __cplusplus
 }  // extern "C"

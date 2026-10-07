@@ -19,6 +19,8 @@ source_set("browser") {
   sources = [
     "browser/brokered_frame_sink.cc",
     "browser/brokered_frame_sink.h",
+    "browser/display_capture.cc",
+    "browser/display_capture.h",
     "browser/display_list.cc",
     "browser/display_list.h",
     "browser/external_surface_provider.cc",
@@ -32,14 +34,39 @@ source_set("browser") {
   # turning that into what a wl_output states is the one piece of this target
   # that is arithmetic rather than plumbing. It is still not //content.
   public_deps = [
+    # Public so the browser's broker in //content, which depends only on this
+    # target, finds a display's window with it.
+    ":display_capture_target",
     "//base",
     "//components/domicile/mojom",
     "//components/viz/common",
     "//components/viz/host",
     "//gpu/command_buffer/client",
+
+    # `browser/display_capture.cc` is a viz FrameSinkVideoConsumer, whose
+    # frames are media's.
+    "//media",
+    "//media/capture/mojom:video_capture_buffer",
     "//mojo/public/cpp/bindings",
+    "//services/viz/privileged/mojom/compositing",
     "//ui/display",
     "//ui/gfx",
+    "//ui/gfx/geometry",
+  ]
+}
+
+# Which browser window's root frame sink shows a display, for a display
+# capture. A target of its own for :shell_windows' reason: the matching is
+# here with its tests, and the windows are read in //content.
+source_set("display_capture_target") {
+  sources = [
+    "browser/display_capture_target.cc",
+    "browser/display_capture_target.h",
+  ]
+
+  public_deps = [
+    "//components/viz/common",
+    "//ui/display",
     "//ui/gfx/geometry",
   ]
 }
@@ -564,6 +591,8 @@ source_set("unit_tests") {
     "browser/desk_geometry_unittest.cc",
     "browser/desk_tabs_unittest.cc",
     "browser/desktop_prefs_unittest.cc",
+    "browser/display_capture_target_unittest.cc",
+    "browser/display_capture_unittest.cc",
     "browser/display_list_unittest.cc",
     "browser/extension_installer_unittest.cc",
     "browser/extension_tray_entry_unittest.cc",
@@ -607,6 +636,7 @@ source_set("unit_tests") {
     ":desk_geometry",
     ":desk_tabs",
     ":desktop_prefs",
+    ":display_capture_target",
     ":display_transform",
     ":extension_installer",
     ":extension_tray_entry",
@@ -639,6 +669,9 @@ source_set("unit_tests") {
     "//components/viz/service",
     "//components/viz/test:test_support",
     "//mojo/public/cpp/bindings",
+    "//media",
+    "//media/capture/mojom:video_capture_buffer",
+    "//services/viz/privileged/mojom/compositing",
     "//skia",
     "//testing/gmock",
     "//testing/gtest",
@@ -688,6 +721,7 @@ group("spike") {
 group("engine") {
   deps = [
     "//components/domicile/engine:domicile_engine",
+    "//components/domicile/engine:engine_capture_probe",
     "//components/domicile/engine:engine_color_probe",
     "//components/domicile/engine:engine_dmabuf_smoke",
     "//components/domicile/engine:engine_smoke",

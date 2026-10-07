@@ -133,6 +133,19 @@ executable("engine_color_probe") {
   ]
 }
 
+# Captures the browser's window through the C ABI and reads the frames back.
+# Used by guard-display-capture.sh.
+executable("engine_capture_probe") {
+  output_name = "domicile_capture_probe"
+
+  sources = [ "engine_capture_probe.cc" ]
+
+  deps = [
+    ":domicile_engine",
+    "//base",
+  ]
+}
+
 # Throwaway smoke test: a dmabuf allocated outside Chromium reaches the screen
 # through a page.
 executable("engine_dmabuf_smoke") {

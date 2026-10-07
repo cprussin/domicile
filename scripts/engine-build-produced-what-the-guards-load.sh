@@ -17,6 +17,7 @@ ARTIFACTS=(
   ozone_unittests
   domicile_css_parity
   domicile_color_probe
+  domicile_capture_probe
 )
 
 # The entry points the compositor looks up by name. Matched as bytes because
@@ -26,6 +27,7 @@ SYMBOLS=(
   domicile_engine_spike_sample_window_center
   domicile_engine_spike_sample_pixel
   domicile_engine_spike_find_color
+  domicile_display_capture_start
 )
 
 for artifact in "${ARTIFACTS[@]}"; do
