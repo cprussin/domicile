@@ -42,8 +42,9 @@
   // The monitor's rotation: `normal`, `rotate-90`, `rotate-180` or
   // `rotate-270`, as the config file spells them.
   //
-  // Follows the wl_output convention: the name is the clockwise turn applied
-  // to content, not the panel's turn. A shell applies it as written.
+  // Follows `wl_output.transform`: the name is the counterclockwise turn
+  // applied to content, not the panel's turn. `rotate-270` is for a panel on
+  // its left side. A shell applies it as written.
   //
   // A DOMString because an enum would need another IDL file and another patched
   // entry in `bindings/idl_in_modules.gni`. The browser maps any other name to

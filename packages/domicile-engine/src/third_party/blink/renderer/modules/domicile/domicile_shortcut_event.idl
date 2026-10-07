@@ -4,10 +4,8 @@
 // A combination claimed with grabShortcut() was pressed (`shortcut`) or let
 // go (`shortcutrelease`).
 //
-// Its own type rather than a DomicileAppEvent with the combination in the
-// `title` slot. A shortcut is not a window's name and does not belong to a
-// window at all: it fires whatever holds the keyboard, which is the point of
-// grabbing it.
+// Its own type rather than a DomicileAppEvent: a shortcut belongs to no
+// window, and fires whatever holds the keyboard.
 
 [
     Exposed=Window,
@@ -20,7 +18,7 @@
   // grabbed as a keycode. See DomicileHost.grabShortcut().
   readonly attribute DOMString chord;
 
-  // The Linux evdev code, the same numbering key() forwards in.
+  // The Linux evdev code.
   readonly attribute unsigned long keycode;
 
   readonly attribute boolean altKey;
