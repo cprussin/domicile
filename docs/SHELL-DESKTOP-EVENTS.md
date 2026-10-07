@@ -108,6 +108,7 @@ import { PortalDialogs } from "@domicile-desktop/component-library/PortalDialogs
   host={domicile}
   screen={focusedScreen}
   screenOf={(appId) => screenShowing(appId)}
+  shellChords={ownedChords(keybindings)}
 />;
 ```
 
@@ -115,8 +116,9 @@ import { PortalDialogs } from "@domicile-desktop/component-library/PortalDialogs
   yes/no question), `Account` (share the user's name and picture),
   `AppChooser` (an app list for "Open with" and `OpenURI`), `FileChooser` (the
   component library's `FilePicker`), `RemoteDesktop` (which devices and the
-  clipboard an application may control) and `InputCapture`. Answer `Access`
-  and `Account` with `PortalAnswer.Access()` to allow.
+  clipboard an application may control), `InputCapture` and `GlobalShortcuts`
+  (review the chords an app asks for). Answer `Access` and `Account` with
+  `PortalAnswer.Access()` to allow.
 - The app list and the file picker read the system through
   `@domicile-desktop/sdk/system` (desktop entries, `mimeapps.list`, `readDir`),
   so `host` must take system calls. `domicile` does.
@@ -128,9 +130,13 @@ import { PortalDialogs } from "@domicile-desktop/component-library/PortalDialogs
   answers to it.
 - It also shows each running remote desktop or input capture session, with a
   Stop button.
+- `PortalDialogs` also fires the chords apps hold. `shellChords` are the
+  shell's own, which a review flags as taken.
 - Without React, `watchPortalRequests` and `answerPortalRequest` in
   `@domicile-desktop/sdk/portal` give the requests, parsed, and send answers.
   `watchCapturing` and `stopCapturing` do the same for running sessions.
+  `fireGlobalShortcuts` in `@domicile-desktop/sdk/global-shortcuts` fires the
+  chords.
 - A shell must answer every request. One left unanswered keeps its application
   waiting until it gives up.
 - The compositor refuses answers while the desktop is locked.

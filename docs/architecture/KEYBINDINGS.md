@@ -57,6 +57,9 @@ compositor: keymap.rs ─▶ shell_config { keys } ─▶ engine ─────
   process matches a grabbed chord in a `<webview>` or on the page.
 - **The SDK owns modes.** It reports the current mode through `onModeChanged`
   so the shell can display it. The shell never interprets keys.
+- **Applications' global shortcuts are grabs too.** The GlobalShortcuts
+  portal's chords use this syntax and grab path; see
+  [PORTALS.md](PORTALS.md).
 - **Grabs are permanent.** The engine's `ShortcutRegistry` has no release. If
   a layout change moves a keysym to another key, the old key stays grabbed
   until restart.

@@ -43,6 +43,10 @@
       "types": "./dist/file-preview.d.ts",
       "default": "./dist/file-preview.js"
     },
+    "./global-shortcuts": {
+      "types": "./dist/global-shortcuts.d.ts",
+      "default": "./dist/global-shortcuts.js"
+    },
     "./key-action": {
       "types": "./dist/key-action.d.ts",
       "default": "./dist/key-action.js"

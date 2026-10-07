@@ -10,8 +10,16 @@ import type {
 } from "@domicile-desktop/sdk/domicile-host";
 import { KeyAction } from "@domicile-desktop/sdk/key-action";
 import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
+import { ownedChords } from "@domicile-desktop/sdk/own-keybindings";
 import type { CSSProperties, PointerEvent } from "react";
-import { Fragment, useEffect, useEffectEvent, useRef, useState } from "react";
+import {
+  Fragment,
+  useEffect,
+  useEffectEvent,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 // `<app>` is the engine's tag. It has no hyphen, so it is not a custom element
 // and React has no JSX type for it. The focus event is not declared: React
@@ -118,6 +126,7 @@ export const Shell = ({
   /** Reports unknown commands. Injectable for tests. */
   report?: typeof logToConsole;
 }) => {
+  const shellChords = useMemo(() => ownedChords(keybindings), [keybindings]);
   const [windows, setWindows] = useState<readonly ShellWindow[]>([]);
   const [popups, setPopups] = useState<readonly Popup[]>([]);
   const drag = useRef<Drag | undefined>(undefined);
@@ -247,7 +256,7 @@ export const Shell = ({
           <app app-id={popup.appId} key={popup.appId} style={style} />
         );
       })}
-      <PortalDialogs host={domicile} />
+      <PortalDialogs host={domicile} shellChords={shellChords} />
     </div>
   );
 };

@@ -65,6 +65,16 @@ export const ownKeybindings = (own: ShellKeybindings): KeybindingsByMode => {
   );
 };
 
+/**
+ * Every chord `own` binds in any mode, once each, in its one spelling. Throws
+ * as {@link ownKeybindings} does.
+ */
+export const ownedChords = (own: ShellKeybindings): readonly string[] => [
+  ...new Set(
+    [...ownKeybindings(own).values()].flatMap((byChord) => [...byChord.keys()]),
+  ),
+];
+
 /** One mode's bindings by chord. Throws on two spellings of one chord. */
 const filed = (bindings: ModeKeybindings): ReadonlyMap<string, KeyAction> =>
   Object.entries(bindings).reduce((by, [written, action]) => {

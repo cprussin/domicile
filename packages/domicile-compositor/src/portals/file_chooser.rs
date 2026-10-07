@@ -238,6 +238,8 @@ impl Asked {
             | PortalAnswer::RemoteDesktop { .. }
             | PortalAnswer::InputCapture
             | PortalAnswer::Stop
+            | PortalAnswer::GlobalShortcuts { .. }
+            | PortalAnswer::Pressed
             | PortalAnswer::Refused => (2, HashMap::new()),
         }
     }

@@ -26,7 +26,7 @@ use domicile_config::{LockdownConfig, ThemeConfig};
 use domicile_host::data_dirs::data_dirs;
 use domicile_host::mime_apps::{default_handler, lists};
 use domicile_host::portal_notifications::Invoked;
-use domicile_protocol::{Capturing, PortalAnswer, PortalRequest, Theme};
+use domicile_protocol::{BoundShortcut, Capturing, PortalAnswer, PortalRequest, Theme};
 use tracing::{debug, warn};
 use zbus::blocking::connection::Builder;
 use zbus::zvariant::{OwnedObjectPath, OwnedValue};
@@ -43,6 +43,7 @@ mod email;
 mod file_chooser;
 #[cfg(test)]
 mod fixture;
+mod global_shortcuts;
 mod inhibit;
 mod input_capture;
 mod lockdown;
@@ -65,6 +66,7 @@ pub use clipboard::Selection;
 use clipboard::{Clipboard, Transfers};
 use email::{Email, Open};
 use file_chooser::FileChooser;
+use global_shortcuts::{GlobalShortcuts, Shortcuts};
 use inhibit::{Inhibit, Inhibitors};
 use input_capture::{InputCapture, Inputs, Zones};
 use lockdown::Lockdown;
@@ -144,7 +146,12 @@ impl Portals {
     pub fn to_nobody() -> Self {
         // Same state as a service thread that has stopped.
         Portals {
-            backends: Backends::new(NotificationServer::unserved(Vec::new()), Tokens::load(None)).0,
+            backends: Backends::new(
+                NotificationServer::unserved(Vec::new()),
+                Tokens::load(None),
+                Shortcuts::new(None),
+            )
+            .0,
         }
     }
 
@@ -188,9 +195,22 @@ impl Portals {
         self.backends.inhibitors.hold_idle_through(hold);
     }
 
-    /// The shell's answer to dialog `id`.
+    /// Publish the chords applications hold through `publish` on every
+    /// change.
+    pub fn listen_for_shortcuts(
+        &self,
+        publish: impl Fn(Vec<BoundShortcut>) + Send + Sync + 'static,
+    ) {
+        self.backends.shortcuts.listen(publish);
+    }
+
+    /// The shell's answer to dialog `id`, or a press of the shortcut bound
+    /// under `id`.
     pub fn answer(&self, id: u32, answer: PortalAnswer) {
-        self.backends.queue.answer(id, answer);
+        match answer {
+            PortalAnswer::Pressed => self.backends.shortcuts.pressed(id),
+            answer => self.backends.queue.answer(id, answer),
+        }
     }
 
     /// Serve RemoteDesktop's and InputCapture's input through `eis`, and the
@@ -238,15 +258,21 @@ struct Backends {
     transfers: Arc<Mutex<Transfers>>,
     inputs: Arc<Inputs>,
     zones: Arc<Mutex<Zones>>,
+    shortcuts: Arc<Shortcuts>,
 }
 
 /// Hands a [`Selection`] to the Wayland thread.
 type Select = dyn Fn(Selection) + Send + Sync;
 
 impl Backends {
-    /// Backends posting notifications to `notifications` and keeping grants
-    /// in `tokens`, and what they tell the portal thread.
-    fn new(notifications: NotificationServer, tokens: Tokens) -> (Backends, Receiver<Told>) {
+    /// Backends posting notifications to `notifications`, keeping grants in
+    /// `tokens` and global shortcuts in `shortcuts`, and what they tell the
+    /// portal thread.
+    fn new(
+        notifications: NotificationServer,
+        tokens: Tokens,
+        shortcuts: Shortcuts,
+    ) -> (Backends, Receiver<Told>) {
         let (told, telling) = channel();
         let backends = Backends {
             queue: Arc::default(),
@@ -260,6 +286,7 @@ impl Backends {
             transfers: Arc::default(),
             inputs: Arc::default(),
             zones: Arc::default(),
+            shortcuts: Arc::new(shortcuts),
         };
         (backends, telling)
     }
@@ -326,6 +353,8 @@ struct Starting {
 /// config's `lockdown`, and sets the activation environment. See
 /// [`activation_environment`] for `ours` and `nested_in`. Portal notifications
 /// go to `notifications`; `spawn` starts a client, such as the mail client.
+/// Restore tokens and global shortcut choices are kept under
+/// `$XDG_STATE_HOME/domicile/`.
 ///
 /// Returns without waiting for the bus, so startup never blocks on D-Bus.
 pub fn serve(
@@ -343,6 +372,10 @@ pub fn serve(
         Tokens::load(restore::path(
             std::env::var_os("XDG_STATE_HOME").map(PathBuf::from),
             std::env::var_os("HOME").map(PathBuf::from),
+        )),
+        Shortcuts::new(domicile_host::global_shortcuts::saved_file(
+            std::env::var("XDG_STATE_HOME").ok().as_deref(),
+            std::env::var("HOME").ok().as_deref(),
         )),
     );
     let portals = Portals {
@@ -405,6 +438,7 @@ fn answer(
         home,
     )?
     .build()?;
+    backends.shortcuts.signal_on(connection.inner().clone());
     say_which_desktop(&connection, environment);
     let notification = connection
         .object_server()
@@ -621,6 +655,13 @@ fn export<'a>(
             Lockdown {
                 config: starting.lockdown,
             },
+        )?
+        .serve_at(
+            OBJECT_PATH,
+            GlobalShortcuts {
+                queue: Arc::clone(&backends.queue),
+                shortcuts: Arc::clone(&backends.shortcuts),
+            },
         )
 }
 
@@ -755,8 +796,11 @@ mod tests {
 
     /// [`served`], opening `mailto:` URLs with `open`.
     fn served_opening(listening: bool, open: Open) -> Served {
-        let (backends, _) =
-            Backends::new(NotificationServer::unserved(Vec::new()), Tokens::load(None));
+        let (backends, _) = Backends::new(
+            NotificationServer::unserved(Vec::new()),
+            Tokens::load(None),
+            Shortcuts::new(None),
+        );
         let (publish, published) = channel();
         backends.queue.listen(
             move |items, _| {

@@ -8,9 +8,10 @@
 #
 # Domicile implements `Settings`, `Access`, `AppChooser`, `FileChooser`,
 # `Notification`, `Inhibit`, `RemoteDesktop`, `Clipboard`, `InputCapture`,
-# `Account`, `Email` and `Lockdown`. Every interface not listed here goes to
-# another backend, mostly `xdg-desktop-portal-gtk`. Listing an interface
-# Domicile does not implement would take it from the backend that does.
+# `Account`, `Email`, `Lockdown` and `GlobalShortcuts`. Every interface not
+# listed here goes to another backend, mostly `xdg-desktop-portal-gtk`.
+# Listing an interface Domicile does not implement would take it from the
+# backend that does.
 # Screenshot and ScreenCast have no backend: gtk does not implement them and the
 # wlroots backends need protocols Domicile does not serve.
 #
@@ -23,10 +24,10 @@
 # suspend inhibitors for the shell. `RemoteDesktop`, its `Clipboard` and
 # `InputCapture` take input over EIS after a grant the shell draws. `Email`
 # opens the `mailto:` handler. `Lockdown` reports the config's `lockdown`
-# section. See
+# section. `GlobalShortcuts` binds chords the shell reviews and grabs. See
 # `packages/domicile-compositor/src/portals/` and
 # `docs/architecture/PORTALS.md`.
 [portal]
 DBusName=org.freedesktop.impl.portal.desktop.domicile
-Interfaces=org.freedesktop.impl.portal.Settings;org.freedesktop.impl.portal.Access;org.freedesktop.impl.portal.AppChooser;org.freedesktop.impl.portal.FileChooser;org.freedesktop.impl.portal.Notification;org.freedesktop.impl.portal.Inhibit;org.freedesktop.impl.portal.RemoteDesktop;org.freedesktop.impl.portal.Clipboard;org.freedesktop.impl.portal.InputCapture;org.freedesktop.impl.portal.Account;org.freedesktop.impl.portal.Email;org.freedesktop.impl.portal.Lockdown;
+Interfaces=org.freedesktop.impl.portal.Settings;org.freedesktop.impl.portal.Access;org.freedesktop.impl.portal.AppChooser;org.freedesktop.impl.portal.FileChooser;org.freedesktop.impl.portal.Notification;org.freedesktop.impl.portal.Inhibit;org.freedesktop.impl.portal.RemoteDesktop;org.freedesktop.impl.portal.Clipboard;org.freedesktop.impl.portal.InputCapture;org.freedesktop.impl.portal.Account;org.freedesktop.impl.portal.Email;org.freedesktop.impl.portal.Lockdown;org.freedesktop.impl.portal.GlobalShortcuts;
 UseIn=domicile

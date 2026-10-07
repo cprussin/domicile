@@ -507,10 +507,15 @@ pub enum HostMessage {
     ///
     /// `capturing` lists the sessions that control or capture input, so the
     /// shell can show each one and stop it with [`PortalAnswer::Stop`].
+    /// `shortcuts` lists the chords applications hold through the
+    /// GlobalShortcuts portal. The shell grabs each and sends
+    /// [`PortalAnswer::Pressed`] under its id when it fires.
     PortalRequests {
         items: Vec<PortalRequest>,
         #[serde(default)]
         capturing: Vec<Capturing>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        shortcuts: Vec<BoundShortcut>,
     },
 }
 
@@ -558,6 +563,9 @@ pub enum PortalKind {
     /// `org.freedesktop.impl.portal.Account`: share the user's name and
     /// picture, or not. Allowed with [`PortalAnswer::Access`].
     Account(AccountDialog),
+    /// `org.freedesktop.impl.portal.GlobalShortcuts`: review the chords an
+    /// application asks for.
+    GlobalShortcuts(ShortcutsDialog),
 }
 
 impl PortalKind {
@@ -575,7 +583,9 @@ impl PortalKind {
             (PortalKind::FileChooser(_), PortalAnswer::FileChooser(_)) => true,
             (PortalKind::RemoteDesktop(_), PortalAnswer::RemoteDesktop { .. }) => true,
             (PortalKind::InputCapture(_), PortalAnswer::InputCapture) => true,
-            // A stop answers a running session, never a request.
+            (PortalKind::GlobalShortcuts(_), PortalAnswer::GlobalShortcuts { .. }) => true,
+            // A stop answers a running session and a press a bound shortcut,
+            // never a request.
             (
                 _,
                 PortalAnswer::Access
@@ -583,7 +593,9 @@ impl PortalKind {
                 | PortalAnswer::FileChooser(_)
                 | PortalAnswer::RemoteDesktop { .. }
                 | PortalAnswer::InputCapture
-                | PortalAnswer::Stop,
+                | PortalAnswer::GlobalShortcuts { .. }
+                | PortalAnswer::Stop
+                | PortalAnswer::Pressed,
             ) => false,
         }
     }
@@ -777,6 +789,53 @@ pub struct AccountDialog {
     pub reason: Option<String>,
 }
 
+/// The shortcuts an application asks to bind, for the user to accept, change
+/// or clear.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ShortcutsDialog {
+    pub shortcuts: Vec<ProposedShortcut>,
+    /// Chords other applications hold, to flag as conflicts.
+    pub taken: Vec<TakenChord>,
+}
+
+/// One shortcut a [`ShortcutsDialog`] reviews.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProposedShortcut {
+    /// The application's id for it.
+    pub id: String,
+    pub description: String,
+    /// The chord the user chose before, else the one the application
+    /// prefers, as the application wrote it. Absent for neither.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trigger: Option<String>,
+}
+
+/// A chord another application holds.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TakenChord {
+    pub chord: String,
+    pub app_id: String,
+}
+
+/// The chord the user chose for one shortcut of a [`ShortcutsDialog`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChosenTrigger {
+    pub id: String,
+    /// Absent when the user cleared it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trigger: Option<String>,
+}
+
+/// A chord an application holds, as [`HostMessage::PortalRequests`] lists it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BoundShortcut {
+    /// The id [`PortalAnswer::Pressed`] is sent under. Not a request's id.
+    pub id: u32,
+    pub app_id: String,
+    /// In the shell's chord syntax; see `docs/architecture/KEYBINDINGS.md`.
+    pub chord: String,
+}
+
 /// The shell's answer to a [`PortalRequest`].
 ///
 /// Each backend reads only its own kind; any other answer refuses the
@@ -799,6 +858,10 @@ pub enum PortalAnswer {
     InputCapture,
     /// The user stopped a [`Capturing`] session.
     Stop,
+    /// The chords the user chose in a [`PortalKind::GlobalShortcuts`].
+    GlobalShortcuts { triggers: Vec<ChosenTrigger> },
+    /// The [`BoundShortcut`] with this id fired. Answers no request.
+    Pressed,
     /// The user dismissed the dialog, or denied it.
     Canceled,
     /// The shell has no dialog for this kind.
@@ -815,9 +878,10 @@ impl PortalAnswer {
             | PortalAnswer::FileChooser(_)
             | PortalAnswer::RemoteDesktop { .. }
             | PortalAnswer::InputCapture
+            | PortalAnswer::GlobalShortcuts { .. }
             | PortalAnswer::Stop => 0,
             PortalAnswer::Canceled => 1,
-            PortalAnswer::Refused => 2,
+            PortalAnswer::Refused | PortalAnswer::Pressed => 2,
         }
     }
 }
