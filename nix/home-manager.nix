@@ -508,10 +508,11 @@ in {
 
     home.packages = [cfg.finalPackage];
 
-    # Takes effect only when `xdg.portal.enable` is set. gtk is included
-    # because `domicile-portals.conf` routes unhandled interfaces to it.
+    # Takes effect only when `xdg.portal.enable` is set. Domicile is the only
+    # backend; `domicile-portals.conf` sends `Secret` to the keyring, which
+    # the user installs.
     xdg.portal = {
-      extraPortals = [cfg.finalPackage pkgs.xdg-desktop-portal-gtk];
+      extraPortals = [cfg.finalPackage];
       configPackages = [cfg.finalPackage];
     };
 

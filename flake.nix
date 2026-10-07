@@ -374,14 +374,14 @@
         mkdir -p "$out/libexec/domicile/shells"
         ln -s ${shellPage "manganese"} "$out/libexec/domicile/shells/manganese"
         ln -s ${shellPage "simple"} "$out/libexec/domicile/shells/simple"
-        # Tells `xdg-desktop-portal` that Domicile implements `Settings`, which
-        # carries the theme to GTK, Qt and Electron apps. The compositor owns
-        # the D-Bus name and sets the matching `XDG_CURRENT_DESKTOP` on clients.
+        # Tells `xdg-desktop-portal` which interfaces Domicile implements. The
+        # compositor owns the D-Bus name and sets the matching
+        # `XDG_CURRENT_DESKTOP` on clients.
         mkdir -p "$out/share/xdg-desktop-portal/portals"
         cp ${./nix/domicile.portal} \
           "$out/share/xdg-desktop-portal/portals/domicile.portal"
         # Routes portal calls (xdg-desktop-portal >= 1.17): Domicile for
-        # `Settings`, gtk for the rest.
+        # everything but `Secret`, which goes to the keyring.
         cp ${./nix/domicile-portals.conf} \
           "$out/share/xdg-desktop-portal/domicile-portals.conf"
         # The user target the login session starts. It binds
@@ -834,9 +834,13 @@
               }
             done
 
-            # The module adds Domicile's portal backend, its
-            # `domicile-portals.conf` and the gtk backend to `xdg.portal`
-            # without enabling portals.
+            # The module adds Domicile's portal backend and its
+            # `domicile-portals.conf` to `xdg.portal` without enabling
+            # portals, and offers no gtk backend.
+            [ ${pkgs.lib.boolToString (pkgs.lib.elem pkgs.xdg-desktop-portal-gtk evaluated.config.xdg.portal.extraPortals)} = false ] || {
+              echo "xdg.portal.extraPortals still offers xdg-desktop-portal-gtk" >&2
+              exit 1
+            }
             ${pkgs.lib.concatMapStrings ({ option, package }: ''
               [ ${pkgs.lib.boolToString (pkgs.lib.elem package evaluated.config.xdg.portal.${option})} = true ] || {
                 echo "xdg.portal.${option} does not hold ${package.name}" >&2
@@ -844,7 +848,6 @@
               }
             '') [
               { option = "extraPortals"; package = evaluated.config.programs.domicile.finalPackage; }
-              { option = "extraPortals"; package = pkgs.xdg-desktop-portal-gtk; }
               { option = "configPackages"; package = evaluated.config.programs.domicile.finalPackage; }
             ]}
 
@@ -931,8 +934,8 @@
               exit 1
             }
 
-            # `domicile-portals.conf` routes portal calls to Domicile first
-            # (for the interfaces `domicile.portal` lists), then gtk.
+            # `domicile-portals.conf` routes every portal call to Domicile but
+            # `Secret`, which goes to the keyring.
             found=
             for package in ${toString machine.config.xdg.portal.configPackages}; do
               conf="$package/share/xdg-desktop-portal/domicile-portals.conf"
@@ -944,14 +947,18 @@
               echo "no configPackage holds a domicile-portals.conf" >&2
               exit 1
             }
-            grep -qxF 'default=domicile;gtk' "$found" || {
-              echo "domicile-portals.conf does not route to domicile, then gtk:" >&2
+            routes=$(grep -vE '^(#|$)' "$found")
+            [ "$routes" = "$(printf '%s\n' \
+              '[preferred]' \
+              'default=domicile' \
+              'org.freedesktop.impl.portal.Secret=gnome-keyring')" ] || {
+              echo "domicile-portals.conf routes other than domicile and the keyring:" >&2
               cat "$found" >&2
               exit 1
             }
-            # The gtk backend must be installed.
-            [ ${pkgs.lib.boolToString (pkgs.lib.elem pkgs.xdg-desktop-portal-gtk machine.config.xdg.portal.extraPortals)} = true ] || {
-              echo "the module offers no xdg-desktop-portal-gtk for that conf to name" >&2
+            # No gtk backend is offered.
+            [ ${pkgs.lib.boolToString (pkgs.lib.elem pkgs.xdg-desktop-portal-gtk machine.config.xdg.portal.extraPortals)} = false ] || {
+              echo "the module still offers xdg-desktop-portal-gtk" >&2
               exit 1
             }
 
