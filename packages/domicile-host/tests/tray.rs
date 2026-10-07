@@ -33,6 +33,7 @@ fn properties() -> Properties {
         attention_icon_name: String::new(),
         attention_pixmaps: Vec::new(),
         icon_theme_path: String::new(),
+        menu: String::new(),
     }
 }
 
@@ -95,7 +96,10 @@ mod items {
             ..properties()
         };
 
-        assert_eq!(item("an-id", passive, &mut icons_in(dir.path())), None);
+        assert_eq!(
+            item("an-id", ":1.42", passive, &mut icons_in(dir.path())),
+            None
+        );
     }
 
     #[test]
@@ -103,7 +107,7 @@ mod items {
         let dir = data_dir(&[]);
         let mut icons = icons_in(dir.path());
         let title = |properties: Properties, icons: &mut TrayIcons| {
-            item("an-id", properties, icons).map(|told| told.title)
+            item("an-id", ":1.42", properties, icons).map(|told| told.title)
         };
 
         assert_eq!(
@@ -143,6 +147,7 @@ mod items {
         assert_eq!(
             item(
                 ":1.9/StatusNotifierItem",
+                ":1.9",
                 nameless,
                 &mut icons_in(dir.path())
             )
@@ -162,11 +167,13 @@ mod items {
         };
 
         assert_eq!(
-            item("an-id", named, &mut icons_in(dir.path())),
+            item("an-id", ":1.42", named, &mut icons_in(dir.path())),
             Some(TrayItem {
                 id: "an-id".into(),
                 title: "nm-applet".into(),
                 icon: Some("data:image/png;base64,d2lmaQ==".into()),
+                bus: ":1.42".into(),
+                menu: None,
             })
         );
     }
@@ -183,7 +190,7 @@ mod items {
         };
 
         assert_eq!(
-            item("an-id", named, &mut icons_in(dir.path())).and_then(|told| told.icon),
+            item("an-id", ":1.42", named, &mut icons_in(dir.path())).and_then(|told| told.icon),
             Some("data:image/png;base64,b3du".into())
         );
     }
@@ -197,7 +204,7 @@ mod items {
             ..properties()
         };
 
-        let icon = item("an-id", pictured, &mut icons_in(dir.path()))
+        let icon = item("an-id", ":1.42", pictured, &mut icons_in(dir.path()))
             .and_then(|told| told.icon)
             .expect("the pixmap, drawn");
         assert!(icon.starts_with("data:image/png;base64,iVBORw0KGgo"));
@@ -210,7 +217,7 @@ mod items {
             icon_pixmaps: pixmaps,
             ..properties()
         };
-        item("an-id", pictured, &mut icons_in(dir.path())).and_then(|told| told.icon)
+        item("an-id", ":1.42", pictured, &mut icons_in(dir.path())).and_then(|told| told.icon)
     }
 
     #[test]
@@ -258,7 +265,7 @@ mod items {
         };
 
         assert_eq!(
-            item("an-id", urgent, &mut icons_in(dir.path())).and_then(|told| told.icon),
+            item("an-id", ":1.42", urgent, &mut icons_in(dir.path())).and_then(|told| told.icon),
             Some("data:image/png;base64,bmV3".into())
         );
     }
@@ -273,9 +280,44 @@ mod items {
         };
 
         assert_eq!(
-            item("an-id", urgent, &mut icons_in(dir.path())).and_then(|told| told.icon),
+            item("an-id", ":1.42", urgent, &mut icons_in(dir.path())).and_then(|told| told.icon),
             Some("data:image/png;base64,Y2FsbQ==".into())
         );
+    }
+
+    #[test]
+    fn an_item_says_the_bus_it_answers_on_and_where_its_menu_is() {
+        // A shell drives the menu itself, over D-Bus.
+        let dir = data_dir(&[]);
+        let menued = Properties {
+            menu: "/MenuBar".into(),
+            ..properties()
+        };
+
+        assert_eq!(
+            item("an-id", ":1.42", menued, &mut icons_in(dir.path()))
+                .map(|told| (told.bus, told.menu)),
+            Some((":1.42".to_string(), Some("/MenuBar".to_string())))
+        );
+    }
+
+    #[test]
+    fn an_item_with_no_menu_says_so() {
+        // KDE's items say `/NO_DBUSMENU` for none.
+        let dir = data_dir(&[]);
+        for none in ["", "/NO_DBUSMENU"] {
+            let unmenued = Properties {
+                menu: none.into(),
+                ..properties()
+            };
+
+            assert_eq!(
+                item("an-id", ":1.42", unmenued, &mut icons_in(dir.path()))
+                    .and_then(|told| told.menu),
+                None,
+                "{none:?}"
+            );
+        }
     }
 
     #[test]
@@ -284,11 +326,13 @@ mod items {
         let dir = data_dir(&[]);
 
         assert_eq!(
-            item("an-id", properties(), &mut icons_in(dir.path())),
+            item("an-id", ":1.42", properties(), &mut icons_in(dir.path())),
             Some(TrayItem {
                 id: "an-id".into(),
                 title: "nm-applet".into(),
                 icon: None,
+                bus: ":1.42".into(),
+                menu: None,
             })
         );
     }
@@ -319,6 +363,8 @@ mod registry {
             id: id.into(),
             title: id.into(),
             icon: None,
+            bus: ":1.42".into(),
+            menu: None,
         }
     }
 

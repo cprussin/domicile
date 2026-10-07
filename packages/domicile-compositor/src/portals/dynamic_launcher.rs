@@ -8,7 +8,7 @@
 //!
 //! **Install tokens:** `RequestInstallToken` lets an application install
 //! without the dialog. No application is trusted with one, so every install is
-//! confirmed. See `docs/architecture/PORTALS.md`.
+//! confirmed. See `docs/PORTALS.md`.
 
 use std::collections::HashMap;
 use std::sync::Arc;

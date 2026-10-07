@@ -1,8 +1,8 @@
 // The shell guard-asks-promise.sh drives. It asks for `old` files and at once
-// for `new` ones and previews a file, then reports how each promise settled:
+// for `new` ones, then reports how each promise settled:
 //
 //   GUARD listening                   the channel is bound
-//   GUARD asks old=<…> new=<…> preview=<kind>:<text>
+//   GUARD asks old=<…> new=<…>
 
 const settled = (promise, read) =>
   promise.then(read, (error) => error?.name ?? String(error));
@@ -23,16 +23,10 @@ export const Shell = (_root, desktop) => {
   setTimeout(async () => {
     const old = host.searchFiles("old");
     const fresh = host.searchFiles("new");
-    const [oldSays, newSays, previewSays] = await Promise.all([
+    const [oldSays, newSays] = await Promise.all([
       settled(old, (found) => found.files.join(",")),
       settled(fresh, (found) => found.files.join(",")),
-      settled(
-        host.previewFile("notes.txt"),
-        (preview) => `${preview.kind}:${preview.text}`,
-      ),
     ]);
-    console.log(
-      `GUARD asks old=${oldSays} new=${newSays} preview=${previewSays}`,
-    );
+    console.log(`GUARD asks old=${oldSays} new=${newSays}`);
   }, 1000);
 };

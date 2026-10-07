@@ -179,7 +179,6 @@ use domicile_config::{
 };
 use domicile_host::clipboard::{text_mime, History, LONGEST_COPY, TEXT_MIMES};
 use domicile_host::data_dirs::data_dirs;
-use domicile_host::file_preview::preview;
 use domicile_host::ipc::{apply_chrome_message, parse_chrome, to_line};
 use domicile_host::system::{locked_out, reach, Environment, Handled, System};
 use domicile_host::theme_turnover::{Step, Turnover, CAPTURE_WITHIN, REPAINT_WITHIN};
@@ -401,7 +400,6 @@ enum ClientRequest {
 /// [`ClientRequest`]; see [`crate::lock::Asked`].
 enum ConnectionRequest {
     SearchFiles { query: String },
-    PreviewFile { path: String },
     SetTheme { theme: Theme },
 }
 
@@ -434,9 +432,6 @@ struct ChromeHub {
     /// then answers nothing, so a launcher does not show a broken desktop as an
     /// empty home.
     offered: Mutex<Option<Arc<Offered>>>,
-    /// The home directory `offered` indexes; previews read under it. Set once,
-    /// before the first index is published.
-    home: OnceLock<std::path::PathBuf>,
     /// The lock state, for [`answer_on_the_connection`]. Set once at startup,
     /// only if the desktop can lock.
     lock: OnceLock<Seen>,
@@ -477,7 +472,6 @@ impl ChromeHub {
             max_scale: AtomicU32::new(max_scale),
             wayland_display,
             offered: Mutex::new(None),
-            home: OnceLock::new(),
             lock: OnceLock::new(),
             portals,
             tray: OnceLock::new(),
@@ -1010,9 +1004,6 @@ fn read_chrome_messages(
             Ok(ChromeMessage::SystemRequest { id, request }) => {
                 call_the_system(hub, &system, id, request)
             }
-            Ok(ChromeMessage::PreviewFile { path }) => {
-                answer_on_the_connection(hub, ConnectionRequest::PreviewFile { path })
-            }
             Ok(ChromeMessage::PointerMotion { app_id, x, y }) => {
                 hub.send_request(ClientRequest::PointerMotion { app_id, x, y });
                 Vec::new()
@@ -1246,22 +1237,6 @@ fn answered_on_the_connection(hub: &ChromeHub, request: ConnectionRequest) -> Ve
                 // rather than an empty list. An empty list would show a broken
                 // desktop as an empty home. The launcher still works for paths,
                 // URLs and queries.
-                .into_iter()
-                .collect()
-        }
-        // Only paths in the index can be previewed, so a page cannot use this
-        // to read arbitrary files. See `domicile_host::file_preview`.
-        ConnectionRequest::PreviewFile { path } => {
-            let offered = hub.offered.lock().unwrap().clone();
-            offered
-                .map(|offered| {
-                    let home = hub.home.get().expect("a home before an index of it");
-                    HostMessage::FilePreview {
-                        preview: preview(home, &path, &offered.search),
-                        path,
-                    }
-                })
-                // No index gets no response, as with search.
                 .into_iter()
                 .collect()
         }
@@ -6746,9 +6721,6 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     match home_directory() {
         Some(home) => {
             let hub = data.state.hub.clone();
-            hub.home
-                .set(home.clone())
-                .expect("the home is set once, at startup");
             let omit = config.files.omit.clone();
             let (told, heard) = mpsc::channel();
             data.state.index = Some(told.clone());

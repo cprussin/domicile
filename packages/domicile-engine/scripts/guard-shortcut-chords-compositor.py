@@ -3,8 +3,7 @@
 the engine resolves a chord grabbed by name.
 
 It answers `hello` with a `welcome`, describes a keyboard with `l` on evdev
-38, presses Meta+Shift+l three seconds later -- once the page has grabbed it --
-and prints every line the browser writes.
+38, and prints every line the browser writes.
 """
 
 import argparse
@@ -16,8 +15,6 @@ import time
 
 SEQUENCE = [
     (0.05, {"type": "shell_config", "keys": {"l": 38, "Return": 28}}),
-    (3.0, {"type": "shortcut",
-           "shortcut": {"key": 38, "shift": True, "logo": True}}),
 ]
 
 

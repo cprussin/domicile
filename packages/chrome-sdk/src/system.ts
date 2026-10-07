@@ -148,6 +148,12 @@ export type Listening<T> = {
   ended: Promise<Result<"stopped", SystemError>>;
 };
 
+/** Part of a file: from `offset` (0 by default), `length` bytes or to the end. */
+export type ByteRange = {
+  offset?: number;
+  length?: number;
+};
+
 /** What {@link System.run} collected. */
 export type Ran = Exit & { stdout: string; stderr: string };
 
@@ -160,7 +166,11 @@ export type Watch = Listening<string>;
  * locked.
  */
 export type System = {
-  readFile: (path: string) => Promise<Result<Uint8Array, SystemError>>;
+  /** The whole file, or `length` bytes from `offset`: fewer at its end. */
+  readFile: (
+    path: string,
+    range?: ByteRange,
+  ) => Promise<Result<Uint8Array, SystemError>>;
   readTextFile: (path: string) => Promise<Result<string, SystemError>>;
   /** Atomic by default: a reader never sees half a file. Writes under `/sys` and `/proc` must not be. */
   writeFile: (
@@ -249,9 +259,9 @@ export const system = (host: SystemHost): System => {
             }))
           : unexpected(reply),
       ),
-    readFile: (path) => readFile(calls, path),
+    readFile: (path, range) => readFile(calls, path, range),
     readTextFile: async (path) =>
-      (await readFile(calls, path)).map((bytes) =>
+      (await readFile(calls, path, undefined)).map((bytes) =>
         new TextDecoder().decode(bytes),
       ),
     run: async (argv, options) =>
@@ -387,9 +397,18 @@ const oneShot = <T extends NonNullable<unknown>>(
 const readFile = (
   calls: Calls,
   path: string,
+  range: ByteRange | undefined,
 ): Promise<Result<Uint8Array, SystemError>> =>
-  oneShot(calls, { call: "read_file", path }, (reply) =>
-    reply.kind === "read" ? fromBase64(reply.data) : unexpected(reply),
+  oneShot(
+    calls,
+    {
+      call: "read_file",
+      path,
+      ...optional("offset", range?.offset),
+      ...optional("length", range?.length),
+    },
+    (reply) =>
+      reply.kind === "read" ? fromBase64(reply.data) : unexpected(reply),
   );
 
 const spawn = (
@@ -630,7 +649,7 @@ const busName = (bus: Bus): string => {
 };
 
 /** `{ [name]: value }`, or nothing when `value` is absent. */
-const optional = (name: string, value: string | undefined) =>
+const optional = (name: string, value: string | number | undefined) =>
   value === undefined ? {} : { [name]: value };
 
 const fileType = (

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# `grabShortcut("Meta+Shift+l")` is resolved by the engine, its press comes
-# back as a `shortcut` whose `chord` is that string, and letting go of Shift
-# comes back as a `shortcutrelease` with the same chord.
+# `grabShortcut("Meta+Shift+l")` is resolved by the engine, its press on the
+# page comes back as a `shortcut` whose `chord` is that string, and letting go
+# of Shift comes back as a `shortcutrelease` with the same chord.
 #
 #   nix develop .#full --command \
 #     ./packages/domicile-engine/scripts/guard-shortcut-chords.sh /build/chromium/src
@@ -9,9 +9,10 @@
 # WHY THIS EXISTS. A shell used to resolve its own chords against the keymap
 # `shell_config` carried, and to answer a press on its own page apart from one
 # in a `<webview>`. The engine does both now. The stand-in describes a keyboard
-# with `l` on evdev 38 and later presses Meta+Shift+l itself; the page grabs a
-# chord written wrong, one the keyboard cannot type and Meta+Shift+l, and
-# presses keys on itself. See docs/architecture/WINDOW-DOMICILE.md.
+# with `l` on evdev 38; the page grabs a chord written wrong, one the keyboard
+# cannot type and Meta+Shift+l, and presses keys on itself. A press in a
+# `<webview>` is guard-webview-keyboard.sh's. See
+# docs/architecture/KEYBINDINGS.md.
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
@@ -96,14 +97,14 @@ sleep 1
 # The closing quote is Chromium's and keeps each match on the message: see
 # guard-windows-state.sh.
 CHORDS=$(grep -oE '"GUARD chords [^"]*"' "$ENGINE_LOG" | head -1)
-WANTED='"GUARD chords bad=SyntaxError missing=NotFoundError page=taken,taken,free heard=Meta+Shift+l,Meta+Shift+l released=Meta+Shift+l"'
+WANTED='"GUARD chords bad=SyntaxError missing=NotFoundError page=taken,taken,free heard=Meta+Shift+l released=Meta+Shift+l"'
 
 if [ -z "$CHORDS" ]; then
   FAILURE="the page never said how its chords went, so the module did not run or threw"
 elif [ "$CHORDS" = "$WANTED" ]; then
   FAILURE=""
 else
-  FAILURE="the page's chords went $CHORDS where $WANTED was owed: a chord written wrong is a SyntaxError, one the keyboard cannot type a NotFoundError, a grabbed chord pressed on the page is taken from it (a repeat too) and fires once, the compositor's press of it carries the chord, and letting go of one of its modifiers releases it once"
+  FAILURE="the page's chords went $CHORDS where $WANTED was owed: a chord written wrong is a SyntaxError, one the keyboard cannot type a NotFoundError, a grabbed chord pressed on the page is taken from it (a repeat too) and fires once, and letting go of one of its modifiers releases it once"
 fi
 
 echo "page: $CHORDS"

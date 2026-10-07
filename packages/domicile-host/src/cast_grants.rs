@@ -6,7 +6,7 @@
 //! do not survive a restart; monitors by `wl_output` name; and regions by a
 //! rectangle on the monitor they are mostly on. Tokens for `persist_mode` 2 are saved to a file
 //! under `$XDG_STATE_HOME/domicile/`; tokens for mode 1 live as long as the
-//! compositor. See `docs/architecture/PORTALS.md`.
+//! compositor. See `docs/PORTALS.md`.
 
 use std::collections::HashMap;
 use std::fs;

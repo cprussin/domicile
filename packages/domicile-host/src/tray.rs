@@ -17,6 +17,9 @@ use crate::png::png;
 /// The object path of an item registered by bus name alone.
 const ITEM_PATH: &str = "/StatusNotifierItem";
 
+/// The `Menu` KDE's items give when they have none.
+const NO_MENU: &str = "/NO_DBUSMENU";
+
 /// The preferred pixmap width: a tray icon's size at a scale of 2. The
 /// smallest pixmap at least this wide wins, so the page only scales down.
 const WANTED_PIXELS: i32 = 32;
@@ -73,6 +76,8 @@ pub struct Properties {
     pub attention_pixmaps: Vec<Pixmap>,
     /// The item's own icon directory.
     pub icon_theme_path: String,
+    /// The object path of its `com.canonical.dbusmenu` menu.
+    pub menu: String,
 }
 
 /// The bus name and object path for a `RegisterStatusNotifierItem(service)`
@@ -241,12 +246,19 @@ impl Registry {
     }
 }
 
-/// The tray entry for an item, or `None` if it is passive. The title falls
-/// back to `id`, so it is never empty.
-pub fn item(id: &str, properties: Properties, icons: &mut TrayIcons) -> Option<TrayItem> {
+/// The tray entry for an item answering on `bus`, or `None` if it is passive.
+/// The title falls back to `id`, so it is never empty.
+pub fn item(
+    id: &str,
+    bus: &str,
+    properties: Properties,
+    icons: &mut TrayIcons,
+) -> Option<TrayItem> {
     (properties.status != Status::Passive).then(|| TrayItem {
         id: id.to_string(),
         icon: picture(&properties, icons),
+        bus: bus.to_string(),
+        menu: (!["", NO_MENU].contains(&properties.menu.as_str())).then(|| properties.menu.clone()),
         title: [properties.tooltip, properties.title, properties.id]
             .into_iter()
             .find(|said| !said.is_empty())

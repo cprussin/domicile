@@ -4,7 +4,7 @@
 //! [`captures`](crate::casting::captures)): every monitor, at the highest
 //! density on the desk. It takes each display's newest frame, starting the
 //! captures it needs and stopping them once it has its frames. See
-//! `docs/architecture/PORTALS.md`.
+//! `docs/PORTALS.md`.
 
 use domicile_host::screenshot::Shot;
 use domicile_protocol::{ShotArea, ShotRect};

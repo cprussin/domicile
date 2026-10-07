@@ -100,6 +100,8 @@ mod files {
             1,
             SystemRequest::ReadFile {
                 path: "note".into(),
+                offset: 0,
+                length: None,
             },
         );
 
@@ -112,6 +114,33 @@ mod files {
     }
 
     #[test]
+    fn a_range_reads_only_its_bytes() {
+        let home = tempfile::tempdir().unwrap();
+        std::fs::write(home.path().join("note"), "a big hi").unwrap();
+        let (system, heard) = system_in(home.path());
+
+        // "hi", whether the range ends at the file's end or past it. One at a
+        // time: each read answers from its own thread.
+        for (id, length) in [(1, Some(2)), (2, Some(100)), (3, None)] {
+            system.handle(
+                id,
+                SystemRequest::ReadFile {
+                    path: "note".into(),
+                    offset: 6,
+                    length,
+                },
+            );
+            assert_eq!(
+                reply(&heard, id),
+                SystemReply::Read {
+                    data: "aGk=".into()
+                },
+                "{id}"
+            );
+        }
+    }
+
+    #[test]
     fn a_missing_file_is_not_found() {
         let home = tempfile::tempdir().unwrap();
         let (system, heard) = system_in(home.path());
@@ -120,6 +149,8 @@ mod files {
             1,
             SystemRequest::ReadFile {
                 path: "/no/such/file".into(),
+                offset: 0,
+                length: None,
             },
         );
 
@@ -485,7 +516,11 @@ mod reaches {
 
     #[test]
     fn reading_the_kernel_is_told_apart_from_reading_anything_else() {
-        let read = |path: &str| SystemRequest::ReadFile { path: path.into() };
+        let read = |path: &str| SystemRequest::ReadFile {
+            path: path.into(),
+            offset: 0,
+            length: None,
+        };
 
         assert_eq!(reach(&read("/sys/class")), Reach::ReadsTheKernel);
         assert_eq!(

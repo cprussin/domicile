@@ -2,7 +2,7 @@
 //!
 //! An application that asks to start with the session gets
 //! `$XDG_CONFIG_HOME/autostart/<app_id>.desktop`, which the session starts at
-//! login. See `docs/architecture/PORTALS.md`.
+//! login. See `docs/PORTALS.md`.
 
 use std::fs;
 use std::io;

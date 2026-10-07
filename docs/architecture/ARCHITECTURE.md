@@ -80,7 +80,7 @@ See [ONE-PAGE-FOR-THE-DESK.md](ONE-PAGE-FOR-THE-DESK.md).
 - **Control:** the page calls the compositor through the `domicile` handed to
   its `Shell`. The engine makes it when it runs the shell on the shell's
   origin, and forwards calls to the compositor's control socket. See
-  [WINDOW-DOMICILE.md](WINDOW-DOMICILE.md).
+  [the SDK's README](/packages/chrome-sdk/README.md#design).
 - **Serving:** the engine serves the shell over `domicile://`, so no port is
   bound. See [DOMICILE-SCHEME.md](DOMICILE-SCHEME.md).
 
@@ -125,7 +125,7 @@ Outside the default members (needs Smithay and native Wayland; build in
     `Access` and `AppChooser`, which the shell draws; RemoteDesktop,
     Clipboard and InputCapture sessions; `ScreenCast`, which casts the
     windows, monitors or region the shell's picker chose; and `Print`, which sends jobs to CUPS
-    over IPP through `domicile_host::cups`. See [PORTALS.md](PORTALS.md).
+    over IPP through `domicile_host::cups`. See [PORTALS.md](../PORTALS.md).
   - `eis.rs` serves EIS, the emulated input the RemoteDesktop and
     InputCapture portals hand out. Its input takes the engine's input path,
     so the lock refuses it.
