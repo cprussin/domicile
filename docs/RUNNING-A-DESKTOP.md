@@ -147,9 +147,9 @@ It provides:
 - **`domicile-session.target`**, started by a desktop that is the session. User
   services bound to `graphical-session.target` start with it. The package is
   also on the system profile, so the portal finds `domicile-mimeapps.list`.
-- **Portal routing**, when `xdg.portal.enable` is set. Domicile answers
-  `Settings`, and `domicile-portals.conf` sends the rest to
-  `xdg-desktop-portal-gtk`. The home-manager module offers the same for
-  home-manager's `xdg.portal`.
+- **Portal routing**, when `xdg.portal.enable` is set. Domicile is the only
+  backend and the shell draws every dialog. `domicile-portals.conf` sends
+  `Secret` to `gnome-keyring`, which you install (`oo7-portal` works too).
+  The home-manager module offers the same for home-manager's `xdg.portal`.
 
 It does not enable a display manager or set the default session.

@@ -10,9 +10,9 @@
 # `Notification`, `Inhibit`, `RemoteDesktop`, `Clipboard`, `InputCapture`,
 # `Account`, `Email`, `Lockdown`, `GlobalShortcuts`, `Background`,
 # `Wallpaper`, `DynamicLauncher`, `Usb`, `ScreenCast`, `Print` and
-# `Screenshot`. Every interface not listed here goes to another backend,
-# mostly `xdg-desktop-portal-gtk`. Listing an interface Domicile does not
-# implement would take it from the backend that does.
+# `Screenshot`: every interface but `Secret`, which goes to the keyring.
+# Listing an interface Domicile does not implement would take it from the
+# backend that does.
 #
 # `Settings` carries `org.freedesktop.appearance`'s `color-scheme`, which GTK4,
 # Qt6, Electron and Firefox read to follow the theme, and its accent color,

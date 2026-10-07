@@ -10,7 +10,7 @@ Today the compositor implements `Settings`, `Access`, `AppChooser`,
 `FileChooser`, `Notification`, `Inhibit`, `RemoteDesktop`, `Clipboard`,
 `InputCapture`, `Account`, `Email`, `Lockdown`, `GlobalShortcuts`,
 `Background`, `Wallpaper`, `DynamicLauncher`, `Usb`, `Print`, `ScreenCast` and
-`Screenshot`, and routes the rest to gtk.
+`Screenshot`, and routes `Secret` to the keyring. No other backend is routed.
 
 ## Design
 
@@ -43,8 +43,7 @@ One request channel carries all dialogs. Each interface's backend builds on it.
 - **No gtk fallback.** The shell already draws every dialog gtk would
   (manganese has a file picker, a launcher with desktop entries, a
   notification drawer). A fallback would give one session two looks and two
-  keyboard models. Gtk stays routed for each interface until that interface
-  lands here, then leaves the NixOS and home-manager modules.
+  keyboard models. The NixOS and home-manager modules offer no gtk backend.
 - **`Secret` goes to the keyring.** `gnome-keyring` or `oo7-portal` implements
   it. It has no UI, and the store must outlive the session.
   `domicile-portals.conf` routes it to the keyring.
@@ -252,4 +251,4 @@ Phase 4: the rest.
 Phase 5: printing, and remove gtk.
 
 - [x] Print over IPP
-- [ ] Remove `xdg-desktop-portal-gtk` from `nix/nixos.nix`, `nix/home-manager.nix` and the flake's checks; the conf names only domicile and the keyring
+- [x] Remove `xdg-desktop-portal-gtk` from `nix/nixos.nix`, `nix/home-manager.nix` and the flake's checks; the conf names only domicile and the keyring

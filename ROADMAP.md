@@ -134,8 +134,8 @@ Evidence is in [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md),
     `RemoteDesktop`, `Clipboard`, `InputCapture`, `Account`, `Email`,
     `Lockdown`, `GlobalShortcuts`, `Background`, `Wallpaper`,
     `DynamicLauncher`, `Usb`, `Print`, `ScreenCast` and `Screenshot`, over
-    the request channel to the shell; gtk answers the rest. Next: every other
-    interface except `Secret` on the channel, then drop gtk.
+    the request channel to the shell; `Secret` goes to the keyring, and no
+    other backend is routed.
     [PORTALS.md](docs/architecture/PORTALS.md).
 
 10. **Split manganese into small packages.** `@domicile-desktop/manganese` is

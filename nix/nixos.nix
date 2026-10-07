@@ -55,10 +55,11 @@ in {
     # missing fails to start.
     security.pam.services.domicile = {};
 
-    # Takes effect only when `xdg.portal.enable` is set. gtk is included
-    # because `domicile-portals.conf` routes unhandled interfaces to it.
+    # Takes effect only when `xdg.portal.enable` is set. Domicile is the only
+    # backend; `domicile-portals.conf` sends `Secret` to the keyring, which
+    # the user installs.
     xdg.portal = {
-      extraPortals = [cfg.package pkgs.xdg-desktop-portal-gtk];
+      extraPortals = [cfg.package];
       configPackages = [cfg.package];
     };
   };
