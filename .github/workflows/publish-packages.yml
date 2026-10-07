@@ -5,7 +5,9 @@ name: Publish packages
 #
 # Uses trusted publishing: npm accepts this workflow's OIDC token for packages
 # whose trusted publisher on npmjs.com names this repository and file, and adds
-# provenance. A package without a trusted publisher refuses the publish.
+# provenance. A package without a trusted publisher refuses the publish. npm
+# attaches one only to an existing package, so a new package is first claimed
+# by hand with a placeholder version and given its trusted publisher there.
 on:
   push:
     branches: [main]
@@ -33,8 +35,4 @@ jobs:
           registry-url: https://registry.npmjs.org
       - run: npm install -g npm@latest
       - run: bun install --frozen-lockfile
-      # NPM_TOKEN is only for a package's first publish, before it can have a
-      # trusted publisher. When unset, npm uses this run's OIDC token.
       - run: .github/scripts/publish-packages.sh
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
