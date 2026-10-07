@@ -40,6 +40,15 @@
     then map withoutNulls value
     else value;
 
+  # One of the `lockdown` switches, which applications read through the
+  # Lockdown portal.
+  lockdownSwitch = description:
+    lib.mkOption {
+      inherit description;
+      type = lib.types.bool;
+      default = false;
+    };
+
   # `wl_output` rotations, counterclockwise as in kanshi and sway: `rotate-270`
   # suits a panel standing on its left side. The strings match the config
   # file, not the Rust variant names.
@@ -325,6 +334,18 @@ in {
               default = null;
               example = "open sesame";
             };
+          };
+
+          # Applications enforce these themselves; the compositor reports them
+          # through the Lockdown portal. Applied on reload.
+          lockdown = {
+            disable_printing = lockdownSwitch "Asks applications not to print.";
+            disable_save_to_disk = lockdownSwitch "Asks applications not to save files.";
+            disable_application_handlers = lockdownSwitch "Asks applications not to open files or links in other applications.";
+            disable_location = lockdownSwitch "Asks applications not to read the location.";
+            disable_camera = lockdownSwitch "Asks applications not to use cameras.";
+            disable_microphone = lockdownSwitch "Asks applications not to use microphones.";
+            disable_sound_output = lockdownSwitch "Asks applications not to play sound.";
           };
 
           startup.commands = lib.mkOption {

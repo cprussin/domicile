@@ -1,7 +1,7 @@
 # The config file
 
 One JSON file (or a module that builds it) describes a desktop: displays,
-keyboard, idle, lock, theme and extensions. The compositor reads it at startup
+keyboard, idle, lock, lockdown, theme and extensions. The compositor reads it at startup
 and reloads it on every change. The schema is the `domicile-config` crate's.
 
 For what a shell does with these settings, see
@@ -91,6 +91,7 @@ An edit applies to the running desktop, and windows stay open:
 | `theme.accent_color`, `contrast`, `reduced_motion` | Windows that read the settings portal follow |
 | `files.omit` | Launcher file index rebuilt |
 | `extensions` | Extensions installed or removed ([EXTENSIONS.md](/docs/architecture/EXTENSIONS.md)) |
+| `lockdown` | Applications told through the Lockdown portal |
 
 - `lock` and `startup` are read only at startup. Rerunning `startup` would
   duplicate its commands.
@@ -141,6 +142,22 @@ be empty.
 
 Shell side: [SHELL-IDLE-AND-LOCK.md](SHELL-IDLE-AND-LOCK.md#locking).
 Implementation: [LOCK.md](LOCK.md).
+
+## Lockdown
+
+```json
+{ "lockdown": { "disable_camera": true, "disable_printing": true } }
+```
+
+Switches that ask applications not to do something. The compositor reports
+them through the `org.freedesktop.impl.portal.Lockdown` portal; applications
+that read it enforce them. Every switch defaults to `false`.
+
+- `disable_printing`, `disable_save_to_disk`, `disable_application_handlers`
+- `disable_location`, `disable_camera`, `disable_microphone`,
+  `disable_sound_output`
+
+An application that ignores the portal is not stopped.
 
 ## Theme
 

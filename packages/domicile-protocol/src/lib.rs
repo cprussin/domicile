@@ -555,6 +555,9 @@ pub enum PortalKind {
     /// `org.freedesktop.impl.portal.InputCapture`'s `CreateSession`: whether
     /// an application may take the input it names.
     InputCapture(InputCaptureDialog),
+    /// `org.freedesktop.impl.portal.Account`: share the user's name and
+    /// picture, or not. Allowed with [`PortalAnswer::Access`].
+    Account(AccountDialog),
 }
 
 impl PortalKind {
@@ -565,7 +568,7 @@ impl PortalKind {
         match (self, answer) {
             (PortalKind::Inhibit(_), _) => false,
             (_, PortalAnswer::Canceled | PortalAnswer::Refused) => true,
-            (PortalKind::Access(_), PortalAnswer::Access) => true,
+            (PortalKind::Access(_) | PortalKind::Account(_), PortalAnswer::Access) => true,
             (PortalKind::AppChooser(dialog), PortalAnswer::AppChooser { choice }) => {
                 dialog.choices.contains(choice)
             }
@@ -766,6 +769,14 @@ pub struct FileChooserAnswer {
     pub current_filter: Option<u32>,
 }
 
+/// A `GetUserInformation` call's texts.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AccountDialog {
+    /// Why the application asks, in its own words.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
 /// The shell's answer to a [`PortalRequest`].
 ///
 /// Each backend reads only its own kind; any other answer refuses the
@@ -773,7 +784,7 @@ pub struct FileChooserAnswer {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum PortalAnswer {
-    /// The user allowed a [`PortalKind::Access`].
+    /// The user allowed a [`PortalKind::Access`] or a [`PortalKind::Account`].
     Access,
     /// The application the user picked in a [`PortalKind::AppChooser`]: one
     /// of its `choices`.

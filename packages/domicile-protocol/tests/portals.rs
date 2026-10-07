@@ -6,9 +6,9 @@
 use std::collections::BTreeMap;
 
 use domicile_protocol::{
-    AccessDialog, AppChooserDialog, Capturing, CapturingKind, ChromeMessage, Devices, FileChoice,
-    FileChoiceOption, FileChooserAnswer, FileChooserDialog, FileChooserMode, FileFilter,
-    HostMessage, Inhibited, Inhibition, InputCaptureDialog, PortalAnswer, PortalKind,
+    AccessDialog, AccountDialog, AppChooserDialog, Capturing, CapturingKind, ChromeMessage,
+    Devices, FileChoice, FileChoiceOption, FileChooserAnswer, FileChooserDialog, FileChooserMode,
+    FileFilter, HostMessage, Inhibited, Inhibition, InputCaptureDialog, PortalAnswer, PortalKind,
     PortalRequest, RemoteDesktopDialog,
 };
 
@@ -73,6 +73,22 @@ fn a_request_with_no_parent_window_reads_back() {
         serde_json::from_str::<PortalRequest>(&written).expect("it parses"),
         request
     );
+}
+
+#[test]
+fn an_account_request_carries_its_reason_when_the_application_gave_one() {
+    let asked = |reason: Option<&str>| {
+        serde_json::to_string(&PortalKind::Account(AccountDialog {
+            reason: reason.map(String::from),
+        }))
+        .expect("it serializes")
+    };
+
+    assert_eq!(
+        asked(Some("To sign you in")),
+        r#"{"kind":"account","body":{"reason":"To sign you in"}}"#
+    );
+    assert_eq!(asked(None), r#"{"kind":"account","body":{}}"#);
 }
 
 #[test]
@@ -241,7 +257,11 @@ fn a_request_takes_only_answers_of_its_own_kind() {
     assert!(!files.accepts(&PortalAnswer::Access));
     assert!(!access.accepts(&chosen_file), "a file grants no access");
     assert!(!chooser.accepts(&chosen_file));
-    for kind in [&chooser, &access, &files] {
+    let account = PortalKind::Account(AccountDialog { reason: None });
+    assert!(account.accepts(&PortalAnswer::Access));
+    assert!(!account.accepts(&chose("firefox")));
+    assert!(!account.accepts(&chosen_file));
+    for kind in [&chooser, &access, &files, &account] {
         assert!(kind.accepts(&PortalAnswer::Canceled));
         assert!(kind.accepts(&PortalAnswer::Refused));
     }

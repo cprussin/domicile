@@ -26,6 +26,11 @@ export enum PortalKind {
   RemoteDesktop,
   /** Whether an application may take input that crosses a screen edge. */
   InputCapture,
+  /**
+   * Whether an application may have the user's name and picture. Allow it
+   * with {@link PortalAnswer.Access}.
+   */
+  Account,
   /** A kind this SDK cannot parse. Answer it with {@link PortalAnswer.Refused}. */
   Unknown,
 }
@@ -156,11 +161,21 @@ export type InputCaptureBody = {
   devices: Devices;
 };
 
+/** Why an application asks for the user's name, in its own words. */
+export type AccountBody = {
+  reason: string | undefined;
+};
+
 export const PortalRequest = {
   Access: (base: PortalRequestBase, body: AccessBody) => ({
     ...base,
     body,
     kind: PortalKind.Access as const,
+  }),
+  Account: (base: PortalRequestBase, body: AccountBody) => ({
+    ...base,
+    body,
+    kind: PortalKind.Account as const,
   }),
   AppChooser: (base: PortalRequestBase, body: AppChooserBody) => ({
     ...base,
@@ -199,7 +214,10 @@ export type PortalRequest = ReturnType<
 >;
 
 export enum PortalAnswerKind {
-  /** The user allowed an {@link PortalKind.Access} request. */
+  /**
+   * The user allowed an {@link PortalKind.Access} or
+   * {@link PortalKind.Account} request.
+   */
   Access,
   /** The application the user picked in an {@link PortalKind.AppChooser}. */
   AppChooser,
@@ -457,6 +475,10 @@ const remoteDesktopSchema = z.object({
 
 const inputCaptureSchema = z.object({ devices: devicesSchema });
 
+const accountSchema = z
+  .object({ reason: z.string().optional() })
+  .transform((body): AccountBody => ({ reason: body.reason }));
+
 /** Reads one kind's body into a request. */
 type ReadKind = (base: PortalRequestBase, body: unknown) => PortalRequest;
 
@@ -490,6 +512,10 @@ const KINDS: ReadonlyMap<string, ReadKind> = new Map<string, ReadKind>([
     "input_capture",
     (base, body) =>
       PortalRequest.InputCapture(base, inputCaptureSchema.parse(body)),
+  ],
+  [
+    "account",
+    (base, body) => PortalRequest.Account(base, accountSchema.parse(body)),
   ],
 ]);
 

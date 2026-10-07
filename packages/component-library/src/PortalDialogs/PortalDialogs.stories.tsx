@@ -53,6 +53,13 @@ const appChooser = {
   kind: "app_chooser",
 };
 
+const account = {
+  app_id: "org.example.Mail",
+  body: { reason: "Mail signs your messages with your name." },
+  id: 8,
+  kind: "account",
+};
+
 const entry = (name: string): string =>
   `[Desktop Entry]\nType=Application\nName=${name}\nExec=true\n`;
 
@@ -210,6 +217,15 @@ export const RemoteDesktop: Story = {
 export const InputCapture: Story = {
   args: {
     host: pushing([inputCapture]),
+    screen: undefined,
+    screenOf: undefined,
+    systemOf: undefined,
+  },
+};
+
+export const Account: Story = {
+  args: {
+    host: pushing([account]),
     screen: undefined,
     screenOf: undefined,
     systemOf: undefined,

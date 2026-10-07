@@ -22,8 +22,9 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 
-use domicile_config::ThemeConfig;
+use domicile_config::{LockdownConfig, ThemeConfig};
 use domicile_host::data_dirs::data_dirs;
+use domicile_host::mime_apps::{default_handler, lists};
 use domicile_host::portal_notifications::Invoked;
 use domicile_protocol::{Capturing, PortalAnswer, PortalRequest, Theme};
 use tracing::{debug, warn};
@@ -35,13 +36,16 @@ use crate::eis::{Captured, Eis};
 use crate::notifications::NotificationServer;
 
 mod access;
+mod account;
 mod app_chooser;
 mod clipboard;
+mod email;
 mod file_chooser;
 #[cfg(test)]
 mod fixture;
 mod inhibit;
 mod input_capture;
+mod lockdown;
 mod notification;
 mod queue;
 mod remote_desktop;
@@ -52,14 +56,18 @@ mod session;
 mod settings;
 #[cfg(test)]
 mod socket_pair;
+mod uri;
 
 use access::Access;
+use account::{Account, LookUp};
 use app_chooser::AppChooser;
 pub use clipboard::Selection;
 use clipboard::{Clipboard, Transfers};
+use email::{Email, Open};
 use file_chooser::FileChooser;
 use inhibit::{Inhibit, Inhibitors};
 use input_capture::{InputCapture, Inputs, Zones};
+use lockdown::Lockdown;
 use notification::Notification;
 use queue::Queue;
 use remote_desktop::{RemoteDesktop, Remotes};
@@ -102,6 +110,8 @@ enum Told {
     Theme(Theme),
     Appearance(Appearance),
     Screensaver(bool),
+    /// The config's new `lockdown`.
+    Lockdown(LockdownConfig),
     /// End the session at this handle, as when the shell stops it.
     End(OwnedObjectPath),
     /// The clipboard now offers `mime_types`, from `owner` if a session set
@@ -154,6 +164,11 @@ impl Portals {
     /// blanked or locked.
     pub fn screensaver(&self, active: bool) {
         self.tell(Told::Screensaver(active));
+    }
+
+    /// Tells applications the config's new `lockdown`.
+    pub fn lock_down(&self, lockdown: LockdownConfig) {
+        self.tell(Told::Lockdown(lockdown));
     }
 
     /// Publish the pending dialogs through `publish` on every change. See
@@ -298,17 +313,29 @@ impl Backends {
     }
 }
 
-/// Starts the portal thread with `theme` as the current theme, and sets the
-/// activation environment. See [`activation_environment`] for `ours` and
-/// `nested_in`. Portal notifications go to `notifications`.
+/// What the Account, Email and Lockdown interfaces start from.
+struct Starting {
+    lockdown: LockdownConfig,
+    /// Opens a `mailto:` URL.
+    open: Open,
+    /// Who the user is, for `Account`.
+    user: LookUp,
+}
+
+/// Starts the portal thread with `theme` as the current theme and the
+/// config's `lockdown`, and sets the activation environment. See
+/// [`activation_environment`] for `ours` and `nested_in`. Portal notifications
+/// go to `notifications`; `spawn` starts a client, such as the mail client.
 ///
 /// Returns without waiting for the bus, so startup never blocks on D-Bus.
 pub fn serve(
     theme: Theme,
     look: &ThemeConfig,
+    lockdown: LockdownConfig,
     ours: &str,
     nested_in: Option<&OsStr>,
     notifications: NotificationServer,
+    spawn: impl Fn(&[String]) + Send + Sync + 'static,
 ) -> Portals {
     let environment = activation_environment(ours, nested_in);
     let (backends, changes) = Backends::new(
@@ -322,10 +349,22 @@ pub fn serve(
         backends: backends.clone(),
     };
     let appearance = Appearance::from(look);
+    let starting = Starting {
+        lockdown,
+        open: mail_client(spawn),
+        user: account::the_user(),
+    };
     thread::spawn(move || {
         // Every failure has the same effect: clients do not follow the theme,
         // and their dialogs go unanswered.
-        if let Err(why) = answer(theme, appearance, &backends, &environment, &changes) {
+        if let Err(why) = answer(
+            theme,
+            appearance,
+            starting,
+            &backends,
+            &environment,
+            &changes,
+        ) {
             warn!(
                 %why,
                 "the desktop portal is not being answered; this desktop's \
@@ -344,6 +383,7 @@ pub fn serve(
 fn answer(
     theme: Theme,
     appearance: Appearance,
+    starting: Starting,
     backends: &Backends,
     environment: &[(&str, String)],
     changes: &Receiver<Told>,
@@ -359,6 +399,7 @@ fn answer(
         Builder::session()?,
         theme,
         appearance,
+        starting,
         backends,
         data_dirs,
         home,
@@ -402,6 +443,12 @@ fn heard(
                 .object_server()
                 .interface::<_, Inhibit>(OBJECT_PATH)?,
             active,
+        ),
+        Told::Lockdown(lockdown) => lockdown::changed(
+            &connection
+                .object_server()
+                .interface::<_, Lockdown>(OBJECT_PATH)?,
+            lockdown,
         ),
         Told::End(handle) => {
             zbus::block_on(session::end(connection.object_server().inner(), &handle))
@@ -497,6 +544,7 @@ fn export<'a>(
     builder: Builder<'a>,
     theme: Theme,
     appearance: Appearance,
+    starting: Starting,
     backends: &Backends,
     data_dirs: Vec<PathBuf>,
     home: String,
@@ -554,7 +602,59 @@ fn export<'a>(
             InputCapture {
                 backends: backends.clone(),
             },
+        )?
+        .serve_at(
+            OBJECT_PATH,
+            Account {
+                queue: Arc::clone(&backends.queue),
+                user: starting.user,
+            },
+        )?
+        .serve_at(
+            OBJECT_PATH,
+            Email {
+                open: starting.open,
+            },
+        )?
+        .serve_at(
+            OBJECT_PATH,
+            Lockdown {
+                config: starting.lockdown,
+            },
         )
+}
+
+/// Opens a `mailto:` URL with the desk's default `x-scheme-handler/mailto`
+/// application, started through `spawn`.
+///
+/// Reads `mimeapps.list` and the desktop entries on each call, as GIO does,
+/// so a new default takes effect at once.
+fn mail_client(spawn: impl Fn(&[String]) + Send + Sync + 'static) -> Open {
+    Box::new(move |url| {
+        let home = std::env::var_os("HOME").map(PathBuf::from);
+        let applications: Vec<PathBuf> = data_dirs(
+            std::env::var_os("XDG_DATA_HOME"),
+            std::env::var_os("XDG_DATA_DIRS"),
+            home.as_deref(),
+        )
+        .into_iter()
+        .map(|dir| dir.join("applications"))
+        .collect();
+        let lists = lists(
+            std::env::var_os("XDG_CONFIG_HOME"),
+            std::env::var_os("XDG_CONFIG_DIRS"),
+            &applications,
+            home.as_deref(),
+            CURRENT_DESKTOP,
+        );
+        let handler = default_handler("x-scheme-handler/mailto", &lists, &applications)
+            .ok_or("no installed application opens mailto: links")?;
+        let command = handler
+            .command(url)
+            .ok_or_else(|| format!("{} has an Exec line that cannot be read", handler.id))?;
+        spawn(&command);
+        Ok(())
+    })
 }
 
 /// The variables [`say_which_desktop`] sets for activated services.
@@ -630,8 +730,9 @@ mod tests {
     use super::*;
     use std::time::Duration;
 
+    use account::User;
     use domicile_protocol::{
-        AccessDialog, AppChooserDialog, FileChooserAnswer, Inhibited, Inhibition,
+        AccessDialog, AccountDialog, AppChooserDialog, FileChooserAnswer, Inhibited, Inhibition,
         Notification as Shown, PortalKind,
     };
     use zbus::zvariant::{ObjectPath, OwnedObjectPath, OwnedValue, Value};
@@ -649,6 +750,11 @@ mod tests {
     }
 
     fn served(listening: bool) -> Served {
+        served_opening(listening, Box::new(|_| Ok(())))
+    }
+
+    /// [`served`], opening `mailto:` URLs with `open`.
+    fn served_opening(listening: bool, open: Open) -> Served {
         let (backends, _) =
             Backends::new(NotificationServer::unserved(Vec::new()), Tokens::load(None));
         let (publish, published) = channel();
@@ -660,10 +766,27 @@ mod tests {
             |parent_window| (parent_window == "wayland:abc").then(|| "app-3".to_string()),
         );
         let (server, client) = socket_pair::connected(|builder| {
+            let starting = Starting {
+                lockdown: LockdownConfig {
+                    disable_camera: true,
+                    ..LockdownConfig::default()
+                },
+                open,
+                user: Box::new(|| {
+                    Box::pin(async {
+                        Ok(User {
+                            id: "ada".into(),
+                            name: "Ada Lovelace".into(),
+                            image: Some("/home/ada/me.png".into()),
+                        })
+                    })
+                }),
+            };
             export(
                 builder,
                 Theme::Dark,
                 Appearance::default(),
+                starting,
                 &backends,
                 Vec::new(),
                 "/home/me".into(),
@@ -1263,6 +1386,196 @@ mod tests {
                 ]
             )
         );
+    }
+
+    /// Call `GetUserInformation` from another thread, returning its reply.
+    fn ask_for_the_user(
+        client: &zbus::blocking::Connection,
+    ) -> thread::JoinHandle<(u32, HashMap<String, OwnedValue>)> {
+        let client = client.clone();
+        thread::spawn(move || {
+            let options = HashMap::from([(
+                "reason".to_string(),
+                OwnedValue::try_from(Value::from("To sign you in")).expect("ownable"),
+            )]);
+            client
+                .call_method(
+                    None::<&str>,
+                    OBJECT_PATH,
+                    Some("org.freedesktop.impl.portal.Account"),
+                    "GetUserInformation",
+                    &(
+                        ObjectPath::try_from(HANDLE).expect("a path"),
+                        "org.example.Mail",
+                        "",
+                        options,
+                    ),
+                )
+                .expect("GetUserInformation answered")
+                .body()
+                .deserialize()
+                .expect("its reply")
+        })
+    }
+
+    #[test]
+    fn an_allowed_account_request_answers_who_the_user_is() {
+        let served = served(true);
+        let asking = ask_for_the_user(&served.client);
+
+        assert_eq!(
+            next(&served.published),
+            [PortalRequest {
+                id: 1,
+                app_id: "org.example.Mail".into(),
+                parent_app_id: None,
+                kind: PortalKind::Account(AccountDialog {
+                    reason: Some("To sign you in".into()),
+                }),
+            }]
+        );
+        served.queue.answer(1, PortalAnswer::Access);
+
+        let (response, results) = asking.join().expect("the call returned");
+        assert_eq!(response, 0);
+        let text = |key: &str| {
+            String::try_from(results.get(key).expect(key).try_clone().expect("cloned"))
+                .expect("a string")
+        };
+        assert_eq!(
+            [text("id"), text("name"), text("image")],
+            ["ada", "Ada Lovelace", "file:///home/ada/me.png"]
+        );
+    }
+
+    #[test]
+    fn a_denied_account_request_answers_nothing() {
+        let served = served(true);
+        let asking = ask_for_the_user(&served.client);
+        next(&served.published);
+        served.queue.answer(1, PortalAnswer::Canceled);
+
+        assert_eq!(
+            asking.join().expect("the call returned"),
+            (1, HashMap::new())
+        );
+    }
+
+    /// Call `ComposeEmail` with one recipient, returning its response.
+    fn compose(client: &zbus::blocking::Connection) -> u32 {
+        let options = HashMap::from([(
+            "address".to_string(),
+            OwnedValue::try_from(Value::from("a@example.com")).expect("ownable"),
+        )]);
+        let (response, results): (u32, HashMap<String, OwnedValue>) = client
+            .call_method(
+                None::<&str>,
+                OBJECT_PATH,
+                Some("org.freedesktop.impl.portal.Email"),
+                "ComposeEmail",
+                &(
+                    ObjectPath::try_from(HANDLE).expect("a path"),
+                    "org.example.App",
+                    "",
+                    options,
+                ),
+            )
+            .expect("ComposeEmail answered")
+            .body()
+            .deserialize()
+            .expect("its reply");
+        assert!(results.is_empty());
+        response
+    }
+
+    #[test]
+    fn an_email_opens_the_mail_client_without_a_dialog() {
+        let (opened, heard) = channel();
+        let served = served_opening(
+            true,
+            Box::new(move |url| {
+                opened.send(url.to_string()).expect("the test listens");
+                Ok(())
+            }),
+        );
+
+        assert_eq!(compose(&served.client), 0);
+        assert_eq!(heard.try_recv(), Ok("mailto:a@example.com".to_string()));
+        assert!(
+            served.published.try_iter().all(|items| items.is_empty()),
+            "nothing reached the shell"
+        );
+    }
+
+    #[test]
+    fn an_email_with_no_mail_client_fails() {
+        let served = served_opening(true, Box::new(|_| Err("no mail client".into())));
+
+        assert_eq!(compose(&served.client), 2);
+    }
+
+    /// The `Lockdown` switch `name`, as a client reads it.
+    fn switch(client: &zbus::blocking::Connection, name: &str) -> bool {
+        let value: OwnedValue = client
+            .call_method(
+                None::<&str>,
+                OBJECT_PATH,
+                Some("org.freedesktop.DBus.Properties"),
+                "Get",
+                &("org.freedesktop.impl.portal.Lockdown", name),
+            )
+            .expect("Get answered")
+            .body()
+            .deserialize()
+            .expect("a value");
+        bool::try_from(value).expect("a boolean")
+    }
+
+    #[test]
+    fn lockdown_reports_the_configs_switches() {
+        let served = served(true);
+
+        assert!(switch(&served.client, "disable-camera"));
+        assert!(!switch(&served.client, "disable-printing"));
+    }
+
+    #[test]
+    fn a_new_lockdown_is_signaled_and_then_read() {
+        let served = served(true);
+        let signals = zbus::blocking::MessageIterator::from(&served.client);
+        let lockdown = served
+            .server
+            .object_server()
+            .interface::<_, Lockdown>(OBJECT_PATH)
+            .expect("Lockdown is served");
+
+        lockdown::changed(
+            &lockdown,
+            LockdownConfig {
+                disable_printing: true,
+                ..LockdownConfig::default()
+            },
+        )
+        .expect("signaled");
+
+        let signal = signals
+            .map(|message| message.expect("a message"))
+            .find(|message| {
+                message
+                    .header()
+                    .member()
+                    .is_some_and(|member| member == "PropertiesChanged")
+            })
+            .expect("a PropertiesChanged signal");
+        let (interface, changed, _): (String, HashMap<String, OwnedValue>, Vec<String>) =
+            signal.body().deserialize().expect("its body");
+        assert_eq!(interface, "org.freedesktop.impl.portal.Lockdown");
+        assert_eq!(
+            bool::try_from(changed["disable-printing"].try_clone().expect("cloned")),
+            Ok(true)
+        );
+        assert!(switch(&served.client, "disable-printing"));
+        assert!(!switch(&served.client, "disable-camera"));
     }
 
     #[test]

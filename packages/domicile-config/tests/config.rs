@@ -7,7 +7,8 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use domicile_config::{
-    AccentColor, Config, ConfigError, ConfigStore, Contrast, DisplayConfig, LockVerifier, ThemeMode,
+    AccentColor, Config, ConfigError, ConfigStore, Contrast, DisplayConfig, LockVerifier,
+    LockdownConfig, ThemeMode,
 };
 
 // ---- parsing & defaults ---------------------------------------------------
@@ -373,6 +374,43 @@ fn rejects_an_accent_that_is_not_a_hex_color() {
             "{accent}: got {err:?}"
         );
     }
+}
+
+// ---- lockdown -------------------------------------------------------------
+
+#[test]
+fn a_desk_that_says_nothing_about_lockdown_disables_nothing() {
+    assert_eq!(
+        Config::parse("{}").unwrap().lockdown,
+        LockdownConfig {
+            disable_printing: false,
+            disable_save_to_disk: false,
+            disable_application_handlers: false,
+            disable_location: false,
+            disable_camera: false,
+            disable_microphone: false,
+            disable_sound_output: false,
+        }
+    );
+}
+
+#[test]
+fn a_desk_that_disables_something_disables_only_that() {
+    let lockdown = Config::parse(
+        r#"
+{ "lockdown": { "disable_camera": true, "disable_printing": true } }
+"#,
+    )
+    .unwrap()
+    .lockdown;
+    assert_eq!(
+        lockdown,
+        LockdownConfig {
+            disable_printing: true,
+            disable_camera: true,
+            ..LockdownConfig::default()
+        }
+    );
 }
 
 // ---- applications ---------------------------------------------------------

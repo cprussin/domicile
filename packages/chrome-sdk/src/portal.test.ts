@@ -271,6 +271,37 @@ describe("watchPortalRequests", () => {
     ]);
   });
 
+  it("parses an account request, with or without a reason", async () => {
+    const host = new FakeHost();
+    const requests = watched(host);
+    host.push([
+      {
+        app_id: "org.example.Mail",
+        body: { reason: "To sign you in" },
+        id: 1,
+        kind: "account",
+      },
+      { app_id: "", body: {}, id: 2, kind: "account" },
+    ]);
+
+    expect(await requests).toEqual([
+      {
+        appId: "org.example.Mail",
+        body: { reason: "To sign you in" },
+        id: 1,
+        kind: PortalKind.Account,
+        parentAppId: undefined,
+      },
+      {
+        appId: "",
+        body: { reason: undefined },
+        id: 2,
+        kind: PortalKind.Account,
+        parentAppId: undefined,
+      },
+    ]);
+  });
+
   it("keeps a kind it does not know, to be refused", async () => {
     const host = new FakeHost();
     const requests = watched(host);

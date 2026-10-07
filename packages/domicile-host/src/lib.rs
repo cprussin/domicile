@@ -30,6 +30,7 @@ pub mod index_file;
 pub mod index_location;
 pub mod ipc;
 mod lock_screen_readouts;
+pub mod mime_apps;
 pub mod notifications;
 mod png;
 pub mod portal_notifications;

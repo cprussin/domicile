@@ -102,6 +102,7 @@ compare() { # what, rust file, rust struct, nix open pattern, nix indent
 compare "extensions" "$LIB" ExtensionsConfig '^          extensions = \{$' '            '
 compare "idle" "$LIB" IdleConfig '^          idle = \{$' '            '
 compare "lock" "$LIB" LockConfig '^          lock = \{$' '            '
+compare "lockdown" "$LIB" LockdownConfig '^          lockdown = \{$' '            '
 compare "input.keyboard" "$LIB" KeyboardConfig '^          input\.keyboard = \{$' '            '
 compare "output" "$LIB" OutputConfig '^          output = \{$' '            '
 compare "output.displays[]" "$LIB" DisplayConfig '^  display = lib\.types\.submodule \{$' '      '

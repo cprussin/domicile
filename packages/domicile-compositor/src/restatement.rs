@@ -19,6 +19,7 @@
 //! | `theme.accent_color`, `contrast`, `reduced_motion` | sent to the desk's clients (`Portals::restyle`) |
 //! | `files.omit` | sent to the index, which rewalks the home (`omit_from_the_index`) |
 //! | `extensions.*` | sent to every chrome, whose browser installs them (`hand_over_the_extensions`) |
+//! | `lockdown.*` | sent to the Lockdown portal, which signals the change (`Portals::lock_down`) |
 //! | `keybindings` | resolved on the keyboard and sent to every chrome (`rebind_the_keys`) |
 //! | `modes` | the same, with `keybindings` |
 //! | `shells` | the same, with `keybindings` |
@@ -40,7 +41,8 @@
 //! restated and an unchanged one is not.
 
 use domicile_config::{
-    Config, ExtensionsConfig, IdleConfig, KeyboardConfig, Omit, ThemeConfig, ThemeMode,
+    Config, ExtensionsConfig, IdleConfig, KeyboardConfig, LockdownConfig, Omit, ThemeConfig,
+    ThemeMode,
 };
 
 /// What a reloaded config asks the compositor to restate.
@@ -68,6 +70,8 @@ pub struct Restatement {
     pub omit: Option<Omit>,
     /// The extensions the browser process installs, or `None` if unchanged.
     pub extensions: Option<ExtensionsConfig>,
+    /// What applications are asked not to do, or `None` if unchanged.
+    pub lockdown: Option<LockdownConfig>,
     /// Whether to resend the key config to the chromes, because keysyms
     /// depend on the layout.
     pub shell_config: bool,
@@ -90,6 +94,7 @@ impl Restatement {
                 .then_some(now.theme),
             omit: (was.files.omit != now.files.omit).then(|| now.files.omit.clone()),
             extensions: (was.extensions != now.extensions).then(|| now.extensions.clone()),
+            lockdown: (was.lockdown != now.lockdown).then(|| now.lockdown.clone()),
             shell_config: was.input.keyboard != now.input.keyboard,
         }
     }
@@ -207,6 +212,20 @@ mod tests {
     }
 
     #[test]
+    fn a_lockdown_that_moved_is_restated() {
+        let was = parsed(A_DVORAK_DESK);
+        let now = parsed(A_DESK_WITHOUT_A_CAMERA);
+
+        assert!(
+            Restatement::between(&was, &now)
+                .lockdown
+                .expect("the lockdown moved")
+                .disable_camera,
+            "the switches handed back are the new ones, not the ones being replaced"
+        );
+    }
+
+    #[test]
     fn the_keys_are_restated_when_the_keyboard_moved() {
         // A chord names a keysym, and the layout decides which key that is.
         let was = parsed(A_DVORAK_DESK);
@@ -262,6 +281,17 @@ mod tests {
   "input": {
     "keyboard": { "xkb_variant": "dvp", "xkb_options": ["caps:swapescape"] }
   },
+  "output": { "displays": [{ "name": "one", "size": [1024, 768] }] }
+}
+"#;
+
+    /// The same desk, asking applications not to use the camera.
+    const A_DESK_WITHOUT_A_CAMERA: &str = r#"
+{
+  "input": {
+    "keyboard": { "xkb_variant": "dvp", "xkb_options": ["caps:swapescape"] }
+  },
+  "lockdown": { "disable_camera": true },
   "output": { "displays": [{ "name": "one", "size": [1024, 768] }] }
 }
 "#;
