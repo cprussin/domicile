@@ -27,6 +27,7 @@ The engine serves this page over `domicile://` and hands `Shell` the desktop.
 | `address/` | Parsing typed text as a URL or search, shared by the launcher and address bar. |
 | `top-bar/` | Bar columns, default layout, and bar items. |
 | `launcher/`, `clipboard/`, `notifications/`, `tray/`, `extensions/` | Those features. |
+| `readouts/` | The desk's system readouts, one watch each, shared by every bar and the lock screen. |
 | `battery/`, `brightness/`, `volume/`, `clock/` | Bar readouts and where each reads from. |
 | `network/`, `bluetooth/` | Bar items on `@domicile-desktop/system-network` and `system-bluetooth`. |
 | `lock/` | Lock screen, with the battery, brightness and volume. |

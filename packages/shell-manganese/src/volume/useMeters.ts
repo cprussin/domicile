@@ -17,7 +17,7 @@ const FLOOR_DB = -60;
  * Metering a microphone records it, so the meters stop on unmount.
  */
 export const useMeters = (
-  server: SoundServer,
+  server: Pick<SoundServer, "meters">,
   ids: readonly string[],
   sources: ReadonlyMap<string, Meter>,
 ): Levels => {

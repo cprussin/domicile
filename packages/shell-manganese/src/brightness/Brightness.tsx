@@ -1,30 +1,27 @@
 import { Popover } from "@domicile-desktop/component-library/Popover";
-import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import { SunIcon } from "@phosphor-icons/react/dist/ssr/Sun";
 import { SunDimIcon } from "@phosphor-icons/react/dist/ssr/SunDim";
 import type { WheelEvent } from "react";
 
 import { css } from "../../styled-system/css";
+import type { SharedBacklight } from "../readouts/readouts";
 import { BrightnessSlider } from "./BrightnessSlider";
-import { hostBacklight } from "./host-backlight";
 import { useBrightness } from "./useBrightness";
 
 /** How far one wheel notch over the icon moves the brightness. */
 const WHEEL_STEP = 0.05;
 
 type Props = {
-  /** The desktop whose system calls reach the backlight. */
-  domicile: DomicileHost;
-  /** Injectable so tests can drive their own backlight. */
-  backlight?: typeof hostBacklight | undefined;
+  /** The desk's backlight. */
+  backlight: SharedBacklight;
 };
 
 /**
  * The brightness control on the bar: a sun icon that reflects the level,
  * opens a slider, and responds to the wheel. See {@link useBrightness}.
  */
-export const Brightness = ({ backlight = hostBacklight, domicile }: Props) => {
-  const control = useBrightness(domicile, backlight);
+export const Brightness = ({ backlight }: Props) => {
+  const control = useBrightness(backlight);
 
   if (control === undefined) {
     return undefined;

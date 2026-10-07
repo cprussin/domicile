@@ -27,6 +27,7 @@ import { NotificationDrawer } from "./notifications/NotificationDrawer";
 import { NotificationToasts } from "./notifications/NotificationToasts";
 import { useNotifications } from "./notifications/useNotifications";
 import { useNow } from "./notifications/useNow";
+import { readouts as deskReadouts } from "./readouts/readouts";
 import { Monitor } from "./screens/Monitor";
 import { NoScreens } from "./screens/NoScreens";
 import type { StageScreen } from "./screens/stage-screens";
@@ -111,6 +112,10 @@ export const Desktop = ({
 
   // Subscribed once for the desk, not per bar: there is a bar per monitor.
   const extensions = useExtensions(domicile);
+
+  // The battery, backlight, sound, network and Bluetooth. Each library's
+  // watch runs once for every bar and the lock screen.
+  const readouts = useMemo(() => deskReadouts(domicile), [domicile]);
 
   // Tray icons, subscribed once for the desk.
   const tray = useTray(domicile);
@@ -244,6 +249,7 @@ export const Desktop = ({
             );
           }}
           opened={opened?.screen === name ? opened.extension : undefined}
+          readouts={readouts}
           topBar={topBar}
           tray={tray}
           trayOrder={trayOrder}
@@ -410,7 +416,7 @@ export const Desktop = ({
         picture={lockPicture}
         refusals={lock.refusals}
       >
-        <LockReadouts domicile={domicile} />
+        <LockReadouts readouts={readouts} />
       </Lock>
       <NoScreens />
     </>

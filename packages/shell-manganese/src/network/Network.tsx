@@ -1,7 +1,5 @@
 import type { Result } from "@cprussin/option-result";
-import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import type { SystemError } from "@domicile-desktop/sdk/system";
-import { system } from "@domicile-desktop/sdk/system";
 import type {
   Link,
   Network as Reading,
@@ -9,23 +7,21 @@ import type {
 import {
   Connectivity,
   LinkKind,
-  watchNetwork,
 } from "@domicile-desktop/system-network/network";
 import { NetworkIcon } from "@phosphor-icons/react/dist/ssr/Network";
 import { WifiHighIcon } from "@phosphor-icons/react/dist/ssr/WifiHigh";
 import { WifiLowIcon } from "@phosphor-icons/react/dist/ssr/WifiLow";
 import { WifiMediumIcon } from "@phosphor-icons/react/dist/ssr/WifiMedium";
 import { WifiSlashIcon } from "@phosphor-icons/react/dist/ssr/WifiSlash";
-import { useEffect, useState } from "react";
 
 import { css, cva } from "../../styled-system/css";
 import { hstack } from "../../styled-system/patterns";
+import type { SharedWatch } from "../readouts/shared-watch";
+import { useSharedWatch } from "../readouts/useSharedWatch";
 
 type Props = {
-  /** The host whose system calls reach NetworkManager. */
-  domicile: DomicileHost;
-  /** Injectable so tests can drive their own network. */
-  watch?: typeof watchNetwork | undefined;
+  /** The desk's network, from the network service. */
+  network: SharedWatch<Result<Reading, SystemError>>;
 };
 
 /**
@@ -33,23 +29,16 @@ type Props = {
  * Wi-Fi network's or VPN's name. Turns `warning` when the link does not reach
  * the internet.
  *
- * Draws nothing until NetworkManager answers, and nothing on a D-Bus error,
- * so a machine without NetworkManager shows no readout.
+ * Draws nothing until the network service answers, and nothing on an error,
+ * so a machine without one shows no readout.
  */
-export const Network = ({ domicile, watch = watchNetwork }: Props) => {
-  const [network, setNetwork] = useState<
-    Result<Reading, SystemError> | undefined
-  >(undefined);
-
-  useEffect(() => watch(system(domicile), setNetwork), [domicile, watch]);
-
-  return network?.match({
+export const Network = ({ network }: Props) =>
+  useSharedWatch(network)?.match({
     Err: () => undefined,
     Ok: (reading) => <Readout network={reading} />,
   });
-};
 
-/** The readout once NetworkManager has answered. */
+/** The readout once the network service has answered. */
 const Readout = ({ network: { connectivity, link } }: { network: Reading }) => {
   const online =
     connectivity !== Connectivity.Limited &&

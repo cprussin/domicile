@@ -1,30 +1,20 @@
-import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
-import { system } from "@domicile-desktop/sdk/system";
 import type { Audio } from "@domicile-desktop/system-audio/audio";
-import type { SoundServer } from "@domicile-desktop/system-audio/sound-server";
-import { soundServer } from "@domicile-desktop/system-audio/sound-server";
-import { useEffect, useMemo, useState } from "react";
 
 import { css } from "../../styled-system/css";
 import { flex } from "../../styled-system/patterns";
 import { Battery } from "../battery/Battery";
-import { watchBattery as defaultWatchBattery } from "../battery/watch-battery";
 import { BrightnessSlider } from "../brightness/BrightnessSlider";
-import { hostBacklight } from "../brightness/host-backlight";
 import { useBrightness } from "../brightness/useBrightness";
+import type { Readouts, SoundControls } from "../readouts/readouts";
+import type { SharedWatch } from "../readouts/shared-watch";
+import { useSharedWatch } from "../readouts/useSharedWatch";
 import { ask } from "../volume/ask";
 import { Level } from "../volume/Level";
 import { primary } from "../volume/primary";
 
 type Props = {
-  /** The desktop whose system calls reach UPower, the backlight and audio. */
-  domicile: DomicileHost;
-  /** Injectable so tests can drive their own backlight. */
-  backlight?: typeof hostBacklight | undefined;
-  /** Injectable so tests can drive their own sound server. */
-  sound?: typeof defaultSound | undefined;
-  /** Injectable so tests can drive their own battery. */
-  watchBattery?: typeof defaultWatchBattery | undefined;
+  /** The desk's readouts, shared with the bars. */
+  readouts: Pick<Readouts, "audio" | "backlight" | "battery" | "sound">;
 };
 
 /**
@@ -34,33 +24,31 @@ type Props = {
  * The compositor allows these system calls while locked. See docs/LOCK.md.
  */
 export const LockReadouts = ({
-  backlight = hostBacklight,
-  domicile,
-  sound = defaultSound,
-  watchBattery = defaultWatchBattery,
+  readouts: { audio, backlight, battery, sound },
 }: Props) => {
-  const brightness = useBrightness(domicile, backlight);
-  const server = useMemo(() => sound(domicile), [sound, domicile]);
+  const brightness = useBrightness(backlight);
   return (
     <div className={paneStyles}>
       <span className={batteryStyles}>
-        <Battery domicile={domicile} watch={watchBattery} />
+        <Battery battery={battery} />
       </span>
       {brightness === undefined ? undefined : (
         <BrightnessSlider control={brightness} />
       )}
-      <Volume server={server} />
+      <Volume audio={audio} server={sound} />
     </div>
   );
 };
 
-const defaultSound = (domicile: DomicileHost): SoundServer =>
-  soundServer(system(domicile));
-
 /** The default output's volume and mute. */
-const Volume = ({ server }: { server: SoundServer }) => {
-  const [audio, setAudio] = useState<Audio | undefined>(undefined);
-  useEffect(() => server.watch(setAudio), [server]);
+const Volume = ({
+  audio: watch,
+  server,
+}: {
+  audio: SharedWatch<Audio>;
+  server: SoundControls;
+}) => {
+  const audio = useSharedWatch(watch);
   const output = audio === undefined ? undefined : primary(audio.outputs);
   return output === undefined ? undefined : (
     <Level

@@ -2,9 +2,6 @@
 // only names them.
 
 import { ThemeSwitch } from "@domicile-desktop/component-library/ThemeSwitch";
-import { system } from "@domicile-desktop/sdk/system";
-import { soundServer } from "@domicile-desktop/system-audio/sound-server";
-import { useMemo } from "react";
 
 import { css } from "../../styled-system/css";
 import { Battery } from "../battery/Battery";
@@ -82,35 +79,34 @@ export const BarMode = () => {
  */
 export const BarThemeSelector = () => <ThemeSwitch />;
 
-/** The primary network connection, from NetworkManager. */
+/** The primary network connection, from the network service. */
 export const BarNetwork = () => {
-  const { domicile } = useBar();
-  return <Network domicile={domicile} />;
+  const { readouts } = useBar();
+  return <Network network={readouts.network} />;
 };
 
 /** The Bluetooth toggle, from BlueZ. */
 export const BarBluetooth = () => {
-  const { domicile } = useBar();
-  return <Bluetooth domicile={domicile} />;
+  const { domicile, readouts } = useBar();
+  return <Bluetooth bluetooth={readouts.bluetooth} domicile={domicile} />;
 };
 
 /** The volume control, whose panel holds the mixer. */
 export const BarVolume = () => {
-  const { domicile } = useBar();
-  const server = useMemo(() => soundServer(system(domicile)), [domicile]);
-  return <Volume server={server} />;
+  const { readouts } = useBar();
+  return <Volume audio={readouts.audio} server={readouts.sound} />;
 };
 
 /** The screen brightness. */
 export const BarBrightness = () => {
-  const { domicile } = useBar();
-  return <Brightness domicile={domicile} />;
+  const { readouts } = useBar();
+  return <Brightness backlight={readouts.backlight} />;
 };
 
 /** The battery charge. */
 export const BarBattery = () => {
-  const { domicile } = useBar();
-  return <Battery domicile={domicile} />;
+  const { readouts } = useBar();
+  return <Battery battery={readouts.battery} />;
 };
 
 /**

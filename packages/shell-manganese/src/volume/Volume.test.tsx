@@ -6,7 +6,7 @@ import { device, heldSound, laptop } from "./fixture";
 import { Volume } from "./Volume";
 
 const shown = (sound: ReturnType<typeof heldSound>) => {
-  render(<Volume server={sound.server} />);
+  render(<Volume audio={sound.audio} server={sound.server} />);
   sound.report(laptop);
 };
 
@@ -20,7 +20,7 @@ describe("Volume", () => {
     it("shows nothing on a desk with no sound server", () => {
       const sound = heldSound();
 
-      render(<Volume server={sound.server} />);
+      render(<Volume audio={sound.audio} server={sound.server} />);
 
       expect(screen.queryByRole("button")).not.toBeInTheDocument();
     });

@@ -8,16 +8,25 @@ import type { Bluetooth as Reading } from "@domicile-desktop/system-bluetooth/bl
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+import { sharedWatch } from "../readouts/shared-watch";
 import { Bluetooth } from "./Bluetooth";
 
 /**
- * A test-controlled BlueZ: `watch` replaces the library's, and `report` sends
- * what it would.
+ * A test-controlled BlueZ: `bluetooth` replaces the library's watch, and
+ * `report` sends what it would.
  */
 const heldBluetooth = () => {
   const listeners: ((bluetooth: Result<Reading, SystemError>) => void)[] = [];
   const watching = { stopped: 0 };
   return {
+    bluetooth: sharedWatch(
+      (onBluetooth: (bluetooth: Result<Reading, SystemError>) => void) => {
+        listeners.push(onBluetooth);
+        return () => {
+          watching.stopped += 1;
+        };
+      },
+    ),
     report: (bluetooth: Result<Reading, SystemError>) => {
       act(() => {
         for (const onBluetooth of listeners) {
@@ -27,15 +36,6 @@ const heldBluetooth = () => {
     },
     get stopped() {
       return watching.stopped;
-    },
-    watch: (
-      _system: unknown,
-      onBluetooth: (bluetooth: Result<Reading, SystemError>) => void,
-    ) => {
-      listeners.push(onBluetooth);
-      return () => {
-        watching.stopped += 1;
-      };
     },
   };
 };
@@ -64,7 +64,11 @@ describe("Bluetooth", () => {
     const bluetooth = heldBluetooth();
 
     const { container } = render(
-      <Bluetooth domicile={NO_HOST} power={NO_POWER} watch={bluetooth.watch} />,
+      <Bluetooth
+        bluetooth={bluetooth.bluetooth}
+        domicile={NO_HOST}
+        power={NO_POWER}
+      />,
     );
 
     expect(container).toBeEmptyDOMElement();
@@ -73,7 +77,11 @@ describe("Bluetooth", () => {
   it("shows nothing without BlueZ or without an adapter", () => {
     const bluetooth = heldBluetooth();
     const { container } = render(
-      <Bluetooth domicile={NO_HOST} power={NO_POWER} watch={bluetooth.watch} />,
+      <Bluetooth
+        bluetooth={bluetooth.bluetooth}
+        domicile={NO_HOST}
+        power={NO_POWER}
+      />,
     );
 
     bluetooth.report(
@@ -91,7 +99,11 @@ describe("Bluetooth", () => {
   it("says whether it is on, and what is connected", () => {
     const bluetooth = heldBluetooth();
     render(
-      <Bluetooth domicile={NO_HOST} power={NO_POWER} watch={bluetooth.watch} />,
+      <Bluetooth
+        bluetooth={bluetooth.bluetooth}
+        domicile={NO_HOST}
+        power={NO_POWER}
+      />,
     );
 
     bluetooth.report(reading(false, []));
@@ -114,12 +126,12 @@ describe("Bluetooth", () => {
       const asked = new Promise<[string, boolean]>((resolve) => {
         render(
           <Bluetooth
+            bluetooth={bluetooth.bluetooth}
             domicile={NO_HOST}
             power={(_system, adapter, powered) => {
               resolve([adapter, powered]);
               return Promise.resolve(Ok("set"));
             }}
-            watch={bluetooth.watch}
           />,
         );
       });
@@ -135,12 +147,12 @@ describe("Bluetooth", () => {
       const asked = new Promise<[string, boolean]>((resolve) => {
         render(
           <Bluetooth
+            bluetooth={bluetooth.bluetooth}
             domicile={NO_HOST}
             power={(_system, adapter, powered) => {
               resolve([adapter, powered]);
               return Promise.resolve(Ok("set"));
             }}
-            watch={bluetooth.watch}
           />,
         );
       });
@@ -164,9 +176,9 @@ describe("Bluetooth", () => {
       const bluetooth = heldBluetooth();
       render(
         <Bluetooth
+          bluetooth={bluetooth.bluetooth}
           domicile={NO_HOST}
           power={() => Promise.resolve(Err(blocked))}
-          watch={bluetooth.watch}
         />,
       );
       bluetooth.report(reading(false, []));
@@ -183,7 +195,11 @@ describe("Bluetooth", () => {
   it("stops watching when it goes away", () => {
     const bluetooth = heldBluetooth();
     const { unmount } = render(
-      <Bluetooth domicile={NO_HOST} power={NO_POWER} watch={bluetooth.watch} />,
+      <Bluetooth
+        bluetooth={bluetooth.bluetooth}
+        domicile={NO_HOST}
+        power={NO_POWER}
+      />,
     );
 
     unmount();

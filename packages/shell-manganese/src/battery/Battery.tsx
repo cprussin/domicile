@@ -1,12 +1,10 @@
 import type { Option } from "@cprussin/option-result";
-import { None } from "@cprussin/option-result";
-import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import type { Battery as BatteryReading } from "@domicile-desktop/system-battery/battery";
 import { LightningIcon } from "@phosphor-icons/react/dist/ssr/Lightning";
-import { useEffect, useState } from "react";
 import { css, cva } from "../../styled-system/css";
 import { hstack } from "../../styled-system/patterns";
-import { watchBattery } from "./watch-battery";
+import type { SharedWatch } from "../readouts/shared-watch";
+import { useSharedWatch } from "../readouts/useSharedWatch";
 
 /** At or below this percentage the readout turns red. */
 const DANGEROUS_PERCENT = 10;
@@ -15,10 +13,8 @@ const DANGEROUS_PERCENT = 10;
 const FLASHING_PERCENT = 5;
 
 type Props = {
-  /** The desktop whose system calls reach UPower. */
-  domicile: DomicileHost;
-  /** Injectable so tests can drive their own battery. */
-  watch?: typeof watchBattery | undefined;
+  /** The desk's battery, from UPower. */
+  battery: SharedWatch<Option<BatteryReading>>;
 };
 
 /**
@@ -31,16 +27,11 @@ type Props = {
  * Draws nothing until UPower reports a battery, so a machine without one shows
  * no false empty meter.
  */
-export const Battery = ({ domicile, watch = watchBattery }: Props) => {
-  const [reading, setReading] = useState<Option<BatteryReading>>(None());
-
-  useEffect(() => watch(domicile, setReading), [domicile, watch]);
-
-  return reading.match({
+export const Battery = ({ battery }: Props) =>
+  useSharedWatch(battery)?.match({
     None: () => undefined,
-    Some: (battery) => <Meter reading={battery} />,
+    Some: (reading) => <Meter reading={reading} />,
   });
-};
 
 /** The readout once there is a reading. */
 const Meter = ({ reading }: { reading: BatteryReading }) => {

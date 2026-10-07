@@ -28,6 +28,9 @@ export const Shell = runManganese({
 To style your own items with manganese's Panda CSS, see
 [CUSTOM-BAR-ITEMS.md](CUSTOM-BAR-ITEMS.md).
 
+Every bar and the lock screen share one watch per system readout. See
+[Host readouts](HOST-READOUTS.md#one-watch-per-desk).
+
 `DEFAULT_TOP_BAR` (`src/top-bar/layout.tsx`) is:
 
 - **left**: launcher button, tray, workspaces

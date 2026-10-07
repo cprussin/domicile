@@ -5,6 +5,7 @@ import type {
 } from "@domicile-desktop/sdk/domicile-host";
 import type { Extension } from "@domicile-desktop/sdk/extension";
 
+import type { Readouts } from "../readouts/readouts";
 import type { TopBarLayout } from "../top-bar/layout";
 import { TopBar } from "../top-bar/TopBar";
 import type { TrayOrder } from "../tray/useTrayOrder";
@@ -38,6 +39,8 @@ type Props = {
   opened: string | undefined;
   /** Open or close an extension's tray popup. */
   onOpenExtension: (id: string | undefined) => void;
+  /** The desk's system readouts, shared by every monitor. */
+  readouts: Readouts;
   /** The system tray icons. */
   tray: readonly DomicileTrayItem[];
   /** The tray order, shared by every monitor. */
@@ -61,6 +64,7 @@ export const Monitor = ({
   notifications,
   onOpenExtension,
   opened,
+  readouts,
   topBar,
   tray,
   trayOrder,
@@ -83,6 +87,7 @@ export const Monitor = ({
         act(WindowAction.WorkspaceSelected(workspace));
       }}
       openedExtension={opened}
+      readouts={readouts}
       screen={name}
       tray={tray}
       trayOrder={trayOrder}
