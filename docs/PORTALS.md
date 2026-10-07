@@ -1,16 +1,11 @@
 # Portals
 
-Make Domicile the session's only `xdg-desktop-portal` backend:
+Domicile is the session's only `xdg-desktop-portal` backend:
 
-- The compositor implements every portal interface except `Secret`.
+- The compositor implements every portal interface except `Secret`, which
+  goes to the keyring.
 - The shell draws every portal dialog.
-- `xdg-desktop-portal-gtk` is removed from the session.
-
-Today the compositor implements `Settings`, `Access`, `AppChooser`,
-`FileChooser`, `Notification`, `Inhibit`, `RemoteDesktop`, `Clipboard`,
-`InputCapture`, `Account`, `Email`, `Lockdown`, `GlobalShortcuts`,
-`Background`, `Wallpaper`, `DynamicLauncher`, `Usb`, `Print`, `ScreenCast` and
-`Screenshot`, and routes `Secret` to the keyring. No other backend is routed.
+- `xdg-desktop-portal-gtk` is not in the session.
 
 ## Design
 
@@ -182,79 +177,30 @@ One request channel carries all dialogs. Each interface's backend builds on it.
 
 ## Interfaces
 
-| Interface | Compositor | Shell UI | Phase |
-|---|---|---|---|
-| Settings | `color-scheme`, `accent-color`, `contrast`, `reduced-motion` from shell config | — | 1 |
-| FileChooser | `OpenFile`, `SaveFile`, `SaveFiles`; filters, `current_folder`, `choices` | picker (manganese's `FilePicker`, moved to component-library) | 1 |
-| AppChooser | candidates from desktop entries and `mimeapps.list`; `UpdateChoices` | app list | 1 |
-| OpenURI | (frontend) | via AppChooser | 1 |
-| Access | — | yes/no prompt with the app's name | 1 |
-| Account | user name, avatar from `AccountsService`, else passwd | confirm; allowed with the `access` answer | 1 |
-| Email | opens the `mailto:` handler from `mimeapps.list` with the fields; attachments as `attach=`, which Thunderbird ignores | — | 1 |
-| Notification | v2, direct to `domicile_host::notifications` | existing drawer | 1 |
-| Inhibit | idle inhibit through `idle.rs`; logout/suspend inhibitors listed as `inhibit` requests; `QueryEndResponse` on session end (the desk has no session end yet, so no query-end is sent) | "X is preventing logout" | 1 |
-| Lockdown | properties from the config's `lockdown`; signaled on reload | — | 1 |
-| ScreenCast | windows, monitors, region; cursor embedded/metadata/hidden; PipeWire streams; restore tokens | source picker, sharing indicator | 2 |
-| Screenshot | one frame from the same sources, PNG to `$XDG_PICTURES_DIR`; `PickColor` | region picker, color picker | 2 |
-| RemoteDesktop | EIS socket; legacy `Notify*` methods use the same path | device grant | 3 |
-| Clipboard | selection to/from a RemoteDesktop session through `clipboard.rs` | part of that grant | 3 |
-| InputCapture | pointer barriers at screen edges; EIS | grant | 3 |
-| GlobalShortcuts | binds into the shell's keymap; `Activated`/`Deactivated` | review and rebind | 4 |
-| Background | autostart entries (`EnableAutostart`); `GetAppState` from windows and focus; `NotifyBackground` as a notification | via Access | 4 |
-| Wallpaper | copies the picture; `set-on` background, lock screen or both | preview dialog, shell wallpaper and lock screen | 4 |
-| DynamicLauncher | `PrepareInstall` asks; no install tokens; `SupportedLauncherTypes` application and web app | install confirm, name editable | 4 |
-| Usb | names each device from its udev properties, else udev's database | device grant, all or none | 4 |
-| Print | printers and options from CUPS over IPP (`domicile_host::cups`, its own IPP codec); GTK `settings`/`page-setup` round-trip; `Print-Job` with the token's choice; no CUPS or no printers ends with `2` | printer, paper, copies, pages, sides, color, orientation, quality | 5 |
-| Secret | keyring, not Domicile | — | — |
+| Interface | Compositor | Shell UI |
+|---|---|---|
+| Settings | `color-scheme`, `accent-color`, `contrast`, `reduced-motion` from shell config | — |
+| FileChooser | `OpenFile`, `SaveFile`, `SaveFiles`; filters, `current_folder`, `choices` | picker (component-library's `FilePicker`) |
+| AppChooser | candidates from desktop entries and `mimeapps.list`; `UpdateChoices` | app list |
+| OpenURI | (frontend) | via AppChooser |
+| Access | — | yes/no prompt with the app's name |
+| Account | user name, avatar from `AccountsService`, else passwd | confirm; allowed with the `access` answer |
+| Email | opens the `mailto:` handler from `mimeapps.list` with the fields; attachments as `attach=`, which Thunderbird ignores | — |
+| Notification | v2, direct to `domicile_host::notifications` | existing drawer |
+| Inhibit | idle inhibit through `idle.rs`; logout/suspend inhibitors listed as `inhibit` requests; `QueryEndResponse` on session end (the desk has no session end yet, so no query-end is sent) | "X is preventing logout" |
+| Lockdown | properties from the config's `lockdown`; signaled on reload | — |
+| ScreenCast | windows, monitors, region; cursor embedded/metadata/hidden; PipeWire streams; restore tokens | source picker, sharing indicator |
+| Screenshot | one frame from the same sources, PNG to `$XDG_PICTURES_DIR`; `PickColor` | region picker, color picker |
+| RemoteDesktop | EIS socket; legacy `Notify*` methods use the same path | device grant |
+| Clipboard | selection to/from a RemoteDesktop session through `clipboard.rs` | part of that grant |
+| InputCapture | pointer barriers at screen edges; EIS | grant |
+| GlobalShortcuts | binds into the shell's keymap; `Activated`/`Deactivated` | review and rebind |
+| Background | autostart entries (`EnableAutostart`); `GetAppState` from windows and focus; `NotifyBackground` as a notification | via Access |
+| Wallpaper | copies the picture; `set-on` background, lock screen or both | preview dialog, shell wallpaper and lock screen |
+| DynamicLauncher | `PrepareInstall` asks; no install tokens; `SupportedLauncherTypes` application and web app | install confirm, name editable |
+| Usb | names each device from its udev properties, else udev's database | device grant, all or none |
+| Print | printers and options from CUPS over IPP (`domicile_host::cups`, its own IPP codec); GTK `settings`/`page-setup` round-trip; `Print-Job` with the token's choice; no CUPS or no printers ends with `2` | printer, paper, copies, pages, sides, color, orientation, quality |
+| Secret | keyring, not Domicile | — |
 
-Also in scope, outside the portal: `ext-data-control-v1`, so clipboard
+Outside the portal, the compositor serves `ext-data-control-v1`, so clipboard
 managers and `wl-paste` work without a focused window.
-
-## Plan
-
-Phase 0: request channel.
-
-- [x] `PortalRequest`, `PortalAnswer`, the two messages; protocol round-trip tests
-- [x] `domicile_host::portals`: queue, first answer wins, refuse when no listener
-- [x] `src/portals/`: one name, `Request` and `Session` objects, `Settings`
-- [x] engine patch: `portalrequests`, `answerPortalRequest`; guard against a stand-in compositor
-- [x] SDK: `portal_requests`, kinds parsed with Zod
-- [x] `zxdg_exporter_v2` and `v1`; resolve a handle to an app id (`domicile_host::xdg_foreign`; no importer)
-- [x] `<PortalDialogs />` in component-library; mounted in manganese and shell-simple; `examples/minimal-shell` refuses instead
-- [x] `domicile.portal` lists each interface as it lands; the conf routes it here
-
-Phase 1: dialogs.
-
-- [x] FileChooser, with `FilePicker` moved to component-library; it lists directories with `readDir` ([SHELL-SYSTEM-ACCESS.md](../SHELL-SYSTEM-ACCESS.md))
-- [x] AppChooser
-- [x] Access, Account, Email, Lockdown
-- [x] Notification v2
-- [x] Inhibit
-- [x] Settings: accent color, contrast, reduced motion
-
-Phase 2: capture.
-
-- [x] PipeWire producer in the compositor; window sources from client buffers
-- [x] engine: `FrameSinkVideoCapturer` per display, dmabufs over the broker socket; monitor and region `Source`s
-- [x] ScreenCast of windows, with restore tokens and the sharing indicator
-- [x] ScreenCast of monitors and regions: offer the engine's display `Source`s in the picker and `AvailableSourceTypes`
-- [x] Screenshot and `PickColor`
-- [x] Remove ROADMAP's "no screenshot or screencast portal" item
-
-Phase 3: input.
-
-- [x] EIS server in the compositor
-- [x] RemoteDesktop, Clipboard, InputCapture
-- [x] `ext-data-control-v1`
-
-Phase 4: the rest.
-
-- [x] GlobalShortcuts
-- [x] engine: report a grabbed chord's release, for `Deactivated` on release
-- [x] Background, Wallpaper
-- [x] DynamicLauncher, Usb
-
-Phase 5: printing, and remove gtk.
-
-- [x] Print over IPP
-- [x] Remove `xdg-desktop-portal-gtk` from `nix/nixos.nix`, `nix/home-manager.nix` and the flake's checks; the conf names only domicile and the keyring

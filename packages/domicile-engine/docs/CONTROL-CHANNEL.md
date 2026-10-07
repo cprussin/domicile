@@ -19,19 +19,19 @@ The engine has two channels to the rest of Domicile:
 
 ### Members
 
-- **Outbound:** `spawn`, `search_files`, `preview_file`, `call_system`,
+- **Outbound:** `spawn`, `search_files`, `call_system`,
   `answer_portal_request`, `copy_clipboard_entry`, `activate_tray_item`,
-  `dismiss_notifications`, `invoke_notification_action`, `focus_app`, `focus_chrome`, `close_app`,
-  `resize_app`, `set_app_bounds`, `set_desktop_size`,
+  `dismiss_notifications`, `invoke_notification_action`, `focus_app`,
+  `focus_chrome`, `close_app`, `set_app_bounds`, `set_desktop_size`,
   `set_device_pixel_ratio`, `set_theme`, `theme_captured`, `unlock`, `lock`,
   `key`, `pointer_motion`, `pointer_leave`, `pointer_button`, `pointer_axis`.
   The browser also sends `hello` on connect.
 - **Inbound:** `welcome`, `app_appeared`, `app_titled`, `app_resized`,
   `app_min_size`, `app_max_size`, `popup_placed`, `app_closed`, `app_cursor`,
-  `shortcut`, `modifiers`, `found_files`, `file_preview`, `clipboard`,
-  `theme`, `focus_changed`, `focus_requested`, `displays`, `keymap`,
-  `extensions`, `tray`, `notifications`, `shell_config`, `idle`, `locked`,
-  `system`, `portal_requests`.
+  `modifiers`, `found_files`, `clipboard`, `theme`, `windows_theme`,
+  `focus_changed`, `focus_requested`, `displays`, `keymap`, `extensions`,
+  `tray`, `notifications`, `shell_config`, `idle`, `locked`, `system`,
+  `portal_requests`.
 - **Handled in the browser, never sent to the compositor:** `grab_shortcut`,
   `warp_pointer`.
 - **Not from the compositor:** `browserwindowschanged`, the desk's browser
@@ -40,12 +40,6 @@ The engine has two channels to the rest of Domicile:
 
 ### Members with special handling
 
-- **`preview_file`** is the only outbound member that names a path.
-  - The path is relative to the home, as `found_files` returned it.
-  - The compositor answers only for paths in its index of the home. Anything
-    else is `unreadable`.
-  - Audio files come back as `audio`, with tags and the cover as a `data:` URL.
-    The page can draw from `domicile://home/` but cannot read it.
 - **`call_system`** and **`system`** carry the shell's system calls. The
   browser wraps the page's request as a `system_request` line and relays
   `system_reply`, `system_event` and `system_end` lines whole, as a
@@ -53,7 +47,7 @@ The engine has two channels to the rest of Domicile:
   call. See `components/domicile/browser/system_call.h` and
   [SHELL-SYSTEM-ACCESS.md](/docs/SHELL-SYSTEM-ACCESS.md).
 - **`portal_requests`** and **`answer_portal_request`** carry portal dialogs.
-  See [PORTALS.md](/docs/architecture/PORTALS.md).
+  See [PORTALS.md](/docs/PORTALS.md).
   - The browser relays `portal_requests` whole, as a `portalrequests`
     `MessageEvent`, and reads nothing but `type`.
   - The renderer keeps the latest line and sends it again to a listener added
@@ -61,10 +55,9 @@ The engine has two channels to the rest of Domicile:
   - The browser wraps the page's answer, which must be a JSON object with a
     string `kind`, as an `answer_portal_request` line. See
     `components/domicile/browser/portal_request.h`.
-- **`resize_app`** is implemented but unused. An `<app>`'s layout box already
-  sets the client's size through `LayoutAppSurface` and
-  `ExternalSurfaceProvider::Embed`. Removing it from the IDL needs an engine
-  release.
+- **`tray`**: each item carries the `bus` it answers on and its dbusmenu
+  `menu` path, so a shell drives the menu with `call_system`. See
+  [SYSTEM-TRAY.md](/docs/architecture/SYSTEM-TRAY.md).
 - **`shell_config`** stops in the renderer. `DomicileHost` reads its keys to
   resolve the chords `grabShortcut` is given by name; none of it reaches the
   page.
@@ -113,8 +106,9 @@ The engine has two channels to the rest of Domicile:
   a decimal point. Reading it as an integer gives zero.
 - **Modifiers** are `altKey`, `ctrlKey`, `shiftKey`, `metaKey`. The compositor
   has already resolved xkb's masks against the keymap.
-- **Shortcuts** are `DomicileShortcut` (`{ keycode, altKey, ctrlKey, shiftKey,
-  metaKey }`) in both directions. `keycode` is an evdev code.
+- **Shortcuts** are grabbed by chord name, `grabShortcut("Meta+Shift+l")`. A
+  `shortcut` event carries the `chord`, `keycode`, `altKey`, `ctrlKey`,
+  `shiftKey` and `metaKey`. `keycode` is an evdev code.
 
 ### Adding a message
 

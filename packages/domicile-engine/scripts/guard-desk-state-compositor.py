@@ -20,7 +20,13 @@ SEQUENCE = [
     {"type": "theme", "theme": "light"},
     {"type": "windows_theme", "theme": "dark"},
     {"type": "clipboard", "entries": [{"id": 7, "preview": "hello"}]},
-    {"type": "tray", "items": [{"id": "nm", "title": "Network", "icon": ""}]},
+    {"type": "tray", "items": [
+        {"id": "nm", "title": "Network", "icon": "", "bus": ":1.42",
+         "menu": "/MenuBar"},
+        {"id": "sync", "title": "Sync", "bus": "org.kde.StatusNotifierItem-7-1"},
+        # No bus: nothing could reach it, so the browser drops it.
+        {"id": "lost", "title": "Lost"},
+    ]},
     {"type": "modifiers", "alt": True, "ctrl": False, "shift": True, "logo": False},
 ]
 

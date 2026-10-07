@@ -1,7 +1,7 @@
 //! An application's name and icon from its desktop entry, for portal dialogs
 //! to name who asks and what they may share.
 //!
-//! See `docs/architecture/PORTALS.md`.
+//! See `docs/PORTALS.md`.
 
 use std::fs;
 use std::path::PathBuf;

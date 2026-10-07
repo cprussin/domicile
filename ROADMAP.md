@@ -97,9 +97,10 @@ Evidence is in [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md),
      count. The lock makes this more pressing: a user about to touch the
      keyboard gets a lock screen with no warning.
 
-4. **System tray menus.** Icons, titles and clicks work. Left:
-   `com.canonical.dbusmenu`. Without it, most libappindicator items do nothing
-   on a secondary click. [SYSTEM-TRAY.md](docs/architecture/SYSTEM-TRAY.md).
+4. **System tray menus.** Icons, titles and clicks work, and each item names
+   its bus and menu path. Left: a library that draws `com.canonical.dbusmenu`
+   over `dbusCall`. Without it, most libappindicator items do nothing on a
+   secondary click. [SYSTEM-TRAY.md](docs/architecture/SYSTEM-TRAY.md).
 
 5. **Which monitor shows a notification.** The compositor serves
    `org.freedesktop.Notifications`, including web notifications, and manganese
@@ -136,7 +137,7 @@ Evidence is in [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md),
     `DynamicLauncher`, `Usb`, `Print`, `ScreenCast` and `Screenshot`, over
     the request channel to the shell; `Secret` goes to the keyring, and no
     other backend is routed.
-    [PORTALS.md](docs/architecture/PORTALS.md).
+    [PORTALS.md](docs/PORTALS.md).
 
 10. **Split manganese into small packages.** `@domicile-desktop/manganese` is
     one package with the layout, the bar and every bar item. Split the clock,
@@ -387,7 +388,7 @@ Understood and not scheduled.
   - No region or window picker, and no screen recording.
   - Tools such as `grim` and `wf-recorder` cannot capture the desk. Portal
     clients can, through the Screenshot portal
-    ([PORTALS.md](docs/architecture/PORTALS.md)).
+    ([PORTALS.md](docs/PORTALS.md)).
 
   Replace it with `ext-image-copy-capture-v1` (and `wlr-screencopy` for older
   tools), on the display captures the portal uses. Then remove the command.

@@ -5,7 +5,7 @@
 //! [`export`]. One that needs the user calls [`queue::ask`], which pushes the
 //! dialog to every chrome as
 //! [`HostMessage::PortalRequests`](domicile_protocol::HostMessage::PortalRequests)
-//! and waits for the shell's answer. See `docs/architecture/PORTALS.md`.
+//! and waits for the shell's answer. See `docs/PORTALS.md`.
 //!
 //! `xdg-desktop-portal` routes to this backend by `XDG_CURRENT_DESKTOP`. It is
 //! activated by D-Bus or systemd, so it reads that from their activation

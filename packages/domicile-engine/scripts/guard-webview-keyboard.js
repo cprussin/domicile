@@ -91,15 +91,9 @@ export const Shell = (_root, desktop) => {
     takeTheKeyboard();
   });
 
-  // Alt+Tab as evdev codes, as `Shell.tsx` names it. Lists every modifier
-  // because the match is on the whole combination.
-  const ALT_TAB = {
-    altKey: true,
-    ctrlKey: false,
-    keycode: 15,
-    metaKey: false,
-    shiftKey: false,
-  };
+  // Alt+Tab, as manganese grabs it. The engine finds Tab on evdev 15 in the
+  // keyboard the control-socket stand-in describes.
+  const ALT_TAB = "Alt+Tab";
 
   const host = desktop;
   if (host === null || host === undefined) {
@@ -151,7 +145,7 @@ export const Shell = (_root, desktop) => {
   });
 
   host.grabShortcut(ALT_TAB);
-  say(`claimed keycode=${ALT_TAB.keycode}`);
+  say(`claimed ${ALT_TAB}`);
 
   // Set `src` after attaching: it requests a guest, which needs a frame.
   document.body.append(view);

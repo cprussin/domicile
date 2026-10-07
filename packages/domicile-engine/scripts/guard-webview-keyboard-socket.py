@@ -10,10 +10,10 @@ and the press comes back up it -- so the guard needs something on the other end
 for the length of the run, and a real compositor is not available here: this
 guard is headless and software-composited, with no GPU and no Wayland.
 
-So this accepts the connection and reads. It answers nothing, which is exactly
-right: no message the browser sends on this socket has an answer, and the
-`welcome` a real compositor sends back is checked by the SDK's `BridgeClient`,
-which this guard's shell module does not use.
+So this accepts the connection, describes a keyboard with Tab on evdev 15 --
+the page grabs Alt+Tab by name, and the engine resolves a name against the
+keyboard the compositor describes -- and reads. It answers nothing: no message
+the browser sends on this socket has an answer.
 
 IT IS ALSO THE ASSERTION THAT A CLAIM IS NO LONGER RELAYED. Every line the
 browser writes is printed here, so `grab_shortcut` appearing in this log would
@@ -23,9 +23,15 @@ to match one against.
 """
 
 import argparse
+import json
 import os
 import socket
 import sys
+import time
+
+# The keyboard, as the compositor's `shell_config` describes it: each keysym
+# and the evdev key it is on.
+KEYBOARD = {"type": "shell_config", "keys": {"Tab": 15}}
 
 
 def serve(path):
@@ -45,6 +51,11 @@ def serve(path):
         print("a channel connected", flush=True)
         remainder = b""
         with connection:
+            # After the page has bound the channel, as the shortcut-chords
+            # stand-in waits.
+            time.sleep(0.5)
+            connection.sendall((json.dumps(KEYBOARD) + "\n").encode("utf-8"))
+            print("sent: %s" % json.dumps(KEYBOARD), flush=True)
             while True:
                 chunk = connection.recv(65536)
                 if not chunk:

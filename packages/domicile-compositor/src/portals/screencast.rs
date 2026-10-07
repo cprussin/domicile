@@ -8,7 +8,7 @@
 //! - The capture is listed for the shell's sharing indicator until it ends.
 //!   Closing the session, the shell's stop, or every stream ending ends it.
 //!
-//! See `docs/architecture/PORTALS.md`.
+//! See `docs/PORTALS.md`.
 
 use std::collections::HashMap;
 use std::fs::File;

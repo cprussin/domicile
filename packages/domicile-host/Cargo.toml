@@ -17,7 +17,6 @@ notify.workspace = true
 libc.workspace = true
 # The shell's D-Bus calls and matches (see `src/system.rs`).
 zbus.workspace = true
-lofty.workspace = true
 # Encodes screenshots (see `src/screenshot.rs`).
 png.workspace = true
 

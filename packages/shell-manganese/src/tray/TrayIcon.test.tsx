@@ -10,15 +10,19 @@ import { TrayIcon } from "./TrayIcon";
 
 /** An application with an image. */
 const network: DomicileTrayItem = {
+  bus: ":1.42",
   icon: "data:image/png;base64,iVBORw0KGgo=",
   id: ":1.42/org/ayatana/nm",
+  menu: "/MenuBar",
   title: "Wired connection 1",
 };
 
 /** An application whose image the compositor could not decode. */
 const sync: DomicileTrayItem = {
+  bus: "org.kde.StatusNotifierItem-4071-1",
   icon: "",
   id: "org.kde.StatusNotifierItem-4071-1/StatusNotifierItem",
+  menu: "",
   title: "Syncthing",
 };
 
