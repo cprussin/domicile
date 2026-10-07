@@ -8,8 +8,9 @@ Make Domicile the session's only `xdg-desktop-portal` backend:
 
 Today the compositor implements `Settings`, `Access`, `AppChooser`,
 `FileChooser`, `Notification`, `Inhibit`, `RemoteDesktop`, `Clipboard`,
-`InputCapture`, `Account`, `Email`, `Lockdown` and `GlobalShortcuts`, and
-routes the rest to gtk. Screen sharing has no backend.
+`InputCapture`, `Account`, `Email`, `Lockdown`, `GlobalShortcuts`,
+`Background` and `Wallpaper`, and routes the rest to gtk. Screen sharing has
+no backend.
 
 ## Design
 
@@ -123,6 +124,19 @@ One request channel carries all dialogs. Each interface's backend builds on it.
 - **The shell shows active sharing.** `portal_requests` carries `capturing`:
   each running session (id, app, what it holds). The shell stops one by
   answering its id with `stop`. `<PortalDialogs />` draws the indicator.
+- **The wallpaper rides the same push.** `PortalRequests` carries `wallpaper`:
+  the background and lock-screen pictures applications set, as paths the shell
+  reads with `read_file`. The engine relays that line untyped, so no engine
+  change. The compositor copies each picture to
+  `$XDG_STATE_HOME/domicile/wallpaper/` and keeps the choice there, so it
+  outlives the application's file and the session.
+- **Background asks through Access.** The frontend puts `RequestBackground` to
+  the user as an `AccessDialog`; the impl interface has no such method.
+  `NotifyBackground` posts a notification ("X is running in the background")
+  through the desktop's own notification server and answers `2` (allow this
+  instance): the user already chose once. `GetAppState` comes from each
+  window's `app_id`; an application with no window is absent, which the
+  frontend reads as background.
 
 ## Interfaces
 
@@ -144,8 +158,8 @@ One request channel carries all dialogs. Each interface's backend builds on it.
 | Clipboard | selection to/from a RemoteDesktop session through `clipboard.rs` | part of that grant | 3 |
 | InputCapture | pointer barriers at screen edges; EIS | grant | 3 |
 | GlobalShortcuts | binds into the shell's keymap; `Activated`/`Deactivated` | review and rebind | 4 |
-| Background | autostart entries; `GetAppState` from compositor clients | "X wants to run in the background" | 4 |
-| Wallpaper | forwards the image | shell wallpaper | 4 |
+| Background | autostart entries (`EnableAutostart`); `GetAppState` from windows and focus; `NotifyBackground` as a notification | via Access | 4 |
+| Wallpaper | copies the picture; `set-on` background, lock screen or both | preview dialog, shell wallpaper and lock screen | 4 |
 | DynamicLauncher | writes the `.desktop` file and icon | install confirm | 4 |
 | Usb | device list from udev | device grant | 4 |
 | Print | printers and options from CUPS over IPP; sends the job to CUPS | print dialog | 5 |
@@ -194,7 +208,8 @@ Phase 4: the rest.
 
 - [x] GlobalShortcuts
 - [ ] engine: report a grabbed chord's release, for `Deactivated` on release
-- [ ] Background, Wallpaper, DynamicLauncher, Usb
+- [x] Background, Wallpaper
+- [ ] DynamicLauncher, Usb
 
 Phase 5: printing, and remove gtk.
 

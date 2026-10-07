@@ -116,12 +116,13 @@ import { PortalDialogs } from "@domicile-desktop/component-library/PortalDialogs
   yes/no question), `Account` (share the user's name and picture),
   `AppChooser` (an app list for "Open with" and `OpenURI`), `FileChooser` (the
   component library's `FilePicker`), `RemoteDesktop` (which devices and the
-  clipboard an application may control), `InputCapture` and `GlobalShortcuts`
-  (review the chords an app asks for). Answer `Access` and `Account` with
-  `PortalAnswer.Access()` to allow.
-- The app list and the file picker read the system through
-  `@domicile-desktop/sdk/system` (desktop entries, `mimeapps.list`, `readDir`),
-  so `host` must take system calls. `domicile` does.
+  clipboard an application may control), `InputCapture`, `GlobalShortcuts`
+  (review the chords an app asks for) and `Wallpaper` (a picture to preview).
+  Answer `Access`, `Account` and `Wallpaper` with `PortalAnswer.Access()` to
+  allow.
+- The app list, the file picker and the wallpaper preview read the system
+  through `@domicile-desktop/sdk/system` (desktop entries, `mimeapps.list`,
+  `readDir`, `readFile`), so `host` must take system calls. `domicile` does.
 - A dialog goes on the screen `screenOf` names for the window that asked, or
   on `screen` when the application named no window.
 - An `Inhibit` request is an application holding off logout, user switching
@@ -140,3 +141,7 @@ import { PortalDialogs } from "@domicile-desktop/component-library/PortalDialogs
 - A shell must answer every request. One left unanswered keeps its application
   waiting until it gives up.
 - The compositor refuses answers while the desktop is locked.
+- `watchPortalWallpaper` gives the pictures applications set for the
+  background and the lock screen, as paths. `usePictureUrl` in
+  `@domicile-desktop/component-library/usePictureUrl` turns a path into a URL
+  for an `<img>`.

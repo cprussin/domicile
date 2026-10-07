@@ -22,6 +22,7 @@ import { FileChooserDialog } from "./FileChooserDialog";
 import { GlobalShortcutsDialog } from "./GlobalShortcutsDialog";
 import { InputCaptureDialog } from "./InputCaptureDialog";
 import { RemoteDesktopDialog } from "./RemoteDesktopDialog";
+import { WallpaperDialog } from "./WallpaperDialog";
 
 /** No shell chords; one array, so the default is stable across renders. */
 const NONE: readonly string[] = [];
@@ -189,6 +190,16 @@ const Dialog = ({
           shellChords={shellChords}
         />
       );
+    case PortalKind.Wallpaper:
+      return (
+        <WallpaperDialog
+          answer={answer}
+          asker={appName(request.appId)}
+          body={request.body}
+          files={files}
+          screen={screen}
+        />
+      );
     case PortalKind.Inhibit:
     case PortalKind.Unknown:
       return undefined;
@@ -218,6 +229,7 @@ const isAsked = (request: PortalRequest): boolean => {
     case PortalKind.InputCapture:
     case PortalKind.Account:
     case PortalKind.GlobalShortcuts:
+    case PortalKind.Wallpaper:
       return true;
     case PortalKind.Inhibit:
     case PortalKind.Unknown:

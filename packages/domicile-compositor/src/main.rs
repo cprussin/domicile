@@ -5073,6 +5073,7 @@ impl SeatHandler for DomicileCompositor {
         // the same client.
         set_primary_focus(&self.display_handle, seat, client);
         self.activate(focused);
+        self.report_running_apps(focused);
     }
 }
 
@@ -5100,6 +5101,37 @@ impl DomicileCompositor {
                 toplevel.send_pending_configure();
             }
         }
+    }
+
+    /// Tell the Background portal each window's application and whether it
+    /// has the keyboard (`focused`).
+    fn report_running_apps(&self, focused: Option<&WlSurface>) {
+        let window = focused.map(|on| self.window_under_menus(on));
+        self.hub
+            .portals
+            .running(self.toplevels.iter().map(|(_, toplevel)| {
+                let app_id = with_states(toplevel.wl_surface(), |states| {
+                    states
+                        .data_map
+                        .get::<XdgToplevelSurfaceData>()
+                        .unwrap()
+                        .lock()
+                        .unwrap()
+                        .app_id
+                        .clone()
+                });
+                (
+                    app_id.unwrap_or_default(),
+                    window.as_ref() == Some(toplevel.wl_surface()),
+                )
+            }));
+    }
+
+    /// The running applications as the keyboard stands, for a window that
+    /// came, went or renamed its application.
+    fn the_running_apps_changed(&self) {
+        let focused = self.seat.get_keyboard().unwrap().current_focus();
+        self.report_running_apps(focused.as_ref());
     }
 
     /// The window a menu (or nested menu) was opened over, or `surface` itself
@@ -5274,6 +5306,7 @@ impl XdgShellHandler for DomicileCompositor {
             self.toplevels.push((app_id, surface));
             announce
         };
+        self.the_running_apps_changed();
         self.hub.broadcast(announce);
         // An inhibitor taken before the window mapped starts holding now (see
         // `crate::idle::holds`), which may wake a dark desktop.
@@ -5313,6 +5346,12 @@ impl XdgShellHandler for DomicileCompositor {
         self.cast_if_asked(&app_id, title.as_deref());
     }
 
+    /// A client set or changed its window's application id, which the
+    /// Background portal reports.
+    fn app_id_changed(&mut self, _surface: ToplevelSurface) {
+        self.the_running_apps_changed();
+    }
+
     fn toplevel_destroyed(&mut self, surface: ToplevelSurface) {
         if self
             .chrome_toplevel
@@ -5333,6 +5372,7 @@ impl XdgShellHandler for DomicileCompositor {
         {
             let (app_id, _) = self.toplevels.remove(pos);
             self.forget(&app_id);
+            self.the_running_apps_changed();
             // Return the keyboard to the chrome. The shell usually refocuses
             // something, but a crashed client gives it no chance, so the
             // compositor must guarantee a holder.
@@ -6333,6 +6373,14 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             .set_global_shortcuts(shortcuts);
         if let Some(message) = told {
             publishing.broadcast(message);
+        }
+    });
+    // The Wallpaper portal's pictures ride with the dialogs. See `portals`.
+    let showing = Arc::clone(&hub);
+    hub.portals.show_wallpaper(move |wallpaper| {
+        let told = showing.host.lock().unwrap().set_portal_wallpaper(wallpaper);
+        if let Some(message) = told {
+            showing.broadcast(message);
         }
     });
     // Bind here so a failure ends the run. Nothing can connect yet: the shell

@@ -33,6 +33,11 @@ export enum PortalKind {
   Account,
   /** Chords an application asks to hold while it is not focused. */
   GlobalShortcuts,
+  /**
+   * A picture to preview before it becomes the wallpaper. Allow it with
+   * {@link PortalAnswer.Access}.
+   */
+  Wallpaper,
   /** A kind this SDK cannot parse. Answer it with {@link PortalAnswer.Refused}. */
   Unknown,
 }
@@ -196,6 +201,28 @@ export type BoundShortcut = {
   chord: string;
 };
 
+/** Where a Wallpaper portal picture goes. */
+export enum WallpaperTarget {
+  Background,
+  Lockscreen,
+  Both,
+}
+
+/** A wallpaper preview: the picture, as a path to read, and where it goes. */
+export type WallpaperBody = {
+  path: string;
+  setOn: WallpaperTarget;
+};
+
+/**
+ * The pictures applications set through the Wallpaper portal, as paths to read
+ * with the SDK's `system`. `undefined` where none was set.
+ */
+export type PortalWallpaper = {
+  background: string | undefined;
+  lockscreen: string | undefined;
+};
+
 export const PortalRequest = {
   Access: (base: PortalRequestBase, body: AccessBody) => ({
     ...base,
@@ -241,6 +268,11 @@ export const PortalRequest = {
     ...base,
     kind: PortalKind.Unknown as const,
     wireKind,
+  }),
+  Wallpaper: (base: PortalRequestBase, body: WallpaperBody) => ({
+    ...base,
+    body,
+    kind: PortalKind.Wallpaper as const,
   }),
 };
 
@@ -397,6 +429,23 @@ export const watchCapturing = (
         .parse(JSON.parse(event.data))
         .capturing.map((item) => parseCapturing(item)),
     );
+  };
+  host.addEventListener("portalrequests", heard);
+  return () => {
+    host.removeEventListener("portalrequests", heard);
+  };
+};
+
+/**
+ * Call `listener` with the pictures applications set through the Wallpaper
+ * portal, on each push. Returns a function that stops listening.
+ */
+export const watchPortalWallpaper = (
+  host: PortalHost,
+  listener: (wallpaper: PortalWallpaper) => void,
+): (() => void) => {
+  const heard = (event: MessageEvent<string>) => {
+    listener(requestsSchema.parse(JSON.parse(event.data)).wallpaper);
   };
   host.addEventListener("portalrequests", heard);
   return () => {
@@ -569,6 +618,25 @@ const shortcutsSchema = z
     }),
   );
 
+const wallpaperTargetSchema = z
+  .enum(["background", "lockscreen", "both"])
+  .transform((target): WallpaperTarget => {
+    switch (target) {
+      case "background":
+        return WallpaperTarget.Background;
+      case "lockscreen":
+        return WallpaperTarget.Lockscreen;
+      case "both":
+        return WallpaperTarget.Both;
+    }
+  });
+
+const wallpaperSchema = z
+  .object({ path: z.string(), set_on: wallpaperTargetSchema })
+  .transform(
+    (body): WallpaperBody => ({ path: body.path, setOn: body.set_on }),
+  );
+
 /** Reads one kind's body into a request. */
 type ReadKind = (base: PortalRequestBase, body: unknown) => PortalRequest;
 
@@ -612,6 +680,10 @@ const KINDS: ReadonlyMap<string, ReadKind> = new Map<string, ReadKind>([
     (base, body) =>
       PortalRequest.GlobalShortcuts(base, shortcutsSchema.parse(body)),
   ],
+  [
+    "wallpaper",
+    (base, body) => PortalRequest.Wallpaper(base, wallpaperSchema.parse(body)),
+  ],
 ]);
 
 type ReadCapturing = (base: CapturingBase, body: unknown) => Capturing;
@@ -648,6 +720,19 @@ const capturingSchema = z.object({
   kind: z.string(),
 });
 
+const portalWallpaperSchema = z
+  .object({
+    background: z.string().optional(),
+    lockscreen: z.string().optional(),
+  })
+  .optional()
+  .transform(
+    (wallpaper): PortalWallpaper => ({
+      background: wallpaper?.background,
+      lockscreen: wallpaper?.lockscreen,
+    }),
+  );
+
 const requestsSchema = z.object({
   // Optional on the wire, so a line without it parses.
   capturing: z.array(capturingSchema).default([]),
@@ -656,6 +741,7 @@ const requestsSchema = z.object({
     .array(z.object({ app_id: z.string(), chord: z.string(), id: z.number() }))
     .optional(),
   type: z.literal("portal_requests"),
+  wallpaper: portalWallpaperSchema,
 });
 
 const parseRequest = (item: z.infer<typeof itemSchema>): PortalRequest => {

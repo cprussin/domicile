@@ -1,6 +1,7 @@
 import { useDisplays } from "@domicile-desktop/component-library/DisplayProvider";
 import { PortalDialogs } from "@domicile-desktop/component-library/PortalDialogs";
 import { createToastManager } from "@domicile-desktop/component-library/Toaster";
+import { usePictureUrl } from "@domicile-desktop/component-library/usePictureUrl";
 import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
 import { ownedChords } from "@domicile-desktop/sdk/own-keybindings";
@@ -35,6 +36,7 @@ import type { TopBarLayout } from "./top-bar/layout";
 import { trayEntries } from "./tray/tray-entry";
 import { useTray } from "./tray/useTray";
 import { useTrayOrder } from "./tray/useTrayOrder";
+import { usePortalWallpaper } from "./wallpaper/usePortalWallpaper";
 import { Wallpaper } from "./wallpaper/Wallpaper";
 import type { Focus } from "./window-management/pointer-warp";
 import { Stage } from "./window-management/Stage";
@@ -82,6 +84,12 @@ export const Desktop = ({
     (query: string) => domicile.searchFiles(query),
     [domicile],
   );
+  // The pictures applications set through the Wallpaper portal. Memoized
+  // because a new `system` would read them again.
+  const files = useMemo(() => system(domicile), [domicile]);
+  const portalWallpaper = usePortalWallpaper(domicile);
+  const backgroundPicture = usePictureUrl(files, portalWallpaper.background);
+  const lockPicture = usePictureUrl(files, portalWallpaper.lockscreen);
   // Installed apps and bookmarks, read through the desktop's system calls.
   // Memoized because it holds what was read and the bookmarks' icons.
   const apps = useMemo(
@@ -209,7 +217,7 @@ export const Desktop = ({
         First, so it paints under everything. It does not wait for the
         desktop to connect.
       */}
-      <Wallpaper />
+      <Wallpaper picture={backgroundPicture} />
       {/*
         Every display the desktop has taken up. A new display appears one
         render after the host reports it, once the reducer gives it a
@@ -399,6 +407,7 @@ export const Desktop = ({
         checking={lock.checking}
         locked={lock.locked}
         onUnlock={lock.unlock}
+        picture={lockPicture}
         refusals={lock.refusals}
       >
         <LockReadouts domicile={domicile} />

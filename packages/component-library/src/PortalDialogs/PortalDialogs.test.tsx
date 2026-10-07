@@ -161,6 +161,16 @@ const shortcuts = (id: number) => ({
   kind: "global_shortcuts",
 });
 
+const wallpaper = (id: number) => ({
+  app_id: "org.example.Photos",
+  body: { path: "/home/u/sky.jpg", set_on: "both" },
+  id,
+  kind: "wallpaper",
+});
+
+/** A desktop holding the picture `wallpaper` names. */
+const withPicture = desktop({ "/home/u/sky.jpg": "sky" });
+
 describe(PortalDialogs, () => {
   describe("rendering", () => {
     it("draws nothing while no application asks", () => {
@@ -332,6 +342,23 @@ describe(PortalDialogs, () => {
       );
 
       expect(screen.getByRole("button", { name: "Bind" })).toBeDisabled();
+    });
+
+    it("previews a wallpaper, naming the application and where it goes", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} systemOf={withPicture} />);
+      host.push([wallpaper(1)]);
+      await act(() => Promise.resolve());
+
+      expect(screen.getByRole("dialog")).toHaveTextContent(
+        "org.example.Photos wants to change the wallpaper",
+      );
+      expect(screen.getByText("Desktop and lock screen")).toBeInTheDocument();
+      expect(
+        screen
+          .getByRole("img", { name: "The new wallpaper" })
+          .getAttribute("src"),
+      ).toStartWith("blob:");
     });
 
     it("goes away when the request does", async () => {
@@ -669,6 +696,24 @@ describe(PortalDialogs, () => {
       });
 
       expect(host.answers).toEqual([[3, { kind: "pressed" }]]);
+    });
+
+    it("sets a wallpaper", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} systemOf={withPicture} />);
+      host.push([wallpaper(1)]);
+      await userEvent.click(screen.getByRole("button", { name: "Set" }));
+
+      expect(host.answers).toEqual([[1, { kind: "access" }]]);
+    });
+
+    it("keeps the wallpaper", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} systemOf={withPicture} />);
+      host.push([wallpaper(1)]);
+      await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+      expect(host.answers).toEqual([[1, { kind: "canceled" }]]);
     });
 
     it("refuses a kind it has no dialog for", () => {

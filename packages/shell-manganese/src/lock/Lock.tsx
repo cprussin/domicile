@@ -32,6 +32,11 @@ type Props = {
   onUnlock: (passphrase: string) => void;
   /** Shown under the field, such as `LockReadouts`. */
   children?: ReactNode;
+  /**
+   * A picture an application set for the lock screen through the Wallpaper
+   * portal, as a URL. Covers each screen in place of the blurred desktop.
+   */
+  picture?: string | undefined;
 };
 
 /**
@@ -60,6 +65,7 @@ export const Lock = ({
   children,
   locked,
   onUnlock,
+  picture,
   refusals,
 }: Props) => {
   const displays = useDisplays();
@@ -121,6 +127,14 @@ export const Lock = ({
       ) : (
         displays.map(({ name }) => <Veil key={name} screen={name} />)
       )}
+      {picture !== undefined &&
+        (displays === undefined ? (
+          <LockPicture picture={picture} screen={undefined} />
+        ) : (
+          displays.map(({ name }) => (
+            <LockPicture key={name} picture={picture} screen={name} />
+          ))
+        ))}
       <div className={contentStyles}>
         <LockClock />
         <div className={entryStyles}>
@@ -186,6 +200,27 @@ const Veil = ({ screen }: { screen: string | undefined }) => (
   <div className={veilStyles} data-veil="" style={useScreenRegion(screen)} />
 );
 
+/**
+ * The lock screen's picture on display `screen`, or the whole page. Data
+ * attribute for tests.
+ */
+const LockPicture = ({
+  picture,
+  screen,
+}: {
+  picture: string;
+  screen: string | undefined;
+}) => (
+  // Empty `alt` because the picture is decorative.
+  <img
+    alt=""
+    className={pictureStyles}
+    data-lock-picture=""
+    src={picture}
+    style={useScreenRegion(screen)}
+  />
+);
+
 // Above everything, including modal panels like the launcher, so nothing can
 // take input over the lock. `lock` is the preset's z-index token for it. One
 // sheet spans every display, since the page is the whole desktop. It paints
@@ -227,6 +262,20 @@ const veilStyles = css({
   position: "absolute",
   transition:
     "opacity {durations.slowest} {easings.out}, backdrop-filter {durations.slowest} {easings.out}",
+});
+
+// Over the veils, so the picture shows sharp, and fading with them. Cropped
+// to the monitor's shape.
+const pictureStyles = css({
+  _starting: { opacity: 0 },
+  "[inert] > &": { opacity: 0 },
+  blockSize: "100%",
+  inlineSize: "100%",
+  inset: 0,
+  objectFit: "cover",
+  opacity: 1,
+  position: "absolute",
+  transition: "opacity {durations.slowest} {easings.out}",
 });
 
 // The clock and field rise in as the desktop blurs, and sink as it clears.

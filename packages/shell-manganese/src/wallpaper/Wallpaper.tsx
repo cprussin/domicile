@@ -35,8 +35,17 @@ enum Layer {
   Waiting = "waiting",
 }
 
+type Props = {
+  /**
+   * A picture an application set through the Wallpaper portal, as a URL. Shown
+   * on every screen in place of the rotation.
+   */
+  picture?: string | undefined;
+};
+
 /**
- * The desktop wallpaper: a photograph rotation that changes every minute. See
+ * The desktop wallpaper: a photograph rotation that changes every minute, or
+ * the picture an application set. See
  * `packages/shell-manganese/docs/WALLPAPER.md`.
  *
  * - Each screen gets its own copy, cropped to that monitor, so nothing is
@@ -48,7 +57,7 @@ enum Layer {
  *   shows loaded photographs and needs only the `data-theme` attribute.
  * - It takes no pointer events.
  */
-export const Wallpaper = () => {
+export const Wallpaper = ({ picture }: Props) => {
   const displays = useDisplays();
   const [step, setStep] = useState(0);
   // Whether this step's fade has finished.
@@ -81,11 +90,17 @@ export const Wallpaper = () => {
       {displays === undefined ? (
         // The whole page until the host describes the screens, so the
         // desktop is not blank while it starts.
-        <ScreenWallpaper screen={undefined} settled={settled} step={step} />
+        <ScreenWallpaper
+          picture={picture}
+          screen={undefined}
+          settled={settled}
+          step={step}
+        />
       ) : (
         displays.map(({ name }) => (
           <ScreenWallpaper
             key={name}
+            picture={picture}
             screen={name}
             settled={settled}
             step={step}
@@ -96,17 +111,39 @@ export const Wallpaper = () => {
   );
 };
 
-/** The rotation on display `screen`, or the whole page, at `step`. */
+/**
+ * The rotation on display `screen`, or the whole page, at `step`; or
+ * `picture` in its place.
+ */
 const ScreenWallpaper = ({
+  picture,
   screen,
   settled,
   step,
 }: {
+  picture: string | undefined;
   screen: string | undefined;
   settled: boolean;
   step: number;
 }) => (
   <div className={screenStyles} style={useScreenRegion(screen)}>
+    {picture === undefined ? (
+      <Rotation settled={settled} step={step} />
+    ) : (
+      // Empty `alt` because the wallpaper is decorative.
+      <img
+        alt=""
+        className={layerStyles}
+        data-wallpaper={Layer.Current}
+        src={picture}
+      />
+    )}
+  </div>
+);
+
+/** Both themes' photographs at `step`. */
+const Rotation = ({ settled, step }: { settled: boolean; step: number }) => (
+  <>
     {THEMES.map((theme) => (
       <div
         className={rotationStyles[theme]}
@@ -127,7 +164,7 @@ const ScreenWallpaper = ({
         ))}
       </div>
     ))}
-  </div>
+  </>
 );
 
 /**

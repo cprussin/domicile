@@ -10,7 +10,8 @@ use std::thread;
 use domicile_host::ipc::{parse_chrome, to_line, Session};
 use domicile_protocol::{
     AccessDialog, BoundShortcut, Capturing, CapturingKind, ChromeMessage, Devices, HostMessage,
-    Notification, PortalKind, PortalRequest, Theme, TrayItem, Urgency, PROTOCOL_VERSION,
+    Notification, PortalKind, PortalRequest, PortalWallpaper, Theme, TrayItem, Urgency,
+    PROTOCOL_VERSION,
 };
 
 #[test]
@@ -406,6 +407,7 @@ fn the_portal_requests_ride_with_the_handshake() {
             items: vec![request.clone()],
             capturing: Vec::new(),
             shortcuts: Vec::new(),
+            wallpaper: PortalWallpaper::default(),
         })
     );
     assert_eq!(
@@ -431,6 +433,7 @@ fn the_portal_requests_ride_with_the_handshake() {
         items: vec![request],
         capturing: vec![remote],
         shortcuts: Vec::new(),
+        wallpaper: PortalWallpaper::default(),
     }));
 }
 
@@ -450,6 +453,7 @@ fn bound_shortcuts_ride_with_the_dialogs_and_the_handshake() {
         items: Vec::new(),
         capturing: Vec::new(),
         shortcuts: vec![bound.clone()],
+        wallpaper: PortalWallpaper::default(),
     };
 
     assert_eq!(
@@ -478,3 +482,38 @@ fn bound_shortcuts_ride_with_the_dialogs_and_the_handshake() {
 /// A stand-in keymap. The host passes it through as text without compiling
 /// it.
 const KEYMAP: &str = "xkb_keymap { /* the compositor's */ };";
+
+#[test]
+fn a_portal_wallpaper_rides_with_the_requests() {
+    // A reloaded page must draw the picture an application set.
+    let mut session = Session::new();
+    session
+        .host_mut()
+        .set_portal_requests(Vec::new(), Vec::new());
+    let wallpaper = PortalWallpaper {
+        background: Some("/state/background-1.jpg".into()),
+        lockscreen: None,
+    };
+    let told = HostMessage::PortalRequests {
+        items: Vec::new(),
+        capturing: Vec::new(),
+        shortcuts: Vec::new(),
+        wallpaper: wallpaper.clone(),
+    };
+
+    assert_eq!(
+        session.host_mut().set_portal_wallpaper(wallpaper.clone()),
+        Some(told.clone())
+    );
+    assert_eq!(
+        session.host_mut().set_portal_wallpaper(wallpaper),
+        None,
+        "an unchanged wallpaper says nothing"
+    );
+
+    let out = session.ingest(&to_line(&ChromeMessage::Hello {
+        protocol_version: PROTOCOL_VERSION,
+    }));
+
+    assert!(out.contains(&told));
+}

@@ -46,6 +46,7 @@ Each export is `@domicile-desktop/component-library/<name>`.
 | `Toaster` | Stack of toasts in a corner. The caller renders each card. |
 | `ThemeProvider` | Light/dark theme state. Sets `data-theme` on `<html>`. |
 | `ThemeSwitch` | Button that flips the theme. |
+| `usePictureUrl` | Hook: a URL an `<img>` can show for a file read through the SDK's `system`. |
 | `theme-core`, `theme-source`, `standalone-theme-source` | Theme types and sources. Use the standalone source where there is no compositor, such as Storybook. |
 | `control-sizes` | `Size` type and `SIZES` array for sized controls. |
 | `spacing` | rem value of one spacing step, for runtime math. |

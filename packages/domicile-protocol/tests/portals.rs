@@ -9,8 +9,8 @@ use domicile_protocol::{
     AccessDialog, AccountDialog, AppChooserDialog, BoundShortcut, Capturing, CapturingKind,
     ChosenTrigger, ChromeMessage, Devices, FileChoice, FileChoiceOption, FileChooserAnswer,
     FileChooserDialog, FileChooserMode, FileFilter, HostMessage, Inhibited, Inhibition,
-    InputCaptureDialog, PortalAnswer, PortalKind, PortalRequest, ProposedShortcut,
-    RemoteDesktopDialog, ShortcutsDialog, TakenChord,
+    InputCaptureDialog, PortalAnswer, PortalKind, PortalRequest, PortalWallpaper, ProposedShortcut,
+    RemoteDesktopDialog, ShortcutsDialog, TakenChord, WallpaperDialog, WallpaperTarget,
 };
 
 fn access() -> PortalRequest {
@@ -34,6 +34,7 @@ fn a_request_carries_its_kind_beside_an_untyped_body() {
         items: vec![access()],
         capturing: Vec::new(),
         shortcuts: Vec::new(),
+        wallpaper: PortalWallpaper::default(),
     })
     .expect("it serializes");
 
@@ -373,6 +374,7 @@ fn the_push_lists_what_is_being_controlled_beside_the_dialogs() {
             },
         ],
         shortcuts: Vec::new(),
+        wallpaper: PortalWallpaper::default(),
     })
     .expect("it serializes");
 
@@ -392,6 +394,7 @@ fn a_push_without_sessions_reads_as_none() {
             items: Vec::new(),
             capturing: Vec::new(),
             shortcuts: Vec::new(),
+            wallpaper: PortalWallpaper::default(),
         }
     );
 }
@@ -458,11 +461,13 @@ fn bound_shortcuts_ride_beside_the_dialogs_and_are_absent_when_none() {
             app_id: "org.example.App".into(),
             chord: "Ctrl+Alt+t".into(),
         }],
+        wallpaper: PortalWallpaper::default(),
     };
     let none = HostMessage::PortalRequests {
         items: Vec::new(),
         capturing: Vec::new(),
         shortcuts: Vec::new(),
+        wallpaper: PortalWallpaper::default(),
     };
 
     assert_eq!(
@@ -521,5 +526,72 @@ fn chosen_triggers_are_a_success_and_a_press_answers_no_dialog() {
     assert!(
         !review.accepts(&PortalAnswer::Pressed),
         "a press answers no request"
+    );
+}
+
+#[test]
+fn a_wallpaper_request_names_the_picture_and_where_it_goes() {
+    let written = serde_json::to_string(&PortalRequest {
+        id: 2,
+        app_id: "org.example.Photos".into(),
+        parent_app_id: None,
+        kind: PortalKind::Wallpaper(WallpaperDialog {
+            path: "/home/u/Pictures/sky.jpg".into(),
+            set_on: WallpaperTarget::Both,
+        }),
+    })
+    .expect("it serializes");
+
+    assert_eq!(
+        written,
+        r#"{"id":2,"app_id":"org.example.Photos","kind":"wallpaper","body":{"path":"/home/u/Pictures/sky.jpg","set_on":"both"}}"#
+    );
+}
+
+#[test]
+fn a_wallpaper_preview_is_allowed_only_as_access() {
+    let preview = PortalKind::Wallpaper(WallpaperDialog {
+        path: "/home/u/Pictures/sky.jpg".into(),
+        set_on: WallpaperTarget::Background,
+    });
+
+    assert!(preview.accepts(&PortalAnswer::Access));
+    assert!(!preview.accepts(&PortalAnswer::AppChooser {
+        choice: "firefox".into()
+    }));
+}
+
+#[test]
+fn the_requests_carry_the_wallpaper_portals_set() {
+    let written = serde_json::to_string(&HostMessage::PortalRequests {
+        items: vec![],
+        capturing: vec![],
+        shortcuts: vec![],
+        wallpaper: PortalWallpaper {
+            background: Some("/state/background-1.jpg".into()),
+            lockscreen: None,
+        },
+    })
+    .expect("it serializes");
+
+    assert_eq!(
+        written,
+        r#"{"type":"portal_requests","items":[],"capturing":[],"wallpaper":{"background":"/state/background-1.jpg"}}"#
+    );
+}
+
+#[test]
+fn no_wallpaper_set_is_left_off_the_wire() {
+    let written = serde_json::to_string(&HostMessage::PortalRequests {
+        items: vec![],
+        capturing: vec![],
+        shortcuts: vec![],
+        wallpaper: PortalWallpaper::default(),
+    })
+    .expect("it serializes");
+
+    assert_eq!(
+        written,
+        r#"{"type":"portal_requests","items":[],"capturing":[]}"#
     );
 }
