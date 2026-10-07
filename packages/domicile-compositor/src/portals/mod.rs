@@ -681,8 +681,10 @@ mod tests {
 
     /// The next signal named `member` the client hears.
     #[track_caller]
-    fn heard(client: &zbus::blocking::Connection, member: &str) -> zbus::message::Body {
-        zbus::blocking::MessageIterator::from(client)
+    /// The next signal named `member` in `messages`. Take `messages` before
+    /// whatever sends the signal: one that arrives earlier is not kept.
+    fn heard(messages: &mut zbus::blocking::MessageIterator, member: &str) -> zbus::message::Body {
+        messages
             .map(|message| message.expect("a message"))
             .find(|message| {
                 message.message_type() == zbus::message::Type::Signal
@@ -979,6 +981,7 @@ mod tests {
         };
 
         let shown = shown_after(&served, add);
+        let mut messages = zbus::blocking::MessageIterator::from(&served.client);
         let iface = served
             .server
             .object_server()
@@ -1002,7 +1005,7 @@ mod tests {
             [("Update", true)]
         );
         let (app_id, id, action, parameter): (String, String, String, Vec<OwnedValue>) =
-            heard(&served.client, "ActionInvoked")
+            heard(&mut messages, "ActionInvoked")
                 .deserialize()
                 .expect("ActionInvoked's arguments");
         assert_eq!(
@@ -1154,12 +1157,13 @@ mod tests {
             )
             .expect("Close answered");
 
+        let mut messages = zbus::blocking::MessageIterator::from(&served.client);
         inhibit::screensaver(&inhibit, true).expect("said");
 
         assert_eq!(responses, [0, 0]);
         // The closed monitor would have been told first.
         let (session, state): (OwnedObjectPath, HashMap<String, OwnedValue>) =
-            heard(&served.client, "StateChanged")
+            heard(&mut messages, "StateChanged")
                 .deserialize()
                 .expect("StateChanged's arguments");
         assert_eq!(session.as_str(), STAYING);
@@ -1175,6 +1179,7 @@ mod tests {
             .object_server()
             .interface::<_, Settings>(OBJECT_PATH)
             .expect("served");
+        let mut messages = zbus::blocking::MessageIterator::from(&served.client);
 
         settings::changed(
             &settings,
@@ -1187,7 +1192,7 @@ mod tests {
         .expect("said");
 
         let (namespace, key, value): (String, String, OwnedValue) =
-            heard(&served.client, "SettingChanged")
+            heard(&mut messages, "SettingChanged")
                 .deserialize()
                 .expect("SettingChanged's arguments");
         assert_eq!(
