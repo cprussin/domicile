@@ -137,7 +137,8 @@ To style your own items with manganese's Panda CSS, see
 
 - Shown, in the warning color, while an application records the desktop
   through the ScreenCast portal. Its name says who.
-- Click lists each recording application and the windows it records, with a
+- Click lists each recording application and what it records (a window's
+  title, "Screen drm-1" or "Region"), with a
   **Stop sharing** button that ends that application's session.
 - See [PORTALS.md](../../../docs/architecture/PORTALS.md).
 

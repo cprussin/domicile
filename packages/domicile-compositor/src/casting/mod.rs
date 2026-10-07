@@ -37,6 +37,7 @@ mod region;
 mod shm_copy;
 mod shots;
 mod streams;
+mod test_pattern;
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -52,6 +53,7 @@ pub use producer::ToWayland;
 pub use region::Screen;
 pub use shots::{Desk, Developed};
 pub use streams::{Committed, Gpu, Streams};
+pub use test_pattern::TestPattern;
 
 /// What a stream shows.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -75,7 +77,8 @@ pub struct Region {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Candidate {
     pub source: Source,
-    /// A window's title. Empty until the client names it.
+    /// A window's title, empty until the client names it, or a monitor's
+    /// make, model and serial, empty when unknown.
     pub title: String,
     /// A window's client app id (`xdg_toplevel.set_app_id`), which names its
     /// desktop entry. Empty when the client set none.
@@ -165,7 +168,8 @@ impl Casting {
         self.send(Request::Stop { stream });
     }
 
-    /// What can be cast now, in the order the windows opened.
+    /// What can be cast now: the windows, in the order they opened, then the
+    /// monitors. A region is any rectangle, so none is listed.
     pub fn list(&self) -> Reply<Vec<Candidate>> {
         let (replier, listed) = reply();
         self.send(Request::List { reply: replier });

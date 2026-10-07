@@ -231,21 +231,34 @@ const usb = (id: number) => ({
   kind: "usb",
 });
 
-const screenCast = (multiple = false) => ({
-  app_id: "us.zoom.Zoom",
-  body: {
-    multiple,
-    sources: [
-      {
-        app_name: "Text Editor",
-        icon: "data:image/png;base64,AA==",
-        id: "app-3",
-        title: "Notes",
-        type: "window",
-      },
-      { id: "app-4", title: "", type: "window" },
-    ],
+const WINDOWS = [
+  {
+    app_name: "Text Editor",
+    icon: "data:image/png;base64,AA==",
+    id: "app-3",
+    title: "Notes",
+    type: "window",
   },
+  { id: "app-4", title: "", type: "window" },
+];
+
+const MONITORS = [
+  {
+    description: "Dell Inc. DELL U3219Q",
+    name: "drm-1",
+    size: [1920, 1080],
+    type: "monitor",
+  },
+  { description: "", name: "drm-2", size: [1280, 800], type: "monitor" },
+];
+
+const screenCast = (
+  multiple = false,
+  sources: readonly object[] = WINDOWS,
+  region = false,
+) => ({
+  app_id: "us.zoom.Zoom",
+  body: { multiple, region, sources },
   id: 5,
   kind: "screen_cast",
 });
@@ -1253,6 +1266,8 @@ describe(PortalDialogs, () => {
               sources: [
                 { id: "app-3", title: "Notes", type: "window" },
                 { id: "app-4", title: "", type: "window" },
+                { name: "drm-1", type: "monitor" },
+                { position: [0, 0], size: [10, 10], type: "region" },
               ],
             },
             id: 7,
@@ -1269,7 +1284,7 @@ describe(PortalDialogs, () => {
       ).toEqual([
         "Remote control: org.example.Remote — keyboard, pointer, clipboard",
         "Input capture: org.example.Barrier — keyboard, pointer",
-        "Sharing: us.zoom.Zoom — Notes, Untitled window",
+        "Sharing: us.zoom.Zoom — Notes, Untitled window, Screen drm-1, Region",
         "screenshot: An application",
       ]);
     });
@@ -1385,6 +1400,138 @@ describe("screen cast", () => {
     await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
     expect(host.answers).toEqual([[5, { kind: "canceled" }]]);
+  });
+
+  describe("screens", () => {
+    it("lists each screen by name and panel", () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} />);
+      host.push([screenCast(false, MONITORS)]);
+
+      expect(screen.getByRole("dialog")).toHaveTextContent("Share a screen");
+      expect(
+        screen.getByRole("button", { name: "drm-1: Dell Inc. DELL U3219Q" }),
+      ).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "drm-2" })).toBeInTheDocument();
+      expect(screen.queryByRole("tab")).not.toBeInTheDocument();
+    });
+
+    it("puts windows and screens on tabs and shares from either", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} />);
+      host.push([screenCast(true, [...WINDOWS, ...MONITORS])]);
+      await userEvent.click(
+        screen.getByRole("button", { name: "Text Editor: Notes" }),
+      );
+      await userEvent.click(screen.getByRole("tab", { name: "Screens" }));
+      await userEvent.click(screen.getByRole("button", { name: "drm-2" }));
+      await userEvent.click(screen.getByRole("button", { name: "Share" }));
+
+      expect(host.answers).toEqual([
+        [
+          5,
+          {
+            kind: "screen_cast",
+            sources: [
+              { id: "app-3", type: "window" },
+              { name: "drm-2", type: "monitor" },
+            ],
+          },
+        ],
+      ]);
+    });
+
+    it("picks one source across the tabs unless the application asks for more", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} />);
+      host.push([screenCast(false, [...WINDOWS, ...MONITORS])]);
+      await userEvent.click(
+        screen.getByRole("button", { name: "Text Editor: Notes" }),
+      );
+      await userEvent.click(screen.getByRole("tab", { name: "Screens" }));
+      await userEvent.click(screen.getByRole("button", { name: "drm-2" }));
+      await userEvent.click(screen.getByRole("button", { name: "Share" }));
+
+      expect(host.answers).toEqual([
+        [
+          5,
+          {
+            kind: "screen_cast",
+            sources: [{ name: "drm-2", type: "monitor" }],
+          },
+        ],
+      ]);
+    });
+  });
+
+  describe("region", () => {
+    it("is offered only when the application asks for one", () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} />);
+      host.push([screenCast()]);
+
+      expect(
+        screen.queryByRole("button", { name: "Draw a region" }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("shares the rectangle dragged on the desk", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} />);
+      host.push([screenCast(false, MONITORS, true)]);
+      await userEvent.click(
+        screen.getByRole("button", { name: "Draw a region" }),
+      );
+      const desk = screen.getByRole("application", {
+        name: "Drag to pick a region to share",
+      });
+      fireEvent.pointerDown(desk, { clientX: 300, clientY: 200 });
+      fireEvent.pointerMove(desk, { clientX: 100, clientY: 50 });
+      fireEvent.pointerUp(desk, { clientX: 100, clientY: 50 });
+
+      expect(host.answers).toEqual([
+        [
+          5,
+          {
+            kind: "screen_cast",
+            sources: [
+              { position: [100, 50], size: [200, 150], type: "region" },
+            ],
+          },
+        ],
+      ]);
+    });
+
+    it("goes back to the picker on Escape", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} />);
+      host.push([screenCast(false, MONITORS, true)]);
+      await userEvent.click(
+        screen.getByRole("button", { name: "Draw a region" }),
+      );
+      await userEvent.keyboard("{Escape}");
+
+      expect(
+        await screen.findByRole("button", { name: "Draw a region" }),
+      ).toBeInTheDocument();
+      expect(host.answers).toEqual([]);
+    });
+
+    it("ignores a click that draws nothing", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} />);
+      host.push([screenCast(false, MONITORS, true)]);
+      await userEvent.click(
+        screen.getByRole("button", { name: "Draw a region" }),
+      );
+      const desk = screen.getByRole("application", {
+        name: "Drag to pick a region to share",
+      });
+      fireEvent.pointerDown(desk, { clientX: 300, clientY: 200 });
+      fireEvent.pointerUp(desk, { clientX: 300, clientY: 200 });
+
+      expect(host.answers).toEqual([]);
+    });
   });
 });
 

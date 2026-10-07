@@ -1,12 +1,14 @@
-//! An application and a shell for `scripts/e2e-a-screen-cast-through-the-portal.sh`.
+//! An application and a shell for `scripts/e2e-a-screen-cast-through-the-portal.sh`
+//! and `scripts/e2e-a-monitor-casts-through-the-portal.sh`.
 //!
-//!     domicile-test-screencast CHROME_SOCKET TITLE
+//!     domicile-test-screencast CHROME_SOCKET (--window TITLE | --monitor)
 //!
 //! Connects to the compositor as its shell, and calls the ScreenCast backend
 //! on the session bus as an application's portal frontend would:
 //!
 //! 1. Starts a session that may be restored, picks the window titled `TITLE`
-//!    in the source picker, and prints `node N` and `capturing ID`.
+//!    or the first monitor in the source picker, and prints `node N`,
+//!    `size W H` when the stream has a size, and `capturing ID`.
 //! 2. Waits for a line on standard input, then for the capture to end on its
 //!    own (the check's consumer left), and prints `ended`.
 //! 3. Starts a second session with the first one's restore token, answering
@@ -24,7 +26,7 @@ use std::time::Duration;
 
 use domicile_protocol::{
     Capturing, CastPick, CastSource, ChromeMessage, HostMessage, PortalAnswer, PortalKind,
-    PortalRequest,
+    PortalRequest, ScreenCastDialog,
 };
 use domicile_test_chrome::Chrome;
 use zbus::blocking::Connection;
@@ -38,13 +40,25 @@ const APP: &str = "org.example.Recorder";
 /// A portal method's response and results.
 type Answered = (u32, HashMap<String, OwnedValue>);
 
+/// What to pick in the source picker.
+enum Wanted {
+    /// The window with this title.
+    Window(String),
+    /// The first monitor.
+    Monitor,
+}
+
 fn main() -> ExitCode {
     let arguments: Vec<String> = std::env::args().skip(1).collect();
-    let [socket, title] = arguments.as_slice() else {
-        eprintln!("usage: domicile-test-screencast CHROME_SOCKET TITLE");
-        return ExitCode::from(2);
+    let (socket, wanted) = match arguments.as_slice() {
+        [socket, flag, title] if flag == "--window" => (socket, Wanted::Window(title.clone())),
+        [socket, flag] if flag == "--monitor" => (socket, Wanted::Monitor),
+        _ => {
+            eprintln!("usage: domicile-test-screencast CHROME_SOCKET (--window TITLE | --monitor)");
+            return ExitCode::from(2);
+        }
     };
-    match run(Path::new(socket), title) {
+    match run(Path::new(socket), &wanted) {
         Ok(()) => ExitCode::SUCCESS,
         Err(why) => {
             eprintln!("domicile-test-screencast: {why}");
@@ -53,25 +67,45 @@ fn main() -> ExitCode {
     }
 }
 
-fn run(socket: &Path, title: &str) -> Result<(), String> {
+fn run(socket: &Path, wanted: &Wanted) -> Result<(), String> {
     let mut chrome =
         Chrome::connect(socket, Duration::from_secs(20)).map_err(|why| why.to_string())?;
     let bus = Connection::session().map_err(|why| format!("no session bus: {why}"))?;
+    let selection = |restore: Option<Value<'static>>| {
+        let mut options = vec![
+            ("persist_mode", Value::from(2u32)),
+            (
+                "types",
+                Value::from(match wanted {
+                    Wanted::Window(_) => 2u32,
+                    Wanted::Monitor => 1,
+                }),
+            ),
+            // Embedded, so a monitor's stream draws the pointer where it is.
+            ("cursor_mode", Value::from(2u32)),
+        ];
+        options.extend(restore.map(|restore| ("restore_data", restore)));
+        options
+    };
 
     let session = "/org/freedesktop/portal/desktop/session/1_1/first";
-    select(&bus, session, vec![("persist_mode", Value::from(2u32))])?;
+    select(&bus, session, selection(None))?;
     let starting = start(&bus, session);
-    let (id, window) = picker(&mut chrome, title)?;
+    let (id, pick) = picker(&mut chrome, wanted)?;
     chrome
         .say(&ChromeMessage::AnswerPortalRequest {
             id,
             answer: PortalAnswer::ScreenCast {
-                sources: vec![CastPick::Window { id: window }],
+                sources: vec![pick],
             },
         })
         .map_err(|why| why.to_string())?;
     let results = started(starting)?;
-    say(&format!("node {}", node(&results)?));
+    let (node, size) = stream(&results)?;
+    say(&format!("node {node}"));
+    if let Some((width, height)) = size {
+        say(&format!("size {width} {height}"));
+    }
     let capture = capturing(&mut chrome, |capturing| !capturing.is_empty())?;
     say(&format!("capturing {capture}"));
 
@@ -90,16 +124,9 @@ fn run(socket: &Path, title: &str) -> Result<(), String> {
         .try_clone()
         .map_err(|why| why.to_string())?;
     let session = "/org/freedesktop/portal/desktop/session/1_1/second";
-    select(
-        &bus,
-        session,
-        vec![
-            ("persist_mode", Value::from(2u32)),
-            ("restore_data", Value::from(restore)),
-        ],
-    )?;
+    select(&bus, session, selection(Some(Value::from(restore))))?;
     let results = started(start(&bus, session))?;
-    say(&format!("restored node {}", node(&results)?));
+    say(&format!("restored node {}", stream(&results)?.0));
     capturing(&mut chrome, |capturing| !capturing.is_empty())?;
 
     bus.call_method(
@@ -115,13 +142,12 @@ fn run(socket: &Path, title: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Create a session at `session` and select windows, with `options` besides.
+/// Create a session at `session` and select sources with `options`.
 fn select(
     bus: &Connection,
     session: &str,
-    mut options: Vec<(&str, Value<'static>)>,
+    options: Vec<(&str, Value<'static>)>,
 ) -> Result<(), String> {
-    options.push(("types", Value::from(2u32)));
     for (method, body) in [("CreateSession", Vec::new()), ("SelectSources", options)] {
         let (response, _) = call(
             bus,
@@ -168,24 +194,17 @@ fn started(
     }
 }
 
-/// The source picker's request id and the id of the window titled `title`.
-fn picker(chrome: &mut Chrome, title: &str) -> Result<(u32, String), String> {
+/// The source picker's request id and the pick of what `wanted` names.
+fn picker(chrome: &mut Chrome, wanted: &Wanted) -> Result<(u32, CastPick), String> {
     loop {
         let (items, _) = next_push(chrome)?;
         let found = items.into_iter().find_map(|item| match item.kind {
             PortalKind::ScreenCast(dialog) => Some(
-                dialog
-                    .sources
-                    .iter()
-                    .find_map(|source| {
-                        let CastSource::Window {
-                            id, title: named, ..
-                        } = source;
-                        (named == title).then(|| (item.id, id.clone()))
-                    })
+                picked(&dialog, wanted)
+                    .map(|pick| (item.id, pick))
                     .ok_or_else(|| {
                         format!(
-                            "the source picker offered no window titled {title:?}: {:?}",
+                            "the source picker offered nothing to pick: {:?}",
                             dialog.sources
                         )
                     }),
@@ -197,6 +216,22 @@ fn picker(chrome: &mut Chrome, title: &str) -> Result<(u32, String), String> {
             return found;
         }
     }
+}
+
+/// The source of `dialog` that `wanted` names.
+fn picked(dialog: &ScreenCastDialog, wanted: &Wanted) -> Option<CastPick> {
+    dialog
+        .sources
+        .iter()
+        .find_map(|source| match (source, wanted) {
+            (CastSource::Window { id, title, .. }, Wanted::Window(wanted)) if title == wanted => {
+                Some(CastPick::Window { id: id.clone() })
+            }
+            (CastSource::Monitor { name, .. }, Wanted::Monitor) => {
+                Some(CastPick::Monitor { name: name.clone() })
+            }
+            _ => None,
+        })
 }
 
 /// The id of the first capture once the list of captures satisfies `wanted`.
@@ -221,8 +256,9 @@ fn next_push(chrome: &mut Chrome) -> Result<(Vec<PortalRequest>, Vec<Capturing>)
     }
 }
 
-/// The first stream's PipeWire node.
-fn node(results: &HashMap<String, OwnedValue>) -> Result<u32, String> {
+/// The first stream's PipeWire node, and its size if it has one. A window
+/// the page has not placed has none.
+fn stream(results: &HashMap<String, OwnedValue>) -> Result<(u32, Option<(i32, i32)>), String> {
     let streams: Vec<(u32, HashMap<String, OwnedValue>)> = results
         .get("streams")
         .ok_or("Start returned no streams")?
@@ -230,10 +266,19 @@ fn node(results: &HashMap<String, OwnedValue>) -> Result<u32, String> {
         .map_err(|why| why.to_string())?
         .try_into()
         .map_err(|why: zbus::zvariant::Error| why.to_string())?;
-    streams
+    let (node, properties) = streams
         .first()
-        .map(|(node, _)| *node)
-        .ok_or_else(|| "Start returned an empty list of streams".to_string())
+        .ok_or("Start returned an empty list of streams")?;
+    let size = properties
+        .get("size")
+        .map(|size| {
+            size.try_clone()
+                .map_err(|why| why.to_string())?
+                .try_into()
+                .map_err(|why: zbus::zvariant::Error| why.to_string())
+        })
+        .transpose()?;
+    Ok((*node, size))
 }
 
 fn call<B: zbus::export::serde::Serialize + zbus::zvariant::DynamicType>(

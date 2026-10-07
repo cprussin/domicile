@@ -48,6 +48,8 @@ const ZOOM = {
     sources: [
       { id: "app-3", title: "Notes", type: "window" },
       { id: "app-4", title: "", type: "window" },
+      { name: "drm-1", type: "monitor" },
+      { position: [0, 0], size: [10, 10], type: "region" },
     ],
   },
   id: 5,
@@ -101,6 +103,8 @@ describe("Sharing", () => {
 
     expect(await screen.findByText("Notes")).toBeInTheDocument();
     expect(screen.getByText("Untitled window")).toBeInTheDocument();
+    expect(screen.getByText("Screen drm-1")).toBeInTheDocument();
+    expect(screen.getByText("Region")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Stop sharing" }));
 
     expect(host.answers).toEqual([[5, { kind: "stop" }]]);

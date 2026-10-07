@@ -124,7 +124,7 @@ Outside the default members (needs Smithay and native Wayland; build in
     theme; `Notification`, `Inhibit`, `Email` and `Lockdown`; dialogs such as
     `Access` and `AppChooser`, which the shell draws; RemoteDesktop,
     Clipboard and InputCapture sessions; `ScreenCast`, which casts the
-    windows the shell's picker chose; and `Print`, which sends jobs to CUPS
+    windows, monitors or region the shell's picker chose; and `Print`, which sends jobs to CUPS
     over IPP through `domicile_host::cups`. See [PORTALS.md](PORTALS.md).
   - `eis.rs` serves EIS, the emulated input the RemoteDesktop and
     InputCapture portals hand out. Its input takes the engine's input path,

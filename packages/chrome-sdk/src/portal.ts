@@ -289,9 +289,24 @@ export type UsbDevice = {
 export type UsbBody = { devices: readonly UsbDevice[] };
 export enum CastSourceKind {
   Window,
+  Monitor,
+  Region,
 }
 
 export const CastSource = {
+  Monitor: (monitor: {
+    /** Its `wl_output` name, as `DomicileHost.displays` names it. */
+    name: string;
+    /** Its make, model and serial, or empty. */
+    description: string;
+    /** In page pixels. */
+    size: readonly [number, number];
+  }) => ({ ...monitor, kind: CastSourceKind.Monitor as const }),
+  /** A rectangle of the desktop the user drew, in page pixels. */
+  Region: (region: {
+    position: readonly [number, number];
+    size: readonly [number, number];
+  }) => ({ ...region, kind: CastSourceKind.Region as const }),
   Window: (window: {
     /** The window's id, as `DomicileHost.windows` lists it. */
     id: string;
@@ -313,14 +328,29 @@ export type CastSource = ReturnType<
 export type ScreenCastBody = {
   /** Whether the user may pick more than one source. */
   multiple: boolean;
+  /** Windows and monitors. */
   sources: readonly CastSource[];
+  /** Whether the user may draw a region instead. */
+  region: boolean;
 };
 
 export enum CapturedKind {
   Window,
+  Monitor,
+  Region,
 }
 
 export const Captured = {
+  /** A monitor, by `wl_output` name. */
+  Monitor: (monitor: { name: string }) => ({
+    ...monitor,
+    kind: CapturedKind.Monitor as const,
+  }),
+  /** A rectangle of the desktop, in page pixels. */
+  Region: (region: {
+    position: readonly [number, number];
+    size: readonly [number, number];
+  }) => ({ ...region, kind: CapturedKind.Region as const }),
   /** A window, with its title when the cast started. */
   Window: (window: { id: string; title: string }) => ({
     ...window,
@@ -591,7 +621,7 @@ export enum CapturingKind {
   RemoteDesktop,
   /** An application takes the user's input once it crosses a screen edge. */
   InputCapture,
-  /** An application records windows. */
+  /** An application records windows, monitors or a region. */
   ScreenCast,
   /** A kind this SDK cannot parse. It can still be stopped. */
   Unknown,
@@ -854,6 +884,8 @@ const inputCaptureSchema = z.object({ devices: devicesSchema });
 const accountSchema = z
   .object({ reason: z.string().optional() })
   .transform((body): AccountBody => ({ reason: body.reason }));
+const pairSchema = z.tuple([z.number(), z.number()]);
+
 const castSourceSchema = z
   .discriminatedUnion("type", [
     z.object({
@@ -863,28 +895,60 @@ const castSourceSchema = z
       title: z.string(),
       type: z.literal("window"),
     }),
-  ])
-  .transform((source) =>
-    CastSource.Window({
-      appName: source.app_name,
-      icon: source.icon,
-      id: source.id,
-      title: source.title,
+    z.object({
+      description: z.string(),
+      name: z.string(),
+      size: pairSchema,
+      type: z.literal("monitor"),
     }),
-  );
+  ])
+  .transform((source) => {
+    switch (source.type) {
+      case "window":
+        return CastSource.Window({
+          appName: source.app_name,
+          icon: source.icon,
+          id: source.id,
+          title: source.title,
+        });
+      case "monitor":
+        return CastSource.Monitor({
+          description: source.description,
+          name: source.name,
+          size: source.size,
+        });
+    }
+  });
 
 const screenCastSchema = z.object({
   multiple: z.boolean(),
+  region: z.boolean(),
   sources: z.array(castSourceSchema),
 });
 
 const capturedSchema = z
   .discriminatedUnion("type", [
     z.object({ id: z.string(), title: z.string(), type: z.literal("window") }),
+    z.object({ name: z.string(), type: z.literal("monitor") }),
+    z.object({
+      position: pairSchema,
+      size: pairSchema,
+      type: z.literal("region"),
+    }),
   ])
-  .transform((source) =>
-    Captured.Window({ id: source.id, title: source.title }),
-  );
+  .transform((source) => {
+    switch (source.type) {
+      case "window":
+        return Captured.Window({ id: source.id, title: source.title });
+      case "monitor":
+        return Captured.Monitor({ name: source.name });
+      case "region":
+        return Captured.Region({
+          position: source.position,
+          size: source.size,
+        });
+    }
+  });
 
 const screenCastingSchema = z.object({ sources: z.array(capturedSchema) });
 
@@ -1328,6 +1392,10 @@ const wireSource = (source: CastSource): object => {
   switch (source.kind) {
     case CastSourceKind.Window:
       return { id: source.id, type: "window" };
+    case CastSourceKind.Monitor:
+      return { name: source.name, type: "monitor" };
+    case CastSourceKind.Region:
+      return { position: source.position, size: source.size, type: "region" };
   }
 };
 

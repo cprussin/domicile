@@ -430,6 +430,7 @@ describe("watchPortalRequests", () => {
         app_id: "us.zoom.Zoom",
         body: {
           multiple: true,
+          region: true,
           sources: [
             {
               app_name: "Text Editor",
@@ -439,6 +440,12 @@ describe("watchPortalRequests", () => {
               type: "window",
             },
             { id: "app-4", title: "", type: "window" },
+            {
+              description: "Dell Inc. DELL U3219Q",
+              name: "drm-1",
+              size: [1920, 1080],
+              type: "monitor",
+            },
           ],
         },
         id: 4,
@@ -451,6 +458,7 @@ describe("watchPortalRequests", () => {
         appId: "us.zoom.Zoom",
         body: {
           multiple: true,
+          region: true,
           sources: [
             CastSource.Window({
               appName: "Text Editor",
@@ -463,6 +471,11 @@ describe("watchPortalRequests", () => {
               icon: undefined,
               id: "app-4",
               title: "",
+            }),
+            CastSource.Monitor({
+              description: "Dell Inc. DELL U3219Q",
+              name: "drm-1",
+              size: [1920, 1080],
             }),
           ],
         },
@@ -765,7 +778,13 @@ describe("watchCapturing", () => {
       [
         {
           app_id: "us.zoom.Zoom",
-          body: { sources: [{ id: "app-3", title: "Notes", type: "window" }] },
+          body: {
+            sources: [
+              { id: "app-3", title: "Notes", type: "window" },
+              { name: "drm-1", type: "monitor" },
+              { position: [10, -20], size: [300, 200], type: "region" },
+            ],
+          },
           id: 5,
           kind: "screen_cast",
         },
@@ -777,7 +796,11 @@ describe("watchCapturing", () => {
         appId: "us.zoom.Zoom",
         id: 5,
         kind: CapturingKind.ScreenCast,
-        sources: [Captured.Window({ id: "app-3", title: "Notes" })],
+        sources: [
+          Captured.Window({ id: "app-3", title: "Notes" }),
+          Captured.Monitor({ name: "drm-1" }),
+          Captured.Region({ position: [10, -20], size: [300, 200] }),
+        ],
       },
     ]);
   });
@@ -947,7 +970,7 @@ describe("answerPortalRequest", () => {
     ]);
   });
 
-  it("writes the windows picked for a screen cast", () => {
+  it("writes the sources picked for a screen cast", () => {
     const host = new FakeHost();
     answerPortalRequest(
       host,
@@ -959,11 +982,27 @@ describe("answerPortalRequest", () => {
           id: "app-3",
           title: "Notes",
         }),
+        CastSource.Monitor({
+          description: "",
+          name: "drm-1",
+          size: [1920, 1080],
+        }),
+        CastSource.Region({ position: [10, -20], size: [300, 200] }),
       ]),
     );
 
     expect(host.answers).toEqual([
-      [4, { kind: "screen_cast", sources: [{ id: "app-3", type: "window" }] }],
+      [
+        4,
+        {
+          kind: "screen_cast",
+          sources: [
+            { id: "app-3", type: "window" },
+            { name: "drm-1", type: "monitor" },
+            { position: [10, -20], size: [300, 200], type: "region" },
+          ],
+        },
+      ],
     ]);
   });
 });

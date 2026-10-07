@@ -9,9 +9,8 @@ Make Domicile the session's only `xdg-desktop-portal` backend:
 Today the compositor implements `Settings`, `Access`, `AppChooser`,
 `FileChooser`, `Notification`, `Inhibit`, `RemoteDesktop`, `Clipboard`,
 `InputCapture`, `Account`, `Email`, `Lockdown`, `GlobalShortcuts`,
-`Background`, `Wallpaper`, `DynamicLauncher`, `Usb`, `Print`, `ScreenCast` of
-windows and `Screenshot`, and routes the rest to gtk. Sharing a monitor has no
-backend.
+`Background`, `Wallpaper`, `DynamicLauncher`, `Usb`, `Print`, `ScreenCast` and
+`Screenshot`, and routes the rest to gtk.
 
 ## Design
 
@@ -157,6 +156,12 @@ One request channel carries all dialogs. Each interface's backend builds on it.
   frontend reads as background.
 - **Restore tokens name windows by app id and title.** Host ids do not
   survive a restart. A window whose title changed matches by app id alone.
+  A monitor is named by its `wl_output` name, and a region by its rectangle
+  relative to the monitor it is mostly on, so it follows that monitor.
+- **A region is drawn on the desk.** The picker's region option closes the
+  dialog and the user drags a rectangle over the page, whose pixels are the
+  desktop's logical pixels. The picker has no monitor thumbnails: the engine
+  captures a display only while a stream shows it.
 
 - **The frontend installs launchers.** `Install`, `Uninstall`,
   `LaunchDesktopFile`, `GetDesktopEntry` and `GetIcon` are frontend methods:
@@ -227,7 +232,7 @@ Phase 2: capture.
 - [x] PipeWire producer in the compositor; window sources from client buffers
 - [x] engine: `FrameSinkVideoCapturer` per display, dmabufs over the broker socket; monitor and region `Source`s
 - [x] ScreenCast of windows, with restore tokens and the sharing indicator
-- [ ] ScreenCast of monitors and regions: offer the engine's display `Source`s in the picker and `AvailableSourceTypes`
+- [x] ScreenCast of monitors and regions: offer the engine's display `Source`s in the picker and `AvailableSourceTypes`
 - [x] Screenshot and `PickColor`
 - [ ] Remove ROADMAP's "no screenshot or screencast portal" item
 

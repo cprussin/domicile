@@ -1,8 +1,10 @@
-//! `org.freedesktop.impl.portal.ScreenCast`: an application records windows.
+//! `org.freedesktop.impl.portal.ScreenCast`: an application records windows,
+//! monitors or regions of the desktop.
 //!
 //! - `SelectSources` keeps the application's options on the session.
-//! - `Start` asks the shell which windows to share, unless a restore token
-//!   names windows that are open, and starts a [`Casting`] stream of each.
+//! - `Start` asks the shell what to share, of the source types the
+//!   application asked for, unless a restore token names sources that are
+//!   there, and starts a [`Casting`] stream of each.
 //! - The capture is listed for the shell's sharing indicator until it ends.
 //!   Closing the session, the shell's stop, or every stream ending ends it.
 //!
@@ -13,7 +15,7 @@ use std::fs::File;
 use std::io::Read;
 use std::sync::{Arc, Mutex};
 
-use domicile_host::cast_grants::{matched, Grants, Open, Persist, Shared};
+use domicile_host::cast_grants::{matched, Grants, Open, Persist, Placed, Restored, Shared};
 use domicile_host::desktop_entries::DesktopEntries;
 use domicile_protocol::{
     Captured, CapturingKind, CastPick, CastSource, PortalAnswer, PortalKind, ScreenCastDialog,
@@ -24,15 +26,19 @@ use zbus::zvariant::{OwnedObjectPath, OwnedValue, Value};
 
 use super::queue::{ask, Queue};
 use super::session;
-use crate::casting::{Candidate, Casting, CursorMode, Event, Source, StreamId};
+use crate::casting::{Candidate, Casting, CursorMode, Event, Region, Source, StreamId};
 use crate::reply::{reply, Replier};
 
 /// The `org.freedesktop.impl.portal.ScreenCast` version implemented.
 const INTERFACE_VERSION: u32 = 5;
 
-/// `AvailableSourceTypes`: windows. Monitors join once the engine sends
-/// their frames.
+/// The source types: a monitor, a window, and a region (`VIRTUAL`).
+const MONITOR: u32 = 1;
 const WINDOW: u32 = 2;
+const VIRTUAL: u32 = 4;
+
+/// `AvailableSourceTypes`: every type.
+const SOURCE_TYPES: u32 = MONITOR | WINDOW | VIRTUAL;
 
 /// `AvailableCursorModes`: hidden, embedded and metadata.
 const CURSOR_MODES: u32 = 1 | 2 | 4;
@@ -64,6 +70,8 @@ struct CastSession {
 /// What an application asked for in `SelectSources`.
 #[derive(Clone)]
 struct Selected {
+    /// The source types asked for.
+    types: u32,
     multiple: bool,
     cursor: CursorMode,
     persist: Persist,
@@ -146,8 +154,8 @@ impl ScreenCast {
         }
     }
 
-    /// Ask which windows to share, or recall them from a restore token, and
-    /// start a stream of each.
+    /// Ask what to share, or recall it from a restore token, and start a
+    /// stream of each.
     async fn start(
         &self,
         #[zbus(connection)] connection: &zbus::Connection,
@@ -169,12 +177,12 @@ impl ScreenCast {
         let Some(listed) = self.casting.list().await else {
             return (2, HashMap::new());
         };
-        // Only windows until monitors are offered; see `AvailableSourceTypes`.
+        let monitors = placed(&listed);
         let open: Vec<Candidate> = listed
             .into_iter()
-            .filter(|candidate| matches!(candidate.source, Source::Window(_)))
+            .filter(|candidate| asked_for(&selected, &candidate.source))
             .collect();
-        let picked = match self.recalled(&selected, &open) {
+        let picked = match self.recalled(&selected, &open, &monitors) {
             Some(picked) => picked,
             None => {
                 let kind = self.dialog(&selected, &open);
@@ -192,7 +200,7 @@ impl ScreenCast {
                         match chosen(&sources, &open, &selected) {
                             Some(picked) => picked,
                             None => {
-                                warn!(?sources, "the shell picked windows that cannot be cast");
+                                warn!(?sources, "the shell picked sources that cannot be cast");
                                 return (2, HashMap::new());
                             }
                         }
@@ -215,13 +223,7 @@ impl ScreenCast {
         let capture = self.queue.begin(
             app_id,
             CapturingKind::ScreenCast {
-                sources: picked
-                    .iter()
-                    .map(|candidate| Captured::Window {
-                        id: window_id(candidate).to_string(),
-                        title: candidate.title.clone(),
-                    })
-                    .collect(),
+                sources: picked.iter().map(captured).collect(),
             },
             {
                 let casting = self.casting.clone();
@@ -246,7 +248,7 @@ impl ScreenCast {
                     .collect::<Vec<_>>(),
             )),
         )]);
-        if let Some(token) = self.remember(&selected, &picked) {
+        if let Some(token) = self.remember(&selected, &picked, &monitors) {
             results.insert(
                 "persist_mode".to_string(),
                 owned(Value::from(selected.persist.mode())),
@@ -261,7 +263,7 @@ impl ScreenCast {
 
     #[zbus(property(emits_changed_signal = "const"))]
     fn available_source_types(&self) -> u32 {
-        WINDOW
+        SOURCE_TYPES
     }
 
     #[zbus(property(emits_changed_signal = "const"))]
@@ -276,29 +278,46 @@ impl ScreenCast {
 }
 
 impl ScreenCast {
-    /// The windows the application's restore token names, if every one is
-    /// open.
-    fn recalled(&self, selected: &Selected, open: &[Candidate]) -> Option<Vec<Candidate>> {
+    /// The sources the application's restore token names, if every one is
+    /// there and of a type it asked for. `open` is what it may pick, and
+    /// `monitors` every monitor, which a region is kept on.
+    fn recalled(
+        &self,
+        selected: &Selected,
+        open: &[Candidate],
+        monitors: &[Placed],
+    ) -> Option<Vec<Candidate>> {
         let token = selected.restore.as_deref()?;
         let grants = self.grants.lock().unwrap();
         let shared = grants.recall(token)?;
-        let ids = matched(
-            shared,
-            &open
-                .iter()
-                .map(|candidate| Open {
-                    id: window_id(candidate).to_string(),
+        let there: Vec<Open> = open
+            .iter()
+            .filter_map(|candidate| match &candidate.source {
+                Source::Window(id) => Some(Open::Window {
+                    id: id.clone(),
                     app_id: candidate.app_id.clone(),
                     title: candidate.title.clone(),
-                })
-                .collect::<Vec<_>>(),
-        )?;
-        Some(
-            ids.iter()
-                .filter_map(|id| open.iter().find(|candidate| window_id(candidate) == id))
-                .cloned()
-                .collect(),
-        )
+                }),
+                Source::Monitor(_) | Source::Region(_) => None,
+            })
+            .chain(monitors.iter().cloned().map(Open::Monitor))
+            .collect();
+        matched(shared, &there)?
+            .into_iter()
+            .map(|restored| {
+                let source = match restored {
+                    Restored::Window(id) => Source::Window(id),
+                    Restored::Monitor(name) => Source::Monitor(name),
+                    Restored::Region { position, size } => {
+                        return asked_for(selected, &Source::Region(Region { position, size }))
+                            .then(|| region(position, size));
+                    }
+                };
+                open.iter()
+                    .find(|candidate| candidate.source == source)
+                    .cloned()
+            })
+            .collect()
     }
 
     /// The source picker for `open`, each window named by its desktop entry.
@@ -308,20 +327,29 @@ impl ScreenCast {
             multiple: selected.multiple,
             sources: open
                 .iter()
-                .map(|candidate| {
-                    let described = if candidate.app_id.is_empty() {
-                        Default::default()
-                    } else {
-                        entries.describe(&candidate.app_id)
-                    };
-                    CastSource::Window {
-                        id: window_id(candidate).to_string(),
-                        title: candidate.title.clone(),
-                        app_name: described.name,
-                        icon: described.icon,
+                .map(|candidate| match &candidate.source {
+                    Source::Window(id) => {
+                        let described = if candidate.app_id.is_empty() {
+                            Default::default()
+                        } else {
+                            entries.describe(&candidate.app_id)
+                        };
+                        CastSource::Window {
+                            id: id.clone(),
+                            title: candidate.title.clone(),
+                            app_name: described.name,
+                            icon: described.icon,
+                        }
                     }
+                    Source::Monitor(name) => CastSource::Monitor {
+                        name: name.clone(),
+                        description: candidate.title.clone(),
+                        size: candidate.bounds.expect("a monitor has bounds").size,
+                    },
+                    Source::Region(_) => unreachable!("regions are drawn, not listed"),
                 })
                 .collect(),
+            region: selected.types & VIRTUAL != 0,
         })
     }
 
@@ -365,18 +393,33 @@ impl ScreenCast {
         }
     }
 
-    /// Keep the grant `selected.persist` asks for, returning its token.
-    fn remember(&self, selected: &Selected, picked: &[Candidate]) -> Option<String> {
+    /// Keep the grant `selected.persist` asks for, returning its token. A
+    /// region is kept on the monitor of `monitors` it is mostly on.
+    fn remember(
+        &self,
+        selected: &Selected,
+        picked: &[Candidate],
+        monitors: &[Placed],
+    ) -> Option<String> {
+        let Some(shared) = picked
+            .iter()
+            .map(|candidate| match &candidate.source {
+                Source::Window(_) => Some(Shared::Window {
+                    app_id: candidate.app_id.clone(),
+                    title: candidate.title.clone(),
+                }),
+                Source::Monitor(name) => Some(Shared::Monitor { name: name.clone() }),
+                Source::Region(region) => Shared::region(region.position, region.size, monitors),
+            })
+            .collect::<Option<Vec<_>>>()
+        else {
+            warn!("a screen cast region left every monitor; the application will ask again");
+            return None;
+        };
         let granted = self.grants.lock().unwrap().grant(
             selected.persist,
             selected.restore.as_deref(),
-            picked
-                .iter()
-                .map(|candidate| Shared {
-                    app_id: candidate.app_id.clone(),
-                    title: candidate.title.clone(),
-                })
-                .collect(),
+            shared,
             fresh_token,
         );
         granted.unwrap_or_else(|why| {
@@ -512,9 +555,9 @@ fn selected(options: &HashMap<String, OwnedValue>) -> Result<Selected, String> {
             .transpose()
     };
     // The spec's default is a monitor.
-    let types = number("types")?.unwrap_or(1);
-    if types & WINDOW == 0 {
-        return Err(format!("source types {types} include no window"));
+    let types = number("types")?.unwrap_or(MONITOR);
+    if types == 0 || types & !SOURCE_TYPES != 0 {
+        return Err(format!("source types {types}"));
     }
     let cursor = match number("cursor_mode")?.unwrap_or(1) {
         1 => CursorMode::Hidden,
@@ -530,6 +573,7 @@ fn selected(options: &HashMap<String, OwnedValue>) -> Result<Selected, String> {
         .transpose()?
         .unwrap_or(false);
     Ok(Selected {
+        types,
         multiple,
         cursor,
         persist,
@@ -556,41 +600,115 @@ fn restore_token(data: &OwnedValue) -> Option<String> {
     }
 }
 
-/// The windows the shell picked, or `None` for one not open or more than
-/// one when the application asked for one.
+/// The sources the shell picked, or `None` for one not open, of a type not
+/// asked for, an empty region, or more than one when the application asked
+/// for one.
 fn chosen(picks: &[CastPick], open: &[Candidate], selected: &Selected) -> Option<Vec<Candidate>> {
     if picks.is_empty() || (picks.len() > 1 && !selected.multiple) {
         return None;
     }
     picks
         .iter()
-        .map(|CastPick::Window { id }| {
-            open.iter()
-                .find(|candidate| window_id(candidate) == id)
-                .cloned()
+        .map(|pick| {
+            let source = match pick {
+                CastPick::Window { id } => Source::Window(id.clone()),
+                CastPick::Monitor { name } => Source::Monitor(name.clone()),
+                CastPick::Region { position, size } => Source::Region(Region {
+                    position: *position,
+                    size: *size,
+                }),
+            };
+            if !asked_for(selected, &source) {
+                return None;
+            }
+            match source {
+                Source::Region(Region { position, size }) => {
+                    (size.0 > 0 && size.1 > 0).then(|| region(position, size))
+                }
+                source => open
+                    .iter()
+                    .find(|candidate| candidate.source == source)
+                    .cloned(),
+            }
         })
         .collect()
 }
 
+/// Whether `source` is of a type the application asked for.
+fn asked_for(selected: &Selected, source: &Source) -> bool {
+    selected.types & source_type(source) != 0
+}
+
+/// The spec's source type of `source`.
+fn source_type(source: &Source) -> u32 {
+    match source {
+        Source::Monitor(_) => MONITOR,
+        Source::Window(_) => WINDOW,
+        Source::Region(_) => VIRTUAL,
+    }
+}
+
+/// A region drawn at `position` and `size`, as a candidate.
+fn region(position: (i32, i32), size: (i32, i32)) -> Candidate {
+    let region = Region { position, size };
+    Candidate {
+        source: Source::Region(region),
+        title: String::new(),
+        app_id: String::new(),
+        bounds: Some(region),
+    }
+}
+
+/// The monitors of `listed`, where they are.
+fn placed(listed: &[Candidate]) -> Vec<Placed> {
+    listed
+        .iter()
+        .filter_map(|candidate| match &candidate.source {
+            Source::Monitor(name) => {
+                let bounds = candidate.bounds.expect("a monitor has bounds");
+                Some(Placed {
+                    name: name.clone(),
+                    position: bounds.position,
+                    size: bounds.size,
+                })
+            }
+            Source::Window(_) | Source::Region(_) => None,
+        })
+        .collect()
+}
+
+/// What the shell's indicator lists for `candidate`.
+fn captured(candidate: &Candidate) -> Captured {
+    match &candidate.source {
+        Source::Window(id) => Captured::Window {
+            id: id.clone(),
+            title: candidate.title.clone(),
+        },
+        Source::Monitor(name) => Captured::Monitor { name: name.clone() },
+        Source::Region(region) => Captured::Region {
+            position: region.position,
+            size: region.size,
+        },
+    }
+}
+
 /// A stream's properties for `Start`'s results.
 fn stream_properties(candidate: &Candidate) -> HashMap<String, OwnedValue> {
-    let mut properties = HashMap::from([
-        ("source_type".to_string(), owned(Value::from(WINDOW))),
-        ("id".to_string(), owned(Value::from(window_id(candidate)))),
-    ]);
+    let mut properties = HashMap::from([(
+        "source_type".to_string(),
+        owned(Value::from(source_type(&candidate.source))),
+    )]);
+    match &candidate.source {
+        Source::Window(id) | Source::Monitor(id) => {
+            properties.insert("id".to_string(), owned(Value::from(id.as_str())));
+        }
+        Source::Region(_) => {}
+    }
     if let Some(bounds) = candidate.bounds {
         properties.insert("position".to_string(), owned(Value::from(bounds.position)));
         properties.insert("size".to_string(), owned(Value::from(bounds.size)));
     }
     properties
-}
-
-/// A listed window's host app id. `start` keeps only windows.
-fn window_id(candidate: &Candidate) -> &str {
-    match &candidate.source {
-        Source::Window(id) => id,
-        Source::Monitor(_) | Source::Region(_) => unreachable!("only windows are offered"),
-    }
 }
 
 fn owned(value: Value<'_>) -> OwnedValue {
@@ -681,19 +799,18 @@ mod tests {
             event_loop
                 .handle()
                 .insert_source(heard, move |event, _, open| match event {
-                    Heard::Msg(Request::List { reply }) => reply.send(windows()),
+                    Heard::Msg(Request::List { reply }) => {
+                        reply.send(windows().into_iter().chain(monitors()).collect())
+                    }
                     Heard::Msg(Request::Start {
                         stream,
-                        source: Source::Window(id),
+                        source,
+                        cursor,
                         mut listener,
-                        ..
                     }) => {
-                        let _ = told.send(format!("start {id}"));
+                        let _ = told.send(format!("start {source:?} {cursor:?}"));
                         listener(Event::Ready { node: 42 });
                         listeners.insert(stream, listener);
-                    }
-                    Heard::Msg(Request::Start { mut listener, .. }) => {
-                        listener(Event::Ended(Ended::SourceGone));
                     }
                     Heard::Msg(Request::Stop { stream }) => {
                         let _ = told.send("stop".to_string());
@@ -737,6 +854,30 @@ mod tests {
         ]
     }
 
+    /// A 1920x1080 monitor, and a 1280x800 one to its right.
+    fn monitors() -> Vec<Candidate> {
+        vec![
+            Candidate {
+                source: Source::Monitor("drm-1".into()),
+                title: "BOE NE135A1M-NY1".into(),
+                app_id: String::new(),
+                bounds: Some(Region {
+                    position: (0, 0),
+                    size: (1920, 1080),
+                }),
+            },
+            Candidate {
+                source: Source::Monitor("drm-2".into()),
+                title: String::new(),
+                app_id: String::new(),
+                bounds: Some(Region {
+                    position: (1920, 0),
+                    size: (1280, 800),
+                }),
+            },
+        ]
+    }
+
     fn options(sent: Vec<(&str, Value<'static>)>) -> HashMap<String, OwnedValue> {
         sent.into_iter()
             .map(|(name, value)| {
@@ -766,9 +907,8 @@ mod tests {
             .expect("a response and results")
     }
 
-    /// Create a session and select windows, with `select` besides.
-    fn select(client: &zbus::blocking::Connection, mut select: Vec<(&str, Value<'static>)>) {
-        select.push(("types", Value::from(2u32)));
+    /// Create a session and select sources with `select`.
+    fn select(client: &zbus::blocking::Connection, select: Vec<(&str, Value<'static>)>) {
         let (response, _) = call(
             client,
             "CreateSession",
@@ -824,15 +964,83 @@ mod tests {
 
     /// Pick `app-3` in the dialog `Start` puts up.
     fn pick_notes(served: &Served) -> (u32, HashMap<String, OwnedValue>) {
+        pick(served, vec![CastPick::Window { id: "app-3".into() }])
+    }
+
+    /// Pick `sources` in the dialog `Start` puts up.
+    fn pick(served: &Served, sources: Vec<CastPick>) -> (u32, HashMap<String, OwnedValue>) {
         let starting = start(&served.client);
         let (items, _) = next(&served.published);
-        served.queue.answer(
-            items[0].id,
-            PortalAnswer::ScreenCast {
-                sources: vec![CastPick::Window { id: "app-3".into() }],
-            },
-        );
+        served
+            .queue
+            .answer(items[0].id, PortalAnswer::ScreenCast { sources });
         starting.join().expect("Start returned")
+    }
+
+    /// Each stream's properties in `Start`'s results.
+    fn streams(results: &HashMap<String, OwnedValue>) -> Vec<HashMap<String, OwnedValue>> {
+        let streams: Vec<(u32, HashMap<String, OwnedValue>)> = results
+            .get("streams")
+            .expect("streams")
+            .try_clone()
+            .expect("cloned")
+            .try_into()
+            .expect("a(ua{sv})");
+        streams
+            .into_iter()
+            .map(|(node, properties)| {
+                assert_eq!(node, 42);
+                properties
+            })
+            .collect()
+    }
+
+    /// Property `name` of a stream, read as `T`.
+    fn read<T>(properties: &HashMap<String, OwnedValue>, name: &str) -> T
+    where
+        T: TryFrom<OwnedValue>,
+        T::Error: std::fmt::Debug,
+    {
+        T::try_from(
+            properties
+                .get(name)
+                .expect(name)
+                .try_clone()
+                .expect("cloned"),
+        )
+        .expect(name)
+    }
+
+    /// The last capture list the queue published.
+    fn captured(served: &Served) -> Vec<Captured> {
+        match served
+            .published
+            .try_iter()
+            .last()
+            .map(|(_, capturing)| capturing)
+            .as_deref()
+        {
+            Some(
+                [Capturing {
+                    kind: CapturingKind::ScreenCast { sources },
+                    ..
+                }],
+            ) => sources.clone(),
+            other => panic!("not one screen cast: {other:?}"),
+        }
+    }
+
+    fn close(served: &Served) {
+        served
+            .client
+            .call_method(
+                None::<&str>,
+                SESSION,
+                Some("org.freedesktop.impl.portal.Session"),
+                "Close",
+                &(),
+            )
+            .expect("Close answered");
     }
 
     #[track_caller]
@@ -845,7 +1053,7 @@ mod tests {
     #[test]
     fn the_shell_picks_from_the_open_windows() {
         let served = served(Grants::default());
-        select(&served.client, vec![]);
+        select(&served.client, vec![("types", Value::from(2u32))]);
         let starting = start(&served.client);
 
         let (items, _) = next(&served.published);
@@ -872,6 +1080,7 @@ mod tests {
                             icon: None,
                         },
                     ],
+                    region: false,
                 }),
             }]
         );
@@ -880,33 +1089,174 @@ mod tests {
     }
 
     #[test]
+    fn the_shell_offers_monitors_and_a_region_when_asked_for() {
+        let served = served(Grants::default());
+        select(
+            &served.client,
+            vec![
+                ("types", Value::from(1u32 | 4)),
+                ("multiple", Value::from(true)),
+            ],
+        );
+        let starting = start(&served.client);
+
+        let (items, _) = next(&served.published);
+
+        assert_eq!(
+            items[0].kind,
+            PortalKind::ScreenCast(ScreenCastDialog {
+                multiple: true,
+                sources: vec![
+                    CastSource::Monitor {
+                        name: "drm-1".into(),
+                        description: "BOE NE135A1M-NY1".into(),
+                        size: (1920, 1080),
+                    },
+                    CastSource::Monitor {
+                        name: "drm-2".into(),
+                        description: String::new(),
+                        size: (1280, 800),
+                    },
+                ],
+                region: true,
+            })
+        );
+        served.queue.answer(items[0].id, PortalAnswer::Canceled);
+        starting.join().expect("Start returned");
+    }
+
+    #[test]
+    fn a_picked_monitor_is_cast_with_its_place_and_the_cursor_mode() {
+        let served = served(Grants::default());
+        select(
+            &served.client,
+            vec![
+                ("types", Value::from(1u32)),
+                ("cursor_mode", Value::from(4u32)),
+            ],
+        );
+
+        let (response, results) = pick(
+            &served,
+            vec![CastPick::Monitor {
+                name: "drm-2".into(),
+            }],
+        );
+
+        assert_eq!(response, 0);
+        assert_eq!(heard(&served.casts), r#"start Monitor("drm-2") Metadata"#);
+        let stream = &streams(&results)[0];
+        assert_eq!(read::<u32>(stream, "source_type"), 1);
+        assert_eq!(read::<(i32, i32)>(stream, "position"), (1920, 0));
+        assert_eq!(read::<(i32, i32)>(stream, "size"), (1280, 800));
+        assert_eq!(
+            captured(&served),
+            [Captured::Monitor {
+                name: "drm-2".into()
+            }]
+        );
+    }
+
+    #[test]
+    fn a_drawn_region_is_cast_where_it_was_drawn() {
+        let served = served(Grants::default());
+        select(&served.client, vec![("types", Value::from(4u32))]);
+
+        let (response, results) = pick(
+            &served,
+            vec![CastPick::Region {
+                position: (1800, 100),
+                size: (300, 200),
+            }],
+        );
+
+        assert_eq!(response, 0);
+        assert_eq!(
+            heard(&served.casts),
+            "start Region(Region { position: (1800, 100), size: (300, 200) }) Hidden"
+        );
+        let stream = &streams(&results)[0];
+        assert_eq!(read::<u32>(stream, "source_type"), 4);
+        assert_eq!(read::<(i32, i32)>(stream, "position"), (1800, 100));
+        assert_eq!(read::<(i32, i32)>(stream, "size"), (300, 200));
+        assert_eq!(
+            captured(&served),
+            [Captured::Region {
+                position: (1800, 100),
+                size: (300, 200),
+            }]
+        );
+    }
+
+    #[test]
+    fn a_restore_token_shares_the_same_monitor_and_region_without_asking() {
+        let served = served(Grants::default());
+        let both = |restore: Option<OwnedValue>| {
+            let mut options = vec![
+                ("types", Value::from(1u32 | 4)),
+                ("multiple", Value::from(true)),
+                ("persist_mode", Value::from(1u32)),
+            ];
+            if let Some(restore) = restore {
+                options.push(("restore_data", Value::from(restore)));
+            }
+            options
+        };
+        select(&served.client, both(None));
+        let (_, results) = pick(
+            &served,
+            vec![
+                CastPick::Monitor {
+                    name: "drm-1".into(),
+                },
+                CastPick::Region {
+                    position: (1800, 100),
+                    size: (300, 200),
+                },
+            ],
+        );
+        heard(&served.casts);
+        heard(&served.casts);
+        let restore = results
+            .get("restore_data")
+            .expect("a token")
+            .try_clone()
+            .expect("cloned");
+        close(&served);
+        heard(&served.casts);
+        heard(&served.casts);
+
+        select(&served.client, both(Some(restore)));
+        let (response, _) = start(&served.client).join().expect("Start returned");
+
+        assert_eq!(response, 0);
+        assert_eq!(heard(&served.casts), r#"start Monitor("drm-1") Hidden"#);
+        assert_eq!(
+            heard(&served.casts),
+            "start Region(Region { position: (1800, 100), size: (300, 200) }) Hidden"
+        );
+        assert!(
+            served
+                .published
+                .try_iter()
+                .all(|(items, _)| items.is_empty()),
+            "no dialog was shown"
+        );
+    }
+
+    #[test]
     fn a_picked_window_is_cast_and_its_node_handed_back() {
         let served = served(Grants::default());
-        select(&served.client, vec![]);
+        select(&served.client, vec![("types", Value::from(2u32))]);
 
         let (response, results) = pick_notes(&served);
 
         assert_eq!(response, 0);
-        assert_eq!(heard(&served.casts), "start app-3");
-        let streams: Vec<(u32, HashMap<String, OwnedValue>)> = results
-            .get("streams")
-            .expect("streams")
-            .try_clone()
-            .expect("cloned")
-            .try_into()
-            .expect("a(ua{sv})");
-        let (node, properties) = &streams[0];
-        assert_eq!(*node, 42);
-        let read = |name: &str| {
-            properties
-                .get(name)
-                .expect(name)
-                .try_clone()
-                .expect("cloned")
-        };
-        assert_eq!(u32::try_from(read("source_type")), Ok(2));
-        assert_eq!(<(i32, i32)>::try_from(read("size")), Ok((640, 480)));
-        assert_eq!(<(i32, i32)>::try_from(read("position")), Ok((10, 20)));
+        assert_eq!(heard(&served.casts), r#"start Window("app-3") Hidden"#);
+        let stream = &streams(&results)[0];
+        assert_eq!(read::<u32>(stream, "source_type"), 2);
+        assert_eq!(read::<(i32, i32)>(stream, "size"), (640, 480));
+        assert_eq!(read::<(i32, i32)>(stream, "position"), (10, 20));
         assert!(!results.contains_key("restore_data"), "persist_mode 0");
         assert_eq!(
             served
@@ -930,20 +1280,11 @@ mod tests {
     #[test]
     fn closing_the_session_stops_its_streams() {
         let served = served(Grants::default());
-        select(&served.client, vec![]);
+        select(&served.client, vec![("types", Value::from(2u32))]);
         pick_notes(&served);
         heard(&served.casts);
 
-        served
-            .client
-            .call_method(
-                None::<&str>,
-                SESSION,
-                Some("org.freedesktop.impl.portal.Session"),
-                "Close",
-                &(),
-            )
-            .expect("Close answered");
+        close(&served);
 
         assert_eq!(heard(&served.casts), "stop");
         assert_eq!(next(&served.published).1, []);
@@ -952,7 +1293,7 @@ mod tests {
     #[test]
     fn the_shell_s_stop_ends_the_session() {
         let served = served(Grants::default());
-        select(&served.client, vec![]);
+        select(&served.client, vec![("types", Value::from(2u32))]);
         pick_notes(&served);
         heard(&served.casts);
         let capture = served.published.try_iter().last().expect("published").1[0].id;
@@ -979,7 +1320,13 @@ mod tests {
         let directory = tempfile::tempdir().expect("a directory");
         let grants = Grants::load(directory.path().join("grants.json")).expect("loaded");
         let served = served(grants);
-        select(&served.client, vec![("persist_mode", Value::from(2u32))]);
+        select(
+            &served.client,
+            vec![
+                ("types", Value::from(2u32)),
+                ("persist_mode", Value::from(2u32)),
+            ],
+        );
         let (_, results) = pick_notes(&served);
         heard(&served.casts);
         assert_eq!(
@@ -993,21 +1340,13 @@ mod tests {
             .expect("a token")
             .try_clone()
             .expect("cloned");
-        served
-            .client
-            .call_method(
-                None::<&str>,
-                SESSION,
-                Some("org.freedesktop.impl.portal.Session"),
-                "Close",
-                &(),
-            )
-            .expect("Close answered");
+        close(&served);
         heard(&served.casts);
 
         select(
             &served.client,
             vec![
+                ("types", Value::from(2u32)),
                 ("persist_mode", Value::from(2u32)),
                 ("restore_data", Value::from(restore)),
             ],
@@ -1015,7 +1354,7 @@ mod tests {
         let (response, _) = start(&served.client).join().expect("Start returned");
 
         assert_eq!(response, 0);
-        assert_eq!(heard(&served.casts), "start app-3");
+        assert_eq!(heard(&served.casts), r#"start Window("app-3") Hidden"#);
         assert!(
             served
                 .published
@@ -1034,36 +1373,63 @@ mod tests {
             ]))
         };
 
+        let types = |types: u32| selected(&options(vec![("types", Value::from(types))]));
+
         assert!(windows_and("cursor_mode", 8).is_err());
         assert!(windows_and("persist_mode", 3).is_err());
         assert!(windows_and("cursor_mode", 4).is_ok());
-        assert!(selected(&options(vec![])).is_err(), "a monitor, by default");
-        assert!(selected(&options(vec![("types", Value::from(3u32))])).is_ok());
+        assert!(types(0).is_err(), "no source type");
+        assert!(types(8).is_err(), "a type the spec does not define");
+        assert!(types(7).is_ok());
+        assert_eq!(
+            selected(&options(vec![])).map(|selected| selected.types),
+            Ok(1),
+            "a monitor, by default"
+        );
     }
 
     #[test]
-    fn the_shell_may_pick_only_as_many_windows_as_were_asked_for() {
-        let one = selected(&options(vec![("types", Value::from(2u32))])).expect("windows");
-        let picks = |ids: &[&str]| -> Vec<CastPick> {
-            ids.iter()
-                .map(|id| CastPick::Window { id: id.to_string() })
-                .collect()
+    fn the_shell_may_pick_only_what_was_asked_for() {
+        let asked =
+            |types: u32| selected(&options(vec![("types", Value::from(types))])).expect("selected");
+        let open: Vec<Candidate> = windows().into_iter().chain(monitors()).collect();
+        let window = |id: &str| CastPick::Window { id: id.into() };
+        let monitor = |name: &str| CastPick::Monitor { name: name.into() };
+        let region = |size: (i32, i32)| CastPick::Region {
+            position: (0, 0),
+            size,
         };
 
-        assert!(chosen(&picks(&["app-3", "app-4"]), &windows(), &one).is_none());
+        assert!(chosen(&[window("app-3"), window("app-4")], &open, &asked(2)).is_none());
         assert!(
-            chosen(&picks(&["app-9"]), &windows(), &one).is_none(),
+            chosen(&[window("app-9")], &open, &asked(2)).is_none(),
             "not open"
         );
-        assert!(chosen(&picks(&[]), &windows(), &one).is_none());
+        assert!(chosen(&[], &open, &asked(2)).is_none());
+        assert!(
+            chosen(&[monitor("drm-1")], &open, &asked(2)).is_none(),
+            "windows only"
+        );
+        assert!(
+            chosen(&[region((10, 10))], &open, &asked(3)).is_none(),
+            "no region"
+        );
+        assert!(
+            chosen(&[region((0, 10))], &open, &asked(4)).is_none(),
+            "empty"
+        );
         assert_eq!(
-            chosen(&picks(&["app-4"]), &windows(), &one),
+            chosen(&[window("app-4")], &open, &asked(2)),
             Some(vec![windows()[1].clone()])
+        );
+        assert_eq!(
+            chosen(&[monitor("drm-2")], &open, &asked(1)),
+            Some(vec![monitors()[1].clone()])
         );
     }
 
     #[test]
-    fn windows_and_every_cursor_mode_are_offered() {
+    fn every_source_type_and_cursor_mode_is_offered() {
         let served = served(Grants::default());
         let property = |name: &str| -> u32 {
             served
@@ -1083,7 +1449,7 @@ mod tests {
                 .expect("a u32")
         };
 
-        assert_eq!(property("AvailableSourceTypes"), 2);
+        assert_eq!(property("AvailableSourceTypes"), 7);
         assert_eq!(property("AvailableCursorModes"), 7);
         assert_eq!(property("version"), 5);
     }

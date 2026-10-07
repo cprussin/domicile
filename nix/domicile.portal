@@ -26,10 +26,10 @@
 # section. `GlobalShortcuts` binds chords the shell reviews and grabs.
 # `Background` reports windows and writes autostart entries; `Wallpaper` hands
 # the shell a picture. `DynamicLauncher` and `Usb` are an install confirm
-# and a device grant the shell draws. `ScreenCast` casts windows to PipeWire,
-# picked in a dialog the shell draws. `Print` sends jobs to CUPS after a print
-# dialog the shell draws. `Screenshot` saves the desk, or a picked area or
-# color of it. See
+# and a device grant the shell draws. `ScreenCast` casts windows, monitors and
+# regions to PipeWire, picked in a dialog the shell draws. `Print` sends jobs
+# to CUPS after a print dialog the shell draws. `Screenshot` saves the desk, or
+# a picked area or color of it. See
 # `packages/domicile-compositor/src/portals/` and
 # `docs/architecture/PORTALS.md`.
 [portal]
