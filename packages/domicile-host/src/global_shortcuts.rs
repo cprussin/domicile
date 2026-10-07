@@ -2,12 +2,12 @@
 //! the user chose per application.
 //!
 //! The compositor's `portals::global_shortcuts` takes the calls off D-Bus and
-//! keeps this. The shell grabs each [`BoundShortcut`] and reports a press by
-//! its id. Choices are saved per app id, so an application that binds the
-//! same shortcuts again gets them without a dialog. See
+//! keeps this. The shell grabs each [`BoundShortcut`] and reports a press and
+//! its release by its id. Choices are saved per app id, so an application
+//! that binds the same shortcuts again gets them without a dialog. See
 //! `docs/architecture/PORTALS.md`.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::io;
 use std::path::{Path, PathBuf};
 
@@ -44,6 +44,8 @@ pub struct GlobalShortcuts {
     next_id: u32,
     sessions: BTreeMap<String, Session>,
     saved: Saved,
+    /// The [`BoundShortcut`] ids pressed and not yet released.
+    held: BTreeSet<u32>,
 }
 
 #[derive(Debug)]
@@ -223,8 +225,22 @@ impl GlobalShortcuts {
             .collect()
     }
 
-    /// The session and shortcut id the [`BoundShortcut`] `id` fires.
-    pub fn pressed(&self, id: u32) -> Option<(String, String)> {
+    /// The session and shortcut id the [`BoundShortcut`] `id` fires. Held
+    /// until [`GlobalShortcuts::released`].
+    pub fn pressed(&mut self, id: u32) -> Option<(String, String)> {
+        self.held.insert(id);
+        self.bound_under(id)
+    }
+
+    /// The session and shortcut id a release of `id` ends, if it was held.
+    pub fn released(&mut self, id: u32) -> Option<(String, String)> {
+        self.held
+            .remove(&id)
+            .then(|| self.bound_under(id))
+            .flatten()
+    }
+
+    fn bound_under(&self, id: u32) -> Option<(String, String)> {
         self.sessions.iter().find_map(|(session, held)| {
             held.shortcuts
                 .iter()
@@ -457,6 +473,50 @@ mod tests {
         assert_eq!(shortcuts.bound(), []);
         assert_eq!(shortcuts.pressed(1), None);
         assert_eq!(shortcuts.list(SESSION), Err(NoSession));
+    }
+
+    /// `open()` with `talk` bound under id 1 and `mute` under id 2.
+    fn two_bound() -> GlobalShortcuts {
+        let mut shortcuts = open();
+        shortcuts
+            .bind(
+                SESSION,
+                &[asked("talk", None), asked("mute", None)],
+                &[
+                    chose("talk", Some("Ctrl+Alt+t")),
+                    chose("mute", Some("Ctrl+Alt+m")),
+                ],
+            )
+            .expect("open");
+        shortcuts
+    }
+
+    fn fired(id: &str) -> Option<(String, String)> {
+        Some((SESSION.into(), id.into()))
+    }
+
+    #[test]
+    fn each_held_shortcut_is_released_on_its_own_in_either_order() {
+        for (first, second) in [((1, "talk"), (2, "mute")), ((2, "mute"), (1, "talk"))] {
+            let mut shortcuts = two_bound();
+            assert_eq!(shortcuts.pressed(1), fired("talk"));
+            assert_eq!(shortcuts.pressed(2), fired("mute"));
+
+            assert_eq!(shortcuts.released(first.0), fired(first.1));
+            assert_eq!(shortcuts.released(first.0), None, "released once");
+            assert_eq!(shortcuts.released(second.0), fired(second.1));
+        }
+    }
+
+    #[test]
+    fn a_shortcut_never_pressed_or_whose_session_closed_releases_nothing() {
+        let mut shortcuts = two_bound();
+        assert_eq!(shortcuts.released(1), None, "never pressed");
+
+        shortcuts.pressed(1);
+        shortcuts.close(SESSION);
+
+        assert_eq!(shortcuts.released(1), None);
     }
 
     #[test]

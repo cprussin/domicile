@@ -14,6 +14,8 @@ namespace {
 // Evdev keycodes.
 constexpr uint32_t kTab = 15;
 constexpr uint32_t kEnter = 28;
+constexpr uint32_t kA = 30;
+constexpr uint32_t kLeftAlt = 56;
 
 Chord AltTab() {
   return Chord{kTab, /*alt=*/true, /*ctrl=*/false, /*shift=*/false,
@@ -33,19 +35,24 @@ class RecordingChannel {
             page,
             base::BindRepeating(&RecordingChannel::OnShortcut,
                                 base::Unretained(this)),
+            base::BindRepeating(&RecordingChannel::OnRelease,
+                                base::Unretained(this)),
             base::BindRepeating(&RecordingChannel::OnModifiers,
                                 base::Unretained(this)))) {}
 
   ShortcutRegistry::ChannelId id() const { return id_; }
   const std::vector<Chord>& presses() const { return presses_; }
+  const std::vector<Chord>& releases() const { return releases_; }
   const std::vector<Modifiers>& modifiers() const { return modifiers_; }
 
  private:
   void OnShortcut(Chord chord) { presses_.push_back(chord); }
+  void OnRelease(Chord chord) { releases_.push_back(chord); }
   void OnModifiers(Modifiers modifiers) { modifiers_.push_back(modifiers); }
 
   ShortcutRegistry::ChannelId id_;
   std::vector<Chord> presses_;
+  std::vector<Chord> releases_;
   std::vector<Modifiers> modifiers_;
 };
 
@@ -125,6 +132,38 @@ TEST(ShortcutRegistryTest, AChordIsToldOnlyToThePageThatHeardIt) {
   EXPECT_TRUE(registry.Press(AltTab(), kRight));
   EXPECT_TRUE(left.presses().empty());
   EXPECT_EQ(1u, right.presses().size());
+}
+
+// A chord's key or modifier coming up in a guest lets go of the chord, which
+// may have been pressed on the page. Only the page that heard it is told.
+TEST(ShortcutRegistryTest, AClaimedKeyOrAModifierComingUpIsToldToItsPage) {
+  ShortcutRegistry registry;
+  RecordingChannel left(registry, kLeft);
+  RecordingChannel right(registry, kRight);
+  registry.Grab(AltTab());
+  const Chord tab_up{kTab, /*alt=*/true, /*ctrl=*/false, /*shift=*/false,
+                     /*meta=*/false};
+  const Chord alt_up{kLeftAlt, /*alt=*/false, /*ctrl=*/false,
+                     /*shift=*/false, /*meta=*/false};
+
+  registry.Release(tab_up, kLeft);
+  registry.Release(alt_up, kLeft);
+
+  EXPECT_EQ(left.releases(), (std::vector{tab_up, alt_up}));
+  EXPECT_TRUE(right.releases().empty());
+}
+
+// Every key typed into a site would otherwise cross to the shell.
+TEST(ShortcutRegistryTest, AnyOtherKeyComingUpIsNotTold) {
+  ShortcutRegistry registry;
+  RecordingChannel channel(registry);
+  registry.Grab(AltTab());
+
+  registry.Release(Chord{kA, /*alt=*/true, /*ctrl=*/false, /*shift=*/false,
+                         /*meta=*/false},
+                   kLeft);
+
+  EXPECT_TRUE(channel.releases().empty());
 }
 
 // The shell re-renders on each report, so a repeated set is not resent.

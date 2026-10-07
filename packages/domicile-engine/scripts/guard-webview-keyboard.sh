@@ -232,14 +232,20 @@ wait_for_line 20 "GUARD document-keydown code=$BEFORE_CODE" "$ENGINE_LOG" ||
 wait_for_line "$TRIES" "GUARD window-focused" "$ENGINE_LOG" ||
   echo "the element never became the shell document's activeElement" >&2
 
-# 7. The chord, then an unclaimed key. In that order, the plain key reports
-#    the modifiers changing back, which is the only sign that the guest's hook
-#    ran for a key it did not match.
+# 7. The chord and its key's release, then an unclaimed key. In that order,
+#    the plain key reports the modifiers changing back, which is the only sign
+#    that the guest's hook ran for a key it did not match.
 python3 "$SCRIPTS/guard-webview-keyboard-key.py" \
   --port "$DEBUG_PORT" --code "$CHORD_CODE" --key "$CHORD_KEY" \
   --evdev "$CHORD_EVDEV" --windows-key-code "$CHORD_VKEY" --alt \
   >>"$KEY_LOG" 2>&1 ||
   echo "the chord could not be driven; see $KEY_LOG" >&2
+
+python3 "$SCRIPTS/guard-webview-keyboard-key.py" \
+  --port "$DEBUG_PORT" --code "$CHORD_CODE" --key "$CHORD_KEY" \
+  --evdev "$CHORD_EVDEV" --windows-key-code "$CHORD_VKEY" --alt --up \
+  >>"$KEY_LOG" 2>&1 ||
+  echo "the chord's release could not be driven; see $KEY_LOG" >&2
 
 python3 "$SCRIPTS/guard-webview-keyboard-key.py" \
   --port "$DEBUG_PORT" --code "$PLAIN_CODE" --key "$PLAIN_KEY" \
@@ -265,6 +271,7 @@ SAW_CLAIM=$(saw "GUARD claimed")
 SAW_PAGE=$(saw "GUARD guest-loaded")
 SAW_FOCUS=$(saw "GUARD window-focused")
 SAW_SHORTCUT=$(saw "GUARD shortcut keycode=$CHORD_EVDEV alt=true ctrl=false shift=false meta=false")
+SAW_RELEASE=$(saw "GUARD release keycode=$CHORD_EVDEV alt=true ctrl=false shift=false meta=false")
 SAW_MODIFIERS=$(saw "GUARD modifiers alt=true ctrl=false shift=false meta=false")
 # The guest's hook running for a key it did not match. Only
 # PreHandleKeyboardEvent on the guest's delegate reports Alt released here.
@@ -280,7 +287,7 @@ SAW_ZOOM_DRAWN=$(saw "GUARD guest-resized")
 
 echo
 echo "claimed=$SAW_CLAIM loaded=$SAW_PAGE focused=$SAW_FOCUS relayed=$SAW_RELAY"
-echo "shortcut=$SAW_SHORTCUT modifiers=$SAW_MODIFIERS hook-ran-unmatched=$SAW_HOOK"
+echo "shortcut=$SAW_SHORTCUT release=$SAW_RELEASE modifiers=$SAW_MODIFIERS hook-ran-unmatched=$SAW_HOOK"
 echo "the shell's document saw: before=$SAW_SHELL_KEY after=$SAW_DOCUMENT_KEY"
 echo "the page in the window saw: after=$SAW_GUEST_KEY"
 echo "handed back: chord=$SAW_GUEST_CHORD plain=$SAW_PLAIN_CHORD; zoom=$SAW_ZOOM drawn=$SAW_ZOOM_DRAWN"
@@ -324,6 +331,12 @@ elif [ "$SAW_SHORTCUT" != "1" ]; then
 the claim was made, so this is the hook: either PreHandleKeyboardEvent did not \
 run on the guest's delegate, or it ran and did not match, or the press did not \
 come back down the control channel"
+elif [ "$SAW_RELEASE" != "1" ]; then
+  FAILURE="the chord fired and its key coming up in the guest never let it \
+go, so an application's global shortcut stays activated. Either \
+PreHandleKeyboardEvent did not pass the release to ShortcutRegistry::Release, \
+or ShortcutReleased did not come back down the control channel, or the page \
+did not pair it with the press"
 elif [ "$SAW_MODIFIERS" != "1" ]; then
   FAILURE="the chord fired and the modifiers did not. The shell reads Alt and \
 Shift from this and nothing else while a window has the keyboard, so a float \

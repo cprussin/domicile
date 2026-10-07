@@ -933,14 +933,6 @@ content::KeyboardEventProcessingResult WebViewGuest::PreHandleKeyboardEvent(
   // matching so a chord's own modifiers are still reported.
   ShortcutRegistry::Get().SetModifiers(held);
 
-  // Chords match on the first press only: no releases or auto-repeats.
-  const bool pressed =
-      event.GetType() == blink::WebInputEvent::Type::kRawKeyDown ||
-      event.GetType() == blink::WebInputEvent::Type::kKeyDown;
-  if (!pressed || (modifiers & blink::WebInputEvent::kIsAutoRepeat) != 0) {
-    return content::KeyboardEventProcessingResult::NOT_HANDLED;
-  }
-
   // Chords are claimed in evdev codes. Zero means no evdev code, which no
   // chord can name.
   const int evdev = ui::KeycodeConverter::DomCodeToEvdevCode(
@@ -948,17 +940,32 @@ content::KeyboardEventProcessingResult WebViewGuest::PreHandleKeyboardEvent(
   if (evdev == 0) {
     return content::KeyboardEventProcessingResult::NOT_HANDLED;
   }
+  const Chord chord{static_cast<uint32_t>(evdev), held.alt, held.ctrl,
+                    held.shift, held.meta};
+  // Delivered only to the page containing this `<webview>`. Each monitor has
+  // its own page, so broadcasting would run the chord once per monitor.
+  const Page page{owner_rfh_id_.child_id.value(),
+                  owner_rfh_id_.frame_routing_id};
+
+  // A release lets go of a chord the page holds, wherever it was pressed. One
+  // after a chord this took arrives only through patch 0100: Chromium drops
+  // the key-ups of a handled key-down before they reach a delegate.
+  if (event.GetType() == blink::WebInputEvent::Type::kKeyUp) {
+    ShortcutRegistry::Get().Release(chord, page);
+    return content::KeyboardEventProcessingResult::NOT_HANDLED;
+  }
+
+  // Chords match on the first press only: no auto-repeats.
+  const bool pressed =
+      event.GetType() == blink::WebInputEvent::Type::kRawKeyDown ||
+      event.GetType() == blink::WebInputEvent::Type::kKeyDown;
+  if (!pressed || (modifiers & blink::WebInputEvent::kIsAutoRepeat) != 0) {
+    return content::KeyboardEventProcessingResult::NOT_HANDLED;
+  }
 
   // A matched chord is HANDLED so the page never sees it and cannot override a
   // desktop shortcut.
-  //
-  // Delivered only to the page containing this `<webview>`. Each monitor has
-  // its own page, so broadcasting would run the chord once per monitor.
-  return ShortcutRegistry::Get().Press(
-             Chord{static_cast<uint32_t>(evdev), held.alt, held.ctrl,
-                   held.shift, held.meta},
-             Page{owner_rfh_id_.child_id.value(),
-                  owner_rfh_id_.frame_routing_id})
+  return ShortcutRegistry::Get().Press(chord, page)
              ? content::KeyboardEventProcessingResult::HANDLED
              : content::KeyboardEventProcessingResult::NOT_HANDLED;
 }

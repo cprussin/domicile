@@ -89,6 +89,7 @@ class ShortcutRegistry {
   // them to post back to the caller's.
   ChannelId AddChannel(Page page,
                        ShortcutCallback on_shortcut,
+                       ShortcutCallback on_release,
                        ModifiersCallback on_modifiers);
 
   // Stops delivering to `channel`. Its claims stay, so a reloading page leaves
@@ -104,6 +105,13 @@ class ShortcutRegistry {
   // swallow the key.
   bool Press(const Chord& chord, const Page& page);
 
+  // Handles a key release in a `<webview>` of `page`: `chord` is the key that
+  // came up and the modifiers still held. Tells that page's channels when the
+  // key is a claimed chord's or a modifier, either of which can let go of a
+  // chord the page holds; the page pairs it with the press. The key is not
+  // swallowed.
+  void Release(const Chord& chord, const Page& page);
+
   // Reports the held modifiers. Delivered only on change (and the first
   // time), so holding Alt while typing does not repeat it per key.
   void SetModifiers(const Modifiers& modifiers);
@@ -112,10 +120,14 @@ class ShortcutRegistry {
   // Whether `chord` is claimed.
   bool IsGrabbed(const Chord& chord) const EXCLUSIVE_LOCKS_REQUIRED(lock_);
 
+  // Whether a claimed chord is on `keycode`.
+  bool IsGrabbedKey(uint32_t keycode) const EXCLUSIVE_LOCKS_REQUIRED(lock_);
+
   struct Channel {
     ChannelId id;
     Page page;
     ShortcutCallback on_shortcut;
+    ShortcutCallback on_release;
     ModifiersCallback on_modifiers;
   };
 

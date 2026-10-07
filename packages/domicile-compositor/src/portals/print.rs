@@ -203,6 +203,7 @@ impl Print {
             | PortalAnswer::PickColor { .. }
             | PortalAnswer::GlobalShortcuts { .. }
             | PortalAnswer::Pressed
+            | PortalAnswer::Released
             | PortalAnswer::Stop => Err(2),
         }
     }

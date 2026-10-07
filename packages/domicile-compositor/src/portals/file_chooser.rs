@@ -245,6 +245,7 @@ impl Asked {
             | PortalAnswer::Screenshot { .. }
             | PortalAnswer::PickColor { .. }
             | PortalAnswer::Pressed
+            | PortalAnswer::Released
             | PortalAnswer::Refused => (2, HashMap::new()),
         }
     }

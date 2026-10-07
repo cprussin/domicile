@@ -329,6 +329,11 @@ export type DomicileHostEventMap = {
   /** A grabbed shortcut fired, as a DomicileShortcutEvent. */
   shortcut: DomicileShortcutEvent;
   /**
+   * A shortcut that fired was let go: its key came up, or one of its
+   * modifiers did, wherever the keyboard is. As a DomicileShortcutEvent.
+   */
+  shortcutrelease: DomicileShortcutEvent;
+  /**
    * A client asked for the keyboard, as a DomicileAppEvent naming it; nothing
    * has moved. The shell answers by calling focusApp(), or does not, which
    * refuses it.
@@ -770,15 +775,13 @@ export type DomicileNotificationAction = {
 };
 
 /**
- * A combination claimed with grabShortcut() was pressed.
+ * A combination claimed with grabShortcut() was pressed (`shortcut`) or let
+ * go (`shortcutrelease`).
  *
  * Its own type rather than a DomicileAppEvent with the combination in the
  * `title` slot. A shortcut is not a window's name and does not belong to a
  * window at all: it fires whatever holds the keyboard, which is the point of
  * grabbing it.
- *
- * Only presses. A release changes nothing and would arrive as a second event
- * for one keystroke.
  */
 export type DomicileShortcutEvent = Event & {
   /**

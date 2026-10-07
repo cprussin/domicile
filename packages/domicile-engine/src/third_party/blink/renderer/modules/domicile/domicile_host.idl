@@ -229,6 +229,10 @@
   // A grabbed shortcut fired, as a DomicileShortcutEvent.
   attribute EventHandler onshortcut;
 
+  // A shortcut that fired was let go: its key came up, or one of its
+  // modifiers did, wherever the keyboard is. As a DomicileShortcutEvent.
+  attribute EventHandler onshortcutrelease;
+
   // A client asked for the keyboard, as a DomicileAppEvent naming it; nothing
   // has moved. The shell answers by calling focusApp(), or does not, which
   // refuses it.

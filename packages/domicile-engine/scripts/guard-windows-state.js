@@ -26,6 +26,7 @@
 // and the fork's the same set, reading it at the top level of this file.
 const EVENT_NAMES = [
   "shortcut",
+  "shortcutrelease",
   "focusrequested",
   "browserwindowschanged",
   "displayschanged",

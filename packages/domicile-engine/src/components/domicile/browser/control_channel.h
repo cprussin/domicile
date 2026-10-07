@@ -165,10 +165,11 @@ class ControlChannel : public mojom::ControlChannel {
   void WriteNext();
   void OnWrite(int result);
 
-  // The registry's two deliveries, on this channel's own sequence. Both are
+  // The registry's three deliveries, on this channel's own sequence. All are
   // registered wrapped in base::BindPostTask, because a press is matched on the
   // UI thread and `client_` is a mojo remote bound to the IO thread.
   void DeliverShortcut(Chord chord);
+  void DeliverRelease(Chord chord);
   void DeliverModifiers(Modifiers modifiers);
 
   void ReadLoop();

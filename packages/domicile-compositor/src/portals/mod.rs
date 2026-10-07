@@ -241,11 +241,12 @@ impl Portals {
         self.backends.shortcuts.listen(publish);
     }
 
-    /// The shell's answer to dialog `id`, or a press of the shortcut bound
-    /// under `id`.
+    /// The shell's answer to dialog `id`, or a press or release of the
+    /// shortcut bound under `id`.
     pub fn answer(&self, id: u32, answer: PortalAnswer) {
         match answer {
             PortalAnswer::Pressed => self.backends.shortcuts.pressed(id),
+            PortalAnswer::Released => self.backends.shortcuts.released(id),
             answer => self.backends.queue.answer(id, answer),
         }
     }

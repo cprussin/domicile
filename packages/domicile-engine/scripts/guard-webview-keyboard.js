@@ -16,6 +16,8 @@
 //   GUARD window-focused          the element is this document's activeElement
 //   GUARD shortcut keycode=…      a claimed chord came back up the control
 //                                 channel
+//   GUARD release keycode=…       its key came up in the guest, and the chord
+//                                 was let go
 //   GUARD modifiers alt=…         the seat's modifiers, which the shell
 //                                 cannot read from DOM events while a window
 //                                 has the keyboard (needed to Alt-drag a float)
@@ -112,6 +114,13 @@ export const Shell = (_root, desktop) => {
   host.addEventListener("shortcut", (event) => {
     say(
       `shortcut keycode=${event.keycode} alt=${event.altKey}` +
+        ` ctrl=${event.ctrlKey} shift=${event.shiftKey} meta=${event.metaKey}`,
+    );
+  });
+
+  host.addEventListener("shortcutrelease", (event) => {
+    say(
+      `release keycode=${event.keycode} alt=${event.altKey}` +
         ` ctrl=${event.ctrlKey} shift=${event.shiftKey} meta=${event.metaKey}`,
     );
   });

@@ -80,7 +80,8 @@ impl Account {
             | PortalAnswer::Screenshot { .. }
             | PortalAnswer::PickColor { .. }
             | PortalAnswer::Stop
-            | PortalAnswer::Pressed => (2, HashMap::new()),
+            | PortalAnswer::Pressed
+            | PortalAnswer::Released => (2, HashMap::new()),
         }
     }
 }
