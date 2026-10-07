@@ -3,6 +3,7 @@ import { GlobalRegistrator } from "@happy-dom/global-registrator";
 
 import { registerAppElement } from "./app-element";
 import { registerNodeInspection } from "./node-inspection";
+import { registerSearchElement } from "./search-element";
 
 // `register()` has to run before `@testing-library/jest-dom` and
 // `@testing-library/react` load, because both access DOM globals when their
@@ -17,6 +18,7 @@ GlobalRegistrator.register({
 
 registerNodeInspection();
 registerAppElement();
+registerSearchElement();
 
 const { default: _, ...matchers } = await import(
   "@testing-library/jest-dom/matchers"

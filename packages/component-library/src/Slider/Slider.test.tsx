@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { Slider } from "./Slider";
@@ -34,7 +34,7 @@ describe(Slider, () => {
 
   describe("interactions", () => {
     it("steps with the arrow keys", async () => {
-      const value = await new Promise((resolve) => {
+      const value = new Promise((resolve) => {
         render(
           <Slider
             label="Brightness"
@@ -45,13 +45,13 @@ describe(Slider, () => {
             value={40}
           />,
         );
-        screen.getByRole("slider", { name: "Brightness" }).focus();
-        userEvent.keyboard("{ArrowRight}").catch((error: unknown) => {
-          throw error;
-        });
       });
+      act(() => {
+        screen.getByRole("slider", { name: "Brightness" }).focus();
+      });
+      await userEvent.keyboard("{ArrowRight}");
 
-      expect(value).toBe(45);
+      expect(await value).toBe(45);
     });
   });
 });

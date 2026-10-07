@@ -40,7 +40,7 @@ describe(Drilldown, () => {
 
   describe("interactions", () => {
     it("asks to go back", async () => {
-      const backed = await new Promise((resolve) => {
+      const backed = new Promise((resolve) => {
         render(
           <Drilldown
             detail={{ content: <p>the ports</p>, title: "Port" }}
@@ -51,14 +51,10 @@ describe(Drilldown, () => {
             <p>main</p>
           </Drilldown>,
         );
-        userEvent
-          .click(screen.getByRole("button", { name: "Back" }))
-          .catch((error: unknown) => {
-            throw error;
-          });
       });
+      await userEvent.click(screen.getByRole("button", { name: "Back" }));
 
-      expect(backed).toBe(true);
+      expect(await backed).toBe(true);
     });
   });
 });
