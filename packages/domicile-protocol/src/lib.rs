@@ -1023,6 +1023,8 @@ pub struct ScreenCastDialog {
     pub multiple: bool,
     /// What may be shared, of the types the application asked for.
     pub sources: Vec<CastSource>,
+    /// Whether the user may draw a region of the desktop instead.
+    pub region: bool,
 }
 
 /// One source a [`ScreenCastDialog`] offers.
@@ -1042,6 +1044,15 @@ pub enum CastSource {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         icon: Option<String>,
     },
+    /// A monitor.
+    Monitor {
+        /// Its `wl_output` name.
+        name: String,
+        /// Its make, model and serial, or empty.
+        description: String,
+        /// In logical pixels.
+        size: (i32, i32),
+    },
 }
 
 /// A source the user picked in a [`ScreenCastDialog`].
@@ -1050,6 +1061,13 @@ pub enum CastSource {
 pub enum CastPick {
     /// The window with this host app id.
     Window { id: String },
+    /// The monitor with this `wl_output` name.
+    Monitor { name: String },
+    /// A rectangle of the desktop, in logical pixels.
+    Region {
+        position: (i32, i32),
+        size: (i32, i32),
+    },
 }
 
 /// One source a [`CapturingKind::ScreenCast`] records.
@@ -1058,6 +1076,13 @@ pub enum CastPick {
 pub enum Captured {
     /// A window, by host app id, with its title when the capture started.
     Window { id: String, title: String },
+    /// A monitor, by `wl_output` name.
+    Monitor { name: String },
+    /// A rectangle of the desktop, in logical pixels.
+    Region {
+        position: (i32, i32),
+        size: (i32, i32),
+    },
 }
 
 /// A print dialog: the printers CUPS offers, each with what it supports.

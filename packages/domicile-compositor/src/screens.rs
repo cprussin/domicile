@@ -400,6 +400,28 @@ impl Screens {
         }]
     }
 
+    /// The monitors a screen cast may pick, each named by its panel.
+    pub fn cast_monitors(&self) -> Vec<crate::casting::Candidate> {
+        self.cast_screens()
+            .into_iter()
+            .map(|screen| crate::casting::Candidate {
+                title: self
+                    .outputs
+                    .iter()
+                    .find(|output| output.name == screen.name)
+                    .expect("every cast screen is an output")
+                    .description
+                    .clone(),
+                app_id: String::new(),
+                bounds: Some(crate::casting::Region {
+                    position: (screen.desk.0, screen.desk.1),
+                    size: (screen.desk.2, screen.desk.3),
+                }),
+                source: crate::casting::Source::Monitor(screen.name),
+            })
+            .collect()
+    }
+
     /// Connector settings for the engine: which to light and where each mode
     /// goes.
     ///
@@ -1064,6 +1086,28 @@ mod tests {
         );
         assert!(cast[0].upright);
         assert!(!cast[1].upright);
+    }
+
+    #[test]
+    fn each_cast_screen_is_offered_by_name_and_panel() {
+        let screens = Screens::from_the_engine(&two_plugged_in(), &unspelled());
+        let desk = screens.outputs[1].position;
+
+        let offered = screens.cast_monitors();
+
+        assert_eq!(offered.len(), 2);
+        assert_eq!(
+            offered[1],
+            crate::casting::Candidate {
+                source: crate::casting::Source::Monitor("drm-2".into()),
+                title: DESK_MONITOR.into(),
+                app_id: String::new(),
+                bounds: Some(crate::casting::Region {
+                    position: desk,
+                    size: screens.outputs[1].logical,
+                }),
+            }
+        );
     }
 
     #[test]

@@ -58,7 +58,9 @@ pw-link domicile-cast:capture_1 <consumer>:input_1   # without a session manager
 `DOMICILE_CAST_MONITOR=<output>` casts a monitor by its `wl_output` name, and
 `DOMICILE_CAST_MONITOR=<x>,<y>,<width>x<height>` a region of the desktop in
 logical pixels. Both need an engine with display capture; a nested desktop's
-one monitor is its window.
+one monitor is its window. Without an engine, `DOMICILE_CAST_TEST_PATTERN=1`
+fills monitor and region casts with one color instead
+(`scripts/e2e-a-monitor-casts-through-the-portal.sh` uses it).
 
 - `cast ready … node=N`: the stream's node. A consumer connects to it.
 - `cast format … settled=…`: what the consumer picked: `Shm`, `Dmabuf`, or a

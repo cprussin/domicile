@@ -61,7 +61,7 @@ export const Sharing = ({ host }: Props) => {
             <span className={whoStyles}>{appName(capture.appId)}</span>
             <ul className={sourcesStyles}>
               {capture.sources.map((source) => (
-                <li key={source.id}>{sourceName(source)}</li>
+                <li key={sourceKey(source)}>{sourceName(source)}</li>
               ))}
             </ul>
             <Button
@@ -97,6 +97,21 @@ const sourceName = (source: Captured): string => {
   switch (source.kind) {
     case CapturedKind.Window:
       return source.title === "" ? "Untitled window" : source.title;
+    case CapturedKind.Monitor:
+      return `Screen ${source.name}`;
+    case CapturedKind.Region:
+      return "Region";
+  }
+};
+
+const sourceKey = (source: Captured): string => {
+  switch (source.kind) {
+    case CapturedKind.Window:
+      return `window:${source.id}`;
+    case CapturedKind.Monitor:
+      return `monitor:${source.name}`;
+    case CapturedKind.Region:
+      return `region:${source.position.join(",")}:${source.size.join("x")}`;
   }
 };
 

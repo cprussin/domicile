@@ -1,20 +1,19 @@
 #!/usr/bin/env bash
-# Checks the ScreenCast portal casts a window an application picks, restores
+# Checks the ScreenCast portal casts a monitor an application picks, restores
 # it from a token, and stops when the session closes.
 #
-#   nix develop .#full -c ./scripts/e2e-a-screen-cast-through-the-portal.sh
+#   nix develop .#full -c ./scripts/e2e-a-monitor-casts-through-the-portal.sh
 #
 # Starts its own session bus and headless `pipewire`, with no session manager,
 # so the check links the consumer with `pw-link`. `domicile-test-screencast`
 # calls the backend on the bus as an application's portal frontend would, and
-# answers the source picker as the shell. The test client draws shm, so the
-# frames are shm too.
+# answers the source picker as the shell. No engine runs, so
+# `DOMICILE_CAST_TEST_PATTERN` stands in for its display captures: every
+# frame is one color, in shm.
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # shellcheck source=scripts/lib/harness.sh
 . "$ROOT/scripts/lib/harness.sh"
-# shellcheck source=scripts/lib/test-client.sh
-. "$ROOT/scripts/lib/test-client.sh"
 
 for tool in pipewire pw-link dbus-daemon; do
   command -v "$tool" >/dev/null || {
@@ -33,9 +32,8 @@ cargo build -p domicile-compositor >/dev/null 2>&1 || {
 for built in "$BIN" "$READER" "$APP"; do
   [ -x "$built" ] || { echo "no $built after building"; exit 1; }
 done
-build_test_client || exit 1
 
-export XDG_RUNTIME_DIR="/tmp/domicile-rt-portal-cast"   # short: Unix socket path limit
+export XDG_RUNTIME_DIR="/tmp/domicile-rt-portal-mon"   # short: Unix socket path limit
 rm -rf "$XDG_RUNTIME_DIR"; mkdir -p "$XDG_RUNTIME_DIR"; chmod 700 "$XDG_RUNTIME_DIR"
 export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
 # Restore tokens go here, not to the user's state.
@@ -43,11 +41,11 @@ export XDG_STATE_HOME="$XDG_RUNTIME_DIR/state"
 SOCK="$XDG_RUNTIME_DIR/c.sock"
 LOG="$(mktemp)"; PWLOG="$(mktemp)"; FRAMES="$(mktemp)"; RLOG="$(mktemp)"
 SAID="$(mktemp)"; ALOG="$(mktemp)"; GO="$XDG_RUNTIME_DIR/go"
-BUS=""; PW=""; COMP=""; CLIENT=""; READING=""; ASKING=""
+BUS=""; PW=""; COMP=""; READING=""; ASKING=""
 # TERM, not KILL: bash prints "Killed" when reaping a SIGKILLed child.
 cleanup() {
   exec 3>&- 2>/dev/null
-  kill $ASKING $READING $CLIENT $COMP $PW $BUS 2>/dev/null; wait 2>/dev/null
+  kill $ASKING $READING $COMP $PW $BUS 2>/dev/null; wait 2>/dev/null
   rm -f "$LOG" "$PWLOG" "$FRAMES" "$RLOG" "$SAID" "$ALOG"; rm -rf "$XDG_RUNTIME_DIR"
 }
 trap cleanup EXIT
@@ -66,30 +64,23 @@ done
   echo "ERROR: pipewire made no socket; it said:"; tail -20 "$PWLOG"; exit 1
 }
 
-TITLE="cast-me"
-NO_COLOR=1 RUST_LOG=info,domicile_compositor=debug \
+NO_COLOR=1 DOMICILE_CAST_TEST_PATTERN=1 RUST_LOG=info,domicile_compositor=debug \
   "$BIN" --session "$SOCK.session" --chrome-socket "$SOCK" >"$LOG" 2>&1 &
 COMP=$!
-for _ in $(seq 1 200); do [ -S "$XDG_RUNTIME_DIR/wayland-1" ] && break; sleep 0.05; done
-WAYLAND_DISPLAY=wayland-1 "$TEST_CLIENT" --title "$TITLE" >/dev/null 2>&1 &
-CLIENT=$!
-for _ in $(seq 1 200); do
-  grep -q "answers the desktop portal" "$LOG" && grep -q "toplevel mapped" "$LOG" && break
-  sleep 0.05
-done
+for _ in $(seq 1 200); do grep -q "answers the desktop portal" "$LOG" && break; sleep 0.05; done
 
 mkfifo "$GO"
-"$APP" "$SOCK" --window "$TITLE" <"$GO" >"$SAID" 2>"$ALOG" &
+"$APP" "$SOCK" --monitor <"$GO" >"$SAID" 2>"$ALOG" &
 ASKING=$!
 exec 3>"$GO"
 
 for _ in $(seq 1 200); do grep -q "^capturing" "$SAID" && break; sleep 0.05; done
 NODE="$(sed -n 's/^node \([0-9]*\)$/\1/p' "$SAID")"
 if [ -n "$NODE" ] && grep -q "^capturing" "$SAID"; then
-  passed "the picked window is PipeWire node $NODE, and the shell lists the capture"
+  passed "the picked monitor is PipeWire node $NODE, and the shell lists the capture"
 else
   compositor_verdict "$COMP" \
-    "FAIL: the portal never cast the window the picker chose. The application said:" \
+    "FAIL: the portal never cast the monitor the picker chose. The application said:" \
     "$(cat "$SAID" "$ALOG")" \
     "  The compositor said:" "$(grep -E "cast|portal" "$LOG" | tail -10)"
 fi
@@ -102,8 +93,9 @@ done
 pw-link "domicile-cast:capture_1" "domicile-test-cast-reader:input_1" 2>&1
 wait "$READING"; READ=$?; READING=""
 
-# The client alternates between two colors; `frame WxH B G R X` per frame.
-COLORS="80 48 32|128 80 48"
+# `frame WxH B G R X` per frame, at the monitor's size: the desktop is at scale
+# 1, so its logical size is its pixels.
+SIZE="$(sed -n 's/^size \([0-9]*\) \([0-9]*\)$/\1x\2/p' "$SAID")"
 if ! after 1; then
   harness_fault "$COMP" "the cast was ready to read" "ERROR: no node to read."
 elif [ "$READ" -ne 0 ]; then
@@ -111,11 +103,11 @@ elif [ "$READ" -ne 0 ]; then
     "FAIL: the consumer read $(wc -l <"$FRAMES") of 3 frames (exit $READ)." \
     "  It said:" "$(tail -5 "$RLOG")" \
     "  The compositor said:" "$(grep -E "cast" "$LOG" | tail -10)"
-elif [ "$(grep -cE "^frame 320x240 ($COLORS) " "$FRAMES")" -eq 3 ]; then
-  passed "three 320x240 frames arrived in the window's colors"
+elif [ -n "$SIZE" ] && [ "$(grep -c "^frame $SIZE 32 64 96 " "$FRAMES")" -eq 3 ]; then
+  passed "three $SIZE frames arrived in the test pattern's color"
 else
   compositor_verdict "$COMP" \
-    "FAIL: frames arrived, but not the window's 320x240 in its colors:" \
+    "FAIL: frames arrived, but not the monitor's ${SIZE:-size} in the test pattern's color:" \
     "$(cat "$FRAMES")"
 fi
 
@@ -129,7 +121,7 @@ elif ! grep -q "^ended" "$SAID"; then
     "$(cat "$SAID" "$ALOG")" "  The compositor said:" "$(grep -E "cast" "$LOG" | tail -10)"
 elif ! grep -q "^restored node" "$SAID"; then
   compositor_verdict "$COMP" \
-    "FAIL: the restore token did not cast the window again. The application said:" \
+    "FAIL: the restore token did not cast the monitor again. The application said:" \
     "$(cat "$SAID" "$ALOG")" "  The compositor said:" "$(grep -E "cast|portal" "$LOG" | tail -10)"
 elif grep -q "^closed" "$SAID" && grep -q "screen cast stream ended.*Stopped" "$LOG"; then
   passed "a restored cast started without the picker, and closing its session stopped it"

@@ -1585,6 +1585,9 @@ struct DomicileCompositor {
     /// cast (see [`casting::Source::desk`]), and the handle to start the cast
     /// with. Taken when it starts.
     cast_on_monitor: Option<(String, casting::Casting)>,
+    /// `DOMICILE_CAST_TEST_PATTERN`: monitor and region casts draw one color
+    /// when no engine captures the displays.
+    cast_test_pattern: Option<casting::TestPattern>,
     /// The event loop handle, for adding sources after startup.
     ///
     /// Only the idle timer needs it: a reload may add a timeout the startup
@@ -2067,51 +2070,44 @@ impl DomicileCompositor {
     fn cast_requested(&mut self, request: casting::Request) {
         let open = self.cast_candidates();
         let renderer = self.gpu.as_mut().map(Gpu::renderer);
-        let capturer = self
-            .engine
-            .as_mut()
-            .map(|session| session as &mut dyn casting::Capturer);
+        let capturer = capturer(&mut self.engine, &mut self.cast_test_pattern);
         self.casting.request(request, || open, renderer, capturer);
     }
 
-    /// The windows that can be cast, in the order they opened.
+    /// The windows that can be cast, in the order they opened, then the
+    /// monitors.
     fn cast_candidates(&self) -> Vec<casting::Candidate> {
         let host = self.hub.host.lock().unwrap();
-        self.toplevels
-            .iter()
-            .map(|(id, toplevel)| {
-                let app_id = with_states(toplevel.wl_surface(), |states| {
-                    states
-                        .data_map
-                        .get::<XdgToplevelSurfaceData>()
-                        .and_then(|data| data.lock().unwrap().app_id.clone())
-                });
-                casting::Candidate {
-                    source: casting::Source::Window(id.clone()),
-                    title: host
-                        .app(id)
-                        .and_then(|app| app.title.clone())
-                        .unwrap_or_default(),
-                    app_id: app_id.unwrap_or_default(),
-                    bounds: self.app_bounds.get(id).map(|bounds| casting::Region {
-                        position: (bounds.min.x.round() as i32, bounds.min.y.round() as i32),
-                        size: (
-                            (bounds.max.x - bounds.min.x).round() as i32,
-                            (bounds.max.y - bounds.min.y).round() as i32,
-                        ),
-                    }),
-                }
-            })
-            .collect()
+        let windows = self.toplevels.iter().map(|(id, toplevel)| {
+            let app_id = with_states(toplevel.wl_surface(), |states| {
+                states
+                    .data_map
+                    .get::<XdgToplevelSurfaceData>()
+                    .and_then(|data| data.lock().unwrap().app_id.clone())
+            });
+            casting::Candidate {
+                source: casting::Source::Window(id.clone()),
+                title: host
+                    .app(id)
+                    .and_then(|app| app.title.clone())
+                    .unwrap_or_default(),
+                app_id: app_id.unwrap_or_default(),
+                bounds: self.app_bounds.get(id).map(|bounds| casting::Region {
+                    position: (bounds.min.x.round() as i32, bounds.min.y.round() as i32),
+                    size: (
+                        (bounds.max.x - bounds.min.x).round() as i32,
+                        (bounds.max.y - bounds.min.y).round() as i32,
+                    ),
+                }),
+            }
+        });
+        windows.chain(self.screens.cast_monitors()).collect()
     }
 
     /// News from the PipeWire thread.
     fn cast_news(&mut self, news: casting::ToWayland) {
         let renderer = self.gpu.as_mut().map(Gpu::renderer);
-        let capturer = self
-            .engine
-            .as_mut()
-            .map(|session| session as &mut dyn casting::Capturer);
+        let capturer = capturer(&mut self.engine, &mut self.cast_test_pattern);
         let due = self.casting.news(news, renderer, capturer, Instant::now());
         self.arm_the_cast_deadline(due);
     }
@@ -2147,12 +2143,31 @@ impl DomicileCompositor {
         self.arm_the_cast_deadline(due);
     }
 
+    /// A test pattern frame for each running capture, when no engine
+    /// captures the displays.
+    fn cast_the_test_pattern(&mut self) {
+        let frames = match (&self.engine, self.cast_test_pattern.as_mut()) {
+            (None, Some(pattern)) => pattern.frames(),
+            _ => return,
+        };
+        for (capture, frame, captured) in frames {
+            let renderer = self.gpu.as_mut().map(Gpu::renderer);
+            let pattern = self.cast_test_pattern.as_mut().expect("checked above");
+            let due = self.casting.captured(
+                capture,
+                frame,
+                Ok(captured),
+                renderer,
+                pattern,
+                Instant::now(),
+            );
+            self.arm_the_cast_deadline(due);
+        }
+    }
+
     /// The monitors changed, so monitor and region streams follow.
     fn tell_the_casts_the_screens(&mut self) {
-        let capturer = self
-            .engine
-            .as_mut()
-            .map(|session| session as &mut dyn casting::Capturer);
+        let capturer = capturer(&mut self.engine, &mut self.cast_test_pattern);
         self.casting.screens(self.screens.cast_screens(), capturer);
         self.cast_the_monitor_if_asked();
     }
@@ -2421,10 +2436,7 @@ impl DomicileCompositor {
                     captured,
                 } => self.cast_captured(capture, frame, captured),
                 engine::Event::CaptureEnded { capture } => {
-                    let capturer = self
-                        .engine
-                        .as_mut()
-                        .map(|session| session as &mut dyn casting::Capturer);
+                    let capturer = capturer(&mut self.engine, &mut self.cast_test_pattern);
                     self.casting.capture_ended(capture, capturer);
                 }
                 // A copy in a page or browser window. The browser is not our
@@ -5990,6 +6002,20 @@ fn advertise_dmabuf(
 /// the engine has events.
 ///
 /// Separate because a replacement engine brings a new fd.
+/// What captures the displays for monitor and region casts: the engine,
+/// else the test pattern when it is on.
+fn capturer<'a>(
+    engine: &'a mut Option<EngineSession>,
+    pattern: &'a mut Option<casting::TestPattern>,
+) -> Option<&'a mut (dyn casting::Capturer + 'static)> {
+    match engine {
+        Some(session) => Some(session),
+        None => pattern
+            .as_mut()
+            .map(|pattern| pattern as &mut dyn casting::Capturer),
+    }
+}
+
 fn poll_the_engine(
     handle: &LoopHandle<'static, CalloopData>,
     fd: std::os::fd::RawFd,
@@ -6317,7 +6343,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 grants: domicile_launch::profile_path::state_directory(&|key| {
                     std::env::var(key).ok()
                 })
-                .map(|directory| directory.join("screen-cast-grants.v1.json")),
+                .map(|directory| directory.join("screen-cast-grants.v2.json")),
                 data_dirs: data_dirs(
                     std::env::var_os("XDG_DATA_HOME"),
                     std::env::var_os("XDG_DATA_DIRS"),
@@ -6646,6 +6672,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         cast_on_monitor: std::env::var("DOMICILE_CAST_MONITOR")
             .ok()
             .map(|name| (name, casting::Casting::new(cast_requests))),
+        cast_test_pattern: std::env::var_os("DOMICILE_CAST_TEST_PATTERN")
+            .map(|_| casting::TestPattern::default()),
         loop_handle: event_loop.handle(),
     };
 
@@ -6688,6 +6716,14 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     // never on its own threads.
     if let Some(session) = data.state.engine.as_ref() {
         data.state.engine_source = Some(poll_the_engine(&handle, session.fd())?);
+    }
+
+    // Test pattern frames, ten a second. See `cast_the_test_pattern`.
+    if data.state.cast_test_pattern.is_some() {
+        handle.insert_source(Timer::immediate(), |_, _, data: &mut CalloopData| {
+            data.state.cast_the_test_pattern();
+            TimeoutAction::ToDuration(Duration::from_millis(100))
+        })?;
     }
 
     // The latency run's timer.

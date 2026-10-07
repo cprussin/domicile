@@ -8,12 +8,16 @@ import type {
 import {
   PortalAnswer as Answer,
   CastSourceKind,
+  CastSource as Source,
 } from "@domicile-desktop/sdk/portal";
 import { AppWindowIcon } from "@phosphor-icons/react/dist/ssr/AppWindow";
+import { MonitorIcon } from "@phosphor-icons/react/dist/ssr/Monitor";
 import { useState } from "react";
 import { css } from "../../styled-system/css";
 import { Button } from "../Button/Button";
 import { ModalDialog } from "../ModalDialog/ModalDialog";
+import { Tabs } from "../Tabs/Tabs";
+import { RegionPicker } from "./RegionPicker";
 
 type Props = {
   answer: (answer: PortalAnswer) => void;
@@ -24,17 +28,80 @@ type Props = {
 };
 
 /**
- * A source picker: the windows an application may record, by name and icon.
- * Picks one, or several when the application asks for more. Dismissing it
- * cancels.
+ * A source picker: the windows and screens an application may record, on a
+ * tab each when it may have either, and a region drawn on the desk when it
+ * asks for one. Picks one, or several when the application asks for more.
+ * Dismissing it cancels.
  */
 export const ScreenCastDialog = ({ answer, asker, body, screen }: Props) => {
   const [picked, setPicked] = useState<readonly string[]>([]);
-  return (
+  const [drawing, setDrawing] = useState(false);
+  const windows = body.sources.filter(
+    (source) => source.kind === CastSourceKind.Window,
+  );
+  const monitors = body.sources.filter(
+    (source) => source.kind === CastSourceKind.Monitor,
+  );
+  const pick = (group: readonly CastSource[], value: readonly string[]) => {
+    setPicked(
+      body.multiple
+        ? [
+            ...picked.filter(
+              (key) => !group.some((source) => sourceKey(source) === key),
+            ),
+            ...value,
+          ]
+        : value,
+    );
+  };
+  const list = (group: readonly CastSource[]) => (
+    <ToggleGroup
+      className={listStyles}
+      multiple={body.multiple}
+      onValueChange={(value) => {
+        pick(group, value);
+      }}
+      orientation="vertical"
+      value={picked.filter((key) =>
+        group.some((source) => sourceKey(source) === key),
+      )}
+    >
+      {group.map((source) => (
+        <Toggle
+          className={rowStyles}
+          key={sourceKey(source)}
+          value={sourceKey(source)}
+        >
+          <SourceIcon source={source} />
+          <span>{sourceName(source)}</span>
+        </Toggle>
+      ))}
+    </ToggleGroup>
+  );
+  return drawing ? (
+    <RegionPicker
+      cancel={() => {
+        setDrawing(false);
+      }}
+      pick={(position, size) => {
+        answer(Answer.ScreenCast([Source.Region({ position, size })]));
+      }}
+    />
+  ) : (
     <ModalDialog
       closeButton={false}
       footer={
         <>
+          {body.region ? (
+            <Button
+              onClick={() => {
+                setDrawing(true);
+              }}
+              variant="ghost"
+            >
+              Draw a region
+            </Button>
+          ) : undefined}
           <Button
             onClick={() => {
               answer(Answer.Canceled());
@@ -48,7 +115,9 @@ export const ScreenCastDialog = ({ answer, asker, body, screen }: Props) => {
             onClick={() => {
               answer(
                 Answer.ScreenCast(
-                  body.sources.filter((source) => picked.includes(source.id)),
+                  body.sources.filter((source) =>
+                    picked.includes(sourceKey(source)),
+                  ),
                 ),
               );
             }}
@@ -64,34 +133,38 @@ export const ScreenCastDialog = ({ answer, asker, body, screen }: Props) => {
       }}
       open
       screen={screen}
-      title={body.multiple ? "Share windows" : "Share a window"}
+      title={title(body.multiple, windows.length > 0, monitors.length > 0)}
     >
       <p className={askerStyles}>{`${asker} wants to record`}</p>
-      <ToggleGroup
-        className={listStyles}
-        multiple={body.multiple}
-        onValueChange={setPicked}
-        orientation="vertical"
-        value={picked}
-      >
-        {body.sources.map((source) => (
-          <Toggle className={rowStyles} key={source.id} value={source.id}>
-            <SourceIcon source={source} />
-            <span>{sourceName(source)}</span>
-          </Toggle>
-        ))}
-      </ToggleGroup>
+      {windows.length > 0 && monitors.length > 0 ? (
+        <Tabs
+          defaultValue="windows"
+          tabs={[
+            { content: list(windows), label: "Windows", value: "windows" },
+            { content: list(monitors), label: "Screens", value: "screens" },
+          ]}
+        />
+      ) : (
+        list(body.sources)
+      )}
     </ModalDialog>
   );
 };
 
-/** A source's application icon, or a window outline without one. */
-const SourceIcon = ({ source }: { source: CastSource }) =>
-  source.icon === undefined ? (
-    <AppWindowIcon aria-hidden className={iconStyles} />
-  ) : (
-    <img alt="" className={iconStyles} src={source.icon} />
-  );
+/** A window's application icon, a window outline without one, or a screen. */
+const SourceIcon = ({ source }: { source: CastSource }) => {
+  switch (source.kind) {
+    case CastSourceKind.Window:
+      return source.icon === undefined ? (
+        <AppWindowIcon aria-hidden className={iconStyles} />
+      ) : (
+        <img alt="" className={iconStyles} src={source.icon} />
+      );
+    case CastSourceKind.Monitor:
+    case CastSourceKind.Region:
+      return <MonitorIcon aria-hidden className={iconStyles} />;
+  }
+};
 
 const askerStyles = css({ color: "muted", fontSize: "sm", margin: 0 });
 
@@ -126,6 +199,33 @@ const rowStyles = css({
 
 const iconStyles = css({ blockSize: 6, flexShrink: 0, inlineSize: 6 });
 
+/** The dialog's title for what it offers. */
+const title = (
+  multiple: boolean,
+  windows: boolean,
+  monitors: boolean,
+): string => {
+  if (windows && monitors) {
+    return "Share your screen";
+  } else if (monitors) {
+    return multiple ? "Share screens" : "Share a screen";
+  } else {
+    return multiple ? "Share windows" : "Share a window";
+  }
+};
+
+/** A source's key in the picked list, unique across kinds. */
+const sourceKey = (source: CastSource): string => {
+  switch (source.kind) {
+    case CastSourceKind.Window:
+      return `window:${source.id}`;
+    case CastSourceKind.Monitor:
+      return `monitor:${source.name}`;
+    case CastSourceKind.Region:
+      return `region:${source.position.join(",")}:${source.size.join("x")}`;
+  }
+};
+
 /** How the picker names a source. */
 const sourceName = (source: CastSource): string => {
   switch (source.kind) {
@@ -135,5 +235,11 @@ const sourceName = (source: CastSource): string => {
         ? title
         : `${source.appName}: ${title}`;
     }
+    case CastSourceKind.Monitor:
+      return source.description === ""
+        ? source.name
+        : `${source.name}: ${source.description}`;
+    case CastSourceKind.Region:
+      return "Region";
   }
 };

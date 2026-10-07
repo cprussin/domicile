@@ -26,8 +26,9 @@ name = "domicile-test-cast-reader"
 path = "src/bin/domicile-test-cast-reader.rs"
 
 # An application and a shell for
-# `scripts/e2e-a-screen-cast-through-the-portal.sh`, which drive the ScreenCast
-# portal over D-Bus and the chrome socket.
+# `scripts/e2e-a-screen-cast-through-the-portal.sh` and
+# `scripts/e2e-a-monitor-casts-through-the-portal.sh`, which drive the
+# ScreenCast portal over D-Bus and the chrome socket.
 [[bin]]
 name = "domicile-test-screencast"
 path = "src/bin/domicile-test-screencast.rs"

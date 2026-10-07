@@ -241,6 +241,7 @@ const screenCast = {
   app_id: "us.zoom.Zoom",
   body: {
     multiple: false,
+    region: true,
     sources: [
       {
         app_name: "Text Editor",
@@ -250,6 +251,13 @@ const screenCast = {
       },
       { app_name: "Terminal", id: "app-4", title: "~/src", type: "window" },
       { id: "app-5", title: "", type: "window" },
+      {
+        description: "Dell Inc. DELL U3219Q",
+        name: "drm-1",
+        size: [1920, 1080],
+        type: "monitor",
+      },
+      { description: "", name: "drm-2", size: [1280, 800], type: "monitor" },
     ],
   },
   id: 2,
@@ -372,7 +380,10 @@ export const FileChooser: Story = {
   },
 };
 
-/** A source picker for an application that may record one window. */
+/**
+ * A source picker for an application that may record one window or screen,
+ * or draw a region.
+ */
 export const ScreenCast: Story = {
   args: {
     host: pushing([screenCast]),
@@ -456,7 +467,12 @@ export const Capturing: Story = {
         { ...inputCapture, id: 7 },
         {
           app_id: "us.zoom.Zoom",
-          body: { sources: [{ id: "app-3", title: "Notes", type: "window" }] },
+          body: {
+            sources: [
+              { id: "app-3", title: "Notes", type: "window" },
+              { name: "drm-1", type: "monitor" },
+            ],
+          },
           id: 8,
           kind: "screen_cast",
         },
