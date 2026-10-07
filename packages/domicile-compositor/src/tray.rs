@@ -62,7 +62,7 @@ enum Event {
 /// A handle that forwards clicks to tray items.
 ///
 /// Works the same when the watcher failed to start; clicks then go nowhere,
-/// like [`crate::appearance::Appearance`].
+/// like [`crate::portals::Portals`].
 #[derive(Debug, Clone)]
 pub struct Tray {
     told: Sender<Event>,

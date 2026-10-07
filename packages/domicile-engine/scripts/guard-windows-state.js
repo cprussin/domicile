@@ -41,6 +41,7 @@ const EVENT_NAMES = [
   "windowsthemechanged",
   "modifierschanged",
   "system",
+  "portalrequests",
 ];
 
 export const Shell = (_root, desktop) => {

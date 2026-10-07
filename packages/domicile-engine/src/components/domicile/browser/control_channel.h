@@ -98,6 +98,7 @@ class ControlChannel : public mojom::ControlChannel {
   void SearchFiles(const std::string& query) override;
   void PreviewFile(const std::string& path) override;
   void CallSystem(uint32_t id, const std::string& request) override;
+  void AnswerPortalRequest(uint32_t id, const std::string& answer) override;
   void CopyClipboardEntry(uint32_t entry) override;
   void ActivateTrayItem(const std::string& id,
                         mojom::TrayAction action) override;
