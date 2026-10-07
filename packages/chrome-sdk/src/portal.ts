@@ -27,6 +27,13 @@ export enum PortalKind {
   /** Whether an application may take input that crosses a screen edge. */
   InputCapture,
   /**
+   * A launcher an application would install. Answer with
+   * {@link PortalAnswer.DynamicLauncher} and the name to install it under.
+   */
+  DynamicLauncher,
+  /** USB devices an application would open. Allow them all with {@link PortalAnswer.Access}. */
+  Usb,
+  /**
    * Whether an application may have the user's name and picture. Allow it
    * with {@link PortalAnswer.Access}.
    */
@@ -223,6 +230,36 @@ export type PortalWallpaper = {
   lockscreen: string | undefined;
 };
 
+/** What a launcher starts. */
+export enum LauncherType {
+  Application,
+  Webapp,
+}
+
+/** A launcher install: its suggested name, icon and, for a web app, address. */
+export type LauncherBody = {
+  /** Whether the user may rename it. */
+  editableName: boolean;
+  /** A `data:` URL; absent when the icon is no picture a page draws. */
+  icon: string | undefined;
+  launcherType: LauncherType;
+  name: string;
+  /** A web app's address. */
+  target: string | undefined;
+};
+
+/** One USB device, as udev names it. */
+export type UsbDevice = {
+  id: string;
+  product: string | undefined;
+  vendor: string | undefined;
+  /** Whether the application would write to it. */
+  writable: boolean;
+};
+
+/** The USB devices an application would open. */
+export type UsbBody = { devices: readonly UsbDevice[] };
+
 export const PortalRequest = {
   Access: (base: PortalRequestBase, body: AccessBody) => ({
     ...base,
@@ -238,6 +275,11 @@ export const PortalRequest = {
     ...base,
     body,
     kind: PortalKind.AppChooser as const,
+  }),
+  DynamicLauncher: (base: PortalRequestBase, body: LauncherBody) => ({
+    ...base,
+    body,
+    kind: PortalKind.DynamicLauncher as const,
   }),
   FileChooser: (base: PortalRequestBase, body: FileChooserBody) => ({
     ...base,
@@ -269,6 +311,11 @@ export const PortalRequest = {
     kind: PortalKind.Unknown as const,
     wireKind,
   }),
+  Usb: (base: PortalRequestBase, body: UsbBody) => ({
+    ...base,
+    body,
+    kind: PortalKind.Usb as const,
+  }),
   Wallpaper: (base: PortalRequestBase, body: WallpaperBody) => ({
     ...base,
     body,
@@ -298,6 +345,8 @@ export enum PortalAnswerKind {
   Stop,
   /** The chords the user chose in a {@link PortalKind.GlobalShortcuts} review. */
   GlobalShortcuts,
+  /** The name the user installs a {@link PortalKind.DynamicLauncher} under. */
+  DynamicLauncher,
   /** The user dismissed or denied the dialog. */
   Canceled,
   /** The shell has no dialog for this kind. */
@@ -312,6 +361,11 @@ export const PortalAnswer = {
     kind: PortalAnswerKind.AppChooser as const,
   }),
   Canceled: () => ({ kind: PortalAnswerKind.Canceled as const }),
+  /** Not empty; the request's own name unless `editableName`. */
+  DynamicLauncher: (name: string) => ({
+    kind: PortalAnswerKind.DynamicLauncher as const,
+    name,
+  }),
   FileChooser: (chosen: FileChosen) => ({
     chosen,
     kind: PortalAnswerKind.FileChooser as const,
@@ -637,6 +691,49 @@ const wallpaperSchema = z
     (body): WallpaperBody => ({ path: body.path, setOn: body.set_on }),
   );
 
+const launcherSchema = z
+  .object({
+    editable_name: z.boolean(),
+    icon: z.string().optional(),
+    launcher_type: z.enum(["application", "webapp"]),
+    name: z.string(),
+    target: z.string().optional(),
+  })
+  .transform(
+    (body): LauncherBody => ({
+      editableName: body.editable_name,
+      icon: body.icon,
+      launcherType:
+        body.launcher_type === "webapp"
+          ? LauncherType.Webapp
+          : LauncherType.Application,
+      name: body.name,
+      target: body.target,
+    }),
+  );
+
+const usbSchema = z
+  .object({
+    devices: z.array(
+      z.object({
+        id: z.string(),
+        product: z.string().optional(),
+        vendor: z.string().optional(),
+        writable: z.boolean(),
+      }),
+    ),
+  })
+  .transform(
+    (body): UsbBody => ({
+      devices: body.devices.map((device) => ({
+        id: device.id,
+        product: device.product,
+        vendor: device.vendor,
+        writable: device.writable,
+      })),
+    }),
+  );
+
 /** Reads one kind's body into a request. */
 type ReadKind = (base: PortalRequestBase, body: unknown) => PortalRequest;
 
@@ -684,6 +781,12 @@ const KINDS: ReadonlyMap<string, ReadKind> = new Map<string, ReadKind>([
     "wallpaper",
     (base, body) => PortalRequest.Wallpaper(base, wallpaperSchema.parse(body)),
   ],
+  [
+    "dynamic_launcher",
+    (base, body) =>
+      PortalRequest.DynamicLauncher(base, launcherSchema.parse(body)),
+  ],
+  ["usb", (base, body) => PortalRequest.Usb(base, usbSchema.parse(body))],
 ]);
 
 type ReadCapturing = (base: CapturingBase, body: unknown) => Capturing;
@@ -794,6 +897,8 @@ const wireAnswer = (answer: PortalAnswer): object => {
       return { kind: "stop" };
     case PortalAnswerKind.Canceled:
       return { kind: "canceled" };
+    case PortalAnswerKind.DynamicLauncher:
+      return { kind: "dynamic_launcher", name: answer.name };
     case PortalAnswerKind.FileChooser:
       return {
         choices: Object.fromEntries(answer.chosen.choices),

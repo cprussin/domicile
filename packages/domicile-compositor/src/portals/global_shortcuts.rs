@@ -300,6 +300,7 @@ impl Shortcuts {
             | PortalAnswer::FileChooser(_)
             | PortalAnswer::RemoteDesktop { .. }
             | PortalAnswer::InputCapture
+            | PortalAnswer::DynamicLauncher { .. }
             | PortalAnswer::Stop
             | PortalAnswer::Refused
             | PortalAnswer::Pressed => Err(2),

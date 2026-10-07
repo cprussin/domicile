@@ -171,6 +171,37 @@ const wallpaper = (id: number) => ({
 /** A desktop holding the picture `wallpaper` names. */
 const withPicture = desktop({ "/home/u/sky.jpg": "sky" });
 
+const launcher = (id: number, body: object = {}) => ({
+  app_id: "org.example.Browser",
+  body: {
+    editable_name: true,
+    icon: "data:image/png;base64,iVBORw==",
+    launcher_type: "webapp",
+    name: "Mail",
+    target: "https://mail.example.com",
+    ...body,
+  },
+  id,
+  kind: "dynamic_launcher",
+});
+
+const usb = (id: number) => ({
+  app_id: "org.example.Keys",
+  body: {
+    devices: [
+      {
+        id: "dev-1",
+        product: "YubiKey 5",
+        vendor: "Yubico.com",
+        writable: true,
+      },
+      { id: "dev-2", writable: false },
+    ],
+  },
+  id,
+  kind: "usb",
+});
+
 describe(PortalDialogs, () => {
   describe("rendering", () => {
     it("draws nothing while no application asks", () => {
@@ -359,6 +390,43 @@ describe(PortalDialogs, () => {
           .getByRole("img", { name: "The new wallpaper" })
           .getAttribute("src"),
       ).toStartWith("blob:");
+    });
+
+    it("shows a launcher's icon, name and address", () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} systemOf={desktop()} />);
+      host.push([launcher(1)]);
+
+      expect(screen.getByRole("dialog")).toHaveTextContent(
+        "org.example.Browser wants to add an app",
+      );
+      expect(screen.getByLabelText("Name")).toHaveValue("Mail");
+      expect(screen.getByText("https://mail.example.com")).toBeInTheDocument();
+      expect(
+        screen.getByRole("img", { name: "App icon" }).getAttribute("src"),
+      ).toBe("data:image/png;base64,iVBORw==");
+    });
+
+    it("keeps a launcher's name when it may not be changed", () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} systemOf={desktop()} />);
+      host.push([launcher(1, { editable_name: false })]);
+
+      expect(screen.getByLabelText("Name")).toHaveAttribute("readonly");
+    });
+
+    it("lists the USB devices an application asks for", () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} systemOf={desktop()} />);
+      host.push([usb(1)]);
+
+      expect(screen.getByRole("dialog")).toHaveTextContent(
+        "org.example.Keys wants to use USB devices",
+      );
+      expect(screen.getByText("Yubico.com YubiKey 5")).toBeInTheDocument();
+      expect(screen.getByText("Unknown device")).toBeInTheDocument();
+      expect(screen.getByText("Read and write")).toBeInTheDocument();
+      expect(screen.getByText("Read only")).toBeInTheDocument();
     });
 
     it("goes away when the request does", async () => {
@@ -714,6 +782,37 @@ describe(PortalDialogs, () => {
       await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
       expect(host.answers).toEqual([[1, { kind: "canceled" }]]);
+    });
+
+    it("installs a launcher under the name typed", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} systemOf={desktop()} />);
+      host.push([launcher(1)]);
+      await userEvent.clear(screen.getByLabelText("Name"));
+      await userEvent.type(screen.getByLabelText("Name"), "Work mail");
+      await userEvent.click(screen.getByRole("button", { name: "Add" }));
+
+      expect(host.answers).toEqual([
+        [1, { kind: "dynamic_launcher", name: "Work mail" }],
+      ]);
+    });
+
+    it("cannot install a launcher with no name", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} systemOf={desktop()} />);
+      host.push([launcher(1)]);
+      await userEvent.clear(screen.getByLabelText("Name"));
+
+      expect(screen.getByRole("button", { name: "Add" })).toBeDisabled();
+    });
+
+    it("allows the USB devices", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} systemOf={desktop()} />);
+      host.push([usb(1)]);
+      await userEvent.click(screen.getByRole("button", { name: "Allow" }));
+
+      expect(host.answers).toEqual([[1, { kind: "access" }]]);
     });
 
     it("refuses a kind it has no dialog for", () => {

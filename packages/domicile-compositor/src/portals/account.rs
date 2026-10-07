@@ -74,6 +74,7 @@ impl Account {
             | PortalAnswer::RemoteDesktop { .. }
             | PortalAnswer::InputCapture
             | PortalAnswer::GlobalShortcuts { .. }
+            | PortalAnswer::DynamicLauncher { .. }
             | PortalAnswer::Stop
             | PortalAnswer::Pressed => (2, HashMap::new()),
         }

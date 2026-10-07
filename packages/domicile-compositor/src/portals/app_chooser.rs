@@ -127,6 +127,7 @@ fn results(answer: PortalAnswer, activation_token: Option<String>) -> HashMap<St
         | PortalAnswer::RemoteDesktop { .. }
         | PortalAnswer::InputCapture
         | PortalAnswer::Stop
+        | PortalAnswer::DynamicLauncher { .. }
         | PortalAnswer::GlobalShortcuts { .. }
         | PortalAnswer::Pressed
         | PortalAnswer::Canceled

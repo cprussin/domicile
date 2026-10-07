@@ -9,8 +9,9 @@ use domicile_protocol::{
     AccessDialog, AccountDialog, AppChooserDialog, BoundShortcut, Capturing, CapturingKind,
     ChosenTrigger, ChromeMessage, Devices, FileChoice, FileChoiceOption, FileChooserAnswer,
     FileChooserDialog, FileChooserMode, FileFilter, HostMessage, Inhibited, Inhibition,
-    InputCaptureDialog, PortalAnswer, PortalKind, PortalRequest, PortalWallpaper, ProposedShortcut,
-    RemoteDesktopDialog, ShortcutsDialog, TakenChord, WallpaperDialog, WallpaperTarget,
+    InputCaptureDialog, LauncherDialog, LauncherType, PortalAnswer, PortalKind, PortalRequest,
+    PortalWallpaper, ProposedShortcut, RemoteDesktopDialog, ShortcutsDialog, TakenChord, UsbDevice,
+    UsbDialog, WallpaperDialog, WallpaperTarget,
 };
 
 fn access() -> PortalRequest {
@@ -594,4 +595,68 @@ fn no_wallpaper_set_is_left_off_the_wire() {
         written,
         r#"{"type":"portal_requests","items":[],"capturing":[]}"#
     );
+}
+
+fn launcher(editable_name: bool) -> PortalKind {
+    PortalKind::DynamicLauncher(LauncherDialog {
+        name: "Mail".into(),
+        icon: Some("data:image/png;base64,iVBORw==".into()),
+        launcher_type: LauncherType::Webapp,
+        target: Some("https://mail.example.com".into()),
+        editable_name,
+    })
+}
+
+#[test]
+fn a_launcher_install_shows_its_name_icon_and_address() {
+    let written = serde_json::to_string(&launcher(true)).expect("it serializes");
+
+    assert_eq!(
+        written,
+        r#"{"kind":"dynamic_launcher","body":{"name":"Mail","icon":"data:image/png;base64,iVBORw==","launcher_type":"webapp","target":"https://mail.example.com","editable_name":true}}"#
+    );
+}
+
+#[test]
+fn a_launcher_takes_the_name_the_user_gave_it() {
+    let line = r#"{"type":"answer_portal_request","id":4,"answer":{"kind":"dynamic_launcher","name":"Work mail"}}"#;
+    let named = |name: &str| PortalAnswer::DynamicLauncher { name: name.into() };
+
+    assert_eq!(
+        serde_json::from_str::<ChromeMessage>(line).expect("the SDK's own wire form"),
+        ChromeMessage::AnswerPortalRequest {
+            id: 4,
+            answer: named("Work mail"),
+        }
+    );
+    assert!(launcher(true).accepts(&named("Work mail")));
+    assert!(
+        !launcher(true).accepts(&named("")),
+        "a launcher needs a name"
+    );
+    assert!(
+        !launcher(false).accepts(&named("Work mail")),
+        "not editable"
+    );
+    assert!(launcher(false).accepts(&named("Mail")));
+    assert!(!launcher(true).accepts(&PortalAnswer::Access));
+}
+
+#[test]
+fn a_usb_grant_lists_each_device_and_is_allowed_whole() {
+    let usb = PortalKind::Usb(UsbDialog {
+        devices: vec![UsbDevice {
+            id: "dev-1".into(),
+            vendor: Some("Yubico".into()),
+            product: None,
+            writable: true,
+        }],
+    });
+
+    assert_eq!(
+        serde_json::to_string(&usb).expect("it serializes"),
+        r#"{"kind":"usb","body":{"devices":[{"id":"dev-1","vendor":"Yubico","writable":true}]}}"#
+    );
+    assert!(usb.accepts(&PortalAnswer::Access));
+    assert!(!usb.accepts(&PortalAnswer::DynamicLauncher { name: "x".into() }));
 }

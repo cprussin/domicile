@@ -11,6 +11,7 @@ import {
   CapturingKind,
   FileChooserMode,
   Inhibited,
+  LauncherType,
   PortalAnswer,
   PortalKind,
   stopCapturing,
@@ -380,6 +381,84 @@ describe("watchPortalRequests", () => {
     ]);
   });
 
+  it("parses a launcher install's body", async () => {
+    const host = new FakeHost();
+    const requests = watched(host);
+    host.push([
+      {
+        app_id: "org.example.Browser",
+        body: {
+          editable_name: true,
+          icon: "data:image/png;base64,iVBORw==",
+          launcher_type: "webapp",
+          name: "Mail",
+          target: "https://mail.example.com",
+        },
+        id: 7,
+        kind: "dynamic_launcher",
+      },
+    ]);
+
+    expect(await requests).toEqual([
+      {
+        appId: "org.example.Browser",
+        body: {
+          editableName: true,
+          icon: "data:image/png;base64,iVBORw==",
+          launcherType: LauncherType.Webapp,
+          name: "Mail",
+          target: "https://mail.example.com",
+        },
+        id: 7,
+        kind: PortalKind.DynamicLauncher,
+        parentAppId: undefined,
+      },
+    ]);
+  });
+
+  it("parses a USB grant's devices", async () => {
+    const host = new FakeHost();
+    const requests = watched(host);
+    host.push([
+      {
+        app_id: "org.example.Keys",
+        body: {
+          devices: [
+            { id: "dev-1", vendor: "Yubico.com", writable: true },
+            { id: "dev-2", writable: false },
+          ],
+        },
+        id: 8,
+        kind: "usb",
+      },
+    ]);
+
+    expect(await requests).toEqual([
+      {
+        appId: "org.example.Keys",
+        body: {
+          devices: [
+            {
+              id: "dev-1",
+              product: undefined,
+              vendor: "Yubico.com",
+              writable: true,
+            },
+            {
+              id: "dev-2",
+              product: undefined,
+              vendor: undefined,
+              writable: false,
+            },
+          ],
+        },
+        id: 8,
+        kind: PortalKind.Usb,
+        parentAppId: undefined,
+      },
+    ]);
+  });
+
   it("keeps a kind it does not know, to be refused", async () => {
     const host = new FakeHost();
     const requests = watched(host);
@@ -563,6 +642,7 @@ describe("answerPortalRequest", () => {
     answerPortalRequest(host, 2, PortalAnswer.Canceled());
     answerPortalRequest(host, 3, PortalAnswer.Refused());
     answerPortalRequest(host, 4, PortalAnswer.AppChooser("firefox"));
+    answerPortalRequest(host, 7, PortalAnswer.DynamicLauncher("Work mail"));
     answerPortalRequest(
       host,
       5,
@@ -605,6 +685,7 @@ describe("answerPortalRequest", () => {
       [2, { kind: "canceled" }],
       [3, { kind: "refused" }],
       [4, { choice: "firefox", kind: "app_chooser" }],
+      [7, { kind: "dynamic_launcher", name: "Work mail" }],
       [
         5,
         {
