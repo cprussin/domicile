@@ -40,7 +40,7 @@ export const Shell = async (root, domicile) => {
 | `@domicile-desktop/system-battery` | UPower over D-Bus |
 | `@domicile-desktop/system-backlight` | sysfs, `udevadm monitor`, logind `SetBrightness` |
 | `@domicile-desktop/system-audio` | `pactl` and `parec` |
-| `@domicile-desktop/system-network` | NetworkManager over D-Bus |
+| `@domicile-desktop/system-network` | NetworkManager, iwd or wpa_supplicant over D-Bus |
 | `@domicile-desktop/system-bluetooth` | BlueZ over D-Bus |
 | `@domicile-desktop/system-apps` | desktop entries, icons and bookmarks |
 

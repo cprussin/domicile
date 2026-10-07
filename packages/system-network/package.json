@@ -4,16 +4,28 @@
     "@domicile-desktop/sdk": "workspace:*",
     "zod": "catalog:"
   },
-  "description": "NetworkManager for a Domicile shell: connectivity and the primary connection, with its Wi-Fi network and signal, kept current.",
+  "description": "The network for a Domicile shell, from NetworkManager, iwd or wpa_supplicant: connectivity and the primary connection, with its Wi-Fi network and signal, kept current.",
   "devDependencies": {
     "@cprussin/tsconfig": "catalog:",
     "@types/bun": "catalog:",
     "typescript": "catalog:"
   },
   "exports": {
+    "./iwd": {
+      "types": "./dist/iwd.d.ts",
+      "default": "./dist/iwd.js"
+    },
     "./network": {
       "types": "./dist/network.d.ts",
       "default": "./dist/network.js"
+    },
+    "./networkmanager": {
+      "types": "./dist/networkmanager.d.ts",
+      "default": "./dist/networkmanager.js"
+    },
+    "./wpa-supplicant": {
+      "types": "./dist/wpa-supplicant.d.ts",
+      "default": "./dist/wpa-supplicant.js"
     }
   },
   "files": [
