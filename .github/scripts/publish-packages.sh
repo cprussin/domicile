@@ -65,5 +65,10 @@ fi
 for package in "${PACKAGES[@]}"; do
   name="$(jq -r .name "packages/$package/package.json")"
   tarball="$OUT/$(tr -d @ <<<"$name" | tr / -)-$VERSION.tgz"
+  # A rerun of a run that stopped partway skips what it already published.
+  if npm view "$name@$VERSION" version >/dev/null 2>&1; then
+    echo "$name@$VERSION is already on npm"
+    continue
+  fi
   npm publish "$tarball" --tag latest --access public --provenance
 done
