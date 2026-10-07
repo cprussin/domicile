@@ -75,6 +75,9 @@ features = [
 
 [dev-dependencies]
 domicile-test-chrome = { path = "../domicile-test-chrome" }
+# `p2p` serves the portal interfaces over a socket pair in tests, without a
+# bus daemon. Adds no crates.
+zbus = { workspace = true, features = ["p2p"] }
 # The fixture reads the published session file to find the compositor's
 # display.
 serde_json.workspace = true

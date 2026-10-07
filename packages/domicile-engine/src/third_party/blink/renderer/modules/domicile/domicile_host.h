@@ -132,6 +132,10 @@ class MODULES_EXPORT DomicileHost final
                   uint32_t id,
                   const String& request,
                   ExceptionState&);
+  void answerPortalRequest(ScriptState*,
+                           uint32_t id,
+                           const String& answer,
+                           ExceptionState&);
   void copyClipboardEntry(ScriptState*, uint32_t entry, ExceptionState&);
   void activateTrayItem(ScriptState*,
                         const String& id,
@@ -339,6 +343,7 @@ class MODULES_EXPORT DomicileHost final
   void FocusChanged(const String& app_id) override;
   void FocusRequested(const String& app_id) override;
   void System(const String& message) override;
+  void PortalRequests(const String& message) override;
   void Displays(
       Vector<domicile::mojom::blink::DisplayInfoPtr> displays) override;
 
@@ -390,6 +395,10 @@ class MODULES_EXPORT DomicileHost final
   // must not grow without bound.
   void DispatchOrHold(Event& event);
   void DeliverHeld(const AtomicString& event_type);
+
+  // Dispatch `portal_requests_` as `portalrequests`. Requests are state, so
+  // only the latest line is kept, and a late listener is sent it again.
+  void DispatchPortalRequests();
 
   // The desktop's size and density, told to the compositor by the engine
   // rather than by the page: the shell's window IS the desktop, the compositor
@@ -460,6 +469,8 @@ class MODULES_EXPORT DomicileHost final
   String focused_window_;
   // Moments that arrived before anything listened -- see DispatchOrHold.
   HeapVector<Member<Event>> held_;
+  // The latest `portal_requests` line, or null until the first.
+  String portal_requests_;
   // The one outstanding ask of each kind, and what it asked: an answer settles
   // it only if it answers that. A newer ask rejects the older -- see
   // searchFiles() in the IDL.

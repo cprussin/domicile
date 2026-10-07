@@ -1,7 +1,7 @@
 # Desktop events in a shell
 
 What a shell receives about the desktop around its windows: displays, theme,
-tray icons and notifications. Part of [WRITING-A-SHELL.md](WRITING-A-SHELL.md).
+tray icons, notifications and application dialogs. Part of [WRITING-A-SHELL.md](WRITING-A-SHELL.md).
 
 ## Displays
 
@@ -92,3 +92,23 @@ domicile.dismissNotifications([id]);              // clear; the app is told
   list until cleared.
 - Design: [NOTIFICATIONS.md](/docs/architecture/NOTIFICATIONS.md).
   Manganese's: [`notifications/`](/packages/shell-manganese/src/notifications/).
+
+## Application dialogs
+
+Applications ask for dialogs through `xdg-desktop-portal`, and the compositor
+is its backend. The shell draws each one. See
+[PORTALS.md](architecture/PORTALS.md).
+
+```tsx
+import { PortalDialogs } from "@domicile-desktop/component-library/PortalDialogs";
+
+<PortalDialogs host={domicile} screen={focusedScreen} />;
+```
+
+- `PortalDialogs` draws every kind it knows and refuses the rest. Only
+  `Access` (a yes/no question) exists so far.
+- Without React, `watchPortalRequests` and `answerPortalRequest` in
+  `@domicile-desktop/sdk/portal` give the requests, parsed, and send answers.
+- A shell must answer every request. One left unanswered keeps its application
+  waiting until it gives up.
+- The compositor refuses answers while the desktop is locked.

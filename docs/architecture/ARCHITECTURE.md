@@ -119,9 +119,10 @@ Outside the default members (needs Smithay and native Wayland; build in
   - `outbound.rs` queues messages to the chrome. The Wayland thread never
     writes to or waits on a chrome socket; a slow chrome would otherwise stall
     input and frame callbacks for every client.
-  - `appearance.rs` serves `org.freedesktop.impl.portal.Settings` on the
-    session bus, so GTK, Qt, Electron and Firefox apps follow the desktop's
-    color scheme.
+  - `portals/` is the `xdg-desktop-portal` backend on the session bus:
+    `Settings`, so GTK, Qt, Electron and Firefox apps follow the desktop's
+    color scheme, and dialogs such as `Access`, which the shell draws. See
+    [PORTALS.md](PORTALS.md).
   - `eis.rs` serves EIS, the emulated input the RemoteDesktop and
     InputCapture portals hand out. Its input takes the engine's input path,
     so the lock refuses it.

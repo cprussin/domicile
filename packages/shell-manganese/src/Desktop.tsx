@@ -1,4 +1,5 @@
 import { useDisplays } from "@domicile-desktop/component-library/DisplayProvider";
+import { PortalDialogs } from "@domicile-desktop/component-library/PortalDialogs";
 import { createToastManager } from "@domicile-desktop/component-library/Toaster";
 import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
@@ -373,6 +374,11 @@ export const Desktop = ({
         open={notificationsOpen && !lock.locked}
         screen={notificationsOn}
       />
+      {/*
+        Applications' dialogs, over every panel. A dialog with no parent window
+        goes on the focused screen.
+      */}
+      <PortalDialogs host={domicile} screen={windows.focused} />
       {/*
         Last, over every panel, so the modal launcher and clipboard cannot take
         input on a locked desk.

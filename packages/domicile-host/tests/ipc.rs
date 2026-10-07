@@ -9,7 +9,8 @@ use std::thread;
 
 use domicile_host::ipc::{parse_chrome, to_line, Session};
 use domicile_protocol::{
-    ChromeMessage, HostMessage, Notification, Theme, TrayItem, Urgency, PROTOCOL_VERSION,
+    AccessDialog, ChromeMessage, HostMessage, Notification, PortalKind, PortalRequest, Theme,
+    TrayItem, Urgency, PROTOCOL_VERSION,
 };
 
 #[test]
@@ -370,6 +371,48 @@ fn a_host_nobody_gave_notifications_says_nothing_about_them() {
     assert!(!out
         .iter()
         .any(|message| matches!(message, HostMessage::Notifications { .. })));
+}
+
+#[test]
+fn the_portal_requests_ride_with_the_handshake() {
+    // A reloaded page must still see a dialog an application is waiting on.
+    let mut session = Session::new();
+    let request = PortalRequest {
+        id: 1,
+        app_id: "org.example.App".into(),
+        parent_app_id: None,
+        kind: PortalKind::Access(AccessDialog {
+            title: "Use the camera?".into(),
+            subtitle: String::new(),
+            body: String::new(),
+            grant_label: None,
+            deny_label: None,
+        }),
+    };
+    let told = session
+        .host_mut()
+        .set_portal_requests(vec![request.clone()]);
+    assert_eq!(
+        told,
+        Some(HostMessage::PortalRequests {
+            items: vec![request.clone()]
+        })
+    );
+    assert_eq!(
+        session
+            .host_mut()
+            .set_portal_requests(vec![request.clone()]),
+        None,
+        "an unchanged list says nothing"
+    );
+
+    let out = session.ingest(&to_line(&ChromeMessage::Hello {
+        protocol_version: PROTOCOL_VERSION,
+    }));
+
+    assert!(out.contains(&HostMessage::PortalRequests {
+        items: vec![request]
+    }));
 }
 
 /// A stand-in keymap. The host passes it through as text without compiling

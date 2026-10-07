@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "@domicile-desktop/component-library": "workspace:*",
     "@domicile-desktop/sdk": "workspace:*",
     "react": "catalog:",
     "react-dom": "catalog:"
@@ -8,11 +9,14 @@
   "devDependencies": {
     "@cprussin/tsconfig": "catalog:",
     "@domicile-desktop/test-support": "workspace:*",
+    "@pandacss/dev": "catalog:",
+    "@pandacss/preset-panda": "catalog:",
     "@testing-library/react": "catalog:",
     "@types/bun": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "@vitejs/plugin-react": "catalog:",
+    "postcss": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:"
   },
@@ -22,6 +26,7 @@
   "productName": "domicile-shell-simple",
   "scripts": {
     "build:vite": "vite build",
+    "prepare": "panda codegen --silent",
     "start:dev": "../../scripts/dev-shell.sh simple",
     "test:types": "tsc --noEmit",
     "test:unit": "bun test"
