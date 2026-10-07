@@ -557,6 +557,14 @@ interface ControlChannelClient {
   // lets go on it.
   WindowsThemeChanged(Theme theme);
 
+  // The config's accent color, contrast and reduced motion, which the settings
+  // portal also serves applications, for the shell to follow too.
+  // `accent_color` is "#rrggbb", or null where the config leaves it to the
+  // shell. Pushed like ThemeChanged: once to a chrome that has just connected,
+  // and again whenever a reload of the config moved it.
+  AppearanceChanged(string? accent_color, bool high_contrast,
+                    bool reduced_motion);
+
   // The shell's part of the desk's config -- its keybindings, each mode's, and
   // the options the config keeps for a shell by name -- as the one JSON line
   // the compositor sent, `type` and all.

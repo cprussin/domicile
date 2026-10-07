@@ -22,6 +22,8 @@
 #   the cursor's closed set: a cursor the engine does not know does NOT reach
 #     `windows`, and one it knows, sent after it, does -- so "the bad name was
 #     refused" can be told apart from "the channel died on it"
+#   the config's appearance: `accentColor`, `highContrast` and
+#     `reducedMotion` hold what the compositor's `appearance` line said
 #   the relay of the shell's system calls: the page's `callSystem` reaches the
 #     compositor wrapped as a `system_request`, one that is not a JSON call
 #     never leaves the browser, and a `system_reply` reaches the page whole
@@ -118,12 +120,14 @@ sleep 1
 NAMES=$(grep -oE '"GUARD names missing=[^"]*"' "$ENGINE_LOG" | head -1)
 WINDOWS=$(grep -oE '"GUARD windows .*"' "$ENGINE_LOG" | head -1)
 FOCUSED=$(grep -oE '"GUARD focused [^"]*"' "$ENGINE_LOG" | head -1)
+APPEARANCE=$(grep -oE '"GUARD appearance [^"]*"' "$ENGINE_LOG" | head -1)
 CHANGED=$(grep -oE '"GUARD changed n=[0-9]+"' "$ENGINE_LOG" | head -1)
 SYSTEM_IN=$(grep -cE '"GUARD system data=\{"type": ?"system_reply"' "$ENGINE_LOG")
 SYSTEM_OUT=$(grep -cE '^said: \{"id":1,"request":\{"call":"stat","path":"/"\},"type":"system_request"\}$' "$SOCKET_LOG")
 SYSTEM_LEAKED=$(grep -cE '^said: .*"id":2' "$SOCKET_LOG")
 
 FAILURE=$(NAMES="$NAMES" WINDOWS="$WINDOWS" FOCUSED="$FOCUSED" CHANGED="$CHANGED" \
+  APPEARANCE="$APPEARANCE" \
   SYSTEM_IN="$SYSTEM_IN" SYSTEM_OUT="$SYSTEM_OUT" SYSTEM_LEAKED="$SYSTEM_LEAKED" python3 - <<'PY'
 import json, os
 
@@ -165,6 +169,8 @@ elif windows != wanted:
     print("`windows` has the right windows but not what the compositor said about %s: got %s" % (", ".join(wrong), json.dumps([by_id[i] for i in wrong])))
 elif os.environ["FOCUSED"] != '"GUARD focused second"':
     print("`focusedWindow` is %s where the compositor focused second" % os.environ["FOCUSED"])
+elif os.environ["APPEARANCE"] != '"GUARD appearance #3584e4 true false"':
+    print("the page's appearance is %s where the compositor said #3584e4, high contrast, no reduced motion: ControlChannel or DomicileHost::AppearanceChanged lost it" % (os.environ["APPEARANCE"] or "no GUARD appearance line"))
 elif os.environ["CHANGED"] != '"GUARD changed n=0"':
     print("a listener registered after the compositor fell silent heard %s; nothing changed after it subscribed, so the engine is dispatching late or twice" % os.environ["CHANGED"])
 elif os.environ["SYSTEM_LEAKED"] != "0":
@@ -176,7 +182,7 @@ elif os.environ["SYSTEM_IN"] == "0":
 PY
 )
 
-echo "page: $NAMES $WINDOWS $FOCUSED $CHANGED"
+echo "page: $NAMES $WINDOWS $FOCUSED $APPEARANCE $CHANGED"
 echo "system: out=$SYSTEM_OUT leaked=$SYSTEM_LEAKED in=$SYSTEM_IN"
 
 if [ -n "$FAILURE" ]; then

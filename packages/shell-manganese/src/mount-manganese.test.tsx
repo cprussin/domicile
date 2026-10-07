@@ -72,4 +72,25 @@ describe("mountManganese", () => {
       mounted.unmount();
     });
   });
+
+  // The config's look, which the settings portal also serves windows.
+  it("follows the config's contrast and motion", async () => {
+    const fake = onADesk();
+    const mounted = await act(() =>
+      mountManganese(document.createElement("div"), fake.host, {
+        applications,
+      }),
+    );
+
+    fake.set({ highContrast: true, reducedMotion: true });
+
+    const html = document.documentElement;
+    expect(html.getAttribute("data-contrast")).toBe("high");
+    expect(html.hasAttribute("data-reduced-motion")).toBe(true);
+    html.removeAttribute("data-contrast");
+    html.removeAttribute("data-reduced-motion");
+    act(() => {
+      mounted.unmount();
+    });
+  });
 });
