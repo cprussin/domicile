@@ -15,7 +15,7 @@
  * The `wp_cursor_shape_v1` shapes, named by the CSS `cursor` keyword the
  * chrome assigns, plus `none` for a hidden cursor. The same set is defined by
  * `domicile_protocol::CursorShape`, `components/domicile/common/cursor_shape.h`
- * and `cursorShapeSchema` in `@domicile/chrome-sdk`.
+ * and `cursorShapeSchema` in `@domicile-desktop/sdk`.
  *
  * An enum, not a DOMString, so the bindings reject unknown values. CSS ignores
  * an unknown cursor keyword, so a bad value would otherwise show the wrong
@@ -66,7 +66,7 @@ export type DomicileCursorShape =
  *
  * One of four copies of this set: `domicile_protocol::Theme`,
  * `components/domicile/common/theme.h`, this enum, and `themeSchema` in
- * `@domicile/chrome-sdk`.
+ * `@domicile-desktop/sdk`.
  *
  * An enum rather than a `DOMString` because `setTheme()` takes it, so the
  * bindings reject an invalid value at the call. There is no `system` value:
@@ -136,10 +136,8 @@ export type DomicileFileSearch = {
   /**
    * Whether the compositor is still building the index this was found in.
    *
-   * THE DIFFERENCE BETWEEN AN INCOMPLETE ANSWER AND A WRONG ONE. The rows are
-   * a launcher's whole evidence that a file exists, so an answer from an index
-   * still being walked has to arrive saying so. A shell draws this as a line
-   * saying the index is being built, and asks again.
+   * When true, the answer may be incomplete. A shell shows that
+   * the index is being built, and asks again.
    */
   readonly indexing: boolean;
 };
@@ -219,9 +217,9 @@ export type DomicileClipboardEntry = {
   /**
    * What DomicileHost.copyClipboardEntry() names this row by.
    *
-   * Assigned by the compositor and never reused, so an id a shell is holding
-   * either names the row it was told about or names nothing at all. NOT a
-   * position: the list a copy re-orders keeps every id it had.
+   * Assigned by the compositor and never reused, so an id a shell holds names
+   * the row it was told about or nothing. Not a position: reordering the list
+   * keeps every id.
    */
   readonly id: number;
   /**
@@ -279,8 +277,9 @@ export type DomicileDisplay = {
    * The monitor's rotation: `normal`, `rotate-90`, `rotate-180` or
    * `rotate-270`, as the config file spells them.
    *
-   * Follows the wl_output convention: the name is the clockwise turn applied
-   * to content, not the panel's turn. A shell applies it as written.
+   * Follows `wl_output.transform`: the name is the counterclockwise turn
+   * applied to content, not the panel's turn. `rotate-270` is for a panel on
+   * its left side. A shell applies it as written.
    *
    * A DOMString because an enum would need another IDL file and another patched
    * entry in `bindings/idl_in_modules.gni`. The browser maps any other name to
@@ -410,28 +409,24 @@ export type DomicileHost = {
    * call supersedes this one, which rejects with an AbortError: a launcher
    * wants the answer to what is typed now.
    *
-   * IT TAKES NO PATH, AND THAT IS THE POINT RATHER THAN AN OVERSIGHT. A shell
-   * is served over domicile:// so that it has an origin without a TCP port,
-   * not so that it gets a filesystem. A call that named a directory would be
-   * one, and every document this engine serves would have it. What gets
-   * searched is the compositor's decision -- see `domicile_host::file_search`
-   * -- and the query is only words to match.
+   * It takes no path. A shell is served over domicile:// to get an origin
+   * without a TCP port, not a filesystem, and a call that named a directory
+   * would give every document this engine serves one. The compositor decides
+   * what is searched (see `domicile_host::file_search`); the query is only
+   * words to match.
    *
-   * ONLY WHAT MATCHED CROSSES. The compositor's index is the whole home; a
-   * page handed that to filter was a desktop that took no input while it
-   * arrived.
+   * Only the matches cross to the page. The index covers the whole home, and
+   * sending all of it would stall the page's input while it arrived.
    */
   searchFiles(query: string): Promise<DomicileFileSearch>;
   /**
    * Ask what is in one file. Resolves with the answer. A newer call
    * supersedes this one, as with searchFiles().
    *
-   * THIS ONE TAKES A PATH, which searchFiles() above says is the point of not
-   * taking one -- so what it may name is narrow: a path relative to the home,
-   * as searchFiles() named it (a directory without its trailing `/`). The
-   * compositor answers only for a path in its own index of the home, and
-   * anything else comes back "unreadable", so this reads nothing a search
-   * could not already have named.
+   * `path` is relative to the home, as searchFiles() named it (a directory
+   * without its trailing `/`). The compositor answers only for a path in its
+   * index of the home, and anything else comes back "unreadable", so this
+   * reads nothing a search could not already have named.
    */
   previewFile(path: string): Promise<DomicileFilePreview>;
   /**
@@ -452,16 +447,13 @@ export type DomicileHost = {
   /**
    * Put a row of the clipboard's history back on the clipboard.
    *
-   * IT NAMES A ROW AND CARRIES NO TEXT: a shell is served over domicile:// so
-   * that it has an origin, not so that it gets the machine, and a call that
-   * took bytes would let this document write the desktop's clipboard rather
-   * than choose among what has already been copied on it. `entry` is an id
-   * `clipboard` lists.
+   * `entry` is an id `clipboard` lists. The call names a row and carries no
+   * text, so a shell can choose among what was copied but cannot write
+   * arbitrary bytes to the desktop's clipboard.
    *
-   * No answer, and none to want: what follows is that the next paste in any
-   * window is that row, served by the compositor rather than by whichever
-   * client first copied it -- which is the whole of what a clipboard manager
-   * is for. An id the history has since dropped sets nothing.
+   * Returns nothing. The next paste in any window is that row, served by the
+   * compositor rather than by the client that copied it. An id the history
+   * has since dropped sets nothing.
    */
   copyClipboardEntry(entry: number): void;
   /**
@@ -496,11 +488,10 @@ export type DomicileHost = {
    * Put the pointer at a place in this page, in the page's own coordinates --
    * the ones a PointerEvent reports as clientX/clientY.
    *
-   * THE COMPANION TO MOVING THE KEYBOARD. A desktop whose focus follows the
-   * cursor has to take the cursor with it when a key moves the focus, or the
-   * next pointer event hands the focus back to whatever the pointer is still
-   * over. Every other compositor does this itself; here the shell is a page,
-   * and a page can read where the pointer is and cannot put it anywhere.
+   * For focus that follows the cursor: when a key moves the focus, the shell
+   * moves the cursor too, or the next pointer event hands the focus back to
+   * whatever the pointer is still over. A page cannot otherwise move the
+   * pointer.
    *
    * Doubles for resizeApp's reason: a place in a page is a CSS pixel and a CSS
    * pixel is fractional. A coordinate outside this page is clamped to its own
@@ -513,7 +504,7 @@ export type DomicileHost = {
    */
   closeApp(appId: string): void;
   /**
-   * The layout box, as a resize. For an <app> the box IS the configure.
+   * The layout box, as a resize. For an <app> the box is the configure.
    *
    * Doubles because a CSS pixel is fractional and this comes from a layout box.
    */
@@ -533,17 +524,12 @@ export type DomicileHost = {
   /**
    * Draw the desktop the other way round.
    *
-   * THE ONE CALL HERE THAT SAYS WHAT THE DESKTOP IS rather than asking it for
-   * something. It reaches the compositor and comes back as `themechanged` --
-   * to every chrome on the desk, this one included, which is why a shell
-   * renders from `theme` rather than from its own click. Three monitors are
-   * three pages and the toggle is on one of them.
+   * Answered with `themechanged` to every chrome on the desk, this one
+   * included, so a shell renders from `theme` rather than from its own click.
    *
-   * It has to leave the page at all because the compositor is the only process
-   * the desk's CLIENTS can hear: it answers the settings portal GTK, Qt and
-   * Electron read a color scheme from, out of this same value. A theme kept in
-   * the renderer would be a desktop whose panels went dark and whose windows
-   * stayed light.
+   * The theme lives in the compositor because it also answers the settings
+   * portal that GTK, Qt and Electron read a color scheme from. A theme kept in
+   * the page would leave client windows light while the shell went dark.
    *
    * A DomicileTheme rather than a DOMString, so a word that is not one of the
    * two is refused at the call instead of at the socket -- see
@@ -553,20 +539,14 @@ export type DomicileHost = {
   /**
    * Offer a passphrase at a locked desk.
    *
-   * THE WAY OUT OF THE ONE STATE THIS PAGE CANNOT CHANGE BY DRAWING. While the
-   * desk is locked the compositor puts nothing this page forwards into the
-   * Wayland seat -- no client sees a keystroke or a click -- and this call is
-   * the only thing that ends it. The page keeps its own keys throughout, which
-   * is what makes a lock screen possible: it is the thing forwarding, so it can
-   * take a passphrase while nothing it forwards arrives anywhere.
+   * While the desk is locked, the compositor passes nothing this page forwards
+   * to the Wayland seat, and this call is the only way to unlock it. The page
+   * still gets its own keys, so a lock screen can take a passphrase.
    *
-   * ANSWERED WITH `lockedchanged` AND NOT WITH A RETURN VALUE, and only when
-   * the desk actually opened. A wrong passphrase produces nothing at all: the
-   * compositor says so in its own log, without the passphrase in it. A page
-   * that cleared its own lock screen because it believed its own keystrokes
-   * would be a lock anybody with the devtools could open -- and the event goes
-   * to every chrome on the desk rather than to this one, because three monitors
-   * are three pages and the desk they draw has one lock.
+   * Answered with `lockedchanged` to every chrome, and only when the desk
+   * unlocked. A wrong passphrase produces no event; the compositor logs it,
+   * without the passphrase. A shell clears its lock screen on `lockedchanged`,
+   * never on its own check, or anyone with the devtools could open it.
    */
   unlock(passphrase: string): void;
   /**
@@ -608,11 +588,10 @@ export type DomicileHost = {
    * popup is the shell's to open, as a <webview> at the `popup` its
    * `extensions` entry names, and is opened after this call.
    *
-   * NOT THE COMPOSITOR'S. An action lives in this browser, so the call goes no
-   * further than the browser process, over the tray's own pipe -- see
-   * components/domicile/mojom/extension_tray.mojom. An id that names no
-   * extension with an action now is a click that raced an uninstall, and does
-   * nothing; an empty one throws.
+   * Handled by the browser process, not the compositor, over the tray's own
+   * pipe: see components/domicile/mojom/extension_tray.mojom. An id that
+   * names no extension with an action now is a click that raced an
+   * uninstall, and does nothing; an empty one throws.
    */
   activateExtension(id: string): void;
   /**
@@ -629,29 +608,16 @@ export type DomicileHost = {
   /**
    * The screens of the desktop.
    *
-   * An attribute rather than an event payload, because the desktop is a fact
-   * and not a stream. A shell reads this when it needs it -- including a
-   * component that mounts long after the description arrived, which an event
-   * would have left with nothing.
+   * An attribute rather than an event payload, so a component that mounts
+   * after the description arrived can still read it.
    *
-   * NULL UNTIL THE COMPOSITOR HAS DESCRIBED THE DESKTOP, and an empty array
-   * for a desktop with no screens on it. They are different states and a shell
-   * renders them differently: nothing at all is what an unknown screen shows,
-   * which is the right answer for "there is no such screen" and the wrong one
-   * for "wait". `domicile-protocol` carries that distinction deliberately --
-   * an empty `Vec` that serializes to nothing and one that serializes to `[]`
-   * both come back empty, and only the second is a desktop a shell can parse
-   * -- and an attribute that started empty threw it away again here.
+   * Null until the compositor has described the desktop, and an empty array
+   * for a desktop with no screens. A shell renders these differently: null
+   * means wait, empty means there is no screen. The compositor always
+   * describes at least one output; the `domicile` daemon sends the empty one.
    *
-   * The compositor describes at least one output, so it does not send the
-   * empty one; the `domicile` daemon, which no desktop has been described to,
-   * does. Leaning on "in practice it never happens" is what made the SDK guess,
-   * and this is instead of the guess.
-   *
-   * No [SameObject]: the compositor sends the whole desktop each time it
-   * changes and a FrozenArray is frozen, so this is a different array after
-   * every `displayschanged`. That is also the shape a shell wants -- an
-   * identity that survived a desktop it no longer describes would be worse.
+   * A different array after every `displayschanged`: the compositor sends the
+   * whole desktop on each change.
    */
   readonly displays: readonly DomicileDisplay[] | null;
   /**
@@ -666,7 +632,7 @@ export type DomicileHost = {
   /** The window holding the keyboard, or null when the shell's page holds it. */
   readonly focusedWindow: string | null;
   /**
-   * THE DESK'S STATE, AS ATTRIBUTES. Each is what the compositor last said,
+   * The desk's state, as attributes. Each is what the compositor last said,
    * null until it has said anything, and a bare `<name>changed` event says it
    * moved: a shell reads, then listens, and one that listens late misses
    * nothing. See docs/architecture/WINDOW-DOMICILE.md.
@@ -680,9 +646,9 @@ export type DomicileHost = {
   readonly theme: DomicileTheme | null;
   readonly windowsTheme: DomicileTheme | null;
   /**
-   * The compositor seat's modifiers -- only the keys forwarded to a client;
-   * see @domicile-desktop/sdk's README before trusting them over a page's
-   * own key events.
+   * The compositor seat's modifiers, which count only keys forwarded to a
+   * client. Read a page's own key events instead; see "Reading held
+   * modifiers" in packages/chrome-sdk/docs/ELEMENTS.md.
    */
   readonly altKey: boolean | null;
   readonly ctrlKey: boolean | null;
@@ -778,10 +744,8 @@ export type DomicileNotificationAction = {
  * A combination claimed with grabShortcut() was pressed (`shortcut`) or let
  * go (`shortcutrelease`).
  *
- * Its own type rather than a DomicileAppEvent with the combination in the
- * `title` slot. A shortcut is not a window's name and does not belong to a
- * window at all: it fires whatever holds the keyboard, which is the point of
- * grabbing it.
+ * Its own type rather than a DomicileAppEvent: a shortcut belongs to no
+ * window, and fires whatever holds the keyboard.
  */
 export type DomicileShortcutEvent = Event & {
   /**
@@ -789,7 +753,7 @@ export type DomicileShortcutEvent = Event & {
    * grabbed as a keycode. See DomicileHost.grabShortcut().
    */
   readonly chord: string;
-  /** The Linux evdev code, the same numbering key() forwards in. */
+  /** The Linux evdev code. */
   readonly keycode: number;
   readonly altKey: boolean;
   readonly ctrlKey: boolean;

@@ -13,11 +13,11 @@
 //
 // The four `wl_output.transform` rotations. Must match
 // `domicile_protocol::DisplayTransform`, `domicile_config::Transform` and
-// `displayTransformSchema` in `@domicile/chrome-sdk`.
+// `displayTransformSchema` in `@domicile-desktop/sdk`.
 //
-// Each name is the clockwise turn the content takes to appear upright, per the
-// `wl_output` convention: `rotate-90` is for an output rotated 90 degrees
-// counterclockwise. A page applies it as written.
+// Each name is the counterclockwise turn the content takes to appear upright,
+// per the `wl_output` convention: `rotate-90` is for an output rotated 90
+// degrees clockwise. A page applies it as written.
 //
 // One x-macro list drives both directions so they cannot disagree. Callers
 // fall back to `kNormal` on an unknown name, because dropping the whole

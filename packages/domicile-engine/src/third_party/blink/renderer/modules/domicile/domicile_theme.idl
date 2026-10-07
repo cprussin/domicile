@@ -5,7 +5,7 @@
 //
 // One of four copies of this set: `domicile_protocol::Theme`,
 // `components/domicile/common/theme.h`, this enum, and `themeSchema` in
-// `@domicile/chrome-sdk`.
+// `@domicile-desktop/sdk`.
 //
 // An enum rather than a `DOMString` because `setTheme()` takes it, so the
 // bindings reject an invalid value at the call. There is no `system` value:

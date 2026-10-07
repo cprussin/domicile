@@ -6,7 +6,7 @@
 // The `wp_cursor_shape_v1` shapes, named by the CSS `cursor` keyword the
 // chrome assigns, plus `none` for a hidden cursor. The same set is defined by
 // `domicile_protocol::CursorShape`, `components/domicile/common/cursor_shape.h`
-// and `cursorShapeSchema` in `@domicile/chrome-sdk`.
+// and `cursorShapeSchema` in `@domicile-desktop/sdk`.
 //
 // An enum, not a DOMString, so the bindings reject unknown values. CSS ignores
 // an unknown cursor keyword, so a bad value would otherwise show the wrong

@@ -12,7 +12,7 @@
 // The desktop's light or dark theme and its wire-name codec.
 //
 // Must match `domicile_protocol::Theme`, `domicile_config::ThemeMode` and
-// `themeSchema` in `@domicile/chrome-sdk`.
+// `themeSchema` in `@domicile-desktop/sdk`.
 //
 // There is no `system` value: Domicile is the system, so there is no higher
 // preference to follow. The compositor exposes this value to other apps
