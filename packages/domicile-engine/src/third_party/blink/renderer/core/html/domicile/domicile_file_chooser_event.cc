@@ -6,12 +6,9 @@
 #include <optional>
 #include <utility>
 
-#include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/core/event_interface_names.h"
 #include "third_party/blink/renderer/core/html/domicile/html_web_view_element.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
-#include "third_party/blink/renderer/platform/heap/persistent.h"
-#include "third_party/blink/renderer/platform/wtf/functional.h"
 
 namespace blink {
 
@@ -31,18 +28,6 @@ bool Climbs(const String& path) {
 }
 
 constexpr char kClimbs[] = "A path must not climb with `..`.";
-
-// No entries means the path is not a readable directory, or the chooser was
-// answered while the listing was in flight.
-void Listed(ScriptPromiseResolver<IDLSequence<IDLString>>* resolver,
-            const std::optional<Vector<String>>& entries) {
-  if (!entries.has_value()) {
-    resolver->RejectWithDOMException(DOMExceptionCode::kNotReadableError,
-                                     "That is not a directory to list.");
-    return;
-  }
-  resolver->Resolve(*entries);
-}
 
 }  // namespace
 
@@ -103,28 +88,6 @@ void DomicileFileChooserEvent::choose(const Vector<String>& paths,
     }
   }
   Reply(paths);
-}
-
-ScriptPromise<IDLSequence<IDLString>> DomicileFileChooserEvent::list(
-    ScriptState* script_state,
-    const String& path,
-    ExceptionState& exception_state) {
-  if (!answer_) {
-    exception_state.ThrowDOMException(
-        DOMExceptionCode::kInvalidStateError,
-        "This file chooser has already been answered.");
-    return EmptyPromise();
-  }
-  if (Climbs(path)) {
-    exception_state.ThrowTypeError(kClimbs);
-    return EmptyPromise();
-  }
-  auto* resolver =
-      MakeGarbageCollected<ScriptPromiseResolver<IDLSequence<IDLString>>>(
-          script_state, exception_state.GetContext());
-  ScriptPromise<IDLSequence<IDLString>> promise = resolver->Promise();
-  owner_->ListDirectory(path, BindOnce(&Listed, WrapPersistent(resolver)));
-  return promise;
 }
 
 void DomicileFileChooserEvent::cancel(ExceptionState& exception_state) {

@@ -6,19 +6,10 @@ Domicile stops adding a message for each feature.
 
 ## Problem
 
-The shell reaches the system only through messages Domicile defines. Each
-feature a desktop wants is a change to Domicile:
-
-- backlight and audio are `domicile_host` modules, host messages and
-  engine IDL members ([HOST-READOUTS.md](/packages/shell-manganese/docs/HOST-READOUTS.md))
-- wifi and bluetooth need the compositor to read NetworkManager and BlueZ and
-  report them on the host protocol (`ROADMAP.md`, item 13)
-- the file chooser in [PORTALS.md](PORTALS.md) adds a `listDirectory()` engine
-  member
-
-A shell published on npm cannot add a feature without a change to Domicile.
-The set of features grows with what desktops want, so the compositor, the
-protocol and the engine grow without bound.
+With a message per feature, each feature a desktop wants is a change to
+Domicile: a compositor module, a host message and an engine IDL member. A
+shell published on npm cannot add one, and the compositor, the protocol and
+the engine grow with every feature.
 
 ## Design
 
@@ -121,9 +112,8 @@ trust from reaching anything else.
   ([DATA.md](/docs/guidelines/DATA.md)).
 - **Libraries own system details.** A `pactl` or sysfs format change breaks
   one package, which its tests cover with recorded output.
-- **The libraries carry the safety rules that leave Rust.** For example,
-  `system-backlight` never sets the level to zero, which
-  `domicile_host::backlight` enforces today.
+- **The libraries carry the safety rules.** For example, `system-backlight`
+  never sets the level to zero.
 
 ## Plan
 
@@ -132,18 +122,20 @@ trust from reaching anything else.
       covers them
 - [x] engine relay: `callSystem()` and the `system` event, on the control
       channel's binding (`guard-windows-state.sh`)
-- [ ] `script-src 'self'` on `domicile://shell`
+- [x] `script-src 'self'` on `domicile://shell`
 - [x] `@domicile-desktop/sdk/system`
 - [x] the compositor serves D-Bus calls and matches
 - [x] `system-battery`; delete `domicile_host::battery`, its host message and
       IDL member
-- [ ] `system-backlight`; delete `domicile_host::backlight` and its messages
-- [ ] `system-audio`; delete `domicile_host::audio`, the meters and their
-      messages
-- [ ] apps and bookmarks as libraries; delete `search_apps` and `found_apps`
-- [ ] `system-network` and `system-bluetooth`, with bar items in manganese
-- [ ] [PORTALS.md](PORTALS.md)'s file chooser uses `readDir`; drop its
-      `listDirectory()`
+- [x] `system-backlight`; delete `domicile_host::backlight`, its messages and
+      IDL members
+- [x] `system-audio`; delete `domicile_host::audio`, the meters, their
+      messages and IDL members
+- [x] apps and bookmarks as libraries; delete `search_apps`, `found_apps` and
+      `searchApps()`
+- [x] `system-network` and `system-bluetooth`, with bar items in manganese
+- [x] [PORTALS.md](PORTALS.md)'s file chooser uses `readDir`; drop the
+      file chooser event's `list()`
 
 ## Open questions
 

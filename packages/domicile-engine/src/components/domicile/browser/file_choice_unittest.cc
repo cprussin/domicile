@@ -8,8 +8,6 @@
 #include <vector>
 
 #include "base/files/file_path.h"
-#include "base/files/file_util.h"
-#include "base/files/scoped_temp_dir.h"
 #include "components/domicile/mojom/web_view_guest.mojom.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -21,7 +19,6 @@ namespace {
 using ::testing::Contains;
 using ::testing::ElementsAre;
 using ::testing::IsEmpty;
-using ::testing::UnorderedElementsAre;
 
 using FileExtensions = ui::SelectFileDialog::FileTypeInfo::FileExtensionList;
 
@@ -45,7 +42,7 @@ TEST(FileChoiceTest, AnAbsolutePathIsItself) {
 }
 
 TEST(FileChoiceTest, ADirectoryMayEndInASlash) {
-  // `found_files` and DirectoryEntries both mark directories this way.
+  // `found_files` marks directories this way.
   EXPECT_EQ(ResolvedPath(base::FilePath(kHome), "Documents/"),
             base::FilePath("/home/someone/Documents"));
   EXPECT_EQ(ResolvedPath(base::FilePath(kHome), "/etc/"),
@@ -57,28 +54,6 @@ TEST(FileChoiceTest, NoPathClimbs) {
   EXPECT_EQ(ResolvedPath(base::FilePath(kHome), "../other/secret"),
             std::nullopt);
   EXPECT_EQ(ResolvedPath(base::FilePath(kHome), "/etc/../root"), std::nullopt);
-}
-
-TEST(FileChoiceTest, AListingIsNamesWithDirectoriesSlashed) {
-  base::ScopedTempDir temp;
-  ASSERT_TRUE(temp.CreateUniqueTempDir());
-  ASSERT_TRUE(base::CreateDirectory(temp.GetPath().Append("photos")));
-  ASSERT_TRUE(base::WriteFile(temp.GetPath().Append("notes.txt"), "hi"));
-
-  const std::optional<std::vector<std::string>> entries =
-      DirectoryEntries(temp.GetPath());
-  ASSERT_TRUE(entries.has_value());
-  EXPECT_THAT(*entries, UnorderedElementsAre("photos/", "notes.txt"));
-}
-
-TEST(FileChoiceTest, NothingIsNotADirectory) {
-  base::ScopedTempDir temp;
-  ASSERT_TRUE(temp.CreateUniqueTempDir());
-  const base::FilePath file = temp.GetPath().Append("notes.txt");
-  ASSERT_TRUE(base::WriteFile(file, "hi"));
-
-  EXPECT_EQ(DirectoryEntries(file), std::nullopt);
-  EXPECT_EQ(DirectoryEntries(temp.GetPath().Append("missing")), std::nullopt);
 }
 
 TEST(FileChoiceTest, EachModeTakesItsOwnCount) {

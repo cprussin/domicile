@@ -114,12 +114,6 @@ class CORE_EXPORT HTMLWebViewElement final
   // `waiting_choosers_`.
   void FileChooserAnswered(DomicileFileChooserEvent&);
 
-  // Asks the browser to list `path` for an open file chooser. See
-  // WebViewGuest.ListDirectory.
-  void ListDirectory(
-      const String& path,
-      domicile::mojom::blink::WebViewGuest::ListDirectoryCallback listed);
-
   void Trace(Visitor*) const override;
 
  private:

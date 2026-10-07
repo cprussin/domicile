@@ -51,14 +51,6 @@
   // could not already have named.
   [CallWith=ScriptState, RaisesException] Promise<DomicileFilePreview> previewFile(DOMString path);
 
-  // Ask which installed applications match `query`. Resolves with the
-  // answer. A newer call supersedes this one, as with searchFiles().
-  //
-  // Words, like searchFiles(): which directories hold the desktop entries is
-  // the compositor's to read, and each entry comes back with the argv to hand
-  // to spawn(), so nothing on the page parses an Exec line.
-  [CallWith=ScriptState, RaisesException] Promise<DomicileAppSearch> searchApps(DOMString query);
-
   // A system call: a file, a directory, a watch or a process. `request` is
   // the call as JSON, such as `{"call":"read_file","path":"/sys/x"}`. Answered
   // with `system` events whose `data` carries `id`. The compositor checks
@@ -181,41 +173,6 @@
   // `lockedchanged` to every chrome, and only when the desk actually shut.
   [CallWith=ScriptState, RaisesException] undefined lock();
 
-  // Set the screen's backlight to `level`, 0.0 through 1.0.
-  //
-  // A request, like setTheme(): answered with `brightnesschanged` to every
-  // chrome once the backlight has moved, so a slider follows the desk rather
-  // than its own drag. `double` rather than `unrestricted double`, so a level
-  // that is not a number throws here instead of reaching the compositor.
-  [CallWith=ScriptState, RaisesException] undefined setBrightness(
-      double level);
-
-  // The mixer: set a device's or a stream's volume, a fraction of the sound
-  // server's 100%; mute it; make a device the default; move a stream to
-  // another device; switch a device's port or a card's profile. Each names
-  // what it acts on by an id the `audio*` attributes list, and each is a
-  // request like setBrightness(): answered with `audiochanged` to every
-  // chrome. An
-  // id the compositor never gave out does nothing but say so in its log.
-  [CallWith=ScriptState, RaisesException] undefined setAudioVolume(
-      DOMString id, double volume);
-  [CallWith=ScriptState, RaisesException] undefined setAudioMuted(
-      DOMString id, boolean muted);
-  [CallWith=ScriptState, RaisesException] undefined setDefaultAudioDevice(
-      DOMString id);
-  [CallWith=ScriptState, RaisesException] undefined moveAudioStream(
-      DOMString id, DOMString device);
-  [CallWith=ScriptState, RaisesException] undefined setAudioPort(
-      DOMString id, DOMString port);
-  [CallWith=ScriptState, RaisesException] undefined setAudioProfile(
-      DOMString card, DOMString profile);
-
-  // Meter these devices and streams, by the ids the `audio*` attributes list,
-  // and fire `audiolevels` with their peaks. A lease: call it again every
-  // second while the meters are on screen; an empty list lets go at once.
-  [CallWith=ScriptState, RaisesException] undefined watchAudioLevels(
-      sequence<DOMString> ids);
-
   // This page's old frame is held for `theme`: turn the desk's windows now.
   //
   // Called from inside a shell's wipe, once the frame it wipes away from is
@@ -264,16 +221,6 @@
 
   // A grabbed shortcut fired, as a DomicileShortcutEvent.
   attribute EventHandler onshortcut;
-
-  // How bright the screen is, 0.0 through 1.0.
-  //
-  // An attribute rather than an event payload, like `displays`: a slider that
-  // mounts long after the reading arrived reads it here. NULL on a machine
-  // with no backlight, which never sends one, and until the first reading.
-  readonly attribute double? brightness;
-
-  // The brightness moved. Read `brightness` for where it is now.
-  attribute EventHandler onbrightnesschanged;
 
   // A client asked for the keyboard, as a DomicileAppEvent naming it; nothing
   // has moved. The shell answers by calling focusApp(), or does not, which
@@ -344,12 +291,6 @@
   attribute EventHandler onnotificationschanged;
   readonly attribute FrozenArray<DomicileExtension>? extensions;
   attribute EventHandler onextensionschanged;
-  readonly attribute FrozenArray<DomicileAudioDevice>? audioOutputs;
-  readonly attribute FrozenArray<DomicileAudioDevice>? audioInputs;
-  readonly attribute FrozenArray<DomicileAudioStream>? audioPlayback;
-  readonly attribute FrozenArray<DomicileAudioStream>? audioRecording;
-  readonly attribute FrozenArray<DomicileAudioCard>? audioCards;
-  attribute EventHandler onaudiochanged;
   readonly attribute boolean? idle;
   attribute EventHandler onidlechanged;
   readonly attribute boolean? locked;
@@ -366,11 +307,6 @@
   readonly attribute boolean? shiftKey;
   readonly attribute boolean? metaKey;
   attribute EventHandler onmodifierschanged;
-
-  // How loud what watchAudioLevels() asked for is, as a
-  // DomicileAudioLevelsEvent: some twenty times a second while anything is
-  // metered.
-  attribute EventHandler onaudiolevels;
 
   // The desk's browser windows, oldest first. Null until the browser lists
   // them, which it does as soon as this page listens. The browser holds each

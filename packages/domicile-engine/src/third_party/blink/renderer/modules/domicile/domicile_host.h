@@ -44,11 +44,7 @@ class DomicileClipboardEntry;
 class DomicileTrayItem;
 class DomicileNotification;
 class DomicileExtension;
-class DomicileAudioDevice;
-class DomicileAudioStream;
-class DomicileAudioCard;
 class DomicileWindow;
-class DomicileAppSearch;
 class DomicileFilePreview;
 class DomicileFileSearch;
 struct DomicileWindowState;
@@ -123,11 +119,6 @@ class MODULES_EXPORT DomicileHost final
   ScriptPromise<DomicileFilePreview> previewFile(ScriptState*,
                                                  const String& path,
                                                  ExceptionState&);
-  // Ask which installed applications match `query`; the promise settles with
-  // the answer.
-  ScriptPromise<DomicileAppSearch> searchApps(ScriptState*,
-                                              const String& query,
-                                              ExceptionState&);
   void callSystem(ScriptState*,
                   uint32_t id,
                   const String& request,
@@ -177,35 +168,6 @@ class MODULES_EXPORT DomicileHost final
   void unlock(ScriptState*, const String& passphrase, ExceptionState&);
   // Lock the desk now. Answered with `lockedchanged` to every chrome.
   void lock(ScriptState*, ExceptionState&);
-  // Set the backlight. Answered with `brightnesschanged` to every chrome.
-  void setBrightness(ScriptState*, double level, ExceptionState&);
-  // The mixer's requests. Each is answered with `audiochanged` to every
-  // chrome.
-  void setAudioVolume(ScriptState*,
-                      const String& id,
-                      double volume,
-                      ExceptionState&);
-  void setAudioMuted(ScriptState*,
-                     const String& id,
-                     bool muted,
-                     ExceptionState&);
-  void setDefaultAudioDevice(ScriptState*, const String& id, ExceptionState&);
-  void moveAudioStream(ScriptState*,
-                       const String& id,
-                       const String& device,
-                       ExceptionState&);
-  void setAudioPort(ScriptState*,
-                    const String& id,
-                    const String& port,
-                    ExceptionState&);
-  void setAudioProfile(ScriptState*,
-                       const String& card,
-                       const String& profile,
-                       ExceptionState&);
-  // A lease on these ids' meters. Answered with `audiolevels`.
-  void watchAudioLevels(ScriptState*,
-                        const Vector<String>& ids,
-                        ExceptionState&);
   // This page's old frame is held for `theme`: the desk's windows may turn.
   // Answered with `windowsthemechanged` once they have.
   void themeCaptured(ScriptState*, V8DomicileTheme theme, ExceptionState&);
@@ -237,9 +199,6 @@ class MODULES_EXPORT DomicileHost final
     return displays_.Get();
   }
 
-  // The screen's brightness, or null until the compositor has said one.
-  std::optional<double> brightness() const { return brightness_; }
-
   // The desk's browser windows, or null until the browser has listed them.
   const FrozenArray<DomicileBrowserWindow>* browserWindows() const {
     return browser_windows_.Get();
@@ -262,11 +221,6 @@ class MODULES_EXPORT DomicileHost final
   const FrozenArray<DomicileTrayItem>* tray() const;
   const FrozenArray<DomicileNotification>* notifications() const;
   const FrozenArray<DomicileExtension>* extensions() const;
-  const FrozenArray<DomicileAudioDevice>* audioOutputs() const;
-  const FrozenArray<DomicileAudioDevice>* audioInputs() const;
-  const FrozenArray<DomicileAudioStream>* audioPlayback() const;
-  const FrozenArray<DomicileAudioStream>* audioRecording() const;
-  const FrozenArray<DomicileAudioCard>* audioCards() const;
   std::optional<bool> idle() const;
   std::optional<bool> locked() const;
   std::optional<V8DomicileTheme> theme() const;
@@ -282,8 +236,6 @@ class MODULES_EXPORT DomicileHost final
 
   // domicile::mojom::blink::ControlChannelClient:
   void AppTitled(const String& app_id, const String& title) override;
-  void AudioLevels(
-      Vector<domicile::mojom::blink::AudioLevelPtr> levels) override;
   void AppAppeared(const String& app_id,
                    const String& title,
                    bool has_size,
@@ -317,10 +269,6 @@ class MODULES_EXPORT DomicileHost final
                    const String& album,
                    double duration,
                    const String& cover) override;
-  void Apps(const String& query,
-            Vector<domicile::mojom::blink::DesktopEntryPtr> apps,
-            Vector<domicile::mojom::blink::BookmarkPtr> bookmarks) override;
-  void Brightness(double level) override;
   void Clipboard(
       Vector<domicile::mojom::blink::ClipboardEntryPtr> entries) override;
   void Tray(Vector<domicile::mojom::blink::TrayItemPtr> items) override;
@@ -331,11 +279,6 @@ class MODULES_EXPORT DomicileHost final
   void Locked(bool locked) override;
   void WindowsThemeChanged(domicile::mojom::blink::Theme theme) override;
   void ShellConfig(const String& config) override;
-  void Audio(Vector<domicile::mojom::blink::AudioDevicePtr> outputs,
-             Vector<domicile::mojom::blink::AudioDevicePtr> inputs,
-             Vector<domicile::mojom::blink::AudioStreamPtr> playback,
-             Vector<domicile::mojom::blink::AudioStreamPtr> recording,
-             Vector<domicile::mojom::blink::AudioCardPtr> cards) override;
   void FocusChanged(const String& app_id) override;
   void FocusRequested(const String& app_id) override;
   void System(const String& message) override;
@@ -467,8 +410,6 @@ class MODULES_EXPORT DomicileHost final
   String file_search_query_;
   Member<ScriptPromiseResolver<DomicileFilePreview>> file_preview_;
   String file_preview_path_;
-  Member<ScriptPromiseResolver<DomicileAppSearch>> app_search_;
-  String app_search_query_;
   // The desk's state, which its attributes read: what the compositor -- or,
   // for `extensions_`, the browser -- last said, and null or nullopt until it
   // has said anything. Each list replaced wholesale, for `displays_`'s reason.
@@ -476,11 +417,6 @@ class MODULES_EXPORT DomicileHost final
   Member<FrozenArray<DomicileTrayItem>> tray_items_;
   Member<FrozenArray<DomicileNotification>> notifications_;
   Member<FrozenArray<DomicileExtension>> extensions_;
-  Member<FrozenArray<DomicileAudioDevice>> audio_outputs_;
-  Member<FrozenArray<DomicileAudioDevice>> audio_inputs_;
-  Member<FrozenArray<DomicileAudioStream>> audio_playback_;
-  Member<FrozenArray<DomicileAudioStream>> audio_recording_;
-  Member<FrozenArray<DomicileAudioCard>> audio_cards_;
   std::optional<bool> idle_;
   std::optional<bool> locked_;
   std::optional<V8DomicileTheme> theme_;
@@ -489,7 +425,6 @@ class MODULES_EXPORT DomicileHost final
   std::optional<bool> ctrl_key_;
   std::optional<bool> shift_key_;
   std::optional<bool> meta_key_;
-  std::optional<double> brightness_;
   // Replaced wholesale, like `displays_`, and for its reason.
   Member<FrozenArray<DomicileBrowserWindow>> browser_windows_;
   HeapMojoRemote<domicile::mojom::blink::ControlChannel> channel_;

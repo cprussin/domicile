@@ -68,9 +68,9 @@ delivers the queue on a task of its own. One rule replaces
 
 ### Requests return promises
 
-`searchFiles`, `previewFile` and `searchApps` resolve with their result
-(`DomicileFileSearch`, `DomicileFilePreview`, `DomicileAppSearch`). A newer
-call rejects the pending one with `AbortError`.
+`searchFiles` and `previewFile` resolve with their result
+(`DomicileFileSearch`, `DomicileFilePreview`). A newer call rejects the
+pending one with `AbortError`.
 
 ### The engine reports size and density
 
@@ -161,8 +161,8 @@ Each step ships alone.
       (`guard-desktop-geometry.sh`)
 - [x] `windows` and `focusedWindow` with `windowschanged` and
       `focusedwindowchanged` (`guard-windows-state.sh`)
-- [x] the rest of the state as attributes: theme, lock, idle, audio,
-      extensions, tray, notifications, clipboard, modifiers
+- [x] the rest of the state as attributes: theme, lock, idle, extensions,
+      tray, notifications, clipboard, modifiers
       (`guard-desk-state.sh`)
 - [x] the engine queues moment events until a listener exists
       (`guard-held-moments.sh`)
