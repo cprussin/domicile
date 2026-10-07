@@ -30,7 +30,7 @@ Each export is `@domicile-desktop/component-library/<name>`.
 | `list-walk` | Arrow-key movement of a highlight through a list while focus stays in an input. |
 | `ModalDialog` | Modal dialog with `title`, `footer` and `trigger` props. |
 | `ContextMenu` | Menu opened at a point, such as a right click's. |
-| `PortalDialogs` | Every dialog applications ask for through the desktop portal. Mount one per shell with `host={domicile}`; it refuses kinds it cannot draw. See [PORTALS.md](/docs/architecture/PORTALS.md). |
+| `PortalDialogs` | Every dialog applications ask for through the desktop portal. Mount one per shell with `host={domicile}`; it refuses kinds it cannot draw. See [the portals README](/packages/domicile-compositor/src/portals/README.md). |
 | `Popover` | Non-modal panel anchored to the control that opened it. |
 | `Provider` | base-ui `DirectionProvider` wrapper. Every app roots its tree in it. |
 | `Screen` | Renders its children once per selected display. |

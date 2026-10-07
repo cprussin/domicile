@@ -2,7 +2,8 @@
 //
 // The compositor lists them with each `portalrequests` push. Each is grabbed
 // as the shell grabs its own keys, and a press and its release are reported to
-// the compositor, which signals the application. See docs/architecture/PORTALS.md.
+// the compositor, which signals the application. See
+// packages/domicile-compositor/src/portals/README.md.
 
 import type { DomicileHost } from "./domicile-host";
 import { watchBoundShortcuts } from "./portal";

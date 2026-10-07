@@ -129,26 +129,17 @@ Evidence is in [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md),
 
    [COMPOSABLE-SHELLS.md](docs/architecture/COMPOSABLE-SHELLS.md).
 
-9. **Domicile answers every portal.** The compositor answers `Settings`,
-    `Access`, `AppChooser`, `FileChooser`, `Notification`, `Inhibit`,
-    `RemoteDesktop`, `Clipboard`, `InputCapture`, `Account`, `Email`,
-    `Lockdown`, `GlobalShortcuts`, `Background`, `Wallpaper`,
-    `DynamicLauncher`, `Usb`, `Print`, `ScreenCast` and `Screenshot`, over
-    the request channel to the shell; `Secret` goes to the keyring, and no
-    other backend is routed.
-    [PORTALS.md](docs/architecture/PORTALS.md).
-
-10. **Split manganese into small packages.** `@domicile-desktop/manganese` is
+9. **Split manganese into small packages.** `@domicile-desktop/manganese` is
     one package with the layout, the bar and every bar item. Split the clock,
     tray, mixer and window management into their own packages, with manganese
     the shell that composes them. No design doc yet.
 
-11. **A History app.** Browser windows have back, forward and address
+10. **A History app.** Browser windows have back, forward and address
     suggestions, but nothing browses, searches or clears history.
     `chrome://history` is blocked like every `chrome://` page (patch 0083). No
     design doc yet.
 
-12. **A Settings app.** Extensions and config values can only be set by editing
+11. **A Settings app.** Extensions and config values can only be set by editing
     the config. A Settings app would manage both. It would also hold the
     *Known gaps* that need a place to store state: a persistent theme choice,
     and the cookies, site data and permissions that `chrome://settings`
@@ -314,7 +305,7 @@ Understood and not scheduled.
   - Download progress is not reported.
 - **No settings page.** Browser windows block every `chrome://` page (patch
   0083), so nothing can clear cookies and site data or change site
-  permissions. The Settings app (item 12) will cover this. Printing is also
+  permissions. The Settings app (item 11) will cover this. Printing is also
   blocked: `window.print()` opens `chrome://print`.
 - **Some extension calls are refused.** `tabs.move`, `group`, `ungroup`,
   `discard`, `duplicate` and splits; `tabs.update`'s `pinned`, `openerTabId`
@@ -354,7 +345,7 @@ Understood and not scheduled.
 - **A theme picked from the toggle lasts only until restart.** `theme.mode` is
   the startup value. The config file is generated (by a shell, or by
   home-manager on NixOS), so the desktop does not write to it. Persisting the
-  choice needs a separate store for desktop state; the Settings app (item 12)
+  choice needs a separate store for desktop state; the Settings app (item 11)
   needs the same.
 - **Unmeasured: whether Wayland windows are in the theme transition's old
   frame.** Windows change theme inside the shell's view transition, after it
@@ -381,16 +372,15 @@ Understood and not scheduled.
   through to the next backend, which is correct, so `nix/domicile.portal`
   lists only what Domicile implements.
 
-- **Screenshots are a Domicile command, not a protocol.** `domicile
-  screenshot <file>` asks the engine for a PNG of the shell page. It is a
-  stopgap:
-  - No region or window picker, and no screen recording.
-  - Tools such as `grim` and `wf-recorder` cannot capture the desk. Portal
-    clients can, through the Screenshot portal
-    ([PORTALS.md](docs/architecture/PORTALS.md)).
+- **Only portal clients can capture the desk.** The Screenshot and ScreenCast
+  portals capture windows, monitors and regions
+  ([the portals README](packages/domicile-compositor/src/portals/README.md)).
+  Tools such as `grim` and `wf-recorder` speak Wayland capture protocols, which
+  Domicile lacks. `domicile screenshot <file>` (a PNG of the shell page) is the
+  stopgap for scripts.
 
-  Replace it with `ext-image-copy-capture-v1` (and `wlr-screencopy` for older
-  tools), on the display captures the portal uses. Then remove the command.
+  Add `ext-image-copy-capture-v1` (and `wlr-screencopy` for older tools), on
+  the display captures the portal uses. Then remove the command.
 
 ### Shell reload
 

@@ -4,7 +4,7 @@
 //!
 //! Zones are the displays. Barriers and capture run on the Wayland thread in
 //! [`crate::eis`], which sends the input to the application's receiving EIS
-//! client. See `docs/architecture/PORTALS.md`.
+//! client. See `packages/domicile-compositor/src/portals/README.md`.
 
 use std::collections::HashMap;
 use std::sync::Mutex;

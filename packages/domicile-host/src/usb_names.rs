@@ -2,7 +2,7 @@
 //!
 //! The portal frontend passes each device's udev properties. When they lack
 //! the names, they are read from udev's database, `/run/udev/data/c<major>:<minor>`.
-//! See `docs/architecture/PORTALS.md`.
+//! See `packages/domicile-compositor/src/portals/README.md`.
 
 use std::collections::HashMap;
 use std::fs;

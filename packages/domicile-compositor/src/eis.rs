@@ -4,7 +4,7 @@
 //! socket. [`Eis::connect`] makes that socket for the input a session was
 //! granted, and dropping the returned [`Session`] revokes it. RemoteDesktop's
 //! legacy `Notify*` methods send through an [`Emulator`] instead, which takes
-//! the same path. Design: `docs/architecture/PORTALS.md`.
+//! the same path. Design: `packages/domicile-compositor/src/portals/README.md`.
 //!
 //! - [`devices`] decides which devices a client gets for its grant.
 //! - [`desk`] maps the displays to regions and points to windows.
