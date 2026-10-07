@@ -273,8 +273,8 @@ const notificationsSchema = z.looseObject({
   type: z.literal("notifications"),
 });
 
-// Every unanswered portal dialog, oldest first. Pushed on change and on
-// connect. `body` is per `kind`; the SDK's `portal` module parses it. Answer
+// Every unanswered portal dialog and held inhibitor, oldest first. Pushed on
+// change and on connect. `body` is per `kind`; the SDK's `portal` module parses it. Answer
 // with `answer_portal_request`. See `docs/architecture/PORTALS.md`.
 const portalRequestSchema = z.looseObject({
   app_id: z.string(),

@@ -7,8 +7,8 @@ use std::collections::BTreeMap;
 
 use domicile_protocol::{
     AccessDialog, AppChooserDialog, ChromeMessage, FileChoice, FileChoiceOption, FileChooserAnswer,
-    FileChooserDialog, FileChooserMode, FileFilter, HostMessage, PortalAnswer, PortalKind,
-    PortalRequest,
+    FileChooserDialog, FileChooserMode, FileFilter, HostMessage, Inhibited, Inhibition,
+    PortalAnswer, PortalKind, PortalRequest,
 };
 
 fn access() -> PortalRequest {
@@ -36,6 +36,25 @@ fn a_request_carries_its_kind_beside_an_untyped_body() {
     assert_eq!(
         written,
         r#"{"type":"portal_requests","items":[{"id":1,"app_id":"org.example.App","parent_app_id":"app-3","kind":"access","body":{"title":"Use the camera?","subtitle":"Example wants to see you","body":"","grant_label":"Allow"}}]}"#
+    );
+}
+
+#[test]
+fn an_inhibitor_names_what_it_holds_off() {
+    let written = serde_json::to_string(&PortalRequest {
+        id: 2,
+        app_id: "org.example.Editor".into(),
+        parent_app_id: None,
+        kind: PortalKind::Inhibit(Inhibition {
+            what: vec![Inhibited::Logout, Inhibited::UserSwitch, Inhibited::Suspend],
+            reason: Some("Unsaved changes".into()),
+        }),
+    })
+    .expect("it serializes");
+
+    assert_eq!(
+        written,
+        r#"{"id":2,"app_id":"org.example.Editor","kind":"inhibit","body":{"what":["logout","user_switch","suspend"],"reason":"Unsaved changes"}}"#
     );
 }
 

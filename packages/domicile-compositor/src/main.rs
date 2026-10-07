@@ -383,6 +383,11 @@ enum ClientRequest {
     },
     /// The shell asked to lock now. See [`DomicileCompositor::shut_the_desk`].
     Lock,
+    /// Whether any application holds an idle inhibitor through the portal.
+    /// From the portal thread; see [`crate::portals`].
+    HeldAwakeByThePortal {
+        held: bool,
+    },
 }
 
 /// A chrome request answered on its own connection thread.
@@ -3235,6 +3240,8 @@ impl DomicileCompositor {
     /// would light everything, so an empty [`crate::idle::darkened`] is not
     /// sent.
     fn state_the_connectors(&self) {
+        // Every blanking edge passes here.
+        self.tell_the_portal_about_the_screensaver();
         let Some(session) = self.engine.as_ref() else {
             return;
         };
@@ -3294,6 +3301,15 @@ impl DomicileCompositor {
     fn tell_the_chromes_whether_the_desk_is_locked(&self) {
         self.hub
             .broadcast(crate::lock::announced(self.the_desk_is_locked()));
+        self.tell_the_portal_about_the_screensaver();
+    }
+
+    /// Tell applications watching the session whether the screens are blanked
+    /// or locked. The portal signals only a change.
+    fn tell_the_portal_about_the_screensaver(&self) {
+        self.hub
+            .portals
+            .screensaver(self.the_screens_are_dark() || self.the_desk_is_locked());
     }
 
     /// Tell a new chrome whether the desktop is locked.
@@ -3421,6 +3437,16 @@ impl DomicileCompositor {
         };
         let edge = idle.inhibited_by(surface, Instant::now(), &on_the_desktop);
         self.the_inhibitors_changed(edge, "a client is holding this desktop awake");
+    }
+
+    /// Whether an application holds an idle inhibitor through the portal.
+    fn held_awake_by_the_portal(&mut self, held: bool) {
+        let on_the_desktop = self.surfaces_on_the_desktop();
+        let Some(idle) = self.idle.as_mut() else {
+            return;
+        };
+        let edge = idle.held_by_portals(held, Instant::now(), &on_the_desktop);
+        self.the_inhibitors_changed(edge, "an application's portal inhibitor changed");
     }
 
     /// A client released an idle inhibitor.
@@ -3560,6 +3586,9 @@ impl DomicileCompositor {
             // nothing back because the config is generated, so a `theme` edit
             // is the source of truth.
             self.hub.take_up_the_theme(theme_on_the_wire(theme));
+        }
+        if let Some(theme) = restated.appearance {
+            self.hub.portals.restyle(&theme);
         }
     }
 
@@ -4143,6 +4172,7 @@ impl DomicileCompositor {
                 ),
             },
             ClientRequest::Unlock { passphrase } => self.offered_the_passphrase(&passphrase),
+            ClientRequest::HeldAwakeByThePortal { held } => self.held_awake_by_the_portal(held),
             ClientRequest::Lock => {
                 if self.lock.is_some() {
                     self.shut_the_desk("the shell asked for this desktop to be locked");
@@ -5979,6 +6009,13 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     // Passphrase verdicts from the checking thread.
     let (verdicts, heard_verdicts) = channel::<Verdict>();
 
+    // Notifications, from the bus and from the portal. Published once the hub
+    // exists. See `notifications`.
+    let notification_server = notifications::serve(data_dirs(
+        std::env::var_os("XDG_DATA_HOME"),
+        std::env::var_os("XDG_DATA_DIRS"),
+        home_directory().as_deref(),
+    ));
     // State shared by the Wayland thread and chrome connections.
     let (hub, outbound_rx) = ChromeHub::new(
         request_tx,
@@ -5989,8 +6026,10 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         // never ask again.
         portals::serve(
             theme_on_the_wire(config.theme.mode),
+            &config.theme,
             &socket_name.to_string_lossy(),
             std::env::var_os("WAYLAND_DISPLAY").as_deref(),
+            notification_server.clone(),
         ),
     );
     // Before any chrome connects, so the handshake carries the desktop.
@@ -6028,23 +6067,16 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
         },
     ));
-    // Notifications, published like the tray, starting empty. See
-    // `notifications`.
-    hub.host.lock().unwrap().set_notifications(Vec::new());
+    // Notifications, published like the tray. Listening publishes the current
+    // list. See `notifications`.
     let publishing = Arc::clone(&hub);
-    let _ = hub.notifications.set(notifications::serve(
-        data_dirs(
-            std::env::var_os("XDG_DATA_HOME"),
-            std::env::var_os("XDG_DATA_DIRS"),
-            home_directory().as_deref(),
-        ),
-        move |items| {
-            let told = publishing.host.lock().unwrap().set_notifications(items);
-            if let Some(message) = told {
-                publishing.broadcast(message);
-            }
-        },
-    ));
+    notification_server.listen(move |items| {
+        let told = publishing.host.lock().unwrap().set_notifications(items);
+        if let Some(message) = told {
+            publishing.broadcast(message);
+        }
+    });
+    let _ = hub.notifications.set(notification_server);
     // Portal dialogs, published like notifications, starting empty. A dialog
     // asked for while no chrome is connected is refused; its `parent_window`
     // resolves through the `xdg_foreign` exports. See `portals`.
@@ -6069,6 +6101,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 .parent_window_app(parent_window)
         },
     );
+    // Portal idle inhibitors, to the Wayland thread's idle clock.
+    let waking = Arc::clone(&hub);
+    hub.portals.hold_idle_through(move |held| {
+        waking.send_request(ClientRequest::HeldAwakeByThePortal { held });
+    });
     // Bind here so a failure ends the run. Nothing can connect yet: the shell
     // waits for the session document, published much later.
     let chrome_listener = bind_chrome_socket(&arguments.chrome_socket)?;

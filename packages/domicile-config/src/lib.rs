@@ -533,7 +533,7 @@ impl std::fmt::Debug for LockVerifier<'_> {
 ///
 /// There is no "follow the system" option: the chrome is the system, so there
 /// is nothing to follow. Clients follow this value through the settings
-/// portal; see `domicile_compositor::appearance`.
+/// portal; see the compositor's `portals::settings`.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum ThemeMode {
@@ -545,8 +545,9 @@ pub enum ThemeMode {
 
 /// How the desktop is themed.
 ///
-/// A section rather than a top-level key, so related keys such as an accent
-/// color or a wallpaper can join `mode`.
+/// Clients read every field but `mode` through the settings portal's
+/// `org.freedesktop.appearance` namespace; see the compositor's
+/// `portals::settings`.
 ///
 /// `PartialEq` lets a reload detect a change; see the compositor's
 /// `Restatement`.
@@ -554,6 +555,39 @@ pub enum ThemeMode {
 #[serde(default, deny_unknown_fields)]
 pub struct ThemeConfig {
     pub mode: ThemeMode,
+    /// The color clients highlight with, or their own when unset.
+    pub accent_color: Option<AccentColor>,
+    pub contrast: Contrast,
+    /// Asks clients to keep animation to a minimum.
+    pub reduced_motion: bool,
+}
+
+/// An sRGB color, written `"#rrggbb"`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(try_from = "String")]
+pub struct AccentColor(pub [u8; 3]);
+
+impl TryFrom<String> for AccentColor {
+    type Error = String;
+
+    fn try_from(written: String) -> Result<Self, String> {
+        let not_a_color = || format!("{written:?} is not a color written \"#rrggbb\"");
+        let digits = written
+            .strip_prefix('#')
+            .filter(|digits| digits.len() == 6 && digits.bytes().all(|b| b.is_ascii_hexdigit()))
+            .ok_or_else(not_a_color)?;
+        let channel = |at: usize| u8::from_str_radix(&digits[at..at + 2], 16).expect("hex digits");
+        Ok(AccentColor([channel(0), channel(2), channel(4)]))
+    }
+}
+
+/// How strongly clients set text and edges apart from their background.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Contrast {
+    #[default]
+    Normal,
+    High,
 }
 
 /// Chrome extensions the engine installs into the browser windows' profile.

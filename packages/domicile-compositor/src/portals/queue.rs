@@ -76,6 +76,18 @@ impl Queue {
         }
     }
 
+    /// List an inhibitor until [`Self::withdraw`], whether or not a chrome
+    /// listens. Returns its id.
+    pub fn hold(&self, app_id: String, parent_window: &str, kind: PortalKind) -> u32 {
+        // An inhibitor takes no answer, so nothing awaits this one.
+        let (replier, _) = reply();
+        let parent = self
+            .listener
+            .get()
+            .and_then(|listener| (listener.parent)(parent_window));
+        self.change(|held| held.hold(app_id, parent, kind, replier))
+    }
+
     /// Queue a request unpublished, or hand the replier back when nobody
     /// listens. [`ask`] publishes it once its `Request` is exported.
     fn submit(

@@ -357,6 +357,29 @@ in {
             example = "light";
           };
 
+          theme.accent_color = lib.mkOption {
+            description = ''
+              The color applications highlight with, as `"#rrggbb"`, through
+              the settings portal. `null`, the default, leaves each
+              application its own.
+            '';
+            type = lib.types.nullOr (lib.types.strMatching "#[0-9a-fA-F]{6}");
+            default = null;
+            example = "#3584e4";
+          };
+
+          theme.contrast = lib.mkOption {
+            description = "Whether applications draw with high contrast, through the settings portal.";
+            type = lib.types.enum ["normal" "high"];
+            default = "normal";
+          };
+
+          theme.reduced_motion = lib.mkOption {
+            description = "Whether applications keep animation to a minimum, through the settings portal.";
+            type = lib.types.bool;
+            default = false;
+          };
+
           input.keyboard = {
             xkb_rules = lib.mkOption {
               description = "Passed to xkb as is. Empty uses the libxkbcommon default.";

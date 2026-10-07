@@ -3,13 +3,15 @@
 //! The compositor's `portals` module takes each backend call off D-Bus,
 //! submits it here with whatever answers the application (`W`), and pushes
 //! [`Portals::items`] to every chrome. The first answer takes the request off
-//! the queue; later ones are refused. See `docs/architecture/PORTALS.md`.
+//! the queue; later ones are refused. Inhibitors ([`Portals::hold`]) are
+//! listed too, take no answer, and stay until withdrawn. See
+//! `docs/architecture/PORTALS.md`.
 
 use domicile_protocol::{PortalAnswer, PortalKind, PortalRequest};
 
 /// A request that was answered or withdrawn already, or never existed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
-#[error("no portal request is waiting under this id")]
+#[error("no portal dialog is waiting under this id")]
 pub struct Unknown;
 
 /// Why an answer was not taken.
@@ -72,20 +74,22 @@ impl<W> Portals<W> {
         waiter: W,
     ) -> Result<u32, W> {
         if self.listening {
-            self.next_id += 1;
-            self.pending.push(Pending {
-                request: PortalRequest {
-                    id: self.next_id,
-                    app_id,
-                    parent_app_id,
-                    kind,
-                },
-                waiter,
-            });
-            Ok(self.next_id)
+            Ok(self.push(app_id, parent_app_id, kind, waiter))
         } else {
             Err(waiter)
         }
+    }
+
+    /// List `kind`, an inhibitor, until it is withdrawn, whether or not a
+    /// chrome listens.
+    pub fn hold(
+        &mut self,
+        app_id: String,
+        parent_app_id: Option<String>,
+        kind: PortalKind,
+        waiter: W,
+    ) -> u32 {
+        self.push(app_id, parent_app_id, kind, waiter)
     }
 
     /// Take the request `id` off the queue to answer it with `answer`,
@@ -121,6 +125,27 @@ impl<W> Portals<W> {
             .position(|pending| pending.request.id == id)
     }
 
+    /// Queue a request under a new id.
+    fn push(
+        &mut self,
+        app_id: String,
+        parent_app_id: Option<String>,
+        kind: PortalKind,
+        waiter: W,
+    ) -> u32 {
+        self.next_id += 1;
+        self.pending.push(Pending {
+            request: PortalRequest {
+                id: self.next_id,
+                app_id,
+                parent_app_id,
+                kind,
+            },
+            waiter,
+        });
+        self.next_id
+    }
+
     /// Every unanswered request, oldest first, for the chromes.
     pub fn items(&self) -> Vec<PortalRequest> {
         self.pending
@@ -133,7 +158,7 @@ impl<W> Portals<W> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use domicile_protocol::{AccessDialog, AppChooserDialog, PortalAnswer};
+    use domicile_protocol::{AccessDialog, AppChooserDialog, Inhibited, Inhibition, PortalAnswer};
 
     fn access() -> PortalKind {
         PortalKind::Access(AccessDialog {
@@ -159,6 +184,13 @@ mod tests {
         PortalAnswer::AppChooser {
             choice: choice.into(),
         }
+    }
+
+    fn logout() -> PortalKind {
+        PortalKind::Inhibit(Inhibition {
+            what: vec![Inhibited::Logout],
+            reason: None,
+        })
     }
 
     fn listening() -> Portals<&'static str> {
@@ -301,5 +333,28 @@ mod tests {
     #[test]
     fn a_request_already_answered_cannot_be_revised() {
         assert_eq!(listening().revise(3, |_| ()), Err(Unknown));
+    }
+
+    #[test]
+    fn an_inhibitor_is_held_while_nobody_listens() {
+        // A shell that connects later still shows who holds off logout.
+        let mut portals = Portals::new();
+
+        assert_eq!(portals.hold("one".into(), None, logout(), "editor"), 1);
+        assert_eq!(portals.items().len(), 1);
+    }
+
+    #[test]
+    fn an_inhibitor_takes_no_answer_and_goes_when_withdrawn() {
+        // A shell that refuses every request must not end an inhibitor.
+        let mut portals = listening();
+        let id = portals.hold("one".into(), None, logout(), "editor");
+
+        assert_eq!(
+            portals.answer(id, &PortalAnswer::Refused),
+            Err(Refusal::Mismatched)
+        );
+        assert_eq!(portals.withdraw(id), Some("editor"));
+        assert_eq!(portals.items(), []);
     }
 }

@@ -3,6 +3,7 @@ import type { PortalHost, PortalRequest } from "./portal";
 import {
   answerPortalRequest,
   FileChooserMode,
+  Inhibited,
   PortalAnswer,
   PortalKind,
   watchPortalRequests,
@@ -172,6 +173,45 @@ describe("watchPortalRequests", () => {
         },
         id: 4,
         kind: PortalKind.FileChooser,
+        parentAppId: undefined,
+      },
+    ]);
+  });
+
+  it("parses an inhibitor's body", async () => {
+    const host = new FakeHost();
+    const requests = watched(host);
+    host.push([
+      {
+        app_id: "org.example.Editor",
+        body: { reason: "Unsaved changes", what: ["logout", "suspend"] },
+        id: 5,
+        kind: "inhibit",
+      },
+      {
+        app_id: "org.example.Burner",
+        body: { what: ["user_switch"] },
+        id: 6,
+        kind: "inhibit",
+      },
+    ]);
+
+    expect(await requests).toEqual([
+      {
+        appId: "org.example.Editor",
+        body: {
+          reason: "Unsaved changes",
+          what: [Inhibited.Logout, Inhibited.Suspend],
+        },
+        id: 5,
+        kind: PortalKind.Inhibit,
+        parentAppId: undefined,
+      },
+      {
+        appId: "org.example.Burner",
+        body: { reason: undefined, what: [Inhibited.UserSwitch] },
+        id: 6,
+        kind: PortalKind.Inhibit,
         parentAppId: undefined,
       },
     ]);

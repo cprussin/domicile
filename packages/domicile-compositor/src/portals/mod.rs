@@ -22,14 +22,21 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
 use std::thread;
 
+use domicile_config::ThemeConfig;
 use domicile_host::data_dirs::data_dirs;
+use domicile_host::portal_notifications::Invoked;
 use domicile_protocol::{PortalAnswer, PortalRequest, Theme};
 use tracing::{debug, warn};
 use zbus::blocking::connection::Builder;
+use zbus::zvariant::OwnedValue;
+
+use crate::notifications::NotificationServer;
 
 mod access;
 mod app_chooser;
 mod file_chooser;
+mod inhibit;
+mod notification;
 mod queue;
 mod reply;
 mod request;
@@ -41,8 +48,10 @@ mod socket_pair;
 use access::Access;
 use app_chooser::AppChooser;
 use file_chooser::FileChooser;
+use inhibit::{Inhibit, Inhibitors};
+use notification::Notification;
 use queue::Queue;
-use settings::{color_scheme, Settings};
+use settings::{color_scheme, Appearance, Settings};
 
 /// The object path the frontend calls backends at.
 const OBJECT_PATH: &str = "/org/freedesktop/portal/desktop";
@@ -60,14 +69,22 @@ const BUS_NAME: &str = "org.freedesktop.impl.portal.desktop.domicile";
 /// for activated services and `client_command` for spawned clients.
 pub const CURRENT_DESKTOP: &str = "domicile";
 
-/// Handle for the portal thread: theme changes in, the shell's answers in.
+/// Handle for the portal thread: the desk's state in, the shell's answers in.
 ///
-/// If the service failed to start, theme changes are dropped and every dialog
-/// is refused, so callers need no separate path for a desk without a portal.
+/// If the service failed to start, changes are dropped and every dialog is
+/// refused, so callers need no separate path for a desk without a portal.
 #[derive(Clone)]
 pub struct Portals {
-    told: Sender<Theme>,
+    told: Sender<Told>,
     queue: Arc<Queue>,
+    inhibitors: Arc<Inhibitors>,
+}
+
+/// A change the portal thread tells clients about.
+enum Told {
+    Theme(Theme),
+    Appearance(Appearance),
+    Screensaver(bool),
 }
 
 impl Portals {
@@ -80,14 +97,26 @@ impl Portals {
         Portals {
             told,
             queue: Arc::default(),
+            inhibitors: Arc::default(),
         }
     }
 
     /// Tells the desk's clients the current theme. Dropped if no service is
     /// running.
     pub fn announce(&self, theme: Theme) {
-        // A closed channel means the service stopped and already logged why.
-        let _ = self.told.send(theme);
+        self.tell(Told::Theme(theme));
+    }
+
+    /// Tells the desk's clients the config's accent color, contrast and
+    /// reduced motion.
+    pub fn restyle(&self, theme: &ThemeConfig) {
+        self.tell(Told::Appearance(Appearance::from(theme)));
+    }
+
+    /// Tells applications watching the session whether the screens are
+    /// blanked or locked.
+    pub fn screensaver(&self, active: bool) {
+        self.tell(Told::Screensaver(active));
     }
 
     /// Publish the pending dialogs through `publish` on every change. See
@@ -101,26 +130,60 @@ impl Portals {
         self.queue.listen(publish, listening, parent);
     }
 
+    /// Call `hold` with whether any application's idle inhibitor is held, on
+    /// each change.
+    pub fn hold_idle_through(&self, hold: impl Fn(bool) + Send + Sync + 'static) {
+        self.inhibitors.hold_idle_through(hold);
+    }
+
     /// The shell's answer to dialog `id`.
     pub fn answer(&self, id: u32, answer: PortalAnswer) {
         self.queue.answer(id, answer);
     }
+
+    fn tell(&self, told: Told) {
+        // A closed channel means the service stopped and already logged why.
+        let _ = self.told.send(told);
+    }
+}
+
+/// What the interfaces share with [`Portals`] and the rest of the desk.
+#[derive(Clone)]
+struct Backends {
+    queue: Arc<Queue>,
+    inhibitors: Arc<Inhibitors>,
+    notifications: NotificationServer,
 }
 
 /// Starts the portal thread with `theme` as the current theme, and sets the
 /// activation environment. See [`activation_environment`] for `ours` and
-/// `nested_in`.
+/// `nested_in`. Portal notifications go to `notifications`.
 ///
 /// Returns without waiting for the bus, so startup never blocks on D-Bus.
-pub fn serve(theme: Theme, ours: &str, nested_in: Option<&OsStr>) -> Portals {
+pub fn serve(
+    theme: Theme,
+    look: &ThemeConfig,
+    ours: &str,
+    nested_in: Option<&OsStr>,
+    notifications: NotificationServer,
+) -> Portals {
     let environment = activation_environment(ours, nested_in);
     let (told, changes) = channel();
-    let queue = Arc::<Queue>::default();
-    let serving = Arc::clone(&queue);
+    let backends = Backends {
+        queue: Arc::default(),
+        inhibitors: Arc::default(),
+        notifications,
+    };
+    let portals = Portals {
+        told,
+        queue: Arc::clone(&backends.queue),
+        inhibitors: Arc::clone(&backends.inhibitors),
+    };
+    let appearance = Appearance::from(look);
     thread::spawn(move || {
         // Every failure has the same effect: clients do not follow the theme,
         // and their dialogs go unanswered.
-        if let Err(why) = answer(theme, &serving, &environment, &changes) {
+        if let Err(why) = answer(theme, appearance, &backends, &environment, &changes) {
             warn!(
                 %why,
                 "the desktop portal is not being answered; this desktop's \
@@ -128,19 +191,20 @@ pub fn serve(theme: Theme, ours: &str, nested_in: Option<&OsStr>) -> Portals {
             );
         }
     });
-    Portals { told, queue }
+    portals
 }
 
 /// Sets the activation environment, serves the interfaces, and signals each
-/// theme change. Returns on failure or when every handle is dropped.
+/// change. Returns on failure or when every handle is dropped.
 ///
 /// Sets the environment before taking the name, so it is set even if another
 /// desk holds the name.
 fn answer(
     theme: Theme,
-    queue: &Arc<Queue>,
+    appearance: Appearance,
+    backends: &Backends,
     environment: &[(&str, String)],
-    changes: &Receiver<Theme>,
+    changes: &Receiver<Told>,
 ) -> Result<(), zbus::Error> {
     let home = std::env::var_os("HOME").map(PathBuf::from);
     let data_dirs = data_dirs(
@@ -149,20 +213,43 @@ fn answer(
         home.as_deref(),
     );
     let home = home.unwrap_or_else(|| "/".into()).display().to_string();
-    let connection = export(Builder::session()?, theme, queue, data_dirs, home)?.build()?;
+    let connection = export(
+        Builder::session()?,
+        theme,
+        appearance,
+        backends,
+        data_dirs,
+        home,
+    )?
+    .build()?;
     say_which_desktop(&connection, environment);
+    let notification = connection
+        .object_server()
+        .interface::<_, Notification>(OBJECT_PATH)?;
+    backends
+        .notifications
+        .on_portal_action(move |invoked: Invoked<OwnedValue>| {
+            notification::invoked(&notification, invoked)
+        });
     connection.request_name(BUS_NAME)?;
     debug!(
         name = BUS_NAME,
         scheme = color_scheme(theme),
         "this desktop answers the desktop portal, so its clients follow its theme"
     );
-    let served = connection
+    let settings = connection
         .object_server()
         .interface::<_, Settings>(OBJECT_PATH)?;
+    let inhibit = connection
+        .object_server()
+        .interface::<_, Inhibit>(OBJECT_PATH)?;
     // Ends when every `Portals` is dropped.
     for next in changes {
-        settings::changed(&served, next)?;
+        match next {
+            Told::Theme(theme) => settings::changed(&settings, Some(theme), None)?,
+            Told::Appearance(appearance) => settings::changed(&settings, None, Some(appearance))?,
+            Told::Screensaver(active) => inhibit::screensaver(&inhibit, active)?,
+        }
     }
     Ok(())
 }
@@ -177,28 +264,43 @@ fn answer(
 fn export<'a>(
     builder: Builder<'a>,
     theme: Theme,
-    queue: &Arc<Queue>,
+    appearance: Appearance,
+    backends: &Backends,
     data_dirs: Vec<PathBuf>,
     home: String,
 ) -> zbus::Result<Builder<'a>> {
     builder
-        .serve_at(OBJECT_PATH, Settings { theme })?
+        .serve_at(OBJECT_PATH, Settings { theme, appearance })?
         .serve_at(
             OBJECT_PATH,
             Access {
-                queue: Arc::clone(queue),
+                queue: Arc::clone(&backends.queue),
             },
         )?
         .serve_at(
             OBJECT_PATH,
             AppChooser {
-                queue: Arc::clone(queue),
+                queue: Arc::clone(&backends.queue),
+            },
+        )?
+        .serve_at(
+            OBJECT_PATH,
+            Notification {
+                notifications: backends.notifications.clone(),
+            },
+        )?
+        .serve_at(
+            OBJECT_PATH,
+            Inhibit {
+                queue: Arc::clone(&backends.queue),
+                inhibitors: Arc::clone(&backends.inhibitors),
+                screensaver_active: false,
             },
         )?
         .serve_at(
             OBJECT_PATH,
             FileChooser {
-                queue: Arc::clone(queue),
+                queue: Arc::clone(&backends.queue),
                 data_dirs,
                 home,
             },
@@ -278,8 +380,11 @@ mod tests {
     use super::*;
     use std::time::Duration;
 
-    use domicile_protocol::{AccessDialog, AppChooserDialog, FileChooserAnswer, PortalKind};
-    use zbus::zvariant::{ObjectPath, OwnedValue, Value};
+    use domicile_protocol::{
+        AccessDialog, AppChooserDialog, FileChooserAnswer, Inhibited, Inhibition,
+        Notification as Shown, PortalKind,
+    };
+    use zbus::zvariant::{ObjectPath, OwnedObjectPath, OwnedValue, Value};
 
     /// The frontend's handle for the dialog these tests open.
     const HANDLE: &str = "/org/freedesktop/portal/desktop/request/1_7/t";
@@ -289,14 +394,18 @@ mod tests {
         client: zbus::blocking::Connection,
         queue: Arc<Queue>,
         published: Receiver<Vec<PortalRequest>>,
-        // Held so the client's peer stays up.
-        _server: zbus::blocking::Connection,
+        backends: Backends,
+        server: zbus::blocking::Connection,
     }
 
     fn served(listening: bool) -> Served {
-        let queue = Arc::<Queue>::default();
+        let backends = Backends {
+            queue: Arc::default(),
+            inhibitors: Arc::default(),
+            notifications: NotificationServer::unserved(Vec::new()),
+        };
         let (publish, published) = channel();
-        queue.listen(
+        backends.queue.listen(
             move |items| {
                 let _ = publish.send(items);
             },
@@ -304,15 +413,36 @@ mod tests {
             |parent_window| (parent_window == "wayland:abc").then(|| "app-3".to_string()),
         );
         let (server, client) = socket_pair::connected(|builder| {
-            export(builder, Theme::Dark, &queue, Vec::new(), "/home/me".into())
-                .expect("the interfaces registered")
+            export(
+                builder,
+                Theme::Dark,
+                Appearance::default(),
+                &backends,
+                Vec::new(),
+                "/home/me".into(),
+            )
+            .expect("the interfaces registered")
         });
         Served {
             client,
-            queue,
+            queue: Arc::clone(&backends.queue),
             published,
-            _server: server,
+            backends,
+            server,
         }
+    }
+
+    /// The next signal named `member` the client hears.
+    #[track_caller]
+    fn heard(client: &zbus::blocking::Connection, member: &str) -> zbus::message::Body {
+        zbus::blocking::MessageIterator::from(client)
+            .map(|message| message.expect("a message"))
+            .find(|message| {
+                message.message_type() == zbus::message::Type::Signal
+                    && message.header().member().is_some_and(|name| name == member)
+            })
+            .expect("the signal")
+            .body()
     }
 
     /// Call `AccessDialog` from another thread, returning its response.
@@ -568,6 +698,255 @@ mod tests {
 
         let (response, results) = choosing.join().expect("the call returned");
         assert_eq!((response, results.len()), (1, 0));
+    }
+
+    /// The notifications the server's history holds after `act`.
+    fn shown_after(served: &Served, act: impl FnOnce()) -> Vec<Shown> {
+        act();
+        let (publish, published) = channel();
+        served.backends.notifications.listen(move |items| {
+            let _ = publish.send(items);
+        });
+        published.recv().expect("the history")
+    }
+
+    #[test]
+    fn a_portal_notification_joins_the_history_and_its_action_goes_back() {
+        let served = served(true);
+        let add = || {
+            let notification = HashMap::from([
+                ("title", Value::from("Update")),
+                ("default-action", Value::from("app.open")),
+                ("default-action-target", Value::from("inbox")),
+            ]);
+            served
+                .client
+                .call_method(
+                    None::<&str>,
+                    OBJECT_PATH,
+                    Some("org.freedesktop.impl.portal.Notification"),
+                    "AddNotification",
+                    &("org.example.App", "update", notification),
+                )
+                .expect("AddNotification answered");
+        };
+
+        let shown = shown_after(&served, add);
+        let iface = served
+            .server
+            .object_server()
+            .interface::<_, Notification>(OBJECT_PATH)
+            .expect("served");
+        notification::invoked(
+            &iface,
+            Invoked {
+                app_id: "org.example.App".into(),
+                id: "update".into(),
+                action: "app.open".into(),
+                target: Some(OwnedValue::try_from(Value::from("inbox")).expect("ownable")),
+            },
+        );
+
+        assert_eq!(
+            shown
+                .iter()
+                .map(|shown| (shown.summary.as_str(), shown.clickable))
+                .collect::<Vec<_>>(),
+            [("Update", true)]
+        );
+        let (app_id, id, action, parameter): (String, String, String, Vec<OwnedValue>) =
+            heard(&served.client, "ActionInvoked")
+                .deserialize()
+                .expect("ActionInvoked's arguments");
+        assert_eq!(
+            (app_id.as_str(), id.as_str(), action.as_str()),
+            ("org.example.App", "update", "app.open")
+        );
+        assert_eq!(
+            parameter
+                .into_iter()
+                .map(String::try_from)
+                .collect::<Vec<_>>(),
+            [Ok("inbox".to_string())]
+        );
+    }
+
+    #[test]
+    fn an_application_removes_its_portal_notification() {
+        let served = served(true);
+        served
+            .client
+            .call_method(
+                None::<&str>,
+                OBJECT_PATH,
+                Some("org.freedesktop.impl.portal.Notification"),
+                "AddNotification",
+                &(
+                    "org.example.App",
+                    "update",
+                    HashMap::from([("title", Value::from("Update"))]),
+                ),
+            )
+            .expect("AddNotification answered");
+
+        let shown = shown_after(&served, || {
+            served
+                .client
+                .call_method(
+                    None::<&str>,
+                    OBJECT_PATH,
+                    Some("org.freedesktop.impl.portal.Notification"),
+                    "RemoveNotification",
+                    &("org.example.App", "update"),
+                )
+                .expect("RemoveNotification answered");
+        });
+
+        assert_eq!(shown, []);
+    }
+
+    /// The handle an application's inhibitor is held under.
+    const INHIBITOR: &str = "/org/freedesktop/portal/desktop/request/1_7/i";
+
+    #[test]
+    fn an_inhibitor_is_listed_and_holds_idle_until_closed() {
+        let served = served(false);
+        let (told, held) = channel();
+        served
+            .backends
+            .inhibitors
+            .hold_idle_through(move |holds| told.send(holds).expect("the test listens"));
+
+        served
+            .client
+            .call_method(
+                None::<&str>,
+                OBJECT_PATH,
+                Some("org.freedesktop.impl.portal.Inhibit"),
+                "Inhibit",
+                &(
+                    ObjectPath::try_from(INHIBITOR).expect("a path"),
+                    "org.example.Editor",
+                    "",
+                    1u32 | 8,
+                    HashMap::from([("reason", Value::from("Unsaved changes"))]),
+                ),
+            )
+            .expect("Inhibit answered");
+        let listed = next(&served.published);
+        served
+            .client
+            .call_method(
+                None::<&str>,
+                INHIBITOR,
+                Some("org.freedesktop.impl.portal.Request"),
+                "Close",
+                &(),
+            )
+            .expect("Close answered");
+
+        assert_eq!(
+            listed,
+            [PortalRequest {
+                id: 1,
+                app_id: "org.example.Editor".into(),
+                parent_app_id: None,
+                kind: PortalKind::Inhibit(Inhibition {
+                    what: vec![Inhibited::Logout],
+                    reason: Some("Unsaved changes".into()),
+                }),
+            }]
+        );
+        assert_eq!(next(&served.published), []);
+        assert_eq!(held.try_iter().collect::<Vec<_>>(), [true, false]);
+    }
+
+    /// Open a monitor at `session`.
+    fn monitor(client: &zbus::blocking::Connection, session: &str) -> u32 {
+        client
+            .call_method(
+                None::<&str>,
+                OBJECT_PATH,
+                Some("org.freedesktop.impl.portal.Inhibit"),
+                "CreateMonitor",
+                &(
+                    ObjectPath::try_from(INHIBITOR).expect("a path"),
+                    ObjectPath::try_from(session).expect("a path"),
+                    "org.example.Player",
+                    "",
+                ),
+            )
+            .expect("CreateMonitor answered")
+            .body()
+            .deserialize()
+            .expect("a response")
+    }
+
+    #[test]
+    fn a_monitor_hears_the_screensaver_until_it_is_closed() {
+        const GONE: &str = "/org/freedesktop/portal/desktop/session/1_7/gone";
+        const STAYING: &str = "/org/freedesktop/portal/desktop/session/1_7/staying";
+        let served = served(true);
+        let inhibit = served
+            .server
+            .object_server()
+            .interface::<_, Inhibit>(OBJECT_PATH)
+            .expect("served");
+        let responses = [
+            monitor(&served.client, GONE),
+            monitor(&served.client, STAYING),
+        ];
+        served
+            .client
+            .call_method(
+                None::<&str>,
+                GONE,
+                Some("org.freedesktop.impl.portal.Session"),
+                "Close",
+                &(),
+            )
+            .expect("Close answered");
+
+        inhibit::screensaver(&inhibit, true).expect("said");
+
+        assert_eq!(responses, [0, 0]);
+        // The closed monitor would have been told first.
+        let (session, state): (OwnedObjectPath, HashMap<String, OwnedValue>) =
+            heard(&served.client, "StateChanged")
+                .deserialize()
+                .expect("StateChanged's arguments");
+        assert_eq!(session.as_str(), STAYING);
+        assert_eq!(bool::try_from(&state["screensaver-active"]), Ok(true));
+        assert_eq!(u32::try_from(&state["session-state"]), Ok(1));
+    }
+
+    #[test]
+    fn a_new_look_is_signaled_to_clients() {
+        let served = served(true);
+        let settings = served
+            .server
+            .object_server()
+            .interface::<_, Settings>(OBJECT_PATH)
+            .expect("served");
+
+        settings::changed(
+            &settings,
+            None,
+            Some(Appearance {
+                reduced_motion: true,
+                ..Appearance::default()
+            }),
+        )
+        .expect("said");
+
+        let (namespace, key, value): (String, String, OwnedValue) =
+            heard(&served.client, "SettingChanged")
+                .deserialize()
+                .expect("SettingChanged's arguments");
+        assert_eq!(
+            (namespace.as_str(), key.as_str(), u32::try_from(value)),
+            ("org.freedesktop.appearance", "reduced-motion", Ok(1))
+        );
     }
 
     #[test]

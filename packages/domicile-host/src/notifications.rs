@@ -36,7 +36,7 @@ const LARGEST_SIDE: i32 = 128;
 
 /// The biggest picture file read. Every change sends every picture to every
 /// page.
-const LARGEST_FILE: u64 = 256 * 1024;
+pub const LARGEST_FILE: u64 = 256 * 1024;
 
 /// A `Notify` call, as the compositor heard it.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -53,6 +53,17 @@ pub struct Notify {
     pub hints: Hints,
     /// Milliseconds: `-1` for the server's choice, `0` for never.
     pub expire_timeout: i32,
+    /// A portal notification's icon. `Notify` has none.
+    pub icon: Option<Icon>,
+}
+
+/// An icon as the notification portal sends it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Icon {
+    /// Names to look up in the icon theme, best first.
+    Themed(Vec<String>),
+    /// An image file's contents.
+    Bytes(Vec<u8>),
 }
 
 /// The hints a shell uses. The compositor drops the rest.
@@ -233,7 +244,7 @@ impl Notifications {
     }
 
     /// The first usable picture, in the spec's order: `image-data`,
-    /// `image-path`, then the application's icon.
+    /// `image-path`, the portal's icon, then the application's icon.
     fn picture(&mut self, notify: &Notify) -> Option<String> {
         notify
             .hints
@@ -246,6 +257,16 @@ impl Notifications {
                     .image_path
                     .as_deref()
                     .and_then(|named| self.named(named))
+            })
+            .or_else(|| match &notify.icon {
+                Some(Icon::Themed(names)) => {
+                    names.iter().find_map(|name| self.icons.icon(name, ""))
+                }
+                Some(Icon::Bytes(bytes)) => (bytes.len() as u64 <= LARGEST_FILE)
+                    .then(|| sniffed(bytes))
+                    .flatten()
+                    .map(|mime| data_url(mime, bytes)),
+                None => None,
             })
             .or_else(|| self.named(&notify.app_icon))
     }
@@ -762,6 +783,67 @@ mod tests {
                 &mut notifications,
                 Notify {
                     app_icon: "thunderbird".into(),
+                    ..notify("")
+                },
+            );
+
+            assert_eq!(icon, Some(data_url("image/svg+xml", b"<svg/>")));
+        }
+
+        #[test]
+        fn an_icons_bytes_are_read_by_what_is_in_them() {
+            let dir = data_dir(&[("icons/hicolor/scalable/apps/thunderbird.svg", b"<svg/>")]);
+            let mut notifications = held(vec![dir.path().to_path_buf()]);
+
+            let drawn = icon_of(
+                &mut notifications,
+                Notify {
+                    icon: Some(Icon::Bytes(PNG_BYTES.to_vec())),
+                    ..notify("")
+                },
+            );
+            let no_picture = icon_of(
+                &mut notifications,
+                Notify {
+                    app_icon: "thunderbird".into(),
+                    icon: Some(Icon::Bytes(b"plain words".to_vec())),
+                    ..notify("")
+                },
+            );
+
+            assert_eq!(drawn, Some(data_url("image/png", PNG_BYTES)));
+            assert_eq!(no_picture, Some(data_url("image/svg+xml", b"<svg/>")));
+        }
+
+        #[test]
+        fn icon_bytes_bigger_than_a_file_may_be_are_passed_over() {
+            let mut notifications = held(Vec::new());
+            let mut big = PNG_BYTES.to_vec();
+            big.resize(LARGEST_FILE as usize + 1, 0);
+
+            let icon = icon_of(
+                &mut notifications,
+                Notify {
+                    icon: Some(Icon::Bytes(big)),
+                    ..notify("")
+                },
+            );
+
+            assert_eq!(icon, None);
+        }
+
+        #[test]
+        fn the_first_themed_name_the_theme_has_is_drawn() {
+            let dir = data_dir(&[("icons/hicolor/scalable/apps/thunderbird.svg", b"<svg/>")]);
+            let mut notifications = held(vec![dir.path().to_path_buf()]);
+
+            let icon = icon_of(
+                &mut notifications,
+                Notify {
+                    icon: Some(Icon::Themed(vec![
+                        "mail-unread".into(),
+                        "thunderbird".into(),
+                    ])),
                     ..notify("")
                 },
             );

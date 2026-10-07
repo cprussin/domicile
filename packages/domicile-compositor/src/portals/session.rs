@@ -14,9 +14,6 @@ pub struct Session {
 
 /// Export a session at `handle`. `closed` runs once, when the application
 /// closes it.
-// The interfaces that open sessions (ScreenCast, RemoteDesktop,
-// InputCapture) are later phases of docs/architecture/PORTALS.md.
-#[allow(dead_code)]
 pub async fn open(
     server: &ObjectServer,
     handle: &OwnedObjectPath,
@@ -60,7 +57,7 @@ mod tests {
 
     use domicile_protocol::Theme;
 
-    use crate::portals::settings::Settings;
+    use crate::portals::settings::{Appearance, Settings};
     use crate::portals::socket_pair::connected;
 
     const HANDLE: &str = "/org/freedesktop/portal/desktop/session/1_7/s";
@@ -70,7 +67,13 @@ mod tests {
         // Any object starts the object server before the connection does.
         let (server, client) = connected(|builder| {
             builder
-                .serve_at("/", Settings { theme: Theme::Dark })
+                .serve_at(
+                    "/",
+                    Settings {
+                        theme: Theme::Dark,
+                        appearance: Appearance::default(),
+                    },
+                )
                 .expect("served")
         });
         let (ended, heard) = channel();

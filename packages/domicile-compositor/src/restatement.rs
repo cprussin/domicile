@@ -16,6 +16,7 @@
 //! | `output.profiles` | re-matched against the connected monitors, same path |
 //! | `idle.blank_after_seconds` | idle clock restarted and timer re-armed (`reset_the_idle_clock`) |
 //! | `theme.mode` | sent to every chrome and the desk's clients (`take_up_the_theme`) |
+//! | `theme.accent_color`, `contrast`, `reduced_motion` | sent to the desk's clients (`Portals::restyle`) |
 //! | `files.omit` | sent to the index, which rewalks the home (`omit_from_the_index`) |
 //! | `extensions.*` | sent to every chrome, whose browser installs them (`hand_over_the_extensions`) |
 //! | `keybindings` | resolved on the keyboard and sent to every chrome (`rebind_the_keys`) |
@@ -38,7 +39,9 @@
 //! says why a reload cannot apply it. Copy the tests below: a changed field is
 //! restated and an unchanged one is not.
 
-use domicile_config::{Config, ExtensionsConfig, IdleConfig, KeyboardConfig, Omit, ThemeMode};
+use domicile_config::{
+    Config, ExtensionsConfig, IdleConfig, KeyboardConfig, Omit, ThemeConfig, ThemeMode,
+};
 
 /// What a reloaded config asks the compositor to restate.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -58,6 +61,9 @@ pub struct Restatement {
     /// Just the mode, unlike `idle`: an absent `theme` means dark, so it needs
     /// no separate value.
     pub theme: Option<ThemeMode>,
+    /// The theme, or `None` if nothing but the mode changed. Clients read
+    /// the rest through the settings portal.
+    pub appearance: Option<ThemeConfig>,
     /// What the file index leaves out, or `None` if unchanged.
     pub omit: Option<Omit>,
     /// The extensions the browser process installs, or `None` if unchanged.
@@ -76,7 +82,12 @@ impl Restatement {
             max_scale: (was.output.max_scale != now.output.max_scale)
                 .then_some(now.output.max_scale),
             idle: (was.idle != now.idle).then(|| now.idle.clone()),
-            theme: (was.theme != now.theme).then_some(now.theme.mode),
+            theme: (was.theme.mode != now.theme.mode).then_some(now.theme.mode),
+            appearance: (ThemeConfig {
+                mode: now.theme.mode,
+                ..was.theme
+            } != now.theme)
+                .then_some(now.theme),
             omit: (was.files.omit != now.files.omit).then(|| now.files.omit.clone()),
             extensions: (was.extensions != now.extensions).then(|| now.extensions.clone()),
             shell_config: was.input.keyboard != now.input.keyboard,
@@ -146,6 +157,22 @@ mod tests {
 
         assert_eq!(
             Restatement::between(&was, &parsed(A_DESK_DRAWN_LIGHT)).theme,
+            None
+        );
+    }
+
+    #[test]
+    fn a_look_that_moved_is_restated_without_the_mode() {
+        // Repainting every page for an accent change would flash the desk.
+        let was = parsed(A_DVORAK_DESK);
+        let now = parsed(A_DVORAK_DESK_WITH_AN_ACCENT);
+
+        let restated = Restatement::between(&was, &now);
+
+        assert_eq!(restated.theme, None);
+        assert_eq!(restated.appearance, Some(now.theme));
+        assert_eq!(
+            Restatement::between(&was, &parsed(A_DESK_DRAWN_LIGHT)).appearance,
             None
         );
     }
@@ -278,6 +305,17 @@ mod tests {
   "output": { "displays": [{ "name": "one", "size": [1024, 768] }] }
 }
 "#;
+
+    /// The same desk with an accent color, high contrast and less motion.
+    const A_DVORAK_DESK_WITH_AN_ACCENT: &str = r##"
+{
+  "input": {
+    "keyboard": { "xkb_variant": "dvp", "xkb_options": ["caps:swapescape"] }
+  },
+  "theme": { "accent_color": "#3584e4", "contrast": "high", "reduced_motion": true },
+  "output": { "displays": [{ "name": "one", "size": [1024, 768] }] }
+}
+"##;
 
     const A_DVORAK_DESK_WITH_A_SECOND_DISPLAY: &str = r#"
 {

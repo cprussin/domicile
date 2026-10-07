@@ -498,6 +498,23 @@ describe(PortalDialogs, () => {
       expect(host.answers).toEqual([[1, { kind: "canceled" }]]);
     });
 
+    it("leaves an inhibitor alone and asks what comes after it", () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host} systemOf={desktop()} />);
+      host.push([
+        {
+          app_id: "org.example.Editor",
+          body: { what: ["logout"] },
+          id: 5,
+          kind: "inhibit",
+        },
+        access(6),
+      ]);
+
+      expect(host.answers).toEqual([]);
+      expect(screen.getByRole("dialog")).toHaveTextContent("Use the camera?");
+    });
+
     it("refuses a kind it has no dialog for", () => {
       const host = new FakeHost();
       render(<PortalDialogs host={host} />);
