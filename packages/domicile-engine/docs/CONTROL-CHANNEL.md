@@ -20,8 +20,8 @@ The engine has two channels to the rest of Domicile:
 ### Members
 
 - **Outbound:** `spawn`, `search_files`, `preview_file`, `call_system`,
-  `copy_clipboard_entry`, `activate_tray_item`, `dismiss_notifications`,
-  `invoke_notification_action`, `focus_app`, `focus_chrome`, `close_app`,
+  `answer_portal_request`, `copy_clipboard_entry`, `activate_tray_item`,
+  `dismiss_notifications`, `invoke_notification_action`, `focus_app`, `focus_chrome`, `close_app`,
   `resize_app`, `set_app_bounds`, `set_desktop_size`,
   `set_device_pixel_ratio`, `set_theme`, `theme_captured`, `unlock`, `lock`,
   `key`, `pointer_motion`, `pointer_leave`, `pointer_button`, `pointer_axis`.
@@ -31,7 +31,7 @@ The engine has two channels to the rest of Domicile:
   `shortcut`, `modifiers`, `found_files`, `file_preview`, `clipboard`,
   `theme`, `focus_changed`, `focus_requested`, `displays`, `keymap`,
   `extensions`, `tray`, `notifications`, `shell_config`, `idle`, `locked`,
-  `system`.
+  `system`, `portal_requests`.
 - **Handled in the browser, never sent to the compositor:** `grab_shortcut`,
   `warp_pointer`.
 - **Not from the compositor:** `browserwindowschanged`, the desk's browser
@@ -52,6 +52,15 @@ The engine has two channels to the rest of Domicile:
   `MessageEvent`. It reads nothing else of them; the compositor checks each
   call. See `components/domicile/browser/system_call.h` and
   [SHELL-SYSTEM-ACCESS.md](/docs/SHELL-SYSTEM-ACCESS.md).
+- **`portal_requests`** and **`answer_portal_request`** carry portal dialogs.
+  See [PORTALS.md](/docs/architecture/PORTALS.md).
+  - The browser relays `portal_requests` whole, as a `portalrequests`
+    `MessageEvent`, and reads nothing but `type`.
+  - The renderer keeps the latest line and sends it again to a listener added
+    later, so a shell that listens late sees pending dialogs.
+  - The browser wraps the page's answer, which must be a JSON object with a
+    string `kind`, as an `answer_portal_request` line. See
+    `components/domicile/browser/portal_request.h`.
 - **`resize_app`** is implemented but unused. An `<app>`'s layout box already
   sets the client's size through `LayoutAppSurface` and
   `ExternalSurfaceProvider::Embed`. Removing it from the IDL needs an engine

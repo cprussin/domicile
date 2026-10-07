@@ -37,7 +37,8 @@
   X(themechanged, Themechanged)                   \
   X(windowsthemechanged, Windowsthemechanged)     \
   X(modifierschanged, Modifierschanged)         \
-  X(system, System)
+  X(system, System)                               \
+  X(portalrequests, Portalrequests)
 
 namespace blink::domicile_event_names {
 

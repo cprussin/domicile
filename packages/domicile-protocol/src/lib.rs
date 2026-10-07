@@ -238,6 +238,12 @@ pub enum ChromeMessage {
     /// drives it by sending further requests under the same id. See
     /// `docs/SHELL-SYSTEM-ACCESS.md`.
     SystemRequest { id: u32, request: SystemRequest },
+
+    /// The shell's answer to a [`PortalRequest`].
+    ///
+    /// The first answer wins; the compositor logs and drops an answer for a
+    /// request that is gone. See `domicile_host::portals`.
+    AnswerPortalRequest { id: u32, answer: PortalAnswer },
 }
 
 /// Messages sent from the host to the chrome (in-page client).
@@ -491,6 +497,80 @@ pub enum HostMessage {
 
     /// A watch or process is over. The last message under its `id`.
     SystemEnd { id: u32, end: SystemEnd },
+
+    /// Every portal dialog not yet answered, oldest first.
+    ///
+    /// The compositor is the `xdg-desktop-portal` backend; see
+    /// `docs/architecture/PORTALS.md`. Pushed as the full list on any change
+    /// and on connect, so a reloaded page still sees a pending dialog. The
+    /// shell answers with [`ChromeMessage::AnswerPortalRequest`].
+    PortalRequests { items: Vec<PortalRequest> },
+}
+
+/// A dialog an application asked for through a portal.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PortalRequest {
+    /// The id [`ChromeMessage::AnswerPortalRequest`] uses. Never reused.
+    pub id: u32,
+    /// The asking application's desktop file id, as the portal frontend
+    /// names it. Empty for an application it could not identify.
+    pub app_id: String,
+    /// The `<app>` the dialog is modal over, or absent to put it over the
+    /// focused screen.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_app_id: Option<String>,
+    /// What the dialog asks.
+    #[serde(flatten)]
+    pub kind: PortalKind,
+}
+
+/// What a [`PortalRequest`] asks, as `kind` and `body` on the wire.
+///
+/// The engine relays `body` without reading it; the SDK parses it per kind.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", content = "body", rename_all = "snake_case")]
+pub enum PortalKind {
+    /// `org.freedesktop.impl.portal.Access`: allow or deny.
+    Access(AccessDialog),
+}
+
+/// An `AccessDialog`'s texts.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AccessDialog {
+    pub title: String,
+    pub subtitle: String,
+    /// May be empty.
+    pub body: String,
+    /// The allow button's label; the shell's own when absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub grant_label: Option<String>,
+    /// The deny button's label; the shell's own when absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deny_label: Option<String>,
+}
+
+/// The shell's answer to a [`PortalRequest`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum PortalAnswer {
+    /// The user allowed a [`PortalKind::Access`].
+    Access,
+    /// The user dismissed the dialog, or denied it.
+    Canceled,
+    /// The shell has no dialog for this kind.
+    Refused,
+}
+
+impl PortalAnswer {
+    /// The portal's `response`: 0 for success, 1 for canceled by the user,
+    /// 2 for any other end.
+    pub fn response(&self) -> u32 {
+        match self {
+            PortalAnswer::Access => 0,
+            PortalAnswer::Canceled => 1,
+            PortalAnswer::Refused => 2,
+        }
+    }
 }
 
 /// What a [`ChromeMessage::SystemRequest`] asks for.

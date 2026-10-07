@@ -451,6 +451,15 @@ void DomicileHost::callSystem(ScriptState*,
   }
 }
 
+void DomicileHost::answerPortalRequest(ScriptState*,
+                                       uint32_t id,
+                                       const String& answer,
+                                       ExceptionState& exception_state) {
+  if (Ready(exception_state)) {
+    channel_->AnswerPortalRequest(id, answer);
+  }
+}
+
 // The whole of what a page may do about the lock, and it is an offer rather
 // than a decision: what opens the desk is the compositor agreeing, and what
 // this page hears about it is `lockedchanged` like every other chrome on the
@@ -1447,6 +1456,22 @@ void DomicileHost::System(const String& message) {
   DispatchEvent(*event);
 }
 
+void DomicileHost::PortalRequests(const String& message) {
+  portal_requests_ = message;
+  DispatchPortalRequests();
+}
+
+// A MessageEvent, as System() builds one.
+void DomicileHost::DispatchPortalRequests() {
+  MessageEvent* event = MessageEvent::Create();
+  event->initMessageEvent(domicile_event_names::Portalrequests(),
+                          /*bubbles=*/false, /*cancelable=*/false,
+                          portal_requests_, /*origin=*/nullptr,
+                          /*last_event_id=*/String(), /*source=*/nullptr,
+                          /*ports=*/nullptr);
+  DispatchEvent(*event);
+}
+
 void DomicileHost::AppTitled(const String& app_id, const String& title) {
   WindowNamed(app_id).title = title;
   WindowsChanged();
@@ -1473,6 +1498,15 @@ void DomicileHost::AddedEventListener(
       }
       break;
     }
+  }
+  // The latest requests again, on a task for the reason above. Every listener
+  // hears it; requests are state, so hearing them twice changes nothing.
+  if (event_type == domicile_event_names::Portalrequests() &&
+      !portal_requests_.IsNull() && window_) {
+    window_->GetTaskRunner(TaskType::kInternalDefault)
+        ->PostTask(FROM_HERE,
+                   BindOnce(&DomicileHost::DispatchPortalRequests,
+                            WrapWeakPersistent(this)));
   }
   // Binding is what opens the inbound direction, so a listener registered
   // before anything has been called has to be what opens it. Ignoring the

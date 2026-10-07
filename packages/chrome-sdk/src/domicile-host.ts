@@ -307,6 +307,12 @@ export type DomicileHostEventMap = {
    */
   system: MessageEvent<string>;
   /**
+   * Every unanswered portal request: `data` is the compositor's
+   * `portal_requests` line. Fired on every change. A listener added later is
+   * sent the latest line. See `docs/architecture/PORTALS.md`.
+   */
+  portalrequests: MessageEvent<string>;
+  /**
    * A screen was added, removed, resized or rescaled. Read
    * {@link DomicileHost.displays} for the new state.
    */
@@ -395,6 +401,13 @@ export type DomicileHost = {
    * `docs/SHELL-SYSTEM-ACCESS.md`.
    */
   callSystem(id: number, request: string): void;
+
+  /**
+   * Answer portal request `id` from a `portalrequests` event. `answer` is JSON
+   * with a string `kind`, such as `{"kind":"access"}`; the engine drops any
+   * other. The compositor checks the rest.
+   */
+  answerPortalRequest(id: number, answer: string): void;
 
   /**
    * Put a clipboard history entry back on the clipboard.

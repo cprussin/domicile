@@ -3,7 +3,13 @@ import { APP_TAG_NAME } from "@domicile-desktop/sdk/app-element";
 import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import { KeyAction } from "@domicile-desktop/sdk/key-action";
 import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
-import { act, cleanup, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 
 import { Shell } from "./Shell";
 
@@ -280,6 +286,35 @@ describe("Shell", () => {
       const host = shell();
       host.appear("term", { height: 480, width: 640 });
       expect(screen.getByText("Alt + drag")).toBeInTheDocument();
+    });
+  });
+
+  describe("an application's dialog", () => {
+    it("is asked, and answered", () => {
+      const host = shell();
+      act(() => {
+        host.fake.dispatch("portalrequests", {
+          data: JSON.stringify({
+            items: [
+              {
+                app_id: "org.example.App",
+                body: { body: "", subtitle: "", title: "Use the camera?" },
+                id: 1,
+                kind: "access",
+              },
+            ],
+            type: "portal_requests",
+          }),
+        });
+      });
+
+      fireEvent.click(screen.getByRole("button", { name: "Allow" }));
+
+      expect(host.fake.calls).toContainEqual([
+        "answerPortalRequest",
+        1,
+        '{"kind":"access"}',
+      ]);
     });
   });
 });

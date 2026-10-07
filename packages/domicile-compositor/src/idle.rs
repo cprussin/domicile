@@ -239,6 +239,7 @@ pub fn somebody_is_here(request: &ClientRequest) -> bool {
         | ClientRequest::ActivateTrayItem { .. }
         | ClientRequest::DismissNotifications { .. }
         | ClientRequest::InvokeNotificationAction { .. }
+        | ClientRequest::AnswerPortalRequest { .. }
         // The lock chord landed on the shell, and locking must not light the
         // screens.
         | ClientRequest::Lock => false,
@@ -298,7 +299,7 @@ mod tests {
     use std::rc::Rc;
     use std::time::{Duration, Instant};
 
-    use domicile_protocol::{HostMessage, TrayAction};
+    use domicile_protocol::{HostMessage, PortalAnswer, TrayAction};
 
     use super::{announced, darkened, somebody_is_here, Blanking, Idle, StillThere};
     use crate::engine::{Clipboard, Connector, Display};
@@ -828,6 +829,13 @@ mod tests {
                 ClientRequest::InvokeNotificationAction {
                     id: 7,
                     action: "default".into(),
+                },
+            ),
+            (
+                "the shell answering a dialog",
+                ClientRequest::AnswerPortalRequest {
+                    id: 1,
+                    answer: PortalAnswer::Canceled,
                 },
             ),
             ("the shell locking the desk", ClientRequest::Lock),

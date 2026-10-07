@@ -108,7 +108,6 @@ use smithay::{
 };
 use tracing::{debug, error, info, warn};
 
-mod appearance;
 mod casting;
 mod clipboard;
 mod coalesce;
@@ -132,6 +131,7 @@ mod outbound;
 mod pam;
 mod peer_process;
 mod pnp_ids;
+mod portals;
 mod restatement;
 mod scale;
 mod screens;
@@ -154,7 +154,6 @@ use crate::latency::{Latency, Step as LatencyStep};
 use crate::shm_upload::{render_modifiers, shm_shape, CopyError};
 use crate::uploads::{UploadId, Uploads};
 
-use crate::appearance::{Appearance, CURRENT_DESKTOP};
 use crate::coalesce::last_of_burst;
 use crate::dmabuf_descriptor::descriptor_from;
 use crate::dmabuf_import::{headless_renderer, DmabufImporter};
@@ -165,6 +164,7 @@ use crate::lock::{Asked, Lock, Offer, Refusal, Seen, Unlocking, Verdict};
 use crate::modifiers::{Held, Modifiers};
 use crate::outbound::{outbound, Outbound, OutboundReceiver, OutboundSender};
 use crate::peer_process::peer_pid;
+use crate::portals::{Portals, CURRENT_DESKTOP};
 use crate::restatement::Restatement;
 use crate::scale::{logical_size, output_scale};
 use crate::screens::{Advertised, Screens, Slot};
@@ -185,7 +185,8 @@ use domicile_launch::arguments::arguments;
 use domicile_launch::handshake::{silence, Handshake, WAIT_FOR_A_PAGE};
 use domicile_launch::session::{publish, Session};
 use domicile_protocol::{
-    ChromeMessage, CursorShape, HostMessage, Passphrase, SystemRequest, Theme, TrayAction,
+    ChromeMessage, CursorShape, HostMessage, Passphrase, PortalAnswer, SystemRequest, Theme,
+    TrayAction,
 };
 use smithay::backend::renderer::gles::GlesRenderer;
 use smithay::backend::renderer::ImportMemWl as _;
@@ -367,6 +368,12 @@ enum ClientRequest {
         id: u32,
         action: String,
     },
+    /// The shell answered a portal dialog. Routed here so a locked desktop can
+    /// refuse it.
+    AnswerPortalRequest {
+        id: u32,
+        answer: PortalAnswer,
+    },
     /// A passphrase typed at the lock screen.
     ///
     /// Handled here because locking blocks input to the seat, and the seat
@@ -424,12 +431,13 @@ struct ChromeHub {
     /// The lock state, for [`answer_on_the_connection`]. Set once at startup,
     /// only if the desktop can lock.
     lock: OnceLock<Seen>,
-    /// Tells clients the theme.
+    /// The desktop portal: tells clients the theme, and takes the shell's
+    /// answers to their dialogs.
     ///
-    /// Driven by the Wayland thread's theme turnover, not the broadcast:
-    /// clients switch only after every chrome has captured its starting frame.
-    /// See [`crate::appearance`].
-    appearance: Appearance,
+    /// The theme is driven by the Wayland thread's theme turnover, not the
+    /// broadcast: clients switch only after every chrome has captured its
+    /// starting frame. See [`crate::portals`].
+    portals: Portals,
     /// The tray worker that activates items.
     ///
     /// Set once after the hub exists, because the tray publishes through the
@@ -448,7 +456,7 @@ impl ChromeHub {
         request_tx: Sender<ClientRequest>,
         max_scale: u32,
         wayland_display: OsString,
-        appearance: Appearance,
+        portals: Portals,
     ) -> (Arc<Self>, OutboundReceiver) {
         let (outbound, outbound_rx) = outbound();
         let hub = Arc::new(ChromeHub {
@@ -462,7 +470,7 @@ impl ChromeHub {
             offered: Mutex::new(None),
             home: OnceLock::new(),
             lock: OnceLock::new(),
-            appearance,
+            portals,
             tray: OnceLock::new(),
             notifications: OnceLock::new(),
             eis: OnceLock::new(),
@@ -979,6 +987,12 @@ fn read_chrome_messages(
             }
             Ok(ChromeMessage::InvokeNotificationAction { id, action }) => {
                 hub.send_request(ClientRequest::InvokeNotificationAction { id, action });
+                Vec::new()
+            }
+            // Sent to the Wayland thread so a locked desktop can refuse it:
+            // an answer grants an application what it asked for.
+            Ok(ChromeMessage::AnswerPortalRequest { id, answer }) => {
+                hub.send_request(ClientRequest::AnswerPortalRequest { id, answer });
                 Vec::new()
             }
             Ok(ChromeMessage::SearchFiles { query }) => {
@@ -3613,7 +3627,7 @@ impl DomicileCompositor {
         match (step, &mut self.turnover) {
             (Step::Wait, _) | (_, None) => {}
             (Step::Announce, Some(turnover)) => {
-                self.hub.appearance.announce(turnover.theme());
+                self.hub.portals.announce(turnover.theme());
                 let windows = self.toplevels.iter().map(|(app_id, _)| app_id.clone());
                 let step = turnover.announced(windows.collect::<Vec<_>>());
                 self.arm_the_turnover_deadline(REPAINT_WITHIN, Turnover::repaint_deadline);
@@ -4104,6 +4118,9 @@ impl DomicileCompositor {
                 if let Some(server) = self.hub.notifications.get() {
                     server.invoke(id, action);
                 }
+            }
+            ClientRequest::AnswerPortalRequest { id, answer } => {
+                self.hub.portals.answer(id, answer);
             }
             ClientRequest::CopyClipboardEntry { entry } => match self.clipboard.text(entry) {
                 Some(text) => {
@@ -5580,7 +5597,7 @@ fn desktop_environment(wayland_display: &OsStr, library_path: Option<&OsStr>) ->
         ("WAYLAND_DISPLAY", Some(wayland_display.to_os_string())),
         // For `OnlyShowIn` in `.desktop` files and for toolkits. Portal routing
         // uses the frontend's environment instead; see
-        // `appearance::say_which_desktop`.
+        // `portals::say_which_desktop`.
         ("XDG_CURRENT_DESKTOP", Some(CURRENT_DESKTOP.into())),
         ("DISPLAY", None),
         ("LD_LIBRARY_PATH", library_path.and_then(without_the_engine)),
@@ -5970,7 +5987,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         // Start before any client is spawned: an app asking for a color scheme
         // before the bus name is taken would get another backend's answer and
         // never ask again.
-        appearance::serve(
+        portals::serve(
             theme_on_the_wire(config.theme.mode),
             &socket_name.to_string_lossy(),
             std::env::var_os("WAYLAND_DISPLAY").as_deref(),
@@ -6028,6 +6045,30 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
         },
     ));
+    // Portal dialogs, published like notifications, starting empty. A dialog
+    // asked for while no chrome is connected is refused; its `parent_window`
+    // resolves through the `xdg_foreign` exports. See `portals`.
+    hub.host.lock().unwrap().set_portal_requests(Vec::new());
+    let publishing = Arc::clone(&hub);
+    let asking = Arc::clone(&hub);
+    let resolving = Arc::clone(&hub);
+    hub.portals.listen(
+        move |items| {
+            let told = publishing.host.lock().unwrap().set_portal_requests(items);
+            if let Some(message) = told {
+                publishing.broadcast(message);
+            }
+        },
+        move || !asking.chromes.lock().unwrap().is_empty(),
+        move |parent_window| {
+            resolving
+                .host
+                .lock()
+                .unwrap()
+                .exports()
+                .parent_window_app(parent_window)
+        },
+    );
     // Bind here so a failure ends the run. Nothing can connect yet: the shell
     // waits for the session document, published much later.
     let chrome_listener = bind_chrome_socket(&arguments.chrome_socket)?;
@@ -6672,9 +6713,9 @@ mod tests {
         announce_open_apps, answer_on_the_connection, answers_keystroke, at, broadcast_closed,
         broadcast_focus_decision, broadcast_focus_request, channel, chrome_connection,
         client_command, clipboard_of, cursor_shape, freshened, parse_find_colors, to_line,
-        write_responses, Appearance, Chrome, ChromeHub, ClientRequest, Clipboard, Committer,
-        ConnectionRequest, Handshake, Lock, Offer, Offered, Outbound, Passphrase, SelectionTarget,
-        Unlocking, BOTH,
+        write_responses, Chrome, ChromeHub, ClientRequest, Clipboard, Committer, ConnectionRequest,
+        Handshake, Lock, Offer, Offered, Outbound, Passphrase, Portals, SelectionTarget, Unlocking,
+        BOTH,
     };
 
     use std::sync::Arc;
@@ -6692,7 +6733,7 @@ mod tests {
             request_tx,
             1,
             OsString::from("wayland-1"),
-            Appearance::to_nobody(),
+            Portals::to_nobody(),
         );
         let (page, compositor) = UnixStream::pair().expect("a socket pair");
         let writer = Arc::new(Mutex::new(
@@ -6727,7 +6768,7 @@ mod tests {
             request_tx,
             1,
             OsString::from("wayland-1"),
-            Appearance::to_nobody(),
+            Portals::to_nobody(),
         );
         let (page, compositor) = UnixStream::pair().expect("a socket pair");
         let writer = Arc::new(Mutex::new(
@@ -6760,7 +6801,7 @@ mod tests {
             request_tx,
             1,
             OsString::from("wayland-1"),
-            Appearance::to_nobody(),
+            Portals::to_nobody(),
         );
         *hub.offered.lock().unwrap() = Some(Arc::new(Offered {
             search: domicile_host::file_search::FileSearch::new(vec!["plan.org".into()]),
@@ -6810,7 +6851,7 @@ mod tests {
             request_tx,
             1,
             OsString::from("wayland-1"),
-            Appearance::to_nobody(),
+            Portals::to_nobody(),
         );
         let (_page, compositor) = UnixStream::pair().expect("a socket pair");
         let writer = Arc::new(Mutex::new(
@@ -6855,7 +6896,7 @@ mod tests {
             request_tx,
             1,
             OsString::from("wayland-1"),
-            Appearance::to_nobody(),
+            Portals::to_nobody(),
         );
         let (page, compositor) = UnixStream::pair().expect("a socket pair");
         let writer = Arc::new(Mutex::new(
@@ -6913,7 +6954,7 @@ mod tests {
             request_tx,
             1,
             OsString::from("wayland-1"),
-            Appearance::to_nobody(),
+            Portals::to_nobody(),
         );
         let described = vec![window_following("domicile-0", [1280, 800], 2)];
         hub.host
@@ -6943,7 +6984,7 @@ mod tests {
             request_tx,
             1,
             OsString::from("wayland-1"),
-            Appearance::to_nobody(),
+            Portals::to_nobody(),
         );
         let welcome = HostMessage::Welcome {
             protocol_version: domicile_protocol::PROTOCOL_VERSION,
@@ -6978,7 +7019,7 @@ mod tests {
             request_tx,
             1,
             OsString::from("wayland-1"),
-            Appearance::to_nobody(),
+            Portals::to_nobody(),
         );
 
         hub.take_up_the_theme(Theme::Light);
@@ -7010,7 +7051,7 @@ mod tests {
             request_tx,
             1,
             OsString::from("wayland-1"),
-            Appearance::to_nobody(),
+            Portals::to_nobody(),
         );
 
         hub.take_up_the_theme(Theme::Dark);
@@ -7030,7 +7071,7 @@ mod tests {
             request_tx,
             1,
             OsString::from("wayland-1"),
-            Appearance::to_nobody(),
+            Portals::to_nobody(),
         );
         let (first, _) = hub
             .host
@@ -7133,7 +7174,7 @@ mod tests {
             request_tx,
             1,
             OsString::from("wayland-1"),
-            Appearance::to_nobody(),
+            Portals::to_nobody(),
         );
         let (page, compositor) = UnixStream::pair().expect("a socket pair");
         let writer = Arc::new(Mutex::new(
@@ -7205,7 +7246,7 @@ mod tests {
             request_tx,
             1,
             OsString::from("wayland-1"),
-            Appearance::to_nobody(),
+            Portals::to_nobody(),
         );
         let app_id = {
             let mut host = hub.host.lock().unwrap();
