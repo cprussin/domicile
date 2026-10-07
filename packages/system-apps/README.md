@@ -31,6 +31,7 @@ const editors = findApps(apps, "edit", 50);
 | `./find-apps`, `./bookmark` | The launcher's matching and ranking; bookmarks and their Zod schema. |
 | `./describe-apps` | Application IDs named and drawn by their entries, for a shell to say who asks. |
 | `./mime-apps` | A content type's default applications from every `mimeapps.list`, the desktop's own (`domicile-mimeapps.list`) first. |
+| `./openers` | The applications that open a file, its default first, and the argv each opens it with. The type comes from shared-mime-info's `mime/globs2`, by name. |
 | `./omit` | Desktop file IDs left out, as globs. |
 | `./app-icons` | Icon names resolved in `hicolor` and `pixmaps` to `data:` URLs (PNG, SVG, 128 KiB at most). |
 | `./favicon`, `./curl`, `./favicons` | A bookmark's icon: picked from the page, fetched with `curl`, kept and retried. |
@@ -40,7 +41,8 @@ const editors = findApps(apps, "edit", 50);
   unreadable file or directory is skipped, as the specs say.
 - `./curl` needs `curl` on the desktop's `PATH`. Domicile's Nix package adds
   it.
-- Launching stays with the shell: pass an entry's `command` to `spawn`.
+- Launching stays with the shell: pass an entry's `command`, or an
+  `openers` result's `command(app)`, to `spawn`.
 
 ## Test
 

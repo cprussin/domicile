@@ -112,6 +112,12 @@ export const launchOf = (choice: Choice): Launch => {
   }
 };
 
+/** The launch for `choice` with Shift: a file asks what to open it with. */
+export const openWithOf = (choice: Choice): Launch =>
+  choice.kind === ChoiceKind.File
+    ? Launch.OpenedWith(choice.row.path)
+    : launchOf(choice);
+
 const plainChoicesFor = (
   query: string,
   found: readonly string[],

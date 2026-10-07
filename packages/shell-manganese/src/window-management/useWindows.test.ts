@@ -200,6 +200,24 @@ describe("a command", () => {
     expect(host.spawned).toEqual([["gedit", "--new-window"]]);
   });
 
+  it("opens a file the launcher chose with what opens it", async () => {
+    const host = client();
+    const displays = [LEFT, RIGHT];
+    const openFile = (_system: unknown, path: string) =>
+      Promise.resolve(["pager", `/home/me/${path}`]);
+    const { result } = renderHook(() =>
+      useWindows(host.domicile, displays, openFile),
+    );
+
+    await act(async () => {
+      result.current.act(WindowAction.FileOpened("Notes/today.txt"));
+      await Promise.resolve();
+    });
+
+    expect(result.current.launcherOpen).toBe(false);
+    expect(host.spawned).toEqual([["pager", "/home/me/Notes/today.txt"]]);
+  });
+
   it("opens a window on the screen the keyboard is on", () => {
     // End to end: focus moves to the second screen, and a new client is laid
     // out there.

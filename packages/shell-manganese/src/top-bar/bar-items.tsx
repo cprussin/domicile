@@ -2,6 +2,8 @@
 // only names them.
 
 import { ThemeSwitch } from "@domicile-desktop/component-library/ThemeSwitch";
+import { system } from "@domicile-desktop/sdk/system";
+import { useMemo } from "react";
 
 import { css } from "../../styled-system/css";
 import { Battery } from "../battery/Battery";

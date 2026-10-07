@@ -1,5 +1,7 @@
 // Which desktop file IDs a launcher leaves out, as globs.
 
+import { globOf } from "./glob";
+
 /**
  * Whether a desktop file ID is left out, per `patterns`.
  *
@@ -19,33 +21,4 @@ export const omitting = (
     const last = rules.findLast(({ glob }) => glob.test(id));
     return last !== undefined && !last.keeps;
   };
-};
-
-/** `pattern` as an anchored regular expression. */
-const globOf = (pattern: string): RegExp => {
-  const parts = pattern.match(/\[[^\]]*\]|\*|\?|\[|[^*?[]+/g) ?? [];
-  return new RegExp(
-    `^${parts
-      .map((part) => {
-        switch (part) {
-          case "*": {
-            return ".*";
-          }
-          case "?": {
-            return ".";
-          }
-          case "[": {
-            throw new Error(
-              `\`${pattern}\` is not a glob: \`[\` is not closed`,
-            );
-          }
-          default: {
-            // A `[…]` set reads the same as a regular expression's.
-            return part.startsWith("[") ? part : RegExp.escape(part);
-          }
-        }
-      })
-      .join("")}$`,
-    "s",
-  );
 };

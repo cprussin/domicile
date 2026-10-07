@@ -29,6 +29,21 @@ Browser address bars use the same rule.
 - **Files**: the compositor's index matches the query and returns the top
   results. While indexing is unfinished, the panel says so and re-queries.
 
+## Opening a file
+
+- **Enter** opens a file with the first application `@domicile-desktop/system-apps/openers`
+  offers (`launcher/open-file.ts`): the type's default from `mimeapps.list`,
+  `domicile-mimeapps.list` first, as the AppChooser portal picks it; else an
+  installed entry whose `MimeType` lists the type.
+- The type comes from shared-mime-info's `mime/globs2`, by name. A directory
+  is `inode/directory`.
+- A file nothing matches goes to `xdg-open`, which also reads aliases,
+  subclasses and contents. `NoDisplay` and `Terminal` entries are never
+  offered, so their types go there too.
+- **Shift+Enter** asks which to open it with, in the AppChooser portal's dialog
+  (`launcher/OpenWith.tsx`). Shift+Enter on any other row acts as Enter.
+- URLs and searches open as a page.
+
 ## Preview
 
 A preview of the highlighted row sits beside the list. It updates once typing

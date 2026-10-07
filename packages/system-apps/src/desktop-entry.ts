@@ -19,6 +19,10 @@ export type DesktopEntry = {
   comment: string;
   /** The argv it runs. */
   command: readonly string[];
+  /** `Exec` as written, for `commandOf` to open a file with. */
+  exec: string;
+  /** `MimeType`: the content types it opens. */
+  mimeTypes: readonly string[];
   /** `Name`, `GenericName` and `Keywords`, in lower case, for `findApps`. */
   words: string;
   /** `Icon`: a theme name or an absolute path. See `./app-icons`. */
@@ -52,8 +56,12 @@ export const parseDesktopEntry = (
     : commandOf(exec).map((command) => ({
         command,
         comment: unescaped(keys.get("Comment") ?? ""),
+        exec,
         icon: optional(keys.get("Icon")),
         id,
+        mimeTypes: (keys.get("MimeType") ?? "")
+          .split(";")
+          .filter((type) => type !== ""),
         name: unescaped(name),
         preview: optional(keys.get("X-Domicile-Preview")),
         words: [name, keys.get("GenericName") ?? "", keys.get("Keywords") ?? ""]

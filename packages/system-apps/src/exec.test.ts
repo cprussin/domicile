@@ -24,6 +24,28 @@ describe("commandOf", () => {
     );
   });
 
+  describe("with a file", () => {
+    it("puts the file in place of each file or URL code", () => {
+      expect(
+        commandOf("app %f --uri=%u %F %U", "/home/me/a b.txt"),
+      ).toStrictEqual(
+        Some([
+          "app",
+          "/home/me/a b.txt",
+          "--uri=/home/me/a b.txt",
+          "/home/me/a b.txt",
+          "/home/me/a b.txt",
+        ]),
+      );
+    });
+
+    it("appends the file when the command has no code for it", () => {
+      expect(commandOf("app --new %i", "/home/me/a.txt")).toStrictEqual(
+        Some(["app", "--new", "/home/me/a.txt"]),
+      );
+    });
+  });
+
   it("is nothing for a command that cannot be read", () => {
     expect(commandOf('app "unterminated')).toStrictEqual(None());
     expect(commandOf("%U")).toStrictEqual(None());

@@ -40,7 +40,7 @@ import { flex, hstack, vstack } from "../../styled-system/patterns";
 import { Engine } from "../address/search";
 import { AudioPreview } from "./AudioPreview";
 import type { Choice } from "./choices";
-import { ChoiceKind, choicesFor, launchOf } from "./choices";
+import { ChoiceKind, choicesFor, launchOf, openWithOf } from "./choices";
 import { FolderPreview } from "./FolderPreview";
 import type { FileRow } from "./file-row";
 import type { DesktopEntry, FoundApps } from "./found-apps";
@@ -242,7 +242,7 @@ const Query = ({
             // end of a narrowed list.
             setStepped(steppedTo(highlighted ?? 0, step, choices.length));
           } else if (event.key === "Enter" && chosen !== undefined) {
-            onLaunch(launchOf(chosen));
+            onLaunch(event.shiftKey ? openWithOf(chosen) : launchOf(chosen));
           } else if (event.key === "Tab") {
             // Keep focus in the box (see `keepKeyboardIn`).
             event.preventDefault();
@@ -913,6 +913,10 @@ const Keys = () => (
     </span>
     <span className={keyStyles}>
       <Kbd>↵</Kbd> Open
+    </span>
+    <span className={keyStyles}>
+      <Kbd>⇧</Kbd>
+      <Kbd>↵</Kbd> Open with
     </span>
     <span className={keyStyles}>
       <Kbd>esc</Kbd> Close

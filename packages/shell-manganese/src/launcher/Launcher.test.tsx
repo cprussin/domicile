@@ -565,6 +565,18 @@ describe("Launcher", () => {
     expect(panel.launched).toStrictEqual([Launch.Opened("Notes/today.org")]);
   });
 
+  it("asks what to open the row with on Shift+Enter", async () => {
+    using panel = launcher();
+
+    await panel.user.type(panel.box(), "today");
+    await panel.rows();
+    await panel.user.keyboard("{Shift>}{Enter}{/Shift}");
+
+    expect(panel.launched).toStrictEqual([
+      Launch.OpenedWith("Notes/today.org"),
+    ]);
+  });
+
   it("edits the row the arrow keys walked to instead", async () => {
     using panel = launcher();
 

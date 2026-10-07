@@ -24,7 +24,8 @@
     "./find-apps": "./src/find-apps.ts",
     "./installed": "./src/installed.ts",
     "./mime-apps": "./src/mime-apps.ts",
-    "./omit": "./src/omit.ts"
+    "./omit": "./src/omit.ts",
+    "./openers": "./src/openers.ts"
   },
   "files": [
     "src/**",

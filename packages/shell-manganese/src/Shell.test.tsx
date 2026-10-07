@@ -26,6 +26,7 @@ import { css } from "../styled-system/css";
 import { answerSystemCalls, THINKPAD_BACKLIGHT } from "./brightness/fixture";
 import { DEFAULT_KEYBINDINGS, DEFAULT_MODES } from "./keyboard/commands";
 import type { ApplicationsConfig } from "./launcher/applications-config";
+import { answerOpening } from "./launcher/fixture";
 import { Shell } from "./Shell";
 import { hostDisplays } from "./screens/host-displays";
 import { BarClock, BarLauncher, BarWorkspaces } from "./top-bar/bar-items";
@@ -2558,7 +2559,7 @@ describe("the launcher", () => {
     unmount();
   });
 
-  it("opens a file with the user's default application and puts the panel away", async () => {
+  it("opens a file nothing claims with xdg-open and puts the panel away", async () => {
     // The spawned shell resolves `$HOME`; the page cannot. See
     // `launcher/open-command.ts`.
     renderShell();
@@ -2566,6 +2567,7 @@ describe("the launcher", () => {
     await homeHolds("Notes/today.org");
 
     await userEvent.setup().click(screen.getByRole("option"));
+    await act(() => answerOpening(domicile.fake));
 
     expect(domicile.calls).toContainEqual([
       "spawn",
