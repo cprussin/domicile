@@ -29,13 +29,6 @@
   // if already answered.
   [RaisesException] undefined choose(sequence<DOMString> paths);
 
-  // Lists the directory at `path` (as for `choose`), unordered, with
-  // subdirectories ending in `/`. Lets a picker browse beyond the home index.
-  // Rejects with NotReadableError for an unreadable directory. Throws
-  // TypeError for a `..` path and InvalidStateError if already answered.
-  [CallWith=ScriptState, RaisesException]
-  Promise<sequence<DOMString>> list(DOMString path);
-
   // Answers that nothing was picked.
   [RaisesException] undefined cancel();
 };

@@ -1,5 +1,5 @@
 // The compositor's answers to a system call, as a `system` event's `data`
-// carries them. See docs/architecture/SYSTEM-ACCESS.md. The rest of the
+// carries them. See docs/SHELL-SYSTEM-ACCESS.md. The rest of the
 // compositor's protocol lives in @domicile-desktop/e2e-harness; a page hears
 // only these three.
 

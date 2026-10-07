@@ -26,7 +26,7 @@ const stop = watchNetwork(system(domicile), (network) => {
 - An `Err` is a D-Bus failure, such as NetworkManager not running.
 - A bug or an unexpected reply shape throws, logged to the console.
 
-See [SYSTEM-ACCESS.md](/docs/architecture/SYSTEM-ACCESS.md).
+See [SHELL-SYSTEM-ACCESS.md](/docs/SHELL-SYSTEM-ACCESS.md).
 
 ## Test
 

@@ -9,7 +9,7 @@
 # `<script>` and an `<img onerror=...>`, as markup from a notification body or
 # window title could, and both must not run. Its control is in the same run: a
 # `<script src>` from the shell root must run, so the page can see a script
-# run. See docs/architecture/SYSTEM-ACCESS.md#security.
+# run. See docs/SHELL-SYSTEM-ACCESS.md#security.
 #
 # Headless, with no compositor or client.
 set -u

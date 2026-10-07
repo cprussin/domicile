@@ -275,8 +275,6 @@ class WebViewGuest : public mojom::WebViewGuest,
   // and replies arrive at DidReceiveFindReply.
   void Find(const std::string& text, bool forward) override;
   void StopFinding(bool keep_selection) override;
-  void ListDirectory(const std::string& path,
-                     ListDirectoryCallback callback) override;
 
   // The shell's context menu choices. Each acts on the newest menu's frame and
   // click. See HandleContextMenu.
@@ -522,16 +520,6 @@ class WebViewGuest : public mojom::WebViewGuest,
   // a new search, and tells the element.
   void EndFind();
 
-  // Wraps `answer` so it counts in `open_choosers_` until it runs. Static with
-  // a weak pointer because the answer must run even if the guest is gone; see
-  // FilesChosen.
-  mojom::WebViewGuestClient::FileChooserRequestedCallback HeldOpen(
-      mojom::WebViewGuestClient::FileChooserRequestedCallback answer);
-  static void ChooserAnswered(
-      base::WeakPtr<WebViewGuest> guest,
-      mojom::WebViewGuestClient::FileChooserRequestedCallback answer,
-      const std::optional<std::vector<std::string>>& paths);
-
   // Finishes CreateAndAttach once content has a frame safe to swap.
   // `outer_contents_frame` is null if the frame went away or beforeunload
   // refused; dropping `guest` then cleans up.
@@ -578,9 +566,6 @@ class WebViewGuest : public mojom::WebViewGuest,
   std::optional<content::ContextMenuParams> context_menu_params_;
 
   mojo::Receiver<mojom::WebViewGuest> receiver_;
-  // File choosers the shell has not answered. ListDirectory answers only while
-  // this is nonzero.
-  size_t open_choosers_ = 0;
 
   // The element. Bound from creation, so every report has a receiver.
   mojo::Remote<mojom::WebViewGuestClient> client_;

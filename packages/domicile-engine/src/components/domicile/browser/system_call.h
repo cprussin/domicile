@@ -12,7 +12,7 @@
 namespace domicile {
 
 // The shell's system calls, relayed between the page and the compositor
-// without reading them. See docs/architecture/SYSTEM-ACCESS.md.
+// without reading them. See docs/SHELL-SYSTEM-ACCESS.md.
 //
 // The compositor checks every call, the lock included. The browser only makes
 // sure a page's call stays a system call: the page writes the request, and

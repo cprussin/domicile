@@ -1,5 +1,5 @@
 // NetworkManager over the system bus: connectivity and the primary
-// connection, kept current. See docs/architecture/SYSTEM-ACCESS.md.
+// connection, kept current. See docs/SHELL-SYSTEM-ACCESS.md.
 
 import type { Result } from "@cprussin/option-result";
 import { Err, Ok } from "@cprussin/option-result";

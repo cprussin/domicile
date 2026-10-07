@@ -136,7 +136,7 @@ Phase 0: request channel.
 
 Phase 1: dialogs.
 
-- [ ] FileChooser, with `FilePicker` moved to component-library; it lists directories with `readDir` ([SYSTEM-ACCESS.md](SYSTEM-ACCESS.md))
+- [ ] FileChooser, with `FilePicker` moved to component-library; it lists directories with `readDir` ([SHELL-SYSTEM-ACCESS.md](../SHELL-SYSTEM-ACCESS.md))
 - [ ] AppChooser
 - [ ] Access, Account, Email, Lockdown
 - [ ] Notification v2
