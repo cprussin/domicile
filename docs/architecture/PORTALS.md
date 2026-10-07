@@ -9,8 +9,8 @@ Make Domicile the session's only `xdg-desktop-portal` backend:
 Today the compositor implements `Settings`, `Access`, `AppChooser`,
 `FileChooser`, `Notification`, `Inhibit`, `RemoteDesktop`, `Clipboard`,
 `InputCapture`, `Account`, `Email`, `Lockdown`, `GlobalShortcuts`,
-`Background` and `Wallpaper`, and routes the rest to gtk. Screen sharing has
-no backend.
+`Background`, `Wallpaper`, `DynamicLauncher` and `Usb`, and routes the rest to
+gtk. Screen sharing has no backend.
 
 ## Design
 
@@ -138,6 +138,18 @@ One request channel carries all dialogs. Each interface's backend builds on it.
   window's `app_id`; an application with no window is absent, which the
   frontend reads as background.
 
+- **The frontend installs launchers.** `Install`, `Uninstall`,
+  `LaunchDesktopFile`, `GetDesktopEntry` and `GetIcon` are frontend methods:
+  it writes the `.desktop` file and icon under
+  `$XDG_DATA_HOME/xdg-desktop-portal/` and links them into `applications/`
+  and `icons/`, where the shell's desktop entries (`system-apps`) find them.
+  The backend only confirms (`PrepareInstall`).
+- **No install tokens.** `RequestInstallToken` is refused for every app, so
+  every launcher install shows the dialog. Domicile has no software store to
+  trust; trusting an app id would let any app claiming it skip the user.
+- **USB is granted whole.** The dialog allows every device asked for or none.
+  The spec allows a subset, but an app asks for the devices it needs.
+
 ## Interfaces
 
 | Interface | Compositor | Shell UI | Phase |
@@ -160,8 +172,8 @@ One request channel carries all dialogs. Each interface's backend builds on it.
 | GlobalShortcuts | binds into the shell's keymap; `Activated`/`Deactivated` | review and rebind | 4 |
 | Background | autostart entries (`EnableAutostart`); `GetAppState` from windows and focus; `NotifyBackground` as a notification | via Access | 4 |
 | Wallpaper | copies the picture; `set-on` background, lock screen or both | preview dialog, shell wallpaper and lock screen | 4 |
-| DynamicLauncher | writes the `.desktop` file and icon | install confirm | 4 |
-| Usb | device list from udev | device grant | 4 |
+| DynamicLauncher | `PrepareInstall` asks; no install tokens; `SupportedLauncherTypes` application and web app | install confirm, name editable | 4 |
+| Usb | names each device from its udev properties, else udev's database | device grant, all or none | 4 |
 | Print | printers and options from CUPS over IPP; sends the job to CUPS | print dialog | 5 |
 | Secret | keyring, not Domicile | — | — |
 
@@ -209,7 +221,7 @@ Phase 4: the rest.
 - [x] GlobalShortcuts
 - [ ] engine: report a grabbed chord's release, for `Deactivated` on release
 - [x] Background, Wallpaper
-- [ ] DynamicLauncher, Usb
+- [x] DynamicLauncher, Usb
 
 Phase 5: printing, and remove gtk.
 

@@ -132,11 +132,11 @@ Evidence is in [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md),
 9. **Domicile answers every portal.** The compositor answers `Settings`,
     `Access`, `AppChooser`, `FileChooser`, `Notification`, `Inhibit`,
     `RemoteDesktop`, `Clipboard`, `InputCapture`, `Account`, `Email`,
-    `Lockdown`, `GlobalShortcuts`, `Background` and `Wallpaper`, over the
-    request channel to the shell; gtk answers the rest. Screen sharing has no
-    backend. Next: every other
-    interface except `Secret` on
-    the channel, then drop gtk. [PORTALS.md](docs/architecture/PORTALS.md).
+    `Lockdown`, `GlobalShortcuts`, `Background`, `Wallpaper`,
+    `DynamicLauncher` and `Usb`, over the request channel to the shell; gtk
+    answers the rest. Screen sharing has no backend. Next: every other
+    interface except `Secret` on the channel, then drop gtk.
+    [PORTALS.md](docs/architecture/PORTALS.md).
 
 10. **Split manganese into small packages.** `@domicile-desktop/manganese` is
     one package with the layout, the bar and every bar item. Split the clock,

@@ -21,7 +21,9 @@ import { CapturingIndicator } from "./CapturingIndicator";
 import { FileChooserDialog } from "./FileChooserDialog";
 import { GlobalShortcutsDialog } from "./GlobalShortcutsDialog";
 import { InputCaptureDialog } from "./InputCaptureDialog";
+import { LauncherDialog } from "./LauncherDialog";
 import { RemoteDesktopDialog } from "./RemoteDesktopDialog";
+import { UsbDialog } from "./UsbDialog";
 import { WallpaperDialog } from "./WallpaperDialog";
 
 /** No shell chords; one array, so the default is stable across renders. */
@@ -200,6 +202,24 @@ const Dialog = ({
           screen={screen}
         />
       );
+    case PortalKind.DynamicLauncher:
+      return (
+        <LauncherDialog
+          answer={answer}
+          asker={appName(request.appId)}
+          body={request.body}
+          screen={screen}
+        />
+      );
+    case PortalKind.Usb:
+      return (
+        <UsbDialog
+          answer={answer}
+          asker={appName(request.appId)}
+          body={request.body}
+          screen={screen}
+        />
+      );
     case PortalKind.Inhibit:
     case PortalKind.Unknown:
       return undefined;
@@ -227,6 +247,8 @@ const isAsked = (request: PortalRequest): boolean => {
     case PortalKind.FileChooser:
     case PortalKind.RemoteDesktop:
     case PortalKind.InputCapture:
+    case PortalKind.DynamicLauncher:
+    case PortalKind.Usb:
     case PortalKind.Account:
     case PortalKind.GlobalShortcuts:
     case PortalKind.Wallpaper:

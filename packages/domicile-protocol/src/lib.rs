@@ -590,6 +590,12 @@ pub enum PortalKind {
     /// `org.freedesktop.impl.portal.Wallpaper`: a picture to preview before it
     /// is set. Allowed with [`PortalAnswer::Access`].
     Wallpaper(WallpaperDialog),
+    /// `org.freedesktop.impl.portal.DynamicLauncher`: confirm installing a
+    /// launcher, perhaps under another name.
+    DynamicLauncher(LauncherDialog),
+    /// `org.freedesktop.impl.portal.Usb`: let an application open USB
+    /// devices. Allowed whole with [`PortalAnswer::Access`].
+    Usb(UsbDialog),
 }
 
 impl PortalKind {
@@ -601,9 +607,15 @@ impl PortalKind {
             (PortalKind::Inhibit(_), _) => false,
             (_, PortalAnswer::Canceled | PortalAnswer::Refused) => true,
             (
-                PortalKind::Access(_) | PortalKind::Account(_) | PortalKind::Wallpaper(_),
+                PortalKind::Access(_)
+                | PortalKind::Account(_)
+                | PortalKind::Wallpaper(_)
+                | PortalKind::Usb(_),
                 PortalAnswer::Access,
             ) => true,
+            (PortalKind::DynamicLauncher(dialog), PortalAnswer::DynamicLauncher { name }) => {
+                !name.is_empty() && (dialog.editable_name || *name == dialog.name)
+            }
             (PortalKind::AppChooser(dialog), PortalAnswer::AppChooser { choice }) => {
                 dialog.choices.contains(choice)
             }
@@ -621,11 +633,55 @@ impl PortalKind {
                 | PortalAnswer::RemoteDesktop { .. }
                 | PortalAnswer::InputCapture
                 | PortalAnswer::GlobalShortcuts { .. }
+                | PortalAnswer::DynamicLauncher { .. }
                 | PortalAnswer::Stop
                 | PortalAnswer::Pressed,
             ) => false,
         }
     }
+}
+
+/// A `PrepareInstall`: the launcher an application would install.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LauncherDialog {
+    /// The application's suggested name.
+    pub name: String,
+    /// The icon, as a `data:` URL; absent when it is no picture a page draws.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
+    pub launcher_type: LauncherType,
+    /// A web app's address.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target: Option<String>,
+    /// Whether the user may rename it.
+    pub editable_name: bool,
+}
+
+/// What a launcher starts: the portal's `launcher_type`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LauncherType {
+    Application,
+    Webapp,
+}
+
+/// An `AcquireDevices`: the devices an application would open.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UsbDialog {
+    pub devices: Vec<UsbDevice>,
+}
+
+/// One USB device, named as udev names it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UsbDevice {
+    /// The frontend's id for it.
+    pub id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vendor: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub product: Option<String>,
+    /// Whether the application would write to it.
+    pub writable: bool,
 }
 
 /// A `SetWallpaperURI` with `show-preview`.
@@ -900,6 +956,8 @@ pub enum PortalAnswer {
     RemoteDesktop { devices: Devices, clipboard: bool },
     /// The user allowed a [`PortalKind::InputCapture`].
     InputCapture,
+    /// The user installs a [`PortalKind::DynamicLauncher`] under `name`.
+    DynamicLauncher { name: String },
     /// The user stopped a [`Capturing`] session.
     Stop,
     /// The chords the user chose in a [`PortalKind::GlobalShortcuts`].
@@ -918,6 +976,7 @@ impl PortalAnswer {
     pub fn response(&self) -> u32 {
         match self {
             PortalAnswer::Access
+            | PortalAnswer::DynamicLauncher { .. }
             | PortalAnswer::AppChooser { .. }
             | PortalAnswer::FileChooser(_)
             | PortalAnswer::RemoteDesktop { .. }

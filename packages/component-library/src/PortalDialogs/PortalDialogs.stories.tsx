@@ -86,6 +86,37 @@ const withPicture = () =>
     ),
   });
 
+const launcher = {
+  app_id: "org.example.Browser",
+  body: {
+    editable_name: true,
+    // A blue square.
+    icon: "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxIDEiPjxyZWN0IHdpZHRoPSIxIiBoZWlnaHQ9IjEiIGZpbGw9IiMyNTYzZWIiLz48L3N2Zz4=",
+    launcher_type: "webapp",
+    name: "Mail",
+    target: "https://mail.example.com",
+  },
+  id: 8,
+  kind: "dynamic_launcher",
+};
+
+const usb = {
+  app_id: "org.example.Keys",
+  body: {
+    devices: [
+      {
+        id: "dev-1",
+        product: "YubiKey 5",
+        vendor: "Yubico.com",
+        writable: true,
+      },
+      { id: "dev-2", writable: false },
+    ],
+  },
+  id: 9,
+  kind: "usb",
+};
+
 const entry = (name: string): string =>
   `[Desktop Entry]\nType=Application\nName=${name}\nExec=true\n`;
 
@@ -276,6 +307,24 @@ export const InputCapture: Story = {
 export const Account: Story = {
   args: {
     host: pushing([account]),
+    screen: undefined,
+    screenOf: undefined,
+    systemOf: undefined,
+  },
+};
+
+export const DynamicLauncher: Story = {
+  args: {
+    host: pushing([launcher]),
+    screen: undefined,
+    screenOf: undefined,
+    systemOf: undefined,
+  },
+};
+
+export const Usb: Story = {
+  args: {
+    host: pushing([usb]),
     screen: undefined,
     screenOf: undefined,
     systemOf: undefined,

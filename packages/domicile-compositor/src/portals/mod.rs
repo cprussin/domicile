@@ -42,6 +42,7 @@ mod account;
 mod app_chooser;
 mod background;
 mod clipboard;
+mod dynamic_launcher;
 mod email;
 mod file_chooser;
 #[cfg(test)]
@@ -61,6 +62,7 @@ mod settings;
 #[cfg(test)]
 mod socket_pair;
 mod uri;
+mod usb;
 mod wallpaper;
 
 use access::Access;
@@ -69,6 +71,7 @@ use app_chooser::AppChooser;
 use background::{Background, RunningApps};
 pub use clipboard::Selection;
 use clipboard::{Clipboard, Transfers};
+use dynamic_launcher::DynamicLauncher;
 use email::{Email, Open};
 use file_chooser::FileChooser;
 use global_shortcuts::{GlobalShortcuts, Shortcuts};
@@ -80,6 +83,7 @@ use queue::Queue;
 use remote_desktop::{RemoteDesktop, Remotes};
 use restore::Tokens;
 use settings::{color_scheme, Appearance, Settings};
+use usb::Usb;
 use wallpaper::{Pictures, Wallpaper};
 
 /// The object path the frontend calls backends at.
@@ -736,6 +740,19 @@ fn export<'a>(
             Wallpaper {
                 queue: Arc::clone(&backends.queue),
                 pictures: Arc::clone(&backends.pictures),
+            },
+        )?
+        .serve_at(
+            OBJECT_PATH,
+            DynamicLauncher {
+                queue: Arc::clone(&backends.queue),
+            },
+        )?
+        .serve_at(
+            OBJECT_PATH,
+            Usb {
+                queue: Arc::clone(&backends.queue),
+                udev_data: PathBuf::from("/run/udev/data"),
             },
         )
 }
