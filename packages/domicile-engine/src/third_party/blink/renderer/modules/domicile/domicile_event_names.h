@@ -38,6 +38,7 @@
   X(themechanged, Themechanged)                   \
   X(windowsthemechanged, Windowsthemechanged)     \
   X(modifierschanged, Modifierschanged)         \
+  X(appearancechanged, Appearancechanged)       \
   X(system, System)                               \
   X(portalrequests, Portalrequests)
 

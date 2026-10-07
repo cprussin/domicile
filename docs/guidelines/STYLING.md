@@ -439,6 +439,11 @@ The domicile preset also defines `_activeEnabled` and `_hoverEnabled`
 (active/hover but only when the element is also enabled), which is what
 buttons use to avoid hover/active styles firing on a disabled control.
 
+`_contrastHigh` matches `theme.contrast: "high"` (`data-contrast="high"` on
+`<html>`). Panda's own `_highContrast` matches forced colors instead.
+`data-reduced-motion` on `<html>` shortens every animation and transition in
+the preset's global CSS, so components need no condition for it.
+
 Use property-conditional shorthand:
 
 ```ts

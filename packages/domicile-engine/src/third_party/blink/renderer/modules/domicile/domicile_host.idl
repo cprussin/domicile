@@ -254,6 +254,14 @@
   readonly attribute boolean? shiftKey;
   readonly attribute boolean? metaKey;
   attribute EventHandler onmodifierschanged;
+  // The config's accent color, contrast and reduced motion, which the
+  // settings portal also serves applications. `accentColor` is "#rrggbb", or
+  // null where the config leaves it to the shell. `highContrast` and
+  // `reducedMotion` are null until the compositor says.
+  readonly attribute DOMString? accentColor;
+  readonly attribute boolean? highContrast;
+  readonly attribute boolean? reducedMotion;
+  attribute EventHandler onappearancechanged;
 
   // The desk's browser windows, oldest first. Null until the browser lists
   // them, which it does as soon as this page listens. The browser holds each

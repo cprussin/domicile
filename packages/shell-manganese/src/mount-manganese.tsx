@@ -1,10 +1,12 @@
 // Mounts manganese's React chrome on the desktop `runManganese`'s `Shell` is
 // handed.
 
+import { applyAppearance } from "@domicile-desktop/component-library/appearance";
 import {
   applyTheme,
   DEFAULT_THEME,
 } from "@domicile-desktop/component-library/theme-core";
+import { watchAppearance } from "@domicile-desktop/sdk/appearance";
 import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
 import type { Root } from "react-dom/client";
@@ -37,6 +39,11 @@ export const mountManganese = (
   // theme (`theme.mode`), which corrects this guess. Defaults to dark,
   // matching `theme.mode`'s default.
   applyTheme(rememberedTheme() ?? DEFAULT_THEME);
+  // The config's accent, contrast and motion, which the settings portal also
+  // serves windows. Held for the page's life, as the theme is.
+  watchAppearance(domicile, (appearance) => {
+    applyAppearance(appearance);
+  });
 
   // Built once here, not per render, because a source holds the connection.
   const displays = hostDisplays(domicile);
