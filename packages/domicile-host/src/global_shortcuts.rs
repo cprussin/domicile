@@ -5,7 +5,7 @@
 //! keeps this. The shell grabs each [`BoundShortcut`] and reports a press and
 //! its release by its id. Choices are saved per app id, so an application
 //! that binds the same shortcuts again gets them without a dialog. See
-//! `docs/architecture/PORTALS.md`.
+//! `docs/PORTALS.md`.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::io;

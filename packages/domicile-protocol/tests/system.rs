@@ -27,7 +27,22 @@ fn file_calls_name_a_path() {
         ChromeMessage::SystemRequest {
             id: 1,
             request: SystemRequest::ReadFile {
-                path: "/sys/x".into()
+                path: "/sys/x".into(),
+                offset: 0,
+                length: None,
+            },
+        }
+    );
+    assert_eq!(
+        chrome(
+            r#"{"type":"system_request","id":1,"request":{"call":"read_file","path":"a","offset":10,"length":4}}"#
+        ),
+        ChromeMessage::SystemRequest {
+            id: 1,
+            request: SystemRequest::ReadFile {
+                path: "a".into(),
+                offset: 10,
+                length: Some(4),
             },
         }
     );

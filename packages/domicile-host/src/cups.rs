@@ -2,7 +2,7 @@
 //!
 //! Speaks HTTP/1.1 to CUPS's local socket or `localhost:631`, as libcups
 //! does, one request per connection. The Print portal is its only caller; see
-//! `docs/architecture/PORTALS.md`.
+//! `docs/PORTALS.md`.
 
 use std::ffi::OsString;
 use std::io::{Read, Write};

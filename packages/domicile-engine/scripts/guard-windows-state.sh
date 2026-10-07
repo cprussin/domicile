@@ -11,7 +11,7 @@
 # guard's page reads only after the stand-in has said everything -- three
 # windows appearing, one retitled, resized, limited and given a cursor, one
 # focused, one closed, a popup placed -- and the attributes must hold all of it.
-# See docs/architecture/WINDOW-DOMICILE.md.
+# See packages/chrome-sdk/README.md.
 #
 # AND TWO THINGS NO OTHER GUARD READS IN A REAL ENGINE:
 #

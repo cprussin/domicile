@@ -7,8 +7,10 @@ namespace blink {
 
 DomicileTrayItem::DomicileTrayItem(const String& id,
                                    const String& title,
-                                   const String& icon)
-    : id_(id), title_(title), icon_(icon) {}
+                                   const String& icon,
+                                   const String& bus,
+                                   const String& menu)
+    : id_(id), title_(title), icon_(icon), bus_(bus), menu_(menu) {}
 
 DomicileTrayItem::~DomicileTrayItem() = default;
 

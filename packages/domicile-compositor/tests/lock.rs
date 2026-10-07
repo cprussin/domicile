@@ -10,7 +10,7 @@
 
 mod running;
 
-use domicile_protocol::{ChromeMessage, FilePreview, HostMessage, Passphrase};
+use domicile_protocol::{ChromeMessage, HostMessage, Passphrase};
 
 use crate::running::Compositor;
 
@@ -348,40 +348,6 @@ fn a_locked_desk_answers_no_search_and_the_passphrase_lets_the_next_one_find_the
     );
 }
 
-/// A file preview while locked is not read; the same preview after unlocking
-/// is.
-///
-/// This reads a file's contents, not just its name. The unlock orders it as in
-/// the search test above.
-#[test]
-fn a_locked_desk_reads_no_preview_and_the_passphrase_lets_the_next_one_read() {
-    let home = tempfile::tempdir().expect("a home to lay out");
-    std::fs::write(home.path().join("plan.org"), "* plan\n").expect("the file");
-    let compositor = Compositor::started_in_a_home(A_DESK_THAT_CAN_LOCK, Some(home.path()));
-    let mut chrome = an_indexed_desk_locked(&compositor);
-
-    say_preview(&mut chrome, "plan.org");
-    let first = opened_or_answered(&mut chrome);
-    assert!(
-        matches!(first, HostMessage::Locked { locked: false }),
-        "the locked desk read a preview out of the home: {first:?}"
-    );
-
-    say_preview(&mut chrome, "plan.org");
-    let read = chrome
-        .wait_for(|message| matches!(message, HostMessage::FilePreview { .. }))
-        .expect("the desk the passphrase opened answers the preview");
-    let HostMessage::FilePreview { preview, .. } = read else {
-        unreachable!("the wait matched on this variant")
-    };
-    assert_eq!(
-        preview,
-        FilePreview::Text {
-            text: "* plan\n".into()
-        }
-    );
-}
-
 /// A shell can request the lock directly, without the idle timeout.
 ///
 /// The desktop has no timeout, so only the message can lock it. A key sent
@@ -425,9 +391,7 @@ fn opened_or_answered(chrome: &mut domicile_test_chrome::Chrome) -> HostMessage 
         .wait_for(|message| {
             matches!(
                 message,
-                HostMessage::Locked { locked: false }
-                    | HostMessage::FoundFiles { .. }
-                    | HostMessage::FilePreview { .. }
+                HostMessage::Locked { locked: false } | HostMessage::FoundFiles { .. }
             )
         })
         .expect("the passphrase opens the desk and every chrome is told")
@@ -439,12 +403,4 @@ fn say_search(chrome: &mut domicile_test_chrome::Chrome, query: &str) {
             query: query.to_string(),
         })
         .expect("the chrome socket takes a search");
-}
-
-fn say_preview(chrome: &mut domicile_test_chrome::Chrome, path: &str) {
-    chrome
-        .say(&ChromeMessage::PreviewFile {
-            path: path.to_string(),
-        })
-        .expect("the chrome socket takes a preview");
 }

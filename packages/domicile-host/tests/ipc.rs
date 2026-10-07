@@ -302,6 +302,8 @@ fn the_tray_rides_with_the_handshake() {
         id: ":1.42/StatusNotifierItem".into(),
         title: "Network".into(),
         icon: None,
+        bus: ":1.42".into(),
+        menu: None,
     };
     let told = session.host_mut().set_tray(vec![icon.clone()]);
     assert_eq!(

@@ -25,7 +25,6 @@ pub mod dbus_json;
 pub mod file_changes;
 pub mod file_filters;
 pub mod file_index;
-pub mod file_preview;
 pub mod file_search;
 pub mod global_shortcuts;
 pub mod home_walk;
@@ -577,7 +576,6 @@ impl Host {
             ChromeMessage::CloseApp { .. }
             | ChromeMessage::Spawn { .. }
             | ChromeMessage::SearchFiles { .. }
-            | ChromeMessage::PreviewFile { .. }
             | ChromeMessage::CopyClipboardEntry { .. }
             | ChromeMessage::ActivateTrayItem { .. }
             | ChromeMessage::DismissNotifications { .. }

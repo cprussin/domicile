@@ -64,14 +64,15 @@ bus) are `domicile.tray`, the full list; `traychanged` reports changes.
 
 ```ts
 domicile.addEventListener("traychanged", () => {
-  drawTray(domicile.tray ?? []); // { id, title, icon: a data: URL or "" }
+  drawTray(domicile.tray ?? []); // { id, title, icon, bus, menu }
 });
 domicile.activateTrayItem(id, "primary"); // or "secondary", "context"
 ```
 
 - The app decides what a click does.
-- Tray menus are not supported yet
-  ([SYSTEM-TRAY.md](/docs/architecture/SYSTEM-TRAY.md)).
+- `icon` is a `data:` URL or `""`. `menu` is the item's
+  `com.canonical.dbusmenu` object path on `bus`, or `""`; no library draws
+  it yet ([SYSTEM-TRAY.md](/docs/architecture/SYSTEM-TRAY.md)).
 - Manganese's: [`tray/Tray.tsx`](/packages/shell-manganese/src/tray/Tray.tsx).
 
 ## Notifications
@@ -99,7 +100,7 @@ domicile.dismissNotifications([id]);              // clear; the app is told
 
 Applications ask for dialogs through `xdg-desktop-portal`, and the compositor
 is its backend. The shell draws each one. See
-[PORTALS.md](architecture/PORTALS.md).
+[PORTALS.md](PORTALS.md).
 
 ```tsx
 import { PortalDialogs } from "@domicile-desktop/component-library/PortalDialogs";

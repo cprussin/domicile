@@ -76,6 +76,22 @@ describe("files", () => {
     expect(await reading).toStrictEqual(Ok(new Uint8Array([0x39, 0x37, 0x0a])));
   });
 
+  it("reads part of a file", async () => {
+    const host = new FakeHost();
+    const files = system(host);
+    const middle = files.readFile("song.flac", { length: 4, offset: 8 });
+    const front = files.readFile("song.flac", { length: 4 });
+    host.reply(1, { data: base64("fLaC"), kind: "read" });
+    host.reply(2, { data: base64("ID3"), kind: "read" });
+
+    expect(host.calls).toStrictEqual([
+      [1, { call: "read_file", length: 4, offset: 8, path: "song.flac" }],
+      [2, { call: "read_file", length: 4, path: "song.flac" }],
+    ]);
+    expect(await middle).toStrictEqual(Ok(new TextEncoder().encode("fLaC")));
+    expect(await front).toStrictEqual(Ok(new TextEncoder().encode("ID3")));
+  });
+
   it("reads a file as text", async () => {
     const host = new FakeHost();
     const reading = system(host).readTextFile("note");

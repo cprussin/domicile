@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """The compositor's end of the control socket, for the guard that asks whether
-`searchFiles()` and `previewFile()` settle with their answers.
+`searchFiles()` settles with its answer.
 
-It answers `hello` with a `welcome`, then answers every ask -- the file
-searches in the order they came, so `old` is answered before `new` -- and
-prints every line the browser writes.
+It answers `hello` with a `welcome`, then answers every search in the order
+they came, so `old` is answered before `new`, and prints every line the
+browser writes.
 """
 
 import argparse
@@ -18,10 +18,6 @@ def answer(ask):
         query = ask["query"]
         return {"type": "found_files", "query": query, "files": [query + ".txt"],
                 "matched": 1, "indexing": False}
-    if ask.get("type") == "preview_file":
-        return {"type": "file_preview", "path": ask["path"], "kind": "text",
-                "text": "hi " + ask["path"], "entries": [], "title": "",
-                "artist": "", "album": "", "duration": 0, "cover": ""}
     return None
 
 

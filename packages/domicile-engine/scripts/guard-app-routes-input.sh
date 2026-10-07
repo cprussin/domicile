@@ -11,7 +11,7 @@
 # rest itself. The engine does it now -- the element maps through its own
 # layout box and every transform above it, and the desktop forwards -- so a
 # shell calls nothing. This page calls nothing and has no pointer listener of
-# its own. See docs/architecture/WINDOW-DOMICILE.md.
+# its own. See packages/chrome-sdk/docs/ELEMENTS.md.
 #
 # WHAT IT ASSERTS. The stand-in records every line the engine writes, and the
 # pointer, wheel, key and focus lines must be exactly, in order:

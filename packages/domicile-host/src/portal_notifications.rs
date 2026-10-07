@@ -5,7 +5,7 @@
 //! [`crate::notifications`], so the shell draws both the same. This keeps which
 //! entries came from the portal, under the application's own ids, so an action
 //! goes back to the portal with its target. See
-//! `docs/architecture/PORTALS.md`.
+//! `docs/PORTALS.md`.
 
 use crate::notifications::{Hints, Icon, Notifications, Notified, Notify, DEFAULT_ACTION};
 

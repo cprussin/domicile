@@ -9,7 +9,7 @@ const NONE_SET: PortalWallpaper = {
 
 /**
  * The pictures applications set through the Wallpaper portal, as paths. See
- * `docs/architecture/PORTALS.md`.
+ * `docs/PORTALS.md`.
  */
 export const usePortalWallpaper = (host: PortalHost): PortalWallpaper => {
   const [wallpaper, setWallpaper] = useState(NONE_SET);

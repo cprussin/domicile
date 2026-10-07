@@ -256,15 +256,6 @@ void ControlChannel::SearchFiles(const std::string& query) {
   SendMessage(std::move(message));
 }
 
-// A path relative to the home, as a `found_files` answer named it. What makes
-// that safe is the compositor's, not this: it answers only for a path in its
-// own index of the home -- see ControlChannel::PreviewFile in the mojom.
-void ControlChannel::PreviewFile(const std::string& path) {
-  base::DictValue message = Typed("preview_file");
-  message.Set("path", path);
-  SendMessage(std::move(message));
-}
-
 // Wrapped rather than read: the compositor judges the call. See
 // components/domicile/browser/system_call.h.
 void ControlChannel::CallSystem(uint32_t id, const std::string& request) {
@@ -357,14 +348,6 @@ void ControlChannel::CloseApp(const std::string& app_id) {
   SendMessage(ForApp("close_app", app_id));
 }
 
-void ControlChannel::ResizeApp(const std::string& app_id,
-                               double width,
-                               double height) {
-  base::DictValue message = ForApp("resize_app", app_id);
-  message.Set("size", Size(width, height));
-  SendMessage(std::move(message));
-}
-
 void ControlChannel::SetAppBounds(const std::string& app_id,
                                   double x,
                                   double y,
@@ -432,14 +415,12 @@ void ControlChannel::ThemeCaptured(mojom::Theme theme) {
 }
 
 void ControlChannel::GrabShortcut(mojom::ShortcutPtr shortcut) {
-  // RECORDED HERE RATHER THAN RELAYED, and the compositor no longer has a
-  // message for it. It used to hold the claims, and it is the layer that
-  // should: it sees a key before the client it belongs to does. It cannot see
-  // these ones. A browser window is a `<webview>` whose page is a guest, DOM
-  // focus moves into it, and its keys reach neither the shell's document nor
-  // -- since the shell is what forwards them -- the compositor. This process is
-  // the only layer above a focused guest, so this is where the set lives and
-  // `WebViewGuest::PreHandleKeyboardEvent` is what matches against it.
+  // Recorded here, not relayed. A browser window is a `<webview>` whose page
+  // is a guest; DOM focus moves into it, and its keys reach neither the
+  // shell's document nor -- since the shell is what forwards them -- the
+  // compositor. This process is the only layer above a focused guest, so the
+  // set lives here and `WebViewGuest::PreHandleKeyboardEvent` matches against
+  // it.
   ShortcutRegistry::Get().Grab(Chord{shortcut->keycode, shortcut->alt,
                                      shortcut->ctrl, shortcut->shift,
                                      shortcut->meta});
@@ -775,30 +756,7 @@ void ControlChannel::DispatchLine(const std::string& line) {
     return;
   }
 
-  // The compositor's own two, through the same pair of methods the registry
-  // reaches -- so that a chord matched in this process and one matched out
-  // there arrive at the page as the same thing.
-  //
-  // A CLAIM CAN NO LONGER BE MADE OUT THERE, so nothing sends `shortcut` today:
-  // `grab_shortcut` is gone from the protocol and the browser holds the set.
-  // The arm stays because the compositor is still the layer that sees a
-  // client's keys, and giving it a chord back is the shape a desktop shortcut
-  // over a Wayland window would take. `logo` is what Wayland calls the key the
-  // web calls Meta.
-  if (*type == "shortcut") {
-    const base::DictValue* combination = message.FindDict("shortcut");
-    if (!combination) {
-      return;
-    }
-    DeliverShortcut(
-        Chord{static_cast<uint32_t>(combination->FindInt("key").value_or(0)),
-              combination->FindBool("alt").value_or(false),
-              combination->FindBool("ctrl").value_or(false),
-              combination->FindBool("shift").value_or(false),
-              combination->FindBool("logo").value_or(false)});
-    return;
-  }
-
+  // `logo` is what Wayland calls the key the web calls Meta.
   if (*type == "modifiers") {
     DeliverModifiers(Modifiers{message.FindBool("alt").value_or(false),
                                message.FindBool("ctrl").value_or(false),
@@ -875,44 +833,6 @@ void ControlChannel::DispatchLine(const std::string& line) {
     // would wait for a message the compositor has already sent.
     client_->Files(*query, std::move(files), static_cast<uint32_t>(*matched),
                    *indexing);
-    return;
-  }
-
-  if (*type == "file_preview") {
-    const std::string* path = message.FindString("path");
-    const std::string* kind = message.FindString("kind");
-    // The path and the kind or nothing, as `found_files` above: an answer
-    // without its path cannot be told from the answer to the row before, and a
-    // kind that is not one of the five is a word the page would have to guess
-    // at. A missing `text`, `entries` or tag is an empty one, which is what
-    // every kind but its own carries anyway -- and what a song that does not
-    // say its title carries too.
-    if (!path || !kind ||
-        (*kind != "text" && *kind != "directory" && *kind != "audio" &&
-         *kind != "binary" && *kind != "unreadable")) {
-      return;
-    }
-    const std::string* text = message.FindString("text");
-    const base::ListValue* listed = message.FindList("entries");
-    std::vector<std::string> entries;
-    if (listed) {
-      entries.reserve(listed->size());
-      for (const base::Value& entry : *listed) {
-        if (const std::string* name = entry.GetIfString()) {
-          entries.push_back(*name);
-        }
-      }
-    }
-    const std::string* title = message.FindString("title");
-    const std::string* artist = message.FindString("artist");
-    const std::string* album = message.FindString("album");
-    const std::string* cover = message.FindString("cover");
-    client_->FilePreview(*path, *kind, text ? *text : std::string(),
-                         std::move(entries), title ? *title : std::string(),
-                         artist ? *artist : std::string(),
-                         album ? *album : std::string(),
-                         message.FindDouble("duration").value_or(0),
-                         cover ? *cover : std::string());
     return;
   }
 
@@ -999,18 +919,22 @@ void ControlChannel::DispatchLine(const std::string& line) {
       if (!item) {
         continue;
       }
-      // An icon with no id is one no click could reach, and one with no title
-      // is one nothing could label: dropped, like a clipboard row missing
-      // either half. The picture is optional -- the compositor leaves it out
-      // for an item it could not draw -- and is carried as empty.
+      // An icon with no id or bus is one no click could reach, and one with no
+      // title is one nothing could label: dropped, like a clipboard row
+      // missing either half. The picture and the menu are optional -- the
+      // compositor leaves them out for an item with none -- and are carried as
+      // empty.
       const std::string* id = item->FindString("id");
       const std::string* title = item->FindString("title");
-      if (!id || !title) {
+      const std::string* bus = item->FindString("bus");
+      if (!id || !title || !bus) {
         continue;
       }
       const std::string* icon = item->FindString("icon");
-      items.push_back(
-          mojom::TrayItem::New(*id, *title, icon ? *icon : std::string()));
+      const std::string* menu = item->FindString("menu");
+      items.push_back(mojom::TrayItem::New(
+          *id, *title, icon ? *icon : std::string(), *bus,
+          menu ? *menu : std::string()));
     }
     // Sent even when it is empty, for `clipboard`'s reason: a tray with
     // nothing in it is an answer.

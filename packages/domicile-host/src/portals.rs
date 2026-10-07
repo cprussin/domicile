@@ -5,7 +5,7 @@
 //! [`Portals::items`] to every chrome. The first answer takes the request off
 //! the queue; later ones are refused. Inhibitors ([`Portals::hold`]) are
 //! listed too, take no answer, and stay until withdrawn. See
-//! `docs/architecture/PORTALS.md`.
+//! `docs/PORTALS.md`.
 //!
 //! It also lists the sessions that control or capture input
 //! ([`Portals::capturing`]), each with what stops it (`S`), so the shell can

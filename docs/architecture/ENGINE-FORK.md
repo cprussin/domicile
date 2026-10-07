@@ -236,7 +236,7 @@ Decisions:
 ### Display capture
 
 A monitor is the composited output, which only viz has. The compositor casts
-it from frames the browser captures ([PORTALS.md](PORTALS.md)).
+it from frames the browser captures ([PORTALS.md](../PORTALS.md)).
 
 1. `domicile_display_capture_start` asks the broker (`CaptureDisplay`) for a
    display. Zero names a nested or headless browser's only window.

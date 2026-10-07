@@ -143,8 +143,6 @@ not rules, and carry no authority level. Read the one for the area you work in.
 | [/docs/architecture/NOTIFICATIONS.md](/docs/architecture/NOTIFICATIONS.md) | The compositor as the `org.freedesktop.Notifications` server for apps and sites; the shell toasts them and keeps a drawer. |
 | [/docs/architecture/KEYBINDINGS.md](/docs/architecture/KEYBINDINGS.md) | A shell's keybindings as props: sway-style chords resolved against the compositor's keyboard layout and dispatched by the SDK. |
 | [/docs/architecture/COMPOSABLE-SHELLS.md](/docs/architecture/COMPOSABLE-SHELLS.md) | The config as a TS, JS or JSON module whose `Shell` export is the shell; `domicile` builds it; manganese as a library; packages on npm. |
-| [/docs/architecture/PORTALS.md](/docs/architecture/PORTALS.md) | Domicile as the only `xdg-desktop-portal` backend, with the shell drawing every dialog. The request channel, `Access`, `Account`, `Email`, `Lockdown`, `Background`, `Wallpaper`, `DynamicLauncher`, `Usb` and `Print` are done. |
-| [/docs/architecture/WINDOW-DOMICILE.md](/docs/architecture/WINDOW-DOMICILE.md) | The desktop handed to `Shell` as the whole shell API, and `DomicileClient` deleted. Done. |
 
 [`/ROADMAP.md`](/ROADMAP.md) lists open work and known gaps, each pointing at
 the doc with the detail. Read it before substantial work. Remove items when
@@ -163,6 +161,7 @@ How to use, configure and debug Domicile. No authority level.
 | [/docs/SHELL-BROWSER-WINDOWS.md](/docs/SHELL-BROWSER-WINDOWS.md) | `<webview>` for shell authors: state properties and events, focus, keyboard, new windows, close requests, file pickers. |
 | [/docs/SHELL-EXTENSIONS.md](/docs/SHELL-EXTENSIONS.md) | Extensions for shell authors: the extensions list, `activateExtension`, popups, the tab/window mapping. |
 | [/docs/SHELL-DESKTOP-EVENTS.md](/docs/SHELL-DESKTOP-EVENTS.md) | Desktop events for shell authors: displays, theme, system tray, notifications. |
+| [/docs/PORTALS.md](/docs/PORTALS.md) | Domicile as the only `xdg-desktop-portal` backend: the request channel, the shell's dialogs, each interface and the decisions behind it. |
 | [/docs/SHELL-SYSTEM-ACCESS.md](/docs/SHELL-SYSTEM-ACCESS.md) | Files, processes and D-Bus for shell authors: the page API, the system libraries, the wire and the security rules. |
 | [/docs/SHELL-IDLE-AND-LOCK.md](/docs/SHELL-IDLE-AND-LOCK.md) | Idle and lock for shell authors: the idle message, what is blocked while locked, drawing a lock screen. |
 | [/docs/SHELL-PACKAGING.md](/docs/SHELL-PACKAGING.md) | Packaging a shell: required Vite settings, inlined CSS, avoiding a theme flash, distributing, building with `domicile`. |
