@@ -4,12 +4,13 @@
 // Screen geometry is an argument because only the chrome knows which display
 // it is on.
 
-import { onScreen, rectOf } from "./floating/float";
-import { floatingGapOf, gapOf } from "./gaps";
+import type { Float } from "./floating/float";
+import { floatHolds, onScreen, rectOf } from "./floating/float";
+import { floatingGapOf, gapOf, tiledAreaOf } from "./gaps";
 import type { Rect } from "./rect";
 import { barOf, surfaceOf } from "./rect";
-import type { Frame, Tab, TabLayout } from "./tree/frames";
-import { framesOf } from "./tree/frames";
+import type { FocusBox, Frame, Tab, TabLayout } from "./tree/frames";
+import { focusBoxOf, framesOf } from "./tree/frames";
 import type { WindowState } from "./window-state";
 import { workspaceOn } from "./window-state";
 import type { Workspace } from "./workspace";
@@ -63,8 +64,16 @@ export type Geometry = {
 /** A container's tab, stacked with its float, if any. */
 export type PlacedTab = Tab & { depth: number };
 
+/** A focus box, stacked with the windows inside it. */
+export type PlacedFocusBox = FocusBox & { depth: number };
+
 /** The windows and container tabs a screen shows. */
 export type Screenful = {
+  /**
+   * The box around the window or group commands target, which the chrome
+   * lights. `undefined` on an empty workspace or under a fullscreen window.
+   */
+  focusBox: PlacedFocusBox | undefined;
   placements: readonly Placement[];
   tabs: readonly PlacedTab[];
 };
@@ -119,7 +128,7 @@ export const placementsOf = (
   const workspace = workspaceOn(state, geometry.name);
   const { frames, tabs } = framesOf(
     workspace.tiling,
-    geometry.workspace,
+    tiledAreaOf(workspace.tiling, geometry.workspace),
     gapOf(workspace.tiling),
   );
   // Floats go above, in workspace stacking order, each tree laid out in its box.
@@ -127,6 +136,7 @@ export const placementsOf = (
     .map((float) => onScreen(float, geometry.screen))
     .map((float, at) => ({
       depth: FLOATING + at,
+      float,
       ...framesOf(float, rectOf(float), floatingGapOf(float)),
     }));
   const laidOut = [
@@ -142,6 +152,10 @@ export const placementsOf = (
       ? laidOut
       : [...laidOut.filter(({ id }) => id !== full.id), full];
   return {
+    focusBox:
+      full === undefined
+        ? focusBoxIn(workspace, geometry, floating)
+        : undefined,
     placements,
     tabs: [
       ...tabs.map((tab) => ({ ...tab, depth: TILED })),
@@ -150,6 +164,37 @@ export const placementsOf = (
       ),
     ],
   };
+};
+
+/**
+ * The focus box of the focused float, at its depth, or else of the tiling.
+ *
+ * Throws if the focused float is not among `floating`: both come from the
+ * same workspace.
+ */
+const focusBoxIn = (
+  workspace: Workspace,
+  geometry: Geometry,
+  floating: readonly { depth: number; float: Float }[],
+): PlacedFocusBox | undefined => {
+  const { floatFocus, tiling } = workspace;
+  if (floatFocus === undefined) {
+    const box = focusBoxOf(
+      tiling,
+      tiledAreaOf(tiling, geometry.workspace),
+      gapOf(tiling),
+    );
+    return box === undefined ? undefined : { ...box, depth: TILED };
+  } else {
+    const focused = floating.find(({ float }) => floatHolds(float, floatFocus));
+    if (focused === undefined) {
+      throw new Error(`placement: no float holds focused ${floatFocus}`);
+    } else {
+      const { depth, float } = focused;
+      const box = focusBoxOf(float, rectOf(float), floatingGapOf(float));
+      return box === undefined ? undefined : { ...box, depth };
+    }
+  }
 };
 
 /**

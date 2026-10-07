@@ -94,7 +94,8 @@ beforeEach(() => {
 
 describe("AppWindow", () => {
   it("leaves its frame the resting color even while it is focused", () => {
-    // Focus is shown by dimming other windows (see `Scrim`), not a border.
+    // Focus is shown by a glow around the window (see `FocusGlow`), not a
+    // border.
     const { container } = render(<AppWindow {...windowProps} focused />);
 
     expect(portal(container).className).toContain(

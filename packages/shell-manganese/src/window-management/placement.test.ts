@@ -41,6 +41,7 @@ const placementFor = (state: WindowState, appId: string) => {
 describe("placementsOf", () => {
   it("places nothing on an empty workspace", () => {
     expect(placementsOf(NO_WINDOWS, GEOMETRY)).toEqual({
+      focusBox: undefined,
       placements: [],
       tabs: [],
     });
@@ -78,20 +79,24 @@ describe("placementsOf", () => {
     });
   });
 
-  it("puts the config's gap between two of them", () => {
-    // `gaps.inner = 20`: 1900 is shared and the second starts 20 past the
-    // first.
+  it("puts the config's gap between two of them and around them", () => {
+    // `gaps.inner = 20` between them and at the screen's edges: 1860 is
+    // shared and the second starts 20 past the first.
     const state = reduce(
       desktop("kitty", "editor"),
       WindowAction.LayoutSet(Layout.SplitH),
     );
-    expect(placementFor(state, "kitty")?.bar).toMatchObject({
-      width: 950,
-      x: 0,
+    expect(placementFor(state, "kitty")?.frame).toEqual({
+      height: 1008,
+      width: 930,
+      x: 20,
+      y: 52,
     });
-    expect(placementFor(state, "editor")?.bar).toMatchObject({
-      width: 950,
+    expect(placementFor(state, "editor")?.frame).toEqual({
+      height: 1008,
+      width: 930,
       x: 970,
+      y: 52,
     });
   });
 
@@ -326,5 +331,78 @@ describe("placementsOf", () => {
 
   it("draws nothing for a window that is not on screen", () => {
     expect(contentsOf(undefined)).toBeUndefined();
+  });
+});
+
+describe("the focus box", () => {
+  const focusBoxOf = (state: WindowState) =>
+    placementsOf(state, GEOMETRY).focusBox;
+
+  it("is the focused window's frame", () => {
+    const state = reduce(
+      desktop("kitty", "editor"),
+      WindowAction.LayoutSet(Layout.SplitH),
+    );
+
+    expect(focusBoxOf(state)).toMatchObject({
+      depth: TILED,
+      rect: placementFor(state, "editor")?.frame ?? {},
+      windows: [appWindowId("editor")],
+    });
+  });
+
+  it("spans the whole group `focus parent` selects", () => {
+    const state = reduce(
+      desktop("kitty", "editor"),
+      WindowAction.LayoutSet(Layout.SplitH),
+      WindowAction.ParentFocused(),
+    );
+
+    expect(focusBoxOf(state)).toMatchObject({
+      rect: { height: 1008, width: 1880, x: 20, y: 52 },
+      windows: [appWindowId("kitty"), appWindowId("editor")],
+    });
+  });
+
+  // The tabs belong to the group, so the box takes them in.
+  it("spans a tab group around its focused window, tabs and all", () => {
+    // The right half of a split holds the tab group.
+    const state = reduce(
+      desktop("kitty", "editor"),
+      WindowAction.LayoutSet(Layout.SplitH),
+      WindowAction.ContainerSplit(Axis.Vertical),
+      WindowAction.AppAppeared("mail", "mail"),
+      WindowAction.LayoutSet(Layout.Tabbed),
+    );
+
+    expect(focusBoxOf(state)).toEqual({
+      depth: TILED,
+      rect: { height: 1008, width: 930, x: 970, y: 52 },
+      windows: [appWindowId("editor"), appWindowId("mail")],
+    });
+  });
+
+  it("is a focused float's frame, at its depth", () => {
+    const state = reduce(
+      desktop("kitty", "editor"),
+      WindowAction.FloatToggled(),
+    );
+    const editor = placementFor(state, "editor");
+
+    expect(focusBoxOf(state)).toMatchObject({
+      depth: editor?.depth ?? -1,
+      rect: editor?.frame ?? {},
+      windows: [appWindowId("editor")],
+    });
+  });
+
+  // A fullscreen window covers the screen, so there is nothing to set apart.
+  it("is missing while a window is fullscreen", () => {
+    const state = reduce(
+      desktop("kitty", "editor"),
+      WindowAction.FullscreenToggled(false),
+    );
+
+    expect(focusBoxOf(state)).toBeUndefined();
   });
 });

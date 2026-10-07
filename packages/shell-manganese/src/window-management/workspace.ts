@@ -18,7 +18,7 @@ import {
   shifted,
   sizedTo,
 } from "./floating/float";
-import { gapOf } from "./gaps";
+import { gapOf, tiledAreaOf } from "./gaps";
 import type { Rect } from "./rect";
 import { droppedOn } from "./tree/drop";
 import { enteredFrom, focusMoved, leavesBy } from "./tree/focus-direction";
@@ -467,7 +467,7 @@ export const tiledStretched = (
     id,
     edge,
     by,
-    area,
+    tiledAreaOf(workspace.tiling, area),
     gapOf(workspace.tiling),
   ),
 });

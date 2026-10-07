@@ -11,18 +11,18 @@ import { AppWindow } from "./AppWindow";
 import { showsOneThing } from "./alone";
 import { BrowserWindow } from "./BrowserWindow";
 import type { Direction } from "./direction";
+import { FocusGlow } from "./FocusGlow";
 import { FloatBorder } from "./floating/FloatBorder";
 import { FloatGrab } from "./floating/FloatGrab";
 import { FloatShadow } from "./floating/FloatShadow";
 import { floatHolds } from "./floating/float";
 import { floatBordersOf } from "./floating/float-borders";
-import type { Geometry, Screenful } from "./placement";
+import type { Geometry, PlacedFocusBox, Screenful } from "./placement";
 import { contentsOf, TILED } from "./placement";
 import type { Spot } from "./pointer-warp";
 import type { Popup } from "./popup";
 import { popupsOver } from "./popup";
 import type { Rect } from "./rect";
-import { Scrim } from "./Scrim";
 import { TitleBar } from "./TitleBar";
 import type { Aim, Target } from "./tiled/aim";
 import { bordersOf } from "./tiled/borders";
@@ -31,6 +31,7 @@ import { TileBorder } from "./tiled/TileBorder";
 import { TileGrab } from "./tiled/TileGrab";
 import { titleFocus } from "./title-focus";
 import { focusedWindowIn } from "./tree/tiling";
+import { keyOf, useFocusGlows } from "./useFocusGlows";
 import { useWindowMotion } from "./useWindowMotion";
 import { WindowFrame } from "./WindowFrame";
 import { WindowTitleBar } from "./WindowTitleBar";
@@ -130,7 +131,12 @@ export const Stage = ({
     ),
   );
   const floats = screens.flatMap((screen) => screen.floats);
-  const alone = showsOneThing(screens.map(({ screenful }) => screenful));
+  const glows = useFocusGlows(
+    showsOneThing(screens.map(({ screenful }) => screenful))
+      ? undefined
+      : focusBoxHolding(screens, activeId),
+  );
+  const active = motions.drawn.find(({ window }) => window.id === activeId);
   // Drawn over every window, not by the dragged one: see `DropIndicator`.
   const [aim, setAim] = useState<Aim | undefined>(undefined);
   // A border drag or a tiled resize grab resizes in place, so unlike a move it
@@ -165,6 +171,33 @@ export const Stage = ({
           </Sliding>
         ) : undefined,
       )}
+      {/*
+        Before every window too, so the windows at its depth cover all but its
+        glow. Only the glow fading in follows the focused window's motion.
+      */}
+      {glows.map(({ box, leaving }) => {
+        const following = leaving ? undefined : active;
+        return (
+          <Sliding
+            key={keyOf(box)}
+            on={screenNamed(screens, following?.screen)}
+          >
+            <FocusGlow
+              depth={box.depth}
+              dragging={following !== undefined && activeId === movingId}
+              leaving={leaving}
+              motion={
+                following === undefined
+                  ? "resting"
+                  : barMotion(following.motion)
+              }
+              rect={box.rect}
+              restack={following?.restack}
+              windows={box.windows}
+            />
+          </Sliding>
+        );
+      })}
       {motions.drawn.map(
         ({ focused, motion, placement, restack, screen, window }) => {
           const on = screenNamed(screens, screen);
@@ -471,46 +504,6 @@ export const Stage = ({
           </Sliding>
         );
       })}
-      {/*
-        Scrims that dim unfocused windows and tabs. After the windows and bars
-        to win the `z-index` tie by document order. None for a fullscreen
-        window.
-      */}
-      {motions.drawn.map(
-        ({ focused, motion, placement, restack, screen, window }) =>
-          placement === undefined ||
-          fillsScreen(screens, window.id) ? undefined : (
-            <Sliding key={window.id} on={screenNamed(screens, screen)}>
-              <Scrim
-                depth={placement.depth}
-                dimmed={sinks(alone, focused, placement.selected)}
-                dragging={window.id === movingId}
-                frame={placement.frame}
-                // The bar's motion: a tab switch fades the contents but not
-                // the tab.
-                motion={barMotion(motion)}
-                rect={placement.frame}
-                restack={restack}
-                tab={placement.surface === undefined}
-                window={window.id}
-              />
-            </Sliding>
-          ),
-      )}
-      {motions.tabs.map(({ focused, motion, screen, tab }) => (
-        <Sliding key={tab.id} on={screenNamed(screens, screen)}>
-          <Scrim
-            depth={tab.depth}
-            dimmed={sinks(alone, focused, tab.selected)}
-            dragging={false}
-            frame={tab.rect}
-            motion={motion}
-            rect={tab.rect}
-            tab
-            window={tab.id}
-          />
-        </Sliding>
-      ))}
       {aim !== undefined && <DropIndicator rect={aim.rect} />}
       {/*
         Last, so a popup wins the `z-index` tie at its window's depth but
@@ -580,12 +573,16 @@ const tiledTargets = (placements: Screenful["placements"]): readonly Target[] =>
     .filter(({ depth, surface }) => depth === TILED && surface !== undefined)
     .map(({ frame, id }) => ({ frame, id }));
 
-/**
- * Whether a window or tab is dimmed: it is neither focused nor in the
- * `focus parent` selection, and the desk shows more than one thing.
- */
-const sinks = (alone: boolean, focused: boolean, selected: boolean): boolean =>
-  !alone && !focused && !selected;
+/** The focus box around window `id`, on whichever screen shows it. */
+const focusBoxHolding = (
+  screens: readonly StageScreen[],
+  id: string | undefined,
+): PlacedFocusBox | undefined =>
+  id === undefined
+    ? undefined
+    : screens
+        .map(({ screenful }) => screenful.focusBox)
+        .find((box) => box?.windows.includes(id) === true);
 
 /**
  * The title of window `id`.

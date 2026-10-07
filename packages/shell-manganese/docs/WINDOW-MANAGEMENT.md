@@ -7,6 +7,9 @@ Manganese uses sway's layout model. For the key bindings, see
 
 - Each workspace holds a tree. Windows are leaves; containers lay out their
   children split, tabbed or stacking.
+- Tiled windows have a 20px gap between them and at the screen's edges, which
+  the focus glow lights. A lone window fills the workspace (sway's
+  `smart_gaps`).
 - A new window opens beside the focused one. Closing a window gives its space
   to the rest.
 - There are 10 workspaces for the whole desktop, plus the scratchpad and floating
@@ -40,13 +43,14 @@ Workspaces belong to the desktop, and screens show them, as in sway:
   moves to the next screen that way, then wraps.
 - **The chrome does not take focus.** The bar, wallpaper and title bars leave
   the keyboard where it was.
-- **The focused window stands out.** Other windows are dimmed by a scrim
-  (`Scrim.tsx`): darker in the dark theme, paler in the light one. Its title
-  bar is raised with bold text. Nothing is dimmed when the desktop shows a single
-  window or tab group. The scrim fades so pointer-driven focus changes don't
-  flash.
-- **Meta+A selects a group.** Commands then act on the whole container. All
-  its windows are lit; the focused one's bar gets the accent color. Meta+Shift+A,
+- **The focused window stands out.** An accent ring and glow surround it
+  (`FocusGlow.tsx`), lighting the gaps around it. A window in a tab group
+  lights the whole group, tabs included. Its title bar is raised with bold
+  text. Nothing is lit when the desktop shows a single window or tab group. The
+  glow fades out and in where it is, rather than moving to the next window, so
+  pointer-driven focus changes don't flash or slide.
+- **Meta+A selects a group.** Commands then act on the whole container. One
+  glow surrounds the group; the focused window's bar gets the accent color. Meta+Shift+A,
   focusing a floating window, or clicking another window ends the selection.
 - **`xdg-activation` requests are granted.** The compositor forwards them as
   `focus_requested`. Manganese switches to that window's workspace and focuses

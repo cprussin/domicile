@@ -17,7 +17,7 @@ The engine serves this page over `domicile://` and hands `Shell` the desktop.
 
 | Path | Contents |
 |---|---|
-| `window-management/` | Window model, the state reducer (`window-state.ts`), `Stage` (draws every window), title bars, scrim, pointer warping, animations. |
+| `window-management/` | Window model, the state reducer (`window-state.ts`), `Stage` (draws every window), title bars, focus glow, pointer warping, animations. |
 | `window-management/tree/` | The sway layout tree: insert, remove, move, layout, resize, focus direction, frames, drag-and-drop. |
 | `window-management/floating/` | Floating windows: drag, resize, edge borders, shadow. |
 | `window-management/tiled/` | Dragging and edge-resizing tiled windows. |

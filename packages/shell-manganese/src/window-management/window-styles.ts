@@ -43,7 +43,7 @@ export const placedAt = (rect: Rect, depth: number): CSSProperties => ({
 export const draggingStyles = css({ opacity: 0.6 });
 
 /**
- * The border that makes a window's edge visible. Focus is shown by `Scrim`,
+ * The border that makes a window's edge visible. Focus is shown by `FocusGlow`,
  * not by this border's color.
  */
 // Longhands, not `border`: the frame overrides one side, and a shorthand and
