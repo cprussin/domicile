@@ -1,11 +1,14 @@
 import { describe, expect, it } from "bun:test";
-import type { PortalHost, PortalRequest } from "./portal";
+import type { Capturing, PortalHost, PortalRequest } from "./portal";
 import {
   answerPortalRequest,
+  CapturingKind,
   FileChooserMode,
   Inhibited,
   PortalAnswer,
   PortalKind,
+  stopCapturing,
+  watchCapturing,
   watchPortalRequests,
 } from "./portal";
 
@@ -34,8 +37,8 @@ class FakeHost implements PortalHost {
     this.#listeners.delete(listener);
   }
 
-  push(items: readonly object[]): void {
-    const data = JSON.stringify({ items, type: "portal_requests" });
+  push(items: readonly object[], capturing?: readonly object[]): void {
+    const data = JSON.stringify({ capturing, items, type: "portal_requests" });
     for (const listener of this.#listeners) {
       listener(new MessageEvent("portalrequests", { data }));
     }
@@ -217,6 +220,57 @@ describe("watchPortalRequests", () => {
     ]);
   });
 
+  it("parses a remote desktop request's body", async () => {
+    const host = new FakeHost();
+    const requests = watched(host);
+    host.push([
+      {
+        app_id: "org.example.Remote",
+        body: { clipboard: true, devices: KEYBOARD_AND_POINTER },
+        id: 3,
+        kind: "remote_desktop",
+      },
+    ]);
+
+    expect(await requests).toEqual([
+      {
+        appId: "org.example.Remote",
+        body: {
+          clipboard: true,
+          devices: { keyboard: true, pointer: true, touchscreen: false },
+        },
+        id: 3,
+        kind: PortalKind.RemoteDesktop,
+        parentAppId: undefined,
+      },
+    ]);
+  });
+
+  it("parses an input capture request's body", async () => {
+    const host = new FakeHost();
+    const requests = watched(host);
+    host.push([
+      {
+        app_id: "org.example.Barrier",
+        body: { devices: KEYBOARD_AND_POINTER },
+        id: 4,
+        kind: "input_capture",
+      },
+    ]);
+
+    expect(await requests).toEqual([
+      {
+        appId: "org.example.Barrier",
+        body: {
+          devices: { keyboard: true, pointer: true, touchscreen: false },
+        },
+        id: 4,
+        kind: PortalKind.InputCapture,
+        parentAppId: undefined,
+      },
+    ]);
+  });
+
   it("keeps a kind it does not know, to be refused", async () => {
     const host = new FakeHost();
     const requests = watched(host);
@@ -265,6 +319,78 @@ describe("watchPortalRequests", () => {
   });
 });
 
+describe("watchCapturing", () => {
+  const capturing = (host: FakeHost): Promise<readonly Capturing[]> =>
+    new Promise((resolve) => {
+      watchCapturing(host, resolve);
+    });
+
+  it("parses each session", async () => {
+    const host = new FakeHost();
+    const sessions = capturing(host);
+    host.push(
+      [],
+      [
+        {
+          app_id: "org.example.Remote",
+          body: { clipboard: false, devices: KEYBOARD_AND_POINTER },
+          id: 5,
+          kind: "remote_desktop",
+        },
+        {
+          app_id: "org.example.Barrier",
+          body: { devices: KEYBOARD_AND_POINTER },
+          id: 6,
+          kind: "input_capture",
+        },
+        { app_id: "", body: {}, id: 7, kind: "screen_cast" },
+      ],
+    );
+
+    expect(await sessions).toEqual([
+      {
+        appId: "org.example.Remote",
+        clipboard: false,
+        devices: { keyboard: true, pointer: true, touchscreen: false },
+        id: 5,
+        kind: CapturingKind.RemoteDesktop,
+      },
+      {
+        appId: "org.example.Barrier",
+        devices: { keyboard: true, pointer: true, touchscreen: false },
+        id: 6,
+        kind: CapturingKind.InputCapture,
+      },
+      {
+        appId: "",
+        id: 7,
+        kind: CapturingKind.Unknown,
+        wireKind: "screen_cast",
+      },
+    ]);
+  });
+
+  it("reads a push without sessions as none", async () => {
+    const host = new FakeHost();
+    const sessions = capturing(host);
+    host.push([]);
+
+    expect(await sessions).toEqual([]);
+  });
+
+  it("stops listening when the returned function is called", () => {
+    const host = new FakeHost();
+    const heard: (readonly Capturing[])[] = [];
+    const stop = watchCapturing(host, (sessions) => {
+      heard.push(sessions);
+    });
+    stop();
+    host.push([]);
+
+    expect(heard).toEqual([]);
+  });
+});
+
 describe("answerPortalRequest", () => {
   it("writes each answer as the compositor reads it", () => {
     const host = new FakeHost();
@@ -291,6 +417,16 @@ describe("answerPortalRequest", () => {
       }),
     );
 
+    answerPortalRequest(
+      host,
+      7,
+      PortalAnswer.RemoteDesktop(
+        { keyboard: true, pointer: false, touchscreen: false },
+        true,
+      ),
+    );
+    answerPortalRequest(host, 8, PortalAnswer.InputCapture());
+
     expect(host.answers).toEqual([
       [1, { kind: "access" }],
       [2, { kind: "canceled" }],
@@ -306,6 +442,30 @@ describe("answerPortalRequest", () => {
         },
       ],
       [6, { choices: {}, kind: "file_chooser", paths: ["/home/me"] }],
+      [
+        7,
+        {
+          clipboard: true,
+          devices: { keyboard: true, pointer: false, touchscreen: false },
+          kind: "remote_desktop",
+        },
+      ],
+      [8, { kind: "input_capture" }],
     ]);
   });
 });
+
+describe("stopCapturing", () => {
+  it("answers the session with a stop", () => {
+    const host = new FakeHost();
+    stopCapturing(host, 5);
+
+    expect(host.answers).toEqual([[5, { kind: "stop" }]]);
+  });
+});
+
+const KEYBOARD_AND_POINTER = {
+  keyboard: true,
+  pointer: true,
+  touchscreen: false,
+};

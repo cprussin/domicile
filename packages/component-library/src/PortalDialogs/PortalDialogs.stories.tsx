@@ -6,13 +6,20 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { PortalDialogs } from "./PortalDialogs";
 
 /**
- * A desktop with one pending request. Answers go to the console; the request
- * stays up, since no compositor takes it away.
+ * A desktop that pushes `items` and `capturing` once. Answers go to the
+ * console; nothing goes away, since no compositor takes it away.
  */
-const pending = (item: object): PortalHost & SystemHost => ({
+const pushing = (
+  items: readonly object[],
+  capturing: readonly object[] = [],
+): PortalHost & SystemHost => ({
   addEventListener: (type, listener) => {
     if (type === "portalrequests") {
-      const data = JSON.stringify({ items: [item], type: "portal_requests" });
+      const data = JSON.stringify({
+        capturing,
+        items,
+        type: "portal_requests",
+      });
       listener(new MessageEvent("portalrequests", { data }));
     }
   },
@@ -105,9 +112,26 @@ const home = () =>
     "/home/me/todo.md": "",
   });
 
+const remoteDesktop = {
+  app_id: "org.example.Remote",
+  body: {
+    clipboard: true,
+    devices: { keyboard: true, pointer: true, touchscreen: false },
+  },
+  id: 4,
+  kind: "remote_desktop",
+};
+
+const inputCapture = {
+  app_id: "org.example.Barrier",
+  body: { devices: { keyboard: true, pointer: true, touchscreen: false } },
+  id: 5,
+  kind: "input_capture",
+};
+
 const meta = {
   args: {
-    host: pending(access),
+    host: pushing([access]),
     screen: undefined,
     screenOf: undefined,
     systemOf: undefined,
@@ -149,7 +173,7 @@ type Story = StoryObj<typeof meta>;
 
 export const Access: Story = {
   args: {
-    host: pending(access),
+    host: pushing([access]),
     screen: undefined,
     screenOf: undefined,
     systemOf: undefined,
@@ -158,7 +182,7 @@ export const Access: Story = {
 
 export const AppChooser: Story = {
   args: {
-    host: pending(appChooser),
+    host: pushing([appChooser]),
     screen: undefined,
     screenOf: undefined,
     systemOf: installed,
@@ -167,9 +191,42 @@ export const AppChooser: Story = {
 
 export const FileChooser: Story = {
   args: {
-    host: pending(fileChooser),
+    host: pushing([fileChooser]),
     screen: undefined,
     screenOf: undefined,
     systemOf: home,
+  },
+};
+
+export const RemoteDesktop: Story = {
+  args: {
+    host: pushing([remoteDesktop]),
+    screen: undefined,
+    screenOf: undefined,
+    systemOf: undefined,
+  },
+};
+
+export const InputCapture: Story = {
+  args: {
+    host: pushing([inputCapture]),
+    screen: undefined,
+    screenOf: undefined,
+    systemOf: undefined,
+  },
+};
+
+export const Capturing: Story = {
+  args: {
+    host: pushing(
+      [],
+      [
+        { ...remoteDesktop, id: 6 },
+        { ...inputCapture, id: 7 },
+      ],
+    ),
+    screen: undefined,
+    screenOf: undefined,
+    systemOf: undefined,
   },
 };

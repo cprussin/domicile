@@ -62,6 +62,19 @@ impl Compositor {
     /// `None` gives an empty home. The compositor indexes and watches `$HOME`
     /// (see `crate::file_indexing`), so tests must never see the runner's.
     pub fn started_in_a_home(config: &str, home: Option<&std::path::Path>) -> Compositor {
+        Compositor::started_with_env(config, home, &[])
+    }
+
+    /// The same, on the session bus at `address`, for the portals.
+    pub fn started_on_a_bus(config: &str, address: &str) -> Compositor {
+        Compositor::started_with_env(config, None, &[("DBUS_SESSION_BUS_ADDRESS", address)])
+    }
+
+    fn started_with_env(
+        config: &str,
+        home: Option<&std::path::Path>,
+        env: &[(&str, &str)],
+    ) -> Compositor {
         let directory = tempfile::tempdir().expect("a runtime directory");
         let config_file = directory.path().join("config.json");
         std::fs::write(&config_file, config).expect("the config is written");
@@ -93,6 +106,7 @@ impl Compositor {
             // Debug, because some decisions (such as a refused density)
             // leave no trace on the socket, only in the log.
             .env("RUST_LOG", "info,domicile_compositor=debug")
+            .envs(env.iter().copied())
             // Both into one buffer: logs go to stdout and panics to stderr.
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())

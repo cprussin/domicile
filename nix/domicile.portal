@@ -7,9 +7,10 @@
 # under another desktop's name keeps that name.
 #
 # Domicile implements `Settings`, `Access`, `AppChooser`, `FileChooser`,
-# `Notification` and `Inhibit`. Every interface not listed here goes to
-# another backend, mostly `xdg-desktop-portal-gtk`. Listing an interface
-# Domicile does not implement would take it from the backend that does.
+# `Notification`, `Inhibit`, `RemoteDesktop`, `Clipboard` and `InputCapture`.
+# Every interface not listed here goes to another backend, mostly
+# `xdg-desktop-portal-gtk`. Listing an interface Domicile does not implement
+# would take it from the backend that does.
 # Screenshot and ScreenCast have no backend: gtk does not implement them and the
 # wlroots backends need protocols Domicile does not serve.
 #
@@ -19,10 +20,11 @@
 # `AppChooser` is the app list the shell draws for `OpenURI` and "Open with",
 # and `FileChooser` its file picker. `Notification` feeds the shell's
 # notification drawer. `Inhibit` holds off blanking and lists logout and
-# suspend inhibitors for the shell. See
+# suspend inhibitors for the shell. `RemoteDesktop`, its `Clipboard` and
+# `InputCapture` take input over EIS after a grant the shell draws. See
 # `packages/domicile-compositor/src/portals/` and
 # `docs/architecture/PORTALS.md`.
 [portal]
 DBusName=org.freedesktop.impl.portal.desktop.domicile
-Interfaces=org.freedesktop.impl.portal.Settings;org.freedesktop.impl.portal.Access;org.freedesktop.impl.portal.AppChooser;org.freedesktop.impl.portal.FileChooser;org.freedesktop.impl.portal.Notification;org.freedesktop.impl.portal.Inhibit;
+Interfaces=org.freedesktop.impl.portal.Settings;org.freedesktop.impl.portal.Access;org.freedesktop.impl.portal.AppChooser;org.freedesktop.impl.portal.FileChooser;org.freedesktop.impl.portal.Notification;org.freedesktop.impl.portal.Inhibit;org.freedesktop.impl.portal.RemoteDesktop;org.freedesktop.impl.portal.Clipboard;org.freedesktop.impl.portal.InputCapture;
 UseIn=domicile

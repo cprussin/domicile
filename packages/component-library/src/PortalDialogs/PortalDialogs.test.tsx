@@ -42,8 +42,8 @@ class FakeHost implements PortalHost, SystemHost {
     this.#listeners.delete(listener);
   }
 
-  push(items: readonly object[]): void {
-    const data = JSON.stringify({ items, type: "portal_requests" });
+  push(items: readonly object[], capturing?: readonly object[]): void {
+    const data = JSON.stringify({ capturing, items, type: "portal_requests" });
     act(() => {
       for (const listener of this.#listeners) {
         listener(new MessageEvent("portalrequests", { data }));
@@ -134,6 +134,23 @@ const fileChooser = (id: number, body: object = {}) => ({
 
 /** Lets the picker's listings resolve. */
 const listed = () => act(() => Promise.resolve());
+
+const remoteDesktop = (id: number, clipboard: boolean) => ({
+  app_id: "org.example.Remote",
+  body: {
+    clipboard,
+    devices: { keyboard: true, pointer: true, touchscreen: false },
+  },
+  id,
+  kind: "remote_desktop",
+});
+
+const inputCapture = (id: number) => ({
+  app_id: "org.example.Barrier",
+  body: { devices: { keyboard: true, pointer: true, touchscreen: false } },
+  id,
+  kind: "input_capture",
+});
 
 describe(PortalDialogs, () => {
   describe("rendering", () => {
@@ -522,6 +539,144 @@ describe(PortalDialogs, () => {
 
       expect(host.answers).toEqual([[4, { kind: "refused" }]]);
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+  });
+  describe("remote desktop", () => {
+    it("offers each device asked for, all on, and the clipboard", () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host} />);
+      host.push([remoteDesktop(1, true)]);
+
+      expect(screen.getByRole("dialog")).toHaveTextContent(
+        "org.example.Remote wants to control your computer",
+      );
+      expect(
+        screen.queryByRole("switch", { name: "Touchscreen" }),
+      ).not.toBeInTheDocument();
+      expect(screen.getByRole("switch", { name: "Keyboard" })).toBeChecked();
+      expect(screen.getByRole("switch", { name: "Pointer" })).toBeChecked();
+      expect(
+        screen.getByRole("switch", { name: "Share clipboard" }),
+      ).toBeChecked();
+    });
+
+    it("offers no clipboard when none was asked for", () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host} />);
+      host.push([remoteDesktop(1, false)]);
+
+      expect(
+        screen.queryByRole("switch", { name: "Share clipboard" }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("grants what is left on", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host} />);
+      host.push([remoteDesktop(1, true)]);
+      await userEvent.click(screen.getByRole("switch", { name: "Keyboard" }));
+      await userEvent.click(
+        screen.getByRole("switch", { name: "Share clipboard" }),
+      );
+      await userEvent.click(screen.getByRole("button", { name: "Allow" }));
+
+      expect(host.answers).toEqual([
+        [
+          1,
+          {
+            clipboard: false,
+            devices: { keyboard: false, pointer: true, touchscreen: false },
+            kind: "remote_desktop",
+          },
+        ],
+      ]);
+    });
+
+    it("denies", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host} />);
+      host.push([remoteDesktop(1, true)]);
+      await userEvent.click(screen.getByRole("button", { name: "Deny" }));
+
+      expect(host.answers).toEqual([[1, { kind: "canceled" }]]);
+    });
+  });
+
+  describe("input capture", () => {
+    it("names the application and the devices it would take", () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host} />);
+      host.push([inputCapture(1)]);
+
+      expect(screen.getByRole("dialog")).toHaveTextContent(
+        "org.example.Barrier wants to capture your keyboard and pointer when the pointer leaves the screen.",
+      );
+    });
+
+    it("allows", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host} />);
+      host.push([inputCapture(1)]);
+      await userEvent.click(screen.getByRole("button", { name: "Allow" }));
+
+      expect(host.answers).toEqual([[1, { kind: "input_capture" }]]);
+    });
+
+    it("denies", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host} />);
+      host.push([inputCapture(1)]);
+      await userEvent.click(screen.getByRole("button", { name: "Deny" }));
+
+      expect(host.answers).toEqual([[1, { kind: "canceled" }]]);
+    });
+  });
+
+  describe("capturing", () => {
+    it("shows nothing while no session runs", () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host} />);
+      host.push([]);
+
+      expect(screen.queryByRole("list")).not.toBeInTheDocument();
+    });
+
+    it("names each session's application and what it holds", () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host} />);
+      host.push(
+        [],
+        [
+          remoteDesktop(5, true),
+          inputCapture(6),
+          { app_id: "", body: {}, id: 7, kind: "screen_cast" },
+        ],
+      );
+
+      expect(
+        screen
+          .getAllByRole("listitem")
+          .map((item) => item.firstChild?.textContent),
+      ).toEqual([
+        "Remote control: org.example.Remote — keyboard, pointer, clipboard",
+        "Input capture: org.example.Barrier — keyboard, pointer",
+        "screen_cast: An application",
+      ]);
+    });
+
+    it("stops a session", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host} />);
+      host.push([], [remoteDesktop(5, false), inputCapture(6)]);
+      const [, capture] = screen.getAllByRole("listitem");
+      if (capture === undefined) {
+        throw new Error("no second session");
+      }
+      await userEvent.click(
+        within(capture).getByRole("button", { name: "Stop" }),
+      );
+
+      expect(host.answers).toEqual([[6, { kind: "stop" }]]);
     });
   });
 });

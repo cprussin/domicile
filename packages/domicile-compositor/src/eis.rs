@@ -2,8 +2,9 @@
 //!
 //! RemoteDesktop's and InputCapture's `ConnectToEIS` hand an app one end of a
 //! socket. [`Eis::connect`] makes that socket for the input a session was
-//! granted, and dropping the returned [`Session`] revokes it. Design:
-//! `docs/architecture/PORTALS.md`.
+//! granted, and dropping the returned [`Session`] revokes it. RemoteDesktop's
+//! legacy `Notify*` methods send through an [`Emulator`] instead, which takes
+//! the same path. Design: `docs/architecture/PORTALS.md`.
 //!
 //! - [`devices`] decides which devices a client gets for its grant.
 //! - [`desk`] maps the displays to regions and points to windows.
@@ -14,6 +15,8 @@
 //! readable, so a client never blocks the loop. [`Eis`] and [`Session`] can be
 //! used from any thread, such as the D-Bus one.
 
+pub mod barriers;
+mod capture;
 mod desk;
 mod devices;
 mod translation;
@@ -39,10 +42,14 @@ use smithay::reexports::calloop::{
 };
 use tracing::{debug, error, warn};
 
+use self::barriers::Barrier;
+use self::capture::Capture as Capturing;
+pub use self::capture::Captured;
 pub use self::desk::{Desk, Window};
 pub use self::devices::Capabilities;
 use self::devices::{devices, Kind};
-use self::translation::{Emulated, Input};
+pub use self::translation::Emulated;
+use self::translation::Input;
 use crate::ClientRequest;
 
 /// What the server needs from the compositor it runs in.
@@ -52,6 +59,9 @@ pub trait Compositor {
 
     /// Send a request down the path the engine's input takes.
     fn inject(&mut self, request: ClientRequest);
+
+    /// The evdev key that types `keysym` on the desk's keyboard, if any.
+    fn keycode(&self, keysym: u32) -> Option<u32>;
 }
 
 /// Opens EIS contexts. Cheap to clone; usable from any thread.
@@ -68,15 +78,54 @@ pub struct Session {
     orders: Sender<Order>,
 }
 
-/// What [`Eis`] and [`Session`] ask of the loop.
+/// One InputCapture context. Dropping it revokes it, as for [`Session`].
+pub struct Capture {
+    id: u64,
+    orders: Sender<Order>,
+}
+
+/// The captures, for the Wayland thread to divert input to. See
+/// [`Captures::divert`].
+pub struct Captures(Rc<RefCell<HashMap<u64, Served>>>);
+
+/// Input sent without a socket. Dropping it lets go of every key and button
+/// it holds.
+pub struct Emulator {
+    id: u64,
+    orders: Sender<Order>,
+}
+
+/// What [`Eis`], [`Session`] and [`Emulator`] ask of the loop.
 enum Order {
     Open {
         id: u64,
         socket: UnixStream,
         granted: Capabilities,
+        /// Set for an InputCapture receiver.
+        capture: Option<Box<dyn Fn(Captured) + Send>>,
+    },
+    Barriers {
+        id: u64,
+        barriers: Vec<Barrier>,
+    },
+    Enable {
+        id: u64,
+        enabled: bool,
+    },
+    Release {
+        id: u64,
     },
     Revoke {
         id: u64,
+    },
+    Emulate {
+        id: u64,
+        emulated: Emulated,
+    },
+    Keysym {
+        id: u64,
+        keysym: u32,
+        pressed: bool,
     },
 }
 
@@ -88,14 +137,19 @@ struct Served {
     connection: Option<Connection>,
     devices: Vec<(Kind, Device)>,
     input: Input,
+    /// Set for an InputCapture receiver, which sends no input.
+    capture: Option<Capturing>,
 }
 
 /// Serve EIS on `handle`'s loop.
 pub fn serve<D: Compositor + 'static>(
     handle: &LoopHandle<'static, D>,
-) -> Result<Eis, calloop::Error> {
+) -> Result<(Eis, Captures), calloop::Error> {
     let (orders, heard) = channel();
     let served: Rc<RefCell<HashMap<u64, Served>>> = Rc::default();
+    let captures = Captures(Rc::clone(&served));
+    // Each emulator's input, created by its first event.
+    let mut emulated: HashMap<u64, Input> = HashMap::new();
     let loop_handle = handle.clone();
     handle
         .insert_source(heard, move |event, _, compositor| {
@@ -105,16 +159,101 @@ pub fn serve<D: Compositor + 'static>(
                         id,
                         socket,
                         granted,
-                    } => open(&loop_handle, &served, id, socket, granted),
-                    Order::Revoke { id } => revoke(&loop_handle, &served, id, compositor),
+                        capture,
+                    } => open(&loop_handle, &served, id, socket, granted, capture),
+                    Order::Barriers { id, barriers } => {
+                        capturing(&served, id, |capture, _| capture.barriers = barriers);
+                    }
+                    Order::Enable { id, enabled } => capturing(&served, id, |capture, devices| {
+                        capture.enabled = enabled;
+                        if !enabled {
+                            capture.deactivate(devices);
+                        }
+                    }),
+                    Order::Release { id } => {
+                        capturing(&served, id, |capture, devices| capture.deactivate(devices));
+                    }
+                    Order::Revoke { id } => {
+                        if let Some(mut input) = emulated.remove(&id) {
+                            for request in input.let_go() {
+                                compositor.inject(request);
+                            }
+                        }
+                        revoke(&loop_handle, &served, id, compositor);
+                    }
+                    Order::Emulate {
+                        id,
+                        emulated: event,
+                    } => {
+                        let desk = compositor.desk();
+                        for request in emulated.entry(id).or_default().translate(event, &desk) {
+                            compositor.inject(request);
+                        }
+                    }
+                    Order::Keysym {
+                        id,
+                        keysym,
+                        pressed,
+                    } => match compositor.keycode(keysym) {
+                        Some(keycode) => {
+                            let desk = compositor.desk();
+                            let key = Emulated::Key { keycode, pressed };
+                            for request in emulated.entry(id).or_default().translate(key, &desk) {
+                                compositor.inject(request);
+                            }
+                        }
+                        None => debug!(keysym, "no key on this keyboard types an emulated keysym"),
+                    },
                 }
             }
         })
         .map_err(|inserting| inserting.error)?;
-    Ok(Eis {
-        orders,
-        next: Arc::new(AtomicU64::new(0)),
-    })
+    Ok((
+        Eis {
+            orders,
+            next: Arc::new(AtomicU64::new(0)),
+        },
+        captures,
+    ))
+}
+
+/// Run `change` on capture `id`'s state, if it is still open.
+fn capturing(
+    served: &Rc<RefCell<HashMap<u64, Served>>>,
+    id: u64,
+    change: impl FnOnce(&mut Capturing, &[(Kind, Device)]),
+) {
+    if let Some(this) = served.borrow_mut().get_mut(&id) {
+        if let Some(capture) = &mut this.capture {
+            change(capture, &this.devices);
+            if let Some(connection) = &this.connection {
+                let _ = connection.flush();
+            }
+        }
+    }
+}
+
+impl Captures {
+    /// Whether an InputCapture session takes `request` from the seat, and
+    /// sends it to its client instead. Called on the Wayland thread for
+    /// input the lock let through.
+    pub fn divert(&self, request: &ClientRequest, desk: &Desk) -> bool {
+        // Borrowed already while an EIS client's input is being injected.
+        // Emulated input is never captured.
+        match self.0.try_borrow_mut() {
+            Ok(mut served) => {
+                served
+                    .values_mut()
+                    .any(|this| match (&mut this.capture, &this.connection) {
+                        (Some(capture), Some(connection)) => {
+                            capture.divert(request, desk, &this.devices, connection)
+                        }
+                        _ => false,
+                    })
+            }
+            Err(_) => false,
+        }
+    }
 }
 
 impl Eis {
@@ -122,13 +261,6 @@ impl Eis {
     ///
     /// Returns the client's end of the socket, which `ConnectToEIS` hands out,
     /// and the session that keeps it open.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "called by the RemoteDesktop and InputCapture backends, next in PORTALS.md's phase 3"
-        )
-    )]
     pub fn connect(&self, granted: Capabilities) -> io::Result<(OwnedFd, Session)> {
         let (ours, theirs) = UnixStream::pair()?;
         // Here rather than on the loop, so a failure reaches the caller.
@@ -139,6 +271,7 @@ impl Eis {
                 id,
                 socket: ours,
                 granted,
+                capture: None,
             })
             .map_err(|_| io::Error::other("the compositor's loop has stopped"))?;
         Ok((
@@ -148,6 +281,107 @@ impl Eis {
                 orders: self.orders.clone(),
             },
         ))
+    }
+
+    /// Open a receiving context that gets the desk's `granted` input once a
+    /// barrier is reached. `heard` hears each activation.
+    pub fn capture(
+        &self,
+        granted: Capabilities,
+        heard: impl Fn(Captured) + Send + 'static,
+    ) -> io::Result<(OwnedFd, Capture)> {
+        let (ours, theirs) = UnixStream::pair()?;
+        ours.set_nonblocking(true)?;
+        let id = self.next.fetch_add(1, Ordering::Relaxed);
+        self.orders
+            .send(Order::Open {
+                id,
+                socket: ours,
+                granted,
+                capture: Some(Box::new(heard)),
+            })
+            .map_err(|_| io::Error::other("the compositor's loop has stopped"))?;
+        Ok((
+            theirs.into(),
+            Capture {
+                id,
+                orders: self.orders.clone(),
+            },
+        ))
+    }
+}
+
+impl Capture {
+    /// Where the pointer starts a capture. Replaces any earlier barriers.
+    pub fn barriers(&self, barriers: Vec<Barrier>) {
+        self.order(Order::Barriers {
+            id: self.id,
+            barriers,
+        });
+    }
+
+    /// Whether reaching a barrier starts a capture. Disabling ends one.
+    pub fn enable(&self, enabled: bool) {
+        self.order(Order::Enable {
+            id: self.id,
+            enabled,
+        });
+    }
+
+    /// End the active capture: input goes back to the seat.
+    pub fn release(&self) {
+        self.order(Order::Release { id: self.id });
+    }
+
+    fn order(&self, order: Order) {
+        // Fails only once the loop has stopped, and the capture with it.
+        let _ = self.orders.send(order);
+    }
+}
+
+impl Drop for Capture {
+    fn drop(&mut self) {
+        self.order(Order::Revoke { id: self.id });
+    }
+}
+
+impl Eis {
+    /// Open an emulator, for input that arrives without a socket.
+    pub fn emulate(&self) -> Emulator {
+        Emulator {
+            id: self.next.fetch_add(1, Ordering::Relaxed),
+            orders: self.orders.clone(),
+        }
+    }
+}
+
+impl Emulator {
+    /// Send one event. The caller checks it against the grant.
+    pub fn send(&self, emulated: Emulated) {
+        self.order(Order::Emulate {
+            id: self.id,
+            emulated,
+        });
+    }
+
+    /// Press or release the key that types `keysym`. Dropped if no key does.
+    pub fn keysym(&self, keysym: u32, pressed: bool) {
+        self.order(Order::Keysym {
+            id: self.id,
+            keysym,
+            pressed,
+        });
+    }
+
+    fn order(&self, order: Order) {
+        // Fails only once the loop has stopped, and the input with it.
+        let _ = self.orders.send(order);
+    }
+}
+
+impl Drop for Emulator {
+    fn drop(&mut self) {
+        self.order(Order::Revoke { id: self.id });
     }
 }
 
@@ -165,6 +399,7 @@ fn open<D: Compositor + 'static>(
     id: u64,
     socket: UnixStream,
     granted: Capabilities,
+    capture: Option<Box<dyn Fn(Captured) + Send>>,
 ) {
     let context = eis::Context::new(socket)
         .expect("a socket already made non-blocking can be made non-blocking again");
@@ -213,6 +448,7 @@ fn open<D: Compositor + 'static>(
                     connection: None,
                     devices: Vec::new(),
                     input: Input::default(),
+                    capture: capture.map(Capturing::new),
                 },
             );
         }
@@ -251,6 +487,8 @@ impl Served {
                 self.bind(bind, &compositor.desk());
                 PostAction::Continue
             }
+            // A receiver sends no input.
+            _ if self.capture.is_some() => PostAction::Continue,
             other => {
                 if let Some(emulated) = emulated(&other) {
                     let desk = compositor.desk();
@@ -360,5 +598,7 @@ fn emulated(request: &EisRequest) -> Option<Emulated> {
     }
 }
 
+#[cfg(test)]
+pub mod recorded;
 #[cfg(test)]
 mod with_a_client;

@@ -10,7 +10,8 @@ use std::collections::HashMap;
 use std::collections::BTreeMap;
 
 use domicile_protocol::{
-    ChromeMessage, DisplayInfo, HostMessage, Notification, PortalRequest, Theme, TrayItem,
+    Capturing, ChromeMessage, DisplayInfo, HostMessage, Notification, PortalRequest, Theme,
+    TrayItem,
 };
 
 pub mod base64;
@@ -125,8 +126,9 @@ pub struct Host {
     /// Handles clients exported their windows under, for a portal's
     /// `parent_window`.
     exports: xdg_foreign::Exports,
-    /// The unanswered portal dialogs. `None` until set, as for `tray`.
-    portal_requests: Option<Vec<PortalRequest>>,
+    /// The unanswered portal dialogs and the running input sessions. `None`
+    /// until set, as for `tray`.
+    portal_requests: Option<(Vec<PortalRequest>, Vec<Capturing>)>,
 }
 
 impl Host {
@@ -269,15 +271,20 @@ impl Host {
             .map(|items| HostMessage::Notifications { items })
     }
 
-    /// Set the unanswered portal dialogs and return the message to broadcast,
-    /// or `None` if they did not change.
-    pub fn set_portal_requests(&mut self, items: Vec<PortalRequest>) -> Option<HostMessage> {
-        (self.portal_requests.as_ref() != Some(&items)).then(|| {
-            let message = HostMessage::PortalRequests {
-                items: items.clone(),
-            };
-            self.portal_requests = Some(items);
-            message
+    /// Set the unanswered portal dialogs and the running input sessions, and
+    /// return the message to broadcast, or `None` if they did not change.
+    pub fn set_portal_requests(
+        &mut self,
+        items: Vec<PortalRequest>,
+        capturing: Vec<Capturing>,
+    ) -> Option<HostMessage> {
+        let set = (items, capturing);
+        (self.portal_requests.as_ref() != Some(&set)).then(|| {
+            self.portal_requests = Some(set.clone());
+            HostMessage::PortalRequests {
+                items: set.0,
+                capturing: set.1,
+            }
         })
     }
 
@@ -285,7 +292,7 @@ impl Host {
     pub fn describe_portal_requests(&self) -> Option<HostMessage> {
         self.portal_requests
             .clone()
-            .map(|items| HostMessage::PortalRequests { items })
+            .map(|(items, capturing)| HostMessage::PortalRequests { items, capturing })
     }
 
     /// Register a newly-mapped Wayland toplevel. Returns its assigned id and

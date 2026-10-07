@@ -4,22 +4,19 @@
 //! it serves records what it was asked to inject, since `inject` is
 //! `handle_client_request` in the real one.
 
-use std::os::fd::OwnedFd;
-use std::os::unix::net::UnixStream;
-use std::sync::mpsc::{self, Receiver};
-use std::thread;
+use std::sync::mpsc::Receiver;
 use std::time::{Duration, Instant};
 
-use domicile_config::Transform;
-use domicile_scene::{Bounds, Point};
+use domicile_scene::Point;
 use reis::ei;
-use reis::enumflags2::BitFlags;
-use reis::event::{Connection, Device, EiEvent};
+use reis::event::{Connection, Device};
 use smithay::reexports::calloop::EventLoop;
 
-use super::{serve, Capabilities, Compositor, Desk, Eis, Window};
+use super::barriers::{placed, Zone};
+use super::recorded::{a_client, a_receiver, Got, Recorded, Saw, KEYSYM_A};
+use super::Compositor;
+use super::{serve, Capabilities, Captured, Captures, Eis, Emulated};
 use crate::lock::{refused, Asked, Refusal};
-use crate::screens::Advertised;
 use crate::ClientRequest;
 
 /// How long a test waits for the client or the server.
@@ -32,59 +29,33 @@ const EVERYTHING: Capabilities = Capabilities {
     touch: true,
 };
 
-/// A compositor with one 1280x800 display at 2x and one window at 100,100,
-/// which records what it is asked to inject.
-#[derive(Default)]
-struct Recorded {
-    injected: Vec<ClientRequest>,
-}
-
-impl Compositor for Recorded {
-    fn desk(&self) -> Desk {
-        Desk::new(
-            vec![Advertised {
-                name: "one".into(),
-                position: (0, 0),
-                logical: (1280, 800),
-                mode: (2560, 1600),
-                scale: 2.0,
-                transform: Transform::Normal,
-                description: String::new(),
-                physical_mm: (0, 0),
-                refresh_mhz: 0,
-            }],
-            vec![Window {
-                app_id: "1".into(),
-                bounds: Bounds {
-                    min: Point::new(100.0, 100.0),
-                    max: Point::new(500.0, 400.0),
-                },
-                focused: true,
-            }],
-        )
-    }
-
-    fn inject(&mut self, request: ClientRequest) {
-        self.injected.push(request);
-    }
-}
-
 /// A served loop and the compositor it serves.
 struct Served {
     event_loop: EventLoop<'static, Recorded>,
     compositor: Recorded,
     eis: Eis,
+    captures: Captures,
 }
 
 impl Served {
     fn new() -> Served {
         let event_loop = EventLoop::try_new().unwrap();
-        let eis = serve(&event_loop.handle()).unwrap();
+        let (eis, captures) = serve(&event_loop.handle()).unwrap();
         Served {
             event_loop,
             compositor: Recorded::default(),
             eis,
+            captures,
         }
+    }
+
+    /// Whether a capture took `request` from the seat.
+    fn diverted(&mut self, request: ClientRequest) -> bool {
+        // Orders from the capture's handle first.
+        self.event_loop
+            .dispatch(Duration::ZERO, &mut self.compositor)
+            .unwrap();
+        self.captures.divert(&request, &self.compositor.desk())
     }
 
     /// Run the loop until `done` holds of what was injected.
@@ -115,82 +86,6 @@ impl Served {
                 .unwrap();
         }
     }
-}
-
-/// A region as a client sees it: offset, size and scale.
-type Region = (u32, u32, u32, u32, f32);
-
-/// What a client thread reports.
-#[derive(Debug, PartialEq)]
-enum Saw {
-    /// Its devices, by name, with each one's regions.
-    Devices(Vec<(String, Vec<Region>)>),
-    Disconnected,
-}
-
-/// A client on `socket` that binds everything, waits for `devices` devices,
-/// reports them, then runs `act` with them.
-fn a_client(
-    socket: OwnedFd,
-    devices: usize,
-    act: impl FnOnce(&Connection, &[Device]) + Send + 'static,
-) -> Receiver<Saw> {
-    let (saw, seen) = mpsc::channel();
-    thread::spawn(move || {
-        let context = ei::Context::new(UnixStream::from(socket)).unwrap();
-        let (connection, events) = context
-            .handshake_blocking("domicile test", ei::handshake::ContextType::Sender)
-            .unwrap();
-        let mut resumed = Vec::new();
-        let mut act = Some(act);
-        for event in events {
-            match event {
-                Ok(EiEvent::SeatAdded(added)) => {
-                    added.seat.bind_capabilities(BitFlags::all());
-                    connection.flush().unwrap();
-                }
-                Ok(EiEvent::DeviceResumed(device)) => {
-                    resumed.push(device.device);
-                    if resumed.len() == devices {
-                        saw.send(Saw::Devices(described(&resumed))).unwrap();
-                        act.take().unwrap()(&connection, &resumed);
-                        connection.flush().unwrap();
-                    }
-                }
-                Ok(EiEvent::Disconnected(_)) => {
-                    saw.send(Saw::Disconnected).unwrap();
-                    return;
-                }
-                Ok(_) => {}
-                Err(err) => panic!("the client heard {err}"),
-            }
-        }
-    });
-    seen
-}
-
-fn described(devices: &[Device]) -> Vec<(String, Vec<Region>)> {
-    devices
-        .iter()
-        .map(|device| {
-            (
-                device.name().unwrap().to_owned(),
-                device
-                    .regions()
-                    .iter()
-                    .map(|region| {
-                        (
-                            region.x,
-                            region.y,
-                            region.width,
-                            region.height,
-                            region.scale,
-                        )
-                    })
-                    .collect(),
-            )
-        })
-        .collect()
 }
 
 /// The device named `name`, emulating, with `send` run on it and then framed.
@@ -323,5 +218,112 @@ fn closing_the_session_disconnects_the_client_and_lets_go_of_its_keys() {
             keycode: 30,
             pressed: false
         })
+    );
+}
+
+#[test]
+fn input_sent_without_a_socket_takes_the_same_path_and_is_let_go_of() {
+    // RemoteDesktop's `NotifyKeyboardKeysym` and the other legacy methods.
+    let mut served = Served::new();
+    let emulator = served.eis.emulate();
+
+    emulator.keysym(KEYSYM_A, true);
+    emulator.send(Emulated::Motion {
+        dx: -240.0,
+        dy: -100.0,
+    });
+    served.until(|injected| injected.len() >= 2);
+    drop(emulator);
+    served.until(|injected| injected.len() >= 4);
+
+    assert_eq!(
+        served.compositor.injected,
+        [
+            ClientRequest::Key {
+                keycode: 30,
+                pressed: true,
+            },
+            // From the middle of the display, inside the window.
+            ClientRequest::PointerMotion {
+                app_id: "1".into(),
+                x: 300.0,
+                y: 200.0,
+            },
+            ClientRequest::Key {
+                keycode: 30,
+                pressed: false,
+            },
+            ClientRequest::PointerLeave,
+        ]
+    );
+}
+
+#[test]
+fn a_capture_takes_the_input_that_crosses_a_barrier_until_released() {
+    let mut served = Served::new();
+    let (tell, told) = std::sync::mpsc::channel();
+    let (socket, capture) = served
+        .eis
+        .capture(
+            Capabilities {
+                pointer: true,
+                keyboard: true,
+                ..Capabilities::default()
+            },
+            move |captured| {
+                let _ = tell.send(captured);
+            },
+        )
+        .unwrap();
+    let got = a_receiver(socket);
+    assert_eq!(served.heard(&got), Got::Devices(2));
+    let (barriers, _) = placed(
+        &[Zone {
+            x: 0,
+            y: 0,
+            width: 1280,
+            height: 800,
+        }],
+        &[(7, [1279, 0, 1279, 799])],
+    );
+    capture.barriers(barriers);
+    capture.enable(true);
+
+    // Window 2 reaches the right edge.
+    let pointing = |x, y| ClientRequest::PointerMotion {
+        app_id: "2".into(),
+        x,
+        y,
+    };
+    assert!(
+        !served.diverted(pointing(100.0, 100.0)),
+        "short of the barrier"
+    );
+    assert!(served.diverted(pointing(279.5, 100.0)));
+    assert_eq!(
+        told.try_recv(),
+        Ok(Captured::Activated {
+            activation_id: 1,
+            cursor: Point::new(1279.5, 100.0),
+            barrier_id: 7,
+        })
+    );
+    assert!(served.diverted(pointing(270.5, 90.0)));
+    assert!(served.diverted(ClientRequest::Key {
+        keycode: 30,
+        pressed: true
+    }));
+    assert_eq!(served.heard(&got), Got::Emulating(1));
+    assert_eq!(served.heard(&got), Got::Motion(-9.0, -10.0));
+    assert_eq!(served.heard(&got), Got::Key(30, true));
+
+    capture.release();
+    assert!(!served.diverted(ClientRequest::Key {
+        keycode: 30,
+        pressed: false
+    }));
+    assert!(
+        served.compositor.injected.is_empty(),
+        "the seat got nothing"
     );
 }

@@ -57,6 +57,9 @@
         # `wl-copy` and `wl-paste`, the data-control clients the clipboard
         # checks run.
         wl-clipboard
+        # `dbus-daemon`, a private session bus for the portal checks
+        # (`tests/portals.rs`).
+        dbus
         # The terminal the demo shell's Alt+Enter binding launches.
         kitty
         # A display for the compositor's `--present` window in headless e2e

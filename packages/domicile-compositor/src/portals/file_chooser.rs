@@ -233,9 +233,12 @@ impl Asked {
                 }
             },
             PortalAnswer::Canceled => (1, HashMap::new()),
-            PortalAnswer::Access | PortalAnswer::AppChooser { .. } | PortalAnswer::Refused => {
-                (2, HashMap::new())
-            }
+            PortalAnswer::Access
+            | PortalAnswer::AppChooser { .. }
+            | PortalAnswer::RemoteDesktop { .. }
+            | PortalAnswer::InputCapture
+            | PortalAnswer::Stop
+            | PortalAnswer::Refused => (2, HashMap::new()),
         }
     }
 

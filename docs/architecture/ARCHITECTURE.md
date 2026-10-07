@@ -121,8 +121,9 @@ Outside the default members (needs Smithay and native Wayland; build in
     input and frame callbacks for every client.
   - `portals/` is the `xdg-desktop-portal` backend on the session bus:
     `Settings`, so GTK, Qt, Electron and Firefox apps follow the desktop's
-    theme; `Notification` and `Inhibit`; and dialogs such as `Access` and
-    `AppChooser`, which the shell draws. See [PORTALS.md](PORTALS.md).
+    theme; `Notification` and `Inhibit`; dialogs such as `Access` and
+    `AppChooser`, which the shell draws; and RemoteDesktop, Clipboard and
+    InputCapture sessions. See [PORTALS.md](PORTALS.md).
   - `eis.rs` serves EIS, the emulated input the RemoteDesktop and
     InputCapture portals hand out. Its input takes the engine's input path,
     so the lock refuses it.

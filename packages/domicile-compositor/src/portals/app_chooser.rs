@@ -120,8 +120,13 @@ fn results(answer: PortalAnswer, activation_token: Option<String>) -> HashMap<St
             .chain(activation_token.map(|token| ("activation_token", token)))
             .map(|(name, value)| (name.to_string(), owned(value)))
             .collect(),
+        // The queue gives a request only answers of its kind, a dismissal or
+        // a refusal.
         PortalAnswer::Access
         | PortalAnswer::FileChooser(_)
+        | PortalAnswer::RemoteDesktop { .. }
+        | PortalAnswer::InputCapture
+        | PortalAnswer::Stop
         | PortalAnswer::Canceled
         | PortalAnswer::Refused => HashMap::new(),
     }

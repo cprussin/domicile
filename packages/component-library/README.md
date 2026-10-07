@@ -39,6 +39,7 @@ Each export is `@domicile-desktop/component-library/<name>`.
 | `Select` | Select / listbox. |
 | `SlideOver` | Drawer anchored to a screen edge. |
 | `Slider` | Single-value range slider drawn in `currentcolor`. |
+| `Switch` | On/off switch with its label. |
 | `Tabs` | Tab set built from a `tabs` array, with sizes. |
 | `TabRail` | Vertical tab rail with brand slot, footer and collapse. |
 | `Textarea` | Auto-sizing textarea with a resize handle. |

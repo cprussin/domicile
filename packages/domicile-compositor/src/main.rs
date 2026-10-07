@@ -70,8 +70,9 @@ use smithay::wayland::{
     idle_inhibit::{IdleInhibitHandler, IdleInhibitManagerState},
     output::{OutputHandler, OutputManagerState},
     selection::data_device::{
-        request_data_device_client_selection, set_data_device_focus, set_data_device_selection,
-        ClientDndGrabHandler, DataDeviceHandler, DataDeviceState, ServerDndGrabHandler,
+        current_data_device_selection_userdata, request_data_device_client_selection,
+        set_data_device_focus, set_data_device_selection, ClientDndGrabHandler, DataDeviceHandler,
+        DataDeviceState, ServerDndGrabHandler,
     },
     selection::ext_data_control::{
         DataControlHandler as ExtDataControlHandler, DataControlState as ExtDataControlState,
@@ -157,6 +158,7 @@ use crate::uploads::{UploadId, Uploads};
 use crate::coalesce::last_of_burst;
 use crate::dmabuf_descriptor::descriptor_from;
 use crate::dmabuf_import::{headless_renderer, DmabufImporter};
+use crate::eis::barriers::Zone;
 use crate::file_indexing::{keep_the_index, kept_at, Heard, Offered};
 use crate::idle::{announced, darkened, somebody_is_here, Blanking, Idle, StillThere};
 use crate::keymap::compiled_keymap;
@@ -164,7 +166,7 @@ use crate::lock::{Asked, Lock, Offer, Refusal, Seen, Unlocking, Verdict};
 use crate::modifiers::{Held, Modifiers};
 use crate::outbound::{outbound, Outbound, OutboundReceiver, OutboundSender};
 use crate::peer_process::peer_pid;
-use crate::portals::{Portals, CURRENT_DESKTOP};
+use crate::portals::{Portals, Selection, CURRENT_DESKTOP};
 use crate::restatement::Restatement;
 use crate::scale::{logical_size, output_scale};
 use crate::screens::{Advertised, Screens, Slot};
@@ -190,6 +192,7 @@ use domicile_protocol::{
 };
 use smithay::backend::renderer::gles::GlesRenderer;
 use smithay::backend::renderer::ImportMemWl as _;
+use zbus::zvariant::OwnedObjectPath;
 
 /// Log messages that tests and operators search for by text.
 ///
@@ -1436,6 +1439,10 @@ struct DomicileCompositor {
     /// The app the pointer is currently over, so a `set_cursor` request can be
     /// attributed to the element the chrome should restyle.
     pointer_app: Option<String>,
+    /// InputCapture sessions, which take input once the pointer reaches a
+    /// barrier. Set when the Wayland loop starts serving EIS. See
+    /// [`crate::eis`].
+    captures: Option<eis::Captures>,
     /// For frame-callback timestamps.
     start: Instant,
     /// Last time a frame was broadcast per app, to throttle to ~30fps.
@@ -1618,7 +1625,27 @@ impl ClientData for ClientState {
 
 impl eis::Compositor for CalloopData {
     fn desk(&self) -> eis::Desk {
-        let state = &self.state;
+        self.state.desk()
+    }
+
+    fn inject(&mut self, request: ClientRequest) {
+        self.state.handle_client_request(request);
+    }
+
+    /// From the keysym table the shell's keybindings resolve against.
+    fn keycode(&self, keysym: u32) -> Option<u32> {
+        let name = smithay::input::keyboard::xkb::keysym_get_name(keysym.into());
+        match self.state.hub.host.lock().unwrap().describe_shell_config() {
+            Some(HostMessage::ShellConfig { keys }) => keys.get(&name).copied(),
+            _ => None,
+        }
+    }
+}
+
+impl DomicileCompositor {
+    /// The displays and windows, as EIS sees them.
+    fn desk(&self) -> eis::Desk {
+        let state = self;
         let focused = state.seat.get_keyboard().unwrap().current_focus();
         let windows = state
             .app_bounds
@@ -1632,10 +1659,6 @@ impl eis::Compositor for CalloopData {
             })
             .collect();
         eis::Desk::new(state.screens.outputs().cloned().collect(), windows)
-    }
-
-    fn inject(&mut self, request: ClientRequest) {
-        self.state.handle_client_request(request);
     }
 }
 
@@ -2300,17 +2323,20 @@ impl DomicileCompositor {
                     // Set the seat's selection, so Wayland clients can paste
                     // it.
                     match clipboard {
-                        Clipboard::Copy => set_data_device_selection(
-                            &self.display_handle,
-                            &self.seat,
-                            text_mimes(),
-                            clipboard,
-                        ),
+                        Clipboard::Copy => {
+                            set_data_device_selection(
+                                &self.display_handle,
+                                &self.seat,
+                                text_mimes(),
+                                Holder::Desk(clipboard),
+                            );
+                            self.hub.portals.selection_changed(text_mimes(), None);
+                        }
                         Clipboard::Primary => set_primary_selection(
                             &self.display_handle,
                             &self.seat,
                             text_mimes(),
-                            clipboard,
+                            Holder::Desk(clipboard),
                         ),
                     }
                 }
@@ -3032,6 +3058,9 @@ impl DomicileCompositor {
             host.describe_desktop()
         };
         self.hub.broadcast(desktop);
+        self.hub
+            .portals
+            .displays(self.screens.outputs().map(Zone::from).collect());
     }
 
     /// Apply a desktop the config now describes, keeping displays that stayed.
@@ -3126,6 +3155,9 @@ impl DomicileCompositor {
             host.describe_desktop()
         };
         self.hub.broadcast(desktop);
+        self.hub
+            .portals
+            .displays(self.screens.outputs().map(Zone::from).collect());
     }
 
     /// Join an engine that replaced the current one, and restore what the old
@@ -3995,6 +4027,10 @@ impl DomicileCompositor {
             say_what_the_lock_refused(refusal);
             return;
         }
+        // Input the lock let through, before it reaches the seat.
+        if self.captured(&event) {
+            return;
+        }
         match event {
             ClientRequest::PointerMotion { app_id, x, y } => {
                 let Some(surface) = self.surface_for(&app_id) else {
@@ -4160,8 +4196,9 @@ impl DomicileCompositor {
                         &self.display_handle,
                         &self.seat,
                         text_mimes(),
-                        Clipboard::Copy,
+                        Holder::Desk(Clipboard::Copy),
                     );
+                    self.hub.portals.selection_changed(text_mimes(), None);
                     self.tell_the_engine_a_clipboard(Clipboard::Copy);
                 }
                 // The history dropped this entry. Set nothing rather than
@@ -5413,13 +5450,102 @@ fn at(clipboard: Clipboard) -> usize {
     }
 }
 
-impl SelectionHandler for DomicileCompositor {
-    /// Which clipboard a compositor-owned selection is on.
+/// Who serves a selection the compositor set.
+#[derive(Debug, Clone)]
+enum Holder {
+    /// A restored history entry, or anything copied in the browser (not our
+    /// Wayland client), on this clipboard. Served from
+    /// [`DomicileCompositor::holding`].
+    Desk(Clipboard),
+    /// A RemoteDesktop session's offer, which its application writes. See
+    /// `crate::portals`.
+    Portal(OwnedObjectPath),
+}
+
+impl DomicileCompositor {
+    /// Whether an InputCapture session took `event` from the seat.
+    fn captured(&self, event: &ClientRequest) -> bool {
+        let input = matches!(
+            event,
+            ClientRequest::Key { .. }
+                | ClientRequest::PointerMotion { .. }
+                | ClientRequest::PointerLeave
+                | ClientRequest::PointerButton { .. }
+                | ClientRequest::PointerAxis { .. }
+        );
+        input
+            && self
+                .captures
+                .as_ref()
+                .is_some_and(|captures| captures.divert(event, &self.desk()))
+    }
+
+    /// Do what the Clipboard portal asked of the seat's clipboard.
+    fn select_for_a_portal(&mut self, selection: Selection) {
+        match selection {
+            Selection::Offer {
+                session,
+                mime_types,
+            } => {
+                set_data_device_selection(
+                    &self.display_handle,
+                    &self.seat,
+                    mime_types.clone(),
+                    Holder::Portal(session.clone()),
+                );
+                self.hub
+                    .portals
+                    .selection_changed(mime_types, Some(session));
+            }
+            Selection::Read { mime_type, into } => {
+                let held =
+                    current_data_device_selection_userdata(&self.seat).map(|held| held.clone());
+                match held {
+                    Some(held) => self.serve_a_selection(&held, mime_type, into),
+                    None => {
+                        if let Err(err) =
+                            request_data_device_client_selection(&self.seat, mime_type, into)
+                        {
+                            debug!(%err, "a portal session read a clipboard nobody holds");
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Write a selection the compositor set into `fd`.
     ///
-    /// The compositor owns two kinds of selection: a restored history entry,
-    /// and anything copied in the browser (not our Wayland client). Both are
-    /// served from [`DomicileCompositor::holding`].
-    type SelectionUserData = Clipboard;
+    /// Written on a thread, since a client that stops reading would otherwise
+    /// block the Wayland thread. The deadline in `crate::clipboard` bounds the
+    /// thread. A portal session's offer is written by its application.
+    ///
+    /// If nothing is held, the fd is dropped and the client reads EOF.
+    fn serve_a_selection(&self, held: &Holder, mime_type: String, fd: OwnedFd) {
+        match held {
+            Holder::Desk(clipboard) => match self.holding[at(*clipboard)].as_deref() {
+                Some(text) => {
+                    let copy = text.to_owned();
+                    thread::spawn(move || {
+                        if let Err(err) =
+                            clipboard::write_copy(fd, copy.as_bytes(), clipboard::PATIENCE)
+                        {
+                            warn!(%err, "a client asked for the clipboard and did not take it");
+                        }
+                    });
+                }
+                None => warn!(
+                    ?clipboard,
+                    "a client is pasting something this desktop no longer holds, so it gets nothing"
+                ),
+            },
+            Holder::Portal(session) => self.hub.portals.transfer(session.clone(), mime_type, fd),
+        }
+    }
+}
+
+impl SelectionHandler for DomicileCompositor {
+    type SelectionUserData = Holder;
 
     /// A client set a selection. Only records the mime type to read; see
     /// [`DomicileCompositor::copying`].
@@ -5437,39 +5563,26 @@ impl SelectionHandler for DomicileCompositor {
         self.copying[at(clipboard_of(target))] = source
             .as_ref()
             .and_then(|offered| text_mime(&offered.mime_types()));
+        if target == SelectionTarget::Clipboard {
+            let offered = source
+                .as_ref()
+                .map(SelectionSource::mime_types)
+                .unwrap_or_default();
+            self.hub.portals.selection_changed(offered, None);
+        }
     }
 
-    /// A client is pasting a compositor-owned selection.
-    ///
-    /// Written on a thread, since a client that stops reading would otherwise
-    /// block the Wayland thread. The deadline in `crate::clipboard` bounds the
-    /// thread.
-    ///
-    /// If nothing is held, the fd is dropped and the client reads EOF.
+    /// A client is pasting a compositor-owned selection. See
+    /// [`DomicileCompositor::serve_a_selection`].
     fn send_selection(
         &mut self,
         _target: SelectionTarget,
-        _mime_type: String,
+        mime_type: String,
         fd: OwnedFd,
         _seat: Seat<Self>,
-        clipboard: &Clipboard,
+        held: &Holder,
     ) {
-        match self.holding[at(*clipboard)].as_deref() {
-            Some(text) => {
-                let copy = text.to_owned();
-                thread::spawn(move || {
-                    if let Err(err) =
-                        clipboard::write_copy(fd, copy.as_bytes(), clipboard::PATIENCE)
-                    {
-                        warn!(%err, "a client asked for the clipboard and did not take it");
-                    }
-                });
-            }
-            None => warn!(
-                ?clipboard,
-                "a client is pasting something this desktop no longer holds, so it gets nothing"
-            ),
-        }
+        self.serve_a_selection(held, mime_type, fd);
     }
 }
 
@@ -6036,6 +6149,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     {
         let mut host = hub.host.lock().unwrap();
         host.describe_displays(screens.outputs().map(Advertised::described).collect());
+        hub.portals
+            .displays(screens.outputs().map(Zone::from).collect());
         // The keymap, for the browser process to decode keys. Outside ChromeOS
         // nothing else gives Chromium's layout engine one. See `keymap`.
         host.set_keymap(keymap);
@@ -6080,13 +6195,20 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     // Portal dialogs, published like notifications, starting empty. A dialog
     // asked for while no chrome is connected is refused; its `parent_window`
     // resolves through the `xdg_foreign` exports. See `portals`.
-    hub.host.lock().unwrap().set_portal_requests(Vec::new());
+    hub.host
+        .lock()
+        .unwrap()
+        .set_portal_requests(Vec::new(), Vec::new());
     let publishing = Arc::clone(&hub);
     let asking = Arc::clone(&hub);
     let resolving = Arc::clone(&hub);
     hub.portals.listen(
-        move |items| {
-            let told = publishing.host.lock().unwrap().set_portal_requests(items);
+        move |items, capturing| {
+            let told = publishing
+                .host
+                .lock()
+                .unwrap()
+                .set_portal_requests(items, capturing);
             if let Some(message) = told {
                 publishing.broadcast(message);
             }
@@ -6273,6 +6395,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         grabbing: Vec::new(),
         bubbles: Vec::new(),
         pointer_app: None,
+        captures: None,
         start: Instant::now(),
         last_frame: HashMap::new(),
         last_commit: None,
@@ -6406,11 +6529,26 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     // but a failure here is fatal since nothing is running yet.
     data.state.arm_the_idle_clock(config.idle.blank_after())?;
 
-    // Emulated input, served on this thread like the engine's.
+    // Emulated input, served on this thread like the engine's, and handed to
+    // the portals that take it.
+    let (eis, captures) = eis::serve(&handle)?;
+    data.state.captures = Some(captures);
+    // The Clipboard portal's requests, handled where the seat lives.
+    let (selections, heard_selections) = channel::<Selection>();
+    handle.insert_source(heard_selections, |event, _, data: &mut CalloopData| {
+        if let ChannelEvent::Msg(selection) = event {
+            data.state.select_for_a_portal(selection);
+        }
+    })?;
+    let selections = move |selection| {
+        // Fails only once the loop has stopped.
+        let _ = selections.send(selection);
+    };
+    data.state.hub.portals.attach(eis.clone(), selections);
     data.state
         .hub
         .eis
-        .set(eis::serve(&handle)?)
+        .set(eis)
         .unwrap_or_else(|_| unreachable!("EIS is served once, at startup"));
 
     // Chrome requests, handled on the Wayland thread.

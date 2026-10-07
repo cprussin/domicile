@@ -284,7 +284,17 @@ const portalRequestSchema = z.looseObject({
   parent_app_id: z.string().optional(),
 });
 
+// A session that controls or captures input. `body` is per `kind`; stop it by
+// answering its `id` with `{"kind":"stop"}`.
+const portalCapturingSchema = z.looseObject({
+  app_id: z.string(),
+  body: z.unknown(),
+  id: z.number(),
+  kind: z.string(),
+});
+
 const portalRequestsSchema = z.looseObject({
+  capturing: z.array(portalCapturingSchema).optional(),
   items: z.array(portalRequestSchema),
   type: z.literal("portal_requests"),
 });
