@@ -30,6 +30,8 @@ export enum SystemErrorKind {
   Locked,
   /** A D-Bus method returned an error; the message starts with its name. */
   Dbus,
+  /** The user dismissed the dialog the call put up. */
+  Canceled,
   Other,
 }
 
@@ -185,6 +187,13 @@ export type System = {
   dbusMatch: (
     match: DbusMatch,
   ) => Promise<Result<Listening<DbusSignal>, SystemError>>;
+  /**
+   * Take a screenshot as an interactive Screenshot portal call takes one, as
+   * if the shell were the application: the desk freezes, `<PortalDialogs />`
+   * draws the screenshot dialog, and the area picked is saved under
+   * `$XDG_PICTURES_DIR/Screenshots/`. Resolves with the saved PNG's path.
+   */
+  screenshot: () => Promise<Result<string, SystemError>>;
 };
 
 /** What {@link system} needs of the desktop `Shell` is handed. */
@@ -263,6 +272,10 @@ export const system = (host: SystemHost): System => {
         ]);
         return exited.map((exit) => ({ ...exit, stderr, stdout }));
       }),
+    screenshot: () =>
+      oneShot(calls, { call: "screenshot" }, (reply) =>
+        reply.kind === "saved" ? reply.path : unexpected(reply),
+      ),
     spawn: (argv, options) => spawn(calls, argv, options),
     stat: (path) =>
       oneShot(calls, { call: "stat", path }, (reply) =>
@@ -605,6 +618,9 @@ const errorKind = (kind: WireError["kind"]): SystemErrorKind => {
     }
     case "dbus": {
       return SystemErrorKind.Dbus;
+    }
+    case "canceled": {
+      return SystemErrorKind.Canceled;
     }
     case "other": {
       return SystemErrorKind.Other;

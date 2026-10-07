@@ -2,7 +2,12 @@ import { describe, expect, it } from "bun:test";
 import { KeyActionKind } from "@domicile-desktop/sdk/key-action";
 
 import { parseCommand } from "./command";
-import { DEFAULT_KEYBINDINGS, DEFAULT_MODES, exec } from "./commands";
+import {
+  DEFAULT_KEYBINDINGS,
+  DEFAULT_MODES,
+  exec,
+  screenshot,
+} from "./commands";
 
 describe("manganese's default keys", () => {
   // Every default binding must parse, or that key does nothing.
@@ -41,6 +46,14 @@ describe("manganese's default keys", () => {
     });
     expect(DEFAULT_KEYBINDINGS["Meta+0"]).toEqual({
       args: ["workspace", "10"],
+      kind: KeyActionKind.SendShell,
+    });
+  });
+
+  it("take a screenshot on Print", () => {
+    expect(DEFAULT_KEYBINDINGS.Print).toEqual(screenshot());
+    expect(screenshot()).toEqual({
+      args: ["screenshot"],
       kind: KeyActionKind.SendShell,
     });
   });

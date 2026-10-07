@@ -381,16 +381,12 @@ Understood and not scheduled.
   through to the next backend, which is correct, so `nix/domicile.portal`
   lists only what Domicile implements.
 
-- **Screenshots are a Domicile command, not a protocol.** `domicile
-  screenshot <file>` asks the engine for a PNG of the shell page. It is a
-  stopgap:
-  - No region or window picker, and no screen recording.
-  - Tools such as `grim` and `wf-recorder` cannot capture the desk. Portal
-    clients can, through the Screenshot portal
-    ([PORTALS.md](docs/architecture/PORTALS.md)).
-
-  Replace it with `ext-image-copy-capture-v1` (and `wlr-screencopy` for older
-  tools), on the display captures the portal uses. Then remove the command.
+- **Wayland capture tools cannot capture the desk.** Portal clients, the
+  shell (`system(host).screenshot()`) and `domicile screenshot <file>` all
+  take the portal's frame (`Casting::shoot`,
+  [PORTALS.md](docs/architecture/PORTALS.md)). `grim` and `wf-recorder` get
+  nothing. Serve `ext-image-copy-capture-v1` (and `wlr-screencopy` for older tools) on
+  the same display captures.
 
 ### Shell reload
 

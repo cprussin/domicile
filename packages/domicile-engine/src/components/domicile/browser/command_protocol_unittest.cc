@@ -10,7 +10,6 @@
 #include "base/files/file_path.h"
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
-#include "base/types/expected.h"
 #include "base/values.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -30,8 +29,6 @@ struct Told {
   std::string module;
   bool opened = false;
   std::string url;
-  bool captured = false;
-  base::FilePath file;
 };
 
 // Answers one line with recording actions. `has_window` false makes every
@@ -51,18 +48,8 @@ std::string Answer(std::string_view line,
     told->url = url.spec();
     return has_window;
   };
-  auto screenshot = [told, has_window](const base::FilePath& file,
-                                       ScreenshotDone done) {
-    told->captured = true;
-    told->file = file;
-    if (has_window) {
-      std::move(done).Run(base::ok());
-    } else {
-      std::move(done).Run(base::unexpected("this engine has no shell page"));
-    }
-  };
   std::string reply;
-  AnswerCommand(line, load_shell, open_url, screenshot,
+  AnswerCommand(line, load_shell, open_url,
                 base::BindOnce([](std::string* out,
                                   std::string line) { *out = std::move(line); },
                                &reply));
@@ -230,59 +217,6 @@ TEST(CommandProtocolTest, RefusesWhenThereIsNoShellPageToOpenIn) {
              &told, /*has_window=*/false);
   EXPECT_EQ(TypeOf(reply), "refused");
   EXPECT_THAT(WhyOf(reply), HasSubstr("shell page"));
-}
-
-constexpr char kScreenshot[] =
-    R"({"type":"screenshot","version":1,"file":"/home/someone/shot.png"})";
-
-TEST(CommandProtocolTest, WritesTheScreenshotToTheFileARequestNames) {
-  Told told;
-  EXPECT_EQ(TypeOf(Answer(kScreenshot, &told)), "captured");
-  EXPECT_TRUE(told.captured);
-  EXPECT_EQ(told.file, base::FilePath("/home/someone/shot.png"));
-  EXPECT_FALSE(told.asked);
-}
-
-TEST(CommandProtocolTest, RefusesAScreenshotWithNoAbsoluteFile) {
-  // A relative file would land in the engine's working directory, which the
-  // sender does not know.
-  Told told;
-  const std::string relative =
-      Answer(R"({"type":"screenshot","version":1,"file":"shot.png"})", &told);
-  EXPECT_EQ(TypeOf(relative), "refused");
-  EXPECT_THAT(WhyOf(relative), HasSubstr("absolute"));
-  EXPECT_EQ(TypeOf(Answer(R"({"type":"screenshot","version":1})", &told)),
-            "refused");
-  EXPECT_FALSE(told.captured);
-}
-
-TEST(CommandProtocolTest, AnswersAScreenshotOnlyOnceItIsDone) {
-  // The display compositor reads the desk back asynchronously, so the reply
-  // waits for it and carries its failure.
-  ScreenshotDone held;
-  std::string reply;
-  AnswerCommand(
-      kScreenshot,
-      [](const base::FilePath&, const std::string&) {
-        ADD_FAILURE() << "a screenshot loads no shell";
-        return false;
-      },
-      [](const GURL&) {
-        ADD_FAILURE() << "a screenshot opens no address";
-        return false;
-      },
-      [&held](const base::FilePath&, ScreenshotDone done) {
-        held = std::move(done);
-      },
-      base::BindOnce(
-          [](std::string* out, std::string line) { *out = std::move(line); },
-          &reply));
-
-  EXPECT_EQ(reply, "");
-  std::move(held).Run(
-      base::unexpected("could not write /home/someone/shot.png"));
-  EXPECT_EQ(TypeOf(reply), "refused");
-  EXPECT_THAT(WhyOf(reply), HasSubstr("could not write"));
 }
 
 }  // namespace

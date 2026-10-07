@@ -1352,7 +1352,24 @@ pub enum SystemRequest {
         #[serde(default)]
         member: Option<String>,
     },
+    /// Take a screenshot: one frame of every monitor, as the Screenshot portal
+    /// takes. Answered with [`SystemReply::Saved`].
+    ///
+    /// Without `file`, the shell's screenshot dialog picks the area, as for
+    /// an interactive portal screenshot asked by [`SHELL_APP_ID`], and the PNG
+    /// goes under `$XDG_PICTURES_DIR/Screenshots/`. A dismissed dialog fails
+    /// with [`SystemErrorKind::Canceled`]. With `file`, the whole desk is
+    /// written there, without a dialog.
+    Screenshot {
+        #[serde(default)]
+        file: Option<String>,
+    },
 }
+
+/// The `app_id` of a portal dialog the shell asked for itself, such as
+/// [`SystemRequest::Screenshot`]'s. Not a valid application id, since it
+/// holds a colon, so no application can be named this.
+pub const SHELL_APP_ID: &str = "domicile:shell";
 
 /// Which D-Bus bus a call or match is on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -1397,6 +1414,8 @@ pub enum SystemReply {
     Returned { signature: String, body: String },
     /// The watch, match or process is running.
     Started,
+    /// The screenshot was written to this absolute path.
+    Saved { path: String },
     /// The call failed. Nothing else follows under this id.
     Failed { error: SystemError },
 }
@@ -1491,6 +1510,8 @@ pub enum SystemErrorKind {
     /// A D-Bus method returned an error. The message starts with its name,
     /// such as `org.freedesktop.DBus.Error.ServiceUnknown`.
     Dbus,
+    /// The user dismissed the dialog the call put up.
+    Canceled,
     Other,
 }
 

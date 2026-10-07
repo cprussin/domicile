@@ -57,6 +57,13 @@ export enum PortalKind {
   Unknown,
 }
 
+/**
+ * The {@link PortalRequestBase.appId} of a dialog the shell asked for itself,
+ * such as the one `system(host).screenshot()` puts up. No application can have
+ * it.
+ */
+export const SHELL_APP_ID = "domicile:shell";
+
 /** What every request carries. */
 export type PortalRequestBase = {
   /** The id {@link answerPortalRequest} takes. */
