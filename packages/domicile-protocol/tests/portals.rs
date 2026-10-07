@@ -4,7 +4,8 @@
 //! `docs/architecture/PORTALS.md`.
 
 use domicile_protocol::{
-    AccessDialog, ChromeMessage, HostMessage, PortalAnswer, PortalKind, PortalRequest,
+    AccessDialog, AppChooserDialog, ChromeMessage, HostMessage, PortalAnswer, PortalKind,
+    PortalRequest,
 };
 
 fn access() -> PortalRequest {
@@ -78,4 +79,67 @@ fn a_dismissal_is_response_one_and_a_refusal_two() {
     assert_eq!(PortalAnswer::Access.response(), 0);
     assert_eq!(PortalAnswer::Canceled.response(), 1);
     assert_eq!(PortalAnswer::Refused.response(), 2);
+}
+
+fn app_chooser() -> AppChooserDialog {
+    AppChooserDialog {
+        choices: vec!["org.gnome.Evince".into(), "firefox".into()],
+        last_choice: Some("firefox".into()),
+        content_type: Some("application/pdf".into()),
+        uri: None,
+        filename: Some("report.pdf".into()),
+    }
+}
+
+#[test]
+fn an_app_chooser_names_its_candidates_by_desktop_file_id() {
+    let written =
+        serde_json::to_string(&PortalKind::AppChooser(app_chooser())).expect("it serializes");
+
+    assert_eq!(
+        written,
+        r#"{"kind":"app_chooser","body":{"choices":["org.gnome.Evince","firefox"],"last_choice":"firefox","content_type":"application/pdf","filename":"report.pdf"}}"#
+    );
+}
+
+#[test]
+fn a_chosen_application_is_a_success() {
+    let line = r#"{"type":"answer_portal_request","id":4,"answer":{"kind":"app_chooser","choice":"firefox"}}"#;
+    let answer = PortalAnswer::AppChooser {
+        choice: "firefox".into(),
+    };
+
+    assert_eq!(
+        serde_json::from_str::<ChromeMessage>(line).expect("the SDK's own wire form"),
+        ChromeMessage::AnswerPortalRequest {
+            id: 4,
+            answer: answer.clone()
+        }
+    );
+    assert_eq!(answer.response(), 0);
+}
+
+#[test]
+fn a_request_takes_only_answers_of_its_own_kind() {
+    let chooser = PortalKind::AppChooser(app_chooser());
+    let access = PortalKind::Access(AccessDialog {
+        title: String::new(),
+        subtitle: String::new(),
+        body: String::new(),
+        grant_label: None,
+        deny_label: None,
+    });
+    let chose = |choice: &str| PortalAnswer::AppChooser {
+        choice: choice.into(),
+    };
+
+    assert!(chooser.accepts(&chose("firefox")));
+    assert!(!chooser.accepts(&chose("evil")), "not among the choices");
+    assert!(!chooser.accepts(&PortalAnswer::Access));
+    assert!(access.accepts(&PortalAnswer::Access));
+    assert!(!access.accepts(&chose("firefox")));
+    for kind in [&chooser, &access] {
+        assert!(kind.accepts(&PortalAnswer::Canceled));
+        assert!(kind.accepts(&PortalAnswer::Refused));
+    }
 }

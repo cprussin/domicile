@@ -6,8 +6,8 @@ Make Domicile the session's only `xdg-desktop-portal` backend:
 - The shell draws every portal dialog.
 - `xdg-desktop-portal-gtk` is removed from the session.
 
-Today the compositor implements `Settings` and `Access` and routes the rest to
-gtk.
+Today the compositor implements `Settings`, `Access` and `AppChooser` and
+routes the rest to gtk.
 So an Electron app's file dialog is a GTK window, and screen sharing, remote
 desktop and global shortcuts have no backend.
 
@@ -63,9 +63,13 @@ One request channel carries all dialogs. Each interface's backend builds on it.
   (`wayland:<handle>`) resolves through the compositor's `xdg_foreign` export
   to an app id. The shell draws the dialog over that `<app>`. A missing or
   unknown handle puts the dialog over the focused screen.
-- **Dialogs name the app.** The frontend's `app_id` resolves through
-  `domicile_host::desktop_entries` to a name and icon ("Zoom wants to share
-  your screen").
+- **Dialogs name the app.** The frontend's `app_id` resolves in the shell,
+  through `@domicile-desktop/system-apps`, to a name and icon ("Zoom wants to
+  share your screen").
+- **AppChooser offers the frontend's `choices`.** The shell names them from
+  their desktop entries and picks `last_choice`, else the first default
+  `mimeapps.list` gives the type (`domicile-mimeapps.list` first). The
+  compositor checks the answer is one of the current choices.
 - **The compositor owns PipeWire.** A window source is the client's buffer,
   which the compositor already has. A monitor source is the composited
   output, which only viz has: the engine runs a `FrameSinkVideoCapturer` on
@@ -138,7 +142,7 @@ Phase 0: request channel.
 Phase 1: dialogs.
 
 - [ ] FileChooser, with `FilePicker` moved to component-library; it lists directories with `readDir` ([SHELL-SYSTEM-ACCESS.md](../SHELL-SYSTEM-ACCESS.md))
-- [ ] AppChooser
+- [x] AppChooser
 - [ ] Access, Account, Email, Lockdown
 - [ ] Notification v2
 - [ ] Inhibit

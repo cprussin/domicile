@@ -5,17 +5,22 @@ import {
   PortalKind,
   watchPortalRequests,
 } from "@domicile-desktop/sdk/portal";
-import { useEffect, useState } from "react";
+import type { System, SystemHost } from "@domicile-desktop/sdk/system";
+import { system } from "@domicile-desktop/sdk/system";
+import { useEffect, useMemo, useState } from "react";
 import { AccessDialog } from "./AccessDialog";
+import { AppChooserDialog } from "./AppChooserDialog";
 
 type Props = {
   /** The desktop `Shell` is handed. */
-  host: PortalHost;
+  host: PortalHost & SystemHost;
   /**
    * The display to show a dialog on when it has no parent window. Needs a
    * `DisplayProvider`; without it, a dialog is centered on the whole page.
    */
   screen?: string | undefined;
+  /** How dialogs read the desktop's files, for tests. */
+  systemOf?: typeof system | undefined;
 };
 
 /**
@@ -23,8 +28,9 @@ type Props = {
  * time, oldest first. Requests of a kind it has no dialog for are refused. See
  * docs/architecture/PORTALS.md.
  */
-export const PortalDialogs = ({ host, screen }: Props) => {
+export const PortalDialogs = ({ host, screen, systemOf = system }: Props) => {
   const [requests, setRequests] = useState<readonly PortalRequest[]>([]);
+  const files = useMemo(() => systemOf(host), [systemOf, host]);
 
   useEffect(() => watchPortalRequests(host, setRequests), [host]);
 
@@ -45,6 +51,7 @@ export const PortalDialogs = ({ host, screen }: Props) => {
       key={shown.id}
       request={shown}
       screen={screen}
+      system={files}
     />
   );
 };
@@ -54,10 +61,12 @@ const Dialog = ({
   answer,
   request,
   screen,
+  system: files,
 }: {
   answer: (answer: PortalAnswer) => void;
   request: PortalRequest;
   screen: string | undefined;
+  system: System;
 }) => {
   switch (request.kind) {
     case PortalKind.Access:
@@ -67,6 +76,16 @@ const Dialog = ({
           asker={askerName(request.appId)}
           body={request.body}
           screen={screen}
+        />
+      );
+    case PortalKind.AppChooser:
+      return (
+        <AppChooserDialog
+          answer={answer}
+          asker={askerName(request.appId)}
+          body={request.body}
+          screen={screen}
+          system={files}
         />
       );
     case PortalKind.Unknown:

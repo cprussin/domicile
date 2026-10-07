@@ -532,6 +532,25 @@ pub struct PortalRequest {
 pub enum PortalKind {
     /// `org.freedesktop.impl.portal.Access`: allow or deny.
     Access(AccessDialog),
+    /// `org.freedesktop.impl.portal.AppChooser`: pick an application to open
+    /// a file or URI with. `OpenURI` asks through it too.
+    AppChooser(AppChooserDialog),
+}
+
+impl PortalKind {
+    /// Whether `answer` can answer a request of this kind: its own kind, or a
+    /// dismissal or refusal. A chosen application must be one offered.
+    pub fn accepts(&self, answer: &PortalAnswer) -> bool {
+        match (self, answer) {
+            (_, PortalAnswer::Canceled | PortalAnswer::Refused) => true,
+            (PortalKind::Access(_), PortalAnswer::Access) => true,
+            (PortalKind::AppChooser(dialog), PortalAnswer::AppChooser { choice }) => {
+                dialog.choices.contains(choice)
+            }
+            (PortalKind::Access(_), PortalAnswer::AppChooser { .. })
+            | (PortalKind::AppChooser(_), PortalAnswer::Access) => false,
+        }
+    }
 }
 
 /// An `AccessDialog`'s texts.
@@ -549,12 +568,34 @@ pub struct AccessDialog {
     pub deny_label: Option<String>,
 }
 
+/// An `AppChooser` request: what to open, and the applications offered.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AppChooserDialog {
+    /// Desktop file ids without `.desktop`, as the portal frontend names
+    /// them. `UpdateChoices` replaces them while the dialog is up.
+    pub choices: Vec<String>,
+    /// The application chosen last time for this content type, to preselect.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_choice: Option<String>,
+    /// The MIME type being opened.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content_type: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub uri: Option<String>,
+    /// The file's name, without its directory.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub filename: Option<String>,
+}
+
 /// The shell's answer to a [`PortalRequest`].
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum PortalAnswer {
     /// The user allowed a [`PortalKind::Access`].
     Access,
+    /// The application the user picked in a [`PortalKind::AppChooser`]: one
+    /// of its `choices`.
+    AppChooser { choice: String },
     /// The user dismissed the dialog, or denied it.
     Canceled,
     /// The shell has no dialog for this kind.
@@ -566,7 +607,7 @@ impl PortalAnswer {
     /// 2 for any other end.
     pub fn response(&self) -> u32 {
         match self {
-            PortalAnswer::Access => 0,
+            PortalAnswer::Access | PortalAnswer::AppChooser { .. } => 0,
             PortalAnswer::Canceled => 1,
             PortalAnswer::Refused => 2,
         }

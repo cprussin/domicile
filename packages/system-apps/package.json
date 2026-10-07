@@ -22,6 +22,7 @@
     "./favicons": "./src/favicons.ts",
     "./find-apps": "./src/find-apps.ts",
     "./installed": "./src/installed.ts",
+    "./mime-apps": "./src/mime-apps.ts",
     "./omit": "./src/omit.ts"
   },
   "files": [

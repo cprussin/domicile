@@ -5,13 +5,24 @@
 //! [`Portals::items`] to every chrome. The first answer takes the request off
 //! the queue; later ones are refused. See `docs/architecture/PORTALS.md`.
 
-use domicile_protocol::{PortalKind, PortalRequest};
+use domicile_protocol::{PortalAnswer, PortalKind, PortalRequest};
 
-/// An answer for a request that was answered or withdrawn already, or never
-/// existed.
+/// A request that was answered or withdrawn already, or never existed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 #[error("no portal request is waiting under this id")]
 pub struct Unknown;
+
+/// Why an answer was not taken.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum Refusal {
+    /// See [`Unknown`].
+    #[error("no portal request is waiting under this id")]
+    Unknown,
+    /// Of another kind than its request, or a choice it did not offer. The
+    /// request keeps waiting.
+    #[error("the answer does not fit its portal request")]
+    Mismatched,
+}
 
 /// A request and what answers it.
 #[derive(Debug)]
@@ -77,18 +88,37 @@ impl<W> Portals<W> {
         }
     }
 
-    /// Take the request `id` off the queue to answer it, returning its waiter.
-    pub fn answer(&mut self, id: u32) -> Result<W, Unknown> {
-        self.withdraw(id).ok_or(Unknown)
+    /// Take the request `id` off the queue to answer it with `answer`,
+    /// returning its waiter.
+    pub fn answer(&mut self, id: u32, answer: &PortalAnswer) -> Result<W, Refusal> {
+        match self.position(id) {
+            Some(index) if self.pending[index].request.kind.accepts(answer) => {
+                Ok(self.pending.remove(index).waiter)
+            }
+            Some(_) => Err(Refusal::Mismatched),
+            None => Err(Refusal::Unknown),
+        }
+    }
+
+    /// Change the request `id`'s body while it waits, as `UpdateChoices`
+    /// does.
+    pub fn revise(&mut self, id: u32, revise: impl FnOnce(&mut PortalKind)) -> Result<(), Unknown> {
+        let index = self.position(id).ok_or(Unknown)?;
+        revise(&mut self.pending[index].request.kind);
+        Ok(())
     }
 
     /// Take the request `id` off the queue unanswered, as when the application
     /// closes it. `None` when it was already answered.
     pub fn withdraw(&mut self, id: u32) -> Option<W> {
+        self.position(id)
+            .map(|index| self.pending.remove(index).waiter)
+    }
+
+    fn position(&self, id: u32) -> Option<usize> {
         self.pending
             .iter()
             .position(|pending| pending.request.id == id)
-            .map(|index| self.pending.remove(index).waiter)
     }
 
     /// Every unanswered request, oldest first, for the chromes.
@@ -103,7 +133,7 @@ impl<W> Portals<W> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use domicile_protocol::AccessDialog;
+    use domicile_protocol::{AccessDialog, AppChooserDialog, PortalAnswer};
 
     fn access() -> PortalKind {
         PortalKind::Access(AccessDialog {
@@ -113,6 +143,22 @@ mod tests {
             grant_label: None,
             deny_label: None,
         })
+    }
+
+    fn chooser(choices: &[&str]) -> PortalKind {
+        PortalKind::AppChooser(AppChooserDialog {
+            choices: choices.iter().map(|choice| choice.to_string()).collect(),
+            last_choice: None,
+            content_type: None,
+            uri: None,
+            filename: None,
+        })
+    }
+
+    fn chose(choice: &str) -> PortalAnswer {
+        PortalAnswer::AppChooser {
+            choice: choice.into(),
+        }
     }
 
     fn listening() -> Portals<&'static str> {
@@ -165,14 +211,20 @@ mod tests {
             .submit("one".into(), None, access(), "camera")
             .expect("queued");
 
-        assert_eq!(portals.answer(id), Ok("camera"));
-        assert_eq!(portals.answer(id), Err(Unknown));
+        assert_eq!(portals.answer(id, &PortalAnswer::Access), Ok("camera"));
+        assert_eq!(
+            portals.answer(id, &PortalAnswer::Access),
+            Err(Refusal::Unknown)
+        );
         assert_eq!(portals.items(), []);
     }
 
     #[test]
     fn an_answer_for_an_id_never_given_out_is_refused() {
-        assert_eq!(listening().answer(7), Err(Unknown));
+        assert_eq!(
+            listening().answer(7, &PortalAnswer::Canceled),
+            Err(Refusal::Unknown)
+        );
     }
 
     #[test]
@@ -184,7 +236,10 @@ mod tests {
 
         assert_eq!(portals.withdraw(id), Some("camera"));
         assert_eq!(portals.withdraw(id), None);
-        assert_eq!(portals.answer(id), Err(Unknown));
+        assert_eq!(
+            portals.answer(id, &PortalAnswer::Access),
+            Err(Refusal::Unknown)
+        );
     }
 
     #[test]
@@ -196,7 +251,7 @@ mod tests {
         portals.set_listening(false);
 
         assert_eq!(portals.items().len(), 1);
-        assert_eq!(portals.answer(id), Ok("camera"));
+        assert_eq!(portals.answer(id, &PortalAnswer::Access), Ok("camera"));
     }
 
     #[test]
@@ -205,11 +260,46 @@ mod tests {
         let first = portals
             .submit("one".into(), None, access(), "first")
             .expect("queued");
-        portals.answer(first).expect("taken");
+        portals.answer(first, &PortalAnswer::Access).expect("taken");
 
         assert_eq!(
             portals.submit("one".into(), None, access(), "second"),
             Ok(first + 1)
         );
+    }
+
+    #[test]
+    fn an_answer_the_request_cannot_take_leaves_it_waiting() {
+        let mut portals = listening();
+        let id = portals
+            .submit("one".into(), None, chooser(&["firefox"]), "open")
+            .expect("queued");
+
+        assert_eq!(portals.answer(id, &chose("evil")), Err(Refusal::Mismatched));
+        assert_eq!(
+            portals.answer(id, &PortalAnswer::Access),
+            Err(Refusal::Mismatched)
+        );
+        assert_eq!(portals.answer(id, &chose("firefox")), Ok("open"));
+    }
+
+    #[test]
+    fn a_revised_request_takes_answers_by_its_new_body() {
+        let mut portals = listening();
+        let id = portals
+            .submit("one".into(), None, chooser(&["firefox"]), "open")
+            .expect("queued");
+
+        assert_eq!(
+            portals.revise(id, |kind| *kind = chooser(&["firefox", "chromium"])),
+            Ok(())
+        );
+        assert_eq!(portals.items()[0].kind, chooser(&["firefox", "chromium"]));
+        assert_eq!(portals.answer(id, &chose("chromium")), Ok("open"));
+    }
+
+    #[test]
+    fn a_request_already_answered_cannot_be_revised() {
+        assert_eq!(listening().revise(3, |_| ()), Err(Unknown));
     }
 }

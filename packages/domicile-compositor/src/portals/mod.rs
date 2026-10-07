@@ -26,6 +26,7 @@ use tracing::{debug, warn};
 use zbus::blocking::connection::Builder;
 
 mod access;
+mod app_chooser;
 mod queue;
 mod reply;
 mod request;
@@ -35,6 +36,7 @@ mod settings;
 mod socket_pair;
 
 use access::Access;
+use app_chooser::AppChooser;
 use queue::Queue;
 use settings::{color_scheme, Settings};
 
@@ -159,12 +161,20 @@ fn answer(
 /// On the builder, so the interfaces are there before the first call can
 /// arrive.
 fn export<'a>(builder: Builder<'a>, theme: Theme, queue: &Arc<Queue>) -> zbus::Result<Builder<'a>> {
-    builder.serve_at(OBJECT_PATH, Settings { theme })?.serve_at(
-        OBJECT_PATH,
-        Access {
-            queue: Arc::clone(queue),
-        },
-    )
+    builder
+        .serve_at(OBJECT_PATH, Settings { theme })?
+        .serve_at(
+            OBJECT_PATH,
+            Access {
+                queue: Arc::clone(queue),
+            },
+        )?
+        .serve_at(
+            OBJECT_PATH,
+            AppChooser {
+                queue: Arc::clone(queue),
+            },
+        )
 }
 
 /// The variables [`say_which_desktop`] sets for activated services.
@@ -240,7 +250,7 @@ mod tests {
     use super::*;
     use std::time::Duration;
 
-    use domicile_protocol::{AccessDialog, PortalKind};
+    use domicile_protocol::{AccessDialog, AppChooserDialog, PortalKind};
     use zbus::zvariant::{ObjectPath, OwnedValue, Value};
 
     /// The frontend's handle for the dialog these tests open.
@@ -386,6 +396,149 @@ mod tests {
             served.published.try_iter().all(|items| items.is_empty()),
             "nothing reached the shell"
         );
+    }
+
+    /// Call `ChooseApplication` over `wayland:abc` from another thread,
+    /// returning its reply. `modal` is the option, if sent.
+    fn choose_application(
+        client: &zbus::blocking::Connection,
+        modal: Option<bool>,
+    ) -> thread::JoinHandle<(u32, HashMap<String, OwnedValue>)> {
+        let client = client.clone();
+        thread::spawn(move || {
+            let mut options = HashMap::from([
+                (
+                    "content_type".to_string(),
+                    OwnedValue::try_from(Value::from("application/pdf")).expect("ownable"),
+                ),
+                (
+                    "activation_token".to_string(),
+                    OwnedValue::try_from(Value::from("token-1")).expect("ownable"),
+                ),
+            ]);
+            if let Some(modal) = modal {
+                options.insert(
+                    "modal".to_string(),
+                    OwnedValue::try_from(Value::from(modal)).expect("ownable"),
+                );
+            }
+            client
+                .call_method(
+                    None::<&str>,
+                    OBJECT_PATH,
+                    Some("org.freedesktop.impl.portal.AppChooser"),
+                    "ChooseApplication",
+                    &(
+                        ObjectPath::try_from(HANDLE).expect("a path"),
+                        "org.example.App",
+                        "wayland:abc",
+                        vec!["org.gnome.Evince"],
+                        options,
+                    ),
+                )
+                .expect("ChooseApplication answered")
+                .body()
+                .deserialize()
+                .expect("its reply")
+        })
+    }
+
+    /// The dialog [`choose_application`] asks for, modal over `app-3`.
+    fn pdf_dialog(choices: &[&str]) -> PortalRequest {
+        PortalRequest {
+            id: 1,
+            app_id: "org.example.App".into(),
+            parent_app_id: Some("app-3".into()),
+            kind: PortalKind::AppChooser(AppChooserDialog {
+                choices: choices.iter().map(|choice| choice.to_string()).collect(),
+                last_choice: None,
+                content_type: Some("application/pdf".into()),
+                uri: None,
+                filename: None,
+            }),
+        }
+    }
+
+    #[test]
+    fn an_application_chosen_after_the_choices_change_is_answered() {
+        let served = served(true);
+        let choosing = choose_application(&served.client, None);
+        assert_eq!(next(&served.published), [pdf_dialog(&["org.gnome.Evince"])]);
+
+        served
+            .client
+            .call_method(
+                None::<&str>,
+                OBJECT_PATH,
+                Some("org.freedesktop.impl.portal.AppChooser"),
+                "UpdateChoices",
+                &(
+                    ObjectPath::try_from(HANDLE).expect("a path"),
+                    vec!["org.gnome.Evince", "org.gnome.Papers"],
+                ),
+            )
+            .expect("UpdateChoices answered");
+        assert_eq!(
+            next(&served.published),
+            [pdf_dialog(&["org.gnome.Evince", "org.gnome.Papers"])]
+        );
+        served.queue.answer(
+            1,
+            PortalAnswer::AppChooser {
+                choice: "org.gnome.Papers".into(),
+            },
+        );
+
+        let (response, results) = choosing.join().expect("the call returned");
+        assert_eq!(response, 0);
+        assert_eq!(
+            results,
+            HashMap::from([
+                (
+                    "choice".to_string(),
+                    OwnedValue::try_from(Value::from("org.gnome.Papers")).expect("ownable"),
+                ),
+                (
+                    "activation_token".to_string(),
+                    OwnedValue::try_from(Value::from("token-1")).expect("ownable"),
+                ),
+            ])
+        );
+    }
+
+    #[test]
+    fn a_dialog_that_need_not_be_modal_goes_over_the_focused_screen() {
+        let served = served(true);
+        let choosing = choose_application(&served.client, Some(false));
+
+        assert_eq!(
+            next(&served.published),
+            [PortalRequest {
+                parent_app_id: None,
+                ..pdf_dialog(&["org.gnome.Evince"])
+            }]
+        );
+        served.queue.answer(1, PortalAnswer::Canceled);
+        choosing.join().expect("the call returned");
+    }
+
+    #[test]
+    fn a_choice_that_was_not_offered_is_not_taken() {
+        let served = served(true);
+        let choosing = choose_application(&served.client, None);
+        next(&served.published);
+
+        served.queue.answer(
+            1,
+            PortalAnswer::AppChooser {
+                choice: "org.example.Evil".into(),
+            },
+        );
+        assert_eq!(next(&served.published).len(), 1, "still waiting");
+        served.queue.answer(1, PortalAnswer::Canceled);
+
+        let (response, results) = choosing.join().expect("the call returned");
+        assert_eq!((response, results.len()), (1, 0));
     }
 
     #[test]
