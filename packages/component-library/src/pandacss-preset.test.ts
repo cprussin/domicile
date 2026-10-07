@@ -25,7 +25,51 @@ describe("the domicile preset", () => {
   it("draws every colored thing against the dark ground legibly", () => {
     expect(unreadableOn("base")).toStrictEqual([]);
   });
+
+  describe("under high contrast", () => {
+    it("draws text further from the light ground", () => {
+      expect(textContrast("_light", true)).toBeGreaterThan(
+        textContrast("_light", false),
+      );
+    });
+
+    it("draws text further from the dark ground", () => {
+      expect(textContrast("base", true)).toBeGreaterThan(
+        textContrast("base", false),
+      );
+    });
+  });
 });
+
+/** The contrast of `foreground` on `background` in `theme`. */
+const textContrast = (theme: Theme, high: boolean): number =>
+  contrast(
+    high ? highContrastForeground(theme) : colorFor("foreground", theme),
+    colorFor("background", theme),
+  );
+
+/** The hex value of `foreground` in `theme` under `_contrastHigh`. */
+const highContrastForeground = (theme: Theme): string => {
+  const value = at(
+    at(
+      at(
+        at(at(at(domicilePreset, "theme"), "extend"), "semanticTokens"),
+        "colors",
+      ),
+      "foreground",
+    ),
+    "value",
+  );
+  const reference = at(
+    theme === "base" ? value : at(value, theme),
+    "_contrastHigh",
+  );
+  if (typeof reference === "string") {
+    return palette(reference);
+  } else {
+    throw new Error(`the preset has no high-contrast ${theme} foreground`);
+  }
+};
 
 /** The colors below {@link READABLE} on `theme`'s background, with ratios. */
 const unreadableOn = (theme: Theme): readonly string[] => {
@@ -43,7 +87,9 @@ const colorFor = (name: string, theme: Theme): string => {
     at(at(domicilePreset, "theme"), "extend"),
     "semanticTokens",
   );
-  const reference = at(at(at(at(colors, "colors"), name), "value"), theme);
+  const themed = at(at(at(at(colors, "colors"), name), "value"), theme);
+  // A theme's value is an object when it has conditions of its own.
+  const reference = typeof themed === "object" ? at(themed, "base") : themed;
   if (typeof reference === "string") {
     return palette(reference);
   } else {

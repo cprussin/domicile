@@ -48,6 +48,7 @@ pub fn apply_chrome_message(
                     host.describe_theme(),
                     // The theme the browser draws its own pages in.
                     host.describe_windows_theme(),
+                    host.describe_appearance(),
                 ]
                 .into_iter()
                 .chain(host.describe_keymap())

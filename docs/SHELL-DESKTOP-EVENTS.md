@@ -31,9 +31,13 @@ domicile.addEventListener("displayschanged", show);
 - The shell reads `domicile.theme`; `themechanged` reports changes.
 - The compositor also publishes it to the settings portal
   (`org.freedesktop.appearance` `color-scheme`, followed by GTK4, Qt6,
-  Electron and Firefox) and applies it to browser windows. The portal also
-  carries `theme.accent_color`, `contrast` and `reduced_motion`; the shell
-  reads its own config for those.
+  Electron and Firefox) and applies it to browser windows.
+- `theme.accent_color`, `contrast` and `reduced_motion` go to the settings
+  portal and to the shell, as `domicile.accentColor`, `highContrast` and
+  `reducedMotion` with an `appearancechanged` event. `watchAppearance` in
+  `@domicile-desktop/sdk/appearance` reads them now and on each change. `applyAppearance` in
+  `@domicile-desktop/component-library/appearance` applies them to the preset:
+  the `accent` token, the `_contrastHigh` condition and shortened animations.
 - `prefers-color-scheme` in the shell's page follows it.
 - `domicile.setTheme("light")` changes it until the desktop exits. It does not
   write the config. A later config edit overrides it.
