@@ -2,7 +2,8 @@
 
 Installed applications and bookmarks for a shell's launcher, read through
 [`@domicile-desktop/sdk/system`](../chrome-sdk/README.md). Manganese's launcher
-uses it (`src/launcher/app-search.ts`).
+uses it (`src/launcher/app-search.ts`), and the component library's portal
+dialogs name applications with it.
 
 ## Usage
 
@@ -28,6 +29,7 @@ const editors = findApps(apps, "edit", 50);
 | `./installed` | Every desktop entry under them; an earlier directory hides a later one's ID. |
 | `./desktop-entry` | One entry parsed: name, comment, argv, icon and `X-Domicile-Preview`. |
 | `./find-apps`, `./bookmark` | The launcher's matching and ranking; bookmarks and their Zod schema. |
+| `./describe-apps` | Application IDs named and drawn by their entries, for a shell to say who asks. |
 | `./mime-apps` | A content type's default applications from every `mimeapps.list`, the desktop's own (`domicile-mimeapps.list`) first. |
 | `./omit` | Desktop file IDs left out, as globs. |
 | `./app-icons` | Icon names resolved in `hicolor` and `pixmaps` to `data:` URLs (PNG, SVG, 128 KiB at most). |

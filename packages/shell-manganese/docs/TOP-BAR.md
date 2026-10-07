@@ -142,9 +142,12 @@ Every bar and the lock screen share one watch per system readout. See
 
 - Shown, in the warning color, while an application records the desktop
   through the ScreenCast portal. Its name says who.
-- Click lists each recording application and what it records (a window's
-  title, "Screen drm-1" or "Region"), with a
+- Click lists each recording application, by its desktop entry's name and
+  icon, and what it records (a window's title, "Screen drm-1" or "Region"),
+  with a
   **Stop sharing** button that ends that application's session.
+- While the bar has this item, the portal dialogs' indicator leaves screen
+  casts out, so each shows once. Without it, the indicator lists them.
 - See [PORTALS.md](../../../docs/architecture/PORTALS.md).
 
 ## Tray

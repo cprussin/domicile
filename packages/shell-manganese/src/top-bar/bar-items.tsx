@@ -115,7 +115,8 @@ export const BarBattery = () => {
  */
 export const BarSharing = () => {
   const { domicile } = useBar();
-  return <Sharing host={domicile} />;
+  const files = useMemo(() => system(domicile), [domicile]);
+  return <Sharing host={domicile} system={files} />;
 };
 
 /** The bell, which opens the notification drawer. */

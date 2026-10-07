@@ -143,7 +143,9 @@ One request channel carries all dialogs. Each interface's backend builds on it.
   says there are no printers; closing it is a failure, not a cancel.
 - **The shell shows active sharing.** `portal_requests` carries `capturing`:
   each running session (id, app, what it holds). The shell stops one by
-  answering its id with `stop`. `<PortalDialogs />` draws the indicator.
+  answering its id with `stop`. `<PortalDialogs />` draws the indicator;
+  `omitScreenCasts` leaves screen casts to a shell that shows them itself, as
+  manganese's bar does.
 - **The wallpaper rides the same push.** `PortalRequests` carries `wallpaper`:
   the background and lock-screen pictures applications set, as paths the shell
   reads with `read_file`. The engine relays that line untyped, so no engine

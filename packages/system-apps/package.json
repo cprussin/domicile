@@ -16,6 +16,7 @@
     "./bookmark": "./src/bookmark.ts",
     "./curl": "./src/curl.ts",
     "./data-dirs": "./src/data-dirs.ts",
+    "./describe-apps": "./src/describe-apps.ts",
     "./desktop-entry": "./src/desktop-entry.ts",
     "./fake-system": "./src/fake-system.ts",
     "./favicon": "./src/favicon.ts",

@@ -2,6 +2,7 @@ import { useDisplays } from "@domicile-desktop/component-library/DisplayProvider
 import { PortalDialogs } from "@domicile-desktop/component-library/PortalDialogs";
 import { createToastManager } from "@domicile-desktop/component-library/Toaster";
 import { usePictureUrl } from "@domicile-desktop/component-library/usePictureUrl";
+import { usePortalWallpaper } from "@domicile-desktop/component-library/usePortalWallpaper";
 import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
 import { ownedChords } from "@domicile-desktop/sdk/own-keybindings";
@@ -34,10 +35,10 @@ import type { StageScreen } from "./screens/stage-screens";
 import { stageScreensOf } from "./screens/stage-screens";
 import { useScreenFollowsPointer } from "./screens/useScreenFollowsPointer";
 import type { TopBarLayout } from "./top-bar/layout";
+import { showsSharing } from "./top-bar/shows-sharing";
 import { trayEntries } from "./tray/tray-entry";
 import { useTray } from "./tray/useTray";
 import { useTrayOrder } from "./tray/useTrayOrder";
-import { usePortalWallpaper } from "./wallpaper/usePortalWallpaper";
 import { Wallpaper } from "./wallpaper/Wallpaper";
 import type { Focus } from "./window-management/pointer-warp";
 import { Stage } from "./window-management/Stage";
@@ -395,9 +396,11 @@ export const Desktop = ({
       {/*
         Applications' dialogs, over every panel, on the screen of the window
         that asked. A dialog with no parent window goes on the focused screen.
+        Screen casts show in the bar's sharing item when it has one.
       */}
       <PortalDialogs
         host={domicile}
+        omitScreenCasts={showsSharing(topBar)}
         screen={windows.focused}
         screenOf={(appId) => screenOfApp(windows, appId)}
         shellChords={shellChords}
