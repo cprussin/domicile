@@ -501,6 +501,7 @@ fn the_shortcut_answers_the_sdk_sends_parse() {
             },
         ),
         (r#"{"kind":"pressed"}"#, PortalAnswer::Pressed),
+        (r#"{"kind":"released"}"#, PortalAnswer::Released),
     ] {
         let line = format!(r#"{{"type":"answer_portal_request","id":4,"answer":{sent}}}"#);
         assert_eq!(
@@ -523,6 +524,7 @@ fn chosen_triggers_are_a_success_and_a_press_answers_no_dialog() {
 
     assert_eq!(chosen.response(), 0);
     assert_eq!(PortalAnswer::Pressed.response(), 2);
+    assert_eq!(PortalAnswer::Released.response(), 2);
     assert!(review.accepts(&chosen));
     assert!(!review.accepts(&PortalAnswer::Access));
     assert!(

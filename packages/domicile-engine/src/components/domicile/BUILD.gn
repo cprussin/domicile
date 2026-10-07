@@ -171,6 +171,13 @@ source_set("theme") {
   public_deps = [ "//base" ]
 }
 
+# The grabbed chords the keyboard holds, each paired with its release. Header
+# only and templated over the press, so Blink keeps its own type and the tests
+# need no Blink.
+source_set("held_chords") {
+  sources = [ "common/held_chords.h" ]
+}
+
 # Serving the shell over domicile://.
 #
 # A target of its own rather than part of :browser, because this depends on
@@ -610,6 +617,7 @@ source_set("unit_tests") {
     "browser/web_view_url_unittest.cc",
     "common/cursor_shape_unittest.cc",
     "common/display_transform_unittest.cc",
+    "common/held_chords_unittest.cc",
     "common/theme_unittest.cc",
     "spike/window_diff_unittest.cc",
   ]
@@ -641,6 +649,7 @@ source_set("unit_tests") {
     ":extension_installer",
     ":extension_tray_entry",
     ":file_choice",
+    ":held_chords",
     ":keyboard_layout",
     ":line_framer",
     ":placeholder_stage",

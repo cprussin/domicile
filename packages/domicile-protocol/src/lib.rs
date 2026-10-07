@@ -510,7 +510,8 @@ pub enum HostMessage {
     /// [`PortalAnswer::Stop`].
     /// `shortcuts` lists the chords applications hold through the
     /// GlobalShortcuts portal. The shell grabs each and sends
-    /// [`PortalAnswer::Pressed`] under its id when it fires.
+    /// [`PortalAnswer::Pressed`] under its id when it fires, and
+    /// [`PortalAnswer::Released`] when it is let go.
     PortalRequests {
         items: Vec<PortalRequest>,
         #[serde(default)]
@@ -651,8 +652,8 @@ impl PortalKind {
             (PortalKind::PickColor(desk), PortalAnswer::PickColor { x, y }) => {
                 *x < desk.width && *y < desk.height
             }
-            // A stop answers a running session and a press a bound shortcut,
-            // never a request.
+            // A stop answers a running session and a press or release a bound
+            // shortcut, never a request.
             (
                 _,
                 PortalAnswer::Access
@@ -667,7 +668,8 @@ impl PortalKind {
                 | PortalAnswer::Screenshot { .. }
                 | PortalAnswer::PickColor { .. }
                 | PortalAnswer::Stop
-                | PortalAnswer::Pressed,
+                | PortalAnswer::Pressed
+                | PortalAnswer::Released,
             ) => false,
         }
     }
@@ -1009,7 +1011,8 @@ pub struct ChosenTrigger {
 /// A chord an application holds, as [`HostMessage::PortalRequests`] lists it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BoundShortcut {
-    /// The id [`PortalAnswer::Pressed`] is sent under. Not a request's id.
+    /// The id [`PortalAnswer::Pressed`] and [`PortalAnswer::Released`] are
+    /// sent under. Not a request's id.
     pub id: u32,
     pub app_id: String,
     /// In the shell's chord syntax; see `docs/architecture/KEYBINDINGS.md`.
@@ -1212,6 +1215,8 @@ pub enum PortalAnswer {
     PickColor { x: u32, y: u32 },
     /// The [`BoundShortcut`] with this id fired. Answers no request.
     Pressed,
+    /// The [`BoundShortcut`] with this id was let go. Answers no request.
+    Released,
     /// The user dismissed the dialog, or denied it.
     Canceled,
     /// The shell has no dialog for this kind.
@@ -1236,7 +1241,7 @@ impl PortalAnswer {
             | PortalAnswer::PickColor { .. }
             | PortalAnswer::Stop => 0,
             PortalAnswer::Canceled => 1,
-            PortalAnswer::Refused | PortalAnswer::Pressed => 2,
+            PortalAnswer::Refused | PortalAnswer::Pressed | PortalAnswer::Released => 2,
         }
     }
 }

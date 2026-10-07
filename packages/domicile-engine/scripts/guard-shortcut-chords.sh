@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# `grabShortcut("Meta+Shift+l")` is resolved by the engine, and its press comes
-# back as a `shortcut` whose `chord` is that string.
+# `grabShortcut("Meta+Shift+l")` is resolved by the engine, its press comes
+# back as a `shortcut` whose `chord` is that string, and letting go of Shift
+# comes back as a `shortcutrelease` with the same chord.
 #
 #   nix develop .#full --command \
 #     ./packages/domicile-engine/scripts/guard-shortcut-chords.sh /build/chromium/src
@@ -95,14 +96,14 @@ sleep 1
 # The closing quote is Chromium's and keeps each match on the message: see
 # guard-windows-state.sh.
 CHORDS=$(grep -oE '"GUARD chords [^"]*"' "$ENGINE_LOG" | head -1)
-WANTED='"GUARD chords bad=SyntaxError missing=NotFoundError page=taken,taken,free heard=Meta+Shift+l,Meta+Shift+l"'
+WANTED='"GUARD chords bad=SyntaxError missing=NotFoundError page=taken,taken,free heard=Meta+Shift+l,Meta+Shift+l released=Meta+Shift+l"'
 
 if [ -z "$CHORDS" ]; then
   FAILURE="the page never said how its chords went, so the module did not run or threw"
 elif [ "$CHORDS" = "$WANTED" ]; then
   FAILURE=""
 else
-  FAILURE="the page's chords went $CHORDS where $WANTED was owed: a chord written wrong is a SyntaxError, one the keyboard cannot type a NotFoundError, a grabbed chord pressed on the page is taken from it (a repeat too) and fires once, and the compositor's press of it carries the chord"
+  FAILURE="the page's chords went $CHORDS where $WANTED was owed: a chord written wrong is a SyntaxError, one the keyboard cannot type a NotFoundError, a grabbed chord pressed on the page is taken from it (a repeat too) and fires once, the compositor's press of it carries the chord, and letting go of one of its modifiers releases it once"
 fi
 
 echo "page: $CHORDS"

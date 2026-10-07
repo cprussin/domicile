@@ -15,6 +15,10 @@ const press = (fake: FakeDomicileHost, chord: string) => {
   fake.dispatch("shortcut", { chord });
 };
 
+const release = (fake: FakeDomicileHost, chord: string) => {
+  fake.dispatch("shortcutrelease", { chord });
+};
+
 const recorded = (fake: FakeDomicileHost, name: string) =>
   fake.calls.filter(([called]) => called === name).map(([, ...args]) => args);
 
@@ -37,6 +41,20 @@ describe("fireGlobalShortcuts", () => {
     ]);
   });
 
+  it("reports a release under its id", () => {
+    const fake = new FakeDomicileHost();
+    fireGlobalShortcuts(fake.host);
+    bind(fake, [TALK]);
+
+    press(fake, "Ctrl+Alt+t");
+    release(fake, "Ctrl+Alt+t");
+
+    expect(recorded(fake, "answerPortalRequest")).toEqual([
+      [3, JSON.stringify({ kind: "pressed" })],
+      [3, JSON.stringify({ kind: "released" })],
+    ]);
+  });
+
   it("reports nothing for a chord no longer bound", () => {
     const fake = new FakeDomicileHost();
     fireGlobalShortcuts(fake.host);
@@ -55,6 +73,7 @@ describe("fireGlobalShortcuts", () => {
     stop();
 
     press(fake, "Ctrl+Alt+t");
+    release(fake, "Ctrl+Alt+t");
 
     expect(recorded(fake, "answerPortalRequest")).toEqual([]);
   });

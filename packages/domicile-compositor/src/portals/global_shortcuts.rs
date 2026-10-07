@@ -5,12 +5,10 @@
 //! this app id before. The bound chords ride on every
 //! [`HostMessage::PortalRequests`](domicile_protocol::HostMessage::PortalRequests);
 //! the shell grabs them as it grabs its own keys and answers
-//! [`PortalAnswer::Pressed`] when one fires. A locked desk refuses that
-//! answer, so nothing fires while locked. The session state is
-//! `domicile_host::global_shortcuts`.
-//!
-//! The engine reports presses, not releases, so `Deactivated` follows
-//! `Activated` at once. See `docs/architecture/PORTALS.md`.
+//! [`PortalAnswer::Pressed`] when one fires and [`PortalAnswer::Released`]
+//! when it is let go. A locked desk refuses both answers, so nothing fires
+//! while locked. The session state is `domicile_host::global_shortcuts`. See
+//! `docs/architecture/PORTALS.md`.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -236,11 +234,24 @@ impl Shortcuts {
         }
     }
 
-    /// The shell says the chord bound under `id` fired: `Activated`, then
-    /// `Deactivated`, to the session holding it. A chord no longer bound, or
-    /// a bus not yet up, fires nothing.
+    /// The shell says the chord bound under `id` fired: `Activated` to the
+    /// session holding it.
     pub fn pressed(&self, id: u32) {
-        let Some((session, shortcut)) = self.read(|held| held.pressed(id)) else {
+        let fired = self.held.lock().unwrap().pressed(id);
+        self.signal(id, fired, Signal::Activated);
+    }
+
+    /// The shell says the chord bound under `id` was let go: `Deactivated`,
+    /// if it was pressed.
+    pub fn released(&self, id: u32) {
+        let fired = self.held.lock().unwrap().released(id);
+        self.signal(id, fired, Signal::Deactivated);
+    }
+
+    /// Send `signal` for `fired`, the session and shortcut id. A chord no
+    /// longer bound, or a bus not yet up, sends nothing.
+    fn signal(&self, id: u32, fired: Option<(String, String)>, signal: Signal) {
+        let Some((session, shortcut)) = fired else {
             debug!(%id, "a global shortcut fired after it was let go");
             return;
         };
@@ -252,19 +263,31 @@ impl Shortcuts {
         let session = ObjectPath::try_from(session.as_str()).expect("a session's own handle");
         let timestamp = u64::try_from(self.started.elapsed().as_millis())
             .expect("a desk up for fewer than 584 million years");
-        let fired = zbus::block_on(async {
-            GlobalShortcuts::activated(
-                &emitter,
-                session.clone(),
-                &shortcut,
-                timestamp,
-                HashMap::new(),
-            )
-            .await?;
-            GlobalShortcuts::deactivated(&emitter, session, &shortcut, timestamp, HashMap::new())
-                .await
+        let sent = zbus::block_on(async {
+            match signal {
+                Signal::Activated => {
+                    GlobalShortcuts::activated(
+                        &emitter,
+                        session,
+                        &shortcut,
+                        timestamp,
+                        HashMap::new(),
+                    )
+                    .await
+                }
+                Signal::Deactivated => {
+                    GlobalShortcuts::deactivated(
+                        &emitter,
+                        session,
+                        &shortcut,
+                        timestamp,
+                        HashMap::new(),
+                    )
+                    .await
+                }
+            }
         });
-        if let Err(why) = fired {
+        if let Err(why) = sent {
             warn!(%why, %shortcut, "an application did not hear its global shortcut");
         }
     }
@@ -307,7 +330,8 @@ impl Shortcuts {
             | PortalAnswer::PickColor { .. }
             | PortalAnswer::Stop
             | PortalAnswer::Refused
-            | PortalAnswer::Pressed => Err(2),
+            | PortalAnswer::Pressed
+            | PortalAnswer::Released => Err(2),
         }
     }
 
@@ -331,6 +355,12 @@ impl Shortcuts {
         }
         changed
     }
+}
+
+/// Which signal a press or a release sends.
+enum Signal {
+    Activated,
+    Deactivated,
 }
 
 /// How a `BindShortcuts` call is answered.
@@ -555,35 +585,15 @@ mod tests {
             .expect("published")
     }
 
-    /// The members of the next `count` signals the client hears.
-    fn signals(heard: &mut MessageIterator, count: usize) -> Vec<(String, String)> {
-        heard
+    /// The next signal the client hears, and its member.
+    fn next_signal(heard: &mut MessageIterator) -> (String, zbus::Message) {
+        let message = heard
             .by_ref()
             .map(|message| message.expect("a message"))
-            .filter(|message| message.message_type() == Type::Signal)
-            .take(count)
-            .map(|message| {
-                let member = message.header().member().expect("a member").to_string();
-                let (session, id): (OwnedObjectPath, String) = match member.as_str() {
-                    "ShortcutsChanged" => {
-                        let (session, shortcuts): (OwnedObjectPath, Vec<Shortcut>) =
-                            message.body().deserialize().expect("its body");
-                        (session, shortcuts[0].0.clone())
-                    }
-                    _ => {
-                        let (session, id, _, _): (
-                            OwnedObjectPath,
-                            String,
-                            u64,
-                            HashMap<String, OwnedValue>,
-                        ) = message.body().deserialize().expect("its body");
-                        (session, id)
-                    }
-                };
-                assert_eq!(session.as_str(), SESSION);
-                (member, id)
-            })
-            .collect()
+            .find(|message| message.message_type() == Type::Signal)
+            .expect("a signal");
+        let member = message.header().member().expect("a member").to_string();
+        (member, message)
     }
 
     /// Bind through the review dialog, choosing `Ctrl+Alt+t`.
@@ -629,21 +639,38 @@ mod tests {
         bound.clone()
     }
 
+    /// The member, shortcut id and timestamp of the next signal the client
+    /// hears, an `Activated` or `Deactivated`.
+    fn fired(heard: &mut MessageIterator) -> (String, String, u64) {
+        let (member, message) = next_signal(heard);
+        let (session, id, timestamp, _): (
+            OwnedObjectPath,
+            String,
+            u64,
+            HashMap<String, OwnedValue>,
+        ) = message.body().deserialize().expect("its body");
+        assert_eq!(session.as_str(), SESSION);
+        (member, id, timestamp)
+    }
+
     #[test]
-    fn a_reviewed_chord_fires_activated_then_deactivated_to_its_session() {
+    fn a_reviewed_chord_is_activated_on_its_press_and_deactivated_on_its_release() {
         let served = served(None);
         let mut heard = MessageIterator::from(served.client.clone());
         create_session(&served.client);
         let bound = bind_through_the_dialog(&served);
 
         served.portals.answer(bound.id, PortalAnswer::Pressed);
+        let (member, id, pressed_at) = fired(&mut heard);
+        assert_eq!((member.as_str(), id.as_str()), ("Activated", "talk"));
+        thread::sleep(Duration::from_millis(50));
+        served.portals.answer(bound.id, PortalAnswer::Released);
+        let (member, id, released_at) = fired(&mut heard);
 
-        assert_eq!(
-            signals(&mut heard, 2),
-            [
-                ("Activated".to_string(), "talk".to_string()),
-                ("Deactivated".to_string(), "talk".to_string()),
-            ]
+        assert_eq!((member.as_str(), id.as_str()), ("Deactivated", "talk"));
+        assert!(
+            released_at >= pressed_at + 50,
+            "deactivated at {released_at} ms, held from {pressed_at} ms"
         );
     }
 
@@ -752,9 +779,12 @@ mod tests {
             },
         );
 
+        let (member, message) = next_signal(&mut heard);
+        let (session, shortcuts): (OwnedObjectPath, Vec<Shortcut>) =
+            message.body().deserialize().expect("its body");
         assert_eq!(
-            signals(&mut heard, 1),
-            [("ShortcutsChanged".to_string(), "talk".to_string())]
+            (member.as_str(), session.as_str(), shortcuts[0].0.as_str()),
+            ("ShortcutsChanged", SESSION, "talk")
         );
         assert_eq!(next(&served.bound)[0].chord, "Ctrl+Alt+y");
     }

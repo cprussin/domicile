@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Press one key at the engine over the DevTools protocol.
+"""Press, or with --up release, one key at the engine over the DevTools
+protocol.
 
 Used by guard-webview-keyboard.sh and guard-webview-escape.sh, which run
 headless with no keyboard. See guard_webview_devtools.py for why this takes the
@@ -38,7 +39,7 @@ def press(connection, identifier, arguments):
         identifier,
         "Input.dispatchKeyEvent",
         {
-            "type": "rawKeyDown",
+            "type": "keyUp" if arguments.up else "rawKeyDown",
             "code": arguments.code,
             "key": arguments.key,
             "windowsVirtualKeyCode": arguments.windows_key_code,
@@ -65,6 +66,7 @@ def main():
     parser.add_argument("--ctrl", action="store_true")
     parser.add_argument("--shift", action="store_true")
     parser.add_argument("--meta", action="store_true")
+    parser.add_argument("--up", action="store_true", help="release the key")
     arguments = parser.parse_args()
 
     connection = connect(shell_target(arguments.port))
@@ -73,7 +75,11 @@ def main():
 
     if "error" in answer:
         raise SystemExit("the engine refused the keystroke: %s" % answer["error"])
-    print("pressed %s (evdev %d)" % (arguments.code, arguments.evdev), flush=True)
+    print(
+        "%s %s (evdev %d)"
+        % ("released" if arguments.up else "pressed", arguments.code, arguments.evdev),
+        flush=True,
+    )
 
 
 if __name__ == "__main__":

@@ -772,9 +772,48 @@ void DomicileHost::PageKeyDown(Event* event) {
   if (key->repeat()) {
     return;
   }
+  FireShortcut(press);
+}
+
+void DomicileHost::FireShortcut(const DomicilePress& press) {
+  held_chords_.Press(press);
+  // Capturing, on the window, as PageKeyDown: a release the page stops is
+  // still heard.
+  if (!key_up_listener_ && window_) {
+    key_up_listener_ = MakeGarbageCollected<PageHeard>(
+        BindRepeating(&DomicileHost::PageKeyUp, WrapWeakPersistent(this)));
+    window_->addEventListener(event_type_names::kKeyup, key_up_listener_.Get(),
+                              /*use_capture=*/true);
+  }
   DispatchOrHold(*MakeGarbageCollected<DomicileShortcutEvent>(
-      domicile_event_names::Shortcut(), chord, press.keycode, press.alt,
-      press.ctrl, press.shift, press.meta));
+      domicile_event_names::Shortcut(), ChordFor(press), press.keycode,
+      press.alt, press.ctrl, press.shift, press.meta));
+}
+
+void DomicileHost::PageKeyUp(Event* event) {
+  auto* key = DynamicTo<KeyboardEvent>(event);
+  if (!key) {
+    return;
+  }
+  const int evdev = EvdevOf(*key);
+  if (evdev <= 0) {
+    return;
+  }
+  ReleaseChords(DomicilePress{static_cast<uint32_t>(evdev), key->altKey(),
+                              key->ctrlKey(), key->shiftKey(),
+                              key->metaKey()});
+}
+
+void DomicileHost::ReleaseChords(const DomicilePress& up) {
+  Vector<DomicilePress> released;
+  held_chords_.Release(up, [&released](const DomicilePress& press) {
+    released.push_back(press);
+  });
+  for (const DomicilePress& press : released) {
+    DispatchOrHold(*MakeGarbageCollected<DomicileShortcutEvent>(
+        domicile_event_names::Shortcutrelease(), ChordFor(press),
+        press.keycode, press.alt, press.ctrl, press.shift, press.meta));
+  }
 }
 
 // Through the tray's pipe rather than the channel's: see the IDL. Ready()
@@ -1158,11 +1197,14 @@ void DomicileHost::AppCursor(const String& app_id,
 
 void DomicileHost::ShortcutPressed(
     domicile::mojom::blink::ShortcutPtr shortcut) {
-  const DomicilePress press{shortcut->keycode, shortcut->alt, shortcut->ctrl,
-                            shortcut->shift, shortcut->meta};
-  DispatchOrHold(*MakeGarbageCollected<DomicileShortcutEvent>(
-      domicile_event_names::Shortcut(), ChordFor(press), shortcut->keycode,
-      shortcut->alt, shortcut->ctrl, shortcut->shift, shortcut->meta));
+  FireShortcut(DomicilePress{shortcut->keycode, shortcut->alt, shortcut->ctrl,
+                             shortcut->shift, shortcut->meta});
+}
+
+void DomicileHost::ShortcutReleased(
+    domicile::mojom::blink::ShortcutPtr shortcut) {
+  ReleaseChords(DomicilePress{shortcut->keycode, shortcut->alt, shortcut->ctrl,
+                              shortcut->shift, shortcut->meta});
 }
 
 void DomicileHost::Modifiers(bool alt, bool ctrl, bool shift, bool meta) {
@@ -1537,6 +1579,7 @@ void DomicileHost::Trace(Visitor* visitor) const {
   visitor->Trace(tray_receiver_);
   visitor->Trace(resize_listener_);
   visitor->Trace(key_listener_);
+  visitor->Trace(key_up_listener_);
   visitor->Trace(density_query_);
   visitor->Trace(density_listener_);
   visitor->Trace(windows_);

@@ -3,6 +3,8 @@
 
 #include "components/domicile/browser/shortcut_registry.h"
 
+#include <linux/input.h>
+
 #include <algorithm>
 #include <utility>
 
@@ -10,6 +12,27 @@
 #include "base/no_destructor.h"
 
 namespace domicile {
+
+namespace {
+
+// Whether `keycode` is one of the keys a chord's modifiers are held on.
+bool IsModifierKey(uint32_t keycode) {
+  switch (keycode) {
+    case KEY_LEFTALT:
+    case KEY_RIGHTALT:
+    case KEY_LEFTCTRL:
+    case KEY_RIGHTCTRL:
+    case KEY_LEFTSHIFT:
+    case KEY_RIGHTSHIFT:
+    case KEY_LEFTMETA:
+    case KEY_RIGHTMETA:
+      return true;
+    default:
+      return false;
+  }
+}
+
+}  // namespace
 
 // static
 ShortcutRegistry& ShortcutRegistry::Get() {
@@ -24,11 +47,12 @@ ShortcutRegistry::~ShortcutRegistry() = default;
 ShortcutRegistry::ChannelId ShortcutRegistry::AddChannel(
     Page page,
     ShortcutCallback on_shortcut,
+    ShortcutCallback on_release,
     ModifiersCallback on_modifiers) {
   base::AutoLock held(lock_);
   const ChannelId id = next_id_++;
-  channels_.push_back(
-      Channel{id, page, std::move(on_shortcut), std::move(on_modifiers)});
+  channels_.push_back(Channel{id, page, std::move(on_shortcut),
+                              std::move(on_release), std::move(on_modifiers)});
   return id;
 }
 
@@ -73,8 +97,33 @@ bool ShortcutRegistry::Press(const Chord& chord, const Page& page) {
   return true;
 }
 
+void ShortcutRegistry::Release(const Chord& chord, const Page& page) {
+  std::vector<ShortcutCallback> tell;
+  {
+    base::AutoLock held(lock_);
+    if (!IsGrabbedKey(chord.keycode) && !IsModifierKey(chord.keycode)) {
+      return;
+    }
+    for (const Channel& channel : channels_) {
+      if (channel.page == page) {
+        tell.push_back(channel.on_release);
+      }
+    }
+  }
+
+  for (const ShortcutCallback& channel : tell) {
+    channel.Run(chord);
+  }
+}
+
 bool ShortcutRegistry::IsGrabbed(const Chord& chord) const {
   return std::ranges::find(grabbed_, chord) != grabbed_.end();
+}
+
+bool ShortcutRegistry::IsGrabbedKey(uint32_t keycode) const {
+  return std::ranges::any_of(grabbed_, [keycode](const Chord& chord) {
+    return chord.keycode == keycode;
+  });
 }
 
 void ShortcutRegistry::SetModifiers(const Modifiers& modifiers) {
