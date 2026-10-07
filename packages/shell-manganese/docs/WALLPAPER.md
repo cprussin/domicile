@@ -18,3 +18,7 @@ A photograph behind the whole desktop, changing every minute. Source:
   and the browser caches them. No credit line is needed.
 - With no network, the theme's `background` shows instead.
 - To use other photos, edit `photos.ts`.
+- **A picture an application set** through the Wallpaper portal replaces the
+  rotation on every screen, and the lock screen shows its own over the blur.
+  Both come from `usePortalWallpaper` and are read with `usePictureUrl`. See
+  [PORTALS.md](/docs/architecture/PORTALS.md).

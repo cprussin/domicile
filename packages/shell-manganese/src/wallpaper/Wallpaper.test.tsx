@@ -54,6 +54,19 @@ const layer = (
   ].map((image) => image.getAttribute("src"));
 
 describe("Wallpaper", () => {
+  it("shows the picture an application set instead of the rotation", () => {
+    const { container } = render(<Wallpaper picture="blob:sky" />, {
+      wrapper: OnOneScreen,
+    });
+
+    expect(container.querySelector("[data-wallpaper-theme]")).toBeNull();
+    expect(
+      [...container.querySelectorAll("img")].map((image) =>
+        image.getAttribute("src"),
+      ),
+    ).toEqual(["blob:sky"]);
+  });
+
   it("starts on the first photograph with every other one already loading", () => {
     // Every photograph mounts up front so it has loaded before it fades in.
     // This includes the other theme's, so a theme switch shows a loaded image.

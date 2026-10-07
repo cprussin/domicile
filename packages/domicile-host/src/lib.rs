@@ -11,9 +11,10 @@ use std::collections::BTreeMap;
 
 use domicile_protocol::{
     BoundShortcut, Capturing, ChromeMessage, DisplayInfo, HostMessage, Notification, PortalRequest,
-    Theme, TrayItem,
+    PortalWallpaper, Theme, TrayItem,
 };
 
+pub mod autostart;
 pub mod base64;
 pub mod clipboard;
 pub mod data_dirs;
@@ -39,6 +40,7 @@ pub mod portals;
 pub mod system;
 pub mod theme_turnover;
 pub mod tray;
+pub mod wallpaper;
 pub mod xdg_foreign;
 use domicile_scene::{KeyboardTarget, Scene};
 
@@ -133,6 +135,9 @@ pub struct Host {
     portal_requests: Option<(Vec<PortalRequest>, Vec<Capturing>)>,
     /// The chords applications hold, which ride on the portal requests.
     global_shortcuts: Vec<BoundShortcut>,
+    /// The pictures set through the Wallpaper portal, which ride on the portal
+    /// requests.
+    portal_wallpaper: PortalWallpaper,
 }
 
 impl Host {
@@ -302,6 +307,17 @@ impl Host {
     }
 
     /// The portal requests message, or `None` if none were set.
+    /// Set the Wallpaper portal's pictures and return the message to
+    /// broadcast, or `None` if they did not change. They ride on
+    /// [`HostMessage::PortalRequests`].
+    pub fn set_portal_wallpaper(&mut self, wallpaper: PortalWallpaper) -> Option<HostMessage> {
+        (self.portal_wallpaper != wallpaper).then(|| {
+            self.portal_wallpaper = wallpaper;
+            self.describe_portal_requests()
+                .expect("the requests are set before any wallpaper is shown")
+        })
+    }
+
     pub fn describe_portal_requests(&self) -> Option<HostMessage> {
         self.portal_requests
             .clone()
@@ -309,6 +325,7 @@ impl Host {
                 items,
                 capturing,
                 shortcuts: self.global_shortcuts.clone(),
+                wallpaper: self.portal_wallpaper.clone(),
             })
     }
 

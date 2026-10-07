@@ -4,6 +4,7 @@ import type {
   Capturing,
   PortalHost,
   PortalRequest,
+  PortalWallpaper,
 } from "./portal";
 import {
   answerPortalRequest,
@@ -13,9 +14,11 @@ import {
   PortalAnswer,
   PortalKind,
   stopCapturing,
+  WallpaperTarget,
   watchBoundShortcuts,
   watchCapturing,
   watchPortalRequests,
+  watchPortalWallpaper,
 } from "./portal";
 
 /** A desktop that pushes `portal_requests` lines and records answers. */
@@ -47,12 +50,14 @@ class FakeHost implements PortalHost {
     items: readonly object[],
     capturing?: readonly object[],
     shortcuts?: readonly object[],
+    wallpaper?: object,
   ): void {
     const data = JSON.stringify({
       capturing,
       items,
       shortcuts,
       type: "portal_requests",
+      wallpaper,
     });
     for (const listener of this.#listeners) {
       listener(new MessageEvent("portalrequests", { data }));
@@ -352,6 +357,29 @@ describe("watchPortalRequests", () => {
     ]);
   });
 
+  it("parses a wallpaper preview's body", async () => {
+    const host = new FakeHost();
+    const requests = watched(host);
+    host.push([
+      {
+        app_id: "org.example.Photos",
+        body: { path: "/home/u/sky.jpg", set_on: "lockscreen" },
+        id: 4,
+        kind: "wallpaper",
+      },
+    ]);
+
+    expect(await requests).toEqual([
+      {
+        appId: "org.example.Photos",
+        body: { path: "/home/u/sky.jpg", setOn: WallpaperTarget.Lockscreen },
+        id: 4,
+        kind: PortalKind.Wallpaper,
+        parentAppId: undefined,
+      },
+    ]);
+  });
+
   it("keeps a kind it does not know, to be refused", async () => {
     const host = new FakeHost();
     const requests = watched(host);
@@ -494,6 +522,37 @@ describe("watchBoundShortcuts", () => {
       [{ appId: "org.example.App", chord: "Ctrl+Alt+t", id: 3 }],
       [],
     ]);
+  });
+});
+
+describe("watchPortalWallpaper", () => {
+  const wallpaper = (host: FakeHost): Promise<PortalWallpaper> =>
+    new Promise((resolve) => {
+      watchPortalWallpaper(host, resolve);
+    });
+
+  it("reads the pictures applications set", async () => {
+    const host = new FakeHost();
+    const heard = wallpaper(host);
+    host.push([], undefined, undefined, {
+      background: "/state/background-1.jpg",
+    });
+
+    expect(await heard).toEqual({
+      background: "/state/background-1.jpg",
+      lockscreen: undefined,
+    });
+  });
+
+  it("reads none set when the line has no wallpaper", async () => {
+    const host = new FakeHost();
+    const heard = wallpaper(host);
+    host.push([]);
+
+    expect(await heard).toEqual({
+      background: undefined,
+      lockscreen: undefined,
+    });
   });
 });
 

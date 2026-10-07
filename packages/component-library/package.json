@@ -66,6 +66,7 @@
     "./Toaster": "./src/Toaster/Toaster.tsx",
     "./theme-core": "./src/ThemeSwitch/theme-core.ts",
     "./theme-source": "./src/ThemeSwitch/theme-source.ts",
+    "./usePictureUrl": "./src/usePictureUrl/usePictureUrl.ts",
     "./vite-shell": "./src/vite-shell.ts"
   },
   "files": [

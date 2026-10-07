@@ -47,6 +47,23 @@ describe("Lock", () => {
     ).not.toBeNull();
   });
 
+  it("shows the lock screen picture an application set", () => {
+    render(
+      <Lock
+        checking={false}
+        locked
+        onUnlock={() => undefined}
+        picture="blob:moon"
+        refusals={0}
+      />,
+      { wrapper: OnOneScreen },
+    );
+
+    expect(
+      document.querySelector("img[data-lock-picture]")?.getAttribute("src"),
+    ).toBe("blob:moon");
+  });
+
   it("covers the desktop and asks for the passphrase", () => {
     lock();
 

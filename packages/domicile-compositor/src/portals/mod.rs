@@ -26,7 +26,9 @@ use domicile_config::{LockdownConfig, ThemeConfig};
 use domicile_host::data_dirs::data_dirs;
 use domicile_host::mime_apps::{default_handler, lists};
 use domicile_host::portal_notifications::Invoked;
-use domicile_protocol::{BoundShortcut, Capturing, PortalAnswer, PortalRequest, Theme};
+use domicile_protocol::{
+    BoundShortcut, Capturing, PortalAnswer, PortalRequest, PortalWallpaper, Theme,
+};
 use tracing::{debug, warn};
 use zbus::blocking::connection::Builder;
 use zbus::zvariant::{OwnedObjectPath, OwnedValue};
@@ -38,6 +40,7 @@ use crate::notifications::NotificationServer;
 mod access;
 mod account;
 mod app_chooser;
+mod background;
 mod clipboard;
 mod email;
 mod file_chooser;
@@ -58,10 +61,12 @@ mod settings;
 #[cfg(test)]
 mod socket_pair;
 mod uri;
+mod wallpaper;
 
 use access::Access;
 use account::{Account, LookUp};
 use app_chooser::AppChooser;
+use background::{Background, RunningApps};
 pub use clipboard::Selection;
 use clipboard::{Clipboard, Transfers};
 use email::{Email, Open};
@@ -75,6 +80,7 @@ use queue::Queue;
 use remote_desktop::{RemoteDesktop, Remotes};
 use restore::Tokens;
 use settings::{color_scheme, Appearance, Settings};
+use wallpaper::{Pictures, Wallpaper};
 
 /// The object path the frontend calls backends at.
 const OBJECT_PATH: &str = "/org/freedesktop/portal/desktop";
@@ -137,6 +143,8 @@ enum Told {
         session: OwnedObjectPath,
         captured: Captured,
     },
+    /// `GetAppState`'s answer changed.
+    RunningApps,
 }
 
 impl Portals {
@@ -187,6 +195,21 @@ impl Portals {
         parent: impl Fn(&str) -> Option<String> + Send + Sync + 'static,
     ) {
         self.backends.queue.listen(publish, listening, parent);
+    }
+
+    /// The windows' applications changed: each window's app id, and whether
+    /// it has focus. Tells the frontend when `GetAppState` would answer
+    /// differently.
+    pub fn running(&self, windows: impl IntoIterator<Item = (String, bool)>) {
+        if self.backends.apps.set(windows) {
+            self.tell(Told::RunningApps);
+        }
+    }
+
+    /// Publish the Wallpaper portal's pictures through `publish`, now and on
+    /// every change.
+    pub fn show_wallpaper(&self, publish: impl Fn(PortalWallpaper) + Send + Sync + 'static) {
+        self.backends.pictures.listen(publish);
     }
 
     /// Call `hold` with whether any application's idle inhibitor is held, on
@@ -259,6 +282,10 @@ struct Backends {
     inputs: Arc<Inputs>,
     zones: Arc<Mutex<Zones>>,
     shortcuts: Arc<Shortcuts>,
+    apps: Arc<RunningApps>,
+    pictures: Arc<Pictures>,
+    /// `$XDG_CONFIG_HOME`, for autostart entries.
+    config_home: Option<PathBuf>,
 }
 
 /// Hands a [`Selection`] to the Wayland thread.
@@ -287,6 +314,12 @@ impl Backends {
             inputs: Arc::default(),
             zones: Arc::default(),
             shortcuts: Arc::new(shortcuts),
+            apps: Arc::default(),
+            // `serve` loads the user's; this is for tests.
+            pictures: Arc::new(Pictures::load(
+                std::env::temp_dir().join("domicile-portals-unloaded"),
+            )),
+            config_home: None,
         };
         (backends, telling)
     }
@@ -367,7 +400,7 @@ pub fn serve(
     spawn: impl Fn(&[String]) + Send + Sync + 'static,
 ) -> Portals {
     let environment = activation_environment(ours, nested_in);
-    let (backends, changes) = Backends::new(
+    let (mut backends, changes) = Backends::new(
         notifications,
         Tokens::load(restore::path(
             std::env::var_os("XDG_STATE_HOME").map(PathBuf::from),
@@ -378,6 +411,17 @@ pub fn serve(
             std::env::var("HOME").ok().as_deref(),
         )),
     );
+    let home = std::env::var_os("HOME").map(PathBuf::from);
+    let state_home =
+        xdg_home("XDG_STATE_HOME", home.as_deref(), ".local/state").unwrap_or_else(|| {
+            warn!(
+                "neither XDG_STATE_HOME nor HOME is set; a wallpaper set \
+                 through the portal lasts until reboot"
+            );
+            std::env::temp_dir()
+        });
+    backends.pictures = Arc::new(Pictures::load(state_home.join("domicile/wallpaper")));
+    backends.config_home = xdg_home("XDG_CONFIG_HOME", home.as_deref(), ".config");
     let portals = Portals {
         backends: backends.clone(),
     };
@@ -406,6 +450,15 @@ pub fn serve(
         }
     });
     portals
+}
+
+/// An XDG base directory: `variable` when set and absolute, else `fallback`
+/// under `home`.
+fn xdg_home(variable: &str, home: Option<&std::path::Path>, fallback: &str) -> Option<PathBuf> {
+    std::env::var_os(variable)
+        .map(PathBuf::from)
+        .filter(|path| path.is_absolute())
+        .or_else(|| home.map(|home| home.join(fallback)))
 }
 
 /// Sets the activation environment, serves the interfaces, and signals each
@@ -484,6 +537,14 @@ fn heard(
                 .interface::<_, Lockdown>(OBJECT_PATH)?,
             lockdown,
         ),
+        Told::RunningApps => {
+            background::changed(
+                &connection
+                    .object_server()
+                    .interface::<_, Background>(OBJECT_PATH)?,
+            );
+            Ok(())
+        }
         Told::End(handle) => {
             zbus::block_on(session::end(connection.object_server().inner(), &handle))
         }
@@ -661,6 +722,20 @@ fn export<'a>(
             GlobalShortcuts {
                 queue: Arc::clone(&backends.queue),
                 shortcuts: Arc::clone(&backends.shortcuts),
+            },
+        )?
+        .serve_at(
+            OBJECT_PATH,
+            Background {
+                apps: Arc::clone(&backends.apps),
+                config_home: backends.config_home.clone(),
+            },
+        )?
+        .serve_at(
+            OBJECT_PATH,
+            Wallpaper {
+                queue: Arc::clone(&backends.queue),
+                pictures: Arc::clone(&backends.pictures),
             },
         )
 }

@@ -70,7 +70,8 @@ impl Compositor {
         Compositor::started_with_env(config, None, &[("DBUS_SESSION_BUS_ADDRESS", address)])
     }
 
-    fn started_with_env(
+    /// The same, with `env` set, such as a session bus for the portals.
+    pub fn started_with_env(
         config: &str,
         home: Option<&std::path::Path>,
         env: &[(&str, &str)],

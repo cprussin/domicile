@@ -516,7 +516,28 @@ pub enum HostMessage {
         capturing: Vec<Capturing>,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         shortcuts: Vec<BoundShortcut>,
+        /// The pictures applications set through the Wallpaper portal, for the
+        /// shell to draw.
+        #[serde(default, skip_serializing_if = "PortalWallpaper::is_unset")]
+        wallpaper: PortalWallpaper,
     },
+}
+
+/// The pictures applications set through the Wallpaper portal, as absolute
+/// paths the shell reads with `read_file`. Absent where none was set.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PortalWallpaper {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub background: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lockscreen: Option<String>,
+}
+
+impl PortalWallpaper {
+    /// Whether no picture was set anywhere.
+    pub fn is_unset(&self) -> bool {
+        self.background.is_none() && self.lockscreen.is_none()
+    }
 }
 
 /// A dialog an application asked for through a portal.
@@ -566,6 +587,9 @@ pub enum PortalKind {
     /// `org.freedesktop.impl.portal.GlobalShortcuts`: review the chords an
     /// application asks for.
     GlobalShortcuts(ShortcutsDialog),
+    /// `org.freedesktop.impl.portal.Wallpaper`: a picture to preview before it
+    /// is set. Allowed with [`PortalAnswer::Access`].
+    Wallpaper(WallpaperDialog),
 }
 
 impl PortalKind {
@@ -576,7 +600,10 @@ impl PortalKind {
         match (self, answer) {
             (PortalKind::Inhibit(_), _) => false,
             (_, PortalAnswer::Canceled | PortalAnswer::Refused) => true,
-            (PortalKind::Access(_) | PortalKind::Account(_), PortalAnswer::Access) => true,
+            (
+                PortalKind::Access(_) | PortalKind::Account(_) | PortalKind::Wallpaper(_),
+                PortalAnswer::Access,
+            ) => true,
             (PortalKind::AppChooser(dialog), PortalAnswer::AppChooser { choice }) => {
                 dialog.choices.contains(choice)
             }
@@ -599,6 +626,23 @@ impl PortalKind {
             ) => false,
         }
     }
+}
+
+/// A `SetWallpaperURI` with `show-preview`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WallpaperDialog {
+    /// The picture, as an absolute path the shell reads with `read_file`.
+    pub path: String,
+    pub set_on: WallpaperTarget,
+}
+
+/// Where a Wallpaper portal picture goes: the portal's `set-on`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WallpaperTarget {
+    Background,
+    Lockscreen,
+    Both,
 }
 
 /// What an application's inhibitor holds off, and why.

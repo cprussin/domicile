@@ -58,7 +58,7 @@
         # checks run.
         wl-clipboard
         # `dbus-daemon`, a private session bus for the portal checks
-        # (`tests/portals.rs`).
+        # (`packages/domicile-compositor/tests/`).
         dbus
         # The terminal the demo shell's Alt+Enter binding launches.
         kitty

@@ -67,6 +67,25 @@ const account = {
   kind: "account",
 };
 
+const wallpaper = {
+  app_id: "org.example.Photos",
+  body: { path: "/home/u/Pictures/dusk.png", set_on: "both" },
+  id: 3,
+  kind: "wallpaper",
+};
+
+/** A small dusk gradient, standing in for a photograph. */
+const DUSK_PNG =
+  "iVBORw0KGgoAAAANSUhEUgAAACAAAAASCAIAAAC1qksFAAAA3ElEQVR42mOQlCyQlc5Vks1WV8jUUUozUEkxVU+y0oy314l10Yv2MIjwNQ4LMg0JtwiMsfJPsPFNtffKcvTId3ErcXOu8HCs9bZv8rVpD7DqCbKYEGI6Ndx4VqTh/Bi9xXE6KxK01iarM9DU9E2pqgw0NX17hjIDTU3fnaXAQFPTD+TIMdDU9KP5Mgw0Nf1UoSQDTU0/XyLOQFPTL5eJMtDU9BsVQgw0Nf1utQADTU1/VMvHQFPTnzdwM9DU9NdNnAw0Nf1DCzsDTU3/2s7CQFPTf3UyMdDU9P89DACWx2/KpRK5igAAAABJRU5ErkJggg==";
+
+/** A desktop holding the picture `wallpaper` names. */
+const withPicture = () =>
+  fakeSystem({
+    "/home/u/Pictures/dusk.png": Uint8Array.from(atob(DUSK_PNG), (c) =>
+      c.charCodeAt(0),
+    ),
+  });
+
 const entry = (name: string): string =>
   `[Desktop Entry]\nType=Application\nName=${name}\nExec=true\n`;
 
@@ -286,5 +305,14 @@ export const GlobalShortcuts: Story = {
     screenOf: undefined,
     shellChords: ["Meta+Return"],
     systemOf: undefined,
+  },
+};
+
+export const Wallpaper: Story = {
+  args: {
+    host: pushing([wallpaper]),
+    screen: undefined,
+    screenOf: undefined,
+    systemOf: withPicture,
   },
 };

@@ -301,11 +301,19 @@ const boundShortcutSchema = z.looseObject({
   id: z.number(),
 });
 
+// The pictures applications set through the Wallpaper portal, as paths the
+// shell reads. Absent until one is set.
+const portalWallpaperSchema = z.looseObject({
+  background: z.string().optional(),
+  lockscreen: z.string().optional(),
+});
+
 const portalRequestsSchema = z.looseObject({
   capturing: z.array(portalCapturingSchema).optional(),
   items: z.array(portalRequestSchema),
   shortcuts: z.array(boundShortcutSchema).optional(),
   type: z.literal("portal_requests"),
+  wallpaper: portalWallpaperSchema.optional(),
 });
 
 // The desktop's light or dark theme. Sent with the handshake, after any
