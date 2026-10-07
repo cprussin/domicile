@@ -6,6 +6,7 @@
 
 #include <optional>
 
+#include "components/domicile/common/held_chords.h"
 #include "components/domicile/mojom/browser_windows.mojom-blink.h"
 #include "components/domicile/mojom/control_channel.mojom-blink.h"
 #include "components/domicile/mojom/extension_tray.mojom-blink.h"
@@ -259,6 +260,7 @@ class MODULES_EXPORT DomicileHost final
   void AppCursor(const String& app_id,
                  domicile::mojom::blink::CursorShape cursor) override;
   void ShortcutPressed(domicile::mojom::blink::ShortcutPtr shortcut) override;
+  void ShortcutReleased(domicile::mojom::blink::ShortcutPtr shortcut) override;
   void Modifiers(bool alt, bool ctrl, bool shift, bool meta) override;
   void Files(const String& query,
              const Vector<String>& files,
@@ -364,6 +366,13 @@ class MODULES_EXPORT DomicileHost final
   // desktop's: taken from the page and dispatched as `shortcut`, the same as
   // the browser process does for one pressed in a `<webview>`.
   void PageKeyDown(Event* event);
+  // Dispatches `press` as `shortcut` and holds it until its release.
+  void FireShortcut(const DomicilePress& press);
+  // A key came up on the page.
+  void PageKeyUp(Event* event);
+  // A key came up: `up.keycode` with `up`'s modifiers still held. Dispatches
+  // `shortcutrelease` for each held chord it lets go.
+  void ReleaseChords(const DomicilePress& up);
 
   // The keyboard's routing, which was `keyboard-input.ts`. A key is delivered
   // to this document and never to an element -- a client is a surface, not a
@@ -468,6 +477,10 @@ class MODULES_EXPORT DomicileHost final
   std::optional<HashMap<String, uint32_t>> keys_;
   // `keydown` on the window, once a chord is grabbed by name.
   Member<NativeEventListener> key_listener_;
+  // The chords fired and not yet released, wherever they were pressed.
+  domicile::HeldChords<DomicilePress> held_chords_;
+  // `keyup` on the window, once a chord is held.
+  Member<NativeEventListener> key_up_listener_;
 
   // The window the page's keys go to, or null for the page itself: the last
   // one reached for -- a press, a `focusApp()` -- or the one the compositor

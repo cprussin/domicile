@@ -36,7 +36,7 @@ compositor: keymap.rs ─▶ shell_config { keys } ─▶ engine ─────
 |---|---|---|
 | Key table | `domicile-compositor` (`keymap.rs`, `shell_config.rs`) | Maps each keysym the layout can type to the lowest key that types it |
 | Wire | `HostMessage::ShellConfig { keys }`, `packages/e2e-harness/src/protocol.ts` | Sends the table on connect and when a reload changes the keyboard |
-| Chords | engine `modules/domicile/domicile_chord.*`, `DomicileHost.grabShortcut` | Parses chords and resolves them against the table, again when it changes. Throws `SyntaxError` on a bad chord and `NotFoundError` on a keysym the layout cannot type. A press arrives as `shortcut` with its `chord` |
+| Chords | engine `modules/domicile/domicile_chord.*`, `DomicileHost.grabShortcut` | Parses chords and resolves them against the table, again when it changes. Throws `SyntaxError` on a bad chord and `NotFoundError` on a keysym the layout cannot type. A press arrives as `shortcut` with its `chord`, its release as `shortcutrelease` |
 | Modes | `@domicile-desktop/sdk/own-keybindings` | Gives each chord one spelling and files the bindings by mode |
 | Dispatch | `@domicile-desktop/sdk/bind-keys` | Grabs every chord, matches `shortcut.chord` in the current mode, runs `Mode`, passes `SendShell` to `onCommand` |
 

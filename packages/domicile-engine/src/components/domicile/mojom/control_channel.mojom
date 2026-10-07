@@ -447,6 +447,11 @@ interface ControlChannelClient {
   // ShortcutRegistry and never crosses the compositor's socket at all.
   ShortcutPressed(Shortcut shortcut);
 
+  // A key came up in a `<webview>` guest of this page: `keycode` is the key
+  // and the modifiers are those still held. Sent only for a claimed chord's
+  // key or a modifier, either of which can let go of a chord the page holds.
+  ShortcutReleased(Shortcut shortcut);
+
   // The seat's modifier state. One seat, outliving every window, which is why
   // a dropped key release latches modifiers into clients that never saw it.
   //

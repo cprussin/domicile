@@ -1,15 +1,13 @@
 // Copyright 2026 Connor Prussin
 // SPDX-License-Identifier: MIT
 
-// A combination claimed with grabShortcut() was pressed.
+// A combination claimed with grabShortcut() was pressed (`shortcut`) or let
+// go (`shortcutrelease`).
 //
 // Its own type rather than a DomicileAppEvent with the combination in the
 // `title` slot. A shortcut is not a window's name and does not belong to a
 // window at all: it fires whatever holds the keyboard, which is the point of
 // grabbing it.
-//
-// Only presses. A release changes nothing and would arrive as a second event
-// for one keystroke.
 
 [
     Exposed=Window,

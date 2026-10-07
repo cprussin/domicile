@@ -108,13 +108,17 @@ One request channel carries all dialogs. Each interface's backend builds on it.
 - **Global shortcuts are the shell's grabs.** Only the engine sees keys, so the
   compositor lists each bound chord in the `PortalRequests` push
   (`shortcuts`); `<PortalDialogs />` grabs it with `grabShortcut` and answers
-  `pressed` under its id. A locked desk refuses that answer.
+  `pressed` under its id on `shortcut`, and `released` on `shortcutrelease`.
+  The compositor signals `Activated` and `Deactivated` for them. A locked desk
+  refuses both answers.
   - The review dialog spells each chord as `bindKeys` does and flags one the
     shell or another app holds.
   - Choices are kept per app id in `global-shortcuts.json`. A `BindShortcuts`
     whose every id has a choice binds without a dialog.
-  - The engine reports presses only, so `Deactivated` follows `Activated` at
-    once. A release needs an engine event.
+  - A chord is released when its key or one of its modifiers comes up,
+    wherever the keyboard is. The page pairs each release with its press
+    (`components/domicile/common/held_chords.h`). A key that comes up in a
+    `<webview>` reaches the page through `ShortcutRegistry::Release`.
 - **Multi-monitor regions use the highest density.** A stream has one scale,
   so a region spanning monitors is captured at the highest density it
   touches. Lower-density monitors lose nothing.
@@ -244,7 +248,7 @@ Phase 3: input.
 Phase 4: the rest.
 
 - [x] GlobalShortcuts
-- [ ] engine: report a grabbed chord's release, for `Deactivated` on release
+- [x] engine: report a grabbed chord's release, for `Deactivated` on release
 - [x] Background, Wallpaper
 - [x] DynamicLauncher, Usb
 

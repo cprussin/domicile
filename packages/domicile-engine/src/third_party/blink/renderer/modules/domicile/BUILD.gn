@@ -44,6 +44,8 @@ blink_modules_sources("domicile") {
     # browser parsed the compositor's JSON with is the one that names it here.
     "//components/domicile:cursor_shape",
     "//components/domicile:display_transform",
+    # The chords fired and not yet released. See DomicileHost::ReleaseChords.
+    "//components/domicile:held_chords",
     # And the wire names of the themes, for the same reason and in both
     # directions: `DomicileHost.theme` is a `DomicileTheme` where the
     # compositor's is a `mojom::Theme`, and `setTheme()` goes back the other

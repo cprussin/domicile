@@ -79,7 +79,10 @@ The engine has two channels to the rest of Domicile:
 - **`grab_shortcut`**: the browser holds the grabbed set and matches it in
   `WebViewGuest::PreHandleKeyboardEvent`. The compositor cannot do this: keys
   typed into a `<webview>` guest never reach it. A match comes back as a
-  `shortcut` event. See `components/domicile/browser/shortcut_registry.h`.
+  `shortcut` event. A guest's release of a grabbed key or a modifier comes
+  back as `ShortcutReleased`, which the page pairs with the press as
+  `shortcutrelease`. Chromium drops key-ups after a key-down the delegate
+  took, so patch `0100` prehandles every key-up. See `components/domicile/browser/shortcut_registry.h`.
 - **`warp_pointer`**: the browser owns the pointer (a DRM cursor plane on a
   tty, the host's pointer when nested), so the compositor cannot move it.
   - Use: focus-follows-mouse desktops. After a keyboard focus change, the

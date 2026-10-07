@@ -65,6 +65,8 @@ ControlChannel::ControlChannel(
       base::BindPostTaskToCurrentDefault(base::BindRepeating(
           &ControlChannel::DeliverShortcut, weak_factory_.GetWeakPtr())),
       base::BindPostTaskToCurrentDefault(base::BindRepeating(
+          &ControlChannel::DeliverRelease, weak_factory_.GetWeakPtr())),
+      base::BindPostTaskToCurrentDefault(base::BindRepeating(
           &ControlChannel::DeliverModifiers, weak_factory_.GetWeakPtr())));
   give_up_at_ = base::TimeTicks::Now() + kReachFor;
   Connect();
@@ -540,6 +542,13 @@ void ControlChannel::OnWrite(int result) {
 void ControlChannel::DeliverShortcut(Chord chord) {
   if (client_) {
     client_->ShortcutPressed(mojom::Shortcut::New(
+        chord.keycode, chord.alt, chord.ctrl, chord.shift, chord.meta));
+  }
+}
+
+void ControlChannel::DeliverRelease(Chord chord) {
+  if (client_) {
+    client_->ShortcutReleased(mojom::Shortcut::New(
         chord.keycode, chord.alt, chord.ctrl, chord.shift, chord.meta));
   }
 }

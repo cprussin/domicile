@@ -3,10 +3,12 @@
 // after the stand-in has pressed Meta+Shift+l too -- reports:
 //
 //   GUARD listening                   the channel is bound
-//   GUARD chords bad=<error> missing=<error> page=<…> heard=<chords>
+//   GUARD chords bad=<error> missing=<error> page=<…> heard=<chords> released=<chords>
 //
 // `page` is, for Meta+Shift+l, the same held as a repeat, and Meta+k, whether
-// the engine took each from the page; `heard` is every `shortcut`'s chord.
+// the engine took each from the page; `heard` is every `shortcut`'s chord and
+// `released` every `shortcutrelease`'s. The page lets go of k, which releases
+// nothing, then Shift, which releases Meta+Shift+l.
 
 const thrown = (grab) => {
   try {
@@ -17,8 +19,10 @@ const thrown = (grab) => {
   }
 };
 
-const press = (code, init) => {
-  const event = new KeyboardEvent("keydown", {
+const press = (code, init) => key("keydown", code, init);
+
+const key = (type, code, init) => {
+  const event = new KeyboardEvent(type, {
     bubbles: true,
     cancelable: true,
     code,
@@ -40,6 +44,10 @@ export const Shell = (_root, desktop) => {
   host.addEventListener("shortcut", (event) => {
     heard.push(event.chord);
   });
+  const released = [];
+  host.addEventListener("shortcutrelease", (event) => {
+    released.push(event.chord);
+  });
   console.log("GUARD listening");
 
   setTimeout(() => {
@@ -51,9 +59,11 @@ export const Shell = (_root, desktop) => {
       press("KeyL", { metaKey: true, repeat: true, shiftKey: true }),
       press("KeyK", { metaKey: true }),
     ].join(",");
+    key("keyup", "KeyK", { metaKey: true, shiftKey: true });
+    key("keyup", "ShiftLeft", { metaKey: true });
     setTimeout(() => {
       console.log(
-        `GUARD chords bad=${bad} missing=${missing} page=${page} heard=${heard.join(",")}`,
+        `GUARD chords bad=${bad} missing=${missing} page=${page} heard=${heard.join(",")} released=${released.join(",")}`,
       );
     }, 3500);
   }, 1000);

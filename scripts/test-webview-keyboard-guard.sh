@@ -51,6 +51,7 @@ verdict() { # $1 NEGATIVE, then NAME=value overrides
     SAW_FOCUS=1
     SAW_RELAY=0
     SAW_SHORTCUT=1
+    SAW_RELEASE=1
     SAW_MODIFIERS=1
     SAW_HOOK=1
     SAW_SHELL_KEY=1
@@ -85,6 +86,7 @@ reason() { # $1 NEGATIVE, then NAME=value overrides
     SAW_FOCUS=1
     SAW_RELAY=0
     SAW_SHORTCUT=1
+    SAW_RELEASE=1
     SAW_MODIFIERS=1
     SAW_HOOK=1
     SAW_SHELL_KEY=1
@@ -147,6 +149,9 @@ expect "an empty window names the guest" "yes" \
 expect "no chord is a failure" "fail" "$(verdict 0 SAW_SHORTCUT=0)"
 expect "no chord blames the hook" "yes" \
   "$(blames "PreHandleKeyboardEvent" 0 SAW_SHORTCUT=0)"
+expect "no release is a failure" "fail" "$(verdict 0 SAW_RELEASE=0)"
+expect "no release blames its leg back" "yes" \
+  "$(blames "ShortcutReleased" 0 SAW_RELEASE=0)"
 expect "no modifiers is a failure" "fail" "$(verdict 0 SAW_MODIFIERS=0)"
 
 echo

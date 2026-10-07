@@ -1,8 +1,8 @@
 // Fires the chords applications hold through the GlobalShortcuts portal.
 //
 // The compositor lists them with each `portalrequests` push. Each is grabbed
-// as the shell grabs its own keys, and a press is reported to the compositor,
-// which signals the application. See docs/architecture/PORTALS.md.
+// as the shell grabs its own keys, and a press and its release are reported to
+// the compositor, which signals the application. See docs/architecture/PORTALS.md.
 
 import type { DomicileHost } from "./domicile-host";
 import { watchBoundShortcuts } from "./portal";
@@ -17,8 +17,8 @@ export type GlobalShortcutsHost = Pick<
 >;
 
 /**
- * Grab every chord applications hold, and report each press. Returns a
- * function that stops reporting.
+ * Grab every chord applications hold, and report each press and release.
+ * Returns a function that stops reporting.
  *
  * Grabs are never released (see `bindKeys`), so a chord an application let go
  * of stays grabbed and reports nothing. A keysym the layout cannot type is
@@ -47,15 +47,21 @@ export const fireGlobalShortcuts = (
       new Map<string, readonly number[]>(),
     );
   });
-  const onShortcut = ({ chord }: { readonly chord: string }) => {
-    for (const id of byChord.get(chord) ?? []) {
-      host.answerPortalRequest(id, JSON.stringify({ kind: "pressed" }));
-    }
-  };
+  const report =
+    (kind: "pressed" | "released") =>
+    ({ chord }: { readonly chord: string }) => {
+      for (const id of byChord.get(chord) ?? []) {
+        host.answerPortalRequest(id, JSON.stringify({ kind }));
+      }
+    };
+  const onShortcut = report("pressed");
+  const onRelease = report("released");
   host.addEventListener("shortcut", onShortcut);
+  host.addEventListener("shortcutrelease", onRelease);
 
   return () => {
     stopWatching();
     host.removeEventListener("shortcut", onShortcut);
+    host.removeEventListener("shortcutrelease", onRelease);
   };
 };

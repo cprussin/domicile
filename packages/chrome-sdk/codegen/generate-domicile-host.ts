@@ -37,6 +37,7 @@ const EVENT_TYPES = {
   focusrequested: "DomicileAppEvent",
   portalrequests: "MessageEvent<string>",
   shortcut: "DomicileShortcutEvent",
+  shortcutrelease: "DomicileShortcutEvent",
   system: "MessageEvent<string>",
 };
 
