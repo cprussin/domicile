@@ -20,7 +20,14 @@
   readonly attribute DOMString title;
 
   // The picture, as a `data:` URL to draw, or empty for one the compositor
-  // could not draw. A URL rather than a path: the page may draw what the
-  // compositor read and cannot read it.
+  // could not draw.
   readonly attribute DOMString icon;
+
+  // The bus name the application answers on, unique or well-known.
+  readonly attribute DOMString bus;
+
+  // The object path of the icon's `com.canonical.dbusmenu` menu on `bus`, or
+  // empty for an icon with none. A shell draws the menu itself, with D-Bus
+  // calls through callSystem().
+  readonly attribute DOMString menu;
 };

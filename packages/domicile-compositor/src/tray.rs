@@ -27,7 +27,7 @@ use zbus::blocking::object_server::InterfaceRef;
 use zbus::blocking::{Connection, MessageIterator, Proxy};
 use zbus::message::{Header, Type};
 use zbus::object_server::SignalEmitter;
-use zbus::zvariant::OwnedValue;
+use zbus::zvariant::{OwnedObjectPath, OwnedValue};
 use zbus::MatchRule;
 
 /// The watcher's bus name. Items look for KDE's name; the freedesktop one was
@@ -181,7 +181,10 @@ fn answer(
                         Ok(properties) => {
                             let properties = parse(properties);
                             let name = registry.named(&id, &properties.id);
-                            registry.show(&id, item(&name, properties, &mut icons));
+                            let (bus, _) = registry
+                                .address(&id)
+                                .expect("an item read is one registered");
+                            registry.show(&id, item(&name, &bus, properties, &mut icons));
                         }
                         // Kept registered but hidden: there is nothing to
                         // draw.
@@ -301,6 +304,11 @@ fn parse(mut properties: HashMap<String, OwnedValue>) -> Properties {
     let icon_name = text("IconName");
     let attention_icon_name = text("AttentionIconName");
     let icon_theme_path = text("IconThemePath");
+    let menu = properties
+        .remove("Menu")
+        .and_then(|value| OwnedObjectPath::try_from(value).ok())
+        .map(|path| path.to_string())
+        .unwrap_or_default();
     let mut pixmaps = |name: &str| {
         properties
             .remove(name)
@@ -338,6 +346,7 @@ fn parse(mut properties: HashMap<String, OwnedValue>) -> Properties {
         attention_icon_name,
         attention_pixmaps,
         icon_theme_path,
+        menu,
     }
 }
 
@@ -441,7 +450,7 @@ impl Watcher {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use zbus::zvariant::Value;
+    use zbus::zvariant::{ObjectPath, Value};
 
     /// `properties` in the shape of a `GetAll` reply.
     fn answered(properties: Vec<(&str, Value<'static>)>) -> HashMap<String, OwnedValue> {
@@ -466,6 +475,10 @@ mod tests {
             ("IconName", Value::from("nm-signal-75")),
             ("AttentionIconName", Value::from("nm-no-connection")),
             ("IconThemePath", Value::from("/opt/nm/icons")),
+            (
+                "Menu",
+                Value::from(ObjectPath::try_from("/MenuBar").expect("a path")),
+            ),
             ("IconPixmap", Value::from(pixmaps.clone())),
             ("AttentionIconPixmap", Value::from(pixmaps)),
             (
@@ -496,6 +509,7 @@ mod tests {
                 attention_icon_name: "nm-no-connection".into(),
                 attention_pixmaps: vec![pixel],
                 icon_theme_path: "/opt/nm/icons".into(),
+                menu: "/MenuBar".into(),
             }
         );
     }
@@ -520,6 +534,7 @@ mod tests {
                 attention_icon_name: String::new(),
                 attention_pixmaps: Vec::new(),
                 icon_theme_path: String::new(),
+                menu: String::new(),
             }
         );
     }

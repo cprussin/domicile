@@ -55,9 +55,11 @@ shell click ─ activateTrayItem(id, action) ─▶ engine ─ activate_tray_ite
 ## Open questions
 
 - **Menus.** Most libappindicator items only expose `com.canonical.dbusmenu`,
-  so secondary click does nothing for them. Recommendation: read the menu
-  layout in the compositor, send it as a separate message, and draw it with the
-  component library's menu.
+  so secondary click does nothing for them. Each `TrayItem` carries its `bus`
+  and its `Menu` path (`menu`, absent for none or `/NO_DBUSMENU`).
+  Recommendation: a TypeScript library drives the menu with `dbusCall` and
+  `dbusMatch` (`GetLayout`, `Event`, `LayoutUpdated`) and draws it with the
+  component library's menu. The lock refuses those calls.
 - **Nested sessions.** Inside another desktop session, that session's panel
   already owns `org.kde.StatusNotifierWatcher`, so the compositor hosts
   nothing. Recommendation: leave it; nested runs are for development.

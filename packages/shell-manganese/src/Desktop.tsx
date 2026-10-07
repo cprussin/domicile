@@ -4,6 +4,7 @@ import { createToastManager } from "@domicile-desktop/component-library/Toaster"
 import { usePictureUrl } from "@domicile-desktop/component-library/usePictureUrl";
 import { usePortalWallpaper } from "@domicile-desktop/component-library/usePortalWallpaper";
 import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
+import { previewFile } from "@domicile-desktop/sdk/file-preview";
 import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
 import { ownedChords } from "@domicile-desktop/sdk/own-keybindings";
 import { system } from "@domicile-desktop/sdk/system";
@@ -19,7 +20,6 @@ import { appSearch } from "./launcher/app-search";
 import type { ApplicationsConfig } from "./launcher/applications-config";
 import { Launcher } from "./launcher/Launcher";
 import { LaunchKind } from "./launcher/launch";
-import { previewOf } from "./launcher/preview-of";
 import { useOpeningApps } from "./launcher/useOpeningApps";
 import { Lock } from "./lock/Lock";
 import { LockReadouts } from "./lock/LockReadouts";
@@ -101,9 +101,9 @@ export const Desktop = ({
   // Read while the launcher is closed so its rows render with it rather than
   // a moment later.
   const opening = useOpeningApps(apps.opening, windows.launcherOpen);
-  // File previews, from the same index.
+  // File previews, read through the desktop's system calls.
   const preview = useCallback(
-    (path: string) => domicile.previewFile(path).then(previewOf),
+    (path: string) => previewFile(system(domicile), path),
     [domicile],
   );
 

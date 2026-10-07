@@ -98,6 +98,8 @@ fn a_page_reads_its_home() {
         1,
         SystemRequest::ReadFile {
             path: "note".into(),
+            offset: 0,
+            length: None,
         },
     );
 

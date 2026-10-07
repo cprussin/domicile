@@ -1,9 +1,16 @@
-// A preview of a path's contents, as a launcher draws it.
-//
-// `filePreviewKindSchema` maps the `kind` of `previewFile`'s answer to the
-// enum.
+// A preview of a path's contents, as a launcher draws it, read through the
+// shell's system calls.
 
-import { z } from "zod";
+import type { AudioContainer } from "./audio-tags/audio-tags";
+import { audioContainer, audioTags } from "./audio-tags/audio-tags";
+import type { System } from "./system";
+import { FileType } from "./system";
+
+/** Bytes of a file read for its preview. */
+const PREVIEW_BYTES = 8 * 1024;
+
+/** Directory entries in a preview. */
+const PREVIEW_ENTRIES = 200;
 
 /** The kinds of file preview. */
 export enum FilePreviewKind {
@@ -20,8 +27,6 @@ export type AudioTags = {
   artist: string | undefined;
   /** Embedded cover art, as a `data:` URL. */
   cover: string | undefined;
-  /** Length in seconds. */
-  duration: number;
   title: string | undefined;
 };
 
@@ -37,7 +42,7 @@ export const FilePreview = {
   }),
   /** The start of a text file. */
   Text: (text: string) => ({ kind: FilePreviewKind.Text as const, text }),
-  /** Not in the home's index, or not readable. */
+  /** Missing, or not readable. */
   Unreadable: () => ({ kind: FilePreviewKind.Unreadable as const }),
 };
 
@@ -45,25 +50,92 @@ export type FilePreview = ReturnType<
   (typeof FilePreview)[keyof typeof FilePreview]
 >;
 
-/** Parses the engine's `kind` string into a {@link FilePreviewKind}. */
-export const filePreviewKindSchema = z
-  .enum(["text", "directory", "audio", "binary", "unreadable"])
-  .transform((kind) => {
-    switch (kind) {
-      case "text": {
-        return FilePreviewKind.Text;
-      }
-      case "directory": {
-        return FilePreviewKind.Directory;
-      }
-      case "audio": {
-        return FilePreviewKind.Audio;
-      }
-      case "binary": {
-        return FilePreviewKind.Binary;
-      }
-      case "unreadable": {
-        return FilePreviewKind.Unreadable;
-      }
-    }
+/** The system calls a preview makes. */
+export type PreviewSystem = Pick<System, "readDir" | "readFile" | "stat">;
+
+/**
+ * Preview `path`: a directory's entries, a song's tags, or the start of a
+ * file as text. A relative path starts at the home. Songs are told by their
+ * contents, not their names.
+ */
+export const previewFile = async (
+  system: PreviewSystem,
+  path: string,
+): Promise<FilePreview> =>
+  (await system.stat(path)).match({
+    Err: () => Promise.resolve(FilePreview.Unreadable()),
+    Ok: ({ fileType }) =>
+      fileType === FileType.Directory
+        ? listed(system, path)
+        : contents(system, path),
   });
+
+/** A directory's entry names, sorted, with directories ending in `/`. */
+const listed = async (
+  system: PreviewSystem,
+  path: string,
+): Promise<FilePreview> =>
+  (await system.readDir(path)).match<FilePreview>({
+    Err: FilePreview.Unreadable,
+    Ok: (entries) =>
+      FilePreview.Directory(
+        entries
+          .map(({ fileType, name }) =>
+            fileType === FileType.Directory ? `${name}/` : name,
+          )
+          .toSorted()
+          .slice(0, PREVIEW_ENTRIES),
+      ),
+  });
+
+const contents = async (
+  system: PreviewSystem,
+  path: string,
+): Promise<FilePreview> =>
+  (await system.readFile(path, { length: PREVIEW_BYTES })).match({
+    Err: () => Promise.resolve(FilePreview.Unreadable()),
+    Ok: (head) => {
+      const container = audioContainer(head);
+      return container === undefined
+        ? Promise.resolve(textOf(head))
+        : song(system, path, container);
+    },
+  });
+
+const song = async (
+  system: PreviewSystem,
+  path: string,
+  container: AudioContainer,
+): Promise<FilePreview> =>
+  (
+    await audioTags(container, (offset, length) =>
+      system.readFile(path, { length, offset }),
+    )
+  ).match<FilePreview>({
+    Err: FilePreview.Unreadable,
+    Ok: FilePreview.Audio,
+  });
+
+/**
+ * The start of a file, as text if it is text. A NUL or invalid UTF-8 means
+ * binary. A character cut off by the limit is dropped: a streaming decoder
+ * holds it back rather than call it invalid.
+ */
+const textOf = (bytes: Uint8Array): FilePreview => {
+  try {
+    return bytes.includes(0)
+      ? FilePreview.Binary()
+      : FilePreview.Text(
+          new TextDecoder("utf-8", { fatal: true }).decode(bytes, {
+            stream: true,
+          }),
+        );
+  } catch (error) {
+    // A fatal decoder throws a TypeError for invalid UTF-8.
+    if (error instanceof TypeError) {
+      return FilePreview.Binary();
+    } else {
+      throw error;
+    }
+  }
+};

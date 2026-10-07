@@ -40,13 +40,11 @@ class FrozenArray;
 
 class DomicileBrowserWindow;
 class DomicileDisplay;
-class DomicileShortcut;
 class DomicileClipboardEntry;
 class DomicileTrayItem;
 class DomicileNotification;
 class DomicileExtension;
 class DomicileWindow;
-class DomicileFilePreview;
 class DomicileFileSearch;
 struct DomicileWindowState;
 class LocalDOMWindow;
@@ -114,12 +112,6 @@ class MODULES_EXPORT DomicileHost final
   ScriptPromise<DomicileFileSearch> searchFiles(ScriptState*,
                                                 const String& query,
                                                 ExceptionState&);
-  // Ask what is in one file; the promise settles with the answer. The path is
-  // one searchFiles() named -- see the IDL for why that is the whole of what
-  // it may name.
-  ScriptPromise<DomicileFilePreview> previewFile(ScriptState*,
-                                                 const String& path,
-                                                 ExceptionState&);
   void callSystem(ScriptState*,
                   uint32_t id,
                   const String& request,
@@ -144,11 +136,6 @@ class MODULES_EXPORT DomicileHost final
   void focusChrome(ScriptState*, ExceptionState&);
   void warpPointer(ScriptState*, double x, double y, ExceptionState&);
   void closeApp(ScriptState*, const String& app_id, ExceptionState&);
-  void resizeApp(ScriptState*,
-                 const String& app_id,
-                 double width,
-                 double height,
-                 ExceptionState&);
   void setAppBounds(ScriptState*,
                     const String& app_id,
                     double x,
@@ -176,9 +163,6 @@ class MODULES_EXPORT DomicileHost final
   // This page's old frame is held for `theme`: the desk's windows may turn.
   // Answered with `windowsthemechanged` once they have.
   void themeCaptured(ScriptState*, V8DomicileTheme theme, ExceptionState&);
-  void grabShortcut(ScriptState*,
-                    const DomicileShortcut* shortcut,
-                    ExceptionState&);
   // The chord, `Meta+Shift+l`, resolved here against the keys the compositor
   // says the keyboard has, and again whenever it says so anew.
   void grabShortcut(ScriptState*, const String& chord, ExceptionState&);
@@ -266,15 +250,6 @@ class MODULES_EXPORT DomicileHost final
              const Vector<String>& files,
              uint32_t matched,
              bool indexing) override;
-  void FilePreview(const String& path,
-                   const String& kind,
-                   const String& text,
-                   const Vector<String>& entries,
-                   const String& title,
-                   const String& artist,
-                   const String& album,
-                   double duration,
-                   const String& cover) override;
   void Clipboard(
       Vector<domicile::mojom::blink::ClipboardEntryPtr> entries) override;
   void Tray(Vector<domicile::mojom::blink::TrayItemPtr> items) override;
@@ -350,7 +325,7 @@ class MODULES_EXPORT DomicileHost final
   // never sees it, and a shell that forgot to say would leave every client laid
   // out against the compositor's startup placeholder. Sent as the channel
   // binds and again on every `resize` and every change of `devicePixelRatio`.
-  // See docs/architecture/WINDOW-DOMICILE.md.
+  // See packages/chrome-sdk/README.md.
   void ReportGeometry();
   void ReportDesktopSize();
   // Re-arms `density_query_` at the new ratio: a `(resolution: Ndppx)` query
@@ -423,13 +398,11 @@ class MODULES_EXPORT DomicileHost final
   HeapVector<Member<Event>> held_;
   // The latest `portal_requests` line, or null until the first.
   String portal_requests_;
-  // The one outstanding ask of each kind, and what it asked: an answer settles
-  // it only if it answers that. A newer ask rejects the older -- see
-  // searchFiles() in the IDL.
+  // The one outstanding search, and what it asked: an answer settles it only
+  // if it answers that. A newer search rejects the older -- see searchFiles()
+  // in the IDL.
   Member<ScriptPromiseResolver<DomicileFileSearch>> file_search_;
   String file_search_query_;
-  Member<ScriptPromiseResolver<DomicileFilePreview>> file_preview_;
-  String file_preview_path_;
   // The desk's state, which its attributes read: what the compositor -- or,
   // for `extensions_`, the browser -- last said, and null or nullopt until it
   // has said anything. Each list replaced wholesale, for `displays_`'s reason.

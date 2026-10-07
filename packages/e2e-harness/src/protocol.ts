@@ -91,21 +91,6 @@ const appClosedSchema = z.looseObject({
   type: z.literal("app_closed"),
 });
 
-const shortcutSchema = z.looseObject({
-  alt: z.boolean(),
-  ctrl: z.boolean(),
-  key: z.number(),
-  logo: z.boolean(),
-  shift: z.boolean(),
-});
-
-// A claimed shortcut was pressed. It comes from the compositor because it must
-// work while a window has keyboard focus.
-const shortcutMessageSchema = z.looseObject({
-  shortcut: shortcutSchema,
-  type: z.literal("shortcut"),
-});
-
 // The held modifiers, sent on change. The page cannot see them while a window
 // has keyboard focus, but needs them for gestures such as alt-drag.
 const modifiersSchema = z.looseObject({
@@ -207,21 +192,6 @@ const foundFilesSchema = z.looseObject({
   type: z.literal("found_files"),
 });
 
-// The reply to `preview_file`. `kind` says which optional fields are set;
-// `binary` and `unreadable` set none.
-const filePreviewSchema = z.looseObject({
-  album: z.string().optional(),
-  artist: z.string().optional(),
-  cover: z.string().optional(),
-  duration: z.number().nonnegative().optional(),
-  entries: z.array(z.string()).optional(),
-  kind: z.enum(["text", "directory", "audio", "binary", "unreadable"]),
-  path: z.string(),
-  text: z.string().optional(),
-  title: z.string().optional(),
-  type: z.literal("file_preview"),
-});
-
 // Clipboard history, newest first. Pushed on change and on connect.
 //
 // Entries carry a preview and an id, not the full text, which limits exposure
@@ -238,10 +208,13 @@ const clipboardSchema = z.looseObject({
 
 // The full system tray (StatusNotifierItem), in registration order. Pushed on
 // change and on connect. Activate an item with `activate_tray_item`. `icon` is
-// a `data:` URL, absent when it could not be rendered.
+// a `data:` URL, absent when it could not be rendered. `menu` is the object
+// path of its dbusmenu on `bus`, absent when it has none.
 const trayItemSchema = z.looseObject({
+  bus: z.string(),
   icon: z.string().optional(),
   id: z.string(),
+  menu: z.string().optional(),
   title: z.string(),
 });
 
@@ -277,7 +250,7 @@ const notificationsSchema = z.looseObject({
 // change and on connect. `body` is per `kind`; the SDK's `portal` module parses it. Answer
 // with `answer_portal_request`. `shortcuts` lists the chords applications hold
 // through the GlobalShortcuts portal; a press is answered `pressed` under its
-// id, and its release `released`. See `docs/architecture/PORTALS.md`.
+// id, and its release `released`. See `docs/PORTALS.md`.
 const portalRequestSchema = z.looseObject({
   app_id: z.string(),
   body: z.unknown(),
@@ -471,10 +444,8 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   extensionsSchema,
   focusChangedSchema,
   focusRequestedSchema,
-  shortcutMessageSchema,
   modifiersSchema,
   foundFilesSchema,
-  filePreviewSchema,
   clipboardSchema,
   traySchema,
   notificationsSchema,
@@ -507,10 +478,8 @@ export type DisplaysMessage = z.infer<typeof displaysSchema>;
 export type KeymapMessage = z.infer<typeof keymapSchema>;
 export type FocusChangedMessage = z.infer<typeof focusChangedSchema>;
 export type FocusRequestedMessage = z.infer<typeof focusRequestedSchema>;
-export type ShortcutMessage = z.infer<typeof shortcutMessageSchema>;
 export type ModifiersMessage = z.infer<typeof modifiersSchema>;
 export type FoundFilesMessage = z.infer<typeof foundFilesSchema>;
-export type FilePreviewMessage = z.infer<typeof filePreviewSchema>;
 export type ClipboardMessage = z.infer<typeof clipboardSchema>;
 export type TrayMessage = z.infer<typeof traySchema>;
 export type NotificationsMessage = z.infer<typeof notificationsSchema>;

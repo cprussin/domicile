@@ -26,7 +26,12 @@ export const Shell = (_root, desktop) => {
       locked: host.locked,
       shiftKey: host.shiftKey,
       theme: host.theme,
-      tray: host.tray?.map(({ id, title }) => ({ id, title })),
+      tray: host.tray?.map(({ bus, id, menu, title }) => ({
+        bus,
+        id,
+        menu,
+        title,
+      })),
       windowsTheme: host.windowsTheme,
     };
     console.log(`GUARD state ${JSON.stringify(state)}`);

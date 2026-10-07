@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# `searchFiles()` and `previewFile()` resolve with the compositor's answer,
-# and a newer ask rejects the one it supersedes.
+# `searchFiles()` resolves with the compositor's answer, and a newer search
+# rejects the one it supersedes.
 #
 #   nix develop .#full --command \
 #     ./packages/domicile-engine/scripts/guard-asks-promise.sh /build/chromium/src
@@ -9,7 +9,7 @@
 # else. The page asks for
 # `old` and then `new` files, so `old` must reject with an AbortError; the
 # stand-in answers `old` first anyway, which must not settle `new`. See
-# docs/architecture/WINDOW-DOMICILE.md.
+# packages/chrome-sdk/README.md.
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
@@ -94,7 +94,7 @@ sleep 1
 # The closing quote is Chromium's and keeps each match on the message: see
 # guard-windows-state.sh.
 ASKS=$(grep -oE '"GUARD asks [^"]*"' "$ENGINE_LOG" | head -1)
-WANTED='"GUARD asks old=AbortError new=new.txt preview=text:hi notes.txt"'
+WANTED='"GUARD asks old=AbortError new=new.txt"'
 
 if [ -z "$ASKS" ]; then
   FAILURE="the page never said how its asks settled, so the module did not run or an ask never settled"

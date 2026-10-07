@@ -87,7 +87,7 @@ type Props = {
    * the panel. See `useOpeningApps`.
    */
   opening: FoundApps;
-  /** Asks the host for a file preview. */
+  /** Reads a file's preview. */
   preview: Preview;
   /** Asks the host for files in home matching a query. */
   search: Search;
@@ -639,9 +639,9 @@ const Placeholder = ({
  * The preview of the highlighted row.
  *
  * - A site loads in a `<webview>`. `keepKeyboardIn` takes back focus from it.
- * - Images, videos, PDFs and songs load from `domicile://home/`; the host
- *   reads song tags.
- * - Other files show what the host reads of them.
+ * - Images, videos, PDFs and songs load from `domicile://home/`. Song tags
+ *   are read through the system calls.
+ * - Other files show what `previewFile` reads of them.
  */
 const ChoicePreview = ({
   choice,
@@ -801,15 +801,15 @@ const CannotPreview = ({ row }: { row: FileRow }) => (
 );
 
 /**
- * The media kind of `row`, or `undefined` if the host previews it. Only paths
- * under home (all the engine serves), and never directories.
+ * The media kind of `row`, or `undefined` if `previewFile` previews it. Only
+ * paths under home (all the engine serves), and never directories.
  */
 const mediaIn = (row: FileRow): MediaKind | undefined =>
   row.isDirectory || row.path.startsWith("/") ? undefined : mediaOf(row.path);
 
 /**
- * A song played by the engine, with tags read by the host. Shown even if the
- * host can't read tags, since the engine may still play it.
+ * A song played by the engine, with its tags. Shown even if they can't be
+ * read, since the engine may still play it.
  */
 const SongPane = ({ preview, row }: { preview: Preview; row: FileRow }) => {
   const shown = usePreview(preview, row.path);
@@ -823,7 +823,7 @@ const SongPane = ({ preview, row }: { preview: Preview; row: FileRow }) => {
   );
 };
 
-/** The host's preview of a path, by kind. */
+/** A path's preview, by kind. */
 const FilePreviewPane = ({
   preview,
   row,
@@ -833,7 +833,7 @@ const FilePreviewPane = ({
 }) => {
   const shown = usePreview(preview, row.path);
   switch (shown?.kind) {
-    // No answer yet (or ever, without an index): show the name.
+    // Not read yet: show the name.
     case undefined: {
       return <NamedFile row={row} />;
     }

@@ -313,26 +313,44 @@ describe("parseHostMessage", () => {
     ).toThrow();
   });
 
-  it("decodes a shortcut the compositor took for the desktop", () => {
-    // The compositor consumed the key, so it arrives as a message, not a DOM
-    // event.
-    const message = parseHostMessage(
-      JSON.stringify({
-        shortcut: {
-          alt: true,
-          ctrl: false,
-          key: 28,
-          logo: false,
-          shift: false,
-        },
-        type: "shortcut",
-      }),
-    );
+  it("knows no message the compositor does not send", () => {
+    // The engine matches shortcuts itself, and a shell previews a file with
+    // its system calls.
+    expect(
+      parseHostMessage(
+        JSON.stringify({
+          shortcut: {
+            alt: true,
+            ctrl: false,
+            key: 28,
+            logo: false,
+            shift: false,
+          },
+          type: "shortcut",
+        }),
+      ),
+    ).toBeUndefined();
+    expect(
+      parseHostMessage(
+        JSON.stringify({ kind: "binary", path: "a", type: "file_preview" }),
+      ),
+    ).toBeUndefined();
+  });
 
-    expect(message).toStrictEqual({
-      shortcut: { alt: true, ctrl: false, key: 28, logo: false, shift: false },
-      type: "shortcut",
-    });
+  it("decodes the tray, with the bus each icon answers on", () => {
+    const icon = { bus: ":1.42", id: "nm", menu: "/MenuBar", title: "Network" };
+
+    expect(
+      parseHostMessage(JSON.stringify({ items: [icon], type: "tray" })),
+    ).toStrictEqual({ items: [icon], type: "tray" });
+    expect(() =>
+      parseHostMessage(
+        JSON.stringify({
+          items: [{ id: "nm", title: "Network" }],
+          type: "tray",
+        }),
+      ),
+    ).toThrow();
   });
 
   it("decodes the keyboard: every keysym and the key it is on", () => {

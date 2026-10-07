@@ -10,7 +10,7 @@
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::ffi::OsString;
-use std::io::{self, Read, Write};
+use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::os::unix::process::{CommandExt, ExitStatusExt};
 use std::path::{Component, Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
@@ -113,7 +113,7 @@ pub fn reach(request: &SystemRequest) -> Reach {
         SystemRequest::Unwatch | SystemRequest::CloseStdin | SystemRequest::Kill { .. } => {
             Reach::Stops
         }
-        SystemRequest::ReadFile { path }
+        SystemRequest::ReadFile { path, .. }
         | SystemRequest::ReadDir { path }
         | SystemRequest::Stat { path }
         | SystemRequest::Watch { path } => {
@@ -204,8 +204,12 @@ impl System {
     /// Run `request` under the page's `id`.
     pub fn handle(&self, id: u32, request: SystemRequest) -> Handled {
         match request {
-            SystemRequest::ReadFile { path } => self.on_a_thread(id, move |home| {
-                std::fs::read(home.join(path)).map(|bytes| SystemReply::Read {
+            SystemRequest::ReadFile {
+                path,
+                offset,
+                length,
+            } => self.on_a_thread(id, move |home| {
+                read_range(&home.join(path), offset, length).map(|bytes| SystemReply::Read {
                     data: encoded(&bytes),
                 })
             }),
@@ -634,6 +638,18 @@ fn reader(
             });
         }
     })
+}
+
+/// Up to `length` bytes of `path` from `offset`, or the rest of it.
+fn read_range(path: &Path, offset: u64, length: Option<u64>) -> io::Result<Vec<u8>> {
+    let mut file = std::fs::File::open(path)?;
+    file.seek(SeekFrom::Start(offset))?;
+    let mut bytes = Vec::new();
+    match length {
+        Some(length) => file.take(length).read_to_end(&mut bytes),
+        None => file.read_to_end(&mut bytes),
+    }?;
+    Ok(bytes)
 }
 
 /// Write through a temporary file beside `path`, renamed over it.

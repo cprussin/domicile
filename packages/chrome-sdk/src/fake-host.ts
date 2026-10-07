@@ -89,7 +89,7 @@ export const describedWindow = (
 });
 
 /** The methods that return a promise. The fake's never settle. */
-const ASKS = new Set(["previewFile", "searchFiles"]);
+const ASKS = new Set(["searchFiles"]);
 
 export class FakeDomicileHost {
   /** Every call the shell made, in order: the method's name, then its arguments. */

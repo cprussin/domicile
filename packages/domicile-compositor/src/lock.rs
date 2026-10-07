@@ -306,7 +306,7 @@ pub enum Asked<'a> {
 ///   it is locked.
 /// - **`ClipboardCopied`** is allowed. It reports a client's copy; refusing it
 ///   would make the history disagree with what a paste produces.
-/// - **Launcher searches and previews** are refused on the connection (see
+/// - **Launcher searches** are refused on the connection (see
 ///   [`Asked::OnTheConnection`]) with no answer, so they reveal nothing about
 ///   the disk.
 /// - **Theme changes** are allowed. They open and read nothing, and keep the
@@ -334,10 +334,7 @@ pub fn refused(asked: Asked) -> Option<Refusal> {
             // Grants an application what its dialog asked for.
             | ClientRequest::AnswerPortalRequest { .. },
         )
-        | Asked::OnTheConnection(
-            ConnectionRequest::SearchFiles { .. }
-            | ConnectionRequest::PreviewFile { .. },
-        )
+        | Asked::OnTheConnection(ConnectionRequest::SearchFiles { .. })
         | Asked::System(Reach::Acts) => Some(Refusal::Command),
         Asked::OnTheWaylandThread(
             ClientRequest::KeyboardFocus { .. }
@@ -730,27 +727,14 @@ mod tests {
 
     #[test]
     fn what_a_locked_desk_refuses_is_reading_the_home_for_a_launcher() {
-        for (what, request) in [
-            (
-                "a search of the home",
-                ConnectionRequest::SearchFiles {
-                    query: "plan".into(),
-                },
-            ),
-            (
-                "a preview of a file in it",
-                ConnectionRequest::PreviewFile {
-                    path: "plan.org".into(),
-                },
-            ),
-        ] {
-            assert_eq!(
-                refused(Asked::OnTheConnection(&request)),
-                Some(Refusal::Command),
-                "{what} reads somebody's files for whoever is at the desk, and \
-                 a locked desk has nobody it reads for"
-            );
-        }
+        assert_eq!(
+            refused(Asked::OnTheConnection(&ConnectionRequest::SearchFiles {
+                query: "plan".into(),
+            })),
+            Some(Refusal::Command),
+            "a search of the home reads somebody's files for whoever is at the \
+             desk, and a locked desk has nobody it reads for"
+        );
     }
 
     /// The lock screen may still read `/sys`, show and adjust the battery,

@@ -11,7 +11,7 @@
 # This page checks the three halves: it was called with the body, the desktop
 # it was handed answers (its `windows` is a list), and neither
 # `navigator.domicile` nor `window.domicile` exists. See
-# docs/architecture/WINDOW-DOMICILE.md.
+# packages/chrome-sdk/README.md.
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"

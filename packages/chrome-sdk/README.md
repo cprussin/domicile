@@ -30,8 +30,8 @@ export const Shell: ShellModule = (root, domicile) => {
   `theme`, …), each with a bare `<name>changed` event. Read, then listen.
 - Moments (`shortcut`, `focusrequested`, …) are events. The engine holds each
   type until its first listener exists.
-- `searchFiles` and `previewFile` return promises. A newer call
-  rejects the older with an `AbortError`.
+- `searchFiles` returns a promise. A newer call rejects the older with an
+  `AbortError`.
 - Only Domicile calls a shell. Develop against the real desktop with
   `./scripts/dev-shell.sh <shell>`.
 - Render `<app app-id="…">` and `<webview window="…">` as normal DOM. CSS
@@ -56,16 +56,33 @@ See [docs/ELEMENTS.md](docs/ELEMENTS.md) for `<app>` input and focus, and the
 | `./app-element`, `./webview-element` | Types and event names for `<app>` and `<webview>`. |
 | `./bind-keys` | `bindKeys`: grab a shell's own chords by name and handle them by mode. `./key-action` and `./own-keybindings` are its parts. |
 | `./fake-host` | `FakeDomicileHost`: a desktop for a shell's tests. |
+| `./file-preview` | `previewFile(system, path)`: a launcher's preview of a path, read through the system calls: a directory's entries, a song's tags and cover, or the start of a text file. |
 | `./system` | `system(domicile)`: files, watches, processes and D-Bus. Calls resolve a `Result`; the compositor refuses most while the desktop is locked. See [SHELL-SYSTEM-ACCESS.md](/docs/SHELL-SYSTEM-ACCESS.md). |
-| `./portal` | `watchPortalRequests` and `answerPortalRequest`: application dialogs from `xdg-desktop-portal`, parsed by kind. `watchCapturing` and `stopCapturing`: running sessions that record the screen or control or capture input. `<PortalDialogs />` in component-library draws them. See [PORTALS.md](/docs/architecture/PORTALS.md). |
+| `./portal` | `watchPortalRequests` and `answerPortalRequest`: application dialogs from `xdg-desktop-portal`, parsed by kind. `watchCapturing` and `stopCapturing`: running sessions that record the screen or control or capture input. `<PortalDialogs />` in component-library draws them. See [PORTALS.md](/docs/PORTALS.md). |
 | `./global-shortcuts` | `fireGlobalShortcuts`: grab the chords applications hold through the GlobalShortcuts portal and report each press and release. `<PortalDialogs />` calls it. |
-| `./extension`, `./tray`, `./notification`, `./theme`, `./file-preview`, `./display-transform` | Data types and Zod schemas for what the desktop holds. |
+| `./extension`, `./tray`, `./notification`, `./theme`, `./display-transform` | Data types and Zod schemas for what the desktop holds. |
 
 Internal, not needed by shells: `./cursor-shape`.
 
 The compositor's JSON socket protocol lives in
 [`@domicile-desktop/e2e-harness`](../e2e-harness/README.md); a page never
 speaks it.
+
+## Design
+
+- **State is attributes with a bare `<name>changed` event**, over events that
+  carry the value. The attribute is the one source of truth, and a late
+  listener misses nothing (`navigator.onLine` with `online` works the same).
+- **The engine holds moments** (`focusrequested`, `shortcut`) until the first
+  listener of their type. Only the engine knows whether a listener exists.
+- **Asks return promises.** A newer `searchFiles` rejects the older.
+- **The desktop is handed to `Shell`**, not found on a global. There is no
+  `navigator.domicile` or `window.domicile`; the shell's copy is the only one.
+- **The engine reports the desktop's size and density**, and `<app>` routes
+  its own input ([docs/ELEMENTS.md](docs/ELEMENTS.md)). Chords are resolved by
+  the engine ([KEYBINDINGS.md](/docs/architecture/KEYBINDINGS.md)).
+- **The SDK is types and pure helpers.** The host types are generated from the
+  IDL, below.
 
 ## Generated types
 

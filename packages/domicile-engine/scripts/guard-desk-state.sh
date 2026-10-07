@@ -11,7 +11,7 @@
 # null until it has said anything, so a shell reads and then listens. The
 # notifications and extensions attributes are the same code -- the last
 # event's payload -- and are left to the shells that read them.
-# See docs/architecture/WINDOW-DOMICILE.md.
+# See packages/chrome-sdk/README.md.
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
@@ -111,7 +111,10 @@ wanted = {
     "locked": False,
     "shiftKey": True,
     "theme": "light",
-    "tray": [{"id": "nm", "title": "Network"}],
+    "tray": [
+        {"bus": ":1.42", "id": "nm", "menu": "/MenuBar", "title": "Network"},
+        {"bus": "org.kde.StatusNotifierItem-7-1", "id": "sync", "menu": "", "title": "Sync"},
+    ],
     "windowsTheme": "dark",
 }
 wrong = sorted(k for k in wanted if state.get(k) != wanted[k])
