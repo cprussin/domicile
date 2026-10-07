@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use domicile_launch::command::{load_shell_line, open_url_line, reply, screenshot_line, Reply};
+use domicile_launch::command::{load_shell_line, open_url_line, reply, Reply};
 
 #[test]
 fn a_load_shell_names_the_version_it_is_written_in() {
@@ -21,19 +21,6 @@ fn an_open_url_names_the_version_it_is_written_in() {
         open_url_line("https://example.com/?q=\"x\""),
         "{\"type\":\"open_url\",\"version\":1,\"url\":\"https://example.com/?q=\\\"x\\\"\"}\n"
     );
-}
-
-#[test]
-fn a_screenshot_names_the_version_it_is_written_in() {
-    assert_eq!(
-        screenshot_line(Path::new("/home/me/shot.png")),
-        "{\"type\":\"screenshot\",\"version\":1,\"file\":\"/home/me/shot.png\"}\n"
-    );
-}
-
-#[test]
-fn an_engine_that_wrote_the_screenshot_says_so() {
-    assert_eq!(reply("{\"type\":\"captured\"}").unwrap(), Reply::Captured);
 }
 
 #[test]

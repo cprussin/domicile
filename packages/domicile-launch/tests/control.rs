@@ -112,7 +112,7 @@ fn an_engine_that_would_not_open_the_address_is_quoted() {
 }
 
 #[test]
-fn a_desktop_told_to_take_a_screenshot_tells_the_engine_and_says_where_it_is() {
+fn a_desktop_told_to_take_a_screenshot_tells_the_compositor_and_says_where_it_is() {
     let told = Cell::new(None);
     let answered = answered_capturing(
         "{\"type\":\"screenshot\",\"file\":\"/home/me/shot.png\"}",
@@ -132,16 +132,16 @@ fn a_desktop_told_to_take_a_screenshot_tells_the_engine_and_says_where_it_is() {
 }
 
 #[test]
-fn an_engine_that_could_not_take_the_screenshot_is_quoted() {
+fn a_compositor_that_could_not_take_the_screenshot_is_quoted() {
     let Response::Refused { why } = answered_capturing(
         "{\"type\":\"screenshot\",\"file\":\"/home/me/shot.png\"}",
         &|_| Err("could not write /home/me/shot.png".to_string()),
     ) else {
-        panic!("an engine that refused the screenshot is not one that took it");
+        panic!("a compositor that refused the screenshot is not one that took it");
     };
     assert!(
         why.contains("could not write"),
-        "the refusal did not carry the engine's own words: {why}"
+        "the refusal did not carry the compositor's own words: {why}"
     );
 }
 

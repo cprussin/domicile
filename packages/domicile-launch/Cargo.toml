@@ -8,6 +8,8 @@ rust-version.workspace = true
 
 [dependencies]
 domicile-config = { path = "../domicile-config" }
+# The chrome protocol, which `domicile screenshot` speaks to the compositor.
+domicile-protocol = { path = "../domicile-protocol" }
 libc.workspace = true
 notify.workspace = true
 serde.workspace = true
