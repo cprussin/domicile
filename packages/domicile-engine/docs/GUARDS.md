@@ -55,6 +55,7 @@ Headless.
 | `guard-shell-web-apis.sh` | the shell may show notifications and read cross-origin responses (patches 0066, 0068) |
 | `guard-shell-script-src.sh` | an injected inline `<script>` and `onerror` do not run in the shell; a `<script src>` from the shell root does |
 | `guard-screenshot.sh` | `screenshot` on the command socket writes a PNG of what the shell drew |
+| `guard-display-capture.sh` | a display capture through the C ABI reads back the shell's color, before and after a resize |
 
 ## Browser windows (`<webview>`)
 

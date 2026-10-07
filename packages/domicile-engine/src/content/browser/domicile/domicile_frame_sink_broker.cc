@@ -17,6 +17,7 @@
 #include "base/no_destructor.h"
 #include "base/process/process_handle.h"
 #include "base/task/thread_pool.h"
+#include "components/domicile/browser/display_capture_target.h"
 #include "components/domicile/browser/display_list.h"
 #include "components/domicile/browser/external_surface_provider.h"
 #include "components/domicile/browser/frame_sink_broker.h"
@@ -28,6 +29,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "gpu/command_buffer/client/shared_image_interface.h"
 #include "ui/aura/env.h"
+#include "ui/aura/window_tree_host.h"
 #include "ui/compositor/compositor.h"
 #include "ui/display/display.h"
 #include "ui/display/display_observer.h"
@@ -201,6 +203,19 @@ void SetClipboard(domicile::mojom::Clipboard clipboard,
                                                          text);
 }
 
+// The root frame sink of the browser window showing `display_id`, for a
+// display capture. See domicile::CaptureTargetFor for the matching.
+std::optional<viz::FrameSinkId> DisplayCaptureTarget(int64_t display_id) {
+  std::vector<domicile::CaptureRoot> windows;
+  for (aura::WindowTreeHost* host :
+       aura::Env::GetInstance()->window_tree_hosts()) {
+    windows.push_back({.bounds_in_pixels = host->GetBoundsInPixels(),
+                       .frame_sink_id = host->compositor()->frame_sink_id()});
+  }
+  return domicile::CaptureTargetFor(
+      display_id, display::Screen::Get()->GetAllDisplays(), windows);
+}
+
 // The browser's frame sink broker and the socket producers reach it over.
 //
 // The socket path is the only access control. A FrameSinkBroker pipe can
@@ -213,7 +228,8 @@ class DomicileBrowserService {
                 base::BindRepeating(&AllocateFrameSinkId),
                 base::BindRepeating(&GetSharedImageInterface),
                 base::BindRepeating(&SetDisplayLayout),
-                base::BindRepeating(&SetClipboard)),
+                base::BindRepeating(&SetClipboard),
+                base::BindRepeating(&DisplayCaptureTarget)),
         provider_(&broker_) {
     // Registered on every platform so copies made in a page reach the producer.
     // `SetClipboard` handles copies made outside. Unretained is safe: this is a

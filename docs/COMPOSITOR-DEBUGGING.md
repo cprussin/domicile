@@ -44,7 +44,7 @@ toplevel mapped -> Host::app_appeared app_id=app-1
 - A slow first launch with fast later ones means a cold machine (page cache,
   fontconfig, Mesa shader cache). The time shows up in spawn → connected.
 
-## Window casts
+## Window, monitor and region casts
 
 `DOMICILE_CAST_WINDOW=<title>` casts the first window that takes that title to
 PipeWire, without the ScreenCast portal. Use it to check the producer
@@ -54,6 +54,11 @@ PipeWire, without the ScreenCast portal. Use it to check the producer
 DOMICILE_CAST_WINDOW=kitty domicile …
 pw-link domicile-cast:capture_1 <consumer>:input_1   # without a session manager
 ```
+
+`DOMICILE_CAST_MONITOR=<output>` casts a monitor by its `wl_output` name, and
+`DOMICILE_CAST_MONITOR=<x>,<y>,<width>x<height>` a region of the desktop in
+logical pixels. Both need an engine with display capture; a nested desktop's
+one monitor is its window.
 
 - `cast ready … node=N`: the stream's node. A consumer connects to it.
 - `cast format … settled=…`: what the consumer picked: `Shm`, `Dmabuf`, or a

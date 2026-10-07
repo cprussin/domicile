@@ -5,9 +5,11 @@
 #define COMPONENTS_DOMICILE_ENGINE_ENGINE_EVENT_QUEUE_H_
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
+#include "base/files/scoped_file.h"
 #include "base/synchronization/lock.h"
 #include "base/thread_annotations.h"
 
@@ -33,6 +35,35 @@ struct EngineDisplay {
   int32_t refresh_mhz = 0;
 };
 
+// One frame of a display capture.
+//
+// Mirrors DomicileCapturedFrame in domicile_engine.h, except the fds: the
+// event owns them, and the C ABI lends them for the callback.
+struct EngineCapturedFrame {
+  // DOMICILE_CAPTURE_DMABUF or DOMICILE_CAPTURE_SHM.
+  uint32_t memory = 0;
+  uint32_t width = 0;
+  uint32_t height = 0;
+  uint32_t fourcc = 0;
+  uint64_t modifier = 0;
+  struct Plane {
+    uint32_t offset = 0;
+    uint32_t stride = 0;
+  };
+  std::vector<Plane> planes;
+  // One per plane. Shared so events stay copyable; the last copy closes them.
+  std::shared_ptr<const std::vector<base::ScopedFD>> fds;
+  int32_t content_x = 0;
+  int32_t content_y = 0;
+  int32_t content_width = 0;
+  int32_t content_height = 0;
+  // Empty means the whole frame.
+  int32_t damage_x = 0;
+  int32_t damage_y = 0;
+  int32_t damage_width = 0;
+  int32_t damage_height = 0;
+};
+
 // An event the library sends to domicile-compositor.
 //
 // Mojo runs on its own thread and pushes events; the compositor's calloop
@@ -56,6 +87,10 @@ struct EngineEvent {
     // client, so this is how its copies reach a seat. See
     // ui/ozone/platform/drm/domicile/drm_clipboard.h.
     kCopied,
+    // A frame of a display capture, for a screen cast.
+    kCaptured,
+    // The browser ended a display capture; no frame follows.
+    kCaptureEnded,
   };
 
   Type type = Type::kFrame;
@@ -75,6 +110,11 @@ struct EngineEvent {
   // was not text.
   uint32_t clipboard = 0;
   std::string copied;
+  // kCaptured and kCaptureEnded: the DomicileCaptureId.
+  uint32_t capture = 0;
+  // kCaptured: the frame's id, which releases it, and the frame.
+  uint64_t frame = 0;
+  EngineCapturedFrame captured;
 };
 
 // Queue of engine events with a pollable fd.

@@ -3,10 +3,15 @@
 
 #include "components/domicile/engine/engine_event_queue.h"
 
+#include <fcntl.h>
 #include <poll.h>
+#include <unistd.h>
 
+#include <memory>
+#include <utility>
 #include <vector>
 
+#include "base/files/scoped_file.h"
 #include "base/threading/simple_thread.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -17,6 +22,39 @@ namespace {
 bool Readable(int fd) {
   pollfd descriptor = {.fd = fd, .events = POLLIN, .revents = 0};
   return poll(&descriptor, 1, /*timeout=*/0) == 1;
+}
+
+// Whether `fd` is an open descriptor.
+bool IsOpen(int fd) {
+  return fcntl(fd, F_GETFD) != -1;
+}
+
+TEST(EngineEventQueueTest, ACapturedFrameKeepsItsFdsUntilTheDrainIsDone) {
+  // The C ABI lends the compositor these fds for the callback, so the queue
+  // must keep them open until the drained event is gone.
+  EngineEventQueue queue;
+  int ends[2];
+  ASSERT_EQ(pipe(ends), 0);
+  base::ScopedFD kept(ends[1]);
+  const int lent = ends[0];
+  {
+    std::vector<base::ScopedFD> fds;
+    fds.emplace_back(lent);
+    EngineEvent pushed{.type = EngineEvent::Type::kCaptured, .capture = 3};
+    pushed.captured.fds =
+        std::make_shared<const std::vector<base::ScopedFD>>(std::move(fds));
+    queue.Push(pushed);
+  }
+  EXPECT_TRUE(IsOpen(lent));
+
+  {
+    const std::vector<EngineEvent> drained = queue.Drain();
+    ASSERT_EQ(drained.size(), 1u);
+    EXPECT_EQ(drained[0].capture, 3u);
+    EXPECT_TRUE(IsOpen(lent));
+  }
+
+  EXPECT_FALSE(IsOpen(lent));
 }
 
 TEST(EngineEventQueueTest, AnIdleQueueDoesNotWakeThePollingThread) {

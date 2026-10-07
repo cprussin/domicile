@@ -10,6 +10,7 @@ import "services/viz/public/mojom/compositing/local_surface_id.mojom";
 import "ui/gfx/geometry/mojom/geometry.mojom";
 import "gpu/ipc/common/exported_shared_image.mojom";
 import "ui/gfx/mojom/buffer_types.mojom";
+import "mojo/public/mojom/base/shared_memory.mojom";
 
 // Tells a producer which surface to submit to.
 //
@@ -138,6 +139,50 @@ interface ClipboardObserver {
   OnCopied(Clipboard clipboard, string text);
 };
 
+// A captured frame's pixels.
+union CapturedPixels {
+  // GPU compositing: a dmabuf.
+  gfx.mojom.GpuMemoryBufferHandle dmabuf;
+  // Software compositing: rows `CapturedFrame.stride` bytes apart from the
+  // region's start.
+  mojo_base.mojom.ReadOnlySharedMemoryRegion shm;
+};
+
+// One frame of a display, as viz composited it.
+struct CapturedFrame {
+  CapturedPixels pixels;
+  // The DRM fourcc: ARGB8888 or ABGR8888, which viz picks.
+  uint32 fourcc;
+  // The buffer's size. Only `content` holds the display; viz letterboxes the
+  // rest when the display's aspect differs from the requested size.
+  gfx.mojom.Size size;
+  // Bytes per row of `shm`. Zero for a dmabuf, whose planes carry it.
+  uint32 stride;
+  gfx.mojom.Rect content;
+  // What changed since the previous frame, in buffer pixels. Empty means
+  // everything.
+  gfx.mojom.Rect damage;
+};
+
+// Holds a captured frame's buffer. Closing it gives the buffer back to viz,
+// which may then draw the next frame into it.
+interface CapturedFrameHold {};
+
+// Hears one display capture's frames.
+interface DisplayCaptureObserver {
+  // A frame, sent when the display changed and no sooner than the frame
+  // rate cap allows. Read it, then close `hold`. Viz keeps a few buffers, so
+  // holding every frame stalls the capture.
+  OnFrameCaptured(CapturedFrame frame, pending_remote<CapturedFrameHold> hold);
+};
+
+// Controls one display capture. Closing it stops the capture.
+interface DisplayCapture {
+  // Captures at `size` from the next frame on, letterboxed to keep the
+  // display's aspect.
+  Resize(gfx.mojom.Size size);
+};
+
 // Brokers viz frame sinks to a producer that is not a renderer.
 //
 // blink.mojom.EmbeddedFrameSinkProvider requires a FrameSinkId in the
@@ -247,4 +292,24 @@ interface FrameSinkBroker {
   // for a hotplug. If the browser has not read the displays yet, nothing is
   // sent until it has.
   ObserveDisplays(pending_remote<DisplayListObserver> observer);
+
+  // Captures what a display shows, for a screen cast. Viz runs a
+  // FrameSinkVideoCapturer on the root frame sink of the browser window on
+  // that display.
+  //
+  // `display_id` is a `Display.id`. Zero names the browser's only window, for
+  // a nested or headless browser, which sends no displays.
+  //
+  // Frames are `size` (see `DisplayCapture.Resize`), sent only on damage and
+  // at most `max_fps` a second. They are dmabufs when the browser composites
+  // on the GPU, shared memory otherwise.
+  //
+  // Replies false, and closes both pipes, when no browser window shows that
+  // display.
+  CaptureDisplay(int64 display_id,
+                 gfx.mojom.Size size,
+                 uint32 max_fps,
+                 pending_receiver<DisplayCapture> capture,
+                 pending_remote<DisplayCaptureObserver> observer)
+      => (bool started);
 };

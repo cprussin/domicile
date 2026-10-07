@@ -4,6 +4,7 @@
 #include "components/domicile/browser/frame_sink_broker.h"
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -120,6 +121,22 @@ class FakeClipboardObserver : public mojom::ClipboardObserver {
   mojo::Receiver<mojom::ClipboardObserver> receiver_{this};
 };
 
+// Fake producer display capture observer. These tests send no frames.
+class FakeDisplayCaptureObserver : public mojom::DisplayCaptureObserver {
+ public:
+  mojo::PendingRemote<mojom::DisplayCaptureObserver> BindRemote() {
+    return receiver_.BindNewPipeAndPassRemote();
+  }
+
+  // mojom::DisplayCaptureObserver implementation.
+  void OnFrameCaptured(
+      mojom::CapturedFramePtr frame,
+      mojo::PendingRemote<mojom::CapturedFrameHold> hold) override {}
+
+ private:
+  mojo::Receiver<mojom::DisplayCaptureObserver> receiver_{this};
+};
+
 // One named 597x336mm panel at the origin, at just under 60Hz.
 //
 // Every field is nonzero so tests catch a field dropped in transit.
@@ -199,7 +216,13 @@ class FrameSinkBrokerTest : public testing::Test {
         base::BindRepeating(&FrameSinkBrokerTest::RecordLayout,
                             base::Unretained(this)),
         base::BindRepeating(&FrameSinkBrokerTest::RecordClipboard,
-                            base::Unretained(this)));
+                            base::Unretained(this)),
+        base::BindRepeating(&FrameSinkBrokerTest::CaptureTarget));
+  }
+
+  // Fake for the browser's windows: display 7's window is the page's.
+  static std::optional<viz::FrameSinkId> CaptureTarget(int64_t display_id) {
+    return display_id == 7 ? std::optional(kPageFrameSinkId) : std::nullopt;
   }
 
   // Fake for the ozone platform that owns the CRTCs.
@@ -753,6 +776,39 @@ TEST_F(FrameSinkBrokerTest, AHotplugReachesEveryObserver) {
   ASSERT_EQ(second.lists_.size(), 1u);
   EXPECT_EQ(first.lists_[0][0]->bounds, gfx::Rect(1920, 1080));
   EXPECT_EQ(second.lists_[0][0]->bounds, gfx::Rect(1920, 1080));
+}
+
+TEST_F(FrameSinkBrokerTest, ADisplayWithAWindowIsCaptured) {
+  mojo::Remote<mojom::FrameSinkBroker> remote;
+  broker()->Bind(remote.BindNewPipeAndPassReceiver());
+  FakeDisplayCaptureObserver observer;
+  mojo::Remote<mojom::DisplayCapture> capture;
+
+  base::test::TestFuture<bool> started;
+  remote->CaptureDisplay(7, gfx::Size(1920, 1080), 30,
+                         capture.BindNewPipeAndPassReceiver(),
+                         observer.BindRemote(), started.GetCallback());
+
+  EXPECT_TRUE(started.Get());
+  RunUntilIdle();
+  EXPECT_TRUE(capture.is_connected());
+}
+
+TEST_F(FrameSinkBrokerTest, ADisplayWithNoWindowIsRefused) {
+  // As while a new monitor's window opens.
+  mojo::Remote<mojom::FrameSinkBroker> remote;
+  broker()->Bind(remote.BindNewPipeAndPassReceiver());
+  FakeDisplayCaptureObserver observer;
+  mojo::Remote<mojom::DisplayCapture> capture;
+
+  base::test::TestFuture<bool> started;
+  remote->CaptureDisplay(8, gfx::Size(1920, 1080), 30,
+                         capture.BindNewPipeAndPassReceiver(),
+                         observer.BindRemote(), started.GetCallback());
+
+  EXPECT_FALSE(started.Get());
+  RunUntilIdle();
+  EXPECT_FALSE(capture.is_connected());
 }
 
 }  // namespace domicile

@@ -42,12 +42,14 @@ FrameSinkBroker::FrameSinkBroker(
     FrameSinkIdAllocator allocate_frame_sink_id,
     SharedImageInterfaceGetter get_shared_image_interface,
     DisplayLayoutSetter set_display_layout,
-    ClipboardSetter set_clipboard)
+    ClipboardSetter set_clipboard,
+    DisplayCaptureTargetGetter get_display_capture_target)
     : host_frame_sink_manager_(host_frame_sink_manager),
       allocate_frame_sink_id_(std::move(allocate_frame_sink_id)),
       get_shared_image_interface_(std::move(get_shared_image_interface)),
       set_display_layout_(std::move(set_display_layout)),
-      set_clipboard_(std::move(set_clipboard)) {
+      set_clipboard_(std::move(set_clipboard)),
+      get_display_capture_target_(std::move(get_display_capture_target)) {
   CHECK(host_frame_sink_manager);
   CHECK(allocate_frame_sink_id_);
   receivers_.set_disconnect_handler(base::BindRepeating(
@@ -228,6 +230,47 @@ void FrameSinkBroker::OnDisplaysChanged(
   for (auto& observer : display_observers_) {
     observer->OnDisplaysChanged(mojo::Clone(displays_));
   }
+}
+
+void FrameSinkBroker::CaptureDisplay(
+    int64_t display_id,
+    const gfx::Size& size,
+    uint32_t max_fps,
+    mojo::PendingReceiver<mojom::DisplayCapture> capture,
+    mojo::PendingRemote<mojom::DisplayCaptureObserver> observer,
+    CaptureDisplayCallback callback) {
+  if (size.IsEmpty() || max_fps == 0) {
+    receivers_.ReportBadMessage("A display capture needs a size and a rate");
+    std::move(callback).Run(false);
+    return;
+  }
+  const std::optional<viz::FrameSinkId> target =
+      get_display_capture_target_ ? get_display_capture_target_.Run(display_id)
+                                  : std::nullopt;
+  if (!target.has_value()) {
+    // Not a bad message: a display's window opens after the display appears.
+    std::move(callback).Run(false);
+    return;
+  }
+  const bool gpu = get_shared_image_interface_ &&
+                   get_shared_image_interface_.Run() != nullptr;
+  const uint64_t id = next_capture_++;
+  // Unretained: the broker owns every capture and the manager outlives it.
+  captures_[id] = std::make_unique<DisplayCapture>(
+      base::BindRepeating(
+          [](viz::HostFrameSinkManager* manager,
+             mojo::PendingReceiver<viz::mojom::FrameSinkVideoCapturer>
+                 receiver) {
+            manager->CreateVideoCapturer(std::move(receiver));
+          },
+          base::Unretained(host_frame_sink_manager_.get())),
+      *target, size, max_fps, gpu, std::move(capture), std::move(observer),
+      base::BindOnce(
+          [](FrameSinkBroker* broker, uint64_t id) {
+            broker->captures_.erase(id);
+          },
+          base::Unretained(this), id));
+  std::move(callback).Run(true);
 }
 
 BrokeredFrameSink* FrameSinkBroker::SinkForApp(const std::string& app_id) {

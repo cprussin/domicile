@@ -9,8 +9,9 @@
 
 use std::cell::{Cell, RefCell};
 use std::ffi::{c_char, c_int, c_void, CString, NulError};
-use std::os::fd::RawFd;
+use std::os::fd::{BorrowedFd, OwnedFd, RawFd};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use crate::dmabuf_descriptor::DmabufDescriptor;
 use domicile_config::{Desk, Transform};
@@ -25,6 +26,9 @@ pub type SurfaceId = u32;
 
 /// An imported buffer, as the engine names one. Never zero.
 pub type BufferId = u64;
+
+/// A display capture, as the engine names one. Never zero.
+pub type CaptureId = u32;
 
 /// Why the engine could not be reached. Messages name the library, because
 /// the usual cause is that it was never built.
@@ -50,6 +54,9 @@ pub enum EngineError {
 
     #[error("the browser brokered no frame sink for {app_id}")]
     NoFrameSink { app_id: String },
+
+    #[error("the browser shows display {display} in no window, so it cannot be captured")]
+    NoCapture { display: i64 },
 
     #[error("a path the engine has to be told contains a nul byte: {0}")]
     Path(#[from] NulError),
@@ -117,6 +124,51 @@ impl Dmabuf {
             plane_count: descriptor.planes.len() as u32,
             planes,
         })
+    }
+}
+
+/// One frame of a display capture, with fds of its own.
+#[derive(Clone, Debug, PartialEq)]
+pub struct CapturedFrame {
+    pub pixels: CapturedPixels,
+    pub size: (u32, u32),
+    /// `DRM_FORMAT_ARGB8888` or `DRM_FORMAT_ABGR8888`.
+    pub fourcc: u32,
+    /// The part of the frame that shows the display. The engine letterboxes
+    /// the rest when the display's aspect differs from the size asked for.
+    pub content: (i32, i32, i32, i32),
+    /// What changed since the previous frame. `None` is all of it.
+    pub damage: Option<(i32, i32, i32, i32)>,
+}
+
+/// Where a captured frame's pixels are.
+#[derive(Clone, Debug, PartialEq)]
+pub enum CapturedPixels {
+    /// The browser composites on the GPU.
+    Dmabuf {
+        modifier: u64,
+        planes: Vec<CapturedPlane>,
+    },
+    /// The browser composites in software: rows `stride` bytes apart from the
+    /// start of `fd`.
+    Shm { fd: SharedFd, stride: u32 },
+}
+
+/// One plane of a captured dmabuf.
+#[derive(Clone, Debug, PartialEq)]
+pub struct CapturedPlane {
+    pub fd: SharedFd,
+    pub offset: u32,
+    pub stride: u32,
+}
+
+/// An fd shared by the clones of an event. Equal only to itself.
+#[derive(Clone, Debug)]
+pub struct SharedFd(pub Arc<OwnedFd>);
+
+impl PartialEq for SharedFd {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
     }
 }
 
@@ -204,6 +256,18 @@ pub enum Event {
     /// Sent at startup and on every hotplug. A display missing from the list
     /// has been unplugged.
     Displays(Vec<Display>),
+
+    /// A frame of a display capture. Release `frame` with
+    /// [`Engine::release_captured`] once read; `Err` says why it could not be
+    /// kept, and must be released too.
+    Captured {
+        capture: CaptureId,
+        frame: u64,
+        captured: Result<CapturedFrame, String>,
+    },
+
+    /// The browser ended a display capture. No frame of it follows.
+    CaptureEnded { capture: CaptureId },
 }
 
 /// Which clipboard a copy is on. Crosses the ABI as [`Clipboard::as_raw`].
@@ -246,6 +310,8 @@ struct Callbacks {
     displays: Option<extern "C" fn(*mut c_void, *const RawDisplay, u32)>,
     copied: Option<extern "C" fn(*mut c_void, u32, *const c_char, usize)>,
     configure_at: Option<extern "C" fn(*mut c_void, SurfaceId, u32, u32, f64)>,
+    captured: Option<extern "C" fn(*mut c_void, CaptureId, u64, *const RawCapturedFrame)>,
+    capture_ended: Option<extern "C" fn(*mut c_void, CaptureId)>,
 }
 
 /// The engine's opaque handle.
@@ -306,6 +372,29 @@ struct RawLayout {
     desk_y: i32,
     desk_width: i32,
     desk_height: i32,
+}
+
+/// `DomicileCapturedFrame`, laid out as in the C header. The fds are lent for
+/// the callback.
+#[derive(Clone, Copy)]
+#[repr(C)]
+struct RawCapturedFrame {
+    /// `DomicileCaptureMemory`: 0 a dmabuf, 1 shared memory.
+    memory: u32,
+    width: u32,
+    height: u32,
+    fourcc: u32,
+    modifier: u64,
+    plane_count: u32,
+    planes: [Plane; MAX_PLANES],
+    content_x: i32,
+    content_y: i32,
+    content_width: i32,
+    content_height: i32,
+    damage_x: i32,
+    damage_y: i32,
+    damage_width: i32,
+    damage_height: i32,
 }
 
 /// `DomicileSpikeCapture`, laid out as in the C header.
@@ -589,6 +678,67 @@ impl Engine {
         unsafe { f(self.handle, surface, buffer) };
     }
 
+    /// Captures what display `display` shows, `size` big, at most `max_fps`
+    /// frames a second, for a screen cast. Frames arrive as
+    /// [`Event::Captured`].
+    ///
+    /// `display` is a [`Display::id`]; zero names a nested engine's only
+    /// window. An engine older than display capture has no symbol for it.
+    pub fn start_capture(
+        &self,
+        display: i64,
+        size: (u32, u32),
+        max_fps: u32,
+    ) -> Result<CaptureId, EngineError> {
+        let f: Symbol<unsafe extern "C" fn(*mut Handle, i64, u32, u32, u32) -> CaptureId> = self
+            .symbol(
+                b"domicile_display_capture_start\0",
+                "domicile_display_capture_start",
+            )?;
+        // SAFETY: the handle is live for the life of self.
+        let capture = unsafe { f(self.handle, display, size.0, size.1, max_fps) };
+        match capture {
+            0 => Err(EngineError::NoCapture { display }),
+            capture => Ok(capture),
+        }
+    }
+
+    /// Captures at `size` from the next frame on.
+    pub fn resize_capture(&self, capture: CaptureId, size: (u32, u32)) {
+        let f: Symbol<unsafe extern "C" fn(*mut Handle, CaptureId, u32, u32)> = self
+            .symbol(
+                b"domicile_display_capture_resize\0",
+                "domicile_display_capture_resize",
+            )
+            .expect("an engine that started a capture can resize it");
+        // SAFETY: as above.
+        unsafe { f(self.handle, capture, size.0, size.1) };
+    }
+
+    /// Stops a capture and releases every frame of it still held.
+    pub fn stop_capture(&self, capture: CaptureId) {
+        let f: Symbol<unsafe extern "C" fn(*mut Handle, CaptureId)> = self
+            .symbol(
+                b"domicile_display_capture_stop\0",
+                "domicile_display_capture_stop",
+            )
+            .expect("an engine that started a capture can stop it");
+        // SAFETY: as above.
+        unsafe { f(self.handle, capture) };
+    }
+
+    /// Gives a captured frame's buffer back to the engine.
+    pub fn release_captured(&self, capture: CaptureId, frame: u64) {
+        let f: Symbol<unsafe extern "C" fn(*mut Handle, CaptureId, u64)> = self
+            .symbol(
+                b"domicile_captured_frame_release\0",
+                "domicile_captured_frame_release",
+            )
+            .expect("an engine that sent a frame can take it back");
+        // SAFETY: as above.
+        unsafe { f(self.handle, capture, frame) };
+    }
+
     /// Spike only. The ARGB pixel at the center of the browser's window,
     /// where spike pages put the `<app>`.
     ///
@@ -709,6 +859,8 @@ fn join(
         displays: Some(on_displays),
         copied: Some(on_copied),
         configure_at: Some(on_configure_at),
+        captured: Some(on_captured),
+        capture_ended: Some(on_capture_ended),
     };
     let socket_c = CString::new(socket.as_os_str().as_encoded_bytes())?;
     let connect: Symbol<unsafe extern "C" fn(*const c_char, Callbacks) -> *mut Handle> = symbol(
@@ -827,6 +979,89 @@ extern "C" fn on_copied(
     );
 }
 
+/// Copies a captured frame out of its record, duplicating the lent fds.
+///
+/// Panics on a memory kind the C header does not declare, rather than read
+/// the planes wrongly.
+fn captured_from(record: &RawCapturedFrame) -> Result<CapturedFrame, String> {
+    let lent = &record.planes[..(record.plane_count as usize).min(MAX_PLANES)];
+    let own = |plane: &Plane| {
+        // SAFETY: the ABI lends each plane's fd for the callback this runs in.
+        let fd = unsafe { BorrowedFd::borrow_raw(plane.fd) };
+        fd.try_clone_to_owned()
+            .map(|fd| SharedFd(Arc::new(fd)))
+            .map_err(|why| format!("a captured frame's fd would not duplicate: {why}"))
+    };
+    let pixels = match record.memory {
+        0 => CapturedPixels::Dmabuf {
+            modifier: record.modifier,
+            planes: lent
+                .iter()
+                .map(|plane| {
+                    Ok(CapturedPlane {
+                        fd: own(plane)?,
+                        offset: plane.offset,
+                        stride: plane.stride,
+                    })
+                })
+                .collect::<Result<_, String>>()?,
+        },
+        1 => {
+            let plane = lent
+                .first()
+                .ok_or("a shared memory frame came with no plane")?;
+            CapturedPixels::Shm {
+                fd: own(plane)?,
+                stride: plane.stride,
+            }
+        }
+        memory => {
+            panic!("the engine sent a frame in memory the C header does not declare: {memory}")
+        }
+    };
+    let damage = (
+        record.damage_x,
+        record.damage_y,
+        record.damage_width,
+        record.damage_height,
+    );
+    Ok(CapturedFrame {
+        pixels,
+        size: (record.width, record.height),
+        fourcc: record.fourcc,
+        content: (
+            record.content_x,
+            record.content_y,
+            record.content_width,
+            record.content_height,
+        ),
+        damage: (damage.2 > 0 && damage.3 > 0).then_some(damage),
+    })
+}
+
+/// Queues a captured frame, with fds of its own.
+extern "C" fn on_captured(
+    user_data: *mut c_void,
+    capture: CaptureId,
+    frame: u64,
+    record: *const RawCapturedFrame,
+) {
+    // SAFETY: the ABI lends a valid record for this call.
+    let record = unsafe { &*record };
+    push(
+        user_data,
+        Event::Captured {
+            capture,
+            frame,
+            captured: captured_from(record),
+        },
+    );
+}
+
+extern "C" fn on_capture_ended(user_data: *mut c_void, capture: CaptureId) {
+    push(user_data, Event::CaptureEnded { capture });
+}
+
 /// Converts the ABI's display records.
 fn displays_from(records: &[RawDisplay]) -> Vec<Display> {
     records
@@ -910,6 +1145,102 @@ fn push(user_data: *mut c_void, event: Event) {
 mod tests {
     use super::*;
     use crate::dmabuf_descriptor::DmabufPlane as BridgePlane;
+    use std::os::fd::{AsRawFd as _, IntoRawFd as _};
+
+    #[test]
+    fn a_captured_frame_is_the_record_the_c_header_declares() {
+        // 16 (four `uint32_t`) + 8 (modifier) + 4 (count) + 48 (four planes)
+        // + 32 (content and damage) + 4 tail padding.
+        assert_eq!(std::mem::size_of::<RawCapturedFrame>(), 112);
+    }
+
+    /// A pipe's read end, standing in for a buffer's fd.
+    fn an_fd() -> RawFd {
+        let (read, _write) = std::io::pipe().expect("a pipe");
+        OwnedFd::from(read).into_raw_fd()
+    }
+
+    fn record(memory: u32, fds: &[RawFd]) -> RawCapturedFrame {
+        let mut planes = [Plane {
+            fd: -1,
+            offset: 0,
+            stride: 0,
+        }; MAX_PLANES];
+        for (index, (slot, &fd)) in planes.iter_mut().zip(fds).enumerate() {
+            *slot = Plane {
+                fd,
+                offset: index as u32 * 4096,
+                stride: 1600,
+            };
+        }
+        RawCapturedFrame {
+            memory,
+            width: 400,
+            height: 300,
+            fourcc: FOURCCS[0],
+            modifier: 7,
+            plane_count: fds.len() as u32,
+            planes,
+            content_x: 0,
+            content_y: 25,
+            content_width: 400,
+            content_height: 250,
+            damage_x: 0,
+            damage_y: 0,
+            damage_width: 0,
+            damage_height: 0,
+        }
+    }
+
+    #[test]
+    fn a_shared_memory_frame_crosses_as_its_own_fd_and_stride() {
+        let lent = an_fd();
+
+        let captured = captured_from(&record(1, &[lent])).expect("a frame");
+
+        let CapturedPixels::Shm { fd, stride } = &captured.pixels else {
+            panic!("a shared memory frame crossed as {:?}", captured.pixels);
+        };
+        // Its own: the engine closes the lent fd after the callback.
+        assert_ne!(fd.0.as_raw_fd(), lent);
+        assert_eq!(*stride, 1600);
+        assert_eq!(captured.size, (400, 300));
+        assert_eq!(captured.content, (0, 25, 400, 250));
+        // Empty damage is all of it.
+        assert_eq!(captured.damage, None);
+    }
+
+    #[test]
+    fn a_dmabuf_frame_crosses_with_every_plane_and_its_damage() {
+        let mut raw = record(0, &[an_fd(), an_fd()]);
+        (
+            raw.damage_x,
+            raw.damage_y,
+            raw.damage_width,
+            raw.damage_height,
+        ) = (1, 2, 3, 4);
+
+        let captured = captured_from(&raw).expect("a frame");
+
+        let CapturedPixels::Dmabuf { modifier, planes } = &captured.pixels else {
+            panic!("a dmabuf frame crossed as {:?}", captured.pixels);
+        };
+        assert_eq!(*modifier, 7);
+        assert_eq!(
+            planes
+                .iter()
+                .map(|plane| (plane.offset, plane.stride))
+                .collect::<Vec<_>>(),
+            [(0, 1600), (4096, 1600)]
+        );
+        assert_eq!(captured.damage, Some((1, 2, 3, 4)));
+    }
+
+    #[test]
+    #[should_panic(expected = "memory")]
+    fn a_frame_in_memory_the_header_does_not_declare_is_refused() {
+        let _ = captured_from(&record(2, &[an_fd()]));
+    }
 
     /// The clipboard numbers are part of the ABI.
     #[test]

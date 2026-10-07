@@ -170,6 +170,23 @@ behaviors not yet seen on real monitors: a connector no layout names is placed
 after the named ones, and a window belongs to its display while its page
 loads.
 
+## Monitor cast on a GPU
+
+`guard-display-capture.sh` runs software-composited, so it reads shared
+memory. A dmabuf capture needs a GPU and a monitor.
+
+```sh
+DOMICILE_CAST_MONITOR=drm-<id> domicile …
+pw-link domicile-cast:capture_1 <consumer>:input_1
+```
+
+- `DOMICILE_CAST_MONITOR cast … Ready`, then frames in the consumer: the
+  capture runs.
+- `a captured frame could not be kept`: the dmabuf did not import into the
+  compositor's renderer.
+- `DOMICILE_CAST_MONITOR=<x>,<y>,<width>x<height>` across two monitors at
+  different densities: the stream is at the higher one, with no seam.
+
 ## `dev-shell.sh` against a real engine
 
 Run `./scripts/dev-shell.sh <name>` and check:

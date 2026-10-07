@@ -184,6 +184,8 @@ Calls (compositor → engine):
 | `domicile_surface_submit_crop(surface, buffer, crop, damage)` | `wl_surface.commit` with `xdg_surface.set_window_geometry` |
 | `domicile_displays_configure(layout, count)` | output configuration |
 | `domicile_clipboard_set(clipboard, text, length)` | `wl_data_offer.receive`. The compositor sends the selection text it already read. |
+| `domicile_display_capture_start(engine, display, width, height, max_fps)`, `_resize`, `_stop` | none: a screen cast of a monitor (see [Display capture](#display-capture)) |
+| `domicile_captured_frame_release(engine, capture, frame)` | none: the compositor is done reading a captured frame |
 
 Callbacks (engine → compositor):
 
@@ -194,6 +196,7 @@ Callbacks (engine → compositor):
 | `configure(surface, width, height)`, `configure_at(…, scale)` | `xdg_toplevel.configure` |
 | `displays(displays, count)` | `wl_output`. Primary first, never empty. |
 | `copied(clipboard, text, length)` | `wl_data_device.set_selection` for a copy made in a page |
+| `captured(capture, frame, record)`, `capture_ended(capture)` | none: a monitor's frame for a screen cast, and the browser ending the capture |
 
 - Only `crop` fills the `<app>` box, so client-side shadows are not drawn. An
   empty rectangle means the whole buffer or surface. `domicile_surface_submit`
@@ -229,6 +232,25 @@ Decisions:
   cannot create new ones. This takes the browser off the per-frame path.
 - `ImportBuffer` refuses a DRM fourcc it cannot map. Guessing swaps color
   channels (`ARGB8888` vs `ABGR8888`).
+
+### Display capture
+
+A monitor is the composited output, which only viz has. The compositor casts
+it from frames the browser captures ([PORTALS.md](PORTALS.md)).
+
+1. `domicile_display_capture_start` asks the broker (`CaptureDisplay`) for a
+   display. Zero names a nested or headless browser's only window.
+2. The browser finds the window whose rectangle is the display's
+   (`display_capture_target.cc`) and runs a viz `FrameSinkVideoCapturer` on
+   its root frame sink (`display_capture.cc`). Damage-driven, capped at
+   `max_fps`, at the size the compositor asks for.
+3. Each frame is a dmabuf when the browser composites on the GPU, shared
+   memory otherwise. It crosses the broker socket opposite to client buffers,
+   and `captured` lends the compositor its fds.
+4. `domicile_captured_frame_release` gives the buffer back to viz.
+
+The capture is the window's root frame sink, so a hardware cursor plane is not
+in it. The compositor draws the pointer from its own state.
 
 ## Key decisions
 
