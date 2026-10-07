@@ -24,6 +24,7 @@ use std::thread;
 
 use domicile_config::{LockdownConfig, ThemeConfig};
 use domicile_host::cast_grants::Grants;
+use domicile_host::cups::Cups;
 use domicile_host::data_dirs::data_dirs;
 use domicile_host::desktop_entries::DesktopEntries;
 use domicile_host::mime_apps::{default_handler, lists};
@@ -54,6 +55,7 @@ mod inhibit;
 mod input_capture;
 mod lockdown;
 mod notification;
+mod print;
 mod queue;
 mod remote_desktop;
 mod request;
@@ -81,6 +83,7 @@ use inhibit::{Inhibit, Inhibitors};
 use input_capture::{InputCapture, Inputs, Zones};
 use lockdown::Lockdown;
 use notification::Notification;
+use print::Print;
 use queue::Queue;
 use remote_desktop::{RemoteDesktop, Remotes};
 use restore::Tokens;
@@ -382,7 +385,8 @@ impl Backends {
     }
 }
 
-/// What the Account, Email, Lockdown and ScreenCast interfaces start from.
+/// What the Account, Email, Lockdown, ScreenCast and Print interfaces start
+/// from.
 struct Starting {
     lockdown: LockdownConfig,
     screen_cast: ScreenCast,
@@ -390,6 +394,8 @@ struct Starting {
     open: Open,
     /// Who the user is, for `Account`.
     user: LookUp,
+    /// Where `Print` finds printers.
+    cups: Cups,
 }
 
 /// What the capture portals need from the rest of the compositor.
@@ -456,6 +462,7 @@ pub fn serve(
             screen_cast: screen_cast(&backends.queue, casting),
             open,
             user: account::the_user(),
+            cups: Cups::at(std::env::var_os("CUPS_SERVER"), account::login_name()),
         };
         // Every failure has the same effect: clients do not follow the theme,
         // and their dialogs go unanswered.
@@ -776,7 +783,15 @@ fn export<'a>(
                 udev_data: PathBuf::from("/run/udev/data"),
             },
         )?
-        .serve_at(OBJECT_PATH, starting.screen_cast)
+        .serve_at(OBJECT_PATH, starting.screen_cast)?
+        .serve_at(
+            OBJECT_PATH,
+            Print {
+                queue: Arc::clone(&backends.queue),
+                cups: starting.cups,
+                prepared: Mutex::default(),
+            },
+        )
 }
 
 /// A ScreenCast backend for tests that cast nothing.
@@ -972,6 +987,7 @@ mod tests {
                         })
                     })
                 }),
+                cups: Cups::new(Vec::new(), "me".into()),
             };
             export(
                 builder,
@@ -1767,6 +1783,46 @@ mod tests {
         );
         assert!(switch(&served.client, "disable-printing"));
         assert!(!switch(&served.client, "disable-camera"));
+    }
+
+    #[test]
+    fn the_print_dialog_is_served() {
+        let served = served(true);
+        let client = served.client.clone();
+        let preparing = thread::spawn(move || {
+            let empty = HashMap::<String, OwnedValue>::new();
+            let (response, _): (u32, HashMap<String, OwnedValue>) = client
+                .call_method(
+                    None::<&str>,
+                    OBJECT_PATH,
+                    Some("org.freedesktop.impl.portal.Print"),
+                    "PreparePrint",
+                    &(
+                        ObjectPath::try_from(HANDLE).expect("a path"),
+                        "org.example.App",
+                        "",
+                        "Report",
+                        &empty,
+                        &empty,
+                        &empty,
+                    ),
+                )
+                .expect("PreparePrint answered")
+                .body()
+                .deserialize()
+                .expect("its reply");
+            response
+        });
+
+        assert!(matches!(
+            next(&served.published).as_slice(),
+            [PortalRequest {
+                kind: PortalKind::Print(_),
+                ..
+            }]
+        ));
+        served.queue.answer(1, PortalAnswer::Canceled);
+        assert_eq!(preparing.join().expect("the call returned"), 2);
     }
 
     #[test]

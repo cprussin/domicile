@@ -238,6 +238,7 @@ impl Asked {
             | PortalAnswer::RemoteDesktop { .. }
             | PortalAnswer::InputCapture
             | PortalAnswer::ScreenCast { .. }
+            | PortalAnswer::Print { .. }
             | PortalAnswer::Stop
             | PortalAnswer::DynamicLauncher { .. }
             | PortalAnswer::GlobalShortcuts { .. }

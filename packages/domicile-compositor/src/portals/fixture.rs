@@ -7,6 +7,7 @@ use std::thread;
 use std::time::Duration;
 
 use domicile_config::LockdownConfig;
+use domicile_host::cups::Cups;
 use domicile_protocol::{Capturing, PortalRequest, Theme};
 use zbus::zvariant::{ObjectPath, OwnedValue, Value};
 
@@ -71,6 +72,7 @@ pub fn served(tokens: Tokens) -> Served {
                 screen_cast: super::idle_screen_cast(&serving.queue),
                 open: Box::new(|_| Ok(())),
                 user: Box::new(|| Box::pin(async { Err("no user here".into()) })),
+                cups: Cups::new(Vec::new(), "me".into()),
             },
             &serving,
             Vec::new(),

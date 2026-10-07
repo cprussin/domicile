@@ -22,6 +22,7 @@ import { FileChooserDialog } from "./FileChooserDialog";
 import { GlobalShortcutsDialog } from "./GlobalShortcutsDialog";
 import { InputCaptureDialog } from "./InputCaptureDialog";
 import { LauncherDialog } from "./LauncherDialog";
+import { PrintDialog } from "./PrintDialog";
 import { RemoteDesktopDialog } from "./RemoteDesktopDialog";
 import { ScreenCastDialog } from "./ScreenCastDialog";
 import { UsbDialog } from "./UsbDialog";
@@ -230,6 +231,15 @@ const Dialog = ({
           screen={screen}
         />
       );
+    case PortalKind.Print:
+      return (
+        <PrintDialog
+          answer={answer}
+          asker={appName(request.appId)}
+          body={request.body}
+          screen={screen}
+        />
+      );
     case PortalKind.Inhibit:
     case PortalKind.Unknown:
       return undefined;
@@ -263,6 +273,7 @@ const isAsked = (request: PortalRequest): boolean => {
     case PortalKind.GlobalShortcuts:
     case PortalKind.Wallpaper:
     case PortalKind.ScreenCast:
+    case PortalKind.Print:
       return true;
     case PortalKind.Inhibit:
     case PortalKind.Unknown:
