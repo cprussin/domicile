@@ -501,7 +501,7 @@ pub enum HostMessage {
     /// Every portal dialog not yet answered, oldest first.
     ///
     /// The compositor is the `xdg-desktop-portal` backend; see
-    /// `docs/architecture/PORTALS.md`. Pushed as the full list on any change
+    /// `packages/domicile-compositor/src/portals/README.md`. Pushed as the full list on any change
     /// and on connect, so a reloaded page still sees a pending dialog. The
     /// shell answers with [`ChromeMessage::AnswerPortalRequest`].
     ///

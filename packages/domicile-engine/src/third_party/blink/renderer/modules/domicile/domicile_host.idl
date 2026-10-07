@@ -62,7 +62,7 @@
   // Answer portal request `id`, which a `portalrequests` event listed.
   // `answer` is JSON with a string `kind`, such as `{"kind":"access"}`. One
   // that is not is dropped in the browser. The compositor checks the rest. See
-  // docs/architecture/PORTALS.md.
+  // packages/domicile-compositor/src/portals/README.md.
   [CallWith=ScriptState, RaisesException] undefined answerPortalRequest(
       unsigned long id, DOMString answer);
 

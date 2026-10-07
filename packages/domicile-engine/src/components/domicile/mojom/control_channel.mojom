@@ -280,7 +280,8 @@ interface ControlChannel {
   // Answer portal request `id`, which a ControlChannelClient::PortalRequests
   // listed. `answer` is JSON with a string `kind`, `{"kind":"access"}`. The
   // browser wraps it as an `answer_portal_request` line and reads nothing
-  // else of it; the compositor checks it. See docs/architecture/PORTALS.md.
+  // else of it; the compositor checks it. See
+  // packages/domicile-compositor/src/portals/README.md.
   AnswerPortalRequest(uint32 id, string answer);
 
   // Put a row of the clipboard's history back on the clipboard.
