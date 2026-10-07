@@ -1,4 +1,5 @@
-//! Files, watches, processes and D-Bus for one chrome connection.
+//! Files, watches, processes, D-Bus and screenshots for one chrome connection.
+//! The compositor takes the screenshots ([`System::screenshotting_with`]).
 //!
 //! [`System::handle`] runs a `ChromeMessage::SystemRequest` and sends every
 //! answer through the callback it was built with. Nothing here blocks the
@@ -52,7 +53,13 @@ pub struct System {
     connect: Connect,
     /// The connection each bus's calls share, once one was made.
     buses: Arc<Mutex<HashMap<Bus, Connection>>>,
+    /// Takes screenshots; `None` on a system that takes none.
+    screenshot: Option<Screenshot>,
 }
+
+/// Takes a screenshot, into the file if one is given, and returns where it
+/// was saved. Blocks until it is saved, the dialog included.
+pub type Screenshot = Arc<dyn Fn(Option<PathBuf>) -> Result<PathBuf, SystemError> + Send + Sync>;
 
 /// How a [`System`] reaches a D-Bus bus.
 type Connect = Arc<dyn Fn(Bus) -> zbus::Result<Connection> + Send + Sync>;
@@ -133,7 +140,9 @@ pub fn reach(request: &SystemRequest) -> Reach {
             true => Reach::Readout,
             false => Reach::Acts,
         },
-        SystemRequest::WriteFile { .. } | SystemRequest::Stdin { .. } => Reach::Acts,
+        SystemRequest::WriteFile { .. }
+        | SystemRequest::Stdin { .. }
+        | SystemRequest::Screenshot { .. } => Reach::Acts,
     }
 }
 
@@ -152,7 +161,8 @@ pub fn locked_out(id: u32, request: &SystemRequest) -> Option<HostMessage> {
         | SystemRequest::Watch { .. }
         | SystemRequest::Spawn { .. }
         | SystemRequest::DbusCall { .. }
-        | SystemRequest::DbusMatch { .. } => Some(HostMessage::SystemReply {
+        | SystemRequest::DbusMatch { .. }
+        | SystemRequest::Screenshot { .. } => Some(HostMessage::SystemReply {
             id,
             reply: SystemReply::Failed {
                 error: SystemError {
@@ -188,6 +198,7 @@ impl System {
                 Bus::System => Connection::system(),
             }),
             buses: Arc::default(),
+            screenshot: None,
         }
     }
 
@@ -198,6 +209,15 @@ impl System {
         connect: impl Fn(Bus) -> zbus::Result<Connection> + Send + Sync + 'static,
     ) -> System {
         self.connect = Arc::new(connect);
+        self
+    }
+
+    /// This system, taking screenshots through `screenshot`.
+    pub fn screenshotting_with(
+        mut self,
+        screenshot: impl Fn(Option<PathBuf>) -> Result<PathBuf, SystemError> + Send + Sync + 'static,
+    ) -> System {
+        self.screenshot = Some(Arc::new(screenshot));
         self
     }
 
@@ -403,6 +423,19 @@ impl System {
                 Some(Running::Watch(_) | Running::Match(_)) => Handled::Malformed,
                 None => Handled::NothingRunning,
             },
+            SystemRequest::Screenshot { file } => {
+                let screenshot = self.screenshot.clone();
+                self.on_a_thread(id, move |home| -> Result<SystemReply, SystemError> {
+                    let screenshot = screenshot.ok_or_else(|| SystemError {
+                        kind: SystemErrorKind::Other,
+                        message: "this desktop takes no screenshots".into(),
+                    })?;
+                    let path = screenshot(file.map(|file| home.join(file)))?;
+                    Ok(SystemReply::Saved {
+                        path: path.display().to_string(),
+                    })
+                })
+            }
         }
     }
 
@@ -685,6 +718,14 @@ enum Failure {
     Io(io::Error),
     Dbus(zbus::Error),
     Body(NotABody),
+    /// Already told as the page will be.
+    Said(SystemError),
+}
+
+impl From<SystemError> for Failure {
+    fn from(err: SystemError) -> Failure {
+        Failure::Said(err)
+    }
 }
 
 impl From<io::Error> for Failure {
@@ -735,6 +776,7 @@ impl From<Failure> for SystemError {
                 kind: SystemErrorKind::InvalidInput,
                 message: err.to_string(),
             },
+            Failure::Said(err) => err,
         }
     }
 }

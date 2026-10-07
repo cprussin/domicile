@@ -39,6 +39,7 @@ export const orAbsent = <T extends NonNullable<unknown>>(
       case SystemErrorKind.InvalidInput:
       case SystemErrorKind.Locked:
       case SystemErrorKind.Dbus:
+      case SystemErrorKind.Canceled:
       case SystemErrorKind.Other: {
         return result;
       }

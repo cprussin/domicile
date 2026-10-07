@@ -61,9 +61,11 @@ Settings live in `~/.config/domicile/domicile.json` (or `.ts`/`.js`). Reference:
 
 ## Screenshots
 
-`domicile screenshot <file>` writes a PNG of the whole desk to `<file>`, from a
-terminal on the desktop. It has no region or window picker. See ROADMAP's
-*Session and portals*.
+`domicile screenshot <file>` writes a PNG of the whole desk, every monitor at
+the highest density, to `<file>`, from a terminal on the desktop. It is
+refused while the desk is locked. To pick a monitor, a window or an area, use
+the shell's screenshot key (Print in manganese), which saves under
+`$XDG_PICTURES_DIR/Screenshots/`.
 
 ## Host shortcuts in a window
 

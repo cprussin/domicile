@@ -23,6 +23,7 @@ Manganese binds sway's keys on Meta (Super, `Mod4`) by default:
 | Meta+Space, Meta+D | Toggle the launcher. |
 | Meta+Shift+V | Toggle the clipboard history. |
 | Meta+Shift+Return | Lock. Does nothing if the config has no `lock`. |
+| Print | Take a screenshot: pick the area in the screenshot dialog. |
 | Meta+R | Enter resize mode. |
 
 There is no terminal key. Bind one with `exec`.
@@ -64,6 +65,7 @@ Manganese-only commands:
 | `lock` | Lock the desktop. |
 | `launcher` | Toggle the launcher. |
 | `clipboard` | Toggle the clipboard history. |
+| `screenshot` | Take a screenshot, as Print does. |
 | `resize grow left/right/up/down` | Grow the window that way. |
 
 - `mode(name)` comes from the SDK's `bindKeys`. Each monitor's page keeps its
