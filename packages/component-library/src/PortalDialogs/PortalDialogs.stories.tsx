@@ -256,6 +256,45 @@ const screenCast = {
   kind: "screen_cast",
 };
 
+/** A drawn desk of two monitors, 1600x500, standing in for a captured one. */
+const deskFrame = `data:image/svg+xml,${encodeURIComponent(
+  `<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="500">
+    <rect width="1000" height="500" fill="#2b6cb0"/>
+    <rect x="1000" width="600" height="500" fill="#9f7aea"/>
+    <rect x="80" y="60" width="520" height="340" fill="#f7fafc"/>
+    <rect x="1080" y="120" width="420" height="260" fill="#1a202c"/>
+    <circle cx="800" cy="380" r="60" fill="#f6ad55"/>
+  </svg>`,
+)}`;
+
+const frozenDesk = {
+  frame: deskFrame,
+  height: 500,
+  monitors: [
+    { area: { height: 500, width: 1000, x: 0, y: 0 }, name: "DP-1" },
+    { area: { height: 500, width: 600, x: 1000, y: 0 }, name: "HDMI-A-1" },
+  ],
+  width: 1600,
+  windows: [
+    { area: { height: 340, width: 520, x: 80, y: 60 }, name: "Notes" },
+    { area: { height: 260, width: 420, x: 1080, y: 120 }, name: "Terminal" },
+  ],
+};
+
+const screenshot = {
+  app_id: "org.example.Shooter",
+  body: frozenDesk,
+  id: 9,
+  kind: "screenshot",
+};
+
+const pickColor = {
+  app_id: "org.example.Paint",
+  body: frozenDesk,
+  id: 10,
+  kind: "pick_color",
+};
+
 const meta = {
   args: {
     host: pushing([access]),
@@ -446,5 +485,25 @@ export const Wallpaper: Story = {
     screen: undefined,
     screenOf: undefined,
     systemOf: withPicture,
+  },
+};
+
+export const Screenshot: Story = {
+  args: {
+    host: pushing([screenshot]),
+    screen: undefined,
+    screenOf: undefined,
+    shellChords: undefined,
+    systemOf: undefined,
+  },
+};
+
+export const PickColor: Story = {
+  args: {
+    host: pushing([pickColor]),
+    screen: undefined,
+    screenOf: undefined,
+    shellChords: undefined,
+    systemOf: undefined,
   },
 };

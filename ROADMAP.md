@@ -133,10 +133,11 @@ Evidence is in [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md),
     `Access`, `AppChooser`, `FileChooser`, `Notification`, `Inhibit`,
     `RemoteDesktop`, `Clipboard`, `InputCapture`, `Account`, `Email`,
     `Lockdown`, `GlobalShortcuts`, `Background`, `Wallpaper`,
-    `DynamicLauncher`, `Usb`, `Print` and `ScreenCast` of windows, over the
-    request channel to the shell; gtk answers the rest. Sharing a monitor has no
-    backend. Next: every other interface except `Secret` on the channel, then
-    drop gtk. [PORTALS.md](docs/architecture/PORTALS.md).
+    `DynamicLauncher`, `Usb`, `Print`, `ScreenCast` of windows and
+    `Screenshot`, over the request channel to the shell; gtk answers the rest.
+    Sharing a monitor has no backend. Next: every other interface except
+    `Secret` on the channel, then drop gtk.
+    [PORTALS.md](docs/architecture/PORTALS.md).
 
 10. **Split manganese into small packages.** `@domicile-desktop/manganese` is
     one package with the layout, the bar and every bar item. Split the clock,
@@ -385,13 +386,12 @@ Understood and not scheduled.
   screenshot <file>` asks the engine for a PNG of the shell page. It is a
   stopgap:
   - No region or window picker, and no screen recording.
-  - Tools such as `grim`, `wf-recorder` and `xdg-desktop-portal` clients
-    cannot capture the desk.
+  - Tools such as `grim` and `wf-recorder` cannot capture the desk. Portal
+    clients can, through the Screenshot portal
+    ([PORTALS.md](docs/architecture/PORTALS.md)).
 
   Replace it with `ext-image-copy-capture-v1` (and `wlr-screencopy` for older
-  tools) and the Screenshot portal ([PORTALS.md](docs/architecture/PORTALS.md)
-  phase 2), on the same engine readback. Draw the picker in the shell. Then
-  remove the command.
+  tools), on the display captures the portal uses. Then remove the command.
 
 ### Shell reload
 

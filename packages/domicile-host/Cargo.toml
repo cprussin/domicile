@@ -18,6 +18,8 @@ libc.workspace = true
 # The shell's D-Bus calls and matches (see `src/system.rs`).
 zbus.workspace = true
 lofty.workspace = true
+# Encodes screenshots (see `src/screenshot.rs`).
+png.workspace = true
 
 [dev-dependencies]
 # A D-Bus service on a socket pair, so the tests need no bus daemon.

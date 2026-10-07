@@ -49,6 +49,10 @@ export enum PortalKind {
   ScreenCast,
   /** Pick a printer and its options. */
   Print,
+  /** Pick the area of a frozen desk to save as a screenshot. */
+  Screenshot,
+  /** Pick a pixel of a frozen desk, for its color. */
+  PickColor,
   /** A kind this SDK cannot parse. Answer it with {@link PortalAnswer.Refused}. */
   Unknown,
 }
@@ -203,6 +207,26 @@ export type ShortcutsBody = {
 
 /** The chord the user chose for a shortcut; `undefined` clears it. */
 export type ChosenTrigger = { id: string; trigger: string | undefined };
+
+/** A rectangle of a {@link FrozenDesk}'s frame, in its pixels. */
+export type ShotRect = { x: number; y: number; width: number; height: number };
+
+/** A monitor or a window of a {@link FrozenDesk}. */
+export type ShotArea = { name: string; area: ShotRect };
+
+/**
+ * A frame of the whole desk, frozen while the user picks from it. Every
+ * rectangle, and the answer, is in the frame's pixels.
+ */
+export type FrozenDesk = {
+  /** The frame, as a `data:` URL. */
+  frame: string;
+  width: number;
+  height: number;
+  monitors: readonly ShotArea[];
+  /** The open windows, by title. */
+  windows: readonly ShotArea[];
+};
 
 /** A chord an application holds, for the shell to grab. */
 export type BoundShortcut = {
@@ -427,6 +451,11 @@ export const PortalRequest = {
     body,
     kind: PortalKind.InputCapture as const,
   }),
+  PickColor: (base: PortalRequestBase, body: FrozenDesk) => ({
+    ...base,
+    body,
+    kind: PortalKind.PickColor as const,
+  }),
   Print: (base: PortalRequestBase, body: PrintBody) => ({
     ...base,
     body,
@@ -441,6 +470,11 @@ export const PortalRequest = {
     ...base,
     body,
     kind: PortalKind.ScreenCast as const,
+  }),
+  Screenshot: (base: PortalRequestBase, body: FrozenDesk) => ({
+    ...base,
+    body,
+    kind: PortalKind.Screenshot as const,
   }),
   Unknown: (base: PortalRequestBase, wireKind: string) => ({
     ...base,
@@ -487,6 +521,10 @@ export enum PortalAnswerKind {
   DynamicLauncher,
   /** The printer and options the user chose in a {@link PortalKind.Print}. */
   Print,
+  /** The area of a {@link PortalKind.Screenshot} the user kept. */
+  Screenshot,
+  /** The pixel of a {@link PortalKind.PickColor} the user picked. */
+  PickColor,
   /** The user dismissed or denied the dialog. */
   Canceled,
   /** The shell has no dialog for this kind. */
@@ -515,6 +553,11 @@ export const PortalAnswer = {
     triggers,
   }),
   InputCapture: () => ({ kind: PortalAnswerKind.InputCapture as const }),
+  /** A pixel inside the request's frame. */
+  PickColor: (at: { x: number; y: number }) => ({
+    at,
+    kind: PortalAnswerKind.PickColor as const,
+  }),
   /** `printer` must be one of the request's `printers`. */
   Print: (printer: string, options: PrintOptions) => ({
     kind: PortalAnswerKind.Print as const,
@@ -530,6 +573,11 @@ export const PortalAnswer = {
   ScreenCast: (sources: readonly CastSource[]) => ({
     kind: PortalAnswerKind.ScreenCast as const,
     sources,
+  }),
+  /** A non-empty area inside the request's frame. */
+  Screenshot: (area: ShotRect) => ({
+    area,
+    kind: PortalAnswerKind.Screenshot as const,
   }),
   Stop: () => ({ kind: PortalAnswerKind.Stop as const }),
 };
@@ -926,6 +974,22 @@ const usbSchema = z
       })),
     }),
   );
+const shotRectSchema = z.object({
+  height: z.number(),
+  width: z.number(),
+  x: z.number(),
+  y: z.number(),
+});
+
+const shotAreaSchema = z.object({ area: shotRectSchema, name: z.string() });
+
+const frozenDeskSchema = z.object({
+  frame: z.string(),
+  height: z.number(),
+  monitors: z.array(shotAreaSchema),
+  width: z.number(),
+  windows: z.array(shotAreaSchema),
+});
 
 /** Each wire name and the value it stands for. */
 type Pairs<W extends string, V> = readonly (readonly [W, V])[];
@@ -1093,6 +1157,15 @@ const KINDS: ReadonlyMap<string, ReadKind> = new Map<string, ReadKind>([
       PortalRequest.ScreenCast(base, screenCastSchema.parse(body)),
   ],
   ["print", (base, body) => PortalRequest.Print(base, printSchema.parse(body))],
+  [
+    "screenshot",
+    (base, body) =>
+      PortalRequest.Screenshot(base, frozenDeskSchema.parse(body)),
+  ],
+  [
+    "pick_color",
+    (base, body) => PortalRequest.PickColor(base, frozenDeskSchema.parse(body)),
+  ],
 ]);
 
 type ReadCapturing = (base: CapturingBase, body: unknown) => Capturing;
@@ -1242,6 +1315,10 @@ const wireAnswer = (answer: PortalAnswer): object => {
         },
         printer: answer.printer,
       };
+    case PortalAnswerKind.Screenshot:
+      return { area: answer.area, kind: "screenshot" };
+    case PortalAnswerKind.PickColor:
+      return { kind: "pick_color", x: answer.at.x, y: answer.at.y };
     case PortalAnswerKind.Refused:
       return { kind: "refused" };
   }

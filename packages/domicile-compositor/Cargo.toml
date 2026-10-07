@@ -91,3 +91,5 @@ zbus = { workspace = true, features = ["p2p"] }
 # display.
 serde_json.workspace = true
 tempfile.workspace = true
+# Reads back the screenshots the portal saves.
+png.workspace = true

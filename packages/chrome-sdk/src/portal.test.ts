@@ -608,10 +608,58 @@ describe("watchPortalRequests", () => {
     ]);
   });
 
+  it("parses a screenshot picker and a color picker over a frozen desk", async () => {
+    const host = new FakeHost();
+    const requests = watched(host);
+    const desk = {
+      frame: "data:image/png;base64,AA==",
+      height: 100,
+      monitors: [
+        { area: { height: 100, width: 300, x: 0, y: 0 }, name: "DP-1" },
+      ],
+      width: 300,
+      windows: [
+        { area: { height: 40, width: 30, x: 10, y: 20 }, name: "Terminal" },
+      ],
+    };
+    host.push([
+      { app_id: "org.example.Shot", body: desk, id: 5, kind: "screenshot" },
+      { app_id: "org.example.Shot", body: desk, id: 6, kind: "pick_color" },
+    ]);
+
+    const frozen = {
+      frame: "data:image/png;base64,AA==",
+      height: 100,
+      monitors: [
+        { area: { height: 100, width: 300, x: 0, y: 0 }, name: "DP-1" },
+      ],
+      width: 300,
+      windows: [
+        { area: { height: 40, width: 30, x: 10, y: 20 }, name: "Terminal" },
+      ],
+    };
+    expect(await requests).toEqual([
+      {
+        appId: "org.example.Shot",
+        body: frozen,
+        id: 5,
+        kind: PortalKind.Screenshot,
+        parentAppId: undefined,
+      },
+      {
+        appId: "org.example.Shot",
+        body: frozen,
+        id: 6,
+        kind: PortalKind.PickColor,
+        parentAppId: undefined,
+      },
+    ]);
+  });
+
   it("keeps a kind it does not know, to be refused", async () => {
     const host = new FakeHost();
     const requests = watched(host);
-    host.push([{ app_id: "", body: { x: 1 }, id: 2, kind: "screenshot" }]);
+    host.push([{ app_id: "", body: { x: 1 }, id: 2, kind: "wobble" }]);
 
     expect(await requests).toEqual([
       {
@@ -619,7 +667,7 @@ describe("watchPortalRequests", () => {
         id: 2,
         kind: PortalKind.Unknown,
         parentAppId: undefined,
-        wireKind: "screenshot",
+        wireKind: "wobble",
       },
     ]);
   });
@@ -855,6 +903,12 @@ describe("answerPortalRequest", () => {
         { id: "mute", trigger: undefined },
       ]),
     );
+    answerPortalRequest(
+      host,
+      10,
+      PortalAnswer.Screenshot({ height: 4, width: 3, x: 1, y: 2 }),
+    );
+    answerPortalRequest(host, 11, PortalAnswer.PickColor({ x: 5, y: 6 }));
 
     expect(host.answers).toEqual([
       [1, { kind: "access" }],
@@ -888,6 +942,8 @@ describe("answerPortalRequest", () => {
           triggers: [{ id: "talk", trigger: "Ctrl+Alt+t" }, { id: "mute" }],
         },
       ],
+      [10, { area: { height: 4, width: 3, x: 1, y: 2 }, kind: "screenshot" }],
+      [11, { kind: "pick_color", x: 5, y: 6 }],
     ]);
   });
 

@@ -2066,11 +2066,12 @@ impl DomicileCompositor {
     /// A cast request, from any thread.
     fn cast_requested(&mut self, request: casting::Request) {
         let open = self.cast_candidates();
+        let renderer = self.gpu.as_mut().map(Gpu::renderer);
         let capturer = self
             .engine
             .as_mut()
             .map(|session| session as &mut dyn casting::Capturer);
-        self.casting.request(request, || open, capturer);
+        self.casting.request(request, || open, renderer, capturer);
     }
 
     /// The windows that can be cast, in the order they opened.
@@ -6280,7 +6281,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     // Chrome requests to the Wayland thread.
     let (request_tx, request_rx) = channel::<ClientRequest>();
-    // Cast requests from any thread, such as the ScreenCast portal's.
+    // Cast and shot requests from any thread, such as the portals'.
     let (cast_requests, heard_cast_requests) = channel::<casting::Request>();
     // Passphrase verdicts from the checking thread.
     let (verdicts, heard_verdicts) = channel::<Verdict>();

@@ -701,6 +701,9 @@ mod tests {
                             listener(Event::Ended(Ended::Stopped));
                         }
                     }
+                    Heard::Msg(Request::Shoot { developed, .. }) => {
+                        developed(Err("no desk here".into()));
+                    }
                     Heard::Closed => *open = false,
                 })
                 .expect("a channel source");

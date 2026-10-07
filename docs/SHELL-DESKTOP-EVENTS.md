@@ -119,10 +119,12 @@ import { PortalDialogs } from "@domicile-desktop/component-library/PortalDialogs
   clipboard an application may control), `InputCapture`, `GlobalShortcuts`
   (review the chords an app asks for), `Wallpaper` (a picture to preview),
   `DynamicLauncher` (an install confirm with an editable name), `Usb` (a
-  device grant), `ScreenCast` (a picker of the windows to share) and `Print`
-  (a printer and its options, or "No printers are set up."). Answer
-  `Access`, `Account`, `Wallpaper` and `Usb` with `PortalAnswer.Access()` to
-  allow, and `DynamicLauncher` with `PortalAnswer.DynamicLauncher(name)`.
+  device grant), `ScreenCast` (a picker of the windows to share), `Print` (a
+  printer and its options, or "No printers are set up."), `Screenshot` (pick
+  the desk, a monitor, a window or a dragged area of a frozen frame) and
+  `PickColor` (pick a pixel of it, with a magnifier). Answer `Access`,
+  `Account`, `Wallpaper` and `Usb` with `PortalAnswer.Access()` to allow, and
+  `DynamicLauncher` with `PortalAnswer.DynamicLauncher(name)`.
 - The app list, the file picker and the wallpaper preview read the system
   through `@domicile-desktop/sdk/system` (desktop entries, `mimeapps.list`,
   `readDir`, `readFile`), so `host` must take system calls. `domicile` does.

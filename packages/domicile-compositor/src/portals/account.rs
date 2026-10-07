@@ -77,6 +77,8 @@ impl Account {
             | PortalAnswer::DynamicLauncher { .. }
             | PortalAnswer::ScreenCast { .. }
             | PortalAnswer::Print { .. }
+            | PortalAnswer::Screenshot { .. }
+            | PortalAnswer::PickColor { .. }
             | PortalAnswer::Stop
             | PortalAnswer::Pressed => (2, HashMap::new()),
         }

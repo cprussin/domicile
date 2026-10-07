@@ -141,7 +141,7 @@ fn frame_scale(logical: (i32, i32), content: Rect) -> (f64, f64) {
 }
 
 /// The overlap of `a` and `b`, or `None` if they do not overlap.
-fn intersection(a: Rect, b: Rect) -> Option<Rect> {
+pub fn intersection(a: Rect, b: Rect) -> Option<Rect> {
     let left = a.0.max(b.0);
     let top = a.1.max(b.1);
     let right = (a.0 + a.2).min(b.0 + b.2);

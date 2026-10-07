@@ -70,6 +70,7 @@ pub fn served(tokens: Tokens) -> Served {
             Starting {
                 lockdown: LockdownConfig::default(),
                 screen_cast: super::idle_screen_cast(&serving.queue),
+                shoot: Box::new(|| Box::pin(async { Err("no desk here".into()) })),
                 open: Box::new(|_| Ok(())),
                 user: Box::new(|| Box::pin(async { Err("no user here".into()) })),
                 cups: Cups::new(Vec::new(), "me".into()),

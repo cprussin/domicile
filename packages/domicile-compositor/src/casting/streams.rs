@@ -12,6 +12,8 @@
 //!   first frame is owed this way.
 //! - Pointer motion damages the pointer's old and new places, for streams
 //!   that show the pointer.
+//! - A shot of the desk (see [`shots`](crate::casting::shots)) shows every
+//!   monitor like a stream, until each has a frame.
 
 use std::collections::HashMap;
 use std::os::fd::OwnedFd;
@@ -31,9 +33,10 @@ use crate::casting::gpu::{self, FillError, Layer, Snapshot};
 use crate::casting::lifecycle::Ended;
 use crate::casting::negotiation::{offer, shm_layout, Pixel, MAX_FRAMERATE, PIXELS};
 use crate::casting::pacing::{within, Due, Pacing, Rect};
+use crate::casting::paint::paint;
 use crate::casting::producer::{self, BufferId, StreamFormat, Target, ToPipewire, ToWayland};
 use crate::casting::region::{self, damage_in_stream, in_frame, Layout, Screen};
-use crate::casting::shm_copy::{copy, Client};
+use crate::casting::shots::{areas, compose, desk_of, Desk, Developed, Window};
 use crate::casting::{Candidate, Event, Listener, Request, Source, StreamId};
 use crate::engine::{CaptureId, CapturedFrame};
 
@@ -91,7 +94,19 @@ pub struct Streams {
     /// The monitors, for monitor and region streams.
     screens: Vec<Screen>,
     captures: Captures,
+    /// Shots waiting for their monitors' frames.
+    shooting: Vec<Shooting>,
     sprite: Sprite,
+}
+
+/// A shot of the desk, waiting for a frame of every monitor.
+struct Shooting {
+    stream: StreamId,
+    /// The desk, in logical pixels.
+    desk: Rect,
+    layout: Layout,
+    windows: Vec<Window>,
+    developed: Developed,
 }
 
 /// A window's last frame and how to read it.
@@ -158,16 +173,19 @@ impl Streams {
             desk_pointer: None,
             screens: Vec::new(),
             captures: Captures::default(),
+            shooting: Vec::new(),
             sprite: arrow(),
         }
     }
 
     /// Handles a caller's request. `open` lists the windows that can be cast
-    /// now; `capturer` is the engine, if one is connected.
+    /// now, which a shot also names; `capturer` is the engine, if one is
+    /// connected.
     pub fn request(
         &mut self,
         request: Request,
         open: impl FnOnce() -> Vec<Candidate>,
+        renderer: Option<&mut GlesRenderer>,
         capturer: Option<&mut (dyn Capturer + 'static)>,
     ) {
         match request {
@@ -186,6 +204,10 @@ impl Streams {
                 self.start(stream, source, cursor, listener, window_open, capturer);
             }
             Request::List { reply } => reply.send(open()),
+            Request::Shoot { stream, developed } => {
+                let windows = open().into_iter().filter_map(placed).collect();
+                self.shoot(stream, windows, developed, renderer, capturer);
+            }
             Request::Stop { stream } => {
                 if self.casts.contains_key(&stream) {
                     self.send(ToPipewire::End {
@@ -275,6 +297,121 @@ impl Streams {
             cursor,
             listener,
         });
+    }
+
+    /// Takes a shot of the whole desk under `stream`, naming `windows` in
+    /// it. `developed` hears it once every monitor has a frame, or why it
+    /// failed.
+    fn shoot(
+        &mut self,
+        stream: StreamId,
+        windows: Vec<Window>,
+        developed: Developed,
+        renderer: Option<&mut GlesRenderer>,
+        capturer: Option<&mut (dyn Capturer + 'static)>,
+    ) {
+        let Some(capturer) = capturer else {
+            developed(Err("no engine is connected to capture the desktop".into()));
+            return;
+        };
+        match self.frame_the_desk(stream, capturer) {
+            Ok((desk, layout)) => {
+                self.shooting.push(Shooting {
+                    stream,
+                    desk,
+                    layout,
+                    windows,
+                    developed,
+                });
+                self.develop(renderer, capturer);
+            }
+            Err(why) => developed(Err(why)),
+        }
+    }
+
+    /// The desk and its layout, with the captures a shot of it draws from
+    /// running under `stream`.
+    fn frame_the_desk(
+        &mut self,
+        stream: StreamId,
+        capturer: &mut (dyn Capturer + 'static),
+    ) -> Result<(Rect, Layout), String> {
+        let desk = desk_of(&self.screens).ok_or("no monitor is plugged in")?;
+        let layout = region::layout(desk, &self.screens).map_err(|why| why.to_string())?;
+        self.captures.show(
+            stream,
+            &self.capture_sizes(&layout),
+            MAX_FRAMERATE,
+            capturer,
+        )?;
+        Ok((desk, layout))
+    }
+
+    /// Finishes each shot whose monitors all have a frame, and lets its
+    /// captures go.
+    fn develop(
+        &mut self,
+        mut renderer: Option<&mut GlesRenderer>,
+        capturer: &mut (dyn Capturer + 'static),
+    ) {
+        let mut index = 0;
+        while index < self.shooting.len() {
+            let shooting = &self.shooting[index];
+            let shows = Shows::Desk {
+                monitor: None,
+                target: shooting.desk,
+                layout: shooting.layout.clone(),
+            };
+            let composed = view(
+                &shows,
+                &self.shots,
+                &self.captures,
+                &self.screens,
+                None,
+                None,
+            )
+            .map(|view| compose(view.size, &view.layers, renderer.as_deref_mut()));
+            let Some(composed) = composed else {
+                index += 1;
+                continue;
+            };
+            let shooting = self.shooting.remove(index);
+            self.captures.forget(shooting.stream, capturer);
+            let scale = f64::from(shooting.layout.size.0) / f64::from(shooting.desk.2);
+            let (monitors, windows) = areas(shooting.desk, scale, &self.screens, &shooting.windows);
+            (shooting.developed)(
+                composed
+                    .map(|shot| Desk {
+                        shot,
+                        monitors,
+                        windows,
+                    })
+                    .map_err(|why| why.to_string()),
+            );
+        }
+    }
+
+    /// Ends `stream`, a stream or a shot, from this side.
+    fn end_or_fail(
+        &mut self,
+        stream: StreamId,
+        why: String,
+        capturer: Option<&mut (dyn Capturer + 'static)>,
+    ) {
+        match self
+            .shooting
+            .iter()
+            .position(|shooting| shooting.stream == stream)
+        {
+            Some(index) => {
+                let shooting = self.shooting.remove(index);
+                if let Some(capturer) = capturer {
+                    self.captures.forget(stream, capturer);
+                }
+                (shooting.developed)(Err(why));
+            }
+            None => self.end(stream, Ended::Failed(why), capturer),
+        }
     }
 
     /// The desktop rectangle of the monitor named `name`.
@@ -535,7 +672,7 @@ impl Streams {
                 let engine_display = display;
                 warn!(%why, engine_display, "a captured frame could not be kept");
                 for stream in self.captures.streams_of(display) {
-                    self.end(stream, Ended::Failed(why.clone()), Some(&mut *capturer));
+                    self.end_or_fail(stream, why.clone(), Some(&mut *capturer));
                 }
                 return self.next_due();
             }
@@ -544,6 +681,7 @@ impl Streams {
         let damage = frame.damage.unwrap_or(content);
         self.captures
             .keep(capture, id, Frame { snapshot, content }, kept, capturer);
+        self.develop(renderer.as_deref_mut(), capturer);
         let logical = self
             .screens
             .iter()
@@ -577,9 +715,9 @@ impl Streams {
         mut capturer: Option<&mut (dyn Capturer + 'static)>,
     ) {
         for stream in self.captures.ended(capture) {
-            self.end(
+            self.end_or_fail(
                 stream,
-                Ended::Failed("the engine stopped capturing the monitor".into()),
+                "the engine stopped capturing the monitor".into(),
                 capturer.as_deref_mut(),
             );
         }
@@ -589,6 +727,9 @@ impl Streams {
     /// streams end.
     pub fn engine_replaced(&mut self) {
         self.captures = Captures::default();
+        for shooting in self.shooting.drain(..) {
+            (shooting.developed)(Err("the engine was replaced".into()));
+        }
         let desk: Vec<StreamId> = self
             .casts
             .iter()
@@ -760,6 +901,20 @@ impl Streams {
     }
 }
 
+/// `candidate` as a shot names it, if the page has placed it.
+fn placed(candidate: Candidate) -> Option<Window> {
+    let bounds = candidate.bounds?;
+    Some(Window {
+        title: candidate.title,
+        desk: (
+            bounds.position.0,
+            bounds.position.1,
+            bounds.size.0,
+            bounds.size.1,
+        ),
+    })
+}
+
 /// A screen's mode: its logical size at its density.
 fn mode(screen: &Screen) -> (u32, u32) {
     (
@@ -899,7 +1054,7 @@ fn fill(
     layers: &[Layer],
     cursor: Plan,
     sprite: &Sprite,
-    mut renderer: Option<&mut GlesRenderer>,
+    renderer: Option<&mut GlesRenderer>,
 ) -> Result<Option<OwnedFd>, FillError> {
     match target {
         Target::Shm(mapping) => {
@@ -907,51 +1062,7 @@ fn fill(
             let stride = stride as usize;
             // SAFETY: the buffer is lent to this thread until it is sent.
             let bytes = unsafe { mapping.bytes() };
-            for layer in layers {
-                match layer.snapshot {
-                    Snapshot::Pixels {
-                        bytes: pixels,
-                        stride: from,
-                        alpha,
-                        ..
-                    } => copy(
-                        &Client {
-                            bytes: pixels,
-                            stride: *from,
-                            alpha: *alpha,
-                        },
-                        layer.from,
-                        bytes,
-                        stride,
-                        format.pixel,
-                        layer.to,
-                    ),
-                    Snapshot::Texture(texture) => {
-                        // Read back at the source's size, then scale on copy.
-                        let row = layer.from.2 as usize * 4;
-                        let mut read = vec![0; row * layer.from.3 as usize];
-                        gpu::read_back(
-                            renderer.as_deref_mut().ok_or(FillError::NoGpu)?,
-                            texture,
-                            layer.from,
-                            &mut read,
-                            row,
-                        )?;
-                        copy(
-                            &Client {
-                                bytes: &read,
-                                stride: row,
-                                alpha: true,
-                            },
-                            (0, 0, layer.from.2, layer.from.3),
-                            bytes,
-                            stride,
-                            format.pixel,
-                            layer.to,
-                        );
-                    }
-                }
-            }
+            paint(layers, bytes, stride, format.pixel, renderer)?;
             if let Plan::Embed { at } = cursor {
                 embed(bytes, stride, format.size, sprite, at);
             }
@@ -964,5 +1075,166 @@ fn fill(
             cursor,
             sprite,
         ),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::Write as _;
+    use std::os::fd::{FromRawFd as _, OwnedFd};
+    use std::sync::mpsc;
+    use std::sync::Arc;
+    use std::time::Instant;
+
+    use smithay::reexports::calloop::channel::channel;
+
+    use super::Streams;
+    use crate::casting::captures::Capturer;
+    use crate::casting::region::Screen;
+    use crate::casting::shots::Desk;
+    use crate::casting::StreamId;
+    use crate::engine::{CaptureId, CapturedFrame, CapturedPixels, SharedFd};
+
+    /// An engine that numbers captures by display and records stops.
+    #[derive(Default)]
+    struct Engine {
+        started: Vec<i64>,
+        stopped: Vec<CaptureId>,
+    }
+
+    impl Capturer for Engine {
+        fn start(&mut self, display: i64, _: (u32, u32), _: u32) -> Result<CaptureId, String> {
+            self.started.push(display);
+            Ok(display as CaptureId)
+        }
+        fn resize(&mut self, _: CaptureId, _: (u32, u32)) {}
+        fn stop(&mut self, capture: CaptureId) {
+            self.stopped.push(capture);
+        }
+        fn release(&mut self, _: CaptureId, _: u64) {}
+    }
+
+    /// A 1x1 monitor at 1x, and a 1x1 one at 2x to its right.
+    fn screens() -> Vec<Screen> {
+        vec![
+            Screen {
+                name: "drm-1".into(),
+                display: 1,
+                desk: (0, 0, 1, 1),
+                scale: 1.0,
+                upright: true,
+            },
+            Screen {
+                name: "drm-2".into(),
+                display: 2,
+                desk: (1, 0, 1, 1),
+                scale: 2.0,
+                upright: true,
+            },
+        ]
+    }
+
+    /// A shared memory frame of `size`, every pixel `[blue, 0, 0, 255]`.
+    fn frame(size: (u32, u32), blue: u8) -> CapturedFrame {
+        // SAFETY: a fresh memfd, owned here.
+        let fd = unsafe { libc::memfd_create(c"frame".as_ptr(), 0) };
+        assert!(fd >= 0, "a memfd");
+        // SAFETY: `fd` is open and owned by nothing else.
+        let fd = unsafe { OwnedFd::from_raw_fd(fd) };
+        let pixels: Vec<u8> = (0..size.0 * size.1)
+            .flat_map(|_| [blue, 0, 0, 255])
+            .collect();
+        std::fs::File::from(fd.try_clone().expect("a duplicate"))
+            .write_all(&pixels)
+            .expect("written");
+        CapturedFrame {
+            pixels: CapturedPixels::Shm {
+                fd: SharedFd(Arc::new(fd)),
+                stride: size.0 * 4,
+            },
+            size,
+            // DRM_FORMAT_ARGB8888.
+            fourcc: 0x3432_5241,
+            content: (0, 0, size.0 as i32, size.1 as i32),
+            damage: None,
+        }
+    }
+
+    fn streams() -> Streams {
+        let mut streams = Streams::new(channel().0, None);
+        streams.screens(screens(), None);
+        streams
+    }
+
+    #[test]
+    fn a_shot_waits_for_every_monitor_then_lets_their_captures_go() {
+        let (mut streams, mut engine) = (streams(), Engine::default());
+        let (developed, heard) = mpsc::channel();
+
+        streams.shoot(
+            StreamId(9),
+            Vec::new(),
+            Box::new(move |desk| developed.send(desk).expect("heard")),
+            None,
+            Some(&mut engine),
+        );
+        assert_eq!(engine.started, [1, 2]);
+        streams.captured(
+            1,
+            1,
+            Ok(frame((1, 1), 10)),
+            None,
+            &mut engine,
+            Instant::now(),
+        );
+        assert!(heard.try_recv().is_err(), "drm-2 has no frame yet");
+        streams.captured(
+            2,
+            1,
+            Ok(frame((2, 2), 20)),
+            None,
+            &mut engine,
+            Instant::now(),
+        );
+
+        let desk: Desk = heard.try_recv().expect("developed").expect("a desk");
+        let blue: Vec<u8> = desk.shot.bgra.chunks(4).map(|pixel| pixel[0]).collect();
+        assert_eq!(blue, [10, 10, 20, 20, 10, 10, 20, 20]);
+        assert_eq!(desk.monitors.len(), 2);
+        engine.stopped.sort_unstable();
+        assert_eq!(engine.stopped, [1, 2]);
+    }
+
+    #[test]
+    fn a_shot_without_an_engine_is_refused() {
+        let (developed, heard) = mpsc::channel();
+
+        streams().shoot(
+            StreamId(9),
+            Vec::new(),
+            Box::new(move |desk| developed.send(desk).expect("heard")),
+            None,
+            None,
+        );
+
+        assert!(heard.try_recv().expect("developed").is_err());
+    }
+
+    #[test]
+    fn a_shot_fails_when_the_engine_stops_a_capture_it_waits_on() {
+        let (mut streams, mut engine) = (streams(), Engine::default());
+        let (developed, heard) = mpsc::channel();
+        streams.shoot(
+            StreamId(9),
+            Vec::new(),
+            Box::new(move |desk| developed.send(desk).expect("heard")),
+            None,
+            Some(&mut engine),
+        );
+
+        streams.capture_ended(2, Some(&mut engine));
+
+        assert!(heard.try_recv().expect("developed").is_err());
+        assert_eq!(engine.stopped, [1]);
     }
 }

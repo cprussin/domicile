@@ -19,7 +19,8 @@
 //!
 //! A monitor or region is filled from the engine's display captures; see
 //! [`captures`] and [`region`]. [`Casting::list`] lists what can be cast as
-//! [`Candidate`]s.
+//! [`Candidate`]s. A shot of the whole desk, for the Screenshot portal, draws
+//! from the same captures; see [`shots`].
 
 mod captured;
 mod captures;
@@ -29,10 +30,12 @@ mod lifecycle;
 mod memory;
 mod negotiation;
 mod pacing;
+mod paint;
 mod params;
 mod producer;
 mod region;
 mod shm_copy;
+mod shots;
 mod streams;
 
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -47,6 +50,7 @@ pub use cursor::CursorMode;
 pub use lifecycle::Ended;
 pub use producer::ToWayland;
 pub use region::Screen;
+pub use shots::{Desk, Developed};
 pub use streams::{Committed, Gpu, Streams};
 
 /// What a stream shows.
@@ -113,6 +117,11 @@ pub enum Request {
     List {
         reply: Replier<Vec<Candidate>>,
     },
+    /// One frame of the whole desk, taken under `stream`.
+    Shoot {
+        stream: StreamId,
+        developed: Developed,
+    },
 }
 
 /// Starts and stops streams. Cheap to clone, and usable from any thread.
@@ -161,6 +170,13 @@ impl Casting {
         let (replier, listed) = reply();
         self.send(Request::List { reply: replier });
         listed
+    }
+
+    /// Takes one frame of the whole desk. `developed` hears it, or why
+    /// there is none.
+    pub fn shoot(&self, developed: Developed) {
+        let stream = StreamId(self.next.fetch_add(1, Ordering::Relaxed));
+        self.send(Request::Shoot { stream, developed });
     }
 
     fn send(&self, request: Request) {

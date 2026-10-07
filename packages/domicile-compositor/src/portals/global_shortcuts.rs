@@ -303,6 +303,8 @@ impl Shortcuts {
             | PortalAnswer::DynamicLauncher { .. }
             | PortalAnswer::ScreenCast { .. }
             | PortalAnswer::Print { .. }
+            | PortalAnswer::Screenshot { .. }
+            | PortalAnswer::PickColor { .. }
             | PortalAnswer::Stop
             | PortalAnswer::Refused
             | PortalAnswer::Pressed => Err(2),
