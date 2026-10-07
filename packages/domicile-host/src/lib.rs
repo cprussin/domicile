@@ -598,7 +598,7 @@ impl Host {
                 // stays pure.
                 //
                 // `SetTheme` must also reach clients over D-Bus (see
-                // `domicile_compositor::appearance`), so the compositor calls
+                // `domicile_compositor::portals::settings`), so the compositor calls
                 // `Host::set_theme` itself and broadcasts the result.
                 //
                 // `Lock` and `Unlock` belong to the seat. Only the compositor's
@@ -621,11 +621,6 @@ impl Host {
     /// Look up a connected app.
     pub fn app(&self, app_id: &str) -> Option<&App> {
         self.apps.get(app_id)
-    }
-
-    /// Number of connected apps (mapped clients), regardless of placement.
-    pub fn app_count(&self) -> usize {
-        self.apps.len()
     }
 }
 

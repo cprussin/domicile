@@ -1,18 +1,49 @@
-//! Tests for the host-chrome IPC `Session`.
+//! Tests for the host-chrome IPC.
 //!
-//! Messages are newline-delimited JSON. A `Session` performs the version
-//! handshake, then passes chrome messages to the `Host`.
+//! Messages are newline-delimited JSON. `apply_chrome_message` performs the
+//! version handshake, then passes chrome messages to the `Host`.
 
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::UnixStream;
 use std::thread;
 
-use domicile_host::ipc::{parse_chrome, to_line, Session};
+use domicile_host::ipc::{apply_chrome_message, parse_chrome, to_line};
+use domicile_host::Host;
 use domicile_protocol::{
     AccessDialog, BoundShortcut, Capturing, CapturingKind, ChromeMessage, Devices, HostMessage,
     Notification, PortalKind, PortalRequest, PortalWallpaper, Theme, TrayItem, Urgency,
     PROTOCOL_VERSION,
 };
+
+/// One chrome connection's [`Host`] and handshake state.
+#[derive(Default)]
+struct Session {
+    host: Host,
+    ready: bool,
+}
+
+impl Session {
+    fn new() -> Self {
+        Session::default()
+    }
+
+    fn is_ready(&self) -> bool {
+        self.ready
+    }
+
+    fn host_mut(&mut self) -> &mut Host {
+        &mut self.host
+    }
+
+    /// Handles one inbound line, ignoring a malformed one, as the compositor
+    /// does.
+    fn ingest(&mut self, line: &str) -> Vec<HostMessage> {
+        match parse_chrome(line.trim()) {
+            Ok(message) => apply_chrome_message(&mut self.host, &mut self.ready, message),
+            Err(_) => Vec::new(),
+        }
+    }
+}
 
 #[test]
 fn hello_completes_the_handshake_with_a_welcome_and_the_desktop() {

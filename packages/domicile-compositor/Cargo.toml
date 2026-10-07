@@ -34,8 +34,6 @@ name = "domicile-test-screencast"
 path = "src/bin/domicile-test-screencast.rs"
 
 [dependencies]
-# The matrix type Smithay's renderer API uses, at Smithay's version.
-cgmath = "0.18"
 domicile-config = { path = "../domicile-config" }
 domicile-host = { path = "../domicile-host" }
 domicile-protocol = { path = "../domicile-protocol" }
@@ -67,7 +65,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # Serves EIS, the emulated input the RemoteDesktop and InputCapture portals
 # hand out (see `src/eis.rs`). Its calloop sources run on the Wayland loop.
 reis = { version = "0.7", features = ["calloop"] }
-# D-Bus, for the settings portal (see `src/appearance.rs`) and logind.
+# D-Bus: the portals (see `src/portals/`), the tray and notifications.
 zbus.workspace = true
 
 # The engine renders, so Smithay's winit, DRM and udev backends are left out.

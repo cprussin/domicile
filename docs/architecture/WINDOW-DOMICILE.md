@@ -55,9 +55,10 @@ misses nothing, so nothing needs buffering.
 | `extensions`, `tray`, `notifications`, `clipboard` | the events of those names |
 | `altKey`, `ctrlKey`, `shiftKey`, `metaKey` | `modifiers` |
 
-`DomicileWindow` uses optional fields in place of the IDL's `hasSize` and empty
-strings: `size?: { width, height }`, `title`, `minSize?`, `maxSize?`, `cursor`,
-`popup?: { parent, x, y, grab }`.
+`DomicileWindow` uses nullable fields in place of a `hasSize` flag and empty
+strings: `width`, `height`, `minWidth`, `minHeight`, `maxWidth`, `maxHeight`,
+and a popup's `parent`, `x` and `y`. `title`, `cursor` and `grab` always have a
+value.
 
 ### One-off events are queued by the engine
 
@@ -168,8 +169,8 @@ Each step ships alone.
       (`guard-desktop-geometry.sh`)
 - [x] `windows` and `focusedWindow` with `windowschanged` and
       `focusedwindowchanged` (`guard-windows-state.sh`)
-- [x] the rest of the state as attributes: theme, lock, idle, audio,
-      extensions, tray, notifications, clipboard, modifiers
+- [x] the rest of the state as attributes: theme, lock, idle, extensions,
+      tray, notifications, clipboard, modifiers
       (`guard-desk-state.sh`)
 - [x] the engine queues moment events until a listener exists
       (`guard-held-moments.sh`)
