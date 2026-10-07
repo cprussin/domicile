@@ -1,7 +1,7 @@
 //! Wire shapes for portal dialogs.
 //!
 //! Pinned as JSON because the SDK and the engine's relay hard-code them. See
-//! `docs/architecture/PORTALS.md`.
+//! `packages/domicile-compositor/src/portals/README.md`.
 
 use std::collections::BTreeMap;
 

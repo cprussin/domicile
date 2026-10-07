@@ -3,7 +3,7 @@
 //! A stream shows a rectangle of the desktop. Each monitor it touches is a
 //! piece, drawn from that monitor's captured frames. A stream has one scale,
 //! so it takes the highest density it touches, and lower-density monitors are
-//! scaled up. See `docs/architecture/PORTALS.md`.
+//! scaled up. See `packages/domicile-compositor/src/portals/README.md`.
 
 use crate::casting::pacing::Rect;
 

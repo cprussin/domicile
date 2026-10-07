@@ -3,7 +3,7 @@
 //! Each picture is copied into the state directory, so it outlives the
 //! application's own file, and the choice is kept in `wallpaper.json` there,
 //! so it outlives the compositor. The shell reads the copies by path. See
-//! `docs/architecture/PORTALS.md`.
+//! `packages/domicile-compositor/src/portals/README.md`.
 
 use std::fs;
 use std::io;
