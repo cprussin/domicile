@@ -923,6 +923,11 @@ pub struct AccountDialog {
     /// Why the application asks, in its own words.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
+    /// The name it would get.
+    pub name: String,
+    /// The path of the picture it would get.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image: Option<String>,
 }
 
 /// The shortcuts an application asks to bind, for the user to accept, change
@@ -1040,12 +1045,8 @@ pub enum CastSource {
         id: String,
         /// Empty until the client names it.
         title: String,
-        /// Its application's name, from its desktop entry.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        app_name: Option<String>,
-        /// Its application's icon, as a `data:` URL.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        icon: Option<String>,
+        /// Its Wayland app id, which names its desktop entry; empty if unset.
+        app_id: String,
     },
     /// A monitor.
     Monitor {

@@ -156,7 +156,10 @@ const inputCapture = (id: number) => ({
   kind: "input_capture",
 });
 
-const account = (id: number, body: object = { reason: "To sign you in" }) => ({
+const account = (
+  id: number,
+  body: object = { name: "Ada Lovelace", reason: "To sign you in" },
+) => ({
   app_id: "org.example.Mail",
   body,
   id,
@@ -241,14 +244,8 @@ const usb = (id: number) => ({
 });
 
 const WINDOWS = [
-  {
-    app_name: "Text Editor",
-    icon: "data:image/png;base64,AA==",
-    id: "app-3",
-    title: "Notes",
-    type: "window",
-  },
-  { id: "app-4", title: "", type: "window" },
+  { app_id: "firefox", id: "app-3", title: "Notes", type: "window" },
+  { app_id: "", id: "app-4", title: "", type: "window" },
 ];
 
 const MONITORS = [
@@ -325,26 +322,45 @@ describe(PortalDialogs, () => {
       expect(screen.getByRole("button", { name: "Never" })).toBeInTheDocument();
     });
 
-    it("asks to share the user's name, naming the application and its reason", () => {
+    it("asks to share the user's name and picture, naming the application and its reason", async () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host.host} />);
-      host.push([account(1)]);
+      render(
+        <PortalDialogs
+          host={host.host}
+          systemOf={desktop({ "/home/ada/me.png": "png" })}
+        />,
+      );
+      host.push([
+        account(1, {
+          image: "/home/ada/me.png",
+          name: "Ada Lovelace",
+          reason: "To sign you in",
+        }),
+      ]);
 
       expect(screen.getByRole("dialog")).toHaveTextContent(
         "Share your name and picture?",
       );
       expect(screen.getByText("org.example.Mail asks")).toBeInTheDocument();
       expect(screen.getByText("To sign you in")).toBeInTheDocument();
+      expect(screen.getByText("Ada Lovelace")).toBeInTheDocument();
+      expect(
+        (await screen.findByRole("img", { name: "Ada Lovelace" })).getAttribute(
+          "src",
+        ),
+      ).toStartWith("blob:");
     });
 
-    it("asks to share the user's name without a reason", () => {
+    it("asks to share the user's name without a reason or picture", () => {
       const host = new FakeHost();
       render(<PortalDialogs host={host.host} />);
-      host.push([account(1, {})]);
+      host.push([account(1, { name: "Ada Lovelace" })]);
 
       expect(screen.getByRole("dialog")).toHaveTextContent(
         "Share your name and picture?",
       );
+      expect(screen.getByText("Ada Lovelace")).toBeInTheDocument();
+      expect(screen.queryByRole("img")).not.toBeInTheDocument();
     });
 
     it("names an application it cannot identify", () => {
@@ -1363,20 +1379,19 @@ describe(PortalDialogs, () => {
 });
 
 describe("screen cast", () => {
-  it("lists the windows with their applications' names and icons", () => {
+  it("lists the windows with their applications' names and icons", async () => {
     const host = new FakeHost();
-    render(<PortalDialogs host={host.host} />);
+    render(<PortalDialogs host={host.host} systemOf={desktop()} />);
     host.push([screenCast()]);
 
     expect(screen.getByRole("dialog")).toHaveTextContent("Share a window");
     expect(
       screen.getByText("us.zoom.Zoom wants to record"),
     ).toBeInTheDocument();
-    const notes = screen.getByRole("button", { name: "Text Editor: Notes" });
-    expect(within(notes).getByRole("presentation")).toHaveAttribute(
-      "src",
-      "data:image/png;base64,AA==",
-    );
+    const notes = await screen.findByRole("button", { name: "Firefox: Notes" });
+    expect(
+      within(notes).getByRole("presentation").getAttribute("src"),
+    ).toStartWith("data:image/svg+xml");
     expect(
       screen.getByRole("button", { name: "Untitled window" }),
     ).toBeInTheDocument();
@@ -1395,7 +1410,7 @@ describe("screen cast", () => {
     render(<PortalDialogs host={host.host} />);
     host.push([screenCast()]);
     await userEvent.click(
-      screen.getByRole("button", { name: "Text Editor: Notes" }),
+      screen.getByRole("button", { name: "firefox: Notes" }),
     );
     await userEvent.click(screen.getByRole("button", { name: "Share" }));
 
@@ -1409,14 +1424,14 @@ describe("screen cast", () => {
     render(<PortalDialogs host={host.host} />);
     host.push([screenCast()]);
     await userEvent.click(
-      screen.getByRole("button", { name: "Text Editor: Notes" }),
+      screen.getByRole("button", { name: "firefox: Notes" }),
     );
     await userEvent.click(
       screen.getByRole("button", { name: "Untitled window" }),
     );
 
     expect(
-      screen.getByRole("button", { name: "Text Editor: Notes" }),
+      screen.getByRole("button", { name: "firefox: Notes" }),
     ).toHaveAttribute("aria-pressed", "false");
     expect(
       screen.getByRole("button", { name: "Untitled window" }),
@@ -1428,7 +1443,7 @@ describe("screen cast", () => {
     render(<PortalDialogs host={host.host} />);
     host.push([screenCast(true)]);
     await userEvent.click(
-      screen.getByRole("button", { name: "Text Editor: Notes" }),
+      screen.getByRole("button", { name: "firefox: Notes" }),
     );
     await userEvent.click(
       screen.getByRole("button", { name: "Untitled window" }),
@@ -1477,7 +1492,7 @@ describe("screen cast", () => {
       render(<PortalDialogs host={host.host} />);
       host.push([screenCast(true, [...WINDOWS, ...MONITORS])]);
       await userEvent.click(
-        screen.getByRole("button", { name: "Text Editor: Notes" }),
+        screen.getByRole("button", { name: "firefox: Notes" }),
       );
       await userEvent.click(screen.getByRole("tab", { name: "Screens" }));
       await userEvent.click(screen.getByRole("button", { name: "drm-2" }));
@@ -1502,7 +1517,7 @@ describe("screen cast", () => {
       render(<PortalDialogs host={host.host} />);
       host.push([screenCast(false, [...WINDOWS, ...MONITORS])]);
       await userEvent.click(
-        screen.getByRole("button", { name: "Text Editor: Notes" }),
+        screen.getByRole("button", { name: "firefox: Notes" }),
       );
       await userEvent.click(screen.getByRole("tab", { name: "Screens" }));
       await userEvent.click(screen.getByRole("button", { name: "drm-2" }));

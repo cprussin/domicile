@@ -17,10 +17,13 @@ import { css } from "../../styled-system/css";
 import { Button } from "../Button/Button";
 import { ModalDialog } from "../ModalDialog/ModalDialog";
 import { Tabs } from "../Tabs/Tabs";
+import type { App } from "../useApps/useApps";
 import { RegionPicker } from "./RegionPicker";
 
 type Props = {
   answer: (answer: PortalAnswer) => void;
+  /** Names a window's application by its Wayland app id. */
+  apps: (appId: string) => App;
   /** Who asks, as the dialog names them. */
   asker: string;
   body: ScreenCastBody;
@@ -33,7 +36,13 @@ type Props = {
  * asks for one. Picks one, or several when the application asks for more.
  * Dismissing it cancels.
  */
-export const ScreenCastDialog = ({ answer, asker, body, screen }: Props) => {
+export const ScreenCastDialog = ({
+  answer,
+  apps,
+  asker,
+  body,
+  screen,
+}: Props) => {
   const [picked, setPicked] = useState<readonly string[]>([]);
   const [drawing, setDrawing] = useState(false);
   const windows = body.sources.filter(
@@ -72,8 +81,8 @@ export const ScreenCastDialog = ({ answer, asker, body, screen }: Props) => {
           key={sourceKey(source)}
           value={sourceKey(source)}
         >
-          <SourceIcon source={source} />
-          <span>{sourceName(source)}</span>
+          <SourceIcon app={appOf(apps, source)} source={source} />
+          <span>{sourceName(source, appOf(apps, source))}</span>
         </Toggle>
       ))}
     </ToggleGroup>
@@ -152,13 +161,19 @@ export const ScreenCastDialog = ({ answer, asker, body, screen }: Props) => {
 };
 
 /** A window's application icon, a window outline without one, or a screen. */
-const SourceIcon = ({ source }: { source: CastSource }) => {
+const SourceIcon = ({
+  app,
+  source,
+}: {
+  app: App | undefined;
+  source: CastSource;
+}) => {
   switch (source.kind) {
     case CastSourceKind.Window:
-      return source.icon === undefined ? (
+      return app?.icon === undefined ? (
         <AppWindowIcon aria-hidden className={iconStyles} />
       ) : (
-        <img alt="" className={iconStyles} src={source.icon} />
+        <img alt="" className={iconStyles} src={app.icon} />
       );
     case CastSourceKind.Monitor:
     case CastSourceKind.Region:
@@ -226,14 +241,21 @@ const sourceKey = (source: CastSource): string => {
   }
 };
 
-/** How the picker names a source. */
-const sourceName = (source: CastSource): string => {
+/** A window's application, or `undefined` for a screen or a window with no app id. */
+const appOf = (
+  apps: (appId: string) => App,
+  source: CastSource,
+): App | undefined =>
+  source.kind === CastSourceKind.Window && source.appId !== ""
+    ? apps(source.appId)
+    : undefined;
+
+/** How the picker names a source, a window by its `app` too. */
+const sourceName = (source: CastSource, app: App | undefined): string => {
   switch (source.kind) {
     case CastSourceKind.Window: {
       const title = source.title === "" ? "Untitled window" : source.title;
-      return source.appName === undefined
-        ? title
-        : `${source.appName}: ${title}`;
+      return app === undefined ? title : `${app.name}: ${title}`;
     }
     case CastSourceKind.Monitor:
       return source.description === ""

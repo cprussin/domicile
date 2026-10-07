@@ -2,7 +2,8 @@
 //! application the user lets have them.
 //!
 //! Read from AccountsService on the system bus, or from the passwd entry when
-//! it is not running. Read on each call, so a changed name or picture shows.
+//! it is not running. Read on each call, so a changed name or picture shows,
+//! and shown in the dialog, so the user sees what is shared.
 
 use std::collections::HashMap;
 use std::ffi::CStr;
@@ -45,7 +46,8 @@ pub struct Account {
 
 #[zbus::interface(name = "org.freedesktop.impl.portal.Account")]
 impl Account {
-    /// Ask the user, then answer with who they are.
+    /// Look the user up, show the user what would be shared, then answer
+    /// with it. Fails without asking when nobody is found.
     async fn get_user_information(
         &self,
         #[zbus(object_server)] server: &ObjectServer,
@@ -54,18 +56,23 @@ impl Account {
         parent_window: String,
         mut options: HashMap<String, OwnedValue>,
     ) -> (u32, HashMap<String, OwnedValue>) {
+        let user = match (self.user)().await {
+            Ok(user) => user,
+            Err(why) => {
+                warn!(%why, "an application asked for the user's name, and they were not found");
+                return (2, HashMap::new());
+            }
+        };
         let reason = options
             .remove("reason")
             .and_then(|value| String::try_from(value).ok());
-        let kind = PortalKind::Account(AccountDialog { reason });
+        let kind = PortalKind::Account(AccountDialog {
+            reason,
+            name: user.name.clone(),
+            image: user.image.clone(),
+        });
         match ask(&self.queue, server, handle, app_id, &parent_window, kind).await {
-            PortalAnswer::Access => match (self.user)().await {
-                Ok(user) => (0, results(user)),
-                Err(why) => {
-                    warn!(%why, "the user allowed an application their name, and it was not found");
-                    (2, HashMap::new())
-                }
-            },
+            PortalAnswer::Access => (0, results(user)),
             PortalAnswer::Canceled => (1, HashMap::new()),
             // The queue takes no other kind's answer; see `PortalKind::accepts`.
             PortalAnswer::Refused

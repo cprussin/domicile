@@ -68,9 +68,12 @@ One request channel carries all dialogs. Each interface's backend builds on it.
   shared-mime-info's `globs2`) into a list. A filter with no extension, such as
   `Makefile`, is left out. The shell answers with paths and a filter index; the
   compositor answers the portal with `file://` URIs and the original filter.
-- **Dialogs name the app.** The frontend's `app_id` resolves in the shell,
-  through `@domicile-desktop/system-apps`, to a name and icon ("Zoom wants to
-  share your screen").
+- **Dialogs name the app.** The frontend's `app_id`, and a ScreenCast
+  window's Wayland `app_id`, resolve in the shell through
+  `@domicile-desktop/system-apps` to a name and icon ("Zoom wants to share
+  your screen").
+- **Account shows what is shared.** The compositor looks the user up before
+  asking; the dialog shows the name and picture.
 - **AppChooser offers the frontend's `choices`.** The shell names them from
   their desktop entries and picks `last_choice`, else the first default
   `mimeapps.list` gives the type (`domicile-mimeapps.list` first). The

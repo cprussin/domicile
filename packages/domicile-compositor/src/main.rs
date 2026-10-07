@@ -6344,11 +6344,6 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                     std::env::var(key).ok()
                 })
                 .map(|directory| directory.join("screen-cast-grants.v2.json")),
-                data_dirs: data_dirs(
-                    std::env::var_os("XDG_DATA_HOME"),
-                    std::env::var_os("XDG_DATA_DIRS"),
-                    home_directory().as_deref(),
-                ),
             },
         ),
     );

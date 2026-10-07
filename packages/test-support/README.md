@@ -1,6 +1,7 @@
 # @domicile-desktop/test-support
 
-Shared bun test setup for packages whose tests need a DOM.
+Shared bun test setup for packages whose tests need a DOM, and the lock
+screen's recorded system requests.
 
 ## Exports
 
@@ -15,6 +16,9 @@ Shared bun test setup for packages whose tests need a DOM.
     `domicile://` pages.
 - **`matchers.d.ts`** (the root `types` entry): types for the jest-dom matchers
   on `bun:test`'s `expect`.
+- **`@domicile-desktop/test-support/lock-screen-readouts`**: the lock screen's
+  recorded system requests (`packages/domicile-protocol/wire/`) and a host that
+  records what a library sends.
 
 ## Usage
 

@@ -51,6 +51,8 @@ Each call reads state or changes what a laptop's brightness and volume keys
 change, so someone at a locked desktop learns or does nothing more.
 `domicile_host::lock_screen_readouts` lists each one field by field; `reach`
 judges a request `Reach::Readout` only on a full match.
+`packages/domicile-protocol/wire/lock-screen-readouts.jsonl` records what each
+library sends; the libraries' tests and the allowlist's both check it.
 
 | Library | Call |
 |---|---|

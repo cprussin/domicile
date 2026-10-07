@@ -26,7 +26,6 @@ use domicile_config::{LockdownConfig, ThemeConfig};
 use domicile_host::cast_grants::Grants;
 use domicile_host::cups::Cups;
 use domicile_host::data_dirs::data_dirs;
-use domicile_host::desktop_entries::DesktopEntries;
 use domicile_host::mime_apps::{default_handler, lists};
 use domicile_host::portal_notifications::Invoked;
 use domicile_protocol::{
@@ -410,8 +409,6 @@ pub struct ScreenCasting {
     /// Where saved ScreenCast restore tokens are kept; `None` keeps them in
     /// memory.
     pub grants: Option<PathBuf>,
-    /// The XDG data directories, for each window's desktop entry.
-    pub data_dirs: Vec<PathBuf>,
 }
 
 /// Starts the portal thread with `theme` as the current theme and the
@@ -817,7 +814,6 @@ fn idle_screen_cast(queue: &Arc<Queue>) -> ScreenCast {
         ScreenCasting {
             casting: Casting::new(requests),
             grants: None,
-            data_dirs: Vec::new(),
         },
     )
 }
@@ -832,12 +828,7 @@ fn screen_cast(queue: &Arc<Queue>, casting: ScreenCasting) -> ScreenCast {
         }),
         None => Grants::default(),
     };
-    ScreenCast::new(
-        Arc::clone(queue),
-        casting.casting,
-        grants,
-        DesktopEntries::new(casting.data_dirs),
-    )
+    ScreenCast::new(Arc::clone(queue), casting.casting, grants)
 }
 
 /// Opens a `mailto:` URL with the desk's default `x-scheme-handler/mailto`
@@ -971,6 +962,23 @@ mod tests {
 
     /// [`served`], opening `mailto:` URLs with `open`.
     fn served_opening(listening: bool, open: Open) -> Served {
+        served_as(
+            listening,
+            open,
+            Box::new(|| {
+                Box::pin(async {
+                    Ok(User {
+                        id: "ada".into(),
+                        name: "Ada Lovelace".into(),
+                        image: Some("/home/ada/me.png".into()),
+                    })
+                })
+            }),
+        )
+    }
+
+    /// [`served_opening`], with the user `user` finds.
+    fn served_as(listening: bool, open: Open, user: LookUp) -> Served {
         let (backends, _) = Backends::new(
             NotificationServer::unserved(Vec::new()),
             Tokens::load(None),
@@ -993,15 +1001,7 @@ mod tests {
                 screen_cast: idle_screen_cast(&backends.queue),
                 shoot: Box::new(|| Box::pin(async { Err("no desk here".into()) })),
                 open,
-                user: Box::new(|| {
-                    Box::pin(async {
-                        Ok(User {
-                            id: "ada".into(),
-                            name: "Ada Lovelace".into(),
-                            image: Some("/home/ada/me.png".into()),
-                        })
-                    })
-                }),
+                user,
                 cups: Cups::new(Vec::new(), "me".into()),
             };
             export(
@@ -1653,6 +1653,8 @@ mod tests {
                 parent_app_id: None,
                 kind: PortalKind::Account(AccountDialog {
                     reason: Some("To sign you in".into()),
+                    name: "Ada Lovelace".into(),
+                    image: Some("/home/ada/me.png".into()),
                 }),
             }]
         );
@@ -1667,6 +1669,23 @@ mod tests {
         assert_eq!(
             [text("id"), text("name"), text("image")],
             ["ada", "Ada Lovelace", "file:///home/ada/me.png"]
+        );
+    }
+
+    #[test]
+    fn an_account_request_for_a_user_not_found_fails_without_asking() {
+        let served = served_as(
+            true,
+            Box::new(|_| Ok(())),
+            Box::new(|| Box::pin(async { Err("nobody".into()) })),
+        );
+
+        assert_eq!(
+            ask_for_the_user(&served.client)
+                .join()
+                .expect("the call returned"),
+            (2, HashMap::new()),
+            "answered with nobody to answer the dialog"
         );
     }
 

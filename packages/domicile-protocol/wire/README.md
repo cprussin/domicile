@@ -23,3 +23,13 @@ rejects.
   `the_fixture_covers_every_host_message`, which names the missing tag.
 - `protocol_version` in the `welcome` line equals `PROTOCOL_VERSION`.
 - Changing a field means editing its line. Both sides fail until they match.
+
+## `lock-screen-readouts.jsonl`
+
+The system requests `@domicile-desktop/system-battery`, `system-backlight` and
+`system-audio` make for a lock screen, one per line, tagged by library.
+
+- **`packages/domicile-host/tests/lock_screen_readouts.rs`**: checks that a
+  locked desktop runs each one.
+- **Each library's `lock-screen.test.ts`**: checks that the library sends
+  exactly its lines.

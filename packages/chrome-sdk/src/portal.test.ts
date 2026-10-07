@@ -298,30 +298,38 @@ describe("watchPortalRequests", () => {
     ]);
   });
 
-  it("parses an account request, with or without a reason", async () => {
+  it("parses an account request, with or without a reason or picture", async () => {
     const host = new FakeHost();
     const requests = watched(host);
     host.push([
       {
         app_id: "org.example.Mail",
-        body: { reason: "To sign you in" },
+        body: {
+          image: "/var/lib/AccountsService/icons/ada",
+          name: "Ada Lovelace",
+          reason: "To sign you in",
+        },
         id: 1,
         kind: "account",
       },
-      { app_id: "", body: {}, id: 2, kind: "account" },
+      { app_id: "", body: { name: "ada" }, id: 2, kind: "account" },
     ]);
 
     expect(await requests).toEqual([
       {
         appId: "org.example.Mail",
-        body: { reason: "To sign you in" },
+        body: {
+          image: "/var/lib/AccountsService/icons/ada",
+          name: "Ada Lovelace",
+          reason: "To sign you in",
+        },
         id: 1,
         kind: PortalKind.Account,
         parentAppId: undefined,
       },
       {
         appId: "",
-        body: { reason: undefined },
+        body: { image: undefined, name: "ada", reason: undefined },
         id: 2,
         kind: PortalKind.Account,
         parentAppId: undefined,
@@ -433,13 +441,12 @@ describe("watchPortalRequests", () => {
           region: true,
           sources: [
             {
-              app_name: "Text Editor",
-              icon: "data:image/png;base64,AA==",
+              app_id: "org.gnome.TextEditor",
               id: "app-3",
               title: "Notes",
               type: "window",
             },
-            { id: "app-4", title: "", type: "window" },
+            { app_id: "", id: "app-4", title: "", type: "window" },
             {
               description: "Dell Inc. DELL U3219Q",
               name: "drm-1",
@@ -461,17 +468,11 @@ describe("watchPortalRequests", () => {
           region: true,
           sources: [
             CastSource.Window({
-              appName: "Text Editor",
-              icon: "data:image/png;base64,AA==",
+              appId: "org.gnome.TextEditor",
               id: "app-3",
               title: "Notes",
             }),
-            CastSource.Window({
-              appName: undefined,
-              icon: undefined,
-              id: "app-4",
-              title: "",
-            }),
+            CastSource.Window({ appId: "", id: "app-4", title: "" }),
             CastSource.Monitor({
               description: "Dell Inc. DELL U3219Q",
               name: "drm-1",
@@ -976,12 +977,7 @@ describe("answerPortalRequest", () => {
       host,
       4,
       PortalAnswer.ScreenCast([
-        CastSource.Window({
-          appName: undefined,
-          icon: undefined,
-          id: "app-3",
-          title: "Notes",
-        }),
+        CastSource.Window({ appId: "", id: "app-3", title: "Notes" }),
         CastSource.Monitor({
           description: "",
           name: "drm-1",

@@ -22,7 +22,6 @@ pub mod cups;
 pub mod data_dirs;
 pub mod data_url;
 pub mod dbus_json;
-pub mod desktop_entries;
 pub mod file_changes;
 pub mod file_filters;
 pub mod file_index;

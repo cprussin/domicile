@@ -16,7 +16,6 @@ use std::io::Read;
 use std::sync::{Arc, Mutex};
 
 use domicile_host::cast_grants::{matched, Grants, Open, Persist, Placed, Restored, Shared};
-use domicile_host::desktop_entries::DesktopEntries;
 use domicile_protocol::{
     Captured, CapturingKind, CastPick, CastSource, PortalAnswer, PortalKind, ScreenCastDialog,
 };
@@ -53,7 +52,6 @@ pub struct ScreenCast {
     casting: Casting,
     sessions: Arc<Mutex<HashMap<OwnedObjectPath, CastSession>>>,
     grants: Arc<Mutex<Grants>>,
-    entries: Arc<Mutex<DesktopEntries>>,
 }
 
 /// One session, from `CreateSession` until it closes.
@@ -80,20 +78,14 @@ struct Selected {
 }
 
 impl ScreenCast {
-    /// The backend over `queue`'s dialogs, casting through `casting`, keeping
-    /// restore tokens in `grants` and naming windows from `entries`.
-    pub fn new(
-        queue: Arc<Queue>,
-        casting: Casting,
-        grants: Grants,
-        entries: DesktopEntries,
-    ) -> Self {
+    /// The backend over `queue`'s dialogs, casting through `casting` and
+    /// keeping restore tokens in `grants`.
+    pub fn new(queue: Arc<Queue>, casting: Casting, grants: Grants) -> Self {
         ScreenCast {
             queue,
             casting,
             sessions: Arc::default(),
             grants: Arc::new(Mutex::new(grants)),
-            entries: Arc::new(Mutex::new(entries)),
         }
     }
 }
@@ -320,27 +312,18 @@ impl ScreenCast {
             .collect()
     }
 
-    /// The source picker for `open`, each window named by its desktop entry.
+    /// The source picker for `open`.
     fn dialog(&self, selected: &Selected, open: &[Candidate]) -> PortalKind {
-        let mut entries = self.entries.lock().unwrap();
         PortalKind::ScreenCast(ScreenCastDialog {
             multiple: selected.multiple,
             sources: open
                 .iter()
                 .map(|candidate| match &candidate.source {
-                    Source::Window(id) => {
-                        let described = if candidate.app_id.is_empty() {
-                            Default::default()
-                        } else {
-                            entries.describe(&candidate.app_id)
-                        };
-                        CastSource::Window {
-                            id: id.clone(),
-                            title: candidate.title.clone(),
-                            app_name: described.name,
-                            icon: described.icon,
-                        }
-                    }
+                    Source::Window(id) => CastSource::Window {
+                        id: id.clone(),
+                        title: candidate.title.clone(),
+                        app_id: candidate.app_id.clone(),
+                    },
                     Source::Monitor(name) => CastSource::Monitor {
                         name: name.clone(),
                         description: candidate.title.clone(),
@@ -768,12 +751,7 @@ mod tests {
             |_| None,
         );
         let (casting, casts) = wayland_thread();
-        let backend = ScreenCast::new(
-            Arc::clone(&queue),
-            casting,
-            grants,
-            DesktopEntries::new(Vec::new()),
-        );
+        let backend = ScreenCast::new(Arc::clone(&queue), casting, grants);
         let (server, client) = connected(|builder| {
             builder
                 .serve_at(OBJECT_PATH, backend)
@@ -1070,14 +1048,12 @@ mod tests {
                         CastSource::Window {
                             id: "app-3".into(),
                             title: "Notes".into(),
-                            app_name: None,
-                            icon: None,
+                            app_id: "org.gnome.TextEditor".into(),
                         },
                         CastSource::Window {
                             id: "app-4".into(),
                             title: "Todo".into(),
-                            app_name: None,
-                            icon: None,
+                            app_id: String::new(),
                         },
                     ],
                     region: false,

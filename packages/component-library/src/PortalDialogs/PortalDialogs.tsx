@@ -4,6 +4,7 @@ import type { Capturing, PortalRequest } from "@domicile-desktop/sdk/portal";
 import {
   answerPortalRequest,
   CapturingKind,
+  CastSourceKind,
   PortalAnswer,
   PortalKind,
   stopCapturing,
@@ -14,6 +15,7 @@ import type { System, SystemHost } from "@domicile-desktop/sdk/system";
 import { system } from "@domicile-desktop/sdk/system";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { listDirectory } from "../FilePicker/list-directory";
+import type { App } from "../useApps/useApps";
 import { useApps } from "../useApps/useApps";
 import { AccessDialog } from "./AccessDialog";
 import { AccountDialog } from "./AccountDialog";
@@ -82,7 +84,7 @@ export const PortalDialogs = ({
   );
   const [sessions, setSessions] = useState<readonly Capturing[]>([]);
   const apps = useApps(files, [
-    ...requests.map((request) => request.appId),
+    ...requests.flatMap(appIds),
     ...sessions.map((session) => session.appId),
   ]);
 
@@ -120,6 +122,7 @@ export const PortalDialogs = ({
           answer={(answer) => {
             answerPortalRequest(host, shown.id, answer);
           }}
+          apps={apps}
           asker={apps(shown.appId).name}
           key={shown.id}
           list={list}
@@ -136,6 +139,7 @@ export const PortalDialogs = ({
 /** The dialog for `request`'s kind. */
 const Dialog = ({
   answer,
+  apps,
   asker,
   list,
   request,
@@ -144,6 +148,7 @@ const Dialog = ({
   system: files,
 }: {
   answer: (answer: PortalAnswer) => void;
+  apps: (appId: string) => App;
   asker: string;
   list: (path: string) => Promise<readonly string[]>;
   request: PortalRequest;
@@ -204,6 +209,7 @@ const Dialog = ({
           answer={answer}
           asker={asker}
           body={request.body}
+          files={files}
           screen={screen}
         />
       );
@@ -249,6 +255,7 @@ const Dialog = ({
       return (
         <ScreenCastDialog
           answer={answer}
+          apps={apps}
           asker={asker}
           body={request.body}
           screen={screen}
@@ -299,6 +306,17 @@ const screenFor = (
       : screenOf?.(request.parentAppId);
   return parents ?? screen;
 };
+
+/** The applications `request` names: who asks, and windows it may record. */
+const appIds = (request: PortalRequest): string[] =>
+  request.kind === PortalKind.ScreenCast
+    ? [
+        request.appId,
+        ...request.body.sources.flatMap((source) =>
+          source.kind === CastSourceKind.Window ? [source.appId] : [],
+        ),
+      ]
+    : [request.appId];
 
 /** Whether `request` is a question this draws a dialog for. */
 const isAsked = (request: PortalRequest): boolean => {

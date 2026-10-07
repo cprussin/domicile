@@ -81,19 +81,27 @@ fn a_request_with_no_parent_window_reads_back() {
 }
 
 #[test]
-fn an_account_request_carries_its_reason_when_the_application_gave_one() {
-    let asked = |reason: Option<&str>| {
+fn an_account_request_carries_what_is_shared_and_its_reason_when_given_one() {
+    let asked = |reason: Option<&str>, image: Option<&str>| {
         serde_json::to_string(&PortalKind::Account(AccountDialog {
             reason: reason.map(String::from),
+            name: "Ada Lovelace".into(),
+            image: image.map(String::from),
         }))
         .expect("it serializes")
     };
 
     assert_eq!(
-        asked(Some("To sign you in")),
-        r#"{"kind":"account","body":{"reason":"To sign you in"}}"#
+        asked(
+            Some("To sign you in"),
+            Some("/var/lib/AccountsService/icons/ada")
+        ),
+        r#"{"kind":"account","body":{"reason":"To sign you in","name":"Ada Lovelace","image":"/var/lib/AccountsService/icons/ada"}}"#
     );
-    assert_eq!(asked(None), r#"{"kind":"account","body":{}}"#);
+    assert_eq!(
+        asked(None, None),
+        r#"{"kind":"account","body":{"name":"Ada Lovelace"}}"#
+    );
 }
 
 #[test]
@@ -262,7 +270,11 @@ fn a_request_takes_only_answers_of_its_own_kind() {
     assert!(!files.accepts(&PortalAnswer::Access));
     assert!(!access.accepts(&chosen_file), "a file grants no access");
     assert!(!chooser.accepts(&chosen_file));
-    let account = PortalKind::Account(AccountDialog { reason: None });
+    let account = PortalKind::Account(AccountDialog {
+        reason: None,
+        name: "Ada Lovelace".into(),
+        image: None,
+    });
     assert!(account.accepts(&PortalAnswer::Access));
     assert!(!account.accepts(&chose("firefox")));
     assert!(!account.accepts(&chosen_file));
@@ -676,8 +688,7 @@ fn a_screen_cast_request_lists_the_sources_to_pick_from() {
                 CastSource::Window {
                     id: "app-3".into(),
                     title: "Notes".into(),
-                    app_name: Some("Text Editor".into()),
-                    icon: None,
+                    app_id: "org.gnome.TextEditor".into(),
                 },
                 CastSource::Monitor {
                     name: "drm-1".into(),
@@ -691,7 +702,7 @@ fn a_screen_cast_request_lists_the_sources_to_pick_from() {
 
     assert_eq!(
         serde_json::to_string(&request).expect("it serializes"),
-        r#"{"id":2,"app_id":"us.zoom.Zoom","kind":"screen_cast","body":{"multiple":false,"sources":[{"type":"window","id":"app-3","title":"Notes","app_name":"Text Editor"},{"type":"monitor","name":"drm-1","description":"Dell Inc. DELL U3219Q","size":[1920,1080]}],"region":true}}"#
+        r#"{"id":2,"app_id":"us.zoom.Zoom","kind":"screen_cast","body":{"multiple":false,"sources":[{"type":"window","id":"app-3","title":"Notes","app_id":"org.gnome.TextEditor"},{"type":"monitor","name":"drm-1","description":"Dell Inc. DELL U3219Q","size":[1920,1080]}],"region":true}}"#
     );
 }
 
