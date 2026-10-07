@@ -3,8 +3,11 @@
 //! Pinned as JSON because the SDK and the engine's relay hard-code them. See
 //! `docs/architecture/PORTALS.md`.
 
+use std::collections::BTreeMap;
+
 use domicile_protocol::{
-    AccessDialog, AppChooserDialog, ChromeMessage, HostMessage, PortalAnswer, PortalKind,
+    AccessDialog, AppChooserDialog, ChromeMessage, FileChoice, FileChoiceOption, FileChooserAnswer,
+    FileChooserDialog, FileChooserMode, FileFilter, HostMessage, PortalAnswer, PortalKind,
     PortalRequest,
 };
 
@@ -65,6 +68,62 @@ fn every_answer_the_sdk_sends_parses() {
             "{sent}"
         );
     }
+}
+
+#[test]
+fn a_file_chooser_carries_what_the_picker_needs() {
+    let request = PortalRequest {
+        id: 2,
+        app_id: "org.example.Editor".into(),
+        parent_app_id: None,
+        kind: PortalKind::FileChooser(FileChooserDialog {
+            mode: FileChooserMode::Save,
+            title: "Save As".into(),
+            accept_label: Some("Keep".into()),
+            multiple: false,
+            directory: false,
+            filters: vec![FileFilter {
+                name: "Text".into(),
+                extensions: vec!["txt".into()],
+            }],
+            current_filter: Some(0),
+            current_folder: Some("/home/me/Documents".into()),
+            home: "/home/me".into(),
+            current_name: Some("notes.txt".into()),
+            files: Vec::new(),
+            choices: vec![FileChoice {
+                id: "encoding".into(),
+                label: "Encoding".into(),
+                options: vec![FileChoiceOption {
+                    id: "utf8".into(),
+                    label: "UTF-8".into(),
+                }],
+                initial: "utf8".into(),
+            }],
+        }),
+    };
+
+    assert_eq!(
+        serde_json::to_string(&request).expect("it serializes"),
+        r#"{"id":2,"app_id":"org.example.Editor","kind":"file_chooser","body":{"mode":"save","title":"Save As","accept_label":"Keep","multiple":false,"directory":false,"filters":[{"name":"Text","extensions":["txt"]}],"current_filter":0,"current_folder":"/home/me/Documents","home":"/home/me","current_name":"notes.txt","files":[],"choices":[{"id":"encoding","label":"Encoding","options":[{"id":"utf8","label":"UTF-8"}],"initial":"utf8"}]}}"#
+    );
+}
+
+#[test]
+fn a_chosen_file_reads_back_with_its_choices_and_filter() {
+    let line = r#"{"type":"answer_portal_request","id":4,"answer":{"kind":"file_chooser","paths":["/home/me/a b.txt"],"choices":{"encoding":"utf8"},"current_filter":1}}"#;
+
+    assert_eq!(
+        serde_json::from_str::<ChromeMessage>(line).expect("the SDK's own wire form"),
+        ChromeMessage::AnswerPortalRequest {
+            id: 4,
+            answer: PortalAnswer::FileChooser(FileChooserAnswer {
+                paths: vec!["/home/me/a b.txt".into()],
+                choices: BTreeMap::from([("encoding".into(), "utf8".into())]),
+                current_filter: Some(1),
+            }),
+        }
+    );
 }
 
 #[test]
@@ -138,7 +197,30 @@ fn a_request_takes_only_answers_of_its_own_kind() {
     assert!(!chooser.accepts(&PortalAnswer::Access));
     assert!(access.accepts(&PortalAnswer::Access));
     assert!(!access.accepts(&chose("firefox")));
-    for kind in [&chooser, &access] {
+    let files = PortalKind::FileChooser(FileChooserDialog {
+        mode: FileChooserMode::Open,
+        title: String::new(),
+        accept_label: None,
+        multiple: false,
+        directory: false,
+        filters: Vec::new(),
+        current_filter: None,
+        current_folder: None,
+        home: "/home/me".into(),
+        current_name: None,
+        files: Vec::new(),
+        choices: Vec::new(),
+    });
+    let chosen_file = PortalAnswer::FileChooser(FileChooserAnswer {
+        paths: vec!["/etc/passwd".into()],
+        choices: BTreeMap::new(),
+        current_filter: None,
+    });
+    assert!(files.accepts(&chosen_file));
+    assert!(!files.accepts(&PortalAnswer::Access));
+    assert!(!access.accepts(&chosen_file), "a file grants no access");
+    assert!(!chooser.accepts(&chosen_file));
+    for kind in [&chooser, &access, &files] {
         assert!(kind.accepts(&PortalAnswer::Canceled));
         assert!(kind.accepts(&PortalAnswer::Refused));
     }

@@ -120,7 +120,10 @@ fn results(answer: PortalAnswer, activation_token: Option<String>) -> HashMap<St
             .chain(activation_token.map(|token| ("activation_token", token)))
             .map(|(name, value)| (name.to_string(), owned(value)))
             .collect(),
-        PortalAnswer::Access | PortalAnswer::Canceled | PortalAnswer::Refused => HashMap::new(),
+        PortalAnswer::Access
+        | PortalAnswer::FileChooser(_)
+        | PortalAnswer::Canceled
+        | PortalAnswer::Refused => HashMap::new(),
     }
 }
 

@@ -39,7 +39,7 @@ import type { Focus } from "./window-management/pointer-warp";
 import { Stage } from "./window-management/Stage";
 import { usePointerWarp } from "./window-management/usePointerWarp";
 import { useWindows } from "./window-management/useWindows";
-import { WindowAction } from "./window-management/window-state";
+import { screenOfApp, WindowAction } from "./window-management/window-state";
 
 type Props = {
   /** What the launcher offers beside files. */
@@ -375,10 +375,14 @@ export const Desktop = ({
         screen={notificationsOn}
       />
       {/*
-        Applications' dialogs, over every panel. A dialog with no parent window
-        goes on the focused screen.
+        Applications' dialogs, over every panel, on the screen of the window
+        that asked. A dialog with no parent window goes on the focused screen.
       */}
-      <PortalDialogs host={domicile} screen={windows.focused} />
+      <PortalDialogs
+        host={domicile}
+        screen={windows.focused}
+        screenOf={(appId) => screenOfApp(windows, appId)}
+      />
       {/*
         Last, over every panel, so the modal launcher and clipboard cannot take
         input on a locked desk.

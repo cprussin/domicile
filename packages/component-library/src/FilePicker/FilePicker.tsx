@@ -105,8 +105,13 @@ export const FilePicker = ({ ref, request }: Props) => {
   const [marks, setMarks] = useState<readonly string[]>([]);
   const [name, setName] = useState(request.suggestedName);
   const [filter, setFilter] = useState<FileFilter | undefined>(
-    request.filters?.[0],
+    request.filters?.[request.currentFilter ?? 0],
   );
+  const filterIndex =
+    filter === undefined ? undefined : request.filters?.indexOf(filter);
+  const choose = (paths: readonly string[]) => {
+    request.choose(paths, filterIndex);
+  };
 
   const listing = useListing(request.list, directory);
   // Lists the home directory to find which standard folders exist.
@@ -137,7 +142,7 @@ export const FilePicker = ({ ref, request }: Props) => {
 
   const confirm = () => {
     if (answer !== undefined) {
-      request.choose(answer);
+      choose(answer);
     }
   };
 
@@ -161,11 +166,11 @@ export const FilePicker = ({ ref, request }: Props) => {
     switch (request.mode) {
       case ChooserMode.Open:
       case ChooserMode.OpenFolder: {
-        request.choose([row.path]);
+        choose([row.path]);
         break;
       }
       case ChooserMode.OpenMultiple: {
-        request.choose(marks.length > 0 ? marks : [row.path]);
+        choose(marks.length > 0 ? marks : [row.path]);
         break;
       }
       case ChooserMode.Save: {
@@ -448,6 +453,7 @@ export const FilePicker = ({ ref, request }: Props) => {
             />
           </output>
           <div className={actionsStyles}>
+            {request.controls}
             {request.filters !== undefined && filter !== undefined && (
               <Select
                 aria-label="File type"
@@ -471,7 +477,7 @@ export const FilePicker = ({ ref, request }: Props) => {
               onClick={confirm}
               variant="accent"
             >
-              {confirmOf(request.mode)}
+              {request.acceptLabel ?? confirmOf(request.mode)}
             </Button>
           </div>
         </footer>

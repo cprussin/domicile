@@ -12,6 +12,7 @@ import {
   currentOn,
   NO_WINDOWS,
   reduceWindows,
+  screenOfApp,
   WindowAction,
   workspaceHere,
   workspaceNamed,
@@ -242,6 +243,16 @@ describe("the screens", () => {
     expect(currentOn(state, "left")).toBe("1");
     expect(state.focused).toBe("left");
     expect(windowsOn(workspaceOn(state, "left"))).toEqual([APP("kitty")]);
+  });
+
+  it("finds the screen a client's window is on, for its dialogs", () => {
+    const state = reduce(
+      desktop("kitty"),
+      WindowAction.ScreensDescribed(sideBySide("left", "right")),
+    );
+
+    expect(screenOfApp(state, "kitty")).toBe("left");
+    expect(screenOfApp(state, "closed")).toBeUndefined();
   });
 
   it("shows a workspace nobody else is on when a monitor is plugged in", () => {

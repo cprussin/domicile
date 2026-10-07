@@ -3,7 +3,7 @@ import type { PortalHost } from "@domicile-desktop/sdk/portal";
 import type { SystemHost } from "@domicile-desktop/sdk/system";
 import type { Node } from "@domicile-desktop/system-apps/fake-system";
 import { fakeSystem } from "@domicile-desktop/system-apps/fake-system";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { DisplayProvider } from "../Screen/DisplayProvider";
@@ -106,6 +106,34 @@ const chooser = (id: number, body: object = {}) => ({
   id,
   kind: "app_chooser",
 });
+
+/** A desktop with a small home for the file chooser to list. */
+const home = () =>
+  desktop({
+    "/home/me/Documents/report.pdf": "",
+    "/home/me/notes.txt": "",
+    "/home/me/photo.png": "",
+  });
+
+const fileChooser = (id: number, body: object = {}) => ({
+  app_id: "org.example.Editor",
+  body: {
+    choices: [],
+    directory: false,
+    files: [],
+    filters: [],
+    home: "/home/me",
+    mode: "open",
+    multiple: false,
+    title: "Open Notes",
+    ...body,
+  },
+  id,
+  kind: "file_chooser",
+});
+
+/** Lets the picker's listings resolve. */
+const listed = () => act(() => Promise.resolve());
 
 describe(PortalDialogs, () => {
   describe("rendering", () => {
@@ -228,6 +256,170 @@ describe(PortalDialogs, () => {
       await waitFor(() => {
         expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
       });
+    });
+  });
+
+  describe("file chooser", () => {
+    it("asks for files under the application's title, in its folder", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host} systemOf={home()} />);
+      host.push([
+        fileChooser(1, {
+          accept_label: "Attach",
+          current_folder: "/home/me/Documents",
+        }),
+      ]);
+      await listed();
+
+      expect(
+        screen.getByRole("dialog", { name: "Open Notes" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("option", { name: "report.pdf" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Attach" }),
+      ).toBeInTheDocument();
+    });
+
+    it("answers with the file chosen, the filter and each choice", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host} systemOf={home()} />);
+      host.push([
+        fileChooser(1, {
+          choices: [
+            {
+              id: "encoding",
+              initial: "utf8",
+              label: "Encoding",
+              options: [
+                { id: "utf8", label: "UTF-8" },
+                { id: "latin1", label: "Latin-1" },
+              ],
+            },
+            {
+              id: "readonly",
+              initial: "false",
+              label: "Read only",
+              options: [],
+            },
+          ],
+          current_filter: 1,
+          filters: [
+            { extensions: ["png"], name: "Images" },
+            { extensions: ["txt"], name: "Text" },
+          ],
+        }),
+      ]);
+      await listed();
+      await userEvent.click(
+        screen.getByRole("combobox", { name: "Read only" }),
+      );
+      await userEvent.click(screen.getByRole("option", { name: "Yes" }));
+      await userEvent.click(screen.getByRole("combobox", { name: "Encoding" }));
+      await userEvent.click(screen.getByRole("option", { name: "Latin-1" }));
+      await userEvent.dblClick(
+        screen.getByRole("option", { name: "notes.txt" }),
+      );
+
+      expect(host.answers).toEqual([
+        [
+          1,
+          {
+            choices: { encoding: "latin1", readonly: "true" },
+            current_filter: 1,
+            kind: "file_chooser",
+            paths: ["/home/me/notes.txt"],
+          },
+        ],
+      ]);
+    });
+
+    it("opens several files", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host} systemOf={home()} />);
+      host.push([fileChooser(1, { multiple: true })]);
+      await listed();
+
+      expect(
+        screen.getByRole("listbox", { name: "Contents of ~" }),
+      ).toHaveAttribute("aria-multiselectable", "true");
+    });
+
+    it("chooses a folder", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host} systemOf={home()} />);
+      host.push([fileChooser(1, { directory: true })]);
+      await listed();
+      await userEvent.click(screen.getByRole("button", { name: "Choose" }));
+
+      expect(host.answers).toEqual([
+        [1, { choices: {}, kind: "file_chooser", paths: ["/home/me"] }],
+      ]);
+    });
+
+    it("saves under the name suggested", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host} systemOf={home()} />);
+      host.push([fileChooser(1, { current_name: "draft.txt", mode: "save" })]);
+      await listed();
+      await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+      expect(host.answers).toEqual([
+        [
+          1,
+          { choices: {}, kind: "file_chooser", paths: ["/home/me/draft.txt"] },
+        ],
+      ]);
+    });
+
+    it("saves several files into the folder chosen", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host} systemOf={home()} />);
+      host.push([
+        fileChooser(1, { files: ["a.txt", "b.txt"], mode: "save_files" }),
+      ]);
+      await listed();
+
+      expect(screen.getByText("Saves a.txt, b.txt")).toBeInTheDocument();
+      await userEvent.click(screen.getByRole("button", { name: "Save" }));
+      expect(host.answers).toEqual([
+        [1, { choices: {}, kind: "file_chooser", paths: ["/home/me"] }],
+      ]);
+    });
+
+    it("cancels", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host} systemOf={home()} />);
+      host.push([fileChooser(1)]);
+      await listed();
+      await userEvent.click(
+        within(screen.getByRole("dialog")).getByRole("button", {
+          name: "Cancel",
+        }),
+      );
+
+      expect(host.answers).toEqual([[1, { kind: "canceled" }]]);
+    });
+
+    it("goes over the screen of the window that asked", async () => {
+      const host = new FakeHost();
+      render(
+        <DisplayProvider source={TWO_SCREENS}>
+          <PortalDialogs
+            host={host}
+            screen="left"
+            screenOf={(appId) => (appId === "app-3" ? "right" : undefined)}
+            systemOf={home()}
+          />
+        </DisplayProvider>,
+      );
+      host.push([{ ...fileChooser(1), parent_app_id: "app-3" }]);
+      await listed();
+
+      expect(screen.getByRole("dialog").parentElement?.style.left).toBe(
+        "1920px",
+      );
     });
   });
 

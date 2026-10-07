@@ -6,10 +6,9 @@ Make Domicile the session's only `xdg-desktop-portal` backend:
 - The shell draws every portal dialog.
 - `xdg-desktop-portal-gtk` is removed from the session.
 
-Today the compositor implements `Settings`, `Access` and `AppChooser` and
-routes the rest to gtk.
-So an Electron app's file dialog is a GTK window, and screen sharing, remote
-desktop and global shortcuts have no backend.
+Today the compositor implements `Settings`, `Access`, `AppChooser` and
+`FileChooser` and routes the rest to gtk.
+Screen sharing, remote desktop and global shortcuts have no backend.
 
 ## Design
 
@@ -63,6 +62,11 @@ One request channel carries all dialogs. Each interface's backend builds on it.
   (`wayland:<handle>`) resolves through the compositor's `xdg_foreign` export
   to an app id. The shell draws the dialog over that `<app>`. A missing or
   unknown handle puts the dialog over the focused screen.
+- **File filters become extensions.** The picker matches extensions, so the
+  compositor turns each glob (`*.[pP][nN][gG]` is `png`) and MIME type (through
+  shared-mime-info's `globs2`) into a list. A filter with no extension, such as
+  `Makefile`, is left out. The shell answers with paths and a filter index; the
+  compositor answers the portal with `file://` URIs and the original filter.
 - **Dialogs name the app.** The frontend's `app_id` resolves in the shell,
   through `@domicile-desktop/system-apps`, to a name and icon ("Zoom wants to
   share your screen").
@@ -141,7 +145,7 @@ Phase 0: request channel.
 
 Phase 1: dialogs.
 
-- [ ] FileChooser, with `FilePicker` moved to component-library; it lists directories with `readDir` ([SHELL-SYSTEM-ACCESS.md](../SHELL-SYSTEM-ACCESS.md))
+- [x] FileChooser, with `FilePicker` moved to component-library; it lists directories with `readDir` ([SHELL-SYSTEM-ACCESS.md](../SHELL-SYSTEM-ACCESS.md))
 - [x] AppChooser
 - [ ] Access, Account, Email, Lockdown
 - [ ] Notification v2

@@ -1,4 +1,5 @@
 import { FilePicker } from "@domicile-desktop/component-library/FilePicker";
+import { listDirectory as defaultListDirectory } from "@domicile-desktop/component-library/list-directory";
 import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import { system } from "@domicile-desktop/sdk/system";
 import {
@@ -15,7 +16,6 @@ import { flex } from "../../styled-system/patterns";
 import { AddressBar } from "./browser/AddressBar";
 import { BrowserCommand, browserCommandFor } from "./browser/browser-command";
 import { FindBar } from "./browser/FindBar";
-import { listDirectory as defaultListDirectory } from "./browser/list-directory";
 import { PageMenu } from "./browser/PageMenu";
 import { choosePageCommand, pageMenuFor } from "./browser/page-menu";
 import { useFileRequest } from "./browser/useFileRequest";

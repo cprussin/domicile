@@ -535,6 +535,9 @@ pub enum PortalKind {
     /// `org.freedesktop.impl.portal.AppChooser`: pick an application to open
     /// a file or URI with. `OpenURI` asks through it too.
     AppChooser(AppChooserDialog),
+    /// `org.freedesktop.impl.portal.FileChooser`: pick files to open or a
+    /// place to save.
+    FileChooser(FileChooserDialog),
 }
 
 impl PortalKind {
@@ -547,8 +550,16 @@ impl PortalKind {
             (PortalKind::AppChooser(dialog), PortalAnswer::AppChooser { choice }) => {
                 dialog.choices.contains(choice)
             }
-            (PortalKind::Access(_), PortalAnswer::AppChooser { .. })
-            | (PortalKind::AppChooser(_), PortalAnswer::Access) => false,
+            (PortalKind::FileChooser(_), PortalAnswer::FileChooser(_)) => true,
+            (
+                PortalKind::Access(_),
+                PortalAnswer::AppChooser { .. } | PortalAnswer::FileChooser(_),
+            )
+            | (PortalKind::AppChooser(_), PortalAnswer::Access | PortalAnswer::FileChooser(_))
+            | (
+                PortalKind::FileChooser(_),
+                PortalAnswer::Access | PortalAnswer::AppChooser { .. },
+            ) => false,
         }
     }
 }
@@ -587,7 +598,93 @@ pub struct AppChooserDialog {
     pub filename: Option<String>,
 }
 
+/// A file chooser, in the shell's terms: the compositor has turned the
+/// portal's globs, MIME types and byte-string paths into these.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FileChooserDialog {
+    pub mode: FileChooserMode,
+    pub title: String,
+    /// The confirm button's label; the shell's own when absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub accept_label: Option<String>,
+    /// Open several files.
+    pub multiple: bool,
+    /// Open a folder rather than a file.
+    pub directory: bool,
+    /// The groups the user switches between; empty accepts any file.
+    pub filters: Vec<FileFilter>,
+    /// The index in `filters` to start with.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current_filter: Option<u32>,
+    /// The absolute folder to start in; `home` when absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current_folder: Option<String>,
+    /// The user's absolute home directory, where the picker's places are.
+    pub home: String,
+    /// The suggested name for [`FileChooserMode::Save`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current_name: Option<String>,
+    /// The names [`FileChooserMode::SaveFiles`] saves into the chosen folder.
+    pub files: Vec<String>,
+    /// Extra questions, such as an encoding.
+    pub choices: Vec<FileChoice>,
+}
+
+/// Which `FileChooser` method asked.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FileChooserMode {
+    /// `OpenFile`: existing files or a folder.
+    Open,
+    /// `SaveFile`: one new path.
+    Save,
+    /// `SaveFiles`: a folder to save [`FileChooserDialog::files`] into.
+    SaveFiles,
+}
+
+/// A named group of accepted extensions, such as "Images".
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FileFilter {
+    pub name: String,
+    /// Lowercase and without the dot; empty accepts any file.
+    pub extensions: Vec<String>,
+}
+
+/// A question asked beside the files. No options means a checkbox, answered
+/// `"true"` or `"false"`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FileChoice {
+    pub id: String,
+    pub label: String,
+    pub options: Vec<FileChoiceOption>,
+    /// The option id, or `"true"`/`"false"`, selected at first.
+    pub initial: String,
+}
+
+/// One answer a [`FileChoice`] offers.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FileChoiceOption {
+    pub id: String,
+    pub label: String,
+}
+
+/// What the user chose in a [`PortalKind::FileChooser`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FileChooserAnswer {
+    /// Absolute paths: the files, or the folder for
+    /// [`FileChooserMode::SaveFiles`].
+    pub paths: Vec<String>,
+    /// Each [`FileChoice::id`]'s answer.
+    pub choices: BTreeMap<String, String>,
+    /// The index in [`FileChooserDialog::filters`] in use.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current_filter: Option<u32>,
+}
+
 /// The shell's answer to a [`PortalRequest`].
+///
+/// Each backend reads only its own kind; any other answer refuses the
+/// request.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum PortalAnswer {
@@ -596,6 +693,8 @@ pub enum PortalAnswer {
     /// The application the user picked in a [`PortalKind::AppChooser`]: one
     /// of its `choices`.
     AppChooser { choice: String },
+    /// The user chose in a [`PortalKind::FileChooser`].
+    FileChooser(FileChooserAnswer),
     /// The user dismissed the dialog, or denied it.
     Canceled,
     /// The shell has no dialog for this kind.
@@ -607,7 +706,9 @@ impl PortalAnswer {
     /// 2 for any other end.
     pub fn response(&self) -> u32 {
         match self {
-            PortalAnswer::Access | PortalAnswer::AppChooser { .. } => 0,
+            PortalAnswer::Access
+            | PortalAnswer::AppChooser { .. }
+            | PortalAnswer::FileChooser(_) => 0,
             PortalAnswer::Canceled => 1,
             PortalAnswer::Refused => 2,
         }

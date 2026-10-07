@@ -17,16 +17,19 @@
 
 use std::collections::HashMap;
 use std::ffi::OsStr;
+use std::path::PathBuf;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
 use std::thread;
 
+use domicile_host::data_dirs::data_dirs;
 use domicile_protocol::{PortalAnswer, PortalRequest, Theme};
 use tracing::{debug, warn};
 use zbus::blocking::connection::Builder;
 
 mod access;
 mod app_chooser;
+mod file_chooser;
 mod queue;
 mod reply;
 mod request;
@@ -37,6 +40,7 @@ mod socket_pair;
 
 use access::Access;
 use app_chooser::AppChooser;
+use file_chooser::FileChooser;
 use queue::Queue;
 use settings::{color_scheme, Settings};
 
@@ -138,7 +142,14 @@ fn answer(
     environment: &[(&str, String)],
     changes: &Receiver<Theme>,
 ) -> Result<(), zbus::Error> {
-    let connection = export(Builder::session()?, theme, queue)?.build()?;
+    let home = std::env::var_os("HOME").map(PathBuf::from);
+    let data_dirs = data_dirs(
+        std::env::var_os("XDG_DATA_HOME"),
+        std::env::var_os("XDG_DATA_DIRS"),
+        home.as_deref(),
+    );
+    let home = home.unwrap_or_else(|| "/".into()).display().to_string();
+    let connection = export(Builder::session()?, theme, queue, data_dirs, home)?.build()?;
     say_which_desktop(&connection, environment);
     connection.request_name(BUS_NAME)?;
     debug!(
@@ -160,7 +171,16 @@ fn answer(
 ///
 /// On the builder, so the interfaces are there before the first call can
 /// arrive.
-fn export<'a>(builder: Builder<'a>, theme: Theme, queue: &Arc<Queue>) -> zbus::Result<Builder<'a>> {
+///
+/// `data_dirs` are where `FileChooser` finds MIME types, and `home` is the
+/// user's home directory.
+fn export<'a>(
+    builder: Builder<'a>,
+    theme: Theme,
+    queue: &Arc<Queue>,
+    data_dirs: Vec<PathBuf>,
+    home: String,
+) -> zbus::Result<Builder<'a>> {
     builder
         .serve_at(OBJECT_PATH, Settings { theme })?
         .serve_at(
@@ -173,6 +193,14 @@ fn export<'a>(builder: Builder<'a>, theme: Theme, queue: &Arc<Queue>) -> zbus::R
             OBJECT_PATH,
             AppChooser {
                 queue: Arc::clone(queue),
+            },
+        )?
+        .serve_at(
+            OBJECT_PATH,
+            FileChooser {
+                queue: Arc::clone(queue),
+                data_dirs,
+                home,
             },
         )
 }
@@ -250,7 +278,7 @@ mod tests {
     use super::*;
     use std::time::Duration;
 
-    use domicile_protocol::{AccessDialog, AppChooserDialog, PortalKind};
+    use domicile_protocol::{AccessDialog, AppChooserDialog, FileChooserAnswer, PortalKind};
     use zbus::zvariant::{ObjectPath, OwnedValue, Value};
 
     /// The frontend's handle for the dialog these tests open.
@@ -276,7 +304,8 @@ mod tests {
             |parent_window| (parent_window == "wayland:abc").then(|| "app-3".to_string()),
         );
         let (server, client) = socket_pair::connected(|builder| {
-            export(builder, Theme::Dark, &queue).expect("the interfaces registered")
+            export(builder, Theme::Dark, &queue, Vec::new(), "/home/me".into())
+                .expect("the interfaces registered")
         });
         Served {
             client,
@@ -326,7 +355,7 @@ mod tests {
     }
 
     #[test]
-    fn an_access_dialog_waits_for_the_shell_and_takes_its_answer() {
+    fn an_access_dialog_waits_for_the_shell_over_its_parent_and_takes_its_answer() {
         let served = served(true);
         let asking = ask_for_access(&served.client);
 
@@ -539,6 +568,70 @@ mod tests {
 
         let (response, results) = choosing.join().expect("the call returned");
         assert_eq!((response, results.len()), (1, 0));
+    }
+
+    #[test]
+    fn a_file_chooser_waits_for_the_shell_and_answers_with_file_uris() {
+        let served = served(true);
+        let client = served.client.clone();
+        let asking = thread::spawn(move || {
+            let options = HashMap::from([(
+                "multiple".to_string(),
+                OwnedValue::try_from(Value::from(true)).expect("ownable"),
+            )]);
+            let reply = client
+                .call_method(
+                    None::<&str>,
+                    OBJECT_PATH,
+                    Some("org.freedesktop.impl.portal.FileChooser"),
+                    "OpenFile",
+                    &(
+                        ObjectPath::try_from(HANDLE).expect("a path"),
+                        "org.example.Editor",
+                        "",
+                        "Open Notes",
+                        options,
+                    ),
+                )
+                .expect("OpenFile answered");
+            let (response, results): (u32, HashMap<String, OwnedValue>) =
+                reply.body().deserialize().expect("its reply");
+            (
+                response,
+                Vec::<String>::try_from(results["uris"].try_clone().expect("cloned"))
+                    .expect("uris"),
+            )
+        });
+
+        let [request] = &next(&served.published)[..] else {
+            panic!("one request");
+        };
+        let PortalKind::FileChooser(dialog) = &request.kind else {
+            panic!("a file chooser: {request:?}");
+        };
+        assert_eq!(
+            (dialog.title.as_str(), dialog.multiple),
+            ("Open Notes", true)
+        );
+        served.queue.answer(
+            request.id,
+            PortalAnswer::FileChooser(FileChooserAnswer {
+                paths: vec!["/home/me/a.txt".into(), "/home/me/b.txt".into()],
+                choices: Default::default(),
+                current_filter: None,
+            }),
+        );
+
+        assert_eq!(
+            asking.join().expect("the call returned"),
+            (
+                0,
+                vec![
+                    "file:///home/me/a.txt".to_string(),
+                    "file:///home/me/b.txt".to_string()
+                ]
+            )
+        );
     }
 
     #[test]

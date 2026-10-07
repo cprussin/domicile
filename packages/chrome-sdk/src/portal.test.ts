@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import type { PortalHost, PortalRequest } from "./portal";
 import {
   answerPortalRequest,
+  FileChooserMode,
   PortalAnswer,
   PortalKind,
   watchPortalRequests,
@@ -114,6 +115,68 @@ describe("watchPortalRequests", () => {
     ]);
   });
 
+  it("parses a file chooser's body", async () => {
+    const host = new FakeHost();
+    const requests = watched(host);
+    host.push([
+      {
+        app_id: "org.example.Editor",
+        body: {
+          choices: [
+            {
+              id: "encoding",
+              initial: "utf8",
+              label: "Encoding",
+              options: [{ id: "utf8", label: "UTF-8" }],
+            },
+          ],
+          current_filter: 0,
+          current_folder: "/home/me",
+          current_name: "notes.txt",
+          directory: false,
+          files: [],
+          filters: [{ extensions: ["txt"], name: "Text" }],
+          home: "/home/me",
+          mode: "save",
+          multiple: false,
+          title: "Save As",
+        },
+        id: 4,
+        kind: "file_chooser",
+      },
+    ]);
+
+    expect(await requests).toEqual([
+      {
+        appId: "org.example.Editor",
+        body: {
+          acceptLabel: undefined,
+          choices: [
+            {
+              id: "encoding",
+              initial: "utf8",
+              label: "Encoding",
+              options: [{ id: "utf8", label: "UTF-8" }],
+            },
+          ],
+          currentFilter: 0,
+          currentFolder: "/home/me",
+          currentName: "notes.txt",
+          directory: false,
+          files: [],
+          filters: [{ extensions: ["txt"], name: "Text" }],
+          home: "/home/me",
+          mode: FileChooserMode.Save,
+          multiple: false,
+          title: "Save As",
+        },
+        id: 4,
+        kind: PortalKind.FileChooser,
+        parentAppId: undefined,
+      },
+    ]);
+  });
+
   it("keeps a kind it does not know, to be refused", async () => {
     const host = new FakeHost();
     const requests = watched(host);
@@ -169,12 +232,40 @@ describe("answerPortalRequest", () => {
     answerPortalRequest(host, 2, PortalAnswer.Canceled());
     answerPortalRequest(host, 3, PortalAnswer.Refused());
     answerPortalRequest(host, 4, PortalAnswer.AppChooser("firefox"));
+    answerPortalRequest(
+      host,
+      5,
+      PortalAnswer.FileChooser({
+        choices: new Map([["encoding", "utf8"]]),
+        currentFilter: 1,
+        paths: ["/home/me/a.txt"],
+      }),
+    );
+    answerPortalRequest(
+      host,
+      6,
+      PortalAnswer.FileChooser({
+        choices: new Map(),
+        currentFilter: undefined,
+        paths: ["/home/me"],
+      }),
+    );
 
     expect(host.answers).toEqual([
       [1, { kind: "access" }],
       [2, { kind: "canceled" }],
       [3, { kind: "refused" }],
       [4, { choice: "firefox", kind: "app_chooser" }],
+      [
+        5,
+        {
+          choices: { encoding: "utf8" },
+          current_filter: 1,
+          kind: "file_chooser",
+          paths: ["/home/me/a.txt"],
+        },
+      ],
+      [6, { choices: {}, kind: "file_chooser", paths: ["/home/me"] }],
     ]);
   });
 });

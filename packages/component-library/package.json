@@ -44,6 +44,7 @@
     "./file-request": "./src/FilePicker/file-request.ts",
     "./Input": "./src/Input/Input.tsx",
     "./Kbd": "./src/Kbd/Kbd.tsx",
+    "./list-directory": "./src/FilePicker/list-directory.ts",
     "./list-walk": "./src/list-walk.ts",
     "./ModalDialog": "./src/ModalDialog/ModalDialog.tsx",
     "./Popover": "./src/Popover/Popover.tsx",

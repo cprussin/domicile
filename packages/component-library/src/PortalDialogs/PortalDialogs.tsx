@@ -7,9 +7,11 @@ import {
 } from "@domicile-desktop/sdk/portal";
 import type { System, SystemHost } from "@domicile-desktop/sdk/system";
 import { system } from "@domicile-desktop/sdk/system";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { listDirectory } from "../FilePicker/list-directory";
 import { AccessDialog } from "./AccessDialog";
 import { AppChooserDialog } from "./AppChooserDialog";
+import { FileChooserDialog } from "./FileChooserDialog";
 
 type Props = {
   /** The desktop `Shell` is handed. */
@@ -21,6 +23,11 @@ type Props = {
   screen?: string | undefined;
   /** How dialogs read the desktop's files, for tests. */
   systemOf?: typeof system | undefined;
+  /**
+   * The display showing the `<app>` with this id, for a dialog modal over
+   * it. `undefined` uses `screen`.
+   */
+  screenOf?: ((appId: string) => string | undefined) | undefined;
 };
 
 /**
@@ -28,9 +35,18 @@ type Props = {
  * time, oldest first. Requests of a kind it has no dialog for are refused. See
  * docs/architecture/PORTALS.md.
  */
-export const PortalDialogs = ({ host, screen, systemOf = system }: Props) => {
+export const PortalDialogs = ({
+  host,
+  screen,
+  screenOf,
+  systemOf = system,
+}: Props) => {
   const [requests, setRequests] = useState<readonly PortalRequest[]>([]);
   const files = useMemo(() => systemOf(host), [systemOf, host]);
+  const list = useCallback(
+    (path: string) => listDirectory(files, path),
+    [files],
+  );
 
   useEffect(() => watchPortalRequests(host, setRequests), [host]);
 
@@ -49,8 +65,9 @@ export const PortalDialogs = ({ host, screen, systemOf = system }: Props) => {
         answerPortalRequest(host, shown.id, answer);
       }}
       key={shown.id}
+      list={list}
       request={shown}
-      screen={screen}
+      screen={screenFor(shown, screen, screenOf)}
       system={files}
     />
   );
@@ -59,11 +76,13 @@ export const PortalDialogs = ({ host, screen, systemOf = system }: Props) => {
 /** The dialog for `request`'s kind. */
 const Dialog = ({
   answer,
+  list,
   request,
   screen,
   system: files,
 }: {
   answer: (answer: PortalAnswer) => void;
+  list: (path: string) => Promise<readonly string[]>;
   request: PortalRequest;
   screen: string | undefined;
   system: System;
@@ -88,9 +107,31 @@ const Dialog = ({
           system={files}
         />
       );
+    case PortalKind.FileChooser:
+      return (
+        <FileChooserDialog
+          answer={answer}
+          body={request.body}
+          list={list}
+          screen={screen}
+        />
+      );
     case PortalKind.Unknown:
       return undefined;
   }
+};
+
+/** The display for `request`: its parent window's, else `screen`. */
+const screenFor = (
+  request: PortalRequest,
+  screen: string | undefined,
+  screenOf: Props["screenOf"],
+): string | undefined => {
+  const parents =
+    request.parentAppId === undefined
+      ? undefined
+      : screenOf?.(request.parentAppId);
+  return parents ?? screen;
 };
 
 /** How a dialog names the application asking. */

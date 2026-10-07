@@ -102,15 +102,21 @@ is its backend. The shell draws each one. See
 ```tsx
 import { PortalDialogs } from "@domicile-desktop/component-library/PortalDialogs";
 
-<PortalDialogs host={domicile} screen={focusedScreen} />;
+<PortalDialogs
+  host={domicile}
+  screen={focusedScreen}
+  screenOf={(appId) => screenShowing(appId)}
+/>;
 ```
 
 - `PortalDialogs` draws every kind it knows and refuses the rest: `Access` (a
-  yes/no question) and `AppChooser` (an app list for "Open with" and
-  `OpenURI`).
-- The app list reads desktop entries and `mimeapps.list` through
-  `@domicile-desktop/sdk/system`, so `host` must take system calls.
-  `domicile` does.
+  yes/no question), `AppChooser` (an app list for "Open with" and `OpenURI`)
+  and `FileChooser` (the component library's `FilePicker`).
+- The app list and the file picker read the system through
+  `@domicile-desktop/sdk/system` (desktop entries, `mimeapps.list`, `readDir`),
+  so `host` must take system calls. `domicile` does.
+- A dialog goes on the screen `screenOf` names for the window that asked, or
+  on `screen` when the application named no window.
 - Without React, `watchPortalRequests` and `answerPortalRequest` in
   `@domicile-desktop/sdk/portal` give the requests, parsed, and send answers.
 - A shell must answer every request. One left unanswered keeps its application
