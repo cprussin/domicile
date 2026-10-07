@@ -91,7 +91,7 @@ An edit applies to the running desktop, and windows stay open:
 | `output.displays`, `output.profiles` | Displays rearranged |
 | `idle.blank_after_seconds` | Idle timer restarts. Dark screens relight |
 | `theme.mode` | Shell and windows repaint |
-| `theme.accent_color`, `contrast`, `reduced_motion` | Windows that read the settings portal follow |
+| `theme.accent_color`, `contrast`, `reduced_motion` | Shell and windows that read the settings portal follow |
 | `files.omit` | Launcher file index rebuilt |
 | `extensions` | Extensions installed or removed ([EXTENSIONS.md](/docs/architecture/EXTENSIONS.md)) |
 | `lockdown` | Applications told through the Lockdown portal |
@@ -172,13 +172,21 @@ An application that ignores the portal is not stopped.
 this config is the system setting. `"system"` is rejected.
 
 Applications read the rest through the settings portal
-(`org.freedesktop.appearance`):
+(`org.freedesktop.appearance`), and the shell receives them too:
 
 | Key | Values | Default |
 |---|---|---|
 | `theme.accent_color` | `"#rrggbb"` | unset: each application's own |
 | `theme.contrast` | `"normal"`, `"high"` | `"normal"` |
 | `theme.reduced_motion` | `true`, `false` | `false` |
+
+In manganese:
+
+- `accent_color` replaces the `accent` token in both themes.
+- `contrast: "high"` draws text at the palette's ends and darkens borders and
+  muted text.
+- `reduced_motion` runs every animation and transition once at the shortest
+  duration: wallpaper crossfades, the theme wipe, window animations.
 
 Shell side: [SHELL-DESKTOP-EVENTS.md](SHELL-DESKTOP-EVENTS.md#theme).
 
