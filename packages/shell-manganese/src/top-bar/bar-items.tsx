@@ -14,6 +14,7 @@ import { Clock } from "../clock/Clock";
 import { LauncherButton } from "../launcher/LauncherButton";
 import { Network } from "../network/Network";
 import { NotificationBell } from "../notifications/NotificationBell";
+import { Sharing } from "../sharing/Sharing";
 import { Tray } from "../tray/Tray";
 import { Volume } from "../volume/Volume";
 import { useBar } from "./bar-context";
@@ -110,6 +111,15 @@ export const BarBrightness = () => {
 export const BarBattery = () => {
   const { domicile } = useBar();
   return <Battery domicile={domicile} />;
+};
+
+/**
+ * Shown while an application records the desktop: who records what, and a
+ * button to stop each.
+ */
+export const BarSharing = () => {
+  const { domicile } = useBar();
+  return <Sharing host={domicile} />;
 };
 
 /** The bell, which opens the notification drawer. */

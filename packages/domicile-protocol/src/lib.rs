@@ -505,8 +505,9 @@ pub enum HostMessage {
     /// and on connect, so a reloaded page still sees a pending dialog. The
     /// shell answers with [`ChromeMessage::AnswerPortalRequest`].
     ///
-    /// `capturing` lists the sessions that control or capture input, so the
-    /// shell can show each one and stop it with [`PortalAnswer::Stop`].
+    /// `capturing` lists the sessions that record the screen or control or
+    /// capture input, so the shell can show each one and stop it with
+    /// [`PortalAnswer::Stop`].
     /// `shortcuts` lists the chords applications hold through the
     /// GlobalShortcuts portal. The shell grabs each and sends
     /// [`PortalAnswer::Pressed`] under its id when it fires.
@@ -596,6 +597,8 @@ pub enum PortalKind {
     /// `org.freedesktop.impl.portal.Usb`: let an application open USB
     /// devices. Allowed whole with [`PortalAnswer::Access`].
     Usb(UsbDialog),
+    /// `org.freedesktop.impl.portal.ScreenCast`: pick what to share.
+    ScreenCast(ScreenCastDialog),
 }
 
 impl PortalKind {
@@ -623,6 +626,7 @@ impl PortalKind {
             (PortalKind::RemoteDesktop(_), PortalAnswer::RemoteDesktop { .. }) => true,
             (PortalKind::InputCapture(_), PortalAnswer::InputCapture) => true,
             (PortalKind::GlobalShortcuts(_), PortalAnswer::GlobalShortcuts { .. }) => true,
+            (PortalKind::ScreenCast(_), PortalAnswer::ScreenCast { .. }) => true,
             // A stop answers a running session and a press a bound shortcut,
             // never a request.
             (
@@ -634,6 +638,7 @@ impl PortalKind {
                 | PortalAnswer::InputCapture
                 | PortalAnswer::GlobalShortcuts { .. }
                 | PortalAnswer::DynamicLauncher { .. }
+                | PortalAnswer::ScreenCast { .. }
                 | PortalAnswer::Stop
                 | PortalAnswer::Pressed,
             ) => false,
@@ -762,6 +767,8 @@ pub enum CapturingKind {
     RemoteDesktop { devices: Devices, clipboard: bool },
     /// The user's own input, once it crosses a barrier.
     InputCapture { devices: Devices },
+    /// What a screen cast records.
+    ScreenCast { sources: Vec<Captured> },
 }
 
 /// An `AccessDialog`'s texts.
@@ -936,6 +943,50 @@ pub struct BoundShortcut {
     pub chord: String,
 }
 
+/// A screen cast source picker's choices.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ScreenCastDialog {
+    /// Whether the user may pick more than one source.
+    pub multiple: bool,
+    /// What may be shared, of the types the application asked for.
+    pub sources: Vec<CastSource>,
+}
+
+/// One source a [`ScreenCastDialog`] offers.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum CastSource {
+    /// A window.
+    Window {
+        /// Its host app id.
+        id: String,
+        /// Empty until the client names it.
+        title: String,
+        /// Its application's name, from its desktop entry.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        app_name: Option<String>,
+        /// Its application's icon, as a `data:` URL.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        icon: Option<String>,
+    },
+}
+
+/// A source the user picked in a [`ScreenCastDialog`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum CastPick {
+    /// The window with this host app id.
+    Window { id: String },
+}
+
+/// One source a [`CapturingKind::ScreenCast`] records.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum Captured {
+    /// A window, by host app id, with its title when the capture started.
+    Window { id: String, title: String },
+}
+
 /// The shell's answer to a [`PortalRequest`].
 ///
 /// Each backend reads only its own kind; any other answer refuses the
@@ -958,6 +1009,8 @@ pub enum PortalAnswer {
     InputCapture,
     /// The user installs a [`PortalKind::DynamicLauncher`] under `name`.
     DynamicLauncher { name: String },
+    /// The user picked these sources in a [`PortalKind::ScreenCast`].
+    ScreenCast { sources: Vec<CastPick> },
     /// The user stopped a [`Capturing`] session.
     Stop,
     /// The chords the user chose in a [`PortalKind::GlobalShortcuts`].
@@ -982,6 +1035,7 @@ impl PortalAnswer {
             | PortalAnswer::RemoteDesktop { .. }
             | PortalAnswer::InputCapture
             | PortalAnswer::GlobalShortcuts { .. }
+            | PortalAnswer::ScreenCast { .. }
             | PortalAnswer::Stop => 0,
             PortalAnswer::Canceled => 1,
             PortalAnswer::Refused | PortalAnswer::Pressed => 2,

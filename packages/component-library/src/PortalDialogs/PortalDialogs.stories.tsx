@@ -207,6 +207,25 @@ const globalShortcuts = {
   kind: "global_shortcuts",
 };
 
+const screenCast = {
+  app_id: "us.zoom.Zoom",
+  body: {
+    multiple: false,
+    sources: [
+      {
+        app_name: "Text Editor",
+        id: "app-3",
+        title: "Notes",
+        type: "window",
+      },
+      { app_name: "Terminal", id: "app-4", title: "~/src", type: "window" },
+      { id: "app-5", title: "", type: "window" },
+    ],
+  },
+  id: 2,
+  kind: "screen_cast",
+};
+
 const meta = {
   args: {
     host: pushing([access]),
@@ -284,6 +303,16 @@ export const FileChooser: Story = {
   },
 };
 
+/** A source picker for an application that may record one window. */
+export const ScreenCast: Story = {
+  args: {
+    host: pushing([screenCast]),
+    screen: undefined,
+    screenOf: undefined,
+    systemOf: undefined,
+  },
+};
+
 export const RemoteDesktop: Story = {
   args: {
     host: pushing([remoteDesktop]),
@@ -338,6 +367,12 @@ export const Capturing: Story = {
       [
         { ...remoteDesktop, id: 6 },
         { ...inputCapture, id: 7 },
+        {
+          app_id: "us.zoom.Zoom",
+          body: { sources: [{ id: "app-3", title: "Notes", type: "window" }] },
+          id: 8,
+          kind: "screen_cast",
+        },
       ],
     ),
     screen: undefined,

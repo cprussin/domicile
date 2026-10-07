@@ -6,12 +6,13 @@
 use std::collections::BTreeMap;
 
 use domicile_protocol::{
-    AccessDialog, AccountDialog, AppChooserDialog, BoundShortcut, Capturing, CapturingKind,
-    ChosenTrigger, ChromeMessage, Devices, FileChoice, FileChoiceOption, FileChooserAnswer,
-    FileChooserDialog, FileChooserMode, FileFilter, HostMessage, Inhibited, Inhibition,
-    InputCaptureDialog, LauncherDialog, LauncherType, PortalAnswer, PortalKind, PortalRequest,
-    PortalWallpaper, ProposedShortcut, RemoteDesktopDialog, ShortcutsDialog, TakenChord, UsbDevice,
-    UsbDialog, WallpaperDialog, WallpaperTarget,
+    AccessDialog, AccountDialog, AppChooserDialog, BoundShortcut, Captured, Capturing,
+    CapturingKind, CastPick, CastSource, ChosenTrigger, ChromeMessage, Devices, FileChoice,
+    FileChoiceOption, FileChooserAnswer, FileChooserDialog, FileChooserMode, FileFilter,
+    HostMessage, Inhibited, Inhibition, InputCaptureDialog, LauncherDialog, LauncherType,
+    PortalAnswer, PortalKind, PortalRequest, PortalWallpaper, ProposedShortcut,
+    RemoteDesktopDialog, ScreenCastDialog, ShortcutsDialog, TakenChord, UsbDevice, UsbDialog,
+    WallpaperDialog, WallpaperTarget,
 };
 
 fn access() -> PortalRequest {
@@ -659,4 +660,70 @@ fn a_usb_grant_lists_each_device_and_is_allowed_whole() {
     );
     assert!(usb.accepts(&PortalAnswer::Access));
     assert!(!usb.accepts(&PortalAnswer::DynamicLauncher { name: "x".into() }));
+}
+
+#[test]
+fn a_screen_cast_request_lists_the_sources_to_pick_from() {
+    let request = PortalRequest {
+        id: 2,
+        app_id: "us.zoom.Zoom".into(),
+        parent_app_id: None,
+        kind: PortalKind::ScreenCast(ScreenCastDialog {
+            multiple: false,
+            sources: vec![CastSource::Window {
+                id: "app-3".into(),
+                title: "Notes".into(),
+                app_name: Some("Text Editor".into()),
+                icon: None,
+            }],
+        }),
+    };
+
+    assert_eq!(
+        serde_json::to_string(&request).expect("it serializes"),
+        r#"{"id":2,"app_id":"us.zoom.Zoom","kind":"screen_cast","body":{"multiple":false,"sources":[{"type":"window","id":"app-3","title":"Notes","app_name":"Text Editor"}]}}"#
+    );
+}
+
+#[test]
+fn the_shell_answers_a_screen_cast_with_the_sources_picked() {
+    let line = r#"{"type":"answer_portal_request","id":2,"answer":{"kind":"screen_cast","sources":[{"type":"window","id":"app-3"}]}}"#;
+    let answer = PortalAnswer::ScreenCast {
+        sources: vec![CastPick::Window { id: "app-3".into() }],
+    };
+
+    assert_eq!(
+        serde_json::from_str::<ChromeMessage>(line).expect("the SDK's own wire form"),
+        ChromeMessage::AnswerPortalRequest {
+            id: 2,
+            answer: answer.clone(),
+        }
+    );
+    let cast = PortalKind::ScreenCast(ScreenCastDialog {
+        multiple: false,
+        sources: vec![],
+    });
+    assert!(cast.accepts(&answer));
+    assert!(!cast.accepts(&PortalAnswer::Access));
+    assert!(!cast.accepts(&PortalAnswer::Stop), "a stop is for sessions");
+}
+
+#[test]
+fn a_running_screen_cast_says_what_it_records() {
+    let written = serde_json::to_string(&Capturing {
+        id: 5,
+        app_id: "us.zoom.Zoom".into(),
+        kind: CapturingKind::ScreenCast {
+            sources: vec![Captured::Window {
+                id: "app-3".into(),
+                title: "Notes".into(),
+            }],
+        },
+    })
+    .expect("it serializes");
+
+    assert_eq!(
+        written,
+        r#"{"id":5,"app_id":"us.zoom.Zoom","kind":"screen_cast","body":{"sources":[{"type":"window","id":"app-3","title":"Notes"}]}}"#
+    );
 }

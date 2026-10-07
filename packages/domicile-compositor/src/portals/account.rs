@@ -75,6 +75,7 @@ impl Account {
             | PortalAnswer::InputCapture
             | PortalAnswer::GlobalShortcuts { .. }
             | PortalAnswer::DynamicLauncher { .. }
+            | PortalAnswer::ScreenCast { .. }
             | PortalAnswer::Stop
             | PortalAnswer::Pressed => (2, HashMap::new()),
         }

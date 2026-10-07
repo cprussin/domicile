@@ -23,6 +23,7 @@ import { GlobalShortcutsDialog } from "./GlobalShortcutsDialog";
 import { InputCaptureDialog } from "./InputCaptureDialog";
 import { LauncherDialog } from "./LauncherDialog";
 import { RemoteDesktopDialog } from "./RemoteDesktopDialog";
+import { ScreenCastDialog } from "./ScreenCastDialog";
 import { UsbDialog } from "./UsbDialog";
 import { WallpaperDialog } from "./WallpaperDialog";
 
@@ -220,6 +221,15 @@ const Dialog = ({
           screen={screen}
         />
       );
+    case PortalKind.ScreenCast:
+      return (
+        <ScreenCastDialog
+          answer={answer}
+          asker={appName(request.appId)}
+          body={request.body}
+          screen={screen}
+        />
+      );
     case PortalKind.Inhibit:
     case PortalKind.Unknown:
       return undefined;
@@ -252,6 +262,7 @@ const isAsked = (request: PortalRequest): boolean => {
     case PortalKind.Account:
     case PortalKind.GlobalShortcuts:
     case PortalKind.Wallpaper:
+    case PortalKind.ScreenCast:
       return true;
     case PortalKind.Inhibit:
     case PortalKind.Unknown:

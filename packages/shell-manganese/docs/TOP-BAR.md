@@ -10,7 +10,8 @@ below it.
 own. Manganese's items take no props:
 
 `Launcher`, `Tray`, `WorkspaceSwitcher`, `Clock`, `Mode`, `ThemeSelector`,
-`Network`, `Bluetooth`, `Volume`, `Brightness`, `Battery`, `Notifications`.
+`Network`, `Bluetooth`, `Volume`, `Brightness`, `Battery`, `Notifications`,
+`Sharing`.
 
 ```tsx
 import { Clock, runManganese, Tray, WorkspaceSwitcher } from "@domicile-desktop/manganese";
@@ -31,8 +32,9 @@ To style your own items with manganese's Panda CSS, see
 
 - **left**: launcher button, tray, workspaces
 - **middle**: clock
-- **right**: binding mode (when not `default`), theme selector, network,
-  Bluetooth, volume, brightness, battery, notification bell
+- **right**: sharing indicator (while recorded), binding mode (when not
+  `default`), theme selector, network, Bluetooth, volume, brightness, battery,
+  notification bell
 
 ## Readability over the wallpaper
 
@@ -130,6 +132,14 @@ To style your own items with manganese's Panda CSS, see
   every uncleared notification, where you can open, clear or clear all.
 - The compositor keeps the history, so it survives a reload. See
   [NOTIFICATIONS.md](../../../docs/architecture/NOTIFICATIONS.md).
+
+## Sharing
+
+- Shown, in the warning color, while an application records the desktop
+  through the ScreenCast portal. Its name says who.
+- Click lists each recording application and the windows it records, with a
+  **Stop sharing** button that ends that application's session.
+- See [PORTALS.md](../../../docs/architecture/PORTALS.md).
 
 ## Tray
 

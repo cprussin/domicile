@@ -301,6 +301,7 @@ impl Shortcuts {
             | PortalAnswer::RemoteDesktop { .. }
             | PortalAnswer::InputCapture
             | PortalAnswer::DynamicLauncher { .. }
+            | PortalAnswer::ScreenCast { .. }
             | PortalAnswer::Stop
             | PortalAnswer::Refused
             | PortalAnswer::Pressed => Err(2),

@@ -11,6 +11,7 @@ import {
   BarMode,
   BarNetwork,
   BarNotifications,
+  BarSharing,
   BarThemeSelector,
   BarTray,
   BarVolume,
@@ -30,8 +31,9 @@ export type TopBarLayout = {
 /**
  * Manganese's default bar.
  *
- * The launcher button is first, next to the tray. The bell is last because the
- * drawer it opens slides out from that edge.
+ * The launcher button is first, next to the tray. The sharing indicator leads
+ * the right column, so it is seen. The bell is last because the drawer it
+ * opens slides out from that edge.
  */
 export const DEFAULT_TOP_BAR: TopBarLayout = {
   left: [
@@ -41,6 +43,7 @@ export const DEFAULT_TOP_BAR: TopBarLayout = {
   ],
   middle: [<BarClock key="clock" />],
   right: [
+    <BarSharing key="sharing" />,
     <BarMode key="mode" />,
     <BarThemeSelector key="theme" />,
     <BarNetwork key="network" />,

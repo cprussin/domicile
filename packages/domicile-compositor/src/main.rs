@@ -133,6 +133,7 @@ mod pam;
 mod peer_process;
 mod pnp_ids;
 mod portals;
+mod reply;
 mod restatement;
 mod scale;
 mod screens;
@@ -2057,20 +2058,50 @@ impl DomicileCompositor {
             casting.start(
                 casting::Source::Window(app_id.to_string()),
                 casting::CursorMode::Embedded,
-                Box::new(|event| info!(?event, "DOMICILE_CAST_WINDOW cast")),
+                |_| Box::new(|event| info!(?event, "DOMICILE_CAST_WINDOW cast")),
             );
         }
     }
 
     /// A cast request, from any thread.
     fn cast_requested(&mut self, request: casting::Request) {
-        let open: HashSet<String> = self.toplevels.iter().map(|(id, _)| id.clone()).collect();
+        let open = self.cast_candidates();
         let capturer = self
             .engine
             .as_mut()
             .map(|session| session as &mut dyn casting::Capturer);
-        self.casting
-            .request(request, |app_id| open.contains(app_id), capturer);
+        self.casting.request(request, || open, capturer);
+    }
+
+    /// The windows that can be cast, in the order they opened.
+    fn cast_candidates(&self) -> Vec<casting::Candidate> {
+        let host = self.hub.host.lock().unwrap();
+        self.toplevels
+            .iter()
+            .map(|(id, toplevel)| {
+                let app_id = with_states(toplevel.wl_surface(), |states| {
+                    states
+                        .data_map
+                        .get::<XdgToplevelSurfaceData>()
+                        .and_then(|data| data.lock().unwrap().app_id.clone())
+                });
+                casting::Candidate {
+                    source: casting::Source::Window(id.clone()),
+                    title: host
+                        .app(id)
+                        .and_then(|app| app.title.clone())
+                        .unwrap_or_default(),
+                    app_id: app_id.unwrap_or_default(),
+                    bounds: self.app_bounds.get(id).map(|bounds| casting::Region {
+                        position: (bounds.min.x.round() as i32, bounds.min.y.round() as i32),
+                        size: (
+                            (bounds.max.x - bounds.min.x).round() as i32,
+                            (bounds.max.y - bounds.min.y).round() as i32,
+                        ),
+                    }),
+                }
+            })
+            .collect()
     }
 
     /// News from the PipeWire thread.
@@ -2146,7 +2177,7 @@ impl DomicileCompositor {
             casting.start(
                 casting::Source::desk(&spec),
                 casting::CursorMode::Embedded,
-                Box::new(|event| info!(?event, "DOMICILE_CAST_MONITOR cast")),
+                |_| Box::new(|event| info!(?event, "DOMICILE_CAST_MONITOR cast")),
             );
         }
     }
@@ -6249,6 +6280,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     // Chrome requests to the Wayland thread.
     let (request_tx, request_rx) = channel::<ClientRequest>();
+    // Cast requests from any thread, such as the ScreenCast portal's.
+    let (cast_requests, heard_cast_requests) = channel::<casting::Request>();
     // Passphrase verdicts from the checking thread.
     let (verdicts, heard_verdicts) = channel::<Verdict>();
 
@@ -6277,6 +6310,18 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             {
                 let display = socket_name.clone();
                 move |command| spawn_client(command, &display)
+            },
+            portals::ScreenCasting {
+                casting: casting::Casting::new(cast_requests.clone()),
+                grants: domicile_launch::profile_path::state_directory(&|key| {
+                    std::env::var(key).ok()
+                })
+                .map(|directory| directory.join("screen-cast-grants.v1.json")),
+                data_dirs: data_dirs(
+                    std::env::var_os("XDG_DATA_HOME"),
+                    std::env::var_os("XDG_DATA_DIRS"),
+                    home_directory().as_deref(),
+                ),
             },
         ),
     );
@@ -6440,8 +6485,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             render_modifiers(&gpu.renderer, fourcc)
         }))
     });
-    // Cast requests from any thread, and news from the PipeWire thread.
-    let (cast_requests, heard_cast_requests) = channel::<casting::Request>();
+    // News from the PipeWire thread.
     let (cast_news, heard_cast_news) = channel::<casting::ToWayland>();
 
     let mut dmabuf_state = DmabufState::new();

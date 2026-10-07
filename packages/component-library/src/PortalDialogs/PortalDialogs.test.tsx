@@ -202,6 +202,25 @@ const usb = (id: number) => ({
   kind: "usb",
 });
 
+const screenCast = (multiple = false) => ({
+  app_id: "us.zoom.Zoom",
+  body: {
+    multiple,
+    sources: [
+      {
+        app_name: "Text Editor",
+        icon: "data:image/png;base64,AA==",
+        id: "app-3",
+        title: "Notes",
+        type: "window",
+      },
+      { id: "app-4", title: "", type: "window" },
+    ],
+  },
+  id: 5,
+  kind: "screen_cast",
+});
+
 describe(PortalDialogs, () => {
   describe("rendering", () => {
     it("draws nothing while no application asks", () => {
@@ -932,7 +951,18 @@ describe(PortalDialogs, () => {
         [
           remoteDesktop(5, true),
           inputCapture(6),
-          { app_id: "", body: {}, id: 7, kind: "screen_cast" },
+          {
+            app_id: "us.zoom.Zoom",
+            body: {
+              sources: [
+                { id: "app-3", title: "Notes", type: "window" },
+                { id: "app-4", title: "", type: "window" },
+              ],
+            },
+            id: 7,
+            kind: "screen_cast",
+          },
+          { app_id: "", body: {}, id: 8, kind: "screenshot" },
         ],
       );
 
@@ -943,7 +973,8 @@ describe(PortalDialogs, () => {
       ).toEqual([
         "Remote control: org.example.Remote — keyboard, pointer, clipboard",
         "Input capture: org.example.Barrier — keyboard, pointer",
-        "screen_cast: An application",
+        "Sharing: us.zoom.Zoom — Notes, Untitled window",
+        "screenshot: An application",
       ]);
     });
 
@@ -961,6 +992,103 @@ describe(PortalDialogs, () => {
 
       expect(host.answers).toEqual([[6, { kind: "stop" }]]);
     });
+  });
+});
+
+describe("screen cast", () => {
+  it("lists the windows with their applications' names and icons", () => {
+    const host = new FakeHost();
+    render(<PortalDialogs host={host.host} />);
+    host.push([screenCast()]);
+
+    expect(screen.getByRole("dialog")).toHaveTextContent("Share a window");
+    expect(
+      screen.getByText("us.zoom.Zoom wants to record"),
+    ).toBeInTheDocument();
+    const notes = screen.getByRole("button", { name: "Text Editor: Notes" });
+    expect(within(notes).getByRole("presentation")).toHaveAttribute(
+      "src",
+      "data:image/png;base64,AA==",
+    );
+    expect(
+      screen.getByRole("button", { name: "Untitled window" }),
+    ).toBeInTheDocument();
+  });
+
+  it("shares nothing until a window is picked", () => {
+    const host = new FakeHost();
+    render(<PortalDialogs host={host.host} />);
+    host.push([screenCast()]);
+
+    expect(screen.getByRole("button", { name: "Share" })).toBeDisabled();
+  });
+
+  it("shares the window picked", async () => {
+    const host = new FakeHost();
+    render(<PortalDialogs host={host.host} />);
+    host.push([screenCast()]);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Text Editor: Notes" }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Share" }));
+
+    expect(host.answers).toEqual([
+      [5, { kind: "screen_cast", sources: [{ id: "app-3", type: "window" }] }],
+    ]);
+  });
+
+  it("picks one window unless the application asks for more", async () => {
+    const host = new FakeHost();
+    render(<PortalDialogs host={host.host} />);
+    host.push([screenCast()]);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Text Editor: Notes" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Untitled window" }),
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Text Editor: Notes" }),
+    ).toHaveAttribute("aria-pressed", "false");
+    expect(
+      screen.getByRole("button", { name: "Untitled window" }),
+    ).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("shares several windows when the application asks for more", async () => {
+    const host = new FakeHost();
+    render(<PortalDialogs host={host.host} />);
+    host.push([screenCast(true)]);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Text Editor: Notes" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Untitled window" }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Share" }));
+
+    expect(host.answers).toEqual([
+      [
+        5,
+        {
+          kind: "screen_cast",
+          sources: [
+            { id: "app-3", type: "window" },
+            { id: "app-4", type: "window" },
+          ],
+        },
+      ],
+    ]);
+  });
+
+  it("cancels", async () => {
+    const host = new FakeHost();
+    render(<PortalDialogs host={host.host} />);
+    host.push([screenCast()]);
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(host.answers).toEqual([[5, { kind: "canceled" }]]);
   });
 });
 
