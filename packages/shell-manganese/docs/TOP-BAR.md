@@ -60,14 +60,16 @@ To style your own items with manganese's Panda CSS, see
 
 ## Network
 
-- The primary connection from NetworkManager
+- The primary connection from NetworkManager, iwd or wpa_supplicant, whichever
+  is on the system bus first in that order
   ([`@domicile-desktop/system-network`](../../system-network/README.md)).
+  iwd and wpa_supplicant report Wi-Fi only.
 - Wi-Fi: a signal icon graded strong, fair or weak by thirds, and the SSID.
   Wired: a network icon. Any other kind, such as a VPN: a network icon and its
   name. No connection: a crossed-out Wi-Fi icon.
 - Turns `warning` when NetworkManager reports limited connectivity or a
   captive portal.
-- Hidden without NetworkManager.
+- Hidden without any of the three.
 
 ## Bluetooth
 
