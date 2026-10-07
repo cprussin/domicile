@@ -5,6 +5,7 @@ import {
   answerPortalRequest,
   PortalAnswer,
   PortalKind,
+  SHELL_APP_ID,
   stopCapturing,
   watchCapturing,
   watchPortalRequests,
@@ -246,7 +247,9 @@ const Dialog = ({
       return (
         <ScreenshotDialog
           answer={answer}
-          asker={appName(request.appId)}
+          asker={
+            request.appId === SHELL_APP_ID ? undefined : appName(request.appId)
+          }
           body={request.body}
           screen={screen}
         />

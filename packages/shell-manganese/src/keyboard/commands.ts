@@ -25,6 +25,8 @@ export const lock = () => command("lock");
 export const launcher = () => command("launcher");
 /** Toggle the clipboard history. */
 export const clipboard = () => command("clipboard");
+/** Take a screenshot, picking the area in a dialog. */
+export const screenshot = () => command("screenshot");
 /** Move the focus, or focus the parent or child container. */
 export const focus = (to: Way | "parent" | "child" | "mode_toggle") =>
   command("focus", to);
@@ -109,6 +111,7 @@ export const DEFAULT_KEYBINDINGS: ModeKeybindings = {
   "Meta+Tab": focus("mode_toggle"),
   "Meta+v": split("v"),
   "Meta+w": layout("tabbed"),
+  Print: screenshot(),
   ...everyWay("", focus),
   ...everyWay("Shift+", move),
   ...everyWorkspace("", workspace),

@@ -30,7 +30,7 @@ use domicile_host::desktop_entries::DesktopEntries;
 use domicile_host::mime_apps::{default_handler, lists};
 use domicile_host::portal_notifications::Invoked;
 use domicile_protocol::{
-    BoundShortcut, Capturing, PortalAnswer, PortalRequest, PortalWallpaper, Theme,
+    BoundShortcut, Capturing, PortalAnswer, PortalRequest, PortalWallpaper, SystemError, Theme,
 };
 use tracing::{debug, warn};
 use zbus::blocking::connection::Builder;
@@ -89,7 +89,7 @@ use queue::Queue;
 use remote_desktop::{RemoteDesktop, Remotes};
 use restore::Tokens;
 use screencast::ScreenCast;
-use screenshot::{Screenshot, Shoot};
+use screenshot::{Screenshot, Shots};
 use settings::{color_scheme, Appearance, Settings};
 use usb::Usb;
 use wallpaper::{Pictures, Wallpaper};
@@ -125,6 +125,7 @@ pub const CURRENT_DESKTOP: &str = "domicile";
 #[derive(Clone)]
 pub struct Portals {
     backends: Backends,
+    shots: Shots,
 }
 
 /// What the portal thread is told to do on the bus.
@@ -174,6 +175,7 @@ impl Portals {
                 Shortcuts::new(None),
             )
             .0,
+            shots: Shots::none(),
         }
     }
 
@@ -272,6 +274,17 @@ impl Portals {
     /// A client is pasting `session`'s offer into `fd`.
     pub fn transfer(&self, session: OwnedObjectPath, mime_type: String, fd: std::os::fd::OwnedFd) {
         self.backends.transfer(session, mime_type, fd);
+    }
+
+    /// Takes a screenshot the shell asked for itself, and returns where it
+    /// was saved. Blocks until then, the dialog included. See
+    /// [`screenshot::for_the_shell`].
+    pub fn screenshot(&self, file: Option<PathBuf>) -> Result<PathBuf, SystemError> {
+        zbus::block_on(screenshot::for_the_shell(
+            &self.backends.queue,
+            &self.shots,
+            file,
+        ))
     }
 
     fn tell(&self, told: Told) {
@@ -393,8 +406,8 @@ impl Backends {
 struct Starting {
     lockdown: LockdownConfig,
     screen_cast: ScreenCast,
-    /// Takes a frame of the desk, for `Screenshot`.
-    shoot: Shoot,
+    /// Takes and saves frames of the desk, for `Screenshot`.
+    shots: Shots,
     /// Opens a `mailto:` URL.
     open: Open,
     /// Who the user is, for `Account`.
@@ -456,15 +469,20 @@ pub fn serve(
         });
     backends.pictures = Arc::new(Pictures::load(state_home.join("domicile/wallpaper")));
     backends.config_home = xdg_home("XDG_CONFIG_HOME", home.as_deref(), ".config");
+    let shots = Shots {
+        shoot: screenshot::shooting(casting.casting.clone()),
+        save: screenshot::in_pictures(),
+    };
     let portals = Portals {
         backends: backends.clone(),
+        shots: shots.clone(),
     };
     let appearance = Appearance::from(look);
     let open = mail_client(spawn);
     thread::spawn(move || {
         let starting = Starting {
             lockdown,
-            shoot: screenshot::shooting(casting.casting.clone()),
+            shots,
             screen_cast: screen_cast(&backends.queue, casting),
             open,
             user: account::the_user(),
@@ -802,8 +820,8 @@ fn export<'a>(
             OBJECT_PATH,
             Screenshot {
                 queue: Arc::clone(&backends.queue),
-                shoot: starting.shoot,
-                save: screenshot::in_pictures(),
+                shoot: starting.shots.shoot,
+                save: starting.shots.save,
             },
         )
 }
@@ -991,7 +1009,7 @@ mod tests {
                     ..LockdownConfig::default()
                 },
                 screen_cast: idle_screen_cast(&backends.queue),
-                shoot: Box::new(|| Box::pin(async { Err("no desk here".into()) })),
+                shots: Shots::none(),
                 open,
                 user: Box::new(|| {
                     Box::pin(async {
