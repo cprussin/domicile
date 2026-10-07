@@ -26,9 +26,3 @@ png.workspace = true
 zbus = { workspace = true, features = ["p2p"] }
 libc.workspace = true
 tempfile.workspace = true
-
-# Gates the Smithay backend so the default build tests without the graphics
-# toolchain.
-[features]
-default = []
-smithay-backend = []

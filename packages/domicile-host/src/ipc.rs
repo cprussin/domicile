@@ -1,7 +1,8 @@
 //! Host-chrome IPC: newline-delimited JSON, one message per line.
 //!
-//! Transport-agnostic, so tests can use in-memory strings. [`Session`] runs
-//! the version handshake and forwards chrome messages to [`Host`].
+//! Transport-agnostic, so tests can use in-memory strings.
+//! [`apply_chrome_message`] runs the version handshake and forwards chrome
+//! messages to [`Host`].
 
 use domicile_protocol::{negotiate, ChromeMessage, HostMessage, PROTOCOL_VERSION};
 use serde::Serialize;
@@ -20,57 +21,10 @@ pub fn parse_chrome(line: &str) -> Result<ChromeMessage, serde_json::Error> {
     serde_json::from_str(line)
 }
 
-/// One chrome connection that owns a [`Host`] and runs the handshake.
-///
-/// [`ingest`](Session::ingest) takes inbound lines and returns replies.
-/// Wayland-side events go through [`Session::host_mut`].
-#[derive(Debug, Default)]
-pub struct Session {
-    host: Host,
-    ready: bool,
-}
-
-impl Session {
-    pub fn new() -> Self {
-        Session::default()
-    }
-
-    /// Whether the version handshake has completed.
-    pub fn is_ready(&self) -> bool {
-        self.ready
-    }
-
-    /// The host, for Wayland-side events and inspection.
-    pub fn host_mut(&mut self) -> &mut Host {
-        &mut self.host
-    }
-
-    /// Handles one inbound line and returns the replies.
-    pub fn ingest(&mut self, line: &str) -> Vec<HostMessage> {
-        handle_chrome_line(&mut self.host, &mut self.ready, line)
-    }
-}
-
-/// Applies one inbound line to a possibly shared [`Host`] and returns the
-/// replies. The caller owns the handshake's `ready` flag.
-///
-/// The compositor calls this directly so one `Host` serves many chromes.
-/// Malformed lines are ignored. See [`apply_chrome_message`] for the
-/// handshake.
-pub fn handle_chrome_line(host: &mut Host, ready: &mut bool, line: &str) -> Vec<HostMessage> {
-    match parse_chrome(line.trim()) {
-        Ok(message) => apply_chrome_message(host, ready, message),
-        // A chrome on another version must not take the host down. This crate
-        // has no logger; the compositor logs the same case.
-        Err(_) => Vec::new(),
-    }
-}
-
 /// Applies a parsed chrome message and returns the replies.
 ///
-/// Before the handshake, only `Hello` is handled. Separate from
-/// [`handle_chrome_line`] so the compositor can intercept messages such as
-/// `Spawn` first.
+/// Before the handshake, only `Hello` is handled. The compositor parses each
+/// line itself, so it can intercept messages such as `Spawn` first.
 pub fn apply_chrome_message(
     host: &mut Host,
     ready: &mut bool,

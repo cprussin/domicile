@@ -466,11 +466,12 @@ fn focus_routes_keyboard_between_app_and_chrome() {
 fn spawn_is_a_no_op_in_the_brain() {
     // The compositor handles `Spawn` before it reaches `Host`.
     let mut host = Host::new();
+    let before = format!("{host:?}");
     host.handle_chrome_message(ChromeMessage::Spawn {
         command: vec!["kitty".into()],
     })
     .unwrap();
-    assert_eq!(host.app_count(), 0);
+    assert_eq!(format!("{host:?}"), before);
 }
 
 #[test]
@@ -484,7 +485,7 @@ fn asking_a_client_to_close_leaves_the_window_where_it_is() {
     host.handle_chrome_message(ChromeMessage::CloseApp { app_id: id.clone() })
         .unwrap();
 
-    assert_eq!(host.app_count(), 1);
+    assert!(host.app(&id).is_some());
 }
 
 // ---- displays -------------------------------------------------------------

@@ -162,7 +162,7 @@ pub enum ChromeMessage {
     /// The user picked a theme from the shell's toggle.
     ///
     /// The compositor applies it to the clients too (see
-    /// `domicile_compositor::appearance`) and broadcasts
+    /// `domicile_compositor::portals::settings`) and broadcasts
     /// [`HostMessage::Theme`] to every chrome, including the sender, so one
     /// path sets the theme. Not written back to the config file, which is
     /// generated; the change lasts until the desktop restarts.

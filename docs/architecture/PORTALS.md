@@ -30,7 +30,7 @@ One request channel carries all dialogs. Each interface's backend builds on it.
 |---|---|
 | Wire types: `HostMessage::PortalRequests`, `ChromeMessage::AnswerPortalRequest`, `PortalRequest`, `PortalAnswer` | `packages/domicile-protocol` |
 | Queue: pending requests, their apps, answer validation | `packages/domicile-host/src/portals.rs` |
-| D-Bus service: one name, one object, all interfaces; `Request`/`Session` objects | `packages/domicile-compositor/src/portals/` (`Settings` moves here from `appearance.rs`) |
+| D-Bus service: one name, one object, all interfaces; `Request`/`Session` objects | `packages/domicile-compositor/src/portals/` (`Settings` in `settings.rs`) |
 | `portalrequests` event, `answerPortalRequest()` | `control_channel.mojom`, `modules/domicile/`; new files only, no patch |
 | Request kinds, parsed with Zod | `@domicile-desktop/sdk/portal` |
 | Ready-made dialogs for any shell | `@domicile-desktop/component-library/PortalDialogs` |
@@ -184,7 +184,7 @@ One request channel carries all dialogs. Each interface's backend builds on it.
 
 | Interface | Compositor | Shell UI | Phase |
 |---|---|---|---|
-| Settings | `color-scheme` (exists); add `accent-color`, `contrast`, `reduced-motion` from shell config | — | 1 |
+| Settings | `color-scheme`, `accent-color`, `contrast`, `reduced-motion` from shell config | — | 1 |
 | FileChooser | `OpenFile`, `SaveFile`, `SaveFiles`; filters, `current_folder`, `choices` | picker (manganese's `FilePicker`, moved to component-library) | 1 |
 | AppChooser | candidates from desktop entries and `mimeapps.list`; `UpdateChoices` | app list | 1 |
 | OpenURI | (frontend) | via AppChooser | 1 |
@@ -216,11 +216,11 @@ Phase 0: request channel.
 
 - [x] `PortalRequest`, `PortalAnswer`, the two messages; protocol round-trip tests
 - [x] `domicile_host::portals`: queue, first answer wins, refuse when no listener
-- [x] `src/portals/`: one name, `Request` and `Session` objects, `Settings` moved from `appearance.rs`
+- [x] `src/portals/`: one name, `Request` and `Session` objects, `Settings`
 - [x] engine patch: `portalrequests`, `answerPortalRequest`; guard against a stand-in compositor
 - [x] SDK: `portal_requests`, kinds parsed with Zod
 - [x] `zxdg_exporter_v2` and `v1`; resolve a handle to an app id (`domicile_host::xdg_foreign`; no importer)
-- [ ] `<PortalDialogs />` in component-library; mounted in manganese, shell-simple, `examples/minimal-shell`
+- [x] `<PortalDialogs />` in component-library; mounted in manganese and shell-simple; `examples/minimal-shell` refuses instead
 - [x] `domicile.portal` lists each interface as it lands; the conf routes it here
 
 Phase 1: dialogs.
@@ -239,7 +239,7 @@ Phase 2: capture.
 - [x] ScreenCast of windows, with restore tokens and the sharing indicator
 - [x] ScreenCast of monitors and regions: offer the engine's display `Source`s in the picker and `AvailableSourceTypes`
 - [x] Screenshot and `PickColor`
-- [ ] Remove ROADMAP's "no screenshot or screencast portal" item
+- [x] Remove ROADMAP's "no screenshot or screencast portal" item
 
 Phase 3: input.
 
