@@ -239,7 +239,8 @@ frame.addEventListener(WEBVIEW_FILE_CHOOSER_EVENT, (event) => {
   dispatch returns.
 - **`event.home`** is the absolute home directory.
 - **Listing directories:** `readDir` and `stat` from
-  `@domicile-desktop/sdk/system` ([SYSTEM-ACCESS.md](/docs/architecture/SYSTEM-ACCESS.md)).
+  `@domicile-desktop/sdk/system`
+  ([SHELL-SYSTEM-ACCESS.md](/docs/SHELL-SYSTEM-ACCESS.md)).
   They are refused while the desktop is locked.
 - **Paths** are absolute or relative to home (`""` is home). `..` throws a
   `TypeError`.

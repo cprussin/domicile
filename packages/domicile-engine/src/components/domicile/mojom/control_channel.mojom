@@ -171,8 +171,9 @@ struct ClipboardEntry {
 //
 // `id` is what ActivateTrayItem names it by. `title` is never empty -- the
 // compositor falls back to the item's own id -- and is what a shell labels the
-// icon with. `icon` is a `data:` URL, for DesktopEntry's reason below, and
-// empty for an item whose picture the compositor could not draw.
+// icon with. `icon` is a `data:` URL, because the page may draw what the
+// compositor read and cannot read it for itself, and empty for an item whose
+// picture the compositor could not draw.
 struct TrayItem {
   string id;
   string title;
@@ -186,58 +187,6 @@ enum TrayAction {
   kPrimary,
   kSecondary,
   kContext,
-};
-
-// A port of an AudioDevice or a profile of an AudioCard: something to switch
-// it to. `available` is false for a port whose jack is empty, or a profile
-// that needs one; either is still choosable.
-struct AudioChoice {
-  string name;
-  string description;
-  bool available;
-};
-
-// An output (a sink) or an input (a source). `id` is what the mixer's
-// requests name it by. `volume` is the loudest channel as a fraction of the
-// server's 100%. `is_default` because `default` is C++'s. `monitor` marks an
-// output's monitor among the inputs. `port` is the one in use, or empty for a
-// device with none.
-struct AudioDevice {
-  string id;
-  string description;
-  double volume;
-  bool muted;
-  bool is_default;
-  bool monitor;
-  array<AudioChoice> ports;
-  string port;
-};
-
-// Something playing (a sink input) or recording (a source output). `title`
-// is empty where the application said nothing; `device` is the AudioDevice id
-// it goes to, or empty for one the next Audio settles.
-struct AudioStream {
-  string id;
-  string application;
-  string title;
-  double volume;
-  bool muted;
-  string device;
-};
-
-// One meter of an AudioLevels: the AudioDevice or AudioStream id it meters,
-// and the loudest sample since the last, 0.0 through 1.0 of full scale.
-struct AudioLevel {
-  string id;
-  double peak;
-};
-
-// A sound card. `profiles` is best first; `profile` the one in use, or empty.
-struct AudioCard {
-  string id;
-  string description;
-  array<AudioChoice> profiles;
-  string profile;
 };
 
 // One button of a Notification.
@@ -256,7 +205,7 @@ struct NotificationAction {
 //
 // `id` is 32 bits for ClipboardEntry's reason. `body` is plain text: the
 // compositor tells senders it takes no markup. `icon` is a `data:` URL, for
-// DesktopEntry's reason below, and empty for nothing to draw. `urgency` is
+// TrayItem's reason, and empty for nothing to draw. `urgency` is
 // "low", "normal" or "critical", carried as the compositor's word because a
 // page reads it as a word. `actions` leaves out the press on the notification
 // itself, which is `clickable`. `timeout_ms` is -1 where the sender left how
@@ -274,36 +223,6 @@ struct Notification {
   bool clickable;
   int32 timeout_ms;
   double time;
-};
-
-// An application a desktop entry offers, as a launcher draws and runs it.
-//
-// `command` is the argv, already unquoted and with its field codes dropped by
-// the compositor, so the page hands it to Spawn and nothing on this side
-// parses an Exec line. `comment` is empty for an entry that has none.
-//
-// `icon` is a `data:` URL, for the reason a song's `cover` is one: the page
-// may draw what the compositor read and cannot read it for itself. Empty for
-// an entry whose icon the compositor did not find. `preview` is the picture
-// the entry names for a launcher's preview, the same way and empty the same
-// way.
-struct DesktopEntry {
-  string id;
-  string name;
-  string comment;
-  array<string> command;
-  string icon;
-  string preview;
-};
-
-// A URL the desk offers by name, from its config: the page opens `url`
-// itself rather than handing it to a program. `icon` is the one its site
-// names for itself, a `data:` URL as DesktopEntry's is, and empty when the
-// compositor has not found it.
-struct Bookmark {
-  string name;
-  string url;
-  string icon;
 };
 
 // Page -> browser -> compositor.
@@ -351,18 +270,11 @@ interface ControlChannel {
   // `Spawn`.
   PreviewFile(string path);
 
-  // Ask which installed applications match `query`. Answered with
-  // ControlChannelClient::Apps, carrying the same query.
-  //
-  // Words, like SearchFiles: which directories hold the desktop entries is
-  // the compositor's to read, and nothing here names one.
-  SearchApps(string query);
-
   // A system call: a file, a directory, a watch or a process. `request` is the
   // call as JSON, `{"call":"read_file","path":"..."}`; `id` names it in every
   // answer, ControlChannelClient::System. The browser wraps it as a
   // `system_request` line and reads nothing else of it; the compositor checks
-  // it, the lock included. See docs/architecture/SYSTEM-ACCESS.md.
+  // it, the lock included. See docs/SHELL-SYSTEM-ACCESS.md.
   CallSystem(uint32 id, string request);
 
   // Put a row of the clipboard's history back on the clipboard.
@@ -460,36 +372,6 @@ interface ControlChannel {
   // and only when the desk actually shut. A desk with no lock configured has
   // nothing to shut, and answers nothing.
   Lock();
-
-  // Set the screen's backlight to `level`, a fraction 0.0 through 1.0.
-  //
-  // Answered like SetTheme: with ControlChannelClient::Brightness to every
-  // chrome, once the kernel says the backlight moved. The compositor asks
-  // logind to write it and never turns the screen all the way off.
-  SetBrightness(double level);
-
-  // The shell's mixer. Each names a device or a stream by an id a
-  // ControlChannelClient::Audio carried -- opaque here, and checked by the
-  // compositor, which refuses one it never gave out -- and each is answered
-  // like SetBrightness: with the next Audio to every chrome, once the sound
-  // server says it moved. A volume is a fraction of the server's 100%.
-  SetAudioVolume(string id, double volume);
-  SetAudioMuted(string id, bool muted);
-  // Make a device the one new streams go to.
-  SetDefaultAudioDevice(string id);
-  // Move a stream to another device of its own direction.
-  MoveAudioStream(string id, string device);
-  // Switch a device's port -- speakers to headphones -- by the port's name.
-  SetAudioPort(string id, string port);
-  // Switch a sound card's profile, by the card's id and the profile's name.
-  SetAudioProfile(string card, string profile);
-
-  // Meter these devices and streams, by the ids an Audio carried, and send
-  // their peaks as AudioLevels. A lease: the page asks again every second
-  // while its meters are on screen, and the compositor stops metering what
-  // nobody renewed -- metering a microphone records it. An empty array lets
-  // go at once.
-  WatchAudioLevels(array<string> ids);
 
   // This page's old frame is held for `theme`: the desk's windows may turn.
   //
@@ -629,24 +511,10 @@ interface ControlChannelClient {
               double duration,
               string cover);
 
-  // The applications and bookmarks a SearchApps matched, each best first. An
-  // answer like Files, so the query comes back for the page to tell answers
-  // apart; empty arrays are a query that matched nothing.
-  Apps(string query,
-       array<DesktopEntry> apps,
-       array<Bookmark> bookmarks);
-
-  // How bright the screen is, 0.0 through 1.0.
-  //
-  // Pushed, unlike Files, with no member on ControlChannel to ask for it. Sent
-  // when the backlight moves (a key, another program, or SetBrightness) and
-  // once more to a chrome that has just connected. A machine with no backlight
-  // sends none.
-  Brightness(double level);
-
   // What has been copied on this desktop, newest first.
   //
-  // Pushed like Brightness: the compositor is the process a
+  // Pushed, unlike Files, and with no member on ControlChannel to ask for it:
+  // the compositor is the process a
   // wl_data_device.set_selection arrives at, so a copy is an event it already
   // hears. Sent whenever the history changes and once more to a chrome that
   // has just connected. An empty array is a desktop nothing has been copied on
@@ -684,7 +552,7 @@ interface ControlChannelClient {
   // inside the generated class -- the same reason ShortcutPressed is not
   // called Shortcut.
   //
-  // Pushed like Brightness, and the one pushed message whose cause can be this
+  // Pushed like Clipboard, and the one pushed message whose cause can be this
   // page: it arrives when a chrome has just connected, when a reload of the
   // compositor's config moved `[theme]`, and when any chrome calls
   // ControlChannel::SetTheme. The sender is told again as part of that last
@@ -694,7 +562,7 @@ interface ControlChannelClient {
   // Whether anybody is at this desktop: true is a desk nobody has touched for
   // as long as its config says, false is somebody back at it.
   //
-  // Pushed like Brightness, and a state rather than an edge although the
+  // Pushed like Clipboard, and a state rather than an edge although the
   // compositor decides an edge: over there an edge is what a connector can
   // take, because lighting one is a modeset and a dark desk restating itself
   // every tick is a modeset a second. A page reloads, so it is sent where the
@@ -757,23 +625,6 @@ interface ControlChannelClient {
   // Pushed like ThemeChanged: once to a chrome that has just connected, and
   // again whenever a reload of the compositor's config moved what it carries.
   ShellConfig(string config);
-
-  // The desk's sound: every output and input, every stream playing or
-  // recording, every sound card, each list in the sound server's order.
-  //
-  // Pushed like Tray, and the whole of it every time: whenever the sound
-  // server says something moved, and once more to a chrome that has just
-  // connected. A desk with no sound server sends none.
-  Audio(array<AudioDevice> outputs,
-        array<AudioDevice> inputs,
-        array<AudioStream> playback,
-        array<AudioStream> recording,
-        array<AudioCard> cards);
-
-  // How loud what WatchAudioLevels asked for is: some twenty times a second
-  // while anything is metered, and never otherwise. An id not heard on yet is
-  // left out rather than sent as silence.
-  AudioLevels(array<AudioLevel> levels);
 
   // Focus moved, including to the chrome itself, in which case app_id is empty.
   FocusChanged(string app_id);

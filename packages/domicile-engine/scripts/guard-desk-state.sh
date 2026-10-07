@@ -9,7 +9,7 @@
 # WHY THIS EXISTS. Each of these used to reach a page only as an event, gone if
 # nobody was listening yet. Each is now the last thing the compositor said,
 # null until it has said anything, so a shell reads and then listens. The
-# notifications, extensions and audio attributes are the same code -- the last
+# notifications and extensions attributes are the same code -- the last
 # event's payload -- and are left to the shells that read them.
 # See docs/architecture/WINDOW-DOMICILE.md.
 set -u

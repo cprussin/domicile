@@ -19,7 +19,6 @@
 #include "third_party/blink/renderer/bindings/core/v8/script_value.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_object_builder.h"
-#include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_app_search.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_cursor_shape.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_file_preview.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_file_search.h"
@@ -40,14 +39,7 @@
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_app_event.h"
-#include "third_party/blink/renderer/modules/domicile/domicile_audio_card.h"
-#include "third_party/blink/renderer/modules/domicile/domicile_audio_choice.h"
-#include "third_party/blink/renderer/modules/domicile/domicile_audio_device.h"
-#include "third_party/blink/renderer/modules/domicile/domicile_audio_levels_event.h"
-#include "third_party/blink/renderer/modules/domicile/domicile_audio_stream.h"
-#include "third_party/blink/renderer/modules/domicile/domicile_bookmark.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_clipboard_entry.h"
-#include "third_party/blink/renderer/modules/domicile/domicile_desktop_entry.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_browser_window.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_display.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_extension.h"
@@ -246,26 +238,6 @@ const FrozenArray<DomicileNotification>* DomicileHost::notifications() const {
 
 const FrozenArray<DomicileExtension>* DomicileHost::extensions() const {
   return extensions_.Get();
-}
-
-const FrozenArray<DomicileAudioDevice>* DomicileHost::audioOutputs() const {
-  return audio_outputs_.Get();
-}
-
-const FrozenArray<DomicileAudioDevice>* DomicileHost::audioInputs() const {
-  return audio_inputs_.Get();
-}
-
-const FrozenArray<DomicileAudioStream>* DomicileHost::audioPlayback() const {
-  return audio_playback_.Get();
-}
-
-const FrozenArray<DomicileAudioStream>* DomicileHost::audioRecording() const {
-  return audio_recording_.Get();
-}
-
-const FrozenArray<DomicileAudioCard>* DomicileHost::audioCards() const {
-  return audio_cards_.Get();
 }
 
 std::optional<bool> DomicileHost::idle() const {
@@ -470,20 +442,6 @@ ScriptPromise<DomicileFilePreview> DomicileHost::previewFile(
   return promise;
 }
 
-ScriptPromise<DomicileAppSearch> DomicileHost::searchApps(
-    ScriptState* script_state,
-    const String& query,
-    ExceptionState& exception_state) {
-  if (!Ready(exception_state)) {
-    return EmptyPromise();
-  }
-  auto* resolver = Supersede(app_search_, script_state, exception_state);
-  app_search_query_ = query;
-  auto promise = resolver->Promise();
-  channel_->SearchApps(query);
-  return promise;
-}
-
 void DomicileHost::callSystem(ScriptState*,
                               uint32_t id,
                               const String& request,
@@ -517,82 +475,6 @@ void DomicileHost::unlock(ScriptState*,
 void DomicileHost::lock(ScriptState*, ExceptionState& exception_state) {
   if (Ready(exception_state)) {
     channel_->Lock();
-  }
-}
-
-// A request too: what this page hears is the `brightnesschanged` every chrome
-// on the desk hears once the backlight has moved.
-void DomicileHost::setBrightness(ScriptState*,
-                                 double level,
-                                 ExceptionState& exception_state) {
-  if (Ready(exception_state)) {
-    channel_->SetBrightness(level);
-  }
-}
-
-// The mixer's requests, relayed like setBrightness: what this page hears is
-// the `audio` every chrome on the desk hears once the sound server has moved.
-// The ids are the compositor's to check -- one it never gave out is a line in
-// its log -- so none is read here.
-void DomicileHost::setAudioVolume(ScriptState*,
-                                  const String& id,
-                                  double volume,
-                                  ExceptionState& exception_state) {
-  if (Ready(exception_state)) {
-    channel_->SetAudioVolume(id, volume);
-  }
-}
-
-void DomicileHost::setAudioMuted(ScriptState*,
-                                 const String& id,
-                                 bool muted,
-                                 ExceptionState& exception_state) {
-  if (Ready(exception_state)) {
-    channel_->SetAudioMuted(id, muted);
-  }
-}
-
-void DomicileHost::setDefaultAudioDevice(ScriptState*,
-                                         const String& id,
-                                         ExceptionState& exception_state) {
-  if (Ready(exception_state)) {
-    channel_->SetDefaultAudioDevice(id);
-  }
-}
-
-void DomicileHost::moveAudioStream(ScriptState*,
-                                   const String& id,
-                                   const String& device,
-                                   ExceptionState& exception_state) {
-  if (Ready(exception_state)) {
-    channel_->MoveAudioStream(id, device);
-  }
-}
-
-void DomicileHost::setAudioPort(ScriptState*,
-                                const String& id,
-                                const String& port,
-                                ExceptionState& exception_state) {
-  if (Ready(exception_state)) {
-    channel_->SetAudioPort(id, port);
-  }
-}
-
-void DomicileHost::setAudioProfile(ScriptState*,
-                                   const String& card,
-                                   const String& profile,
-                                   ExceptionState& exception_state) {
-  if (Ready(exception_state)) {
-    channel_->SetAudioProfile(card, profile);
-  }
-}
-
-// An empty list is a page letting go, which is an ask like any other.
-void DomicileHost::watchAudioLevels(ScriptState*,
-                                    const Vector<String>& ids,
-                                    ExceptionState& exception_state) {
-  if (Ready(exception_state)) {
-    channel_->WatchAudioLevels(ids);
   }
 }
 
@@ -1370,40 +1252,7 @@ void DomicileHost::FilePreview(const String& path,
   Settle(file_preview_, file_preview_path_, path, answer);
 }
 
-// An answer, like Files. The entries are built here rather than carried as
-// parallel arrays because what a launcher draws and runs is an entry -- see
-// `domicile_desktop_entry.h`.
-void DomicileHost::Apps(const String& query,
-                        Vector<domicile::mojom::blink::DesktopEntryPtr> apps,
-                        Vector<domicile::mojom::blink::BookmarkPtr> bookmarks) {
-  HeapVector<Member<DomicileDesktopEntry>> entries;
-  entries.reserve(apps.size());
-  for (auto& app : apps) {
-    entries.push_back(MakeGarbageCollected<DomicileDesktopEntry>(
-        app->id, app->name, app->comment, std::move(app->command),
-        app->icon, app->preview));
-  }
-  HeapVector<Member<DomicileBookmark>> marked;
-  marked.reserve(bookmarks.size());
-  for (auto& bookmark : bookmarks) {
-    marked.push_back(MakeGarbageCollected<DomicileBookmark>(
-        bookmark->name, bookmark->url, bookmark->icon));
-  }
-  auto* answer = DomicileAppSearch::Create();
-  answer->setApps(entries);
-  answer->setBookmarks(marked);
-  Settle(app_search_, app_search_query_, query, answer);
-}
-
-// Pushed, so there is no ask for this to be the answer to. Kept, like
-// Displays: the event says the brightness moved and the attribute says where
-// it is, so a slider that mounts later still has a reading.
-void DomicileHost::Brightness(double level) {
-  brightness_ = level;
-  DispatchEvent(*Event::Create(domicile_event_names::Brightnesschanged()));
-}
-
-// Pushed, like Brightness and unlike Files: the compositor hears a copy without
+// Pushed, unlike Files: the compositor hears a copy without
 // anybody asking. The rows are built here rather than carried as two arrays
 // because what a panel draws is a row -- see `domicile_clipboard_entry.h`.
 void DomicileHost::Clipboard(
@@ -1456,7 +1305,7 @@ void DomicileHost::Notifications(
   DispatchEvent(*Event::Create(domicile_event_names::Notificationschanged()));
 }
 
-// Pushed, like Brightness, and the one pushed message this page can cause:
+// Pushed, like Clipboard, and the one pushed message this page can cause:
 // `setTheme` above is answered with it, to every chrome on the desk rather
 // than to the one that called. Through the wire name, for `AppCursor`'s
 // reason and with `AppCursor`'s unreachable CHECK.
@@ -1472,7 +1321,7 @@ void DomicileHost::WindowsThemeChanged(domicile::mojom::blink::Theme theme) {
   DispatchEvent(*Event::Create(domicile_event_names::Windowsthemechanged()));
 }
 
-// Pushed like Brightness, and a state rather than an edge -- the compositor
+// Pushed like Clipboard, and a state rather than an edge -- the compositor
 // decides the edge, because lighting a connector is a modeset and a dark desk
 // must not ask for one per tick, and then sends where the desk stands so that
 // a page which has only just loaded is not left drawing a desktop somebody is
@@ -1511,92 +1360,6 @@ void DomicileHost::ShellConfig(const String& config) {
       ResolveChords();
     }
   }
-}
-
-namespace {
-
-HeapVector<Member<DomicileAudioChoice>> AudioChoices(
-    const Vector<domicile::mojom::blink::AudioChoicePtr>& choices) {
-  HeapVector<Member<DomicileAudioChoice>> made;
-  made.reserve(choices.size());
-  for (const auto& choice : choices) {
-    made.push_back(MakeGarbageCollected<DomicileAudioChoice>(
-        choice->name, choice->description, choice->available));
-  }
-  return made;
-}
-
-HeapVector<Member<DomicileAudioDevice>> AudioDevices(
-    const Vector<domicile::mojom::blink::AudioDevicePtr>& devices) {
-  HeapVector<Member<DomicileAudioDevice>> made;
-  made.reserve(devices.size());
-  for (const auto& device : devices) {
-    made.push_back(MakeGarbageCollected<DomicileAudioDevice>(
-        device->id, device->description, device->volume, device->muted,
-        device->is_default, device->monitor, AudioChoices(device->ports),
-        device->port));
-  }
-  return made;
-}
-
-HeapVector<Member<DomicileAudioStream>> AudioStreams(
-    const Vector<domicile::mojom::blink::AudioStreamPtr>& streams) {
-  HeapVector<Member<DomicileAudioStream>> made;
-  made.reserve(streams.size());
-  for (const auto& stream : streams) {
-    made.push_back(MakeGarbageCollected<DomicileAudioStream>(
-        stream->id, stream->application, stream->title, stream->volume,
-        stream->muted, stream->device));
-  }
-  return made;
-}
-
-HeapVector<Member<DomicileAudioCard>> AudioCards(
-    const Vector<domicile::mojom::blink::AudioCardPtr>& cards) {
-  HeapVector<Member<DomicileAudioCard>> made;
-  made.reserve(cards.size());
-  for (const auto& card : cards) {
-    made.push_back(MakeGarbageCollected<DomicileAudioCard>(
-        card->id, card->description, AudioChoices(card->profiles),
-        card->profile));
-  }
-  return made;
-}
-
-}  // namespace
-
-// Pushed, like Notifications: the compositor hears the sound server without
-// anybody asking, and the mixer's own requests come back this way.
-void DomicileHost::Audio(
-    Vector<domicile::mojom::blink::AudioDevicePtr> outputs,
-    Vector<domicile::mojom::blink::AudioDevicePtr> inputs,
-    Vector<domicile::mojom::blink::AudioStreamPtr> playback,
-    Vector<domicile::mojom::blink::AudioStreamPtr> recording,
-    Vector<domicile::mojom::blink::AudioCardPtr> cards) {
-  audio_outputs_ = MakeGarbageCollected<FrozenArray<DomicileAudioDevice>>(
-      AudioDevices(outputs));
-  audio_inputs_ = MakeGarbageCollected<FrozenArray<DomicileAudioDevice>>(
-      AudioDevices(inputs));
-  audio_playback_ = MakeGarbageCollected<FrozenArray<DomicileAudioStream>>(
-      AudioStreams(playback));
-  audio_recording_ = MakeGarbageCollected<FrozenArray<DomicileAudioStream>>(
-      AudioStreams(recording));
-  audio_cards_ =
-      MakeGarbageCollected<FrozenArray<DomicileAudioCard>>(AudioCards(cards));
-  DispatchEvent(*Event::Create(domicile_event_names::Audiochanged()));
-}
-
-// Pushed while anything is metered, as rows like every list here.
-void DomicileHost::AudioLevels(
-    Vector<domicile::mojom::blink::AudioLevelPtr> levels) {
-  HeapVector<Member<DomicileAudioLevel>> made;
-  made.reserve(levels.size());
-  for (const auto& level : levels) {
-    made.push_back(
-        MakeGarbageCollected<DomicileAudioLevel>(level->id, level->peak));
-  }
-  DispatchEvent(*MakeGarbageCollected<DomicileAudioLevelsEvent>(
-      domicile_event_names::Audiolevels(), std::move(made)));
 }
 
 void DomicileHost::FocusChanged(const String& app_id) {
@@ -1729,16 +1492,10 @@ void DomicileHost::Trace(Visitor* visitor) const {
   visitor->Trace(held_);
   visitor->Trace(file_search_);
   visitor->Trace(file_preview_);
-  visitor->Trace(app_search_);
   visitor->Trace(clipboard_);
   visitor->Trace(tray_items_);
   visitor->Trace(notifications_);
   visitor->Trace(extensions_);
-  visitor->Trace(audio_outputs_);
-  visitor->Trace(audio_inputs_);
-  visitor->Trace(audio_playback_);
-  visitor->Trace(audio_recording_);
-  visitor->Trace(audio_cards_);
   visitor->Trace(window_);
   visitor->Trace(channel_);
   visitor->Trace(client_receiver_);

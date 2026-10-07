@@ -285,7 +285,7 @@ pub enum Asked<'a> {
     OnTheWaylandThread(&'a ClientRequest),
     OnTheConnection(&'a ConnectionRequest),
     /// A system call from the shell, by what it touches. See
-    /// `docs/architecture/SYSTEM-ACCESS.md`.
+    /// `docs/SHELL-SYSTEM-ACCESS.md`.
     System(Reach),
 }
 

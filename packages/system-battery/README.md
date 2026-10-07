@@ -6,7 +6,7 @@ The battery for a Domicile shell, from UPower over the system bus.
   whether a charger is connected.
 - Built on [`@domicile-desktop/sdk/system`](../chrome-sdk/README.md)'s
   `dbusCall` and `dbusMatch`. See
-  [SYSTEM-ACCESS.md](/docs/architecture/SYSTEM-ACCESS.md).
+  [SHELL-SYSTEM-ACCESS.md](/docs/SHELL-SYSTEM-ACCESS.md).
 - Needs `upower` running. Without it, calls fail with a `Dbus` error.
 
 ## Usage

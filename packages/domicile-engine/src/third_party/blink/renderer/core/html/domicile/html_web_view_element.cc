@@ -492,12 +492,4 @@ void HTMLWebViewElement::FileChooserAnswered(DomicileFileChooserEvent& event) {
   waiting_choosers_.erase(&event);
 }
 
-// Only the guest dispatches choosers, so a guest exists here.
-void HTMLWebViewElement::ListDirectory(
-    const String& path,
-    domicile::mojom::blink::WebViewGuest::ListDirectoryCallback listed) {
-  CHECK(guest_.is_bound());
-  guest_->ListDirectory(path, std::move(listed));
-}
-
 }  // namespace blink

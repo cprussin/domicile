@@ -68,9 +68,9 @@ delivers the queue on a task of its own. One rule replaces
 
 ### Requests return promises
 
-`searchFiles`, `previewFile` and `searchApps` resolve with their result
-(`DomicileFileSearch`, `DomicileFilePreview`, `DomicileAppSearch`). A newer
-call rejects the pending one with `AbortError`.
+`searchFiles` and `previewFile` resolve with their result
+(`DomicileFileSearch`, `DomicileFilePreview`). A newer call rejects the
+pending one with `AbortError`.
 
 ### The engine reports size and density
 
@@ -130,7 +130,7 @@ domicile.addEventListener("shortcut", (event) => event.chord); // "Meta+Shift+l"
 ## Key decisions
 
 - **Battery, brightness and audio are not attributes.** They become libraries
-  on the system primitives in [SYSTEM-ACCESS.md](SYSTEM-ACCESS.md).
+  on the system primitives in [SHELL-SYSTEM-ACCESS.md](../SHELL-SYSTEM-ACCESS.md).
 
 - **Attributes plus a bare change event, over events carrying the value.** The
   attribute is the single source of truth. This matches the platform

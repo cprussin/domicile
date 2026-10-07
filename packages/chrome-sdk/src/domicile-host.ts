@@ -392,7 +392,7 @@ export type DomicileHost = {
    * A system call: `request` is the call as JSON, answered with `system`
    * events carrying `id`. The compositor checks every call, the lock
    * included. Use the `system` module rather than calling this. See
-   * `docs/architecture/SYSTEM-ACCESS.md`.
+   * `docs/SHELL-SYSTEM-ACCESS.md`.
    */
   callSystem(id: number, request: string): void;
 

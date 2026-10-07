@@ -5,8 +5,6 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_HTML_DOMICILE_DOMICILE_FILE_CHOOSER_EVENT_H_
 
 #include "components/domicile/mojom/web_view_guest.mojom-blink.h"
-#include "third_party/blink/renderer/bindings/core/v8/idl_types.h"
-#include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
 #include "third_party/blink/renderer/platform/heap/member.h"
@@ -18,7 +16,6 @@ namespace blink {
 
 class ExceptionState;
 class HTMLWebViewElement;
-class ScriptState;
 
 // Asks the shell to pick a file for the page inside a <webview>.
 //
@@ -53,9 +50,6 @@ class CORE_EXPORT DomicileFileChooserEvent final : public Event {
   const String& home() const { return home_; }
 
   void choose(const Vector<String>& paths, ExceptionState&);
-  ScriptPromise<IDLSequence<IDLString>> list(ScriptState*,
-                                             const String& path,
-                                             ExceptionState&);
   void cancel(ExceptionState&);
 
   // Called by the element for an event no shell claimed.

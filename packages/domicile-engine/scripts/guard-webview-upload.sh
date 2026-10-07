@@ -6,8 +6,7 @@
 #     ./packages/domicile-engine/scripts/guard-webview-upload.sh /build/chromium/src
 #
 # Runs headless. The guest's RunFileChooser dispatches `domicile-file-chooser`
-# on the element. The shell lists a directory with the event's `list()`, then
-# answers with an absolute path.
+# on the element. The shell answers with an absolute path.
 #
 # Asserts, in order (each step depends on the previous one):
 #
@@ -18,7 +17,6 @@
 #   the press landed in the guest      on the input, which fills the page
 #   the browser was asked              WebViewGuest::RunFileChooser ran
 #   the shell was asked                the event reached the element
-#   the shell listed the directory     `list()` returned the picked file
 #   the shell answered                 its answer did not throw
 #   the page read the file             the assertion: name and contents; a
 #                                      renderer can read the contents only if
@@ -67,10 +65,8 @@ WINDOW_Y=$((STRIP_HEIGHT + (HEIGHT - STRIP_HEIGHT) / 2))
 
 FOR_SECONDS="${FOR_SECONDS:-90}"
 
-# LISTED is the directory the shell lists, relative to the event's `home`.
-# PICK is the absolute path it answers with. TEXT is the file's contents.
-LISTED="picked"
-PICK="$HOME_DIR/$LISTED/guard-upload.txt"
+# PICK is the absolute path the shell answers with. TEXT is the file's contents.
+PICK="$HOME_DIR/picked/guard-upload.txt"
 TEXT="a file the shell picked"
 
 WHICH=""
@@ -101,7 +97,7 @@ command -v python3 >/dev/null || {
 }
 
 rm -f "$BROKER"; rm -rf "$PROFILE" "$HOME_DIR"; mkdir -p "$PROFILE"
-mkdir -p "$HOME_DIR/$LISTED"
+mkdir -p "$(dirname "$PICK")"
 printf '%s' "$TEXT" >"$PICK"
 
 wait_for_line() { # $1 tries, $2 pattern, $3 file
@@ -132,7 +128,7 @@ rm -f "$ENGINE_LOG"
 HOME="$HOME_DIR" "$CHROMIUM/$OUT/chrome" \
   --ozone-platform=headless \
   --disable-gpu \
-  --app="domicile://shell/?strip=$STRIP_HEIGHT&src=$SITE/upload&answer=$ANSWER&pick=$PICK&list=$LISTED" \
+  --app="domicile://shell/?strip=$STRIP_HEIGHT&src=$SITE/upload&answer=$ANSWER&pick=$PICK" \
   --domicile-shell-root="$SCRIPTS" \
   --domicile-shell-module="guard-webview-file-chooser.js" \
   --remote-debugging-port=0 \
@@ -190,7 +186,6 @@ SAW_GUEST=$(saw "GUARD guest-mousedown")
 # "the shell was never told".
 SAW_BROWSER=$(saw "domicile: a <webview>'s page asked for a file; asking the shell.")
 SAW_ASKED=$(saw "GUARD file-chooser mode=open ")
-SAW_LISTED=$(saw "GUARD listed $(basename "$PICK")")
 SAW_ANSWERED=$(saw "GUARD answered")
 # Matches the contents too: reading them proves the browser granted the
 # renderer the file.
@@ -200,7 +195,7 @@ SAW_NOTHING=$(saw "GUARD picked-nothing")
 
 echo
 echo "shell=$SAW_SHELL page=$SAW_PAGE press=$SAW_CHROME guest=$SAW_GUEST"
-echo "the browser was asked=$SAW_BROWSER; the shell was asked=$SAW_ASKED, listed=$SAW_LISTED and answered=$SAW_ANSWERED"
+echo "the browser was asked=$SAW_BROWSER; the shell was asked=$SAW_ASKED and answered=$SAW_ANSWERED"
 echo "the page got: the file=$SAW_PICKED any file=$SAW_ANY_PICK nothing=$SAW_NOTHING"
 echo
 
@@ -231,14 +226,6 @@ and no domicile-file-chooser in open mode reached this document. That is \
 FileChooserRequested on WebViewGuestClient, the dispatch in \
 HTMLWebViewElement, or the event's name, of which WEBVIEW_FILE_CHOOSER_EVENT \
 in the SDK is the third copy"
-elif [ "$SAW_LISTED" != "1" ]; then
-  FAILURE="THE SHELL COULD NOT LIST THE DIRECTORY IT PICKS FROM: its list() \
-never answered with the file this guard wrote. That is the event's home attribute -- \
-which the shell lists under, so a wrong one lists the wrong directory -- its \
-list(), \
-WebViewGuest::ListDirectory -- which answers only while a chooser is open -- \
-or DirectoryEntries in file_choice.h. The engine log has GUARD list-refused \
-if it was refused"
 elif [ "$SAW_ANSWERED" != "1" ]; then
   FAILURE="the shell was asked and its answer threw: this guard's page called \
 choose() or cancel() and never got past it. The engine log has the exception"
@@ -256,7 +243,7 @@ and heard the cancel. So what the positive run reads is the shell's answer"
   fi
 elif [ "$SAW_PICKED" = "1" ]; then
   PASSED="an <input type=\"file\"> clicked inside a browser window asked the \
-shell, which listed its directory and answered with an absolute path, and \
+shell, which answered with an absolute path, and \
 that file reached the page, which read its contents"
 elif [ "$SAW_ANY_PICK" = "1" ]; then
   FAILURE="THE PAGE GOT THE WRONG FILE: a file arrived and it is not the one \

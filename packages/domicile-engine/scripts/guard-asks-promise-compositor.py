@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """The compositor's end of the control socket, for the guard that asks whether
-`searchFiles()`, `previewFile()` and `searchApps()` settle with their answers.
+`searchFiles()` and `previewFile()` settle with their answers.
 
 It answers `hello` with a `welcome`, then answers every ask -- the file
 searches in the order they came, so `old` is answered before `new` -- and
@@ -22,10 +22,6 @@ def answer(ask):
         return {"type": "file_preview", "path": ask["path"], "kind": "text",
                 "text": "hi " + ask["path"], "entries": [], "title": "",
                 "artist": "", "album": "", "duration": 0, "cover": ""}
-    if ask.get("type") == "search_apps":
-        return {"type": "found_apps", "query": ask["query"], "bookmarks": [],
-                "apps": [{"id": "editor.desktop", "name": "Editor",
-                          "command": ["editor"]}]}
     return None
 
 
