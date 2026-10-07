@@ -11,12 +11,7 @@ import { Brightness } from "./Brightness";
 import { heldBacklight } from "./held-backlight";
 
 const opened = async (backlight: ReturnType<typeof heldBacklight>) => {
-  render(
-    <Brightness
-      backlight={backlight.backlight}
-      domicile={backlight.domicile}
-    />,
-  );
+  render(<Brightness backlight={backlight.backlight} />);
   backlight.report(0.42);
   await userEvent.click(screen.getByRole("button", { name: "Brightness 42%" }));
   return screen.getByRole("slider", { name: "Brightness" });
@@ -26,12 +21,7 @@ describe("Brightness", () => {
   it("shows nothing on a machine that has said no brightness", () => {
     const backlight = heldBacklight();
 
-    render(
-      <Brightness
-        backlight={backlight.backlight}
-        domicile={backlight.domicile}
-      />,
-    );
+    render(<Brightness backlight={backlight.backlight} />);
 
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
@@ -66,12 +56,7 @@ describe("Brightness", () => {
 
   it("steps by a twentieth from wherever the wheel left it", () => {
     const backlight = heldBacklight();
-    render(
-      <Brightness
-        backlight={backlight.backlight}
-        domicile={backlight.domicile}
-      />,
-    );
+    render(<Brightness backlight={backlight.backlight} />);
     backlight.report(0.42);
     const icon = screen.getByRole("button", { name: "Brightness 42%" });
 
@@ -83,12 +68,7 @@ describe("Brightness", () => {
 
   it("never asks past either end", () => {
     const backlight = heldBacklight();
-    render(
-      <Brightness
-        backlight={backlight.backlight}
-        domicile={backlight.domicile}
-      />,
-    );
+    render(<Brightness backlight={backlight.backlight} />);
     backlight.report(0.98);
 
     fireEvent.wheel(screen.getByRole("button"), { deltaY: -100 });
@@ -98,12 +78,7 @@ describe("Brightness", () => {
 
   it("draws a plain sun that dims with the level", () => {
     const backlight = heldBacklight();
-    render(
-      <Brightness
-        backlight={backlight.backlight}
-        domicile={backlight.domicile}
-      />,
-    );
+    render(<Brightness backlight={backlight.backlight} />);
     const icon = () => screen.getByRole("button", { name: /^Brightness/ });
 
     backlight.report(0.2);

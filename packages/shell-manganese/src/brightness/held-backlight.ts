@@ -1,5 +1,7 @@
-import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import { act } from "@testing-library/react";
+
+import type { SharedBacklight } from "../readouts/readouts";
+import { sharedWatch } from "../readouts/shared-watch";
 
 /**
  * A test-controlled backlight: `backlight` replaces the system's, `report`
@@ -8,18 +10,18 @@ import { act } from "@testing-library/react";
 export const heldBacklight = () => {
   const listeners: ((level: number) => void)[] = [];
   const asked: number[] = [];
+  const backlight: SharedBacklight = {
+    level: sharedWatch((onLevel: (level: number) => void) => {
+      listeners.push(onLevel);
+      return () => undefined;
+    }),
+    set: (level) => {
+      asked.push(level);
+    },
+  };
   return {
     asked,
-    backlight: () => ({
-      set: (level: number) => {
-        asked.push(level);
-      },
-      watch: (onLevel: (level: number) => void) => {
-        listeners.push(onLevel);
-        return () => undefined;
-      },
-    }),
-    domicile: new FakeDomicileHost().host,
+    backlight,
     report: (level: number) => {
       act(() => {
         for (const onLevel of listeners) {

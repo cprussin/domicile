@@ -6,22 +6,21 @@ import type {
   Adapter,
   Bluetooth as Reading,
 } from "@domicile-desktop/system-bluetooth/bluetooth";
-import {
-  setPowered,
-  watchBluetooth,
-} from "@domicile-desktop/system-bluetooth/bluetooth";
+import { setPowered } from "@domicile-desktop/system-bluetooth/bluetooth";
 import { BluetoothIcon } from "@phosphor-icons/react/dist/ssr/Bluetooth";
 import { BluetoothConnectedIcon } from "@phosphor-icons/react/dist/ssr/BluetoothConnected";
 import { BluetoothSlashIcon } from "@phosphor-icons/react/dist/ssr/BluetoothSlash";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 
 import { css } from "../../styled-system/css";
+import type { SharedWatch } from "../readouts/shared-watch";
+import { useSharedWatch } from "../readouts/useSharedWatch";
 
 type Props = {
-  /** The host whose system calls reach BlueZ. */
+  /** The desk's Bluetooth, from BlueZ. */
+  bluetooth: SharedWatch<Result<Reading, SystemError>>;
+  /** The host whose system calls reach BlueZ to turn it on or off. */
   domicile: DomicileHost;
-  /** Injectable so tests can drive their own BlueZ. */
-  watch?: typeof watchBluetooth | undefined;
   /** Injectable so tests can see what a click asks for. */
   power?: typeof setPowered | undefined;
 };
@@ -34,18 +33,12 @@ type Props = {
  * Draws nothing until BlueZ answers, on a D-Bus error, or with no adapter.
  */
 export const Bluetooth = ({
+  bluetooth,
   domicile,
   power = setPowered,
-  watch = watchBluetooth,
 }: Props) => {
   const host = useMemo(() => system(domicile), [domicile]);
-  const [bluetooth, setBluetooth] = useState<
-    Result<Reading, SystemError> | undefined
-  >(undefined);
-
-  useEffect(() => watch(host, setBluetooth), [host, watch]);
-
-  return bluetooth?.match({
+  return useSharedWatch(bluetooth)?.match({
     Err: () => undefined,
     Ok: (reading) =>
       reading.adapters.length === 0 ? undefined : (

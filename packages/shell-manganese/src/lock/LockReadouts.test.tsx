@@ -14,10 +14,12 @@ const readouts = () => {
   const sound = heldSound();
   render(
     <LockReadouts
-      backlight={backlight.backlight}
-      domicile={backlight.domicile}
-      sound={() => sound.server}
-      watchBattery={battery.watch}
+      readouts={{
+        audio: sound.audio,
+        backlight: backlight.backlight,
+        battery: battery.battery,
+        sound: sound.server,
+      }}
     />,
   );
   return { backlight, battery, sound, user: userEvent.setup() };

@@ -1,7 +1,7 @@
-import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
-import type { hostBacklight } from "./host-backlight";
+import type { SharedBacklight } from "../readouts/readouts";
+import { useSharedWatch } from "../readouts/useSharedWatch";
 
 /** The backlight as a control draws it. */
 export type BrightnessControl = {
@@ -24,23 +24,21 @@ export type BrightnessControl = {
  * readings after earlier requests arrive late.
  */
 export const useBrightness = (
-  domicile: DomicileHost,
-  backlight: typeof hostBacklight,
+  backlight: SharedBacklight,
 ): BrightnessControl | undefined => {
-  const [reading, setReading] = useState<number | undefined>(undefined);
+  const reading = useSharedWatch(backlight.level);
   const [held, setHeld] = useState<number | undefined>(undefined);
   const dragging = useRef(false);
-  const control = useMemo(() => backlight(domicile), [backlight, domicile]);
 
+  // Each report, even of the same level, ends a hold outside a drag.
   useEffect(
     () =>
-      control.watch((level) => {
-        setReading(level);
+      backlight.level.subscribe(() => {
         if (!dragging.current) {
           setHeld(undefined);
         }
       }),
-    [control],
+    [backlight],
   );
 
   if (reading === undefined) {
@@ -48,7 +46,7 @@ export const useBrightness = (
   } else {
     const ask = (level: number) => {
       setHeld(level);
-      control.set(level);
+      backlight.set(level);
     };
     return {
       ask,

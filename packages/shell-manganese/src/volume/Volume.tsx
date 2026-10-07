@@ -1,15 +1,16 @@
 import { Popover } from "@domicile-desktop/component-library/Popover";
 import type { Audio, AudioDevice } from "@domicile-desktop/system-audio/audio";
-import type { SoundServer } from "@domicile-desktop/system-audio/sound-server";
 import { SpeakerSimpleHighIcon } from "@phosphor-icons/react/dist/ssr/SpeakerSimpleHigh";
 import { SpeakerSimpleLowIcon } from "@phosphor-icons/react/dist/ssr/SpeakerSimpleLow";
 import { SpeakerSimpleNoneIcon } from "@phosphor-icons/react/dist/ssr/SpeakerSimpleNone";
 import { SpeakerSimpleSlashIcon } from "@phosphor-icons/react/dist/ssr/SpeakerSimpleSlash";
 import { SpeakerSimpleXIcon } from "@phosphor-icons/react/dist/ssr/SpeakerSimpleX";
 import type { WheelEvent } from "react";
-import { useEffect, useState } from "react";
 
 import { css } from "../../styled-system/css";
+import type { SoundControls } from "../readouts/readouts";
+import type { SharedWatch } from "../readouts/shared-watch";
+import { useSharedWatch } from "../readouts/useSharedWatch";
 import { ask } from "./ask";
 import { Mixer } from "./Mixer";
 
@@ -17,8 +18,10 @@ import { Mixer } from "./Mixer";
 const WHEEL_STEP = 0.05;
 
 type Props = {
-  /** Source of audio state and target of volume changes. */
-  server: SoundServer;
+  /** The sound server's state. */
+  audio: SharedWatch<Audio>;
+  /** The target of volume changes. */
+  server: SoundControls;
 };
 
 /**
@@ -29,10 +32,8 @@ type Props = {
  * sound server. The mixer meters only while open, because metering a
  * microphone records it.
  */
-export const Volume = ({ server }: Props) => {
-  const [audio, setAudio] = useState<Audio | undefined>(undefined);
-
-  useEffect(() => server.watch(setAudio), [server]);
+export const Volume = ({ audio: watch, server }: Props) => {
+  const audio = useSharedWatch(watch);
 
   if (audio === undefined) {
     return undefined;

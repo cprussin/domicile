@@ -7,6 +7,7 @@ import type {
 import type { Extension } from "@domicile-desktop/sdk/extension";
 import { createContext, useContext } from "react";
 
+import type { Readouts } from "../readouts/readouts";
 import type { TrayOrder } from "../tray/useTrayOrder";
 
 /** What a monitor's bar provides to its items. */
@@ -33,6 +34,8 @@ export type Bar = {
   onSelectWorkspace: (name: string) => void;
   /** The extension whose popup is open, or `undefined`. */
   openedExtension: string | undefined;
+  /** The desk's system readouts, shared by every bar. */
+  readouts: Readouts;
   /** The monitor this bar is on, which the mixer opens over. */
   screen: string;
   /** The applications' tray icons. */

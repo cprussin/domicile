@@ -8,13 +8,12 @@ import type {
   AudioDevice,
   AudioStream,
 } from "@domicile-desktop/system-audio/audio";
-import type { SoundServer } from "@domicile-desktop/system-audio/sound-server";
 import { CheckCircleIcon } from "@phosphor-icons/react/dist/ssr/CheckCircle";
 import type { ReactNode } from "react";
 import { createContext, useContext, useState } from "react";
-
 import { css, cx } from "../../styled-system/css";
 import { flex, hstack } from "../../styled-system/patterns";
+import type { SoundControls } from "../readouts/readouts";
 import { ask } from "./ask";
 import type { Direction } from "./Level";
 import { Level } from "./Level";
@@ -24,7 +23,7 @@ import { useMeters } from "./useMeters";
 type Props = {
   audio: Audio;
   /** Where changes are requested and meters read. */
-  server: SoundServer;
+  server: SoundControls;
 };
 
 /** A drawer under the sliders. */
@@ -205,7 +204,7 @@ const byApp = (
 type DefaultProps = {
   device: AudioDevice;
   direction: Direction;
-  server: SoundServer;
+  server: SoundControls;
   /** The slider's label: its purpose, not the device name. */
   label: string;
   meter: number | undefined;
@@ -237,7 +236,7 @@ const Default = ({ device, direction, server, label, meter }: DefaultProps) => (
 type DevicesProps = {
   devices: readonly AudioDevice[];
   direction: Direction;
-  server: SoundServer;
+  server: SoundControls;
   levels: ReadonlyMap<string, number>;
 };
 
@@ -282,7 +281,7 @@ const Devices = ({ devices, direction, levels, server }: DevicesProps) =>
 
 type AppsProps = {
   apps: readonly App[];
-  server: SoundServer;
+  server: SoundControls;
   /** Where a recording can go: every input, monitors included. */
   inputs: readonly AudioDevice[];
   levels: ReadonlyMap<string, number>;
@@ -355,7 +354,7 @@ const Apps = ({ apps, inputs, levels, outputs, server }: AppsProps) => (
 
 type CardsProps = {
   cards: readonly AudioCard[];
-  server: SoundServer;
+  server: SoundControls;
 };
 
 const Cards = ({ cards, server }: CardsProps) => (
@@ -380,7 +379,7 @@ const Cards = ({ cards, server }: CardsProps) => (
 
 type PortProps = {
   device: AudioDevice;
-  server: SoundServer;
+  server: SoundControls;
 };
 
 /** A device's port picker, when it has more than one. */

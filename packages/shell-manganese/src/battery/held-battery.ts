@@ -1,11 +1,12 @@
 import type { Option } from "@cprussin/option-result";
 import { None, Some } from "@cprussin/option-result";
-import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import type { Battery as BatteryReading } from "@domicile-desktop/system-battery/battery";
 import { act } from "@testing-library/react";
 
+import { sharedWatch } from "../readouts/shared-watch";
+
 /**
- * A test-controlled battery: `watch` replaces the UPower watch, and `report`
+ * A test-controlled battery: `battery` replaces the UPower watch, and `report`
  * and `absent` send readings.
  */
 export const heldBattery = () => {
@@ -19,6 +20,14 @@ export const heldBattery = () => {
         }
       });
     },
+    battery: sharedWatch(
+      (onReading: (reading: Option<BatteryReading>) => void) => {
+        listeners.push(onReading);
+        return () => {
+          watching.stopped += 1;
+        };
+      },
+    ),
     report: (reading: BatteryReading) => {
       act(() => {
         for (const onReading of listeners) {
@@ -28,15 +37,6 @@ export const heldBattery = () => {
     },
     get stopped() {
       return watching.stopped;
-    },
-    watch: (
-      _domicile: DomicileHost,
-      onReading: (reading: Option<BatteryReading>) => void,
-    ) => {
-      listeners.push(onReading);
-      return () => {
-        watching.stopped += 1;
-      };
     },
   };
 };

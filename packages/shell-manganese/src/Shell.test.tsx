@@ -842,6 +842,20 @@ describe("Shell", () => {
       });
     });
 
+    it("asks the system once for every bar and the lock screen", async () => {
+      // One `pactl subscribe`, `udevadm monitor` and D-Bus match for the
+      // desk, not one per bar and one more for the lock screen.
+      renderShell([LEFT, RIGHT]);
+      await act(() => new Promise((settled) => setTimeout(settled, 0)));
+
+      const requests = domicile.calls.flatMap(([method, , request]) =>
+        method === "callSystem" && typeof request === "string" ? [request] : [],
+      );
+
+      expect(requests).toContainEqual(expect.stringContaining('"pactl"'));
+      expect(requests).toEqual([...new Set(requests)]);
+    });
+
     it("draws no meter until UPower answers", () => {
       // A desktop PC gets no battery reading; the bar must not show `100%`.
       renderShell();

@@ -14,6 +14,8 @@ import type {
 } from "@domicile-desktop/system-audio/sound-server";
 import { act } from "@testing-library/react";
 
+import { sharedWatch } from "../readouts/shared-watch";
+
 /** An audio device with test overrides. */
 export const device = (overrides: Partial<AudioDevice>): AudioDevice => ({
   default: false,
@@ -121,6 +123,7 @@ export const heldSound = () => {
   const asked: Request[] = [];
   /** Each set of ids the shell metered, in order; empty once it stopped. */
   const metered: (readonly string[])[] = [];
+  const counts = { started: 0, stopped: 0 };
   const record =
     (method: string) =>
     (...args: unknown[]): Promise<Result<Asked, AudioError>> => {
@@ -129,12 +132,14 @@ export const heldSound = () => {
     };
   const server: SoundServer = {
     meters: (onLevels) => {
+      counts.started += 1;
       meters.push(onLevels);
       return {
         meter: (wanted) => {
           metered.push([...wanted.keys()]);
         },
         stop: () => {
+          counts.stopped += 1;
           metered.push([]);
         },
       };
@@ -152,6 +157,7 @@ export const heldSound = () => {
   };
   return {
     asked,
+    audio: sharedWatch(server.watch),
     /** Sends a level for each metered id. */
     levels: (levels: Levels) => {
       act(() => {
@@ -169,5 +175,13 @@ export const heldSound = () => {
       });
     },
     server,
+    /** How many times the shell started meters. */
+    get started() {
+      return counts.started;
+    },
+    /** How many times the shell stopped meters. */
+    get stopped() {
+      return counts.stopped;
+    },
   };
 };
