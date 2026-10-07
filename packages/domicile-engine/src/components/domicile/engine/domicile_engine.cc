@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <memory>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -13,10 +14,13 @@
 #include "base/compiler_specific.h"
 #include "base/containers/span.h"
 #include "base/containers/flat_map.h"
+#include "base/files/scoped_file.h"
 #include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/message_loop/message_pump_type.h"
+#include "base/memory/platform_shared_memory_region.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/read_only_shared_memory_region.h"
 #include "base/no_destructor.h"
 #include "base/notreached.h"
 #include "base/run_loop.h"
@@ -288,6 +292,130 @@ class Surface : public mojom::SurfaceObserver,
   viz::FrameTokenGenerator next_frame_token_;
 };
 
+// The planes DomicileCapturedFrame carries.
+constexpr size_t kMostCapturedPlanes =
+    std::extent_v<decltype(DomicileCapturedFrame::planes)>;
+
+// One display capture, for a screen cast.
+//
+// Runs on the engine's mojo thread, like Surface, and reports to the
+// compositor only through the EngineEventQueue. Holds each frame until the
+// compositor releases it, which gives the buffer back to viz.
+class Capture : public mojom::DisplayCaptureObserver {
+ public:
+  // `ended` runs once the browser closes the capture; the owner then
+  // destroys this.
+  Capture(DomicileCaptureId id, EngineEventQueue* queue, base::OnceClosure ended)
+      : id_(id), queue_(queue), ended_(std::move(ended)) {}
+
+  Capture(const Capture&) = delete;
+  Capture& operator=(const Capture&) = delete;
+
+  ~Capture() override = default;
+
+  void Start(mojom::FrameSinkBroker* broker,
+             int64_t display_id,
+             const gfx::Size& size,
+             uint32_t max_fps,
+             base::OnceCallback<void(bool)> done) {
+    broker->CaptureDisplay(display_id, size, max_fps,
+                           control_.BindNewPipeAndPassReceiver(),
+                           observer_.BindNewPipeAndPassRemote(),
+                           std::move(done));
+  }
+
+  // Starts hearing the browser close the capture. Called only once it
+  // started, so a refusal's closed pipes are not an ending.
+  void Watch() {
+    if (!control_.is_connected()) {
+      End();
+      return;
+    }
+    // Unretained: both pipes are members.
+    control_.set_disconnect_handler(
+        base::BindOnce(&Capture::End, base::Unretained(this)));
+    observer_.set_disconnect_handler(
+        base::BindOnce(&Capture::End, base::Unretained(this)));
+  }
+
+  void Resize(const gfx::Size& size) { control_->Resize(size); }
+
+  void Release(uint64_t frame) { holds_.erase(frame); }
+
+ private:
+  // mojom::DisplayCaptureObserver implementation.
+  void OnFrameCaptured(
+      mojom::CapturedFramePtr frame,
+      mojo::PendingRemote<mojom::CapturedFrameHold> hold) override {
+    EngineEvent event{.type = EngineEvent::Type::kCaptured,
+                      .capture = id_,
+                      .frame = next_frame_++};
+    EngineCapturedFrame& out = event.captured;
+    std::vector<base::ScopedFD> fds;
+    if (frame->pixels->is_dmabuf()) {
+      gfx::GpuMemoryBufferHandle& handle = frame->pixels->get_dmabuf();
+      if (handle.type != gfx::NATIVE_PIXMAP) {
+        // Closing `hold` gives the buffer back.
+        LOG(ERROR) << "domicile: a captured frame came as a buffer that is "
+                      "not a dmabuf; dropped";
+        return;
+      }
+      gfx::NativePixmapHandle pixmap = std::move(handle).native_pixmap_handle();
+      if (pixmap.planes.size() > kMostCapturedPlanes) {
+        LOG(ERROR) << "domicile: a captured frame has " << pixmap.planes.size()
+                   << " planes, more than the ABI carries; dropped";
+        return;
+      }
+      out.memory = DOMICILE_CAPTURE_DMABUF;
+      out.modifier = pixmap.modifier;
+      for (gfx::NativePixmapPlane& plane : pixmap.planes) {
+        out.planes.push_back({.offset = static_cast<uint32_t>(plane.offset),
+                              .stride = plane.stride});
+        fds.push_back(std::move(plane.fd));
+      }
+    } else {
+      base::subtle::PlatformSharedMemoryRegion region =
+          base::ReadOnlySharedMemoryRegion::TakeHandleForSerialization(
+              std::move(frame->pixels->get_shm()));
+      out.memory = DOMICILE_CAPTURE_SHM;
+      out.planes.push_back({.offset = 0, .stride = frame->stride});
+      fds.push_back(std::move(region.PassPlatformHandle().fd));
+    }
+    out.width = static_cast<uint32_t>(frame->size.width());
+    out.height = static_cast<uint32_t>(frame->size.height());
+    out.fourcc = frame->fourcc;
+    out.fds =
+        std::make_shared<const std::vector<base::ScopedFD>>(std::move(fds));
+    out.content_x = frame->content.x();
+    out.content_y = frame->content.y();
+    out.content_width = frame->content.width();
+    out.content_height = frame->content.height();
+    out.damage_x = frame->damage.x();
+    out.damage_y = frame->damage.y();
+    out.damage_width = frame->damage.width();
+    out.damage_height = frame->damage.height();
+    holds_[event.frame] = mojo::Remote<mojom::CapturedFrameHold>(std::move(hold));
+    queue_->Push(event);
+  }
+
+  // The browser closed the capture.
+  void End() {
+    queue_->Push(
+        {.type = EngineEvent::Type::kCaptureEnded, .capture = id_});
+    // Runs last: the owner destroys this.
+    std::move(ended_).Run();
+  }
+
+  const DomicileCaptureId id_;
+  const raw_ptr<EngineEventQueue> queue_;
+  base::OnceClosure ended_;
+  mojo::Remote<mojom::DisplayCapture> control_;
+  mojo::Receiver<mojom::DisplayCaptureObserver> observer_{this};
+  // The frames the compositor has not released, by frame id.
+  base::flat_map<uint64_t, mojo::Remote<mojom::CapturedFrameHold>> holds_;
+  uint64_t next_frame_ = 1;
+};
+
 // Forwards the browser's display list to the compositor.
 //
 // Separate from Surface because displays must be advertised before any window
@@ -508,6 +636,19 @@ struct DomicileEngine {
                               event.copied.data(), event.copied.size());
           }
           break;
+        case domicile::EngineEvent::Type::kCaptured:
+          if (callbacks_.captured) {
+            // `event` owns the fds until the loop ends, as for display names.
+            const DomicileCapturedFrame record = RecordOf(event.captured);
+            callbacks_.captured(callbacks_.user_data, event.capture,
+                                event.frame, &record);
+          }
+          break;
+        case domicile::EngineEvent::Type::kCaptureEnded:
+          if (callbacks_.capture_ended) {
+            callbacks_.capture_ended(callbacks_.user_data, event.capture);
+          }
+          break;
       }
     }
   }
@@ -604,6 +745,35 @@ struct DomicileEngine {
                        base::Unretained(this), std::move(wanted)));
   }
 
+  // Blocks for the browser's answer, like CreateSurface.
+  DomicileCaptureId StartCapture(int64_t display_id,
+                                 const gfx::Size& size,
+                                 uint32_t max_fps) {
+    DomicileCaptureId started = 0;
+    RunOnThreadAndWait(base::BindOnce(&DomicileEngine::StartCaptureOnThread,
+                                      base::Unretained(this), display_id, size,
+                                      max_fps, &started));
+    return started;
+  }
+
+  void ResizeCapture(DomicileCaptureId capture, const gfx::Size& size) {
+    thread_.task_runner()->PostTask(
+        FROM_HERE, base::BindOnce(&DomicileEngine::ResizeCaptureOnThread,
+                                  base::Unretained(this), capture, size));
+  }
+
+  void StopCapture(DomicileCaptureId capture) {
+    thread_.task_runner()->PostTask(
+        FROM_HERE, base::BindOnce(&DomicileEngine::ForgetCapture,
+                                  base::Unretained(this), capture));
+  }
+
+  void ReleaseCapturedFrame(DomicileCaptureId capture, uint64_t frame) {
+    thread_.task_runner()->PostTask(
+        FROM_HERE, base::BindOnce(&DomicileEngine::ReleaseCapturedFrameOnThread,
+                                  base::Unretained(this), capture, frame));
+  }
+
   // Takes a copy: the ABI lends the bytes only for the call, and the browser is
   // told later on another thread.
   void SetClipboard(DomicileClipboard clipboard, std::string text) {
@@ -614,6 +784,89 @@ struct DomicileEngine {
   }
 
  private:
+  // The ABI's record of `frame`, pointing at the fds `frame` owns.
+  static DomicileCapturedFrame RecordOf(
+      const domicile::EngineCapturedFrame& frame) {
+    DomicileCapturedFrame record = {
+        .memory = frame.memory,
+        .width = frame.width,
+        .height = frame.height,
+        .fourcc = frame.fourcc,
+        .modifier = frame.modifier,
+        .plane_count = static_cast<uint32_t>(frame.planes.size()),
+        .planes = {},
+        .content_x = frame.content_x,
+        .content_y = frame.content_y,
+        .content_width = frame.content_width,
+        .content_height = frame.content_height,
+        .damage_x = frame.damage_x,
+        .damage_y = frame.damage_y,
+        .damage_width = frame.damage_width,
+        .damage_height = frame.damage_height};
+    // A span because -Wunsafe-buffer-usage rejects indexing a raw C array.
+    // Capture::OnFrameCaptured refused more planes than it holds.
+    const auto planes = base::span(record.planes);
+    for (size_t i = 0; i < frame.planes.size(); ++i) {
+      planes[i] = {.fd = (*frame.fds)[i].get(),
+                   .offset = frame.planes[i].offset,
+                   .stride = frame.planes[i].stride};
+    }
+    return record;
+  }
+
+  void StartCaptureOnThread(int64_t display_id,
+                            const gfx::Size& size,
+                            uint32_t max_fps,
+                            DomicileCaptureId* started) {
+    if (!broker_) {
+      return;
+    }
+    const DomicileCaptureId id = next_capture_id_++;
+    auto capture = std::make_unique<domicile::Capture>(
+        id, &queue_,
+        base::BindOnce(&DomicileEngine::ForgetCapture, base::Unretained(this),
+                       id));
+    domicile::Capture* raw = capture.get();
+    captures_[id] = std::move(capture);
+
+    // Synchronous because the ABI is; see CreateSurfaceOnThread.
+    base::RunLoop loop(base::RunLoop::Type::kNestableTasksAllowed);
+    bool ok = false;
+    raw->Start(broker_.get(), display_id, size, max_fps,
+               base::BindOnce(
+                   [](base::RunLoop* loop, bool* ok, bool result) {
+                     *ok = result;
+                     loop->Quit();
+                   },
+                   &loop, &ok));
+    loop.Run();
+    if (!ok) {
+      captures_.erase(id);
+      return;
+    }
+    *started = id;
+    raw->Watch();
+  }
+
+  void ResizeCaptureOnThread(DomicileCaptureId capture, const gfx::Size& size) {
+    auto iter = captures_.find(capture);
+    if (iter != captures_.end()) {
+      iter->second->Resize(size);
+    }
+  }
+
+  void ReleaseCapturedFrameOnThread(DomicileCaptureId capture,
+                                    uint64_t frame) {
+    auto iter = captures_.find(capture);
+    if (iter != captures_.end()) {
+      iter->second->Release(frame);
+    }
+  }
+
+  // Closing the capture's pipes stops it in the browser and releases its
+  // frames.
+  void ForgetCapture(DomicileCaptureId capture) { captures_.erase(capture); }
+
   void SetClipboardOnThread(DomicileClipboard clipboard, std::string text) {
     if (broker_) {
       broker_->SetClipboard(clipboard == DOMICILE_CLIPBOARD_PRIMARY
@@ -859,6 +1112,7 @@ struct DomicileEngine {
   }
 
   void TearDown() {
+    captures_.clear();
     surfaces_.clear();
     broker_.reset();
     // Mojo remotes and receivers check they are destroyed on the thread that
@@ -893,6 +1147,9 @@ struct DomicileEngine {
   base::flat_map<DomicileSurfaceId, std::unique_ptr<domicile::Surface>>
       surfaces_;
   DomicileSurfaceId next_surface_id_ = 1;
+  base::flat_map<DomicileCaptureId, std::unique_ptr<domicile::Capture>>
+      captures_;
+  DomicileCaptureId next_capture_id_ = 1;
 };
 
 extern "C" {
@@ -1010,6 +1267,46 @@ void domicile_buffer_destroy(DomicileEngine* engine,
                              DomicileBufferId buffer) {
   if (engine) {
     engine->DestroyBuffer(surface, buffer);
+  }
+}
+
+DomicileCaptureId domicile_display_capture_start(DomicileEngine* engine,
+                                                 int64_t display_id,
+                                                 uint32_t width,
+                                                 uint32_t height,
+                                                 uint32_t max_fps) {
+  // The browser refuses an empty size or a zero rate as a bad message, which
+  // would close the whole connection.
+  if (!engine || width == 0 || height == 0 || max_fps == 0) {
+    return 0;
+  }
+  return engine->StartCapture(
+      display_id,
+      gfx::Size(static_cast<int>(width), static_cast<int>(height)), max_fps);
+}
+
+void domicile_display_capture_resize(DomicileEngine* engine,
+                                     DomicileCaptureId capture,
+                                     uint32_t width,
+                                     uint32_t height) {
+  if (engine && width != 0 && height != 0) {
+    engine->ResizeCapture(
+        capture, gfx::Size(static_cast<int>(width), static_cast<int>(height)));
+  }
+}
+
+void domicile_display_capture_stop(DomicileEngine* engine,
+                                   DomicileCaptureId capture) {
+  if (engine) {
+    engine->StopCapture(capture);
+  }
+}
+
+void domicile_captured_frame_release(DomicileEngine* engine,
+                                     DomicileCaptureId capture,
+                                     uint64_t frame) {
+  if (engine) {
+    engine->ReleaseCapturedFrame(capture, frame);
   }
 }
 

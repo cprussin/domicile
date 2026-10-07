@@ -1,4 +1,4 @@
-//! Screen casting: PipeWire video streams of windows.
+//! Screen casting: PipeWire video streams of windows, monitors and regions.
 //!
 //! [`Casting`] is the API the ScreenCast portal calls. It starts a stream of a
 //! [`Source`], reports the stream's PipeWire node, and reports when it ends.
@@ -6,9 +6,10 @@
 //! Three threads take part:
 //!
 //! - The caller's, which may be any. [`Casting`] only queues requests.
-//! - The Wayland thread, which owns the windows. It routes each request,
-//!   checks the source exists, and fills stream buffers from the window's
-//!   committed buffers (see [`windows`]).
+//! - The Wayland thread, which owns the windows and the engine. It routes
+//!   each request, checks the source exists, and fills stream buffers from
+//!   the window's committed buffers or the engine's display captures (see
+//!   [`streams`]).
 //! - The PipeWire thread, which owns the streams, their buffers and the
 //!   negotiation (see [`producer`]). It lends empty buffers to the Wayland
 //!   thread and queues the ones it fills.
@@ -16,9 +17,11 @@
 //! Neither thread waits on the other: both directions are queues. See
 //! `docs/architecture/PORTALS.md`.
 //!
-//! A monitor source joins as another [`Source`] variant, filled from the
-//! engine's dmabufs. Callers do not change.
+//! A monitor or region is filled from the engine's display captures; see
+//! [`captures`] and [`region`].
 
+mod captured;
+mod captures;
 mod cursor;
 mod gpu;
 mod lifecycle;
@@ -27,24 +30,38 @@ mod negotiation;
 mod pacing;
 mod params;
 mod producer;
+mod region;
 mod shm_copy;
-mod windows;
+mod streams;
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 use smithay::reexports::calloop::channel::Sender;
 
+pub use captures::Capturer;
 pub use cursor::CursorMode;
 pub use lifecycle::Ended;
 pub use producer::ToWayland;
-pub use windows::{Committed, Gpu, Windows};
+pub use region::Screen;
+pub use streams::{Committed, Gpu, Streams};
 
 /// What a stream shows.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Source {
     /// A window, by its host app id.
     Window(String),
+    /// A monitor, by its `wl_output` name, at its own density.
+    Monitor(String),
+    /// A rectangle of the desktop, at the highest density it touches.
+    Region(Region),
+}
+
+/// A rectangle of the desktop, in logical pixels.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct Region {
+    pub position: (i32, i32),
+    pub size: (i32, i32),
 }
 
 /// One stream, as long as it lives.
@@ -116,5 +133,40 @@ impl Casting {
         self.requests
             .send(request)
             .expect("the Wayland thread outlives every casting handle");
+    }
+}
+
+impl Source {
+    /// A monitor named `spec`, or the region `spec` spells as
+    /// `<x>,<y>,<width>x<height>` in logical pixels.
+    pub fn desk(spec: &str) -> Source {
+        let region = || {
+            let (x, rest) = spec.split_once(',')?;
+            let (y, size) = rest.split_once(',')?;
+            let (width, height) = size.split_once('x')?;
+            Some(Region {
+                position: (x.parse().ok()?, y.parse().ok()?),
+                size: (width.parse().ok()?, height.parse().ok()?),
+            })
+        };
+        region().map_or_else(|| Source::Monitor(spec.to_string()), Source::Region)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Region, Source};
+
+    #[test]
+    fn a_desk_source_is_a_region_when_it_spells_one_and_a_monitor_otherwise() {
+        assert_eq!(
+            Source::desk("1800,-20,240x100"),
+            Source::Region(Region {
+                position: (1800, -20),
+                size: (240, 100),
+            })
+        );
+        assert_eq!(Source::desk("drm-2"), Source::Monitor("drm-2".into()));
+        assert_eq!(Source::desk("1,2,3"), Source::Monitor("1,2,3".into()));
     }
 }

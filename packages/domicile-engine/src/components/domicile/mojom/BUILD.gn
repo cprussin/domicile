@@ -21,6 +21,10 @@ mojom("mojom") {
 
   public_deps = [
     "//gpu/ipc/common:interfaces",
+
+    # frame_sink_broker.mojom sends a captured frame in shared memory when the
+    # browser composites in software.
+    "//mojo/public/mojom/base",
     "//services/viz/public/mojom",
     "//services/viz/public/mojom:surfaces",
 

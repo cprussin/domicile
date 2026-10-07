@@ -1573,13 +1573,17 @@ struct DomicileCompositor {
     /// The theme change in progress, if any, and its current phase's deadline.
     turnover: Option<Turnover<usize>>,
     turnover_deadline: Option<RegistrationToken>,
-    /// Window streams. See [`crate::casting`].
-    casting: casting::Windows,
+    /// Window, monitor and region streams. See [`crate::casting`].
+    casting: casting::Streams,
     /// When the next paced cast frame is sent, if one waits.
     cast_deadline: Option<RegistrationToken>,
     /// `DOMICILE_CAST_WINDOW`: the title of a window to cast as soon as it has
     /// it, and the handle to start the cast with. Taken when it starts.
     cast_on_title: Option<(String, casting::Casting)>,
+    /// `DOMICILE_CAST_MONITOR`: a monitor's `wl_output` name or a region to
+    /// cast (see [`casting::Source::desk`]), and the handle to start the cast
+    /// with. Taken when it starts.
+    cast_on_monitor: Option<(String, casting::Casting)>,
     /// The event loop handle, for adding sources after startup.
     ///
     /// Only the idle timer needs it: a reload may add a timeout the startup
@@ -2061,24 +2065,90 @@ impl DomicileCompositor {
     /// A cast request, from any thread.
     fn cast_requested(&mut self, request: casting::Request) {
         let open: HashSet<String> = self.toplevels.iter().map(|(id, _)| id.clone()).collect();
+        let capturer = self
+            .engine
+            .as_mut()
+            .map(|session| session as &mut dyn casting::Capturer);
         self.casting
-            .request(request, |casting::Source::Window(app_id)| {
-                open.contains(app_id)
-            });
+            .request(request, |app_id| open.contains(app_id), capturer);
     }
 
     /// News from the PipeWire thread.
     fn cast_news(&mut self, news: casting::ToWayland) {
         let renderer = self.gpu.as_mut().map(Gpu::renderer);
-        let due = self.casting.news(news, renderer, Instant::now());
+        let capturer = self
+            .engine
+            .as_mut()
+            .map(|session| session as &mut dyn casting::Capturer);
+        let due = self.casting.news(news, renderer, capturer, Instant::now());
         self.arm_the_cast_deadline(due);
     }
 
     /// The pointer moved over `at`'s window box, or left every window.
     fn cast_pointer(&mut self, at: Option<(String, (f64, f64))>) {
+        // The same point on the desktop, for monitor and region streams. The
+        // compositor knows the pointer only over a window.
+        let desk = at.as_ref().and_then(|(app_id, (x, y))| {
+            let bounds = self.app_bounds.get(app_id)?;
+            Some((bounds.min.x + x, bounds.min.y + y))
+        });
         let renderer = self.gpu.as_mut().map(Gpu::renderer);
-        let due = self.casting.pointer(at, renderer, Instant::now());
+        let due = self.casting.pointer(at, desk, renderer, Instant::now());
         self.arm_the_cast_deadline(due);
+    }
+
+    /// The engine captured a frame of a display, for monitor and region
+    /// streams.
+    fn cast_captured(
+        &mut self,
+        capture: engine::CaptureId,
+        frame: u64,
+        captured: Result<engine::CapturedFrame, String>,
+    ) {
+        let renderer = self.gpu.as_mut().map(Gpu::renderer);
+        let Some(session) = self.engine.as_mut() else {
+            return;
+        };
+        let due =
+            self.casting
+                .captured(capture, frame, captured, renderer, session, Instant::now());
+        self.arm_the_cast_deadline(due);
+    }
+
+    /// The monitors changed, so monitor and region streams follow.
+    fn tell_the_casts_the_screens(&mut self) {
+        let capturer = self
+            .engine
+            .as_mut()
+            .map(|session| session as &mut dyn casting::Capturer);
+        self.casting.screens(self.screens.cast_screens(), capturer);
+        self.cast_the_monitor_if_asked();
+    }
+
+    /// Starts the `DOMICILE_CAST_MONITOR` cast once that monitor is plugged
+    /// in, or at once for a region.
+    ///
+    /// For checking monitor and region casts without the ScreenCast portal;
+    /// see `docs/COMPOSITOR-DEBUGGING.md`. The stream's events are only
+    /// logged.
+    fn cast_the_monitor_if_asked(&mut self) {
+        let ready = self.cast_on_monitor.as_ref().is_some_and(|(spec, _)| {
+            match casting::Source::desk(spec) {
+                casting::Source::Monitor(name) => {
+                    self.screens.outputs().any(|output| output.name == name)
+                }
+                _ => true,
+            }
+        });
+        if ready {
+            let (spec, casting) = self.cast_on_monitor.take().expect("checked above");
+            info!(%spec, "casting what DOMICILE_CAST_MONITOR names");
+            casting.start(
+                casting::Source::desk(&spec),
+                casting::CursorMode::Embedded,
+                Box::new(|event| info!(?event, "DOMICILE_CAST_MONITOR cast")),
+            );
+        }
     }
 
     /// Hands a window's committed frame to its casts. `crop` is the engine's:
@@ -2313,6 +2383,18 @@ impl DomicileCompositor {
                 engine::Event::Frame { .. } => {}
                 // Handled above, with the buffers.
                 engine::Event::Released { .. } => {}
+                engine::Event::Captured {
+                    capture,
+                    frame,
+                    captured,
+                } => self.cast_captured(capture, frame, captured),
+                engine::Event::CaptureEnded { capture } => {
+                    let capturer = self
+                        .engine
+                        .as_mut()
+                        .map(|session| session as &mut dyn casting::Capturer);
+                    self.casting.capture_ended(capture, capturer);
+                }
                 // A copy in a page or browser window. The browser is not our
                 // Wayland client, so this is how its copies reach the seat and
                 // the desktop has one clipboard.
@@ -3016,6 +3098,7 @@ impl DomicileCompositor {
             grepped::ADVERTISING
         );
         self.screens = Screens::following_the_window(logical, scale);
+        self.tell_the_casts_the_screens();
         // The mode is in physical pixels, so it grows with the scale to keep
         // the logical size. Read from the new `Screens`.
         let mode = current_mode(
@@ -3119,6 +3202,7 @@ impl DomicileCompositor {
         }
         self.outputs = outputs;
         self.screens = screens;
+        self.tell_the_casts_the_screens();
         // Tell the engine, which holds DRM master, which connectors to light. A
         // profile that turns a panel off needs the panel actually turned off.
         //
@@ -3185,6 +3269,8 @@ impl DomicileCompositor {
             served_by,
             "the engine this desktop was drawing through has been replaced; rejoining it"
         );
+        // The old engine's captures are gone with it.
+        self.casting.engine_replaced();
         let session = self
             .engine
             .as_mut()
@@ -6096,6 +6182,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     // mapping, so do this before opening the socket.
     let output_manager_state = OutputManagerState::new_with_xdg_output::<DomicileCompositor>(&dh);
     let screens = screens_at_startup(&config);
+    let cast_screens = screens.cast_screens();
     let outputs: Vec<LiveOutput> = screens
         .outputs()
         .map(|advertised| advertise_output(&dh, advertised))
@@ -6454,15 +6541,23 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         lock,
         turnover: None,
         turnover_deadline: None,
-        casting: casting::Windows::new(cast_news, casting_gpu),
+        casting: {
+            let mut streams = casting::Streams::new(cast_news, casting_gpu);
+            streams.screens(cast_screens, None);
+            streams
+        },
         cast_deadline: None,
         cast_on_title: std::env::var("DOMICILE_CAST_WINDOW")
             .ok()
-            .map(|title| (title, casting::Casting::new(cast_requests))),
+            .map(|title| (title, casting::Casting::new(cast_requests.clone()))),
+        cast_on_monitor: std::env::var("DOMICILE_CAST_MONITOR")
+            .ok()
+            .map(|name| (name, casting::Casting::new(cast_requests))),
         loop_handle: event_loop.handle(),
     };
 
     let mut data = CalloopData { display, state };
+    data.state.cast_the_monitor_if_asked();
 
     // Accept on the sockets bound above.
     let handle = event_loop.handle();

@@ -356,6 +356,50 @@ impl Screens {
         self.outputs.iter()
     }
 
+    /// The monitors as screen casts see them.
+    ///
+    /// On a tty each engine display is captured on its own. A nested desktop
+    /// is one capture of Domicile's window, which the engine names zero, and
+    /// one screen named after the first output.
+    pub fn cast_screens(&self) -> Vec<crate::casting::Screen> {
+        let engine: Vec<_> = self
+            .outputs
+            .iter()
+            .filter_map(|output| {
+                Some(crate::casting::Screen {
+                    name: output.name.clone(),
+                    display: display_id_of(&output.name)?,
+                    desk: (
+                        output.position.0,
+                        output.position.1,
+                        output.logical.0,
+                        output.logical.1,
+                    ),
+                    scale: output.scale,
+                    upright: output.transform == Transform::Normal,
+                })
+            })
+            .collect();
+        if !engine.is_empty() {
+            return engine;
+        }
+        let first = self
+            .outputs
+            .first()
+            .expect("every desktop advertises an output");
+        vec![crate::casting::Screen {
+            name: first.name.clone(),
+            display: 0,
+            desk: (0, 0, self.size.0, self.size.1),
+            scale: self
+                .outputs
+                .iter()
+                .map(|output| output.scale)
+                .fold(f64::MIN, f64::max),
+            upright: true,
+        }]
+    }
+
     /// Connector settings for the engine: which to light and where each mode
     /// goes.
     ///
@@ -555,6 +599,12 @@ fn overlap_area(a: &Bounds, b: &Bounds) -> f64 {
 /// Ozone derives the id from the EDID, so it survives a replug.
 fn name_of(display: &Display) -> String {
     format!("drm-{}", display.id)
+}
+
+/// The engine display a `wl_output` named by [`name_of`] is, or `None` for
+/// another name.
+fn display_id_of(name: &str) -> Option<i64> {
+    name.strip_prefix("drm-")?.parse().ok()
 }
 
 /// The engine's id for the display named `name`. The inverse of [`name_of`],
@@ -991,6 +1041,45 @@ mod tests {
 "#,
         ));
         assert!(!screens.follows_the_window());
+    }
+
+    #[test]
+    fn a_tty_casts_each_monitor_from_its_own_capture() {
+        let mut screens = Screens::from_the_engine(&two_plugged_in(), &unspelled());
+        screens.outputs[1].transform = Transform::Rotate90;
+
+        let cast = screens.cast_screens();
+
+        assert_eq!(cast.len(), 2);
+        assert_eq!(cast[0].name, screens.outputs[0].name);
+        assert_eq!(cast[0].display, two_plugged_in()[0].id);
+        assert_eq!(
+            cast[0].desk,
+            (
+                screens.outputs[0].position.0,
+                screens.outputs[0].position.1,
+                screens.outputs[0].logical.0,
+                screens.outputs[0].logical.1
+            )
+        );
+        assert!(cast[0].upright);
+        assert!(!cast[1].upright);
+    }
+
+    #[test]
+    fn a_nested_desktop_casts_from_the_window() {
+        let cast = Screens::following_the_window((1280, 800), 2).cast_screens();
+
+        assert_eq!(
+            cast,
+            [crate::casting::Screen {
+                name: "domicile-0".into(),
+                display: 0,
+                desk: (0, 0, 1280, 800),
+                scale: 2.0,
+                upright: true,
+            }]
+        );
     }
 
     #[test]

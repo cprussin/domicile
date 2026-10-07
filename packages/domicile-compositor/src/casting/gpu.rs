@@ -1,4 +1,4 @@
-//! Keeps a window's frame and draws it into stream buffers.
+//! Keeps a source's frame and draws it into stream buffers.
 //!
 //! Thin glue over Smithay's GLES renderer, which needs a GPU; the decisions
 //! live in the modules beside it. Shm frames in `Argb8888` or `Xrgb8888` are
@@ -35,6 +35,14 @@ pub enum Snapshot {
     Texture(GlesTexture),
 }
 
+/// Part of a stream frame: `from` of `snapshot`, in its pixels, drawn over
+/// `to`, in the stream's.
+pub struct Layer<'a> {
+    pub snapshot: &'a Snapshot,
+    pub from: Rect,
+    pub to: Rect,
+}
+
 /// Why a frame could not be kept or filled.
 #[derive(Debug, Error)]
 pub enum FillError {
@@ -46,6 +54,12 @@ pub enum FillError {
     Gles(#[from] GlesError),
     #[error("the wait for the GPU to draw the frame was interrupted")]
     Interrupted,
+    #[error("a captured frame is in DRM format {0:#x}, which streams do not read")]
+    Format(u32),
+    #[error("a captured frame's shared memory would not map: {0}")]
+    Map(std::io::Error),
+    #[error("a captured frame's dmabuf is malformed")]
+    Dmabuf,
 }
 
 /// Keeps `buffer`'s frame.
@@ -120,34 +134,22 @@ pub fn read_back(
     Ok(())
 }
 
-/// Draws `crop` of `snapshot` over all of `target`, and the pointer if
-/// `cursor` embeds it.
+/// Draws `layers` over `target`, cleared, and the pointer if `cursor` embeds
+/// it.
 ///
 /// Returns the fence that signals when the draw lands. A driver without
 /// native fences is waited on here instead.
 pub fn draw(
     renderer: &mut GlesRenderer,
-    snapshot: &Snapshot,
-    crop: Rect,
+    layers: &[Layer],
     target: &Dmabuf,
     cursor: Plan,
     sprite: &Sprite,
 ) -> Result<Option<OwnedFd>, FillError> {
-    let texture = match snapshot {
-        Snapshot::Pixels {
-            bytes, alpha, size, ..
-        } => renderer.import_memory(
-            bytes,
-            if *alpha {
-                Fourcc::Argb8888
-            } else {
-                Fourcc::Xrgb8888
-            },
-            Size::from((size.0 as i32, size.1 as i32)),
-            false,
-        )?,
-        Snapshot::Texture(texture) => texture.clone(),
-    };
+    let textures = layers
+        .iter()
+        .map(|layer| texture_of(renderer, layer.snapshot))
+        .collect::<Result<Vec<_>, _>>()?;
     let arrow = match cursor {
         Plan::Embed { at } => Some((
             renderer.import_memory(
@@ -163,23 +165,29 @@ pub fn draw(
     let mut target = target.clone();
     let size: Size<i32, Physical> = Size::from((target.width() as i32, target.height() as i32));
     let whole = Rectangle::from_size(size);
-    let source = Rectangle::new(
-        (f64::from(crop.0), f64::from(crop.1)).into(),
-        (f64::from(crop.2), f64::from(crop.3)).into(),
-    );
     let mut framebuffer = renderer.bind(&mut target)?;
     let mut frame = renderer.render(&mut framebuffer, size, Transform::Normal)?;
     frame.clear(Color32F::TRANSPARENT, &[whole])?;
-    Frame::render_texture_from_to(
-        &mut frame,
-        &texture,
-        source,
-        whole,
-        &[whole],
-        &[],
-        Transform::Normal,
-        1.0,
-    )?;
+    for (layer, texture) in layers.iter().zip(&textures) {
+        let source = Rectangle::new(
+            (f64::from(layer.from.0), f64::from(layer.from.1)).into(),
+            (f64::from(layer.from.2), f64::from(layer.from.3)).into(),
+        );
+        let place = Rectangle::new(
+            (layer.to.0, layer.to.1).into(),
+            (layer.to.2, layer.to.3).into(),
+        );
+        Frame::render_texture_from_to(
+            &mut frame,
+            texture,
+            source,
+            place,
+            &[place],
+            &[],
+            Transform::Normal,
+            1.0,
+        )?;
+    }
     if let Some((arrow, at)) = &arrow {
         let (width, height) = (sprite.size.0 as i32, sprite.size.1 as i32);
         let place = Rectangle::new(
@@ -205,5 +213,24 @@ pub fn draw(
             sync.wait().map_err(|_| FillError::Interrupted)?;
             Ok(None)
         }
+    }
+}
+
+/// `snapshot` as a texture, uploading a frame kept on the CPU.
+fn texture_of(renderer: &mut GlesRenderer, snapshot: &Snapshot) -> Result<GlesTexture, FillError> {
+    match snapshot {
+        Snapshot::Pixels {
+            bytes, alpha, size, ..
+        } => Ok(renderer.import_memory(
+            bytes,
+            if *alpha {
+                Fourcc::Argb8888
+            } else {
+                Fourcc::Xrgb8888
+            },
+            Size::from((size.0 as i32, size.1 as i32)),
+            false,
+        )?),
+        Snapshot::Texture(texture) => Ok(texture.clone()),
     }
 }

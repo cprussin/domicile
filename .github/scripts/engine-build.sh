@@ -26,7 +26,7 @@ fi
 # The release build, plus the test binaries and probes the checks run.
 "$HERE/engine-release-build.sh" "$CHROMIUM" "${OUT_RELEASE:-out/Release}" \
   domicile_unittests ozone_unittests domicile_css_parity domicile_color_probe \
-  domicile_solid_color_submitter
+  domicile_solid_color_submitter domicile_capture_probe
 
 # Chromium's shell can lose the exit status, so the caller checks for this file.
 touch "$SENTINEL"

@@ -372,7 +372,11 @@ impl EngineSession {
                     self.surfaces.embedded(*surface);
                     None
                 }
-                Event::Copied { .. } | Event::Frame { .. } | Event::Displays(_) => None,
+                Event::Copied { .. }
+                | Event::Frame { .. }
+                | Event::Displays(_)
+                | Event::Captured { .. }
+                | Event::CaptureEnded { .. } => None,
             })
             .collect();
         (events, releases)
@@ -528,6 +532,34 @@ fn take_imports_of<K>(
         .extract_if(|_, (held, _)| *held == surface)
         .map(|(_, (_, id))| id)
         .collect()
+}
+
+/// The engine's display captures, for monitor and region casts. Thin glue
+/// over [`crate::engine::Engine`]; the bookkeeping is in
+/// [`crate::casting::Capturer`]'s callers.
+impl crate::casting::Capturer for EngineSession {
+    fn start(
+        &mut self,
+        display: i64,
+        size: (u32, u32),
+        max_fps: u32,
+    ) -> Result<crate::engine::CaptureId, String> {
+        self.engine
+            .start_capture(display, size, max_fps)
+            .map_err(|why| why.to_string())
+    }
+
+    fn resize(&mut self, capture: crate::engine::CaptureId, size: (u32, u32)) {
+        self.engine.resize_capture(capture, size);
+    }
+
+    fn stop(&mut self, capture: crate::engine::CaptureId) {
+        self.engine.stop_capture(capture);
+    }
+
+    fn release(&mut self, capture: crate::engine::CaptureId, frame: u64) {
+        self.engine.release_captured(capture, frame);
+    }
 }
 
 #[cfg(test)]

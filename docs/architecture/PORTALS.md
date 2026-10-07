@@ -81,7 +81,9 @@ One request channel carries all dialogs. Each interface's backend builds on it.
   the display's root frame sink and sends each frame's dmabuf over the broker
   socket. One producer keeps cursor modes and restore tokens in one place.
   The producer is `src/casting/`: `Casting::start` takes a `Source` and
-  reports the node, and a monitor is another `Source`.
+  reports the node. `Source::Monitor` names a `wl_output`; `Source::Region`
+  is a desktop rectangle in logical pixels. The pointer is drawn from the
+  compositor's state, so it shows only over a window.
 - **Input uses EIS.** RemoteDesktop and InputCapture hand out a libei socket
   (`ConnectToEIS`) served by the compositor (`reis`). Emulated input takes the
   engine's input injection path, so the lock screen still blocks it.
@@ -177,7 +179,7 @@ Phase 1: dialogs.
 Phase 2: capture.
 
 - [x] PipeWire producer in the compositor; window sources from client buffers
-- [ ] engine: `FrameSinkVideoCapturer` per display, dmabufs over the broker socket
+- [x] engine: `FrameSinkVideoCapturer` per display, dmabufs over the broker socket; monitor and region `Source`s
 - [ ] ScreenCast, with restore tokens and the sharing indicator
 - [ ] Screenshot and `PickColor`
 - [ ] Remove ROADMAP's "no screenshot or screencast portal" item

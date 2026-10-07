@@ -250,7 +250,8 @@ case "$ninja" in
   (*) ok "the job does not build all of components_unittests" ;;
 esac
 for target in chrome domicile_engine domicile_unittests ozone_unittests \
-    domicile_css_parity domicile_color_probe domicile_solid_color_submitter; do
+    domicile_css_parity domicile_color_probe domicile_solid_color_submitter \
+    domicile_capture_probe; do
   if printf '%s\n' "$ninja" | grep -qE "out/Release( .*)? $target( |$)"; then
     ok "out/Release builds $target"
   else
