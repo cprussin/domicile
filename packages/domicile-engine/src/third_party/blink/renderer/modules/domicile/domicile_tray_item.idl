@@ -20,7 +20,7 @@
   readonly attribute DOMString title;
 
   // The picture, as a `data:` URL to draw, or empty for one the compositor
-  // could not draw. A URL rather than a path for DomicileDesktopEntry.icon's
-  // reason: the page may draw what the compositor read and cannot read it.
+  // could not draw. A URL rather than a path: the page may draw what the
+  // compositor read and cannot read it.
   readonly attribute DOMString icon;
 };

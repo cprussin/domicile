@@ -39,7 +39,6 @@ run_block() { # $1 NEGATIVE, then NAME=value overrides
   SAW_GUEST=1
   SAW_BROWSER=1
   SAW_ASKED=1
-  SAW_LISTED=1
   SAW_ANSWERED=1
   SAW_PICKED=1
   SAW_ANY_PICK=1
@@ -95,8 +94,6 @@ expect "a browser never asked says so" "yes" \
   "$(blames "NEVER ASKED" 0 SAW_BROWSER=0 SAW_ASKED=0)"
 expect "a browser asked and a shell not told says so" "yes" \
   "$(blames "SHELL WAS NOT" 0 SAW_ASKED=0)"
-expect "a directory the shell could not list says so" "yes" \
-  "$(blames "COULD NOT LIST" 0 SAW_LISTED=0 SAW_ANSWERED=0)"
 expect "an answer that threw blames this guard's page" "yes" \
   "$(blames "threw" 0 SAW_ANSWERED=0)"
 

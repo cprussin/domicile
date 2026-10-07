@@ -30,13 +30,6 @@ namespace domicile {
 std::optional<base::FilePath> ResolvedPath(const base::FilePath& home,
                                            std::string_view path);
 
-// The unordered names in `directory`, with a trailing `/` on directories as in
-// `found_files`. Returns nothing if `directory` is not a readable directory.
-//
-// Blocking, so call it on the thread pool.
-std::optional<std::vector<std::string>> DirectoryEntries(
-    const base::FilePath& directory);
-
 // Whether `count` paths answer what `mode` asked: one, except for
 // kOpenMultiple, which takes at least one.
 bool IsAnswerFor(mojom::WebViewFileChooserMode mode, size_t count);

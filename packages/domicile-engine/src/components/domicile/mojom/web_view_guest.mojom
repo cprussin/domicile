@@ -332,15 +332,6 @@ interface WebViewGuest {
   // FindChanged(0, 0).
   StopFinding(bool keep_selection);
 
-  // Lists the directory at `path` for the shell's picker, directories ending
-  // in `/`. Lets the picker reach files outside the index. `path` is absolute
-  // or home-relative; one containing `..` is a bad message.
-  //
-  // Works only while a file chooser is open, so the shell cannot browse the
-  // filesystem otherwise. Returns null with none open, or if `path` is not a
-  // readable directory.
-  ListDirectory(string path) => (array<string>? entries);
-
   // The element gained focus, by `view.focus()` or a click.
   //
   // Makes this guest the active tab for chrome.tabs. The browser gets no

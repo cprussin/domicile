@@ -97,7 +97,6 @@ class ControlChannel : public mojom::ControlChannel {
   void Spawn(const std::vector<std::string>& command) override;
   void SearchFiles(const std::string& query) override;
   void PreviewFile(const std::string& path) override;
-  void SearchApps(const std::string& query) override;
   void CallSystem(uint32_t id, const std::string& request) override;
   void CopyClipboardEntry(uint32_t entry) override;
   void ActivateTrayItem(const std::string& id,
@@ -122,16 +121,6 @@ class ControlChannel : public mojom::ControlChannel {
   void SetTheme(mojom::Theme theme) override;
   void Unlock(const std::string& passphrase) override;
   void Lock() override;
-  void SetBrightness(double level) override;
-  void SetAudioVolume(const std::string& id, double volume) override;
-  void SetAudioMuted(const std::string& id, bool muted) override;
-  void SetDefaultAudioDevice(const std::string& id) override;
-  void MoveAudioStream(const std::string& id,
-                       const std::string& device) override;
-  void SetAudioPort(const std::string& id, const std::string& port) override;
-  void SetAudioProfile(const std::string& card,
-                       const std::string& profile) override;
-  void WatchAudioLevels(const std::vector<std::string>& ids) override;
   void ThemeCaptured(mojom::Theme theme) override;
   void GrabShortcut(mojom::ShortcutPtr shortcut) override;
   void Key(const std::string& app_id, uint32_t keycode, bool pressed) override;
