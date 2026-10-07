@@ -140,7 +140,7 @@ To style your own items with manganese's Panda CSS, see
 - Click lists each recording application and what it records (a window's
   title, "Screen drm-1" or "Region"), with a
   **Stop sharing** button that ends that application's session.
-- See [PORTALS.md](../../../docs/architecture/PORTALS.md).
+- See [the portals README](../../domicile-compositor/src/portals/README.md).
 
 ## Tray
 

@@ -1,7 +1,7 @@
 //! A DynamicLauncher icon as a picture a page can draw.
 //!
 //! The portal frontend accepts PNG, JPEG and SVG icons; this tells them apart
-//! by their first bytes. See `docs/architecture/PORTALS.md`.
+//! by their first bytes. See `packages/domicile-compositor/src/portals/README.md`.
 
 use crate::data_url::data_url;
 

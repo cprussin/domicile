@@ -15,7 +15,7 @@
 //!   thread and queues the ones it fills.
 //!
 //! Neither thread waits on the other: both directions are queues. See
-//! `docs/architecture/PORTALS.md`.
+//! `packages/domicile-compositor/src/portals/README.md`.
 //!
 //! A monitor or region is filled from the engine's display captures; see
 //! [`captures`] and [`region`]. [`Casting::list`] lists what can be cast as

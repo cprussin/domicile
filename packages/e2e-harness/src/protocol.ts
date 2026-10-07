@@ -277,7 +277,7 @@ const notificationsSchema = z.looseObject({
 // change and on connect. `body` is per `kind`; the SDK's `portal` module parses it. Answer
 // with `answer_portal_request`. `shortcuts` lists the chords applications hold
 // through the GlobalShortcuts portal; a press is answered `pressed` under its
-// id, and its release `released`. See `docs/architecture/PORTALS.md`.
+// id, and its release `released`. See `packages/domicile-compositor/src/portals/README.md`.
 const portalRequestSchema = z.looseObject({
   app_id: z.string(),
   body: z.unknown(),
