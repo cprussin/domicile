@@ -15,7 +15,7 @@ describe(Switch, () => {
 
   describe("interactions", () => {
     it("flips when its label is clicked", async () => {
-      const checked = await new Promise((resolve) => {
+      const checked = new Promise((resolve) => {
         render(
           <Switch
             defaultChecked
@@ -25,14 +25,10 @@ describe(Switch, () => {
             }}
           />,
         );
-        userEvent
-          .click(screen.getByText("Keyboard"))
-          .catch((error: unknown) => {
-            throw error;
-          });
       });
+      await userEvent.click(screen.getByText("Keyboard"));
 
-      expect(checked).toBe(false);
+      expect(await checked).toBe(false);
     });
   });
 });
