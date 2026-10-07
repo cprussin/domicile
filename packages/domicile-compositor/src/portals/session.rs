@@ -29,6 +29,24 @@ pub async fn open(
         .await
 }
 
+/// End the session at `handle` from the desktop's side, as when the user
+/// stops it: what it started ends, the application hears `Closed`, and the
+/// object goes. Nothing happens if the application closed it first.
+pub async fn end(server: &ObjectServer, handle: &OwnedObjectPath) -> zbus::Result<()> {
+    match server.interface::<_, Session>(handle).await {
+        Ok(session) => {
+            if let Some(closed) = session.get_mut().await.closed.take() {
+                closed();
+            }
+            Session::closed_signal(session.signal_emitter()).await?;
+            server.remove::<Session, _>(handle).await?;
+            Ok(())
+        }
+        Err(zbus::Error::InterfaceNotFound) => Ok(()),
+        Err(other) => Err(other),
+    }
+}
+
 #[zbus::interface(name = "org.freedesktop.impl.portal.Session")]
 impl Session {
     /// The application ended the session. The object goes with it.
@@ -43,6 +61,10 @@ impl Session {
         server.remove::<Session, _>(emitter.path()).await?;
         Ok(())
     }
+
+    /// The desktop ended the session. See [`end`].
+    #[zbus(signal, name = "Closed")]
+    async fn closed_signal(emitter: &SignalEmitter<'_>) -> zbus::Result<()>;
 
     #[zbus(property(emits_changed_signal = "const"))]
     fn version(&self) -> u32 {
@@ -96,5 +118,47 @@ mod tests {
 
         assert_eq!(heard.try_recv(), Ok(()));
         assert!(close().is_err(), "the session is gone");
+    }
+
+    #[test]
+    fn a_session_the_desktop_ends_tells_the_application() {
+        let (server, client) = connected(|builder| {
+            builder
+                .serve_at(
+                    "/",
+                    Settings {
+                        theme: Theme::Dark,
+                        appearance: Appearance::default(),
+                    },
+                )
+                .expect("served")
+        });
+        let (ended, heard) = channel();
+        let handle = OwnedObjectPath::try_from(HANDLE).expect("a path");
+        zbus::block_on(open(server.object_server().inner(), &handle, move || {
+            ended.send(()).expect("the test listens");
+        }))
+        .expect("opened");
+        let closed = zbus::blocking::MessageIterator::for_match_rule(
+            zbus::MatchRule::builder()
+                .msg_type(zbus::message::Type::Signal)
+                .interface("org.freedesktop.impl.portal.Session")
+                .expect("a name")
+                .member("Closed")
+                .expect("a name")
+                .build(),
+            &client,
+            None,
+        )
+        .expect("listening");
+
+        zbus::block_on(end(server.object_server().inner(), &handle)).expect("ended");
+
+        assert_eq!(heard.try_recv(), Ok(()));
+        let signal = closed.into_iter().next().expect("a signal").expect("read");
+        assert_eq!(
+            signal.header().path().map(|path| path.as_str()),
+            Some(HANDLE)
+        );
     }
 }

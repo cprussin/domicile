@@ -504,7 +504,14 @@ pub enum HostMessage {
     /// `docs/architecture/PORTALS.md`. Pushed as the full list on any change
     /// and on connect, so a reloaded page still sees a pending dialog. The
     /// shell answers with [`ChromeMessage::AnswerPortalRequest`].
-    PortalRequests { items: Vec<PortalRequest> },
+    ///
+    /// `capturing` lists the sessions that control or capture input, so the
+    /// shell can show each one and stop it with [`PortalAnswer::Stop`].
+    PortalRequests {
+        items: Vec<PortalRequest>,
+        #[serde(default)]
+        capturing: Vec<Capturing>,
+    },
 }
 
 /// A dialog an application asked for through a portal.
@@ -542,6 +549,12 @@ pub enum PortalKind {
     /// logout, user switching or suspend, so a shell can say who. Listed
     /// until the application lets go. Not a dialog: it accepts no answer.
     Inhibit(Inhibition),
+    /// `org.freedesktop.impl.portal.RemoteDesktop`'s `Start`: which devices,
+    /// and the clipboard, an application may control.
+    RemoteDesktop(RemoteDesktopDialog),
+    /// `org.freedesktop.impl.portal.InputCapture`'s `CreateSession`: whether
+    /// an application may take the input it names.
+    InputCapture(InputCaptureDialog),
 }
 
 impl PortalKind {
@@ -557,14 +570,17 @@ impl PortalKind {
                 dialog.choices.contains(choice)
             }
             (PortalKind::FileChooser(_), PortalAnswer::FileChooser(_)) => true,
+            (PortalKind::RemoteDesktop(_), PortalAnswer::RemoteDesktop { .. }) => true,
+            (PortalKind::InputCapture(_), PortalAnswer::InputCapture) => true,
+            // A stop answers a running session, never a request.
             (
-                PortalKind::Access(_),
-                PortalAnswer::AppChooser { .. } | PortalAnswer::FileChooser(_),
-            )
-            | (PortalKind::AppChooser(_), PortalAnswer::Access | PortalAnswer::FileChooser(_))
-            | (
-                PortalKind::FileChooser(_),
-                PortalAnswer::Access | PortalAnswer::AppChooser { .. },
+                _,
+                PortalAnswer::Access
+                | PortalAnswer::AppChooser { .. }
+                | PortalAnswer::FileChooser(_)
+                | PortalAnswer::RemoteDesktop { .. }
+                | PortalAnswer::InputCapture
+                | PortalAnswer::Stop,
             ) => false,
         }
     }
@@ -587,6 +603,50 @@ pub enum Inhibited {
     Logout,
     UserSwitch,
     Suspend,
+}
+
+/// Input devices a session asks for or was granted.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Devices {
+    pub keyboard: bool,
+    pub pointer: bool,
+    pub touchscreen: bool,
+}
+
+/// What a RemoteDesktop session asks to control.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RemoteDesktopDialog {
+    pub devices: Devices,
+    /// Whether it asked to share the clipboard.
+    pub clipboard: bool,
+}
+
+/// What an InputCapture session asks to take.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InputCaptureDialog {
+    pub devices: Devices,
+}
+
+/// A running session that controls or captures input, as `kind` and `body`
+/// on the wire.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Capturing {
+    /// The id [`PortalAnswer::Stop`] answers. Never shared with a request.
+    pub id: u32,
+    /// The application's desktop file id, as the portal frontend names it.
+    pub app_id: String,
+    #[serde(flatten)]
+    pub kind: CapturingKind,
+}
+
+/// What a [`Capturing`] session holds.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", content = "body", rename_all = "snake_case")]
+pub enum CapturingKind {
+    /// Emulated input, and the clipboard when `clipboard` is set.
+    RemoteDesktop { devices: Devices, clipboard: bool },
+    /// The user's own input, once it crosses a barrier.
+    InputCapture { devices: Devices },
 }
 
 /// An `AccessDialog`'s texts.
@@ -720,6 +780,14 @@ pub enum PortalAnswer {
     AppChooser { choice: String },
     /// The user chose in a [`PortalKind::FileChooser`].
     FileChooser(FileChooserAnswer),
+    /// The user granted a [`PortalKind::RemoteDesktop`] these devices, and the
+    /// clipboard when `clipboard` is set. The compositor grants no more than
+    /// was asked.
+    RemoteDesktop { devices: Devices, clipboard: bool },
+    /// The user allowed a [`PortalKind::InputCapture`].
+    InputCapture,
+    /// The user stopped a [`Capturing`] session.
+    Stop,
     /// The user dismissed the dialog, or denied it.
     Canceled,
     /// The shell has no dialog for this kind.
@@ -733,7 +801,10 @@ impl PortalAnswer {
         match self {
             PortalAnswer::Access
             | PortalAnswer::AppChooser { .. }
-            | PortalAnswer::FileChooser(_) => 0,
+            | PortalAnswer::FileChooser(_)
+            | PortalAnswer::RemoteDesktop { .. }
+            | PortalAnswer::InputCapture
+            | PortalAnswer::Stop => 0,
             PortalAnswer::Canceled => 1,
             PortalAnswer::Refused => 2,
         }

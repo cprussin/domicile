@@ -7,8 +7,9 @@ Make Domicile the session's only `xdg-desktop-portal` backend:
 - `xdg-desktop-portal-gtk` is removed from the session.
 
 Today the compositor implements `Settings`, `Access`, `AppChooser`,
-`FileChooser`, `Notification` and `Inhibit` and routes the rest to gtk.
-Screen sharing, remote desktop and global shortcuts have no backend.
+`FileChooser`, `Notification`, `Inhibit`, `RemoteDesktop`, `Clipboard` and
+`InputCapture`, and routes the rest to gtk. Screen sharing and global
+shortcuts have no backend.
 
 ## Design
 
@@ -89,6 +90,16 @@ One request channel carries all dialogs. Each interface's backend builds on it.
     shell reaches nothing: only the engine can deliver to the page.
   - The seat has no touchscreen, so a touch is the left button, one finger
     at a time.
+  - The legacy `NotifyPointerMotionAbsolute` and `NotifyTouch*` take a
+    ScreenCast stream's coordinates. A session that shares no screen has no
+    stream, so they are refused; EIS's absolute pointer covers the displays.
+  - InputCapture sees only what the engine forwards: keys, and pointer events
+    over a window. So the pointer reaches a barrier only over a window, and
+    captured motion is the change between reported points, which stops at
+    the screen's edge. Relative motion past the edge needs an engine change.
+    No touchscreen capture.
+  - A Clipboard paste hands the application the pasting client's pipe, so the
+    data never passes through the compositor.
 - **Grants live in the frontend's `PermissionStore`.** Domicile stores only
   ScreenCast and RemoteDesktop restore tokens, under
   `$XDG_STATE_HOME/domicile/`.
@@ -97,8 +108,9 @@ One request channel carries all dialogs. Each interface's backend builds on it.
   touches. Lower-density monitors lose nothing.
 - **No print preview.** The portal sends the document only after the dialog
   closes, so there is nothing to preview. Gtk's backend has none either.
-- **The shell shows active sharing.** A `capturing` state in the same push
-  (who, what, stop) lets a shell draw an indicator and end the session.
+- **The shell shows active sharing.** `portal_requests` carries `capturing`:
+  each running session (id, app, what it holds). The shell stops one by
+  answering its id with `stop`. `<PortalDialogs />` draws the indicator.
 
 ## Interfaces
 
@@ -163,7 +175,7 @@ Phase 2: capture.
 Phase 3: input.
 
 - [x] EIS server in the compositor
-- [ ] RemoteDesktop, Clipboard, InputCapture
+- [x] RemoteDesktop, Clipboard, InputCapture
 - [x] `ext-data-control-v1`
 
 Phase 4: the rest.

@@ -4,6 +4,7 @@
 //
 // The engine relays each request's body untyped; it is parsed here, by kind.
 // A new kind is one schema in `KINDS`, one `PortalKind` and one constructor.
+// The same push lists the sessions that control or capture input.
 
 import { z } from "zod";
 
@@ -21,6 +22,10 @@ export enum PortalKind {
    * lets go. Not a question: the compositor refuses answers to it.
    */
   Inhibit,
+  /** Which input devices, and the clipboard, an application may control. */
+  RemoteDesktop,
+  /** Whether an application may take input that crosses a screen edge. */
+  InputCapture,
   /** A kind this SDK cannot parse. Answer it with {@link PortalAnswer.Refused}. */
   Unknown,
 }
@@ -133,6 +138,24 @@ export type InhibitBody = {
   reason: string | undefined;
 };
 
+/** Input devices a session asks for or holds. */
+export type Devices = {
+  keyboard: boolean;
+  pointer: boolean;
+  touchscreen: boolean;
+};
+
+/** What a remote desktop session asks to control. */
+export type RemoteDesktopBody = {
+  devices: Devices;
+  clipboard: boolean;
+};
+
+/** What an input capture session asks to take. */
+export type InputCaptureBody = {
+  devices: Devices;
+};
+
 export const PortalRequest = {
   Access: (base: PortalRequestBase, body: AccessBody) => ({
     ...base,
@@ -154,6 +177,16 @@ export const PortalRequest = {
     body,
     kind: PortalKind.Inhibit as const,
   }),
+  InputCapture: (base: PortalRequestBase, body: InputCaptureBody) => ({
+    ...base,
+    body,
+    kind: PortalKind.InputCapture as const,
+  }),
+  RemoteDesktop: (base: PortalRequestBase, body: RemoteDesktopBody) => ({
+    ...base,
+    body,
+    kind: PortalKind.RemoteDesktop as const,
+  }),
   Unknown: (base: PortalRequestBase, wireKind: string) => ({
     ...base,
     kind: PortalKind.Unknown as const,
@@ -172,6 +205,12 @@ export enum PortalAnswerKind {
   AppChooser,
   /** The user chose in a {@link PortalKind.FileChooser}. */
   FileChooser,
+  /** The user granted a {@link PortalKind.RemoteDesktop} no more than it asked. */
+  RemoteDesktop,
+  /** The user allowed a {@link PortalKind.InputCapture} request. */
+  InputCapture,
+  /** The user stopped a {@link Capturing} session. */
+  Stop,
   /** The user dismissed or denied the dialog. */
   Canceled,
   /** The shell has no dialog for this kind. */
@@ -190,12 +229,56 @@ export const PortalAnswer = {
     chosen,
     kind: PortalAnswerKind.FileChooser as const,
   }),
+  InputCapture: () => ({ kind: PortalAnswerKind.InputCapture as const }),
   Refused: () => ({ kind: PortalAnswerKind.Refused as const }),
+  RemoteDesktop: (devices: Devices, clipboard: boolean) => ({
+    clipboard,
+    devices,
+    kind: PortalAnswerKind.RemoteDesktop as const,
+  }),
+  Stop: () => ({ kind: PortalAnswerKind.Stop as const }),
 };
 
 export type PortalAnswer = ReturnType<
   (typeof PortalAnswer)[keyof typeof PortalAnswer]
 >;
+
+export enum CapturingKind {
+  /** An application controls input, and the clipboard when `clipboard` is set. */
+  RemoteDesktop,
+  /** An application takes the user's input once it crosses a screen edge. */
+  InputCapture,
+  /** A kind this SDK cannot parse. It can still be stopped. */
+  Unknown,
+}
+
+/** What every capturing session carries. */
+export type CapturingBase = {
+  /** The id {@link stopCapturing} takes. */
+  id: number;
+  /** The application's desktop file id. Empty when unknown. */
+  appId: string;
+};
+
+export const Capturing = {
+  InputCapture: (base: CapturingBase, body: InputCaptureBody) => ({
+    ...base,
+    ...body,
+    kind: CapturingKind.InputCapture as const,
+  }),
+  RemoteDesktop: (base: CapturingBase, body: RemoteDesktopBody) => ({
+    ...base,
+    ...body,
+    kind: CapturingKind.RemoteDesktop as const,
+  }),
+  Unknown: (base: CapturingBase, wireKind: string) => ({
+    ...base,
+    kind: CapturingKind.Unknown as const,
+    wireKind,
+  }),
+};
+
+export type Capturing = ReturnType<(typeof Capturing)[keyof typeof Capturing]>;
 
 /** What the portal functions need of the desktop `Shell` is handed. */
 export type PortalHost = Pick<DomicileHost, "answerPortalRequest"> & {
@@ -231,6 +314,27 @@ export const watchPortalRequests = (
   };
 };
 
+/**
+ * Call `listener` with every session that controls or captures input, on each
+ * change. Returns a function that stops listening.
+ */
+export const watchCapturing = (
+  host: PortalHost,
+  listener: (sessions: readonly Capturing[]) => void,
+): (() => void) => {
+  const heard = (event: MessageEvent<string>) => {
+    listener(
+      requestsSchema
+        .parse(JSON.parse(event.data))
+        .capturing.map((item) => parseCapturing(item)),
+    );
+  };
+  host.addEventListener("portalrequests", heard);
+  return () => {
+    host.removeEventListener("portalrequests", heard);
+  };
+};
+
 /** Answer request `id`. The first answer to reach the compositor wins. */
 export const answerPortalRequest = (
   host: PortalHost,
@@ -238,6 +342,11 @@ export const answerPortalRequest = (
   answer: PortalAnswer,
 ): void => {
   host.answerPortalRequest(id, JSON.stringify(wireAnswer(answer)));
+};
+
+/** End capturing session `id`. */
+export const stopCapturing = (host: PortalHost, id: number): void => {
+  answerPortalRequest(host, id, PortalAnswer.Stop());
 };
 
 const accessSchema = z
@@ -335,6 +444,19 @@ const inhibitSchema = z
     }),
   );
 
+const devicesSchema = z.object({
+  keyboard: z.boolean(),
+  pointer: z.boolean(),
+  touchscreen: z.boolean(),
+});
+
+const remoteDesktopSchema = z.object({
+  clipboard: z.boolean(),
+  devices: devicesSchema,
+});
+
+const inputCaptureSchema = z.object({ devices: devicesSchema });
+
 /** Reads one kind's body into a request. */
 type ReadKind = (base: PortalRequestBase, body: unknown) => PortalRequest;
 
@@ -359,6 +481,35 @@ const KINDS: ReadonlyMap<string, ReadKind> = new Map<string, ReadKind>([
     (base: PortalRequestBase, body: unknown) =>
       PortalRequest.Inhibit(base, inhibitSchema.parse(body)),
   ],
+  [
+    "remote_desktop",
+    (base, body) =>
+      PortalRequest.RemoteDesktop(base, remoteDesktopSchema.parse(body)),
+  ],
+  [
+    "input_capture",
+    (base, body) =>
+      PortalRequest.InputCapture(base, inputCaptureSchema.parse(body)),
+  ],
+]);
+
+type ReadCapturing = (base: CapturingBase, body: unknown) => Capturing;
+
+/** Each capturing kind's wire name, and how to read its body into a session. */
+const CAPTURING_KINDS: ReadonlyMap<string, ReadCapturing> = new Map<
+  string,
+  ReadCapturing
+>([
+  [
+    "remote_desktop",
+    (base, body) =>
+      Capturing.RemoteDesktop(base, remoteDesktopSchema.parse(body)),
+  ],
+  [
+    "input_capture",
+    (base, body) =>
+      Capturing.InputCapture(base, inputCaptureSchema.parse(body)),
+  ],
 ]);
 
 const itemSchema = z.object({
@@ -369,7 +520,16 @@ const itemSchema = z.object({
   parent_app_id: z.string().optional(),
 });
 
+const capturingSchema = z.object({
+  app_id: z.string(),
+  body: z.unknown(),
+  id: z.number(),
+  kind: z.string(),
+});
+
 const requestsSchema = z.object({
+  // Optional on the wire, so a line without it parses.
+  capturing: z.array(capturingSchema).default([]),
   items: z.array(itemSchema),
   type: z.literal("portal_requests"),
 });
@@ -397,6 +557,14 @@ const chooserMode = (mode: "open" | "save" | "save_files"): FileChooserMode => {
   }
 };
 
+const parseCapturing = (item: z.infer<typeof capturingSchema>): Capturing => {
+  const base = { appId: item.app_id, id: item.id };
+  const parse = CAPTURING_KINDS.get(item.kind);
+  return parse === undefined
+    ? Capturing.Unknown(base, item.kind)
+    : parse(base, item.body);
+};
+
 /** `answer` as the compositor reads it. */
 const wireAnswer = (answer: PortalAnswer): object => {
   switch (answer.kind) {
@@ -404,6 +572,16 @@ const wireAnswer = (answer: PortalAnswer): object => {
       return { kind: "access" };
     case PortalAnswerKind.AppChooser:
       return { choice: answer.choice, kind: "app_chooser" };
+    case PortalAnswerKind.RemoteDesktop:
+      return {
+        clipboard: answer.clipboard,
+        devices: answer.devices,
+        kind: "remote_desktop",
+      };
+    case PortalAnswerKind.InputCapture:
+      return { kind: "input_capture" };
+    case PortalAnswerKind.Stop:
+      return { kind: "stop" };
     case PortalAnswerKind.Canceled:
       return { kind: "canceled" };
     case PortalAnswerKind.FileChooser:

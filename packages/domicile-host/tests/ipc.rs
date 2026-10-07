@@ -9,8 +9,8 @@ use std::thread;
 
 use domicile_host::ipc::{parse_chrome, to_line, Session};
 use domicile_protocol::{
-    AccessDialog, ChromeMessage, HostMessage, Notification, PortalKind, PortalRequest, Theme,
-    TrayItem, Urgency, PROTOCOL_VERSION,
+    AccessDialog, Capturing, CapturingKind, ChromeMessage, Devices, HostMessage, Notification,
+    PortalKind, PortalRequest, Theme, TrayItem, Urgency, PROTOCOL_VERSION,
 };
 
 #[test]
@@ -375,7 +375,8 @@ fn a_host_nobody_gave_notifications_says_nothing_about_them() {
 
 #[test]
 fn the_portal_requests_ride_with_the_handshake() {
-    // A reloaded page must still see a dialog an application is waiting on.
+    // A reloaded page must still see a dialog an application is waiting on,
+    // and a session it can stop.
     let mut session = Session::new();
     let request = PortalRequest {
         id: 1,
@@ -389,21 +390,36 @@ fn the_portal_requests_ride_with_the_handshake() {
             deny_label: None,
         }),
     };
+    let remote = Capturing {
+        id: 2,
+        app_id: "org.example.Remote".into(),
+        kind: CapturingKind::InputCapture {
+            devices: Devices::default(),
+        },
+    };
     let told = session
         .host_mut()
-        .set_portal_requests(vec![request.clone()]);
+        .set_portal_requests(vec![request.clone()], Vec::new());
     assert_eq!(
         told,
         Some(HostMessage::PortalRequests {
-            items: vec![request.clone()]
+            items: vec![request.clone()],
+            capturing: Vec::new(),
         })
     );
     assert_eq!(
         session
             .host_mut()
-            .set_portal_requests(vec![request.clone()]),
+            .set_portal_requests(vec![request.clone()], Vec::new()),
         None,
         "an unchanged list says nothing"
+    );
+    assert!(
+        session
+            .host_mut()
+            .set_portal_requests(vec![request.clone()], vec![remote.clone()])
+            .is_some(),
+        "a new session is a change"
     );
 
     let out = session.ingest(&to_line(&ChromeMessage::Hello {
@@ -411,7 +427,8 @@ fn the_portal_requests_ride_with_the_handshake() {
     }));
 
     assert!(out.contains(&HostMessage::PortalRequests {
-        items: vec![request]
+        items: vec![request],
+        capturing: vec![remote],
     }));
 }
 

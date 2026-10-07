@@ -97,6 +97,15 @@ impl Desk {
         )
     }
 
+    /// The desktop point at `x`, `y` in window `app_id`, as the engine
+    /// reports the pointer. `None` for a window the page has not placed.
+    pub fn point_in(&self, app_id: &str, x: f64, y: f64) -> Option<Point> {
+        self.windows
+            .iter()
+            .find(|window| window.app_id == app_id)
+            .map(|window| Point::new(window.bounds.min.x + x, window.bounds.min.y + y))
+    }
+
     /// The window under `point`, and the point relative to it.
     ///
     /// The page knows the stacking and this does not. Where windows overlap,

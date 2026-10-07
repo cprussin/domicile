@@ -6,8 +6,12 @@
 //! the queue; later ones are refused. Inhibitors ([`Portals::hold`]) are
 //! listed too, take no answer, and stay until withdrawn. See
 //! `docs/architecture/PORTALS.md`.
+//!
+//! It also lists the sessions that control or capture input
+//! ([`Portals::capturing`]), each with what stops it (`S`), so the shell can
+//! show and end them.
 
-use domicile_protocol::{PortalAnswer, PortalKind, PortalRequest};
+use domicile_protocol::{Capturing, CapturingKind, PortalAnswer, PortalKind, PortalRequest};
 
 /// A request that was answered or withdrawn already, or never existed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
@@ -33,25 +37,27 @@ struct Pending<W> {
     waiter: W,
 }
 
-/// The unanswered requests, oldest first.
+/// The unanswered requests, oldest first, and the running sessions.
 #[derive(Debug)]
-pub struct Portals<W> {
+pub struct Portals<W, S> {
     next_id: u32,
     listening: bool,
     pending: Vec<Pending<W>>,
+    sessions: Vec<(Capturing, S)>,
 }
 
-impl<W> Default for Portals<W> {
+impl<W, S> Default for Portals<W, S> {
     fn default() -> Self {
         Portals {
             next_id: 0,
             listening: false,
             pending: Vec::new(),
+            sessions: Vec::new(),
         }
     }
 }
 
-impl<W> Portals<W> {
+impl<W, S> Portals<W, S> {
     pub fn new() -> Self {
         Portals::default()
     }
@@ -146,6 +152,33 @@ impl<W> Portals<W> {
         self.next_id
     }
 
+    /// List a running session, and return the id that stops it. Shares the
+    /// requests' ids, so an answer never reaches the wrong one.
+    pub fn begin(&mut self, app_id: String, kind: CapturingKind, stopper: S) -> u32 {
+        self.next_id += 1;
+        let id = self.next_id;
+        self.sessions
+            .push((Capturing { id, app_id, kind }, stopper));
+        id
+    }
+
+    /// Take session `id` off the list, returning what stops it. `None` when
+    /// it already ended.
+    pub fn end(&mut self, id: u32) -> Option<S> {
+        self.sessions
+            .iter()
+            .position(|(session, _)| session.id == id)
+            .map(|index| self.sessions.remove(index).1)
+    }
+
+    /// Every running session, oldest first, for the chromes.
+    pub fn capturing(&self) -> Vec<Capturing> {
+        self.sessions
+            .iter()
+            .map(|(session, _)| session.clone())
+            .collect()
+    }
+
     /// Every unanswered request, oldest first, for the chromes.
     pub fn items(&self) -> Vec<PortalRequest> {
         self.pending
@@ -158,7 +191,9 @@ impl<W> Portals<W> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use domicile_protocol::{AccessDialog, AppChooserDialog, Inhibited, Inhibition, PortalAnswer};
+    use domicile_protocol::{
+        AccessDialog, AppChooserDialog, Capturing, Devices, Inhibited, Inhibition, PortalAnswer,
+    };
 
     fn access() -> PortalKind {
         PortalKind::Access(AccessDialog {
@@ -193,7 +228,7 @@ mod tests {
         })
     }
 
-    fn listening() -> Portals<&'static str> {
+    fn listening() -> Portals<&'static str, &'static str> {
         let mut portals = Portals::new();
         portals.set_listening(true);
         portals
@@ -201,7 +236,7 @@ mod tests {
 
     #[test]
     fn a_request_nobody_listens_for_is_handed_back() {
-        let mut portals = Portals::new();
+        let mut portals = Portals::<_, ()>::new();
 
         assert_eq!(
             portals.submit("org.example.App".into(), None, access(), "camera"),
@@ -338,7 +373,7 @@ mod tests {
     #[test]
     fn an_inhibitor_is_held_while_nobody_listens() {
         // A shell that connects later still shows who holds off logout.
-        let mut portals = Portals::new();
+        let mut portals = Portals::<_, ()>::new();
 
         assert_eq!(portals.hold("one".into(), None, logout(), "editor"), 1);
         assert_eq!(portals.items().len(), 1);
@@ -356,5 +391,51 @@ mod tests {
         );
         assert_eq!(portals.withdraw(id), Some("editor"));
         assert_eq!(portals.items(), []);
+    }
+
+    fn remote_desktop() -> CapturingKind {
+        CapturingKind::RemoteDesktop {
+            devices: Devices {
+                keyboard: true,
+                pointer: true,
+                touchscreen: false,
+            },
+            clipboard: false,
+        }
+    }
+
+    #[test]
+    fn a_session_is_listed_until_it_ends() {
+        let mut portals = listening();
+        let id = portals.begin("one".into(), remote_desktop(), "stop it");
+
+        assert_eq!(
+            portals.capturing(),
+            [Capturing {
+                id,
+                app_id: "one".into(),
+                kind: remote_desktop(),
+            }]
+        );
+        assert_eq!(portals.end(id), Some("stop it"));
+        assert_eq!(portals.end(id), None);
+        assert_eq!(portals.capturing(), []);
+    }
+
+    #[test]
+    fn sessions_and_requests_never_share_an_id() {
+        let mut portals = listening();
+        let session = portals.begin("one".into(), remote_desktop(), "session");
+        let request = portals
+            .submit("one".into(), None, access(), "request")
+            .expect("queued");
+
+        assert_ne!(session, request);
+        assert_eq!(
+            portals.answer(session, &PortalAnswer::Canceled),
+            Err(Refusal::Unknown),
+            "a session is no dialog"
+        );
+        assert_eq!(portals.end(request), None, "a dialog is no session");
     }
 }

@@ -112,8 +112,10 @@ import { PortalDialogs } from "@domicile-desktop/component-library/PortalDialogs
 ```
 
 - `PortalDialogs` draws every kind it knows and refuses the rest: `Access` (a
-  yes/no question), `AppChooser` (an app list for "Open with" and `OpenURI`)
-  and `FileChooser` (the component library's `FilePicker`).
+  yes/no question), `AppChooser` (an app list for "Open with" and `OpenURI`),
+  `FileChooser` (the component library's `FilePicker`), `RemoteDesktop`
+  (which devices and the clipboard an application may control) and
+  `InputCapture`.
 - The app list and the file picker read the system through
   `@domicile-desktop/sdk/system` (desktop entries, `mimeapps.list`, `readDir`),
   so `host` must take system calls. `domicile` does.
@@ -123,8 +125,11 @@ import { PortalDialogs } from "@domicile-desktop/component-library/PortalDialogs
   or suspend (`body.what`), listed until it lets go. It asks nothing, so a
   shell only shows it ("Editor is preventing logout"). The compositor refuses
   answers to it.
+- It also shows each running remote desktop or input capture session, with a
+  Stop button.
 - Without React, `watchPortalRequests` and `answerPortalRequest` in
   `@domicile-desktop/sdk/portal` give the requests, parsed, and send answers.
+  `watchCapturing` and `stopCapturing` do the same for running sessions.
 - A shell must answer every request. One left unanswered keeps its application
   waiting until it gives up.
 - The compositor refuses answers while the desktop is locked.

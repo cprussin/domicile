@@ -130,10 +130,10 @@ Evidence is in [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md),
    [COMPOSABLE-SHELLS.md](docs/architecture/COMPOSABLE-SHELLS.md).
 
 9. **Domicile answers every portal.** The compositor answers `Settings`,
-    `Access`, `AppChooser`, `FileChooser`, `Notification` and `Inhibit`, over
-    the request channel to the shell; gtk answers the rest. Screen sharing,
-    remote desktop and global
-    shortcuts have no backend. Next: every other interface except `Secret` on
+    `Access`, `AppChooser`, `FileChooser`, `Notification`, `Inhibit`,
+    `RemoteDesktop`, `Clipboard` and `InputCapture`, over the request channel
+    to the shell; gtk answers the rest. Screen sharing and global shortcuts
+    have no backend. Next: every other interface except `Secret` on
     the channel, then drop gtk. [PORTALS.md](docs/architecture/PORTALS.md).
 
 10. **Split manganese into small packages.** `@domicile-desktop/manganese` is

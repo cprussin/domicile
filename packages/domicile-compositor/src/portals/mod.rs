@@ -19,27 +19,35 @@ use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::path::PathBuf;
 use std::sync::mpsc::{channel, Receiver, Sender};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 
 use domicile_config::ThemeConfig;
 use domicile_host::data_dirs::data_dirs;
 use domicile_host::portal_notifications::Invoked;
-use domicile_protocol::{PortalAnswer, PortalRequest, Theme};
+use domicile_protocol::{Capturing, PortalAnswer, PortalRequest, Theme};
 use tracing::{debug, warn};
 use zbus::blocking::connection::Builder;
-use zbus::zvariant::OwnedValue;
+use zbus::zvariant::{OwnedObjectPath, OwnedValue};
 
+use crate::eis::barriers::Zone;
+use crate::eis::{Captured, Eis};
 use crate::notifications::NotificationServer;
 
 mod access;
 mod app_chooser;
+mod clipboard;
 mod file_chooser;
+#[cfg(test)]
+mod fixture;
 mod inhibit;
+mod input_capture;
 mod notification;
 mod queue;
+mod remote_desktop;
 mod reply;
 mod request;
+mod restore;
 mod session;
 mod settings;
 #[cfg(test)]
@@ -47,10 +55,15 @@ mod socket_pair;
 
 use access::Access;
 use app_chooser::AppChooser;
+pub use clipboard::Selection;
+use clipboard::{Clipboard, Transfers};
 use file_chooser::FileChooser;
 use inhibit::{Inhibit, Inhibitors};
+use input_capture::{InputCapture, Inputs, Zones};
 use notification::Notification;
 use queue::Queue;
+use remote_desktop::{RemoteDesktop, Remotes};
+use restore::Tokens;
 use settings::{color_scheme, Appearance, Settings};
 
 /// The object path the frontend calls backends at.
@@ -61,6 +74,12 @@ const OBJECT_PATH: &str = "/org/freedesktop/portal/desktop";
 /// Owns the backend name, not the frontend's `org.freedesktop.portal.Desktop`,
 /// so other portal interfaces still reach their own backends.
 const BUS_NAME: &str = "org.freedesktop.impl.portal.desktop.domicile";
+
+/// The Clipboard interface, for its signals.
+const CLIPBOARD: &str = "org.freedesktop.impl.portal.Clipboard";
+
+/// The InputCapture interface, for its signals.
+const INPUT_CAPTURE: &str = "org.freedesktop.impl.portal.InputCapture";
 
 /// This desktop's `XDG_CURRENT_DESKTOP` value.
 ///
@@ -75,16 +94,37 @@ pub const CURRENT_DESKTOP: &str = "domicile";
 /// refused, so callers need no separate path for a desk without a portal.
 #[derive(Clone)]
 pub struct Portals {
-    told: Sender<Told>,
-    queue: Arc<Queue>,
-    inhibitors: Arc<Inhibitors>,
+    backends: Backends,
 }
 
-/// A change the portal thread tells clients about.
+/// What the portal thread is told to do on the bus.
 enum Told {
     Theme(Theme),
     Appearance(Appearance),
     Screensaver(bool),
+    /// End the session at this handle, as when the shell stops it.
+    End(OwnedObjectPath),
+    /// The clipboard now offers `mime_types`, from `owner` if a session set
+    /// it.
+    SelectionChanged {
+        mime_types: Vec<String>,
+        owner: Option<OwnedObjectPath>,
+    },
+    /// A client is pasting `session`'s offer as `mime_type` into `fd`.
+    Transfer {
+        session: OwnedObjectPath,
+        mime_type: String,
+        fd: std::os::fd::OwnedFd,
+    },
+    /// The displays changed to zone set `set`.
+    Rezoned {
+        set: u32,
+    },
+    /// An InputCapture session's capture says something.
+    Captured {
+        session: OwnedObjectPath,
+        captured: Captured,
+    },
 }
 
 impl Portals {
@@ -93,11 +133,8 @@ impl Portals {
     #[cfg(test)]
     pub fn to_nobody() -> Self {
         // Same state as a service thread that has stopped.
-        let (told, _) = channel();
         Portals {
-            told,
-            queue: Arc::default(),
-            inhibitors: Arc::default(),
+            backends: Backends::new(NotificationServer::unserved(Vec::new()), Tokens::load(None)).0,
         }
     }
 
@@ -123,36 +160,142 @@ impl Portals {
     /// [`Queue::listen`] for `listening` and `parent`.
     pub fn listen(
         &self,
-        publish: impl Fn(Vec<PortalRequest>) + Send + Sync + 'static,
+        publish: impl Fn(Vec<PortalRequest>, Vec<Capturing>) + Send + Sync + 'static,
         listening: impl Fn() -> bool + Send + Sync + 'static,
         parent: impl Fn(&str) -> Option<String> + Send + Sync + 'static,
     ) {
-        self.queue.listen(publish, listening, parent);
+        self.backends.queue.listen(publish, listening, parent);
     }
 
     /// Call `hold` with whether any application's idle inhibitor is held, on
     /// each change.
     pub fn hold_idle_through(&self, hold: impl Fn(bool) + Send + Sync + 'static) {
-        self.inhibitors.hold_idle_through(hold);
+        self.backends.inhibitors.hold_idle_through(hold);
     }
 
     /// The shell's answer to dialog `id`.
     pub fn answer(&self, id: u32, answer: PortalAnswer) {
-        self.queue.answer(id, answer);
+        self.backends.queue.answer(id, answer);
+    }
+
+    /// Serve RemoteDesktop's and InputCapture's input through `eis`, and the
+    /// Clipboard through `selections`. Called once, when the Wayland loop
+    /// starts.
+    pub fn attach(&self, eis: Eis, selections: impl Fn(Selection) + Send + Sync + 'static) {
+        self.backends.attach(eis, selections);
+    }
+
+    /// The seat's clipboard now offers `mime_types`; `owner` is the session
+    /// that set it, if one did.
+    pub fn selection_changed(&self, mime_types: Vec<String>, owner: Option<OwnedObjectPath>) {
+        self.backends.selection_changed(mime_types, owner);
+    }
+
+    /// The displays, as InputCapture zones, in desktop logical units.
+    pub fn displays(&self, zones: Vec<Zone>) {
+        self.backends.displays(zones);
+    }
+
+    /// A client is pasting `session`'s offer into `fd`.
+    pub fn transfer(&self, session: OwnedObjectPath, mime_type: String, fd: std::os::fd::OwnedFd) {
+        self.backends.transfer(session, mime_type, fd);
+    }
+
+    fn tell(&self, told: Told) {
+        self.backends.tell(told);
+    }
+}
+
+/// What the interfaces share with [`Portals`] and the rest of the desk: the
+/// dialogs, the input server, the sessions, and the way to the portal thread.
+#[derive(Clone)]
+struct Backends {
+    queue: Arc<Queue>,
+    inhibitors: Arc<Inhibitors>,
+    notifications: NotificationServer,
+    told: Sender<Told>,
+    /// Set once the Wayland loop serves EIS; see [`Portals::attach`].
+    eis: Arc<OnceLock<Eis>>,
+    remotes: Arc<Remotes>,
+    tokens: Arc<Mutex<Tokens>>,
+    /// Where clipboard requests go on the Wayland thread. Set with `eis`.
+    selections: Arc<OnceLock<Box<Select>>>,
+    transfers: Arc<Mutex<Transfers>>,
+    inputs: Arc<Inputs>,
+    zones: Arc<Mutex<Zones>>,
+}
+
+/// Hands a [`Selection`] to the Wayland thread.
+type Select = dyn Fn(Selection) + Send + Sync;
+
+impl Backends {
+    /// Backends posting notifications to `notifications` and keeping grants
+    /// in `tokens`, and what they tell the portal thread.
+    fn new(notifications: NotificationServer, tokens: Tokens) -> (Backends, Receiver<Told>) {
+        let (told, telling) = channel();
+        let backends = Backends {
+            queue: Arc::default(),
+            inhibitors: Arc::default(),
+            notifications,
+            told,
+            eis: Arc::default(),
+            remotes: Arc::default(),
+            tokens: Arc::new(Mutex::new(tokens)),
+            selections: Arc::default(),
+            transfers: Arc::default(),
+            inputs: Arc::default(),
+            zones: Arc::default(),
+        };
+        (backends, telling)
+    }
+
+    fn attach(&self, eis: Eis, selections: impl Fn(Selection) + Send + Sync + 'static) {
+        if self.eis.set(eis).is_err() || self.selections.set(Box::new(selections)).is_err() {
+            panic!("the portals are attached to one desktop");
+        }
+    }
+
+    /// The input server, or an error for the application before it is up.
+    fn eis(&self) -> zbus::fdo::Result<&Eis> {
+        self.eis
+            .get()
+            .ok_or_else(|| zbus::fdo::Error::Failed("the desktop takes no input yet".into()))
+    }
+
+    /// Hand `selection` to the Wayland thread, or fail before it is up.
+    fn select(&self, selection: Selection) -> zbus::fdo::Result<()> {
+        let select = self
+            .selections
+            .get()
+            .ok_or_else(|| zbus::fdo::Error::Failed("the desktop has no clipboard yet".into()))?;
+        select(selection);
+        Ok(())
+    }
+
+    /// The displays are now `zones`.
+    fn displays(&self, zones: Vec<Zone>) {
+        let mut held = self.zones.lock().unwrap();
+        if held.replace(zones) {
+            self.tell(Told::Rezoned { set: held.set });
+        }
+    }
+
+    fn selection_changed(&self, mime_types: Vec<String>, owner: Option<OwnedObjectPath>) {
+        self.tell(Told::SelectionChanged { mime_types, owner });
+    }
+
+    fn transfer(&self, session: OwnedObjectPath, mime_type: String, fd: std::os::fd::OwnedFd) {
+        self.tell(Told::Transfer {
+            session,
+            mime_type,
+            fd,
+        });
     }
 
     fn tell(&self, told: Told) {
         // A closed channel means the service stopped and already logged why.
         let _ = self.told.send(told);
     }
-}
-
-/// What the interfaces share with [`Portals`] and the rest of the desk.
-#[derive(Clone)]
-struct Backends {
-    queue: Arc<Queue>,
-    inhibitors: Arc<Inhibitors>,
-    notifications: NotificationServer,
 }
 
 /// Starts the portal thread with `theme` as the current theme, and sets the
@@ -168,16 +311,15 @@ pub fn serve(
     notifications: NotificationServer,
 ) -> Portals {
     let environment = activation_environment(ours, nested_in);
-    let (told, changes) = channel();
-    let backends = Backends {
-        queue: Arc::default(),
-        inhibitors: Arc::default(),
+    let (backends, changes) = Backends::new(
         notifications,
-    };
+        Tokens::load(restore::path(
+            std::env::var_os("XDG_STATE_HOME").map(PathBuf::from),
+            std::env::var_os("HOME").map(PathBuf::from),
+        )),
+    );
     let portals = Portals {
-        told,
-        queue: Arc::clone(&backends.queue),
-        inhibitors: Arc::clone(&backends.inhibitors),
+        backends: backends.clone(),
     };
     let appearance = Appearance::from(look);
     thread::spawn(move || {
@@ -237,21 +379,111 @@ fn answer(
         scheme = color_scheme(theme),
         "this desktop answers the desktop portal, so its clients follow its theme"
     );
-    let settings = connection
-        .object_server()
-        .interface::<_, Settings>(OBJECT_PATH)?;
-    let inhibit = connection
-        .object_server()
-        .interface::<_, Inhibit>(OBJECT_PATH)?;
     // Ends when every `Portals` is dropped.
     for next in changes {
-        match next {
-            Told::Theme(theme) => settings::changed(&settings, Some(theme), None)?,
-            Told::Appearance(appearance) => settings::changed(&settings, None, Some(appearance))?,
-            Told::Screensaver(active) => inhibit::screensaver(&inhibit, active)?,
-        }
+        heard(&connection, backends, next)?;
     }
     Ok(())
+}
+
+/// Do one thing the portal thread was told.
+fn heard(
+    connection: &zbus::blocking::Connection,
+    backends: &Backends,
+    told: Told,
+) -> zbus::Result<()> {
+    match told {
+        Told::Theme(theme) => settings::changed(&settings(connection)?, Some(theme), None),
+        Told::Appearance(appearance) => {
+            settings::changed(&settings(connection)?, None, Some(appearance))
+        }
+        Told::Screensaver(active) => inhibit::screensaver(
+            &connection
+                .object_server()
+                .interface::<_, Inhibit>(OBJECT_PATH)?,
+            active,
+        ),
+        Told::End(handle) => {
+            zbus::block_on(session::end(connection.object_server().inner(), &handle))
+        }
+        Told::SelectionChanged { mime_types, owner } => {
+            for session in backends.remotes.sharing_sessions() {
+                let is_owner = owner.as_ref() == Some(&session);
+                connection.emit_signal(
+                    None::<&str>,
+                    OBJECT_PATH,
+                    CLIPBOARD,
+                    "SelectionOwnerChanged",
+                    &(&session, clipboard::owner_changed(&mime_types, is_owner)),
+                )?;
+            }
+            Ok(())
+        }
+        Told::Transfer {
+            session,
+            mime_type,
+            fd,
+        } => match backends.remotes.sharing(&session) {
+            Ok(()) => {
+                let serial = backends.transfers.lock().unwrap().hold(session.clone(), fd);
+                connection.emit_signal(
+                    None::<&str>,
+                    OBJECT_PATH,
+                    CLIPBOARD,
+                    "SelectionTransfer",
+                    &(&session, mime_type, serial),
+                )
+            }
+            // The session ended after the client asked: dropping the pipe
+            // pastes nothing.
+            Err(why) => {
+                debug!(%why, "a paste of a portal session's offer found no session");
+                Ok(())
+            }
+        },
+        Told::Rezoned { set } => {
+            for session in backends.inputs.rezoned() {
+                connection.emit_signal(
+                    None::<&str>,
+                    OBJECT_PATH,
+                    INPUT_CAPTURE,
+                    "ZonesChanged",
+                    &(
+                        &session,
+                        HashMap::from([("zone_set", zbus::zvariant::Value::from(set))]),
+                    ),
+                )?;
+            }
+            Ok(())
+        }
+        Told::Captured {
+            session,
+            captured:
+                Captured::Activated {
+                    activation_id,
+                    cursor,
+                    barrier_id,
+                },
+        } => connection.emit_signal(
+            None::<&str>,
+            OBJECT_PATH,
+            INPUT_CAPTURE,
+            "Activated",
+            &(
+                &session,
+                input_capture::activated(activation_id, (cursor.x, cursor.y), barrier_id),
+            ),
+        ),
+    }
+}
+
+/// The `Settings` interface, to signal a change on.
+fn settings(
+    connection: &zbus::blocking::Connection,
+) -> zbus::Result<zbus::blocking::object_server::InterfaceRef<Settings>> {
+    connection
+        .object_server()
+        .interface::<_, Settings>(OBJECT_PATH)
 }
 
 /// Registers every interface at [`OBJECT_PATH`].
@@ -303,6 +535,24 @@ fn export<'a>(
                 queue: Arc::clone(&backends.queue),
                 data_dirs,
                 home,
+            },
+        )?
+        .serve_at(
+            OBJECT_PATH,
+            RemoteDesktop {
+                backends: backends.clone(),
+            },
+        )?
+        .serve_at(
+            OBJECT_PATH,
+            Clipboard {
+                backends: backends.clone(),
+            },
+        )?
+        .serve_at(
+            OBJECT_PATH,
+            InputCapture {
+                backends: backends.clone(),
             },
         )
 }
@@ -399,14 +649,11 @@ mod tests {
     }
 
     fn served(listening: bool) -> Served {
-        let backends = Backends {
-            queue: Arc::default(),
-            inhibitors: Arc::default(),
-            notifications: NotificationServer::unserved(Vec::new()),
-        };
+        let (backends, _) =
+            Backends::new(NotificationServer::unserved(Vec::new()), Tokens::load(None));
         let (publish, published) = channel();
         backends.queue.listen(
-            move |items| {
+            move |items, _| {
                 let _ = publish.send(items);
             },
             move || listening,

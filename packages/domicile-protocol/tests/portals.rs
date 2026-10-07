@@ -6,9 +6,10 @@
 use std::collections::BTreeMap;
 
 use domicile_protocol::{
-    AccessDialog, AppChooserDialog, ChromeMessage, FileChoice, FileChoiceOption, FileChooserAnswer,
-    FileChooserDialog, FileChooserMode, FileFilter, HostMessage, Inhibited, Inhibition,
-    PortalAnswer, PortalKind, PortalRequest,
+    AccessDialog, AppChooserDialog, Capturing, CapturingKind, ChromeMessage, Devices, FileChoice,
+    FileChoiceOption, FileChooserAnswer, FileChooserDialog, FileChooserMode, FileFilter,
+    HostMessage, Inhibited, Inhibition, InputCaptureDialog, PortalAnswer, PortalKind,
+    PortalRequest, RemoteDesktopDialog,
 };
 
 fn access() -> PortalRequest {
@@ -30,12 +31,13 @@ fn access() -> PortalRequest {
 fn a_request_carries_its_kind_beside_an_untyped_body() {
     let written = serde_json::to_string(&HostMessage::PortalRequests {
         items: vec![access()],
+        capturing: Vec::new(),
     })
     .expect("it serializes");
 
     assert_eq!(
         written,
-        r#"{"type":"portal_requests","items":[{"id":1,"app_id":"org.example.App","parent_app_id":"app-3","kind":"access","body":{"title":"Use the camera?","subtitle":"Example wants to see you","body":"","grant_label":"Allow"}}]}"#
+        r#"{"type":"portal_requests","items":[{"id":1,"app_id":"org.example.App","parent_app_id":"app-3","kind":"access","body":{"title":"Use the camera?","subtitle":"Example wants to see you","body":"","grant_label":"Allow"}}],"capturing":[]}"#
     );
 }
 
@@ -242,5 +244,154 @@ fn a_request_takes_only_answers_of_its_own_kind() {
     for kind in [&chooser, &access, &files] {
         assert!(kind.accepts(&PortalAnswer::Canceled));
         assert!(kind.accepts(&PortalAnswer::Refused));
+    }
+}
+
+fn every_device() -> Devices {
+    Devices {
+        keyboard: true,
+        pointer: true,
+        touchscreen: true,
+    }
+}
+
+#[test]
+fn a_remote_desktop_grant_asks_for_devices_and_the_clipboard() {
+    let written = serde_json::to_string(&PortalRequest {
+        id: 2,
+        app_id: "org.example.Remote".into(),
+        parent_app_id: None,
+        kind: PortalKind::RemoteDesktop(RemoteDesktopDialog {
+            devices: Devices {
+                keyboard: true,
+                pointer: true,
+                touchscreen: false,
+            },
+            clipboard: true,
+        }),
+    })
+    .expect("it serializes");
+
+    assert_eq!(
+        written,
+        r#"{"id":2,"app_id":"org.example.Remote","kind":"remote_desktop","body":{"devices":{"keyboard":true,"pointer":true,"touchscreen":false},"clipboard":true}}"#
+    );
+}
+
+#[test]
+fn an_input_capture_grant_asks_for_devices() {
+    let written = serde_json::to_string(&PortalKind::InputCapture(InputCaptureDialog {
+        devices: every_device(),
+    }))
+    .expect("it serializes");
+
+    assert_eq!(
+        written,
+        r#"{"kind":"input_capture","body":{"devices":{"keyboard":true,"pointer":true,"touchscreen":true}}}"#
+    );
+}
+
+#[test]
+fn the_answers_to_input_grants_parse() {
+    for (sent, answer) in [
+        (
+            r#"{"kind":"remote_desktop","devices":{"keyboard":true,"pointer":false,"touchscreen":true},"clipboard":false}"#,
+            PortalAnswer::RemoteDesktop {
+                devices: Devices {
+                    keyboard: true,
+                    pointer: false,
+                    touchscreen: true,
+                },
+                clipboard: false,
+            },
+        ),
+        (r#"{"kind":"input_capture"}"#, PortalAnswer::InputCapture),
+        (r#"{"kind":"stop"}"#, PortalAnswer::Stop),
+    ] {
+        assert_eq!(
+            serde_json::from_str::<PortalAnswer>(sent).expect("the SDK's own wire form"),
+            answer,
+            "{sent}"
+        );
+    }
+    assert_eq!(
+        PortalAnswer::RemoteDesktop {
+            devices: every_device(),
+            clipboard: true,
+        }
+        .response(),
+        0
+    );
+    assert_eq!(PortalAnswer::InputCapture.response(), 0);
+}
+
+#[test]
+fn the_push_lists_what_is_being_controlled_beside_the_dialogs() {
+    let written = serde_json::to_string(&HostMessage::PortalRequests {
+        items: Vec::new(),
+        capturing: vec![
+            Capturing {
+                id: 3,
+                app_id: "org.example.Remote".into(),
+                kind: CapturingKind::RemoteDesktop {
+                    devices: every_device(),
+                    clipboard: true,
+                },
+            },
+            Capturing {
+                id: 4,
+                app_id: "org.example.Barrier".into(),
+                kind: CapturingKind::InputCapture {
+                    devices: Devices {
+                        keyboard: true,
+                        pointer: true,
+                        touchscreen: false,
+                    },
+                },
+            },
+        ],
+    })
+    .expect("it serializes");
+
+    assert_eq!(
+        written,
+        r#"{"type":"portal_requests","items":[],"capturing":[{"id":3,"app_id":"org.example.Remote","kind":"remote_desktop","body":{"devices":{"keyboard":true,"pointer":true,"touchscreen":true},"clipboard":true}},{"id":4,"app_id":"org.example.Barrier","kind":"input_capture","body":{"devices":{"keyboard":true,"pointer":true,"touchscreen":false}}}]}"#
+    );
+}
+
+#[test]
+fn a_push_without_sessions_reads_as_none() {
+    let line = r#"{"type":"portal_requests","items":[]}"#;
+
+    assert_eq!(
+        serde_json::from_str::<HostMessage>(line).expect("it parses"),
+        HostMessage::PortalRequests {
+            items: Vec::new(),
+            capturing: Vec::new(),
+        }
+    );
+}
+
+#[test]
+fn an_input_grant_takes_only_its_own_answer() {
+    let remote = PortalKind::RemoteDesktop(RemoteDesktopDialog {
+        devices: every_device(),
+        clipboard: false,
+    });
+    let capture = PortalKind::InputCapture(InputCaptureDialog {
+        devices: every_device(),
+    });
+    let granted = PortalAnswer::RemoteDesktop {
+        devices: every_device(),
+        clipboard: false,
+    };
+
+    assert!(remote.accepts(&granted));
+    assert!(!remote.accepts(&PortalAnswer::InputCapture));
+    assert!(capture.accepts(&PortalAnswer::InputCapture));
+    assert!(!capture.accepts(&granted));
+    assert!(!capture.accepts(&PortalAnswer::Access));
+    for kind in [&remote, &capture] {
+        assert!(!kind.accepts(&PortalAnswer::Stop), "a stop is for sessions");
     }
 }

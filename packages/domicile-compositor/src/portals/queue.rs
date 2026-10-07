@@ -3,11 +3,14 @@
 //! An interface's method calls [`ask`] and awaits the shell's answer. The
 //! queue itself is `domicile_host::portals`; this adds the bus's `Request`
 //! object and who hears each change.
+//!
+//! A session that controls or captures input is listed with [`Queue::begin`]
+//! until it ends, and the shell stops it with [`PortalAnswer::Stop`].
 
 use std::sync::{Arc, Mutex, OnceLock};
 
 use domicile_host::portals::{Portals, Unknown};
-use domicile_protocol::{PortalAnswer, PortalKind, PortalRequest};
+use domicile_protocol::{Capturing, CapturingKind, PortalAnswer, PortalKind, PortalRequest};
 use tracing::{debug, warn};
 use zbus::object_server::ObjectServer;
 use zbus::zvariant::OwnedObjectPath;
@@ -18,10 +21,16 @@ use super::request::Request;
 /// Who hears the queue change, whether anybody can answer, and which
 /// `<app>` a `parent_window` names.
 struct Listener {
-    publish: Box<dyn Fn(Vec<PortalRequest>) + Send + Sync>,
+    publish: Box<Publish>,
     listening: Box<dyn Fn() -> bool + Send + Sync>,
     parent: Box<Resolve>,
 }
+
+/// Hears the dialogs and the sessions on each change.
+type Publish = dyn Fn(Vec<PortalRequest>, Vec<Capturing>) + Send + Sync;
+
+/// Ends a session the shell stopped.
+type Stopper = Box<dyn FnOnce() + Send>;
 
 /// Resolves a `parent_window` to an app id.
 type Resolve = dyn Fn(&str) -> Option<String> + Send + Sync;
@@ -29,7 +38,7 @@ type Resolve = dyn Fn(&str) -> Option<String> + Send + Sync;
 /// The pending requests and their listener.
 #[derive(Default)]
 pub struct Queue {
-    held: Mutex<Portals<Replier<PortalAnswer>>>,
+    held: Mutex<Portals<Replier<PortalAnswer>, Stopper>>,
     listener: OnceLock<Listener>,
 }
 
@@ -40,7 +49,7 @@ impl Queue {
     /// app id the dialog is modal over.
     pub fn listen(
         &self,
-        publish: impl Fn(Vec<PortalRequest>) + Send + Sync + 'static,
+        publish: impl Fn(Vec<PortalRequest>, Vec<Capturing>) + Send + Sync + 'static,
         listening: impl Fn() -> bool + Send + Sync + 'static,
         parent: impl Fn(&str) -> Option<String> + Send + Sync + 'static,
     ) {
@@ -55,11 +64,22 @@ impl Queue {
     }
 
     /// The shell's answer to `id`. An answer for a request already answered
-    /// or closed is dropped, and so is one that does not fit the request.
+    /// or closed is dropped, and so is one that does not fit the request. A
+    /// stop ends a running session; one for a session already ended is
+    /// dropped.
     pub fn answer(&self, id: u32, answer: PortalAnswer) {
-        match self.change(|held| held.answer(id, &answer)) {
-            Ok(replier) => replier.send(answer),
-            Err(why) => debug!(%id, %why, "a portal answer was dropped"),
+        if answer == PortalAnswer::Stop {
+            // Outside the lock: stopping a session ends it, which changes the
+            // queue again.
+            match self.change(|held| held.end(id)) {
+                Some(stop) => stop(),
+                None => debug!(%id, "a stop came for a session that has ended"),
+            }
+        } else {
+            match self.change(|held| held.answer(id, &answer)) {
+                Ok(replier) => replier.send(answer),
+                Err(why) => debug!(%id, %why, "a portal answer was dropped"),
+            }
         }
     }
 
@@ -88,6 +108,22 @@ impl Queue {
         self.change(|held| held.hold(app_id, parent, kind, replier))
     }
 
+    /// List a running session until [`Queue::end`]. `stop` runs if the shell
+    /// stops it first.
+    pub fn begin(
+        &self,
+        app_id: String,
+        kind: CapturingKind,
+        stop: impl FnOnce() + Send + 'static,
+    ) -> u32 {
+        self.change(|held| held.begin(app_id, kind, Box::new(stop)))
+    }
+
+    /// Take session `id` off the list. Its stopper does not run.
+    pub fn end(&self, id: u32) {
+        self.change(|held| held.end(id));
+    }
+
     /// Queue a request unpublished, or hand the replier back when nobody
     /// listens. [`ask`] publishes it once its `Request` is exported.
     fn submit(
@@ -114,13 +150,38 @@ impl Queue {
 
     /// Apply `change` and publish the result. Publishing under the lock keeps
     /// changes in order.
-    fn change<T>(&self, change: impl FnOnce(&mut Portals<Replier<PortalAnswer>>) -> T) -> T {
+    fn change<T>(
+        &self,
+        change: impl FnOnce(&mut Portals<Replier<PortalAnswer>, Stopper>) -> T,
+    ) -> T {
         let mut held = self.held.lock().unwrap();
         let changed = change(&mut held);
         if let Some(listener) = self.listener.get() {
-            (listener.publish)(held.items());
+            (listener.publish)(held.items(), held.capturing());
         }
         changed
+    }
+}
+
+/// A session's entry in the shell's list. Dropping it takes it off.
+pub struct Listed {
+    id: u32,
+    queue: Arc<Queue>,
+}
+
+impl Listed {
+    /// Session `id`, which [`Queue::begin`] listed.
+    pub fn new(id: u32, queue: &Arc<Queue>) -> Listed {
+        Listed {
+            id,
+            queue: Arc::clone(queue),
+        }
+    }
+}
+
+impl Drop for Listed {
+    fn drop(&mut self) {
+        self.queue.end(self.id);
     }
 }
 
@@ -159,5 +220,56 @@ pub async fn ask(
             debug!(%handle, "no shell is listening for portal dialogs; refused");
             PortalAnswer::Refused
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::mpsc::channel;
+
+    use domicile_protocol::{CapturingKind, Devices};
+
+    fn input_capture() -> CapturingKind {
+        CapturingKind::InputCapture {
+            devices: Devices::default(),
+        }
+    }
+
+    #[test]
+    fn the_shell_stops_a_session_and_it_leaves_the_list() {
+        let queue = Queue::default();
+        let (publish, published) = channel();
+        queue.listen(
+            move |_, capturing| {
+                let _ = publish.send(capturing);
+            },
+            || true,
+            |_| None,
+        );
+        let (stop, stopped) = channel();
+        let id = queue.begin("org.example.App".into(), input_capture(), move || {
+            stop.send(()).expect("the test listens");
+        });
+        assert_eq!(published.try_recv().map(|listed| listed.len()), Ok(1));
+
+        queue.answer(id, PortalAnswer::Stop);
+
+        assert_eq!(stopped.try_recv(), Ok(()));
+        assert_eq!(published.try_recv(), Ok(Vec::new()));
+    }
+
+    #[test]
+    fn a_session_that_ends_itself_is_not_stopped() {
+        let queue = Queue::default();
+        let (stop, stopped) = channel();
+        let id = queue.begin("org.example.App".into(), input_capture(), move || {
+            stop.send(()).expect("the test listens");
+        });
+
+        queue.end(id);
+        queue.answer(id, PortalAnswer::Stop);
+
+        assert!(stopped.try_recv().is_err());
     }
 }
