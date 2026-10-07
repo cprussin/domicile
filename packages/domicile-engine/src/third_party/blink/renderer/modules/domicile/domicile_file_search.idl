@@ -14,9 +14,7 @@ dictionary DomicileFileSearch {
 
   // Whether the compositor is still building the index this was found in.
   //
-  // THE DIFFERENCE BETWEEN AN INCOMPLETE ANSWER AND A WRONG ONE. The rows are
-  // a launcher's whole evidence that a file exists, so an answer from an index
-  // still being walked has to arrive saying so. A shell draws this as a line
-  // saying the index is being built, and asks again.
+  // When true, the answer may be incomplete. A shell shows that
+  // the index is being built, and asks again.
   boolean indexing = false;
 };

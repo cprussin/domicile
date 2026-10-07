@@ -14,7 +14,7 @@
 // The shapes of `wp_cursor_shape_v1`, named by their CSS `cursor` keyword,
 // plus `none` for a hidden cursor. The same set as
 // `domicile_protocol::CursorShape` in the compositor and `cursorShapeSchema`
-// in `@domicile/chrome-sdk`.
+// in `@domicile-desktop/sdk`.
 //
 // An enum rather than a string, because CSS silently ignores an unknown
 // cursor keyword. Per docs/guidelines/DISCRIMINATED_UNIONS.md, the wire string
