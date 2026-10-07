@@ -1,4 +1,5 @@
-import type { PortalHost } from "@domicile-desktop/sdk/portal";
+import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
+import type { GlobalShortcutsHost } from "@domicile-desktop/sdk/global-shortcuts";
 import type { SystemHost } from "@domicile-desktop/sdk/system";
 import { fakeSystem } from "@domicile-desktop/system-apps/fake-system";
 import type { Meta, StoryObj } from "@storybook/react-vite";
@@ -12,24 +13,30 @@ import { PortalDialogs } from "./PortalDialogs";
 const pushing = (
   items: readonly object[],
   capturing: readonly object[] = [],
-): PortalHost & SystemHost => ({
-  addEventListener: (type, listener) => {
-    if (type === "portalrequests") {
-      const data = JSON.stringify({
-        capturing,
-        items,
-        type: "portal_requests",
-      });
-      listener(new MessageEvent("portalrequests", { data }));
-    }
-  },
-  answerPortalRequest: (id, answer) => {
-    // biome-ignore lint/suspicious/noConsole: the story shows its answers in the console
-    console.info("answered", id, answer);
-  },
-  callSystem: () => undefined,
-  removeEventListener: () => undefined,
-});
+): GlobalShortcutsHost & SystemHost => {
+  const fake = new FakeDomicileHost();
+  const data = JSON.stringify({ capturing, items, type: "portal_requests" });
+  const host: GlobalShortcutsHost = {
+    addEventListener: (type, listener) => {
+      fake.host.addEventListener(type, listener);
+      // The engine replays the requests to a late listener.
+      if (type === "portalrequests") {
+        queueMicrotask(() => {
+          fake.dispatch("portalrequests", { data });
+        });
+      }
+    },
+    answerPortalRequest: (id, answer) => {
+      // biome-ignore lint/suspicious/noConsole: the story shows its answers in the console
+      console.info("answered", id, answer);
+    },
+    grabShortcut: () => undefined,
+    removeEventListener: (type, listener) => {
+      fake.host.removeEventListener(type, listener);
+    },
+  };
+  return { ...host, callSystem: () => undefined };
+};
 
 const access = {
   app_id: "org.example.Camera",
@@ -136,11 +143,26 @@ const inputCapture = {
   kind: "input_capture",
 };
 
+const globalShortcuts = {
+  app_id: "org.example.Chat",
+  body: {
+    shortcuts: [
+      { description: "Push to talk", id: "talk", trigger: "CTRL+ALT+t" },
+      { description: "Mute", id: "mute", trigger: "Meta+Return" },
+      { description: "Deafen", id: "deafen" },
+    ],
+    taken: [{ app_id: "org.example.Recorder", chord: "Ctrl+Alt+t" }],
+  },
+  id: 8,
+  kind: "global_shortcuts",
+};
+
 const meta = {
   args: {
     host: pushing([access]),
     screen: undefined,
     screenOf: undefined,
+    shellChords: undefined,
     systemOf: undefined,
   },
   argTypes: {
@@ -155,6 +177,10 @@ const meta = {
     screenOf: {
       control: false,
       table: { category: "Appearance" },
+    },
+    shellChords: {
+      control: "object",
+      table: { category: "Behavior" },
     },
     systemOf: {
       control: false,
@@ -183,6 +209,7 @@ export const Access: Story = {
     host: pushing([access]),
     screen: undefined,
     screenOf: undefined,
+    shellChords: undefined,
     systemOf: undefined,
   },
 };
@@ -192,6 +219,7 @@ export const AppChooser: Story = {
     host: pushing([appChooser]),
     screen: undefined,
     screenOf: undefined,
+    shellChords: undefined,
     systemOf: installed,
   },
 };
@@ -201,6 +229,7 @@ export const FileChooser: Story = {
     host: pushing([fileChooser]),
     screen: undefined,
     screenOf: undefined,
+    shellChords: undefined,
     systemOf: home,
   },
 };
@@ -210,6 +239,7 @@ export const RemoteDesktop: Story = {
     host: pushing([remoteDesktop]),
     screen: undefined,
     screenOf: undefined,
+    shellChords: undefined,
     systemOf: undefined,
   },
 };
@@ -219,6 +249,7 @@ export const InputCapture: Story = {
     host: pushing([inputCapture]),
     screen: undefined,
     screenOf: undefined,
+    shellChords: undefined,
     systemOf: undefined,
   },
 };
@@ -243,6 +274,17 @@ export const Capturing: Story = {
     ),
     screen: undefined,
     screenOf: undefined,
+    shellChords: undefined,
+    systemOf: undefined,
+  },
+};
+
+export const GlobalShortcuts: Story = {
+  args: {
+    host: pushing([globalShortcuts]),
+    screen: undefined,
+    screenOf: undefined,
+    shellChords: ["Meta+Return"],
     systemOf: undefined,
   },
 };

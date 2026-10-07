@@ -9,8 +9,8 @@ use std::thread;
 
 use domicile_host::ipc::{parse_chrome, to_line, Session};
 use domicile_protocol::{
-    AccessDialog, Capturing, CapturingKind, ChromeMessage, Devices, HostMessage, Notification,
-    PortalKind, PortalRequest, Theme, TrayItem, Urgency, PROTOCOL_VERSION,
+    AccessDialog, BoundShortcut, Capturing, CapturingKind, ChromeMessage, Devices, HostMessage,
+    Notification, PortalKind, PortalRequest, Theme, TrayItem, Urgency, PROTOCOL_VERSION,
 };
 
 #[test]
@@ -405,6 +405,7 @@ fn the_portal_requests_ride_with_the_handshake() {
         Some(HostMessage::PortalRequests {
             items: vec![request.clone()],
             capturing: Vec::new(),
+            shortcuts: Vec::new(),
         })
     );
     assert_eq!(
@@ -429,7 +430,49 @@ fn the_portal_requests_ride_with_the_handshake() {
     assert!(out.contains(&HostMessage::PortalRequests {
         items: vec![request],
         capturing: vec![remote],
+        shortcuts: Vec::new(),
     }));
+}
+
+#[test]
+fn bound_shortcuts_ride_with_the_dialogs_and_the_handshake() {
+    // A reloaded page must grab the chords applications hold again.
+    let mut session = Session::new();
+    session
+        .host_mut()
+        .set_portal_requests(Vec::new(), Vec::new());
+    let bound = BoundShortcut {
+        id: 1,
+        app_id: "org.example.App".into(),
+        chord: "Ctrl+Alt+t".into(),
+    };
+    let expected = HostMessage::PortalRequests {
+        items: Vec::new(),
+        capturing: Vec::new(),
+        shortcuts: vec![bound.clone()],
+    };
+
+    assert_eq!(
+        session.host_mut().set_global_shortcuts(vec![bound.clone()]),
+        Some(expected.clone())
+    );
+    assert_eq!(
+        session.host_mut().set_global_shortcuts(vec![bound]),
+        None,
+        "an unchanged list says nothing"
+    );
+    assert_eq!(
+        session
+            .host_mut()
+            .set_portal_requests(Vec::new(), Vec::new()),
+        None,
+        "the dialogs did not change either"
+    );
+
+    let out = session.ingest(&to_line(&ChromeMessage::Hello {
+        protocol_version: PROTOCOL_VERSION,
+    }));
+    assert!(out.contains(&expected));
 }
 
 /// A stand-in keymap. The host passes it through as text without compiling

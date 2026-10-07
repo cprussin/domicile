@@ -6236,6 +6236,18 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     hub.portals.hold_idle_through(move |held| {
         waking.send_request(ClientRequest::HeldAwakeByThePortal { held });
     });
+    // The chords applications hold, which ride on the portal requests.
+    let publishing = Arc::clone(&hub);
+    hub.portals.listen_for_shortcuts(move |shortcuts| {
+        let told = publishing
+            .host
+            .lock()
+            .unwrap()
+            .set_global_shortcuts(shortcuts);
+        if let Some(message) = told {
+            publishing.broadcast(message);
+        }
+    });
     // Bind here so a failure ends the run. Nothing can connect yet: the shell
     // waits for the session document, published much later.
     let chrome_listener = bind_chrome_socket(&arguments.chrome_socket)?;

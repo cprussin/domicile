@@ -6,10 +6,11 @@
 use std::collections::BTreeMap;
 
 use domicile_protocol::{
-    AccessDialog, AccountDialog, AppChooserDialog, Capturing, CapturingKind, ChromeMessage,
-    Devices, FileChoice, FileChoiceOption, FileChooserAnswer, FileChooserDialog, FileChooserMode,
-    FileFilter, HostMessage, Inhibited, Inhibition, InputCaptureDialog, PortalAnswer, PortalKind,
-    PortalRequest, RemoteDesktopDialog,
+    AccessDialog, AccountDialog, AppChooserDialog, BoundShortcut, Capturing, CapturingKind,
+    ChosenTrigger, ChromeMessage, Devices, FileChoice, FileChoiceOption, FileChooserAnswer,
+    FileChooserDialog, FileChooserMode, FileFilter, HostMessage, Inhibited, Inhibition,
+    InputCaptureDialog, PortalAnswer, PortalKind, PortalRequest, ProposedShortcut,
+    RemoteDesktopDialog, ShortcutsDialog, TakenChord,
 };
 
 fn access() -> PortalRequest {
@@ -32,6 +33,7 @@ fn a_request_carries_its_kind_beside_an_untyped_body() {
     let written = serde_json::to_string(&HostMessage::PortalRequests {
         items: vec![access()],
         capturing: Vec::new(),
+        shortcuts: Vec::new(),
     })
     .expect("it serializes");
 
@@ -370,6 +372,7 @@ fn the_push_lists_what_is_being_controlled_beside_the_dialogs() {
                 },
             },
         ],
+        shortcuts: Vec::new(),
     })
     .expect("it serializes");
 
@@ -388,6 +391,7 @@ fn a_push_without_sessions_reads_as_none() {
         HostMessage::PortalRequests {
             items: Vec::new(),
             capturing: Vec::new(),
+            shortcuts: Vec::new(),
         }
     );
 }
@@ -414,4 +418,108 @@ fn an_input_grant_takes_only_its_own_answer() {
     for kind in [&remote, &capture] {
         assert!(!kind.accepts(&PortalAnswer::Stop), "a stop is for sessions");
     }
+}
+
+#[test]
+fn a_shortcuts_review_carries_each_proposal_and_the_chords_others_hold() {
+    let written = serde_json::to_string(&PortalKind::GlobalShortcuts(ShortcutsDialog {
+        shortcuts: vec![
+            ProposedShortcut {
+                id: "talk".into(),
+                description: "Push to talk".into(),
+                trigger: Some("Ctrl+Alt+t".into()),
+            },
+            ProposedShortcut {
+                id: "mute".into(),
+                description: "Mute".into(),
+                trigger: None,
+            },
+        ],
+        taken: vec![TakenChord {
+            chord: "Ctrl+Alt+m".into(),
+            app_id: "org.example.Other".into(),
+        }],
+    }))
+    .expect("it serializes");
+
+    assert_eq!(
+        written,
+        r#"{"kind":"global_shortcuts","body":{"shortcuts":[{"id":"talk","description":"Push to talk","trigger":"Ctrl+Alt+t"},{"id":"mute","description":"Mute"}],"taken":[{"chord":"Ctrl+Alt+m","app_id":"org.example.Other"}]}}"#
+    );
+}
+
+#[test]
+fn bound_shortcuts_ride_beside_the_dialogs_and_are_absent_when_none() {
+    let bound = HostMessage::PortalRequests {
+        items: Vec::new(),
+        capturing: Vec::new(),
+        shortcuts: vec![BoundShortcut {
+            id: 3,
+            app_id: "org.example.App".into(),
+            chord: "Ctrl+Alt+t".into(),
+        }],
+    };
+    let none = HostMessage::PortalRequests {
+        items: Vec::new(),
+        capturing: Vec::new(),
+        shortcuts: Vec::new(),
+    };
+
+    assert_eq!(
+        serde_json::to_string(&bound).expect("it serializes"),
+        r#"{"type":"portal_requests","items":[],"capturing":[],"shortcuts":[{"id":3,"app_id":"org.example.App","chord":"Ctrl+Alt+t"}]}"#
+    );
+    assert_eq!(
+        serde_json::to_string(&none).expect("it serializes"),
+        r#"{"type":"portal_requests","items":[],"capturing":[]}"#
+    );
+}
+
+#[test]
+fn the_shortcut_answers_the_sdk_sends_parse() {
+    for (sent, answer) in [
+        (
+            r#"{"kind":"global_shortcuts","triggers":[{"id":"talk","trigger":"Ctrl+Alt+t"},{"id":"mute"}]}"#,
+            PortalAnswer::GlobalShortcuts {
+                triggers: vec![
+                    ChosenTrigger {
+                        id: "talk".into(),
+                        trigger: Some("Ctrl+Alt+t".into()),
+                    },
+                    ChosenTrigger {
+                        id: "mute".into(),
+                        trigger: None,
+                    },
+                ],
+            },
+        ),
+        (r#"{"kind":"pressed"}"#, PortalAnswer::Pressed),
+    ] {
+        let line = format!(r#"{{"type":"answer_portal_request","id":4,"answer":{sent}}}"#);
+        assert_eq!(
+            serde_json::from_str::<ChromeMessage>(&line).expect("the SDK's own wire form"),
+            ChromeMessage::AnswerPortalRequest { id: 4, answer },
+            "{sent}"
+        );
+    }
+}
+
+#[test]
+fn chosen_triggers_are_a_success_and_a_press_answers_no_dialog() {
+    let review = PortalKind::GlobalShortcuts(ShortcutsDialog {
+        shortcuts: Vec::new(),
+        taken: Vec::new(),
+    });
+    let chosen = PortalAnswer::GlobalShortcuts {
+        triggers: Vec::new(),
+    };
+
+    assert_eq!(chosen.response(), 0);
+    assert_eq!(PortalAnswer::Pressed.response(), 2);
+    assert!(review.accepts(&chosen));
+    assert!(!review.accepts(&PortalAnswer::Access));
+    assert!(
+        !review.accepts(&PortalAnswer::Pressed),
+        "a press answers no request"
+    );
 }

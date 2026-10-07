@@ -223,6 +223,28 @@ pub async fn ask(
     }
 }
 
+/// Put a dialog of `kind` to the shell for a call that has no `Request`
+/// object, such as `ConfigureShortcuts`, and wait for its answer.
+/// [`PortalAnswer::Refused`] when nobody listens.
+pub async fn ask_unbidden(
+    queue: &Queue,
+    app_id: String,
+    parent_window: &str,
+    kind: PortalKind,
+) -> PortalAnswer {
+    let (replier, answered) = reply();
+    match queue.submit(app_id, parent_window, kind, replier) {
+        Ok(_) => {
+            queue.publish();
+            answered.await.unwrap_or(PortalAnswer::Refused)
+        }
+        Err(_) => {
+            debug!("no shell is listening for portal dialogs; refused");
+            PortalAnswer::Refused
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

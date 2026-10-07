@@ -275,7 +275,9 @@ const notificationsSchema = z.looseObject({
 
 // Every unanswered portal dialog and held inhibitor, oldest first. Pushed on
 // change and on connect. `body` is per `kind`; the SDK's `portal` module parses it. Answer
-// with `answer_portal_request`. See `docs/architecture/PORTALS.md`.
+// with `answer_portal_request`. `shortcuts` lists the chords applications hold
+// through the GlobalShortcuts portal; a press is answered `pressed` under its
+// id. See `docs/architecture/PORTALS.md`.
 const portalRequestSchema = z.looseObject({
   app_id: z.string(),
   body: z.unknown(),
@@ -293,9 +295,16 @@ const portalCapturingSchema = z.looseObject({
   kind: z.string(),
 });
 
+const boundShortcutSchema = z.looseObject({
+  app_id: z.string(),
+  chord: z.string(),
+  id: z.number(),
+});
+
 const portalRequestsSchema = z.looseObject({
   capturing: z.array(portalCapturingSchema).optional(),
   items: z.array(portalRequestSchema),
+  shortcuts: z.array(boundShortcutSchema).optional(),
   type: z.literal("portal_requests"),
 });
 

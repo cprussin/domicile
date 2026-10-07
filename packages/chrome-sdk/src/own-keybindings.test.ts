@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import { KeyAction } from "./key-action";
-import { ownKeybindings } from "./own-keybindings";
+import { ownedChords, ownKeybindings } from "./own-keybindings";
 
 describe("ownKeybindings", () => {
   it("files each binding under its chord, spelled the one way", () => {
@@ -58,5 +58,21 @@ describe("ownKeybindings", () => {
 
   it("refuses a table for `default` beside the default one", () => {
     expect(() => ownKeybindings({ modes: { default: {} } })).toThrow("default");
+  });
+});
+
+describe("ownedChords", () => {
+  it("lists every chord in every mode once, spelled the one way", () => {
+    expect(
+      ownedChords({
+        keybindings: { "Shift+Meta+l": KeyAction.Mode("resize") },
+        modes: {
+          resize: {
+            "Meta+h": KeyAction.SendShell(["resize"]),
+            "Meta+Shift+l": KeyAction.Mode("default"),
+          },
+        },
+      }),
+    ).toEqual(["Shift+Meta+l", "Meta+h"]);
   });
 });

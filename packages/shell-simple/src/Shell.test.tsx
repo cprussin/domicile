@@ -316,5 +316,33 @@ describe("Shell", () => {
         '{"kind":"access"}',
       ]);
     });
+
+    it("flags a global shortcut that takes one of the shell's chords", () => {
+      const host = shell();
+      act(() => {
+        host.fake.dispatch("portalrequests", {
+          data: JSON.stringify({
+            items: [
+              {
+                app_id: "org.example.App",
+                body: {
+                  shortcuts: [
+                    { description: "Talk", id: "talk", trigger: "Alt+Return" },
+                  ],
+                  taken: [],
+                },
+                id: 2,
+                kind: "global_shortcuts",
+              },
+            ],
+            type: "portal_requests",
+          }),
+        });
+      });
+
+      expect(
+        screen.getByText("The desktop uses this chord"),
+      ).toBeInTheDocument();
+    });
   });
 });

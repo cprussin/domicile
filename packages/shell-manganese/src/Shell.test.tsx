@@ -986,6 +986,32 @@ describe("Shell", () => {
         '{"kind":"access"}',
       ]);
     });
+
+    it("flags a global shortcut that takes one of the shell's chords", async () => {
+      renderShell();
+      domicile.dispatch("portalrequests", {
+        data: JSON.stringify({
+          items: [
+            {
+              app_id: "org.example.App",
+              body: {
+                shortcuts: [
+                  { description: "Talk", id: "talk", trigger: "Meta+Return" },
+                ],
+                taken: [],
+              },
+              id: 2,
+              kind: "global_shortcuts",
+            },
+          ],
+          type: "portal_requests",
+        }),
+      });
+
+      expect(
+        await screen.findByText("The desktop uses this chord"),
+      ).toBeInTheDocument();
+    });
   });
 
   describe("the notifications", () => {

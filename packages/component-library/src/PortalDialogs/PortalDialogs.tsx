@@ -1,8 +1,6 @@
-import type {
-  Capturing,
-  PortalHost,
-  PortalRequest,
-} from "@domicile-desktop/sdk/portal";
+import type { GlobalShortcutsHost } from "@domicile-desktop/sdk/global-shortcuts";
+import { fireGlobalShortcuts } from "@domicile-desktop/sdk/global-shortcuts";
+import type { Capturing, PortalRequest } from "@domicile-desktop/sdk/portal";
 import {
   answerPortalRequest,
   PortalAnswer,
@@ -21,12 +19,16 @@ import { AppChooserDialog } from "./AppChooserDialog";
 import { appName } from "./app-name";
 import { CapturingIndicator } from "./CapturingIndicator";
 import { FileChooserDialog } from "./FileChooserDialog";
+import { GlobalShortcutsDialog } from "./GlobalShortcutsDialog";
 import { InputCaptureDialog } from "./InputCaptureDialog";
 import { RemoteDesktopDialog } from "./RemoteDesktopDialog";
 
+/** No shell chords; one array, so the default is stable across renders. */
+const NONE: readonly string[] = [];
+
 type Props = {
   /** The desktop `Shell` is handed. */
-  host: PortalHost & SystemHost;
+  host: GlobalShortcutsHost & SystemHost;
   /**
    * The display to show a dialog on when it has no parent window. Needs a
    * `DisplayProvider`; without it, a dialog is centered on the whole page.
@@ -39,19 +41,23 @@ type Props = {
    * it. `undefined` uses `screen`.
    */
   screenOf?: ((appId: string) => string | undefined) | undefined;
+  /** The shell's own chords, which a global shortcuts review flags. */
+  shellChords?: readonly string[] | undefined;
 };
 
 /**
  * Every dialog applications ask for through `xdg-desktop-portal`, one at a
  * time, oldest first, and an indicator for each session that controls or
  * captures input. Requests of a kind it has no dialog for are refused.
- * Inhibitors are not questions, so it leaves them be. See
+ * Inhibitors are not questions, so it leaves them be. It also fires the
+ * chords applications hold through the GlobalShortcuts portal. See
  * docs/architecture/PORTALS.md.
  */
 export const PortalDialogs = ({
   host,
   screen,
   screenOf,
+  shellChords = NONE,
   systemOf = system,
 }: Props) => {
   const [requests, setRequests] = useState<readonly PortalRequest[]>([]);
@@ -64,6 +70,7 @@ export const PortalDialogs = ({
 
   useEffect(() => watchPortalRequests(host, setRequests), [host]);
   useEffect(() => watchCapturing(host, setSessions), [host]);
+  useEffect(() => fireGlobalShortcuts(host), [host]);
 
   useEffect(() => {
     for (const request of requests) {
@@ -92,6 +99,7 @@ export const PortalDialogs = ({
           list={list}
           request={shown}
           screen={screenFor(shown, screen, screenOf)}
+          shellChords={shellChords}
           system={files}
         />
       )}
@@ -105,12 +113,14 @@ const Dialog = ({
   list,
   request,
   screen,
+  shellChords,
   system: files,
 }: {
   answer: (answer: PortalAnswer) => void;
   list: (path: string) => Promise<readonly string[]>;
   request: PortalRequest;
   screen: string | undefined;
+  shellChords: readonly string[];
   system: System;
 }) => {
   switch (request.kind) {
@@ -169,6 +179,16 @@ const Dialog = ({
           screen={screen}
         />
       );
+    case PortalKind.GlobalShortcuts:
+      return (
+        <GlobalShortcutsDialog
+          answer={answer}
+          asker={appName(request.appId)}
+          body={request.body}
+          screen={screen}
+          shellChords={shellChords}
+        />
+      );
     case PortalKind.Inhibit:
     case PortalKind.Unknown:
       return undefined;
@@ -197,6 +217,7 @@ const isAsked = (request: PortalRequest): boolean => {
     case PortalKind.RemoteDesktop:
     case PortalKind.InputCapture:
     case PortalKind.Account:
+    case PortalKind.GlobalShortcuts:
       return true;
     case PortalKind.Inhibit:
     case PortalKind.Unknown:

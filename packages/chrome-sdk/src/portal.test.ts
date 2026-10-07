@@ -1,5 +1,10 @@
 import { describe, expect, it } from "bun:test";
-import type { Capturing, PortalHost, PortalRequest } from "./portal";
+import type {
+  BoundShortcut,
+  Capturing,
+  PortalHost,
+  PortalRequest,
+} from "./portal";
 import {
   answerPortalRequest,
   CapturingKind,
@@ -8,6 +13,7 @@ import {
   PortalAnswer,
   PortalKind,
   stopCapturing,
+  watchBoundShortcuts,
   watchCapturing,
   watchPortalRequests,
 } from "./portal";
@@ -37,8 +43,17 @@ class FakeHost implements PortalHost {
     this.#listeners.delete(listener);
   }
 
-  push(items: readonly object[], capturing?: readonly object[]): void {
-    const data = JSON.stringify({ capturing, items, type: "portal_requests" });
+  push(
+    items: readonly object[],
+    capturing?: readonly object[],
+    shortcuts?: readonly object[],
+  ): void {
+    const data = JSON.stringify({
+      capturing,
+      items,
+      shortcuts,
+      type: "portal_requests",
+    });
     for (const listener of this.#listeners) {
       listener(new MessageEvent("portalrequests", { data }));
     }
@@ -302,6 +317,41 @@ describe("watchPortalRequests", () => {
     ]);
   });
 
+  it("parses a global shortcuts review's body", async () => {
+    const host = new FakeHost();
+    const requests = watched(host);
+    host.push([
+      {
+        app_id: "org.example.App",
+        body: {
+          shortcuts: [
+            { description: "Push to talk", id: "talk", trigger: "CTRL+t" },
+            { description: "Mute", id: "mute" },
+          ],
+          taken: [{ app_id: "org.example.Other", chord: "Ctrl+Alt+m" }],
+        },
+        id: 4,
+        kind: "global_shortcuts",
+      },
+    ]);
+
+    expect(await requests).toEqual([
+      {
+        appId: "org.example.App",
+        body: {
+          shortcuts: [
+            { description: "Push to talk", id: "talk", trigger: "CTRL+t" },
+            { description: "Mute", id: "mute", trigger: undefined },
+          ],
+          taken: [{ appId: "org.example.Other", chord: "Ctrl+Alt+m" }],
+        },
+        id: 4,
+        kind: PortalKind.GlobalShortcuts,
+        parentAppId: undefined,
+      },
+    ]);
+  });
+
   it("keeps a kind it does not know, to be refused", async () => {
     const host = new FakeHost();
     const requests = watched(host);
@@ -422,6 +472,31 @@ describe("watchCapturing", () => {
   });
 });
 
+describe("watchBoundShortcuts", () => {
+  it("parses the chords applications hold, none when absent", async () => {
+    const host = new FakeHost();
+    const heard: (readonly BoundShortcut[])[] = [];
+    const both = new Promise<void>((resolve) => {
+      watchBoundShortcuts(host, (shortcuts) => {
+        heard.push(shortcuts);
+        if (heard.length === 2) {
+          resolve();
+        }
+      });
+    });
+    host.push([], undefined, [
+      { app_id: "org.example.App", chord: "Ctrl+Alt+t", id: 3 },
+    ]);
+    host.push([]);
+    await both;
+
+    expect(heard).toEqual([
+      [{ appId: "org.example.App", chord: "Ctrl+Alt+t", id: 3 }],
+      [],
+    ]);
+  });
+});
+
 describe("answerPortalRequest", () => {
   it("writes each answer as the compositor reads it", () => {
     const host = new FakeHost();
@@ -457,6 +532,14 @@ describe("answerPortalRequest", () => {
       ),
     );
     answerPortalRequest(host, 8, PortalAnswer.InputCapture());
+    answerPortalRequest(
+      host,
+      9,
+      PortalAnswer.GlobalShortcuts([
+        { id: "talk", trigger: "Ctrl+Alt+t" },
+        { id: "mute", trigger: undefined },
+      ]),
+    );
 
     expect(host.answers).toEqual([
       [1, { kind: "access" }],
@@ -482,6 +565,13 @@ describe("answerPortalRequest", () => {
         },
       ],
       [8, { kind: "input_capture" }],
+      [
+        9,
+        {
+          kind: "global_shortcuts",
+          triggers: [{ id: "talk", trigger: "Ctrl+Alt+t" }, { id: "mute" }],
+        },
+      ],
     ]);
   });
 });

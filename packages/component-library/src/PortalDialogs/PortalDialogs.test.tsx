@@ -1,6 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import type { PortalHost } from "@domicile-desktop/sdk/portal";
-import type { SystemHost } from "@domicile-desktop/sdk/system";
+import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import type { Node } from "@domicile-desktop/system-apps/fake-system";
 import { fakeSystem } from "@domicile-desktop/system-apps/fake-system";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
@@ -14,40 +13,29 @@ import { PortalDialogs } from "./PortalDialogs";
  * A desktop that pushes `portal_requests` lines and records answers. Its
  * system calls go to the `fakeSystem` each test passes as `systemOf`.
  */
-class FakeHost implements PortalHost, SystemHost {
-  readonly answers: [id: number, answer: unknown][] = [];
-  readonly #listeners = new Set<(event: MessageEvent<string>) => void>();
+class FakeHost {
+  readonly fake = new FakeDomicileHost();
+  readonly host = this.fake.host;
 
-  answerPortalRequest(id: number, answer: string): void {
-    this.answers.push([id, JSON.parse(answer)]);
+  get answers(): [id: unknown, answer: unknown][] {
+    return this.fake.calls
+      .filter(([name]) => name === "answerPortalRequest")
+      .map(([, id, answer]) => [id, JSON.parse(String(answer))]);
   }
 
-  callSystem(): void {
-    throw new Error("system calls go to the test's fakeSystem");
-  }
-
-  addEventListener(
-    type: "portalrequests" | "system",
-    listener: (event: MessageEvent<string>) => void,
+  push(
+    items: readonly object[],
+    capturing?: readonly object[],
+    shortcuts?: readonly object[],
   ): void {
-    if (type === "portalrequests") {
-      this.#listeners.add(listener);
-    }
-  }
-
-  removeEventListener(
-    _type: "portalrequests",
-    listener: (event: MessageEvent<string>) => void,
-  ): void {
-    this.#listeners.delete(listener);
-  }
-
-  push(items: readonly object[], capturing?: readonly object[]): void {
-    const data = JSON.stringify({ capturing, items, type: "portal_requests" });
+    const data = JSON.stringify({
+      capturing,
+      items,
+      shortcuts,
+      type: "portal_requests",
+    });
     act(() => {
-      for (const listener of this.#listeners) {
-        listener(new MessageEvent("portalrequests", { data }));
-      }
+      this.fake.dispatch("portalrequests", { data });
     });
   }
 }
@@ -159,11 +147,25 @@ const account = (id: number, body: object = { reason: "To sign you in" }) => ({
   kind: "account",
 });
 
+const shortcuts = (id: number) => ({
+  app_id: "org.example.App",
+  body: {
+    shortcuts: [
+      { description: "Push to talk", id: "talk", trigger: "CTRL+ALT+t" },
+      { description: "Mute", id: "mute" },
+      { description: "Deafen", id: "deafen", trigger: "Alt+Meta+d" },
+    ],
+    taken: [{ app_id: "org.example.Other", chord: "Ctrl+Alt+t" }],
+  },
+  id,
+  kind: "global_shortcuts",
+});
+
 describe(PortalDialogs, () => {
   describe("rendering", () => {
     it("draws nothing while no application asks", () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host} />);
+      render(<PortalDialogs host={host.host} />);
       host.push([]);
 
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -171,7 +173,7 @@ describe(PortalDialogs, () => {
 
     it("asks an access question naming the application", () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host} />);
+      render(<PortalDialogs host={host.host} />);
       host.push([access(1)]);
 
       expect(screen.getByRole("dialog")).toHaveTextContent("Use the camera?");
@@ -182,7 +184,7 @@ describe(PortalDialogs, () => {
 
     it("uses the labels the application offers", () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host} />);
+      render(<PortalDialogs host={host.host} />);
       host.push([access(1, { deny_label: "Never", grant_label: "Sure" })]);
 
       expect(screen.getByRole("button", { name: "Sure" })).toBeInTheDocument();
@@ -191,7 +193,7 @@ describe(PortalDialogs, () => {
 
     it("asks to share the user's name, naming the application and its reason", () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host} />);
+      render(<PortalDialogs host={host.host} />);
       host.push([account(1)]);
 
       expect(screen.getByRole("dialog")).toHaveTextContent(
@@ -203,7 +205,7 @@ describe(PortalDialogs, () => {
 
     it("asks to share the user's name without a reason", () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host} />);
+      render(<PortalDialogs host={host.host} />);
       host.push([account(1, {})]);
 
       expect(screen.getByRole("dialog")).toHaveTextContent(
@@ -213,7 +215,7 @@ describe(PortalDialogs, () => {
 
     it("names an application it cannot identify", () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host} />);
+      render(<PortalDialogs host={host.host} />);
       host.push([{ ...access(1), app_id: "" }]);
 
       expect(screen.getByText("An application asks")).toBeInTheDocument();
@@ -223,7 +225,7 @@ describe(PortalDialogs, () => {
       const host = new FakeHost();
       render(
         <DisplayProvider source={TWO_SCREENS}>
-          <PortalDialogs host={host} screen="right" />
+          <PortalDialogs host={host.host} screen="right" />
         </DisplayProvider>,
       );
       host.push([access(1)]);
@@ -235,7 +237,7 @@ describe(PortalDialogs, () => {
 
     it("offers each choice by name and icon, the default picked", async () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host} systemOf={desktop()} />);
+      render(<PortalDialogs host={host.host} systemOf={desktop()} />);
       host.push([chooser(1)]);
 
       expect(screen.getByRole("dialog")).toHaveTextContent(
@@ -253,7 +255,7 @@ describe(PortalDialogs, () => {
 
     it("picks the last choice over the default", async () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host} systemOf={desktop()} />);
+      render(<PortalDialogs host={host.host} systemOf={desktop()} />);
       host.push([chooser(1, { last_choice: "org.gnome.Evince" })]);
 
       expect(
@@ -263,7 +265,7 @@ describe(PortalDialogs, () => {
 
     it("names a choice with no desktop entry by its id, and a URI", async () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host} systemOf={desktop()} />);
+      render(<PortalDialogs host={host.host} systemOf={desktop()} />);
       host.push([
         chooser(1, {
           choices: ["org.example.Gone"],
@@ -283,7 +285,7 @@ describe(PortalDialogs, () => {
 
     it("shows choices the application adds while it is up", async () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host} systemOf={desktop()} />);
+      render(<PortalDialogs host={host.host} systemOf={desktop()} />);
       host.push([chooser(1, { choices: ["org.gnome.Evince"] })]);
       await screen.findByRole("option", { name: "Document Viewer" });
       host.push([chooser(1)]);
@@ -293,9 +295,48 @@ describe(PortalDialogs, () => {
       ).toBeInTheDocument();
     });
 
+    it("reviews each shortcut an application asks for", () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} />);
+      host.push([shortcuts(5)]);
+
+      expect(screen.getByRole("dialog")).toHaveTextContent(
+        "org.example.App wants shortcuts that work in any window",
+      );
+      expect(screen.getByRole("textbox", { name: "Push to talk" })).toHaveValue(
+        "CTRL+ALT+t",
+      );
+      expect(screen.getByRole("textbox", { name: "Mute" })).toHaveValue("");
+    });
+
+    it("flags a chord the shell or another application holds", () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} shellChords={["Meta+Alt+d"]} />);
+      host.push([shortcuts(5)]);
+
+      expect(
+        screen.getByText("org.example.Other uses this chord"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText("The desktop uses this chord"),
+      ).toBeInTheDocument();
+    });
+
+    it("will not bind a trigger that is not a chord", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} />);
+      host.push([shortcuts(5)]);
+      await userEvent.type(
+        screen.getByRole("textbox", { name: "Mute" }),
+        "Hyper+m",
+      );
+
+      expect(screen.getByRole("button", { name: "Bind" })).toBeDisabled();
+    });
+
     it("goes away when the request does", async () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host} />);
+      render(<PortalDialogs host={host.host} />);
       host.push([access(1)]);
       host.push([]);
 
@@ -308,7 +349,7 @@ describe(PortalDialogs, () => {
   describe("file chooser", () => {
     it("asks for files under the application's title, in its folder", async () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host} systemOf={home()} />);
+      render(<PortalDialogs host={host.host} systemOf={home()} />);
       host.push([
         fileChooser(1, {
           accept_label: "Attach",
@@ -330,7 +371,7 @@ describe(PortalDialogs, () => {
 
     it("answers with the file chosen, the filter and each choice", async () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host} systemOf={home()} />);
+      render(<PortalDialogs host={host.host} systemOf={home()} />);
       host.push([
         fileChooser(1, {
           choices: [
@@ -383,7 +424,7 @@ describe(PortalDialogs, () => {
 
     it("opens several files", async () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host} systemOf={home()} />);
+      render(<PortalDialogs host={host.host} systemOf={home()} />);
       host.push([fileChooser(1, { multiple: true })]);
       await listed();
 
@@ -394,7 +435,7 @@ describe(PortalDialogs, () => {
 
     it("chooses a folder", async () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host} systemOf={home()} />);
+      render(<PortalDialogs host={host.host} systemOf={home()} />);
       host.push([fileChooser(1, { directory: true })]);
       await listed();
       await userEvent.click(screen.getByRole("button", { name: "Choose" }));
@@ -406,7 +447,7 @@ describe(PortalDialogs, () => {
 
     it("saves under the name suggested", async () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host} systemOf={home()} />);
+      render(<PortalDialogs host={host.host} systemOf={home()} />);
       host.push([fileChooser(1, { current_name: "draft.txt", mode: "save" })]);
       await listed();
       await userEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -421,7 +462,7 @@ describe(PortalDialogs, () => {
 
     it("saves several files into the folder chosen", async () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host} systemOf={home()} />);
+      render(<PortalDialogs host={host.host} systemOf={home()} />);
       host.push([
         fileChooser(1, { files: ["a.txt", "b.txt"], mode: "save_files" }),
       ]);
@@ -436,7 +477,7 @@ describe(PortalDialogs, () => {
 
     it("cancels", async () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host} systemOf={home()} />);
+      render(<PortalDialogs host={host.host} systemOf={home()} />);
       host.push([fileChooser(1)]);
       await listed();
       await userEvent.click(
@@ -453,7 +494,7 @@ describe(PortalDialogs, () => {
       render(
         <DisplayProvider source={TWO_SCREENS}>
           <PortalDialogs
-            host={host}
+            host={host.host}
             screen="left"
             screenOf={(appId) => (appId === "app-3" ? "right" : undefined)}
             systemOf={home()}
@@ -472,7 +513,7 @@ describe(PortalDialogs, () => {
   describe("answers", () => {
     it("allows", async () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host} />);
+      render(<PortalDialogs host={host.host} />);
       host.push([access(1)]);
       await userEvent.click(screen.getByRole("button", { name: "Allow" }));
 
@@ -481,7 +522,7 @@ describe(PortalDialogs, () => {
 
     it("denies", async () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host} />);
+      render(<PortalDialogs host={host.host} />);
       host.push([access(1)]);
       await userEvent.click(screen.getByRole("button", { name: "Deny" }));
 
@@ -490,7 +531,7 @@ describe(PortalDialogs, () => {
 
     it("shares the user's name", async () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host} />);
+      render(<PortalDialogs host={host.host} />);
       host.push([account(1)]);
       await userEvent.click(screen.getByRole("button", { name: "Share" }));
 
@@ -499,7 +540,7 @@ describe(PortalDialogs, () => {
 
     it("keeps the user's name", async () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host} />);
+      render(<PortalDialogs host={host.host} />);
       host.push([account(1)]);
       await userEvent.click(
         screen.getByRole("button", { name: "Don't share" }),
@@ -510,7 +551,7 @@ describe(PortalDialogs, () => {
 
     it("cancels on Escape", async () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host} />);
+      render(<PortalDialogs host={host.host} />);
       host.push([access(1)]);
       await userEvent.keyboard("{Escape}");
 
@@ -519,7 +560,7 @@ describe(PortalDialogs, () => {
 
     it("opens the picked application", async () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host} systemOf={desktop()} />);
+      render(<PortalDialogs host={host.host} systemOf={desktop()} />);
       host.push([chooser(1)]);
       await screen.findByRole("option", { name: "Firefox" });
       await userEvent.click(screen.getByRole("button", { name: "Open" }));
@@ -531,7 +572,7 @@ describe(PortalDialogs, () => {
 
     it("moves the pick with the arrows and opens it with Enter", async () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host} systemOf={desktop()} />);
+      render(<PortalDialogs host={host.host} systemOf={desktop()} />);
       host.push([chooser(1)]);
       await screen.findByRole("option", { name: "Firefox" });
       await userEvent.keyboard("{ArrowUp}{Enter}");
@@ -543,7 +584,7 @@ describe(PortalDialogs, () => {
 
     it("opens an application double-clicked", async () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host} systemOf={desktop()} />);
+      render(<PortalDialogs host={host.host} systemOf={desktop()} />);
       host.push([chooser(1)]);
       await userEvent.dblClick(
         await screen.findByRole("option", { name: "Document Viewer" }),
@@ -556,7 +597,7 @@ describe(PortalDialogs, () => {
 
     it("cancels a choice", async () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host} systemOf={desktop()} />);
+      render(<PortalDialogs host={host.host} systemOf={desktop()} />);
       host.push([chooser(1)]);
       await screen.findByRole("option", { name: "Firefox" });
       await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
@@ -566,7 +607,7 @@ describe(PortalDialogs, () => {
 
     it("leaves an inhibitor alone and asks what comes after it", () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host} systemOf={desktop()} />);
+      render(<PortalDialogs host={host.host} systemOf={desktop()} />);
       host.push([
         {
           app_id: "org.example.Editor",
@@ -581,9 +622,58 @@ describe(PortalDialogs, () => {
       expect(screen.getByRole("dialog")).toHaveTextContent("Use the camera?");
     });
 
+    it("binds the chords the user accepts, changes and clears", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} />);
+      host.push([shortcuts(5)]);
+      await userEvent.clear(screen.getByRole("textbox", { name: "Mute" }));
+      await userEvent.type(
+        screen.getByRole("textbox", { name: "Mute" }),
+        "shift+ctrl+m",
+      );
+      await userEvent.clear(screen.getByRole("textbox", { name: "Deafen" }));
+      await userEvent.click(screen.getByRole("button", { name: "Bind" }));
+
+      expect(host.answers).toEqual([
+        [
+          5,
+          {
+            kind: "global_shortcuts",
+            triggers: [
+              { id: "talk", trigger: "Ctrl+Alt+t" },
+              { id: "mute", trigger: "Ctrl+Shift+m" },
+              { id: "deafen" },
+            ],
+          },
+        ],
+      ]);
+    });
+
+    it("binds nothing when dismissed", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} />);
+      host.push([shortcuts(5)]);
+      await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+      expect(host.answers).toEqual([[5, { kind: "canceled" }]]);
+    });
+
+    it("reports a press of a chord an application holds", () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} />);
+      host.push([], undefined, [
+        { app_id: "org.example.App", chord: "Ctrl+Alt+t", id: 3 },
+      ]);
+      act(() => {
+        host.fake.dispatch("shortcut", { chord: "Ctrl+Alt+t" });
+      });
+
+      expect(host.answers).toEqual([[3, { kind: "pressed" }]]);
+    });
+
     it("refuses a kind it has no dialog for", () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host} />);
+      render(<PortalDialogs host={host.host} />);
       host.push([{ app_id: "", body: {}, id: 4, kind: "print" }]);
 
       expect(host.answers).toEqual([[4, { kind: "refused" }]]);
@@ -593,7 +683,7 @@ describe(PortalDialogs, () => {
   describe("remote desktop", () => {
     it("offers each device asked for, all on, and the clipboard", () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host} />);
+      render(<PortalDialogs host={host.host} />);
       host.push([remoteDesktop(1, true)]);
 
       expect(screen.getByRole("dialog")).toHaveTextContent(
@@ -611,7 +701,7 @@ describe(PortalDialogs, () => {
 
     it("offers no clipboard when none was asked for", () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host} />);
+      render(<PortalDialogs host={host.host} />);
       host.push([remoteDesktop(1, false)]);
 
       expect(
@@ -621,7 +711,7 @@ describe(PortalDialogs, () => {
 
     it("grants what is left on", async () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host} />);
+      render(<PortalDialogs host={host.host} />);
       host.push([remoteDesktop(1, true)]);
       await userEvent.click(screen.getByRole("switch", { name: "Keyboard" }));
       await userEvent.click(
@@ -643,7 +733,7 @@ describe(PortalDialogs, () => {
 
     it("denies", async () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host} />);
+      render(<PortalDialogs host={host.host} />);
       host.push([remoteDesktop(1, true)]);
       await userEvent.click(screen.getByRole("button", { name: "Deny" }));
 
@@ -654,7 +744,7 @@ describe(PortalDialogs, () => {
   describe("input capture", () => {
     it("names the application and the devices it would take", () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host} />);
+      render(<PortalDialogs host={host.host} />);
       host.push([inputCapture(1)]);
 
       expect(screen.getByRole("dialog")).toHaveTextContent(
@@ -664,7 +754,7 @@ describe(PortalDialogs, () => {
 
     it("allows", async () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host} />);
+      render(<PortalDialogs host={host.host} />);
       host.push([inputCapture(1)]);
       await userEvent.click(screen.getByRole("button", { name: "Allow" }));
 
@@ -673,7 +763,7 @@ describe(PortalDialogs, () => {
 
     it("denies", async () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host} />);
+      render(<PortalDialogs host={host.host} />);
       host.push([inputCapture(1)]);
       await userEvent.click(screen.getByRole("button", { name: "Deny" }));
 
@@ -684,7 +774,7 @@ describe(PortalDialogs, () => {
   describe("capturing", () => {
     it("shows nothing while no session runs", () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host} />);
+      render(<PortalDialogs host={host.host} />);
       host.push([]);
 
       expect(screen.queryByRole("list")).not.toBeInTheDocument();
@@ -692,7 +782,7 @@ describe(PortalDialogs, () => {
 
     it("names each session's application and what it holds", () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host} />);
+      render(<PortalDialogs host={host.host} />);
       host.push(
         [],
         [
@@ -715,7 +805,7 @@ describe(PortalDialogs, () => {
 
     it("stops a session", async () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host} />);
+      render(<PortalDialogs host={host.host} />);
       host.push([], [remoteDesktop(5, false), inputCapture(6)]);
       const [, capture] = screen.getAllByRole("listitem");
       if (capture === undefined) {

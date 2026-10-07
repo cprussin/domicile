@@ -10,8 +10,8 @@ use std::collections::HashMap;
 use std::collections::BTreeMap;
 
 use domicile_protocol::{
-    Capturing, ChromeMessage, DisplayInfo, HostMessage, Notification, PortalRequest, Theme,
-    TrayItem,
+    BoundShortcut, Capturing, ChromeMessage, DisplayInfo, HostMessage, Notification, PortalRequest,
+    Theme, TrayItem,
 };
 
 pub mod base64;
@@ -24,6 +24,7 @@ pub mod file_filters;
 pub mod file_index;
 pub mod file_preview;
 pub mod file_search;
+pub mod global_shortcuts;
 pub mod home_walk;
 pub mod home_watch;
 pub mod index_file;
@@ -130,6 +131,8 @@ pub struct Host {
     /// The unanswered portal dialogs and the running input sessions. `None`
     /// until set, as for `tray`.
     portal_requests: Option<(Vec<PortalRequest>, Vec<Capturing>)>,
+    /// The chords applications hold, which ride on the portal requests.
+    global_shortcuts: Vec<BoundShortcut>,
 }
 
 impl Host {
@@ -281,11 +284,20 @@ impl Host {
     ) -> Option<HostMessage> {
         let set = (items, capturing);
         (self.portal_requests.as_ref() != Some(&set)).then(|| {
-            self.portal_requests = Some(set.clone());
-            HostMessage::PortalRequests {
-                items: set.0,
-                capturing: set.1,
-            }
+            self.portal_requests = Some(set);
+            self.describe_portal_requests()
+                .expect("the requests were just set")
+        })
+    }
+
+    /// Set the chords applications hold through the GlobalShortcuts portal and
+    /// return the message to broadcast, or `None` if they did not change. They
+    /// ride on [`HostMessage::PortalRequests`].
+    pub fn set_global_shortcuts(&mut self, shortcuts: Vec<BoundShortcut>) -> Option<HostMessage> {
+        (self.global_shortcuts != shortcuts).then(|| {
+            self.global_shortcuts = shortcuts;
+            self.describe_portal_requests()
+                .expect("the requests are set before any shortcut is bound")
         })
     }
 
@@ -293,7 +305,11 @@ impl Host {
     pub fn describe_portal_requests(&self) -> Option<HostMessage> {
         self.portal_requests
             .clone()
-            .map(|(items, capturing)| HostMessage::PortalRequests { items, capturing })
+            .map(|(items, capturing)| HostMessage::PortalRequests {
+                items,
+                capturing,
+                shortcuts: self.global_shortcuts.clone(),
+            })
     }
 
     /// Register a newly-mapped Wayland toplevel. Returns its assigned id and

@@ -11,6 +11,7 @@ use domicile_protocol::{Capturing, PortalRequest, Theme};
 use zbus::zvariant::{ObjectPath, OwnedValue, Value};
 
 use super::clipboard::Selection;
+use super::global_shortcuts::Shortcuts;
 use super::restore::Tokens;
 use super::settings::Appearance;
 use super::socket_pair::connected;
@@ -43,7 +44,11 @@ pub fn served(tokens: Tokens) -> Served {
     let (publish, published) = channel();
     let background = in_the_background();
     let (eis, injected) = (background.eis, background.injected);
-    let (backends, told) = Backends::new(NotificationServer::unserved(Vec::new()), tokens);
+    let (backends, told) = Backends::new(
+        NotificationServer::unserved(Vec::new()),
+        tokens,
+        Shortcuts::new(None),
+    );
     backends.queue.listen(
         move |items, capturing| {
             let _ = publish.send((items, capturing));

@@ -8,8 +8,8 @@ Make Domicile the session's only `xdg-desktop-portal` backend:
 
 Today the compositor implements `Settings`, `Access`, `AppChooser`,
 `FileChooser`, `Notification`, `Inhibit`, `RemoteDesktop`, `Clipboard`,
-`InputCapture`, `Account`, `Email` and `Lockdown`, and routes the rest to gtk.
-Screen sharing and global shortcuts have no backend.
+`InputCapture`, `Account`, `Email`, `Lockdown` and `GlobalShortcuts`, and
+routes the rest to gtk. Screen sharing has no backend.
 
 ## Design
 
@@ -101,8 +101,18 @@ One request channel carries all dialogs. Each interface's backend builds on it.
   - A Clipboard paste hands the application the pasting client's pipe, so the
     data never passes through the compositor.
 - **Grants live in the frontend's `PermissionStore`.** Domicile stores only
-  ScreenCast and RemoteDesktop restore tokens, under
-  `$XDG_STATE_HOME/domicile/`.
+  ScreenCast and RemoteDesktop restore tokens and the global shortcut choices,
+  under `$XDG_STATE_HOME/domicile/`.
+- **Global shortcuts are the shell's grabs.** Only the engine sees keys, so the
+  compositor lists each bound chord in the `PortalRequests` push
+  (`shortcuts`); `<PortalDialogs />` grabs it with `grabShortcut` and answers
+  `pressed` under its id. A locked desk refuses that answer.
+  - The review dialog spells each chord as `bindKeys` does and flags one the
+    shell or another app holds.
+  - Choices are kept per app id in `global-shortcuts.json`. A `BindShortcuts`
+    whose every id has a choice binds without a dialog.
+  - The engine reports presses only, so `Deactivated` follows `Activated` at
+    once. A release needs an engine event.
 - **Multi-monitor regions use the highest density.** A stream has one scale,
   so a region spanning monitors is captured at the highest density it
   touches. Lower-density monitors lose nothing.
@@ -180,7 +190,8 @@ Phase 3: input.
 
 Phase 4: the rest.
 
-- [ ] GlobalShortcuts
+- [x] GlobalShortcuts
+- [ ] engine: report a grabbed chord's release, for `Deactivated` on release
 - [ ] Background, Wallpaper, DynamicLauncher, Usb
 
 Phase 5: printing, and remove gtk.

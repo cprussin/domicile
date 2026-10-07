@@ -3,6 +3,7 @@ import { PortalDialogs } from "@domicile-desktop/component-library/PortalDialogs
 import { createToastManager } from "@domicile-desktop/component-library/Toaster";
 import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
+import { ownedChords } from "@domicile-desktop/sdk/own-keybindings";
 import { system } from "@domicile-desktop/sdk/system";
 import { useCallback, useMemo, useState } from "react";
 
@@ -184,6 +185,9 @@ export const Desktop = ({
     },
     [act, spendShift],
   );
+
+  // A global shortcuts review flags these.
+  const shellChords = useMemo(() => ownedChords(keybindings), [keybindings]);
 
   // The binding mode is desk-wide.
   useKeybindings({
@@ -382,6 +386,7 @@ export const Desktop = ({
         host={domicile}
         screen={windows.focused}
         screenOf={(appId) => screenOfApp(windows, appId)}
+        shellChords={shellChords}
       />
       {/*
         Last, over every panel, so the modal launcher and clipboard cannot take

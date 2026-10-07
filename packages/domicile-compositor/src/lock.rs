@@ -704,6 +704,13 @@ mod tests {
                     answer: PortalAnswer::Access,
                 },
             ),
+            (
+                "an application's global shortcut fired",
+                ClientRequest::AnswerPortalRequest {
+                    id: 1,
+                    answer: PortalAnswer::Pressed,
+                },
+            ),
         ] {
             assert_eq!(
                 refused(Asked::OnTheWaylandThread(&request)),

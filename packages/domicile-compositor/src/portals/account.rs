@@ -73,7 +73,9 @@ impl Account {
             | PortalAnswer::FileChooser(_)
             | PortalAnswer::RemoteDesktop { .. }
             | PortalAnswer::InputCapture
-            | PortalAnswer::Stop => (2, HashMap::new()),
+            | PortalAnswer::GlobalShortcuts { .. }
+            | PortalAnswer::Stop
+            | PortalAnswer::Pressed => (2, HashMap::new()),
         }
     }
 }

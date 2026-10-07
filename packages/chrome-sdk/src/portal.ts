@@ -31,6 +31,8 @@ export enum PortalKind {
    * with {@link PortalAnswer.Access}.
    */
   Account,
+  /** Chords an application asks to hold while it is not focused. */
+  GlobalShortcuts,
   /** A kind this SDK cannot parse. Answer it with {@link PortalAnswer.Refused}. */
   Unknown,
 }
@@ -166,6 +168,34 @@ export type AccountBody = {
   reason: string | undefined;
 };
 
+/** A shortcut an application asks for. */
+export type ProposedShortcut = {
+  id: string;
+  description: string;
+  /**
+   * The chord the user chose before, else the one the application prefers,
+   * as it wrote it; it may not parse. Absent for neither.
+   */
+  trigger: string | undefined;
+};
+
+/** A global shortcuts review: the shortcuts, and chords other apps hold. */
+export type ShortcutsBody = {
+  shortcuts: readonly ProposedShortcut[];
+  taken: readonly { chord: string; appId: string }[];
+};
+
+/** The chord the user chose for a shortcut; `undefined` clears it. */
+export type ChosenTrigger = { id: string; trigger: string | undefined };
+
+/** A chord an application holds, for the shell to grab. */
+export type BoundShortcut = {
+  /** The id a press is reported under. */
+  id: number;
+  appId: string;
+  chord: string;
+};
+
 export const PortalRequest = {
   Access: (base: PortalRequestBase, body: AccessBody) => ({
     ...base,
@@ -186,6 +216,11 @@ export const PortalRequest = {
     ...base,
     body,
     kind: PortalKind.FileChooser as const,
+  }),
+  GlobalShortcuts: (base: PortalRequestBase, body: ShortcutsBody) => ({
+    ...base,
+    body,
+    kind: PortalKind.GlobalShortcuts as const,
   }),
   Inhibit: (base: PortalRequestBase, body: InhibitBody) => ({
     ...base,
@@ -229,6 +264,8 @@ export enum PortalAnswerKind {
   InputCapture,
   /** The user stopped a {@link Capturing} session. */
   Stop,
+  /** The chords the user chose in a {@link PortalKind.GlobalShortcuts} review. */
+  GlobalShortcuts,
   /** The user dismissed or denied the dialog. */
   Canceled,
   /** The shell has no dialog for this kind. */
@@ -246,6 +283,10 @@ export const PortalAnswer = {
   FileChooser: (chosen: FileChosen) => ({
     chosen,
     kind: PortalAnswerKind.FileChooser as const,
+  }),
+  GlobalShortcuts: (triggers: readonly ChosenTrigger[]) => ({
+    kind: PortalAnswerKind.GlobalShortcuts as const,
+    triggers,
   }),
   InputCapture: () => ({ kind: PortalAnswerKind.InputCapture as const }),
   Refused: () => ({ kind: PortalAnswerKind.Refused as const }),
@@ -318,19 +359,29 @@ export type PortalHost = Pick<DomicileHost, "answerPortalRequest"> & {
 export const watchPortalRequests = (
   host: PortalHost,
   listener: (requests: readonly PortalRequest[]) => void,
-): (() => void) => {
-  const heard = (event: MessageEvent<string>) => {
+): (() => void) =>
+  watch(host, (message) => {
+    listener(message.items.map((item) => parseRequest(item)));
+  });
+
+/**
+ * Call `listener` with every chord applications hold through the
+ * GlobalShortcuts portal, on each push. Returns a function that stops
+ * listening.
+ */
+export const watchBoundShortcuts = (
+  host: PortalHost,
+  listener: (shortcuts: readonly BoundShortcut[]) => void,
+): (() => void) =>
+  watch(host, (message) => {
     listener(
-      requestsSchema
-        .parse(JSON.parse(event.data))
-        .items.map((item) => parseRequest(item)),
+      (message.shortcuts ?? []).map((bound) => ({
+        appId: bound.app_id,
+        chord: bound.chord,
+        id: bound.id,
+      })),
     );
-  };
-  host.addEventListener("portalrequests", heard);
-  return () => {
-    host.removeEventListener("portalrequests", heard);
-  };
-};
+  });
 
 /**
  * Call `listener` with every session that controls or captures input, on each
@@ -365,6 +416,20 @@ export const answerPortalRequest = (
 /** End capturing session `id`. */
 export const stopCapturing = (host: PortalHost, id: number): void => {
   answerPortalRequest(host, id, PortalAnswer.Stop());
+};
+
+/** Each `portal_requests` push, parsed. */
+const watch = (
+  host: PortalHost,
+  listener: (message: z.infer<typeof requestsSchema>) => void,
+): (() => void) => {
+  const heard = (event: MessageEvent<string>) => {
+    listener(requestsSchema.parse(JSON.parse(event.data)));
+  };
+  host.addEventListener("portalrequests", heard);
+  return () => {
+    host.removeEventListener("portalrequests", heard);
+  };
 };
 
 const accessSchema = z
@@ -479,6 +544,31 @@ const accountSchema = z
   .object({ reason: z.string().optional() })
   .transform((body): AccountBody => ({ reason: body.reason }));
 
+const shortcutsSchema = z
+  .object({
+    shortcuts: z.array(
+      z.object({
+        description: z.string(),
+        id: z.string(),
+        trigger: z.string().optional(),
+      }),
+    ),
+    taken: z.array(z.object({ app_id: z.string(), chord: z.string() })),
+  })
+  .transform(
+    (body): ShortcutsBody => ({
+      shortcuts: body.shortcuts.map((shortcut) => ({
+        description: shortcut.description,
+        id: shortcut.id,
+        trigger: shortcut.trigger,
+      })),
+      taken: body.taken.map((taken) => ({
+        appId: taken.app_id,
+        chord: taken.chord,
+      })),
+    }),
+  );
+
 /** Reads one kind's body into a request. */
 type ReadKind = (base: PortalRequestBase, body: unknown) => PortalRequest;
 
@@ -516,6 +606,11 @@ const KINDS: ReadonlyMap<string, ReadKind> = new Map<string, ReadKind>([
   [
     "account",
     (base, body) => PortalRequest.Account(base, accountSchema.parse(body)),
+  ],
+  [
+    "global_shortcuts",
+    (base, body) =>
+      PortalRequest.GlobalShortcuts(base, shortcutsSchema.parse(body)),
   ],
 ]);
 
@@ -557,6 +652,9 @@ const requestsSchema = z.object({
   // Optional on the wire, so a line without it parses.
   capturing: z.array(capturingSchema).default([]),
   items: z.array(itemSchema),
+  shortcuts: z
+    .array(z.object({ app_id: z.string(), chord: z.string(), id: z.number() }))
+    .optional(),
   type: z.literal("portal_requests"),
 });
 
@@ -591,7 +689,7 @@ const parseCapturing = (item: z.infer<typeof capturingSchema>): Capturing => {
     : parse(base, item.body);
 };
 
-/** `answer` as the compositor reads it. */
+/** `answer` as the compositor reads it. A cleared trigger is absent. */
 const wireAnswer = (answer: PortalAnswer): object => {
   switch (answer.kind) {
     case PortalAnswerKind.Access:
@@ -616,6 +714,13 @@ const wireAnswer = (answer: PortalAnswer): object => {
         current_filter: answer.chosen.currentFilter,
         kind: "file_chooser",
         paths: answer.chosen.paths,
+      };
+    case PortalAnswerKind.GlobalShortcuts:
+      return {
+        kind: "global_shortcuts",
+        triggers: answer.triggers.map(({ id, trigger }) =>
+          trigger === undefined ? { id } : { id, trigger },
+        ),
       };
     case PortalAnswerKind.Refused:
       return { kind: "refused" };
