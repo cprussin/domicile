@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { device, heldSound, laptop } from "./fixture";
@@ -128,7 +128,9 @@ describe("Mixer", () => {
         screen.getByRole("button", { name: "More outputs" }),
       );
 
-      screen.getByRole("slider", { name: "HDMI" }).focus();
+      act(() => {
+        screen.getByRole("slider", { name: "HDMI" }).focus();
+      });
       await userEvent.keyboard("{ArrowLeft}");
       await userEvent.click(
         screen.getByRole("button", { name: "Make HDMI the default" }),

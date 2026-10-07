@@ -3,21 +3,12 @@
 // default build. Bar items are exported for custom layouts. Importing this
 // module only installs its stylesheet.
 
-import {
-  applyTheme,
-  DEFAULT_THEME,
-} from "@domicile-desktop/component-library/theme-core";
 import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
 import type { Shell as ShellModule } from "@domicile-desktop/sdk/shell";
-import { createRoot } from "react-dom/client";
 
 import type { ApplicationsOptions } from "./launcher/applications-config";
 import { applicationsConfigSchema } from "./launcher/applications-config";
-import { mountPoint } from "./mount-point";
-import { Shell as Chrome } from "./Shell";
-import { hostDisplays } from "./screens/host-displays";
-import { hostTheme } from "./theme/host-theme";
-import { rememberedTheme } from "./theme/remembered-theme";
+import { mountManganese } from "./mount-manganese";
 import type { TopBarLayout } from "./top-bar/layout";
 
 import "./global.css";
@@ -81,27 +72,7 @@ export const runManganese = (options: ManganeseOptions = {}): ShellModule => {
   // Parsed when the config is built, so a bad bookmark fails it.
   const applications = applicationsConfigSchema.parse(options.applications);
   return (root, domicile) => {
-    // Apply the last-seen theme before React mounts to avoid a theme flash on
-    // first paint (the stylesheet ships in this module; see
-    // `@domicile-desktop/component-library/vite-shell`). The compositor owns the
-    // theme (`theme.mode`), which corrects this guess. Defaults to dark,
-    // matching `theme.mode`'s default.
-    applyTheme(rememberedTheme() ?? DEFAULT_THEME);
-
-    // Built once here, not per render, because a source holds the connection.
-    const displays = hostDisplays(domicile);
-    const theme = hostTheme(domicile);
-
-    createRoot(mountPoint(root)).render(
-      <Chrome
-        applications={applications}
-        displays={displays}
-        domicile={domicile}
-        keybindings={options.keybindings}
-        theme={theme}
-        topBar={options.topBar}
-      />,
-    );
+    mountManganese(root, domicile, { ...options, applications });
   };
 };
 
