@@ -91,6 +91,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "generate": "bun codegen/generate-domicile-host.ts",
     "test:types": "tsc --noEmit",
     "test:unit": "bun test"
   },

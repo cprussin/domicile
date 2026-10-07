@@ -113,7 +113,7 @@ domicile.addEventListener("shortcut", (event) => event.chord); // "Meta+Shift+l"
 
 | Module | Kind |
 |---|---|
-| `domicile-host` | types: `DomicileHost` and its events |
+| `domicile-host` | types: `DomicileHost` and its events, generated from the IDL |
 | `shell` | type: `Shell` |
 | `app-element`, `webview-element` | types |
 | `bind-keys`, `key-action`, `own-keybindings` | helpers: chord grammar, modes |
@@ -151,6 +151,13 @@ domicile.addEventListener("shortcut", (event) => event.chord); // "Meta+Shift+l"
   copy is the only one.
 - **The do-nothing stand-in goes.** Only Domicile calls a shell, so there is
   no plain-browser case and no null check.
+- **The SDK's types are generated from the IDL, over a hand copy.** The
+  SDK's `codegen/` writes `domicile-host.ts` from the `.idl` files, with their
+  comments as its docs. `scripts/test-host-types-match-the-idl.sh` fails when
+  it is stale. The hand copy drifted: it lacked `resizeApp`.
+- **A parser for the IDL subset, over `webidl2`.** A new dependency changes
+  `bun.lock` and so the flake's `outputHash`. The parser throws on syntax it
+  does not read, so new IDL fails the generator instead of vanishing.
 
 ## Plan
 
@@ -183,9 +190,3 @@ Each step ships alone.
       (`guard-windows-state.sh` fires every name left)
 - [x] `<app>` routes its own input; `registerElements` and the routing modules
       go (`guard-app-routes-input.sh`)
-
-## Open questions
-
-- **Types from the IDL, or by hand?** `domicile-host.ts` mirrors the IDL by
-  hand. Recommendation: by hand until the API settles, then generate from the
-  `.idl` files.
