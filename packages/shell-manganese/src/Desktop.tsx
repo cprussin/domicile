@@ -135,16 +135,17 @@ export const Desktop = ({
   const notifications = useNotifications(domicile, toasts);
   const { read } = notifications;
   const now = useNow();
-  // The screen whose bell opened the drawer, or `undefined` when closed.
-  // Opening it marks everything read and closes all toasts, which the drawer
-  // already shows.
+  // The screen whose bell last opened the drawer. Kept after it closes, so the
+  // drawer slides out on that screen. Opening it marks everything read and
+  // closes all toasts, which the drawer already shows.
   const [notificationsOn, setNotificationsOn] = useState<string | undefined>(
     undefined,
   );
-  const notificationsOpen = notificationsOn !== undefined;
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const openNotifications = useCallback(
     (screen: string) => {
       setNotificationsOn(screen);
+      setNotificationsOpen(true);
       read();
       toasts.close();
     },
@@ -419,7 +420,7 @@ export const Desktop = ({
         // Only a bell opens it, so the drawer reports only closing.
         onOpenChange={(open) => {
           if (!open) {
-            setNotificationsOn(undefined);
+            setNotificationsOpen(false);
           }
         }}
         open={notificationsOpen && !lock.locked}
