@@ -62,7 +62,10 @@ const appChooser = {
 
 const account = {
   app_id: "org.example.Mail",
-  body: { reason: "Mail signs your messages with your name." },
+  body: {
+    name: "Ada Lovelace",
+    reason: "Mail signs your messages with your name.",
+  },
   id: 8,
   kind: "account",
 };
@@ -243,14 +246,14 @@ const screenCast = {
     multiple: false,
     region: true,
     sources: [
+      { app_id: "firefox", id: "app-3", title: "Notes", type: "window" },
       {
-        app_name: "Text Editor",
-        id: "app-3",
-        title: "Notes",
+        app_id: "org.gnome.Evince",
+        id: "app-4",
+        title: "report.pdf",
         type: "window",
       },
-      { app_name: "Terminal", id: "app-4", title: "~/src", type: "window" },
-      { id: "app-5", title: "", type: "window" },
+      { app_id: "", id: "app-5", title: "", type: "window" },
       {
         description: "Dell Inc. DELL U3219Q",
         name: "drm-1",
@@ -389,7 +392,7 @@ export const ScreenCast: Story = {
     host: pushing([screenCast]),
     screen: undefined,
     screenOf: undefined,
-    systemOf: undefined,
+    systemOf: installed,
   },
 };
 

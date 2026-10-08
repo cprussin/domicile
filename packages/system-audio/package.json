@@ -7,6 +7,7 @@
   "description": "Volume, mute, devices, streams and level meters for a Domicile shell, through pactl and parec.",
   "devDependencies": {
     "@cprussin/tsconfig": "catalog:",
+    "@domicile-desktop/test-support": "workspace:*",
     "@types/bun": "catalog:",
     "typescript": "catalog:"
   },

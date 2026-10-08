@@ -183,9 +183,13 @@ export type InputCaptureBody = {
   devices: Devices;
 };
 
-/** Why an application asks for the user's name, in its own words. */
+/** What an application would get of the user, and why it asks. */
 export type AccountBody = {
+  /** In the application's own words. */
   reason: string | undefined;
+  name: string;
+  /** The picture's path, or `undefined` for none. */
+  image: string | undefined;
 };
 
 /** A shortcut an application asks for. */
@@ -312,10 +316,8 @@ export const CastSource = {
     id: string;
     /** Empty until the client names it. */
     title: string;
-    /** Its application's name, from its desktop entry. */
-    appName: string | undefined;
-    /** Its application's icon, as a `data:` URL. */
-    icon: string | undefined;
+    /** Its Wayland app id, which names its desktop entry; empty if unset. */
+    appId: string;
   }) => ({ ...window, kind: CastSourceKind.Window as const }),
 };
 
@@ -882,15 +884,24 @@ const remoteDesktopSchema = z.object({
 const inputCaptureSchema = z.object({ devices: devicesSchema });
 
 const accountSchema = z
-  .object({ reason: z.string().optional() })
-  .transform((body): AccountBody => ({ reason: body.reason }));
+  .object({
+    image: z.string().optional(),
+    name: z.string(),
+    reason: z.string().optional(),
+  })
+  .transform(
+    (body): AccountBody => ({
+      image: body.image,
+      name: body.name,
+      reason: body.reason,
+    }),
+  );
 const pairSchema = z.tuple([z.number(), z.number()]);
 
 const castSourceSchema = z
   .discriminatedUnion("type", [
     z.object({
-      app_name: z.string().optional(),
-      icon: z.string().optional(),
+      app_id: z.string(),
       id: z.string(),
       title: z.string(),
       type: z.literal("window"),
@@ -906,8 +917,7 @@ const castSourceSchema = z
     switch (source.type) {
       case "window":
         return CastSource.Window({
-          appName: source.app_name,
-          icon: source.icon,
+          appId: source.app_id,
           id: source.id,
           title: source.title,
         });

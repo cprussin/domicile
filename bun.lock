@@ -175,6 +175,7 @@
       },
       "devDependencies": {
         "@cprussin/tsconfig": "catalog:",
+        "@domicile-desktop/test-support": "workspace:*",
         "@types/bun": "catalog:",
         "typescript": "catalog:",
       },
@@ -189,6 +190,7 @@
       },
       "devDependencies": {
         "@cprussin/tsconfig": "catalog:",
+        "@domicile-desktop/test-support": "workspace:*",
         "@types/bun": "catalog:",
         "typescript": "catalog:",
       },
@@ -203,6 +205,7 @@
       },
       "devDependencies": {
         "@cprussin/tsconfig": "catalog:",
+        "@domicile-desktop/test-support": "workspace:*",
         "@types/bun": "catalog:",
         "typescript": "catalog:",
       },
@@ -243,6 +246,7 @@
         "@testing-library/jest-dom": "catalog:",
         "@testing-library/react": "catalog:",
         "happy-dom": "catalog:",
+        "zod": "catalog:",
       },
       "devDependencies": {
         "@cprussin/tsconfig": "catalog:",

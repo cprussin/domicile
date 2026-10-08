@@ -1,8 +1,9 @@
 //! The system calls a locked desktop still runs, so a lock screen can show the
-//! battery, brightness and volume: each shape the libraries send, and the
-//! near misses that stay refused.
+//! battery, brightness and volume: each call the libraries record sending, and
+//! the near misses that stay refused.
 
 use std::collections::BTreeMap;
+use std::fs;
 
 use domicile_host::system::{reach, Reach};
 use domicile_protocol::{Bus, SystemRequest};
@@ -77,8 +78,33 @@ const UDEVADM: [&str; 4] = [
     "--subsystem-match=backlight",
 ];
 
-fn allowed(request: &SystemRequest) -> bool {
-    reach(request) == Reach::Readout
+/// The calls the libraries' tests record them sending; see
+/// `packages/domicile-protocol/wire/README.md`.
+const RECORDED: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../domicile-protocol/wire/lock-screen-readouts.jsonl"
+);
+
+#[derive(serde::Deserialize)]
+struct Recorded {
+    library: String,
+    request: SystemRequest,
+}
+
+#[test]
+fn every_call_the_libraries_send_is_a_readout() {
+    let recorded = fs::read_to_string(RECORDED).expect("the recorded readouts");
+    let mut libraries = Vec::new();
+    for line in recorded.lines() {
+        let Recorded { library, request } = serde_json::from_str(line).expect("a recorded call");
+        assert_eq!(reach(&request), Reach::Readout, "{library}: {line}");
+        libraries.push(library);
+    }
+    libraries.dedup();
+    assert_eq!(
+        libraries,
+        ["system-battery", "system-backlight", "system-audio"]
+    );
 }
 
 /// Why a request is a near miss, and the change that makes it one.
@@ -164,12 +190,6 @@ mod battery {
     use super::*;
 
     #[test]
-    fn its_read_and_watch_are_readouts() {
-        assert!(allowed(&battery_read()));
-        assert!(allowed(&battery_watch()));
-    }
-
-    #[test]
     fn a_read_of_anything_else_on_the_bus_is_not() {
         let misses: [Miss<Call>; 5] = [
             ("session bus", |call| call.bus = Bus::Session),
@@ -214,14 +234,6 @@ mod brightness {
     use super::*;
 
     #[test]
-    fn its_watch_and_setter_are_readouts() {
-        assert!(allowed(&spawn(&UDEVADM, &[])));
-        assert!(allowed(&set_brightness(
-            r#"["backlight","intel_backlight",120]"#
-        )));
-    }
-
-    #[test]
     fn setting_another_kind_of_light_is_not() {
         assert_eq!(
             reach(&set_brightness(r#"["leds","input3::capslock",1]"#)),
@@ -264,35 +276,6 @@ mod brightness {
 
 mod audio {
     use super::*;
-
-    #[test]
-    fn reading_and_following_the_server_are_readouts() {
-        for verb in ["subscribe", "info", "list"] {
-            assert!(allowed(&pactl(&["-f", "json", verb])), "{verb}");
-        }
-    }
-
-    #[test]
-    fn setting_an_outputs_volume_or_mute_is_a_readout() {
-        assert!(allowed(&pactl(&[
-            "--",
-            "set-sink-volume",
-            "alsa_output.pci",
-            "65536"
-        ])));
-        assert!(allowed(&pactl(&[
-            "--",
-            "set-sink-mute",
-            "alsa_output.pci",
-            "1"
-        ])));
-        assert!(allowed(&pactl(&[
-            "--",
-            "set-sink-mute",
-            "alsa_output.pci",
-            "0"
-        ])));
-    }
 
     #[test]
     fn anything_else_pactl_does_is_not() {

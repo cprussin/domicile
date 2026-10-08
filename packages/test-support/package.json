@@ -3,9 +3,10 @@
     "@happy-dom/global-registrator": "catalog:",
     "@testing-library/jest-dom": "catalog:",
     "@testing-library/react": "catalog:",
-    "happy-dom": "catalog:"
+    "happy-dom": "catalog:",
+    "zod": "catalog:"
   },
-  "description": "Shared bun test setup: happy-dom globals, jest-dom matchers, and Testing Library cleanup.",
+  "description": "Shared bun test setup: happy-dom globals, jest-dom matchers, Testing Library cleanup, and the lock screen's recorded system requests.",
   "devDependencies": {
     "@cprussin/tsconfig": "catalog:",
     "@types/bun": "catalog:",
@@ -18,6 +19,7 @@
     ".": {
       "types": "./matchers.d.ts"
     },
+    "./lock-screen-readouts": "./src/lock-screen-readouts.ts",
     "./preload": "./src/preload.ts"
   },
   "files": [

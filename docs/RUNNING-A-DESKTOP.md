@@ -145,8 +145,9 @@ It provides:
   `services.displayManager.sessionPackages = [domicile]` adds it.
 - **The `domicile` PAM service**, for `lock.pam_service = "domicile"`.
 - **`domicile-session.target`**, started by a desktop that is the session. User
-  services bound to `graphical-session.target` start with it. The package is
-  also on the system profile, so the portal finds `domicile-mimeapps.list`.
+  services bound to `graphical-session.target` and `~/.config/autostart`
+  entries start with it. The package is also on the system profile, so the
+  portal finds `domicile-mimeapps.list`.
 - **Portal routing**, when `xdg.portal.enable` is set. Domicile is the only
   backend and the shell draws every dialog. `domicile-portals.conf` sends
   `Secret` to `gnome-keyring`, which you install (`oo7-portal` works too).

@@ -126,9 +126,10 @@ import { PortalDialogs } from "@domicile-desktop/component-library/PortalDialogs
   `PickColor` (pick a pixel of it, with a magnifier). Answer `Access`,
   `Account`, `Wallpaper` and `Usb` with `PortalAnswer.Access()` to allow, and
   `DynamicLauncher` with `PortalAnswer.DynamicLauncher(name)`.
-- The app list, the file picker and the wallpaper preview read the system
-  through `@domicile-desktop/sdk/system` (desktop entries, `mimeapps.list`,
-  `readDir`, `readFile`), so `host` must take system calls. `domicile` does.
+- The app list, the file picker, the account picture and the wallpaper
+  preview read the system through `@domicile-desktop/sdk/system` (desktop
+  entries, `mimeapps.list`, `readDir`, `readFile`), so `host` must take system
+  calls. `domicile` does.
 - A dialog goes on the screen `screenOf` names for the window that asked, or
   on `screen` when the application named no window.
 - An `Inhibit` request is an application holding off logout, user switching

@@ -4,6 +4,9 @@
 //! [`READOUTS`] lists each call that `@domicile-desktop/system-battery`,
 //! `system-backlight` and `system-audio` make, field by field. Anything else is
 //! refused while locked. See `docs/LOCK.md`.
+//!
+//! `packages/domicile-protocol/wire/lock-screen-readouts.jsonl` records the
+//! calls the libraries send; their tests and this crate's check against it.
 
 use std::collections::BTreeMap;
 
