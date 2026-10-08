@@ -9,7 +9,13 @@ import { domicilePreset } from "./pandacss-preset";
  * `color-mix(...)` tokens are left out because they have no hex until a
  * browser resolves them.
  */
-const PER_THEME = ["accent", "danger", "success", "warning"] as const;
+const PER_THEME = [
+  "accent",
+  "danger",
+  "private",
+  "success",
+  "warning",
+] as const;
 
 /** WCAG AA contrast for normal text. These colors are used for text. */
 const READABLE = 4.5;

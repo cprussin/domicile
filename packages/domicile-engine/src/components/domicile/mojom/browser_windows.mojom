@@ -46,6 +46,9 @@ struct BrowserWindow {
   // unset, and always 0 outside a popup window.
   int32 width;
   int32 height;
+  // Whether the page is in the profile's off-the-record profile. A private
+  // window's new windows are private too.
+  bool private_browsing;
 };
 
 // Renderer -> browser, bound per document.
@@ -57,7 +60,8 @@ interface BrowserWindows {
 
   // Opens a browser window at `url`; it appears in the next list. A
   // domicile:// address shows about:blank#blocked, as in a <webview>.
-  Open(url.mojom.Url url);
+  // `private_browsing` puts its page in the off-the-record profile.
+  Open(url.mojom.Url url, bool private_browsing);
 
   // Closes window `id` and destroys its page; it leaves the next list. An
   // unknown id is a close that raced another, and does nothing.

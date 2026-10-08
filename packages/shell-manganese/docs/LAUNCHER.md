@@ -15,6 +15,12 @@ Every row is something Enter can do. Source: `src/launcher/`.
 5. Files from the compositor's index of the home directory.
 6. A Google search for the line as typed. Always present.
 
+The site (2) and the search (6) each have a row beside them that opens them in
+a private browser. `!p` anywhere in the line offers only the web rows (1, 2
+and 6), all private. A private browser's address bar is tinted the `private`
+color and says "Private"; its new windows are private too. See
+[private browsing](../../../docs/SHELL-BROWSER-WINDOWS.md#private-browsing).
+
 `src/address/typed-address.ts` decides whether a line is a site or a search.
 Browser address bars use the same rule.
 
@@ -56,7 +62,9 @@ settles, and keeps the last preview until then.
   ID3v2 (MP3, WAV, AIFF), FLAC, Ogg Vorbis and Opus, MP4.
 - **Video**: one frame from 10% in.
 - **Image or PDF**: loaded from `domicile://home/`.
-- **URL**: the page.
+- **URL or search**: the page, in a private `<webview>`, so previewing stores
+  nothing.
+- **Bookmark**: the page, signed in, so its icon can be learned.
 - **Application**: the image named by `X-Domicile-Preview`, or else its
   description and the command Enter runs.
 

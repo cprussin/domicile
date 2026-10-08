@@ -10,6 +10,9 @@
 //    for more often.
 // 7. A Google search for the query, always, as the fallback.
 //
+// The site and the search each have a private row beside them. `!p` anywhere
+// in the query offers only the web rows, all private.
+//
 // `typedAddress` decides site vs. search, so this box and a browser window's
 // address bar agree.
 
@@ -51,25 +54,35 @@ export const Choice = {
    * A web search. The row shows the words rather than the search URL, which
    * is harder to read.
    */
-  Search: (query: string, url: string) => ({
+  Search: (query: string, url: string, isPrivate: boolean) => ({
+    isPrivate,
     kind: ChoiceKind.Search as const,
     query,
     url,
   }),
-  Site: (url: string) => ({ kind: ChoiceKind.Site as const, url }),
+  Site: (url: string, isPrivate: boolean) => ({
+    isPrivate,
+    kind: ChoiceKind.Site as const,
+    url,
+  }),
   /** A search on the site a tag names. */
-  TaggedSearch: (search: TaggedSearch) => ({
+  TaggedSearch: (search: TaggedSearch, isPrivate: boolean) => ({
+    isPrivate,
     kind: ChoiceKind.TaggedSearch as const,
     ...search,
   }),
   /** The page on a tag's site whose name is the words. */
-  TaggedSite: (site: TaggedSite) => ({
+  TaggedSite: (site: TaggedSite, isPrivate: boolean) => ({
+    isPrivate,
     kind: ChoiceKind.TaggedSite as const,
     ...site,
   }),
 };
 
 export type Choice = ReturnType<(typeof Choice)[keyof typeof Choice]>;
+
+/** The tag that makes every row private. */
+const PRIVATE_TAG = "!p";
 
 /**
  * The rows for `query`, given what the host found for it.
@@ -84,13 +97,14 @@ export const choicesFor = (
   apps: readonly DesktopEntry[],
   bookmarks: readonly Bookmark[],
 ): Choice[] => {
-  const site = taggedSite(query);
-  const tagged = taggedSearch(query);
-  return [
-    ...(site === undefined ? [] : [Choice.TaggedSite(site)]),
-    ...(tagged === undefined ? [] : [Choice.TaggedSearch(tagged)]),
-    ...plainChoicesFor(query, found, apps, bookmarks),
-  ];
+  const words = query.split(/\s+/).filter((word) => word !== "");
+  const typed = words.filter((word) => word !== PRIVATE_TAG).join(" ");
+  return words.includes(PRIVATE_TAG)
+    ? [...taggedChoicesFor(typed, true), ...webChoicesFor(typed, true)]
+    : [
+        ...taggedChoicesFor(query, false),
+        ...plainChoicesFor(query, found, apps, bookmarks),
+      ];
 };
 
 /** The launch for `choice`. */
@@ -102,12 +116,14 @@ export const launchOf = (choice: Choice): Launch => {
     case ChoiceKind.File: {
       return Launch.Opened(choice.row.path);
     }
-    case ChoiceKind.Bookmark:
+    case ChoiceKind.Bookmark: {
+      return Launch.Browsed(choice.url, false);
+    }
     case ChoiceKind.Site:
     case ChoiceKind.Search:
     case ChoiceKind.TaggedSearch:
     case ChoiceKind.TaggedSite: {
-      return Launch.Browsed(choice.url);
+      return Launch.Browsed(choice.url, choice.isPrivate);
     }
   }
 };
@@ -117,6 +133,29 @@ export const openWithOf = (choice: Choice): Launch =>
   choice.kind === ChoiceKind.File
     ? Launch.OpenedWith(choice.row.path)
     : launchOf(choice);
+
+/** The page and search `query`'s tag names, if any. */
+const taggedChoicesFor = (query: string, isPrivate: boolean): Choice[] => {
+  const site = taggedSite(query);
+  const tagged = taggedSearch(query);
+  return [
+    ...(site === undefined ? [] : [Choice.TaggedSite(site, isPrivate)]),
+    ...(tagged === undefined ? [] : [Choice.TaggedSearch(tagged, isPrivate)]),
+  ];
+};
+
+/** The site `typed` names, if it is one, then a search for it. */
+const webChoicesFor = (typed: string, isPrivate: boolean): Choice[] => {
+  const address = typedAddress(typed);
+  return address === undefined
+    ? []
+    : [
+        ...(address.kind === TypedAddressKind.Site
+          ? [Choice.Site(address.url, isPrivate)]
+          : []),
+        Choice.Search(typed, googleUrl(typed), isPrivate),
+      ];
+};
 
 const plainChoicesFor = (
   query: string,
@@ -135,12 +174,13 @@ const plainChoicesFor = (
     ? [...applications, ...files]
     : [
         ...(address.kind === TypedAddressKind.Site
-          ? [Choice.Site(address.url)]
+          ? [Choice.Site(address.url, false), Choice.Site(address.url, true)]
           : []),
         ...applications,
         ...typedPath(typed, found),
         ...files,
-        Choice.Search(typed, googleUrl(typed)),
+        Choice.Search(typed, googleUrl(typed), false),
+        Choice.Search(typed, googleUrl(typed), true),
       ];
 };
 

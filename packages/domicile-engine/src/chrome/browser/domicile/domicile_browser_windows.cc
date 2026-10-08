@@ -109,15 +109,26 @@ class DeskWindows final : public base::SupportsUserData::Data,
   DeskWindows& operator=(const DeskWindows&) = delete;
   ~DeskWindows() override = default;
 
-  // Opens a window at `url` as a tab of the desk's own window. Returns false
-  // and opens nothing when the profile has no shell to own it.
-  bool Open(const GURL& url) {
-    return Make(url, /*popup_window=*/std::nullopt, 0, 0);
+  // Opens a window at `url` as a tab of the desk's own window, or a private
+  // window in the off-the-record profile. Returns false and opens nothing
+  // when the profile has no shell to own it.
+  bool Open(const GURL& url, bool private_browsing) {
+    return Make(url, /*popup_window=*/std::nullopt, 0, 0, private_browsing);
   }
 
   // Opens a window at `url` as popup window `window_id`'s one tab.
   bool OpenPopupWindow(int window_id, const GURL& url, int width, int height) {
-    return Make(url, window_id, width, height);
+    return Make(url, window_id, width, height, /*private_browsing=*/false);
+  }
+
+  // The off-the-record profile private windows live in, made on first use.
+  // Watched, so its windows close before it is destroyed.
+  Profile& PrivateProfile() {
+    Profile* otr = profile_->GetPrimaryOTRProfile(/*create_if_needed=*/true);
+    if (!private_observation_.IsObserving()) {
+      private_observation_.Observe(otr);
+    }
+    return *otr;
   }
 
   // Closes window `id`. An unknown id is a close that raced another.
@@ -156,7 +167,7 @@ class DeskWindows final : public base::SupportsUserData::Data,
           window.id, entry == nullptr ? GURL() : entry->GetVirtualURL(),
           base::UTF16ToUTF8(contents.GetTitle()),
           window.guest->popup_window().value_or(0), window.width,
-          window.height));
+          window.height, contents.GetBrowserContext()->IsOffTheRecord()));
     }
     return list;
   }
@@ -197,7 +208,8 @@ class DeskWindows final : public base::SupportsUserData::Data,
   bool Make(const GURL& url,
             std::optional<int> popup_window,
             int width,
-            int height) {
+            int height,
+            bool private_browsing) {
     // The shell owns every guest, browser windows included: content's guest
     // machinery reads the owner's WebContents when making a guest. A desk with
     // no shell has nothing to draw a window in anyway.
@@ -208,8 +220,9 @@ class DeskWindows final : public base::SupportsUserData::Data,
       return false;
     }
     const std::string id = base::NumberToString(next_id_++);
-    std::unique_ptr<WebViewGuest> guest = WebViewGuest::MakeWindow(
-        *shell, id, popup_window, base::BindRepeating(&AttachTabHelpers));
+    std::unique_ptr<WebViewGuest> guest =
+        WebViewGuest::MakeWindow(*shell, id, popup_window, private_browsing,
+                                 base::BindRepeating(&AttachTabHelpers));
     // `windows_` owns `guest` and the watch from here.
     auto watch = std::make_unique<Watch>(
         guest->contents(),
@@ -232,7 +245,21 @@ class DeskWindows final : public base::SupportsUserData::Data,
 
   // ProfileObserver:
   void OnProfileWillBeDestroyed(Profile* profile) override {
+    if (profile->IsOffTheRecord()) {
+      // Only the private windows, which would otherwise outlive their
+      // profile.
+      private_observation_.Reset();
+      std::erase_if(windows_, [](const Window& window) {
+        return window.guest->contents().GetBrowserContext()->IsOffTheRecord();
+      });
+      std::erase_if(closing_, [](const std::unique_ptr<WebViewGuest>& guest) {
+        return guest->contents().GetBrowserContext()->IsOffTheRecord();
+      });
+      Changed();
+      return;
+    }
     profile_observation_.Reset();
+    private_observation_.Reset();
     windows_.clear();
     closing_.clear();
   }
@@ -249,15 +276,19 @@ class DeskWindows final : public base::SupportsUserData::Data,
 
   base::ObserverList<Observer> observers_;
   base::ScopedObservation<Profile, ProfileObserver> profile_observation_{this};
+  // The off-the-record profile, once PrivateProfile made it.
+  base::ScopedObservation<Profile, ProfileObserver> private_observation_{this};
 
   base::WeakPtrFactory<DeskWindows> weak_factory_{this};
 };
 
-// WebViewGuest's host. Routes each call to the guest's profile.
+// WebViewGuest's host. Routes each call to the desk of the guest's profile,
+// which for a private guest is its original profile's.
 class Host final : public BrowserWindowHost {
  public:
+  // A private page's new window is private too.
   void Open(content::BrowserContext& context, const GURL& url) override {
-    Windows(context).Open(url);
+    Windows(context).Open(url, context.IsOffTheRecord());
   }
 
   void OpenPopupWindow(content::BrowserContext& context,
@@ -277,9 +308,15 @@ class Host final : public BrowserWindowHost {
     return Windows(context).Find(id);
   }
 
+  content::BrowserContext& PrivateContext(
+      content::BrowserContext& context) override {
+    return Windows(context).PrivateProfile();
+  }
+
  private:
   static DeskWindows& Windows(content::BrowserContext& context) {
-    return DeskWindows::For(Profile::FromBrowserContext(&context));
+    return DeskWindows::For(
+        Profile::FromBrowserContext(&context)->GetOriginalProfile());
   }
 };
 
@@ -312,7 +349,9 @@ class BrowserWindowsService final
     OnWindowsChanged();
   }
 
-  void Open(const GURL& url) override { windows_->Open(url); }
+  void Open(const GURL& url, bool private_browsing) override {
+    windows_->Open(url, private_browsing);
+  }
 
   void Close(const std::string& id) override { windows_->Close(id); }
 
@@ -341,7 +380,7 @@ bool OpenBrowserWindow(const GURL& url) {
     return false;
   }
   return DeskWindows::For(Profile::FromBrowserContext(shell->GetBrowserContext()))
-      .Open(url);
+      .Open(url, /*private_browsing=*/false);
 }
 
 void BindBrowserWindows(content::RenderFrameHost* frame,

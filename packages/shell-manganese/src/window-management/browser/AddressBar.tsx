@@ -5,6 +5,7 @@ import { ArrowClockwiseIcon } from "@phosphor-icons/react/dist/ssr/ArrowClockwis
 import { CaretLeftIcon } from "@phosphor-icons/react/dist/ssr/CaretLeft";
 import { CaretRightIcon } from "@phosphor-icons/react/dist/ssr/CaretRight";
 import { ClockCounterClockwiseIcon } from "@phosphor-icons/react/dist/ssr/ClockCounterClockwise";
+import { DetectiveIcon } from "@phosphor-icons/react/dist/ssr/Detective";
 import { GlobeSimpleIcon } from "@phosphor-icons/react/dist/ssr/GlobeSimple";
 import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/ssr/MagnifyingGlass";
 import { MinusIcon } from "@phosphor-icons/react/dist/ssr/Minus";
@@ -42,6 +43,8 @@ type Props = {
   address: string;
   canGoBack: boolean;
   canGoForward: boolean;
+  /** Whether the window is private, which the bar says in its own color. */
+  isPrivate: boolean;
   /** Whether a page is loading, which turns Reload into Stop. */
   loading: boolean;
   onBack: () => void;
@@ -67,7 +70,8 @@ type Props = {
 };
 
 /**
- * A browser window's toolbar: history controls, address field and zoom.
+ * A browser window's toolbar: history controls, a private label for a private
+ * window, address field and zoom.
  *
  * Follows Chromium's layout, which users already know.
  */
@@ -75,6 +79,7 @@ export const AddressBar = ({
   address,
   canGoBack,
   canGoForward,
+  isPrivate,
   loading,
   onBack,
   onForward,
@@ -111,7 +116,11 @@ export const AddressBar = ({
   };
 
   return (
-    <form className={barStyles} onSubmit={submit}>
+    <form
+      className={barStyles}
+      data-private={isPrivate ? "" : undefined}
+      onSubmit={submit}
+    >
       <div className={historyStyles}>
         <Button
           disabled={!canGoBack}
@@ -145,6 +154,12 @@ export const AddressBar = ({
           {loading ? <XIcon size={16} /> : <ArrowClockwiseIcon size={16} />}
         </Button>
       </div>
+      {isPrivate && (
+        <span className={privateStyles}>
+          <DetectiveIcon size={16} weight="fill" />
+          Private
+        </span>
+      )}
       <Autocomplete
         aria-label="Address"
         autoComplete="off"
@@ -258,8 +273,15 @@ const lineFor = (suggestion: AddressSuggestion): Suggestion<string> => {
   }
 };
 
-// A slightly different background, so the bar reads as chrome, not page.
+// A slightly different background, so the bar reads as chrome, not page. A
+// private window's bar is tinted its own color, so it is never mistaken for
+// an ordinary one.
 const barStyles = hstack({
+  "&[data-private]": {
+    backgroundColor:
+      "color-mix(in oklab, {colors.private} 35%, {colors.background})",
+    borderBlockEndColor: "private",
+  },
   backgroundColor:
     "color-mix(in oklab, {colors.card} 88%, {colors.background})",
   borderBlockEnd: "1px solid {colors.border}",
@@ -269,6 +291,20 @@ const barStyles = hstack({
   paddingInline: 2,
   // Anchors the zoom indicator.
   position: "relative",
+});
+
+// A solid capsule before the address, so a private window says so in words
+// as well as color.
+const privateStyles = hstack({
+  backgroundColor: "private",
+  blockSize: 6,
+  borderRadius: "full",
+  color: "background",
+  flex: "none",
+  fontSize: "sm",
+  fontWeight: "semibold",
+  gap: 1,
+  paddingInline: 2.5,
 });
 
 // Tighter than the bar's gap, so the three buttons read as one group.

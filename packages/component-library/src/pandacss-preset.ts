@@ -239,9 +239,9 @@ export const domicilePreset = definePreset({
       semanticTokens: {
         // `base` is dark; `_light` applies under `data-theme="light"`.
         //
-        // Only foreground, background, accent, danger, success and warning
-        // have per-theme values. The rest are `color-mix(...)` of those, so
-        // they follow the theme.
+        // Only foreground, background, accent, danger, private, success and
+        // warning have per-theme values. The rest are `color-mix(...)` of
+        // those, so they follow the theme.
         colors: {
           accent: {
             // Steps differ per theme so each has enough contrast with its
@@ -294,6 +294,14 @@ export const domicilePreset = definePreset({
           },
           panelOverPhoto: {
             value: "rgb(from black r g b / 55%)",
+          },
+          // Marks a private browser window. Distinct from `accent`, which
+          // marks focus and selection everywhere.
+          private: {
+            value: {
+              _light: "{colors.violet.700}",
+              base: "{colors.violet.400}",
+            },
           },
           skeleton: {
             value:

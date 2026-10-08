@@ -50,6 +50,18 @@ plus.addEventListener("click", () => {
 - **A `<webview src="…">` with no `window`** is your own page, such as an
   extension's popup or a preview. It closes with your document.
 
+## Private browsing
+
+- **`openPrivateBrowserWindow(url)`** opens a private window. It is listed with
+  `isPrivate: true`. Draw it so the user can tell.
+- **`<webview private>`** makes your own page private, such as a preview. Set
+  `private` before the view enters the document.
+- A private page is in Chrome's off-the-record profile: its cookies, cache and
+  storage stay in memory until the engine exits, shared by every private page
+  and none of the user's.
+- A private window's new windows are private too.
+- Extensions see no private page.
+
 ## Basics
 
 - `goBack`, `goForward`, `stop` and `reload` are element methods.
