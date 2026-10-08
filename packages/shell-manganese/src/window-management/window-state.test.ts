@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import { Axis, Direction } from "./direction";
 import { TITLE_BAR } from "./rect";
-import { Layout, windowsIn } from "./tree/node";
+import { Layout, LayoutNode, windowsIn } from "./tree/node";
 import { windowsOf } from "./tree/tiling";
 import { appWindowId, browserWindowId } from "./window";
 import type { WindowState } from "./window-state";
@@ -702,9 +702,10 @@ describe("moves across screens", () => {
     );
 
     expect(state.focused).toBe("right");
-    expect(windowsOf(workspaceOn(state, "right").tiling)).toEqual([
-      APP("editor"),
-    ]);
+    // In the workspace's tab group, as a window opened there would be.
+    expect(workspaceOn(state, "right").tiling.root).toEqual(
+      LayoutNode.Container(Layout.Tabbed, [LayoutNode.Window(APP("editor"))]),
+    );
   });
 });
 

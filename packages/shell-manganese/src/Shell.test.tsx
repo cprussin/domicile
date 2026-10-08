@@ -1693,10 +1693,11 @@ describe("Shell", () => {
 
       press("w");
 
-      // One tab each across the top. Both contents share a box, the focused
-      // one on top, so the other is ready when its tab is picked.
+      // One tab each across the top, their slots meeting in one strip. Both
+      // contents share a box, the focused one on top, so the other is ready
+      // when its tab is picked.
       expect(boxOf(barFor(container, "app:one"))).toMatchObject({
-        width: "938px",
+        width: "940px",
         x: "20px",
       });
       expect(boxOf(appElement(container, "one"))).toEqual(
@@ -1729,9 +1730,9 @@ describe("Shell", () => {
       expect(barFor(container, "app:two").dataset.focus).toBe("focused");
     });
 
-    it("lights a selected tab group's hidden tabs without raising them", () => {
-      // A raised hidden tab would look open. A sibling window keeps the tabs
-      // from filling the screen.
+    it("lights a selected tab group's strip, leaving its tabs as they were", () => {
+      // The tabs keep showing which one is open and has the keyboard. A
+      // sibling window keeps the tabs from filling the screen.
       const { container } = renderShell();
       clientAppears("one");
       clientAppears("two");
@@ -1744,7 +1745,9 @@ describe("Shell", () => {
 
       expect(lit(container)).toEqual(["app:two", "app:three"]);
       expect(barFor(container, "app:two").dataset.focus).toBe("resting");
-      expect(barFor(container, "app:three").dataset.focus).toBe("leaf");
+      expect(barFor(container, "app:three").dataset.focus).toBe("focused");
+      expect(barFor(container, "app:two").dataset.groupSelected).toBe("true");
+      expect(barFor(container, "app:three").dataset.groupSelected).toBe("true");
     });
 
     it("runs the open tab's edge under the tabs beside it", () => {

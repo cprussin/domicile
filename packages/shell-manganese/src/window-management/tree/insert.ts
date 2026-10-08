@@ -21,17 +21,31 @@ export const inserted = (tiling: Tiling, id: string): Tiling =>
 /**
  * The same for a whole node, such as a floating group rejoining the tiling.
  * Focus goes to its last-focused window.
+ *
+ * On an empty workspace it goes in as {@link groupedForWorkspace} gives it.
  */
 export const insertedNode = (tiling: Tiling, node: LayoutNode): Tiling => {
   const { root } = tiling;
   return withFocusOn(
     {
       ...tiling,
-      root: root === undefined ? node : besideFocus(root, tiling.depth, node),
+      root:
+        root === undefined
+          ? groupedForWorkspace(node)
+          : besideFocus(root, tiling.depth, node),
     },
     focusedWindowIn(node),
   );
 };
+
+/**
+ * `node` as the root of an empty workspace: a window gets a
+ * `WORKSPACE_LAYOUT` group, so the group the next window joins shows.
+ */
+export const groupedForWorkspace = (node: LayoutNode): LayoutNode =>
+  node.kind === NodeKind.Window
+    ? Node.Container(WORKSPACE_LAYOUT, [node])
+    : node;
 
 const besideFocus = (
   root: LayoutNode,

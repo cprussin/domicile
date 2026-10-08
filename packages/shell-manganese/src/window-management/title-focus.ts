@@ -7,6 +7,8 @@
 // - `resting` (sway `unfocused`): everything else.
 // - `leaf`: the focused window inside a `focus parent` selection (not in sway).
 //
+// A tab ignores the selection: its tab strip shows it instead (`TitleBar`).
+//
 // A string union, not an enum, because these are Panda `cva` variant keys.
 
 export type TitleFocus = "focused" | "leaf" | "resting" | "selected";
@@ -19,6 +21,8 @@ type Marks = {
    * selected. Hidden tabs never are.
    */
   inSelection: boolean;
+  /** Whether it is a tab of a tabbed or stacking container. */
+  isTab: boolean;
   /** Whether it is the open tab of a tabbed or stacking container. */
   shownByContainer: boolean;
 };
@@ -26,11 +30,13 @@ type Marks = {
 export const titleFocus = ({
   hasKeyboard,
   inSelection,
+  isTab,
   shownByContainer,
 }: Marks): TitleFocus => {
+  const marked = inSelection && !isTab;
   if (hasKeyboard) {
-    return inSelection ? "leaf" : "focused";
-  } else if (shownByContainer || inSelection) {
+    return marked ? "leaf" : "focused";
+  } else if (shownByContainer || marked) {
     return "selected";
   } else {
     return "resting";

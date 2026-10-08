@@ -142,6 +142,19 @@ describe("movedBy", () => {
     expect(moved.root).toMatchObject({ children: [{}, {}, {}] });
   });
 
+  it("keeps the group a window moves out into, even with it alone", () => {
+    const nested = {
+      depth: 2,
+      root: LayoutNode.Container(Layout.SplitH, [
+        LayoutNode.Container(Layout.SplitV, [LayoutNode.Window("a")]),
+      ]),
+    };
+
+    expect(movedBy(nested, Direction.Right).root).toEqual(
+      LayoutNode.Container(Layout.SplitH, [LayoutNode.Window("a")]),
+    );
+  });
+
   it("moves a window into the container beside it", () => {
     // As in sway, a window moved at a container joins it instead of swapping.
     const moved = movedBy(withFocusOn(NESTED, "a"), Direction.Right);

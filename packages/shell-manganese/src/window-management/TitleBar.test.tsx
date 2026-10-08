@@ -55,6 +55,22 @@ const bar = (container: HTMLElement): HTMLElement => {
   }
 };
 
+/** The bar's own box, inside the slot `bar` returns. */
+const face = (container: HTMLElement): HTMLElement => {
+  const element = container.querySelector<HTMLElement>("[data-face]");
+  if (element === null) {
+    throw new Error("test: the title bar rendered no face");
+  } else {
+    return element;
+  }
+};
+
+/** The tab strip behind a container's tabs. */
+const STRIP = css({
+  backgroundColor:
+    "color-mix(in oklab, {colors.border} 50%, {colors.background})",
+});
+
 // The bar and the contents are separate elements, so they must animate
 // identically or the window splits apart.
 describe("TitleBar", () => {
@@ -133,7 +149,7 @@ describe("TitleBar", () => {
   it("eases between the colors that say where the keyboard is", () => {
     const { container } = render(<TitleBar {...barProps} />);
 
-    const { transition } = globalThis.getComputedStyle(bar(container));
+    const { transition } = globalThis.getComputedStyle(face(container));
     expect(transition).toContain("background-color");
     expect(transition).toContain("border-color");
     expect(transition).toContain("color");
@@ -142,12 +158,12 @@ describe("TitleBar", () => {
   it("sets the name of the window being worked in in a heavier face", () => {
     // Weight as well as color, for users who cannot tell the colors apart.
     const focused = render(<TitleBar {...barProps} focus="focused" />);
-    expect(bar(focused.container).className).toContain(
+    expect(face(focused.container).className).toContain(
       css({ fontWeight: "medium" }),
     );
 
     const resting = render(<TitleBar {...barProps} />);
-    expect(bar(resting.container).className).not.toContain(
+    expect(face(resting.container).className).not.toContain(
       css({ fontWeight: "medium" }),
     );
   });
@@ -156,12 +172,12 @@ describe("TitleBar", () => {
     // The card matches the address bar's background, so the focused bar
     // reads as part of its window.
     const focused = render(<TitleBar {...barProps} focus="focused" />);
-    expect(bar(focused.container).className).toContain(
+    expect(face(focused.container).className).toContain(
       css({ backgroundColor: "card" }),
     );
 
     const resting = render(<TitleBar {...barProps} />);
-    expect(bar(resting.container).className).not.toContain(
+    expect(face(resting.container).className).not.toContain(
       css({ backgroundColor: "card" }),
     );
   });
@@ -177,15 +193,15 @@ describe("TitleBar", () => {
     });
 
     const hidden = render(<TitleBar {...barProps} tabbed={Layout.Tabbed} />);
-    expect(bar(hidden.container).className).toContain(lift);
+    expect(face(hidden.container).className).toContain(lift);
 
     const open = render(
       <TitleBar {...barProps} focus="selected" tabbed={Layout.Tabbed} />,
     );
-    expect(bar(open.container).className).not.toContain(lift);
+    expect(face(open.container).className).not.toContain(lift);
 
     const own = render(<TitleBar {...barProps} />);
-    expect(bar(own.container).className).not.toContain(lift);
+    expect(face(own.container).className).not.toContain(lift);
   });
 
   it("draws no bar's edge in the accent, whatever it says about the keyboard", () => {
@@ -193,7 +209,7 @@ describe("TitleBar", () => {
     for (const focus of ["focused", "leaf", "resting", "selected"] as const) {
       const { container } = render(<TitleBar {...barProps} focus={focus} />);
 
-      expect(bar(container).className).toContain(
+      expect(face(container).className).toContain(
         css({ borderColor: "borderStrong" }),
       );
     }
@@ -204,25 +220,27 @@ describe("TitleBar", () => {
     // one.
     const { container } = render(<TitleBar {...barProps} focus="leaf" />);
 
-    expect(bar(container).className).toContain(
+    expect(face(container).className).toContain(
       css({
         backgroundColor:
           "color-mix(in oklab, {colors.accent} 45%, {colors.card})",
       }),
     );
-    expect(bar(container).className).toContain(css({ fontWeight: "medium" }));
+    expect(face(container).className).toContain(css({ fontWeight: "medium" }));
   });
 
   // Continues the shown window's top edge under every hidden tab.
   describe("the line under a tab its container is not showing", () => {
     const under = (props: Partial<Parameters<typeof TitleBar>[0]>) =>
-      bar(
-        render(<TitleBar {...barProps} tabbed={Layout.Tabbed} {...props} />)
-          .container,
-      );
+      render(<TitleBar {...barProps} tabbed={Layout.Tabbed} {...props} />)
+        .container;
 
     it("is the resting edge", () => {
-      const tab = under({ besideOpenTab: true });
+      // The strip draws it under the space between tabs too.
+      const tab = face(under({ besideOpenTab: true }));
+      expect(bar(under({ besideOpenTab: true })).className).toContain(
+        css({ borderBlockEndColor: "borderStrong" }),
+      );
 
       expect(globalThis.getComputedStyle(tab).borderBlockEndWidth).toBe("1px");
       expect(tab.className).toContain(
@@ -232,7 +250,7 @@ describe("TitleBar", () => {
 
     // It keeps the same width, so opening a tab does not shift its contents.
     it("is not drawn under a bar that is not such a tab", () => {
-      const open = under({});
+      const open = face(under({}));
 
       expect(globalThis.getComputedStyle(open).borderBlockEndWidth).toBe("1px");
       expect(open.className).toContain(
@@ -241,12 +259,59 @@ describe("TitleBar", () => {
     });
   });
 
+  describe("a tab", () => {
+    it("rests in a strip that runs between it and its neighbors", () => {
+      const tab = render(<TitleBar {...barProps} tabbed={Layout.Tabbed} />);
+      expect(bar(tab.container).className).toContain(STRIP);
+      // Inset on top and at the sides; the bottom meets the window.
+      expect(bar(tab.container).className).toContain(
+        css({ paddingBlockStart: 0.75, paddingInline: 0.75 }),
+      );
+
+      const own = render(<TitleBar {...barProps} />);
+      expect(bar(own.container).className).not.toContain(STRIP);
+    });
+
+    it("lights its strip, not itself, when its whole group is selected", () => {
+      const { container } = render(
+        <TitleBar
+          {...barProps}
+          focus="focused"
+          groupSelected
+          tabbed={Layout.Tabbed}
+        />,
+      );
+
+      expect(bar(container).className).toContain(
+        css({
+          backgroundColor:
+            "color-mix(in oklab, {colors.accent} 45%, {colors.background})",
+        }),
+      );
+      expect(face(container).className).toContain(
+        css({ backgroundColor: "card" }),
+      );
+    });
+
+    it("shows the layout and size of a group it stands for", () => {
+      const { getByRole } = render(
+        <TitleBar
+          {...barProps}
+          group={{ layout: Layout.SplitV, windows: 3 }}
+          tabbed={Layout.Tabbed}
+        />,
+      );
+
+      expect(getByRole("img", { name: "Column of 3" }).textContent).toBe("3");
+    });
+  });
+
   it("rounds its top corners, and squares them and drops its edge while its window fills the screen", () => {
     const rounded = globalThis.getComputedStyle(
-      bar(render(<TitleBar {...barProps} />).container),
+      face(render(<TitleBar {...barProps} />).container),
     );
     const square = globalThis.getComputedStyle(
-      bar(render(<TitleBar {...barProps} fullscreen />).container),
+      face(render(<TitleBar {...barProps} fullscreen />).container),
     );
 
     expect(rounded.borderStartStartRadius).not.toBe("");
