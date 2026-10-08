@@ -7,6 +7,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/callback_list.h"
@@ -14,6 +15,9 @@
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/scoped_observation.h"
+#include "components/content_settings/core/browser/content_settings_observer.h"
+#include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/domicile/mojom/web_view_guest.mojom.h"
 #include "components/input/native_web_keyboard_event.h"
 #include "content/public/browser/browser_plugin_guest_delegate.h"
@@ -23,6 +27,7 @@
 #include "content/public/browser/host_zoom_map.h"
 #include "content/public/browser/invalidate_type.h"
 #include "content/public/browser/keyboard_event_processing_result.h"
+#include "content/public/browser/media_stream_request.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_delegate.h"
@@ -34,10 +39,12 @@
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/choosers/file_chooser.mojom-forward.h"
 #include "third_party/blink/public/mojom/favicon/favicon_url.mojom-forward.h"
+#include "third_party/blink/public/mojom/mediastream/media_stream.mojom-shared.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 #include "url/gurl.h"
+#include "url/origin.h"
 
 namespace content {
 class BrowserContext;
@@ -98,6 +105,26 @@ using InspectCallback =
     base::RepeatingCallback<void(content::RenderFrameHost& frame,
                                  std::optional<gfx::Point> root_point)>;
 
+// Answers a guest page's camera and microphone requests. Implemented in
+// //chrome (//chrome/browser/domicile/domicile_permissions.h), whose
+// MediaCaptureDevicesDispatcher asks through the guest's permission prompt.
+//
+// //chrome sets it once, with SetMediaAccess, before any guest exists.
+class MediaAccess {
+ public:
+  virtual ~MediaAccess() = default;
+
+  // As WebContentsDelegate::RequestMediaAccessPermission.
+  virtual void Request(content::WebContents& contents,
+                       const content::MediaStreamRequest& request,
+                       content::MediaResponseCallback callback) = 0;
+
+  // As WebContentsDelegate::CheckMediaAccessPermission.
+  virtual bool Check(content::RenderFrameHost& frame,
+                     const url::Origin& origin,
+                     blink::mojom::MediaStreamType type) = 0;
+};
+
 // The page behind a <webview>: an inner WebContents attached as a guest.
 //
 // Like components/guest_view's GuestViewBase, but without depending on
@@ -110,6 +137,8 @@ using InspectCallback =
 //                               (new windows, dialogs, permissions)
 //   WebContentsObserver         tracks the guest's lifetime; after
 //                               attaching, this object is deleted with it
+//   content_settings::Observer  reports the page's site permissions when a
+//                               setting changes
 //
 // A guest, not a subframe, so the page is a main frame: X-Frame-Options and
 // CSP frame-ancestors pass, history works across process changes, and storage
@@ -129,7 +158,8 @@ using InspectCallback =
 class WebViewGuest : public mojom::WebViewGuest,
                      public content::BrowserPluginGuestDelegate,
                      public content::WebContentsDelegate,
-                     public content::WebContentsObserver {
+                     public content::WebContentsObserver,
+                     public content_settings::Observer {
  public:
   // Creates a guest for `placeholder`, a child frame of `owner`, and starts
   // attaching it. The attach replaces and destroys `placeholder`; a refused
@@ -186,6 +216,9 @@ class WebViewGuest : public mojom::WebViewGuest,
   // menu's kInspect. See InspectCallback.
   static void SetInspect(InspectCallback inspect);
 
+  // Set once by //chrome, before any guest exists. See MediaAccess.
+  static void SetMediaAccess(MediaAccess* access);
+
   // The id a <webview window> uses for this window. Empty for a shell's own
   // page.
   const std::string& window_id() const { return window_id_; }
@@ -223,6 +256,24 @@ class WebViewGuest : public mojom::WebViewGuest,
       const base::FilePath& suggested_path,
       base::OnceCallback<void(std::optional<std::vector<base::FilePath>>)>
           chosen);
+
+  // Asks the shell to answer a permission prompt for `origin`. See
+  // PermissionRequested in the mojom.
+  //
+  // `answered` gets the shell's answer, or nothing if the shell ignored the
+  // request or the element went away.
+  using PermissionAnswered =
+      base::OnceCallback<void(std::optional<mojom::WebViewPermissionAnswer>)>;
+  void AskPermission(const GURL& origin,
+                     std::vector<mojom::WebViewPermission> permissions,
+                     PermissionAnswered answered);
+
+  // Tells the shell the request AskPermission sent is gone unanswered.
+  void WithdrawPermissionRequest();
+
+  base::WeakPtr<WebViewGuest> GetWeakPtr() {
+    return weak_factory_.GetWeakPtr();
+  }
 
   // chrome.tabs requests on a tab, handled as if the page had asked:
   // - Focus: the shell raises windows, so the element fires
@@ -290,6 +341,12 @@ class WebViewGuest : public mojom::WebViewGuest,
   void RunContextMenuAction(int32_t menu,
                             mojom::WebViewContextMenuAction action) override;
   void Inspect() override;
+
+  // Stores the setting through the profile's HostContentSettingsMap, as
+  // Chrome's page info does. The change reaches the shell through
+  // OnContentSettingChanged.
+  void SetSitePermission(mojom::WebViewPermission permission,
+                         mojom::WebViewPermissionSetting setting) override;
 
   // content::BrowserPluginGuestDelegate:
   content::WebContents* GetOwnerWebContents() override;
@@ -398,6 +455,18 @@ class WebViewGuest : public mojom::WebViewGuest,
   // the shell must remove the element. See CloseRequested in the mojom.
   void CloseContents(content::WebContents* source) override;
 
+  // Camera and microphone requests go through MediaAccess, so they ask the
+  // shell like any other permission. Other capture, such as getDisplayMedia,
+  // is refused as content's default does: Chrome's screen picker is a dialog
+  // the shell cannot place.
+  void RequestMediaAccessPermission(
+      content::WebContents* web_contents,
+      const content::MediaStreamRequest& request,
+      content::MediaResponseCallback callback) override;
+  bool CheckMediaAccessPermission(content::RenderFrameHost* render_frame_host,
+                                  const url::Origin& security_origin,
+                                  blink::mojom::MediaStreamType type) override;
+
   // Handles `window.focus()` or `client.focus()` (e.g. after a notification
   // click) by asking the shell, which decides window order.
   void ActivateContents(content::WebContents* contents) override;
@@ -434,9 +503,18 @@ class WebViewGuest : public mojom::WebViewGuest,
       blink::mojom::FaviconUpdateReason reason) override;
 
   // On a new page: clears the previous favicon (a page without one reports
-  // nothing), ends any find as Chrome does, and asks the new renderer to
-  // report its content size.
+  // nothing), ends any find as Chrome does, asks the new renderer to report
+  // its content size, and reports the new site's permissions.
   void PrimaryPageChanged(content::Page& page) override;
+
+  // content_settings::Observer:
+  //
+  // Any setting of a reported type may change the page's site's, so this
+  // reports again; ReportSitePermissions skips an unchanged list.
+  void OnContentSettingChanged(
+      const ContentSettingsPattern& primary_pattern,
+      const ContentSettingsPattern& secondary_pattern,
+      ContentSettingsTypeSet content_type_set) override;
 
  private:
   WebViewGuest(content::RenderFrameHost& owner,
@@ -511,6 +589,10 @@ class WebViewGuest : public mojom::WebViewGuest,
   // Both come from `GetVisibleEntry()`, as in Chrome's omnibox, so the
   // padlock always matches the address shown.
   void ReportPage();
+
+  // Reports the page's site's permissions to the element if they changed. A
+  // page with no site reports none.
+  void ReportSitePermissions();
 
   // Reports loading state to the element if it changed. LoadingStateChanged
   // also fires when nothing changed.
@@ -601,6 +683,16 @@ class WebViewGuest : public mojom::WebViewGuest,
 
   int reported_find_matches_ = 0;
   int reported_find_active_match_ = 0;
+
+  // The last SitePermissionsChanged sent. Empty, as the element starts.
+  std::vector<std::pair<mojom::WebViewPermission,
+                        mojom::WebViewPermissionSetting>>
+      reported_site_permissions_;
+
+  // The profile's settings, watched for ReportSitePermissions. Reset in
+  // WebContentsDestroyed, with the zoom subscription.
+  base::ScopedObservation<HostContentSettingsMap, content_settings::Observer>
+      settings_observation_{this};
 
   // HostZoomMap zoom changes, including from other windows on the same host.
   // Dropped with the guest's WebContents, which ReportZoom reads.

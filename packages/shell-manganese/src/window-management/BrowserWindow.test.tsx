@@ -10,6 +10,8 @@ import {
   WEBVIEW_HISTORY_CHANGE_EVENT,
   WEBVIEW_LOADING_CHANGE_EVENT,
   WEBVIEW_PAGE_CHANGE_EVENT,
+  WEBVIEW_PERMISSION_REQUEST_EVENT,
+  WEBVIEW_SITE_PERMISSIONS_CHANGE_EVENT,
   WEBVIEW_ZOOM_CHANGE_EVENT,
   WEBVIEW_ZOOM_OUT_REQUEST_EVENT,
 } from "@domicile-desktop/sdk/webview-element";
@@ -1247,6 +1249,75 @@ describe("BrowserWindow", () => {
   });
 
   // The engine sends what was under a right click; the window draws the menu.
+  describe("site permissions", () => {
+    const renderWindow = () =>
+      render(
+        <BrowserWindow
+          clickThrough={false}
+          covered={false}
+          depth={0}
+          domicile={silentDomicile}
+          dragging={false}
+          focused
+          frame={FRAME}
+          fullscreen={false}
+          motion="resting"
+          onMotionEnded={nothingEnded}
+          onReach={() => undefined}
+          rect={ON_SCREEN}
+          url="https://example.com"
+          window="1"
+        />,
+      );
+
+    it("answers the page's request from the panel it opens", async () => {
+      const answers: string[] = [];
+      const { container } = renderWindow();
+      fireEvent(
+        view(container),
+        Object.assign(
+          new Event(WEBVIEW_PERMISSION_REQUEST_EVENT, { cancelable: true }),
+          {
+            allow: () => {
+              answers.push("allow");
+            },
+            deny: () => undefined,
+            dismiss: () => undefined,
+            origin: "https://example.com",
+            permissions: ["camera"],
+          },
+        ),
+      );
+
+      await userEvent.click(
+        await screen.findByRole("button", { name: "Allow" }),
+      );
+
+      expect(answers).toStrictEqual(["allow"]);
+    });
+
+    it("stores a setting on the page's site", async () => {
+      const stored: string[] = [];
+      const { container } = renderWindow();
+      const element = view(container);
+      Object.assign(element, {
+        setSitePermission: (permission: string, setting: string) => {
+          stored.push(`${permission} ${setting}`);
+        },
+        sitePermissions: () => ({ camera: "ask" }),
+      });
+      fireEvent(element, new Event(WEBVIEW_SITE_PERMISSIONS_CHANGE_EVENT));
+
+      await userEvent.click(control("Site permissions"));
+      await userEvent.click(
+        await screen.findByRole("combobox", { name: "Camera" }),
+      );
+      await userEvent.click(screen.getByRole("option", { name: "Block" }));
+
+      expect(stored).toStrictEqual(["camera block"]);
+    });
+  });
+
   describe("a context menu its page asks for", () => {
     const renderWindow = (
       opens: (url: string) => void = () => undefined,

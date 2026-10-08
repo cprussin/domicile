@@ -62,4 +62,5 @@ gets its Meta chords.
   engine sends the inhibit request, and sway honors it. See
   [ENGINE-FORK-MEASUREMENTS.md](ENGINE-FORK-MEASUREMENTS.md#host-shortcut-inhibitor).
 - `guard-webview-context-menu.sh`: the context menu and DevTools.
+- `guard-webview-permissions.sh`: permission requests and site settings.
 - No guard reads the browser's offers.

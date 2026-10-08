@@ -1,0 +1,82 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Thu, 8 Oct 2026 00:00:00 +0000
+Subject: [PATCH] domicile: a webview's page asks the shell for permissions
+
+A permission prompt is a bubble anchored to a browser window's location
+bar. A <webview> guest has no browser window, so its prompts went
+unanswered. //chrome/browser/domicile gives each guest a
+PermissionRequestManager whose prompt asks the shell; the manager's one
+setter for its prompt factory is for tests, so this adds one that is not.
+
+The rest is three lists, so that `DomicilePermissionRequestEvent`, the
+event a `<webview>` dispatches for the shell to answer, is compiled and
+reaches the page: `core/html/build.gni` builds it, `idl_in_core.gni`
+generates its bindings, and `generated_in_core.gni` names the generated
+pair. Each sits beside the context menu event, as patch 0092 leaves the
+lists.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on `crux`.
+---
+ components/permissions/permission_request_manager.h       | 7 +++++++
+ third_party/blink/renderer/bindings/generated_in_core.gni | 2 ++
+ third_party/blink/renderer/bindings/idl_in_core.gni       | 1 +
+ third_party/blink/renderer/core/html/build.gni            | 2 ++
+ 4 files changed, 12 insertions(+)
+
+diff --git a/components/permissions/permission_request_manager.h b/components/permissions/permission_request_manager.h
+--- a/components/permissions/permission_request_manager.h
++++ b/components/permissions/permission_request_manager.h
+@@ -265,6 +265,13 @@ class PermissionRequestManager
+     view_factory_ = std::move(view_factory);
+   }
+ 
++  // DOMICILE: a <webview> guest has no browser window for Chrome's prompt to
++  // anchor to; its prompt asks the shell. See
++  // //chrome/browser/domicile/domicile_permissions.h.
++  void set_view_factory(PermissionPrompt::Factory view_factory) {
++    view_factory_ = std::move(view_factory);
++  }
++
+   void set_current_request_first_display_time_for_testing(base::Time time) {
+     current_request_first_display_time_ = time;
+   }
+diff --git a/third_party/blink/renderer/bindings/generated_in_core.gni b/third_party/blink/renderer/bindings/generated_in_core.gni
+--- a/third_party/blink/renderer/bindings/generated_in_core.gni
++++ b/third_party/blink/renderer/bindings/generated_in_core.gni
+@@ -1200,6 +1200,8 @@ generated_interface_sources_in_core = [
+   "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_domicile_file_chooser_event.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_domicile_context_menu_event.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_domicile_context_menu_event.h",
++  "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_domicile_permission_request_event.cc",
++  "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_domicile_permission_request_event.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_html_geolocation_element.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_html_geolocation_element.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_html_head_element.cc",
+diff --git a/third_party/blink/renderer/bindings/idl_in_core.gni b/third_party/blink/renderer/bindings/idl_in_core.gni
+--- a/third_party/blink/renderer/bindings/idl_in_core.gni
++++ b/third_party/blink/renderer/bindings/idl_in_core.gni
+@@ -462,6 +462,7 @@ static_idl_files_in_core = [
+   "//third_party/blink/renderer/core/html/domicile/html_web_view_element.idl",
+   "//third_party/blink/renderer/core/html/domicile/domicile_file_chooser_event.idl",
+   "//third_party/blink/renderer/core/html/domicile/domicile_context_menu_event.idl",
++  "//third_party/blink/renderer/core/html/domicile/domicile_permission_request_event.idl",
+   "//third_party/blink/renderer/core/html/html_geolocation_element.idl",
+   "//third_party/blink/renderer/core/html/html_head_element.idl",
+   "//third_party/blink/renderer/core/html/html_heading_element.idl",
+diff --git a/third_party/blink/renderer/core/html/build.gni b/third_party/blink/renderer/core/html/build.gni
+--- a/third_party/blink/renderer/core/html/build.gni
++++ b/third_party/blink/renderer/core/html/build.gni
+@@ -98,6 +98,8 @@ blink_core_sources_html = [
+   "domicile/domicile_file_chooser_event.h",
+   "domicile/domicile_context_menu_event.cc",
+   "domicile/domicile_context_menu_event.h",
++  "domicile/domicile_permission_request_event.cc",
++  "domicile/domicile_permission_request_event.h",
+   "domicile/html_app_element.cc",
+   "domicile/html_app_element.h",
+   "domicile/html_web_view_element.cc",
+-- 
+2.43.0
+

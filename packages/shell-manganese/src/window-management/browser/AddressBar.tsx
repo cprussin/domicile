@@ -1,6 +1,10 @@
 import type { Suggestion } from "@domicile-desktop/component-library/Autocomplete";
 import { Autocomplete } from "@domicile-desktop/component-library/Autocomplete";
 import { Button } from "@domicile-desktop/component-library/Button";
+import type {
+  WebViewPermission,
+  WebViewPermissionSetting,
+} from "@domicile-desktop/sdk/webview-element";
 import { ArrowClockwiseIcon } from "@phosphor-icons/react/dist/ssr/ArrowClockwise";
 import { CaretLeftIcon } from "@phosphor-icons/react/dist/ssr/CaretLeft";
 import { CaretRightIcon } from "@phosphor-icons/react/dist/ssr/CaretRight";
@@ -24,6 +28,9 @@ import {
 import type { ConnectionSafety } from "../../address/connection-safety";
 import { typedAddress } from "../../address/typed-address";
 import { ConnectionIndicator } from "./ConnectionIndicator";
+import { SitePermissions } from "./SitePermissions";
+import type { SitePermission } from "./site-permissions";
+import type { PermissionRequest } from "./usePermissionRequest";
 import { ZoomIndicator } from "./ZoomIndicator";
 import {
   isFullyZoomedIn,
@@ -52,12 +59,21 @@ type Props = {
   /** Loads `url`, already resolved from what was typed. */
   onNavigate: (url: string) => void;
   onReload: () => void;
+  /** Stores a site permission for the page's site. */
+  onSetSitePermission: (
+    permission: WebViewPermission,
+    setting: WebViewPermissionSetting,
+  ) => void;
   onStop: () => void;
   onZoomIn: () => void;
   onZoomOut: () => void;
   onZoomReset: () => void;
+  /** The permission request the page is waiting on, if any. */
+  permissionRequest: PermissionRequest | undefined;
   /** The browser's security state for {@link Props.address}. */
   security: ConnectionSafety;
+  /** The page's site's permission settings. */
+  sitePermissions: readonly SitePermission[];
   /** Visited addresses, oldest first. */
   visited: readonly string[];
   /** The page zoom factor; 1 is 100%. */
@@ -71,7 +87,7 @@ type Props = {
 
 /**
  * A browser window's toolbar: history controls, a private label for a private
- * window, address field and zoom.
+ * window, address field with the connection and site permissions, and zoom.
  *
  * Follows Chromium's layout, which users already know.
  */
@@ -85,11 +101,14 @@ export const AddressBar = ({
   onForward,
   onNavigate,
   onReload,
+  onSetSitePermission,
   onStop,
   onZoomIn,
   onZoomOut,
   onZoomReset,
+  permissionRequest,
   security,
+  sitePermissions,
   visited,
   zoom,
   zoomsAnnounced,
@@ -173,7 +192,14 @@ export const AddressBar = ({
         onSuggestionTaken={onNavigate}
         onValueChange={type}
         prefixButtons={
-          <ConnectionIndicator security={security} url={address} />
+          <>
+            <ConnectionIndicator security={security} url={address} />
+            <SitePermissions
+              onSet={onSetSitePermission}
+              permissions={sitePermissions}
+              request={permissionRequest}
+            />
+          </>
         }
         rounded
         size="sm"

@@ -350,9 +350,14 @@ source_set("web_view_guest") {
     ":file_choice",
     ":placeholder_stage",
     ":shortcut_registry",
+    ":site_permissions",
     ":web_view_url",
     "//base",
+    # Site permissions: the profile's settings, found through Chrome's
+    # PermissionsClient, which //components may reach.
+    "//components/content_settings/core/browser",
     "//components/domicile/mojom",
+    "//components/permissions",
     "//components/input",
     # THE LOCK A BROWSER WINDOW DRAWS, and the reason it is Chromium's own
     # answer rather than the fork's. `security_state` is what Chrome's omnibox
@@ -373,6 +378,24 @@ source_set("web_view_guest") {
     "//ui/base/clipboard",
     "//ui/events:dom_keycode_converter",
     "//ui/gfx/geometry",
+    "//url",
+  ]
+}
+
+# How a <webview>'s permissions map to Chrome's. Its own target beside
+# :web_view_guest for the reason :file_choice is one: it needs no browser,
+# which is where its tests are.
+source_set("site_permissions") {
+  sources = [
+    "browser/site_permissions.cc",
+    "browser/site_permissions.h",
+  ]
+
+  public_deps = [
+    "//components/content_settings/core/common",
+    "//components/domicile/mojom",
+    "//components/permissions",
+    "//third_party/blink/public/common",
     "//url",
   ]
 }
@@ -613,6 +636,7 @@ source_set("unit_tests") {
     "browser/shell_url_loader_factory_unittest.cc",
     "browser/shell_windows_unittest.cc",
     "browser/shortcut_registry_unittest.cc",
+    "browser/site_permissions_unittest.cc",
     "browser/system_call_unittest.cc",
     "browser/web_view_url_unittest.cc",
     "common/cursor_shape_unittest.cc",
@@ -659,6 +683,7 @@ source_set("unit_tests") {
     ":shell_source",
     ":shell_windows",
     ":shortcut_registry",
+    ":site_permissions",
     ":system_call",
     ":theme",
     ":web_view_url",

@@ -22,7 +22,7 @@ The engine serves this page over `domicile://` and hands `Shell` the desktop.
 | `window-management/tree/` | The sway layout tree: insert, remove, move, layout, resize, focus direction, frames, drag-and-drop. |
 | `window-management/floating/` | Floating windows: drag, resize, edge borders, shadow. |
 | `window-management/tiled/` | Dragging and edge-resizing tiled windows. |
-| `window-management/browser/` | Browser window chrome: address bar, connection indicator, find bar, zoom, file picker requests for component-library's `FilePicker`. |
+| `window-management/browser/` | Browser window chrome: address bar, connection indicator, site permissions, find bar, zoom, file picker requests for component-library's `FilePicker`. |
 | `screens/` | The screen source, the per-screen bar (`Monitor.tsx`), and screen adjacency. |
 | `keyboard/` | Commands, default bindings, `bindKeys` wiring, held modifiers. |
 | `address/` | Parsing typed text as a URL or search, shared by the launcher and address bar. |

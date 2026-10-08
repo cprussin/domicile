@@ -16,11 +16,14 @@ const BAR = {
   onForward: () => undefined,
   onNavigate: () => undefined,
   onReload: () => undefined,
+  onSetSitePermission: () => undefined,
   onStop: () => undefined,
   onZoomIn: () => undefined,
   onZoomOut: () => undefined,
   onZoomReset: () => undefined,
+  permissionRequest: undefined,
   security: ConnectionSafety.Secure,
+  sitePermissions: [],
   visited: ["https://example.com"],
   zoom: 1,
   zoomsAnnounced: 0,
@@ -51,6 +54,17 @@ describe("AddressBar", () => {
 
       expect(screen.queryByText("Private")).toBeNull();
     });
+  });
+
+  it("puts the site permissions just after the connection", () => {
+    render(<AddressBar {...BAR} />);
+
+    const buttons = screen.getAllByRole("button");
+    const connection = buttons.indexOf(
+      screen.getByRole("button", { name: /^Connection/ }),
+    );
+
+    expect(buttons[connection + 1]).toBe(control("Site permissions"));
   });
 
   // One button for Reload and Stop, since only one applies at a time.

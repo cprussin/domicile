@@ -13,6 +13,7 @@
 #include "chrome/browser/domicile/domicile_browser_windows.h"
 #include "chrome/browser/domicile/domicile_desk_functions.h"
 #include "chrome/browser/domicile/domicile_devtools.h"
+#include "chrome/browser/domicile/domicile_permissions.h"
 #include "chrome/browser/domicile/domicile_window_controller.h"
 #include "chrome/browser/extensions/domicile_desk_hooks.h"
 #include "chrome/browser/profiles/profile.h"
@@ -95,6 +96,8 @@ void StartDesk(Profile* profile) {
     StartBrowserWindows();
     // DevTools for the context menu's "inspect" and <webview>.inspect().
     WebViewGuest::SetInspect(base::BindRepeating(&OpenDevTools));
+    // Camera and microphone requests, asked through the shell's prompt.
+    UseChromeForGuestMedia();
     return true;
   }();
   CHECK(installed);

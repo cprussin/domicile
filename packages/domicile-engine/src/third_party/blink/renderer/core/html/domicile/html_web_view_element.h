@@ -6,6 +6,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <utility>
 
 #include "components/domicile/mojom/web_view_guest.mojom-blink.h"
 #include "third_party/blink/renderer/core/core_export.h"
@@ -19,6 +20,7 @@ namespace blink {
 
 class DomicileContextMenuEvent;
 class DomicileFileChooserEvent;
+class DomicilePermissionRequestEvent;
 class ExceptionState;
 
 // <webview>: a browser page embedded in a shell, driven by `src`, goBack(),
@@ -113,6 +115,18 @@ class CORE_EXPORT HTMLWebViewElement final
   // Releases a dispatched file chooser event once answered. See
   // `waiting_choosers_`.
   void FileChooserAnswered(DomicileFileChooserEvent&);
+
+  // The site permissions from SitePermissionsChanged, as name and setting.
+  const Vector<std::pair<String, String>>& sitePermissions() const {
+    return site_permissions_;
+  }
+  void setSitePermission(const String& permission,
+                         const String& setting,
+                         ExceptionState&);
+
+  // Releases the permission request once answered. See
+  // `permission_request_`.
+  void PermissionRequestAnswered(DomicilePermissionRequestEvent&);
 
   void Trace(Visitor*) const override;
 
@@ -224,6 +238,22 @@ class CORE_EXPORT HTMLWebViewElement final
       const String& home,
       FileChooserRequestedCallback callback) override;
 
+  // Dispatches `domicile-permission-request`. If no listener calls
+  // `preventDefault()`, the request is ignored after dispatch. See
+  // domicile_permission_request_event.h.
+  void PermissionRequested(
+      const KURL& origin,
+      const Vector<domicile::mojom::blink::WebViewPermission>& permissions,
+      PermissionRequestedCallback callback) override;
+
+  // Ignores the held request and dispatches
+  // `domicile-permission-request-withdrawn`, so the shell stops showing it.
+  void PermissionRequestWithdrawn() override;
+
+  void SitePermissionsChanged(
+      Vector<domicile::mojom::blink::WebViewSitePermissionPtr> permissions)
+      override;
+
   // Dispatches `domicile-context-menu`. See domicile_context_menu_event.h.
   void ContextMenuRequested(
       domicile::mojom::blink::WebViewContextMenuPtr menu) override;
@@ -278,6 +308,13 @@ class CORE_EXPORT HTMLWebViewElement final
   // Held so garbage collection cannot destroy the browser's reply callback
   // unrun, which would leave the page waiting forever.
   HeapHashSet<Member<DomicileFileChooserEvent>> waiting_choosers_;
+
+  // The permission request the shell has not answered, if any. The browser
+  // sends one at a time. Held for `waiting_choosers_`' reason.
+  Member<DomicilePermissionRequestEvent> permission_request_;
+
+  // See sitePermissions().
+  Vector<std::pair<String, String>> site_permissions_;
 };
 
 }  // namespace blink

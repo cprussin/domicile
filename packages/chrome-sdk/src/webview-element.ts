@@ -245,6 +245,61 @@ export const WEBVIEW_MEDIA_TYPES = [
 export type WebViewMediaType = (typeof WEBVIEW_MEDIA_TYPES)[number];
 
 /**
+ * Fired when the page asks for a permission its site has no stored choice
+ * for, such as the camera in a video call. Bubbles.
+ *
+ * The browser draws no prompt. Call `preventDefault()` to handle it, then
+ * answer with {@link DomicilePermissionRequestEvent.allow},
+ * {@link DomicilePermissionRequestEvent.deny} or
+ * {@link DomicilePermissionRequestEvent.dismiss}. If no listener calls
+ * `preventDefault()`, the request is ignored: the page gets nothing and
+ * nothing is stored. One request is outstanding at a time.
+ */
+export const WEBVIEW_PERMISSION_REQUEST_EVENT = "domicile-permission-request";
+
+/**
+ * Fired when the browser drops the outstanding
+ * {@link WEBVIEW_PERMISSION_REQUEST_EVENT} unanswered, for example because the
+ * page navigated. Answering it afterward throws. Carries no payload. Bubbles.
+ */
+export const WEBVIEW_PERMISSION_REQUEST_WITHDRAWN_EVENT =
+  "domicile-permission-request-withdrawn";
+
+/**
+ * Fired when {@link HTMLWebViewElement.sitePermissions} may have changed: the
+ * page moved to another site, or a setting changed. Carries no payload.
+ * Bubbles.
+ */
+export const WEBVIEW_SITE_PERMISSIONS_CHANGE_EVENT =
+  "domicile-site-permissions-change";
+
+/**
+ * The permissions a site can ask for and a shell can set.
+ *
+ * - `camera`, `microphone`: `getUserMedia`.
+ * - `location`: the Geolocation API.
+ * - `notifications`: allowed by default (see `NOTIFICATIONS.md`).
+ * - `clipboard`: reading the clipboard.
+ * - `midi`: Web MIDI with system exclusive messages.
+ */
+export const WEBVIEW_PERMISSIONS = [
+  "camera",
+  "microphone",
+  "location",
+  "notifications",
+  "clipboard",
+  "midi",
+] as const;
+
+export type WebViewPermission = (typeof WEBVIEW_PERMISSIONS)[number];
+
+/** A site's stored choice for a permission. `ask` prompts the shell. */
+export const WEBVIEW_PERMISSION_SETTINGS = ["ask", "allow", "block"] as const;
+
+export type WebViewPermissionSetting =
+  (typeof WEBVIEW_PERMISSION_SETTINGS)[number];
+
+/**
  * Global declarations for the engine's `<webview>`.
  *
  * Merged into the global `HTMLWebViewElement` because `@types/react` already
@@ -324,6 +379,24 @@ declare global {
      * {@link WEBVIEW_FOCUS_REQUEST_EVENT} instead.
      */
     inspect(): void;
+    /**
+     * The page's site's setting for each of {@link WEBVIEW_PERMISSIONS}, or
+     * `{}` for a page that is not `http` or `https`. Changes fire
+     * {@link WEBVIEW_SITE_PERMISSIONS_CHANGE_EVENT}.
+     *
+     * Keys and values are external data; parse them at the boundary.
+     */
+    sitePermissions(): Record<string, string>;
+    /**
+     * Store `setting` for `permission` on the page's site. The result fires
+     * {@link WEBVIEW_SITE_PERMISSIONS_CHANGE_EVENT}. Throws a `TypeError` for
+     * an unknown name, and an `InvalidStateError` when
+     * {@link HTMLWebViewElement.sitePermissions} is empty.
+     */
+    setSitePermission(
+      permission: WebViewPermission,
+      setting: WebViewPermissionSetting,
+    ): void;
     goBack(): void;
     goForward(): void;
     stop(): void;
@@ -408,6 +481,30 @@ declare global {
   }
 
   /**
+   * The {@link WEBVIEW_PERMISSION_REQUEST_EVENT} event. The engine defines it
+   * in `domicile_permission_request_event.idl`.
+   */
+  interface DomicilePermissionRequestEvent extends Event {
+    /** The asking site's origin, such as `https://meet.google.com`. */
+    readonly origin: string;
+    /**
+     * What it asks for, from {@link WEBVIEW_PERMISSIONS}. Camera and
+     * microphone may come together. `string`s because they are external data;
+     * parse them at the boundary.
+     */
+    readonly permissions: readonly string[];
+    /**
+     * Allow or block the site, storing the choice, or close without choosing.
+     * Answering twice, or after
+     * {@link WEBVIEW_PERMISSION_REQUEST_WITHDRAWN_EVENT}, throws an
+     * `InvalidStateError`.
+     */
+    allow(): void;
+    deny(): void;
+    dismiss(): void;
+  }
+
+  /**
    * Types `addEventListener` for the events that carry data. Merged into
    * `HTMLElementEventMap` because `HTMLWebViewElement` has no event map of its
    * own.
@@ -417,5 +514,6 @@ declare global {
     "domicile-guest-keydown": KeyboardEvent;
     "domicile-file-chooser": DomicileFileChooserEvent;
     "domicile-context-menu": DomicileContextMenuEvent;
+    "domicile-permission-request": DomicilePermissionRequestEvent;
   }
 }
