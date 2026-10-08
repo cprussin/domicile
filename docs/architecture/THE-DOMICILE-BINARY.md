@@ -95,18 +95,20 @@ whole file (see Config file) and the desk does not start. So:
 
 - The module runs `domicile check-config` on the file it writes. A refused
   config fails the build.
-- `removedSettings` lists top-level settings the schema dropped. Setting one
-  fails an assertion that says where it went.
+- `removedSettings` lists settings the schema dropped, by dotted path
+  (`output.profiles[].displays[].mode`). Setting one fails an assertion that
+  says where it went; `nix/removed-settings.nix` builds them.
 
 Checks:
 
 - `scripts/test-the-home-manager-module-agrees.sh` compares option names to
   the Rust structs, without Nix.
 - `scripts/test-a-dropped-config-field-is-removed-here.sh` fails when a
-  top-level `Config` field is gone since the base commit and `removedSettings`
-  does not list it.
-- `nix flake check` evaluates the module, reads back the file it writes, and
-  checks that a refused config fails to build.
+  config field at any depth is gone since the base commit and
+  `removedSettings` lists neither it nor an ancestor.
+- `nix flake check` evaluates the module, reads back the file it writes,
+  checks that a refused config fails to build, and tests
+  `nix/removed-settings.nix` at the top, in a section and in a list.
 
 ## Key decisions
 

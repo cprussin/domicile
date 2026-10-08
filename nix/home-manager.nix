@@ -56,7 +56,7 @@
 
   # A display for a nested run, which has no hardware to report its size.
   display = lib.types.submodule {
-    options = {
+    options = lib.recursiveUpdate (removed.optionsUnder "output.displays[]") {
       name = lib.mkOption {
         description = "The display's name, shared by the chrome and the compositor. Matched exactly.";
         type = lib.types.str;
@@ -76,7 +76,7 @@
   # One monitor's placement in a profile. The monitor reports its own mode, so
   # there is no size.
   placement = lib.types.submodule {
-    options = {
+    options = lib.recursiveUpdate (removed.optionsUnder "output.profiles[].displays[]") {
       display = lib.mkOption {
         description = ''
           The monitor to place. Matches the output name (`drm-<id>`), the EDID's
@@ -124,7 +124,7 @@
   # A monitor arrangement, chosen by which monitors are connected. The first
   # profile whose exact set is connected wins, rechecked on every hotplug.
   profile = lib.types.submodule {
-    options = {
+    options = lib.recursiveUpdate (removed.optionsUnder "output.profiles[]") {
       name = lib.mkOption {
         description = "The profile's name, used in logs. Must be unique.";
         type = lib.types.str;
@@ -171,16 +171,19 @@
     exec ${cfg.package}/bin/domicile "$@" ${lib.escapeShellArg (toString cfg.shell)}
   '';
 
-  # Settings the compositor no longer reads, and where each went. Each is a
-  # hidden option, and setting one fails an assertion with its note.
-  # `scripts/test-a-dropped-config-field-is-removed-here.sh` fails when a field
-  # leaves `domicile-config` without an entry here.
+  # Settings the compositor no longer reads, by dotted path, and where each
+  # went. `nix/removed-settings.nix` makes them hidden options that fail an
+  # assertion when set. `scripts/test-a-dropped-config-field-is-removed-here.sh`
+  # fails when a field leaves `domicile-config` and neither it nor an ancestor
+  # is listed here.
   removedSettings = {
     applications = ''
       `applications.omit` and `applications.bookmarks` are manganese's
       `applications` option. See docs/LAUNCHER.md.
     '';
   };
+
+  removed = import ./removed-settings.nix {inherit lib;} removedSettings;
 
   # The config file, checked by the `domicile` that reads it. A setting the
   # compositor refuses fails the build instead of the desk.
@@ -245,15 +248,7 @@ in {
       default = {};
       type = lib.types.submodule {
         freeformType = json.type;
-        options =
-          lib.mapAttrs (_: _:
-            lib.mkOption {
-              visible = false;
-              type = lib.types.nullOr json.type;
-              default = null;
-            })
-          removedSettings
-          // {
+        options = lib.recursiveUpdate (removed.optionsUnder "") {
           extensions = {
             web_store = lib.mkOption {
               description = ''
@@ -544,12 +539,7 @@ in {
       configPackages = [cfg.finalPackage];
     };
 
-    assertions =
-      lib.mapAttrsToList (name: note: {
-        assertion = cfg.settings.${name} == null;
-        message = "programs.domicile.settings.${name} is removed. ${note}";
-      })
-      removedSettings;
+    assertions = removed.assertions cfg.settings;
 
     # `domicile` reads this path when no `--config` is given. Nulls are
     # dropped; see `withoutNulls`.

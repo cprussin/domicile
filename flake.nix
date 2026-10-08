@@ -884,6 +884,57 @@
             touch "$out"
           '';
 
+        # `nix/removed-settings.nix` on its own, with paths the real module does
+        # not list: one at the top, one in a section, one in a list's elements.
+        removed-settings =
+          let
+            lib = pkgs.lib;
+            removed = import ./nix/removed-settings.nix { inherit lib; } {
+              gone = "top note";
+              "section.gone" = "section note";
+              "items[].gone" = "item note";
+            };
+            evaluate = settings: (lib.evalModules {
+              modules = [
+                ({ config, ... }: {
+                  options.assertions = lib.mkOption { type = lib.types.listOf lib.types.unspecified; };
+                  options.settings = lib.mkOption {
+                    type = lib.types.submodule {
+                      freeformType = (pkgs.formats.json { }).type;
+                      options = lib.recursiveUpdate {
+                        section.kept = lib.mkOption { default = 1; };
+                        items = lib.mkOption {
+                          type = lib.types.listOf (lib.types.submodule {
+                            options = lib.recursiveUpdate
+                              { kept = lib.mkOption { default = 1; }; }
+                              (removed.optionsUnder "items[]");
+                          });
+                          default = [ ];
+                        };
+                      } (removed.optionsUnder "");
+                    };
+                    default = { };
+                  };
+                  config.assertions = removed.assertions config.settings;
+                })
+                { inherit settings; }
+              ];
+            }).config;
+            # The notes of the assertions that fail.
+            failing = settings: map (each: each.message)
+              (lib.filter (each: !each.assertion) (evaluate settings).assertions);
+            expect = what: holds: lib.optionalString (!holds) "echo ${lib.escapeShellArg "removed-settings: ${what}"} >&2; exit 1\n";
+            unset = evaluate { items = [ { } ]; };
+          in
+          pkgs.runCommandLocal "removed-settings" { } ''
+            ${expect "nothing set fails nothing" (failing { items = [ { } ]; } == [ ])}
+            ${expect "an unset removed setting is null" (unset.settings.gone == null && unset.settings.section.gone == null && (lib.head unset.settings.items).gone == null)}
+            ${expect "a removed setting at the top fails with its note" (failing { gone = 1; } == [ "programs.domicile.settings.gone is removed. top note" ])}
+            ${expect "a removed setting in a section fails with its note" (failing { section.gone = 1; } == [ "programs.domicile.settings.section.gone is removed. section note" ])}
+            ${expect "a removed setting in a list's element fails with its note" (failing { items = [ { } { gone = 1; } ]; } == [ "programs.domicile.settings.items[].gone is removed. item note" ])}
+            touch "$out"
+          '';
+
         # The NixOS module, evaluated with real NixOS instead of a stub, since
         # NixOS's own checks (such as `sessionPackages` requiring
         # `providedSessions`) are what is under test. Evaluation builds no
