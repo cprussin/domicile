@@ -10,6 +10,8 @@
 //   GUARD listening                the channel is bound
 //   GUARD windows <json>           `windows`, every field of every window
 //   GUARD focused <id|null>        `focusedWindow`
+//   GUARD appearance <a> <c> <m>   `accentColor`, `highContrast`,
+//                                  `reducedMotion`
 //   GUARD changed n=…              how many `windowschanged` it heard after
 //                                  subscribing late: none are owed, and the
 //                                  attribute is what carries the state
@@ -41,6 +43,7 @@ const EVENT_NAMES = [
   "themechanged",
   "windowsthemechanged",
   "modifierschanged",
+  "appearancechanged",
   "system",
   "portalrequests",
 ];
@@ -115,6 +118,9 @@ export const Shell = (_root, desktop) => {
     }));
     console.log(`GUARD windows ${JSON.stringify(windows)}`);
     console.log(`GUARD focused ${host.focusedWindow}`);
+    console.log(
+      `GUARD appearance ${host.accentColor} ${host.highContrast} ${host.reducedMotion}`,
+    );
     setTimeout(() => {
       console.log(`GUARD changed n=${changed}`);
     }, 500);

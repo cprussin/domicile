@@ -234,6 +234,9 @@ class MODULES_EXPORT DomicileHost final
   std::optional<bool> ctrlKey() const;
   std::optional<bool> shiftKey() const;
   std::optional<bool> metaKey() const;
+  const String& accentColor() const { return accent_color_; }
+  std::optional<bool> highContrast() const;
+  std::optional<bool> reducedMotion() const;
 
   // EventTarget:
   const AtomicString& InterfaceName() const override;
@@ -284,6 +287,9 @@ class MODULES_EXPORT DomicileHost final
   void Idle(bool idle) override;
   void Locked(bool locked) override;
   void WindowsThemeChanged(domicile::mojom::blink::Theme theme) override;
+  void AppearanceChanged(const String& accent_color,
+                         bool high_contrast,
+                         bool reduced_motion) override;
   void ShellConfig(const String& config) override;
   void FocusChanged(const String& app_id) override;
   void FocusRequested(const String& app_id) override;
@@ -445,6 +451,9 @@ class MODULES_EXPORT DomicileHost final
   std::optional<bool> ctrl_key_;
   std::optional<bool> shift_key_;
   std::optional<bool> meta_key_;
+  String accent_color_;
+  std::optional<bool> high_contrast_;
+  std::optional<bool> reduced_motion_;
   // Replaced wholesale, like `displays_`, and for its reason.
   Member<FrozenArray<DomicileBrowserWindow>> browser_windows_;
   HeapMojoRemote<domicile::mojom::blink::ControlChannel> channel_;

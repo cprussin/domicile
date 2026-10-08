@@ -29,7 +29,7 @@ The engine has two channels to the rest of Domicile:
 - **Inbound:** `welcome`, `app_appeared`, `app_titled`, `app_resized`,
   `app_min_size`, `app_max_size`, `popup_placed`, `app_closed`, `app_cursor`,
   `shortcut`, `modifiers`, `found_files`, `file_preview`, `clipboard`,
-  `theme`, `focus_changed`, `focus_requested`, `displays`, `keymap`,
+  `theme`, `appearance`, `focus_changed`, `focus_requested`, `displays`, `keymap`,
   `extensions`, `tray`, `notifications`, `shell_config`, `idle`, `locked`,
   `system`, `portal_requests`.
 - **Handled in the browser, never sent to the compositor:** `grab_shortcut`,

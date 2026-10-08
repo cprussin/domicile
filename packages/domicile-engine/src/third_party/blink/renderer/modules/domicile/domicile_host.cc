@@ -272,6 +272,14 @@ std::optional<bool> DomicileHost::metaKey() const {
   return meta_key_;
 }
 
+std::optional<bool> DomicileHost::highContrast() const {
+  return high_contrast_;
+}
+
+std::optional<bool> DomicileHost::reducedMotion() const {
+  return reduced_motion_;
+}
+
 DomicileWindowState& DomicileHost::WindowNamed(const String& app_id) {
   for (DomicileWindowState& state : window_states_) {
     if (state.app_id == app_id) {
@@ -1370,6 +1378,16 @@ void DomicileHost::ThemeChanged(domicile::mojom::blink::Theme theme) {
 void DomicileHost::WindowsThemeChanged(domicile::mojom::blink::Theme theme) {
   windows_theme_ = PageTheme(theme);
   DispatchEvent(*Event::Create(domicile_event_names::Windowsthemechanged()));
+}
+
+// A state like `theme`, so all three are set before the one event.
+void DomicileHost::AppearanceChanged(const String& accent_color,
+                                     bool high_contrast,
+                                     bool reduced_motion) {
+  accent_color_ = accent_color;
+  high_contrast_ = high_contrast;
+  reduced_motion_ = reduced_motion;
+  DispatchEvent(*Event::Create(domicile_event_names::Appearancechanged()));
 }
 
 // Pushed like Clipboard, and a state rather than an edge -- the compositor

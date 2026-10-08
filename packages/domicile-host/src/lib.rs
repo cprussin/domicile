@@ -10,8 +10,8 @@ use std::collections::HashMap;
 use std::collections::BTreeMap;
 
 use domicile_protocol::{
-    BoundShortcut, Capturing, ChromeMessage, DisplayInfo, HostMessage, Notification, PortalRequest,
-    PortalWallpaper, Theme, TrayItem,
+    Appearance, BoundShortcut, Capturing, ChromeMessage, DisplayInfo, HostMessage, Notification,
+    PortalRequest, PortalWallpaper, Theme, TrayItem,
 };
 
 pub mod autostart;
@@ -128,6 +128,8 @@ pub struct Host {
     /// The client windows' theme. Separate from `theme` because windows
     /// switch after the chromes (see [`theme_turnover`]).
     windows_theme: Theme,
+    /// The config's accent color, contrast and reduced motion.
+    appearance: Appearance,
     /// The system tray's icons.
     ///
     /// `None` until set. The `domicile` daemon has no session bus, so it
@@ -247,6 +249,20 @@ impl Host {
         HostMessage::WindowsTheme {
             theme: self.windows_theme,
         }
+    }
+
+    /// Set the config's appearance and return the message to broadcast, or
+    /// `None` if it did not change.
+    pub fn set_appearance(&mut self, appearance: Appearance) -> Option<HostMessage> {
+        (self.appearance != appearance).then(|| {
+            self.appearance = appearance;
+            self.describe_appearance()
+        })
+    }
+
+    /// The appearance message, sent on handshake and broadcast on change.
+    pub fn describe_appearance(&self) -> HostMessage {
+        HostMessage::Appearance(self.appearance.clone())
     }
 
     /// Set the tray's icons and return the message to broadcast, or `None` if

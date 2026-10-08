@@ -411,6 +411,12 @@ pub struct ScreenCasting {
     pub grants: Option<PathBuf>,
 }
 
+/// The config's look besides `mode`, as the shell is told it. The shell
+/// follows it as the settings portal's clients do.
+pub fn shell_appearance(theme: &ThemeConfig) -> domicile_protocol::Appearance {
+    Appearance::from(theme).into()
+}
+
 /// Starts the portal thread with `theme` as the current theme and the
 /// config's `lockdown`, and sets the activation environment. See
 /// [`activation_environment`] for `ours` and `nested_in`. Portal notifications
