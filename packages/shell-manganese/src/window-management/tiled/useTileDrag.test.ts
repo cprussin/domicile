@@ -2,11 +2,18 @@ import { describe, expect, it, mock } from "bun:test";
 import { act, fireEvent, renderHook } from "@testing-library/react";
 
 import { Direction } from "../direction";
-import type { Aim } from "./aim";
+import { Aim } from "./aim";
 import { useTileDrag } from "./useTileDrag";
 
 const DRAGGED = { frame: { height: 400, width: 500, x: 0, y: 0 }, id: "a" };
 const OTHER = { frame: { height: 400, width: 500, x: 500, y: 0 }, id: "b" };
+/** A drop on the left half of {@link OTHER}. */
+const LEFT_OF_OTHER = Aim.Window(OTHER.id, Direction.Left, {
+  height: 400,
+  width: 250,
+  x: 500,
+  y: 0,
+});
 
 /** A press with only the pointer-event fields the hook reads. */
 const press = (x: number, y: number, button = 0) =>
@@ -36,9 +43,7 @@ const dragging = (resizes = false) => {
   const calls = {
     onAim: mock((_aim: Aim | undefined) => undefined),
     onDrop: mock(() => undefined),
-    onDropOn: mock(
-      (_target: string, _edge: Direction | undefined) => undefined,
-    ),
+    onDropOn: mock((_aim: Aim) => undefined),
     onGrab: mock((_resizing: boolean) => undefined),
     onStretch: mock((_edge: Direction, _by: number) => undefined),
   };
@@ -47,7 +52,7 @@ const dragging = (resizes = false) => {
       frame: DRAGGED.frame,
       id: DRAGGED.id,
       resizes,
-      targets: [DRAGGED, OTHER],
+      targets: { screens: [], windows: [DRAGGED, OTHER] },
       ...calls,
     }),
   );
@@ -73,15 +78,11 @@ describe("useTileDrag", () => {
       act(() => {
         moveTo(520, 200);
       });
-      expect(calls.onAim).toHaveBeenLastCalledWith({
-        edge: Direction.Left,
-        id: OTHER.id,
-        rect: { height: 400, width: 250, x: 500, y: 0 },
-      });
+      expect(calls.onAim).toHaveBeenLastCalledWith(LEFT_OF_OTHER);
       act(() => {
         release();
       });
-      expect(calls.onDropOn).toHaveBeenCalledWith(OTHER.id, Direction.Left);
+      expect(calls.onDropOn).toHaveBeenCalledWith(LEFT_OF_OTHER);
       expect(calls.onDrop).toHaveBeenCalledTimes(1);
       expect(calls.onAim).toHaveBeenLastCalledWith(undefined);
     });
@@ -97,7 +98,7 @@ describe("useTileDrag", () => {
         moveTo(210, 210);
       });
       expect(calls.onAim.mock.calls).toEqual([
-        [{ edge: undefined, id: OTHER.id, rect: OTHER.frame }],
+        [Aim.Window(OTHER.id, undefined, OTHER.frame)],
         [undefined],
       ]);
     });
@@ -136,7 +137,7 @@ describe("useTileDrag", () => {
         moveTo(520, 200);
         release();
       });
-      expect(calls.onDropOn).toHaveBeenCalledWith(OTHER.id, Direction.Left);
+      expect(calls.onDropOn).toHaveBeenCalledWith(LEFT_OF_OTHER);
     });
 
     it("drops only once when a release and a cancel both arrive", () => {

@@ -44,6 +44,41 @@ export const droppedOn = (
   }
 };
 
+/**
+ * The tiling with window `id`, dragged in from another workspace, dropped on
+ * `target`'s `edge`, or in its place when `edge` is `undefined`. Focuses `id`.
+ *
+ * Throws if `target` is not tiled here.
+ */
+export const arrivedOn = (
+  tiling: Tiling,
+  id: string,
+  target: string,
+  edge: Direction | undefined,
+): Tiling => {
+  const root = tiledRoot(tiling);
+  const at = pathOf(root, target);
+  const moved =
+    edge === undefined
+      ? replacedAt(root, at, () => Node.Window(id))
+      : placedBeside(root, at, Node.Window(id), edge);
+  return withFocusOn({ ...tiling, root: moved }, id);
+};
+
+/**
+ * The tiling with window `id` replaced by `by`, the window it was dropped on
+ * in the middle of on another workspace.
+ *
+ * Throws if `id` is not tiled here.
+ */
+export const tradedFor = (tiling: Tiling, id: string, by: string): Tiling => {
+  const root = tiledRoot(tiling);
+  return {
+    ...tiling,
+    root: replacedAt(root, pathOf(root, id), () => Node.Window(by)),
+  };
+};
+
 /** Swaps the two windows, keeping both boxes' sizes. */
 const traded = (root: LayoutNode, id: string, target: string): LayoutNode => {
   const from = pathOf(root, id);

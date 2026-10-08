@@ -9,7 +9,7 @@ Manganese binds sway's keys on Meta (Super, `Mod4`) by default:
 | Keys | Action |
 |---|---|
 | Meta+H/J/K/L, Meta+arrows | Move focus. Wraps at the ends of a container. |
-| Meta+Shift+H/J/K/L, Meta+Shift+arrows | Move the window in that direction (sway's `move`). |
+| Meta+Shift+H/J/K/L, Meta+Shift+arrows | Move the window in that direction (sway's `move`), onto the next screen past the edge. |
 | Meta+1 … Meta+0 | Go to workspace 1–10. |
 | Meta+Shift+1 … Meta+Shift+0 | Send the window to workspace 1–10 and stay. |
 | Meta+B / Meta+V | `splith` / `splitv`. |

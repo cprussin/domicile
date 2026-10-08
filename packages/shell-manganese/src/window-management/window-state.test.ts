@@ -647,6 +647,67 @@ describe("focus across screens", () => {
   });
 });
 
+describe("moves across screens", () => {
+  /** Kitty on the left screen; a row of the editor and a terminal on the right. */
+  const twoScreens = () =>
+    reduce(
+      desktop("kitty"),
+      WindowAction.ScreensDescribed(sideBySide("left", "right")),
+      WindowAction.WorkspaceSelected("2"),
+      WindowAction.AppAppeared("editor", "editor"),
+      WindowAction.AppAppeared("term", "term"),
+      WindowAction.LayoutSet(Layout.SplitH),
+    );
+
+  it("goes on to the screen that way from the edge of the tiling", () => {
+    // sway's order: through the tiling, then to the screen that way.
+    const state = reduce(
+      twoScreens(),
+      WindowAction.WindowStepped(Direction.Left),
+      WindowAction.WindowStepped(Direction.Left),
+    );
+
+    expect(state.focused).toBe("left");
+    expect(activeIdOf(state)).toBe(APP("term"));
+    expect(windowsOf(workspaceNamed(state, "1").tiling)).toEqual([
+      APP("kitty"),
+      APP("term"),
+    ]);
+    expect(windowsOf(workspaceNamed(state, "2").tiling)).toEqual([
+      APP("editor"),
+    ]);
+  });
+
+  it("comes in on the near edge of a row", () => {
+    const state = reduce(
+      twoScreens(),
+      WindowAction.ScreenHovered("left"),
+      WindowAction.WindowStepped(Direction.Right),
+    );
+
+    expect(state.focused).toBe("right");
+    expect(windowsOf(workspaceNamed(state, "2").tiling)).toEqual([
+      APP("kitty"),
+      APP("editor"),
+      APP("term"),
+    ]);
+  });
+
+  it("goes on to a screen with nothing on it", () => {
+    const state = reduce(
+      desktop("kitty", "editor"),
+      WindowAction.LayoutSet(Layout.SplitH),
+      WindowAction.ScreensDescribed(sideBySide("left", "right")),
+      WindowAction.WindowStepped(Direction.Right),
+    );
+
+    expect(state.focused).toBe("right");
+    expect(windowsOf(workspaceOn(state, "right").tiling)).toEqual([
+      APP("editor"),
+    ]);
+  });
+});
+
 describe("the keyed commands", () => {
   it("passes the tiling commands to the workspace on screen", () => {
     const state = reduce(
@@ -992,6 +1053,66 @@ describe("the pointer", () => {
       x: 250,
       y: 150,
     });
+  });
+});
+
+describe("a tiled window dragged across screens", () => {
+  /** Kitty and the editor on the left screen; a terminal on the right. */
+  const twoScreens = () =>
+    reduce(
+      desktop("kitty", "editor"),
+      WindowAction.ScreensDescribed(sideBySide("left", "right")),
+      WindowAction.WorkspaceSelected("2"),
+      WindowAction.AppAppeared("term", "term"),
+      WindowAction.ScreenHovered("left"),
+    );
+
+  it("goes beside the window it is dropped on, and takes the keyboard there", () => {
+    const state = reduce(
+      twoScreens(),
+      WindowAction.WindowDroppedOn(APP("kitty"), APP("term"), Direction.Left),
+    );
+
+    expect(state.focused).toBe("right");
+    expect(activeIdOf(state)).toBe(APP("kitty"));
+    expect(windowsOf(workspaceOn(state, "left").tiling)).toEqual([
+      APP("editor"),
+    ]);
+    expect(windowsOf(workspaceOn(state, "right").tiling)).toEqual([
+      APP("kitty"),
+      APP("term"),
+    ]);
+  });
+
+  it("trades places with the window it is dropped in the middle of", () => {
+    const state = reduce(
+      twoScreens(),
+      WindowAction.WindowDroppedOn(APP("kitty"), APP("term"), undefined),
+    );
+
+    expect(windowsOf(workspaceOn(state, "left").tiling)).toEqual([
+      APP("term"),
+      APP("editor"),
+    ]);
+    expect(windowsOf(workspaceOn(state, "right").tiling)).toEqual([
+      APP("kitty"),
+    ]);
+  });
+
+  it("fills a screen with nothing tiled on it", () => {
+    const state = reduce(
+      desktop("kitty", "editor"),
+      WindowAction.ScreensDescribed(sideBySide("left", "right")),
+      WindowAction.WindowDroppedOnScreen(APP("kitty"), "right"),
+    );
+
+    expect(state.focused).toBe("right");
+    expect(windowsOf(workspaceOn(state, "left").tiling)).toEqual([
+      APP("editor"),
+    ]);
+    expect(windowsOf(workspaceOn(state, "right").tiling)).toEqual([
+      APP("kitty"),
+    ]);
   });
 });
 

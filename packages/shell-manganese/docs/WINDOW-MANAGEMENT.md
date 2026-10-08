@@ -41,6 +41,10 @@ Workspaces belong to the desktop, and screens show them, as in sway:
   it (`src/screens/useScreenFollowsPointer.ts`).
 - **`focus <direction>`** past the edge of a workspace or a fullscreen window
   moves to the next screen that way, then wraps.
+- **`move <direction>`** past the edge of a workspace moves the tiled window
+  (or `focus parent` selection) to the next screen that way, as in sway. It
+  enters that screen's tiling on the near side, and focus follows it. Floats
+  and fullscreen windows stay put.
 - **The chrome does not take focus.** The bar, wallpaper and title bars leave
   the keyboard where it was.
 - **The focused window stands out.** An accent ring and glow surround it
@@ -101,9 +105,13 @@ For how warping, browser-window focus and modifier drags work, see
 
 ## Dragging tiled windows
 
-- **Meta+drag** picks up a tiled window. An overlay shows where it will land:
-  half of a target puts it on that side; the center swaps the two. Dropping
-  over nothing does nothing. See `tree/drop.ts`.
+- **Meta+drag**, or dragging its title bar, picks up a tiled window. An
+  overlay shows where it will land: half of a target puts it on that side; the
+  center swaps the two. Dropping over nothing does nothing. See
+  `tree/drop.ts`.
+- **A drop can land on any screen.** Targets include tiled windows on other
+  screens, and the whole of a screen with nothing tiled. Focus follows the
+  window.
 - A move aims only once the pointer is 8px from the press, so clicking a tab
   never drops it beside its container's open tab.
 - **Meta+right-drag** or **Meta+Shift+drag** resizes from the

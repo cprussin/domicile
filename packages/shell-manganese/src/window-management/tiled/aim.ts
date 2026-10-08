@@ -10,14 +10,47 @@ export type Target = {
   id: string;
 };
 
-/** What a drop here would do, and where to draw it. */
-export type Aim = {
-  /** The target's edge, or `undefined` for its middle, which swaps. */
-  edge: Direction | undefined;
-  id: string;
-  /** Where the dragged window would go: half the target, or all of it. */
-  rect: Rect;
+/** A screen with nothing tiled on it, which a dragged window fills. */
+export type EmptyScreen = {
+  /** Its workspace's box. */
+  area: Rect;
+  name: string;
 };
+
+/** Everything on every screen a dragged tiled window can be dropped on. */
+export type DropTargets = {
+  screens: readonly EmptyScreen[];
+  windows: readonly Target[];
+};
+
+export enum AimKind {
+  Screen,
+  Window,
+}
+
+/**
+ * What a drop here would do. `rect` is where the dragged window would go, for
+ * drawing.
+ */
+export const Aim = {
+  /** Fills the empty screen `name`. */
+  Screen: (name: string, rect: Rect) => ({
+    kind: AimKind.Screen as const,
+    name,
+    rect,
+  }),
+  /**
+   * Goes on window `id`'s `edge`, or swaps with it when `edge` is `undefined`.
+   */
+  Window: (id: string, edge: Direction | undefined, rect: Rect) => ({
+    edge,
+    id,
+    kind: AimKind.Window as const,
+    rect,
+  }),
+};
+
+export type Aim = ReturnType<(typeof Aim)[keyof typeof Aim]>;
 
 /** The two edges a tiled resize moves. */
 export type Corner = {
@@ -32,25 +65,23 @@ export type Corner = {
 const EDGE_ZONE = 0.3;
 
 /**
- * What dropping `dragged` at `x`, `y` would do, or `undefined` over no window
- * or over itself.
+ * What dropping `dragged` at `x`, `y` would do, or `undefined` over itself or
+ * over nothing to drop it on.
  */
 export const aimAt = (
-  targets: readonly Target[],
+  { screens, windows }: DropTargets,
   dragged: string,
   x: number,
   y: number,
 ): Aim | undefined => {
-  const target = targets.find(({ frame }) => contains(frame, x, y));
-  if (target === undefined || target.id === dragged) {
-    return undefined;
+  const target = windows.find(({ frame }) => contains(frame, x, y));
+  if (target === undefined) {
+    const screen = screens.find(({ area }) => contains(area, x, y));
+    return screen === undefined
+      ? undefined
+      : Aim.Screen(screen.name, screen.area);
   } else {
-    const edge = edgeNear(target.frame, x, y);
-    return {
-      edge,
-      id: target.id,
-      rect: edge === undefined ? target.frame : halfOf(target.frame, edge),
-    };
+    return target.id === dragged ? undefined : aimAtWindow(target, x, y);
   }
 };
 
@@ -62,6 +93,11 @@ export const cornerOf = (frame: Rect, x: number, y: number): Corner => ({
   horizontal: x > frame.x + frame.width / 2 ? Direction.Right : Direction.Left,
   vertical: y > frame.y + frame.height / 2 ? Direction.Down : Direction.Up,
 });
+
+const aimAtWindow = ({ frame, id }: Target, x: number, y: number): Aim => {
+  const edge = edgeNear(frame, x, y);
+  return Aim.Window(id, edge, edge === undefined ? frame : halfOf(frame, edge));
+};
 
 const contains = (rect: Rect, x: number, y: number): boolean =>
   x >= rect.x &&

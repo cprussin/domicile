@@ -50,12 +50,16 @@ import {
   openedFloating,
   parentFocused,
   pointedOn,
+  pushedOffBy,
+  pushedOnBy,
   reached,
   shown,
   splitFlipped,
+  tiledArrived,
   tiledDropped,
   tiledIn,
   tiledStretched,
+  tiledTraded,
   windowGrown,
   windowMoved,
   windowsOn,
@@ -316,6 +320,7 @@ export enum WindowActionKind {
   WindowClosed,
   WindowDropped,
   WindowDroppedOn,
+  WindowDroppedOnScreen,
   WindowFullscreened,
   WindowGrabbed,
   WindowGrown,
@@ -597,6 +602,18 @@ export const WindowAction = {
   }),
 
   /**
+   * The user dropped a tiled window on screen `screen`, which has nothing
+   * tiled on it.
+   *
+   * Sent alongside {@link WindowAction.WindowDropped}, which ends the drag.
+   */
+  WindowDroppedOnScreen: (id: string, screen: string) => ({
+    id,
+    kind: WindowActionKind.WindowDroppedOnScreen as const,
+    screen,
+  }),
+
+  /**
    * The user pressed the fullscreen button on window `id`'s title bar.
    *
    * Unlike {@link WindowAction.FullscreenToggled}, it targets a named window.
@@ -865,9 +882,10 @@ const reduceAction = (
       return { ...state, draggingId: undefined };
     }
     case WindowActionKind.WindowDroppedOn: {
-      return onWorkspaceWith(state, action.id, (workspace) =>
-        tiledDropped(workspace, action.id, action.target, action.edge),
-      );
+      return dropWindow(state, action.id, action.target, action.edge);
+    }
+    case WindowActionKind.WindowDroppedOnScreen: {
+      return dropOnScreen(state, action.id, action.screen);
     }
     case WindowActionKind.WindowFullscreened: {
       // Focus the window first: `fullscreenToggled` acts on the focused
@@ -912,9 +930,7 @@ const reduceAction = (
       return sendToWorkspace(state, action.name);
     }
     case WindowActionKind.WindowStepped: {
-      return onCurrent(state, (workspace) =>
-        windowMoved(workspace, action.direction),
-      );
+      return stepWindow(state, action.direction);
     }
     case WindowActionKind.WindowStretched: {
       return onWorkspaceWith(state, action.id, (workspace) =>
@@ -983,6 +999,28 @@ const stepFocus = (state: WindowState, direction: Direction): WindowState => {
     );
   } else {
     return onCurrent(state, (workspace) => focusStepped(workspace, direction));
+  }
+};
+
+/**
+ * `move <direction>`: within the current workspace, then on to the next
+ * screen, as in sway. Focus follows the window.
+ */
+const stepWindow = (state: WindowState, direction: Direction): WindowState => {
+  const beyond = screenToward(state.screens, state.focused, direction);
+  const leaving =
+    beyond === undefined
+      ? undefined
+      : pushedOffBy(workspaceHere(state), direction);
+  if (beyond === undefined || leaving === undefined) {
+    return onCurrent(state, (workspace) => windowMoved(workspace, direction));
+  } else {
+    const left = onCurrent(state, () => leaving.rest);
+    return onWorkspace(
+      { ...left, focused: beyond },
+      currentOn(state, beyond),
+      (workspace) => pushedOnBy(workspace, leaving.node, direction),
+    );
   }
 };
 
@@ -1318,6 +1356,62 @@ const floatDragged = (
         (found) => floatLanded(found, arrived),
       );
     }
+  }
+};
+
+/**
+ * A tiled window dropped on `target`, on its own workspace or another screen's.
+ * Focus goes with it. No-op if either closed during the drag.
+ */
+const dropWindow = (
+  state: WindowState,
+  id: string,
+  target: string,
+  edge: Direction | undefined,
+): WindowState => {
+  const from = workspaceHolding(state, id);
+  const to = workspaceHolding(state, target);
+  const screen = to === undefined ? undefined : screenShowing(state, to.name);
+  if (from === undefined || to === undefined || screen === undefined) {
+    return state;
+  } else if (from.name === to.name) {
+    return onWorkspace(state, from.name, (workspace) =>
+      tiledDropped(workspace, id, target, edge),
+    );
+  } else {
+    // A middle drop swaps, so the target takes the window's place.
+    const left = onWorkspace(state, from.name, (workspace) =>
+      edge === undefined
+        ? tiledTraded(workspace, id, target)
+        : closed(workspace, id),
+    );
+    return onWorkspace({ ...left, focused: screen }, to.name, (workspace) =>
+      tiledArrived(workspace, id, target, edge),
+    );
+  }
+};
+
+/**
+ * A tiled window dropped on a screen with nothing tiled on it. Focus goes with
+ * it. No-op if it closed during the drag.
+ */
+const dropOnScreen = (
+  state: WindowState,
+  id: string,
+  screen: string,
+): WindowState => {
+  const from = workspaceHolding(state, id);
+  if (from === undefined) {
+    return state;
+  } else {
+    const left = onWorkspace(state, from.name, (workspace) =>
+      closed(workspace, id),
+    );
+    return onWorkspace(
+      { ...left, focused: screen },
+      currentOn(state, screen),
+      (workspace) => tiledIn(workspace, id),
+    );
   }
 };
 

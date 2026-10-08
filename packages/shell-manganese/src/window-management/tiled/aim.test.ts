@@ -1,40 +1,52 @@
 import { describe, expect, it } from "bun:test";
 
 import { Direction } from "../direction";
-import { aimAt, cornerOf } from "./aim";
+import { Aim, aimAt, cornerOf } from "./aim";
 
 const LEFT = { frame: { height: 400, width: 500, x: 0, y: 0 }, id: "a" };
 const RIGHT = { frame: { height: 400, width: 500, x: 500, y: 0 }, id: "b" };
-const TARGETS = [LEFT, RIGHT];
+/** A screen below the two with nothing tiled on it. */
+const EMPTY = { area: { height: 400, width: 1000, x: 0, y: 500 }, name: "low" };
+const TARGETS = { screens: [EMPTY], windows: [LEFT, RIGHT] };
 
 describe("aimAt", () => {
   it("aims at the middle of the window under the pointer", () => {
-    expect(aimAt(TARGETS, "a", 750, 200)).toEqual({
-      edge: undefined,
-      id: "b",
-      rect: RIGHT.frame,
-    });
+    expect(aimAt(TARGETS, "a", 750, 200)).toEqual(
+      Aim.Window("b", undefined, RIGHT.frame),
+    );
   });
 
   it("aims at the edge of it the pointer is near, and half of it", () => {
-    expect(aimAt(TARGETS, "a", 520, 200)).toEqual({
-      edge: Direction.Left,
-      id: "b",
-      rect: { height: 400, width: 250, x: 500, y: 0 },
-    });
-    expect(aimAt(TARGETS, "a", 750, 390)).toEqual({
-      edge: Direction.Down,
-      id: "b",
-      rect: { height: 200, width: 500, x: 500, y: 200 },
-    });
+    expect(aimAt(TARGETS, "a", 520, 200)).toEqual(
+      Aim.Window("b", Direction.Left, {
+        height: 400,
+        width: 250,
+        x: 500,
+        y: 0,
+      }),
+    );
+    expect(aimAt(TARGETS, "a", 750, 390)).toEqual(
+      Aim.Window("b", Direction.Down, {
+        height: 200,
+        width: 500,
+        x: 500,
+        y: 200,
+      }),
+    );
   });
 
   it("aims at nothing over the window being dragged", () => {
     expect(aimAt(TARGETS, "a", 250, 200)).toBeUndefined();
   });
 
+  it("aims at all of a screen with nothing tiled on it", () => {
+    expect(aimAt(TARGETS, "a", 250, 600)).toEqual(
+      Aim.Screen("low", EMPTY.area),
+    );
+  });
+
   it("aims at nothing where there is no window", () => {
-    expect(aimAt(TARGETS, "a", 250, 600)).toBeUndefined();
+    expect(aimAt(TARGETS, "a", 250, 450)).toBeUndefined();
   });
 });
 

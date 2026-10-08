@@ -1,13 +1,12 @@
 import type { PointerEvent as ReactPointerEvent } from "react";
 
-import type { Direction } from "./direction";
 import type { Float } from "./floating/float";
 import type { FloatDrag } from "./floating/useFloatDrag";
 import { useFloatDrag } from "./floating/useFloatDrag";
 import type { Rect } from "./rect";
 import type { Restack } from "./restacking";
 import { TitleBar } from "./TitleBar";
-import type { Aim, Target } from "./tiled/aim";
+import type { Aim, DropTargets } from "./tiled/aim";
 import type { TileDrag } from "./tiled/useTileDrag";
 import { useTileDrag } from "./tiled/useTileDrag";
 import type { TitleFocus } from "./title-focus";
@@ -34,12 +33,12 @@ type Props = {
   fullscreen: boolean;
   /** The window's motion, which the bar plays too. */
   motion: WindowMotion;
-  /** Where a dragged tab would land if dropped now. */
+  /** Where a dragged tiled window would land if dropped now. */
   onAim: (aim: Aim | undefined) => void;
   onClose: () => void;
   onDrop: () => void;
-  /** A tab dropped on a tiled window. See `useTileDrag`. */
-  onDropOn: (target: string, edge: Direction | undefined) => void;
+  /** A tiled window dropped where it was aimed. See `useTileDrag`. */
+  onDropOn: (aim: Aim) => void;
   onFullscreen: () => void;
   onMotionEnded: () => void;
   onGrab: () => void;
@@ -53,8 +52,8 @@ type Props = {
   restack?: Restack | undefined;
   /** The tab strip direction. See {@link TitleBar}. */
   tabbed: TabLayout | undefined;
-  /** The tiled windows on this screen that a tab can be dropped on. */
-  targets: readonly Target[];
+  /** What a tiled window can be dropped on, on every screen. */
+  targets: DropTargets;
   title: string;
   /** The window this bar names. See {@link TitleBar}. */
   window: string;
@@ -67,9 +66,9 @@ type Props = {
  * make it jump while the contents ease to the new box.
  *
  * A floating window's bar drags it without the modifier; a bar never resizes.
- * A tiled window's tab drags like a modifier drag (`useTileDrag`), with the
- * primary button only, and a middle click closes it. A tiled window's own bar
- * does not drag.
+ * A tiled window's bar or tab drags like a modifier drag (`useTileDrag`), with
+ * the primary button only, onto any screen. A middle click closes a tab. A
+ * fullscreen window's bar does not drag.
  */
 export const WindowTitleBar = ({
   besideOpenTab,
@@ -133,7 +132,7 @@ export const WindowTitleBar = ({
       tabbed={tabbed}
       title={title}
       window={window}
-      {...dragOf(float, tabbed, floatDrag, tileDrag)}
+      {...dragOf(float, fullscreen, floatDrag, tileDrag)}
     />
   );
 };
@@ -143,18 +142,18 @@ const doesNotResize = () => {
   throw new Error("window title bar: a bar does not resize its window");
 };
 
-/** Never called: a tab only moves. */
+/** Never called: a tiled window's bar only moves it. */
 const doesNotStretch = () => {
-  throw new Error("window title bar: a tab does not resize its window");
+  throw new Error("window title bar: a bar does not resize its window");
 };
 
 /**
- * The drag handlers for a bar: a float's, a tab's (primary button only), or
- * none.
+ * The drag handlers for a bar: a float's, a tiled window's (primary button
+ * only), or none for a fullscreen window.
  */
 const dragOf = (
   float: Float | undefined,
-  tabbed: TabLayout | undefined,
+  fullscreen: boolean,
   { drag: _floatDrag, ...floatHandlers }: FloatDrag,
   tileDrag: TileDrag,
 ): {
@@ -163,7 +162,7 @@ const dragOf = (
 } => {
   if (float !== undefined) {
     return floatHandlers;
-  } else if (tabbed === undefined) {
+  } else if (fullscreen) {
     return {};
   } else {
     return {

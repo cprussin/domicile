@@ -5,7 +5,7 @@ import { TILED } from "../placement";
 import type { Rect } from "../rect";
 import { useGrabCursor } from "../useGrabCursor";
 import { placedAt } from "../window-styles";
-import type { Aim, Target } from "./aim";
+import type { Aim, DropTargets } from "./aim";
 import { useTileDrag } from "./useTileDrag";
 
 type Props = {
@@ -14,13 +14,13 @@ type Props = {
   id: string;
   onAim: (aim: Aim | undefined) => void;
   onDrop: () => void;
-  onDropOn: (target: string, edge: Direction | undefined) => void;
+  onDropOn: (aim: Aim) => void;
   onGrab: (resizing: boolean) => void;
   onStretch: (edge: Direction, by: number) => void;
   /** Whether a drag started now resizes instead of moves. */
   resizes: boolean;
-  /** The tiled windows on this screen it can be dropped on. */
-  targets: readonly Target[];
+  /** What it can be dropped on, on every screen. */
+  targets: DropTargets;
 };
 
 /**
