@@ -40,6 +40,7 @@ ozone_platform_wayland = true
 ozone_platform_headless = true
 ozone_platform_drm = true
 use_libinput = true
+import("//build/args/domicile_codecs.gn")
 ```
 
 - **`ozone_platform_headless`** is for `crux`, which has no display server.
@@ -49,6 +50,8 @@ use_libinput = true
   default platform is unchanged. See
   [A-DESKTOP-ON-A-TTY.md](/docs/architecture/A-DESKTOP-ON-A-TTY.md).
 - **`use_libinput`** gives evdev a touchpad path off ChromeOS.
+- **`domicile_codecs.gn`** turns on H.264 and AAC. It is under `src/`, so
+  `apply.sh` lays it into the checkout before the build.
 
 ## Pitfalls
 
