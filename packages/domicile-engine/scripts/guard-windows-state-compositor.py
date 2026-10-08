@@ -19,6 +19,9 @@ there, and the symptom is an arrow where a hand should be -- so `second` keeps
 "the bad cursor was refused" and "the channel died on the bad cursor" are the
 same reading. See components/domicile/common/cursor_shape.h.
 
+The config's `appearance` must reach the page's `accentColor`, `highContrast`
+and `reducedMotion`.
+
 A `system_reply` ends the sequence: the engine relays it to the page whole, and
 the page's `system_request` comes back as a `said:` line. See
 docs/SHELL-SYSTEM-ACCESS.md.
@@ -51,6 +54,7 @@ SEQUENCE = [
         "size": [120, 90],
         "grab": True,
     },
+    {"type": "appearance", "accent_color": "#3584e4", "high_contrast": True, "reduced_motion": False},
     {"type": "system_reply", "id": 1, "reply": {"kind": "written"}},
 ]
 

@@ -333,6 +333,16 @@ const windowsThemeMessageSchema = z.looseObject({
   type: z.literal("windows_theme"),
 });
 
+// The config's accent color, contrast and reduced motion, which the settings
+// portal also serves applications. Sent with the handshake and on a reload
+// that changes them. `accent_color` is absent when unset.
+const appearanceSchema = z.looseObject({
+  accent_color: z.string().optional(),
+  high_contrast: z.boolean(),
+  reduced_motion: z.boolean(),
+  type: z.literal("appearance"),
+});
+
 // Maps each typeable keysym to its evdev key, for resolving shell shortcuts.
 // Sent after the handshake and when the layout changes.
 export const shellConfigSchema = z.looseObject({
@@ -456,6 +466,7 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   idleSchema,
   lockedSchema,
   windowsThemeMessageSchema,
+  appearanceSchema,
   shellConfigSchema,
   systemReplySchema,
   systemEventSchema,
@@ -490,6 +501,7 @@ export type ThemeMessage = z.infer<typeof themeMessageSchema>;
 export type IdleMessage = z.infer<typeof idleSchema>;
 export type LockedMessage = z.infer<typeof lockedSchema>;
 export type WindowsThemeMessage = z.infer<typeof windowsThemeMessageSchema>;
+export type AppearanceMessage = z.infer<typeof appearanceSchema>;
 export type ShellConfigMessage = z.infer<typeof shellConfigSchema>;
 export type SystemReplyMessage = z.infer<typeof systemReplySchema>;
 export type SystemEventMessage = z.infer<typeof systemEventSchema>;

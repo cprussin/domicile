@@ -15,6 +15,10 @@
       "types": "./dist/app-element.d.ts",
       "default": "./dist/app-element.js"
     },
+    "./appearance": {
+      "types": "./dist/appearance.d.ts",
+      "default": "./dist/appearance.js"
+    },
     "./bind-keys": {
       "types": "./dist/bind-keys.d.ts",
       "default": "./dist/bind-keys.js"

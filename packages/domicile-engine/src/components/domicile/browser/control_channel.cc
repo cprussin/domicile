@@ -876,6 +876,22 @@ void ControlChannel::DispatchLine(const std::string& line) {
     return;
   }
 
+  if (*type == "appearance") {
+    // Refused rather than defaulted, for `theme`'s reason above. Only the
+    // accent may be absent: that is the config leaving it to the shell.
+    const std::optional<bool> high_contrast = message.FindBool("high_contrast");
+    const std::optional<bool> reduced_motion =
+        message.FindBool("reduced_motion");
+    if (!high_contrast || !reduced_motion) {
+      return;
+    }
+    const std::string* accent_color = message.FindString("accent_color");
+    client_->AppearanceChanged(
+        accent_color ? std::make_optional(*accent_color) : std::nullopt,
+        *high_contrast, *reduced_motion);
+    return;
+  }
+
   if (*type == "clipboard") {
     const base::ListValue* history = message.FindList("entries");
     if (!history) {
