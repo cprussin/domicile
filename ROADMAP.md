@@ -173,8 +173,8 @@ Evidence is in [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md),
 11. **A Settings app.** Extensions and config values can only be set by editing
     the config. A Settings app would manage both. It would also hold the
     *Known gaps* that need a place to store state: a persistent theme choice,
-    and the cookies, site data and permissions that `chrome://settings`
-    manages in Chrome. No design doc yet.
+    and the cookies and site data that `chrome://settings` manages in
+    Chrome. No design doc yet.
 
 12. **Split up the compositor's `main.rs`.** Subsystems such as the lock,
     portals and screens are their own modules. `main.rs` still holds the
@@ -332,13 +332,16 @@ Understood and not scheduled.
 
 ### Browser windows
 
-- **Browser windows deny permission requests and dialogs.** A `<webview>`
-  guest's `WebContentsDelegate` gives the default answer: camera, microphone,
-  location and the like are denied, and `alert`, `confirm` and `prompt` show
-  nothing and return at once. `window.open` is the
-  exception: the engine opens a browser window at the address. But
-  `window.open` returns `null`, the opener and target name are dropped, and a
-  form POST to a new target arrives as a GET.
+- **Browser windows draw no dialogs.** A `<webview>` guest's
+  `WebContentsDelegate` gives the default answer: `alert`, `confirm` and
+  `prompt` show nothing and return at once. `window.open` is the exception:
+  the engine opens a browser window at the address. But `window.open` returns
+  `null`, the opener and target name are dropped, and a form POST to a new
+  target arrives as a GET.
+- **Some permission requests are refused.** The shell answers camera,
+  microphone, location, notifications, clipboard and MIDI (patch 0103).
+  Other requests are ignored, and screen capture (`getDisplayMedia`) is
+  refused.
 - **Some file dialogs are refused.** Every file dialog goes to the shell
   (`domicile-file-chooser`): file inputs, downloads, File System Access pickers
   and the PDF viewer's save (patch 0086). Not covered:
@@ -346,9 +349,9 @@ Understood and not scheduled.
   - A directory dropped on a page (`EnumerateDirectory`) is refused.
   - Download progress is not reported.
 - **No settings page.** Browser windows block every `chrome://` page (patch
-  0083), so nothing can clear cookies and site data or change site
-  permissions. The Settings app (item 11) will cover this. Printing is also
-  blocked: `window.print()` opens `chrome://print`.
+  0083), so nothing can clear cookies and site data. Site permissions are set
+  per site from the address bar. The Settings app (item 11) will cover the
+  rest. Printing is also blocked: `window.print()` opens `chrome://print`.
 - **Some extension calls are refused.** `tabs.move`, `group`, `ungroup`,
   `discard`, `duplicate` and splits; `tabs.update`'s `pinned`, `openerTabId`
   and `autoDiscardable`; `windows.update` bounds and state; and any

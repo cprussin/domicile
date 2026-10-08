@@ -39,8 +39,10 @@ shell ─ dismissNotifications(ids) / invokeNotificationAction(id, key) ─▶ e
   `persistent` keeps the toast up; buttons and `default-action` become actions
   and a click. `transient` and the lock-screen hints change nothing: the drawer
   keeps every notification, and the shell shows none while locked.
-- **Pages get notification permission by default.** Chrome's permission prompt
-  is a bubble the shell has no place to draw, so the profile allows it.
+- **Pages get notification permission by default.** The profile allows it, so
+  sites notify without asking. A site's own setting can be changed to ask or
+  block in its site permissions
+  ([SHELL-BROWSER-WINDOWS.md](/docs/SHELL-BROWSER-WINDOWS.md#permissions)).
 - **The compositor keeps the history.**
   - It sends the full list on every change and on connect, so a reload keeps
     it and every monitor's page sees the same list.

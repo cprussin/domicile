@@ -265,11 +265,47 @@ frame.addEventListener(WEBVIEW_FILE_CHOOSER_EVENT, (event) => {
   takes a `FileRequest`. Manganese builds one from the event in
   `window-management/browser/file-request.ts`.
 
+## Permissions
+
+The browser draws no permission prompt. A site asking for a permission it has
+no stored choice for fires `domicile-permission-request`:
+
+```ts
+import { WEBVIEW_PERMISSION_REQUEST_EVENT } from "@domicile-desktop/sdk/webview-element";
+
+frame.addEventListener(WEBVIEW_PERMISSION_REQUEST_EVENT, (event) => {
+  event.preventDefault(); // claim it
+  ask(event.origin, event.permissions).then(
+    (allowed) => (allowed ? event.allow() : event.deny()),
+    () => event.dismiss(),
+  );
+});
+```
+
+- **`preventDefault()`:** claims it. Unclaimed requests are ignored: the page
+  gets nothing and nothing is stored.
+- **Answers:** `allow()` and `deny()` store the choice for the site.
+  `dismiss()` stores nothing; Chrome blocks a site for a while after several.
+- **One at a time.** Camera and microphone may come together.
+- **`domicile-permission-request-withdrawn`:** the browser dropped the request,
+  for example on navigation. Stop showing it.
+- **Permissions:** `camera`, `microphone`, `location`, `notifications`,
+  `clipboard` and `midi` (`WEBVIEW_PERMISSIONS`). A request for anything else
+  is ignored.
+- **Hidden windows wait.** A request is asked when its window is shown.
+- **Site settings:** `view.sitePermissions()` maps each permission to `ask`,
+  `allow` or `block` for the page's site, `{}` for a page that is not `http` or
+  `https`. `view.setSitePermission(permission, setting)` stores one.
+  `domicile-site-permissions-change` signals a change.
+- **Notifications** default to allowed
+  ([NOTIFICATIONS.md](/docs/architecture/NOTIFICATIONS.md)).
+- **Screen capture** (`getDisplayMedia`) is refused.
+
+Manganese draws both in the address bar's site permissions panel
+(`window-management/browser/SitePermissions.tsx`).
+
 ## Not supported yet
 
 - `alert`, `confirm` and `prompt` show nothing and return at once.
-- Permission requests (camera, microphone, location, …) are denied.
-  Notifications are the exception: pages may show them
-  ([NOTIFICATIONS.md](/docs/architecture/NOTIFICATIONS.md)).
 
-[ROADMAP.md](/ROADMAP.md) tracks both.
+[ROADMAP.md](/ROADMAP.md) tracks it.

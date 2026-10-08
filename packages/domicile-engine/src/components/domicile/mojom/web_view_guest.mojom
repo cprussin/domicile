@@ -122,6 +122,50 @@ enum WebViewContextMenuAction {
   kInspect,
 };
 
+// A permission a site asks for, and the shell shows in its site permissions.
+//
+// Chrome's permission types reduced to the ones a shell offers. A request for
+// any other type is ignored, as before the shell could answer: the page sees
+// no grant and nothing is stored.
+enum WebViewPermission {
+  // getUserMedia's video.
+  kCamera,
+  // getUserMedia's audio.
+  kMicrophone,
+  // The Geolocation API.
+  kLocation,
+  kNotifications,
+  // Reading the clipboard.
+  kClipboard,
+  // Web MIDI with system exclusive messages.
+  kMidi,
+};
+
+// A site's stored choice for a permission.
+enum WebViewPermissionSetting {
+  // The site must ask; the shell is asked.
+  kAsk,
+  kAllow,
+  kBlock,
+};
+
+// The shell's answer to a permission request.
+enum WebViewPermissionAnswer {
+  // Stored as allowed for the site.
+  kAllow,
+  // Stored as blocked for the site.
+  kDeny,
+  // The user closed the request without choosing. Nothing is stored, but
+  // Chrome blocks a site for a while after several dismissals.
+  kDismiss,
+};
+
+// One permission's setting for the page's site.
+struct WebViewSitePermission {
+  WebViewPermission permission;
+  WebViewPermissionSetting setting;
+};
+
 // Renderer -> browser, bound per document.
 interface WebViewGuestHost {
   // Gives `placeholder_frame` a guest page.
@@ -282,6 +326,28 @@ interface WebViewGuestClient {
   // not cancel `contextmenu`. The browser draws no menu, so the shell draws
   // one from this. Sent once per menu.
   ContextMenuRequested(WebViewContextMenu menu);
+
+  // The page asked for `permissions` and the site has no stored choice, so
+  // the shell must ask the user. `origin` is the asking site. Camera and
+  // microphone may come together; anything else comes alone.
+  //
+  // One at a time: the next request waits for the answer or for
+  // PermissionRequestWithdrawn. Null, an unhandled event or a closed pipe
+  // ignores the request: the page gets no grant and nothing is stored.
+  PermissionRequested(url.mojom.Url origin,
+                      array<WebViewPermission> permissions)
+      => (WebViewPermissionAnswer? answer);
+
+  // The browser dropped the unanswered request, for example because the page
+  // navigated. Its answer, if one is sent, is ignored.
+  PermissionRequestWithdrawn();
+
+  // The page's site's permission settings, one per WebViewPermission. Empty
+  // for a page that is not http or https, which has none.
+  //
+  // Sent when the page's site or a setting changes. A fresh guest sends
+  // nothing until its first commit.
+  SitePermissionsChanged(array<WebViewSitePermission> permissions);
 };
 
 // One guest, for the life of the element that requested it.
@@ -355,4 +421,10 @@ interface WebViewGuest {
   // already open, its window's element gets FocusRequested instead. See
   // //chrome/browser/domicile/domicile_devtools.h.
   Inspect();
+
+  // Stores `setting` for `permission` on the page's site. Reported back as
+  // WebViewGuestClient.SitePermissionsChanged. Dropped, and logged, when the
+  // page has no site, which happens when it navigates as the shell sends.
+  SetSitePermission(WebViewPermission permission,
+                    WebViewPermissionSetting setting);
 };

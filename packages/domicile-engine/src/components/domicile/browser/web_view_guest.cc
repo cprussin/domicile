@@ -9,6 +9,7 @@
 #include <string>
 #include <tuple>
 #include <utility>
+#include <vector>
 
 #include "base/check.h"
 #include "base/files/file_enumerator.h"
@@ -30,6 +31,8 @@
 #include "components/domicile/browser/file_choice.h"
 #include "components/domicile/browser/placeholder_stage.h"
 #include "components/domicile/browser/shortcut_registry.h"
+#include "components/domicile/browser/site_permissions.h"
+#include "components/permissions/permissions_client.h"
 #include "components/domicile/browser/web_view_url.h"
 #include "components/security_state/content/content_utils.h"
 #include "components/security_state/core/security_state.h"
@@ -107,6 +110,15 @@ content::BrowserContext* ContextFor(content::BrowserContext& owner,
 InspectCallback& InspectSlot() {
   static base::NoDestructor<InspectCallback> inspect;
   return *inspect;
+}
+
+// The guests' camera and microphone. See SetMediaAccess.
+MediaAccess* g_media_access = nullptr;
+
+MediaAccess& Media() {
+  // //chrome sets it in StartDesk, with the window host.
+  CHECK(g_media_access);
+  return *g_media_access;
 }
 
 // Opens DevTools. See SetInspect.
@@ -603,6 +615,9 @@ std::unique_ptr<content::WebContents> WebViewGuest::MakeContents(
   // navigation, which some record.
   created.Run(*guest_contents_);
 
+  settings_observation_.Observe(
+      permissions::PermissionsClient::Get()->GetSettingsMap(context));
+
   // Unretained is safe: the subscription is a member, reset in
   // WebContentsDestroyed.
   zoom_subscription_ =
@@ -715,6 +730,8 @@ void WebViewGuest::ReportEverything() {
     client_->ContentSizeChanged(content_size_->width(),
                                 content_size_->height());
   }
+  reported_site_permissions_.clear();
+  ReportSitePermissions();
 }
 
 WebViewGuest::WebViewGuest(
@@ -759,6 +776,12 @@ void WebViewGuest::SetInspect(InspectCallback inspect) {
 }
 
 // static
+void WebViewGuest::SetMediaAccess(MediaAccess* access) {
+  CHECK(!g_media_access);
+  g_media_access = access;
+}
+
+// static
 WebViewGuest* WebViewGuest::FromWebContents(content::WebContents* contents) {
   const auto* link =
       static_cast<GuestLink*>(contents->GetUserData(kGuestUserDataKey));
@@ -797,6 +820,25 @@ void WebViewGuest::ChooseFiles(
       mojo::WrapCallbackWithDefaultInvokeIfNotRun(
           base::BindOnce(&DialogFilesChosen, mode, std::move(chosen)),
           std::nullopt));
+}
+
+void WebViewGuest::AskPermission(
+    const GURL& origin,
+    std::vector<mojom::WebViewPermission> permissions,
+    PermissionAnswered answered) {
+  // Logged before asking; the permissions guard greps for it.
+  LOG(INFO) << "domicile: a <webview>'s page asked for a permission; asking "
+               "the shell.";
+  // Wrapped, as in ChooseFiles: the page waits for an answer, and a pipe
+  // closing unanswered must still give one.
+  client_->PermissionRequested(
+      origin, std::move(permissions),
+      mojo::WrapCallbackWithDefaultInvokeIfNotRun(std::move(answered),
+                                                  std::nullopt));
+}
+
+void WebViewGuest::WithdrawPermissionRequest() {
+  client_->PermissionRequestWithdrawn();
 }
 
 void WebViewGuest::Navigate(const GURL& url) {
@@ -1171,6 +1213,27 @@ void WebViewGuest::Inspect() {
   Inspector().Run(*guest_contents_->GetPrimaryMainFrame(), std::nullopt);
 }
 
+void WebViewGuest::SetSitePermission(
+    mojom::WebViewPermission permission,
+    mojom::WebViewPermissionSetting setting) {
+  CHECK(guest_contents_);
+  const GURL site =
+      guest_contents_->GetPrimaryMainFrame()->GetLastCommittedOrigin().GetURL();
+  // The shell sends what it last saw, and the page may have navigated since.
+  if (!HasSitePermissions(site)) {
+    LOG(WARNING) << "domicile: the shell set a site permission for a page "
+                    "with no site; it is dropped.";
+    return;
+  }
+  HostContentSettingsMap* map =
+      permissions::PermissionsClient::Get()->GetSettingsMap(
+          guest_contents_->GetBrowserContext());
+  const ContentSettingsType type = SettingsTypeFor(permission);
+  map->SetContentSettingDefaultScope(
+      site, site, type,
+      StoredSetting(setting, map->GetDefaultContentSetting(type)));
+}
+
 void WebViewGuest::CopyAddress(const GURL& url) {
   ui::ScopedClipboardWriter writer(ui::ClipboardBuffer::kCopyPaste);
   writer.WriteText(base::UTF8ToUTF16(url.spec()));
@@ -1351,6 +1414,63 @@ void WebViewGuest::PrimaryPageChanged(content::Page& page) {
     reported_favicon_ = GURL();
     client_->FaviconChanged(reported_favicon_);
   }
+  ReportSitePermissions();
+}
+
+void WebViewGuest::OnContentSettingChanged(
+    const ContentSettingsPattern& primary_pattern,
+    const ContentSettingsPattern& secondary_pattern,
+    ContentSettingsTypeSet content_type_set) {
+  ReportSitePermissions();
+}
+
+void WebViewGuest::ReportSitePermissions() {
+  CHECK(guest_contents_);
+  const GURL site =
+      guest_contents_->GetPrimaryMainFrame()->GetLastCommittedOrigin().GetURL();
+  std::vector<
+      std::pair<mojom::WebViewPermission, mojom::WebViewPermissionSetting>>
+      now;
+  if (HasSitePermissions(site)) {
+    const HostContentSettingsMap* map =
+        permissions::PermissionsClient::Get()->GetSettingsMap(
+            guest_contents_->GetBrowserContext());
+    for (const mojom::WebViewPermission permission : kSitePermissions) {
+      now.emplace_back(permission,
+                       SettingFor(map->GetContentSetting(
+                           site, site, SettingsTypeFor(permission))));
+    }
+  }
+  if (now == reported_site_permissions_) {
+    return;
+  }
+  reported_site_permissions_ = now;
+  std::vector<mojom::WebViewSitePermissionPtr> report;
+  for (const auto& [permission, setting] : now) {
+    report.push_back(mojom::WebViewSitePermission::New(permission, setting));
+  }
+  client_->SitePermissionsChanged(std::move(report));
+}
+
+void WebViewGuest::RequestMediaAccessPermission(
+    content::WebContents* web_contents,
+    const content::MediaStreamRequest& request,
+    content::MediaResponseCallback callback) {
+  if (!IsDeviceCapture(request.audio_type, request.video_type)) {
+    LOG(WARNING) << "domicile: a <webview>'s page asked to capture something "
+                    "other than a camera or microphone; it is refused.";
+    content::WebContentsDelegate::RequestMediaAccessPermission(
+        web_contents, request, std::move(callback));
+    return;
+  }
+  Media().Request(*web_contents, request, std::move(callback));
+}
+
+bool WebViewGuest::CheckMediaAccessPermission(
+    content::RenderFrameHost* render_frame_host,
+    const url::Origin& security_origin,
+    blink::mojom::MediaStreamType type) {
+  return Media().Check(*render_frame_host, security_origin, type);
 }
 
 void WebViewGuest::ReportZoom() {
@@ -1585,6 +1705,7 @@ base::CallbackListSubscription WebViewGuest::AddZoomChangedCallback(
 
 void WebViewGuest::WebContentsDestroyed() {
   zoom_subscription_ = {};
+  settings_observation_.Reset();
   guest_contents_ = nullptr;
   if (self_owned_) {
     delete this;

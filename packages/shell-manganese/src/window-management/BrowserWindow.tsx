@@ -20,6 +20,8 @@ import { PageMenu } from "./browser/PageMenu";
 import { choosePageCommand, pageMenuFor } from "./browser/page-menu";
 import { useFileRequest } from "./browser/useFileRequest";
 import { usePageMenu } from "./browser/usePageMenu";
+import { usePermissionRequest } from "./browser/usePermissionRequest";
+import { useSitePermissions } from "./browser/useSitePermissions";
 import { zoomedIn, zoomedOut } from "./browser/zoom-steps";
 import type { Rect } from "./rect";
 import type { Restack } from "./restacking";
@@ -189,6 +191,10 @@ export const BrowserWindow = ({
   const found = useFindResult(view);
   // The context menu the page asked for. The engine draws none.
   const [menu, dismissMenu] = usePageMenu(view);
+  // The page's site's permissions, and the request it is waiting on. The
+  // engine draws no prompt; the address bar's site permissions panel does.
+  const sitePermissions = useSitePermissions(view);
+  const permissionRequest = usePermissionRequest(view);
 
   // Focuses an element in this window without reporting it as a user reach.
   // All programmatic focus here must go through this.
@@ -475,6 +481,11 @@ export const BrowserWindow = ({
           onReload={drive((loaded) => {
             loaded.reload();
           })}
+          onSetSitePermission={(permission, setting) => {
+            withView((loaded) => {
+              loaded.setSitePermission(permission, setting);
+            });
+          }}
           onStop={drive((loaded) => {
             loaded.stop();
           })}
@@ -487,7 +498,9 @@ export const BrowserWindow = ({
           onZoomReset={() => {
             run(BrowserCommand.ZoomReset);
           }}
+          permissionRequest={permissionRequest}
           security={shown.security}
+          sitePermissions={sitePermissions}
           visited={shown.visited}
           zoom={zoom}
           zoomsAnnounced={zoomsAnnounced}

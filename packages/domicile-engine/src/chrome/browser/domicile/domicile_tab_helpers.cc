@@ -6,6 +6,7 @@
 #include "base/check.h"
 #include "chrome/browser/domicile/domicile_desk.h"
 #include "chrome/browser/domicile/domicile_devtools.h"
+#include "chrome/browser/domicile/domicile_permissions.h"
 #include "chrome/browser/extensions/tab_helper.h"
 #include "chrome/browser/sessions/session_tab_helper_factory.h"
 #include "components/domicile/browser/web_view_guest.h"
@@ -17,6 +18,9 @@
 namespace domicile {
 
 void AttachTabHelpers(content::WebContents& guest) {
+  // Before the popup check: a popup's page may ask for permissions too.
+  AttachPermissionPrompts(guest);
+
   // An action popup is not a tab, as in Chrome. Without a SessionTabHelper,
   // tabs.getCurrent() returns nothing and it never becomes the active tab.
   WebViewGuest* web_view = WebViewGuest::FromWebContents(&guest);

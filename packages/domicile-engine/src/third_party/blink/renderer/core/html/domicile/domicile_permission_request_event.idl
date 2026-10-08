@@ -1,0 +1,26 @@
+// Copyright 2026 Connor Prussin
+// SPDX-License-Identifier: MIT
+
+// Dispatched by a <webview> when its page asks for a permission the site has
+// no stored choice for. The shell answers on the event.
+//
+// Domicile-only, not a web standard. No constructor: only the browser creates
+// one.
+[
+    RuntimeEnabled=DomicileExternalSurface,
+    Exposed=Window
+] interface DomicilePermissionRequestEvent : Event {
+  // The asking site, e.g. "https://meet.google.com".
+  readonly attribute USVString origin;
+
+  // What it asks for: "camera", "microphone", "location", "notifications",
+  // "clipboard" or "midi". Camera and microphone may come together. DOMStrings,
+  // not an IDL enum, as for HTMLWebViewElement's `security`.
+  readonly attribute FrozenArray<DOMString> permissions;
+
+  // Answers: allow or block the site, storing the choice, or close without
+  // choosing. Each throws InvalidStateError if already answered or withdrawn.
+  [RaisesException] undefined allow();
+  [RaisesException] undefined deny();
+  [RaisesException] undefined dismiss();
+};
