@@ -8,7 +8,7 @@
 //! [`PortalAnswer::Pressed`] when one fires and [`PortalAnswer::Released`]
 //! when it is let go. A locked desk refuses both answers, so nothing fires
 //! while locked. The session state is `domicile_host::global_shortcuts`. See
-//! `docs/architecture/PORTALS.md`.
+//! `docs/PORTALS.md`.
 
 use std::collections::HashMap;
 use std::path::PathBuf;

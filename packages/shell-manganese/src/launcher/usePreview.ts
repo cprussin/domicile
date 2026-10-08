@@ -1,10 +1,8 @@
 import type { FilePreview } from "@domicile-desktop/sdk/file-preview";
 import { useEffect, useState } from "react";
 
-import { superseded } from "../host/superseded";
-
 /**
- * The host's preview of `path`, or `undefined` until it answers.
+ * The preview of `path`, or `undefined` until it is read.
  *
  * Answers for a stale path are dropped, since they can arrive out of order.
  */
@@ -25,11 +23,8 @@ export const usePreview = (
         }
       })
       .catch((error: unknown) => {
-        // A newer preview replaced this one: the highlight has moved on.
-        if (!superseded(error)) {
-          // biome-ignore lint/suspicious/noConsole: surfacing a preview the host failed
-          console.error("The host could not preview a file", error);
-        }
+        // biome-ignore lint/suspicious/noConsole: surfacing a preview that failed
+        console.error("A file could not be previewed", error);
       });
     return () => {
       current = false;

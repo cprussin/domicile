@@ -3,7 +3,7 @@
 //! The portal sends each filter as patterns: a glob (`*.png`, often written
 //! `*.[pP][nN][gG]`) or a MIME type (`image/png`, `image/*`). A MIME type
 //! becomes its extensions through shared-mime-info's `globs2`. See
-//! `docs/architecture/PORTALS.md`.
+//! `docs/PORTALS.md`.
 
 use std::collections::BTreeMap;
 use std::io;

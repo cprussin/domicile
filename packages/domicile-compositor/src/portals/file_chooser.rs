@@ -3,7 +3,7 @@
 //!
 //! The shell's picker matches extensions and answers with paths. This turns
 //! the portal's globs, MIME types and byte-string paths into those, and the
-//! answer back into `file://` URIs. See `docs/architecture/PORTALS.md`.
+//! answer back into `file://` URIs. See `docs/PORTALS.md`.
 
 use std::collections::HashMap;
 use std::path::PathBuf;

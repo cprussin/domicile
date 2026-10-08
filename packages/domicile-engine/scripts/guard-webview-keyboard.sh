@@ -65,9 +65,10 @@ NEGATIVE="${NEGATIVE:-0}"
 KIND="webview"
 [ "$NEGATIVE" = "1" ] && KIND="iframe"
 
-# Alt+Tab, the chord `Shell.tsx` claims: evdev for the claim, a DOM code and
-# key for the event, and a VKEY, without which Blink cannot name the key.
-CHORD_EVDEV="${CHORD_EVDEV:-15}"
+# Alt+Tab, the chord the page grabs by name: the evdev key the control-socket
+# stand-in puts Tab on, a DOM code and key for the event, and a VKEY, without
+# which Blink cannot name the key.
+CHORD_EVDEV=15
 CHORD_CODE="Tab"
 CHORD_KEY="Tab"
 CHORD_VKEY=9
@@ -158,8 +159,8 @@ echo "serving a browser window's page at $SUBJECT"
 
 # 2. A stand-in for the compositor's end of the control channel. Without a
 #    listener, `ControlChannel` closes after thirty seconds, and the claim,
-#    press and modifiers travel on it. `grab_shortcut` must never appear in
-#    its log.
+#    press and modifiers travel on it. It describes the keyboard the chord is
+#    resolved against. `grab_shortcut` must never appear in its log.
 rm -f "$SOCKET_LOG"
 python3 "$SCRIPTS/guard-webview-keyboard-socket.py" --socket "$CONTROL" \
   >"$SOCKET_LOG" 2>&1 &

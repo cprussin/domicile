@@ -100,8 +100,8 @@ export const Shell: ShellModule = (root, domicile) => {
 - Moments (`focusrequested`, `shortcut`) are events. The engine holds each
   type until its first listener exists, so a listener added in React's first
   effect misses none.
-- `searchFiles` and `previewFile` return promises. A newer call rejects the
-  older with an `AbortError`.
+- `searchFiles` returns a promise. A newer call rejects the older with an
+  `AbortError`.
 - Only Domicile calls a shell, so there is no plain-browser case to check
   for. Develop against a real desktop.
 
