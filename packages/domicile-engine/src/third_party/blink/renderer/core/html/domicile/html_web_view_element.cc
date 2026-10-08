@@ -78,6 +78,10 @@ constexpr char kFocusRequestEvent[] = "domicile-focus-request";
 // matters.
 constexpr char kExtensionPopupAttr[] = "extensionpopup";
 
+// Makes the guest's page private: in the off-the-record profile. Read once,
+// on requesting the guest; only presence matters.
+constexpr char kPrivateAttr[] = "private";
+
 // Names the browser window a <webview> shows. Read once, on requesting the
 // guest. Not in html_names, to avoid patching Chromium's list. See
 // browser_windows.mojom.
@@ -197,7 +201,8 @@ void HTMLWebViewElement::RequestGuest() {
                      guest_.BindNewPipeAndPassReceiver(task_runner),
                      client_receiver_.BindNewPipeAndPassRemote(task_runner),
                      BrowserWindow(),
-                     hasAttribute(AtomicString(kExtensionPopupAttr)));
+                     hasAttribute(AtomicString(kExtensionPopupAttr)),
+                     hasAttribute(AtomicString(kPrivateAttr)));
 }
 
 String HTMLWebViewElement::BrowserWindow() const {

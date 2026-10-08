@@ -26,7 +26,8 @@ class MODULES_EXPORT DomicileBrowserWindow final : public ScriptWrappable {
                         const String& title,
                         std::optional<int32_t> popup_window,
                         int32_t width,
-                        int32_t height);
+                        int32_t height,
+                        bool is_private);
   ~DomicileBrowserWindow() override;
 
   const String& id() const { return id_; }
@@ -35,6 +36,7 @@ class MODULES_EXPORT DomicileBrowserWindow final : public ScriptWrappable {
   std::optional<int32_t> popupWindow() const { return popup_window_; }
   int32_t width() const { return width_; }
   int32_t height() const { return height_; }
+  bool isPrivate() const { return is_private_; }
 
   void Trace(Visitor*) const override;
 
@@ -45,6 +47,7 @@ class MODULES_EXPORT DomicileBrowserWindow final : public ScriptWrappable {
   std::optional<int32_t> popup_window_;
   int32_t width_ = 0;
   int32_t height_ = 0;
+  bool is_private_ = false;
 };
 
 }  // namespace blink

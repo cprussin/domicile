@@ -53,6 +53,9 @@ const client = () => {
     get opened() {
       return called("openBrowserWindow");
     },
+    get openedPrivately() {
+      return called("openPrivateBrowserWindow");
+    },
     /** The system calls asking for a screenshot. */
     get screenshots() {
       return fake.calls
@@ -125,6 +128,7 @@ describe("the desk's browser windows", () => {
   const EXAMPLE: DomicileBrowserWindow = {
     height: 0,
     id: "1",
+    isPrivate: false,
     popupWindow: null,
     title: "",
     url: "https://example.com/",
@@ -147,10 +151,25 @@ describe("the desk's browser windows", () => {
     const { host, result } = desktop([LEFT, RIGHT]);
 
     act(() => {
-      result.current.act(WindowAction.BrowserOpened("https://example.com/"));
+      result.current.act(
+        WindowAction.BrowserOpened("https://example.com/", false),
+      );
     });
 
     expect(host.opened).toEqual(["https://example.com/"]);
+  });
+
+  it("are asked for privately, for a private window", () => {
+    const { host, result } = desktop([LEFT, RIGHT]);
+
+    act(() => {
+      result.current.act(
+        WindowAction.BrowserOpened("https://example.com/", true),
+      );
+    });
+
+    expect(host.openedPrivately).toEqual(["https://example.com/"]);
+    expect(host.opened).toEqual([]);
   });
 
   it("are asked to close, because the engine closes them", () => {
