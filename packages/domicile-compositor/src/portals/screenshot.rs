@@ -4,7 +4,8 @@
 //! Each call takes one frame of the whole desk (see
 //! [`crate::casting::Casting::shoot`]). An interactive screenshot and
 //! `PickColor` freeze that frame in the shell, which answers with the area or
-//! pixel the user picked. See `docs/architecture/PORTALS.md`.
+//! pixel the user picked. The shell takes its own screenshots the same way,
+//! through [`for_the_shell`]. See `docs/architecture/PORTALS.md`.
 
 use std::collections::HashMap;
 use std::future::Future;
@@ -16,21 +17,42 @@ use domicile_host::data_url::data_url;
 use domicile_host::screenshot::{
     color_at, crop, encode, file_name, save, screenshots_dir, Shot, Taken,
 };
-use domicile_protocol::{AccessDialog, FrozenDesk, PortalAnswer, PortalKind, ShotRect};
+use domicile_protocol::{
+    AccessDialog, FrozenDesk, PortalAnswer, PortalKind, ShotRect, SystemError, SystemErrorKind,
+    SHELL_APP_ID,
+};
 use tracing::warn;
 use zbus::object_server::ObjectServer;
 use zbus::zvariant::{OwnedObjectPath, OwnedValue, Value};
 
-use super::queue::{ask, Queue};
+use super::queue::{ask, ask_unbidden, Queue};
 use super::uri::file_uri;
 use crate::casting::{Casting, Desk};
 
 /// Takes a frame of the whole desk, or says why it cannot.
 pub type Shoot =
-    Box<dyn Fn() -> Pin<Box<dyn Future<Output = Result<Desk, String>> + Send>> + Send + Sync>;
+    Arc<dyn Fn() -> Pin<Box<dyn Future<Output = Result<Desk, String>> + Send>> + Send + Sync>;
 
 /// Saves a screenshot as a PNG and returns its path, or says why it cannot.
-pub type Save = Box<dyn Fn(&Shot) -> Result<PathBuf, String> + Send + Sync>;
+pub type Save = Arc<dyn Fn(&Shot) -> Result<PathBuf, String> + Send + Sync>;
+
+/// How screenshots are taken and saved, for the portal and for the shell.
+#[derive(Clone)]
+pub struct Shots {
+    pub shoot: Shoot,
+    pub save: Save,
+}
+
+impl Shots {
+    /// Shots of a desk that cannot be shot, for tests that take none.
+    #[cfg(test)]
+    pub fn none() -> Shots {
+        Shots {
+            shoot: Arc::new(|| Box::pin(async { Err("no desk here".into()) })),
+            save: Arc::new(|_| Err("no pictures here".into())),
+        }
+    }
+}
 
 /// The frontend's permission store, where the user's answers are kept.
 const PERMISSION_STORE: &str = "org.freedesktop.impl.portal.PermissionStore";
@@ -253,9 +275,41 @@ async fn keep(connection: &zbus::Connection, app_id: &str, allowed: bool) {
     }
 }
 
+/// Saves a screenshot the shell asked for itself, as `SystemRequest::Screenshot`
+/// describes: the whole desk into `file`, or else the area the shell picks,
+/// as for an interactive screenshot, through `shots.save`.
+pub async fn for_the_shell(
+    queue: &Queue,
+    shots: &Shots,
+    file: Option<PathBuf>,
+) -> Result<PathBuf, SystemError> {
+    let desk = (shots.shoot)()
+        .await
+        .map_err(|why| other(format!("the desk could not be shot: {why}")))?;
+    match file {
+        Some(file) => std::fs::write(&file, encode(&desk.shot))
+            .map(|()| file)
+            .map_err(|why| other(format!("the screenshot could not be written: {why}"))),
+        None => {
+            let kind = PortalKind::Screenshot(frozen(&desk));
+            match ask_unbidden(queue, SHELL_APP_ID.into(), "", kind).await {
+                PortalAnswer::Screenshot { area } => (shots.save)(&crop(&desk.shot, area))
+                    .map_err(|why| other(format!("the screenshot could not be saved: {why}"))),
+                PortalAnswer::Canceled => Err(SystemError {
+                    kind: SystemErrorKind::Canceled,
+                    message: "the screenshot dialog was dismissed".into(),
+                }),
+                answer => Err(other(format!(
+                    "the screenshot dialog was not answered: {answer:?}"
+                ))),
+            }
+        }
+    }
+}
+
 /// A [`Shoot`] that takes its frames through `casting`.
 pub fn shooting(casting: Casting) -> Shoot {
-    Box::new(move || {
+    Arc::new(move || {
         let (replier, developed) = crate::reply::reply();
         casting.shoot(Box::new(move |desk| replier.send(desk)));
         Box::pin(async move {
@@ -281,7 +335,7 @@ pub fn in_pictures() -> Save {
 
 /// A [`Save`] into the folder `dir` names, named for the local time.
 fn saving_into(dir: impl Fn() -> PathBuf + Send + Sync + 'static) -> Save {
-    Box::new(move |shot| {
+    Arc::new(move |shot| {
         save(&dir(), &file_name(now()), &encode(shot)).map_err(|why| why.to_string())
     })
 }
@@ -332,6 +386,14 @@ fn flag(options: &HashMap<String, OwnedValue>, name: &str) -> bool {
         .get(name)
         .and_then(|value| bool::try_from(value).ok())
         .unwrap_or(false)
+}
+
+/// A failure of kind `Other`, saying `why`.
+fn other(why: String) -> SystemError {
+    SystemError {
+        kind: SystemErrorKind::Other,
+        message: why,
+    }
 }
 
 fn owned(value: Value) -> OwnedValue {
@@ -431,6 +493,14 @@ mod tests {
         }
     }
 
+    /// A [`Shoot`] that always answers `shot`.
+    fn shot_of(shot: Result<Desk, String>) -> Shoot {
+        Arc::new(move || {
+            let shot = shot.clone();
+            Box::pin(async move { shot })
+        })
+    }
+
     struct Served {
         client: Connection,
         queue: Arc<Queue>,
@@ -456,10 +526,7 @@ mod tests {
         let album = tempfile::tempdir().expect("a temporary folder");
         let backend = Screenshot {
             queue: Arc::clone(&queue),
-            shoot: Box::new(move || {
-                let shot = shot.clone();
-                Box::pin(async move { shot })
-            }),
+            shoot: shot_of(shot),
             save: {
                 let dir = album.path().join("Screenshots");
                 saving_into(move || dir.clone())
@@ -696,6 +763,122 @@ mod tests {
 
         assert_eq!(response, 2);
         assert!(results.is_empty());
+    }
+
+    /// The shell's own screenshot of `shot`, into `file` if given, on another
+    /// thread, with the queue it asks through and the folder it saves into.
+    struct ShellShot {
+        taken: thread::JoinHandle<Result<PathBuf, SystemError>>,
+        queue: Arc<Queue>,
+        published: Receiver<Vec<PortalRequest>>,
+        album: tempfile::TempDir,
+    }
+
+    fn shell_shot(shot: Result<Desk, String>, file: Option<PathBuf>) -> ShellShot {
+        let queue = Arc::<Queue>::default();
+        let (publish, published) = channel();
+        queue.listen(
+            move |items, _| {
+                let _ = publish.send(items);
+            },
+            || true,
+            |_| None,
+        );
+        let album = tempfile::tempdir().expect("a temporary folder");
+        let shots = Shots {
+            shoot: shot_of(shot),
+            save: {
+                let dir = album.path().join("Screenshots");
+                saving_into(move || dir.clone())
+            },
+        };
+        let taken = {
+            let queue = Arc::clone(&queue);
+            thread::spawn(move || zbus::block_on(for_the_shell(&queue, &shots, file)))
+        };
+        ShellShot {
+            taken,
+            queue,
+            published,
+            album,
+        }
+    }
+
+    #[test]
+    fn the_shells_own_screenshot_keeps_the_area_it_picked() {
+        let shooting = shell_shot(Ok(desk()), None);
+
+        let asked = shooting
+            .published
+            .recv_timeout(Duration::from_secs(10))
+            .expect("the queue published");
+        assert_eq!(asked[0].app_id, SHELL_APP_ID);
+        let PortalKind::Screenshot(FrozenDesk { windows, .. }) = &asked[0].kind else {
+            panic!("a picker, not {:?}", asked[0].kind);
+        };
+        shooting.queue.answer(
+            asked[0].id,
+            PortalAnswer::Screenshot {
+                area: windows[0].area,
+            },
+        );
+
+        let path = shooting.taken.join().expect("returned").expect("saved");
+        assert!(path.starts_with(shooting.album.path().join("Screenshots")));
+        assert_eq!(
+            png_at(&owned(Value::from(file_uri(&path.display().to_string())))),
+            ((1, 1), vec![0, 0, 255, 128])
+        );
+    }
+
+    #[test]
+    fn a_dismissed_shell_screenshot_is_canceled() {
+        let shooting = shell_shot(Ok(desk()), None);
+        let asked = shooting
+            .published
+            .recv_timeout(Duration::from_secs(10))
+            .expect("the queue published");
+        shooting.queue.answer(asked[0].id, PortalAnswer::Canceled);
+
+        let error = shooting
+            .taken
+            .join()
+            .expect("returned")
+            .expect_err("canceled");
+
+        assert_eq!(error.kind, SystemErrorKind::Canceled);
+        assert!(!shooting.album.path().join("Screenshots").exists());
+    }
+
+    #[test]
+    fn a_screenshot_into_a_file_is_the_whole_desk_without_a_dialog() {
+        let folder = tempfile::tempdir().expect("a temporary folder");
+        let file = folder.path().join("shot.png");
+        let shooting = shell_shot(Ok(desk()), Some(file.clone()));
+
+        assert_eq!(shooting.taken.join().expect("returned"), Ok(file.clone()));
+        assert_eq!(
+            png_at(&owned(Value::from(file_uri(&file.display().to_string())))).0,
+            (2, 1)
+        );
+        assert!(
+            shooting.published.try_iter().all(|items| items.is_empty()),
+            "no dialog"
+        );
+    }
+
+    #[test]
+    fn a_shell_screenshot_of_a_desk_that_cannot_be_shot_says_why() {
+        let shooting = shell_shot(Err("no engine".into()), None);
+
+        let error = shooting
+            .taken
+            .join()
+            .expect("returned")
+            .expect_err("unshot");
+
+        assert_eq!(error.kind, SystemErrorKind::Other);
+        assert!(error.message.contains("no engine"), "{}", error.message);
     }
 
     #[test]

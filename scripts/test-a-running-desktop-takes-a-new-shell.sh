@@ -6,13 +6,15 @@
 #   ./scripts/test-a-running-desktop-takes-a-new-shell.sh
 #
 # Unit tests cover the parts: `tests/cli.rs` the arguments, `tests/command.rs`
-# the line sent, `tests/command_socket.rs` the reply. This covers the wiring:
-# the supervisor gives the engine a command socket, a command from another
-# terminal reaches it over DOMICILE_SOCK, and a refusal is printed in that
+# the line sent, `tests/command_socket.rs` and `tests/compositor_socket.rs` the
+# reply. This covers the wiring: the supervisor gives the engine a command
+# socket, a command from another terminal reaches it, or the compositor's chrome
+# socket for a screenshot, over DOMICILE_SOCK, and a refusal is printed in that
 # terminal.
 #
-# The engine is a small Python stub of the command socket. The real side,
-# `components/domicile/browser/command_protocol.cc`, has its own unit tests.
+# The engine and the compositor are small Python stubs of their sockets. The
+# real sides, `components/domicile/browser/command_protocol.cc` and the
+# compositor's `screenshot` system call, have their own unit tests.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -90,7 +92,6 @@ while True:
         heard.write(line.decode())
     answer = open("$WORK/answer").read().strip()
     done = ({"type": "opened"} if b'"type":"open_url"' in line
-            else {"type": "captured"} if b'"type":"screenshot"' in line
             else {"type": "loaded"})
     reply = (done if answer == "loaded"
              else {"type": "refused", "why": answer})
@@ -99,17 +100,39 @@ while True:
 ENGINE
 chmod +x "$WORK/engine/chrome"
 
-cat >"$WORK/domicile-compositor" <<'COMPOSITOR'
-#!/bin/sh
-while [ $# -gt 0 ]; do
-  case "$1" in --session) session="$2"; shift ;; esac
-  shift
-done
+# Stub compositor: binds the chrome socket, publishes the session, and saves
+# every screenshot it is asked for.
+cat >"$WORK/domicile-compositor" <<COMPOSITOR
+#!/usr/bin/env python3
+import json, os, socket, sys
+
+arguments = dict(zip(sys.argv[1::2], sys.argv[2::2]))
+session = arguments["--session"]
 # Record the environment apps inherit, for the test to check.
-printf '%s' "$BROWSER" >"$(dirname "$session")/browser"
-printf '%s' "$PATH" >"$(dirname "$session")/path"
-: >"$session"
-exec sleep 60
+for name in ("BROWSER", "PATH"):
+    with open(os.path.join(os.path.dirname(session), name.lower()), "w") as saying:
+        saying.write(os.environ[name])
+
+listening = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+listening.bind(arguments["--chrome-socket"])
+listening.listen(4)
+open(session, "w").close()
+
+while True:
+    connection, _ = listening.accept()
+    line = b""
+    while not line.endswith(b"\n"):
+        got = connection.recv(4096)
+        if not got:
+            break
+        line += got
+    with open("$WORK/compositor-heard", "a") as heard:
+        heard.write(line.decode())
+    asked = json.loads(line)
+    reply = {"kind": "saved", "path": asked["request"]["file"]}
+    connection.sendall((json.dumps(
+        {"type": "system_reply", "id": asked["id"], "reply": reply}) + "\n").encode())
+    connection.close()
 COMPOSITOR
 chmod +x "$WORK/domicile-compositor"
 
@@ -217,16 +240,15 @@ else
   FAILED=1
 fi
 
-echo "== screenshot reaches the engine with the file made absolute =="
-# The engine does not share the terminal's working directory.
-echo loaded >"$WORK/answer"
+echo "== screenshot reaches the compositor with the file made absolute =="
+# The compositor does not share the terminal's working directory.
 SAID="$(cd "$WORK" && ask_desktop screenshot shot.png)"
-HEARD="$(tail -n 1 "$WORK/engine-heard" 2>/dev/null)"
-WANT="{\"type\":\"screenshot\",\"version\":1,\"file\":\"$WORK/shot.png\"}"
+HEARD="$(tail -n 1 "$WORK/compositor-heard" 2>/dev/null)"
+WANT="{\"type\":\"system_request\",\"id\":1,\"request\":{\"call\":\"screenshot\",\"file\":\"$WORK/shot.png\"}}"
 if [ "$HEARD" = "$WANT" ]; then
   echo "PASS: $HEARD"
 else
-  echo "FAIL: the engine heard '$HEARD'"
+  echo "FAIL: the compositor heard '$HEARD'"
   echo "      and the protocol says  $WANT"
   FAILED=1
 fi

@@ -311,6 +311,7 @@ export enum WindowActionKind {
   PopupPlaced,
   ScratchpadShown,
   ScreenHovered,
+  ScreenshotTaken,
   ScreensDescribed,
   SplitToggled,
   WindowClosed,
@@ -565,6 +566,16 @@ export const WindowAction = {
   ScreensDescribed: (screens: readonly PlacedScreen[]) => ({
     kind: WindowActionKind.ScreensDescribed as const,
     screens,
+  }),
+
+  /**
+   * The user asked for a screenshot.
+   *
+   * Changes no state; the compositor freezes the desk and `<PortalDialogs />`
+   * draws the dialog.
+   */
+  ScreenshotTaken: () => ({
+    kind: WindowActionKind.ScreenshotTaken as const,
   }),
 
   /** `layout toggle split`. */
@@ -849,6 +860,10 @@ const reduceAction = (
     }
     case WindowActionKind.DeskLocked: {
       // The compositor locks it and the host says so.
+      return state;
+    }
+    case WindowActionKind.ScreenshotTaken: {
+      // The compositor takes it, through the portal dialog.
       return state;
     }
     case WindowActionKind.CommandExecuted: {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
+import { SHELL_APP_ID } from "@domicile-desktop/sdk/portal";
 import type { Node } from "@domicile-desktop/system-apps/fake-system";
 import { fakeSystem } from "@domicile-desktop/system-apps/fake-system";
 import {
@@ -1168,6 +1169,15 @@ describe(PortalDialogs, () => {
       expect(
         screen.getByRole("button", { name: "Terminal" }),
       ).toBeInTheDocument();
+    });
+
+    it("names no asker when the shell asked for it", () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} />);
+      host.push([{ ...frozen(1, "screenshot"), app_id: SHELL_APP_ID }]);
+
+      expect(screen.getByRole("dialog")).toHaveTextContent("Take a screenshot");
+      expect(screen.getByRole("dialog")).not.toHaveTextContent("asks");
     });
 
     it("saves the whole desk", async () => {

@@ -489,7 +489,10 @@ mod tests {
         Served {
             client,
             queue: Arc::clone(&backends.queue),
-            portals: Portals { backends },
+            portals: Portals {
+                backends,
+                shots: crate::portals::Shots::none(),
+            },
             dialogs,
             bound,
             _server: server,

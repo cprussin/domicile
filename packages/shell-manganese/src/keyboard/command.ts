@@ -2,7 +2,8 @@
 //
 // - Commands use sway's syntax where sway has one (`focus left`, `layout
 //   tabbed`), so sway bindings can be copied over. `lock`, `launcher`,
-//   `clipboard` and `resize grow <direction>` are manganese's own.
+//   `clipboard`, `screenshot` and `resize grow <direction>` are manganese's
+//   own.
 // - `exec <argv…>` runs the argv directly, not through `sh -c` as sway does.
 // - An unknown command is a config error, so it returns an `Err`, not a throw.
 //
@@ -37,6 +38,8 @@ const COMMANDS: ReadonlyMap<string, Action> = new Map<string, Action>([
   ["launcher", WindowAction.LauncherToggled()],
   // Clipboard history; a toggle, like the launcher.
   ["clipboard", WindowAction.ClipboardToggled()],
+  // The area is picked in the screenshot dialog.
+  ["screenshot", WindowAction.ScreenshotTaken()],
   ...DIRECTIONS.map(
     ([word, way]): Command => [`focus ${word}`, WindowAction.FocusStepped(way)],
   ),

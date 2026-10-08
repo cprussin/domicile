@@ -10,7 +10,6 @@
 #include "base/files/file_path.h"
 #include "base/functional/callback.h"
 #include "base/functional/function_ref.h"
-#include "base/types/expected.h"
 #include "url/gurl.h"
 
 namespace domicile {
@@ -24,10 +23,6 @@ namespace domicile {
 //
 //   {"type":"open_url","version":1,"url":"https://example.com/"}
 //   -> {"type":"opened"}
-//   -> {"type":"refused","why":"..."}
-//
-//   {"type":"screenshot","version":1,"file":"/home/me/shot.png"}
-//   -> {"type":"captured"}
 //   -> {"type":"refused","why":"..."}
 //
 // This file only parses and answers lines; the actions are injected so it can
@@ -52,24 +47,14 @@ using LoadShell =
 // there is no shell to own the window.
 using OpenUrl = base::FunctionRef<bool(const GURL& url)>;
 
-// How a screenshot ended: written, or why not.
-using ScreenshotDone =
-    base::OnceCallback<void(base::expected<void, std::string>)>;
-
-// Carries out `screenshot`: writes a PNG of the desk to `file`. Answers through
-// `done` because the display compositor reads the desk back asynchronously.
-using Screenshot =
-    base::FunctionRef<void(const base::FilePath& file, ScreenshotDone done)>;
-
 // Receives the reply line, including its trailing newline.
 using CommandReply = base::OnceCallback<void(std::string)>;
 
-// Answers one request line (without its newline). `reply` runs once:
-// before this returns, except for `screenshot`, where it runs from `done`.
+// Answers one request line (without its newline). `reply` runs once, before
+// this returns.
 void AnswerCommand(std::string_view line,
                    LoadShell load_shell,
                    OpenUrl open_url,
-                   Screenshot screenshot,
                    CommandReply reply);
 
 // Returns the refusal reply line for `why`.

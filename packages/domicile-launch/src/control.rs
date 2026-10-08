@@ -26,7 +26,7 @@ pub enum Request {
     /// Open this URL in a browser window. The client converts paths with
     /// [`crate::address`].
     OpenUrl { url: String },
-    /// Write a PNG of the desk to this absolute path.
+    /// Write a PNG of the whole desk to this absolute path.
     ///
     /// The client makes the path absolute, as for `LoadShell`.
     Screenshot { file: PathBuf },
@@ -47,7 +47,7 @@ pub enum Response {
     /// back.
     Opened,
 
-    /// The engine wrote the screenshot to this file.
+    /// The compositor wrote the screenshot to this file.
     Captured { file: PathBuf },
 
     /// The request was unknown or could not be carried out.
@@ -80,15 +80,15 @@ pub type LoadShell<'a> = &'a dyn Fn(&Path, &Path) -> Result<(), String>;
 /// [`crate::command_socket::open_url`] in a desktop; a closure in tests.
 pub type OpenUrl<'a> = &'a dyn Fn(&str) -> Result<(), String>;
 
-/// Tells the engine to write a PNG of the desk to a file.
+/// Tells the compositor to write a PNG of the desk to a file.
 ///
-/// [`crate::command_socket::screenshot`] in a desktop; a closure in tests.
+/// [`crate::compositor_socket::screenshot`] in a desktop; a closure in tests.
 pub type Screenshot<'a> = &'a dyn Fn(&Path) -> Result<(), String>;
 
 /// Answers one request line, given the current shell `module`.
 ///
-/// `load`, `open` and `capture` reach the engine; they are injected so this
-/// can be tested without sockets.
+/// `load` and `open` reach the engine and `capture` the compositor; they are
+/// injected so this can be tested without sockets.
 pub fn answer(
     line: &str,
     module: &Path,

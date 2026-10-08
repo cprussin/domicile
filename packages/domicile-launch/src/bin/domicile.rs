@@ -18,8 +18,9 @@ use std::time::{Duration, Instant};
 use domicile_launch::address::url_for;
 use domicile_launch::build_progress::{bar, heard, Heard as BuilderHeard};
 use domicile_launch::cli::{invocation, CliError, Invocation};
-use domicile_launch::command_socket::{load_shell, open_url, screenshot};
+use domicile_launch::command_socket::{load_shell, open_url};
 use domicile_launch::components::{builder, components, our_shell, Components};
+use domicile_launch::compositor_socket::screenshot;
 use domicile_launch::config_check::check;
 use domicile_launch::config_path::{config_file, is_module, ConfigFile};
 use domicile_launch::config_watch;
@@ -48,8 +49,8 @@ use domicile_launch::supervise::{catch_interrupts, interrupted, Running, ASK_EVE
 /// machine takes seconds.
 const PATIENCE: Duration = Duration::from_secs(30);
 
-/// How long a screenshot may take: the engine reads back the whole desk and
-/// encodes a PNG, which for several 4K monitors takes seconds.
+/// How long a screenshot may take: the compositor reads back every monitor
+/// and encodes a PNG, which for several 4K monitors takes seconds.
 const CAPTURE_WITHIN: Duration = Duration::from_secs(10);
 
 /// How many of the compositor's last stderr lines to repeat when a run gives
@@ -352,11 +353,17 @@ fn desktop(shell: Option<&str>, flag: Option<&Path>) -> Result<ExitCode, String>
     println!("profile: {}", places.profile.display());
 
     // Bind before starting components, which inherit the path. The
-    // supervisor owns it because it routes some commands to the engine, and it
-    // is keyed on the pid because no Wayland display exists yet.
+    // supervisor owns it because it routes commands to the engine and the
+    // compositor, and it is keyed on the pid because no Wayland display exists
+    // yet.
     let control = take(&places.control).map_err(|why| why.to_string())?;
     let serving = Arc::new(Mutex::new(module));
-    answering(&control, Arc::clone(&serving), places.command.clone())?;
+    answering(
+        &control,
+        Arc::clone(&serving),
+        places.command.clone(),
+        places.chrome_socket.clone(),
+    )?;
     println!("{VARIABLE}={}", places.control.display());
 
     // Watch a module config's directory. On an edit, re-evaluate it into the
@@ -634,7 +641,8 @@ fn wait_or_notice_a_stop(wait: Duration) {
 /// status as displayed, which tells signals apart from exit codes.
 const CLEANLY: &str = "exit status: 0";
 
-/// Serves the control socket on a thread, routing engine commands to `engine`.
+/// Serves the control socket on a thread, routing engine commands to `engine`
+/// and screenshots to the compositor's `chrome` socket.
 ///
 /// A separate thread because the supervisor blocks on its children. A failed
 /// connection is logged and skipped, so one bad client cannot stop the socket.
@@ -645,6 +653,7 @@ fn answering(
     control: &Control,
     serving: Arc<Mutex<PathBuf>>,
     engine: PathBuf,
+    chrome: PathBuf,
 ) -> Result<(), String> {
     let listener = control
         .listener()
@@ -662,7 +671,7 @@ fn answering(
                                 open_url(&engine, url, ANSWER_WITHIN).map_err(|why| why.to_string())
                             },
                             &|file| {
-                                screenshot(&engine, file, CAPTURE_WITHIN)
+                                screenshot(&chrome, file, CAPTURE_WITHIN)
                                     .map_err(|why| why.to_string())
                             },
                         )

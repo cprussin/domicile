@@ -16,6 +16,7 @@ describe("parseCommand", () => {
     ["lock", WindowAction.DeskLocked()],
     ["launcher", WindowAction.LauncherToggled()],
     ["clipboard", WindowAction.ClipboardToggled()],
+    ["screenshot", WindowAction.ScreenshotTaken()],
     ["focus left", WindowAction.FocusStepped(Direction.Left)],
     ["focus right", WindowAction.FocusStepped(Direction.Right)],
     ["focus up", WindowAction.FocusStepped(Direction.Up)],
