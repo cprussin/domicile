@@ -299,6 +299,9 @@ export const Desktop = ({
               }
             }
           }}
+          onFloat={(id) => {
+            act(WindowAction.WindowFloated(id));
+          }}
           onFullscreen={(id) => {
             act(WindowAction.WindowFullscreened(id));
           }}

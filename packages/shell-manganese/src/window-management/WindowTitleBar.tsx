@@ -41,6 +41,7 @@ type Props = {
   onDrop: () => void;
   /** A tiled window dropped where it was aimed. See `useTileDrag`. */
   onDropOn: (aim: Aim) => void;
+  onFloat: () => void;
   onFullscreen: () => void;
   onMotionEnded: () => void;
   onGrab: () => void;
@@ -86,6 +87,7 @@ export const WindowTitleBar = ({
   onClose,
   onDrop,
   onDropOn,
+  onFloat,
   onFullscreen,
   onGrab,
   onMotionEnded,
@@ -122,12 +124,14 @@ export const WindowTitleBar = ({
       besideOpenTab={besideOpenTab}
       depth={depth}
       dragging={dragging}
+      floating={float !== undefined}
       focus={focus}
       frame={frame}
       fullscreen={fullscreen}
       groupSelected={groupSelected}
       motion={motion}
       onClose={onClose}
+      onFloat={onFloat}
       onFullscreen={onFullscreen}
       onMiddleClick={onClose}
       onMotionEnded={onMotionEnded}

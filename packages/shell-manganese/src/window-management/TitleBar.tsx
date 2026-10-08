@@ -1,9 +1,11 @@
 import { Button } from "@domicile-desktop/component-library/Button";
+import { BrowsersIcon } from "@phosphor-icons/react/dist/ssr/Browsers";
 import { CornersInIcon } from "@phosphor-icons/react/dist/ssr/CornersIn";
 import { CornersOutIcon } from "@phosphor-icons/react/dist/ssr/CornersOut";
 import { RowsIcon } from "@phosphor-icons/react/dist/ssr/Rows";
 import { SquareSplitHorizontalIcon } from "@phosphor-icons/react/dist/ssr/SquareSplitHorizontal";
 import { SquareSplitVerticalIcon } from "@phosphor-icons/react/dist/ssr/SquareSplitVertical";
+import { SquaresFourIcon } from "@phosphor-icons/react/dist/ssr/SquaresFour";
 import { TabsIcon } from "@phosphor-icons/react/dist/ssr/Tabs";
 import { XIcon } from "@phosphor-icons/react/dist/ssr/X";
 import type { PointerEvent as ReactPointerEvent } from "react";
@@ -70,6 +72,8 @@ type Props = {
    * {@link scaledAbout}. For a tab, this is the tab's own box.
    */
   frame: Rect;
+  /** Whether the window floats. Switches the float button to "Tile". */
+  floating: boolean;
   /**
    * Whether the window is fullscreen. Switches the button to "Restore" and
    * drops the bar's rounded corners and edge.
@@ -82,6 +86,8 @@ type Props = {
   motion: WindowMotion;
   /** Closes the window. */
   onClose: () => void;
+  /** Toggles floating, like `floating toggle`. */
+  onFloat: () => void;
   /** Toggles fullscreen, like `mod+f`. */
   onFullscreen: () => void;
   /** Called when `motion` finishes. */
@@ -121,6 +127,7 @@ export const TitleBar = ({
   besideOpenTab = false,
   depth,
   dragging,
+  floating,
   focus,
   frame,
   fullscreen,
@@ -129,6 +136,7 @@ export const TitleBar = ({
   motion,
   onClose,
   onContextMenu,
+  onFloat,
   onFullscreen,
   onMiddleClick,
   onMotionEnded,
@@ -208,6 +216,18 @@ export const TitleBar = ({
           event.stopPropagation();
         }}
       >
+        <Button
+          label={floating ? "Tile" : "Float"}
+          onClick={onFloat}
+          size="sm"
+          variant="ghost"
+        >
+          {floating ? (
+            <SquaresFourIcon size={14} />
+          ) : (
+            <BrowsersIcon size={14} />
+          )}
+        </Button>
         <Button
           label={fullscreen ? "Restore" : "Maximize"}
           onClick={onFullscreen}

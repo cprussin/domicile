@@ -1311,6 +1311,19 @@ describe("Shell", () => {
       });
     });
 
+    it("floats and tiles the window from the button on its own bar", async () => {
+      // The pointer equivalent of `floating toggle`.
+      const user = userEvent.setup();
+      const { container } = renderShell();
+      clientAppears("term");
+
+      await user.click(screen.getByRole("button", { name: "Float" }));
+      expect(shadows(container)).toHaveLength(1);
+
+      await user.click(screen.getByRole("button", { name: "Tile" }));
+      expect(shadows(container)).toHaveLength(0);
+    });
+
     it("takes the window away when the client goes", () => {
       const { container } = renderShell();
       clientAppears("term");
@@ -1794,6 +1807,22 @@ describe("Shell", () => {
       expect(barFor(container, "app:three").dataset.focus).toBe("focused");
       expect(barFor(container, "app:two").dataset.groupSelected).toBe("true");
       expect(barFor(container, "app:three").dataset.groupSelected).toBe("true");
+    });
+
+    it("offers to tile a floating group from the tab that stands for it", () => {
+      // A tabbed container holding a column, floated whole.
+      renderShell();
+      clientAppears("one");
+      clientAppears("two");
+      press("w");
+      press("v");
+      clientAppears("three");
+      press("a");
+      press("a");
+      press("Tab", true);
+
+      expect(screen.getByRole("img", { name: "Column of 2" })).toBeDefined();
+      expect(screen.queryAllByRole("button", { name: "Float" })).toEqual([]);
     });
 
     it("runs the open tab's edge under the tabs beside it", () => {

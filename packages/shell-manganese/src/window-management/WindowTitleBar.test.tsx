@@ -32,6 +32,7 @@ const tabProps = {
   onClose: nothing,
   onDrop: nothing,
   onDropOn: nothing,
+  onFloat: nothing,
   onFullscreen: nothing,
   onGrab: nothing,
   onMotionEnded: nothing,

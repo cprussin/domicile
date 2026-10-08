@@ -34,11 +34,13 @@ const nothingEnded = () => {
 const barProps = {
   depth: 0,
   dragging: false,
+  floating: false,
   focus: "resting",
   frame: FRAME,
   fullscreen: false,
   motion: "resting",
   onClose: () => undefined,
+  onFloat: () => undefined,
   onFullscreen: () => undefined,
   onMotionEnded: nothingEnded,
   rect: ON_SCREEN,
@@ -360,6 +362,35 @@ describe("TitleBar", () => {
 
       expect(queryByRole("button", { name: "Maximize" })).toBeNull();
       expect(queryByRole("button", { name: "Restore" })).not.toBeNull();
+    });
+  });
+
+  describe("the button that floats the window", () => {
+    it("asks for the window it names to float, left of the fullscreen button", async () => {
+      await new Promise<void>((resolve) => {
+        const { getByRole } = render(
+          <TitleBar
+            {...barProps}
+            onFloat={() => {
+              resolve();
+            }}
+          />,
+        );
+        const float = getByRole("button", { name: "Float" });
+        expect(
+          float.compareDocumentPosition(
+            getByRole("button", { name: "Maximize" }),
+          ),
+        ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+        fireEvent.click(float);
+      });
+    });
+
+    it("offers to tile a floating window", () => {
+      const { queryByRole } = render(<TitleBar {...barProps} floating />);
+
+      expect(queryByRole("button", { name: "Float" })).toBeNull();
+      expect(queryByRole("button", { name: "Tile" })).not.toBeNull();
     });
   });
 });

@@ -62,6 +62,8 @@ type Props = {
   onDrop: () => void;
   /** A tiled window dropped where it was aimed, on any screen. */
   onDropOn: (id: string, aim: Aim) => void;
+  /** Toggles floating from a window's title bar. */
+  onFloat: (id: string) => void;
   /** Toggles fullscreen from a window's title bar. */
   onFullscreen: (id: string) => void;
   onGrab: (id: string) => void;
@@ -108,6 +110,7 @@ export const Stage = ({
   onClose,
   onDrop,
   onDropOn,
+  onFloat,
   onFullscreen,
   onGrab,
   onHover,
@@ -304,6 +307,9 @@ export const Stage = ({
                   onDropOn={(aim) => {
                     onDropOn(window.id, aim);
                   }}
+                  onFloat={() => {
+                    onFloat(window.id);
+                  }}
                   onFullscreen={() => {
                     onFullscreen(window.id);
                   }}
@@ -472,6 +478,7 @@ export const Stage = ({
               depth={tab.depth}
               // A tab moves only with its container.
               dragging={false}
+              floating={floats.some((float) => floatHolds(float, tab.id))}
               // The shown tab of an unfocused container must not use the
               // accent, which marks keyboard focus.
               focus={titleFocus({
@@ -491,6 +498,9 @@ export const Stage = ({
               motion={motion}
               onClose={() => {
                 onClose(tab.id);
+              }}
+              onFloat={() => {
+                onFloat(tab.id);
               }}
               onFullscreen={() => {
                 onFullscreen(tab.id);
