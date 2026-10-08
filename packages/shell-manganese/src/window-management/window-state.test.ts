@@ -1259,6 +1259,19 @@ describe("the buttons on a window's own title bar", () => {
 
     expect(workspaceHere(state).fullscreen).toBeUndefined();
   });
+
+  it("floats the window whose bar it is, not the one being worked in, and tiles it again", () => {
+    const floated = reduce(
+      desktop("kitty", "editor"),
+      WindowAction.WindowFloated(APP("kitty")),
+    );
+    expect(
+      workspaceHere(floated).floats.flatMap(({ root }) => windowsIn(root)),
+    ).toEqual([APP("kitty")]);
+
+    const tiled = reduce(floated, WindowAction.WindowFloated(APP("kitty")));
+    expect(workspaceHere(tiled).floats).toEqual([]);
+  });
 });
 
 describe("the clipboard panel", () => {

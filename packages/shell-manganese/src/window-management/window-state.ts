@@ -332,6 +332,7 @@ export enum WindowActionKind {
   WindowDropped,
   WindowDroppedOn,
   WindowDroppedOnScreen,
+  WindowFloated,
   WindowFullscreened,
   WindowGrabbed,
   WindowGrown,
@@ -636,6 +637,16 @@ export const WindowAction = {
   }),
 
   /**
+   * The user pressed the float button on window `id`'s title bar.
+   *
+   * Unlike {@link WindowAction.FloatToggled}, it targets a named window.
+   */
+  WindowFloated: (id: string) => ({
+    id,
+    kind: WindowActionKind.WindowFloated as const,
+  }),
+
+  /**
    * The user pressed the fullscreen button on window `id`'s title bar.
    *
    * Unlike {@link WindowAction.FullscreenToggled}, it targets a named window.
@@ -915,6 +926,14 @@ const reduceAction = (
     }
     case WindowActionKind.WindowDroppedOnScreen: {
       return dropOnScreen(state, action.id, action.screen);
+    }
+    case WindowActionKind.WindowFloated: {
+      // Focus the window first, as for `WindowFullscreened`. Reaching it also
+      // focuses its screen, which the float is placed on.
+      const reached = reachWindow(state, action.id);
+      return onWorkspaceWith(reached, action.id, (workspace) =>
+        floatToggled(workspace, screenHere(reached)),
+      );
     }
     case WindowActionKind.WindowFullscreened: {
       // Focus the window first: `fullscreenToggled` acts on the focused
