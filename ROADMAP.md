@@ -6,7 +6,9 @@ For what Domicile is, see [README.md](README.md) and
 
 ## Status
 
-- Nothing is released.
+- There is no supported end-user release.
+- CI publishes alpha npm packages (`0.0.0-alpha-<sha>`) and prebuilt engines
+  for the pinned fork. Neither is a supported release.
 - The wire protocol is at `PROTOCOL_VERSION = 1`.
 - `packages/domicile-engine/engine-pin.nix` picks the engine users get. See
   [RELEASES.md](packages/domicile-engine/docs/RELEASES.md).
@@ -29,12 +31,40 @@ What works:
 - Shells reach files, processes and D-Bus. Battery, backlight, audio,
   network, Bluetooth and apps are libraries on them
   ([SHELL-SYSTEM-ACCESS.md](docs/SHELL-SYSTEM-ACCESS.md)).
+- Domicile is the only portal backend. The compositor answers `Settings`,
+  `Access`, `AppChooser`, `FileChooser`, `Notification`, `Inhibit`,
+  `RemoteDesktop`, `Clipboard`, `InputCapture`, `Account`, `Email`,
+  `Lockdown`, `GlobalShortcuts`, `Background`, `Wallpaper`, `DynamicLauncher`,
+  `Usb`, `Print`, `ScreenCast` and `Screenshot` over the request channel to
+  the shell. `Secret` goes to the keyring, and no other backend is routed
+  ([PORTALS.md](docs/architecture/PORTALS.md)).
 
 Evidence is in [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md),
 [A-DESKTOP-ON-A-TTY.md](docs/architecture/A-DESKTOP-ON-A-TTY.md),
 [COMPOSABLE-SHELLS.md](docs/architecture/COMPOSABLE-SHELLS.md),
 [EXTENSIONS.md](docs/architecture/EXTENSIONS.md) and the
 `packages/domicile-engine/scripts/guard-*.sh` scripts.
+
+## Trust
+
+- **A shell is trusted native code.** It reads and writes the user's files,
+  spawns any program, and calls the session and system D-Bus.
+- Installing a third-party shell is running a native program with the user's
+  rights. It is not a sandboxed theme.
+- Only the shell page's `domicile` has this access. `<webview>` guests,
+  extensions and `domicile://home` do not.
+- [SHELL-SYSTEM-ACCESS.md](docs/SHELL-SYSTEM-ACCESS.md#security) has the rules.
+
+## Validation
+
+- **CI proves:** unit tests, end-to-end scripts on a headless display, and
+  the engine guards on `crux`'s GPU. Pixel checks read back an offscreen
+  buffer. `./scripts/check.sh` runs the non-engine set locally
+  ([AGENTS.md](AGENTS.md#checking-your-work)).
+- **Only a physical machine proves:** anything on a lit panel, the DRM
+  scanout path, and several real displays. No agent or CI runner has one.
+  [HARDWARE-CHECKS.md](docs/HARDWARE-CHECKS.md) lists the checks a person
+  with a laptop must run.
 
 ## In this repository
 
@@ -129,30 +159,28 @@ Evidence is in [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md),
 
    [COMPOSABLE-SHELLS.md](docs/architecture/COMPOSABLE-SHELLS.md).
 
-9. **Domicile answers every portal.** The compositor answers `Settings`,
-    `Access`, `AppChooser`, `FileChooser`, `Notification`, `Inhibit`,
-    `RemoteDesktop`, `Clipboard`, `InputCapture`, `Account`, `Email`,
-    `Lockdown`, `GlobalShortcuts`, `Background`, `Wallpaper`,
-    `DynamicLauncher`, `Usb`, `Print`, `ScreenCast` and `Screenshot`, over
-    the request channel to the shell; `Secret` goes to the keyring, and no
-    other backend is routed.
-    [PORTALS.md](docs/architecture/PORTALS.md).
+9. **Split manganese into small packages.** `@domicile-desktop/manganese` is
+   one package with the layout, the bar and every bar item. Split the clock,
+   tray, mixer and window management into their own packages, with manganese
+   the shell that composes them. No design doc yet.
 
-10. **Split manganese into small packages.** `@domicile-desktop/manganese` is
-    one package with the layout, the bar and every bar item. Split the clock,
-    tray, mixer and window management into their own packages, with manganese
-    the shell that composes them. No design doc yet.
-
-11. **A History app.** Browser windows have back, forward and address
+10. **A History app.** Browser windows have back, forward and address
     suggestions, but nothing browses, searches or clears history.
     `chrome://history` is blocked like every `chrome://` page (patch 0083). No
     design doc yet.
 
-12. **A Settings app.** Extensions and config values can only be set by editing
+11. **A Settings app.** Extensions and config values can only be set by editing
     the config. A Settings app would manage both. It would also hold the
     *Known gaps* that need a place to store state: a persistent theme choice,
     and the cookies, site data and permissions that `chrome://settings`
     manages in Chrome. No design doc yet.
+
+12. **Split up the compositor's `main.rs`.** Subsystems such as the lock,
+    portals and screens are their own modules. `main.rs` still holds the
+    event-loop state, the chrome hub, frame reporting and most request
+    handling. Left: extract cohesive subsystems so each can be read and tested
+    alone, keeping the event-loop state and the order it changes in clear from
+    `main.rs`.
 
 ## In the engine fork (the agent on `crux`)
 
@@ -228,11 +256,15 @@ Evidence is in [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md),
    `RenderProcessHostImpl` to get the renderer's child process id.
    [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md#open-questions).
 
-## Needs a machine with a screen
-
-No agent or CI runner here has a lit panel.
-[HARDWARE-CHECKS.md](docs/HARDWARE-CHECKS.md) lists the checks a person with a
-laptop must run.
+10. **Keeping the fork current.** The fork is a patch series on the Chromium
+    named in `CHROMIUM_PIN`. A Chromium security fix reaches users only in a
+    new engine release, by moving the pin or carrying the fix as a patch.
+    Moving the pin rebases every patch and rebuilds on `crux`, the one build
+    machine ([Engine CI](#engine-ci)).
+    See [BUILDING-CHROMIUM.md](packages/domicile-engine/docs/BUILDING-CHROMIUM.md#rolling-the-pin),
+    [BUILD-MACHINE.md](packages/domicile-engine/docs/BUILD-MACHINE.md),
+    [RELEASES.md](packages/domicile-engine/docs/RELEASES.md) and
+    [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md).
 
 ## Known gaps
 
@@ -314,7 +346,7 @@ Understood and not scheduled.
   - Download progress is not reported.
 - **No settings page.** Browser windows block every `chrome://` page (patch
   0083), so nothing can clear cookies and site data or change site
-  permissions. The Settings app (item 12) will cover this. Printing is also
+  permissions. The Settings app (item 11) will cover this. Printing is also
   blocked: `window.print()` opens `chrome://print`.
 - **Some extension calls are refused.** `tabs.move`, `group`, `ungroup`,
   `discard`, `duplicate` and splits; `tabs.update`'s `pinned`, `openerTabId`
@@ -354,7 +386,7 @@ Understood and not scheduled.
 - **A theme picked from the toggle lasts only until restart.** `theme.mode` is
   the startup value. The config file is generated (by a shell, or by
   home-manager on NixOS), so the desktop does not write to it. Persisting the
-  choice needs a separate store for desktop state; the Settings app (item 12)
+  choice needs a separate store for desktop state; the Settings app (item 11)
   needs the same.
 - **Unmeasured: whether Wayland windows are in the theme transition's old
   frame.** Windows change theme inside the shell's view transition, after it
