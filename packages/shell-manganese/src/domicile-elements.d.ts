@@ -12,10 +12,12 @@ import type { DetailedHTMLProps, HTMLAttributes } from "react";
 
 declare module "react" {
   // `<webview>` attributes missing from React's Electron-era types: `window`
-  // makes a view show a browser window (see `WEBVIEW_WINDOW_ATTRIBUTE`), and
-  // `extensionpopup`, by its presence, makes it an extension's action popup.
+  // makes a view show a browser window (see `WEBVIEW_WINDOW_ATTRIBUTE`),
+  // `extensionpopup`, by its presence, makes it an extension's action popup,
+  // and `private`, by its presence, makes its page private.
   interface WebViewHTMLAttributes<T> extends HTMLAttributes<T> {
     extensionpopup?: string | undefined;
+    private?: string | undefined;
     window?: string | undefined;
   }
 

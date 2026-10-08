@@ -17,6 +17,7 @@ import { AppWindowIcon } from "@phosphor-icons/react/dist/ssr/AppWindow";
 import { BinaryIcon } from "@phosphor-icons/react/dist/ssr/Binary";
 import { BookmarkSimpleIcon } from "@phosphor-icons/react/dist/ssr/BookmarkSimple";
 import { CircleNotchIcon } from "@phosphor-icons/react/dist/ssr/CircleNotch";
+import { DetectiveIcon } from "@phosphor-icons/react/dist/ssr/Detective";
 import { FileIcon } from "@phosphor-icons/react/dist/ssr/File";
 import { FileXIcon } from "@phosphor-icons/react/dist/ssr/FileX";
 import { FolderIcon } from "@phosphor-icons/react/dist/ssr/Folder";
@@ -417,9 +418,10 @@ const ChoiceRow = ({
     case ChoiceKind.Site: {
       return (
         <>
-          <RowTile icon={GlobeSimpleIcon} />
+          <RowTile icon={choice.isPrivate ? DetectiveIcon : GlobeSimpleIcon} />
           <span className={rowNameStyles}>
             <span className={rowVerbStyles}>Go to</span> {choice.url}
+            <InPrivate isPrivate={choice.isPrivate} />
           </span>
         </>
       );
@@ -427,9 +429,12 @@ const ChoiceRow = ({
     case ChoiceKind.Search: {
       return (
         <>
-          <RowTile icon={MagnifyingGlassIcon} />
+          <RowTile
+            icon={choice.isPrivate ? DetectiveIcon : MagnifyingGlassIcon}
+          />
           <span className={rowNameStyles}>
             <span className={rowVerbStyles}>Search for</span> {choice.query}
+            <InPrivate isPrivate={choice.isPrivate} />
           </span>
         </>
       );
@@ -441,6 +446,7 @@ const ChoiceRow = ({
           <span className={rowNameStyles}>
             <span className={rowVerbStyles}>Search for</span> {choice.query}{" "}
             <span className={rowVerbStyles}>on</span> {nameOf(choice.engine)}
+            <InPrivate isPrivate={choice.isPrivate} />
           </span>
         </>
       );
@@ -452,12 +458,22 @@ const ChoiceRow = ({
           <span className={rowNameStyles}>
             <span className={rowVerbStyles}>Go to</span> {choice.path}{" "}
             <span className={rowVerbStyles}>on</span> {nameOf(choice.engine)}
+            <InPrivate isPrivate={choice.isPrivate} />
           </span>
         </>
       );
     }
   }
 };
+
+/** The end of a web row that opens a private browser. */
+const InPrivate = ({ isPrivate }: { isPrivate: boolean }) =>
+  isPrivate && (
+    <>
+      {" "}
+      <span className={rowVerbStyles}>in a private browser</span>
+    </>
+  );
 
 /** A path's row: the directory it is in, over its name. */
 const FileChoice = ({ query, row }: { query: string; row: FileRow }) => (
@@ -638,7 +654,8 @@ const Placeholder = ({
 /**
  * The preview of the highlighted row.
  *
- * - A site loads in a `<webview>`. `keepKeyboardIn` takes back focus from it.
+ * - A site loads in a private `<webview>`, a bookmark in a signed-in one.
+ *   `keepKeyboardIn` takes back focus from it.
  * - Images, videos, PDFs and songs load from `domicile://home/`. Song tags
  *   are read through the system calls.
  * - Other files show what `previewFile` reads of them.
@@ -675,12 +692,18 @@ const ChoicePreview = ({
         <BookmarkPreview key={choice.url} onLearn={onLearn} url={choice.url} />
       );
     }
+    // Private, so a page the user only looked at leaves nothing behind.
     case ChoiceKind.Site:
     case ChoiceKind.Search:
     case ChoiceKind.TaggedSearch:
     case ChoiceKind.TaggedSite: {
       return (
-        <webview className={viewStyles} src={choice.url} title={choice.url} />
+        <webview
+          className={viewStyles}
+          private=""
+          src={choice.url}
+          title={choice.url}
+        />
       );
     }
   }
@@ -936,21 +959,25 @@ const keyOf = (choice: Choice): string => {
     case ChoiceKind.File: {
       return `file:${choice.row.path}`;
     }
-    // Include the URL, so a changed search is a new row for the preview.
+    // Include the URL, so a changed search is a new row for the preview, and
+    // privacy, since a private row sits beside its ordinary one.
     case ChoiceKind.Site: {
-      return `site:${choice.url}`;
+      return `site:${privacyOf(choice.isPrivate)}:${choice.url}`;
     }
     case ChoiceKind.Search: {
-      return `search:${choice.url}`;
+      return `search:${privacyOf(choice.isPrivate)}:${choice.url}`;
     }
     case ChoiceKind.TaggedSearch: {
-      return `tagged:${choice.url}`;
+      return `tagged:${privacyOf(choice.isPrivate)}:${choice.url}`;
     }
     case ChoiceKind.TaggedSite: {
-      return `tagged-site:${choice.url}`;
+      return `tagged-site:${privacyOf(choice.isPrivate)}:${choice.url}`;
     }
   }
 };
+
+const privacyOf = (isPrivate: boolean): string =>
+  isPrivate ? "private" : "ordinary";
 
 /** The logo of a tagged search's site. Images and Maps use Google's. */
 const logoOf = (engine: Engine): typeof FileIcon => {

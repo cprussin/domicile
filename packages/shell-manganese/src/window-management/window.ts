@@ -78,13 +78,16 @@ export const ShellWindow = {
    * - `url`: the page's current address.
    * - `popupWindow`: the `chrome.windows` id of the extension popup window
    *   whose one tab this is. Drawn without an address bar, as in Chrome.
+   * - `isPrivate`: whether the page is private. Its address bar says so.
    */
   Browser: (
     windowId: string,
     url: string,
     popupWindow: number | undefined,
+    isPrivate: boolean,
   ) => ({
     id: browserWindowId(windowId),
+    isPrivate,
     kind: WindowKind.Browser as const,
     popupWindow,
     title: url === "" ? BLANK_PAGE : siteOf(url),

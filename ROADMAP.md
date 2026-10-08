@@ -27,7 +27,7 @@ What works:
 - A shell is a module named in the config and built by `domicile`. manganese
   is a library, and `@domicile-desktop/*` is on npm.
 - Extensions named in the config run. Their actions show in the shell's tray,
-  and every `<webview>` is a tab to them.
+  and every `<webview>` but a private one is a tab to them.
 - Shells reach files, processes and D-Bus. Battery, backlight, audio,
   network, Bluetooth and apps are libraries on them
   ([SHELL-SYSTEM-ACCESS.md](docs/SHELL-SYSTEM-ACCESS.md)).
@@ -354,6 +354,10 @@ Understood and not scheduled.
   and `autoDiscardable`; `windows.update` bounds and state; and any
   `windows.create` but a one-`url` popup fail with `not supported on a
   Domicile desk`. [EXTENSIONS.md](docs/architecture/EXTENSIONS.md).
+- **Private data lasts until the engine exits.** Every private page shares
+  the profile's one off-the-record profile, which is never destroyed while
+  the engine runs. Chrome drops it when the last private window closes.
+  [SHELL-BROWSER-WINDOWS.md](docs/SHELL-BROWSER-WINDOWS.md#private-browsing).
 - **Resize cost is unmeasured.** Patch 0054 stops the shell's frame waiting
   for a `<webview>` to draw at each new size, matching `<app>`. No guard times
   a resize of either.

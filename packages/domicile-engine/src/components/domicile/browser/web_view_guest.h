@@ -84,6 +84,11 @@ class BrowserWindowHost {
   // Returns window `id` in `context`, or null.
   virtual WebViewGuest* Find(content::BrowserContext& context,
                              const std::string& id) = 0;
+
+  // Returns the off-the-record context of `context`'s profile, making it on
+  // first use. Private guests' pages live there.
+  virtual content::BrowserContext& PrivateContext(
+      content::BrowserContext& context) = 0;
 };
 
 // Opens DevTools on `frame`'s page, at `root_point` (a context menu's click,
@@ -132,13 +137,15 @@ class WebViewGuest : public mojom::WebViewGuest,
   //
   // `created` runs once, before the guest is attached or navigated, so tab
   // helpers see the first navigation. `extension_popup`: see
-  // extension_popup().
+  // extension_popup(). `private_browsing` makes the page in
+  // BrowserWindowHost::PrivateContext rather than the owner's context.
   static void CreateAndAttach(
       content::RenderFrameHost& owner,
       content::RenderFrameHost& placeholder,
       mojo::PendingReceiver<mojom::WebViewGuest> receiver,
       mojo::PendingRemote<mojom::WebViewGuestClient> client,
       bool extension_popup,
+      bool private_browsing,
       const GuestCreatedCallback& created);
 
   // Makes a browser window's page, owned by BrowserWindowHost's
@@ -150,6 +157,7 @@ class WebViewGuest : public mojom::WebViewGuest,
   // - `window_id`: the id a <webview window> uses.
   // - `popup_window`: the chrome.windows popup window whose one tab this is;
   //   empty for a tab of the desk's window. See popup_window().
+  // - `private_browsing`: as in CreateAndAttach.
   // - `created`: runs before the first navigation, as in CreateAndAttach.
   //
   // The caller navigates it with Navigate.
@@ -157,6 +165,7 @@ class WebViewGuest : public mojom::WebViewGuest,
       content::WebContents& shell,
       const std::string& window_id,
       std::optional<int> popup_window,
+      bool private_browsing,
       const GuestCreatedCallback& created);
 
   // Shows this window in `placeholder`, the <webview window> frame under

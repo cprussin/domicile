@@ -117,6 +117,11 @@ export class FakeDomicileHost {
             calls.push([name, url]);
             this.openBrowser(url);
           };
+        } else if (name === "openPrivateBrowserWindow") {
+          return (url: string) => {
+            calls.push([name, url]);
+            this.openBrowser(url, null, true);
+          };
         } else if (name === "closeBrowserWindow") {
           return (id: string) => {
             calls.push([name, id]);
@@ -178,10 +183,14 @@ export class FakeDomicileHost {
   /**
    * The engine opened a browser window at `url`, as for `domicile open-url`,
    * `target="_blank"`, or with `popupWindow` an extension's popup window.
-   * `openBrowserWindow` calls this too. Ids count up from `"1"`; the asked-for
-   * size is 0.
+   * `openBrowserWindow` calls this too, and `openPrivateBrowserWindow` with
+   * `isPrivate`. Ids count up from `"1"`; the asked-for size is 0.
    */
-  openBrowser(url: string, popupWindow: number | null = null): void {
+  openBrowser(
+    url: string,
+    popupWindow: number | null = null,
+    isPrivate = false,
+  ): void {
     this.#browsersOpened += 1;
     this.set({
       browserWindows: [
@@ -189,6 +198,7 @@ export class FakeDomicileHost {
         {
           height: 0,
           id: this.#browsersOpened.toString(),
+          isPrivate,
           popupWindow,
           title: "",
           url,

@@ -72,6 +72,22 @@ describe("FakeDomicileHost", () => {
     expect(changed).toBe(3);
   });
 
+  it("opens private browser windows as the engine does", () => {
+    const fake = new FakeDomicileHost();
+
+    fake.host.openPrivateBrowserWindow("https://example.com");
+    fake.host.openBrowserWindow("https://example.org");
+
+    expect(fake.host.browserWindows).toMatchObject([
+      { id: "1", isPrivate: true, url: "https://example.com" },
+      { id: "2", isPrivate: false, url: "https://example.org" },
+    ]);
+    expect(fake.calls).toStrictEqual([
+      ["openPrivateBrowserWindow", "https://example.com"],
+      ["openBrowserWindow", "https://example.org"],
+    ]);
+  });
+
   it("dispatches a moment with its fields", () => {
     const fake = new FakeDomicileHost();
     const chords: string[] = [];

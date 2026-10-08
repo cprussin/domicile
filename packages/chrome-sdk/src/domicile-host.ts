@@ -160,6 +160,12 @@ export type DomicileBrowserWindow = {
    */
   readonly width: number;
   readonly height: number;
+  /**
+   * Whether the page is private: in the off-the-record profile, sharing
+   * nothing with the user's pages and storing nothing past the browser. A
+   * private window's new windows are private too.
+   */
+  readonly isPrivate: boolean;
 };
 
 /**
@@ -526,6 +532,12 @@ export type DomicileHost = {
    * domicile:// address shows blocked, as in a <webview>.
    */
   openBrowserWindow(url: string): void;
+  /**
+   * Opens a private browser window at `url`, as openBrowserWindow does. Its
+   * page is in the off-the-record profile; see DomicileBrowserWindow's
+   * `isPrivate`.
+   */
+  openPrivateBrowserWindow(url: string): void;
   /**
    * Closes window `id`; it leaves the next `browserwindowschanged`. An unknown
    * id does nothing.

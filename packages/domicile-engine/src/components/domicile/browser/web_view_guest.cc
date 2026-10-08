@@ -90,6 +90,19 @@ BrowserWindowHost& Host() {
   return *g_browser_window_host;
 }
 
+// The context a guest's page is made in: `owner`, or its off-the-record
+// context for a private guest.
+content::BrowserContext* ContextFor(content::BrowserContext& owner,
+                                    bool private_browsing) {
+  if (!private_browsing) {
+    return &owner;
+  }
+  // guard-webview-private.sh reads this to tell "never asked for" from "asked
+  // for and shared the user's storage".
+  LOG(INFO) << "domicile: made a private guest.";
+  return &Host().PrivateContext(owner);
+}
+
 // Storage for SetInspect's callback.
 InspectCallback& InspectSlot() {
   static base::NoDestructor<InspectCallback> inspect;
@@ -134,6 +147,7 @@ class WebViewGuestHost final
     mojo::PendingRemote<mojom::WebViewGuestClient> client;
     std::optional<std::string> window;
     bool extension_popup;
+    bool private_browsing;
     mojo::ReportBadMessageCallback report_bad_message;
   };
 
@@ -142,7 +156,8 @@ class WebViewGuestHost final
                    mojo::PendingReceiver<mojom::WebViewGuest> guest,
                    mojo::PendingRemote<mojom::WebViewGuestClient> client,
                    const std::optional<std::string>& window,
-                   bool extension_popup) override {
+                   bool extension_popup,
+                   bool private_browsing) override {
     content::RenderFrameHost* placeholder = FindPlaceholder(placeholder_frame);
 
     // A document may only claim a guest for its own child frame.
@@ -168,14 +183,17 @@ class WebViewGuestHost final
         // Distinguishes a waiting guest in logs.
         LOG(INFO) << "domicile: a <webview> asked for a guest before its frame "
                      "or its frame's first page arrived; waiting for it.";
-        waiting_ = WaitingRequest{
-            placeholder_frame, std::move(guest),
-            std::move(client), window,
-            extension_popup,   mojo::GetBadMessageCallback()};
+        waiting_ = WaitingRequest{placeholder_frame,
+                                  std::move(guest),
+                                  std::move(client),
+                                  window,
+                                  extension_popup,
+                                  private_browsing,
+                                  mojo::GetBadMessageCallback()};
         return;
       case PlaceholderStage::kReady:
         Give(*placeholder, std::move(guest), std::move(client), window,
-             extension_popup);
+             extension_popup, private_browsing);
         return;
     }
   }
@@ -246,14 +264,15 @@ class WebViewGuestHost final
         return;
       case PlaceholderStage::kReady:
         Give(*placeholder, std::move(request.guest), std::move(request.client),
-             request.window, request.extension_popup);
+             request.window, request.extension_popup,
+             request.private_browsing);
         return;
     }
   }
 
   // Puts a page behind `placeholder`: the browser window `window` names, or a
   // new page owned by this document (an extension's action popup when
-  // `extension_popup` is set).
+  // `extension_popup` is set, a private page when `private_browsing` is).
   //
   // An unknown `window` is expected: it may close before the shell hears. The
   // pipes drop and a warning is logged.
@@ -261,11 +280,13 @@ class WebViewGuestHost final
             mojo::PendingReceiver<mojom::WebViewGuest> guest,
             mojo::PendingRemote<mojom::WebViewGuestClient> client,
             const std::optional<std::string>& window,
-            bool extension_popup) {
+            bool extension_popup,
+            bool private_browsing) {
     if (!window.has_value()) {
       WebViewGuest::CreateAndAttach(render_frame_host(), placeholder,
                                     std::move(guest), std::move(client),
-                                    extension_popup, created_);
+                                    extension_popup, private_browsing,
+                                    created_);
       return;
     }
     WebViewGuest* shown =
@@ -487,11 +508,13 @@ void WebViewGuest::CreateAndAttach(
     mojo::PendingReceiver<mojom::WebViewGuest> receiver,
     mojo::PendingRemote<mojom::WebViewGuestClient> client,
     bool extension_popup,
+    bool private_browsing,
     const GuestCreatedCallback& created) {
   std::unique_ptr<WebViewGuest> guest = base::WrapUnique(new WebViewGuest(
       owner, std::move(receiver), std::move(client), extension_popup));
   guest->owned_guest_contents_ = guest->MakeContents(
-      owner.GetBrowserContext(), /*initially_hidden=*/false, created);
+      ContextFor(*owner.GetBrowserContext(), private_browsing),
+      /*initially_hidden=*/false, created);
 
 
   // Asynchronous: beforeunload handlers must run first, and a cross-process
@@ -540,13 +563,15 @@ std::unique_ptr<WebViewGuest> WebViewGuest::MakeWindow(
     content::WebContents& shell,
     const std::string& window_id,
     std::optional<int> popup_window,
+    bool private_browsing,
     const GuestCreatedCallback& created) {
   std::unique_ptr<WebViewGuest> guest =
       base::WrapUnique(new WebViewGuest(shell, window_id, popup_window));
   // Hidden (and throttled) like a background tab until AttachWindowTo shows
   // it.
   guest->owned_guest_contents_ = guest->MakeContents(
-      shell.GetBrowserContext(), /*initially_hidden=*/true, created);
+      ContextFor(*shell.GetBrowserContext(), private_browsing),
+      /*initially_hidden=*/true, created);
   LOG(INFO) << "domicile: opened browser window " << window_id << ".";
   return guest;
 }
@@ -559,7 +584,8 @@ std::unique_ptr<content::WebContents> WebViewGuest::MakeContents(
   // construction, so the owner is set in this object's constructor.
   //
   // No SiteInstance or StoragePartitionConfig: the guest uses the default
-  // partition with the user's cookies. See the class comment.
+  // partition of `context`, the user's cookies unless the guest is private.
+  // See the class comment.
   content::WebContents::CreateParams params(context);
   params.guest_delegate = this;
   params.initially_hidden = initially_hidden;
