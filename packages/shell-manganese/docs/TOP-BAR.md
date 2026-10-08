@@ -39,6 +39,19 @@ Every bar and the lock screen share one watch per system readout. See
   `default`), theme selector, network, Bluetooth, volume, brightness, battery,
   notification bell
 
+## On the lock screen
+
+- The lock screen draws the same bar on every screen, with only Bluetooth,
+  volume, brightness and battery (`LOCK_TOP_BAR`, `src/lock/LockBar.tsx`). The
+  `topBar` option does not change it.
+- Each item offers only what a locked desktop allows
+  ([LOCK.md](../../../docs/LOCK.md#lock-screen-readouts)):
+  - Bluetooth: the icon, not a button.
+  - Volume: the default output's slider and mute; no mixer.
+  - Brightness and battery: as on the desktop.
+- Panels draw over the lock screen and keep the keyboard until they close.
+  Then it goes back to the passphrase.
+
 ## Readability over the wallpaper
 
 - Text is white with a tight dark shadow (`shadows.textOverPhoto`) in both
@@ -110,7 +123,6 @@ Every bar and the lock screen share one watch per system readout. See
 - Hidden on machines without a battery, and until UPower answers.
 - Read from UPower by
   [`@domicile-desktop/system-battery`](../../system-battery/README.md).
-- Works while the desktop is locked. The lock screen shows it too.
 
 ## Brightness
 
@@ -121,7 +133,6 @@ Every bar and the lock screen share one watch per system readout. See
   pointer.
 - The popover closes on an outside click or focus loss, including a click in
   a `<webview>`.
-- The lock screen shows the same slider.
 
 ## Volume
 
@@ -141,8 +152,6 @@ Every bar and the lock screen share one watch per system readout. See
 - Level meters run only while the mixer is open, for the devices it shows.
   They show -60 to 0 dB.
 - See [Host readouts](HOST-READOUTS.md#volume) for how audio is read.
-- A locked desktop rejects mixer requests and new meters. The lock screen
-  sets the default output's volume and mute.
 
 ## Notifications
 

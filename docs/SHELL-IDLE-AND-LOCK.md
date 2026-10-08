@@ -51,9 +51,10 @@ The compositor enforces the lock. While `locked` is `true`:
 - `closeApp`, `spawn` and `copyClipboardEntry` do nothing and log a warning.
 - `searchFiles` never settles. Retry once `locked` is `false`.
 - `setTheme` still works.
-- System calls fail with `locked`, except reads under `/sys` and the calls
+- System calls fail with `locked`, except reads under `/sys`, the calls
   `system-battery`, `system-backlight` and `system-audio` make for the
-  battery, brightness and output volume ([LOCK.md](LOCK.md#lock-screen-readouts)).
+  battery, brightness and output volume, and `system-bluetooth`'s watch
+  ([LOCK.md](LOCK.md#lock-screen-readouts)).
 
 Reloading the page, restarting the engine, loading another shell or editing
 the page in devtools does not unlock the desktop.
@@ -78,5 +79,5 @@ the page in devtools does not unlock the desktop.
 
 Manganese's lock screen:
 [`lock/Lock.tsx`](/packages/shell-manganese/src/lock/Lock.tsx),
-[`lock/LockReadouts.tsx`](/packages/shell-manganese/src/lock/LockReadouts.tsx) and
+[`lock/LockBar.tsx`](/packages/shell-manganese/src/lock/LockBar.tsx) and
 [`lock/useLocked.ts`](/packages/shell-manganese/src/lock/useLocked.ts).

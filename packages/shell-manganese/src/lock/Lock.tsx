@@ -4,6 +4,7 @@ import {
   useScreenRegion,
 } from "@domicile-desktop/component-library/DisplayProvider";
 import { Input } from "@domicile-desktop/component-library/Input";
+import { PopoverContainer } from "@domicile-desktop/component-library/Popover";
 import { ArrowRightIcon } from "@phosphor-icons/react/dist/ssr/ArrowRight";
 import { LockIcon } from "@phosphor-icons/react/dist/ssr/Lock";
 import type { ReactNode } from "react";
@@ -30,8 +31,8 @@ type Props = {
    * going up.
    */
   onUnlock: (passphrase: string) => void;
-  /** Shown under the field, such as `LockReadouts`. */
-  children?: ReactNode;
+  /** Drawn across the top of each screen, such as `LockBar`. */
+  bar?: ReactNode;
   /**
    * A picture an application set for the lock screen through the Wallpaper
    * portal, as a URL. Covers each screen in place of the blurred desktop.
@@ -57,14 +58,15 @@ type Props = {
  * once faded it is `display: none`, so it never catches clicks on the desktop.
  *
  * While locked, focus stays in the field, since nothing else takes keys. A
- * control in `children` works by pointer and gives the focus back.
+ * control in `bar` works by pointer and gives the focus back. A panel it opens
+ * draws over the sheet and keeps the focus until it closes.
  *
  * Nothing dismisses it except unlocking: not Escape, an outside click or
  * submit. That is why it does not use `ModalDialog`.
  */
 export const Lock = ({
+  bar,
   checking,
-  children,
   locked,
   onUnlock,
   picture,
@@ -75,6 +77,8 @@ export const Lock = ({
   const [typed, setTyped] = useState("");
   const [wrong, setWrong] = useState(false);
   const field = useRef<HTMLInputElement>(null);
+  // `null` is React's value for a ref with no element.
+  const [panels, setPanels] = useState<HTMLDivElement | null>(null);
 
   // Focus the field when the desktop locks, so the first keys typed are not
   // lost. Done on the transition because the sheet is always mounted.
@@ -106,7 +110,7 @@ export const Lock = ({
       inert={!locked}
       // Take the focus back from a slider, which focuses itself on a click.
       onFocus={(event) => {
-        if (event.target !== field.current) {
+        if (!keepsFocus(event.target, field.current, panels)) {
           field.current?.focus();
         }
       }}
@@ -118,7 +122,7 @@ export const Lock = ({
         }
       }}
       onMouseDown={(event) => {
-        if (event.target !== field.current) {
+        if (!keepsFocus(event.target, field.current, panels)) {
           event.preventDefault();
         }
       }}
@@ -193,11 +197,45 @@ export const Lock = ({
             </p>
           ) : undefined}
         </div>
-        {children}
       </div>
+      {/*
+        After the content, which covers a whole screen, so the bar is on top.
+        Only while locked: the desktop's own bar has the same controls.
+      */}
+      {locked && bar !== undefined && (
+        <PopoverContainer value={panels ?? undefined}>
+          {(displays ?? []).map(({ name }) => (
+            <BarRegion key={name} screen={name}>
+              {bar}
+            </BarRegion>
+          ))}
+        </PopoverContainer>
+      )}
+      {/* Last, so the bar's panels draw over everything on the sheet. */}
+      <div ref={setPanels} />
     </div>
   );
 };
+
+/**
+ * The bar on display `screen`. `data-screen` keeps its panels on that
+ * screen, as `<Screen>` does.
+ */
+const BarRegion = ({
+  children,
+  screen,
+}: {
+  children: ReactNode;
+  screen: string;
+}) => (
+  <div
+    className={barRegionStyles}
+    data-screen={screen}
+    style={useScreenRegion(screen)}
+  >
+    <div className={barStyles}>{children}</div>
+  </div>
+);
 
 /**
  * The blurred veil over display `screen`, or the whole page. Data attribute
@@ -282,6 +320,21 @@ const pictureStyles = css({
   objectFit: "cover",
   opacity: 1,
   position: "absolute",
+  transition: "opacity {durations.slowest} {easings.out}",
+});
+
+// A whole screen, over the content's, that lets the pointer through to the
+// field everywhere but the bar.
+const barRegionStyles = css({
+  pointerEvents: "none",
+  position: "absolute",
+});
+
+// Fades in with the veils.
+const barStyles = css({
+  _starting: { opacity: 0 },
+  opacity: 1,
+  pointerEvents: "auto",
   transition: "opacity {durations.slowest} {easings.out}",
 });
 
@@ -376,6 +429,15 @@ const refusalStyles = css({
   textAlign: "center",
   textShadow: "textOverPhoto",
 });
+
+/** Whether focus may stay on `target`: the field, or a panel the bar opened. */
+const keepsFocus = (
+  target: EventTarget,
+  field: HTMLInputElement | null,
+  panels: HTMLDivElement | null,
+): boolean =>
+  target === field ||
+  (target instanceof Node && panels?.contains(target) === true);
 
 /** Which shake keyframes to use for the {@link refusals}th refusal. */
 const shaken = (refusals: number): "never" | "once" | "again" => {

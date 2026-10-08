@@ -26,8 +26,9 @@ rejects.
 
 ## `lock-screen-readouts.jsonl`
 
-The system requests `@domicile-desktop/system-battery`, `system-backlight` and
-`system-audio` make for a lock screen, one per line, tagged by library.
+The system requests `@domicile-desktop/system-battery`, `system-backlight`,
+`system-audio` and `system-bluetooth` make for a lock screen, one per line,
+tagged by library.
 
 - **`packages/domicile-host/tests/lock_screen_readouts.rs`**: checks that a
   locked desktop runs each one.

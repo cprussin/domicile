@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { DisplayProvider } from "@domicile-desktop/component-library/DisplayProvider";
+import { Popover } from "@domicile-desktop/component-library/Popover";
 import { Slider } from "@domicile-desktop/component-library/Slider";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -154,6 +155,70 @@ describe("Lock", () => {
     expect(veils[0]?.getAttribute("style")).toBeNull();
   });
 
+  describe("the bar", () => {
+    it("is drawn across each screen", () => {
+      render(
+        <Lock
+          bar={<p>Bar</p>}
+          checking={false}
+          locked
+          onUnlock={() => undefined}
+          refusals={0}
+          screen="left"
+        />,
+        { wrapper: OnTwoScreens },
+      );
+
+      expect(
+        screen
+          .getAllByText("Bar")
+          .map((bar) =>
+            bar.closest("[data-screen]")?.getAttribute("data-screen"),
+          ),
+      ).toEqual(["left", "right"]);
+    });
+
+    it("is not drawn while the desk is open", () => {
+      // The desktop's own bar has the same controls.
+      render(
+        <Lock
+          bar={<p>Bar</p>}
+          checking={false}
+          locked={false}
+          onUnlock={() => undefined}
+          refusals={0}
+          screen={SCREEN}
+        />,
+        { wrapper: OnOneScreen },
+      );
+
+      expect(screen.queryByText("Bar")).not.toBeInTheDocument();
+    });
+
+    it("opens its panels over the lock", async () => {
+      // The page's body is under the sheet.
+      const { container } = render(
+        <Lock
+          bar={
+            <Popover trigger={<button type="button">Brightness</button>}>
+              Level
+            </Popover>
+          }
+          checking={false}
+          locked
+          onUnlock={() => undefined}
+          refusals={0}
+          screen={SCREEN}
+        />,
+        { wrapper: OnOneScreen },
+      );
+
+      await userEvent.click(screen.getByRole("button", { name: "Brightness" }));
+
+      expect(container).toContainElement(screen.getByRole("dialog"));
+    });
+  });
+
   describe("the keyboard", () => {
     it("is put in the field as the desk shuts", () => {
       // On the transition, not on mount: the sheet is always mounted.
@@ -176,18 +241,17 @@ describe("Lock", () => {
       expect(document.activeElement).toBe(screen.getByLabelText("Passphrase"));
     });
 
-    it("comes back to the field after a readout is used", async () => {
+    it("comes back to the field after the bar is used", async () => {
       // A slider takes focus on a click, and the next key typed would move it.
       render(
         <Lock
+          bar={<Slider label="Brightness" max={100} min={0} value={50} />}
           checking={false}
           locked
           onUnlock={() => undefined}
           refusals={0}
           screen={SCREEN}
-        >
-          <Slider label="Brightness" max={100} min={0} value={50} />
-        </Lock>,
+        />,
         { wrapper: OnOneScreen },
       );
       const user = userEvent.setup();
@@ -195,6 +259,33 @@ describe("Lock", () => {
       await user.click(screen.getByRole("slider", { name: "Brightness" }));
 
       expect(document.activeElement).toBe(screen.getByLabelText("Passphrase"));
+    });
+
+    it("stays in a panel the bar opens", async () => {
+      // Taking it back to the field would close the panel.
+      render(
+        <Lock
+          bar={
+            <Popover trigger={<button type="button">Brightness</button>}>
+              <Slider label="Level" max={100} min={0} value={50} />
+            </Popover>
+          }
+          checking={false}
+          locked
+          onUnlock={() => undefined}
+          refusals={0}
+          screen={SCREEN}
+        />,
+        { wrapper: OnOneScreen },
+      );
+      const user = userEvent.setup();
+
+      await user.click(screen.getByRole("button", { name: "Brightness" }));
+      await user.click(screen.getByRole("slider", { name: "Level" }));
+
+      expect(document.activeElement).toBe(
+        screen.getByRole("slider", { name: "Level" }),
+      );
     });
   });
 

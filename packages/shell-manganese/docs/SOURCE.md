@@ -32,7 +32,7 @@ The engine serves this page over `domicile://` and hands `Shell` the desktop.
 | `battery/`, `brightness/`, `volume/`, `clock/` | Bar readouts and where each reads from. |
 | `network/`, `bluetooth/` | Bar items on `@domicile-desktop/system-network` and `system-bluetooth`, and their panels. |
 | `requests/` | Requests a panel sends to a system service, with each one's progress and refusal. |
-| `lock/` | Lock screen, with the battery, brightness and volume. |
+| `lock/` | Lock screen, with a bar of Bluetooth, volume, brightness and battery. |
 | `theme/` | Theme from the host or the last session. |
 | `wallpaper/` | Wallpaper and its photo list. |
 | `host/` | Helpers for the desktop: watching an attribute, and spotting a superseded search. |

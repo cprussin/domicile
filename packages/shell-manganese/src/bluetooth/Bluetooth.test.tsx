@@ -135,6 +135,26 @@ describe("Bluetooth", () => {
     ).toBeVisible();
   });
 
+  it("only shows what is connected on a locked desk", () => {
+    // A locked desk refuses power, pairing and connecting.
+    const bluetooth = heldBluetooth();
+    render(
+      <Bluetooth
+        actions={NO_ACTIONS}
+        bluetooth={bluetooth.bluetooth}
+        domicile={NO_HOST}
+        locked
+      />,
+    );
+
+    bluetooth.report(reading(true, ["WH-1000XM4"]));
+
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("img", { name: "Bluetooth: WH-1000XM4" }),
+    ).toBeVisible();
+  });
+
   it("opens its panel on a click", async () => {
     const bluetooth = heldBluetooth();
     const held = heldActions();

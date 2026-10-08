@@ -1,6 +1,6 @@
 //! The system calls a locked desktop still runs, so a lock screen can show the
-//! battery, brightness and volume: each call the libraries record sending, and
-//! the near misses that stay refused.
+//! battery, brightness, volume and Bluetooth: each call the libraries record
+//! sending, and the near misses that stay refused.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -13,6 +13,7 @@ const DISPLAY_DEVICE: &str = "/org/freedesktop/UPower/devices/DisplayDevice";
 const PROPERTIES: &str = "org.freedesktop.DBus.Properties";
 const LOGIND: &str = "org.freedesktop.login1";
 const SESSION: &str = "/org/freedesktop/login1/session/auto";
+const BLUEZ: &str = "org.bluez";
 
 /// `@domicile-desktop/system-battery`'s read of the battery.
 fn battery_read() -> SystemRequest {
@@ -47,6 +48,41 @@ fn set_brightness(body: &str) -> SystemRequest {
         interface: "org.freedesktop.login1.Session".into(),
         member: "SetBrightness".into(),
         signature: "ssu".into(),
+        body: body.into(),
+    }
+}
+
+/// `@domicile-desktop/system-bluetooth`'s read of the adapters and devices.
+fn bluetooth_read() -> SystemRequest {
+    bluez(
+        "/",
+        "org.freedesktop.DBus.ObjectManager",
+        "GetManagedObjects",
+        "",
+        "[]",
+    )
+}
+
+/// `@domicile-desktop/system-bluetooth`'s watch of BlueZ.
+fn bluetooth_watch() -> SystemRequest {
+    SystemRequest::DbusMatch {
+        bus: Bus::System,
+        sender: Some(BLUEZ.into()),
+        path: None,
+        interface: None,
+        member: None,
+    }
+}
+
+/// A call to BlueZ on the system bus.
+fn bluez(path: &str, interface: &str, member: &str, signature: &str, body: &str) -> SystemRequest {
+    SystemRequest::DbusCall {
+        bus: Bus::System,
+        destination: BLUEZ.into(),
+        path: path.into(),
+        interface: interface.into(),
+        member: member.into(),
+        signature: signature.into(),
         body: body.into(),
     }
 }
@@ -103,7 +139,12 @@ fn every_call_the_libraries_send_is_a_readout() {
     libraries.dedup();
     assert_eq!(
         libraries,
-        ["system-battery", "system-backlight", "system-audio"]
+        [
+            "system-battery",
+            "system-backlight",
+            "system-audio",
+            "system-bluetooth"
+        ]
     );
 }
 
@@ -305,6 +346,66 @@ mod audio {
             )),
             Reach::Acts
         );
+    }
+}
+
+mod bluetooth {
+    use super::*;
+
+    /// Power, scanning, pairing and connecting change the desk.
+    #[test]
+    fn a_call_that_changes_bluetooth_is_not() {
+        let adapter = "/org/bluez/hci0";
+        let device = "/org/bluez/hci0/dev_00_11_22_33_44_55";
+        let power = r#"["org.bluez.Adapter1","Powered",{"signature":"b","value":true}]"#;
+        for (why, request) in [
+            ("power", bluez(adapter, PROPERTIES, "Set", "ssv", power)),
+            (
+                "scan",
+                bluez(adapter, "org.bluez.Adapter1", "StartDiscovery", "", "[]"),
+            ),
+            ("pair", bluez(device, "org.bluez.Device1", "Pair", "", "[]")),
+            (
+                "connect",
+                bluez(device, "org.bluez.Device1", "Connect", "", "[]"),
+            ),
+        ] {
+            assert_eq!(reach(&request), Reach::Acts, "{why}");
+        }
+    }
+
+    #[test]
+    fn a_read_of_anything_else_on_the_bus_is_not() {
+        let misses: [Miss<Call>; 4] = [
+            ("session bus", |call| call.bus = Bus::Session),
+            ("other service", |call| {
+                call.destination = "org.example.Evil".into()
+            }),
+            ("other path", |call| call.path = "/org/bluez".into()),
+            ("other member", |call| call.member = "GetInterfaces".into()),
+        ];
+        for (why, change) in misses {
+            assert_eq!(
+                reach(&changed(bluetooth_read(), change)),
+                Reach::Acts,
+                "{why}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_match_on_more_than_bluez_is_not() {
+        let misses: [Miss<Match>; 2] = [
+            ("session bus", |watch| watch.bus = Bus::Session),
+            ("any sender", |watch| watch.sender = None),
+        ];
+        for (why, change) in misses {
+            assert_eq!(
+                reach(&matching(bluetooth_watch(), change)),
+                Reach::Acts,
+                "{why}"
+            );
+        }
     }
 }
 

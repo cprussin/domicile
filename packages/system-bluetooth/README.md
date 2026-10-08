@@ -30,6 +30,9 @@ await setPowered(host, "/org/bluez/hci0", false);
 - An `Err` is a D-Bus failure, such as BlueZ not running or an adapter
   blocked by rfkill.
 - A bug or an unexpected reply shape throws, logged to the console.
+- **Lock:** `watchBluetooth` works while the desktop is locked, so a lock
+  screen can show Bluetooth. Every request fails with `locked`
+  ([LOCK.md](/docs/LOCK.md)).
 
 See [SHELL-SYSTEM-ACCESS.md](/docs/SHELL-SYSTEM-ACCESS.md).
 

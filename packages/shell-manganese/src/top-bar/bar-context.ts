@@ -48,7 +48,20 @@ export type Bar = {
   workspaces: readonly string[];
 };
 
+/**
+ * What the readout items read: Bluetooth, volume, brightness and battery. The
+ * lock screen's bar gives only this.
+ */
+export type BarReadouts = Pick<Bar, "domicile" | "readouts"> & {
+  /** Whether the desktop is locked, so items offer only what it allows. */
+  locked: boolean;
+};
+
 export const BarContext = createContext<Bar | undefined>(undefined);
+
+export const BarReadoutsContext = createContext<BarReadouts | undefined>(
+  undefined,
+);
 
 /**
  * The bar this item is on.
@@ -61,4 +74,19 @@ export const useBar = (): Bar => {
     throw new Error("manganese: a bar item was rendered outside the top bar");
   }
   return bar;
+};
+
+/**
+ * The readouts of the bar this item is on, the desktop's or the lock
+ * screen's.
+ *
+ * Throws outside a bar, as {@link useBar} does.
+ */
+export const useBarReadouts = (): BarReadouts => {
+  const bar = useContext(BarReadoutsContext);
+  if (bar === undefined) {
+    throw new Error("manganese: a bar item was rendered outside a bar");
+  } else {
+    return bar;
+  }
 };

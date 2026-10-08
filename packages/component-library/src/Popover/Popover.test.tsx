@@ -11,7 +11,7 @@ import userEvent from "@testing-library/user-event";
 import { Button } from "../Button/Button";
 import { Select } from "../Select/Select";
 
-import { Popover } from "./Popover";
+import { Popover, PopoverContainer } from "./Popover";
 
 describe(Popover, () => {
   describe("rendering", () => {
@@ -86,6 +86,18 @@ describe(Popover, () => {
       );
       expect(screen.getByRole("button", { name: "Details" })).toBeVisible();
       expect(screen.queryByText("Body")).not.toBeInTheDocument();
+    });
+
+    it("draws the panel in the element a PopoverContainer names", () => {
+      const layer = document.createElement("div");
+      document.body.append(layer);
+      render(
+        <PopoverContainer value={layer}>
+          <Popover open>Body</Popover>
+        </PopoverContainer>,
+      );
+      expect(layer).toContainElement(screen.getByRole("dialog"));
+      layer.remove();
     });
   });
 

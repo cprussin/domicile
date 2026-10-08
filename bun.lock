@@ -220,6 +220,7 @@
       },
       "devDependencies": {
         "@cprussin/tsconfig": "catalog:",
+        "@domicile-desktop/test-support": "workspace:*",
         "@types/bun": "catalog:",
         "typescript": "catalog:",
       },

@@ -125,4 +125,30 @@ describe("Volume", () => {
       expect(sound.metered.at(-1)).toEqual([]);
     });
   });
+
+  describe("its panel on a locked desk", () => {
+    // A locked desk refuses meters, inputs and everything but an output's
+    // volume and mute.
+    it("has only the default output, unmetered", async () => {
+      const sound = heldSound();
+      render(<Volume audio={sound.audio} locked server={sound.server} />);
+      sound.report(laptop);
+
+      await userEvent.click(screen.getByRole("button", { name: "Volume 50%" }));
+      act(() => {
+        screen.getByRole("slider", { name: "Volume" }).focus();
+      });
+      await userEvent.keyboard("{ArrowRight}");
+      await userEvent.click(
+        screen.getByRole("button", { name: "Mute Volume" }),
+      );
+
+      expect(screen.getAllByRole("slider")).toHaveLength(1);
+      expect(sound.started).toBe(0);
+      expect(sound.asked).toEqual([
+        ["setVolume", "output:speakers", 0.51],
+        ["setMuted", "output:speakers", true],
+      ]);
+    });
+  });
 });
