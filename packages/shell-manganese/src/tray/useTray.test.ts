@@ -18,7 +18,13 @@ const client = () => {
   };
 };
 
-const icon = (id: string): DomicileTrayItem => ({ icon: "", id, title: id });
+const icon = (id: string): DomicileTrayItem => ({
+  bus: ":1.9",
+  icon: "",
+  id,
+  menu: "",
+  title: id,
+});
 
 describe("useTray", () => {
   it("has no icons until the compositor has said", () => {

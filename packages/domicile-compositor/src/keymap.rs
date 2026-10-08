@@ -65,7 +65,7 @@ impl Keyboard {
             for level in 0..self.keymap.num_levels_for_key(key, 0) {
                 for &keysym in self.keymap.key_get_syms_by_level(key, 0, level) {
                     // xkb keycodes are evdev codes plus 8. The chrome uses
-                    // evdev; see `Shortcut::key`.
+                    // evdev, as `ChromeMessage::Key` does.
                     keys.entry(xkb::keysym_get_name(keysym))
                         .or_insert(key.raw() - 8);
                 }

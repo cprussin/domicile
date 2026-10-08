@@ -93,35 +93,6 @@ export type DomicileAppEventInit = EventInit & {
   appId?: string;
 };
 
-/** What `DomicileHost.previewFile()` resolves with. */
-export type DomicileFilePreview = {
-  /**
-   * Which of the rest means anything: "text", "directory", "audio", "binary"
-   * or "unreadable". "unreadable" is also what a path outside the compositor's
-   * index of the home gets -- see previewFile(). A DOMString rather than an
-   * enum: the browser drops an answer whose kind is not one of the five.
-   */
-  readonly kind: string;
-  /** The front of the file, for "text". */
-  readonly text: string;
-  /** What is in it, for "directory": names, a subdirectory ending in `/`. */
-  readonly entries: readonly string[];
-  /**
-   * What a song says of itself, for "audio": each tag empty when it does not
-   * say it.
-   */
-  readonly title: string;
-  readonly artist: string;
-  readonly album: string;
-  /** How long it plays, in seconds, for "audio". */
-  readonly duration: number;
-  /**
-   * The picture it carries of itself, for "audio", as a `data:` URL -- the
-   * page cannot read the file to draw one of its own.
-   */
-  readonly cover: string;
-};
-
 /** What `DomicileHost.searchFiles()` resolves with. */
 export type DomicileFileSearch = {
   /**
@@ -140,21 +111,6 @@ export type DomicileFileSearch = {
    * the index is being built, and asks again.
    */
   readonly indexing: boolean;
-};
-
-/**
- * A key combination the desktop grabs.
- *
- * Same fields as `DomicileShortcutEvent`, so a shell can compare a press
- * against it directly. `keycode` is a Linux evdev code; `KeyboardEvent.key` is
- * already a string such as "Enter".
- */
-export type DomicileShortcut = {
-  keycode: number;
-  altKey?: boolean;
-  ctrlKey?: boolean;
-  shiftKey?: boolean;
-  metaKey?: boolean;
 };
 
 export type DomicileShortcutEventInit = EventInit & {
@@ -405,30 +361,15 @@ export type DomicileHost = {
    */
   spawn(command: readonly string[]): void;
   /**
-   * Ask what in the home matches `query`. Resolves with the answer. A newer
-   * call supersedes this one, which rejects with an AbortError: a launcher
-   * wants the answer to what is typed now.
+   * Ask what in the compositor's index of the home matches `query`. Resolves
+   * with the answer. A newer call supersedes this one, which rejects with an
+   * AbortError: a launcher wants the answer to what is typed now.
    *
-   * It takes no path. A shell is served over domicile:// to get an origin
-   * without a TCP port, not a filesystem, and a call that named a directory
-   * would give every document this engine serves one. The compositor decides
-   * what is searched (see `domicile_host::file_search`); the query is only
-   * words to match.
-   *
-   * Only the matches cross to the page. The index covers the whole home, and
-   * sending all of it would stall the page's input while it arrived.
+   * The compositor matches, and only what matched crosses: the index is the
+   * whole home, too large to send. See `domicile_host::file_search`. A file's
+   * contents are read with callSystem().
    */
   searchFiles(query: string): Promise<DomicileFileSearch>;
-  /**
-   * Ask what is in one file. Resolves with the answer. A newer call
-   * supersedes this one, as with searchFiles().
-   *
-   * `path` is relative to the home, as searchFiles() named it (a directory
-   * without its trailing `/`). The compositor answers only for a path in its
-   * index of the home, and anything else comes back "unreadable", so this
-   * reads nothing a search could not already have named.
-   */
-  previewFile(path: string): Promise<DomicileFilePreview>;
   /**
    * A system call: a file, a directory, a watch or a process. `request` is
    * the call as JSON, such as `{"call":"read_file","path":"/sys/x"}`. Answered
@@ -441,26 +382,22 @@ export type DomicileHost = {
    * Answer portal request `id`, which a `portalrequests` event listed.
    * `answer` is JSON with a string `kind`, such as `{"kind":"access"}`. One
    * that is not is dropped in the browser. The compositor checks the rest. See
-   * docs/architecture/PORTALS.md.
+   * docs/PORTALS.md.
    */
   answerPortalRequest(id: number, answer: string): void;
   /**
    * Put a row of the clipboard's history back on the clipboard.
    *
-   * `entry` is an id `clipboard` lists. The call names a row and carries no
-   * text, so a shell can choose among what was copied but cannot write
-   * arbitrary bytes to the desktop's clipboard.
-   *
-   * Returns nothing. The next paste in any window is that row, served by the
-   * compositor rather than by the client that copied it. An id the history
-   * has since dropped sets nothing.
+   * `entry` is an id `clipboard` lists. The compositor holds each row's full
+   * text, and the page sees only its preview. No answer: the next paste in any
+   * window is that row, served by the compositor. An id the history has since
+   * dropped sets nothing.
    */
   copyClipboardEntry(entry: number): void;
   /**
    * Click an icon in the system tray, with the button `action` names.
    *
-   * It names an icon `tray` lists and a button, and nothing about
-   * what the click does, for copyClipboardEntry's reason: that is the
+   * It names an icon `tray` lists and a button. What the click does is the
    * application's. An id that names no icon now is a click that raced the
    * application going away, and does nothing; an empty one throws.
    */
@@ -473,9 +410,8 @@ export type DomicileHost = {
   dismissNotifications(ids: readonly number[]): void;
   /**
    * Press one of a notification's actions -- "default" for the notification
-   * itself. It names a notification and a key it offered, and nothing about
-   * what the press does, for copyClipboardEntry's reason: that is the
-   * application's. An empty action throws.
+   * itself. It names a notification and a key it offered. What the press does
+   * is the application's. An empty action throws.
    */
   invokeNotificationAction(id: number, action: string): void;
   /**
@@ -493,9 +429,9 @@ export type DomicileHost = {
    * whatever the pointer is still over. A page cannot otherwise move the
    * pointer.
    *
-   * Doubles for resizeApp's reason: a place in a page is a CSS pixel and a CSS
-   * pixel is fractional. A coordinate outside this page is clamped to its own
-   * box -- what a page may move is the pointer over itself -- and NaN throws.
+   * Doubles because a place in a page is a CSS pixel, which is fractional. A
+   * coordinate outside this page is clamped to its own box -- what a page may
+   * move is the pointer over itself -- and NaN throws.
    */
   warpPointer(x: number, y: number): void;
   /**
@@ -503,12 +439,6 @@ export type DomicileHost = {
    * window can refuse and show a save dialog instead.
    */
   closeApp(appId: string): void;
-  /**
-   * The layout box, as a resize. For an <app> the box is the configure.
-   *
-   * Doubles because a CSS pixel is fractional and this comes from a layout box.
-   */
-  resizeApp(appId: string, width: number, height: number): void;
   /**
    * Where the page put an <app>, in the page's CSS pixels. The client draws at
    * the scale of the monitor holding most of that box. Layout still places the
@@ -565,12 +495,8 @@ export type DomicileHost = {
    */
   themeCaptured(theme: DomicileTheme): void;
   /**
-   * Route a key combination to the page rather than to the focused client.
-   *
-   * The press comes back as a `shortcut` event carrying the same fields, so a
-   * shell compares what it grabbed against what fired without parsing a string.
-   *
-   * The same, by name: `grabShortcut("Meta+Shift+l")`, in sway's grammar. The
+   * Route a key combination to the page rather than to the focused client, by
+   * name: `grabShortcut("Meta+Shift+l")`, in sway's grammar. The
    * engine finds the key the keysym is on, from the keyboard the compositor
    * describes, and finds it again whenever the layout changes. The press comes
    * back as a `shortcut` event whose `chord` is this string -- pressed in a
@@ -580,7 +506,7 @@ export type DomicileHost = {
    * keysym the keyboard cannot type; before any keyboard is described, that
    * one is a console warning once it is.
    */
-  grabShortcut(shortcut: DomicileShortcut | string): void;
+  grabShortcut(chord: string): void;
   /**
    * Click an extension's action, popup or not: the extension is granted
    * activeTab on the active tab, as a toolbar click grants it in Chrome. Then
@@ -635,7 +561,7 @@ export type DomicileHost = {
    * The desk's state, as attributes. Each is what the compositor last said,
    * null until it has said anything, and a bare `<name>changed` event says it
    * moved: a shell reads, then listens, and one that listens late misses
-   * nothing. See docs/architecture/WINDOW-DOMICILE.md.
+   * nothing. See packages/chrome-sdk/README.md.
    */
   readonly clipboard: readonly DomicileClipboardEntry[] | null;
   readonly tray: readonly DomicileTrayItem[] | null;
@@ -749,8 +675,8 @@ export type DomicileNotificationAction = {
  */
 export type DomicileShortcutEvent = Event & {
   /**
-   * The chord as the shell grabbed it -- `Meta+Shift+l` -- or empty for one
-   * grabbed as a keycode. See DomicileHost.grabShortcut().
+   * The chord as the shell grabbed it -- `Meta+Shift+l` -- or empty for a key
+   * its chord has since moved off. See DomicileHost.grabShortcut().
    */
   readonly chord: string;
   /** The Linux evdev code. */
@@ -781,10 +707,17 @@ export type DomicileTrayItem = {
   readonly title: string;
   /**
    * The picture, as a `data:` URL to draw, or empty for one the compositor
-   * could not draw. A URL rather than a path: the page may draw what the
-   * compositor read and cannot read it.
+   * could not draw.
    */
   readonly icon: string;
+  /** The bus name the application answers on, unique or well-known. */
+  readonly bus: string;
+  /**
+   * The object path of the icon's `com.canonical.dbusmenu` menu on `bus`, or
+   * empty for an icon with none. A shell draws the menu itself, with D-Bus
+   * calls through callSystem().
+   */
+  readonly menu: string;
 };
 
 /**

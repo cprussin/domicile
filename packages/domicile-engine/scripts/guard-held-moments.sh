@@ -10,7 +10,8 @@
 # holds one that arrives before anything listens for its type, and hands it to
 # the first listener. The stand-in asks for focus on `first` before the page
 # listens, and on `second` after; the page must hear both, in order, once each,
-# and neither inside its own `addEventListener` call. See docs/architecture/WINDOW-DOMICILE.md.
+# and neither inside its own `addEventListener` call. See
+# packages/chrome-sdk/README.md.
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"

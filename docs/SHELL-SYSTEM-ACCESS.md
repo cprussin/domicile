@@ -46,6 +46,7 @@ export const Shell = async (root, domicile) => {
 | `@domicile-desktop/system-network` | NetworkManager, iwd or wpa_supplicant over D-Bus |
 | `@domicile-desktop/system-bluetooth` | BlueZ over D-Bus |
 | `@domicile-desktop/system-apps` | desktop entries, icons and bookmarks |
+| `@domicile-desktop/sdk/file-preview` | a launcher's file preview: directory entries, text, audio tags and cover |
 
 Each library owns its system's format and the safety rules for it (for
 example, `system-backlight` never sets the level to zero), with tests on
@@ -58,8 +59,7 @@ recorded output.
 | Windows, input, rendering, Wayland protocols | only the compositor and engine can do them |
 | The lock and PAM | must outlive the page ([LOCK.md](LOCK.md)) |
 | Notifications, tray, portals | D-Bus servers that own a bus name |
-| The home file index | speed |
-| File search and preview (`searchFiles`, `previewFile`) | search reads the index; a preview reads audio tags and cover art with `lofty` |
+| The home file index and `searchFiles` | speed: only the matches cross to the page |
 | Launching apps (`spawn`) | a client outlives a shell reload and runs on the compositor's Wayland display |
 | Clipboard history (`copyClipboardEntry`) | the compositor serves the paste, so it outlives the client that copied; full text stays out of the page ([CLIPBOARD.md](../packages/shell-manganese/docs/CLIPBOARD.md)) |
 | Theme (`theme`, `windowsTheme`) | clients read it from the portal's `Settings`; the compositor switches them only after every chrome captures its old frame |
@@ -69,8 +69,8 @@ recorded output.
 - Page to compositor: `system_request { id, request }`. `request` starts a
   call (`read_file`, `write_file`, `read_dir`, `stat`, `watch`, `spawn`,
   `dbus_call`, `dbus_match`, `screenshot`) or drives one running under the
-  same `id`
-  (`unwatch`, `stdin`, `close_stdin`, `kill`).
+  same `id` (`unwatch`, `stdin`, `close_stdin`, `kill`). `read_file` takes an
+  optional byte range, `offset` and `length`.
 - Compositor to page: one `system_reply` per call that starts something
   (`failed` included), then for a watch or process any number of
   `system_event` and one `system_end`. Bytes are base64.

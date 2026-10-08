@@ -5,7 +5,7 @@
 
 use domicile_protocol::{
     negotiate, ChromeMessage, ClipboardEntry, CursorShape, DisplayInfo, DisplayTransform,
-    FilePreview, HostMessage, Passphrase, PROTOCOL_VERSION,
+    HostMessage, Passphrase, PROTOCOL_VERSION,
 };
 
 fn chrome_round_trip(msg: &ChromeMessage) {
@@ -65,9 +65,6 @@ fn chrome_messages_round_trip() {
     chrome_round_trip(&ChromeMessage::SearchFiles {
         query: "plan".into(),
     });
-    chrome_round_trip(&ChromeMessage::PreviewFile {
-        path: "Notes/today.org".into(),
-    });
     chrome_round_trip(&ChromeMessage::Unlock {
         passphrase: Passphrase::from("open sesame"),
     });
@@ -106,69 +103,6 @@ fn spawn_wire_shape_is_pinned() {
     .unwrap();
     assert_eq!(v["type"], "spawn");
     assert_eq!(v["command"][0], "kitty");
-}
-
-/// A preview request names one path; the compositor answers only for paths in
-/// its index.
-#[test]
-fn asking_for_a_preview_names_the_path_a_search_answered() {
-    let v = serde_json::to_value(ChromeMessage::PreviewFile {
-        path: "Notes/today.org".into(),
-    })
-    .unwrap();
-    assert_eq!(
-        v,
-        serde_json::json!({"type": "preview_file", "path": "Notes/today.org"})
-    );
-}
-
-/// The preview's kind is flattened beside its path, the shape the engine
-/// reads.
-#[test]
-fn a_preview_is_flat_on_the_wire() {
-    let v = serde_json::to_value(HostMessage::FilePreview {
-        path: "Notes".into(),
-        preview: FilePreview::Directory {
-            entries: vec!["2026/".into(), "today.org".into()],
-        },
-    })
-    .unwrap();
-    assert_eq!(
-        v,
-        serde_json::json!({
-            "type": "file_preview",
-            "path": "Notes",
-            "kind": "directory",
-            "entries": ["2026/", "today.org"],
-        })
-    );
-}
-
-/// Audio tags are flattened beside the kind, and a missing tag is absent
-/// rather than empty.
-#[test]
-fn an_audio_preview_is_flat_on_the_wire() {
-    let v = serde_json::to_value(HostMessage::FilePreview {
-        path: "Music/song.flac".into(),
-        preview: FilePreview::Audio {
-            title: Some("Song".into()),
-            artist: None,
-            album: None,
-            duration: 61.5,
-            cover: None,
-        },
-    })
-    .unwrap();
-    assert_eq!(
-        v,
-        serde_json::json!({
-            "type": "file_preview",
-            "path": "Music/song.flac",
-            "kind": "audio",
-            "title": "Song",
-            "duration": 61.5,
-        })
-    );
 }
 
 #[test]
@@ -493,5 +427,27 @@ fn a_resize_the_chrome_no_longer_sends_is_not_a_message() {
     assert!(
         serde_json::from_str::<ChromeMessage>(line).is_err(),
         "the host still reads a resize the chrome no longer sends"
+    );
+}
+
+/// `preview_file` is not a message: a shell previews a file with its system
+/// calls.
+#[test]
+fn a_preview_the_chrome_no_longer_asks_for_is_not_a_message() {
+    let line = r#"{"type":"preview_file","path":"Notes/today.org"}"#;
+    assert!(
+        serde_json::from_str::<ChromeMessage>(line).is_err(),
+        "the host still reads a preview the chrome no longer asks for"
+    );
+}
+
+/// `shortcut` is not a host message: the engine matches grabbed chords
+/// itself, and the compositor never sent one.
+#[test]
+fn a_shortcut_the_host_never_sent_is_not_a_message() {
+    let line = r#"{"type":"shortcut","shortcut":{"key":24,"alt":false,"ctrl":true,"shift":false,"logo":true}}"#;
+    assert!(
+        serde_json::from_str::<HostMessage>(line).is_err(),
+        "the chrome still reads a shortcut the host never sends"
     );
 }

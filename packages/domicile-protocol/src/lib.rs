@@ -21,19 +21,6 @@ use serde::{Deserialize, Serialize};
 /// in `wire/host-messages.jsonl`.
 pub const PROTOCOL_VERSION: u32 = 1;
 
-/// A key combination the desktop claims for itself.
-///
-/// `key` is a Linux evdev keycode, as the chrome forwards keystrokes. The X
-/// keycode the Wayland keymap uses is this plus 8.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct Shortcut {
-    pub key: u32,
-    pub alt: bool,
-    pub ctrl: bool,
-    pub shift: bool,
-    pub logo: bool,
-}
-
 /// A passphrase typed at the lock screen.
 ///
 /// A newtype so that its [`Debug`] never prints the secret: a `debug!` of a
@@ -186,13 +173,6 @@ pub enum ChromeMessage {
     /// because the index is too large to send to the page.
     SearchFiles { query: String },
 
-    /// Preview the file at `path`. Answered with [`HostMessage::FilePreview`].
-    ///
-    /// The compositor answers only for paths in its home index and returns
-    /// [`FilePreview::Unreadable`] for anything else, so a page learns nothing
-    /// a search could not already show it.
-    PreviewFile { path: String },
-
     /// Try to unlock the desktop with a passphrase from the lock screen.
     ///
     /// The compositor checks it, not the page, so editing the page cannot
@@ -252,14 +232,6 @@ pub enum ChromeMessage {
 pub enum HostMessage {
     /// Response to `Hello`; declares the version the host agreed to speak.
     Welcome { protocol_version: u32 },
-
-    /// A desktop shortcut was pressed.
-    ///
-    /// Delivered instead of to the focused client, so the chrome hears it
-    /// regardless of focus. Presses only. The browser process registers and
-    /// matches the shortcuts, because browser windows never forward their
-    /// keys to the compositor.
-    Shortcut { shortcut: Shortcut },
 
     /// Which modifier keys are held, sent whenever that changes.
     ///
@@ -400,16 +372,6 @@ pub enum HostMessage {
         indexing: bool,
     },
 
-    /// The answer to a [`ChromeMessage::PreviewFile`].
-    ///
-    /// `path` echoes the request so a shell can drop stale answers. The
-    /// preview is flattened beside it, the shape the engine reads.
-    FilePreview {
-        path: String,
-        #[serde(flatten)]
-        preview: FilePreview,
-    },
-
     /// The clipboard history, newest first.
     ///
     /// Only the compositor sees `wl_data_device.set_selection`, and a
@@ -501,7 +463,7 @@ pub enum HostMessage {
     /// Every portal dialog not yet answered, oldest first.
     ///
     /// The compositor is the `xdg-desktop-portal` backend; see
-    /// `docs/architecture/PORTALS.md`. Pushed as the full list on any change
+    /// `docs/PORTALS.md`. Pushed as the full list on any change
     /// and on connect, so a reloaded page still sees a pending dialog. The
     /// shell answers with [`ChromeMessage::AnswerPortalRequest`].
     ///
@@ -1279,8 +1241,16 @@ impl PortalAnswer {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "call", rename_all = "snake_case")]
 pub enum SystemRequest {
-    /// Read a whole file. Answered with [`SystemReply::Read`].
-    ReadFile { path: String },
+    /// Read a file from byte `offset`, at most `length` bytes, or to its end
+    /// without one. Answered with [`SystemReply::Read`], short at the end of
+    /// the file.
+    ReadFile {
+        path: String,
+        #[serde(default)]
+        offset: u64,
+        #[serde(default)]
+        length: Option<u64>,
+    },
     /// Write a whole file, creating it if needed. Answered with
     /// [`SystemReply::Written`].
     ///
@@ -1640,35 +1610,6 @@ pub enum CursorShape {
     ZoomOut,
 }
 
-/// A short preview of a file's contents.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
-pub enum FilePreview {
-    /// The start of a text file.
-    Text { text: String },
-    /// The first entries of a directory, sorted, with directories ending in
-    /// `/`.
-    Directory { entries: Vec<String> },
-    /// An audio file's tags. A missing tag is absent; an empty one is empty.
-    Audio {
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        title: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        artist: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        album: Option<String>,
-        /// Length in seconds.
-        duration: f64,
-        /// Embedded cover art as a `data:` URL.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        cover: Option<String>,
-    },
-    /// A non-text file with nothing to preview.
-    Binary,
-    /// Not in the index, or not readable.
-    Unreadable,
-}
-
 /// The desktop's color theme.
 ///
 /// Mirrors `domicile_config::ThemeMode` rather than sharing it, to keep this
@@ -1699,6 +1640,12 @@ pub struct TrayItem {
     /// attention. Absent when none could be drawn.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub icon: Option<String>,
+    /// The bus name the item answers on, unique or well-known.
+    pub bus: String,
+    /// The object path of its `com.canonical.dbusmenu` menu, on `bus`: its
+    /// `Menu` property. Absent when it has none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub menu: Option<String>,
 }
 
 /// Which StatusNotifierItem action a tray click requests.

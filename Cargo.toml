@@ -28,7 +28,7 @@ default-members = [
 version = "0.0.0"
 edition = "2021"
 license = "MIT"
-# The oldest rustc the locked dependencies build with (lofty needs 1.89).
+# The oldest rustc the locked dependencies build with.
 rust-version = "1.89"
 
 [workspace.dependencies]
@@ -41,9 +41,6 @@ thiserror = "2"
 notify = "=9.0.0-rc.5"
 # Matches the gitignore-style globs in the config's `[files] omit`.
 globset = { version = "0.4", default-features = false }
-# Reads audio tags and cover art for launcher previews (see
-# `domicile_host::file_preview`).
-lofty = "0.25"
 tempfile = "3"
 # D-Bus. Pure Rust, so it links nothing. `blocking-api` because nothing here runs
 # an async runtime; no default features to avoid tokio.

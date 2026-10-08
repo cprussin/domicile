@@ -50,9 +50,10 @@ A preview of the highlighted row sits beside the list. It updates once typing
 settles, and keeps the last preview until then.
 
 - **Text file**: the start of the file, highlighted with `lowlight` in the
-  theme's colors. The compositor reads it only for indexed paths.
+  theme's colors.
 - **Folder**: a grid of its contents; images show as thumbnails.
-- **Audio**: tags and cover art, over a player.
+- **Audio**: tags and cover art, over a player. Told by content, not name:
+  ID3v2 (MP3, WAV, AIFF), FLAC, Ogg Vorbis and Opus, MP4.
 - **Video**: one frame from 10% in.
 - **Image or PDF**: loaded from `domicile://home/`.
 - **URL**: the page.

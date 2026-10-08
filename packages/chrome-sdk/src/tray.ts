@@ -26,4 +26,11 @@ export type TrayItem = {
   title: string;
   /** The icon as a `data:` URL, or `undefined` if it could not be rendered. */
   icon: string | undefined;
+  /** The bus name the application answers on. */
+  bus: string;
+  /**
+   * The object path of its `com.canonical.dbusmenu` menu on `bus`, or
+   * `undefined` for none.
+   */
+  menu: string | undefined;
 };

@@ -15,11 +15,12 @@ const COVER_ICON_SIZE = 56;
 const BARS = [0, 1, 2, 3, 4];
 
 /**
- * A song's cover, title, artist and album over a player.
+ * A song's cover, title, artist and album over a player, and how long it
+ * plays once the player has read that.
  *
- * `tags` is `undefined` when the host couldn't read them; the engine may still
- * play the file. The meter animates while playing and is decorative: the page
- * can't read the file to draw its real waveform.
+ * `tags` is `undefined` until they are read, or when they can't be; the engine
+ * may still play the file. The meter animates while playing and is
+ * decorative.
  */
 export const AudioPreview = ({
   row,
@@ -29,6 +30,7 @@ export const AudioPreview = ({
   tags: AudioTags | undefined;
 }) => {
   const [playing, setPlaying] = useState(false);
+  const [duration, setDuration] = useState<number | undefined>(undefined);
   const byline = [tags?.artist, tags?.album].filter(
     (said) => said !== undefined,
   );
@@ -61,13 +63,18 @@ export const AudioPreview = ({
             <span className={barStyles} key={bar} />
           ))}
         </span>
-        {tags !== undefined && <span>{clockOf(tags.duration)}</span>}
+        {duration !== undefined && Number.isFinite(duration) && (
+          <span>{clockOf(duration)}</span>
+        )}
       </div>
       <audio
         aria-label={`Play ${row.name}`}
         className={playerStyles}
         controls
         onEnded={stop}
+        onLoadedMetadata={(event) => {
+          setDuration(event.currentTarget.duration);
+        }}
         onPause={stop}
         onPlay={() => {
           setPlaying(true);

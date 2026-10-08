@@ -25,7 +25,7 @@ desktop treats it.
 |---|---|---|
 | Input | `Key`, pointer motion, buttons, axis, leave; the same from EIS clients (`crate::eis`) | Dropped (`debug` log) |
 | Commands | `CloseApp`, `Spawn`, `CopyClipboardEntry`, tray, notifications | Refused (`warn` log) |
-| Reads on the connection | `SearchFiles`, `PreviewFile` | Answered with nothing (`warn` log) |
+| Reads on the connection | `SearchFiles` | Answered with nothing (`warn` log) |
 | System calls | `SystemRequest`, except reads under `/sys`, lock screen readouts and calls that stop something running | A call that starts something is answered `locked`; `stdin` is dropped (`warn` log) |
 | Allowed | `ChromeHello`, `Lock`, `Unlock`, `KeyboardFocus`, output scale and size, window bounds, `ClipboardCopied`, theme | Handled normally |
 

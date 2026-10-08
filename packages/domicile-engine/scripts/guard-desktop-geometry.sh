@@ -11,7 +11,7 @@
 # `reportDevicePixelRatio`), and one that forgot left the compositor laying
 # windows out against its startup placeholder with nothing to say so. The
 # renderer half of `DomicileHost` sends both now, so the page under test here
-# never calls either -- see docs/architecture/WINDOW-DOMICILE.md.
+# never calls either -- see packages/chrome-sdk/README.md.
 #
 # WHAT IT ASSERTS: the stand-in compositor hears `set_desktop_size` with the
 # page's own `innerWidth` and `innerHeight`, and `set_device_pixel_ratio` with

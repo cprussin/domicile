@@ -170,7 +170,7 @@ TEST(ShellURLLoaderFactoryTest, OnlyTheShellMayAskForHome) {
   EXPECT_FALSE(ShellURLLoaderFactory::MayReadHome(std::nullopt, false));
 
   // A locked desk serves nothing from home, matching the compositor's rule for
-  // `search_files` and `preview_file`.
+  // `search_files` and the shell's reads of the home.
   EXPECT_FALSE(ShellURLLoaderFactory::MayReadHome(shell, /*desk_locked=*/true));
 }
 
