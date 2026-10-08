@@ -326,6 +326,7 @@ export type DomicileHostEventMap = {
   themechanged: Event;
   windowsthemechanged: Event;
   modifierschanged: Event;
+  appearancechanged: Event;
   /**
    * Fires when a window opens, closes, navigates or changes title. Read
    * `browserWindows` for the current list.
@@ -592,6 +593,15 @@ export type DomicileHost = {
   readonly ctrlKey: boolean | null;
   readonly shiftKey: boolean | null;
   readonly metaKey: boolean | null;
+  /**
+   * The config's accent color, contrast and reduced motion, which the
+   * settings portal also serves applications. `accentColor` is "#rrggbb", or
+   * null where the config leaves it to the shell. `highContrast` and
+   * `reducedMotion` are null until the compositor says.
+   */
+  readonly accentColor: string | null;
+  readonly highContrast: boolean | null;
+  readonly reducedMotion: boolean | null;
   /**
    * The desk's browser windows, oldest first. Null until the browser lists
    * them, which it does as soon as this page listens. The browser holds each

@@ -33,6 +33,7 @@
     "./AppChooser": "./src/AppChooser/AppChooser.tsx",
     "./Autocomplete": "./src/Autocomplete/Autocomplete.tsx",
     "./Avatar": "./src/Avatar/Avatar.tsx",
+    "./appearance": "./src/ThemeSwitch/appearance.ts",
     "./Button": "./src/Button/Button.tsx",
     "./Card": "./src/Card/Card.tsx",
     "./ContextMenu": "./src/ContextMenu/ContextMenu.tsx",

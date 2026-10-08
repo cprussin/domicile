@@ -427,6 +427,11 @@ pub enum HostMessage {
     /// on connect.
     WindowsTheme { theme: Theme },
 
+    /// The config's accent color, contrast and reduced motion, for the shell
+    /// to follow as the Settings portal's clients do. Sent on connect and when
+    /// a reload changes it.
+    Appearance(Appearance),
+
     /// Every system tray icon, in registration order.
     ///
     /// The compositor is the StatusNotifierItem host on the session bus; see
@@ -502,6 +507,17 @@ impl PortalWallpaper {
     pub fn is_unset(&self) -> bool {
         self.background.is_none() && self.lockscreen.is_none()
     }
+}
+
+/// The config's `theme` keys besides `mode`, which the Settings portal also
+/// serves applications in `org.freedesktop.appearance`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Appearance {
+    /// `"#rrggbb"`, or absent to keep the shell's own accent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub accent_color: Option<String>,
+    pub high_contrast: bool,
+    pub reduced_motion: bool,
 }
 
 /// A dialog an application asked for through a portal.

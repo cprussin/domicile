@@ -29,6 +29,9 @@ export const domicilePreset = definePreset({
   conditions: {
     extend: {
       activeEnabled: "&:active:not(:disabled):not([data-disabled])",
+      // `theme.contrast` set to `high`, as `data-contrast="high"` on
+      // `<html>`. Panda's own `_highContrast` matches forced colors instead.
+      contrastHigh: "[data-contrast=high] &",
       hoverEnabled: "&:hover:not(:disabled):not([data-disabled])",
       // Panda's default `_light` matches a `light` class; we use
       // `data-theme="light"` on `<html>`.
@@ -73,6 +76,20 @@ export const domicilePreset = definePreset({
     "[data-theme-flipping] *, [data-theme-flipping] *::before, [data-theme-flipping] *::after":
       {
         transition: "none !important",
+      },
+    // `theme.reduced_motion`, as `data-reduced-motion` on `<html>`: every
+    // animation and transition, the theme wipe's included, runs once at the
+    // shortest duration. Shortened rather than removed so `animationend` and
+    // `transitionend` still fire.
+    "[data-reduced-motion] *, [data-reduced-motion] *::before, [data-reduced-motion] *::after":
+      {
+        animationDuration: "{durations.fastest} !important",
+        animationIterationCount: "1 !important",
+        transitionDuration: "{durations.fastest} !important",
+      },
+    "html[data-reduced-motion]::view-transition-group(*), html[data-reduced-motion]::view-transition-old(*), html[data-reduced-motion]::view-transition-new(*)":
+      {
+        animationDuration: "{durations.fastest} !important",
       },
     html: {
       "::selection": {
@@ -242,6 +259,9 @@ export const domicilePreset = definePreset({
         // Only foreground, background, accent, danger, private, success and
         // warning have per-theme values. The rest are `color-mix(...)` of
         // those, so they follow the theme.
+        //
+        // `_contrastHigh` moves text to the palette's ends and leans the
+        // mixed grays toward the foreground.
         colors: {
           accent: {
             // Steps differ per theme so each has enough contrast with its
@@ -259,12 +279,18 @@ export const domicilePreset = definePreset({
             },
           },
           border: {
-            value:
-              "color-mix(in oklab, {colors.foreground} 18%, {colors.background})",
+            value: {
+              _contrastHigh:
+                "color-mix(in oklab, {colors.foreground} 45%, {colors.background})",
+              base: "color-mix(in oklab, {colors.foreground} 18%, {colors.background})",
+            },
           },
           borderStrong: {
-            value:
-              "color-mix(in oklab, {colors.foreground} 25%, {colors.background})",
+            value: {
+              _contrastHigh:
+                "color-mix(in oklab, {colors.foreground} 60%, {colors.background})",
+              base: "color-mix(in oklab, {colors.foreground} 25%, {colors.background})",
+            },
           },
           card: {
             value:
@@ -279,13 +305,20 @@ export const domicilePreset = definePreset({
           },
           foreground: {
             value: {
-              _light: "{colors.neutral.900}",
+              _contrastHigh: "{colors.neutral.50}",
+              _light: {
+                _contrastHigh: "{colors.neutral.950}",
+                base: "{colors.neutral.900}",
+              },
               base: "{colors.neutral.200}",
             },
           },
           muted: {
-            value:
-              "color-mix(in oklab, {colors.foreground} 55%, {colors.background})",
+            value: {
+              _contrastHigh:
+                "color-mix(in oklab, {colors.foreground} 80%, {colors.background})",
+              base: "color-mix(in oklab, {colors.foreground} 55%, {colors.background})",
+            },
           },
           // Text and panels drawn over the wallpaper. Theme-independent
           // because the wallpaper doesn't change with the theme.
