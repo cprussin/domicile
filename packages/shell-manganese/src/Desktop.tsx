@@ -19,6 +19,7 @@ import { appSearch } from "./launcher/app-search";
 import type { ApplicationsConfig } from "./launcher/applications-config";
 import { Launcher } from "./launcher/Launcher";
 import { LaunchKind } from "./launcher/launch";
+import { OpenWith } from "./launcher/OpenWith";
 import { previewOf } from "./launcher/preview-of";
 import { useOpeningApps } from "./launcher/useOpeningApps";
 import { Lock } from "./lock/Lock";
@@ -101,6 +102,8 @@ export const Desktop = ({
   // Read while the launcher is closed so its rows render with it rather than
   // a moment later.
   const opening = useOpeningApps(apps.opening, windows.launcherOpen);
+  // The file the launcher asked what to open with, while that is asked.
+  const [openingWith, setOpeningWith] = useState<string | undefined>();
   // File previews, from the same index.
   const preview = useCallback(
     (path: string) => domicile.previewFile(path).then(previewOf),
@@ -342,6 +345,11 @@ export const Desktop = ({
               act(WindowAction.FileOpened(launch.path));
               break;
             }
+            case LaunchKind.OpenedWith: {
+              act(WindowAction.LauncherDismissed());
+              setOpeningWith(launch.path);
+              break;
+            }
             case LaunchKind.Browsed: {
               act(WindowAction.BrowserOpened(launch.url));
               break;
@@ -355,6 +363,20 @@ export const Desktop = ({
         search={search}
         searchApps={apps.search}
       />
+      {openingWith !== undefined && (
+        <OpenWith
+          onClose={() => {
+            setOpeningWith(undefined);
+          }}
+          onOpen={(argv) => {
+            setOpeningWith(undefined);
+            act(WindowAction.AppLaunched(argv));
+          }}
+          path={openingWith}
+          screen={windows.focused}
+          system={files}
+        />
+      )}
       {/* Over the whole desktop, like the launcher. */}
       <Clipboard
         entries={clipboard}

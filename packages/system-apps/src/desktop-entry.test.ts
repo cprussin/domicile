@@ -11,7 +11,7 @@ const entry = (name: string, exec: string): string =>
   `[Desktop Entry]\nType=Application\nName=${name}\nExec=${exec}\n`;
 
 describe("parseDesktopEntry", () => {
-  it("reads an application's name, comment, command, icon and preview", () => {
+  it("reads an application's name, comment, command, types, icon and preview", () => {
     expect(
       parseDesktopEntry(
         "firefox.desktop",
@@ -25,6 +25,7 @@ describe("parseDesktopEntry", () => {
           "Keywords=internet;www;",
           "Comment = Browse the web",
           "Exec=firefox %u",
+          "MimeType=text/html;x-scheme-handler/http;",
           "Icon=firefox",
           "X-Domicile-Preview=/usr/share/firefox/preview.svg",
           "[Desktop Action new-window]",
@@ -36,8 +37,10 @@ describe("parseDesktopEntry", () => {
       Some({
         command: ["firefox"],
         comment: "Browse the web",
+        exec: "firefox %u",
         icon: "firefox",
         id: "firefox.desktop",
+        mimeTypes: ["text/html", "x-scheme-handler/http"],
         name: "Firefox",
         preview: "/usr/share/firefox/preview.svg",
         words: "firefox\nweb browser\ninternet;www;",
@@ -56,8 +59,21 @@ describe("parseDesktopEntry", () => {
         command: ["libreoffice"],
         comment:
           "Launch applications to create text documents, spreadsheets, presentations, drawings, formulas, and databases, or open recently used documents.",
+        exec: "libreoffice %U",
         icon: "libreoffice-startcenter",
         id: "libreoffice-startcenter.desktop",
+        mimeTypes: [
+          "application/vnd.openofficeorg.extension",
+          "x-scheme-handler/vnd.libreoffice.cmis",
+          "x-scheme-handler/vnd.sun.star.webdav",
+          "x-scheme-handler/vnd.sun.star.webdavs",
+          "x-scheme-handler/vnd.libreoffice.command",
+          "x-scheme-handler/ms-word",
+          "x-scheme-handler/ms-powerpoint",
+          "x-scheme-handler/ms-excel",
+          "x-scheme-handler/ms-visio",
+          "x-scheme-handler/ms-access",
+        ],
         name: "LibreOffice",
         preview: undefined,
         words: "libreoffice\noffice\n",

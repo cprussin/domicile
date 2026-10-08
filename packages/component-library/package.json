@@ -30,6 +30,7 @@
   },
   "exports": {
     "./Accordion": "./src/Accordion/Accordion.tsx",
+    "./AppChooser": "./src/AppChooser/AppChooser.tsx",
     "./Autocomplete": "./src/Autocomplete/Autocomplete.tsx",
     "./Avatar": "./src/Avatar/Avatar.tsx",
     "./Button": "./src/Button/Button.tsx",

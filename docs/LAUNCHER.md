@@ -56,6 +56,20 @@ Icon=/path/to/agenda.svg
 X-Domicile-Preview=/path/to/agenda-preview.svg
 ```
 
+### Opening files
+
+Enter opens a file with its type's default application. Set one in
+`~/.config/domicile-mimeapps.list` to apply only in Domicile, or in
+`~/.config/mimeapps.list`:
+
+```ini
+[Default Applications]
+text/plain=org.gnome.TextEditor.desktop
+```
+
+Shift+Enter asks which application to open it with. See manganese's
+[launcher doc](../packages/shell-manganese/docs/LAUNCHER.md#opening-a-file).
+
 ## Bookmarks
 
 Manganese's `applications.bookmarks` option adds web pages to the launcher.

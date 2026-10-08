@@ -3,9 +3,9 @@ import type {
   DomicileHost,
   DomicileWindow,
 } from "@domicile-desktop/sdk/domicile-host";
+import { system } from "@domicile-desktop/sdk/system";
 import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
-
-import { openCommand } from "../launcher/open-command";
+import { openFileCommand } from "../launcher/open-file";
 import type { PlacedScreen } from "../screens/screen-toward";
 import { appIdOf, browserIdOf } from "./window";
 import { windowChanges } from "./window-changes";
@@ -39,12 +39,16 @@ export type Windows = WindowState & {
  *
  * @param displays - the desk the host described. `undefined` until it has
  *   described one.
+ * @param openFile - the argv that opens a file the launcher chose.
  */
 export const useWindows = (
   domicile: DomicileHost,
   displays: readonly Display[] | undefined,
+  openFile: typeof openFileCommand = openFileCommand,
 ): Windows => {
   const [state, dispatch] = useReducer(reduceWindows, NO_WINDOWS);
+  // Memoized so `act` keeps its identity.
+  const files = useMemo(() => system(domicile), [domicile]);
 
   // Side effects the reducer cannot perform: spawning processes, locking,
   // asking a client to close, and opening or closing browser windows. A client
@@ -60,10 +64,15 @@ export const useWindows = (
       if (action.kind === WindowActionKind.DeskLocked) {
         domicile.lock();
       }
-      // `openCommand` runs through a shell because `$HOME` is only known to the
-      // spawned process, not to a page served over `domicile://`.
       if (action.kind === WindowActionKind.FileOpened) {
-        domicile.spawn(openCommand(action.path));
+        openFile(files, action.path)
+          .then((argv) => {
+            domicile.spawn(argv);
+          })
+          .catch((error: unknown) => {
+            // biome-ignore lint/suspicious/noConsole: surfacing a file that did not open
+            console.error(`Could not open ${action.path}`, error);
+          });
       }
       if (action.kind === WindowActionKind.AppLaunched) {
         domicile.spawn(action.command);
@@ -89,7 +98,7 @@ export const useWindows = (
         }
       }
     },
-    [domicile, state],
+    [domicile, files, openFile, state],
   );
 
   // The host's last window list, diffed against the next. A ref, not

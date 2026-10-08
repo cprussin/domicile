@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import { Engine } from "../address/search";
-import { Choice, choicesFor, launchOf } from "./choices";
+import { Choice, choicesFor, launchOf, openWithOf } from "./choices";
 import { fileRow } from "./file-row";
 import { Launch } from "./launch";
 
@@ -215,6 +215,20 @@ describe("launchOf", () => {
       Launch.Browsed(
         "https://www.youtube.com/results?search_query=kate%20bush",
       ),
+    );
+  });
+});
+
+describe("openWithOf", () => {
+  it("asks what to open a file with", () => {
+    expect(openWithOf(Choice.File("Notes/today.org"))).toStrictEqual(
+      Launch.OpenedWith("Notes/today.org"),
+    );
+  });
+
+  it("launches any other row as Enter would", () => {
+    expect(openWithOf(Choice.App(EDITOR))).toStrictEqual(
+      launchOf(Choice.App(EDITOR)),
     );
   });
 });
