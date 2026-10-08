@@ -87,7 +87,7 @@ type Props = {
   /** Called when `motion` finishes. */
   onMotionEnded: () => void;
   onContextMenu?: ((event: { preventDefault: () => void }) => void) | undefined;
-  /** A middle click, which closes a tab as in a browser. */
+  /** A middle click, which closes the window as a browser closes a tab. */
   onMiddleClick?: (() => void) | undefined;
   /** A press on the bar, which starts a drag or selects a tab's window. */
   onPointerDown?: ((event: ReactPointerEvent<HTMLElement>) => void) | undefined;

@@ -69,7 +69,7 @@ type Props = {
  *
  * A floating window's bar drags it without the modifier; a bar never resizes.
  * A tiled window's bar or tab drags like a modifier drag (`useTileDrag`), with
- * the primary button only, onto any screen. A middle click closes a tab. A
+ * the primary button only, onto any screen. A middle click closes the window. A
  * fullscreen window's bar does not drag.
  */
 export const WindowTitleBar = ({
@@ -129,7 +129,7 @@ export const WindowTitleBar = ({
       motion={motion}
       onClose={onClose}
       onFullscreen={onFullscreen}
-      onMiddleClick={tabbed === undefined ? undefined : onClose}
+      onMiddleClick={onClose}
       onMotionEnded={onMotionEnded}
       rect={rect}
       restack={restack}

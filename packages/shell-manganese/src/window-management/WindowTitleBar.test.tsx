@@ -70,13 +70,13 @@ describe("WindowTitleBar", () => {
       });
     });
 
-    it("leaves a bar that is not a tab alone", () => {
-      const onClose = mock(nothing);
-      const { container } = render(
-        <WindowTitleBar {...tabProps} onClose={onClose} tabbed={undefined} />,
-      );
-      middleClick(bar(container));
-      expect(onClose).not.toHaveBeenCalled();
+    it("closes a window by its own bar", async () => {
+      await new Promise<void>((resolve) => {
+        const { container } = render(
+          <WindowTitleBar {...tabProps} onClose={resolve} tabbed={undefined} />,
+        );
+        middleClick(bar(container));
+      });
     });
   });
 
