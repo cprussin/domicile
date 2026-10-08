@@ -1015,6 +1015,13 @@
               exit 1
             }
 
+            # UPower, which `@domicile-desktop/system-battery` reads. NixOS
+            # enables it only with a desktop that asks for it.
+            [ ${pkgs.lib.boolToString machine.config.services.upower.enable} = true ] || {
+              echo "the module does not enable UPower, so the shell has no battery" >&2
+              exit 1
+            }
+
             # `domicile-portals.conf` routes every portal call to Domicile but
             # `Secret`, which goes to the keyring.
             found=

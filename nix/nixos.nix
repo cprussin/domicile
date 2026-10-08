@@ -2,7 +2,8 @@
 #
 # `nix/home-manager.nix` configures the desk itself. This module provides the
 # `domicile` login session and its user units, the PAM service the lock uses,
-# and portal routing. See docs/RUNNING-A-DESKTOP.md#on-nixos.
+# UPower for the battery, and portal routing. See
+# docs/RUNNING-A-DESKTOP.md#on-nixos.
 #
 # The session runs whichever shell the config names. The module sets no
 # default session and enables no display manager; set
@@ -50,6 +51,10 @@ in {
     # on the system profile. It is read only when `XDG_CURRENT_DESKTOP` is
     # `domicile`.
     environment.systemPackages = [cfg.package];
+
+    # Read by `@domicile-desktop/system-battery`, so manganese's bar and lock
+    # screen show the battery. NixOS enables it only for desktops that ask.
+    services.upower.enable = lib.mkDefault true;
 
     # Named by `lock.pam_service = "domicile"`. A desk whose PAM service is
     # missing fails to start.

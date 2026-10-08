@@ -146,6 +146,8 @@ It provides:
   session serves every desktop. Without the module,
   `services.displayManager.sessionPackages = [domicile]` adds it.
 - **The `domicile` PAM service**, for `lock.pam_service = "domicile"`.
+- **UPower**, which the battery readout reads. Without it, manganese shows no
+  battery. Set `services.upower.enable = false` to opt out.
 - **`domicile-session.target`**, started by a desktop that is the session. User
   services bound to `graphical-session.target` and `~/.config/autostart`
   entries start with it. The package is also on the system profile, so the
