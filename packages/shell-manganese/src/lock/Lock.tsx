@@ -10,7 +10,7 @@ import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 
 import { css, cva } from "../../styled-system/css";
-import { center, hstack, vstack } from "../../styled-system/patterns";
+import { hstack, vstack } from "../../styled-system/patterns";
 import { LockClock } from "./LockClock";
 
 /** The field's label, also used by tests to find it. */
@@ -37,6 +37,8 @@ type Props = {
    * portal, as a URL. Covers each screen in place of the blurred desktop.
    */
   picture?: string | undefined;
+  /** The screen to ask for the passphrase on: the one with the keyboard. */
+  screen: string;
 };
 
 /**
@@ -67,6 +69,7 @@ export const Lock = ({
   onUnlock,
   picture,
   refusals,
+  screen,
 }: Props) => {
   const displays = useDisplays();
   const [typed, setTyped] = useState("");
@@ -135,7 +138,11 @@ export const Lock = ({
             <LockPicture key={name} picture={picture} screen={name} />
           ))
         ))}
-      <div className={contentStyles}>
+      <div
+        className={contentStyles}
+        data-lock-content=""
+        style={useScreenRegion(screen)}
+      >
         <LockClock />
         <div className={entryStyles}>
           <form
@@ -227,7 +234,7 @@ const LockPicture = ({
 // nothing itself; its veils and content fade.
 //
 // `allow-discrete` delays `display: none` until the fade ends.
-const sheetStyles = center({
+const sheetStyles = css({
   "&[inert]": {
     display: "none",
   },
@@ -279,6 +286,8 @@ const pictureStyles = css({
 });
 
 // The clock and field rise in as the desktop blurs, and sink as it clears.
+// Centered on one screen, narrowed by the region from `useScreenRegion`, since
+// the page's center can fall between monitors.
 const contentStyles = vstack({
   _starting: {
     opacity: 0,
@@ -289,9 +298,11 @@ const contentStyles = vstack({
     transform: "translateY({spacing.6}) scale(0.97)",
   },
   gap: 10,
+  inset: 0,
+  justifyContent: "center",
   opacity: 1,
   // Positioned, so it draws over the veils before it.
-  position: "relative",
+  position: "absolute",
   transform: "none",
   transition:
     "opacity {durations.slowest} {easings.out}, transform {durations.slowest} {easings.emphasized}",

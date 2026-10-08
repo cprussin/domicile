@@ -450,6 +450,7 @@ export const Desktop = ({
         onUnlock={lock.unlock}
         picture={lockPicture}
         refusals={lock.refusals}
+        screen={windows.focused}
       >
         <LockReadouts readouts={readouts} />
       </Lock>
