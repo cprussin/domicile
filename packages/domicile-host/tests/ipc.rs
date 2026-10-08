@@ -10,9 +10,9 @@ use std::thread;
 use domicile_host::ipc::{apply_chrome_message, parse_chrome, to_line};
 use domicile_host::Host;
 use domicile_protocol::{
-    AccessDialog, BoundShortcut, Capturing, CapturingKind, ChromeMessage, Devices, HostMessage,
-    Notification, PortalKind, PortalRequest, PortalWallpaper, Theme, TrayItem, Urgency,
-    PROTOCOL_VERSION,
+    AccessDialog, Appearance, BoundShortcut, Capturing, CapturingKind, ChromeMessage, Devices,
+    HostMessage, Notification, PortalKind, PortalRequest, PortalWallpaper, Theme, TrayItem,
+    Urgency, PROTOCOL_VERSION,
 };
 
 /// One chrome connection's [`Host`] and handshake state.
@@ -65,6 +65,7 @@ fn hello_completes_the_handshake_with_a_welcome_and_the_desktop() {
             HostMessage::Displays { displays: vec![] },
             HostMessage::Theme { theme: Theme::Dark },
             HostMessage::WindowsTheme { theme: Theme::Dark },
+            HostMessage::Appearance(Appearance::default()),
         ]
     );
 }
@@ -234,6 +235,7 @@ fn a_keymap_the_compositor_compiled_rides_with_the_handshake() {
             HostMessage::Displays { displays: vec![] },
             HostMessage::Theme { theme: Theme::Dark },
             HostMessage::WindowsTheme { theme: Theme::Dark },
+            HostMessage::Appearance(Appearance::default()),
             HostMessage::Keymap {
                 keymap: KEYMAP.into()
             },
@@ -549,4 +551,31 @@ fn a_portal_wallpaper_rides_with_the_requests() {
     }));
 
     assert!(out.contains(&told));
+}
+
+#[test]
+fn the_configs_appearance_rides_with_the_handshake() {
+    // A reloaded page must follow the config's accent, contrast and motion.
+    let mut session = Session::new();
+    let appearance = Appearance {
+        accent_color: Some("#3584e4".into()),
+        high_contrast: true,
+        reduced_motion: false,
+    };
+
+    assert_eq!(
+        session.host_mut().set_appearance(appearance.clone()),
+        Some(HostMessage::Appearance(appearance.clone()))
+    );
+    assert_eq!(
+        session.host_mut().set_appearance(appearance.clone()),
+        None,
+        "an unchanged appearance says nothing"
+    );
+
+    let out = session.ingest(&to_line(&ChromeMessage::Hello {
+        protocol_version: PROTOCOL_VERSION,
+    }));
+
+    assert!(out.contains(&HostMessage::Appearance(appearance)));
 }

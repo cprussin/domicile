@@ -6,7 +6,7 @@
 use domicile_host::ipc::apply_chrome_message;
 use domicile_host::{AppId, Host};
 use domicile_protocol::{
-    ChromeMessage, DisplayInfo, DisplayTransform, HostMessage, Theme, PROTOCOL_VERSION,
+    Appearance, ChromeMessage, DisplayInfo, DisplayTransform, HostMessage, Theme, PROTOCOL_VERSION,
 };
 use domicile_scene::KeyboardTarget;
 
@@ -515,6 +515,7 @@ fn the_displays_are_answered_after_the_welcome() {
             },
             HostMessage::Theme { theme: Theme::Dark },
             HostMessage::WindowsTheme { theme: Theme::Dark },
+            HostMessage::Appearance(Appearance::default()),
         ]
     );
 }

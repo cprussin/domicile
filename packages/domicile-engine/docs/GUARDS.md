@@ -36,7 +36,7 @@ Under `under-wayland.sh` unless marked headless.
 | `guard-css-and-resize.sh` | CSS parity of `<app>` against `<div>`, with and without `backdrop-filter`, plus resize and latency. Headless; `GPU=1` uses the GPU |
 | `guard-latency.sh` | keystroke to pixel with a real client, from the compositor's `latency` lines |
 | `guard-app-routes-input.sh` | `<app>` sends the pointer, wheel and keys to its client through its whole CSS transform, with no page script; a `<div>` control gets nothing |
-| `guard-windows-state.sh` | `windows` and `focusedWindow` follow the compositor, every event name fires, and every CSS cursor keyword reaches the page; and that a system call and its answer cross the browser. Headless |
+| `guard-windows-state.sh` | `windows`, `focusedWindow` and the appearance attributes follow the compositor, every event name fires, and every CSS cursor keyword reaches the page; and that a system call and its answer cross the browser. Headless |
 | `guard-portal-requests.sh` | a shell that listens late for `portalrequests` hears them; `answerPortalRequest` reaches the compositor and a malformed answer does not. Headless |
 | `guard-desk-state.sh` | the desk's state attributes (idle, lock, themes, clipboard, tray with each icon's bus and menu, modifiers) say what the compositor said, to a shell that reads late. Headless |
 | `guard-held-moments.sh` | a `focusrequested` sent before the shell listens reaches its first listener, once. Headless |

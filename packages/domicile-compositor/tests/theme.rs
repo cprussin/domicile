@@ -10,7 +10,7 @@ mod running;
 
 use std::time::{Duration, Instant};
 
-use domicile_protocol::{ChromeMessage, HostMessage, Theme};
+use domicile_protocol::{Appearance, ChromeMessage, HostMessage, Theme};
 
 use crate::running::Compositor;
 
@@ -106,4 +106,42 @@ fn a_desk_that_comes_up_light_says_its_windows_are_light() {
     chrome
         .wait_for(windows_theme(Theme::Light))
         .expect("the handshake names the windows' theme as the config states it");
+}
+
+#[test]
+fn the_shell_follows_the_configs_look_and_its_reloads() {
+    // The settings portal serves these to windows; the shell must match them.
+    let compositor = Compositor::started_with(
+        r##"{
+  "output": { "displays": [{ "name": "left", "size": [1920, 1080] }] },
+  "theme": { "accent_color": "#3584e4", "contrast": "high" }
+}"##,
+    );
+    let mut chrome = compositor.chrome();
+    chrome
+        .wait_for(appearance(Appearance {
+            accent_color: Some("#3584e4".into()),
+            high_contrast: true,
+            reduced_motion: false,
+        }))
+        .expect("the handshake carries the config's look");
+
+    compositor.reconfigure(
+        r#"{
+  "output": { "displays": [{ "name": "left", "size": [1920, 1080] }] },
+  "theme": { "reduced_motion": true }
+}"#,
+    );
+
+    chrome
+        .wait_for(appearance(Appearance {
+            accent_color: None,
+            high_contrast: false,
+            reduced_motion: true,
+        }))
+        .expect("a connected chrome is told the look the edit names");
+}
+
+fn appearance(wanted: Appearance) -> impl Fn(&HostMessage) -> bool {
+    move |message| *message == HostMessage::Appearance(wanted.clone())
 }

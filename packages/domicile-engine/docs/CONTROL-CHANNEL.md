@@ -29,9 +29,9 @@ The engine has two channels to the rest of Domicile:
 - **Inbound:** `welcome`, `app_appeared`, `app_titled`, `app_resized`,
   `app_min_size`, `app_max_size`, `popup_placed`, `app_closed`, `app_cursor`,
   `modifiers`, `found_files`, `clipboard`, `theme`, `windows_theme`,
-  `focus_changed`, `focus_requested`, `displays`, `keymap`, `extensions`,
-  `tray`, `notifications`, `shell_config`, `idle`, `locked`, `system`,
-  `portal_requests`.
+  `appearance`, `focus_changed`, `focus_requested`, `displays`, `keymap`,
+  `extensions`, `tray`, `notifications`, `shell_config`, `idle`, `locked`,
+  `system`, `portal_requests`.
 - **Handled in the browser, never sent to the compositor:** `grab_shortcut`,
   `warp_pointer`.
 - **Not from the compositor:** `browserwindowschanged`, the desk's browser
