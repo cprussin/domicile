@@ -24,6 +24,7 @@ pub mod cli;
 pub mod command;
 pub mod command_socket;
 pub mod components;
+pub mod config_check;
 pub mod config_path;
 pub mod config_watch;
 pub mod control;

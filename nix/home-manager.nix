@@ -171,6 +171,26 @@
     exec ${cfg.package}/bin/domicile "$@" ${lib.escapeShellArg (toString cfg.shell)}
   '';
 
+  # Settings the compositor no longer reads, and where each went. Each is a
+  # hidden option, and setting one fails an assertion with its note.
+  # `scripts/test-a-dropped-config-field-is-removed-here.sh` fails when a field
+  # leaves `domicile-config` without an entry here.
+  removedSettings = {
+    applications = ''
+      `applications.omit` and `applications.bookmarks` are manganese's
+      `applications` option. See docs/LAUNCHER.md.
+    '';
+  };
+
+  # The config file, checked by the `domicile` that reads it. A setting the
+  # compositor refuses fails the build instead of the desk.
+  checkedConfig = settings: let
+    written = json.generate "domicile.json" settings;
+  in
+    pkgs.runCommandLocal "domicile.json" {} ''
+      ${cfg.package}/bin/domicile check-config ${written}
+      cp ${written} "$out"
+    '';
 in {
   imports = [
     (lib.mkRemovedOptionModule ["programs" "domicile" "defaultBrowser"] ''
@@ -225,7 +245,15 @@ in {
       default = {};
       type = lib.types.submodule {
         freeformType = json.type;
-        options = {
+        options =
+          lib.mapAttrs (_: _:
+            lib.mkOption {
+              visible = false;
+              type = lib.types.nullOr json.type;
+              default = null;
+            })
+          removedSettings
+          // {
           extensions = {
             web_store = lib.mkOption {
               description = ''
@@ -516,9 +544,16 @@ in {
       configPackages = [cfg.finalPackage];
     };
 
+    assertions =
+      lib.mapAttrsToList (name: note: {
+        assertion = cfg.settings.${name} == null;
+        message = "programs.domicile.settings.${name} is removed. ${note}";
+      })
+      removedSettings;
+
     # `domicile` reads this path when no `--config` is given. Nulls are
     # dropped; see `withoutNulls`.
     xdg.configFile."domicile/domicile.json".source =
-      json.generate "domicile.json" (withoutNulls cfg.settings);
+      checkedConfig (withoutNulls cfg.settings);
   };
 }
