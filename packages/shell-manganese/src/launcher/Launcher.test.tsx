@@ -108,7 +108,6 @@ const holding = (path: string): FilePreview => {
       album: "Record",
       artist: "Band",
       cover: "data:image/png;base64,AQID",
-      duration: 61.5,
       title: "Song",
     });
   } else if (path === "empty") {
@@ -785,13 +784,17 @@ describe("Launcher", () => {
       ).toBeInTheDocument();
       expect(previewPane()).toHaveTextContent("Band");
       expect(previewPane()).toHaveTextContent("Record");
-      expect(previewPane()).toHaveTextContent("1:01");
       expect(
         pane.getByRole("img", { name: "Cover art" }).getAttribute("src"),
       ).toBe("data:image/png;base64,AQID");
-      expect(pane.getByLabelText("Play song.flac").getAttribute("src")).toBe(
+      const player = pane.getByLabelText("Play song.flac");
+      expect(player.getAttribute("src")).toBe(
         "domicile://home/Music/song.flac",
       );
+      // How long it plays, once the engine has read that far.
+      Object.defineProperty(player, "duration", { value: 61.5 });
+      fireEvent.loadedMetadata(player);
+      expect(previewPane()).toHaveTextContent("1:01");
     });
 
     it("still offers to play a song that says nothing of itself", async () => {
@@ -804,9 +807,13 @@ describe("Launcher", () => {
           name: "noise.mp3",
         }),
       ).toBeInTheDocument();
-      expect(
-        within(previewPane()).getByLabelText("Play noise.mp3"),
-      ).toBeInTheDocument();
+      const player = within(previewPane()).getByLabelText("Play noise.mp3");
+      // Nor how long it plays.
+      Object.defineProperty(player, "duration", {
+        value: Number.POSITIVE_INFINITY,
+      });
+      fireEvent.loadedMetadata(player);
+      expect(previewPane()).not.toHaveTextContent(/\d:\d\d|Infinity|NaN/);
     });
 
     it("shows a song the host heard, whatever its name says", async () => {

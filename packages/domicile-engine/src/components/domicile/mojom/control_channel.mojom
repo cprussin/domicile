@@ -32,14 +32,12 @@ module domicile.mojom;
 // Adding a member costs a near-full Blink rebuild, so they are added in
 // batches rather than one at a time.
 
-// A key combination the desktop claims for itself.
+// A key combination: one the shell grabs, and a press or release of one.
 //
-// A struct rather than a string, because the compositor's protocol takes one:
-// serializing this as text would mean the browser inventing a syntax and the
-// compositor parsing it back, and the two halves are built from one repository
-// with no reason to disagree about a keystroke. `keycode` is a Linux evdev
-// code -- the same numbering `Key` forwards in, not the X keycode the Wayland
-// keymap uses, which is this plus 8.
+// `keycode` is a Linux evdev code -- the same numbering `Key` forwards in, not
+// the X keycode the Wayland keymap uses, which is this plus 8. The renderer
+// resolves a chord grabbed by name to one of these; see
+// DomicileHost::grabShortcut.
 struct Shortcut {
   uint32 keycode;
   bool alt;
@@ -171,13 +169,16 @@ struct ClipboardEntry {
 //
 // `id` is what ActivateTrayItem names it by. `title` is never empty -- the
 // compositor falls back to the item's own id -- and is what a shell labels the
-// icon with. `icon` is a `data:` URL, because the page may draw what the
-// compositor read and cannot read it for itself, and empty for an item whose
-// picture the compositor could not draw.
+// icon with. `icon` is a `data:` URL, and empty for an item whose picture the
+// compositor could not draw. `bus` is the bus name the item answers on, and
+// `menu` the object path of its `com.canonical.dbusmenu` menu there, empty for
+// none: a shell drives the menu with its own D-Bus calls.
 struct TrayItem {
   string id;
   string title;
   string icon;
+  string bus;
+  string menu;
 };
 
 // Which button clicked a tray icon, as StatusNotifierItem names the three
@@ -242,33 +243,13 @@ interface ControlChannel {
   // There is no shell in this path and there should not be one.
   Spawn(array<string> command);
 
-  // Ask what in the home matches `query`. Answered with
-  // ControlChannelClient::Files, carrying the same query.
+  // Ask what in the compositor's index of the home matches `query`. Answered
+  // with ControlChannelClient::Files, carrying the same query.
   //
-  // NO PATH, DELIBERATELY. The note at the top of this file says what makes
-  // the channel safe is which renderers can reach it, not what is on it --
-  // and this member is the one place that would have been untrue if it took a
-  // directory: a compromised shell renderer could then read the disk a
-  // directory at a time. What is searched is decided in the compositor, which
-  // is also where the index lives; the query is words to match, not a place.
-  //
-  // THE COMPOSITOR MATCHES, AND ONLY WHAT MATCHED CROSSES. Its index is the
-  // whole home, and it used to cross this channel whole so the page could
-  // filter it -- tens of megabytes of JSON on a real home, parsed on this
-  // process's IO thread, and a desktop that took no input while it was.
+  // The compositor matches, and only what matched crosses: the index is the
+  // whole home, tens of megabytes of JSON on a real one. A file's contents are
+  // read with CallSystem.
   SearchFiles(string query);
-
-  // Ask what is in one file a launcher has reached. Answered with
-  // ControlChannelClient::FilePreview, carrying the same path.
-  //
-  // THIS ONE DOES NAME A PATH, which SearchFiles above says it deliberately
-  // does not -- and what keeps that note true is where the path is looked up.
-  // It is relative to the home, as a Files answer named it, and the compositor
-  // answers only for a path in its own index of the home: anything else comes
-  // back `unreadable`. So it reads nothing a search could not already have
-  // named, and a renderer that wanted more of the disk than that already has
-  // `Spawn`.
-  PreviewFile(string path);
 
   // A system call: a file, a directory, a watch or a process. `request` is the
   // call as JSON, `{"call":"read_file","path":"..."}`; `id` names it in every
@@ -280,31 +261,22 @@ interface ControlChannel {
   // Answer portal request `id`, which a ControlChannelClient::PortalRequests
   // listed. `answer` is JSON with a string `kind`, `{"kind":"access"}`. The
   // browser wraps it as an `answer_portal_request` line and reads nothing
-  // else of it; the compositor checks it. See docs/architecture/PORTALS.md.
+  // else of it; the compositor checks it. See docs/PORTALS.md.
   AnswerPortalRequest(uint32 id, string answer);
 
-  // Put a row of the clipboard's history back on the clipboard.
-  //
-  // IT NAMES A ROW AND CARRIES NO TEXT: what makes this channel safe is which
-  // renderers can reach it, and a member that took bytes would let a
-  // compromised shell renderer write the desktop's clipboard rather than
-  // choose among what is already on it. The id is one a Clipboard message
-  // carried.
+  // Put a row of the clipboard's history back on the clipboard. The id is one
+  // a Clipboard message carried; the compositor holds the row's full text,
+  // which the page never sees.
   CopyClipboardEntry(uint32 entry);
 
-  // Click an icon in the system tray. `id` is one a Tray message carried.
-  //
-  // NAMES AN ICON AND CARRIES NOTHING ELSE, for CopyClipboardEntry's reason:
-  // what the click does is the application's, and all a page may do is say
-  // which of the icons already in the tray was clicked, and with which button.
+  // Click an icon in the system tray. `id` is one a Tray message carried. What
+  // the click does is the application's.
   ActivateTrayItem(string id, TrayAction action);
 
   // Clear notifications: ids a Notifications message carried. Each
-  // application hears its notification was dismissed.
-  //
-  // NAMES NOTIFICATIONS AND CARRIES NOTHING ELSE, for CopyClipboardEntry's
-  // reason. An id that names none now is one its application closed while the
-  // click was in flight, and is passed over.
+  // application hears its notification was dismissed. An id that names none
+  // now is one its application closed while the click was in flight, and is
+  // passed over.
   DismissNotifications(array<uint32> ids);
 
   // Press one of a notification's actions -- "default" for the notification
@@ -319,14 +291,6 @@ interface ControlChannel {
   // Ask a client to close. Not a kill: the client decides, which is why a
   // window can refuse and show a save dialog instead.
   CloseApp(string app_id);
-
-  // The layout box, as a resize. For an <app> element the box IS the
-  // xdg_toplevel.configure, which is why this exists at all.
-  //
-  // Doubles because the compositor's sizes are doubles, and because these come
-  // from a layout box: a CSS pixel is fractional and rounding it here would
-  // make a window's size depend on which half of the channel measured it.
-  ResizeApp(string app_id, double width, double height);
 
   // Where the page put an <app>, in the desk's CSS pixels. The compositor
   // gives the client the scale of the monitor holding most of it. It positions
@@ -386,8 +350,9 @@ interface ControlChannel {
   // answers with ControlChannelClient::WindowsThemeChanged.
   ThemeCaptured(Theme theme);
 
-  // A key combination the compositor should route to the page rather than to
-  // whichever client has focus.
+  // A key combination to route to the page rather than to whichever client
+  // has focus. It stops in the browser process, in ShortcutRegistry, which
+  // `WebViewGuest::PreHandleKeyboardEvent` matches a guest's keys against.
   GrabShortcut(Shortcut shortcut);
 
   // Put the cursor where the page says, in the page's own coordinates.
@@ -475,12 +440,10 @@ interface ControlChannelClient {
   // directory, sorted by the compositor, a directory ending in `/` -- and
   // `matched` how many there were in all.
   //
-  // One of the two methods here that ARE because the page asked -- FilePreview
-  // below is the other -- which is why the note above says "one method, not a
-  // callback on Spawn" rather than "none". It is still a message and not a
-  // reply: the page has one listener per message type and a callback would be
-  // a second shape of delivery for one answer. The query comes back so the
-  // page can tell answers apart.
+  // An answer to SearchFiles rather than a push. It is still a message and
+  // not a reply: the page has one listener per message type and a callback
+  // would be a second shape of delivery for one answer. The query comes back
+  // so the page can tell answers apart.
   //
   // A home that could not be read sends nothing at all -- the compositor logs
   // it -- because a launcher drawing an empty list is how that failure would
@@ -494,33 +457,6 @@ interface ControlChannelClient {
         array<string> files,
         uint32 matched,
         bool indexing);
-
-  // What is in the file a PreviewFile named: `path` is the one answered, and
-  // `kind` says which of the rest means anything.
-  //
-  //   "text"        `text` is the front of the file
-  //   "directory"   `entries` is what is in it, a subdirectory ending in `/`
-  //   "audio"       `title`, `artist`, `album` and `cover` are what a song
-  //                 says of itself, each empty when it does not say, and
-  //                 `duration` is how long it plays, in seconds. `cover` is a
-  //                 `data:` URL, because the page cannot read the file
-  //   "binary"      nothing else: it is a file, and not one to print
-  //   "unreadable"  nothing else: not in the index, or not readable
-  //
-  // A string rather than an enum, because nothing on the page's side decides
-  // anything with it but which of those to draw -- and the browser refuses a
-  // word that is not one of the five before it gets here. An answer and not a
-  // push, like Files, so the path comes back for the page to tell answers
-  // apart.
-  FilePreview(string path,
-              string kind,
-              string text,
-              array<string> entries,
-              string title,
-              string artist,
-              string album,
-              double duration,
-              string cover);
 
   // What has been copied on this desktop, newest first.
   //

@@ -1,6 +1,6 @@
 // The shell guard-shortcut-chords.sh drives. Once the stand-in has described
-// the keyboard it grabs three chords by name, presses keys on itself, and --
-// after the stand-in has pressed Meta+Shift+l too -- reports:
+// the keyboard it grabs three chords by name, presses keys on itself, and
+// reports:
 //
 //   GUARD listening                   the channel is bound
 //   GUARD chords bad=<error> missing=<error> page=<…> heard=<chords> released=<chords>

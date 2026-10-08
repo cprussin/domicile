@@ -3,7 +3,7 @@
 //! A client exports its window and passes the handle to another process. A
 //! portal request carries it as `parent_window` (`wayland:<handle>`), and the
 //! portals backend resolves it to the `<app>` to draw the dialog over. See
-//! `docs/architecture/PORTALS.md`.
+//! `docs/PORTALS.md`.
 
 use std::collections::HashMap;
 use std::fs::File;

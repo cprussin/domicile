@@ -941,7 +941,15 @@ describe("Shell", () => {
     it("is on the bar, and a click activates the icon", async () => {
       renderShell();
       domicile.set({
-        tray: [{ icon: "", id: ":1.9/StatusNotifierItem", title: "Sync" }],
+        tray: [
+          {
+            bus: ":1.9",
+            icon: "",
+            id: ":1.9/StatusNotifierItem",
+            menu: "",
+            title: "Sync",
+          },
+        ],
       });
 
       await userEvent.click(screen.getByRole("button", { name: "Sync" }));
@@ -956,7 +964,15 @@ describe("Shell", () => {
     it("is left of the extensions, which are left of the workspaces", () => {
       renderShell();
       domicile.set({
-        tray: [{ icon: "", id: ":1.9/StatusNotifierItem", title: "Sync" }],
+        tray: [
+          {
+            bus: ":1.9",
+            icon: "",
+            id: ":1.9/StatusNotifierItem",
+            menu: "",
+            title: "Sync",
+          },
+        ],
       });
       extensionsInstalled();
 

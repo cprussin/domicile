@@ -20,9 +20,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_object_builder.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_cursor_shape.h"
-#include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_file_preview.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_file_search.h"
-#include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_shortcut.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_theme.h"
 #include "third_party/blink/renderer/core/css/media_query_list.h"
 #include "third_party/blink/renderer/core/css/media_query_list_listener.h"
@@ -428,20 +426,6 @@ ScriptPromise<DomicileFileSearch> DomicileHost::searchFiles(
   return promise;
 }
 
-ScriptPromise<DomicileFilePreview> DomicileHost::previewFile(
-    ScriptState* script_state,
-    const String& path,
-    ExceptionState& exception_state) {
-  if (!Ready(exception_state)) {
-    return EmptyPromise();
-  }
-  auto* resolver = Supersede(file_preview_, script_state, exception_state);
-  file_preview_path_ = path;
-  auto promise = resolver->Promise();
-  channel_->PreviewFile(path);
-  return promise;
-}
-
 void DomicileHost::callSystem(ScriptState*,
                               uint32_t id,
                               const String& request,
@@ -530,14 +514,6 @@ void DomicileHost::closeApp(ScriptState*, const String& app_id,
                             ExceptionState& exception_state) {
   if (ReadyForApp(app_id, exception_state)) {
     channel_->CloseApp(app_id);
-  }
-}
-
-void DomicileHost::resizeApp(ScriptState*, const String& app_id, double width,
-                             double height,
-                             ExceptionState& exception_state) {
-  if (ReadyForApp(app_id, exception_state)) {
-    channel_->ResizeApp(app_id, width, height);
   }
 }
 
@@ -655,22 +631,6 @@ void DomicileHost::themeCaptured(ScriptState*, V8DomicileTheme theme,
                                  ExceptionState& exception_state) {
   if (Ready(exception_state)) {
     channel_->ThemeCaptured(MojoTheme(theme));
-  }
-}
-
-void DomicileHost::grabShortcut(ScriptState*, const DomicileShortcut* shortcut,
-                                ExceptionState& exception_state) {
-  // Keycode 0 is not a key. A combination of modifiers alone would fire on
-  // every keystroke that happens to hold them, which is not a shortcut and is
-  // indistinguishable from the page forgetting to say which key it meant.
-  if (!shortcut->keycode()) {
-    exception_state.ThrowTypeError("keycode must be a non-zero evdev code");
-    return;
-  }
-  if (Ready(exception_state)) {
-    channel_->GrabShortcut(domicile::mojom::blink::Shortcut::New(
-        shortcut->keycode(), shortcut->altKey(), shortcut->ctrlKey(),
-        shortcut->shiftKey(), shortcut->metaKey()));
   }
 }
 
@@ -1280,29 +1240,6 @@ void DomicileHost::Files(const String& query,
   Settle(file_search_, file_search_query_, query, answer);
 }
 
-// An answer, like Files: the path is the one previewFile() was given, and it
-// comes back so a launcher can drop the preview of a row it has since left.
-void DomicileHost::FilePreview(const String& path,
-                               const String& kind,
-                               const String& text,
-                               const Vector<String>& entries,
-                               const String& title,
-                               const String& artist,
-                               const String& album,
-                               double duration,
-                               const String& cover) {
-  auto* answer = DomicileFilePreview::Create();
-  answer->setKind(kind);
-  answer->setText(text);
-  answer->setEntries(entries);
-  answer->setTitle(title);
-  answer->setArtist(artist);
-  answer->setAlbum(album);
-  answer->setDuration(duration);
-  answer->setCover(cover);
-  Settle(file_preview_, file_preview_path_, path, answer);
-}
-
 // Pushed, unlike Files: the compositor hears a copy without
 // anybody asking. The rows are built here rather than carried as two arrays
 // because what a panel draws is a row -- see `domicile_clipboard_entry.h`.
@@ -1325,8 +1262,8 @@ void DomicileHost::Tray(Vector<domicile::mojom::blink::TrayItemPtr> items) {
   HeapVector<Member<DomicileTrayItem>> tray;
   tray.reserve(items.size());
   for (const auto& item : items) {
-    tray.push_back(MakeGarbageCollected<DomicileTrayItem>(item->id, item->title,
-                                                          item->icon));
+    tray.push_back(MakeGarbageCollected<DomicileTrayItem>(
+        item->id, item->title, item->icon, item->bus, item->menu));
   }
   tray_items_ =
       MakeGarbageCollected<FrozenArray<DomicileTrayItem>>(std::move(tray));
@@ -1567,7 +1504,6 @@ void DomicileHost::Trace(Visitor* visitor) const {
   visitor->Trace(client_windows_);
   visitor->Trace(held_);
   visitor->Trace(file_search_);
-  visitor->Trace(file_preview_);
   visitor->Trace(clipboard_);
   visitor->Trace(tray_items_);
   visitor->Trace(notifications_);
