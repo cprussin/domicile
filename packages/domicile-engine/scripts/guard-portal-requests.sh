@@ -8,7 +8,7 @@
 # The engine keeps the latest `portal_requests` line and sends it again to a
 # listener added later. The stand-in pushes one request on connect; the page
 # listens only after it has arrived, so only that replay reaches it. See
-# docs/architecture/PORTALS.md.
+# packages/domicile-compositor/src/portals/README.md.
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"

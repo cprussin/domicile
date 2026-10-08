@@ -5,7 +5,8 @@
 //! [`crate::casting::Casting::shoot`]). An interactive screenshot and
 //! `PickColor` freeze that frame in the shell, which answers with the area or
 //! pixel the user picked. The shell takes its own screenshots the same way,
-//! through [`for_the_shell`]. See `docs/architecture/PORTALS.md`.
+//! through [`for_the_shell`]. See
+//! `packages/domicile-compositor/src/portals/README.md`.
 
 use std::collections::HashMap;
 use std::future::Future;

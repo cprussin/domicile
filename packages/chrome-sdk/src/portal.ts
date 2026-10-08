@@ -1,6 +1,6 @@
 // Portal dialogs for a shell: the requests applications make through
 // `xdg-desktop-portal`, and the shell's answers. See
-// docs/architecture/PORTALS.md.
+// packages/domicile-compositor/src/portals/README.md.
 //
 // The engine relays each request's body untyped; it is parsed here, by kind.
 // A new kind is one schema in `KINDS`, one `PortalKind` and one constructor.

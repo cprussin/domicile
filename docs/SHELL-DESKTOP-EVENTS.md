@@ -99,7 +99,7 @@ domicile.dismissNotifications([id]);              // clear; the app is told
 
 Applications ask for dialogs through `xdg-desktop-portal`, and the compositor
 is its backend. The shell draws each one. See
-[PORTALS.md](architecture/PORTALS.md).
+[the portals README](/packages/domicile-compositor/src/portals/README.md).
 
 ```tsx
 import { PortalDialogs } from "@domicile-desktop/component-library/PortalDialogs";

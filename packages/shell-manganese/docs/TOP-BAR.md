@@ -148,7 +148,7 @@ Every bar and the lock screen share one watch per system readout. See
   **Stop sharing** button that ends that application's session.
 - While the bar has this item, the portal dialogs' indicator leaves screen
   casts out, so each shows once. Without it, the indicator lists them.
-- See [PORTALS.md](../../../docs/architecture/PORTALS.md).
+- See [the portals README](../../domicile-compositor/src/portals/README.md).
 
 ## Tray
 

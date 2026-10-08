@@ -1,7 +1,7 @@
 //! Wire shapes for the print dialog.
 //!
 //! Pinned as JSON because the SDK hard-codes them. See
-//! `docs/architecture/PORTALS.md`.
+//! `packages/domicile-compositor/src/portals/README.md`.
 
 use domicile_protocol::{
     ChromeMessage, ColorMode, Media, Orientation, PageRange, PortalAnswer, PortalKind, PrintDialog,

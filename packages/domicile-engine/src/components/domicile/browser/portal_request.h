@@ -13,7 +13,7 @@ namespace domicile {
 
 // The shell's answers to portal requests, relayed to the compositor without
 // reading them. The compositor checks each answer against its request. See
-// docs/architecture/PORTALS.md.
+// packages/domicile-compositor/src/portals/README.md.
 
 // The `answer_portal_request` line for request `id`, or nothing when `answer`
 // is not a JSON object with a string `kind`, or `id` is above 2^31 - 1.
