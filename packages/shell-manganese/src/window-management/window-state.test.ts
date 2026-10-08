@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import { Axis, Direction } from "./direction";
-import { TITLE_BAR } from "./rect";
+import { SURFACE_TUCK, TITLE_BAR } from "./rect";
 import { Layout, LayoutNode, windowsIn } from "./tree/node";
 import { windowsOf } from "./tree/tiling";
 import { appWindowId, browserWindowId } from "./window";
@@ -1366,8 +1366,9 @@ describe("a client's limits on its size", () => {
       WindowAction.FloatToggled(),
     );
 
+    // The client's surface tucks under the bar. See `surfaceOf`.
     expect(floatOf(state)).toMatchObject({
-      height: 500 + TITLE_BAR,
+      height: 500 + TITLE_BAR - SURFACE_TUCK,
       width: 680,
     });
   });

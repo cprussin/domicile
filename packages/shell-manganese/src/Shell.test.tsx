@@ -31,7 +31,7 @@ import { Shell } from "./Shell";
 import { hostDisplays } from "./screens/host-displays";
 import { BarClock, BarLauncher, BarWorkspaces } from "./top-bar/bar-items";
 import type { TopBarLayout } from "./top-bar/layout";
-import { TITLE_BAR } from "./window-management/rect";
+import { SURFACE_TUCK, TITLE_BAR } from "./window-management/rect";
 import {
   movingStyles,
   settlingStyles,
@@ -1172,10 +1172,10 @@ describe("Shell", () => {
       clientAppears("term");
 
       expect(boxOf(appElement(container, "term"))).toEqual({
-        height: `${(1080 - TOP_BAR - 2 * GAP - TITLE_BAR).toString()}px`,
+        height: `${(1080 - TOP_BAR - 2 * GAP - TITLE_BAR + SURFACE_TUCK).toString()}px`,
         width: `${(1920 - 2 * GAP).toString()}px`,
         x: `${GAP.toString()}px`,
-        y: `${(TOP_BAR + GAP + TITLE_BAR).toString()}px`,
+        y: `${(TOP_BAR + GAP + TITLE_BAR - SURFACE_TUCK).toString()}px`,
       });
     });
 
@@ -1274,15 +1274,15 @@ describe("Shell", () => {
 
       // A fullscreen window covers the top bar too.
       expect(boxOf(appElement(container, "term"))).toMatchObject({
-        height: `${(1080 - TITLE_BAR).toString()}px`,
-        y: `${TITLE_BAR.toString()}px`,
+        height: `${(1080 - TITLE_BAR + SURFACE_TUCK).toString()}px`,
+        y: `${(TITLE_BAR - SURFACE_TUCK).toString()}px`,
       });
 
       // The same button restores it.
       await user.click(screen.getByRole("button", { name: "Restore" }));
 
       expect(boxOf(appElement(container, "term"))).toMatchObject({
-        y: `${(TOP_BAR + GAP + TITLE_BAR).toString()}px`,
+        y: `${(TOP_BAR + GAP + TITLE_BAR - SURFACE_TUCK).toString()}px`,
       });
     });
 
@@ -1678,11 +1678,11 @@ describe("Shell", () => {
       // One column of two full-width windows, not a swap.
       expect(boxOf(appElement(container, "one"))).toMatchObject({
         width: "1880px",
-        y: `${(TOP_BAR + 20 + TITLE_BAR).toString()}px`,
+        y: `${(TOP_BAR + 20 + TITLE_BAR - SURFACE_TUCK).toString()}px`,
       });
       expect(boxOf(appElement(container, "two"))).toMatchObject({
         width: "1880px",
-        y: `${(TOP_BAR + 20 + 494 + 20 + TITLE_BAR).toString()}px`,
+        y: `${(TOP_BAR + 20 + 494 + 20 + TITLE_BAR - SURFACE_TUCK).toString()}px`,
       });
     });
 
@@ -1854,8 +1854,8 @@ describe("Shell", () => {
 
       // A fullscreen window covers the top bar too.
       expect(boxOf(appElement(container, "term"))).toMatchObject({
-        height: `${(1080 - TITLE_BAR).toString()}px`,
-        y: `${TITLE_BAR.toString()}px`,
+        height: `${(1080 - TITLE_BAR + SURFACE_TUCK).toString()}px`,
+        y: `${(TITLE_BAR - SURFACE_TUCK).toString()}px`,
       });
     });
 
@@ -2368,10 +2368,10 @@ describe("Shell", () => {
 
       expect(domicile.calls).toContainEqual(["warpPointer", 1435, 571]);
       expect(boxOf(appElement(container, "two"))).toMatchObject({
-        height: "978px",
+        height: "979px",
         width: "930px",
         x: "970px",
-        y: "82px",
+        y: "81px",
       });
     });
 
@@ -2390,10 +2390,10 @@ describe("Shell", () => {
       expect(domicile.calls).toContainEqual(["focusApp", "one"]);
       expect(domicile.calls).toContainEqual(["warpPointer", 485, 571]);
       expect(boxOf(appElement(container, "one"))).toMatchObject({
-        height: "978px",
+        height: "979px",
         width: "930px",
         x: "20px",
-        y: "82px",
+        y: "81px",
       });
     });
 

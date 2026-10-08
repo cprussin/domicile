@@ -5,7 +5,7 @@
 // instead of by document flow.
 
 import type { Rect } from "../rect";
-import { barOf, surfaceOf, TITLE_BAR } from "../rect";
+import { barOf, surfaceOf, TITLE_BAR, tuckedUnderBar } from "../rect";
 import type { Container, LayoutNode } from "./node";
 import { Layout, NodeKind, showsOneChild, windowsIn } from "./node";
 import type { Path } from "./path";
@@ -300,16 +300,18 @@ const titled = (
       const openTab = layout === Layout.Tabbed && !showing ? open : undefined;
       switch (child.kind) {
         case NodeKind.Window: {
+          // A window's surface tucks under the bars, as in `surfaceOf`.
+          const surface = tuckedUnderBar(contents);
           return {
             frames: [
               {
                 bar,
-                behind: showing ? undefined : contents,
+                behind: showing ? undefined : surface,
                 id: child.id,
                 openTab,
                 selected,
                 soleTab: container.children.length === 1,
-                surface: showing ? contents : undefined,
+                surface: showing ? surface : undefined,
                 tabbed: layout,
               },
             ],

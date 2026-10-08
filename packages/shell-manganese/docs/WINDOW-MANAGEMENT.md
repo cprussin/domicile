@@ -133,6 +133,8 @@ For how warping, browser-window focus and modifier drags work, see
 - Every window has a title bar: its name, a fullscreen button (same as
   Meta+F) and a close button.
 - The bar is inside the window's box, so a window's size includes its bar.
+- The contents reach 1px up under the bar (`SURFACE_TUCK`), so no sliver of
+  the desktop shows between them at fractional scales.
 - Only the top corners are rounded. The bottom of the frame is client pixels.
 - The page hit-tests the bar, so clicks on it never reach the client.
 - In a tabbed or stacking container, each window's tab is its title bar. The
