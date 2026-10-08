@@ -137,8 +137,6 @@ export const Launcher = ({
       }
     }}
     open={open}
-    // Conventional placement, covering the least of the desktop.
-    placement="top"
     screen={screen}
     // Wide enough for the rows and the preview side by side.
     size="xl"
