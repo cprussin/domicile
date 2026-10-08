@@ -1,0 +1,70 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Thu, 8 Oct 2026 00:00:00 +0000
+Subject: [PATCH] domicile: an <app> can wait for its window to draw at a new
+ size
+
+SurfaceLayerBridge::EmbedSurface takes a cc::DeadlinePolicy, defaulting
+to upstream's UseSpecifiedDeadline(0u). An <app> whose box changes
+embeds its window's surface for the new size with the default deadline,
+so viz holds the shell's frame until the window draws at that size and
+the box and the window change together.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on crux.
+---
+ .../renderer/platform/graphics/surface_layer_bridge.cc     | 7 ++++---
+ .../renderer/platform/graphics/surface_layer_bridge.h      | 7 ++++++-
+ 2 files changed, 10 insertions(+), 4 deletions(-)
+
+diff --git a/third_party/blink/renderer/platform/graphics/surface_layer_bridge.cc b/third_party/blink/renderer/platform/graphics/surface_layer_bridge.cc
+--- a/third_party/blink/renderer/platform/graphics/surface_layer_bridge.cc
++++ b/third_party/blink/renderer/platform/graphics/surface_layer_bridge.cc
+@@ -55,7 +55,9 @@ void SurfaceLayerBridge::SetLocalSurfaceId(
+   EmbedSurface(viz::SurfaceId(frame_sink_id_, local_surface_id));
+ }
+ 
+-void SurfaceLayerBridge::EmbedSurface(const viz::SurfaceId& surface_id) {
++void SurfaceLayerBridge::EmbedSurface(
++    const viz::SurfaceId& surface_id,
++    const cc::DeadlinePolicy& deadline_policy) {
+   if (solid_color_layer_) {
+     if (observer_)
+       observer_->UnregisterContentsLayer(solid_color_layer_.get());
+@@ -72,8 +74,7 @@ void SurfaceLayerBridge::EmbedSurface(const viz::SurfaceId& surface_id) {
+ 
+   current_surface_id_ = surface_id;
+ 
+-  surface_layer_->SetSurfaceId(surface_id,
+-                               cc::DeadlinePolicy::UseSpecifiedDeadline(0u));
++  surface_layer_->SetSurfaceId(surface_id, deadline_policy);
+ 
+   if (observer_) {
+     observer_->OnWebLayerUpdated();
+diff --git a/third_party/blink/renderer/platform/graphics/surface_layer_bridge.h b/third_party/blink/renderer/platform/graphics/surface_layer_bridge.h
+--- a/third_party/blink/renderer/platform/graphics/surface_layer_bridge.h
++++ b/third_party/blink/renderer/platform/graphics/surface_layer_bridge.h
+@@ -7,6 +7,7 @@
+ 
+ #include "base/memory/raw_ptr.h"
+ #include "base/memory/scoped_refptr.h"
++#include "cc/layers/deadline_policy.h"
+ #include "components/viz/common/surfaces/parent_local_surface_id_allocator.h"
+ #include "components/viz/common/surfaces/surface_id.h"
+ #include "mojo/public/cpp/bindings/pending_receiver.h"
+@@ -42,7 +43,11 @@ class PLATFORM_EXPORT SurfaceLayerBridge
+   void BindSurfaceEmbedder(
+       mojo::PendingReceiver<mojom::blink::SurfaceEmbedder> receiver) override;
+ 
+-  void EmbedSurface(const viz::SurfaceId& surface_id);
++  // `deadline_policy` is how long viz holds the embedder's frame for the
++  // surface. Zero shows the allocation group's latest surface meanwhile.
++  void EmbedSurface(const viz::SurfaceId& surface_id,
++                    const cc::DeadlinePolicy& deadline_policy =
++                        cc::DeadlinePolicy::UseSpecifiedDeadline(0u));
+ 
+   // Implementation of blink::mojom::blink::SurfaceEmbedder
+   void SetLocalSurfaceId(const viz::LocalSurfaceId& local_surface_id) override;
+-- 
+2.43.0
+

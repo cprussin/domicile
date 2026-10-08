@@ -220,6 +220,11 @@ pub struct Connector {
     pub desk: Option<Desk>,
 }
 
+/// Names the box the engine showed last, in [`Engine::submit`].
+pub const LAST_SHOWN_BOX: u64 = 0;
+/// Names the page's newest box, in [`Engine::submit`].
+pub const NEWEST_BOX: u64 = u64::MAX;
+
 /// A message from the engine, and its Wayland equivalent.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Event {
@@ -228,11 +233,15 @@ pub enum Event {
     /// `width` and `height` are in device pixels; `scale` is device pixels per
     /// CSS pixel. `scale` is `None` from an engine without
     /// `configure_at`.
+    ///
+    /// `number` names the box for [`Engine::submit`]. `None` from an engine
+    /// without `configure_box`.
     Configure {
         surface: SurfaceId,
         width: u32,
         height: u32,
         scale: Option<f64>,
+        number: Option<u64>,
     },
     /// `wl_surface.frame`: viz asked for a frame.
     Frame {
@@ -312,6 +321,7 @@ struct Callbacks {
     configure_at: Option<extern "C" fn(*mut c_void, SurfaceId, u32, u32, f64)>,
     captured: Option<extern "C" fn(*mut c_void, CaptureId, u64, *const RawCapturedFrame)>,
     capture_ended: Option<extern "C" fn(*mut c_void, CaptureId)>,
+    configure_box: Option<extern "C" fn(*mut c_void, SurfaceId, u32, u32, f64, u64)>,
 }
 
 /// The engine's opaque handle.
@@ -333,6 +343,8 @@ pub struct Engine {
     /// Whether the missing-crop warning was logged. Logged once because
     /// submit runs every frame.
     said_it_cannot_crop: Cell<bool>,
+    /// Whether the missing `domicile_surface_submit_for_box` was logged.
+    said_it_cannot_wait: Cell<bool>,
 }
 
 /// `DomicileDisplay`, laid out as in the C header. 48 bytes, including 4 of
@@ -454,6 +466,7 @@ impl Engine {
             library,
             path,
             said_it_cannot_crop: Cell::new(false),
+            said_it_cannot_wait: Cell::new(false),
         })
     }
 
@@ -575,12 +588,74 @@ impl Engine {
         };
     }
 
-    /// Submits a frame showing the `crop` of `buffer` (`wl_surface.commit`).
+    /// Submits a frame showing the `crop` of `buffer` (`wl_surface.commit`) at
+    /// the newest box numbered at most `at_box` (see [`Event::Configure`]).
     ///
     /// The crop is the window geometry, which excludes client-drawn shadows
     /// (see [`crate::window_geometry`]). An empty crop means the whole buffer;
     /// empty damage means the whole surface.
     pub fn submit(
+        &self,
+        surface: SurfaceId,
+        buffer: BufferId,
+        crop: (i32, i32, i32, i32),
+        damage: (i32, i32, i32, i32),
+        at_box: u64,
+    ) {
+        #[allow(clippy::type_complexity)] // the C signature, spelled out
+        let f: Symbol<
+            unsafe extern "C" fn(
+                *mut Handle,
+                SurfaceId,
+                BufferId,
+                i32,
+                i32,
+                i32,
+                i32,
+                i32,
+                i32,
+                i32,
+                i32,
+                u64,
+            ),
+        > = match self.symbol(
+            b"domicile_surface_submit_for_box\0",
+            "domicile_surface_submit_for_box",
+        ) {
+            Ok(symbol) => symbol,
+            // An older engine shows every frame at the newest box, so a
+            // resized window's old frame is stretched until it redraws.
+            Err(why) => {
+                if !self.said_it_cannot_wait.replace(true) {
+                    tracing::warn!(%why, "resized windows stretch until they redraw");
+                }
+                return self.submit_at_the_newest_box(surface, buffer, crop, damage);
+            }
+        };
+        let (crop_x, crop_y, crop_width, crop_height) = crop;
+        let (x, y, width, height) = damage;
+        // SAFETY: as above.
+        unsafe {
+            f(
+                self.handle,
+                surface,
+                buffer,
+                crop_x,
+                crop_y,
+                crop_width,
+                crop_height,
+                x,
+                y,
+                width,
+                height,
+                at_box,
+            )
+        };
+    }
+
+    /// Submits at the newest box, for an engine without
+    /// `domicile_surface_submit_for_box`.
+    fn submit_at_the_newest_box(
         &self,
         surface: SurfaceId,
         buffer: BufferId,
@@ -861,6 +936,7 @@ fn join(
         configure_at: Some(on_configure_at),
         captured: Some(on_captured),
         capture_ended: Some(on_capture_ended),
+        configure_box: Some(on_configure_box),
     };
     let socket_c = CString::new(socket.as_os_str().as_encoded_bytes())?;
     let connect: Symbol<unsafe extern "C" fn(*const c_char, Callbacks) -> *mut Handle> = symbol(
@@ -904,6 +980,7 @@ extern "C" fn on_configure(user_data: *mut c_void, surface: SurfaceId, width: u3
             width,
             height,
             scale: None,
+            number: None,
         },
     );
 }
@@ -922,6 +999,27 @@ extern "C" fn on_configure_at(
             width,
             height,
             scale: Some(scale),
+            number: None,
+        },
+    );
+}
+
+extern "C" fn on_configure_box(
+    user_data: *mut c_void,
+    surface: SurfaceId,
+    width: u32,
+    height: u32,
+    scale: f64,
+    number: u64,
+) {
+    push(
+        user_data,
+        Event::Configure {
+            surface,
+            width,
+            height,
+            scale: Some(scale),
+            number: Some(number),
         },
     );
 }
@@ -1303,6 +1401,7 @@ mod tests {
         // Only the engine knows the scale a box was laid out at.
         let events = RefCell::new(Vec::new());
         let queue = (&events as *const RefCell<Vec<Event>>) as *mut c_void;
+        on_configure_box(queue, 2, 640, 480, 2.0, 9);
         on_configure_at(queue, 3, 1200, 900, 1.5);
         on_configure(queue, 4, 800, 600);
 
@@ -1310,10 +1409,19 @@ mod tests {
             events.into_inner(),
             vec![
                 Event::Configure {
+                    surface: 2,
+                    width: 640,
+                    height: 480,
+                    scale: Some(2.0),
+                    number: Some(9),
+                },
+                // An engine without `configure_box` numbers no box.
+                Event::Configure {
                     surface: 3,
                     width: 1200,
                     height: 900,
                     scale: Some(1.5),
+                    number: None,
                 },
                 // An engine without `configure_at` sends no scale.
                 Event::Configure {
@@ -1321,6 +1429,7 @@ mod tests {
                     width: 800,
                     height: 600,
                     scale: None,
+                    number: None,
                 },
             ]
         );

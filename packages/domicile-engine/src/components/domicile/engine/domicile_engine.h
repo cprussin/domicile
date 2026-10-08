@@ -238,6 +238,17 @@ typedef struct DomicileEngineCallbacks {
   // The browser ended `capture`, and no frame follows. Not called after
   // domicile_display_capture_stop.
   void (*capture_ended)(void* user_data, DomicileCaptureId capture);
+  // Like `configure_at`, plus the box's number. Pass it to
+  // domicile_surface_submit_for_box with the frame the client draws for this
+  // configure. Numbers start at 1 and grow per surface.
+  //
+  // Called instead of `configure_at` when set.
+  void (*configure_box)(void* user_data,
+                        DomicileSurfaceId surface,
+                        uint32_t width,
+                        uint32_t height,
+                        double scale,
+                        uint64_t box);
 } DomicileEngineCallbacks;
 
 // Connects to the browser's mojo socket. Returns null on failure, and the
@@ -310,6 +321,30 @@ DOMICILE_ENGINE_EXPORT void domicile_surface_submit_crop(
     int32_t damage_y,
     int32_t damage_width,
     int32_t damage_height);
+
+// Names the newest box in domicile_surface_submit_for_box.
+#define DOMICILE_NEWEST_BOX UINT64_MAX
+
+// Like domicile_surface_submit_crop, but shows the frame at the newest box
+// numbered at most `box` (see `configure_box`). Zero is the box shown last.
+//
+// A client draws for the configure it acked, which may be older than the
+// page's box. Shown at its own box, an old buffer keeps its size, and the page
+// waits for the client's frame at the new one instead of stretching the old
+// one over it.
+DOMICILE_ENGINE_EXPORT void domicile_surface_submit_for_box(
+    DomicileEngine* engine,
+    DomicileSurfaceId surface,
+    DomicileBufferId buffer,
+    int32_t crop_x,
+    int32_t crop_y,
+    int32_t crop_width,
+    int32_t crop_height,
+    int32_t damage_x,
+    int32_t damage_y,
+    int32_t damage_width,
+    int32_t damage_height,
+    uint64_t box);
 
 // Tells the browser which connectors to light and where, in answer to the
 // `displays` callback.
