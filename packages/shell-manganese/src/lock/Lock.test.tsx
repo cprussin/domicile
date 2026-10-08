@@ -3,8 +3,9 @@ import { DisplayProvider } from "@domicile-desktop/component-library/DisplayProv
 import { Slider } from "@domicile-desktop/component-library/Slider";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { PropsWithChildren } from "react";
 
-import { OnOneScreen } from "../screens/fixture";
+import { OnOneScreen, SCREEN } from "../screens/fixture";
 import { Lock } from "./Lock";
 
 /** The lock state, as `useLocked` returns it. */
@@ -19,6 +20,7 @@ const lock = (locked = true) => {
       onUnlock={(passphrase) => {
         offered.push(passphrase);
       }}
+      screen={SCREEN}
     />
   );
   const { rerender } = render(drawn({ checking: false, locked, refusals: 0 }), {
@@ -55,6 +57,7 @@ describe("Lock", () => {
         onUnlock={() => undefined}
         picture="blob:moon"
         refusals={0}
+        screen={SCREEN}
       />,
       { wrapper: OnOneScreen },
     );
@@ -74,32 +77,14 @@ describe("Lock", () => {
     // Monitors of different sizes leave gaps in the page. A blur over the
     // whole page would cost as much there as on the screens.
     render(
-      <Lock checking={false} locked onUnlock={() => undefined} refusals={0} />,
-      {
-        wrapper: ({ children }) => (
-          <DisplayProvider
-            source={{
-              displays: [
-                {
-                  name: "left",
-                  position: [0, 0],
-                  scale: 1,
-                  size: [1920, 1080],
-                },
-                {
-                  name: "right",
-                  position: [1920, 120],
-                  scale: 2,
-                  size: [2560, 1440],
-                },
-              ],
-              onDisplays: () => () => undefined,
-            }}
-          >
-            {children}
-          </DisplayProvider>
-        ),
-      },
+      <Lock
+        checking={false}
+        locked
+        onUnlock={() => undefined}
+        refusals={0}
+        screen="left"
+      />,
+      { wrapper: OnTwoScreens },
     );
 
     expect(
@@ -117,10 +102,42 @@ describe("Lock", () => {
     ]);
   });
 
+  it("asks for the passphrase on the focused screen", () => {
+    // Centered on the page, the field would sit on the seam between monitors
+    // or in a gap no monitor shows.
+    render(
+      <Lock
+        checking={false}
+        locked
+        onUnlock={() => undefined}
+        refusals={0}
+        screen="right"
+      />,
+      { wrapper: OnTwoScreens },
+    );
+
+    const { height, left, top, width } =
+      screen
+        .getByLabelText("Passphrase")
+        .closest<HTMLElement>("[data-lock-content]")?.style ?? {};
+    expect({ height, left, top, width }).toEqual({
+      height: "1440px",
+      left: "1920px",
+      top: "120px",
+      width: "2560px",
+    });
+  });
+
   it("blurs the whole page until the screens are described", () => {
     // A desk that locks while starting must not be left readable.
     render(
-      <Lock checking={false} locked onUnlock={() => undefined} refusals={0} />,
+      <Lock
+        checking={false}
+        locked
+        onUnlock={() => undefined}
+        refusals={0}
+        screen={SCREEN}
+      />,
       {
         wrapper: ({ children }) => (
           <DisplayProvider
@@ -162,7 +179,13 @@ describe("Lock", () => {
     it("comes back to the field after a readout is used", async () => {
       // A slider takes focus on a click, and the next key typed would move it.
       render(
-        <Lock checking={false} locked onUnlock={() => undefined} refusals={0}>
+        <Lock
+          checking={false}
+          locked
+          onUnlock={() => undefined}
+          refusals={0}
+          screen={SCREEN}
+        >
           <Slider label="Brightness" max={100} min={0} value={50} />
         </Lock>,
         { wrapper: OnOneScreen },
@@ -242,3 +265,18 @@ describe("Lock", () => {
     });
   });
 });
+
+/** A desk of two monitors of different sizes, which leaves gaps in the page. */
+const OnTwoScreens = ({ children }: PropsWithChildren) => (
+  <DisplayProvider
+    source={{
+      displays: [
+        { name: "left", position: [0, 0], scale: 1, size: [1920, 1080] },
+        { name: "right", position: [1920, 120], scale: 2, size: [2560, 1440] },
+      ],
+      onDisplays: () => () => undefined,
+    }}
+  >
+    {children}
+  </DisplayProvider>
+);
