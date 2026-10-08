@@ -267,6 +267,7 @@ export const Stage = ({
                   focused={focused}
                   frame={placement?.frame}
                   fullscreen={fillsScreen(screens, window.id)}
+                  isPrivate={window.isPrivate}
                   motion={motion}
                   onMotionEnded={onMotionEnded}
                   onReach={() => {

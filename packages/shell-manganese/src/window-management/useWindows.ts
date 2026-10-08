@@ -81,7 +81,11 @@ export const useWindows = (
         domicile.spawn(action.command);
       }
       if (action.kind === WindowActionKind.BrowserOpened) {
-        domicile.openBrowserWindow(action.src);
+        if (action.isPrivate) {
+          domicile.openPrivateBrowserWindow(action.src);
+        } else {
+          domicile.openBrowserWindow(action.src);
+        }
       }
       if (
         action.kind === WindowActionKind.WindowKilled ||

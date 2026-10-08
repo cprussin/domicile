@@ -11,13 +11,15 @@ DomicileBrowserWindow::DomicileBrowserWindow(
     const String& title,
     std::optional<int32_t> popup_window,
     int32_t width,
-    int32_t height)
+    int32_t height,
+    bool is_private)
     : id_(id),
       url_(url),
       title_(title),
       popup_window_(popup_window),
       width_(width),
-      height_(height) {}
+      height_(height),
+      is_private_(is_private) {}
 
 DomicileBrowserWindow::~DomicileBrowserWindow() = default;
 

@@ -1248,7 +1248,11 @@ describe("BrowserWindow", () => {
 
   // The engine sends what was under a right click; the window draws the menu.
   describe("a context menu its page asks for", () => {
-    const renderWindow = (opens: (url: string) => void = () => undefined) =>
+    const renderWindow = (
+      opens: (url: string) => void = () => undefined,
+      opensPrivately: (url: string) => void = () => undefined,
+      isPrivate = false,
+    ) =>
       render(
         <BrowserWindow
           clickThrough={false}
@@ -1258,12 +1262,14 @@ describe("BrowserWindow", () => {
             {
               ...silentDomicile,
               openBrowserWindow: opens,
+              openPrivateBrowserWindow: opensPrivately,
             } as unknown as DomicileHost
           }
           dragging={false}
           focused
           frame={FRAME}
           fullscreen={false}
+          isPrivate={isPrivate}
           motion="resting"
           onMotionEnded={nothingEnded}
           onReach={() => undefined}
@@ -1311,6 +1317,28 @@ describe("BrowserWindow", () => {
       await userEvent.click(await menuItem("Open link in new window"));
 
       expect(await opened.promise).toBe("https://example.com/opened");
+    });
+
+    it("opens a link from a private window in a private window", async () => {
+      const opened = Promise.withResolvers<string>();
+      const { container } = renderWindow(
+        () => {
+          opened.reject(new Error("opened an ordinary window"));
+        },
+        opened.resolve,
+        true,
+      );
+      asksForAMenu(view(container), { linkUrl: "https://example.com/opened" });
+
+      await userEvent.click(await menuItem("Open link in new window"));
+
+      expect(await opened.promise).toBe("https://example.com/opened");
+    });
+
+    it("says a private window is private", () => {
+      renderWindow(undefined, undefined, true);
+
+      expect(screen.getByText("Private")).toBeInTheDocument();
     });
 
     it("hands what only the browser can do back to the menu it came from", async () => {

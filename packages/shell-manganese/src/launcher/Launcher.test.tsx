@@ -238,6 +238,7 @@ describe("Launcher", () => {
       "Notes/2026april.org",
       "Notestoday.org",
       "Search for notes",
+      "Search for notes in a private browser",
     ]);
   });
 
@@ -271,8 +272,10 @@ describe("Launcher", () => {
 
     expect(await panel.rows()).toStrictEqual([
       "Go to https://example.com",
+      "Go to https://example.com in a private browser",
       "example.com",
       "Search for example.com",
+      "Search for example.com in a private browser",
     ]);
   });
 
@@ -306,6 +309,7 @@ describe("Launcher", () => {
       "Text Editor",
       "text.md",
       "Search for text",
+      "Search for text in a private browser",
     ]);
   });
 
@@ -351,6 +355,7 @@ describe("Launcher", () => {
       "Mail",
       "mail.txt",
       "Search for mail",
+      "Search for mail in a private browser",
     ]);
   });
 
@@ -478,7 +483,7 @@ describe("Launcher", () => {
     await panel.user.keyboard("{Enter}");
 
     expect(panel.launched).toStrictEqual([
-      Launch.Browsed("https://mail.example.com"),
+      Launch.Browsed("https://mail.example.com", false),
     ]);
   });
 
@@ -490,6 +495,7 @@ describe("Launcher", () => {
     expect(await panel.rows()).toStrictEqual([
       "Search for notes on Wikipedia",
       "Search for !wiki notes",
+      "Search for !wiki notes in a private browser",
     ]);
   });
 
@@ -502,6 +508,41 @@ describe("Launcher", () => {
       "Go to cprussin on GitHub",
       "Search for cprussin on GitHub",
       "Search for !gh cprussin",
+      "Search for !gh cprussin in a private browser",
+    ]);
+  });
+
+  it("offers only private rows for a line with !p", async () => {
+    using panel = launcher();
+
+    await panel.user.type(panel.box(), "!p !gh cprussin");
+
+    expect(await panel.rows()).toStrictEqual([
+      "Go to cprussin on GitHub in a private browser",
+      "Search for cprussin on GitHub in a private browser",
+      "Search for !gh cprussin in a private browser",
+    ]);
+  });
+
+  it("goes to a site in a private browser with !p", async () => {
+    using panel = launcher();
+
+    await panel.user.type(panel.box(), "!p example.com{Enter}");
+
+    expect(panel.launched).toStrictEqual([
+      Launch.Browsed("https://example.com", true),
+    ]);
+  });
+
+  it("goes to a site in a private browser from the row beside it", async () => {
+    using panel = launcher();
+
+    await panel.user.type(panel.box(), "example.com");
+    await panel.rows();
+    await panel.user.keyboard("{ArrowDown}{Enter}");
+
+    expect(panel.launched).toStrictEqual([
+      Launch.Browsed("https://example.com", true),
     ]);
   });
 
@@ -531,7 +572,7 @@ describe("Launcher", () => {
     await panel.user.keyboard("{ArrowDown}{Enter}");
 
     expect(panel.launched).toStrictEqual([
-      Launch.Browsed("https://google.com/search?q=today"),
+      Launch.Browsed("https://google.com/search?q=today", false),
     ]);
   });
 
@@ -613,7 +654,7 @@ describe("Launcher", () => {
     await panel.user.type(panel.box(), "example.com{Enter}");
 
     expect(panel.launched).toStrictEqual([
-      Launch.Browsed("https://example.com"),
+      Launch.Browsed("https://example.com", false),
     ]);
   });
 
@@ -625,6 +666,7 @@ describe("Launcher", () => {
     expect(panel.launched).toStrictEqual([
       Launch.Browsed(
         "https://www.youtube.com/results?search_query=kate%20bush",
+        false,
       ),
     ]);
   });
@@ -635,7 +677,7 @@ describe("Launcher", () => {
     await panel.user.type(panel.box(), "!gh cprussin/domicile{Enter}");
 
     expect(panel.launched).toStrictEqual([
-      Launch.Browsed("https://github.com/cprussin/domicile"),
+      Launch.Browsed("https://github.com/cprussin/domicile", false),
     ]);
   });
 
@@ -878,29 +920,33 @@ describe("Launcher", () => {
       ).toBeInTheDocument();
     });
 
-    it("shows the highlighted site in a view of its own", async () => {
+    it("shows the highlighted site in a private view of its own", async () => {
+      // Private, so a page the user only looked at leaves nothing behind.
       using panel = launcher();
 
       await panel.user.type(panel.box(), "example.com");
+      const view = await within(previewPane()).findByTitle(
+        "https://example.com",
+      );
 
-      expect(
-        (await within(previewPane()).findByTitle("https://example.com"))
-          .tagName,
-      ).toBe("WEBVIEW");
+      expect(view.tagName).toBe("WEBVIEW");
+      expect(view.hasAttribute("private")).toBe(true);
     });
 
-    it("shows the highlighted bookmark in a view of its own", async () => {
+    it("shows the highlighted bookmark in a signed-in view of its own", async () => {
+      // Not private, so the page has the user's sign-in to learn icons from.
       using panel = launcher([], false, [], [MAIL]);
 
       await panel.user.type(panel.box(), "mail");
+      const view = await within(previewPane()).findByTitle(
+        "https://mail.example.com",
+      );
 
-      expect(
-        (await within(previewPane()).findByTitle("https://mail.example.com"))
-          .tagName,
-      ).toBe("WEBVIEW");
+      expect(view.tagName).toBe("WEBVIEW");
+      expect(view.hasAttribute("private")).toBe(false);
     });
 
-    it("follows the highlight onto a search", async () => {
+    it("follows the highlight onto a search, in a private view", async () => {
       using panel = launcher();
 
       await panel.user.type(panel.box(), "today");
@@ -908,10 +954,12 @@ describe("Launcher", () => {
       await panel.user.keyboard("{ArrowDown}");
 
       expect(
-        await within(previewPane()).findByTitle(
-          "https://google.com/search?q=today",
-        ),
-      ).toBeInTheDocument();
+        (
+          await within(previewPane()).findByTitle(
+            "https://google.com/search?q=today",
+          )
+        ).hasAttribute("private"),
+      ).toBe(true);
     });
 
     it("says what the highlighted application is and what it runs", async () => {

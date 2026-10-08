@@ -64,6 +64,10 @@ once, when the view connects. The SDK provides types only.
   `activateExtension(id)` (which grants `activeTab`), then open a
   `<webview extensionpopup>` at the popup address. Set `extensionpopup` on
   first render.
+- **Private pages:** `<webview private>` puts a shell's own page in the
+  off-the-record profile, and `openPrivateBrowserWindow(url)` opens a private
+  window. Set `private` on first render. See
+  [SHELL-BROWSER-WINDOWS.md](/docs/SHELL-BROWSER-WINDOWS.md#private-browsing).
 
 ## Reading held modifiers
 

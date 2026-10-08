@@ -156,9 +156,13 @@ class Desk {
    * target="_blank", `domicile open-url`, or, with `popupWindow`, an
    * extension's popup window.
    */
-  engineOpens(url: string, popupWindow: number | null = null): void {
+  engineOpens(
+    url: string,
+    popupWindow: number | null = null,
+    isPrivate = false,
+  ): void {
     act(() => {
-      this.fake.openBrowser(url, popupWindow);
+      this.fake.openBrowser(url, popupWindow, isPrivate);
     });
   }
 
@@ -1504,6 +1508,27 @@ describe("Shell", () => {
         "openBrowserWindow",
         "https://example.com",
       ]);
+    });
+
+    it("opens a private browser window from the launcher's private row", async () => {
+      renderShell();
+      press("space");
+      await userEvent
+        .setup()
+        .type(screen.getByRole("combobox"), "!p example.com{Enter}");
+
+      expect(domicile.calls).toContainEqual([
+        "openPrivateBrowserWindow",
+        "https://example.com",
+      ]);
+    });
+
+    it("says a private browser window is private", () => {
+      renderShell();
+
+      domicile.engineOpens("https://example.com/", null, true);
+
+      expect(screen.getByText("Private")).toBeInTheDocument();
     });
 
     // Bitwarden's "Unlock", end to end: `chrome.windows.create` opens a browser

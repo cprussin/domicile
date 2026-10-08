@@ -1380,6 +1380,18 @@ void DomicileHost::FocusRequested(const String& app_id) {
 void DomicileHost::openBrowserWindow(ScriptState*,
                                      const String& url,
                                      ExceptionState& exception_state) {
+  OpenBrowserWindow(url, /*private_browsing=*/false, exception_state);
+}
+
+void DomicileHost::openPrivateBrowserWindow(ScriptState*,
+                                            const String& url,
+                                            ExceptionState& exception_state) {
+  OpenBrowserWindow(url, /*private_browsing=*/true, exception_state);
+}
+
+void DomicileHost::OpenBrowserWindow(const String& url,
+                                     bool private_browsing,
+                                     ExceptionState& exception_state) {
   // Resolved against this document, as a <webview src> is. An unresolvable
   // address is a shell bug, so it throws a TypeError instead of opening an
   // empty window.
@@ -1389,7 +1401,7 @@ void DomicileHost::openBrowserWindow(ScriptState*,
     return;
   }
   if (Ready(exception_state)) {
-    windows_->Open(resolved);
+    windows_->Open(resolved, private_browsing);
   }
 }
 
@@ -1416,7 +1428,7 @@ void DomicileHost::WindowsChanged(
         window->id, window->url.GetString(), window->title,
         window->popup_window == 0 ? std::nullopt
                                   : std::optional<int32_t>(window->popup_window),
-        window->width, window->height));
+        window->width, window->height, window->private_browsing));
   }
   browser_windows_ = MakeGarbageCollected<FrozenArray<DomicileBrowserWindow>>(
       std::move(listed));

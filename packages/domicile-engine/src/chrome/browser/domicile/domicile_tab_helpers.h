@@ -30,6 +30,10 @@ namespace domicile {
 // popup view type and is not a tab, as in Chrome. Extensions that check for a
 // popup to size themselves (such as Bitwarden) depend on this.
 //
+// A private guest, in the off-the-record profile, is not a tab either: no tab
+// id and no desk window, so extensions do not see it. It is still watched for
+// DevTools.
+//
 // WebViewGuest calls this for each guest it creates. It lives in //chrome
 // because both helpers do.
 void AttachTabHelpers(content::WebContents& guest);

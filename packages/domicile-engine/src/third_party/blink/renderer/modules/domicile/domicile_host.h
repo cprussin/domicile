@@ -196,6 +196,9 @@ class MODULES_EXPORT DomicileHost final
   // Opens or closes a browser window. The next `browserwindowschanged`
   // reflects it.
   void openBrowserWindow(ScriptState*, const String& url, ExceptionState&);
+  void openPrivateBrowserWindow(ScriptState*,
+                                const String& url,
+                                ExceptionState&);
   void closeBrowserWindow(ScriptState*, const String& id, ExceptionState&);
   // Every client window, in the order they appeared. Not const: reading it
   // binds the channel, which is what has the compositor announce them.
@@ -383,6 +386,11 @@ class MODULES_EXPORT DomicileHost final
            std::optional<Element*> pressed);
 
   bool Ready(ExceptionState&);
+
+  // openBrowserWindow and openPrivateBrowserWindow.
+  void OpenBrowserWindow(const String& url,
+                         bool private_browsing,
+                         ExceptionState&);
   bool ReadyForApp(const String& app_id, ExceptionState&);
 
   Member<LocalDOMWindow> window_;

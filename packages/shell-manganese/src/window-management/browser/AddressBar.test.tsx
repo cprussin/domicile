@@ -10,6 +10,7 @@ const BAR = {
   address: "https://example.com",
   canGoBack: false,
   canGoForward: false,
+  isPrivate: false,
   loading: false,
   onBack: () => undefined,
   onForward: () => undefined,
@@ -36,6 +37,20 @@ describe("AddressBar", () => {
     render(<AddressBar {...BAR} />);
 
     expect(address()).toHaveValue("https://example.com");
+  });
+
+  describe("a private window", () => {
+    it("says it is private beside the address", () => {
+      render(<AddressBar {...BAR} isPrivate />);
+
+      expect(screen.getByText("Private")).toBeInTheDocument();
+    });
+
+    it("says nothing of the kind for an ordinary window", () => {
+      render(<AddressBar {...BAR} />);
+
+      expect(screen.queryByText("Private")).toBeNull();
+    });
   });
 
   // One button for Reload and Stop, since only one applies at a time.

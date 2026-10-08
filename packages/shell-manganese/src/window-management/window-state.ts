@@ -404,11 +404,12 @@ export const WindowAction = {
   }),
 
   /**
-   * The user opened a browser window at `src`. `useWindows` asks the engine,
-   * and the window arrives in the next
+   * The user opened a browser window at `src`, private or not. `useWindows`
+   * asks the engine, and the window arrives in the next
    * {@link WindowAction.BrowserWindowsListed}.
    */
-  BrowserOpened: (src: string) => ({
+  BrowserOpened: (src: string, isPrivate: boolean) => ({
+    isPrivate,
     kind: WindowActionKind.BrowserOpened as const,
     src,
   }),
@@ -1082,9 +1083,9 @@ const listBrowsers = (
 // address and title.
 const takeUpBrowser = (
   state: WindowState,
-  { height, id, popupWindow, url, width }: DomicileBrowserWindow,
+  { height, id, isPrivate, popupWindow, url, width }: DomicileBrowserWindow,
 ): WindowState => {
-  const window = Window.Browser(id, url, popupWindow ?? undefined);
+  const window = Window.Browser(id, url, popupWindow ?? undefined, isPrivate);
   if (windowOf(state, window.id) !== undefined) {
     return {
       ...state,
