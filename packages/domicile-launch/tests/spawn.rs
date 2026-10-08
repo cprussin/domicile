@@ -118,6 +118,26 @@ fn a_tty_desktop_asks_for_the_whole_screen() {
 }
 
 #[test]
+fn a_tty_desktop_keeps_retrying_a_crashed_gpu_process() {
+    // After three GPU process crashes Chromium falls back to software
+    // compositing (`GpuProcessHost::RecordProcessCrash`). ozone/drm has no
+    // software output, so the browser aborts in
+    // `IntentionallyCrashBrowserForUnusableGpuProcess` and the shell page and
+    // its webviews are lost with it.
+    let args = args_of(&engine(
+        Path::new("/l/engine"),
+        &shell(),
+        "drm",
+        &runtime(),
+        None,
+    ));
+    assert!(
+        args.contains(&"--disable-gpu-process-crash-limit".to_string()),
+        "{args:?}"
+    );
+}
+
+#[test]
 fn the_engine_sizes_its_own_tile_memory() {
     // NO FIXED BUDGET. The engine sizes the desk page's tile memory from the
     // monitors it spans (patch 0088, `DomicileTileBytesFor`), and an explicit

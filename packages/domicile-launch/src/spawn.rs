@@ -110,8 +110,13 @@ pub fn engine(
     // dropped and the screen stays black. Fullscreen takes the display's own
     // bounds, which `--window-size` cannot know in advance. Nested runs skip
     // this so the window stays a normal window.
+    //
+    // drm has no software output, so Chromium's fallback after three GPU
+    // process crashes aborts the browser. Without the limit it relaunches the
+    // GPU process and the shell page survives.
     if platform == SCANOUT_PLATFORM {
         args.push("--start-fullscreen".into());
+        args.push("--disable-gpu-process-crash-limit".into());
     }
     // When nested, ask the host compositor to pass its shortcuts through
     // (`zwp_keyboard_shortcuts_inhibit_unstable_v1`). Otherwise the host
