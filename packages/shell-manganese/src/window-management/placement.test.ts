@@ -3,7 +3,7 @@ import { describe, expect, it } from "bun:test";
 import { Axis } from "./direction";
 import type { Geometry } from "./placement";
 import { contentsOf, LEAVING, placementsOf, TILED } from "./placement";
-import { TITLE_BAR } from "./rect";
+import { SURFACE_TUCK, TITLE_BAR } from "./rect";
 import { Layout } from "./tree/node";
 import { appWindowId } from "./window";
 import type { WindowState } from "./window-state";
@@ -70,10 +70,10 @@ describe("placementsOf", () => {
       selected: false,
       soleTab: true,
       surface: {
-        height: 1008 - TITLE_BAR,
+        height: 1008 - TITLE_BAR + SURFACE_TUCK,
         width: 1880,
         x: 20,
-        y: 52 + TITLE_BAR,
+        y: 52 + TITLE_BAR - SURFACE_TUCK,
       },
       // The workspace's tab group, holding one tab.
       tabbed: Layout.Tabbed,
@@ -196,10 +196,10 @@ describe("placementsOf", () => {
     );
 
     expect(placementFor(state, "editor")?.surface).toMatchObject({
-      height: 1080 - TITLE_BAR,
+      height: 1080 - TITLE_BAR + SURFACE_TUCK,
       width: 1920,
       x: 0,
-      y: TITLE_BAR,
+      y: TITLE_BAR - SURFACE_TUCK,
     });
   });
 

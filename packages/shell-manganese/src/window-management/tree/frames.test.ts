@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { TITLE_BAR } from "../rect";
+import { SURFACE_TUCK, TITLE_BAR } from "../rect";
 import { framesOf } from "./frames";
 import { Layout, LayoutNode } from "./node";
 import { NOTHING_TILED } from "./tiling";
@@ -51,10 +51,10 @@ describe("framesOf", () => {
       selected: false,
       soleTab: false,
       surface: {
-        height: 1000 - TITLE_BAR,
+        height: 1000 - TITLE_BAR + SURFACE_TUCK,
         width: 1000,
         x: 0,
-        y: TITLE_BAR,
+        y: TITLE_BAR - SURFACE_TUCK,
       },
       tabbed: undefined,
     });
@@ -98,10 +98,10 @@ describe("framesOf", () => {
       y: 0,
     });
     expect(frameFor(lone(Layout.SplitV), "a").surface).toEqual({
-      height: 936 - TITLE_BAR,
+      height: 936 - TITLE_BAR + SURFACE_TUCK,
       width: 1000,
       x: 0,
-      y: TITLE_BAR,
+      y: TITLE_BAR - SURFACE_TUCK,
     });
   });
 
@@ -121,8 +121,8 @@ describe("framesOf", () => {
     expect(frameFor(tiled, "a").bar).toMatchObject({ height: TITLE_BAR, y: 0 });
     expect(frameFor(tiled, "b").bar).toMatchObject({ y: 500 });
     expect(frameFor(tiled, "b").surface).toMatchObject({
-      height: 500 - TITLE_BAR,
-      y: 500 + TITLE_BAR,
+      height: 500 - TITLE_BAR + SURFACE_TUCK,
+      y: 500 + TITLE_BAR - SURFACE_TUCK,
     });
   });
 
@@ -166,10 +166,10 @@ describe("framesOf", () => {
 
     expect(frameFor(tiled, "a").surface).toBeUndefined();
     expect(frameFor(tiled, "b").surface).toEqual({
-      height: 1000 - TITLE_BAR,
+      height: 1000 - TITLE_BAR + SURFACE_TUCK,
       width: 1000,
       x: 0,
-      y: TITLE_BAR,
+      y: TITLE_BAR - SURFACE_TUCK,
     });
   });
 
@@ -210,7 +210,9 @@ describe("framesOf", () => {
       width: 1000,
       y: TITLE_BAR,
     });
-    expect(frameFor(tiled, "a").surface).toMatchObject({ y: TITLE_BAR * 2 });
+    expect(frameFor(tiled, "a").surface).toMatchObject({
+      y: TITLE_BAR * 2 - SURFACE_TUCK,
+    });
   });
 
   // Sets the direction a tab-close animation runs: across for tabbed, down for

@@ -7,7 +7,7 @@
 import type { Direction } from "../direction";
 import { Axis, axisOf, isForward } from "../direction";
 import type { Rect } from "../rect";
-import { TITLE_BAR } from "../rect";
+import { SURFACE_TUCK, TITLE_BAR } from "../rect";
 import type { LayoutNode } from "../tree/node";
 import { windowsIn } from "../tree/node";
 import type { Tiling } from "../tree/tiling";
@@ -133,6 +133,9 @@ export const floatHolds = (float: Float, id: string): boolean =>
  */
 const SMALLEST = { height: 120, width: 240 };
 
+/** How much of a float's height is not its client's. See `surfaceOf`. */
+const BAR_OVER_SURFACE = TITLE_BAR - SURFACE_TUCK;
+
 /**
  * The box with its contents clamped to the client's `min` and `max` size,
  * plus the title bar.
@@ -156,8 +159,8 @@ export const limitedTo = (
   const down = spanLimited(
     { size: float.height, start: float.y },
     before === undefined ? undefined : { size: before.height, start: before.y },
-    minHeight === undefined ? undefined : minHeight + TITLE_BAR,
-    maxHeight === undefined ? undefined : maxHeight + TITLE_BAR,
+    minHeight === undefined ? undefined : minHeight + BAR_OVER_SURFACE,
+    maxHeight === undefined ? undefined : maxHeight + BAR_OVER_SURFACE,
   );
   return across.size === float.width &&
     across.start === float.x &&
