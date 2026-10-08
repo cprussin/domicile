@@ -8,8 +8,7 @@ Manganese uses sway's layout model. For the key bindings, see
 - Each workspace holds a tree. Windows are leaves; containers lay out their
   children split, tabbed or stacking.
 - Tiled windows have a 20px gap between them and at the screen's edges, which
-  the focus glow lights. A lone window fills the workspace (sway's
-  `smart_gaps`).
+  the focus glow lights. A lone window keeps the gap at the edges.
 - A new window opens beside the focused one. Closing a window gives its space
   to the rest.
 - There are 10 workspaces for the whole desktop, plus the scratchpad and floating
