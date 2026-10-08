@@ -237,3 +237,28 @@ fn a_config_alone_is_a_run_on_the_shell_it_names() {
         })
     );
 }
+
+#[test]
+fn check_config_is_the_verb_that_takes_a_config() {
+    assert_eq!(
+        run(&["check-config", "domicile.json"]).unwrap(),
+        Invocation::Check {
+            config: PathBuf::from("domicile.json")
+        }
+    );
+}
+
+#[test]
+fn check_config_with_no_config_is_refused() {
+    assert_eq!(run(&["check-config"]), Err(CliError::NothingToCheck));
+}
+
+#[test]
+fn check_config_takes_one_config_and_the_extra_word_is_named() {
+    assert_eq!(
+        run(&["check-config", "a.json", "b.json"]),
+        Err(CliError::ExtraToCheck {
+            extra: "b.json".to_string()
+        })
+    );
+}

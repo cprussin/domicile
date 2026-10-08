@@ -30,6 +30,7 @@ domicile which-shell              # ask the running desktop which shell it serve
 domicile load-shell <shell>       # replace the running desktop's shell
 domicile open-url <url>           # open a URL in the running desktop (BROWSER)
 domicile screenshot <file>        # write a PNG of the running desktop
+domicile check-config <file>      # exit 1 with the reason if the compositor refuses this JSON config
 ```
 
 Config file:
@@ -90,12 +91,22 @@ has one option per field of the `domicile-config` schema and generates JSON
 with `pkgs.formats.json`.
 
 Every config struct is `deny_unknown_fields`, so one unknown key rejects the
-whole file (see Config file). Two checks keep the module and the structs in
-sync:
+whole file (see Config file) and the desk does not start. So:
+
+- The module runs `domicile check-config` on the file it writes. A refused
+  config fails the build.
+- `removedSettings` lists top-level settings the schema dropped. Setting one
+  fails an assertion that says where it went.
+
+Checks:
 
 - `scripts/test-the-home-manager-module-agrees.sh` compares option names to
   the Rust structs, without Nix.
-- `nix flake check` evaluates the module and reads back the file it writes.
+- `scripts/test-a-dropped-config-field-is-removed-here.sh` fails when a
+  top-level `Config` field is gone since the base commit and `removedSettings`
+  does not list it.
+- `nix flake check` evaluates the module, reads back the file it writes, and
+  checks that a refused config fails to build.
 
 ## Key decisions
 

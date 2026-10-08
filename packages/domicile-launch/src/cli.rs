@@ -19,7 +19,8 @@ pub enum CliError {
          --config <path>: a module's `Shell` export, or a JSON config's \
          \"shell\", is the shell when none is given.\n\
          Or a command for the desktop already running: which-shell, \
-         load-shell <shell>, open-url <url>, or screenshot <file>.\n"
+         load-shell <shell>, open-url <url>, or screenshot <file>. Or \
+         check-config <file> to check a config without running it.\n"
     )]
     NoShell,
     #[error(
@@ -60,6 +61,14 @@ pub enum CliError {
     #[error("screenshot takes one file, and it was given {extra} as well.")]
     ExtraToSave { extra: String },
     #[error(
+        "check-config takes the config file to check, and was given \
+         nothing:\n\n    \
+         domicile check-config ~/.config/domicile/domicile.json\n"
+    )]
+    NothingToCheck,
+    #[error("check-config takes one config, and it was given {extra} as well.")]
+    ExtraToCheck { extra: String },
+    #[error(
         "--config takes the path to the compositor's config file and was given \
          nothing. Leaving the flag off reads ~/.config/domicile/domicile.{{ts,tsx,js,mjs,json}} \
          and runs the defaults when there is none, which is what an empty one \
@@ -99,6 +108,8 @@ pub enum Invocation {
     ///
     /// Kept as typed; the client makes it absolute.
     Screenshot { file: String },
+    /// Check that the compositor takes this config, without running a desktop.
+    Check { config: PathBuf },
 }
 
 /// Parses the command line.
@@ -140,6 +151,13 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
                 (None, _) => Err(CliError::NowhereToSave),
                 (Some(file), None) => Ok(Invocation::Screenshot { file }),
                 (Some(_), Some(extra)) => Err(CliError::ExtraToSave { extra }),
+            },
+            Verb::Checking => match (args.next(), args.next()) {
+                (None, _) => Err(CliError::NothingToCheck),
+                (Some(config), None) => Ok(Invocation::Check {
+                    config: PathBuf::from(config),
+                }),
+                (Some(_), Some(extra)) => Err(CliError::ExtraToCheck { extra }),
             },
         };
     }
@@ -185,6 +203,8 @@ enum Verb {
     Opening,
     /// `screenshot`, which takes a file.
     Capturing,
+    /// `check-config`, which takes a config file.
+    Checking,
 }
 
 /// The verb `word` names, if any.
@@ -196,6 +216,7 @@ fn verb(word: &str) -> Option<Verb> {
         "load-shell" => Some(Verb::Loading),
         "open-url" => Some(Verb::Opening),
         "screenshot" => Some(Verb::Capturing),
+        "check-config" => Some(Verb::Checking),
         _ => None,
     }
 }

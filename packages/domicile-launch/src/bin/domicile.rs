@@ -20,6 +20,7 @@ use domicile_launch::build_progress::{bar, heard, Heard as BuilderHeard};
 use domicile_launch::cli::{invocation, CliError, Invocation};
 use domicile_launch::command_socket::{load_shell, open_url, screenshot};
 use domicile_launch::components::{builder, components, our_shell, Components};
+use domicile_launch::config_check::check;
 use domicile_launch::config_path::{config_file, is_module, ConfigFile};
 use domicile_launch::config_watch;
 use domicile_launch::control::{answer, Request, Response};
@@ -86,6 +87,7 @@ fn run() -> Result<ExitCode, String> {
             file: std::path::absolute(&file)
                 .map_err(|why| format!("cannot tell where {file} is: {why}"))?,
         }),
+        Invocation::Check { config } => check(&config).map(|()| ExitCode::SUCCESS),
     }
 }
 

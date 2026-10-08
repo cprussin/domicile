@@ -739,6 +739,22 @@
             };
             written = evaluated.config.xdg.configFile."domicile/domicile.json".source;
 
+            # The module with settings of its own on top of `desk`.
+            deskWith = settings: pkgs.lib.evalModules {
+              modules = [ stub self.homeManagerModules.domicile desk { programs.domicile.settings = settings; } ];
+              specialArgs = { inherit pkgs; };
+            };
+
+            # A removed setting fails an assertion that says where it went.
+            removedSettingSaysWhere = pkgs.lib.any
+              (each: !each.assertion && pkgs.lib.hasInfix "manganese" each.message)
+              (deskWith { applications.omit = [ "*" ]; }).config.assertions;
+
+            # A config the compositor refuses fails to build, so it never
+            # reaches a desk. Its log is the compositor's reason.
+            refused = pkgs.testers.testBuildFailure
+              (deskWith { no_such_section = { }; }).config.xdg.configFile."domicile/domicile.json".source;
+
             # The same module with a `domicile` that prints its arguments, to
             # test the wrapper's command lines. The real binary needs a
             # compositor, which the sandbox lacks.
@@ -782,6 +798,17 @@
             # A mode that is set reaches the file.
             expect '.output.profiles[0].displays[1].mode == [3840, 2160]'
 
+            grep -qF 'unknown field `no_such_section`' ${refused}/testBuildFailure.log || {
+              echo "a config domicile refuses did not fail to build over it:" >&2
+              cat ${refused}/testBuildFailure.log >&2
+              exit 1
+            }
+
+            [ ${pkgs.lib.boolToString removedSettingSaysWhere} = true ] || {
+              echo "setting programs.domicile.settings.applications fails no assertion naming manganese" >&2
+              exit 1
+            }
+
             # Check the arguments the wrapped `domicile` receives. The shell
             # must go last, because a subcommand is recognized only as the
             # first argument.
@@ -812,6 +839,9 @@
 
             # `open-url` takes an address, so nothing is appended.
             saw "open-url https://example.com" open-url https://example.com
+            # Nor to `screenshot`'s file or `check-config`'s config.
+            saw "screenshot shot.png" screenshot shot.png
+            saw "check-config domicile.json" check-config domicile.json
 
             # The default-browser file ships in Domicile's `share`, which
             # `domicile` puts first in `XDG_DATA_DIRS`. The module must not

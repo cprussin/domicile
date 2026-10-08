@@ -76,6 +76,9 @@ export const Shell = runManganese();
 - It installs no login session. That is the NixOS module's job
   ([RUNNING-A-DESKTOP.md](/docs/RUNNING-A-DESKTOP.md#the-machines-half)).
 - `settings` is freeform, so keys newer than the module pass through.
+- The build runs `domicile check-config` on the file, so a key the compositor
+  refuses fails `home-manager switch` instead of the desk. Run it yourself on
+  a hand-written config: `domicile check-config ~/.config/domicile/domicile.json`.
 
 ## Reloading
 
