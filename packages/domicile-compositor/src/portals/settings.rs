@@ -68,6 +68,19 @@ impl From<&ThemeConfig> for Appearance {
     }
 }
 
+/// The same keys for the shell, which follows them too.
+impl From<Appearance> for domicile_protocol::Appearance {
+    fn from(appearance: Appearance) -> Self {
+        domicile_protocol::Appearance {
+            accent_color: appearance
+                .accent_color
+                .map(|AccentColor([r, g, b])| format!("#{r:02x}{g:02x}{b:02x}")),
+            high_contrast: appearance.contrast == Contrast::High,
+            reduced_motion: appearance.reduced_motion,
+        }
+    }
+}
+
 /// The `Settings` backend object, serving [`NAMESPACE`].
 ///
 /// Other namespaces are left to the next backend rather than answered with
@@ -238,6 +251,24 @@ mod tests {
         assert_eq!(u32::try_from(value(&settings, "contrast")), Ok(1));
         assert_eq!(u32::try_from(value(&settings, "reduced-motion")), Ok(1));
         assert_eq!(settings.read_all(Vec::new())[NAMESPACE].len(), 4);
+    }
+
+    #[test]
+    fn the_shell_is_told_the_same_look() {
+        let told = domicile_protocol::Appearance::from(Appearance {
+            accent_color: Some(AccentColor([0xff, 0x33, 0x0a])),
+            contrast: Contrast::High,
+            reduced_motion: true,
+        });
+
+        assert_eq!(
+            told,
+            domicile_protocol::Appearance {
+                accent_color: Some("#ff330a".into()),
+                high_contrast: true,
+                reduced_motion: true,
+            }
+        );
     }
 
     #[test]
