@@ -12,6 +12,7 @@
 
 #include "base/at_exit.h"
 #include "base/compiler_specific.h"
+#include "base/containers/circular_deque.h"
 #include "base/containers/span.h"
 #include "base/containers/flat_map.h"
 #include "base/files/scoped_file.h"
@@ -155,14 +156,25 @@ class Surface : public mojom::SurfaceObserver,
     }
   }
 
+  // Shows `buffer_id` at the newest box numbered at most `box`. A client's
+  // buffer is drawn for the box it acked, so an old buffer stays at its old
+  // size and id: viz keeps the page's frame waiting for the new one rather
+  // than stretching the old one over it.
   bool Submit(uint64_t buffer_id,
               const gfx::Rect& crop,
-              const gfx::Rect& damage) {
+              const gfx::Rect& damage,
+              uint64_t box) {
     auto iter = buffers_.find(buffer_id);
-    if (iter == buffers_.end() || !local_surface_id_.is_valid()) {
+    if (iter == buffers_.end() || boxes_.empty()) {
       return false;
     }
-    const gfx::Rect rect(size_);
+    // Viz refuses a frame at an older LocalSurfaceId than one it has, so a
+    // box once shown is never shown again after a newer one.
+    while (boxes_.size() > 1 && boxes_[1].number <= box) {
+      boxes_.pop_front();
+    }
+    const Box& shown = boxes_.front();
+    const gfx::Rect rect(shown.size);
     // Blend buffers with alpha, such as a menu's transparent rounded corners.
     const bool opaque = !iter->second.has_alpha;
 
@@ -197,7 +209,7 @@ class Surface : public mojom::SurfaceObserver,
     frame.resource_list.push_back(iter->second.resource);
     frame.render_pass_list.push_back(std::move(pass));
 
-    sink_->SubmitCompositorFrame(local_surface_id_, std::move(frame),
+    sink_->SubmitCompositorFrame(shown.local_surface_id, std::move(frame),
                                  std::nullopt, 0);
     return true;
   }
@@ -215,8 +227,9 @@ class Surface : public mojom::SurfaceObserver,
   void OnSurfaceEmbedded(const viz::LocalSurfaceId& local_surface_id,
                          const gfx::Size& size,
                          double scale) override {
-    local_surface_id_ = local_surface_id;
-    size_ = size;
+    boxes_.push_back({.number = ++last_box_,
+                      .local_surface_id = local_surface_id,
+                      .size = size});
     if (!wants_begin_frames_) {
       wants_begin_frames_ = true;
       sink_->SetNeedsBeginFrame(true);
@@ -225,7 +238,8 @@ class Surface : public mojom::SurfaceObserver,
                   .surface = id_,
                   .width = static_cast<uint32_t>(size.width()),
                   .height = static_cast<uint32_t>(size.height()),
-                  .scale = scale});
+                  .scale = scale,
+                  .box = last_box_});
   }
 
   // Sent only when the browser owns the sink, which this does not request.
@@ -282,9 +296,17 @@ class Surface : public mojom::SurfaceObserver,
   mojo::Remote<viz::mojom::CompositorFrameSink> sink_;
   mojo::Receiver<viz::mojom::CompositorFrameSinkClient> client_receiver_{this};
 
+  // A box the page embedded this surface at.
+  struct Box {
+    uint64_t number = 0;
+    viz::LocalSurfaceId local_surface_id;
+    gfx::Size size;
+  };
+
   viz::FrameSinkId frame_sink_id_;
-  viz::LocalSurfaceId local_surface_id_;
-  gfx::Size size_;
+  // The box shown last, then every newer one, oldest first.
+  base::circular_deque<Box> boxes_;
+  uint64_t last_box_ = 0;
   bool wants_begin_frames_ = false;
   base::flat_map<uint64_t, Adopted> buffers_;
   base::flat_map<viz::ResourceId, uint64_t> resource_to_buffer_;
@@ -585,7 +607,11 @@ struct DomicileEngine {
     for (const domicile::EngineEvent& event : queue_.Drain()) {
       switch (event.type) {
         case domicile::EngineEvent::Type::kConfigure:
-          if (callbacks_.configure_at) {
+          if (callbacks_.configure_box) {
+            callbacks_.configure_box(callbacks_.user_data, event.surface,
+                                     event.width, event.height, event.scale,
+                                     event.box);
+          } else if (callbacks_.configure_at) {
             callbacks_.configure_at(callbacks_.user_data, event.surface,
                                     event.width, event.height, event.scale);
           } else if (callbacks_.configure) {
@@ -679,11 +705,12 @@ struct DomicileEngine {
   void SubmitBuffer(DomicileSurfaceId surface,
                     DomicileBufferId buffer,
                     const gfx::Rect& crop,
-                    const gfx::Rect& damage) {
+                    const gfx::Rect& damage,
+                    uint64_t box) {
     thread_.task_runner()->PostTask(
-        FROM_HERE,
-        base::BindOnce(&DomicileEngine::SubmitBufferOnThread,
-                       base::Unretained(this), surface, buffer, crop, damage));
+        FROM_HERE, base::BindOnce(&DomicileEngine::SubmitBufferOnThread,
+                                  base::Unretained(this), surface, buffer, crop,
+                                  damage, box));
   }
 
   // Throwaway; see domicile_engine_spike.h.
@@ -1002,10 +1029,11 @@ struct DomicileEngine {
   void SubmitBufferOnThread(DomicileSurfaceId surface,
                             DomicileBufferId buffer,
                             const gfx::Rect& crop,
-                            const gfx::Rect& damage) {
+                            const gfx::Rect& damage,
+                            uint64_t box) {
     auto iter = surfaces_.find(surface);
     if (iter != surfaces_.end()) {
-      iter->second->Submit(buffer, crop, damage);
+      iter->second->Submit(buffer, crop, damage, box);
     }
   }
 
@@ -1229,10 +1257,28 @@ void domicile_surface_submit_crop(DomicileEngine* engine,
                                   int32_t damage_y,
                                   int32_t damage_width,
                                   int32_t damage_height) {
+  domicile_surface_submit_for_box(engine, surface, buffer, crop_x, crop_y,
+                                  crop_width, crop_height, damage_x, damage_y,
+                                  damage_width, damage_height,
+                                  DOMICILE_NEWEST_BOX);
+}
+
+void domicile_surface_submit_for_box(DomicileEngine* engine,
+                                     DomicileSurfaceId surface,
+                                     DomicileBufferId buffer,
+                                     int32_t crop_x,
+                                     int32_t crop_y,
+                                     int32_t crop_width,
+                                     int32_t crop_height,
+                                     int32_t damage_x,
+                                     int32_t damage_y,
+                                     int32_t damage_width,
+                                     int32_t damage_height,
+                                     uint64_t box) {
   if (engine) {
     engine->SubmitBuffer(
         surface, buffer, gfx::Rect(crop_x, crop_y, crop_width, crop_height),
-        gfx::Rect(damage_x, damage_y, damage_width, damage_height));
+        gfx::Rect(damage_x, damage_y, damage_width, damage_height), box);
   }
 }
 

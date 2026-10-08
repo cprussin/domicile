@@ -134,7 +134,8 @@ class CORE_EXPORT HTMLAppElement final : public HTMLElement,
   // element a box -- each of which is a state the element passes through on the
   // way to its first frame rather than an error.
   void Embed();
-  void OnEmbedded(const std::optional<viz::SurfaceId>&);
+  void OnEmbedded(const AtomicString& app_id,
+                  const std::optional<viz::SurfaceId>&);
 
   bool CreateLayer();
 
@@ -166,6 +167,10 @@ class CORE_EXPORT HTMLAppElement final : public HTMLElement,
   // answer in flight is for the wrong app or the wrong size, so re-ask once it
   // lands.
   bool embed_stale_ = false;
+
+  // The app-id whose surface the layer shows, or null before one does. A
+  // resize of that app embeds its new surface without waiting for the reply.
+  AtomicString embedded_app_id_;
 
   std::unique_ptr<::blink::SurfaceLayerBridge> surface_layer_bridge_;
   std::unique_ptr<ExternalSurfaceEmbedder> external_surface_embedder_;
