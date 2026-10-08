@@ -3,7 +3,7 @@ import { Children } from "react";
 import { css } from "../../styled-system/css";
 import { grid, hstack } from "../../styled-system/patterns";
 import type { Bar } from "./bar-context";
-import { BarContext } from "./bar-context";
+import { BarContext, BarReadoutsContext } from "./bar-context";
 import type { TopBarLayout } from "./layout";
 
 /**
@@ -36,12 +36,24 @@ type Props = Bar & {
  */
 export const TopBar = ({ layout, ...bar }: Props) => (
   <BarContext value={bar}>
-    <header className={barStyles} style={{ blockSize: `${TOP_BAR}px` }}>
-      <div className={startStyles}>{Children.toArray(layout.left)}</div>
-      <div className={middleStyles}>{Children.toArray(layout.middle)}</div>
-      <div className={endStyles}>{Children.toArray(layout.right)}</div>
-    </header>
+    <BarReadoutsContext
+      value={{ domicile: bar.domicile, locked: false, readouts: bar.readouts }}
+    >
+      <BarColumns layout={layout} />
+    </BarReadoutsContext>
   </BarContext>
+);
+
+/**
+ * The bar's columns and look, with no context of its own: the caller provides
+ * what its items read, as `LockBar` does with only the readouts.
+ */
+export const BarColumns = ({ layout }: { layout: TopBarLayout }) => (
+  <header className={barStyles} style={{ blockSize: `${TOP_BAR}px` }}>
+    <div className={startStyles}>{Children.toArray(layout.left)}</div>
+    <div className={middleStyles}>{Children.toArray(layout.middle)}</div>
+    <div className={endStyles}>{Children.toArray(layout.right)}</div>
+  </header>
 );
 
 const barStyles = grid({

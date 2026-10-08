@@ -21,13 +21,19 @@ type Props = {
   bluetooth: SharedWatch<Result<Reading, SystemError>>;
   /** The host whose system calls reach BlueZ. */
   domicile: DomicileHost;
+  /**
+   * Whether the desktop is locked. A locked desktop refuses power, pairing and
+   * connecting, so the icon only shows the state.
+   */
+  locked?: boolean | undefined;
   /** Injectable so tests can see what the panel asks for. */
   actions?: BluetoothActions | undefined;
 };
 
 /**
  * The Bluetooth item on the bar: an icon for off, on or connected, named with
- * the connected devices. A click opens the {@link BluetoothPanel}.
+ * the connected devices. A click opens the {@link BluetoothPanel}. On a locked
+ * desktop it is the icon alone.
  *
  * Draws nothing until BlueZ answers, on a D-Bus error, or with no adapter.
  */
@@ -35,15 +41,41 @@ export const Bluetooth = ({
   actions = BLUETOOTH_ACTIONS,
   bluetooth,
   domicile,
+  locked = false,
 }: Props) => {
   const host = useMemo(() => system(domicile), [domicile]);
   return useSharedWatch(bluetooth)?.match({
     Err: () => undefined,
-    Ok: (reading) =>
-      reading.adapters.length === 0 ? undefined : (
-        <Item actions={actions} host={host} reading={reading} />
-      ),
+    Ok: (reading) => {
+      if (reading.adapters.length === 0) {
+        return undefined;
+      } else {
+        return locked ? (
+          <Status reading={reading} />
+        ) : (
+          <Item actions={actions} host={host} reading={reading} />
+        );
+      }
+    },
   });
+};
+
+/** The icon alone, on a locked desktop. */
+const Status = ({ reading }: { reading: Reading }) => {
+  const on = reading.adapters.some(({ powered }) => powered);
+  const connected = reading.devices.filter((device) => device.connected);
+  return (
+    <span
+      aria-label={labelOf(
+        on,
+        connected.map(({ name }) => name),
+      )}
+      className={statusStyles}
+      role="img"
+    >
+      <Icon connected={connected.length > 0} on={on} />
+    </span>
+  );
 };
 
 /** The button and its panel once BlueZ has reported an adapter. */
@@ -111,6 +143,16 @@ const triggerStyles = css({
   justifyContent: "center",
   padding: 0,
   transition: "background-color {durations.fast} {easings.default}",
+});
+
+// The button's box, so the bar's spacing is the same while locked.
+const statusStyles = css({
+  alignItems: "center",
+  blockSize: 7,
+  display: "inline-flex",
+  flexShrink: 0,
+  inlineSize: 7,
+  justifyContent: "center",
 });
 
 const labelOf = (on: boolean, names: string[]): string => {

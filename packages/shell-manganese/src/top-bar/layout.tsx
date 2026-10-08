@@ -54,3 +54,18 @@ export const DEFAULT_TOP_BAR: TopBarLayout = {
     <BarNotifications key="notifications" />,
   ],
 };
+
+/**
+ * The lock screen's bar: the readouts a locked desktop allows, in the default
+ * bar's order.
+ */
+export const LOCK_TOP_BAR: TopBarLayout = {
+  left: [],
+  middle: [],
+  right: [
+    <BarBluetooth key="bluetooth" />,
+    <BarVolume key="volume" />,
+    <BarBrightness key="brightness" />,
+    <BarBattery key="battery" />,
+  ],
+};

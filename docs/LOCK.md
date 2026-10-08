@@ -40,9 +40,10 @@ Why some requests are allowed:
 - `SetTheme`: it opens and reads nothing.
 - System reads under `/sys`: the user can change nothing there. Only an
   absolute path with no `..` counts.
-- Lock screen readouts: the calls `system-battery`, `system-backlight` and
-  `system-audio` make, so a lock screen shows the battery and sets the
-  brightness and volume. See [Lock screen readouts](#lock-screen-readouts).
+- Lock screen readouts: the calls `system-battery`, `system-backlight`,
+  `system-audio` and `system-bluetooth` make, so a lock screen shows the
+  battery and Bluetooth and sets the brightness and volume. See
+  [Lock screen readouts](#lock-screen-readouts).
 - `unwatch`, `close_stdin`, `kill`: they stop what the shell started.
 
 ## Lock screen readouts
@@ -59,6 +60,7 @@ library sends; the libraries' tests and the allowlist's both check it.
 | `system-battery` | UPower `DisplayDevice` `GetAll` of `org.freedesktop.UPower.Device`; a match on its `PropertiesChanged` with every field set |
 | `system-backlight` | `udevadm monitor --kernel --subsystem-match=backlight`; logind `Session.SetBrightness("backlight", device, level)` on `session/auto` |
 | `system-audio` | `pactl -f json info`, `list` and `subscribe`; `pactl -- set-sink-volume NAME N` and `set-sink-mute NAME 0\|1` |
+| `system-bluetooth` | BlueZ `GetManagedObjects` on `/`: adapters' power, connected devices and their batteries; a match on every BlueZ signal |
 
 - D-Bus calls are on the system bus only.
 - A spawn has no `cwd` or `stdin`, and exactly the library's `env`: none for
@@ -67,6 +69,8 @@ library sends; the libraries' tests and the allowlist's both check it.
   trusts whatever `udevadm` and `pactl` that `PATH` finds.
 - Left out: inputs (unmuting a microphone would let a locked desktop record),
   `parec` meters, and every other `pactl` command.
+- Left out of BlueZ: power, scanning, pairing and connecting. Someone at a
+  locked desktop must not pair a device.
 
 ## Ordering
 

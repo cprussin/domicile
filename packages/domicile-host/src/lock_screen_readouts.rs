@@ -1,9 +1,9 @@
-//! The system calls a locked desktop still runs, so a lock screen can show and
-//! adjust the battery, brightness and volume.
+//! The system calls a locked desktop still runs, so a lock screen can show the
+//! battery and Bluetooth and adjust the brightness and volume.
 //!
 //! [`READOUTS`] lists each call that `@domicile-desktop/system-battery`,
-//! `system-backlight` and `system-audio` make, field by field. Anything else is
-//! refused while locked. See `docs/LOCK.md`.
+//! `system-backlight`, `system-audio` and `system-bluetooth` make, field by
+//! field. Anything else is refused while locked. See `docs/LOCK.md`.
 //!
 //! `packages/domicile-protocol/wire/lock-screen-readouts.jsonl` records the
 //! calls the libraries send; their tests and this crate's check against it.
@@ -16,6 +16,7 @@ use serde_json::Value as Json;
 const UPOWER: &str = "org.freedesktop.UPower";
 const DISPLAY_DEVICE: &str = "/org/freedesktop/UPower/devices/DisplayDevice";
 const PROPERTIES: &str = "org.freedesktop.DBus.Properties";
+const BLUEZ: &str = "org.bluez";
 
 /// One word of an argv, or one value of a D-Bus body.
 #[derive(Clone, Copy)]
@@ -38,12 +39,13 @@ enum Readout {
         signature: &'static str,
         body: &'static [Word],
     },
-    /// A match on every field. The bus is the system bus.
+    /// A match on the system bus. Each field must equal the request's; `None`
+    /// matches only a request that leaves the field out.
     Match {
         sender: &'static str,
-        path: &'static str,
-        interface: &'static str,
-        member: &'static str,
+        path: Option<&'static str>,
+        interface: Option<&'static str>,
+        member: Option<&'static str>,
     },
     /// A process from `PATH` with no `cwd` or `stdin`, run with exactly `env`.
     Spawn {
@@ -70,9 +72,9 @@ const READOUTS: &[Readout] = &[
     // Changes to the battery's charge. Hears one service's one signal.
     Readout::Match {
         sender: UPOWER,
-        path: DISPLAY_DEVICE,
-        interface: PROPERTIES,
-        member: "PropertiesChanged",
+        path: Some(DISPLAY_DEVICE),
+        interface: Some(PROPERTIES),
+        member: Some("PropertiesChanged"),
     },
     // Backlight changes. Prints kernel uevents for backlights only.
     Readout::Spawn {
@@ -127,6 +129,23 @@ const READOUTS: &[Readout] = &[
         ],
         env: C_LOCALE,
     },
+    // Bluetooth adapters, connected devices and their batteries. Reads BlueZ's
+    // objects; pairing, connecting, power and scanning stay refused.
+    Readout::Call {
+        destination: BLUEZ,
+        path: "/",
+        interface: "org.freedesktop.DBus.ObjectManager",
+        member: "GetManagedObjects",
+        signature: "",
+        body: &[],
+    },
+    // Changes to them. Hears BlueZ's signals only.
+    Readout::Match {
+        sender: BLUEZ,
+        path: None,
+        interface: None,
+        member: None,
+    },
 ];
 
 /// Whether `request` is one of [`READOUTS`].
@@ -172,11 +191,16 @@ fn fits(readout: &Readout, request: &SystemRequest) -> bool {
             SystemRequest::DbusMatch {
                 bus: Bus::System,
                 sender: Some(from),
-                path: Some(at),
-                interface: Some(on),
-                member: Some(heard),
+                path: at,
+                interface: on,
+                member: heard,
             },
-        ) => from == sender && at == path && on == interface && heard == member,
+        ) => {
+            from == sender
+                && at.as_deref() == *path
+                && on.as_deref() == *interface
+                && heard.as_deref() == *member
+        }
         (
             Readout::Spawn { argv, env },
             SystemRequest::Spawn {

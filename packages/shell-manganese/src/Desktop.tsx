@@ -23,7 +23,7 @@ import { LaunchKind } from "./launcher/launch";
 import { OpenWith } from "./launcher/OpenWith";
 import { useOpeningApps } from "./launcher/useOpeningApps";
 import { Lock } from "./lock/Lock";
-import { LockReadouts } from "./lock/LockReadouts";
+import { LockBar } from "./lock/LockBar";
 import { useLocked } from "./lock/useLocked";
 import { NotificationDrawer } from "./notifications/NotificationDrawer";
 import { NotificationToasts } from "./notifications/NotificationToasts";
@@ -446,15 +446,14 @@ export const Desktop = ({
         unlocks. See `lock/Lock.tsx`.
       */}
       <Lock
+        bar={<LockBar domicile={domicile} readouts={readouts} />}
         checking={lock.checking}
         locked={lock.locked}
         onUnlock={lock.unlock}
         picture={lockPicture}
         refusals={lock.refusals}
         screen={windows.focused}
-      >
-        <LockReadouts readouts={readouts} />
-      </Lock>
+      />
       <NoScreens />
     </>
   );

@@ -98,7 +98,7 @@ pub enum Reach {
     Stops,
     /// It only reads the kernel's state under `/sys`.
     ReadsTheKernel,
-    /// A lock screen's battery, brightness or volume readout. See
+    /// A lock screen's battery, brightness, volume or Bluetooth readout. See
     /// `crate::lock_screen_readouts`.
     Readout,
     /// Anything else.

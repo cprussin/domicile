@@ -102,8 +102,9 @@ that trust from reaching anything else.
     - a read, stat, listing or watch of an absolute path under `/sys` with no
       `..`
     - the calls `system-battery`, `system-backlight` and `system-audio` make,
-      matched field by field, so a lock screen shows the battery and sets the
-      brightness and volume ([LOCK.md](LOCK.md#lock-screen-readouts))
+      and `system-bluetooth`'s watch, matched field by field, so a lock screen
+      shows the battery and Bluetooth and sets the brightness and volume
+      ([LOCK.md](LOCK.md#lock-screen-readouts))
   - `stdin` is dropped; `unwatch`, `close_stdin` and `kill` are allowed
   - processes and watches started before the lock keep running
 - **Lifetime:** a page's processes, watches and matches end when its

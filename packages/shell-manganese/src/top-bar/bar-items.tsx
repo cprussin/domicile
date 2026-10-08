@@ -16,7 +16,7 @@ import { NotificationBell } from "../notifications/NotificationBell";
 import { Sharing } from "../sharing/Sharing";
 import { Tray } from "../tray/Tray";
 import { Volume } from "../volume/Volume";
-import { useBar } from "./bar-context";
+import { useBar, useBarReadouts } from "./bar-context";
 import { Workspaces } from "./Workspaces";
 
 /** The launcher button: opens the panel `mod+Space` opens. */
@@ -93,27 +93,41 @@ export const BarNetwork = () => {
   );
 };
 
-/** Bluetooth, whose panel controls adapters and devices. */
+/**
+ * Bluetooth, whose panel controls adapters and devices. Only its state while
+ * locked.
+ */
 export const BarBluetooth = () => {
-  const { domicile, readouts } = useBar();
-  return <Bluetooth bluetooth={readouts.bluetooth} domicile={domicile} />;
+  const { domicile, locked, readouts } = useBarReadouts();
+  return (
+    <Bluetooth
+      bluetooth={readouts.bluetooth}
+      domicile={domicile}
+      locked={locked}
+    />
+  );
 };
 
-/** The volume control, whose panel holds the mixer. */
+/**
+ * The volume control, whose panel holds the mixer, or only the output while
+ * locked.
+ */
 export const BarVolume = () => {
-  const { readouts } = useBar();
-  return <Volume audio={readouts.audio} server={readouts.sound} />;
+  const { locked, readouts } = useBarReadouts();
+  return (
+    <Volume audio={readouts.audio} locked={locked} server={readouts.sound} />
+  );
 };
 
 /** The screen brightness. */
 export const BarBrightness = () => {
-  const { readouts } = useBar();
+  const { readouts } = useBarReadouts();
   return <Brightness backlight={readouts.backlight} />;
 };
 
 /** The battery charge. */
 export const BarBattery = () => {
-  const { readouts } = useBar();
+  const { readouts } = useBarReadouts();
   return <Battery battery={readouts.battery} />;
 };
 

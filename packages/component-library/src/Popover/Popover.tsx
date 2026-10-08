@@ -1,12 +1,27 @@
 import { Popover as BasePopover } from "@base-ui/react/popover";
 import type { ReactElement, ReactNode, RefCallback, RefObject } from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { css, cva } from "../../styled-system/css";
 import { flex } from "../../styled-system/patterns";
 import { useStableRef } from "../_control/useStableRef";
 import type { ExtendProps } from "../extend-props";
 
 export const { createHandle } = BasePopover;
+
+/**
+ * Where popovers inside draw their panels; the page's body without one. For a
+ * layer above `modal`, such as a lock screen, whose panels must draw over it.
+ */
+export const PopoverContainer = createContext<HTMLElement | undefined>(
+  undefined,
+);
 
 /** Which side of its trigger the panel opens on. */
 export const SIDES = ["top", "bottom", "inline-start", "inline-end"] as const;
@@ -81,12 +96,13 @@ const PopoverComponent = ({
     [setTriggerRef],
   );
   const within = useRef<FocusEvent | undefined>(undefined);
+  const container = useContext(PopoverContainer);
   return (
     <BasePopover.Root actionsRef={actions} {...rootProps}>
       {trigger !== undefined && (
         <BasePopover.Trigger ref={attachTrigger} render={trigger} />
       )}
-      <BasePopover.Portal>
+      <BasePopover.Portal container={container}>
         <BasePopover.Positioner
           align={align}
           className={positionerStyles}

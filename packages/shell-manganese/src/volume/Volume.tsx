@@ -12,7 +12,9 @@ import type { SoundControls } from "../readouts/readouts";
 import type { SharedWatch } from "../readouts/shared-watch";
 import { useSharedWatch } from "../readouts/useSharedWatch";
 import { ask } from "./ask";
+import { Level } from "./Level";
 import { Mixer } from "./Mixer";
+import { primary } from "./primary";
 
 /** How far one notch of the wheel over the icon moves the volume. */
 const WHEEL_STEP = 0.05;
@@ -20,6 +22,8 @@ const WHEEL_STEP = 0.05;
 type Props = {
   /** The sound server's state. */
   audio: SharedWatch<Audio>;
+  /** Whether the desktop is locked; see below. */
+  locked?: boolean | undefined;
   /** The target of volume changes. */
   server: SoundControls;
 };
@@ -31,8 +35,11 @@ type Props = {
  * Renders nothing until the server reports, so it stays hidden without a
  * sound server. The mixer meters only while open, because metering a
  * microphone records it.
+ *
+ * On a locked desktop the panel holds only the default output's volume and
+ * mute, the requests a locked desktop allows.
  */
-export const Volume = ({ audio: watch, server }: Props) => {
+export const Volume = ({ audio: watch, locked = false, server }: Props) => {
   const audio = useSharedWatch(watch);
 
   if (audio === undefined) {
@@ -58,12 +65,43 @@ export const Volume = ({ audio: watch, server }: Props) => {
             <Speaker output={output} />
           </button>
         }
-        wide
+        wide={!locked}
       >
-        <Mixer audio={audio} server={server} />
+        {locked ? (
+          <OutputLevel audio={audio} server={server} />
+        ) : (
+          <Mixer audio={audio} server={server} />
+        )}
       </Popover>
     );
   }
+};
+
+/** The default output's volume and mute, unmetered. */
+const OutputLevel = ({
+  audio,
+  server,
+}: {
+  audio: Audio;
+  server: SoundControls;
+}) => {
+  const output = primary(audio.outputs);
+  return output === undefined ? undefined : (
+    <span className={outputLevelStyles}>
+      <Level
+        direction="output"
+        label="Volume"
+        level={output.volume}
+        muted={output.muted}
+        onLevel={(level) => {
+          ask(server.setVolume(output.id, level));
+        }}
+        onMuted={(muted) => {
+          ask(server.setMuted(output.id, muted));
+        }}
+      />
+    </span>
+  );
 };
 
 const triggerLabel = (output: AudioDevice | undefined) => {
@@ -117,4 +155,10 @@ const triggerStyles = css({
   justifyContent: "center",
   padding: 0,
   transition: "background-color {durations.fast} {easings.default}",
+});
+
+// As wide as the brightness item's slider.
+const outputLevelStyles = css({
+  display: "block",
+  inlineSize: 60,
 });
