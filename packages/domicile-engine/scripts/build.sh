@@ -73,6 +73,7 @@ gn gen "$OUT" --args="
   ozone_platform_headless = true
   ozone_platform_drm = true
   use_libinput = true
+  import(\"//build/args/domicile_codecs.gn\")
 $CACHE_ARG" || exit 1
 
 # guard-css-and-resize.sh needs `domicile_css_parity`,
