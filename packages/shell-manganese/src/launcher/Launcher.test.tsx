@@ -1127,6 +1127,15 @@ describe("Launcher", () => {
     expect(panel.box()).toHaveFocus();
   });
 
+  it("sits in the middle of the screen", () => {
+    using _panel = launcher();
+
+    expect(screen.getByRole("dialog")).toHaveAttribute(
+      "data-placement",
+      "center",
+    );
+  });
+
   it("says it was dismissed when Escape closes it", async () => {
     // The desktop owns open state, so the panel only reports the dismissal.
     using panel = launcher();
