@@ -22,7 +22,7 @@ TOGETHER="webview-framing shell-local-network webview-content-script extension-i
   webview-click webview-activate webview-new-window webview-routed-link webview-context-menu webview-upload
   webview-download webview-save-picker webview-tabs webview-active-tab webview-passkey-extension
   webview-popup-window windows-state webview-notifications
-  webview-survives-load-shell"
+  webview-survives-load-shell webview-private"
 
 # A repository with check.sh and a stand-in for every engine check that
 # records its start and end. `bun` is stubbed because the group installs.

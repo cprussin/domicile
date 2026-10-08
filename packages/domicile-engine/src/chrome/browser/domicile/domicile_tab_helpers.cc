@@ -9,6 +9,7 @@
 #include "chrome/browser/extensions/tab_helper.h"
 #include "chrome/browser/sessions/session_tab_helper_factory.h"
 #include "components/domicile/browser/web_view_guest.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/view_type_utils.h"
 #include "extensions/common/mojom/view_type.mojom.h"
@@ -23,6 +24,15 @@ void AttachTabHelpers(content::WebContents& guest) {
   if (web_view->extension_popup()) {
     extensions::SetViewType(&guest,
                             extensions::mojom::ViewType::kExtensionPopup);
+    return;
+  }
+
+  // A private page is not a tab extensions see, as an incognito tab is hidden
+  // from extensions Chrome has not allowed there. The view type keeps
+  // runtime.getContexts off its NOTREACHED; see below.
+  if (guest.GetBrowserContext()->IsOffTheRecord()) {
+    extensions::SetViewType(&guest, extensions::mojom::ViewType::kTabContents);
+    WatchForDevTools(guest);
     return;
   }
 

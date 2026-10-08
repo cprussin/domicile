@@ -48,6 +48,7 @@ const listed = (
 ) => ({
   height: popup.height,
   id,
+  isPrivate: false,
   popupWindow: popup.popupWindow === 0 ? null : popup.popupWindow,
   title: "",
   url,
@@ -129,10 +130,21 @@ describe("the browser windows the engine lists", () => {
     // The engine owns the page, so the window arrives with the list.
     const state = reduce(
       desktop("kitty"),
-      WindowAction.BrowserOpened("https://example.com/"),
+      WindowAction.BrowserOpened("https://example.com/", false),
     );
 
     expect(state.windows).toHaveLength(1);
+  });
+
+  it("marks a private window as private", () => {
+    const state = reduce(
+      desktop("kitty"),
+      WindowAction.BrowserWindowsListed([
+        { ...listed("1", "https://example.com/"), isPrivate: true },
+      ]),
+    );
+
+    expect(state.windows[1]).toMatchObject({ isPrivate: true });
   });
 
   it("names a window after the site its page is at now", () => {
@@ -1313,7 +1325,7 @@ describe("the launcher", () => {
     const launched = reduce(
       NO_WINDOWS,
       WindowAction.LauncherToggled(),
-      WindowAction.BrowserOpened("https://example.com"),
+      WindowAction.BrowserOpened("https://example.com", false),
     );
 
     expect(launched.launcherOpen).toBe(false);

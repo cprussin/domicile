@@ -148,11 +148,17 @@ interface WebViewGuestHost {
   // id, no window. Extensions that lay out differently in a popup (e.g.
   // Bitwarden) then work. See //chrome/browser/domicile/domicile_tab_helpers.h.
   // Ignored with `window`.
+  //
+  // `private_browsing` is the element's `private` attribute. The guest's page
+  // is then in the profile's off-the-record profile: nothing it stores
+  // outlives the browser, and it shares nothing with the user's pages.
+  // Ignored with `window`, whose page already has its profile.
   CreateGuest(blink.mojom.LocalFrameToken placeholder_frame,
               pending_receiver<WebViewGuest> guest,
               pending_remote<WebViewGuestClient> client,
               string? window,
-              bool extension_popup);
+              bool extension_popup,
+              bool private_browsing);
 };
 
 // Browser -> renderer: guest state only the browser has.

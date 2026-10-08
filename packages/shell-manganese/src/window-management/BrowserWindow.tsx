@@ -100,6 +100,11 @@ type Props = {
    */
   popupWindow?: number | undefined;
   /**
+   * Whether the page is private. The address bar says so, and the page's new
+   * windows are private too.
+   */
+  isPrivate?: boolean;
+  /**
    * The contents' box, or `undefined` when off screen (another workspace, or
    * behind a tab).
    */
@@ -134,6 +139,7 @@ export const BrowserWindow = ({
   focused,
   frame,
   fullscreen,
+  isPrivate = false,
   listDirectory = defaultListDirectory,
   motion,
   onMotionEnded,
@@ -457,6 +463,7 @@ export const BrowserWindow = ({
           address={addressOf(shown.url, sent)}
           canGoBack={canGoBack}
           canGoForward={canGoForward}
+          isPrivate={isPrivate}
           loading={loading}
           onBack={drive((loaded) => {
             loaded.goBack();
@@ -518,7 +525,11 @@ export const BrowserWindow = ({
               choosePageCommand(command, menu.context, {
                 browse: run,
                 openWindow: (url) => {
-                  domicile.openBrowserWindow(url);
+                  if (isPrivate) {
+                    domicile.openPrivateBrowserWindow(url);
+                  } else {
+                    domicile.openBrowserWindow(url);
+                  }
                 },
               });
             }}

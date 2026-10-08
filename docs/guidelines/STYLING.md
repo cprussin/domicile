@@ -184,6 +184,7 @@ Stick to the **semantic** color tokens defined by the domicile preset:
 | `card` | Card / elevated surface backgrounds |
 | `accent` | Primary brand / focus / selection |
 | `danger` / `warning` / `success` | Status colors |
+| `private` | Marks a private browser window |
 | `backdrop` | Modal/popover backdrop overlay |
 | `skeleton` | Loading skeleton fills |
 | `onPhoto` / `panelOverPhoto` | Lettering and a frosted panel drawn straight onto the wallpaper, the same in both themes |
@@ -220,7 +221,8 @@ no attribute (or any other value) leaves the page in dark mode, which
 is the implicit default.
 
 The primitive tokens are the only ones with per-theme values:
-`foreground`, `background`, `accent`, `danger`, `success`, `warning`.
+`foreground`, `background`, `accent`, `danger`, `private`, `success`,
+`warning`.
 Every derived token (`border`, `borderStrong`, `card`, `dangerSoft`,
 `muted`, `skeleton`) resolves at CSS time through
 `color-mix(... var(--colors-foreground), var(--colors-background))` —

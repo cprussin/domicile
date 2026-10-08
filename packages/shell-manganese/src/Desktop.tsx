@@ -362,7 +362,7 @@ export const Desktop = ({
               break;
             }
             case LaunchKind.Browsed: {
-              act(WindowAction.BrowserOpened(launch.url));
+              act(WindowAction.BrowserOpened(launch.url, launch.isPrivate));
               break;
             }
           }
