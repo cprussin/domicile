@@ -93,7 +93,6 @@ For how warping, browser-window focus and modifier drags work, see
   the desktop.
 - **A float moves to the screen its center is dragged onto**, as in sway
   (`floatDragged`). A browser window crosses screens without reloading.
-- A dragged window is half transparent.
 - A float casts a shadow (`FloatShadow.tsx`), except when fullscreen.
 - Stacking order is the `z-index` of the window's element, so drawing order and
   hit-testing order match.
