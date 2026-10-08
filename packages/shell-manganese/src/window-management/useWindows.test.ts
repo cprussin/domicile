@@ -53,6 +53,13 @@ const client = () => {
     get opened() {
       return called("openBrowserWindow");
     },
+    /** The system calls asking for a screenshot. */
+    get screenshots() {
+      return fake.calls
+        .filter(([name]) => name === "callSystem")
+        .map(([, , request]) => JSON.parse(String(request)))
+        .filter((request) => request.call === "screenshot");
+    },
     get spawned() {
       return called("spawn");
     },
@@ -188,6 +195,16 @@ describe("a command", () => {
     });
 
     expect(host.locks).toHaveLength(1);
+  });
+
+  it("asks the compositor for a screenshot through the shell's dialog", () => {
+    const { host, result } = desktop([LEFT, RIGHT]);
+
+    act(() => {
+      result.current.act(WindowAction.ScreenshotTaken());
+    });
+
+    expect(host.screenshots).toEqual([{ call: "screenshot" }]);
   });
 
   it("runs the command of an application the launcher chose", () => {

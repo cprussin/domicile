@@ -6,7 +6,7 @@
 #     ./packages/domicile-engine/scripts/guard-display-capture.sh /build/chromium/src
 #
 # Headless and software-composited, so frames come in shared memory. The shell
-# paints the whole page one color (guard-screenshot.js); domicile_capture_probe
+# paints the whole page one color (guard-flat-color.js); domicile_capture_probe
 # captures the browser's window and checks each frame's center.
 #
 # NEGATIVE=1 runs the control: the shell paints another color, and the frames
@@ -61,7 +61,7 @@ rm -f "$ENGINE_LOG" "$PROBE_LOG"
   --disable-gpu \
   --app="domicile://shell/?color=$PAINTED" \
   --domicile-shell-root="$SCRIPTS" \
-  --domicile-shell-module="guard-screenshot.js" \
+  --domicile-shell-module="guard-flat-color.js" \
   --no-sandbox --password-store=basic --no-first-run \
   --user-data-dir="$WORK/profile" \
   --window-size=800,600 \

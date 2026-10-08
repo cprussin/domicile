@@ -1,5 +1,5 @@
-//! The protocol the supervisor uses to send `load-shell`, `open-url` and
-//! `screenshot` to the engine.
+//! The protocol the supervisor uses to send `load-shell` and `open-url` to the
+//! engine.
 //!
 //! One JSON line each way per connection:
 //!
@@ -9,9 +9,6 @@
 //!
 //! {"type":"open_url","version":1,"url":"https://example.com/"}
 //! {"type":"opened"}   |   {"type":"refused","why":"…"}
-//!
-//! {"type":"screenshot","version":1,"file":"/home/me/shot.png"}
-//! {"type":"captured"}   |   {"type":"refused","why":"…"}
 //! ```
 //!
 //! The engine side is C++ in the fork
@@ -40,8 +37,6 @@ pub enum Reply {
     Loaded,
     /// The engine passed the address to the shell.
     Opened,
-    /// The engine wrote the screenshot.
-    Captured,
     /// The engine refused, with its reason.
     Refused { why: String },
 }
@@ -72,19 +67,6 @@ pub fn open_url_line(url: &str) -> String {
     line
 }
 
-/// The request to write a PNG of the desk to `file`.
-///
-/// `file` must be absolute; the engine refuses relative paths.
-pub fn screenshot_line(file: &Path) -> String {
-    let mut line = serde_json::to_string(&Command::Screenshot {
-        file,
-        version: VERSION,
-    })
-    .expect("a command is plain data and always serializes");
-    line.push('\n');
-    line
-}
-
 /// Parses one reply line, without its trailing newline.
 ///
 /// An unparseable reply is an error, not a [`Reply::Refused`]: it comes from
@@ -108,9 +90,5 @@ enum Command<'a> {
     OpenUrl {
         version: u32,
         url: &'a str,
-    },
-    Screenshot {
-        version: u32,
-        file: &'a Path,
     },
 }

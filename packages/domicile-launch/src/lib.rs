@@ -9,6 +9,8 @@
 //!   [`control_socket`]).
 //! - `domicile load-shell` and `domicile open-url`: forwarded to the engine
 //!   ([`command`], [`command_socket`], [`address`]).
+//! - `domicile screenshot`: forwarded to the compositor
+//!   ([`compositor_socket`]).
 //! - Failed runs report the compositor's last output ([`heard`]).
 //! - The compositor's side: its command line ([`arguments`]), the session
 //!   document it publishes ([`session`]), and whether a page connected
@@ -24,6 +26,7 @@ pub mod cli;
 pub mod command;
 pub mod command_socket;
 pub mod components;
+pub mod compositor_socket;
 pub mod config_check;
 pub mod config_path;
 pub mod config_watch;

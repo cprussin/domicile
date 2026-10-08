@@ -385,6 +385,30 @@ describe("D-Bus", () => {
   });
 });
 
+describe("screenshots", () => {
+  it("says where the screenshot the shell's dialog picked was saved", async () => {
+    const host = new FakeHost();
+    const taking = system(host).screenshot();
+    host.reply(1, { kind: "saved", path: "/home/me/Pictures/a.png" });
+
+    expect(host.calls).toStrictEqual([[1, { call: "screenshot" }]]);
+    expect(await taking).toStrictEqual(Ok("/home/me/Pictures/a.png"));
+  });
+
+  it("says the dialog was dismissed", async () => {
+    const host = new FakeHost();
+    const taking = system(host).screenshot();
+    host.reply(1, {
+      error: { kind: "canceled", message: "dismissed" },
+      kind: "failed",
+    });
+
+    expect(await taking).toStrictEqual(
+      Err({ kind: SystemErrorKind.Canceled, message: "dismissed" }),
+    );
+  });
+});
+
 describe("ids", () => {
   // The compositor names calls per connection, and a page has one.
   it("are shared by every system on one host", () => {

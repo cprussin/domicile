@@ -521,9 +521,71 @@ mod reaches {
                 data: "".into(),
                 atomic: false,
             },
+            SystemRequest::Screenshot { file: None },
         ] {
             assert_eq!(reach(&acts), Reach::Acts);
         }
+    }
+}
+
+/// Screenshots, taken by whatever the compositor hands the system.
+mod screenshots {
+    use std::path::PathBuf;
+
+    use domicile_protocol::SystemError;
+
+    use super::*;
+
+    #[test]
+    fn a_screenshot_is_saved_where_the_compositor_says() {
+        let home = tempfile::tempdir().unwrap();
+        let (told, asked) = channel();
+        let (system, heard) = system_in(home.path());
+        let system = system.screenshotting_with(move |file| {
+            told.send(file).unwrap();
+            Ok(PathBuf::from("/pictures/a.png"))
+        });
+
+        system.handle(
+            1,
+            SystemRequest::Screenshot {
+                file: Some("shot.png".into()),
+            },
+        );
+
+        assert_eq!(
+            reply(&heard, 1),
+            SystemReply::Saved {
+                path: "/pictures/a.png".into()
+            }
+        );
+        assert_eq!(asked.recv().unwrap(), Some(home.path().join("shot.png")));
+    }
+
+    #[test]
+    fn a_screenshot_the_compositor_did_not_take_says_why() {
+        let home = tempfile::tempdir().unwrap();
+        let (system, heard) = system_in(home.path());
+        let system = system.screenshotting_with(|_| {
+            Err(SystemError {
+                kind: SystemErrorKind::Canceled,
+                message: "dismissed".into(),
+            })
+        });
+
+        system.handle(1, SystemRequest::Screenshot { file: None });
+
+        assert_eq!(failure(reply(&heard, 1)), SystemErrorKind::Canceled);
+    }
+
+    #[test]
+    fn a_system_that_takes_no_screenshots_says_so() {
+        let home = tempfile::tempdir().unwrap();
+        let (system, heard) = system_in(home.path());
+
+        system.handle(1, SystemRequest::Screenshot { file: None });
+
+        assert_eq!(failure(reply(&heard, 1)), SystemErrorKind::Other);
     }
 }
 
@@ -533,14 +595,16 @@ mod locked {
 
     #[test]
     fn a_call_that_would_start_something_is_told_it_is_locked() {
-        let Some(HostMessage::SystemReply {
-            id: 4,
-            reply: SystemReply::Failed { error },
-        }) = locked_out(4, &spawn(&["true"]))
-        else {
-            panic!("expected a failure for 4");
-        };
-        assert_eq!(error.kind, SystemErrorKind::Locked);
+        for starts in [spawn(&["true"]), SystemRequest::Screenshot { file: None }] {
+            let Some(HostMessage::SystemReply {
+                id: 4,
+                reply: SystemReply::Failed { error },
+            }) = locked_out(4, &starts)
+            else {
+                panic!("expected a failure for 4");
+            };
+            assert_eq!(error.kind, SystemErrorKind::Locked);
+        }
     }
 
     /// Only events and the end may follow a start, so a refused write to a

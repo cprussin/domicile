@@ -466,6 +466,7 @@ name = "domicile-launch"
 version = "0.0.0"
 dependencies = [
  "domicile-config",
+ "domicile-protocol",
  "libc",
  "notify",
  "serde",

@@ -15,8 +15,8 @@ import { draggedArea, framePoint } from "./frame-point";
 
 type Props = {
   answer: (answer: PortalAnswer) => void;
-  /** Who asks, as the dialog names them. */
-  asker: string;
+  /** Who asks, as the dialog names them; absent when the shell itself asks. */
+  asker: string | undefined;
   body: FrozenDesk;
   screen: string | undefined;
 };
@@ -79,7 +79,7 @@ export const ScreenshotDialog = ({ answer, asker, body, screen }: Props) => {
       size="xl"
       title="Take a screenshot"
     >
-      <p className={askerStyles}>{`${asker} asks`}</p>
+      {asker !== undefined && <p className={askerStyles}>{`${asker} asks`}</p>}
       <div className={choicesStyles}>
         {choices.map((choice, index) => (
           <Button
