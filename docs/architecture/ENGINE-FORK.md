@@ -145,13 +145,23 @@ Two mojo interfaces carry the ids, each with one method:
 
 ### Embed deadlines
 
-- `<app>` embeds with deadline 0 (`SurfaceLayerBridge`), so the page never waits
-  for a client to draw.
-- A `<webview>` guest also embeds with deadline 0 (patch `0054`). The default
-  deadline would make the whole desktop wait on one page's layout during a
-  drag or tiling animation.
-- An `<iframe>` still uses the default deadline.
-- `scripts/test-a-webview-does-not-hold-the-shell.sh` checks this.
+A resized window holds back the shell's frame until it draws at the new size,
+up to viz's default deadline. The box and the window change in one frame, as
+on other Wayland compositors.
+
+- **`<app>`:** a resize embeds the surface for the new box with the default
+  deadline, in the frame whose layout changed the box (`html_app_element.cc`,
+  patch `0102`). A first embed uses deadline 0.
+- **The compositor** shows each commit at the box of the configure the client
+  acked (`configure_box`, `domicile_surface_submit_for_box`,
+  `configure_answers.rs`). An old buffer stays at its old surface instead of
+  meeting the new box stretched.
+- **`<webview>`:** the guest keeps upstream's default deadline, as an
+  out-of-process `<iframe>` does.
+- **Cost:** a client slower than the deadline slows the whole desktop during a
+  resize. Past the deadline, viz shows the window's last frame stretched.
+- `scripts/test-a-resized-window-holds-the-shell-until-it-draws.sh` checks
+  this.
 
 ## The C ABI
 
@@ -181,7 +191,7 @@ Calls (compositor → engine):
 |---|---|
 | `domicile_surface_create(engine, app_id)` → `DomicileSurfaceId` | a window appearing. The page's embed waits for this call. |
 | `domicile_surface_import(surface, dmabuf)` → `DomicileBufferId` | `zwp_linux_dmabuf_v1` |
-| `domicile_surface_submit_crop(surface, buffer, crop, damage)` | `wl_surface.commit` with `xdg_surface.set_window_geometry` |
+| `domicile_surface_submit_for_box(surface, buffer, crop, damage, box)` | `wl_surface.commit` with `xdg_surface.set_window_geometry`, shown at the box of the acked configure |
 | `domicile_displays_configure(layout, count)` | output configuration |
 | `domicile_clipboard_set(clipboard, text, length)` | `wl_data_offer.receive`. The compositor sends the selection text it already read. |
 | `domicile_display_capture_start(engine, display, width, height, max_fps)`, `_resize`, `_stop` | none: a screen cast of a monitor (see [Display capture](#display-capture)) |
@@ -193,7 +203,7 @@ Callbacks (engine → compositor):
 |---|---|
 | `released(surface, buffer)` | `wl_buffer.release` |
 | `frame(surface, deadline_us)` | `wl_surface.frame` |
-| `configure(surface, width, height)`, `configure_at(…, scale)` | `xdg_toplevel.configure` |
+| `configure(surface, width, height)`, `configure_at(…, scale)`, `configure_box(…, box)` | `xdg_toplevel.configure` |
 | `displays(displays, count)` | `wl_output`. Primary first, never empty. |
 | `copied(clipboard, text, length)` | `wl_data_device.set_selection` for a copy made in a page |
 | `captured(capture, frame, record)`, `capture_ended(capture)` | none: a monitor's frame for a screen cast, and the browser ending the capture |

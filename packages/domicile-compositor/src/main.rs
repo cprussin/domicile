@@ -112,6 +112,7 @@ use tracing::{debug, error, info, warn};
 mod casting;
 mod clipboard;
 mod coalesce;
+mod configure_answers;
 mod dmabuf_descriptor;
 mod dmabuf_import;
 mod eis;
@@ -148,7 +149,7 @@ mod window_geometry;
 mod xdg_foreign;
 
 use crate::dmabuf_descriptor::DmabufDescriptor;
-use crate::engine::{Bounds, Capture, Clipboard};
+use crate::engine::{Bounds, Capture, Clipboard, NEWEST_BOX};
 use crate::engine_buffers::Returned;
 use crate::engine_session::{EngineSession, Submission, Submitted};
 use crate::gbm::Gbm;
@@ -157,6 +158,7 @@ use crate::shm_upload::{render_modifiers, shm_shape, CopyError};
 use crate::uploads::{UploadId, Uploads};
 
 use crate::coalesce::last_of_burst;
+use crate::configure_answers::ConfigureAnswers;
 use crate::dmabuf_descriptor::descriptor_from;
 use crate::dmabuf_import::{headless_renderer, DmabufImporter};
 use crate::eis::barriers::Zone;
@@ -1453,6 +1455,9 @@ struct DomicileCompositor {
     /// GPU buffers that shm frames are copied into, so the engine gets a
     /// dmabuf. See [`crate::uploads`].
     uploads: Uploads<Dmabuf>,
+    /// Each toplevel's numbered configures, so a commit is shown at the box
+    /// it was drawn for. See [`crate::configure_answers`].
+    configure_answers: HashMap<String, ConfigureAnswers<Serial>>,
 
     /// Apps whose first frame the engine accepted, logged once each.
     ///
@@ -2252,6 +2257,7 @@ impl DomicileCompositor {
         }
         // All of viz's buffers came back above, so the uploads can go.
         self.uploads.forget(app_id);
+        self.configure_answers.remove(app_id);
         self.last_frame.remove(app_id);
         // Host ids are never reused, so a stale entry would only leak.
         self.content.remove(app_id);
@@ -2355,6 +2361,7 @@ impl DomicileCompositor {
                     width,
                     height,
                     scale,
+                    number,
                 } => {
                     let app_id = self
                         .engine
@@ -2400,9 +2407,23 @@ impl DomicileCompositor {
                     toplevel.with_pending_state(|state| {
                         state.size = Some((width as i32, height as i32).into());
                     });
-                    // Sends only if the size differs from the last acknowledged
-                    // configure.
-                    toplevel.send_pending_configure();
+                    match number {
+                        // Sent even at an unchanged size, so the client's
+                        // commit names the new box and the page stops waiting
+                        // for it.
+                        Some(number) => {
+                            let serial = toplevel.send_configure();
+                            self.configure_answers
+                                .entry(app_id)
+                                .or_insert_with(ConfigureAnswers::new)
+                                .sent(serial, number);
+                        }
+                        // Sends only if the size differs from the last
+                        // acknowledged configure.
+                        None => {
+                            toplevel.send_pending_configure();
+                        }
+                    }
                 }
                 // `wl_surface.frame` is sent at commit. Driving it from viz
                 // would change every client's frame rate.
@@ -2727,6 +2748,7 @@ impl DomicileCompositor {
         app_id: &str,
         buffer: &wl_buffer::WlBuffer,
         crop: (i32, i32, i32, i32),
+        at_box: u64,
     ) -> Published {
         let Some(committed) = committed_buffer(buffer) else {
             return Published::NotShown;
@@ -2740,9 +2762,10 @@ impl DomicileCompositor {
                 Submitted::Client(buffer.clone()),
                 &descriptor_from(dmabuf),
                 crop,
+                at_box,
                 Published::Held,
             ),
-            CommittedBuffer::Pixels { .. } => self.publish_shm_frame(app_id, buffer, crop),
+            CommittedBuffer::Pixels { .. } => self.publish_shm_frame(app_id, buffer, crop, at_box),
         };
         if matches!(published, Published::Held | Published::Copied) {
             self.frame_shown(app_id);
@@ -2758,6 +2781,7 @@ impl DomicileCompositor {
         submitted: Submitted,
         descriptor: &DmabufDescriptor,
         crop: (i32, i32, i32, i32),
+        at_box: u64,
         shown: Published,
     ) -> Published {
         let Some(session) = self.engine.as_mut() else {
@@ -2771,6 +2795,7 @@ impl DomicileCompositor {
             descriptor,
             crop,
             (0, 0, 0, 0),
+            at_box,
             Instant::now(),
         ) {
             Submission::Taken => shown,
@@ -2796,6 +2821,7 @@ impl DomicileCompositor {
         app_id: &str,
         buffer: &wl_buffer::WlBuffer,
         crop: (i32, i32, i32, i32),
+        at_box: u64,
     ) -> Published {
         let copied = match self.copy_shm_frame(app_id, buffer) {
             Ok(copied) => copied,
@@ -2811,6 +2837,7 @@ impl DomicileCompositor {
             Submitted::Upload(copied.id),
             &copied.descriptor,
             crop,
+            at_box,
             Published::Copied,
         );
         if published == Published::NotShown {
@@ -3315,6 +3342,8 @@ impl DomicileCompositor {
         match &rejoined.dialed {
             Ok(()) => {
                 self.watch_the_engines_fd();
+                // The new engine numbers its boxes afresh.
+                self.configure_answers.clear();
                 // The new engine does not know the profile, and
                 // `Screens::replugged_into` ignores an unchanged list, so
                 // restate the connectors or disabled ones come back lit.
@@ -4883,17 +4912,37 @@ impl CompositorHandler for DomicileCompositor {
             }
             let engine_holds = match &committer {
                 Committer::App(app_id) => {
-                    // The size the page's box last requested; the client may
-                    // not have drawn at it. See `crop`.
-                    let configured = match &role {
-                        Role::Toplevel(toplevel) => toplevel
-                            .with_pending_state(|state| state.size.map(|size| (size.w, size.h))),
+                    // The size this commit was drawn for, and the engine's box
+                    // at that size. See `crop` and `crate::configure_answers`.
+                    let (configured, at_box) = match &role {
+                        Role::Toplevel(toplevel) => {
+                            let acked = with_states(surface, |states| {
+                                states
+                                    .data_map
+                                    .get::<XdgToplevelSurfaceData>()
+                                    .unwrap()
+                                    .lock()
+                                    .unwrap()
+                                    .current_serial
+                            });
+                            (
+                                toplevel.current_state().size.map(|size| (size.w, size.h)),
+                                self.configure_answers
+                                    .get_mut(app_id)
+                                    .map_or(crate::engine::LAST_SHOWN_BOX, |answers| {
+                                        answers.answered(acked)
+                                    }),
+                            )
+                        }
                         // The positioner's size, which the shell places.
-                        Role::Popup(popup) => popup.with_pending_state(|state| {
-                            Some((state.geometry.size.w, state.geometry.size.h))
-                        }),
+                        Role::Popup(popup) => (
+                            popup.with_pending_state(|state| {
+                                Some((state.geometry.size.w, state.geometry.size.h))
+                            }),
+                            NEWEST_BOX,
+                        ),
                         // Sized by its own buffer.
-                        Role::Bubble => None,
+                        Role::Bubble => (None, NEWEST_BOX),
                     };
                     let crop = committed_buffer(&buffer).map_or((0, 0, 0, 0), |committed| {
                         let size = committed.size();
@@ -4906,7 +4955,7 @@ impl CompositorHandler for DomicileCompositor {
                         )
                     });
                     self.cast_frame(app_id, &buffer, crop, buffer_scale, damage);
-                    let published = self.publish_frame(app_id, &buffer, crop);
+                    let published = self.publish_frame(app_id, &buffer, crop, at_box);
                     // After the submit, so there is something to sample, but
                     // timed from `started` so the import and submit count as
                     // ours.
@@ -6605,6 +6654,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         latency_reported: false,
         shm_refused: HashSet::new(),
         uploads: Uploads::default(),
+        configure_answers: HashMap::new(),
         first_frame_logged: HashSet::new(),
         last_probe: None,
         probe_refused: HashSet::new(),
