@@ -1,0 +1,14 @@
+# Copyright 2026 Connor Prussin
+# SPDX-License-Identifier: MIT
+
+# Codec arguments every engine build imports.
+#
+# Lets the engine play H.264 video and AAC audio, which most sites' `<video>`
+# serves. Chromium builds them only for Chrome-branded builds; without them an
+# MP4 fails with `DEMUXER_ERROR_NO_SUPPORTED_STREAMS`. `ffmpeg_branding`
+# selects the FFmpeg configuration that has their decoders.
+#
+# Under `src/` so a change to it changes the series identity and rebuilds the
+# release. guard-video-codecs.sh checks it.
+proprietary_codecs = true
+ffmpeg_branding = "Chrome"
