@@ -1105,6 +1105,27 @@ describe("Shell", () => {
       expect(dialogBox()).toStrictEqual({ left: "0px", width: "1920px" });
     });
 
+    it("stays on that screen while it closes", async () => {
+      const { container } = renderShell([LEFT, RIGHT]);
+      const left = screenNamed(container, "left") as HTMLElement;
+      await userEvent.click(
+        within(left).getByRole("button", { name: "Notifications" }),
+      );
+
+      // An exit animation that never ends, to look at the drawer mid-close.
+      const { getAnimations } = Element.prototype;
+      Element.prototype.getAnimations = () => [
+        { finished: new Promise(() => undefined) } as Animation,
+      ];
+      try {
+        await userEvent.click(screen.getByRole("button", { name: "Close" }));
+
+        expect(dialogBox()).toStrictEqual({ left: "0px", width: "1920px" });
+      } finally {
+        Element.prototype.getAnimations = getAnimations;
+      }
+    });
+
     it("is the far end of the bar", () => {
       renderShell();
 

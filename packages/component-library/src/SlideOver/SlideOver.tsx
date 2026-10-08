@@ -104,12 +104,14 @@ const backdropStyles = css({
 });
 
 // Pins the panel to the right edge at full height. A size container, so the
-// panel's width is relative to the screen.
+// panel's width is relative to the screen. Clips, so the panel slides in from
+// its screen's edge rather than over the next monitor.
 const viewportStyles = flex({
   align: "stretch",
   containerType: "size",
   inset: 0,
   justify: "flex-end",
+  overflow: "hidden",
   position: "fixed",
   zIndex: "modal",
 });
