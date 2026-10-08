@@ -1,6 +1,6 @@
 import { Popover as BasePopover } from "@base-ui/react/popover";
-import type { ReactElement, ReactNode, RefObject } from "react";
-import { useEffect, useRef } from "react";
+import type { ReactElement, ReactNode, RefCallback, RefObject } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { css, cva } from "../../styled-system/css";
 import { flex } from "../../styled-system/patterns";
 import { useStableRef } from "../_control/useStableRef";
@@ -49,6 +49,9 @@ type Props = ExtendProps<
  * A non-modal panel anchored to its trigger, for detail the trigger has no
  * room for. Use `ModalDialog` when the user must respond first.
  *
+ * Stays on its trigger's `<Screen>` region, so on a desktop of several
+ * monitors it never spans two.
+ *
  * Closes on an outside press, Escape, or focus leaving it. The focus check
  * catches presses inside out-of-process frames, which the document can't
  * see. Portaled content such as a `Select` list counts as inside.
@@ -69,16 +72,25 @@ const PopoverComponent = ({
   const actions = actionsRef ?? ownActions;
   const [popupRef, setPopupRef] = useStableRef<HTMLDivElement>();
   const [triggerRef, setTriggerRef] = useStableRef<HTMLElement>();
+  const [screen, setScreen] = useState<Element | undefined>(undefined);
+  const attachTrigger = useCallback<RefCallback<HTMLElement>>(
+    (element) => {
+      setScreen(element?.closest("[data-screen]") ?? undefined);
+      return setTriggerRef(element);
+    },
+    [setTriggerRef],
+  );
   const within = useRef<FocusEvent | undefined>(undefined);
   return (
     <BasePopover.Root actionsRef={actions} {...rootProps}>
       {trigger !== undefined && (
-        <BasePopover.Trigger ref={setTriggerRef} render={trigger} />
+        <BasePopover.Trigger ref={attachTrigger} render={trigger} />
       )}
       <BasePopover.Portal>
         <BasePopover.Positioner
           align={align}
           className={positionerStyles}
+          collisionBoundary={screen}
           onFocus={(event) => {
             within.current = event.nativeEvent;
           }}
