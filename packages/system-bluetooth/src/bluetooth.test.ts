@@ -12,11 +12,22 @@ import type {
 import { Bus, SystemErrorKind } from "@domicile-desktop/sdk/system";
 
 import type { Bluetooth } from "./bluetooth";
-import { setPowered, watchBluetooth } from "./bluetooth";
+import {
+  connect,
+  disconnect,
+  forget,
+  pair,
+  setPowered,
+  startDiscovery,
+  stopDiscovery,
+  watchBluetooth,
+} from "./bluetooth";
 
 const ADAPTER = "/org/bluez/hci0";
 const HEADPHONES = "/org/bluez/hci0/dev_AC_80_0A_1B_2C_3D";
 const MOUSE = "/org/bluez/hci0/dev_F4_73_35_4E_5F_60";
+const SPEAKER = "/org/bluez/hci0/dev_10_94_97_2A_3B_4C";
+const NAMELESS = "/org/bluez/hci0/dev_5E_11_22_33_44_55";
 
 /** `ObjectManager.GetManagedObjects` as the compositor writes it, trimmed. */
 const recorded = (powered: boolean, mouse: boolean): DbusBody => ({
@@ -51,6 +62,25 @@ const recorded = (powered: boolean, mouse: boolean): DbusBody => ({
           Alias: { signature: "s", value: "MX Master 3" },
           Connected: { signature: "b", value: mouse },
           Paired: { signature: "b", value: true },
+        },
+      },
+      [SPEAKER]: {
+        "org.bluez.Device1": {
+          Adapter: { signature: "o", value: ADAPTER },
+          Address: { signature: "s", value: "10:94:97:2A:3B:4C" },
+          Alias: { signature: "s", value: "Kitchen" },
+          Connected: { signature: "b", value: false },
+          Name: { signature: "s", value: "Kitchen" },
+          Paired: { signature: "b", value: false },
+        },
+      },
+      [NAMELESS]: {
+        "org.bluez.Device1": {
+          Adapter: { signature: "o", value: ADAPTER },
+          Address: { signature: "s", value: "5E:11:22:33:44:55" },
+          Alias: { signature: "s", value: "5E-11-22-33-44-55" },
+          Connected: { signature: "b", value: false },
+          Paired: { signature: "b", value: false },
         },
       },
     },
@@ -169,19 +199,49 @@ const reports = () => {
   };
 };
 
-const HEADPHONES_ONLY: Bluetooth = {
-  adapters: [{ path: ADAPTER, powered: true }],
-  connected: [{ name: "WH-1000XM4", path: HEADPHONES }],
+const headphones = {
+  adapter: ADAPTER,
+  address: "AC:80:0A:1B:2C:3D",
+  battery: 80,
+  connected: true,
+  name: "WH-1000XM4",
+  paired: true,
+  path: HEADPHONES,
+};
+
+const mouse = (connected: boolean) => ({
+  adapter: ADAPTER,
+  address: "F4:73:35:4E:5F:60",
+  battery: undefined,
+  connected,
+  name: "MX Master 3",
+  paired: true,
+  path: MOUSE,
+});
+
+const speaker = {
+  adapter: ADAPTER,
+  address: "10:94:97:2A:3B:4C",
+  battery: undefined,
+  connected: false,
+  name: "Kitchen",
+  paired: false,
+  path: SPEAKER,
+};
+
+const MOUSE_AWAY: Bluetooth = {
+  adapters: [{ discovering: false, path: ADAPTER, powered: true }],
+  devices: [headphones, mouse(false), speaker],
 };
 
 describe("watchBluetooth", () => {
-  it("reads each adapter and the devices connected", async () => {
+  it("reads each adapter, and the devices paired or named", async () => {
     const bus = fakeBus([Ok(recorded(true, false))]);
     const seen = reports();
 
     watchBluetooth(bus.system, seen.on);
 
-    expect(await seen.next()).toStrictEqual(Ok(HEADPHONES_ONLY));
+    expect(await seen.next()).toStrictEqual(Ok(MOUSE_AWAY));
     expect(bus.calls).toStrictEqual([
       {
         bus: Bus.System,
@@ -231,13 +291,7 @@ describe("watchBluetooth", () => {
       );
 
       expect(await seen.next()).toStrictEqual(
-        Ok({
-          adapters: [{ path: ADAPTER, powered: true }],
-          connected: [
-            { name: "WH-1000XM4", path: HEADPHONES },
-            { name: "MX Master 3", path: MOUSE },
-          ],
-        }),
+        Ok({ ...MOUSE_AWAY, devices: [headphones, mouse(true), speaker] }),
       );
     });
 
@@ -263,11 +317,30 @@ describe("watchBluetooth", () => {
 
       expect(await seen.next()).toStrictEqual(
         Ok({
-          adapters: [{ path: ADAPTER, powered: false }],
-          connected: [{ name: "WH-1000XM4", path: HEADPHONES }],
+          ...MOUSE_AWAY,
+          adapters: [{ discovering: false, path: ADAPTER, powered: false }],
         }),
       );
       expect(bus.calls).toHaveLength(2);
+    });
+
+    it.each([
+      ["org.bluez.Adapter1", "Discovering", { signature: "b", value: true }],
+      ["org.bluez.Device1", "Paired", { signature: "b", value: true }],
+      ["org.bluez.Device1", "Name", { signature: "s", value: "Kitchen" }],
+      ["org.bluez.Battery1", "Percentage", { signature: "y", value: 75 }],
+    ])("reads again when %s's %s changes", async (iface, name, value) => {
+      const bus = fakeBus([
+        Ok(recorded(true, false)),
+        Ok(recorded(true, false)),
+      ]);
+      const seen = reports();
+      watchBluetooth(bus.system, seen.on);
+      await seen.next();
+
+      await bus.send(properties(iface, { [name]: value }));
+
+      expect(await seen.next()).toStrictEqual(Ok(MOUSE_AWAY));
     });
 
     it("reads again when an object comes or goes", async () => {
@@ -288,7 +361,7 @@ describe("watchBluetooth", () => {
         signature: "oas",
       });
 
-      expect(await seen.next()).toStrictEqual(Ok(HEADPHONES_ONLY));
+      expect(await seen.next()).toStrictEqual(Ok(MOUSE_AWAY));
     });
 
     it("reports the error when it cannot listen", async () => {
@@ -382,5 +455,98 @@ describe("setPowered", () => {
     expect(await setPowered(bus.system, ADAPTER, true)).toStrictEqual(
       Err(blocked),
     );
+  });
+});
+
+/** A request's call, as the compositor is asked to make it. */
+const request = (
+  path: string,
+  iface: string,
+  member: string,
+  body?: unknown[],
+): DbusCall => ({
+  ...(body === undefined ? {} : { body, signature: "o" }),
+  bus: Bus.System,
+  destination: "org.bluez",
+  interface: iface,
+  member,
+  path,
+});
+
+const FAILED: SystemError = {
+  kind: SystemErrorKind.Dbus,
+  message: "org.bluez.Error.Failed: Page Timeout",
+};
+
+describe.each([
+  [
+    "startDiscovery",
+    startDiscovery,
+    ADAPTER,
+    "org.bluez.Adapter1",
+    "StartDiscovery",
+  ],
+  [
+    "stopDiscovery",
+    stopDiscovery,
+    ADAPTER,
+    "org.bluez.Adapter1",
+    "StopDiscovery",
+  ],
+  ["connect", connect, HEADPHONES, "org.bluez.Device1", "Connect"],
+  ["disconnect", disconnect, HEADPHONES, "org.bluez.Device1", "Disconnect"],
+] as const)("%s", (_name, ask, path, iface, member) => {
+  it(`calls ${member}`, async () => {
+    const bus = fakeBus([Ok({ body: [], signature: "" })]);
+
+    expect(await ask(bus.system, path)).toStrictEqual(Ok("done"));
+    expect(bus.calls).toStrictEqual([request(path, iface, member)]);
+  });
+
+  it("reports BlueZ's refusal", async () => {
+    const bus = fakeBus([Err(FAILED)]);
+
+    expect(await ask(bus.system, path)).toStrictEqual(Err(FAILED));
+  });
+});
+
+describe("pair", () => {
+  it("pairs, then trusts the device so it can reconnect", async () => {
+    const bus = fakeBus([
+      Ok({ body: [], signature: "" }),
+      Ok({ body: [], signature: "" }),
+    ]);
+
+    expect(await pair(bus.system, SPEAKER)).toStrictEqual(Ok("done"));
+    expect(bus.calls).toStrictEqual([
+      request(SPEAKER, "org.bluez.Device1", "Pair"),
+      {
+        body: ["org.bluez.Device1", "Trusted", { signature: "b", value: true }],
+        bus: Bus.System,
+        destination: "org.bluez",
+        interface: "org.freedesktop.DBus.Properties",
+        member: "Set",
+        path: SPEAKER,
+        signature: "ssv",
+      },
+    ]);
+  });
+
+  it("does not trust a device that failed to pair", async () => {
+    const bus = fakeBus([Err(FAILED)]);
+
+    expect(await pair(bus.system, SPEAKER)).toStrictEqual(Err(FAILED));
+    expect(bus.calls).toHaveLength(1);
+  });
+});
+
+describe("forget", () => {
+  it("removes the device from its adapter", async () => {
+    const bus = fakeBus([Ok({ body: [], signature: "" })]);
+
+    expect(await forget(bus.system, mouse(false))).toStrictEqual(Ok("done"));
+    expect(bus.calls).toStrictEqual([
+      request(ADAPTER, "org.bluez.Adapter1", "RemoveDevice", [MOUSE]),
+    ]);
   });
 });

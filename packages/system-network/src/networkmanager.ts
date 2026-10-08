@@ -8,7 +8,7 @@ import { Bus } from "@domicile-desktop/sdk/system";
 import { z } from "zod";
 
 import type { Reading } from "./follow";
-import { followNetwork } from "./follow";
+import { followBus } from "./follow";
 import type { Network, NetworkSystem } from "./network-state";
 import { Connectivity, Link } from "./network-state";
 import { variant } from "./variant";
@@ -29,7 +29,7 @@ export const watchNetworkManager = (
   system: NetworkSystem,
   onNetwork: (network: Result<Network, SystemError>) => void,
 ): (() => void) =>
-  followNetwork(
+  followBus(
     system,
     {
       bus: Bus.System,
@@ -42,20 +42,20 @@ export const watchNetworkManager = (
   );
 
 /** Read the network; a change to any object read for it matters. */
-const read = async (system: NetworkSystem): Promise<Reading> => {
+const read = async (system: NetworkSystem): Promise<Reading<Network>> => {
   const root = await properties(system, ROOT, SERVICE, rootSchema);
   return root.match({
     Err: (error) =>
       Promise.resolve({
         matters: ({ path }) => path === ROOT,
-        network: Err(error),
+        value: Err(error),
       }),
     Ok: async ({ Connectivity: connectivity, PrimaryConnection: primary }) => {
       const link = await linkOf(system, primary);
       const paths = new Set([ROOT, ...link.paths]);
       return {
         matters: ({ path }) => paths.has(path),
-        network: link.result.map((found) => ({
+        value: link.result.map((found) => ({
           connectivity,
           link: found,
         })),

@@ -23,6 +23,10 @@
       "types": "./dist/networkmanager.d.ts",
       "default": "./dist/networkmanager.js"
     },
+    "./wifi": {
+      "types": "./dist/wifi.d.ts",
+      "default": "./dist/wifi.js"
+    },
     "./wpa-supplicant": {
       "types": "./dist/wpa-supplicant.d.ts",
       "default": "./dist/wpa-supplicant.js"

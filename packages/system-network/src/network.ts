@@ -6,9 +6,7 @@
 import type { Result } from "@cprussin/option-result";
 import { Err, Ok } from "@cprussin/option-result";
 import type { SystemError } from "@domicile-desktop/sdk/system";
-import { Bus } from "@domicile-desktop/sdk/system";
-import { z } from "zod";
-
+import { hasOwner } from "./has-owner";
 import { watchIwd } from "./iwd";
 import type { Network, NetworkSystem } from "./network-state";
 import { watchNetworkManager } from "./networkmanager";
@@ -84,23 +82,3 @@ const detect = async (
     });
   }
 };
-
-/**
- * Whether `name` has an owner. `NameHasOwner` does not start a service that
- * D-Bus can activate, as a call to the service would.
- */
-const hasOwner = async (
-  system: NetworkSystem,
-  name: string,
-): Promise<Result<boolean, SystemError>> =>
-  (
-    await system.dbusCall({
-      body: [name],
-      bus: Bus.System,
-      destination: "org.freedesktop.DBus",
-      interface: "org.freedesktop.DBus",
-      member: "NameHasOwner",
-      path: "/org/freedesktop/DBus",
-      signature: "s",
-    })
-  ).map(({ body }) => z.tuple([z.boolean()]).parse(body)[0]);

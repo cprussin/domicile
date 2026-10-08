@@ -24,6 +24,35 @@ export const SERVICE_UNKNOWN: SystemError = {
 /** Replies by object path. */
 export type Objects = Map<string, Result<DbusBody, SystemError>>;
 
+/** Replies by {@link callKey}. */
+export type Replies = Map<string, Result<DbusBody, SystemError>>;
+
+/**
+ * A call's path, member, and its first argument when that is a string, such
+ * as the interface `GetAll` reads: `"/a GetAll org.example"`.
+ */
+export const callKey = (call: DbusCall): string => {
+  const [first] = call.body ?? [];
+  return typeof first === "string"
+    ? `${call.path} ${call.member} ${first}`
+    : `${call.path} ${call.member}`;
+};
+
+/** Answers each call from `replies`, by its {@link callKey}. */
+export const byKey =
+  (replies: Replies) =>
+  (call: DbusCall): Result<DbusBody, SystemError> => {
+    const reply = replies.get(callKey(call));
+    if (reply === undefined) {
+      throw new Error(`test: no reply for ${callKey(call)}`);
+    } else {
+      return reply;
+    }
+  };
+
+/** A method's empty reply. */
+export const DONE: DbusBody = { body: [], signature: "" };
+
 /** Answers each call from `objects`, by its path. */
 export const byPath =
   (objects: Objects) =>
@@ -115,11 +144,11 @@ export const propertiesChanged = (
 });
 
 /** The reports a watch makes, read one at a time. */
-export const reports = () => {
-  const queue: Result<Network, SystemError>[] = [];
-  const waiting: ((report: Result<Network, SystemError>) => void)[] = [];
+export const reports = <T extends NonNullable<unknown> = Network>() => {
+  const queue: Result<T, SystemError>[] = [];
+  const waiting: ((report: Result<T, SystemError>) => void)[] = [];
   return {
-    next: (): Promise<Result<Network, SystemError>> => {
+    next: (): Promise<Result<T, SystemError>> => {
       const report = queue.shift();
       return report === undefined
         ? new Promise((resolve) => {
@@ -127,7 +156,7 @@ export const reports = () => {
           })
         : Promise.resolve(report);
     },
-    on: (report: Result<Network, SystemError>) => {
+    on: (report: Result<T, SystemError>) => {
       const resolve = waiting.shift();
       if (resolve === undefined) {
         queue.push(report);

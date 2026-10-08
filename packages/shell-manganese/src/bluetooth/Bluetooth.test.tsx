@@ -1,4 +1,4 @@
-import { describe, expect, it, spyOn } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import type { Result } from "@cprussin/option-result";
 import { Err, Ok } from "@cprussin/option-result";
 import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
@@ -10,6 +10,7 @@ import userEvent from "@testing-library/user-event";
 
 import { sharedWatch } from "../readouts/shared-watch";
 import { Bluetooth } from "./Bluetooth";
+import { heldActions } from "./held-actions";
 
 /**
  * A test-controlled BlueZ: `bluetooth` replaces the library's watch, and
@@ -47,17 +48,31 @@ const ADAPTER = "/org/bluez/hci0";
 
 const reading = (powered: boolean, connected: string[]) =>
   Ok<Reading, SystemError>({
-    adapters: [{ path: ADAPTER, powered }],
-    connected: connected.map((name, index) => ({
-      name,
-      path: `${ADAPTER}/dev_${index}`,
-    })),
+    adapters: [{ discovering: false, path: ADAPTER, powered }],
+    devices: [
+      ...connected.map((name, index) => ({
+        adapter: ADAPTER,
+        address: `AC:80:0A:1B:2C:3${index}`,
+        battery: undefined,
+        connected: true,
+        name,
+        paired: true,
+        path: `${ADAPTER}/dev_${index}`,
+      })),
+      {
+        adapter: ADAPTER,
+        address: "F4:73:35:4E:5F:60",
+        battery: undefined,
+        connected: false,
+        name: "MX Master 3",
+        paired: true,
+        path: `${ADAPTER}/dev_mouse`,
+      },
+    ],
   });
 
-/** Never called: the test does not click. */
-const NO_POWER = () => {
-  throw new Error("test: nothing should turn Bluetooth on or off");
-};
+/** Asks nothing: these tests do not open the panel. */
+const NO_ACTIONS = heldActions().actions;
 
 describe("Bluetooth", () => {
   it("shows nothing until BlueZ has answered", () => {
@@ -65,9 +80,9 @@ describe("Bluetooth", () => {
 
     const { container } = render(
       <Bluetooth
+        actions={NO_ACTIONS}
         bluetooth={bluetooth.bluetooth}
         domicile={NO_HOST}
-        power={NO_POWER}
       />,
     );
 
@@ -78,9 +93,9 @@ describe("Bluetooth", () => {
     const bluetooth = heldBluetooth();
     const { container } = render(
       <Bluetooth
+        actions={NO_ACTIONS}
         bluetooth={bluetooth.bluetooth}
         domicile={NO_HOST}
-        power={NO_POWER}
       />,
     );
 
@@ -92,7 +107,7 @@ describe("Bluetooth", () => {
     );
     expect(container).toBeEmptyDOMElement();
 
-    bluetooth.report(Ok({ adapters: [], connected: [] }));
+    bluetooth.report(Ok({ adapters: [], devices: [] }));
     expect(container).toBeEmptyDOMElement();
   });
 
@@ -100,9 +115,9 @@ describe("Bluetooth", () => {
     const bluetooth = heldBluetooth();
     render(
       <Bluetooth
+        actions={NO_ACTIONS}
         bluetooth={bluetooth.bluetooth}
         domicile={NO_HOST}
-        power={NO_POWER}
       />,
     );
 
@@ -120,85 +135,31 @@ describe("Bluetooth", () => {
     ).toBeVisible();
   });
 
-  describe("a click", () => {
-    it("turns every adapter off when one is on", async () => {
-      const bluetooth = heldBluetooth();
-      const asked = new Promise<[string, boolean]>((resolve) => {
-        render(
-          <Bluetooth
-            bluetooth={bluetooth.bluetooth}
-            domicile={NO_HOST}
-            power={(_system, adapter, powered) => {
-              resolve([adapter, powered]);
-              return Promise.resolve(Ok("set"));
-            }}
-          />,
-        );
-      });
-      bluetooth.report(reading(true, []));
+  it("opens its panel on a click", async () => {
+    const bluetooth = heldBluetooth();
+    const held = heldActions();
+    render(
+      <Bluetooth
+        actions={held.actions}
+        bluetooth={bluetooth.bluetooth}
+        domicile={NO_HOST}
+      />,
+    );
+    bluetooth.report(reading(true, ["WH-1000XM4"]));
 
-      await userEvent.click(screen.getByRole("button"));
+    await userEvent.click(screen.getByRole("button"));
 
-      expect(await asked).toStrictEqual([ADAPTER, false]);
-    });
-
-    it("turns them on when all are off", async () => {
-      const bluetooth = heldBluetooth();
-      const asked = new Promise<[string, boolean]>((resolve) => {
-        render(
-          <Bluetooth
-            bluetooth={bluetooth.bluetooth}
-            domicile={NO_HOST}
-            power={(_system, adapter, powered) => {
-              resolve([adapter, powered]);
-              return Promise.resolve(Ok("set"));
-            }}
-          />,
-        );
-      });
-      bluetooth.report(reading(false, []));
-
-      await userEvent.click(screen.getByRole("button"));
-
-      expect(await asked).toStrictEqual([ADAPTER, true]);
-    });
-
-    it("logs BlueZ's refusal", async () => {
-      const blocked: SystemError = {
-        kind: SystemErrorKind.Dbus,
-        message: "org.bluez.Error.Blocked: Blocked through rfkill",
-      };
-      const logged = new Promise<unknown[]>((resolve) => {
-        spyOn(console, "error").mockImplementationOnce((...args) => {
-          resolve(args);
-        });
-      });
-      const bluetooth = heldBluetooth();
-      render(
-        <Bluetooth
-          bluetooth={bluetooth.bluetooth}
-          domicile={NO_HOST}
-          power={() => Promise.resolve(Err(blocked))}
-        />,
-      );
-      bluetooth.report(reading(false, []));
-
-      await userEvent.click(screen.getByRole("button"));
-
-      expect(await logged).toStrictEqual([
-        "Failed to turn Bluetooth on",
-        blocked,
-      ]);
-    });
+    expect(screen.getByRole("switch", { name: "Bluetooth" })).toBeChecked();
+    expect(screen.getByText("WH-1000XM4")).toBeVisible();
   });
 
   it("stops watching when it goes away", () => {
     const bluetooth = heldBluetooth();
     const { unmount } = render(
       <Bluetooth
+        actions={NO_ACTIONS}
         bluetooth={bluetooth.bluetooth}
         domicile={NO_HOST}
-        power={NO_POWER}
       />,
     );
 

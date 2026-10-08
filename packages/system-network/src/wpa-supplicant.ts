@@ -7,7 +7,7 @@ import { Bus } from "@domicile-desktop/sdk/system";
 import { z } from "zod";
 
 import type { Reading } from "./follow";
-import { followNetwork } from "./follow";
+import { followBus } from "./follow";
 import type { Network, NetworkSystem } from "./network-state";
 import { Connectivity, Link } from "./network-state";
 import { strengthOfDbm } from "./signal-strength";
@@ -30,7 +30,7 @@ export const watchWpaSupplicant = (
   system: NetworkSystem,
   onNetwork: (network: Result<Network, SystemError>) => void,
 ): (() => void) =>
-  followNetwork(
+  followBus(
     system,
     { bus: Bus.System, sender: SERVICE },
     () => read(system),
@@ -41,11 +41,11 @@ export const watchWpaSupplicant = (
  * Read the network. An interface coming or going matters, as does a property
  * change on an object read for it.
  */
-const read = async (system: NetworkSystem): Promise<Reading> => {
+const read = async (system: NetworkSystem): Promise<Reading<Network>> => {
   const found = await readPaths(system);
   return {
     matters: (signal) => matters(found.paths, signal),
-    network: found.network.map((link) => ({
+    value: found.network.map((link) => ({
       connectivity: Connectivity.Unknown,
       link,
     })),

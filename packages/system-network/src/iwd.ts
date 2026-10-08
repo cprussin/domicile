@@ -7,7 +7,7 @@ import type { DbusSignal, SystemError } from "@domicile-desktop/sdk/system";
 import { Bus } from "@domicile-desktop/sdk/system";
 import { z } from "zod";
 
-import { followNetwork } from "./follow";
+import { followBus } from "./follow";
 import type { Network, NetworkSystem } from "./network-state";
 import { Connectivity, Link } from "./network-state";
 import { strengthOfDbm } from "./signal-strength";
@@ -36,10 +36,10 @@ export const watchIwd = (
   system: NetworkSystem,
   onNetwork: (network: Result<Network, SystemError>) => void,
 ): (() => void) =>
-  followNetwork(
+  followBus(
     system,
     { bus: Bus.System, sender: SERVICE },
-    async () => ({ matters, network: await read(system) }),
+    async () => ({ matters, value: await read(system) }),
     onNetwork,
   );
 
