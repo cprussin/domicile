@@ -304,7 +304,8 @@ if wanted engine; then
       scripts/engine-guard-shortcut-chords.sh \
       scripts/engine-guard-app-routes-input.sh \
       scripts/engine-guard-shell-handover.sh \
-      scripts/engine-guard-shell-script-src.sh
+      scripts/engine-guard-shell-script-src.sh \
+      scripts/engine-guard-video-codecs.sh
     ! engine_stop; } &&
   engine_serial scripts/engine-guard-css-and-resize.sh &&
   run engine-guard-latency scripts/engine-guard-latency.sh &&
