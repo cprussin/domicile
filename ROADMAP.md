@@ -354,9 +354,10 @@ Understood and not scheduled.
   and `autoDiscardable`; `windows.update` bounds and state; and any
   `windows.create` but a one-`url` popup fail with `not supported on a
   Domicile desk`. [EXTENSIONS.md](docs/architecture/EXTENSIONS.md).
-- **Resize cost is unmeasured.** Patch 0054 stops the shell's frame waiting
-  for a `<webview>` to draw at each new size, matching `<app>`. No guard times
-  a resize of either.
+- **Resize cost is unmeasured.** A resized `<app>` or `<webview>` holds the
+  shell's frame until it draws at the new size
+  ([ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md#embed-deadlines)). No
+  guard times a resize of either.
 - **The padlock state is not fully tested.** `PageChanged` carries the address
   and `security_state::GetSecurityLevel` for the visible entry, the same source
   as Chrome's omnibox. The fixture serves plain http from localhost, so the

@@ -7,9 +7,9 @@
 /// The engine's crop for a surface, as `(x, y, width, height)` in buffer
 /// pixels. `(0, 0, 0, 0)` means the whole buffer.
 ///
-/// - The crop is at most `configured`, the client's last configured size. The
-///   engine stretches the crop over the box, so a window larger than its box
-///   is cut off, not squeezed.
+/// - The crop is at most `configured`, the size of the configure the commit
+///   answers. The engine stretches the crop over that configure's box, so a
+///   window larger than its box is cut off, not squeezed.
 /// - `source` is the viewport's source in buffer pixels (see
 ///   `viewport::source_pixels`); without one the surface maps to the whole
 ///   buffer.

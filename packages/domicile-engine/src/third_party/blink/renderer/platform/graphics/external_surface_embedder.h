@@ -61,7 +61,10 @@ class PLATFORM_EXPORT ExternalSurfaceEmbedder {
   //
   // The browser replies only once a producer for that app exists, since an
   // <app> element can exist before its window. The callback may never run.
-  void Embed(const String& app_id,
+  //
+  // Returns the LocalSurfaceId, so a caller that knows the FrameSinkId can
+  // embed the surface before the reply.
+  viz::LocalSurfaceId Embed(const String& app_id,
              const viz::FrameSinkId& parent_frame_sink_id,
              const gfx::Size& size,
              double scale,

@@ -8,6 +8,7 @@
 
 #include "base/functional/callback_helpers.h"
 #include "base/notreached.h"
+#include "cc/layers/deadline_policy.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/event_type_names.h"
 #include "third_party/blink/renderer/core/events/mouse_event.h"
@@ -178,26 +179,42 @@ void HTMLAppElement::Embed() {
   }
   embed_in_flight_ = true;
   embed_stale_ = false;
-  external_surface_embedder_->Embed(
-      app_id,
-      frame->GetPage()->GetChromeClient().GetFrameSinkId(frame),
-      configured_size_,
-      // The box is in device pixels and the client is configured in logical
-      // ones. Each monitor's page has its own scale, so the page sends it.
-      frame->LayoutZoomFactor(),
-      reconfiguring ? ExternalSurfaceEmbedder::Allocation::kReconfigure
-                    : ExternalSurfaceEmbedder::Allocation::kAdopt,
-      BindOnce(&HTMLAppElement::OnEmbedded, WrapPersistent(this)));
+  const viz::LocalSurfaceId local_surface_id =
+      external_surface_embedder_->Embed(
+          app_id,
+          frame->GetPage()->GetChromeClient().GetFrameSinkId(frame),
+          configured_size_,
+          // The box is in device pixels and the client is configured in logical
+          // ones. Each monitor's page has its own scale, so the page sends it.
+          frame->LayoutZoomFactor(),
+          reconfiguring ? ExternalSurfaceEmbedder::Allocation::kReconfigure
+                        : ExternalSurfaceEmbedder::Allocation::kAdopt,
+          BindOnce(&HTMLAppElement::OnEmbedded, WrapPersistent(this), app_id));
+
+  // A shown window resized: its frame sink is known, so embed the surface for
+  // the new box in the frame whose layout changed it. Viz holds that frame
+  // until the client draws at the new size, up to the default deadline, so the
+  // box and the window change together instead of the old frame stretching.
+  if (app_id == embedded_app_id_) {
+    surface_layer_bridge_->EmbedSurface(
+        viz::SurfaceId(surface_layer_bridge_->GetSurfaceId().frame_sink_id(),
+                       local_surface_id),
+        cc::DeadlinePolicy::UseDefaultDeadline());
+  }
 }
 
 void HTMLAppElement::OnEmbedded(
+    const AtomicString& app_id,
     const std::optional<viz::SurfaceId>& surface_id) {
   embed_in_flight_ = false;
-  if (surface_id && surface_layer_bridge_) {
+  // Embedding the id Embed() already did would drop its deadline.
+  if (surface_id && surface_layer_bridge_ &&
+      *surface_id != surface_layer_bridge_->GetSurfaceId()) {
     // SurfaceLayerBridge accepts any SurfaceId, so the window becomes an
     // ordinary layer.
     surface_layer_bridge_->EmbedSurface(*surface_id);
   }
+  embedded_app_id_ = surface_id ? app_id : g_null_atom;
   if (embed_stale_) {
     // app-id or the box changed while the request was in flight.
     Embed();
