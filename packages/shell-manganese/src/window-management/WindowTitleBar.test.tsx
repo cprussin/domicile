@@ -2,7 +2,7 @@ import { describe, expect, it, mock } from "bun:test";
 import { fireEvent, render } from "@testing-library/react";
 
 import { Direction } from "./direction";
-import type { Aim } from "./tiled/aim";
+import { Aim } from "./tiled/aim";
 import { Layout } from "./tree/node";
 import { WindowTitleBar } from "./WindowTitleBar";
 
@@ -37,7 +37,7 @@ const tabProps = {
   onMove: nothing,
   rect: TAB,
   tabbed: Layout.Tabbed,
-  targets: [{ frame: FRAME, id: "a" }, OTHER],
+  targets: { screens: [], windows: [{ frame: FRAME, id: "a" }, OTHER] },
   title: "kitty",
   window: "a",
 } as const;
@@ -79,11 +79,9 @@ describe("WindowTitleBar", () => {
     });
   });
 
-  describe("a drag of a tab", () => {
+  describe("a drag of a tiled window's bar", () => {
     it("picks its window up and drops it where it is aimed", () => {
-      const onDropOn = mock(
-        (_target: string, _edge: Direction | undefined) => undefined,
-      );
+      const onDropOn = mock((_aim: Aim) => undefined);
       const onAim = mock((_aim: Aim | undefined) => undefined);
       const { container } = render(
         <WindowTitleBar {...tabProps} onAim={onAim} onDropOn={onDropOn} />,
@@ -100,7 +98,12 @@ describe("WindowTitleBar", () => {
         pointerId: 1,
       });
       fireEvent.pointerUp(window, { pointerId: 1 });
-      expect(onDropOn).toHaveBeenCalledWith(OTHER.id, Direction.Left);
+      expect(onDropOn).toHaveBeenCalledWith(
+        Aim.Window(OTHER.id, Direction.Left, {
+          ...OTHER.frame,
+          width: OTHER.frame.width / 2,
+        }),
+      );
     });
 
     it("is not started by the middle button, which closes it instead", () => {
@@ -115,10 +118,24 @@ describe("WindowTitleBar", () => {
       expect(onGrab).not.toHaveBeenCalled();
     });
 
-    it("is not how a bar that is not a tab moves a tiled window", () => {
+    it("picks up a tiled window by its own bar too", async () => {
+      await new Promise<void>((resolve) => {
+        const { container } = render(
+          <WindowTitleBar {...tabProps} onGrab={resolve} tabbed={undefined} />,
+        );
+        fireEvent.pointerDown(bar(container), { button: 0, pointerId: 1 });
+      });
+    });
+
+    it("leaves a fullscreen window where it is", () => {
       const onGrab = mock(nothing);
       const { container } = render(
-        <WindowTitleBar {...tabProps} onGrab={onGrab} tabbed={undefined} />,
+        <WindowTitleBar
+          {...tabProps}
+          fullscreen
+          onGrab={onGrab}
+          tabbed={undefined}
+        />,
       );
       fireEvent.pointerDown(bar(container), { button: 0, pointerId: 1 });
       expect(onGrab).not.toHaveBeenCalled();

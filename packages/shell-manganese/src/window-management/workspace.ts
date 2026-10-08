@@ -20,12 +20,12 @@ import {
 } from "./floating/float";
 import { gapOf, tiledAreaOf } from "./gaps";
 import type { Rect } from "./rect";
-import { droppedOn } from "./tree/drop";
+import { arrivedOn, droppedOn, tradedFor } from "./tree/drop";
 import { enteredFrom, focusMoved, leavesBy } from "./tree/focus-direction";
 import { inserted, insertedNode } from "./tree/insert";
 import { laidOut, split, splitToggled } from "./tree/layout";
-import { movedBy } from "./tree/move";
-import type { Layout } from "./tree/node";
+import { movedBy, pushedOff, pushedOn } from "./tree/move";
+import type { Layout, LayoutNode } from "./tree/node";
 import { LayoutNode as Node, NodeKind, windowsIn } from "./tree/node";
 import { removed, removedAt } from "./tree/remove";
 import { resized } from "./tree/resize";
@@ -351,6 +351,39 @@ export const windowMoved = (
     (tiling) => movedBy(tiling, direction),
   );
 
+/**
+ * `move <direction>` off the workspace's edge: the focused tiled node and the
+ * workspace without it. `undefined` when it moves within the tiling, or a
+ * float or fullscreen window has the keyboard.
+ */
+export const pushedOffBy = (
+  workspace: Workspace,
+  direction: Direction,
+): { node: LayoutNode; rest: Workspace } | undefined => {
+  const leaving =
+    workspace.floatFocus === undefined && workspace.fullscreen === undefined
+      ? pushedOff(workspace.tiling, direction)
+      : undefined;
+  return leaving === undefined
+    ? undefined
+    : { node: leaving.node, rest: { ...workspace, tiling: leaving.rest } };
+};
+
+/**
+ * The workspace with `node`, pushed off a neighboring screen's workspace
+ * moving `direction`, tiled and focused.
+ */
+export const pushedOnBy = (
+  workspace: Workspace,
+  node: LayoutNode,
+  direction: Direction,
+): Workspace => ({
+  ...workspace,
+  floatFocus: undefined,
+  floats: onWindows(workspace.floats),
+  tiling: pushedOn(workspace.tiling, node, direction),
+});
+
 /** `resize`: a tiled window's share, or a float's box by ten pixels. */
 export const windowGrown = (
   workspace: Workspace,
@@ -448,6 +481,35 @@ export const tiledDropped = (
   ...workspace,
   floatFocus: undefined,
   tiling: droppedOn(workspace.tiling, id, target, edge),
+});
+
+/**
+ * A tiled window dragged in from another workspace and dropped on `target` —
+ * see `arrivedOn`.
+ */
+export const tiledArrived = (
+  workspace: Workspace,
+  id: string,
+  target: string,
+  edge: Direction | undefined,
+): Workspace => ({
+  ...workspace,
+  floatFocus: undefined,
+  floats: onWindows(workspace.floats),
+  tiling: arrivedOn(workspace.tiling, id, target, edge),
+});
+
+/**
+ * The tiled window `id` swapped for `by`, from another workspace, which it was
+ * dropped in the middle of.
+ */
+export const tiledTraded = (
+  workspace: Workspace,
+  id: string,
+  by: string,
+): Workspace => ({
+  ...workspace,
+  tiling: tradedFor(workspace.tiling, id, by),
 });
 
 /**

@@ -18,9 +18,15 @@ import {
 } from "./node";
 import type { Ancestor, Path } from "./path";
 import { ancestorsOf, nodeAt, replacedAt } from "./path";
-import { withoutAt } from "./remove";
+import { removedAt, withoutAt } from "./remove";
 import type { Tiling } from "./tiling";
 import { focusedChildIn, focusPathOf, withCommandsOn } from "./tiling";
+
+/** A node `move <direction>` takes off the tiling, and the tiling left. */
+export type Departure = {
+  node: LayoutNode;
+  rest: Tiling;
+};
 
 /** The tiling with the focused node moved one place `direction`. */
 export const movedBy = (tiling: Tiling, direction: Direction): Tiling => {
@@ -36,6 +42,68 @@ export const movedBy = (tiling: Tiling, direction: Direction): Tiling => {
     return moved === undefined
       ? tiling
       : withCommandsOn({ ...tiling, root: moved }, moving);
+  }
+};
+
+/**
+ * The focused node and the tiling without it, when `move <direction>` has no
+ * room for it in the tiling. `undefined` when it moves within the tiling or
+ * nothing is tiled.
+ *
+ * As in sway, the caller then moves it to the screen that way.
+ */
+export const pushedOff = (
+  tiling: Tiling,
+  direction: Direction,
+): Departure | undefined => {
+  const { root } = tiling;
+  if (root === undefined) {
+    return undefined;
+  } else {
+    const path = focusPathOf(root, tiling.depth);
+    const node = nodeAt(root, path);
+    return relocated(root, path, node, direction) === undefined
+      ? { node, rest: removedAt(root, path) }
+      : undefined;
+  }
+};
+
+/**
+ * The tiling with `node` moved in from the screen past its far side, moving
+ * `direction`, and commands on it.
+ *
+ * Mirrors sway's `container_move_to_workspace_from_direction`: it enters the
+ * root as it would a neighboring container (see {@link entryInto}), and a lone
+ * window splits along `direction` with `node` on the near side.
+ */
+export const pushedOn = (
+  tiling: Tiling,
+  node: LayoutNode,
+  direction: Direction,
+): Tiling =>
+  withCommandsOn(
+    { depth: 0, root: enteredWith(tiling.root, node, direction) },
+    node,
+  );
+
+// The tree `pushedOn` builds.
+const enteredWith = (
+  root: LayoutNode | undefined,
+  node: LayoutNode,
+  direction: Direction,
+): LayoutNode => {
+  const forward = isForward(direction);
+  if (root === undefined) {
+    return node;
+  } else if (root.kind === NodeKind.Window) {
+    return Node.Container(
+      splitFor(axisOfDirection(direction)),
+      forward ? [node, root] : [root, node],
+      forward ? 0 : 1,
+    );
+  } else {
+    const { at, into, path } = entryInto(root, direction);
+    return replacedAt(root, path, () => withChildAt(into, at, node));
   }
 };
 

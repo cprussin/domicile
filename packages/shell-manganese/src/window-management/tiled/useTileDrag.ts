@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 
 import type { Direction } from "../direction";
 import type { Rect } from "../rect";
-import type { Aim, Corner, Target } from "./aim";
+import type { Aim, Corner, DropTargets } from "./aim";
 import { aimAt, cornerOf } from "./aim";
 
 /**
@@ -21,14 +21,14 @@ type Drag = {
   last: { x: number; y: number };
   onAim: (aim: Aim | undefined) => void;
   onDrop: () => void;
-  onDropOn: (target: string, edge: Direction | undefined) => void;
+  onDropOn: (aim: Aim) => void;
   onStretch: (edge: Direction, by: number) => void;
   /**
    * Whether a move has gone {@link SLOP} from the press. Until then it does not
    * aim, so a click is not a drop.
    */
   pulled: boolean;
-  targets: readonly Target[];
+  targets: DropTargets;
 };
 
 /** The secondary button, which resizes. */
@@ -58,15 +58,15 @@ type Options = {
   /** Reports where a drop would land, for drawing. */
   onAim: (aim: Aim | undefined) => void;
   onDrop: () => void;
-  onDropOn: (target: string, edge: Direction | undefined) => void;
+  onDropOn: (aim: Aim) => void;
   /** The window was taken hold of, to resize it or else to move it. */
   onGrab: (resizing: boolean) => void;
   /** An edge dragged `by` pixels, rightwards or downwards. */
   onStretch: (edge: Direction, by: number) => void;
   /** Whether a drag started now resizes instead of moves. */
   resizes: boolean;
-  /** The tiled windows on this screen it can be dropped on. */
-  targets: readonly Target[];
+  /** What it can be dropped on, on every screen. */
+  targets: DropTargets;
 };
 
 /**
@@ -173,17 +173,29 @@ const followed = (drag: Drag, x: number, y: number): Drag => {
 const aimed = (drag: Drag, x: number, y: number): Drag => {
   const aim = aimAt(drag.targets, drag.id, x, y);
   // Report only changes, to avoid a redraw on every move.
-  if (aim?.id !== drag.aim?.id || aim?.edge !== drag.aim?.edge) {
+  if (!landsAlike(aim, drag.aim)) {
     drag.onAim(aim);
   }
   return { ...drag, aim, last: { x, y }, pulled: true };
 };
 
+/**
+ * Whether two aims put the window in the same place. Each target and edge has
+ * its own box, so comparing boxes compares aims.
+ */
+const landsAlike = (one: Aim | undefined, other: Aim | undefined): boolean =>
+  one === undefined || other === undefined
+    ? one === other
+    : one.rect.x === other.rect.x &&
+      one.rect.y === other.rect.y &&
+      one.rect.width === other.rect.width &&
+      one.rect.height === other.rect.height;
+
 /** Ends a drag, dropping onto its aim if it has one. */
 const dropped = (drag: Drag): void => {
   const { aim } = drag;
   if (aim !== undefined) {
-    drag.onDropOn(aim.id, aim.edge);
+    drag.onDropOn(aim);
   }
   if (drag.corner === undefined) {
     drag.onAim(undefined);

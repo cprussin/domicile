@@ -24,7 +24,7 @@ import type { Popup } from "./popup";
 import { popupsOver } from "./popup";
 import type { Rect } from "./rect";
 import { TitleBar } from "./TitleBar";
-import type { Aim, Target } from "./tiled/aim";
+import type { Aim, DropTargets, Target } from "./tiled/aim";
 import { bordersOf } from "./tiled/borders";
 import { DropIndicator } from "./tiled/DropIndicator";
 import { TileBorder } from "./tiled/TileBorder";
@@ -60,11 +60,8 @@ type Props = {
   modifiers: Modifiers;
   onClose: (id: string) => void;
   onDrop: () => void;
-  /**
-   * A tiled window dropped on another, at its `edge` or, when `undefined`, its
-   * middle.
-   */
-  onDropOn: (id: string, target: string, edge: Direction | undefined) => void;
+  /** A tiled window dropped where it was aimed, on any screen. */
+  onDropOn: (id: string, aim: Aim) => void;
   /** Toggles fullscreen from a window's title bar. */
   onFullscreen: (id: string) => void;
   onGrab: (id: string) => void;
@@ -149,6 +146,10 @@ export const Stage = ({
   const targets = screens.flatMap(({ screenful }) =>
     tiledTargets(screenful.placements),
   );
+  const dropTargets: DropTargets = {
+    screens: emptyScreens(screens),
+    windows: targets,
+  };
   return (
     <main className={stageStyles} data-stretching={stretching || undefined}>
       {/*
@@ -297,8 +298,8 @@ export const Stage = ({
                     onClose(window.id);
                   }}
                   onDrop={onDrop}
-                  onDropOn={(target, edge) => {
-                    onDropOn(window.id, target, edge);
+                  onDropOn={(aim) => {
+                    onDropOn(window.id, aim);
                   }}
                   onFullscreen={() => {
                     onFullscreen(window.id);
@@ -313,7 +314,7 @@ export const Stage = ({
                   rect={placement.bar}
                   restack={restack}
                   tabbed={placement.tabbed}
-                  targets={targetsOn(on)}
+                  targets={dropTargets}
                   title={window.title}
                   window={window.id}
                 />
@@ -416,8 +417,8 @@ export const Stage = ({
                       setStretching(false);
                       onDrop();
                     }}
-                    onDropOn={(target, edge) => {
-                      onDropOn(window.id, target, edge);
+                    onDropOn={(aim) => {
+                      onDropOn(window.id, aim);
                     }}
                     onGrab={(resizing) => {
                       setStretching(resizing);
@@ -427,7 +428,7 @@ export const Stage = ({
                       onStretch(window.id, edge, by, on.geometry);
                     }}
                     resizes={shift}
-                    targets={targetsOn(on)}
+                    targets={dropTargets}
                   />
                 )}
               {/*
@@ -572,6 +573,24 @@ const tiledTargets = (placements: Screenful["placements"]): readonly Target[] =>
   placements
     .filter(({ depth, surface }) => depth === TILED && surface !== undefined)
     .map(({ frame, id }) => ({ frame, id }));
+
+/**
+ * The screens with no tiled window to drop on, which a dropped window fills.
+ * Excludes fullscreen ones, whose tiling is hidden.
+ */
+const emptyScreens = (
+  screens: readonly StageScreen[],
+): DropTargets["screens"] =>
+  screens
+    .filter(
+      ({ fullscreenId, screenful }) =>
+        fullscreenId === undefined &&
+        tiledTargets(screenful.placements).length === 0,
+    )
+    .map(({ geometry }) => ({
+      area: geometry.workspace,
+      name: geometry.name,
+    }));
 
 /** The focus box around window `id`, on whichever screen shows it. */
 const focusBoxHolding = (

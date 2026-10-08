@@ -43,6 +43,7 @@ import { useTrayOrder } from "./tray/useTrayOrder";
 import { Wallpaper } from "./wallpaper/Wallpaper";
 import type { Focus } from "./window-management/pointer-warp";
 import { Stage } from "./window-management/Stage";
+import { AimKind } from "./window-management/tiled/aim";
 import { usePointerWarp } from "./window-management/usePointerWarp";
 import { useWindows } from "./window-management/useWindows";
 import { screenOfApp, WindowAction } from "./window-management/window-state";
@@ -285,8 +286,17 @@ export const Desktop = ({
           onDrop={() => {
             act(WindowAction.WindowDropped());
           }}
-          onDropOn={(id, target, edge) => {
-            act(WindowAction.WindowDroppedOn(id, target, edge));
+          onDropOn={(id, aim) => {
+            switch (aim.kind) {
+              case AimKind.Screen: {
+                act(WindowAction.WindowDroppedOnScreen(id, aim.name));
+                break;
+              }
+              case AimKind.Window: {
+                act(WindowAction.WindowDroppedOn(id, aim.id, aim.edge));
+                break;
+              }
+            }
           }}
           onFullscreen={(id) => {
             act(WindowAction.WindowFullscreened(id));
