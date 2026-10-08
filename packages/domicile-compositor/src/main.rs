@@ -167,7 +167,7 @@ use crate::lock::{Asked, Lock, Offer, Refusal, Seen, Unlocking, Verdict};
 use crate::modifiers::{Held, Modifiers};
 use crate::outbound::{outbound, Outbound, OutboundReceiver, OutboundSender};
 use crate::peer_process::peer_pid;
-use crate::portals::{Portals, Selection, CURRENT_DESKTOP};
+use crate::portals::{shell_appearance, Portals, Selection, CURRENT_DESKTOP};
 use crate::restatement::Restatement;
 use crate::scale::{logical_size, output_scale};
 use crate::screens::{Advertised, Screens, Slot};
@@ -3733,6 +3733,16 @@ impl DomicileCompositor {
         }
         if let Some(theme) = restated.appearance {
             self.hub.portals.restyle(&theme);
+            // Release the host before broadcasting.
+            let told = self
+                .hub
+                .host
+                .lock()
+                .unwrap()
+                .set_appearance(shell_appearance(&theme));
+            if let Some(message) = told {
+                self.hub.broadcast(message);
+            }
         }
     }
 
@@ -6344,6 +6354,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         // `take_up_the_theme`, since there is nobody to broadcast to yet.
         host.set_theme(theme_on_the_wire(config.theme.mode));
         host.set_windows_theme(theme_on_the_wire(config.theme.mode));
+        // The rest of the config's look, which the shell follows as the
+        // settings portal's clients do.
+        host.set_appearance(shell_appearance(&config.theme));
     }
     // The system tray, published through the hub. Start with an empty tray so a
     // desktop without a session bus still reports one. See `tray`.
