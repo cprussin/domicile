@@ -139,6 +139,15 @@ export type WindowState = {
    */
   focusedId: string | undefined;
   /**
+   * Whether the compositor has named a window with the keyboard yet.
+   *
+   * The first window it names ends the replay to a newly bound page, and says
+   * where the user was typing, so the shell follows it. Later reports answer
+   * the shell's own asks. Following one that lands late would undo a newer
+   * choice, such as a window opened from the launcher.
+   */
+  replayed: boolean;
+  /**
    * Whether the launcher is open.
    *
    * Kept here because key commands open it and launches close it.
@@ -189,6 +198,7 @@ export const NO_WINDOWS: WindowState = {
   popups: [],
   pressed: 0,
   previous: undefined,
+  replayed: false,
   scratchpad: [],
   screens: [{ box: NOWHERE, current: "1", name: UNDESCRIBED_SCREEN }],
   windows: [],
@@ -819,9 +829,12 @@ const reduceAction = (
         action.appId === undefined ? undefined : appWindowId(action.appId);
       // Return the same object when unchanged so React skips re-rendering.
       // A newly connected chrome is told the current holder, usually a no-op.
-      return focusedId === state.focusedId
-        ? state
-        : followFocus({ ...state, focusedId }, focusedId);
+      if (focusedId === state.focusedId) {
+        return state;
+      } else {
+        const told = { ...state, focusedId };
+        return state.replayed ? told : followFocus(told, focusedId);
+      }
     }
     case WindowActionKind.FocusRequested: {
       return reachWindow(state, appWindowId(action.appId));
@@ -1117,15 +1130,16 @@ const closeWindow = (state: WindowState, id: string): WindowState => ({
 });
 
 // Follows compositor focus to its window and that window's workspace, so the
-// user can see where they are typing. Focus on the chrome or an unknown
-// window keeps the current focus, since a stale value beats `undefined`.
+// user can see where they are typing, and ends the replay (see
+// `WindowState.replayed`). Focus on the chrome or an unknown window keeps the
+// current focus, since a stale value beats `undefined`.
 const followFocus = (
   state: WindowState,
   focusedId: string | undefined,
 ): WindowState =>
   focusedId === undefined || windowOf(state, focusedId) === undefined
     ? state
-    : reachWindow(state, focusedId);
+    : reachWindow({ ...state, replayed: true }, focusedId);
 
 /**
  * Focuses a window, raising it if it floats, and shows its workspace.

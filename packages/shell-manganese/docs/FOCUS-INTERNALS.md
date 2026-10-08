@@ -16,6 +16,9 @@ How manganese implements the focus behavior in
 - The shell decides focus for both window kinds. For clients, the engine sends a
   cancelable `domicile-focus-requested` and the shell handles it.
   `focusedwindowchanged` reports where the keyboard went.
+- The shell follows only the first window `focusedwindowchanged` names, which
+  ends the replay to a new page. Later reports answer the shell's own asks, and
+  a late one would undo a newer choice (`WindowState.replayed`).
 - A click in a `<webview>` sends no pointer or focus events to the shell. The
   element dispatches its own event, which the window listens for.
   `packages/domicile-engine/scripts/guard-webview-click.sh` tests this.

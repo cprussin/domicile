@@ -811,6 +811,21 @@ describe("what the compositor says about the keyboard", () => {
     expect(activeIdOf(state)).toBe(APP("editor"));
   });
 
+  it("keeps a window opened after the launcher when the old one's grant lands late", () => {
+    // Closing the launcher hands the keyboard back to kitty. The editor it
+    // launched can open before the compositor answers.
+    const state = reduce(
+      desktop("kitty"),
+      WindowAction.FocusChanged("kitty"),
+      WindowAction.FocusChanged(undefined),
+      WindowAction.AppAppeared("editor", "editor"),
+      WindowAction.FocusChanged("kitty"),
+    );
+
+    expect(state.focusedId).toBe(APP("kitty"));
+    expect(activeIdOf(state)).toBe(APP("editor"));
+  });
+
   it("says nothing twice", () => {
     // The host reports focus to a newly connected chrome, which usually matches
     // the existing state.
