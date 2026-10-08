@@ -29,6 +29,7 @@ export type DomicileState = {
 const CHANGED: Readonly<
   Record<keyof DomicileState, keyof DomicileHostEventMap>
 > = {
+  accentColor: "appearancechanged",
   altKey: "modifierschanged",
   browserWindows: "browserwindowschanged",
   clipboard: "clipboardchanged",
@@ -36,10 +37,12 @@ const CHANGED: Readonly<
   displays: "displayschanged",
   extensions: "extensionschanged",
   focusedWindow: "focusedwindowchanged",
+  highContrast: "appearancechanged",
   idle: "idlechanged",
   locked: "lockedchanged",
   metaKey: "modifierschanged",
   notifications: "notificationschanged",
+  reducedMotion: "appearancechanged",
   shiftKey: "modifierschanged",
   theme: "themechanged",
   tray: "traychanged",
@@ -49,6 +52,7 @@ const CHANGED: Readonly<
 
 /** Every attribute before the compositor has sent anything. */
 const UNDESCRIBED: DomicileState = {
+  accentColor: null,
   altKey: null,
   browserWindows: null,
   clipboard: null,
@@ -56,10 +60,12 @@ const UNDESCRIBED: DomicileState = {
   displays: null,
   extensions: null,
   focusedWindow: null,
+  highContrast: null,
   idle: null,
   locked: null,
   metaKey: null,
   notifications: null,
+  reducedMotion: null,
   shiftKey: null,
   theme: null,
   tray: null,
