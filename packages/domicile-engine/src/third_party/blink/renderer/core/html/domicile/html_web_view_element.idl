@@ -77,4 +77,16 @@
   // Open DevTools for the page in a new browser window. If DevTools is already
   // open, the <webview> showing it dispatches `domicile-focus-request`.
   undefined inspect();
+
+  // The page's site's permission settings: each permission
+  // DomicilePermissionRequestEvent names, mapped to "ask", "allow" or
+  // "block". Empty for a page that is not http or https.
+  // `domicile-site-permissions-change` signals a change.
+  record<DOMString, DOMString> sitePermissions();
+
+  // Stores `setting` ("ask", "allow" or "block") for `permission` on the
+  // page's site. Throws TypeError for an unknown permission or setting, and
+  // InvalidStateError when `sitePermissions()` is empty.
+  [RaisesException] undefined setSitePermission(DOMString permission,
+                                                DOMString setting);
 };

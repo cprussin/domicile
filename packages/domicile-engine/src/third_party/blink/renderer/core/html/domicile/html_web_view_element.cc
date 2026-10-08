@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <limits>
 #include <optional>
+#include <utility>
 
 #include "base/logging.h"
 #include "base/task/single_thread_task_runner.h"
@@ -22,6 +23,7 @@
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/html/domicile/domicile_context_menu_event.h"
 #include "third_party/blink/renderer/core/html/domicile/domicile_file_chooser_event.h"
+#include "third_party/blink/renderer/core/html/domicile/domicile_permission_request_event.h"
 #include "third_party/blink/renderer/core/html/parser/html_parser_idioms.h"
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/layout/layout_iframe.h"
@@ -30,6 +32,7 @@
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
+#include "third_party/blink/renderer/platform/weborigin/security_origin.h"
 
 namespace blink {
 
@@ -68,6 +71,19 @@ constexpr char kFileChooserEvent[] = "domicile-file-chooser";
 // See domicile_context_menu_event.h.
 constexpr char kContextMenuEvent[] = "domicile-context-menu";
 
+// A request the shell answers on the event, and its withdrawal. See
+// domicile_permission_request_event.h.
+constexpr char kPermissionRequestEvent[] = "domicile-permission-request";
+constexpr char kPermissionRequestWithdrawnEvent[] =
+    "domicile-permission-request-withdrawn";
+constexpr char kSitePermissionsChangeEvent[] =
+    "domicile-site-permissions-change";
+
+// The values of a site permission's setting. Strings, as for `security`.
+constexpr char kSettingAsk[] = "ask";
+constexpr char kSettingAllow[] = "allow";
+constexpr char kSettingBlock[] = "block";
+
 // The page called window.close().
 constexpr char kCloseEvent[] = "domicile-close";
 // An extension asked to raise this window.
@@ -93,6 +109,33 @@ constexpr char kSecurityNeutral[] = "neutral";
 constexpr char kSecureSecurity[] = "secure";
 constexpr char kSecurityWarning[] = "warning";
 constexpr char kSecurityDangerous[] = "dangerous";
+
+// Maps a site permission's setting to its string. No default, so a new mojom
+// value breaks the build.
+const char* SettingName(domicile::mojom::blink::WebViewPermissionSetting s) {
+  switch (s) {
+    case domicile::mojom::blink::WebViewPermissionSetting::kAsk:
+      return kSettingAsk;
+    case domicile::mojom::blink::WebViewPermissionSetting::kAllow:
+      return kSettingAllow;
+    case domicile::mojom::blink::WebViewPermissionSetting::kBlock:
+      return kSettingBlock;
+  }
+}
+
+// The setting named `name`, or nothing for an unknown name.
+std::optional<domicile::mojom::blink::WebViewPermissionSetting> SettingNamed(
+    const String& name) {
+  for (const domicile::mojom::blink::WebViewPermissionSetting setting :
+       {domicile::mojom::blink::WebViewPermissionSetting::kAsk,
+        domicile::mojom::blink::WebViewPermissionSetting::kAllow,
+        domicile::mojom::blink::WebViewPermissionSetting::kBlock}) {
+    if (name == SettingName(setting)) {
+      return setting;
+    }
+  }
+  return std::nullopt;
+}
 
 // Whether `action` is an edit command, which acts on the focused frame. No
 // default arm, so a new action fails the build.
@@ -147,6 +190,7 @@ void HTMLWebViewElement::Trace(Visitor* visitor) const {
   visitor->Trace(guest_);
   visitor->Trace(client_receiver_);
   visitor->Trace(waiting_choosers_);
+  visitor->Trace(permission_request_);
   HTMLFrameElementBase::Trace(visitor);
 }
 
@@ -380,6 +424,36 @@ void HTMLWebViewElement::RunContextMenuAction(
   guest_->RunContextMenuAction(menu.id(), action);
 }
 
+// Does not change `site_permissions_`: the browser reports the stored result
+// in SitePermissionsChanged.
+void HTMLWebViewElement::setSitePermission(const String& permission,
+                                           const String& setting,
+                                           ExceptionState& exception_state) {
+  const std::optional<domicile::mojom::blink::WebViewPermission> named =
+      DomicilePermissionRequestEvent::PermissionNamed(permission);
+  if (!named.has_value()) {
+    exception_state.ThrowTypeError(String("Unknown permission: ") +
+                                   permission + ".");
+    return;
+  }
+  const std::optional<domicile::mojom::blink::WebViewPermissionSetting>
+      stored = SettingNamed(setting);
+  if (!stored.has_value()) {
+    exception_state.ThrowTypeError(
+        "A setting must be \"ask\", \"allow\" or \"block\".");
+    return;
+  }
+  // Only a guest reports site permissions, so a guest exists past this.
+  if (site_permissions_.empty()) {
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kInvalidStateError,
+        "This page has no site permissions.");
+    return;
+  }
+  CHECK(guest_.is_bound());
+  guest_->SetSitePermission(*named, *stored);
+}
+
 // State updates store the new value before dispatching, so handlers read it.
 void HTMLWebViewElement::HistoryChanged(bool can_go_back, bool can_go_forward) {
   can_go_back_ = can_go_back;
@@ -473,6 +547,57 @@ void HTMLWebViewElement::FileChooserRequested(
   if (!event->defaultPrevented()) {
     event->CancelIfUnanswered();
   }
+}
+
+// Held in `permission_request_` until answered. If no listener calls
+// `preventDefault()`, the shell draws no prompt, so ignore immediately.
+void HTMLWebViewElement::PermissionRequested(
+    const KURL& origin,
+    const Vector<domicile::mojom::blink::WebViewPermission>& permissions,
+    PermissionRequestedCallback callback) {
+  // The browser withdraws a request before sending the next one. Answer a
+  // stale one anyway, so its callback is never dropped unrun.
+  if (permission_request_) {
+    permission_request_->IgnoreIfUnanswered();
+  }
+  auto* event = MakeGarbageCollected<DomicilePermissionRequestEvent>(
+      AtomicString(kPermissionRequestEvent),
+      SecurityOrigin::Create(origin)->ToString(), permissions,
+      std::move(callback), *this);
+  permission_request_ = event;
+  DispatchEvent(*event);
+  if (!event->defaultPrevented()) {
+    event->IgnoreIfUnanswered();
+  }
+}
+
+// Only for a request still held: one the shell answered is already gone.
+void HTMLWebViewElement::PermissionRequestWithdrawn() {
+  if (permission_request_) {
+    permission_request_->IgnoreIfUnanswered();
+    DispatchEvent(
+        *Event::CreateBubble(AtomicString(kPermissionRequestWithdrawnEvent)));
+  }
+}
+
+void HTMLWebViewElement::PermissionRequestAnswered(
+    DomicilePermissionRequestEvent& event) {
+  if (permission_request_ == &event) {
+    permission_request_ = nullptr;
+  }
+}
+
+void HTMLWebViewElement::SitePermissionsChanged(
+    Vector<domicile::mojom::blink::WebViewSitePermissionPtr> permissions) {
+  site_permissions_.clear();
+  for (const auto& permission : permissions) {
+    site_permissions_.push_back(std::make_pair(
+        DomicilePermissionRequestEvent::PermissionName(permission->permission),
+        String(SettingName(permission->setting))));
+  }
+
+  DispatchEvent(
+      *Event::CreateBubble(AtomicString(kSitePermissionsChangeEvent)));
 }
 
 // Stored before dispatch, so a handler can run the menu immediately.
