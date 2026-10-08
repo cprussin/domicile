@@ -13,7 +13,8 @@ use smithay::reexports::wayland_server::protocol::wl_buffer;
 use smithay::reexports::wayland_server::Resource as _;
 
 use crate::engine::{
-    BufferId, Capture, Clipboard, Connector, Dmabuf, Engine, EngineError, Event, SurfaceId, LIBRARY,
+    BufferId, Capture, Clipboard, Connector, Dmabuf, Engine, EngineError, Event, SurfaceId,
+    LIBRARY, NEWEST_BOX,
 };
 use crate::engine_buffers::{HeldBuffers, Returned};
 use crate::engine_surfaces::Surfaces;
@@ -66,6 +67,7 @@ struct Frame {
     buffer: Submitted,
     descriptor: DmabufDescriptor,
     crop: (i32, i32, i32, i32),
+    at_box: u64,
 }
 
 #[derive(Debug)]
@@ -231,7 +233,16 @@ impl EngineSession {
             return Submission::Refused;
         };
         let crop = self.crops.get(app_id).copied().unwrap_or_default();
-        self.submit(app_id, buffer.clone(), &descriptor, crop, (0, 0, 0, 0), now)
+        // A new engine numbers its boxes afresh.
+        self.submit(
+            app_id,
+            buffer.clone(),
+            &descriptor,
+            crop,
+            (0, 0, 0, 0),
+            NEWEST_BOX,
+            now,
+        )
     }
 
     /// The fd to add to the compositor's loop.
@@ -255,8 +266,10 @@ impl EngineSession {
         self.engine.set_clipboard(clipboard, text);
     }
 
-    /// Submits a buffer as `app_id`'s window. See [`Submission`] for who owns
-    /// the buffer afterward.
+    /// Submits a buffer as `app_id`'s window, at the box `at_box` names (see
+    /// [`crate::engine::Engine::submit`]). See [`Submission`] for who owns the
+    /// buffer afterward.
+    #[allow(clippy::too_many_arguments)] // One frame's worth, as `put_up` takes it.
     pub fn submit(
         &mut self,
         app_id: &str,
@@ -264,6 +277,7 @@ impl EngineSession {
         descriptor: &DmabufDescriptor,
         crop: (i32, i32, i32, i32),
         damage: (i32, i32, i32, i32),
+        at_box: u64,
         now: Instant,
     ) -> Submission {
         let Some(surface) = self.surface_for(app_id) else {
@@ -277,6 +291,7 @@ impl EngineSession {
                 buffer,
                 descriptor: descriptor.clone(),
                 crop,
+                at_box,
             };
             return Submission::Waiting {
                 replaced: self
@@ -285,7 +300,9 @@ impl EngineSession {
                     .map(|replaced| replaced.buffer),
             };
         }
-        match self.put_up(app_id, surface, buffer, descriptor, crop, damage, now) {
+        match self.put_up(
+            app_id, surface, buffer, descriptor, crop, damage, at_box, now,
+        ) {
             true => Submission::Taken,
             false => Submission::Refused,
         }
@@ -319,6 +336,7 @@ impl EngineSession {
             &frame.descriptor,
             frame.crop,
             (0, 0, 0, 0),
+            frame.at_box,
             now,
         ) {
             true => Ok(true),
@@ -337,12 +355,13 @@ impl EngineSession {
         descriptor: &DmabufDescriptor,
         crop: (i32, i32, i32, i32),
         damage: (i32, i32, i32, i32),
+        at_box: u64,
         now: Instant,
     ) -> bool {
         let Some(id) = self.import(surface, &buffer, descriptor) else {
             return false;
         };
-        self.engine.submit(surface, id, crop, damage);
+        self.engine.submit(surface, id, crop, damage, at_box);
         self.crops.insert(app_id.to_owned(), crop);
         // A replaced hold is the same buffer, since `imports` is keyed on the
         // object. Drop it without releasing: viz holds it again.
