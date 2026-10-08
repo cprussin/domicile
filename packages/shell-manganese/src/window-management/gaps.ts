@@ -5,33 +5,24 @@ import type { Rect } from "./rect";
 import type { Tiling } from "./tree/tiling";
 import { windowsOf } from "./tree/tiling";
 
-/** `gaps.inner` from the config. */
-const INNER_GAP = 20;
+/** `gaps.inner` from the config, around tiled windows and between them. */
+export const INNER_GAP = 20;
 
 /** The gap inside a floating group, narrower since the group shares one box. */
 const FLOATING_GAP = 10;
 
 /**
- * The gap between the windows of `tiling`: `gaps.inner`, or 0 for a single
- * window (`gaps.smartGaps`).
+ * The part of the workspace `area` that tiled windows are laid out in: inset by
+ * {@link INNER_GAP}, even for a lone window, so the focused window's glow has
+ * room at the screen's edges.
  */
-export const gapOf = (tiling: Tiling): number =>
-  windowsOf(tiling).length > 1 ? INNER_GAP : 0;
+export const tiledAreaOf = (area: Rect): Rect => ({
+  height: area.height - 2 * INNER_GAP,
+  width: area.width - 2 * INNER_GAP,
+  x: area.x + INNER_GAP,
+  y: area.y + INNER_GAP,
+});
 
-/**
- * The part of the workspace `area` that `tiling` is laid out in: inset by
- * {@link gapOf}, so the focused window's glow has room at the screen's edges.
- */
-export const tiledAreaOf = (tiling: Tiling, area: Rect): Rect => {
-  const gap = gapOf(tiling);
-  return {
-    height: area.height - 2 * gap,
-    width: area.width - 2 * gap,
-    x: area.x + gap,
-    y: area.y + gap,
-  };
-};
-
-/** {@link gapOf} for a floating group. */
+/** The gap between the windows of a floating group: 0 for a lone window. */
 export const floatingGapOf = (tiling: Tiling): number =>
   windowsOf(tiling).length > 1 ? FLOATING_GAP : 0;

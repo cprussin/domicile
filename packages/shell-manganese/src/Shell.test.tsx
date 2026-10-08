@@ -66,6 +66,9 @@ const RIGHT: DomicileDisplay = {
 /** The top bar's height; windows start below it. */
 const TOP_BAR = 32;
 
+/** `gaps.inner`: around tiled windows, even a lone one. */
+const GAP = 20;
+
 /** The region a `<Screen>` renders for the display of this name. */
 const screenNamed = (container: HTMLElement, name: string): Element | null =>
   container.querySelector(`[data-screen="${name}"]`);
@@ -1148,16 +1151,15 @@ describe("Shell", () => {
   });
 
   describe("the windows", () => {
-    it("tiles a client's window over the whole workspace", () => {
-      // One window, so `gaps.smartGaps` gives it the whole area below the bar.
+    it("tiles a client's window over the workspace, inset by the gap", () => {
       const { container } = renderShell();
       clientAppears("term");
 
       expect(boxOf(appElement(container, "term"))).toEqual({
-        height: `${(1080 - TOP_BAR - TITLE_BAR).toString()}px`,
-        width: "1920px",
-        x: "0px",
-        y: `${(TOP_BAR + TITLE_BAR).toString()}px`,
+        height: `${(1080 - TOP_BAR - 2 * GAP - TITLE_BAR).toString()}px`,
+        width: `${(1920 - 2 * GAP).toString()}px`,
+        x: `${GAP.toString()}px`,
+        y: `${(TOP_BAR + GAP + TITLE_BAR).toString()}px`,
       });
     });
 
@@ -1169,7 +1171,7 @@ describe("Shell", () => {
       expect(bar).toHaveTextContent("Terminal");
       expect(boxOf(bar)).toMatchObject({
         height: `${TITLE_BAR.toString()}px`,
-        y: `${TOP_BAR.toString()}px`,
+        y: `${(TOP_BAR + GAP).toString()}px`,
       });
     });
 
@@ -1264,7 +1266,7 @@ describe("Shell", () => {
       await user.click(screen.getByRole("button", { name: "Restore" }));
 
       expect(boxOf(appElement(container, "term"))).toMatchObject({
-        y: `${(TOP_BAR + TITLE_BAR).toString()}px`,
+        y: `${(TOP_BAR + GAP + TITLE_BAR).toString()}px`,
       });
     });
 
@@ -1923,14 +1925,14 @@ describe("Shell", () => {
 
       // Its own box over the tiling, not the whole workspace.
       const floated = boxOf(appElement(container, "term"));
-      expect(floated.width).not.toBe("1920px");
+      expect(floated.width).not.toBe(`${(1920 - 2 * GAP).toString()}px`);
       expect(
         Number(appElement(container, "term").style.zIndex),
       ).toBeGreaterThan(0);
 
       press("Tab", true);
       expect(boxOf(appElement(container, "term"))).toMatchObject({
-        width: "1920px",
+        width: `${(1920 - 2 * GAP).toString()}px`,
       });
     });
 

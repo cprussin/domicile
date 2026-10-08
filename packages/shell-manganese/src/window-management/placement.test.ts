@@ -59,21 +59,20 @@ describe("placementsOf", () => {
     ).toEqual([true, true]);
   });
 
-  it("gives a lone tiled window the whole workspace, with no gaps", () => {
-    // `gaps.smartGaps`: a lone window gets no gap.
+  it("insets a lone tiled window by the gap at the screen's edges", () => {
     expect(placementFor(desktop("kitty"), "kitty")).toEqual({
-      bar: { height: TITLE_BAR, width: 1920, x: 0, y: 32 },
+      bar: { height: TITLE_BAR, width: 1880, x: 20, y: 52 },
       behind: undefined,
       depth: 0,
-      frame: { height: 1048, width: 1920, x: 0, y: 32 },
+      frame: { height: 1008, width: 1880, x: 20, y: 52 },
       id: appWindowId("kitty"),
       openTab: undefined,
       selected: false,
       surface: {
-        height: 1048 - TITLE_BAR,
-        width: 1920,
-        x: 0,
-        y: 32 + TITLE_BAR,
+        height: 1008 - TITLE_BAR,
+        width: 1880,
+        x: 20,
+        y: 52 + TITLE_BAR,
       },
       tabbed: undefined,
     });
@@ -263,15 +262,15 @@ describe("placementsOf", () => {
 
     // A lone window in a tabbed container: its tab is its title bar.
     expect(placementsOf(state, GEOMETRY).tabs).toEqual([]);
-    expect(placementFor(state, "kitty")?.bar).toMatchObject({ y: 32 });
+    expect(placementFor(state, "kitty")?.bar).toMatchObject({ y: 52 });
   });
   // `frame` spans the bar and contents, so both scale about one center.
   it("gives every window the box its bar and its contents span together", () => {
     expect(placementFor(desktop("kitty"), "kitty")?.frame).toEqual({
-      height: 1048,
-      width: 1920,
-      x: 0,
-      y: 32,
+      height: 1008,
+      width: 1880,
+      x: 20,
+      y: 52,
     });
   });
 

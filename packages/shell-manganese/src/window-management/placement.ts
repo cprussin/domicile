@@ -6,7 +6,7 @@
 
 import type { Float } from "./floating/float";
 import { floatHolds, onScreen, rectOf } from "./floating/float";
-import { floatingGapOf, gapOf, tiledAreaOf } from "./gaps";
+import { floatingGapOf, INNER_GAP, tiledAreaOf } from "./gaps";
 import type { Rect } from "./rect";
 import { barOf, surfaceOf } from "./rect";
 import type { FocusBox, Frame, Tab, TabLayout } from "./tree/frames";
@@ -128,8 +128,8 @@ export const placementsOf = (
   const workspace = workspaceOn(state, geometry.name);
   const { frames, tabs } = framesOf(
     workspace.tiling,
-    tiledAreaOf(workspace.tiling, geometry.workspace),
-    gapOf(workspace.tiling),
+    tiledAreaOf(geometry.workspace),
+    INNER_GAP,
   );
   // Floats go above, in workspace stacking order, each tree laid out in its box.
   const floating = workspace.floats
@@ -179,11 +179,7 @@ const focusBoxIn = (
 ): PlacedFocusBox | undefined => {
   const { floatFocus, tiling } = workspace;
   if (floatFocus === undefined) {
-    const box = focusBoxOf(
-      tiling,
-      tiledAreaOf(tiling, geometry.workspace),
-      gapOf(tiling),
-    );
+    const box = focusBoxOf(tiling, tiledAreaOf(geometry.workspace), INNER_GAP);
     return box === undefined ? undefined : { ...box, depth: TILED };
   } else {
     const focused = floating.find(({ float }) => floatHolds(float, floatFocus));
