@@ -225,6 +225,7 @@ export const Stage = ({
             hasKeyboard: focused,
             inSelection:
               placement?.selected === true && placement.surface !== undefined,
+            isTab: placement?.tabbed !== undefined,
             shownByContainer: false,
           });
           return (
@@ -292,6 +293,7 @@ export const Stage = ({
                   focus={focus}
                   frame={placement.frame}
                   fullscreen={fillsScreen(screens, window.id)}
+                  groupSelected={placement.selected}
                   motion={barMotion(motion)}
                   onAim={setAim}
                   onClose={() => {
@@ -474,6 +476,7 @@ export const Stage = ({
               focus={titleFocus({
                 hasKeyboard: focused,
                 inSelection: tab.selected && tab.active,
+                isTab: true,
                 shownByContainer: tab.active,
               })}
               // A tab is all its window shows, so it scales about its own
@@ -482,6 +485,8 @@ export const Stage = ({
               // Always false: a fullscreen workspace draws no tabs. See
               // `placement.ts`.
               fullscreen={fillsScreen(screens, tab.id)}
+              group={{ layout: tab.group, windows: tab.windows }}
+              groupSelected={tab.selected}
               motion={motion}
               onClose={() => {
                 onClose(tab.id);
@@ -499,6 +504,7 @@ export const Stage = ({
                 onSelect(tab.id);
               }}
               rect={tab.rect}
+              tabbed={tab.tabbed}
               title={titleOf(windows, tab.id)}
               window={tab.id}
             />

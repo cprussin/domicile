@@ -15,8 +15,9 @@ import { focusChainOf, NOTHING_TILED } from "./tiling";
 /**
  * The tiling without the window `id`.
  *
- * A container left with one child is replaced by that child, and an empty one
- * is removed, up to the root. Returns `tiling` unchanged for an unknown `id`,
+ * An emptied container is removed, up to the root. A container left with one
+ * window keeps it, since a group changes only on request. One left with one
+ * container is replaced by it, since the inner group is what shows. Returns `tiling` unchanged for an unknown `id`,
  * since the host also reports closes for windows this tree never held.
  */
 export const removed = (tiling: Tiling, id: string): Tiling => {
@@ -62,18 +63,18 @@ export const withoutAt = (
 };
 
 /**
- * The container without child `index`, replaced by its only remaining child,
- * or `undefined` if none remain.
+ * The container without child `index`: `undefined` if none remain, and its
+ * only remaining child if that is a container.
  */
 const collapsed = (
   container: Container,
   index: number,
 ): LayoutNode | undefined => {
   const children = container.children.filter((_, at) => at !== index);
-  const only = children[0];
+  const [only] = children;
   if (only === undefined) {
     return undefined;
-  } else if (children.length === 1) {
+  } else if (children.length === 1 && only.kind === NodeKind.Container) {
     return only;
   } else {
     return Node.Container(

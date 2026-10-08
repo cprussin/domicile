@@ -16,6 +16,7 @@ const placed = (
   id,
   openTab: undefined,
   selected: false,
+  soleTab: false,
   surface,
   tabbed: undefined,
 });

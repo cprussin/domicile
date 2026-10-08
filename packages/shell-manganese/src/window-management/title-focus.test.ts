@@ -8,6 +8,7 @@ describe("titleFocus", () => {
       titleFocus({
         hasKeyboard: true,
         inSelection: false,
+        isTab: false,
         shownByContainer: false,
       }),
     ).toBe("focused");
@@ -19,6 +20,7 @@ describe("titleFocus", () => {
       titleFocus({
         hasKeyboard: false,
         inSelection: false,
+        isTab: false,
         shownByContainer: true,
       }),
     ).toBe("selected");
@@ -29,6 +31,7 @@ describe("titleFocus", () => {
       titleFocus({
         hasKeyboard: false,
         inSelection: false,
+        isTab: false,
         shownByContainer: false,
       }),
     ).toBe("resting");
@@ -39,6 +42,7 @@ describe("titleFocus", () => {
       titleFocus({
         hasKeyboard: true,
         inSelection: false,
+        isTab: false,
         shownByContainer: true,
       }),
     ).toBe("focused");
@@ -49,6 +53,7 @@ describe("titleFocus", () => {
       titleFocus({
         hasKeyboard: false,
         inSelection: true,
+        isTab: false,
         shownByContainer: false,
       }),
     ).toBe("selected");
@@ -61,8 +66,29 @@ describe("titleFocus", () => {
       titleFocus({
         hasKeyboard: true,
         inSelection: true,
+        isTab: false,
         shownByContainer: false,
       }),
     ).toBe("leaf");
+  });
+
+  it("leaves a tab in a selected group to say where the keyboard is", () => {
+    // Its tab strip shows the selection instead. See `TitleBar`.
+    expect(
+      titleFocus({
+        hasKeyboard: true,
+        inSelection: true,
+        isTab: true,
+        shownByContainer: true,
+      }),
+    ).toBe("focused");
+    expect(
+      titleFocus({
+        hasKeyboard: false,
+        inSelection: true,
+        isTab: true,
+        shownByContainer: false,
+      }),
+    ).toBe("resting");
   });
 });

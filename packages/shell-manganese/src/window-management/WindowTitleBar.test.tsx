@@ -26,6 +26,7 @@ const tabProps = {
   focus: "resting",
   frame: FRAME,
   fullscreen: false,
+  groupSelected: false,
   motion: "resting",
   onAim: nothing,
   onClose: nothing,

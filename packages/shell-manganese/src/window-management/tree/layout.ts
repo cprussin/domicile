@@ -13,11 +13,20 @@ import { nodeAt, replacedAt } from "./path";
 import type { Tiling } from "./tiling";
 import { focusPathOf, withCommandsOn } from "./tiling";
 
-/** `splith` / `splitv`: wraps the focus in a one-child container. */
+/**
+ * `splith` / `splitv`: wraps the focus in a one-child container. A lone child
+ * relays its container instead, as in i3, so groups do not nest one in one.
+ */
 export const split = (tiling: Tiling, axis: Axis): Tiling =>
-  rearranged(tiling, (root, path) =>
-    replacedAt(root, path, (node) => Node.Container(splitFor(axis), [node])),
-  );
+  rearranged(tiling, (root, path) => {
+    const parent = path.slice(0, -1);
+    const around = path.length === 0 ? undefined : nodeAt(root, parent);
+    return around?.kind === NodeKind.Container && around.children.length === 1
+      ? relaid(root, parent, () => splitFor(axis))
+      : replacedAt(root, path, (node) =>
+          Node.Container(splitFor(axis), [node]),
+        );
+  });
 
 /** `layout tabbed` / `layout stacking` on the container around the focus. */
 export const laidOut = (tiling: Tiling, layout: Layout): Tiling =>

@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 
 import type { Closing } from "./closing";
-import { departed, withClosing } from "./closing";
+import { closesAsTab, departed, withClosing } from "./closing";
 import type { PlacedTab, Placement } from "./placement";
 import type { Restack } from "./restacking";
 import { restacked } from "./restacking";
@@ -338,8 +338,7 @@ const drawnWindow = (
       focused: closing.focused,
       // A tab closes within its strip instead of shrinking with its window, and
       // a shown tab fades to the tab replacing it.
-      motion:
-        closing.placement.tabbed === undefined ? "closing" : "closing-tab",
+      motion: closesAsTab(closing.placement) ? "closing-tab" : "closing",
       placement: closing.placement,
       restack: undefined,
       screen: closing.screen,

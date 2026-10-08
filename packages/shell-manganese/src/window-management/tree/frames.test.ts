@@ -49,6 +49,7 @@ describe("framesOf", () => {
       id: "a",
       openTab: undefined,
       selected: false,
+      soleTab: false,
       surface: {
         height: 1000 - TITLE_BAR,
         width: 1000,
@@ -79,6 +80,31 @@ describe("framesOf", () => {
     expect(frameFor(tiled, "b").bar).toMatchObject({ width: 735, x: 265 });
   });
 
+  it("leaves room at the end of a split of one, where the next window opens", () => {
+    const lone = (layout: Layout) =>
+      framesOf(
+        {
+          depth: 1,
+          root: LayoutNode.Container(layout, [LayoutNode.Window("a")]),
+        },
+        AREA,
+        20,
+      );
+
+    expect(frameFor(lone(Layout.SplitH), "a").bar).toEqual({
+      height: TITLE_BAR,
+      width: 936,
+      x: 0,
+      y: 0,
+    });
+    expect(frameFor(lone(Layout.SplitV), "a").surface).toEqual({
+      height: 936 - TITLE_BAR,
+      width: 1000,
+      x: 0,
+      y: TITLE_BAR,
+    });
+  });
+
   it("divides a column the other way", () => {
     const tiled = framesOf(
       {
@@ -100,7 +126,7 @@ describe("framesOf", () => {
     });
   });
 
-  it("makes a tabbed container's title bars its tabs, a little apart", () => {
+  it("makes a tabbed container's title bars its tabs, side by side", () => {
     const tiled = framesOf(
       {
         depth: 1,
@@ -114,13 +140,14 @@ describe("framesOf", () => {
       0,
     );
 
+    // The tab strip is one row; the bars draw the space between tabs.
     expect(frameFor(tiled, "a").bar).toEqual({
       height: TITLE_BAR,
-      width: 498,
+      width: 500,
       x: 0,
       y: 0,
     });
-    expect(frameFor(tiled, "b").bar).toMatchObject({ width: 498, x: 502 });
+    expect(frameFor(tiled, "b").bar).toMatchObject({ width: 500, x: 500 });
   });
 
   it("shows only the tab a tabbed container has the focus in", () => {
@@ -209,8 +236,7 @@ describe("framesOf", () => {
     ]);
   });
 
-  // Closing a container's only tab closes the container too.
-  it("says nothing of a container's only tab, or a bar of a window's own", () => {
+  it("marks a container's only tab as a tab, and a window's own bar as none", () => {
     const only = framesOf(
       {
         depth: 1,
@@ -220,7 +246,9 @@ describe("framesOf", () => {
       0,
     );
 
-    expect(frameFor(only, "a").tabbed).toBeUndefined();
+    expect(frameFor(only, "a").tabbed).toBe(Layout.Tabbed);
+    // It closes with its group, as a window does, not along the strip.
+    expect(frameFor(only, "a").soleTab).toBe(true);
     expect(
       frameFor(framesOf(COLUMN_BESIDE_A_WINDOW, AREA, 0), "b").tabbed,
     ).toBeUndefined();
@@ -311,10 +339,13 @@ describe("framesOf", () => {
     expect(tiled.tabs).toEqual([
       {
         active: true,
+        group: Layout.SplitH,
         id: "a",
         openTab: undefined,
-        rect: { height: TITLE_BAR, width: 498, x: 0, y: 0 },
+        rect: { height: TITLE_BAR, width: 500, x: 0, y: 0 },
         selected: false,
+        tabbed: Layout.Tabbed,
+        windows: 2,
       },
     ]);
     // Its windows are laid out under the tabs, with their own title bars.
@@ -345,10 +376,13 @@ describe("framesOf", () => {
     expect(tiled.tabs).toEqual([
       {
         active: false,
+        group: Layout.SplitH,
         id: "a",
         openTab: "c",
-        rect: { height: TITLE_BAR, width: 498, x: 0, y: 0 },
+        rect: { height: TITLE_BAR, width: 500, x: 0, y: 0 },
         selected: false,
+        tabbed: Layout.Tabbed,
+        windows: 2,
       },
     ]);
   });

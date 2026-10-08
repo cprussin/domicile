@@ -43,6 +43,8 @@ export type Placement = {
   openTab: string | undefined;
   /** Whether it is in the container `focus parent` selected. See `Frame.selected`. */
   selected: boolean;
+  /** Whether it is its container's only tab. See `Frame.soleTab`. */
+  soleTab: boolean;
   /** Where its contents go, or `undefined` for a hidden tab. */
   surface: Rect | undefined;
   /** The direction of the tab row its bar is in. See `Frame.tabbed`. */
@@ -226,6 +228,7 @@ const fullscreen = (
         id: full.id,
         openTab: undefined,
         selected: false,
+        soleTab: false,
         surface: surfaceOf(area),
         tabbed: undefined,
       },
@@ -239,7 +242,7 @@ const fullscreen = (
  * is built, so `frame` is computed one way.
  */
 const placed = (
-  { bar, behind, id, openTab, selected, surface, tabbed }: Frame,
+  { bar, behind, id, openTab, selected, soleTab, surface, tabbed }: Frame,
   depth: number,
 ): Placement => ({
   bar,
@@ -249,6 +252,7 @@ const placed = (
   id,
   openTab,
   selected,
+  soleTab,
   surface,
   tabbed,
 });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { inserted } from "./insert";
+import { inserted, insertedNode } from "./insert";
 import { Layout, LayoutNode } from "./node";
 import {
   focusedIdOf,
@@ -31,16 +31,31 @@ const NESTED = {
 };
 
 describe("inserted", () => {
-  it("makes the first window the whole tree", () => {
+  it("opens the first window in a tab group", () => {
+    // sway's `workspace_layout tabbed`, the desktop's default. A group from
+    // the start shows where the next window goes.
     const tiling = inserted(NOTHING_TILED, "a");
 
-    expect(tiling.root).toEqual(LayoutNode.Window("a"));
+    expect(tiling.root).toEqual(
+      LayoutNode.Container(Layout.Tabbed, [LayoutNode.Window("a")]),
+    );
     expect(focusedIdOf(tiling)).toBe("a");
   });
 
-  it("tabs the workspace for the second one", () => {
-    // sway's `workspace_layout tabbed`, the desktop's default.
-    expect(tiled("a", "b").root).toMatchObject({ layout: Layout.Tabbed });
+  it("opens the second window in the first one's tab group", () => {
+    expect(tiled("a", "b").root).toMatchObject({
+      children: [{ id: "a" }, { id: "b" }],
+      layout: Layout.Tabbed,
+    });
+  });
+
+  it("keeps a group arriving on an empty workspace as it is", () => {
+    const column = LayoutNode.Container(Layout.SplitV, [
+      LayoutNode.Window("a"),
+      LayoutNode.Window("b"),
+    ]);
+
+    expect(insertedNode(NOTHING_TILED, column).root).toEqual(column);
   });
 
   it("puts a new window beside the one being worked in", () => {

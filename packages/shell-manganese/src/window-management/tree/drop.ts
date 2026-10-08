@@ -135,6 +135,19 @@ const placedBeside = (
     return replacedAt(root, around, () =>
       withChildAt(parent, forward ? index + 1 : index, moving),
     );
+  } else if (
+    parent?.kind === NodeKind.Container &&
+    parent.children.length === 1
+  ) {
+    // The target alone in its group: the drop relays the group, rather than
+    // nesting a split in it.
+    return replacedAt(root, around, () =>
+      Node.Container(
+        splitFor(axis),
+        forward ? [...parent.children, moving] : [moving, ...parent.children],
+        forward ? 1 : 0,
+      ),
+    );
   } else {
     return replacedAt(root, at, (node) =>
       Node.Container(

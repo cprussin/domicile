@@ -77,15 +77,36 @@ describe("removed", () => {
     });
   });
 
-  it("flattens a container left holding one window", () => {
-    // As in i3, a one-child container collapses into its child.
+  it("keeps a container left holding one window", () => {
+    // A group changes only on request, so closing a window keeps its layout.
     expect(removed(NESTED, "c").root).toEqual(
       LayoutNode.Container(
         Layout.SplitH,
-        [LayoutNode.Window("a"), LayoutNode.Window("b")],
+        [
+          LayoutNode.Window("a"),
+          LayoutNode.Container(Layout.SplitV, [LayoutNode.Window("b")]),
+        ],
         1,
       ),
     );
+  });
+
+  it("keeps a tab group left holding one tab", () => {
+    const tabs = {
+      depth: 1,
+      root: LayoutNode.Container(Layout.Tabbed, [
+        LayoutNode.Window("a"),
+        LayoutNode.Window("b"),
+      ]),
+    };
+
+    expect(removed(tabs, "b").root).toEqual(
+      LayoutNode.Container(Layout.Tabbed, [LayoutNode.Window("a")]),
+    );
+  });
+
+  it("replaces a container left holding one group with that group", () => {
+    expect(removed(NESTED, "a").root).toEqual(COLUMN);
   });
 
   it("keeps what is left of a resized container in proportion", () => {

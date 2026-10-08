@@ -38,13 +38,16 @@ export type Frame = {
    * highlighted as a group.
    */
   selected: boolean;
+  /**
+   * Whether it is its container's only tab. It closes with its group, as a
+   * window does, rather than along the strip.
+   */
+  soleTab: boolean;
   /** Where its contents go, or `undefined` for a hidden tab. */
   surface: Rect | undefined;
   /**
    * The layout of the container whose tab this bar is: tabbed or stacking.
-   *
-   * `undefined` for a plain title bar and for a container's only tab, since
-   * closing that closes the container too.
+   * `undefined` for a plain title bar.
    */
   tabbed: TabLayout | undefined;
 };
@@ -56,6 +59,8 @@ export type TabLayout = Layout.Stacking | Layout.Tabbed;
 export type Tab = {
   /** Whether its container is showing this child. */
   active: boolean;
+  /** The layout of the nested container, which the tab shows. */
+  group: Layout;
   /** The container's last-focused window, which names the tab. */
   id: string;
   /** The window its container's open tab is named after. See `Frame.openTab`. */
@@ -63,6 +68,10 @@ export type Tab = {
   rect: Rect;
   /** Whether it is inside the container `focus parent` selected. */
   selected: boolean;
+  /** The layout of the container whose tab this is. */
+  tabbed: TabLayout;
+  /** How many windows the nested container holds. */
+  windows: number;
 };
 
 /** The frames and tabs a workspace's tiling puts on screen. */
@@ -166,6 +175,7 @@ const placed = (
             id: node.id,
             openTab: undefined,
             selected,
+            soleTab: false,
             surface: surfaceOf(area),
             tabbed: undefined,
           },
@@ -224,8 +234,15 @@ const within = (pointed: Path | undefined, at: number): Path | undefined =>
   pointed === undefined || pointed[0] !== at ? undefined : pointed.slice(1);
 
 /**
+ * How much a split of one leaves empty at its end, where the next window
+ * opens, so the group shows.
+ */
+const LONE_SPLIT_ROOM = 64;
+
+/**
  * The part of `area` child `at` gets: its share of the space left after the
- * gaps, along the container's axis.
+ * gaps, along the container's axis. A split of one leaves
+ * {@link LONE_SPLIT_ROOM} instead.
  */
 const sliceOf = (
   container: Container,
@@ -233,7 +250,10 @@ const sliceOf = (
   gap: number,
   at: number,
 ): Rect => {
-  const gaps = gap * (container.children.length - 1);
+  const gaps =
+    container.children.length === 1
+      ? LONE_SPLIT_ROOM
+      : gap * (container.children.length - 1);
   const shares = container.fractions.slice(0, at);
   const before = shares.reduce((sum, fraction) => sum + fraction, 0);
   const fraction = container.fractions[at];
@@ -288,8 +308,9 @@ const titled = (
                 id: child.id,
                 openTab,
                 selected,
+                soleTab: container.children.length === 1,
                 surface: showing ? contents : undefined,
-                tabbed: container.children.length > 1 ? layout : undefined,
+                tabbed: layout,
               },
             ],
             tabs: [],
@@ -298,10 +319,13 @@ const titled = (
         case NodeKind.Container: {
           const tab = {
             active: showing,
+            group: child.layout,
             id: focusedWindowIn(child),
             openTab,
             rect: bar,
             selected,
+            tabbed: layout,
+            windows: windowsIn(child).length,
           };
           const inside = showing
             ? placed(child, contents, gap, within(pointed, at), selected)
@@ -316,17 +340,14 @@ const titled = (
   );
 };
 
-/** The gap between neighboring tabs. */
-const TAB_GAP = 4;
-
-// Tabs share the top row; a stack gives each child a full-width bar.
+// Tabs share the top row; a stack gives each child a full-width bar. The bars
+// meet, so together they draw one tab strip. See `TitleBar`.
 const titleOf = (container: Container, area: Rect, at: number): Rect => {
   if (container.layout === Layout.Stacking) {
     return { ...barOf(area), y: area.y + TITLE_BAR * at };
   } else {
-    const count = container.children.length;
-    const width = (area.width - TAB_GAP * (count - 1)) / count;
-    return { ...barOf(area), width, x: area.x + (width + TAB_GAP) * at };
+    const width = area.width / container.children.length;
+    return { ...barOf(area), width, x: area.x + width * at };
   }
 };
 

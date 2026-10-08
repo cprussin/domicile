@@ -11,6 +11,13 @@ Manganese uses sway's layout model. For the key bindings, see
   the focus glow lights. A lone window keeps the gap at the edges.
 - A new window opens beside the focused one. Closing a window gives its space
   to the rest.
+- Every tiled window is in a group. The first window on a workspace opens in a
+  tab group of one, so the next window's place shows.
+- A group changes only on request (a layout or split command, a move or a
+  drop). Closing down to one window keeps the group. A group left holding only
+  another group is replaced by it.
+- A split of one window leaves 64px empty at its end, where the next window
+  opens.
 - There are 10 workspaces for the whole desktop, plus the scratchpad and floating
   windows.
 - A window is either a Wayland client or a browser window the shell opened.
@@ -53,7 +60,9 @@ Workspaces belong to the desktop, and screens show them, as in sway:
   glow fades out and in where it is, rather than moving to the next window, so
   pointer-driven focus changes don't flash or slide.
 - **Meta+A selects a group.** Commands then act on the whole container. One
-  glow surrounds the group; the focused window's bar gets the accent color. Meta+Shift+A,
+  glow surrounds the group; the focused window's bar gets the accent color.
+  A selected tab group lights its tab strip instead, and its tabs keep their
+  usual states. Meta+Shift+A,
   focusing a floating window, or clicking another window ends the selection.
 - **`xdg-activation` requests are granted.** The compositor forwards them as
   `focus_requested`. Manganese switches to that window's workspace and focuses
@@ -126,8 +135,10 @@ For how warping, browser-window focus and modifier drags work, see
 - The bar is inside the window's box, so a window's size includes its bar.
 - Only the top corners are rounded. The bottom of the frame is client pixels.
 - The page hit-tests the bar, so clicks on it never reach the client.
-- In a tabbed or stacking container, each window's tab is its title bar. A tab
-  for a nested container shows the name of its last-focused window.
+- In a tabbed or stacking container, each window's tab is its title bar. The
+  tabs rest in a tab strip, even a container of one.
+- A tab for a nested container shows the name of its last-focused window, an
+  icon for its layout and its window count.
 - A bar has four states, set as `data-focus` (`title-focus.ts`): sway's
   `focused`, `focused_inactive` and `unfocused`, plus `leaf` for the focused
   window inside a selected group.

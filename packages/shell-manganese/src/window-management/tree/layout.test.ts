@@ -56,6 +56,17 @@ describe("split", () => {
     });
   });
 
+  it("relays a lone window's group instead of nesting one in it", () => {
+    const group = {
+      depth: 1,
+      root: LayoutNode.Container(Layout.Tabbed, [LayoutNode.Window("a")]),
+    };
+
+    expect(split(group, Axis.Vertical).root).toEqual(
+      LayoutNode.Container(Layout.SplitV, [LayoutNode.Window("a")]),
+    );
+  });
+
   it("has nothing to split on an empty workspace", () => {
     expect(split(NOTHING_TILED, Axis.Horizontal)).toBe(NOTHING_TILED);
   });

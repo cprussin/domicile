@@ -68,13 +68,15 @@ describe("placementsOf", () => {
       id: appWindowId("kitty"),
       openTab: undefined,
       selected: false,
+      soleTab: true,
       surface: {
         height: 1008 - TITLE_BAR,
         width: 1880,
         x: 20,
         y: 52 + TITLE_BAR,
       },
-      tabbed: undefined,
+      // The workspace's tab group, holding one tab.
+      tabbed: Layout.Tabbed,
     });
   });
 

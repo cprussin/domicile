@@ -8,6 +8,7 @@
 
 import type { Direction } from "../direction";
 import { axisOf as axisOfDirection, isForward } from "../direction";
+import { groupedForWorkspace } from "./insert";
 import type { Container, LayoutNode } from "./node";
 import {
   axisOf,
@@ -94,7 +95,7 @@ const enteredWith = (
 ): LayoutNode => {
   const forward = isForward(direction);
   if (root === undefined) {
-    return node;
+    return groupedForWorkspace(node);
   } else if (root.kind === NodeKind.Window) {
     return Node.Container(
       splitFor(axisOfDirection(direction)),
@@ -327,14 +328,17 @@ const acrossWorkspace = (
   }
 };
 
-/** Collapses a one-child container into its child, as a close does. */
+/**
+ * Collapses a container holding only a container into it, as a close does. A
+ * container holding one window stays.
+ */
 const flattened = (
   container: Container,
   children: readonly LayoutNode[],
   focused: number,
 ): LayoutNode => {
   const [only] = children;
-  return children.length === 1 && only !== undefined
+  return children.length === 1 && only?.kind === NodeKind.Container
     ? only
     : Node.Container(container.layout, children, focused);
 };
