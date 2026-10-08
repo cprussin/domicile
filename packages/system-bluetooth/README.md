@@ -1,7 +1,7 @@
 # @domicile-desktop/system-bluetooth
 
-BlueZ for a Domicile shell: each adapter and whether it is powered, the
-connected devices, and turning an adapter on or off. Built on
+BlueZ for a Domicile shell: each adapter and whether it is powered or
+scanning, the devices it knows, and the requests that change them. Built on
 [`@domicile-desktop/sdk/system`](../chrome-sdk/README.md).
 
 ## Usage
@@ -14,14 +14,19 @@ const host = system(domicile);
 const stop = watchBluetooth(host, (bluetooth) => {
   bluetooth.match({
     Err: () => hide(),
-    Ok: ({ adapters, connected }) => show(adapters, connected),
+    Ok: ({ adapters, devices }) => show(adapters, devices),
   });
 });
 await setPowered(host, "/org/bluez/hci0", false);
 ```
 
 - Reads `GetManagedObjects` once, then again when an object comes or goes or
-  an adapter's `Powered` or a device's `Connected` or `Alias` changes.
+  one of these changes: an adapter's `Powered` or `Discovering`, a device's
+  `Alias`, `Name`, `Connected` or `Paired`, or its battery's `Percentage`.
+- `devices` holds paired devices and, from a scan, those with a name.
+- Requests: `setPowered`, `startDiscovery`, `stopDiscovery`, `connect`,
+  `disconnect`, `pair` (then trusts the device) and `forget`.
+- `pair` registers no agent, so only devices that need no code pair.
 - An `Err` is a D-Bus failure, such as BlueZ not running or an adapter
   blocked by rfkill.
 - A bug or an unexpected reply shape throws, logged to the console.

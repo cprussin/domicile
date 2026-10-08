@@ -1,5 +1,5 @@
-// BlueZ over the system bus: adapters and connected devices, kept current.
-// See docs/SHELL-SYSTEM-ACCESS.md.
+// BlueZ over the system bus: adapters and devices, kept current, and the
+// requests that change them. See docs/SHELL-SYSTEM-ACCESS.md.
 
 import type { Result } from "@cprussin/option-result";
 import { Err } from "@cprussin/option-result";
@@ -15,20 +15,37 @@ import { z } from "zod";
 const SERVICE = "org.bluez";
 const ADAPTER = "org.bluez.Adapter1";
 const DEVICE = "org.bluez.Device1";
+const BATTERY = "org.bluez.Battery1";
 
 /** The properties whose changes alter a {@link Bluetooth}, by interface. */
 const WATCHED: Readonly<Record<string, readonly string[]>> = {
-  [ADAPTER]: ["Powered"],
-  [DEVICE]: ["Alias", "Connected"],
+  [ADAPTER]: ["Discovering", "Powered"],
+  [BATTERY]: ["Percentage"],
+  [DEVICE]: ["Alias", "Connected", "Name", "Paired"],
 };
 
 /** A controller, such as `/org/bluez/hci0`. */
-export type Adapter = { path: string; powered: boolean };
+export type Adapter = { path: string; powered: boolean; discovering: boolean };
 
-/** A connected device. `name` is its alias, which BlueZ fills from its name. */
-export type Device = { path: string; name: string };
+/**
+ * A device BlueZ knows. `name` is its alias, which BlueZ fills from its name.
+ * `battery` is 0 through 100, for a device that reports it.
+ */
+export type Device = {
+  path: string;
+  adapter: string;
+  address: string;
+  name: string;
+  paired: boolean;
+  connected: boolean;
+  battery: number | undefined;
+};
 
-export type Bluetooth = { adapters: Adapter[]; connected: Device[] };
+/**
+ * Every adapter, and each device that is paired or, found by a scan, has a
+ * name. A scan finds many nameless devices, such as beacons.
+ */
+export type Bluetooth = { adapters: Adapter[]; devices: Device[] };
 
 /** The calls this library makes. */
 export type BluetoothSystem = Pick<System, "dbusCall" | "dbusMatch">;
@@ -77,6 +94,88 @@ export const setPowered = async (
       signature: "ssv",
     })
   ).map(() => "set");
+
+/** Start scanning for devices. BlueZ stops when every scanner has asked. */
+export const startDiscovery = (
+  system: Pick<System, "dbusCall">,
+  adapter: string,
+): Promise<Result<"done", SystemError>> =>
+  call(system, adapter, ADAPTER, "StartDiscovery");
+
+export const stopDiscovery = (
+  system: Pick<System, "dbusCall">,
+  adapter: string,
+): Promise<Result<"done", SystemError>> =>
+  call(system, adapter, ADAPTER, "StopDiscovery");
+
+/** Connect a paired device's profiles. */
+export const connect = (
+  system: Pick<System, "dbusCall">,
+  device: string,
+): Promise<Result<"done", SystemError>> =>
+  call(system, device, DEVICE, "Connect");
+
+export const disconnect = (
+  system: Pick<System, "dbusCall">,
+  device: string,
+): Promise<Result<"done", SystemError>> =>
+  call(system, device, DEVICE, "Disconnect");
+
+/**
+ * Pair with a device, then trust it so it can reconnect on its own. With no
+ * agent registered, BlueZ pairs only devices that need no code.
+ */
+export const pair = async (
+  system: Pick<System, "dbusCall">,
+  device: string,
+): Promise<Result<"done", SystemError>> =>
+  (await call(system, device, DEVICE, "Pair")).andThenAsync(async () =>
+    (
+      await system.dbusCall({
+        body: [DEVICE, "Trusted", { signature: "b", value: true }],
+        bus: Bus.System,
+        destination: SERVICE,
+        interface: "org.freedesktop.DBus.Properties",
+        member: "Set",
+        path: device,
+        signature: "ssv",
+      })
+    ).map(() => "done" as const),
+  );
+
+/** Remove a device and its pairing. */
+export const forget = async (
+  system: Pick<System, "dbusCall">,
+  device: Pick<Device, "adapter" | "path">,
+): Promise<Result<"done", SystemError>> =>
+  (
+    await system.dbusCall({
+      body: [device.path],
+      bus: Bus.System,
+      destination: SERVICE,
+      interface: ADAPTER,
+      member: "RemoveDevice",
+      path: device.adapter,
+      signature: "o",
+    })
+  ).map(() => "done");
+
+/** A BlueZ method that takes no arguments. */
+const call = async (
+  system: Pick<System, "dbusCall">,
+  path: string,
+  iface: string,
+  member: string,
+): Promise<Result<"done", SystemError>> =>
+  (
+    await system.dbusCall({
+      bus: Bus.System,
+      destination: SERVICE,
+      interface: iface,
+      member,
+      path,
+    })
+  ).map(() => "done");
 
 /** A watch's state, shared by its loop and its stop function. */
 type Watch = {
@@ -170,13 +269,31 @@ const bluetoothOf = (objects: ManagedObjects): Bluetooth => {
     adapters: entries.flatMap(([path, held]) =>
       held[ADAPTER] === undefined
         ? []
-        : [{ path, powered: held[ADAPTER].Powered }],
+        : [
+            {
+              discovering: held[ADAPTER].Discovering,
+              path,
+              powered: held[ADAPTER].Powered,
+            },
+          ],
     ),
-    connected: entries.flatMap(([path, held]) =>
-      held[DEVICE]?.Connected === true
-        ? [{ name: held[DEVICE].Alias, path }]
-        : [],
-    ),
+    devices: entries.flatMap(([path, held]) => {
+      const device = held[DEVICE];
+      return device === undefined ||
+        (!device.Paired && device.Name === undefined)
+        ? []
+        : [
+            {
+              adapter: device.Adapter,
+              address: device.Address,
+              battery: held[BATTERY]?.Percentage,
+              connected: device.Connected,
+              name: device.Alias,
+              paired: device.Paired,
+              path,
+            },
+          ];
+    }),
   };
 };
 
@@ -188,11 +305,21 @@ const managedObjectsSchema = z.tuple([
   z.record(
     z.string(),
     z.object({
-      [ADAPTER]: z.object({ Powered: variant(z.boolean()) }).optional(),
+      [ADAPTER]: z
+        .object({
+          Discovering: variant(z.boolean()),
+          Powered: variant(z.boolean()),
+        })
+        .optional(),
+      [BATTERY]: z.object({ Percentage: variant(z.number()) }).optional(),
       [DEVICE]: z
         .object({
+          Adapter: variant(z.string()),
+          Address: variant(z.string()),
           Alias: variant(z.string()),
           Connected: variant(z.boolean()),
+          Name: variant(z.string()).optional(),
+          Paired: variant(z.boolean()),
         })
         .optional(),
     }),

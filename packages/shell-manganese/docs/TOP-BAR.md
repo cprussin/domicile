@@ -73,14 +73,32 @@ Every bar and the lock screen share one watch per system readout. See
 - Turns `warning` when NetworkManager reports limited connectivity or a
   captive portal.
 - Hidden without any of the three.
+- Click for the Wi-Fi panel, from NetworkManager or iwd. With wpa_supplicant
+  alone it says there is no Wi-Fi device.
+  - A switch turns the radio on or off.
+  - Opening it scans. The arrow scans again.
+  - The connection: signal, frequency, speed, addresses, gateway, DNS,
+    interface and hardware address, and **Disconnect**. iwd reports no
+    addresses.
+  - The other networks, strongest first, marked saved and secured. A click
+    joins a saved or open network. A new secured one asks for its passphrase.
+  - A refusal shows under what was asked.
+  - Wi-Fi is read only while the panel is open.
 
 ## Bluetooth
 
 - From BlueZ ([`@domicile-desktop/system-bluetooth`](../../system-bluetooth/README.md)).
 - An icon for off, on, or on with a device connected. Its name lists the
   connected devices.
-- Click turns every adapter off if any is on, and on otherwise. A refusal,
-  such as an rfkill block, is logged.
+- Click for the Bluetooth panel:
+  - A switch turns every adapter on or off.
+  - While open with an adapter on, it scans for devices.
+  - Devices: connected, then paired, then new. Each shows its state, battery
+    and address, and **Disconnect**, **Connect** or **Pair** (pair, then
+    connect). Paired devices have a forget button.
+  - Pairing registers no agent, so a device that asks for a code does not
+    pair.
+  - A refusal, such as an rfkill block, shows under what was asked.
 - Hidden without BlueZ or without an adapter.
 
 ## Battery

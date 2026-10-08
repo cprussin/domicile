@@ -1,5 +1,5 @@
-// The loop each backend runs: listen, read, then read again on each signal
-// that can change what was read.
+// The loop each watch runs: listen, read, then read again on each signal that
+// can change what was read.
 
 import type { Result } from "@cprussin/option-result";
 import { Err } from "@cprussin/option-result";
@@ -10,28 +10,28 @@ import type {
   SystemError,
 } from "@domicile-desktop/sdk/system";
 
-import type { Network, NetworkSystem } from "./network-state";
+import type { NetworkSystem } from "./network-state";
 
 /** What one read found, and which signals can change it. */
-export type Reading = {
-  network: Result<Network, SystemError>;
+export type Reading<T extends NonNullable<unknown>> = {
+  value: Result<T, SystemError>;
   matters: (signal: DbusSignal) => boolean;
 };
 
 /**
- * Calls `onNetwork` with what `read` finds now and after each signal that
+ * Calls `onValue` with what `read` finds now and after each signal that
  * matters, and returns a function that stops watching.
  */
-export const followNetwork = (
+export const followBus = <T extends NonNullable<unknown>>(
   system: NetworkSystem,
   match: DbusMatch,
-  read: () => Promise<Reading>,
-  onNetwork: (network: Result<Network, SystemError>) => void,
+  read: () => Promise<Reading<T>>,
+  onValue: (value: Result<T, SystemError>) => void,
 ): (() => void) => {
   const watch: Watch = { listening: undefined, stopped: false };
-  const report = (network: Result<Network, SystemError>) => {
+  const report = (value: Result<T, SystemError>) => {
     if (!watch.stopped) {
-      onNetwork(network);
+      onValue(value);
     }
   };
   follow(system, match, read, watch, report).catch((error: unknown) => {
@@ -50,12 +50,12 @@ type Watch = {
   stopped: boolean;
 };
 
-const follow = async (
+const follow = async <T extends NonNullable<unknown>>(
   system: NetworkSystem,
   match: DbusMatch,
-  read: () => Promise<Reading>,
+  read: () => Promise<Reading<T>>,
   watch: Watch,
-  report: (network: Result<Network, SystemError>) => void,
+  report: (value: Result<T, SystemError>) => void,
 ): Promise<void> => {
   const matched = await system.dbusMatch(match);
   await matched.match({
@@ -83,19 +83,19 @@ const follow = async (
 };
 
 /** Read now, and again on each signal that matters to the last read. */
-const changes = async (
+const changes = async <T extends NonNullable<unknown>>(
   listening: Listening<DbusSignal>,
-  read: () => Promise<Reading>,
-  report: (network: Result<Network, SystemError>) => void,
+  read: () => Promise<Reading<T>>,
+  report: (value: Result<T, SystemError>) => void,
 ): Promise<void> => {
   const reader = listening.items.getReader();
   const first = await read();
-  report(first.network);
+  report(first.value);
   let matters = first.matters;
   for (let next = await reader.read(); !next.done; next = await reader.read()) {
     if (matters(next.value)) {
       const again = await read();
-      report(again.network);
+      report(again.value);
       matters = again.matters;
     }
   }

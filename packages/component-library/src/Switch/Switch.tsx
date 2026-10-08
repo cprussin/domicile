@@ -26,8 +26,9 @@ export const Switch = ({ label, ...rootProps }: Props) => {
   );
 };
 
+// Takes its surface's text color, so it reads on a card and over the wallpaper.
 const labelStyles = hstack({
-  color: "foreground",
+  color: "inherit",
   cursor: "pointer",
   gap: 2,
 });

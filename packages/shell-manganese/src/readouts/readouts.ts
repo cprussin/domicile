@@ -10,6 +10,8 @@ import type { Bluetooth } from "@domicile-desktop/system-bluetooth/bluetooth";
 import { watchBluetooth } from "@domicile-desktop/system-bluetooth/bluetooth";
 import type { Network } from "@domicile-desktop/system-network/network";
 import { watchNetwork } from "@domicile-desktop/system-network/network";
+import type { Wifi } from "@domicile-desktop/system-network/wifi";
+import { watchWifi } from "@domicile-desktop/system-network/wifi";
 
 import { watchBattery } from "../battery/watch-battery";
 import { hostBacklight } from "../brightness/host-backlight";
@@ -38,6 +40,8 @@ export type Readouts = {
   battery: SharedWatch<Option<Battery>>;
   bluetooth: SharedWatch<Result<Bluetooth, SystemError>>;
   network: SharedWatch<Result<Network, SystemError>>;
+  /** The Wi-Fi device; `None` without one. */
+  wifi: SharedWatch<Result<Option<Wifi>, SystemError>>;
   /** Its meters are shared by id among open mixers. */
   sound: SoundControls;
 };
@@ -54,5 +58,6 @@ export const readouts = (domicile: DomicileHost): Readouts => {
     bluetooth: sharedWatch((onBluetooth) => watchBluetooth(host, onBluetooth)),
     network: sharedWatch((onNetwork) => watchNetwork(host, onNetwork)),
     sound: { ...sound, meters: sharedMeters(sound.meters) },
+    wifi: sharedWatch((onWifi) => watchWifi(host, onWifi)),
   };
 };

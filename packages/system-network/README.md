@@ -2,7 +2,9 @@
 
 The network for a Domicile shell, from NetworkManager, iwd or wpa_supplicant:
 connectivity and the primary connection, with the Wi-Fi network's name and
-signal. Built on [`@domicile-desktop/sdk/system`](../chrome-sdk/README.md).
+signal. The Wi-Fi device, from NetworkManager or iwd: its networks and
+connection, and the requests that change them. Built on
+[`@domicile-desktop/sdk/system`](../chrome-sdk/README.md).
 
 ## Usage
 
@@ -36,6 +38,37 @@ const stop = watchNetwork(system(domicile), (network) => {
 - Reports once, then after each change the service signals.
 - An `Err` is a D-Bus failure, such as the service not running.
 - A bug or an unexpected reply shape throws, logged to the console.
+
+## Wi-Fi
+
+```ts
+import { connectWifi, watchWifi } from "@domicile-desktop/system-network/wifi";
+
+const stop = watchWifi(host, (wifi) => {
+  wifi.match({
+    Err: () => hide(),
+    Ok: (found) => found.match({ None: () => hide(), Some: (device) => show(device) }),
+  });
+});
+await connectWifi(host, device, network, "passphrase");
+```
+
+- `watchWifi` watches the first Wi-Fi device of NetworkManager, else iwd, by
+  `NameHasOwner`. `None` is no device, or neither service. wpa_supplicant is
+  not controlled.
+- Requests: `setWifiEnabled`, `scanWifi`, `connectWifi`, `disconnectWifi`.
+  Each resolves `Ok` once the service accepts it; the watch reports the
+  outcome.
+- `connectWifi` uses a network's saved profile when it has one. A new secured
+  network needs a passphrase:
+  - NetworkManager: a new WPA-PSK profile, saved.
+  - iwd: `iwctl --passphrase … station <interface> connect <ssid>`, since iwd
+    asks an agent for it and a page cannot serve one. `iwctl` must be on the
+    compositor's `PATH`.
+- NetworkManager reads re-run on each property change of an object read, an
+  access point coming or going, or a device coming or going. It does not say
+  when a scan runs, so `scanning` is always `false`.
+- iwd does not report addresses, so `connection.ip` is `undefined`.
 
 See [SHELL-SYSTEM-ACCESS.md](/docs/SHELL-SYSTEM-ACCESS.md).
 

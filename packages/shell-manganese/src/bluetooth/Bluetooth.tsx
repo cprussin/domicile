@@ -1,12 +1,9 @@
 import type { Result } from "@cprussin/option-result";
+import { Popover } from "@domicile-desktop/component-library/Popover";
 import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import type { System, SystemError } from "@domicile-desktop/sdk/system";
 import { system } from "@domicile-desktop/sdk/system";
-import type {
-  Adapter,
-  Bluetooth as Reading,
-} from "@domicile-desktop/system-bluetooth/bluetooth";
-import { setPowered } from "@domicile-desktop/system-bluetooth/bluetooth";
+import type { Bluetooth as Reading } from "@domicile-desktop/system-bluetooth/bluetooth";
 import { BluetoothIcon } from "@phosphor-icons/react/dist/ssr/Bluetooth";
 import { BluetoothConnectedIcon } from "@phosphor-icons/react/dist/ssr/BluetoothConnected";
 import { BluetoothSlashIcon } from "@phosphor-icons/react/dist/ssr/BluetoothSlash";
@@ -15,94 +12,74 @@ import { useMemo } from "react";
 import { css } from "../../styled-system/css";
 import type { SharedWatch } from "../readouts/shared-watch";
 import { useSharedWatch } from "../readouts/useSharedWatch";
+import { BluetoothPanel } from "./BluetoothPanel";
+import type { BluetoothActions } from "./bluetooth-actions";
+import { BLUETOOTH_ACTIONS } from "./bluetooth-actions";
 
 type Props = {
   /** The desk's Bluetooth, from BlueZ. */
   bluetooth: SharedWatch<Result<Reading, SystemError>>;
-  /** The host whose system calls reach BlueZ to turn it on or off. */
+  /** The host whose system calls reach BlueZ. */
   domicile: DomicileHost;
-  /** Injectable so tests can see what a click asks for. */
-  power?: typeof setPowered | undefined;
+  /** Injectable so tests can see what the panel asks for. */
+  actions?: BluetoothActions | undefined;
 };
 
 /**
- * The Bluetooth toggle on the bar: an icon for off, on or connected, named
- * with the connected devices. A click turns every adapter off if any is on,
- * and on otherwise.
+ * The Bluetooth item on the bar: an icon for off, on or connected, named with
+ * the connected devices. A click opens the {@link BluetoothPanel}.
  *
  * Draws nothing until BlueZ answers, on a D-Bus error, or with no adapter.
  */
 export const Bluetooth = ({
+  actions = BLUETOOTH_ACTIONS,
   bluetooth,
   domicile,
-  power = setPowered,
 }: Props) => {
   const host = useMemo(() => system(domicile), [domicile]);
   return useSharedWatch(bluetooth)?.match({
     Err: () => undefined,
     Ok: (reading) =>
       reading.adapters.length === 0 ? undefined : (
-        <Toggle host={host} power={power} reading={reading} />
+        <Item actions={actions} host={host} reading={reading} />
       ),
   });
 };
 
-/** The button once BlueZ has reported an adapter. */
-const Toggle = ({
+/** The button and its panel once BlueZ has reported an adapter. */
+const Item = ({
+  actions,
   host,
-  power,
-  reading: { adapters, connected },
+  reading,
 }: {
+  actions: BluetoothActions;
   host: System;
-  power: typeof setPowered;
   reading: Reading;
 }) => {
-  const on = adapters.some(({ powered }) => powered);
+  const on = reading.adapters.some(({ powered }) => powered);
+  const connected = reading.devices.filter((device) => device.connected);
   return (
-    <button
-      aria-label={labelOf(
-        on,
-        connected.map(({ name }) => name),
-      )}
-      className={triggerStyles}
-      onClick={() => {
-        toggle(host, power, adapters, !on);
-      }}
-      type="button"
-    >
-      <Icon connected={connected.length > 0} on={on} />
-    </button>
-  );
-};
-
-/** Turn every adapter on or off, logging BlueZ's refusals. */
-const toggle = (
-  host: System,
-  power: typeof setPowered,
-  adapters: readonly Adapter[],
-  powered: boolean,
-): void => {
-  Promise.all(adapters.map(({ path }) => power(host, path, powered)))
-    .then((results) => {
-      for (const result of results) {
-        result.match({
-          Err: (error) => {
-            // biome-ignore lint/suspicious/noConsole: the bar shows BlueZ's state, which did not change
-            console.error(
-              `Failed to turn Bluetooth ${powered ? "on" : "off"}`,
-              error,
-            );
-          },
-          Ok: () => {
-            /* the watch reports the new state */
-          },
-        });
+    <Popover
+      align="center"
+      side="bottom"
+      tone="overPhoto"
+      trigger={
+        <button
+          aria-label={labelOf(
+            on,
+            connected.map(({ name }) => name),
+          )}
+          className={triggerStyles}
+          type="button"
+        >
+          <Icon connected={connected.length > 0} on={on} />
+        </button>
       }
-    })
-    .catch((error: unknown) => {
-      // biome-ignore lint/suspicious/noConsole: surfacing a background failure
-      console.error("Failed to turn Bluetooth on or off", error);
-    });
+      wide
+    >
+      <BluetoothPanel actions={actions} bluetooth={reading} host={host} />
+    </Popover>
+  );
 };
 
 const Icon = ({ connected, on }: { connected: boolean; on: boolean }) => {
@@ -116,7 +93,7 @@ const Icon = ({ connected, on }: { connected: boolean; on: boolean }) => {
 };
 
 // Not the library's `Button`: its ghost variant uses `muted` text, which is
-// unreadable over the wallpaper. Matches the brightness control.
+// unreadable over the wallpaper. Matches the volume control.
 const triggerStyles = css({
   _hover: {
     backgroundColor: "color-mix(in oklab, white 16%, transparent)",

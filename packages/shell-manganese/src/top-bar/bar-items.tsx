@@ -81,13 +81,19 @@ export const BarMode = () => {
  */
 export const BarThemeSelector = () => <ThemeSwitch />;
 
-/** The primary network connection, from the network service. */
+/** The primary network connection, whose panel controls Wi-Fi. */
 export const BarNetwork = () => {
-  const { readouts } = useBar();
-  return <Network network={readouts.network} />;
+  const { domicile, readouts } = useBar();
+  return (
+    <Network
+      domicile={domicile}
+      network={readouts.network}
+      wifi={readouts.wifi}
+    />
+  );
 };
 
-/** The Bluetooth toggle, from BlueZ. */
+/** Bluetooth, whose panel controls adapters and devices. */
 export const BarBluetooth = () => {
   const { domicile, readouts } = useBar();
   return <Bluetooth bluetooth={readouts.bluetooth} domicile={domicile} />;

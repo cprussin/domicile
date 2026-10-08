@@ -30,7 +30,8 @@ The engine serves this page over `domicile://` and hands `Shell` the desktop.
 | `launcher/`, `clipboard/`, `notifications/`, `tray/`, `extensions/` | Those features. |
 | `readouts/` | The desk's system readouts, one watch each, shared by every bar and the lock screen. |
 | `battery/`, `brightness/`, `volume/`, `clock/` | Bar readouts and where each reads from. |
-| `network/`, `bluetooth/` | Bar items on `@domicile-desktop/system-network` and `system-bluetooth`. |
+| `network/`, `bluetooth/` | Bar items on `@domicile-desktop/system-network` and `system-bluetooth`, and their panels. |
+| `requests/` | Requests a panel sends to a system service, with each one's progress and refusal. |
 | `lock/` | Lock screen, with the battery, brightness and volume. |
 | `theme/` | Theme from the host or the last session. |
 | `wallpaper/` | Wallpaper and its photo list. |
