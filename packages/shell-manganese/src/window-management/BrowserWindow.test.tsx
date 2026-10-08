@@ -1592,21 +1592,11 @@ describe("BrowserWindow", () => {
       );
     });
 
-    // A drag changes opacity at both ends; snapping would look like a blink.
-    it("fades to see-through as it is taken hold of", () => {
+    it("stays opaque while it is being dragged", () => {
       render(<BrowserWindow {...windowProps} dragging />);
 
-      expect(globalThis.getComputedStyle(browser()).transition).toContain(
-        "opacity",
-      );
-    });
-
-    it("fades back to solid as it is let go", () => {
-      render(<BrowserWindow {...windowProps} />);
-
-      expect(globalThis.getComputedStyle(browser()).transition).toContain(
-        "opacity",
-      );
+      // Unset, so it draws at full opacity.
+      expect(globalThis.getComputedStyle(browser()).opacity).toBe("");
     });
 
     // A leaving window still shows its page, but must not pull focus back into

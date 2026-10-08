@@ -34,7 +34,6 @@ import { isLeaving } from "./window-motion";
 import {
   bottomCornerStyles,
   clickThroughStyles,
-  draggingStyles,
   edgeStyles,
   movingStyles,
   placedAt,
@@ -415,7 +414,6 @@ export const BrowserWindow = ({
         (clickThrough || leaving) && clickThroughStyles,
         // A dragged window gets a new box on every pointer move, so it skips
         // easing. Colors still ease; see `settlingStyles`.
-        dragging && draggingStyles,
         settlingStyles({ dragging }),
       )}
       // Exposes the motion on the element for tests and debugging.

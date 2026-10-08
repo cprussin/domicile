@@ -37,12 +37,6 @@ export const placedAt = (rect: Rect, depth: number): CSSProperties => ({
 });
 
 /**
- * A window being dragged. The window is a compositor layer, so the opacity
- * applies to the client's buffer too.
- */
-export const draggingStyles = css({ opacity: 0.6 });
-
-/**
  * The border that makes a window's edge visible. Focus is shown by `FocusGlow`,
  * not by this border's color.
  */
@@ -208,8 +202,7 @@ export const movingStyles = cva({
  *   `placement.ts`).
  * - Colors: always eased; focus follows the pointer, so snapping would
  *   flicker.
- * - Opacity: always eased, so the drag fade does not blink at either end of
- *   a drag.
+ * - Opacity: always eased, so `FocusGlow` fades rather than blinks.
  *
  * One recipe because two rules setting `transition` on one element race on
  * Panda's emit order.

@@ -277,25 +277,13 @@ describe("AppWindow", () => {
       ).not.toContain("inline-size");
     });
 
-    // A drag changes opacity at both ends; snapping would look like a blink.
-    it("fades to see-through as it is taken hold of", () => {
+    it("stays opaque while it is being dragged", () => {
       const { container } = render(
         <AppWindow {...windowProps} dragging focused={false} />,
       );
 
-      expect(
-        globalThis.getComputedStyle(portal(container)).transition,
-      ).toContain("opacity");
-    });
-
-    it("fades back to solid as it is let go", () => {
-      const { container } = render(
-        <AppWindow {...windowProps} focused={false} />,
-      );
-
-      expect(
-        globalThis.getComputedStyle(portal(container)).transition,
-      ).toContain("opacity");
+      // Unset, so it draws at full opacity.
+      expect(globalThis.getComputedStyle(portal(container)).opacity).toBe("");
     });
 
     it("says when it has played its motion out", async () => {

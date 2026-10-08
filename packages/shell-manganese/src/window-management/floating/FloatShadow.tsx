@@ -3,7 +3,6 @@ import type { Rect } from "../rect";
 import type { Restack } from "../restacking";
 import type { WindowMotion } from "../window-motion";
 import {
-  draggingStyles,
   movingStyles,
   placedAt,
   scaledAbout,
@@ -14,7 +13,7 @@ import {
 type Props = {
   /** The stacking depth of the window casting it. */
   depth: number;
-  /** Whether the window is being dragged, which makes it translucent. */
+  /** Whether the window is being dragged, which stops its box easing. */
   dragging: boolean;
   /** The window's whole box, bar included. */
   frame: Rect;
@@ -44,7 +43,6 @@ export const FloatShadow = ({
     className={cx(
       shadowStyles,
       movingStyles({ motion }),
-      dragging && draggingStyles,
       settlingStyles({ dragging }),
     )}
     data-shadow
@@ -57,9 +55,8 @@ export const FloatShadow = ({
 );
 
 /**
- * An outer `box-shadow` only, which is never drawn under its own box, so a
- * translucent dragged window shows the desktop, not its shadow. Rounded like
- * the frame, and ignores the pointer.
+ * An outer `box-shadow` only, which is never drawn under its own box. Rounded
+ * like the frame, and ignores the pointer.
  */
 const shadowStyles = css({
   borderRadius: "lg",
