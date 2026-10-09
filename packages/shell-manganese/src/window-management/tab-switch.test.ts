@@ -50,7 +50,7 @@ describe("tabSwitched", () => {
         desktop([shownIn("a"), hiddenIn("b")]),
         desktop([hiddenIn("a"), shownIn("b")]),
       ),
-    ).toStrictEqual({ concealed: ["a"], revealed: ["b"] });
+    ).toStrictEqual({ concealed: ["a"], revealed: ["b"], uncovered: [] });
   });
 
   // A window from another workspace or the scratchpad is not a tab switch.
@@ -60,18 +60,18 @@ describe("tabSwitched", () => {
         desktop([shownIn("a")]),
         desktop([hiddenIn("a"), shownIn("b")]),
       ),
-    ).toStrictEqual({ concealed: [], revealed: [] });
+    ).toStrictEqual({ concealed: [], revealed: [], uncovered: [] });
   });
 
   // A tab closing is not a switch; fading both would show the desktop
   // through.
-  it("leaves the window a closed tab uncovers alone", () => {
+  it("names the window a closed tab uncovers apart from a switch", () => {
     expect(
       tabSwitched(
         desktop([shownIn("a"), hiddenIn("b")]),
         desktop([shownIn("b")]),
       ),
-    ).toStrictEqual({ concealed: [], revealed: [] });
+    ).toStrictEqual({ concealed: [], revealed: [], uncovered: ["b"] });
   });
 
   it("leaves a window that stays as it was alone", () => {
@@ -80,7 +80,7 @@ describe("tabSwitched", () => {
         desktop([shownIn("a"), hiddenIn("b")]),
         desktop([shownIn("a"), hiddenIn("b")]),
       ),
-    ).toStrictEqual({ concealed: [], revealed: [] });
+    ).toStrictEqual({ concealed: [], revealed: [], uncovered: [] });
   });
 
   // Floats are skipped; the crossfade's tiled depth would drop a float under
@@ -91,7 +91,7 @@ describe("tabSwitched", () => {
         desktop([hiddenIn("a")]),
         desktop([{ ...shownIn("a"), depth: 2000 }]),
       ),
-    ).toStrictEqual({ concealed: [], revealed: [] });
+    ).toStrictEqual({ concealed: [], revealed: [], uncovered: [] });
   });
 
   it("says nothing across a workspace switch, which slides the screenful", () => {
@@ -100,6 +100,6 @@ describe("tabSwitched", () => {
         desktop([shownIn("a"), hiddenIn("b")]),
         desktop([hiddenIn("a"), shownIn("b")], "2"),
       ),
-    ).toStrictEqual({ concealed: [], revealed: [] });
+    ).toStrictEqual({ concealed: [], revealed: [], uncovered: [] });
   });
 });

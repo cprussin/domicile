@@ -28,10 +28,14 @@ export type WindowMotion =
   | TabFade;
 
 /**
- * The two halves of a tab switch crossfade: the revealed window fades in over
- * the hidden one. See `tab-switch.ts`.
+ * A tab being shown or hidden. See `tab-switch.ts`.
+ *
+ * - `concealing` and `revealing`: the two halves of a tab switch crossfade,
+ *   where the revealed window fades in over the hidden one.
+ * - `uncovering`: the window shown when the tab over it closes. It holds its
+ *   depth so no other hidden tab shows through the closing one.
  */
-export type TabFade = "concealing" | "revealing";
+export type TabFade = "concealing" | "revealing" | "uncovering";
 
 /**
  * A float swapping places in the stack. Two identical animations let the same
@@ -72,7 +76,8 @@ export const isLeaving = (motion: WindowMotion): boolean => {
     case "restacking":
     case "restacking-again":
     case "resting":
-    case "revealing": {
+    case "revealing":
+    case "uncovering": {
       return false;
     }
   }
@@ -87,7 +92,8 @@ export const isLeaving = (motion: WindowMotion): boolean => {
 export const barMotion = (motion: WindowMotion): WindowMotion => {
   switch (motion) {
     case "concealing":
-    case "revealing": {
+    case "revealing":
+    case "uncovering": {
       return "resting";
     }
     case "arriving-from-end":

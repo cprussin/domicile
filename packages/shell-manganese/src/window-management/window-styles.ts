@@ -191,6 +191,10 @@ export const movingStyles = cva({
       revealing: {
         animation: "windowRevealing {durations.fast} {easings.in-out}",
       },
+      // Lasts as long as `closing-tab`, which it is drawn under.
+      uncovering: {
+        animation: "windowUncovering {durations.fast} {easings.out}",
+      },
     },
   },
 });

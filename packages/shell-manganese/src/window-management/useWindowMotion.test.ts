@@ -341,6 +341,45 @@ describe("useWindowMotion", () => {
     });
   });
 
+  describe("a tab uncovered by a close", () => {
+    const shownOver = (hidden: ShellWindow): Shown => ({
+      ...desktop("1", [TERMINAL, EDITOR]),
+      placements: [
+        placementOf(TERMINAL.id),
+        {
+          ...placementOf(hidden.id),
+          behind: placementOf(hidden.id).surface,
+          surface: undefined,
+        },
+      ],
+    });
+
+    // Its depth would otherwise ease up from the hidden tabs', letting one of
+    // them show through the closing tab.
+    it("holds its depth while the closed tab fades", () => {
+      const { rerender, result } = showing(shownOver(EDITOR));
+
+      act(() => {
+        rerender(desktop("1", [EDITOR]));
+      });
+
+      expect(motionOf(result, EDITOR.id)).toBe("uncovering");
+    });
+
+    it("is done when it says it has finished", () => {
+      const { rerender, result } = showing(shownOver(EDITOR));
+      act(() => {
+        rerender(desktop("1", [EDITOR]));
+      });
+
+      act(() => {
+        result.current.onPlayedOut(EDITOR.id, "uncovering", SCREEN);
+      });
+
+      expect(motionOf(result, EDITOR.id)).toBe("resting");
+    });
+  });
+
   describe("a workspace switch", () => {
     it("slides the workspace arriving in from the side it was on", () => {
       const { rerender, result } = showing(
