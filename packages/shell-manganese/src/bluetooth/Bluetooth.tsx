@@ -3,7 +3,10 @@ import { Popover } from "@domicile-desktop/component-library/Popover";
 import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import type { System, SystemError } from "@domicile-desktop/sdk/system";
 import { system } from "@domicile-desktop/sdk/system";
-import type { Bluetooth as Reading } from "@domicile-desktop/system-bluetooth/bluetooth";
+import type {
+  Device,
+  Bluetooth as Reading,
+} from "@domicile-desktop/system-bluetooth/bluetooth";
 import { BluetoothIcon } from "@phosphor-icons/react/dist/ssr/Bluetooth";
 import { BluetoothConnectedIcon } from "@phosphor-icons/react/dist/ssr/BluetoothConnected";
 import { BluetoothSlashIcon } from "@phosphor-icons/react/dist/ssr/BluetoothSlash";
@@ -32,7 +35,7 @@ type Props = {
 
 /**
  * The Bluetooth item on the bar: an icon for off, on or connected, named with
- * the connected devices. A click opens the {@link BluetoothPanel}. On a locked
+ * the connected devices and their batteries. A click opens the {@link BluetoothPanel}. On a locked
  * desktop it is the icon alone.
  *
  * Draws nothing until BlueZ answers, on a D-Bus error, or with no adapter.
@@ -64,15 +67,9 @@ export const Bluetooth = ({
 const Status = ({ reading }: { reading: Reading }) => {
   const on = reading.adapters.some(({ powered }) => powered);
   const connected = reading.devices.filter((device) => device.connected);
+  const label = labelOf(on, connected);
   return (
-    <span
-      aria-label={labelOf(
-        on,
-        connected.map(({ name }) => name),
-      )}
-      className={statusStyles}
-      role="img"
-    >
+    <span aria-label={label} className={statusStyles} role="img" title={label}>
       <Icon connected={connected.length > 0} on={on} />
     </span>
   );
@@ -90,6 +87,7 @@ const Item = ({
 }) => {
   const on = reading.adapters.some(({ powered }) => powered);
   const connected = reading.devices.filter((device) => device.connected);
+  const label = labelOf(on, connected);
   return (
     <Popover
       align="center"
@@ -97,11 +95,9 @@ const Item = ({
       tone="overPhoto"
       trigger={
         <button
-          aria-label={labelOf(
-            on,
-            connected.map(({ name }) => name),
-          )}
+          aria-label={label}
           className={triggerStyles}
+          title={label}
           type="button"
         >
           <Icon connected={connected.length > 0} on={on} />
@@ -155,12 +151,16 @@ const statusStyles = css({
   justifyContent: "center",
 });
 
-const labelOf = (on: boolean, names: string[]): string => {
+/** Its name and tooltip: whether it is on, and each connected device's battery. */
+const labelOf = (on: boolean, connected: Device[]): string => {
   if (!on) {
     return "Bluetooth off";
-  } else if (names.length === 0) {
+  } else if (connected.length === 0) {
     return "Bluetooth on";
   } else {
-    return `Bluetooth: ${names.join(", ")}`;
+    return `Bluetooth: ${connected.map(deviceLabelOf).join(", ")}`;
   }
 };
+
+const deviceLabelOf = ({ battery, name }: Device): string =>
+  battery === undefined ? name : `${name} (${battery}%)`;

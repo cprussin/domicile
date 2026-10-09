@@ -46,14 +46,19 @@ const NO_HOST = new FakeDomicileHost().host;
 
 const ADAPTER = "/org/bluez/hci0";
 
-const reading = (powered: boolean, connected: string[]) =>
+/** `batteries` holds the charge of the connected devices that report one. */
+const reading = (
+  powered: boolean,
+  connected: string[],
+  batteries: Record<string, number> = {},
+) =>
   Ok<Reading, SystemError>({
     adapters: [{ discovering: false, path: ADAPTER, powered }],
     devices: [
       ...connected.map((name, index) => ({
         adapter: ADAPTER,
         address: `AC:80:0A:1B:2C:3${index}`,
-        battery: undefined,
+        battery: batteries[name],
         connected: true,
         name,
         paired: true,
@@ -135,6 +140,27 @@ describe("Bluetooth", () => {
     ).toBeVisible();
   });
 
+  it("names each connected device's battery, also as its tooltip", () => {
+    const bluetooth = heldBluetooth();
+    render(
+      <Bluetooth
+        actions={NO_ACTIONS}
+        bluetooth={bluetooth.bluetooth}
+        domicile={NO_HOST}
+      />,
+    );
+
+    bluetooth.report(
+      reading(true, ["WH-1000XM4", "MX Master 3"], { "WH-1000XM4": 80 }),
+    );
+
+    expect(
+      screen.getByRole("button", {
+        name: "Bluetooth: WH-1000XM4 (80%), MX Master 3",
+      }),
+    ).toHaveAttribute("title", "Bluetooth: WH-1000XM4 (80%), MX Master 3");
+  });
+
   it("only shows what is connected on a locked desk", () => {
     // A locked desk refuses power, pairing and connecting.
     const bluetooth = heldBluetooth();
@@ -147,12 +173,12 @@ describe("Bluetooth", () => {
       />,
     );
 
-    bluetooth.report(reading(true, ["WH-1000XM4"]));
+    bluetooth.report(reading(true, ["WH-1000XM4"], { "WH-1000XM4": 80 }));
 
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
     expect(
-      screen.getByRole("img", { name: "Bluetooth: WH-1000XM4" }),
-    ).toBeVisible();
+      screen.getByRole("img", { name: "Bluetooth: WH-1000XM4 (80%)" }),
+    ).toHaveAttribute("title", "Bluetooth: WH-1000XM4 (80%)");
   });
 
   it("opens its panel on a click", async () => {
