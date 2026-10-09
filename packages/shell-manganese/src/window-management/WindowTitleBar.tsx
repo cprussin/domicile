@@ -10,15 +10,13 @@ import type { Aim, DropTargets } from "./tiled/aim";
 import type { TileDrag } from "./tiled/useTileDrag";
 import { useTileDrag } from "./tiled/useTileDrag";
 import type { TitleFocus } from "./title-focus";
-import type { TabLayout } from "./tree/frames";
+import type { StripPlace, TabLayout } from "./tree/frames";
 import type { WindowMotion } from "./window-motion";
 
 /** The primary button, as `PointerEvent.button` numbers it. */
 const PRIMARY_BUTTON = 0;
 
 type Props = {
-  /** Whether this is a hidden tab. See {@link TitleBar}. */
-  besideOpenTab: boolean;
   /** The stacking depth of the window it names. */
   depth: number;
   /** Whether this window is being dragged. See {@link TitleBar}. */
@@ -54,6 +52,8 @@ type Props = {
   /** The window's restack animation, which the bar plays too. */
   restack?: Restack | undefined;
   /** The tab strip direction. See {@link TitleBar}. */
+  /** Its place in its tab strip. See {@link TitleBar}. */
+  strip: StripPlace | undefined;
   tabbed: TabLayout | undefined;
   /** What a tiled window can be dropped on, on every screen. */
   targets: DropTargets;
@@ -74,7 +74,6 @@ type Props = {
  * fullscreen window's bar does not drag.
  */
 export const WindowTitleBar = ({
-  besideOpenTab,
   depth,
   dragging,
   float,
@@ -94,6 +93,7 @@ export const WindowTitleBar = ({
   onMove,
   rect,
   restack,
+  strip,
   tabbed,
   targets,
   title,
@@ -121,7 +121,6 @@ export const WindowTitleBar = ({
   });
   return (
     <TitleBar
-      besideOpenTab={besideOpenTab}
       depth={depth}
       dragging={dragging}
       floating={float !== undefined}
@@ -137,6 +136,7 @@ export const WindowTitleBar = ({
       onMotionEnded={onMotionEnded}
       rect={rect}
       restack={restack}
+      strip={strip}
       tabbed={tabbed}
       title={title}
       window={window}

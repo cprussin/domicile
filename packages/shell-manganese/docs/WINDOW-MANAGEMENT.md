@@ -143,6 +143,10 @@ For how warping, browser-window focus and modifier drags work, see
 - The page hit-tests the bar, so clicks on it never reach the client.
 - In a tabbed or stacking container, each window's tab is its title bar. The
   tabs rest in a tab strip, even a container of one.
+- The strip has a rounded top and an edge. Its bottom edge is the window's top
+  edge; the open tab breaks it to join its window.
+- Tabs are at most 240px wide, so the strip always runs on past the last one.
+- A hidden tab shows only its close button. Dividers separate hidden tabs.
 - A tab for a nested container shows the name of its last-focused window, an
   icon for its layout and its window count.
 - A bar has four states, set as `data-focus` (`title-focus.ts`): sway's

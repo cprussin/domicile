@@ -15,7 +15,7 @@ import { hstack } from "../../styled-system/patterns";
 import type { Rect } from "./rect";
 import type { Restack } from "./restacking";
 import type { TitleFocus } from "./title-focus";
-import type { TabLayout } from "./tree/frames";
+import type { StripPlace, TabLayout } from "./tree/frames";
 import { Layout } from "./tree/node";
 import type { WindowMotion } from "./window-motion";
 import { isLeaving } from "./window-motion";
@@ -42,11 +42,6 @@ const GROUP_NAMES: Record<Layout, string> = {
 };
 
 type Props = {
-  /**
-   * Whether this is a hidden tab, which draws a line under it to continue the
-   * top edge of the shown window.
-   */
-  besideOpenTab?: boolean;
   /** The stacking depth of the window it names. */
   depth: number;
   /**
@@ -103,6 +98,8 @@ type Props = {
    * See `shuffledBy`.
    */
   restack?: Restack | undefined;
+  /** Its place in its tab strip, or `undefined` for a window's own bar. */
+  strip?: StripPlace | undefined;
   /**
    * The direction of the tab strip, which a closing tab collapses along. See
    * `collapsedAlong`. `undefined` for a window's own bar.
@@ -120,11 +117,12 @@ type Props = {
  * window's depth so windows in front cover it. The page hit-tests it, so
  * presses on it never reach the `<app>` below.
  *
- * A tab is drawn inset in its slot of the tab strip. The slots meet, so a
- * container's tabs rest in one strip, even a container of one.
+ * A tab is drawn in its slot of the tab strip. The slots meet, and the last
+ * one runs the strip on to its end, so a container's tabs rest in one strip,
+ * even a container of one. The strip's bottom edge is the window's top edge;
+ * the open tab breaks it to join its window.
  */
 export const TitleBar = ({
-  besideOpenTab = false,
   depth,
   dragging,
   floating,
@@ -143,110 +141,138 @@ export const TitleBar = ({
   onPointerDown,
   rect,
   restack,
+  strip,
   tabbed,
   title,
   window,
-}: Props) => (
-  // biome-ignore lint/a11y/noStaticElementInteractions: a press only raises the window; its buttons are the keyboard-reachable controls
-  // biome-ignore lint/a11y/noNoninteractiveElementInteractions: same as above
-  <div
-    className={cx(
-      slotStyles({
-        besideOpenTab,
-        groupSelected,
-        tab: tabbed !== undefined,
-      }),
-      movingStyles({ motion }),
-      isLeaving(motion) && clickThroughStyles,
-      settlingStyles({ dragging }),
-    )}
-    // Exposed as attributes so devtools and tests can read the state.
-    data-focus={focus}
-    data-group-selected={groupSelected || undefined}
-    data-motion={motion}
-    // A press here lands outside every `<app>`, so the window is named for
-    // the focus handling in `AppWindow`.
-    data-window={window}
-    // A closed window's buttons would do nothing.
-    inert={isLeaving(motion)}
-    // Ignore animations bubbling up from the buttons.
-    onAnimationEnd={(event) => {
-      if (event.target === event.currentTarget) {
-        onMotionEnded();
-      }
-    }}
-    onAuxClick={(event) => {
-      if (event.button === MIDDLE_BUTTON) {
-        onMiddleClick?.();
-      }
-    }}
-    onContextMenu={onContextMenu}
-    onPointerDown={onPointerDown}
-    style={{
-      ...placedAt(rect, depth),
-      ...scaledAbout(frame, rect),
-      ...shuffledBy(restack),
-      ...collapsedAlong(tabbed),
-    }}
-  >
+}: Props) => {
+  const hidden = strip !== undefined && !strip.open;
+  return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: a press only raises the window; its buttons are the keyboard-reachable controls
+    // biome-ignore lint/a11y/noNoninteractiveElementInteractions: same as above
     <div
       className={cx(
-        barStyles({
-          besideOpenTab,
-          focus,
-          tab: tabbed !== undefined,
-        }),
-        !fullscreen && edgeStyles,
-        !fullscreen && topCornerStyles,
+        slotStyles,
+        strip !== undefined &&
+          stripStyles({
+            first: strip.first,
+            selected: groupSelected,
+            stacked: tabbed === Layout.Stacking,
+          }),
+        movingStyles({ motion }),
+        isLeaving(motion) && clickThroughStyles,
         settlingStyles({ dragging }),
       )}
-      data-face
+      data-divided={strip?.divided || undefined}
+      // Exposed as attributes so devtools and tests can read the state.
+      data-focus={focus}
+      data-group-selected={groupSelected || undefined}
+      data-motion={motion}
+      data-strip-end={strip?.rest === undefined ? undefined : true}
+      // A press here lands outside every `<app>`, so the window is named for
+      // the focus handling in `AppWindow`.
+      data-window={window}
+      // A closed window's buttons would do nothing.
+      inert={isLeaving(motion)}
+      // Ignore animations bubbling up from the buttons.
+      onAnimationEnd={(event) => {
+        if (event.target === event.currentTarget) {
+          onMotionEnded();
+        }
+      }}
+      onAuxClick={(event) => {
+        if (event.button === MIDDLE_BUTTON) {
+          onMiddleClick?.();
+        }
+      }}
+      onContextMenu={onContextMenu}
+      onPointerDown={onPointerDown}
+      style={{
+        ...placedAt(rect, depth),
+        ...scaledAbout(frame, rect),
+        ...shuffledBy(restack),
+        ...collapsedAlong(tabbed),
+        ...stripRestOf(strip),
+      }}
     >
-      {group !== undefined && (
-        <GroupMark layout={group.layout} windows={group.windows} />
-      )}
-      <span className={titleStyles}>{title}</span>
-      {/*
+      <div
+        className={cx(
+          strip === undefined
+            ? cx(
+                barStyles({ focus }),
+                !fullscreen && edgeStyles,
+                !fullscreen && topCornerStyles,
+              )
+            : tabStyles({ focus, open: !hidden }),
+          settlingStyles({ dragging }),
+        )}
+        data-face
+      >
+        {group !== undefined && (
+          <GroupMark layout={group.layout} windows={group.windows} />
+        )}
+        <span className={titleStyles}>{title}</span>
+        {/*
         A press on a button must not start a drag: drag pointer capture would
         retarget the click to the bar.
       */}
-      <span
-        className={controlStyles}
-        onPointerDown={(event) => {
-          event.stopPropagation();
-        }}
-      >
-        <Button
-          label={floating ? "Tile" : "Float"}
-          onClick={onFloat}
-          size="sm"
-          variant="ghost"
+        <span
+          className={controlStyles}
+          onPointerDown={(event) => {
+            event.stopPropagation();
+          }}
         >
-          {floating ? (
-            <SquaresFourIcon size={14} />
-          ) : (
-            <BrowsersIcon size={14} />
+          {/*
+            A hidden tab only offers to close, as in a browser, so its title
+            keeps the room. A narrow bar drops these too.
+          */}
+          {!hidden && (
+            <span className={extraControlStyles}>
+              <Button
+                label={floating ? "Tile" : "Float"}
+                onClick={onFloat}
+                size="sm"
+                variant="ghost"
+              >
+                {floating ? (
+                  <SquaresFourIcon size={14} />
+                ) : (
+                  <BrowsersIcon size={14} />
+                )}
+              </Button>
+              <Button
+                label={fullscreen ? "Restore" : "Maximize"}
+                onClick={onFullscreen}
+                size="sm"
+                variant="ghost"
+              >
+                {fullscreen ? (
+                  <CornersInIcon size={14} />
+                ) : (
+                  <CornersOutIcon size={14} />
+                )}
+              </Button>
+            </span>
           )}
-        </Button>
-        <Button
-          label={fullscreen ? "Restore" : "Maximize"}
-          onClick={onFullscreen}
-          size="sm"
-          variant="ghost"
-        >
-          {fullscreen ? (
-            <CornersInIcon size={14} />
-          ) : (
-            <CornersOutIcon size={14} />
-          )}
-        </Button>
-        <Button label="Close" onClick={onClose} size="sm" variant="ghost">
-          <XIcon size={14} />
-        </Button>
-      </span>
+          <Button label="Close" onClick={onClose} size="sm" variant="ghost">
+            <XIcon size={14} />
+          </Button>
+        </span>
+      </div>
     </div>
-  </div>
-);
+  );
+};
+
+/**
+ * Inline custom property for {@link stripStyles}: how far the last tab's slot
+ * runs the strip on past itself. None for other bars.
+ */
+const stripRestOf = (
+  strip: StripPlace | undefined,
+): Record<`--${string}`, string> =>
+  strip?.rest === undefined
+    ? {}
+    : { "--strip-rest": `${strip.rest.toString()}px` };
 
 /**
  * The layout of the group a tab stands for, and its size, so a group in a tab
@@ -286,42 +312,145 @@ const GroupIcon = ({ layout }: { layout: Layout }) => {
   }
 };
 
+// Fills the slot with the bar's own box.
+const slotStyles = css({ display: "flex" });
+
 /**
- * The bar's slot. For a tab, its piece of the tab strip, with the tab inset
- * so the strip shows around and between the tabs.
+ * A tab's slot: its piece of the tab strip. The strip has a rounded top, an
+ * edge all round, and a bottom edge that is the window's top edge. The last
+ * slot draws the rest of the strip past itself, at `--strip-rest`, and passes
+ * the pointer through it. A divided slot draws a divider before its tab.
  */
-const slotStyles = cva({
-  base: { display: "flex" },
+const stripStyles = cva({
+  base: {
+    // A short line in the gap before the tab, between two hidden tabs.
+    "&[data-divided]::before": {
+      backgroundColor: "borderStrong",
+      content: '""',
+      inlineSize: "1px",
+      // Centered on the tab's title, which sits below the strip's top inset.
+      insetBlockEnd: 1.5,
+      insetBlockStart: 2.5,
+      insetInlineStart: 0.5,
+      position: "absolute",
+    },
+    "&[data-strip-end]::after": {
+      backgroundColor: "inherit",
+      borderBlockWidth: "1px",
+      borderColor: "inherit",
+      borderInlineEndWidth: "1px",
+      borderStartEndRadius: "lg",
+      borderStyle: "solid",
+      content: '""',
+      inlineSize: "var(--strip-rest)",
+      insetBlockEnd: "-1px",
+      insetBlockStart: "-1px",
+      insetInlineStart: "100%",
+      pointerEvents: "none",
+      position: "absolute",
+    },
+    borderBlockEndWidth: "1px",
+    borderStyle: "solid",
+    paddingBlockStart: 1,
+    paddingInlineStart: 1,
+  },
   compoundVariants: [
     {
-      css: {
-        backgroundColor:
-          "color-mix(in oklab, {colors.accent} 45%, {colors.background})",
-      },
-      groupSelected: true,
-      tab: true,
+      css: { borderBlockStartWidth: "1px", borderStartEndRadius: "lg" },
+      first: true,
+      stacked: true,
     },
   ],
   variants: {
-    // Continues the shown window's top edge under the gaps between tabs.
-    besideOpenTab: {
-      false: { borderBlockEndColor: "transparent" },
-      true: { borderBlockEndColor: "borderStrong" },
-    },
-    // Read only by `compoundVariants`.
-    groupSelected: {
+    first: {
       false: {},
-      true: {},
+      true: { borderInlineStartWidth: "1px", borderStartStartRadius: "lg" },
     },
-    tab: {
-      false: {},
+    // A selected group lights its strip. Its tabs keep their own states.
+    selected: {
+      false: {
+        backgroundColor:
+          "color-mix(in oklab, {colors.card} 45%, {colors.background})",
+        borderColor: "borderStrong",
+      },
       true: {
         backgroundColor:
-          "color-mix(in oklab, {colors.border} 50%, {colors.background})",
-        borderBlockEndStyle: "solid",
-        borderBlockEndWidth: "1px",
-        paddingBlockStart: 0.75,
-        paddingInline: 0.75,
+          "color-mix(in oklab, {colors.accent} 30%, {colors.background})",
+        borderColor:
+          "color-mix(in oklab, {colors.accent} 70%, {colors.background})",
+      },
+    },
+    // A stack's bars each span the strip. Each bar's bottom edge is the top
+    // edge of the next, so only the first draws one.
+    stacked: {
+      false: { borderBlockStartWidth: "1px" },
+      true: { borderInlineWidth: "1px", paddingInlineEnd: 1 },
+    },
+  },
+});
+
+/**
+ * A tab, in its slot of the strip. The open tab is raised in the card with an
+ * edge, and reaches over the strip's bottom edge to join its window. Hidden
+ * tabs lie flat on the strip.
+ */
+const tabStyles = cva({
+  base: hstack.raw({
+    borderBlockEndWidth: 0,
+    borderBlockStartWidth: "1px",
+    borderInlineWidth: "1px",
+    borderStartEndRadius: "md",
+    borderStartStartRadius: "md",
+    borderStyle: "solid",
+    containerType: "inline-size",
+    flex: 1,
+    gap: 1.5,
+    justify: "space-between",
+    minInlineSize: 0,
+    overflow: "hidden",
+    paddingInlineEnd: 0.5,
+    paddingInlineStart: 2,
+  }),
+  // The background follows both variants, so each pair sets it once.
+  compoundVariants: [
+    {
+      css: { backgroundColor: "card" },
+      focus: ["focused", "leaf", "resting", "selected"],
+      open: true,
+    },
+    {
+      css: {
+        _hover: {
+          backgroundColor:
+            "color-mix(in oklab, {colors.card} 60%, transparent)",
+          color: "foreground",
+        },
+        backgroundColor: "transparent",
+      },
+      focus: ["focused", "leaf", "resting", "selected"],
+      open: false,
+    },
+  ],
+  variants: {
+    // Weight as well as color, for users who cannot tell the colors apart.
+    focus: {
+      focused: { fontWeight: "medium" },
+      leaf: { fontWeight: "medium" },
+      resting: { fontWeight: "normal" },
+      selected: { fontWeight: "normal" },
+      // A window that asked for the keyboard (sway's `urgent`), as its bar.
+      urgent: {
+        backgroundColor:
+          "color-mix(in oklab, {colors.warning} 45%, {colors.background})",
+        fontWeight: "medium",
+      },
+    },
+    open: {
+      false: { borderColor: "transparent", color: "muted" },
+      true: {
+        borderColor: "borderStrong",
+        color: "foreground",
+        marginBlockEnd: "-1px",
       },
     },
   },
@@ -339,7 +468,9 @@ const slotStyles = cva({
  */
 const barStyles = cva({
   base: hstack.raw({
+    borderBlockEndColor: "transparent",
     borderBlockEndWidth: "1px",
+    containerType: "inline-size",
     flex: 1,
     gap: 1.5,
     justify: "space-between",
@@ -349,28 +480,7 @@ const barStyles = cva({
     paddingInlineEnd: 0.5,
     paddingInlineStart: 2,
   }),
-  // Hovering a hidden tab lightens it halfway to the card, so it is not
-  // mistaken for the open tab.
-  compoundVariants: [
-    {
-      css: {
-        _hover: {
-          backgroundColor:
-            "color-mix(in oklab, {colors.card} 50%, {colors.background})",
-          color: "foreground",
-        },
-      },
-      focus: "resting",
-      tab: true,
-    },
-  ],
   variants: {
-    // Only hidden tabs show the bottom line. Other bars keep a transparent
-    // one so opening a tab does not shift its contents.
-    besideOpenTab: {
-      false: { borderBlockEndColor: "transparent" },
-      true: { borderBlockEndColor: "borderStrong" },
-    },
     focus: {
       focused: {
         backgroundColor: "card",
@@ -392,8 +502,7 @@ const barStyles = cva({
         color: "muted",
         fontWeight: "normal",
       },
-      // An unfocused container's open tab, or a bar in the `focus parent`
-      // selection.
+      // A bar in the `focus parent` selection.
       selected: {
         backgroundColor: "card",
         color: "foreground",
@@ -406,12 +515,6 @@ const barStyles = cva({
         color: "foreground",
         fontWeight: "medium",
       },
-    },
-    // Over the slot's bottom line, so the open tab meets its window and a
-    // hidden tab's line meets the strip's.
-    tab: {
-      false: {},
-      true: { marginBlockEnd: "-1px" },
     },
   },
 });
@@ -427,6 +530,13 @@ const topCornerStyles = css({
 
 // No gap: each button is already padded, and together they read as a group.
 const controlStyles = hstack({ gap: 0 });
+
+// Hidden in a bar too narrow to keep its title beside them. The bar is the
+// query container (see `barStyles` and `tabStyles`).
+const extraControlStyles = hstack({
+  "@container (max-width: 10rem)": { display: "none" },
+  gap: 0,
+});
 
 const groupMarkStyles = hstack({
   color: "muted",

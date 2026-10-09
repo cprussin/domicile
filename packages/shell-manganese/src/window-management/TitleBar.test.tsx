@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
-import { fireEvent, render } from "@testing-library/react";
+import { fireEvent, render, within } from "@testing-library/react";
 
 import { css } from "../../styled-system/css";
 import { TitleBar } from "./TitleBar";
@@ -67,11 +67,13 @@ const face = (container: HTMLElement): HTMLElement => {
   }
 };
 
-/** The tab strip behind a container's tabs. */
-const STRIP = css({
-  backgroundColor:
-    "color-mix(in oklab, {colors.border} 50%, {colors.background})",
-});
+/** A tab's place in a strip, for cases about a tab. */
+const MIDDLE_TAB = {
+  divided: false,
+  first: false,
+  open: false,
+  rest: undefined,
+};
 
 // The bar and the contents are separate elements, so they must animate
 // identically or the window splits apart.
@@ -184,28 +186,6 @@ describe("TitleBar", () => {
     );
   });
 
-  it("lifts a tab that is not open under the pointer, and no other bar", () => {
-    // Only a hidden tab has anything to show by clicking.
-    const lift = css({
-      _hover: {
-        backgroundColor:
-          "color-mix(in oklab, {colors.card} 50%, {colors.background})",
-        color: "foreground",
-      },
-    });
-
-    const hidden = render(<TitleBar {...barProps} tabbed={Layout.Tabbed} />);
-    expect(face(hidden.container).className).toContain(lift);
-
-    const open = render(
-      <TitleBar {...barProps} focus="selected" tabbed={Layout.Tabbed} />,
-    );
-    expect(face(open.container).className).not.toContain(lift);
-
-    const own = render(<TitleBar {...barProps} />);
-    expect(face(own.container).className).not.toContain(lift);
-  });
-
   it("draws no bar's edge in the accent, whatever it says about the keyboard", () => {
     // The glow around the window marks focus instead. See `FocusGlow`.
     for (const focus of ["focused", "leaf", "resting", "selected"] as const) {
@@ -242,78 +222,94 @@ describe("TitleBar", () => {
     expect(face(container).className).toContain(css({ fontWeight: "medium" }));
   });
 
-  // Continues the shown window's top edge under every hidden tab.
-  describe("the line under a tab its container is not showing", () => {
-    const under = (props: Partial<Parameters<typeof TitleBar>[0]>) =>
-      render(<TitleBar {...barProps} tabbed={Layout.Tabbed} {...props} />)
-        .container;
-
-    it("is the resting edge", () => {
-      // The strip draws it under the space between tabs too.
-      const tab = face(under({ besideOpenTab: true }));
-      expect(bar(under({ besideOpenTab: true })).className).toContain(
-        css({ borderBlockEndColor: "borderStrong" }),
-      );
-
-      expect(globalThis.getComputedStyle(tab).borderBlockEndWidth).toBe("1px");
-      expect(tab.className).toContain(
-        css({ borderBlockEndColor: "borderStrong" }),
-      );
-    });
-
-    // It keeps the same width, so opening a tab does not shift its contents.
-    it("is not drawn under a bar that is not such a tab", () => {
-      const open = face(under({}));
-
-      expect(globalThis.getComputedStyle(open).borderBlockEndWidth).toBe("1px");
-      expect(open.className).toContain(
-        css({ borderBlockEndColor: "transparent" }),
-      );
-    });
-  });
-
   describe("a tab", () => {
-    it("rests in a strip that runs between it and its neighbors", () => {
-      const tab = render(<TitleBar {...barProps} tabbed={Layout.Tabbed} />);
-      expect(bar(tab.container).className).toContain(STRIP);
-      // Inset on top and at the sides; the bottom meets the window.
-      expect(bar(tab.container).className).toContain(
-        css({ paddingBlockStart: 0.75, paddingInline: 0.75 }),
-      );
-
-      const own = render(<TitleBar {...barProps} />);
-      expect(bar(own.container).className).not.toContain(STRIP);
-    });
-
-    it("lights its strip, not itself, when its whole group is selected", () => {
-      const { container } = render(
+    const tab = (props: Partial<Parameters<typeof TitleBar>[0]>) =>
+      render(
         <TitleBar
           {...barProps}
-          focus="focused"
-          groupSelected
+          strip={MIDDLE_TAB}
           tabbed={Layout.Tabbed}
+          {...props}
         />,
       );
 
-      expect(bar(container).className).toContain(
-        css({
-          backgroundColor:
-            "color-mix(in oklab, {colors.accent} 45%, {colors.background})",
+    it("rounds the strip at the end it starts", () => {
+      const rounded = css({ borderStartStartRadius: "lg" });
+
+      expect(
+        bar(tab({ strip: { ...MIDDLE_TAB, first: true } }).container).className,
+      ).toContain(rounded);
+      expect(bar(tab({}).container).className).not.toContain(rounded);
+    });
+
+    it("runs the strip on past the last tab to the strip's end", () => {
+      const last = bar(tab({ strip: { ...MIDDLE_TAB, rest: 300 } }).container);
+
+      expect(last.style.getPropertyValue("--strip-rest")).toBe("300px");
+      expect(last).toHaveAttribute("data-strip-end");
+      expect(bar(tab({}).container)).not.toHaveAttribute("data-strip-end");
+    });
+
+    it("draws the window's top edge along the strip, broken only by the open tab", () => {
+      const line = css({ borderBlockEndWidth: "1px" });
+      const overLine = css({ marginBlockEnd: "-1px" });
+
+      const hidden = tab({});
+      expect(bar(hidden.container).className).toContain(line);
+      expect(bar(hidden.container).className).toContain(
+        css({ borderColor: "borderStrong" }),
+      );
+      expect(face(hidden.container).className).not.toContain(overLine);
+
+      const open = tab({ strip: { ...MIDDLE_TAB, open: true } });
+      expect(face(open.container).className).toContain(overLine);
+    });
+
+    it("marks off a hidden tab from the hidden tab before it", () => {
+      expect(
+        bar(tab({ strip: { ...MIDDLE_TAB, divided: true } }).container),
+      ).toHaveAttribute("data-divided");
+      expect(bar(tab({}).container)).not.toHaveAttribute("data-divided");
+    });
+
+    it("offers only to close while hidden, keeping room for its title", () => {
+      const hidden = tab({});
+      expect(hidden.queryByRole("button", { name: "Close" })).not.toBeNull();
+      expect(hidden.queryByRole("button", { name: "Maximize" })).toBeNull();
+      expect(hidden.queryByRole("button", { name: "Float" })).toBeNull();
+
+      const open = tab({ strip: { ...MIDDLE_TAB, open: true } });
+      expect(open.queryByRole("button", { name: "Maximize" })).not.toBeNull();
+      expect(open.queryByRole("button", { name: "Float" })).not.toBeNull();
+    });
+
+    it("washes a tab whose window asked for the keyboard, open or hidden", () => {
+      const wash = css({
+        backgroundColor:
+          "color-mix(in oklab, {colors.warning} 45%, {colors.background})",
+      });
+
+      expect(face(tab({ focus: "urgent" }).container).className).toContain(
+        wash,
+      );
+      expect(
+        face(
+          tab({ focus: "urgent", strip: { ...MIDDLE_TAB, open: true } })
+            .container,
+        ).className,
+      ).toContain(wash);
+      // A hidden tab that asked stays hidden.
+      expect(
+        within(tab({ focus: "urgent" }).container).queryByRole("button", {
+          name: "Maximize",
         }),
-      );
-      expect(face(container).className).toContain(
-        css({ backgroundColor: "card" }),
-      );
+      ).toBeNull();
     });
 
     it("shows the layout and size of a group it stands for", () => {
-      const { getByRole } = render(
-        <TitleBar
-          {...barProps}
-          group={{ layout: Layout.SplitV, windows: 3 }}
-          tabbed={Layout.Tabbed}
-        />,
-      );
+      const { getByRole } = tab({
+        group: { layout: Layout.SplitV, windows: 3 },
+      });
 
       expect(getByRole("img", { name: "Column of 3" }).textContent).toBe("3");
     });

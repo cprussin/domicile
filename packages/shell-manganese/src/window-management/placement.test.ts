@@ -61,14 +61,15 @@ describe("placementsOf", () => {
 
   it("insets a lone tiled window by the gap at the screen's edges", () => {
     expect(placementFor(desktop("kitty"), "kitty")).toEqual({
-      bar: { height: TITLE_BAR, width: 1880, x: 20, y: 52 },
+      // A tab at most 240 wide, the rest of the strip after it.
+      bar: { height: TITLE_BAR, width: 240, x: 20, y: 52 },
       behind: undefined,
       depth: 0,
       frame: { height: 1008, width: 1880, x: 20, y: 52 },
       id: appWindowId("kitty"),
-      openTab: undefined,
       selected: false,
       soleTab: true,
+      strip: { divided: false, first: true, open: true, rest: 1640 },
       surface: {
         height: 1008 - TITLE_BAR + SURFACE_TUCK,
         width: 1880,

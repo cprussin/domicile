@@ -47,9 +47,9 @@ describe("framesOf", () => {
       bar: { height: TITLE_BAR, width: 1000, x: 0, y: 0 },
       behind: undefined,
       id: "a",
-      openTab: undefined,
       selected: false,
       soleTab: false,
+      strip: undefined,
       surface: {
         height: 1000 - TITLE_BAR + SURFACE_TUCK,
         width: 1000,
@@ -143,11 +143,11 @@ describe("framesOf", () => {
     // The tab strip is one row; the bars draw the space between tabs.
     expect(frameFor(tiled, "a").bar).toEqual({
       height: TITLE_BAR,
-      width: 500,
+      width: 240,
       x: 0,
       y: 0,
     });
-    expect(frameFor(tiled, "b").bar).toMatchObject({ width: 500, x: 500 });
+    expect(frameFor(tiled, "b").bar).toMatchObject({ width: 240, x: 240 });
   });
 
   it("shows only the tab a tabbed container has the focus in", () => {
@@ -256,70 +256,97 @@ describe("framesOf", () => {
     ).toBeUndefined();
   });
 
-  // Inactive tabs underline in the open tab's color, so the edge runs
-  // unbroken.
-  it("names the open tab to a tabbed container's other tabs, and to no other bar", () => {
-    const tiled = framesOf(
-      {
-        depth: 1,
-        root: LayoutNode.Container(
-          Layout.Tabbed,
-          [
-            LayoutNode.Window("a"),
-            LayoutNode.Container(
-              Layout.SplitH,
-              [LayoutNode.Window("b"), LayoutNode.Window("c")],
-              1,
+  describe("the tab strip", () => {
+    const strip = (layout: Layout, count: number) =>
+      framesOf(
+        {
+          depth: 1,
+          root: LayoutNode.Container(
+            layout,
+            Array.from({ length: count }, (_, at) =>
+              LayoutNode.Window(at.toString()),
             ),
-          ],
-          1,
-        ),
-      },
-      AREA,
-      0,
-    );
+          ),
+        },
+        AREA,
+        0,
+      ).frames.map(({ bar, strip }) => ({ strip, width: bar.width, x: bar.x }));
 
-    expect(frameFor(tiled, "a").openTab).toBe("c");
-    expect(tiled.tabs.map(({ openTab }) => openTab)).toStrictEqual([undefined]);
-    expect(frameFor(tiled, "b").openTab).toBeUndefined();
+    it("caps each tab's width, leaving the rest of the strip after the last", () => {
+      // The strip always shows past the tabs, so even one tab reads as a tab.
+      expect(strip(Layout.Tabbed, 1)).toEqual([
+        {
+          strip: { divided: false, first: true, open: true, rest: 760 },
+          width: 240,
+          x: 0,
+        },
+      ]);
+      expect(strip(Layout.Tabbed, 2)).toEqual([
+        {
+          strip: { divided: false, first: true, open: true, rest: undefined },
+          width: 240,
+          x: 0,
+        },
+        {
+          strip: { divided: false, first: false, open: false, rest: 520 },
+          width: 240,
+          x: 240,
+        },
+      ]);
+    });
 
-    const behind = framesOf(
-      {
-        depth: 1,
-        root: LayoutNode.Container(
-          Layout.Tabbed,
-          [
-            LayoutNode.Window("a"),
-            LayoutNode.Container(Layout.SplitH, [
-              LayoutNode.Window("b"),
-              LayoutNode.Window("c"),
-            ]),
-          ],
-          0,
-        ),
-      },
-      AREA,
-      0,
-    );
-    expect(frameFor(behind, "a").openTab).toBeUndefined();
-    expect(behind.tabs.map(({ openTab }) => openTab)).toStrictEqual(["a"]);
+    it("shares out a crowded strip, keeping room for its end", () => {
+      const crowded = strip(Layout.Tabbed, 8);
 
-    // A stack's bars sit on each other's edges.
-    const stacked = framesOf(
-      {
-        depth: 1,
-        root: LayoutNode.Container(Layout.Stacking, [
-          LayoutNode.Window("a"),
-          LayoutNode.Window("b"),
-        ]),
-      },
-      AREA,
-      0,
-    );
-    expect(stacked.frames.map(({ openTab }) => openTab)).toStrictEqual([
-      undefined,
-      undefined,
-    ]);
+      expect(crowded.map(({ width }) => width)).toEqual(
+        Array.from({ length: 8 }, () => 122),
+      );
+      expect(crowded.at(-1)?.strip).toEqual({
+        divided: true,
+        first: false,
+        open: false,
+        rest: 24,
+      });
+    });
+
+    it("runs a stack's bars full width, the first at its top", () => {
+      expect(strip(Layout.Stacking, 2)).toEqual([
+        {
+          strip: { divided: false, first: true, open: true, rest: undefined },
+          width: 1000,
+          x: 0,
+        },
+        {
+          strip: { divided: false, first: false, open: false, rest: undefined },
+          width: 1000,
+          x: 0,
+        },
+      ]);
+    });
+
+    it("divides two hidden tabs, and no tab from the open one", () => {
+      const divided = framesOf(
+        {
+          depth: 1,
+          root: LayoutNode.Container(
+            Layout.Tabbed,
+            ["a", "b", "c", "d"].map((id) => LayoutNode.Window(id)),
+            1,
+          ),
+        },
+        AREA,
+        0,
+      ).frames.map(({ strip }) => strip?.divided);
+
+      // `b` is open: only `d` starts beside a hidden tab.
+      expect(divided).toEqual([false, false, false, true]);
+    });
+
+    it("places a window's own bar in no strip", () => {
+      expect(
+        frameFor(framesOf(COLUMN_BESIDE_A_WINDOW, AREA, 0), "b").strip,
+      ).toBeUndefined();
+    });
   });
 
   it("titles a tab that holds a container by the window in it", () => {
@@ -343,9 +370,9 @@ describe("framesOf", () => {
         active: true,
         group: Layout.SplitH,
         id: "a",
-        openTab: undefined,
-        rect: { height: TITLE_BAR, width: 500, x: 0, y: 0 },
+        rect: { height: TITLE_BAR, width: 240, x: 0, y: 0 },
         selected: false,
+        strip: { divided: false, first: true, open: true, rest: undefined },
         tabbed: Layout.Tabbed,
         windows: 2,
       },
@@ -380,9 +407,9 @@ describe("framesOf", () => {
         active: false,
         group: Layout.SplitH,
         id: "a",
-        openTab: "c",
-        rect: { height: TITLE_BAR, width: 500, x: 0, y: 0 },
+        rect: { height: TITLE_BAR, width: 240, x: 0, y: 0 },
         selected: false,
+        strip: { divided: false, first: true, open: false, rest: undefined },
         tabbed: Layout.Tabbed,
         windows: 2,
       },
