@@ -198,6 +198,7 @@ export const AddressBar = ({
               onSet={onSetSitePermission}
               permissions={sitePermissions}
               request={permissionRequest}
+              url={address}
             />
           </>
         }
