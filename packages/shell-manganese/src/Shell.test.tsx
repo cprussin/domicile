@@ -2829,6 +2829,7 @@ describe("the launcher", () => {
     const { container } = renderShell([LEFT, RIGHT]);
     press("space");
     await typeIntoLauncher("example.com{Enter}");
+    await launched();
     press("l");
     press("space");
     const behind = container.querySelector<HTMLElement>("webview");
