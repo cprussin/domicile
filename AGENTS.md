@@ -139,7 +139,7 @@ not rules, and carry no authority level. Read the one for the area you work in.
 | [/docs/architecture/ONE-PAGE-FOR-THE-DESK.md](/docs/architecture/ONE-PAGE-FOR-THE-DESK.md) | One shell page spanning every monitor on a tty, each at its own scale and refresh rate: presenters per CRTC and floats dragged across screens. |
 | [/docs/architecture/DISPLAY-TILINGS.md](/docs/architecture/DISPLAY-TILINGS.md) | How cc keeps a tiling per monitor scale: regions, tilings, activation, raster order, draw, fallback, tile memory. |
 | [/docs/architecture/EXTENSIONS.md](/docs/architecture/EXTENSIONS.md) | Chrome extensions: installed from the config, actions in the shell's tray, every `<webview>` a tab to `chrome.tabs`. |
-| [/docs/architecture/SYSTEM-TRAY.md](/docs/architecture/SYSTEM-TRAY.md) | The compositor as StatusNotifierItem host; the shell draws the icons. Menus (dbusmenu) are left. |
+| [/docs/architecture/SYSTEM-TRAY.md](/docs/architecture/SYSTEM-TRAY.md) | The compositor as StatusNotifierItem host; the shell draws the icons and their dbusmenu menus. |
 | [/docs/architecture/NOTIFICATIONS.md](/docs/architecture/NOTIFICATIONS.md) | The compositor as the `org.freedesktop.Notifications` server for apps and sites; the shell toasts them and keeps a drawer. |
 | [/docs/architecture/KEYBINDINGS.md](/docs/architecture/KEYBINDINGS.md) | A shell's keybindings as props: sway-style chords resolved against the compositor's keyboard layout and dispatched by the SDK. |
 | [/docs/architecture/COMPOSABLE-SHELLS.md](/docs/architecture/COMPOSABLE-SHELLS.md) | The config as a TS, JS or JSON module whose `Shell` export is the shell; `domicile` builds it; manganese as a library; packages on npm. |

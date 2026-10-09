@@ -127,12 +127,7 @@ Evidence is in [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md),
      count. The lock makes this more pressing: a user about to touch the
      keyboard gets a lock screen with no warning.
 
-4. **System tray menus.** Icons, titles and clicks work, and each item names
-   its bus and menu path. Left: a library that draws `com.canonical.dbusmenu`
-   over `dbusCall`. Without it, most libappindicator items do nothing on a
-   secondary click. [SYSTEM-TRAY.md](docs/architecture/SYSTEM-TRAY.md).
-
-5. **Which monitor shows a notification.** The compositor serves
+4. **Which monitor shows a notification.** The compositor serves
    `org.freedesktop.Notifications`, including web notifications, and manganese
    shows toasts and a drawer. Left:
    - Toasts go to the top right of the whole desktop, not the focused monitor.
@@ -142,41 +137,41 @@ Evidence is in [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md),
 
    [NOTIFICATIONS.md](docs/architecture/NOTIFICATIONS.md).
 
-6. **Native density on every monitor.** On a tty the shell is one page over
+5. **Native density on every monitor.** On a tty the shell is one page over
    all monitors. It is hosted on the fastest monitor, rastered at the largest
    scale, and each lower-density monitor's region is also rastered at its own
    scale. Left: test on hardware.
    [ONE-PAGE-FOR-THE-DESK.md](docs/architecture/ONE-PAGE-FOR-THE-DESK.md).
 
-7. **`domicile send-shell` from a terminal.** Keybindings are shell props and
+6. **`domicile send-shell` from a terminal.** Keybindings are shell props and
    their commands reach the shell. The same command typed as
    `domicile send-shell focus right` has no route yet (supervisor → compositor
    → every page). [KEYBINDINGS.md](docs/architecture/KEYBINDINGS.md).
 
-8. **Composable shells, phase 3.** Phases 1, 2 and 4 are done. Left:
+7. **Composable shells, phase 3.** Phases 1, 2 and 4 are done. Left:
    - A `schemars` schema with generated `@domicile-desktop/sdk/config` types.
    - `nix/home-manager.nix` building a TS config directory with `bun2nix`. It
      writes `domicile.json` today.
 
    [COMPOSABLE-SHELLS.md](docs/architecture/COMPOSABLE-SHELLS.md).
 
-9. **Split manganese into small packages.** `@domicile-desktop/manganese` is
+8. **Split manganese into small packages.** `@domicile-desktop/manganese` is
    one package with the layout, the bar and every bar item. Split the clock,
    tray, mixer and window management into their own packages, with manganese
    the shell that composes them. No design doc yet.
 
-10. **A History app.** Browser windows have back, forward and address
+9. **A History app.** Browser windows have back, forward and address
     suggestions, but nothing browses, searches or clears history.
     `chrome://history` is blocked like every `chrome://` page (patch 0083). No
     design doc yet.
 
-11. **A Settings app.** Extensions and config values can only be set by editing
+10. **A Settings app.** Extensions and config values can only be set by editing
     the config. A Settings app would manage both. It would also hold the
     *Known gaps* that need a place to store state: a persistent theme choice,
     and the cookies and site data that `chrome://settings` manages in
     Chrome. No design doc yet.
 
-12. **Split up the compositor's `main.rs`.** Subsystems such as the lock,
+11. **Split up the compositor's `main.rs`.** Subsystems such as the lock,
     portals and screens are their own modules. `main.rs` still holds the
     event-loop state, the chrome hub, frame reporting and most request
     handling. Left: extract cohesive subsystems so each can be read and tested
@@ -350,7 +345,7 @@ Understood and not scheduled.
   - Download progress is not reported.
 - **No settings page.** Browser windows block every `chrome://` page (patch
   0083), so nothing can clear cookies and site data. Site permissions are set
-  per site from the address bar. The Settings app (item 11) will cover the
+  per site from the address bar. The Settings app (item 10) will cover the
   rest. Printing is also blocked: `window.print()` opens `chrome://print`.
 - **Some extension calls are refused.** `tabs.move`, `group`, `ungroup`,
   `discard`, `duplicate` and splits; `tabs.update`'s `pinned`, `openerTabId`
@@ -395,7 +390,7 @@ Understood and not scheduled.
 - **A theme picked from the toggle lasts only until restart.** `theme.mode` is
   the startup value. The config file is generated (by a shell, or by
   home-manager on NixOS), so the desktop does not write to it. Persisting the
-  choice needs a separate store for desktop state; the Settings app (item 11)
+  choice needs a separate store for desktop state; the Settings app (item 10)
   needs the same.
 - **Unmeasured: whether Wayland windows are in the theme transition's old
   frame.** Windows change theme inside the shell's view transition, after it
@@ -428,6 +423,16 @@ Understood and not scheduled.
   [PORTALS.md](docs/PORTALS.md)). `grim` and `wf-recorder` get
   nothing. Serve `ext-image-copy-capture-v1` (and `wlr-screencopy` for older tools) on
   the same display captures.
+
+### System tray
+
+- **Left click never opens a dbusmenu.** Manganese opens an item's menu on
+  right click and sends `Activate` on left click. Items that set `ItemIsMenu`
+  expect left click to open the menu, but `TrayItem` does not carry it; adding
+  it changes the protocol, the compositor and the engine's IDL.
+- **Tray menus draw no icons or mnemonics.** `@domicile-desktop/sdk/dbusmenu`
+  parses `icon-name` and the access key; manganese draws neither.
+  [SYSTEM-TRAY.md](docs/architecture/SYSTEM-TRAY.md).
 
 ### Shell reload
 

@@ -27,6 +27,10 @@
       "types": "./dist/cursor-shape.d.ts",
       "default": "./dist/cursor-shape.js"
     },
+    "./dbusmenu": {
+      "types": "./dist/dbusmenu.d.ts",
+      "default": "./dist/dbusmenu.js"
+    },
     "./display-transform": {
       "types": "./dist/display-transform.d.ts",
       "default": "./dist/display-transform.js"

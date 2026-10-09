@@ -1,4 +1,8 @@
+import { ContextMenu as BaseContextMenu } from "@base-ui/react/context-menu";
 import { Menu as BaseMenu } from "@base-ui/react/menu";
+import { CaretRightIcon } from "@phosphor-icons/react/dist/ssr/CaretRight";
+import { CheckIcon } from "@phosphor-icons/react/dist/ssr/Check";
+import { DotIcon } from "@phosphor-icons/react/dist/ssr/Dot";
 import type { ReactNode } from "react";
 import { useMemo } from "react";
 import { css } from "../../styled-system/css";
@@ -8,7 +12,7 @@ import type { ExtendProps } from "../extend-props";
 export type Point = { x: number; y: number };
 
 type Props = ExtendProps<
-  typeof BaseMenu.Root,
+  typeof BaseContextMenu.Root,
   {
     /** Where the menu opens: its top left corner, unless that would not fit. */
     at: Point;
@@ -37,7 +41,9 @@ const ContextMenuComponent = ({ at, children, label, ...rootProps }: Props) => {
     [at.x, at.y],
   );
   return (
-    <BaseMenu.Root {...rootProps}>
+    // The context menu's root, not `Menu.Root`: a `Menu.Root` with no trigger
+    // closes when one of its submenus opens.
+    <BaseContextMenu.Root {...rootProps}>
       <BaseMenu.Portal>
         <BaseMenu.Positioner
           align="start"
@@ -51,7 +57,7 @@ const ContextMenuComponent = ({ at, children, label, ...rootProps }: Props) => {
           </BaseMenu.Popup>
         </BaseMenu.Positioner>
       </BaseMenu.Portal>
-    </BaseMenu.Root>
+    </BaseContextMenu.Root>
   );
 };
 
@@ -74,12 +80,76 @@ const Item = ({ children, shortcut, ...itemProps }: ItemProps) => (
   </BaseMenu.Item>
 );
 
+type CheckboxItemProps = ExtendProps<
+  typeof BaseMenu.CheckboxItem,
+  { children: ReactNode }
+>;
+
+/** An item with a check mark that shows whether it is on. */
+const CheckboxItem = ({ children, ...itemProps }: CheckboxItemProps) => (
+  <BaseMenu.CheckboxItem className={itemStyles} {...itemProps}>
+    <span className={labelStyles}>{children}</span>
+    <BaseMenu.CheckboxItemIndicator className={indicatorStyles}>
+      <CheckIcon />
+    </BaseMenu.CheckboxItemIndicator>
+  </BaseMenu.CheckboxItem>
+);
+
+/** Radio items, of which the one whose `value` is the group's is chosen. */
+const RadioGroup = BaseMenu.RadioGroup;
+
+type RadioItemProps = ExtendProps<
+  typeof BaseMenu.RadioItem,
+  { children: ReactNode }
+>;
+
+/** One choice in a `RadioGroup`, with a dot when chosen. */
+const RadioItem = ({ children, ...itemProps }: RadioItemProps) => (
+  <BaseMenu.RadioItem className={itemStyles} {...itemProps}>
+    <span className={labelStyles}>{children}</span>
+    <BaseMenu.RadioItemIndicator className={indicatorStyles}>
+      <DotIcon weight="bold" />
+    </BaseMenu.RadioItemIndicator>
+  </BaseMenu.RadioItem>
+);
+
+type SubmenuProps = ExtendProps<
+  typeof BaseMenu.SubmenuRoot,
+  {
+    children: ReactNode;
+    disabled?: boolean | undefined;
+    /** The text of the item that opens it, and the submenu's name. */
+    label: string;
+  }
+>;
+
+/** An item that opens a menu of `children` beside it. */
+const Submenu = ({ children, disabled, label, ...rootProps }: SubmenuProps) => (
+  <BaseMenu.SubmenuRoot {...rootProps}>
+    <BaseMenu.SubmenuTrigger className={itemStyles} disabled={disabled}>
+      <span className={labelStyles}>{label}</span>
+      <CaretRightIcon className={caretStyles} />
+    </BaseMenu.SubmenuTrigger>
+    <BaseMenu.Portal>
+      <BaseMenu.Positioner className={positionerStyles}>
+        <BaseMenu.Popup aria-label={label} className={popupStyles}>
+          {children}
+        </BaseMenu.Popup>
+      </BaseMenu.Positioner>
+    </BaseMenu.Portal>
+  </BaseMenu.SubmenuRoot>
+);
+
 /** A line between groups of items. */
 const Separator = () => <BaseMenu.Separator className={separatorStyles} />;
 
 export const ContextMenu = Object.assign(ContextMenuComponent, {
+  CheckboxItem,
   Item,
+  RadioGroup,
+  RadioItem,
   Separator,
+  Submenu,
 });
 
 const positionerStyles = css({
@@ -113,7 +183,7 @@ const popupStyles = css({
   transition: "opacity {durations.fast} {easings.out}",
 });
 
-// `Select`'s item, with a shortcut where its check would be.
+// `Select`'s item. Its end holds a shortcut, check, dot or caret.
 const itemStyles = css({
   "&[data-disabled]": {
     color: "muted",
@@ -145,6 +215,16 @@ const shortcutStyles = css({
   color: "muted",
   fontSize: "xs",
 });
+
+// `Select`'s check.
+const indicatorStyles = css({
+  alignItems: "center",
+  color: "accent",
+  display: "inline-flex",
+  flexShrink: 0,
+});
+
+const caretStyles = css({ color: "muted" });
 
 const separatorStyles = css({
   backgroundColor: "border",
