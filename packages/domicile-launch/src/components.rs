@@ -105,6 +105,20 @@ pub fn our_shell(
     }
 }
 
+/// The directory of Domicile's own apps: `DOMICILE_APPS`, or
+/// `libexec/domicile/apps` if it exists. A checkout has none.
+pub fn apps(
+    binary: &Path,
+    env: &dyn Fn(&str) -> Option<String>,
+    exists: &dyn Fn(&Path) -> bool,
+) -> Option<PathBuf> {
+    let beside = libexec(binary).join("apps");
+    match env("DOMICILE_APPS") {
+        Some(named) => Some(PathBuf::from(named)),
+        None => exists(&beside).then_some(beside),
+    }
+}
+
 /// The `libexec/domicile` directory next to `binary`'s `bin`.
 fn libexec(binary: &Path) -> PathBuf {
     binary

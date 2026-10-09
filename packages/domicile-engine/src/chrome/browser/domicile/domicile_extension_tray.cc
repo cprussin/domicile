@@ -31,6 +31,7 @@
 #include "extensions/browser/extension_registry_observer.h"
 #include "extensions/browser/permissions/active_tab_permission_granter.h"
 #include "extensions/browser/ui_util.h"
+#include "extensions/common/api/extension_action/action_info.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_set.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -262,8 +263,13 @@ class ExtensionTray final
       if (!extensions::ui_util::ShouldDisplayInExtensionSettings(*extension)) {
         continue;
       }
+      // Skip an extension whose manifest names no action, such as the History
+      // app. Chrome gives it a synthesized one that its toolbar shows only
+      // once pinned, and the tray has no pins.
       ExtensionAction* action = actions->GetExtensionAction(*extension);
-      if (action == nullptr) {
+      if (action == nullptr ||
+          extensions::ActionInfo::GetExtensionActionInfo(extension.get())
+              ->synthesized) {
         continue;
       }
       Watch(*action);
