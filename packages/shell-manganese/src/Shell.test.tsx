@@ -2624,6 +2624,30 @@ describe("the launcher", () => {
     expect(dialogBox()).toStrictEqual({ left: "1920px", width: "1280px" });
   });
 
+  it("stays on the empty screen it was opened on", async () => {
+    // Opening it gives the page the keyboard, so the engine refocuses the last
+    // guest, here the browser window on the other screen, as if clicked.
+    const { container } = renderShell([LEFT, RIGHT]);
+    press("space");
+    await typeIntoLauncher("example.com{Enter}");
+    press("l");
+    press("space");
+    const behind = container.querySelector<HTMLElement>("webview");
+    if (behind === null) {
+      throw new Error("test: no browser window");
+    }
+
+    // The view takes focus too, as a click in its page would give it.
+    act(() => {
+      behind.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+      behind.dispatchEvent(
+        new Event(WEBVIEW_GUEST_FOCUS_EVENT, { bubbles: true }),
+      );
+    });
+
+    expect(dialogBox()).toStrictEqual({ left: "1920px", width: "1280px" });
+  });
+
   it("opens on mod+space and asks the host what matches its empty box", () => {
     // Searched on each open, not at startup, so the results are current.
     renderShell();

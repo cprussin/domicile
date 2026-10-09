@@ -244,6 +244,7 @@ describe("BrowserWindow", () => {
   it("rounds its bottom corners, and clips the page to them", () => {
     render(
       <BrowserWindow
+        behindPanel={false}
         clickThrough={false}
         covered={false}
         depth={0}
@@ -271,6 +272,7 @@ describe("BrowserWindow", () => {
   it("squares its corners and drops its edge while it fills the screen", () => {
     render(
       <BrowserWindow
+        behindPanel={false}
         clickThrough={false}
         covered={false}
         depth={0}
@@ -300,6 +302,7 @@ describe("BrowserWindow", () => {
     // border.
     render(
       <BrowserWindow
+        behindPanel={false}
         clickThrough={false}
         covered={false}
         depth={0}
@@ -326,6 +329,7 @@ describe("BrowserWindow", () => {
   it("shows the browser window it is given, at the address it is at", () => {
     const { container } = render(
       <BrowserWindow
+        behindPanel={false}
         clickThrough={false}
         covered={false}
         depth={0}
@@ -351,6 +355,7 @@ describe("BrowserWindow", () => {
     it("sends the view to what was typed, filling in a missing scheme", async () => {
       const { container } = render(
         <BrowserWindow
+          behindPanel={false}
           clickThrough={false}
           covered={false}
           depth={0}
@@ -378,6 +383,7 @@ describe("BrowserWindow", () => {
     it("shows where the page went rather than where it was sent", () => {
       const { container } = render(
         <BrowserWindow
+          behindPanel={false}
           clickThrough={false}
           covered={false}
           depth={0}
@@ -406,6 +412,7 @@ describe("BrowserWindow", () => {
     it("draws the browser's verdict on the page, not a guess from its scheme", () => {
       const { container } = render(
         <BrowserWindow
+          behindPanel={false}
           clickThrough={false}
           covered={false}
           depth={0}
@@ -437,6 +444,7 @@ describe("BrowserWindow", () => {
   describe("an extension's popup window", () => {
     const POPUP = "chrome-extension://vault/popup/index.html?uilocation=popout";
     const windowProps = {
+      behindPanel: false,
       clickThrough: false,
       covered: false,
       depth: 0,
@@ -498,6 +506,7 @@ describe("BrowserWindow", () => {
   // window draws a picker over the page and gives it the keyboard.
   describe("a file its page asks for", () => {
     const windowProps = {
+      behindPanel: false,
       clickThrough: false,
       covered: false,
       depth: 0,
@@ -604,6 +613,7 @@ describe("BrowserWindow", () => {
     it("takes the whole window under the address bar", () => {
       const { container } = render(
         <BrowserWindow
+          behindPanel={false}
           clickThrough={false}
           covered={false}
           depth={0}
@@ -638,6 +648,7 @@ describe("BrowserWindow", () => {
       const calls: string[] = [];
       render(
         <BrowserWindow
+          behindPanel={false}
           clickThrough={false}
           covered={false}
           depth={0}
@@ -661,6 +672,7 @@ describe("BrowserWindow", () => {
       const calls: string[] = [];
       render(
         <BrowserWindow
+          behindPanel={false}
           clickThrough={false}
           covered={false}
           depth={0}
@@ -683,6 +695,7 @@ describe("BrowserWindow", () => {
     // The guest page has its own browsing context, so the window must focus it.
     it("puts the keyboard in its page when it becomes the window being worked in", () => {
       const windowProps = {
+        behindPanel: false,
         clickThrough: false,
         covered: false,
         depth: 0,
@@ -710,6 +723,7 @@ describe("BrowserWindow", () => {
     // the page then would pull the caret out of the address bar.
     it("leaves the focus in its address bar when the press that reached it landed there", async () => {
       const windowProps = {
+        behindPanel: false,
         clickThrough: false,
         covered: false,
         depth: 0,
@@ -740,6 +754,7 @@ describe("BrowserWindow", () => {
     // typing into every client, and `focusChrome` cannot fix that.
     it("gives the keyboard back when the user moves to another window", () => {
       const windowProps = {
+        behindPanel: false,
         clickThrough: false,
         covered: false,
         depth: 0,
@@ -768,6 +783,7 @@ describe("BrowserWindow", () => {
     // caret left in the address bar would look active but receive nothing.
     it("gives it back from its address bar too", async () => {
       const windowProps = {
+        behindPanel: false,
         clickThrough: false,
         covered: false,
         depth: 0,
@@ -801,6 +817,7 @@ describe("BrowserWindow", () => {
       await new Promise<void>((resolve) => {
         const { container } = render(
           <BrowserWindow
+            behindPanel={false}
             clickThrough={false}
             covered={false}
             depth={0}
@@ -827,6 +844,7 @@ describe("BrowserWindow", () => {
       await new Promise<void>((resolve) => {
         const { container } = render(
           <BrowserWindow
+            behindPanel={false}
             clickThrough={false}
             covered={false}
             depth={0}
@@ -850,35 +868,43 @@ describe("BrowserWindow", () => {
     });
 
     // When the page regains the keyboard, the engine refocuses the last guest
-    // and fires both `focusin` and its own event. The window ignores both.
-    it("says nothing when the page under another tab takes focus", () => {
-      const reaches: string[] = [];
-      const { container } = render(
-        <BrowserWindow
-          clickThrough={false}
-          covered
-          depth={0}
-          domicile={silentDomicile}
-          dragging={false}
-          focused={false}
-          frame={FRAME}
-          fullscreen={false}
-          motion="resting"
-          onMotionEnded={nothingEnded}
-          onReach={() => {
-            reaches.push("reach");
-          }}
-          rect={ON_SCREEN}
-          url="https://example.com"
-          window="1"
-        />,
-      );
+    // and fires both `focusin` and its own event. The window ignores both
+    // while nothing can click its page.
+    it.each([
+      { behindPanel: false, covered: true, under: "another tab" },
+      { behindPanel: true, covered: false, under: "a desktop panel" },
+    ])(
+      "says nothing when the page under $under takes focus",
+      ({ behindPanel, covered }) => {
+        const reaches: string[] = [];
+        const { container } = render(
+          <BrowserWindow
+            behindPanel={behindPanel}
+            clickThrough={false}
+            covered={covered}
+            depth={0}
+            domicile={silentDomicile}
+            dragging={false}
+            focused={false}
+            frame={FRAME}
+            fullscreen={false}
+            motion="resting"
+            onMotionEnded={nothingEnded}
+            onReach={() => {
+              reaches.push("reach");
+            }}
+            rect={ON_SCREEN}
+            url="https://example.com"
+            window="1"
+          />,
+        );
 
-      fireEvent.focusIn(view(container));
-      view(container).dispatchEvent(new Event(WEBVIEW_GUEST_FOCUS_EVENT));
+        fireEvent.focusIn(view(container));
+        view(container).dispatchEvent(new Event(WEBVIEW_GUEST_FOCUS_EVENT));
 
-      expect(reaches).toStrictEqual([]);
-    });
+        expect(reaches).toStrictEqual([]);
+      },
+    );
 
     it("reports a click in the page of the window it is already in", async () => {
       // Focus follows the cursor, so the window is usually focused before the
@@ -886,6 +912,7 @@ describe("BrowserWindow", () => {
       await new Promise<void>((resolve) => {
         const { container } = render(
           <BrowserWindow
+            behindPanel={false}
             clickThrough={false}
             covered={false}
             depth={0}
@@ -914,6 +941,7 @@ describe("BrowserWindow", () => {
       await new Promise<void>((resolve) => {
         const { container } = render(
           <BrowserWindow
+            behindPanel={false}
             clickThrough={false}
             covered={false}
             depth={0}
@@ -942,6 +970,7 @@ describe("BrowserWindow", () => {
       // them.
       const reaches: string[] = [];
       const windowProps = {
+        behindPanel: false,
         clickThrough: false,
         covered: false,
         depth: 0,
@@ -980,6 +1009,7 @@ describe("BrowserWindow", () => {
       const reaches: string[] = [];
       const { container } = render(
         <BrowserWindow
+          behindPanel={false}
           clickThrough={false}
           covered={false}
           depth={0}
@@ -1023,6 +1053,7 @@ describe("BrowserWindow", () => {
     it("grays Back out until the page has somewhere to go back to", () => {
       const { container } = render(
         <BrowserWindow
+          behindPanel={false}
           clickThrough={false}
           covered={false}
           depth={0}
@@ -1049,6 +1080,7 @@ describe("BrowserWindow", () => {
     it("grays Forward out until the page has somewhere to go forward to", () => {
       const { container } = render(
         <BrowserWindow
+          behindPanel={false}
           clickThrough={false}
           covered={false}
           depth={0}
@@ -1078,6 +1110,7 @@ describe("BrowserWindow", () => {
     it("becomes a stop button while the view says a page is arriving", () => {
       const { container } = render(
         <BrowserWindow
+          behindPanel={false}
           clickThrough={false}
           covered={false}
           depth={0}
@@ -1106,6 +1139,7 @@ describe("BrowserWindow", () => {
       const driven: string[] = [];
       const { container } = render(
         <BrowserWindow
+          behindPanel={false}
           clickThrough={false}
           covered={false}
           depth={0}
@@ -1142,6 +1176,7 @@ describe("BrowserWindow", () => {
     const renderWindow = () =>
       render(
         <BrowserWindow
+          behindPanel={false}
           clickThrough={false}
           covered={false}
           depth={0}
@@ -1253,6 +1288,7 @@ describe("BrowserWindow", () => {
     const renderWindow = () =>
       render(
         <BrowserWindow
+          behindPanel={false}
           clickThrough={false}
           covered={false}
           depth={0}
@@ -1326,6 +1362,7 @@ describe("BrowserWindow", () => {
     ) =>
       render(
         <BrowserWindow
+          behindPanel={false}
           clickThrough={false}
           covered={false}
           depth={0}
@@ -1468,6 +1505,7 @@ describe("BrowserWindow", () => {
     it("opens on Ctrl+Shift+I the page left alone", async () => {
       const { container } = render(
         <BrowserWindow
+          behindPanel={false}
           clickThrough={false}
           covered={false}
           depth={0}
@@ -1502,6 +1540,7 @@ describe("BrowserWindow", () => {
     const renderWindow = () =>
       render(
         <BrowserWindow
+          behindPanel={false}
           clickThrough={false}
           covered={false}
           depth={0}
@@ -1619,6 +1658,7 @@ describe("BrowserWindow", () => {
   it("hides the window when it is not on screen", () => {
     render(
       <BrowserWindow
+        behindPanel={false}
         clickThrough={false}
         covered={false}
         depth={0}
@@ -1642,6 +1682,7 @@ describe("BrowserWindow", () => {
   describe("the way it moves", () => {
     /** Default props; each test overrides what it checks. */
     const windowProps = {
+      behindPanel: false,
       clickThrough: false,
       covered: false,
       depth: 0,

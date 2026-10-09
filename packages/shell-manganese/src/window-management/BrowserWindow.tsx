@@ -47,6 +47,13 @@ import {
 
 type Props = {
   /**
+   * Whether a desktop panel, such as the launcher, covers the desktop. Opening
+   * one hands the page the keyboard, and the engine then refocuses the last
+   * guest as if clicked. A covered page cannot be clicked, so that is not a
+   * user reach (see `onReach`).
+   */
+  behindPanel: boolean;
+  /**
    * Used to tell the host that no client holds the keyboard, and to list
    * directories for the file picker. The page lives in the shell's own window,
    * so focusing it takes focus from any client.
@@ -133,6 +140,7 @@ type Props = {
  * `packages/shell-manganese/docs/FOCUS-INTERNALS.md`.
  */
 export const BrowserWindow = ({
+  behindPanel,
   clickThrough,
   covered,
   depth,
@@ -156,6 +164,9 @@ export const BrowserWindow = ({
   // which has moved to the next window.
   const leaving = isLeaving(motion);
   const holdsKeyboard = focused && !leaving;
+  // Whether nothing can click the page, so its guest taking focus is the
+  // engine's doing rather than the user's.
+  const unclickable = covered || behindPanel;
   // `null` because React passes `null` to a callback ref on unmount.
   const [view, setView] = useState<HTMLWebViewElement | null>(null);
   // The whole window, used to check whether focus is inside it. A ref because
@@ -206,15 +217,16 @@ export const BrowserWindow = ({
 
   // Reports a click in the guest page (see `onReach`).
   //
-  // Ignored for a covered tab. When the page regains the keyboard (such as
-  // when the launcher opens), the engine refocuses the last guest and fires
-  // this event as if clicked, which would raise the hidden tab.
+  // Ignored while nothing can click the page. When the page regains the
+  // keyboard (such as when the launcher opens), the engine refocuses the last
+  // guest and fires this event as if clicked, which would raise a hidden tab
+  // or move focus to another screen.
   useEffect(() => {
     if (view === null) {
       return undefined;
     } else {
       const reached = () => {
-        if (!(focusing.current || covered)) {
+        if (!(focusing.current || unclickable)) {
           onReach();
         }
       };
@@ -223,7 +235,7 @@ export const BrowserWindow = ({
         view.removeEventListener(WEBVIEW_GUEST_FOCUS_EVENT, reached);
       };
     }
-  }, [covered, onReach, view]);
+  }, [onReach, unclickable, view]);
 
   // An extension asked to raise this window (`chrome.tabs.update` with
   // `active`, or `chrome.windows.update` with `focused`). See
@@ -385,9 +397,9 @@ export const BrowserWindow = ({
 
   // Reports focus entering this window as a user reach.
   const reach = (event: FocusEvent) => {
-    // Skips focus from `focusOwn` and a covered tab's guest regaining focus,
+    // Skips focus from `focusOwn` and an unclickable guest regaining focus,
     // which also fires `focusin` on the view.
-    if (!(focusing.current || (covered && event.target === view))) {
+    if (!(focusing.current || (unclickable && event.target === view))) {
       onReach();
     }
   };
