@@ -66,7 +66,7 @@ Headless.
 |---|---|
 | `guard-shell-shortcuts.sh` | Chrome's reload, back, fullscreen, zoom, close and quit keys do nothing to the shell (patch 0047) |
 | `guard-shell-local-network.sh` | the shell loads an image from loopback with no Local Network Access prompt (patch 0066) |
-| `guard-shell-web-apis.sh` | the shell may show notifications and read cross-origin responses (patches 0066, 0068) |
+| `guard-shell-web-apis.sh` | the shell may show notifications and read cross-origin responses (patches 0066, 0104) |
 | `guard-shell-script-src.sh` | an injected inline `<script>` and `onerror` do not run in the shell; a `<script src>` from the shell root does |
 | `guard-video-codecs.sh` | the engine plays H.264 and AAC (`src/build/args/domicile_codecs.gn`); VP9 is the control |
 | `guard-display-capture.sh` | a display capture through the C ABI reads back the shell's color, before and after a resize |
@@ -78,7 +78,7 @@ Headless.
 | Guard | Checks |
 |---|---|
 | `guard-webview-framing.sh` | a site that refuses framing still shows |
-| `guard-webview-notifications.sh` | a page's notifications are granted without a prompt (patch 0068) |
+| `guard-webview-notifications.sh` | a page must ask before it notifies, even in a profile that stores an allow-all default (patch 0104) |
 | `guard-webview-history.sh` | back, forward, reload and stop; the element's navigation state, address and connection security |
 | `guard-webview-find.sh` | find in page, including a cross-site frame; find next starts from the active match (patch 0073) |
 | `guard-webview-keyboard.sh` | a desktop shortcut pressed in a guest is caught; an unclaimed Ctrl+R goes to the shell as `domicile-guest-keydown` |
