@@ -1848,15 +1848,12 @@ describe("Shell", () => {
 
       press("w");
 
-      // Every slot draws the line; the open tab reaches over its own part.
-      const line = css({ borderBlockEndWidth: "1px" });
-      const overLine = css({ marginBlockEnd: "-1px" });
-      const faceOf = (id: string) =>
-        barFor(container, id).querySelector("[data-face]")?.className;
-      expect(barFor(container, "app:two").className).toContain(line);
-      expect(barFor(container, "app:three").className).toContain(line);
-      expect(faceOf("app:two")).not.toContain(overLine);
-      expect(faceOf("app:three")).toContain(overLine);
+      // Every slot draws the line; the open tab draws it only past itself.
+      const pastSlot = css({ insetInlineStart: "100%" });
+      const edgeOf = (id: string) =>
+        barFor(container, id).querySelector("[data-strip-edge]")?.className;
+      expect(edgeOf("app:two")).not.toContain(pastSlot);
+      expect(edgeOf("app:three")).toContain(pastSlot);
     });
 
     it("grows the glow in with the window that opened", () => {

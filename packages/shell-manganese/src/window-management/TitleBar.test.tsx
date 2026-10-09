@@ -289,19 +289,37 @@ describe("TitleBar", () => {
       );
     });
 
+    // Each slot draws the edge as the same straight band, which every slot
+    // shades alike between device pixels. The window's top row is tucked
+    // under the slot's bottom row, so the open tab leaves that row to it.
     it("draws the window's top edge along the strip, broken only by the open tab", () => {
       const line = css({ borderBlockEndWidth: "1px" });
-      const overLine = css({ marginBlockEnd: "-1px" });
+      const pastSlot = css({ insetInlineStart: "100%" });
+      const leavesBottomRow = [
+        css({ borderBlockEndColor: "transparent" }),
+        css({ backgroundClip: "padding-box" }),
+      ];
+      const edge = (container: HTMLElement) =>
+        bar(container).querySelector("[data-strip-edge]");
 
       const hidden = tab({});
-      expect(bar(hidden.container).className).toContain(line);
+      for (const style of leavesBottomRow) {
+        expect(bar(hidden.container).className).toContain(style);
+      }
+      expect(edge(hidden.container)?.className).toContain(line);
+      expect(edge(hidden.container)?.className).not.toContain(pastSlot);
       expect(bar(hidden.container).className).toContain(
-        css({ borderColor: "borderStrong" }),
+        css({ "--strip-edge": "{colors.borderStrong}" }),
       );
-      expect(face(hidden.container).className).not.toContain(overLine);
 
       const open = tab({ strip: { ...MIDDLE_TAB, open: true } });
-      expect(face(open.container).className).toContain(overLine);
+      for (const style of leavesBottomRow) {
+        expect(bar(open.container).className).toContain(style);
+      }
+      expect(edge(open.container)?.className).toContain(pastSlot);
+      expect(face(open.container).className).not.toContain(
+        css({ marginBlockEnd: "-1px" }),
+      );
     });
 
     it("marks off a hidden tab from the hidden tab before it", () => {
