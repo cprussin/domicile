@@ -155,6 +155,8 @@ For how warping, browser-window focus and modifier drags work, see
 ## Animations
 
 - Opening: fade in and grow from the center.
+- Opening a tab: the tab opens out along its strip, which stays whole; the
+  contents fade in.
 - Rearranging: windows ease to their new boxes.
 - Closing: shrink and fade out.
 - Workspace switch: the new workspace slides in; the old one slides out.

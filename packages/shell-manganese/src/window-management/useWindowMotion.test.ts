@@ -130,6 +130,41 @@ describe("useWindowMotion", () => {
     });
   });
 
+  // A new tab opens within its strip. Its contents fade in over the tab it
+  // replaces instead of growing.
+  describe("a tab that has opened", () => {
+    const tabs = (windows: readonly ShellWindow[]): Shown => ({
+      ...desktop("1", windows),
+      placements: windows.map(({ id }) => ({
+        ...placementOf(id),
+        tabbed: Layout.Tabbed,
+      })),
+    });
+
+    it("opens out rather than growing in", () => {
+      const { rerender, result } = showing(tabs([TERMINAL]));
+
+      act(() => {
+        rerender(tabs([TERMINAL, EDITOR]));
+      });
+
+      expect(motionOf(result, EDITOR.id)).toBe("opening-tab");
+    });
+
+    it("is done when it says it has opened out", () => {
+      const { rerender, result } = showing(tabs([TERMINAL]));
+      act(() => {
+        rerender(tabs([TERMINAL, EDITOR]));
+      });
+
+      act(() => {
+        result.current.onPlayedOut(EDITOR.id, "opening-tab", SCREEN);
+      });
+
+      expect(motionOf(result, EDITOR.id)).toBe("resting");
+    });
+  });
+
   // A closing tab closes within its strip. If it was shown, its contents fade
   // to the replacing tab instead of shrinking.
   describe("a tab that has closed", () => {

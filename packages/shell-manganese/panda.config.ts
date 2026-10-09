@@ -168,6 +168,15 @@ export default defineConfig({
           "0%": { opacity: "0", transform: "scale(0.85)" },
           "100%": { opacity: "1", transform: "scale(1)" },
         },
+        // The reverse of `windowClosingTab`: a new tab opens out along its
+        // strip, and its contents only fade in over the tab they replace.
+        windowOpeningTab: {
+          "0%": {
+            opacity: "0",
+            transform: "scale(var(--collapse-x, 1), var(--collapse-y, 1))",
+          },
+          "100%": { opacity: "1", transform: "scale(1, 1)" },
+        },
         windowRestacking: RESTACKING,
         windowRestackingAgain: RESTACKING,
         windowRevealing: {

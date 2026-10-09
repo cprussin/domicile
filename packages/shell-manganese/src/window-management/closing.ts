@@ -62,7 +62,7 @@ export const departed = (
               behind: undefined,
               depth: LEAVING,
               // A tab collapses about its own middle, not the window's.
-              frame: closesAsTab(placement) ? placement.bar : placement.frame,
+              frame: movesAsTab(placement) ? placement.bar : placement.frame,
             },
             window,
           },
@@ -70,10 +70,10 @@ export const departed = (
   });
 
 /**
- * Whether a closing window collapses along its tab strip. A group's only tab
- * shrinks away with its group, as a window does.
+ * Whether a window opens and closes along its tab strip. A group's only tab
+ * opens and closes with its group, as a window does.
  */
-export const closesAsTab = ({ soleTab, tabbed }: Placement): boolean =>
+export const movesAsTab = ({ soleTab, tabbed }: Placement): boolean =>
   tabbed !== undefined && !soleTab;
 
 /**

@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 
 import type { Closing } from "./closing";
-import { closesAsTab, departed, withClosing } from "./closing";
+import { departed, movesAsTab, withClosing } from "./closing";
 import type { PlacedTab, Placement } from "./placement";
 import type { Restack } from "./restacking";
 import { restacked } from "./restacking";
@@ -288,7 +288,8 @@ const played = (
         ? playing
         : { ...playing, closing };
     }
-    case "opening": {
+    case "opening":
+    case "opening-tab": {
       const opening = playing.opening.filter((arriving) => arriving !== id);
       return opening.length === playing.opening.length
         ? playing
@@ -338,7 +339,7 @@ const drawnWindow = (
       focused: closing.focused,
       // A tab closes within its strip instead of shrinking with its window, and
       // a shown tab fades to the tab replacing it.
-      motion: closesAsTab(closing.placement) ? "closing-tab" : "closing",
+      motion: movesAsTab(closing.placement) ? "closing-tab" : "closing",
       placement: closing.placement,
       restack: undefined,
       screen: closing.screen,
@@ -347,7 +348,7 @@ const drawnWindow = (
   } else if (placed === undefined) {
     return leavingWindow(playing.switching, window);
   } else {
-    const motion = arriving(playing, placed.screen, window.id);
+    const motion = arriving(playing, placed.screen, placed.placement);
     return {
       focused: shown[placed.screen]?.activeId === window.id,
       motion,
@@ -370,13 +371,14 @@ const drawnWindow = (
 const arriving = (
   playing: Playing,
   screen: string,
-  id: string,
+  placement: Placement,
 ): WindowMotion => {
+  const { id } = placement;
   const switching = playing.switching[screen];
   if (switching !== undefined) {
     return arrivalFrom(switching.towards);
   } else if (playing.opening.includes(id)) {
-    return "opening";
+    return movesAsTab(placement) ? "opening-tab" : "opening";
   } else {
     return (
       playing.tabbing.find((fade) => fade.id === id)?.motion ??
