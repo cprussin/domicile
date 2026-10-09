@@ -83,9 +83,11 @@ TEST(SitePermissionsTest, AnythingElseIsStoredAsItself) {
             CONTENT_SETTING_ASK);
 }
 
-TEST(SitePermissionsTest, OnlyWebPagesHaveSitePermissions) {
+TEST(SitePermissionsTest, OnlyWebAndExtensionPagesHaveSitePermissions) {
   EXPECT_TRUE(HasSitePermissions(GURL("https://example.com/page")));
   EXPECT_TRUE(HasSitePermissions(GURL("http://127.0.0.1:8000/")));
+  EXPECT_TRUE(HasSitePermissions(
+      GURL("chrome-extension://mhjfbmdgcfjbbpaeojofohoemgfcjjof/popup.html")));
   EXPECT_FALSE(HasSitePermissions(GURL("about:blank")));
   EXPECT_FALSE(HasSitePermissions(GURL("file:///home/someone/a.html")));
   EXPECT_FALSE(HasSitePermissions(GURL()));

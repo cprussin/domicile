@@ -50,7 +50,9 @@ ContentSetting ContentSettingFor(mojom::WebViewPermissionSetting setting);
 ContentSetting StoredSetting(mojom::WebViewPermissionSetting setting,
                              ContentSetting default_setting);
 
-// Whether a page at `url` has site permissions: only http and https pages do.
+// Whether a page at `url` has site permissions: http, https and extension
+// pages do. An extension's pages share its origin's settings, so a grant in a
+// browser window holds in its action popup.
 bool HasSitePermissions(const GURL& url);
 
 // Whether a media request asks only for cameras and microphones. Other
