@@ -1717,6 +1717,7 @@ describe("Shell", () => {
       await userEvent
         .setup()
         .type(screen.getByRole("combobox"), "example.com{Enter}");
+      await launched();
       const view = container.querySelector("webview");
       if (view === null) {
         throw new Error("test: no browser window");
