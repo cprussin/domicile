@@ -143,14 +143,17 @@ fn screenshot_is_the_verb_that_takes_a_file() {
     assert_eq!(
         run(&["screenshot", "shot.png"]).unwrap(),
         Invocation::Screenshot {
-            file: "shot.png".to_string()
+            file: Some("shot.png".to_string())
         }
     );
 }
 
 #[test]
-fn screenshot_with_no_file_is_refused() {
-    assert_eq!(run(&["screenshot"]), Err(CliError::NowhereToSave));
+fn screenshot_with_no_file_is_the_shells_own() {
+    assert_eq!(
+        run(&["screenshot"]).unwrap(),
+        Invocation::Screenshot { file: None }
+    );
 }
 
 #[test]

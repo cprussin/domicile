@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use domicile_launch::compositor_socket::{screenshot, ScreenshotError};
+use domicile_launch::control::Shot;
 
 /// Reply timeout: long enough for a loaded machine, short enough for a fast
 /// suite.
@@ -16,14 +17,17 @@ fn the_compositor_is_asked_for_the_whole_desk_in_the_file_and_says_it_saved_it()
     let (_scratch, path) = scratch();
     let heard = a_compositor(
         &path,
+        Duration::ZERO,
         Some(
             "{\"type\":\"system_reply\",\"id\":1,\"reply\":{\"kind\":\"saved\",\
              \"path\":\"/home/me/shot.png\"}}\n",
         ),
     );
 
-    screenshot(&path, Path::new("/home/me/shot.png"), BRIEFLY).expect("the compositor saved it");
-
+    assert_eq!(
+        screenshot(&path, Some(Path::new("/home/me/shot.png")), Some(BRIEFLY)),
+        Ok(Shot::Saved(PathBuf::from("/home/me/shot.png")))
+    );
     assert_eq!(
         heard.join().expect("the compositor was listening"),
         "{\"type\":\"system_request\",\"id\":1,\"request\":{\"call\":\"screenshot\",\
@@ -36,13 +40,14 @@ fn a_compositor_that_could_not_save_it_is_carried_back_in_its_own_words() {
     let (_scratch, path) = scratch();
     let heard = a_compositor(
         &path,
+        Duration::ZERO,
         Some(
             "{\"type\":\"system_reply\",\"id\":1,\"reply\":{\"kind\":\"failed\",\
              \"error\":{\"kind\":\"locked\",\"message\":\"the desktop is locked\"}}}\n",
         ),
     );
 
-    let why = screenshot(&path, Path::new("/home/me/shot.png"), BRIEFLY)
+    let why = screenshot(&path, Some(Path::new("/home/me/shot.png")), Some(BRIEFLY))
         .expect_err("the compositor refused");
 
     assert_eq!(
@@ -58,7 +63,7 @@ fn a_compositor_that_could_not_save_it_is_carried_back_in_its_own_words() {
 fn a_compositor_that_is_not_there_is_said_rather_than_waited_for() {
     let (_scratch, path) = scratch();
 
-    let why = screenshot(&path, Path::new("/home/me/shot.png"), BRIEFLY)
+    let why = screenshot(&path, Some(Path::new("/home/me/shot.png")), Some(BRIEFLY))
         .expect_err("nothing is bound there");
 
     assert_eq!(
@@ -72,9 +77,9 @@ fn a_compositor_that_is_not_there_is_said_rather_than_waited_for() {
 #[test]
 fn a_compositor_that_says_nothing_did_not_save_it() {
     let (_scratch, path) = scratch();
-    let heard = a_compositor(&path, None);
+    let heard = a_compositor(&path, Duration::ZERO, None);
 
-    let why = screenshot(&path, Path::new("/home/me/shot.png"), BRIEFLY)
+    let why = screenshot(&path, Some(Path::new("/home/me/shot.png")), Some(BRIEFLY))
         .expect_err("the compositor never answered");
 
     assert_eq!(
@@ -87,11 +92,35 @@ fn a_compositor_that_says_nothing_did_not_save_it() {
 }
 
 #[test]
+fn a_compositor_that_stays_silent_past_the_patience_did_not_save_it() {
+    let (_scratch, path) = scratch();
+    let heard = a_compositor(&path, BRIEFLY * 4, None);
+    let asked = std::time::Instant::now();
+
+    let why = screenshot(&path, Some(Path::new("/home/me/shot.png")), Some(BRIEFLY))
+        .expect_err("the compositor never answered");
+
+    assert_eq!(
+        why,
+        ScreenshotError::NoAnswer {
+            path: path.display().to_string()
+        }
+    );
+    assert!(
+        asked.elapsed() < BRIEFLY * 3,
+        "it waited for the hang-up rather than its patience: {:?}",
+        asked.elapsed()
+    );
+    heard.join().expect("the compositor was listening");
+}
+
+#[test]
 fn an_answer_that_is_not_a_reply_is_unreadable() {
     let (_scratch, path) = scratch();
-    let heard = a_compositor(&path, Some("{\"type\":\"welcome\"}\n"));
+    let heard = a_compositor(&path, Duration::ZERO, Some("{\"type\":\"welcome\"}\n"));
 
-    let why = screenshot(&path, Path::new("/home/me/shot.png"), BRIEFLY).expect_err("not a reply");
+    let why = screenshot(&path, Some(Path::new("/home/me/shot.png")), Some(BRIEFLY))
+        .expect_err("not a reply");
 
     assert_eq!(
         why,
@@ -103,9 +132,56 @@ fn an_answer_that_is_not_a_reply_is_unreadable() {
     heard.join().expect("the compositor was listening");
 }
 
-/// A fake compositor at `path` that reads one line and replies `with`, or
-/// hangs up if `with` is `None`.
-fn a_compositor(path: &Path, with: Option<&'static str>) -> std::thread::JoinHandle<String> {
+#[test]
+fn a_screenshot_with_no_file_is_the_shells_and_waits_for_the_user_to_pick() {
+    // The user takes as long as they take, so the supervisor gives no
+    // patience.
+    let (_scratch, path) = scratch();
+    let heard = a_compositor(
+        &path,
+        BRIEFLY * 2,
+        Some(
+            "{\"type\":\"system_reply\",\"id\":1,\"reply\":{\"kind\":\"saved\",\
+             \"path\":\"/home/me/Pictures/Screenshots/picked.png\"}}\n",
+        ),
+    );
+
+    assert_eq!(
+        screenshot(&path, None, None),
+        Ok(Shot::Saved(PathBuf::from(
+            "/home/me/Pictures/Screenshots/picked.png"
+        )))
+    );
+    assert_eq!(
+        heard.join().expect("the compositor was listening"),
+        "{\"type\":\"system_request\",\"id\":1,\"request\":{\"call\":\"screenshot\",\
+         \"file\":null}}\n"
+    );
+}
+
+#[test]
+fn a_screenshot_the_user_dismissed_is_canceled_rather_than_refused() {
+    let (_scratch, path) = scratch();
+    let heard = a_compositor(
+        &path,
+        Duration::ZERO,
+        Some(
+            "{\"type\":\"system_reply\",\"id\":1,\"reply\":{\"kind\":\"failed\",\
+             \"error\":{\"kind\":\"canceled\",\"message\":\"the screenshot dialog was dismissed\"}}}\n",
+        ),
+    );
+
+    assert_eq!(screenshot(&path, None, None), Ok(Shot::Canceled));
+    heard.join().expect("the compositor was listening");
+}
+
+/// A fake compositor at `path` that reads one line and, `after` that long,
+/// replies `with`, or hangs up if `with` is `None`.
+fn a_compositor(
+    path: &Path,
+    after: Duration,
+    with: Option<&'static str>,
+) -> std::thread::JoinHandle<String> {
     let listener = UnixListener::bind(path).expect("the compositor binds its chrome socket");
     std::thread::spawn(move || {
         let (stream, _) = listener.accept().expect("a supervisor dialed");
@@ -113,6 +189,7 @@ fn a_compositor(path: &Path, with: Option<&'static str>) -> std::thread::JoinHan
         BufReader::new(stream.try_clone().expect("the connection is readable"))
             .read_line(&mut line)
             .expect("the supervisor wrote a line");
+        std::thread::sleep(after);
         if let Some(answer) = with {
             let mut answering = stream;
             answering

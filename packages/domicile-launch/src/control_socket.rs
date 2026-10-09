@@ -17,9 +17,8 @@ use crate::control::{parse_response, to_line, Request, Response};
 
 /// How long either end waits for the other.
 ///
-/// The desktop serves one connection at a time, so a silent client blocks the
-/// socket until this elapses. Neither side does real work, so a timeout means
-/// a stopped process.
+/// A silent client holds a thread of the desktop's until this elapses. Neither
+/// side does real work, so a timeout means a stopped process.
 pub const PATIENCE: Duration = Duration::from_secs(5);
 
 /// The environment variable holding the control socket path, like
@@ -167,7 +166,13 @@ pub enum AskError {
 }
 
 /// Sends one request to the desktop at `path` and reads its response.
-pub fn ask(path: &Path, request: &Request, patience: Duration) -> Result<Response, AskError> {
+///
+/// With no `patience`, waits until the desktop answers or hangs up.
+pub fn ask(
+    path: &Path,
+    request: &Request,
+    patience: Option<Duration>,
+) -> Result<Response, AskError> {
     let mut stream = UnixStream::connect(path).map_err(|why| match why.kind() {
         // A missing socket, or a stale one left by a dead desktop.
         std::io::ErrorKind::NotFound | std::io::ErrorKind::ConnectionRefused => {
@@ -181,10 +186,10 @@ pub fn ask(path: &Path, request: &Request, patience: Duration) -> Result<Respons
         },
     })?;
     stream
-        .set_read_timeout(Some(patience))
+        .set_read_timeout(patience)
         .map_err(|why| unreachable_desktop(path, &why))?;
     stream
-        .set_write_timeout(Some(patience))
+        .set_write_timeout(patience)
         .map_err(|why| unreachable_desktop(path, &why))?;
     stream
         .write_all(to_line(request).as_bytes())

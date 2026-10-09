@@ -7,10 +7,14 @@
 
 use std::io::{BufRead as _, BufReader, Write as _};
 use std::os::unix::net::UnixStream;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use domicile_protocol::{ChromeMessage, HostMessage, SystemReply, SystemRequest};
+use domicile_protocol::{
+    ChromeMessage, HostMessage, SystemError, SystemErrorKind, SystemReply, SystemRequest,
+};
+
+use crate::control::Shot;
 
 /// The id the one call goes under.
 const CALL: u32 = 1;
@@ -45,8 +49,16 @@ pub enum ScreenshotError {
 }
 
 /// Tells the compositor at `socket` to write a PNG of the whole desk to the
-/// absolute path `file`.
-pub fn screenshot(socket: &Path, file: &Path, patience: Duration) -> Result<(), ScreenshotError> {
+/// absolute path `file`, or, with no `file`, to take the shell's interactive
+/// screenshot.
+///
+/// With no `patience`, waits until the compositor answers or hangs up, as the
+/// interactive one needs while the user picks.
+pub fn screenshot(
+    socket: &Path,
+    file: Option<&Path>,
+    patience: Option<Duration>,
+) -> Result<Shot, ScreenshotError> {
     let path = || socket.display().to_string();
     let unreachable = |why: std::io::Error| match why.kind() {
         // A timeout is `WouldBlock` or `TimedOut` depending on the platform,
@@ -64,16 +76,12 @@ pub fn screenshot(socket: &Path, file: &Path, patience: Duration) -> Result<(), 
         }
         kind => ScreenshotError::Failed { path: path(), kind },
     })?;
-    stream
-        .set_read_timeout(Some(patience))
-        .map_err(unreachable)?;
-    stream
-        .set_write_timeout(Some(patience))
-        .map_err(unreachable)?;
+    stream.set_read_timeout(patience).map_err(unreachable)?;
+    stream.set_write_timeout(patience).map_err(unreachable)?;
     let mut line = serde_json::to_string(&ChromeMessage::SystemRequest {
         id: CALL,
         request: SystemRequest::Screenshot {
-            file: Some(file.display().to_string()),
+            file: file.map(|file| file.display().to_string()),
         },
     })
     .expect("a system request always serializes");
@@ -91,8 +99,19 @@ pub fn screenshot(socket: &Path, file: &Path, patience: Duration) -> Result<(), 
         match serde_json::from_str::<HostMessage>(said) {
             Ok(HostMessage::SystemReply {
                 id: CALL,
-                reply: SystemReply::Saved { .. },
-            }) => Ok(()),
+                reply: SystemReply::Saved { path },
+            }) => Ok(Shot::Saved(PathBuf::from(path))),
+            Ok(HostMessage::SystemReply {
+                id: CALL,
+                reply:
+                    SystemReply::Failed {
+                        error:
+                            SystemError {
+                                kind: SystemErrorKind::Canceled,
+                                ..
+                            },
+                    },
+            }) => Ok(Shot::Canceled),
             Ok(HostMessage::SystemReply {
                 id: CALL,
                 reply: SystemReply::Failed { error },

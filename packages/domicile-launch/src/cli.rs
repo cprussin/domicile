@@ -19,7 +19,7 @@ pub enum CliError {
          --config <path>: a module's `Shell` export, or a JSON config's \
          \"shell\", is the shell when none is given.\n\
          Or a command for the desktop already running: which-shell, \
-         load-shell <shell>, open-url <url>, or screenshot <file>. Or \
+         load-shell <shell>, open-url <url>, or screenshot [file]. Or \
          check-config <file> to check a config without running it.\n"
     )]
     NoShell,
@@ -52,12 +52,6 @@ pub enum CliError {
          address is one browser window."
     )]
     ExtraToOpen { extra: String },
-    #[error(
-        "screenshot takes the file to write the PNG to, and was given \
-         nothing:\n\n    \
-         domicile screenshot ~/shot.png\n"
-    )]
-    NowhereToSave,
     #[error("screenshot takes one file, and it was given {extra} as well.")]
     ExtraToSave { extra: String },
     #[error(
@@ -104,10 +98,11 @@ pub enum Invocation {
     ///
     /// Kept as typed; [`crate::address`] makes it a URL.
     Open { target: String },
-    /// Tell the running desktop to write a PNG of the desk to this file.
+    /// Tell the running desktop to write a PNG of the desk to this file, or,
+    /// with none, to take the shell's interactive screenshot.
     ///
     /// Kept as typed; the client makes it absolute.
-    Screenshot { file: String },
+    Screenshot { file: Option<String> },
     /// Check that the compositor takes this config, without running a desktop.
     Check { config: PathBuf },
 }
@@ -148,9 +143,8 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
                 (Some(_), Some(extra)) => Err(CliError::ExtraToOpen { extra }),
             },
             Verb::Capturing => match (args.next(), args.next()) {
-                (None, _) => Err(CliError::NowhereToSave),
-                (Some(file), None) => Ok(Invocation::Screenshot { file }),
                 (Some(_), Some(extra)) => Err(CliError::ExtraToSave { extra }),
+                (file, _) => Ok(Invocation::Screenshot { file }),
             },
             Verb::Checking => match (args.next(), args.next()) {
                 (None, _) => Err(CliError::NothingToCheck),
@@ -201,7 +195,7 @@ enum Verb {
     Loading,
     /// `open-url`, which takes an address.
     Opening,
-    /// `screenshot`, which takes a file.
+    /// `screenshot`, which takes a file or nothing.
     Capturing,
     /// `check-config`, which takes a config file.
     Checking,

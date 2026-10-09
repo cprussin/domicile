@@ -154,7 +154,7 @@ fn a_command_reaches_the_desktop_and_the_answer_comes_back() {
     });
 
     assert_eq!(
-        ask(&path, &Request::WhichShell, BRIEFLY).expect("a desktop is running"),
+        ask(&path, &Request::WhichShell, Some(BRIEFLY)).expect("a desktop is running"),
         Response::Shell {
             module: PathBuf::from("/desktops/mine/shell.js")
         }
@@ -167,7 +167,7 @@ fn asking_where_no_desktop_is_running_says_so() {
     let (_scratch, path) = scratch();
 
     assert_eq!(
-        ask(&path, &Request::WhichShell, BRIEFLY).unwrap_err(),
+        ask(&path, &Request::WhichShell, Some(BRIEFLY)).unwrap_err(),
         AskError::NoDesktop {
             path: path.display().to_string()
         }
@@ -183,7 +183,7 @@ fn the_socket_a_dead_desktop_left_behind_is_a_failure_rather_than_a_wait() {
     drop(UnixListener::bind(&path).expect("a desktop that is no longer running"));
 
     assert_eq!(
-        ask(&path, &Request::WhichShell, BRIEFLY).unwrap_err(),
+        ask(&path, &Request::WhichShell, Some(BRIEFLY)).unwrap_err(),
         AskError::NoDesktop {
             path: path.display().to_string()
         }
@@ -192,8 +192,7 @@ fn the_socket_a_dead_desktop_left_behind_is_a_failure_rather_than_a_wait() {
 
 #[test]
 fn a_connection_that_says_nothing_is_given_up_on() {
-    // The desktop answers one connection at a time, so a silent client would
-    // block the control socket indefinitely.
+    // A silent client would hold one of the desktop's threads indefinitely.
     let (_scratch, path) = scratch();
     let control = take(&path).expect("nothing was there");
     let listener = control.listener().expect("the run's own listener");
@@ -243,7 +242,7 @@ fn a_desktop_that_takes_the_connection_and_says_nothing_is_not_a_transport_fault
     });
 
     assert_eq!(
-        ask(&path, &Request::WhichShell, BRIEFLY).unwrap_err(),
+        ask(&path, &Request::WhichShell, Some(BRIEFLY)).unwrap_err(),
         AskError::NoAnswer {
             path: path.display().to_string()
         }
@@ -263,12 +262,34 @@ fn a_desktop_that_hangs_up_without_answering_is_the_same_answer() {
     });
 
     assert_eq!(
-        ask(&path, &Request::WhichShell, BRIEFLY).unwrap_err(),
+        ask(&path, &Request::WhichShell, Some(BRIEFLY)).unwrap_err(),
         AskError::NoAnswer {
             path: path.display().to_string()
         }
     );
     hanging_up.join().expect("the desktop that hung up");
+}
+
+#[test]
+fn a_client_with_no_patience_waits_for_however_long_the_answer_takes() {
+    // An interactive screenshot answers when the user has picked.
+    let (_scratch, path) = scratch();
+    let control = take(&path).expect("nothing was there");
+    let listener = control.listener().expect("the run's own listener");
+    let slow = std::thread::spawn(move || {
+        let (stream, _) = listener.accept().expect("the client connected");
+        answer_one(stream, BRIEFLY, &|_| {
+            std::thread::sleep(BRIEFLY * 2);
+            String::from("{\"type\":\"canceled\"}\n")
+        })
+        .expect("the client waited for the answer");
+    });
+
+    assert_eq!(
+        ask(&path, &Request::WhichShell, None).expect("the desktop answered in the end"),
+        Response::Canceled
+    );
+    slow.join().expect("the desktop answered");
 }
 
 /// A temporary directory and a socket path inside it.

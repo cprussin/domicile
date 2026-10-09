@@ -10,6 +10,7 @@
 //!   end to end)
 
 use std::io::{BufRead, BufReader, IsTerminal, Write};
+use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
 use std::sync::{Arc, Mutex};
@@ -82,11 +83,15 @@ fn run() -> Result<ExitCode, String> {
                     .map_err(|why| format!("cannot tell where this was typed: {why}"))?,
             ),
         }),
-        // Absolute here, since the engine does not share this working
+        // Absolute here, since the compositor does not share this working
         // directory.
         Invocation::Screenshot { file } => asked(&Request::Screenshot {
-            file: std::path::absolute(&file)
-                .map_err(|why| format!("cannot tell where {file} is: {why}"))?,
+            file: file
+                .map(|file| {
+                    std::path::absolute(&file)
+                        .map_err(|why| format!("cannot tell where {file} is: {why}"))
+                })
+                .transpose()?,
         }),
         Invocation::Check { config } => check(&config).map(|()| ExitCode::SUCCESS),
     }
@@ -256,10 +261,13 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
     let socket =
         advertised(std::env::var(VARIABLE).ok().as_deref()).map_err(|why| why.to_string())?;
     let patience = match request {
-        // Longer than the supervisor waits for the engine, so the engine's
-        // own failure reaches this terminal rather than a timeout.
-        Request::Screenshot { .. } => CAPTURE_WITHIN + ANSWER_WITHIN,
-        _ => ANSWER_WITHIN,
+        // Longer than the supervisor waits for the compositor, so the
+        // compositor's own failure reaches this terminal rather than a timeout.
+        Request::Screenshot { file: Some(_) } => Some(CAPTURE_WITHIN + ANSWER_WITHIN),
+        // The user picks the area, however long that takes. A desktop that
+        // dies hangs up, which ends the wait.
+        Request::Screenshot { file: None } => None,
+        _ => Some(ANSWER_WITHIN),
     };
     let answer = ask(&socket, request, patience).map_err(|why| why.to_string())?;
     match answer {
@@ -271,6 +279,11 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
         Response::Captured { file } => {
             println!("{}", file.display());
             Ok(ExitCode::SUCCESS)
+        }
+        // A failure, so `f=$(domicile screenshot) && …` stops here.
+        Response::Canceled => {
+            eprintln!("domicile: the screenshot was canceled");
+            Ok(ExitCode::FAILURE)
         }
         // Print the desktop's own reason.
         Response::Refused { why } => {
@@ -644,11 +657,10 @@ const CLEANLY: &str = "exit status: 0";
 /// Serves the control socket on a thread, routing engine commands to `engine`
 /// and screenshots to the compositor's `chrome` socket.
 ///
-/// A separate thread because the supervisor blocks on its children. A failed
-/// connection is logged and skipped, so one bad client cannot stop the socket.
-/// `serving` tracks the current shell; it is read before answering and written
-/// only after the engine accepts a load, so the lock is never held across the
-/// call.
+/// A separate thread because the supervisor blocks on its children, and a
+/// thread per connection because an interactive screenshot waits on the user.
+/// A failed connection is logged and skipped, so one bad client cannot stop
+/// the socket. `serving` tracks the current shell; see [`load_the_shell`].
 fn answering(
     control: &Control,
     serving: Arc<Mutex<PathBuf>>,
@@ -658,32 +670,41 @@ fn answering(
     let listener = control
         .listener()
         .map_err(|why| format!("cannot answer the control socket: {why}"))?;
+    let (engine, chrome) = (Arc::new(engine), Arc::new(chrome));
     std::thread::spawn(move || {
         for connection in listener.incoming() {
             match connection {
                 Ok(stream) => {
-                    if let Err(why) = answer_one(stream, ANSWER_WITHIN, &|line| {
-                        answer(
-                            line,
-                            &shell(&serving),
-                            &|root, module| load_the_shell(&engine, root, module, &serving),
-                            &|url| {
-                                open_url(&engine, url, ANSWER_WITHIN).map_err(|why| why.to_string())
-                            },
-                            &|file| {
-                                screenshot(&chrome, file, CAPTURE_WITHIN)
-                                    .map_err(|why| why.to_string())
-                            },
-                        )
-                    }) {
-                        eprintln!("domicile: a command went unanswered: {why}");
-                    }
+                    let (serving, engine, chrome) =
+                        (serving.clone(), engine.clone(), chrome.clone());
+                    std::thread::spawn(move || {
+                        answer_a_command(stream, &serving, &engine, &chrome)
+                    });
                 }
                 Err(why) => eprintln!("domicile: a command did not arrive: {why}"),
             }
         }
     });
     Ok(())
+}
+
+/// Answers the one command on `stream`; see [`answering`].
+fn answer_a_command(stream: UnixStream, serving: &Mutex<PathBuf>, engine: &Path, chrome: &Path) {
+    if let Err(why) = answer_one(stream, ANSWER_WITHIN, &|line| {
+        answer(
+            line,
+            &shell(serving),
+            &|root, module| load_the_shell(engine, root, module, serving),
+            &|url| open_url(engine, url, ANSWER_WITHIN).map_err(|why| why.to_string()),
+            // The interactive one waits for the user, however long that takes.
+            &|file| {
+                screenshot(chrome, file, file.map(|_| CAPTURE_WITHIN))
+                    .map_err(|why| why.to_string())
+            },
+        )
+    }) {
+        eprintln!("domicile: a command went unanswered: {why}");
+    }
 }
 
 /// Watches the module config's directory and reloads on edits.
@@ -758,17 +779,20 @@ fn shell(serving: &Mutex<PathBuf>) -> PathBuf {
 /// Sends `load_shell` to the engine and records the new shell.
 ///
 /// `serving` is updated only after the engine accepts, since a refused load
-/// leaves the old shell in place.
+/// leaves the old shell in place. Its lock is held across the call, so loads
+/// from concurrent commands and the config watcher record the shell the
+/// engine took last.
 fn load_the_shell(
     engine: &Path,
     root: &Path,
     module: &Path,
     serving: &Mutex<PathBuf>,
 ) -> Result<(), String> {
-    load_shell(engine, root, module, ANSWER_WITHIN).map_err(|why| why.to_string())?;
-    *serving
+    let mut served = serving
         .lock()
-        .expect("nothing panics holding which shell is served") = root.join(module);
+        .expect("nothing panics holding which shell is served");
+    load_shell(engine, root, module, ANSWER_WITHIN).map_err(|why| why.to_string())?;
+    *served = root.join(module);
     Ok(())
 }
 

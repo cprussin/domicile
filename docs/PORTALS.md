@@ -135,8 +135,8 @@ One request channel carries all dialogs. Each interface's backend builds on it.
   - The shell takes its own through the `screenshot` system call
     (`portals::screenshot::for_the_shell`): an interactive screenshot asked as
     `SHELL_APP_ID`, which the dialog draws without an asker. Given a file,
-    it writes the whole desk there without a dialog; `domicile screenshot`
-    sends that.
+    it writes the whole desk there without a dialog. `domicile screenshot`
+    sends either, with the file it was given or none.
 - **No print preview.** The portal sends the document only after the dialog
   closes, so there is nothing to preview. Gtk's backend has none either.
 - **Print speaks IPP itself.** `domicile_host::ipp` encodes the few message

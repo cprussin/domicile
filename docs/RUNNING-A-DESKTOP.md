@@ -61,11 +61,18 @@ Settings live in `~/.config/domicile/domicile.json` (or `.ts`/`.js`). Reference:
 
 ## Screenshots
 
-`domicile screenshot <file>` writes a PNG of the whole desk, every monitor at
-the highest density, to `<file>`, from a terminal on the desktop. It is
-refused while the desk is locked. To pick a monitor, a window or an area, use
-the shell's screenshot key (Print in manganese), which saves under
-`$XDG_PICTURES_DIR/Screenshots/`.
+Run these from a terminal on the desktop. Both are refused while the desk is
+locked.
+
+- **`domicile screenshot`** opens the shell's screenshot picker, as the
+  shell's screenshot key does (Print in manganese). Pick a monitor, a window
+  or an area. The PNG goes under `$XDG_PICTURES_DIR/Screenshots/` and its path
+  is printed. Dismissing the picker prints
+  `domicile: the screenshot was canceled` and exits 1. It waits as long as
+  the picker is open. With a shell that answers no portal requests, it waits
+  until the desktop exits, and Ctrl-C does not withdraw the request.
+- **`domicile screenshot <file>`** writes a PNG of the whole desk, every
+  monitor at the highest density, to `<file>` and prints its path.
 
 ## Host shortcuts in a window
 
