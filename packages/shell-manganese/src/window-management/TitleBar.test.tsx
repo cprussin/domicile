@@ -370,6 +370,17 @@ describe("TitleBar", () => {
       );
     });
 
+    // A press on a hidden tab opens it; one on the open tab does nothing new.
+    it("shows a pointer over a hidden tab but not the open one", () => {
+      const cursor = (container: HTMLElement) =>
+        globalThis.getComputedStyle(face(container)).cursor;
+
+      expect(cursor(tab({}).container)).toBe("pointer");
+      expect(
+        cursor(tab({ strip: { ...MIDDLE_TAB, open: true } }).container),
+      ).not.toBe("pointer");
+    });
+
     describe("moved along its strip", () => {
       const SLOT = { height: 30, width: 240, x: 260, y: 32 };
       const moved = (strip: StripPlace) => {

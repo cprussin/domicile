@@ -559,7 +559,8 @@ const tabStyles = cva({
       selected: { fontWeight: "normal" },
     },
     open: {
-      false: { borderColor: "transparent", color: "muted" },
+      // A press opens a hidden tab.
+      false: { borderColor: "transparent", color: "muted", cursor: "pointer" },
       true: {
         borderColor: "borderStrong",
         color: "foreground",
