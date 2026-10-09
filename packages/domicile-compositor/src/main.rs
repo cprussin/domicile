@@ -3767,15 +3767,15 @@ impl DomicileCompositor {
             // is the source of truth.
             self.hub.take_up_the_theme(theme_on_the_wire(theme));
         }
-        if let Some(theme) = restated.appearance {
-            self.hub.portals.restyle(&theme);
+        if let Some(theme) = &restated.appearance {
+            self.hub.portals.restyle(theme);
             // Release the host before broadcasting.
             let told = self
                 .hub
                 .host
                 .lock()
                 .unwrap()
-                .set_appearance(shell_appearance(&theme));
+                .set_appearance(shell_appearance(theme));
             if let Some(message) = told {
                 self.hub.broadcast(message);
             }

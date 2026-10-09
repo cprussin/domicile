@@ -92,6 +92,7 @@ An edit applies to the running desktop, and windows stay open:
 | `idle.blank_after_seconds` | Idle timer restarts. Dark screens relight |
 | `theme.mode` | Shell and windows repaint |
 | `theme.accent_color`, `contrast`, `reduced_motion` | Shell and windows that read the settings portal follow |
+| `theme.icon_theme` | Shell and windows that read the settings portal follow; manganese on the next menu or launcher opening |
 | `files.omit` | Launcher file index rebuilt |
 | `extensions` | Extensions installed or removed ([EXTENSIONS.md](/docs/architecture/EXTENSIONS.md)) |
 | `lockdown` | Applications told through the Lockdown portal |
@@ -179,6 +180,16 @@ Applications read the rest through the settings portal
 | `theme.accent_color` | `"#rrggbb"` | unset: each application's own |
 | `theme.contrast` | `"normal"`, `"high"` | `"normal"` |
 | `theme.reduced_motion` | `true`, `false` | `false` |
+| `theme.icon_theme` | an icon theme's directory name, such as `"Papirus-Dark"` | unset: `hicolor` only |
+
+`icon_theme`:
+
+- Served as `org.gnome.desktop.interface`'s `icon-theme`. Unset leaves it to
+  the next portal backend; a reload that unsets it signals `hicolor`.
+- Install the theme so it is under a data directory's `icons`, such as
+  `~/.nix-profile/share/icons`.
+- Shells read it with `watchIconTheme` from `@domicile-desktop/sdk/icon-theme`
+  and look icons up with `@domicile-desktop/system-apps/app-icons`.
 
 In manganese:
 
@@ -187,6 +198,9 @@ In manganese:
   muted text.
 - `reduced_motion` runs every animation and transition once at the shortest
   duration: wallpaper crossfades, the theme wipe, window animations.
+- `icon_theme` draws tray menu and launcher icons. Symbolic icons take the
+  text's color. It is followed once per desktop; a theme that cannot be read
+  is logged and drawn as `hicolor`.
 
 Shell side: [SHELL-DESKTOP-EVENTS.md](SHELL-DESKTOP-EVENTS.md#theme).
 

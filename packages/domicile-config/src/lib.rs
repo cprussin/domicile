@@ -545,13 +545,12 @@ pub enum ThemeMode {
 
 /// How the desktop is themed.
 ///
-/// Clients read every field but `mode` through the settings portal's
-/// `org.freedesktop.appearance` namespace; see the compositor's
-/// `portals::settings`.
+/// Clients read every field but `mode` through the settings portal; see the
+/// compositor's `portals::settings`.
 ///
 /// `PartialEq` lets a reload detect a change; see the compositor's
 /// `Restatement`.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct ThemeConfig {
     pub mode: ThemeMode,
@@ -560,6 +559,25 @@ pub struct ThemeConfig {
     pub contrast: Contrast,
     /// Asks clients to keep animation to a minimum.
     pub reduced_motion: bool,
+    /// The freedesktop icon theme's directory name, such as `Papirus-Dark`.
+    /// Unset leaves shells with `hicolor`.
+    pub icon_theme: Option<String>,
+}
+
+impl ThemeConfig {
+    fn validate(&self) -> Result<(), ConfigError> {
+        // A theme is a directory under each `icons` directory.
+        match self
+            .icon_theme
+            .as_deref()
+            .filter(|name| matches!(*name, "" | "." | "..") || name.contains('/'))
+        {
+            Some(name) => Err(ConfigError::Validation(format!(
+                "theme.icon_theme {name:?} is not an icon theme's directory name"
+            ))),
+            None => Ok(()),
+        }
+    }
 }
 
 /// An sRGB color, written `"#rrggbb"`.
@@ -751,6 +769,7 @@ impl Config {
         self.input.keyboard.validate()?;
         self.lock.validate()?;
         self.startup.validate()?;
+        self.theme.validate()?;
         self.output.validate()
     }
 }

@@ -193,8 +193,9 @@ extension with an action. See
     out. Choosing an entry sends it to the app and closes the menu. A menu
     that cannot be read shows "Menu unavailable".
   - An app without a dbusmenu gets `ContextMenu` on right-click instead.
-  - Entries show their icon: the `hicolor` theme's for its name, else the
-    app's own picture.
+  - Entries show their icon: the icon theme's for its name, else the app's
+    own picture. Symbolic icons take the text's color. See
+    [SHELL-CONFIG.md](/docs/SHELL-CONFIG.md#theme).
   - Each entry's mnemonic is underlined. Pressing that letter chooses the
     entry, or opens its submenu. Other letters highlight the next entry
     starting with them.

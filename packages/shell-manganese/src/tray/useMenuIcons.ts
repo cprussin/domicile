@@ -2,11 +2,11 @@ import type { Result } from "@cprussin/option-result";
 import type { MenuEntry } from "@domicile-desktop/sdk/dbusmenu";
 import { MenuEntryKind } from "@domicile-desktop/sdk/dbusmenu";
 import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
-import type { System, SystemError } from "@domicile-desktop/sdk/system";
-import { system } from "@domicile-desktop/sdk/system";
+import type { SystemError } from "@domicile-desktop/sdk/system";
+import type { ThemedIcon } from "@domicile-desktop/system-apps/app-icons";
 import { useEffect, useState } from "react";
 
-import type { menuIcons } from "./menu-icons";
+import type { MenuIcons } from "./menu-icons";
 
 /**
  * The pictures for the `icon-name`s in `menu`, by name, read with `icons`.
@@ -16,9 +16,11 @@ import type { menuIcons } from "./menu-icons";
 export const useMenuIcons = (
   domicile: DomicileHost,
   menu: Result<readonly MenuEntry[], SystemError> | undefined,
-  icons: typeof menuIcons,
-): ReadonlyMap<string, string> => {
-  const [found, setFound] = useState<ReadonlyMap<string, string>>(new Map());
+  icons: MenuIcons,
+): ReadonlyMap<string, ThemedIcon> => {
+  const [found, setFound] = useState<ReadonlyMap<string, ThemedIcon>>(
+    new Map(),
+  );
   // The menu is new on every read; its names are what change.
   const key =
     menu === undefined
@@ -33,7 +35,7 @@ export const useMenuIcons = (
       return undefined;
     } else {
       let current = true;
-      pictures(system(domicile), key.split("\n"), icons)
+      pictures(domicile, key.split("\n"), icons)
         .then((read) => {
           if (current) {
             setFound(read);
@@ -68,18 +70,18 @@ const namesIn = (entries: readonly MenuEntry[]): string[] =>
     }
   });
 
-/** `names` that have an icon, each with its `data:` URL. */
+/** `names` that have an icon, each with its icon. */
 const pictures = async (
-  host: System,
+  domicile: DomicileHost,
   names: readonly string[],
-  icons: typeof menuIcons,
-): Promise<ReadonlyMap<string, string>> => {
-  const lookup = succeeded(await icons(host));
+  icons: MenuIcons,
+): Promise<ReadonlyMap<string, ThemedIcon>> => {
+  const lookup = succeeded(await icons(domicile));
   const read = await Promise.all(
     names.map(async (name) =>
       succeeded(await lookup(name)).match({
         None: () => [],
-        Some: (url): [string, string][] => [[name, url]],
+        Some: (icon): [string, ThemedIcon][] => [[name, icon]],
       }),
     ),
   );

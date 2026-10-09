@@ -4,7 +4,10 @@ import { ContextMenu } from "@domicile-desktop/component-library/ContextMenu";
 import type { MenuEntry, MenuItem } from "@domicile-desktop/sdk/dbusmenu";
 import { MenuEntryKind, ToggleKind } from "@domicile-desktop/sdk/dbusmenu";
 import type { SystemError } from "@domicile-desktop/sdk/system";
+import type { ThemedIcon } from "@domicile-desktop/system-apps/app-icons";
 import type { ReactNode } from "react";
+
+import { css } from "../../styled-system/css";
 
 type Requests = {
   /** Activate the item `id`. */
@@ -17,7 +20,7 @@ type Props = Requests & {
   /** Where the menu's corner goes, in the viewport's CSS pixels. */
   at: Point;
   /** The theme's pictures for the menu's icon names. */
-  icons: ReadonlyMap<string, string>;
+  icons: ReadonlyMap<string, ThemedIcon>;
   /** The tray icon's title. */
   label: string;
   /** What the application's menu holds. */
@@ -68,7 +71,7 @@ export const TrayMenu = ({
 
 type EntriesProps = Requests & {
   entries: readonly MenuEntry[];
-  icons: ReadonlyMap<string, string>;
+  icons: ReadonlyMap<string, ThemedIcon>;
 };
 
 const Entries = ({ entries, icons, onClick, onShow }: EntriesProps) =>
@@ -92,7 +95,7 @@ const Entries = ({ entries, icons, onClick, onShow }: EntriesProps) =>
   });
 
 type ItemProps = Requests & {
-  icons: ReadonlyMap<string, string>;
+  icons: ReadonlyMap<string, ThemedIcon>;
   item: MenuItem;
 };
 
@@ -164,12 +167,33 @@ const Leaf = ({ icons, item, onClick }: Omit<ItemProps, "onShow">) => {
   }
 };
 
-/** `item`'s icon: the theme's for its name, else the application's picture. */
+/**
+ * `item`'s icon: the theme's for its name, else the application's picture. A
+ * symbolic icon is a mask over the text's color, so it shows on any menu.
+ */
 const picture = (
-  icons: ReadonlyMap<string, string>,
+  icons: ReadonlyMap<string, ThemedIcon>,
   item: MenuItem,
 ): ReactNode => {
-  const src =
-    (item.icon === undefined ? undefined : icons.get(item.icon)) ?? item.image;
-  return src === undefined ? undefined : <img alt="" src={src} />;
+  const themed = item.icon === undefined ? undefined : icons.get(item.icon);
+  if (themed?.symbolic === true) {
+    return (
+      <span
+        className={symbolicStyles}
+        role="presentation"
+        style={{ maskImage: `url("${themed.url}")` }}
+      />
+    );
+  } else {
+    const src = themed?.url ?? item.image;
+    return src === undefined ? undefined : <img alt="" src={src} />;
+  }
 };
+
+const symbolicStyles = css({
+  backgroundColor: "currentColor",
+  display: "block",
+  maskPosition: "center",
+  maskRepeat: "no-repeat",
+  maskSize: "contain",
+});

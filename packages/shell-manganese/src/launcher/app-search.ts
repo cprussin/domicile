@@ -16,6 +16,7 @@ import { findApps } from "@domicile-desktop/system-apps/find-apps";
 import { installedApps } from "@domicile-desktop/system-apps/installed";
 import { omitting } from "@domicile-desktop/system-apps/omit";
 
+import type { IconTheme } from "../followed-icon-theme";
 import type { ApplicationsConfig } from "./applications-config";
 import type { Bookmark, DesktopEntry, FoundApps } from "./found-apps";
 
@@ -34,7 +35,8 @@ type Installed = { entries: InstalledEntry[]; icon: IconLookup };
 
 /**
  * Searches the applications installed on the desktop `system` reaches, less
- * those `config` omits, and `config`'s bookmarks.
+ * those `config` omits, and `config`'s bookmarks. Application icons come from
+ * the config's icon theme.
  *
  * Reads desktop entries on {@link AppSearch.opening} only: a read is a system
  * call per file, too slow for every keystroke. Bookmark icons are fetched in
@@ -43,6 +45,7 @@ type Installed = { entries: InstalledEntry[]; icon: IconLookup };
 export const appSearch = (
   system: System,
   config: ApplicationsConfig,
+  iconTheme: IconTheme,
   icons: Favicons = favicons((url) => favicon(url, curlFetch(system))),
 ): AppSearch => {
   const omits = omitting(config.omit);
@@ -54,7 +57,7 @@ export const appSearch = (
         // biome-ignore lint/suspicious/noConsole: surfacing a lookup that broke
         console.error("could not look for bookmarks' icons", error);
       });
-    installed ??= read(system, omits);
+    installed ??= read(system, omits, iconTheme);
     const { entries, icon } = await installed;
     return {
       apps: await Promise.all(
@@ -70,7 +73,7 @@ export const appSearch = (
   };
   return {
     opening: () => {
-      installed = read(system, omits);
+      installed = read(system, omits, iconTheme);
       return search("");
     },
     search,
@@ -80,13 +83,15 @@ export const appSearch = (
 const read = async (
   system: System,
   omits: (id: string) => boolean,
+  iconTheme: IconTheme,
 ): Promise<Installed> => {
   const dirs = succeeded(await dataDirs(system));
+  const theme = await iconTheme();
   return {
     entries: succeeded(await installedApps(system, dirs)).filter(
       ({ id }) => !omits(id),
     ),
-    icon: appIcons(system, dirs),
+    icon: appIcons(system, dirs, ["apps"], { theme }),
   };
 };
 

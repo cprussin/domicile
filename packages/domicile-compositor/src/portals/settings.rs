@@ -6,7 +6,8 @@
 //! signal. Theme changes are announced once every shell has captured its
 //! wipe's start frame (see `domicile_host::theme_turnover`). `accent-color`,
 //! `contrast` and `reduced-motion` come from the config's `theme` section and
-//! change on reload.
+//! change on reload. So does `org.gnome.desktop.interface`'s `icon-theme`,
+//! which shells read too.
 
 use std::collections::HashMap;
 
@@ -20,6 +21,15 @@ const NAMESPACE: &str = "org.freedesktop.appearance";
 
 /// The color scheme key in [`NAMESPACE`].
 const COLOR_SCHEME: &str = "color-scheme";
+
+/// GNOME's interface settings, where GTK reads the icon theme.
+const INTERFACE: &str = "org.gnome.desktop.interface";
+
+/// The icon theme key in [`INTERFACE`].
+const ICON_THEME: &str = "icon-theme";
+
+/// The theme every icon theme inherits, signaled when the config's is unset.
+const HICOLOR: &str = "hicolor";
 
 /// The `org.freedesktop.impl.portal.Settings` version implemented. Version 2
 /// adds `ReadOne`.
@@ -36,26 +46,28 @@ pub fn color_scheme(theme: Theme) -> u32 {
     }
 }
 
-/// Whether a `ReadAll` for `requested` includes `org.freedesktop.appearance`.
+/// Whether a `ReadAll` for `requested` includes `namespace`.
 ///
 /// Matches whole dotted components by prefix, so `org.freedesktop` matches
-/// and `org.freedesktop.appear` does not. An empty list matches everything.
-pub fn wants_appearance(requested: &[String]) -> bool {
+/// `org.freedesktop.appearance` and `org.freedesktop.appear` does not. An
+/// empty list matches everything.
+fn wants(namespace: &str, requested: &[String]) -> bool {
     requested.is_empty()
-        || requested.iter().any(|namespace| {
-            NAMESPACE == namespace
-                || NAMESPACE
-                    .strip_prefix(namespace.as_str())
+        || requested.iter().any(|prefix| {
+            namespace == prefix
+                || namespace
+                    .strip_prefix(prefix.as_str())
                     .is_some_and(|rest| rest.starts_with('.'))
         })
 }
 
 /// The config's `theme` keys besides `mode`.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Appearance {
     pub accent_color: Option<AccentColor>,
     pub contrast: Contrast,
     pub reduced_motion: bool,
+    pub icon_theme: Option<String>,
 }
 
 impl From<&ThemeConfig> for Appearance {
@@ -64,13 +76,15 @@ impl From<&ThemeConfig> for Appearance {
             accent_color: theme.accent_color,
             contrast: theme.contrast,
             reduced_motion: theme.reduced_motion,
+            icon_theme: theme.icon_theme.clone(),
         }
     }
 }
 
-/// The same keys for the shell, which follows them too.
-impl From<Appearance> for domicile_protocol::Appearance {
-    fn from(appearance: Appearance) -> Self {
+/// The same keys for the shell, which follows them too. The icon theme
+/// reaches shells through this portal instead.
+impl From<&Appearance> for domicile_protocol::Appearance {
+    fn from(appearance: &Appearance) -> Self {
         domicile_protocol::Appearance {
             accent_color: appearance
                 .accent_color
@@ -81,9 +95,9 @@ impl From<Appearance> for domicile_protocol::Appearance {
     }
 }
 
-/// The `Settings` backend object, serving [`NAMESPACE`].
+/// The `Settings` backend object, serving [`NAMESPACE`] and the icon theme.
 ///
-/// Other namespaces are left to the next backend rather than answered with
+/// Other keys are left to the next backend rather than answered with
 /// invented values.
 pub struct Settings {
     pub theme: Theme,
@@ -92,28 +106,27 @@ pub struct Settings {
 
 #[zbus::interface(name = "org.freedesktop.impl.portal.Settings")]
 impl Settings {
-    /// All settings in the requested namespaces. Empty for any namespace but
-    /// [`NAMESPACE`].
+    /// All settings in the requested namespaces.
     fn read_all(&self, namespaces: Vec<String>) -> HashMap<String, HashMap<String, OwnedValue>> {
-        if wants_appearance(&namespaces) {
-            HashMap::from([(
-                NAMESPACE.to_string(),
-                values(self.theme, &self.appearance)
-                    .into_iter()
-                    .map(|(key, value)| (key.to_string(), value))
-                    .collect(),
-            )])
-        } else {
-            HashMap::new()
+        let mut read: HashMap<String, HashMap<String, OwnedValue>> = HashMap::new();
+        for (namespace, key, value) in values(self.theme, &self.appearance) {
+            if wants(namespace, &namespaces) {
+                read.entry(namespace.to_string())
+                    .or_default()
+                    .insert(key.to_string(), value);
+            }
         }
+        read
     }
 
     /// One setting (interface version 2).
     fn read_one(&self, namespace: &str, key: &str) -> zbus::fdo::Result<OwnedValue> {
         values(self.theme, &self.appearance)
             .into_iter()
-            .find(|(served, _)| namespace == NAMESPACE && *served == key)
-            .map(|(_, value)| value)
+            .find(|(served_namespace, served_key, _)| {
+                namespace == *served_namespace && key == *served_key
+            })
+            .map(|(_, _, value)| value)
             // Return an error so xdg-desktop-portal asks the next backend;
             // it moves on after any error. The spec names
             // `org.freedesktop.portal.Error.NotFound`, but the frontend does
@@ -156,7 +169,7 @@ pub fn changed(
     let moved = {
         let mut settings = served.get_mut();
         let now_theme = theme.unwrap_or(settings.theme);
-        let now_appearance = appearance.unwrap_or(settings.appearance);
+        let now_appearance = appearance.unwrap_or_else(|| settings.appearance.clone());
         let moved = moved(
             settings.theme,
             &settings.appearance,
@@ -167,12 +180,12 @@ pub fn changed(
         settings.appearance = now_appearance;
         moved
     };
-    for (key, value) in moved {
+    for (namespace, key, value) in moved {
         // zbus's blocking API has no signal emitter, so block on the async
         // one.
         zbus::block_on(Settings::setting_changed(
             served.signal_emitter(),
-            NAMESPACE,
+            namespace,
             key,
             Value::from(value),
         ))?;
@@ -180,8 +193,18 @@ pub fn changed(
     Ok(())
 }
 
+/// A served setting: its namespace, key and value.
+type Setting = (&'static str, &'static str, OwnedValue);
+
+/// Every key served and its value. `icon-theme` is served only when set.
+fn values(theme: Theme, appearance: &Appearance) -> Vec<Setting> {
+    let mut served = looks(theme, appearance);
+    served.extend(appearance.icon_theme.as_deref().map(icon_theme));
+    served
+}
+
 /// Every key in [`NAMESPACE`] and its value.
-fn values(theme: Theme, appearance: &Appearance) -> Vec<(&'static str, OwnedValue)> {
+fn looks(theme: Theme, appearance: &Appearance) -> Vec<Setting> {
     // The spec reads a channel outside 0 to 1 as no accent.
     let accent = appearance
         .accent_color
@@ -190,12 +213,18 @@ fn values(theme: Theme, appearance: &Appearance) -> Vec<(&'static str, OwnedValu
             (channel(r), channel(g), channel(b))
         });
     vec![
-        (COLOR_SCHEME, OwnedValue::from(color_scheme(theme))),
         (
+            NAMESPACE,
+            COLOR_SCHEME,
+            OwnedValue::from(color_scheme(theme)),
+        ),
+        (
+            NAMESPACE,
             "accent-color",
             OwnedValue::try_from(Value::from(accent)).expect("doubles hold no file descriptors"),
         ),
         (
+            NAMESPACE,
             "contrast",
             OwnedValue::from(match appearance.contrast {
                 Contrast::Normal => 0u32,
@@ -203,23 +232,37 @@ fn values(theme: Theme, appearance: &Appearance) -> Vec<(&'static str, OwnedValu
             }),
         ),
         (
+            NAMESPACE,
             "reduced-motion",
             OwnedValue::from(u32::from(appearance.reduced_motion)),
         ),
     ]
 }
 
+fn icon_theme(name: &str) -> Setting {
+    (
+        INTERFACE,
+        ICON_THEME,
+        OwnedValue::try_from(Value::from(name)).expect("a string holds no file descriptors"),
+    )
+}
+
 /// The keys whose values differ between two looks, with their new values.
-fn moved(
-    was_theme: Theme,
-    was: &Appearance,
-    theme: Theme,
-    now: &Appearance,
-) -> Vec<(&'static str, OwnedValue)> {
-    values(was_theme, was)
+///
+/// An icon theme the config stops setting is signaled as [`HICOLOR`]: a
+/// client has no other way to hear that it went.
+fn moved(was_theme: Theme, was: &Appearance, theme: Theme, now: &Appearance) -> Vec<Setting> {
+    let signaled = |theme: Theme, appearance: &Appearance| {
+        let mut signaled = looks(theme, appearance);
+        signaled.push(icon_theme(
+            appearance.icon_theme.as_deref().unwrap_or(HICOLOR),
+        ));
+        signaled
+    };
+    signaled(was_theme, was)
         .into_iter()
-        .zip(values(theme, now))
-        .filter(|((_, before), (_, after))| before != after)
+        .zip(signaled(theme, now))
+        .filter(|((_, _, before), (_, _, after))| before != after)
         .map(|(_, after)| after)
         .collect()
 }
@@ -241,6 +284,7 @@ mod tests {
                 accent_color: Some(AccentColor([0xff, 0x33, 0])),
                 contrast: Contrast::High,
                 reduced_motion: true,
+                icon_theme: None,
             },
         };
 
@@ -255,10 +299,11 @@ mod tests {
 
     #[test]
     fn the_shell_is_told_the_same_look() {
-        let told = domicile_protocol::Appearance::from(Appearance {
+        let told = domicile_protocol::Appearance::from(&Appearance {
             accent_color: Some(AccentColor([0xff, 0x33, 0x0a])),
             contrast: Contrast::High,
             reduced_motion: true,
+            icon_theme: None,
         });
 
         assert_eq!(
@@ -291,16 +336,67 @@ mod tests {
         let was = Appearance::default();
         let now = Appearance {
             reduced_motion: true,
-            ..was
+            ..was.clone()
         };
 
         assert_eq!(
             moved(Theme::Dark, &was, Theme::Dark, &now),
-            [("reduced-motion", OwnedValue::from(1u32))]
+            [(NAMESPACE, "reduced-motion", OwnedValue::from(1u32))]
         );
         assert_eq!(
             moved(Theme::Dark, &was, Theme::Light, &was),
-            [(COLOR_SCHEME, OwnedValue::from(2u32))]
+            [(NAMESPACE, COLOR_SCHEME, OwnedValue::from(2u32))]
+        );
+    }
+
+    #[test]
+    fn the_icon_theme_is_gnomes_interface_setting() {
+        let settings = Settings {
+            theme: Theme::Dark,
+            appearance: Appearance {
+                icon_theme: Some("Papirus".into()),
+                ..Appearance::default()
+            },
+        };
+
+        assert_eq!(
+            settings.read_one(INTERFACE, ICON_THEME),
+            Ok(OwnedValue::try_from(Value::from("Papirus")).expect("a string"))
+        );
+        assert_eq!(
+            settings.read_all(vec![INTERFACE.to_string()])[INTERFACE].len(),
+            1
+        );
+        assert_eq!(settings.read_all(Vec::new()).len(), 2);
+    }
+
+    #[test]
+    fn no_icon_theme_is_left_to_the_next_backend() {
+        let settings = Settings {
+            theme: Theme::Dark,
+            appearance: Appearance::default(),
+        };
+
+        assert!(settings.read_one(INTERFACE, ICON_THEME).is_err());
+        assert!(settings.read_all(vec![INTERFACE.to_string()]).is_empty());
+    }
+
+    #[test]
+    fn an_icon_theme_unset_by_a_reload_is_hicolor() {
+        let was = Appearance::default();
+        let now = Appearance {
+            icon_theme: Some("Papirus".into()),
+            ..Appearance::default()
+        };
+        let string = |name: &str| OwnedValue::try_from(Value::from(name)).expect("a string");
+
+        assert_eq!(
+            moved(Theme::Dark, &was, Theme::Dark, &now),
+            [(INTERFACE, ICON_THEME, string("Papirus"))]
+        );
+        assert_eq!(
+            moved(Theme::Dark, &now, Theme::Dark, &was),
+            [(INTERFACE, ICON_THEME, string("hicolor"))]
         );
     }
 
@@ -314,30 +410,28 @@ mod tests {
 
     #[test]
     fn a_question_about_nothing_in_particular_wants_this() {
-        assert!(wants_appearance(&[]));
+        assert!(wants(NAMESPACE, &[]));
     }
 
     #[test]
     fn a_question_naming_this_namespace_wants_it() {
-        assert!(wants_appearance(&[NAMESPACE.to_string()]));
+        assert!(wants(NAMESPACE, &[NAMESPACE.to_string()]));
     }
 
     #[test]
     fn a_question_naming_a_prefix_of_it_wants_it() {
         // The spec matches dotted-name prefixes.
-        assert!(wants_appearance(&["org.freedesktop".to_string()]));
+        assert!(wants(NAMESPACE, &["org.freedesktop".to_string()]));
     }
 
     #[test]
     fn a_prefix_that_is_not_a_dotted_one_does_not_want_it() {
         // A string prefix that ends mid-component does not match.
-        assert!(!wants_appearance(&["org.freedesktop.appear".to_string()]));
+        assert!(!wants(NAMESPACE, &["org.freedesktop.appear".to_string()]));
     }
 
     #[test]
     fn a_question_about_somebody_elses_settings_does_not_want_it() {
-        assert!(!wants_appearance(&[
-            "org.gnome.desktop.interface".to_string()
-        ]));
+        assert!(!wants(NAMESPACE, &["org.kde.kdeglobals".to_string()]));
     }
 }

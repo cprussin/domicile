@@ -55,6 +55,10 @@
       "types": "./dist/global-shortcuts.d.ts",
       "default": "./dist/global-shortcuts.js"
     },
+    "./icon-theme": {
+      "types": "./dist/icon-theme.d.ts",
+      "default": "./dist/icon-theme.js"
+    },
     "./key-action": {
       "types": "./dist/key-action.d.ts",
       "default": "./dist/key-action.js"

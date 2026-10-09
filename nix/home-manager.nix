@@ -424,6 +424,17 @@ in {
             default = false;
           };
 
+          theme.icon_theme = lib.mkOption {
+            description = ''
+              The icon theme shells and applications draw icons from, by its
+              directory name under `share/icons`. Install the theme's package
+              too. `null`, the default, leaves shells with `hicolor`.
+            '';
+            type = lib.types.nullOr lib.types.str;
+            default = null;
+            example = "Papirus-Dark";
+          };
+
           input.keyboard = {
             xkb_rules = lib.mkOption {
               description = "Passed to xkb as is. Empty uses the libxkbcommon default.";

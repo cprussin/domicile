@@ -12,8 +12,23 @@ const desktop = (): Spawned => ({
   stdout: "XDG_DATA_HOME=/home\0XDG_DATA_DIRS=/nowhere\0",
 });
 
+/** A config with `theme` as its icon theme. */
+const configured = (theme: string | undefined) => () => Promise.resolve(theme);
+
+/** `name`'s icon from `icons`, as its contents. */
+const drawn = async (
+  icons: Awaited<ReturnType<typeof menuIcons>>,
+  name: string,
+) =>
+  (await icons.andThenAsync((icon) => icon(name))).map((found) =>
+    found.map(({ symbolic, url }) => ({
+      symbolic,
+      text: atob(url.slice(url.indexOf(",") + 1)),
+    })),
+  );
+
 describe("menuIcons", () => {
-  it("finds action and status icons in the data directories, before apps", async () => {
+  it("finds menu-sized action and status icons in hicolor, before apps", async () => {
     const icons = await menuIcons(
       fakeSystem(
         {
@@ -23,13 +38,32 @@ describe("menuIcons", () => {
         },
         desktop,
       ),
+      configured(undefined),
     );
 
-    expect(await icons.andThenAsync((icon) => icon("exit"))).toStrictEqual(
-      Ok(Some("data:image/png;base64,YWN0aW9u")),
+    expect(await drawn(icons, "exit")).toStrictEqual(
+      Ok(Some({ symbolic: false, text: "action" })),
     );
-    expect(await icons.andThenAsync((icon) => icon("wired"))).toStrictEqual(
-      Ok(Some("data:image/png;base64,cG5n")),
+    expect(await drawn(icons, "wired")).toStrictEqual(
+      Ok(Some({ symbolic: false, text: "png" })),
+    );
+  });
+
+  it("finds icons in the config's icon theme, symbolic ones too", async () => {
+    const icons = await menuIcons(
+      fakeSystem(
+        {
+          "/home/icons/Adwaita/index.theme":
+            "[Icon Theme]\nDirectories=symbolic/actions\n[symbolic/actions]\nSize=16\nContext=Actions\nType=Scalable\n",
+          "/home/icons/Adwaita/symbolic/actions/exit-symbolic.svg": "adwaita",
+        },
+        desktop,
+      ),
+      configured("Adwaita"),
+    );
+
+    expect(await drawn(icons, "exit")).toStrictEqual(
+      Ok(Some({ symbolic: true, text: "adwaita" })),
     );
   });
 });
