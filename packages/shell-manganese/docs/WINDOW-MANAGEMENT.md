@@ -136,8 +136,11 @@ For how warping, browser-window focus and modifier drags work, see
   Meta+Shift+Tab), a fullscreen button (same as Meta+F) and a close button.
 - A browser window's name is its page's title, or its site when the page has
   none.
-- Each bar and tab draws its window's icon before the name: a browser window's
-  page icon, else a stand-in.
+- Each bar and tab draws its window's icon before the name, else a stand-in:
+  - A client's: the `Icon` of the desktop entry its Wayland app id names
+    (matched in any case), else the icon named after the app id, in
+    `theme.icon_theme`. Entries are read again when a new app id appears.
+  - A browser window's: its page's icon.
 - A middle click on a bar or tab closes its window.
 - The bar is inside the window's box, so a window's size includes its bar.
 - The contents reach 1px up under the bar (`SURFACE_TUCK`), so no sliver of

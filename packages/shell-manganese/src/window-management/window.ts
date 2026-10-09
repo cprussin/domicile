@@ -35,6 +35,11 @@ export type ClientWindow = {
   appId: string;
   /** The cursor the client asked for, or `undefined` if none. */
   cursor: CursorShape | undefined;
+  /**
+   * The client's Wayland app id, which names its desktop entry and so its
+   * icon. `""` until the client sets one.
+   */
+  desktopId: string;
   id: string;
   kind: WindowKind.App;
   /** The largest the client will draw its window. */
@@ -64,6 +69,7 @@ export const ShellWindow = {
   App: (appId: string, title: string): ClientWindow => ({
     appId,
     cursor: undefined,
+    desktopId: "",
     id: appWindowId(appId),
     kind: WindowKind.App,
     maxSize: UNLIMITED,

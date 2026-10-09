@@ -61,6 +61,9 @@ const toplevelChanges = (
     ...(before.cursor === window.cursor
       ? []
       : [WindowAction.AppCursorChanged(appId, window.cursor)]),
+    ...(before.desktopId === window.desktopId
+      ? []
+      : [WindowAction.AppDesktopIdChanged(appId, window.desktopId)]),
   ];
 };
 
@@ -81,6 +84,7 @@ const popupChanges = (
 /** A window's state before its client has sent anything. */
 const UNSAID = {
   cursor: "default",
+  desktopId: "",
   maxHeight: null,
   maxWidth: null,
   minHeight: null,

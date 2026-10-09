@@ -17,6 +17,7 @@ describe("ShellWindow", () => {
         appId: "term",
         // Unset until the client reports them.
         cursor: undefined,
+        desktopId: "",
         id: "app:term",
         kind: WindowKind.App,
         maxSize: [undefined, undefined],
