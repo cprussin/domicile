@@ -80,7 +80,7 @@
 
   // The page's site's permission settings: each permission
   // DomicilePermissionRequestEvent names, mapped to "ask", "allow" or
-  // "block". Empty for a page that is not http or https.
+  // "block". Empty for a page that is not http, https or an extension's.
   // `domicile-site-permissions-change` signals a change.
   record<DOMString, DOMString> sitePermissions();
 
