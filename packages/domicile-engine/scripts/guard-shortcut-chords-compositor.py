@@ -3,7 +3,8 @@
 the engine resolves a chord grabbed by name.
 
 It answers `hello` with a `welcome`, describes a keyboard with `l` on evdev
-38, and prints every line the browser writes.
+38, then sends `idle`, which tells the page the keyboard has reached it. It
+prints every line the browser writes.
 """
 
 import argparse
@@ -15,6 +16,7 @@ import time
 
 SEQUENCE = [
     (0.05, {"type": "shell_config", "keys": {"l": 38, "Return": 28}}),
+    (0, {"type": "idle", "idle": True}),
 ]
 
 
