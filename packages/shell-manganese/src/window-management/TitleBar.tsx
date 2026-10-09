@@ -399,6 +399,13 @@ const barStyles = cva({
         color: "foreground",
         fontWeight: "medium",
       },
+      // A window that asked for the keyboard (sway's `urgent`).
+      urgent: {
+        backgroundColor:
+          "color-mix(in oklab, {colors.warning} 45%, {colors.background})",
+        color: "foreground",
+        fontWeight: "medium",
+      },
     },
     // Over the slot's bottom line, so the open tab meets its window and a
     // hidden tab's line meets the strip's.

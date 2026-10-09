@@ -44,6 +44,8 @@ export type Bar = {
   trayOrder: TrayOrder;
   /** How many notifications arrived since the drawer was last opened. */
   unread: number;
+  /** Workspaces holding a window that asked for the keyboard. */
+  urgent: readonly string[];
   /** This screen's workspaces. */
   workspaces: readonly string[];
 };

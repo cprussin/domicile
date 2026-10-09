@@ -86,6 +86,8 @@ type Props = {
   popups: readonly Popup[];
   /** Every screen and what it shows. */
   screens: readonly StageScreen[];
+  /** Windows that asked for the keyboard. See `WindowState.urgent`. */
+  urgent: readonly string[];
   windows: readonly ShellWindow[];
 };
 
@@ -120,6 +122,7 @@ export const Stage = ({
   onStretch,
   popups,
   screens,
+  urgent,
   windows,
 }: Props) => {
   const motions = useWindowMotion(
@@ -230,6 +233,7 @@ export const Stage = ({
               placement?.selected === true && placement.surface !== undefined,
             isTab: placement?.tabbed !== undefined,
             shownByContainer: false,
+            urgent: urgent.includes(window.id),
           });
           return (
             <WindowFrame
@@ -486,6 +490,8 @@ export const Stage = ({
                 inSelection: tab.selected && tab.active,
                 isTab: true,
                 shownByContainer: tab.active,
+                // The window the container last focused, which the tab names.
+                urgent: urgent.includes(tab.id),
               })}
               // A tab is all its window shows, so it scales about its own
               // middle.

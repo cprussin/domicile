@@ -12,6 +12,7 @@ import type { TrayOrder } from "../tray/useTrayOrder";
 import type { Windows } from "../window-management/useWindows";
 import {
   currentOn,
+  urgentWorkspacesOf,
   WindowAction,
   workspacesOn,
 } from "../window-management/window-state";
@@ -92,6 +93,7 @@ export const Monitor = ({
       tray={tray}
       trayOrder={trayOrder}
       unread={notifications.unread}
+      urgent={urgentWorkspacesOf(windows)}
       workspaces={workspacesOn(windows, name)}
     />
   </Screen>

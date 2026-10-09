@@ -2516,20 +2516,20 @@ describe("Shell", () => {
       expect(domicile.calls).toEqual([]);
     });
 
-    it("grants a client that asks for the keyboard over xdg-activation", () => {
-      renderShell();
+    it("marks a client that asks for the keyboard, and leaves the keyboard where it is", () => {
+      // xdg-activation. Granting it would let a window take the keyboard from
+      // the one being typed in.
+      const { container } = renderShell();
       clientAppears("one");
       clientAppears("two");
-      press("parenright");
       domicile.calls.length = 0;
 
       domicile.dispatch("focusrequested", { appId: "one" });
 
-      // Granted, and its workspace is switched to.
-      expect(domicile.calls).toContainEqual(["focusApp", "one"]);
-      expect(screen.getByRole("button", { name: "1" })).toHaveAttribute(
-        "aria-current",
-        "true",
+      expect(domicile.calls).not.toContainEqual(["focusApp", "one"]);
+      expect(barFor(container, "app:one")).toHaveAttribute(
+        "data-focus",
+        "urgent",
       );
     });
 

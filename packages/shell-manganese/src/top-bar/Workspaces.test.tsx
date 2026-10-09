@@ -8,12 +8,13 @@ import { Workspaces } from "./Workspaces";
  * The switcher with four workspaces and the second on screen. Includes the
  * tenth to test that a two-digit label still gets a circle.
  */
-const switcher = (focused = true) => {
+const switcher = (focused = true, urgent: readonly string[] = []) => {
   render(
     <Workspaces
       current="2"
       focused={focused}
       onSelect={() => undefined}
+      urgent={urgent}
       workspaces={["1", "2", "3", "10"]}
     />,
   );
@@ -53,6 +54,17 @@ describe("Workspaces", () => {
     );
     expect(workspace("1").className).not.toContain(
       css({ backgroundColor: "white" }),
+    );
+  });
+
+  it("washes one holding a window that asked for the keyboard in the warning color", () => {
+    const workspace = switcher(true, ["3"]);
+
+    expect(workspace("3").className).toContain(
+      css({ backgroundColor: "warning" }),
+    );
+    expect(workspace("1").className).not.toContain(
+      css({ backgroundColor: "warning" }),
     );
   });
 
