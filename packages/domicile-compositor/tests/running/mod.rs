@@ -177,12 +177,6 @@ impl Compositor {
         self.client_on(&self.session.chrome_wayland_display, title)
     }
 
-    /// A client that asks for the keyboard through `xdg-activation` once its
-    /// window is up.
-    pub fn client_asking_for_focus(&self, title: &str) -> Client {
-        self.client_on_with(&self.session.wayland_display, title, &["--ask-for-focus"])
-    }
-
     /// A client with extra command-line flags, for checks that combine them.
     pub fn client_with(&self, title: &str, extra: &[&str]) -> Client {
         self.client_on_with(&self.session.wayland_display, title, extra)

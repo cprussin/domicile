@@ -28,9 +28,8 @@ pub struct Arguments {
     /// over the window.
     pub translucent: bool,
 
-    /// Whether to request focus with `xdg_activation_v1` once the window is
-    /// up.
-    pub ask_for_focus: bool,
+    /// When to request focus with `xdg_activation_v1`, if at all.
+    pub ask_for_focus: Option<AskForFocus>,
 
     /// Text to offer on the clipboard.
     ///
@@ -92,6 +91,19 @@ pub enum HoldTheScreensOn {
     BeforeItHasAWindow,
 }
 
+/// When the client asks for the keyboard, and with which serial.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AskForFocus {
+    /// Once its window is up, without a serial.
+    OnceMapped,
+    /// When the keyboard enters it, with that `enter`'s serial: a request the
+    /// user's own focus change backs.
+    WhenEntered,
+    /// When the keyboard leaves it, with the serial of the `enter` before: a
+    /// window taking the keyboard back after the user moved on.
+    WhenLeft,
+}
+
 /// Why a command line was rejected.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ArgumentError {
@@ -146,7 +158,13 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
                 take(&mut follow_configure, &flag, true)?;
             }
             "--ask-for-focus" => {
-                take(&mut ask_for_focus, &flag, true)?;
+                take(&mut ask_for_focus, &flag, AskForFocus::OnceMapped)?;
+            }
+            "--ask-for-focus-when-entered" => {
+                take(&mut ask_for_focus, &flag, AskForFocus::WhenEntered)?;
+            }
+            "--ask-for-focus-when-left" => {
+                take(&mut ask_for_focus, &flag, AskForFocus::WhenLeft)?;
             }
             "--hold-the-screens-on" => {
                 take(
@@ -198,7 +216,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
         follow_configure: follow_configure.unwrap_or(false),
         trace: trace.unwrap_or(false),
         translucent: translucent.unwrap_or(false),
-        ask_for_focus: ask_for_focus.unwrap_or(false),
+        ask_for_focus,
         hold_the_screens_on,
         outlive_its_window: outlive_its_window.unwrap_or(false),
         copy,

@@ -7,8 +7,6 @@ type Props = {
   /** Whether this screen has keyboard focus, which decides `current`'s fill. */
   focused: boolean;
   onSelect: (name: string) => void;
-  /** Workspaces holding a window that asked for the keyboard. */
-  urgent: readonly string[];
   /** This screen's workspaces, in order. */
   workspaces: readonly string[];
 };
@@ -19,11 +17,9 @@ type Props = {
  *
  * Each is a number in a ring, filled for the focused workspace and outlined for
  * one visible on another screen (sway's `focused_workspace` versus
- * `active_workspace`). A hidden one holding a window that asked for the
- * keyboard is filled in the warning color (sway's `urgent_workspace`). The
- * ring marks the current workspace by shape, not just shade, so it stands out
- * over a wallpaper. Text is set smaller than the bar's so `10` fits in the same
- * circle.
+ * `active_workspace`). The ring marks the current workspace by shape, not just
+ * shade, so it stands out over a wallpaper. Text is set smaller than the bar's
+ * so `10` fits in the same circle.
  *
  * A plain `<button>` rather than the library's `Button`, which does not support
  * `aria-current` styling or an external `className`. It inherits the bar's
@@ -33,7 +29,6 @@ export const Workspaces = ({
   current,
   focused,
   onSelect,
-  urgent,
   workspaces,
 }: Props) => (
   <nav aria-label="Workspaces" className={listStyles}>
@@ -43,7 +38,7 @@ export const Workspaces = ({
         // wrong: a press on it switches back via `workspaceAutoBackAndForth`.
         aria-current={name === current ? "true" : undefined}
         className={workspaceStyles({
-          shown: shownAs(name === current, focused, urgent.includes(name)),
+          shown: shownAs(name === current, focused),
         })}
         key={name}
         onClick={() => {
@@ -115,14 +110,6 @@ const workspaceStyles = cva({
         },
         backgroundColor: "transparent",
       },
-      // Hidden, with a window that asked for the keyboard. Black text, as on
-      // the white chip, since the fill does not follow the theme's text.
-      urgent: {
-        backgroundColor: "warning",
-        color: "black",
-        fontWeight: "bold",
-        textShadow: "none",
-      },
       // Visible on another screen: the hover ring without the fill.
       visible: {
         _hover: {
@@ -139,11 +126,10 @@ const workspaceStyles = cva({
 const shownAs = (
   current: boolean,
   focused: boolean,
-  urgent: boolean,
-): "focused" | "hidden" | "urgent" | "visible" => {
+): "focused" | "hidden" | "visible" => {
   if (current) {
     return focused ? "focused" : "visible";
   } else {
-    return urgent ? "urgent" : "hidden";
+    return "hidden";
   }
 };

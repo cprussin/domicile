@@ -305,6 +305,10 @@ app asking to come forward (for example, a browser asked to open a link). The
 compositor does not grant it. Call `domicile.focusApp(event.appId)` to grant
 it, or ignore it.
 
+Only requests made since the keyboard last moved arrive. The compositor drops a
+token whose serial is older than the keyboard's last `enter`, or has none: that
+is a window taking focus back on its own, not something the user did.
+
 ### Where focus is
 
 `domicile.focusedWindow` is the client that holds the keyboard, `null` while

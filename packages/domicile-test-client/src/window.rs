@@ -46,7 +46,7 @@ use wayland_protocols_misc::server_decoration::client::{
     org_kde_kwin_server_decoration, org_kde_kwin_server_decoration_manager,
 };
 
-use crate::arguments::{Arguments, HoldTheScreensOn};
+use crate::arguments::{Arguments, AskForFocus, HoldTheScreensOn};
 
 /// Why the client stopped.
 #[derive(Debug, thiserror::Error)]
@@ -198,7 +198,10 @@ struct Client {
     /// See [`crate::arguments::Arguments::follow_configure`].
     follow_configure: bool,
     /// See [`crate::arguments::Arguments::ask_for_focus`].
-    ask_for_focus: bool,
+    ask_for_focus: Option<AskForFocus>,
+    /// The serial of the keyboard's last `enter`, for
+    /// [`AskForFocus::WhenLeft`].
+    entered_at: Option<u32>,
     /// See [`crate::arguments::Arguments::hold_the_screens_on`].
     hold_the_screens_on: Option<HoldTheScreensOn>,
     /// See [`crate::arguments::Arguments::outlive_its_window`].
@@ -382,6 +385,7 @@ impl Client {
             translucent: asked.translucent,
             follow_configure: asked.follow_configure,
             ask_for_focus: asked.ask_for_focus,
+            entered_at: None,
             hold_the_screens_on: asked.hold_the_screens_on,
             outlive_its_window: asked.outlive_its_window,
             window_is_gone: false,
@@ -650,11 +654,16 @@ impl Client {
         }
     }
 
-    /// Request an activation token for this window's surface.
+    /// Request an activation token for this window's surface, made for the
+    /// input or focus event `serial`.
     ///
-    /// Sent without a serial or seat, which the protocol allows. Checks use it
-    /// as the kind of request a focus policy should be able to refuse.
-    fn ask_for_the_keyboard(&self, handle: &QueueHandle<Client>) -> Result<(), ClientError> {
+    /// `None` sends no serial or seat, which the protocol allows. Checks use
+    /// it as the kind of request a focus policy should refuse.
+    fn ask_for_the_keyboard(
+        &self,
+        handle: &QueueHandle<Client>,
+        serial: Option<u32>,
+    ) -> Result<(), ClientError> {
         let activation = self
             .globals
             .activation
@@ -667,6 +676,9 @@ impl Client {
         })?;
         let token = activation.get_activation_token(handle, window.surface.clone());
         token.set_surface(&window.surface);
+        if let (Some(serial), Some(seat)) = (serial, self.globals.seat.as_ref()) {
+            token.set_serial(serial, seat);
+        }
         token.commit();
         crate::say!(token.id(), "commit()");
         Ok(())
@@ -882,13 +894,18 @@ fn anonymous(bytes: usize) -> std::io::Result<std::fs::File> {
     Ok(file)
 }
 
-/// Request focus once, if `--ask-for-focus` was given.
+/// Request focus once, if it was asked for at `when`, with `serial`.
 ///
 /// This mints a token; the token's `done` handler sends the activation.
-fn ask_for_focus_or_stop(client: &mut Client, handle: &QueueHandle<Client>) {
-    if client.ask_for_focus && !client.asked {
+fn ask_for_focus_or_stop(
+    client: &mut Client,
+    handle: &QueueHandle<Client>,
+    when: AskForFocus,
+    serial: Option<u32>,
+) {
+    if client.ask_for_focus == Some(when) && !client.asked {
         client.asked = true;
-        if let Err(err) = client.ask_for_the_keyboard(handle) {
+        if let Err(err) = client.ask_for_the_keyboard(handle, serial) {
             crate::say!("client", "cannot ask for the keyboard: {err}");
         }
     }
@@ -1207,7 +1224,7 @@ impl Dispatch<xdg_surface::XdgSurface, ()> for Client {
                 client.configured = true;
                 draw_or_stop(client, handle);
                 // After mapping, since activation names a surface.
-                ask_for_focus_or_stop(client, handle);
+                ask_for_focus_or_stop(client, handle, AskForFocus::OnceMapped, None);
                 // A popup needs a mapped parent.
                 open_popup(client, handle);
                 open_bubble(client, handle);
@@ -1844,10 +1861,18 @@ impl Dispatch<wl_keyboard::WlKeyboard, ()> for Client {
     ) {
         match event {
             // Copy on focus; see `Client::copy_what_was_asked_for`.
-            wl_keyboard::Event::Enter { surface, .. } => {
+            wl_keyboard::Event::Enter {
+                serial, surface, ..
+            } => {
                 // The window's surface, or a grabbing popup's.
                 crate::say!(keyboard.id(), "enter({})", surface.id());
+                client.entered_at = Some(serial);
                 client.copy_what_was_asked_for(handle);
+                ask_for_focus_or_stop(client, handle, AskForFocus::WhenEntered, Some(serial));
+            }
+            wl_keyboard::Event::Leave { .. } => {
+                let entered_at = client.entered_at;
+                ask_for_focus_or_stop(client, handle, AskForFocus::WhenLeft, entered_at);
             }
             wl_keyboard::Event::Key {
                 serial,

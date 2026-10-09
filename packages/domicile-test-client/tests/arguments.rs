@@ -5,7 +5,9 @@
 
 use std::ffi::OsString;
 
-use domicile_test_client::arguments::{arguments, ArgumentError, Arguments, HoldTheScreensOn};
+use domicile_test_client::arguments::{
+    arguments, ArgumentError, Arguments, AskForFocus, HoldTheScreensOn,
+};
 
 /// Parse a command line given as strings.
 fn given(args: &[&str]) -> Result<Arguments, ArgumentError> {
@@ -28,7 +30,7 @@ fn a_client_told_nothing_still_opens_a_window() {
         "a client keeps the size it opened at unless a check says otherwise",
     );
     assert!(
-        !asked.ask_for_focus,
+        asked.ask_for_focus.is_none(),
         "a client takes the keyboard it is given rather than asking for one",
     );
     assert_eq!(
@@ -61,7 +63,10 @@ fn a_client_can_be_asked_to_hold_the_screens_on() {
         asked.hold_the_screens_on,
         Some(HoldTheScreensOn::OnItsWindow)
     );
-    assert!(!asked.ask_for_focus, "and nothing else came on with it");
+    assert!(
+        asked.ask_for_focus.is_none(),
+        "and nothing else came on with it"
+    );
 }
 
 #[test]
@@ -96,7 +101,10 @@ fn a_client_can_be_asked_to_outlive_its_window() {
     let asked = given(&["--outlive-its-window"]).expect("a client that stays when its window goes");
 
     assert!(asked.outlive_its_window);
-    assert!(!asked.ask_for_focus, "and nothing else came on with it");
+    assert!(
+        asked.ask_for_focus.is_none(),
+        "and nothing else came on with it"
+    );
 }
 
 #[test]
@@ -206,8 +214,34 @@ fn asking_for_a_see_through_window_twice_is_refused_like_any_other_repeat() {
 fn a_client_can_be_asked_to_ask_for_the_keyboard() {
     let asked = given(&["--ask-for-focus"]).expect("a client that wants the keyboard");
 
-    assert!(asked.ask_for_focus);
+    assert_eq!(asked.ask_for_focus, Some(AskForFocus::OnceMapped));
     assert!(!asked.translucent, "and nothing else came on with it");
+}
+
+#[test]
+fn a_client_can_be_asked_to_ask_for_the_keyboard_with_the_serial_it_was_given_it() {
+    assert_eq!(
+        given(&["--ask-for-focus-when-entered"])
+            .expect("a client that asks as the keyboard arrives")
+            .ask_for_focus,
+        Some(AskForFocus::WhenEntered)
+    );
+    assert_eq!(
+        given(&["--ask-for-focus-when-left"])
+            .expect("a client that asks for the keyboard back")
+            .ask_for_focus,
+        Some(AskForFocus::WhenLeft)
+    );
+}
+
+#[test]
+fn a_client_asks_for_the_keyboard_one_way() {
+    assert_eq!(
+        given(&["--ask-for-focus", "--ask-for-focus-when-left"]),
+        Err(ArgumentError::Repeated {
+            flag: "--ask-for-focus-when-left".to_string()
+        })
+    );
 }
 
 #[test]
