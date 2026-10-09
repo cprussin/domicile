@@ -367,6 +367,7 @@ fn wire_shape_is_pinned() {
     let v = serde_json::to_value(HostMessage::AppAppeared {
         app_id: "term".into(),
         title: None,
+        desktop_id: None,
         size: None,
     })
     .unwrap();

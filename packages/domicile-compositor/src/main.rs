@@ -5461,8 +5461,33 @@ impl XdgShellHandler for DomicileCompositor {
     }
 
     /// A client set or changed its window's application id, which the
-    /// Background portal reports.
-    fn app_id_changed(&mut self, _surface: ToplevelSurface) {
+    /// Background portal reports and the chrome reads as its desktop id.
+    fn app_id_changed(&mut self, surface: ToplevelSurface) {
+        // `None` for the chrome's own window, which is never announced.
+        if let Some(app_id) = self.app_id_of(surface.wl_surface()) {
+            let desktop_id = with_states(surface.wl_surface(), |states| {
+                states
+                    .data_map
+                    .get::<XdgToplevelSurfaceData>()
+                    .unwrap()
+                    .lock()
+                    .unwrap()
+                    .app_id
+                    .clone()
+            })
+            .expect("Smithay calls this only after the client set an app id");
+            // Separate `let` so the host guard drops before the broadcast, as
+            // in `title_changed`.
+            let named = self
+                .hub
+                .host
+                .lock()
+                .unwrap()
+                .app_desktop_id(&app_id, desktop_id);
+            if let Some(named) = named {
+                self.hub.broadcast(named);
+            }
+        }
         self.the_running_apps_changed();
     }
 
