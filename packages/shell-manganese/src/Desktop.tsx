@@ -172,10 +172,19 @@ export const Desktop = ({
     () => windows.windows.map(({ id }) => id),
     [windows.windows],
   );
+  // Bars count: a window is under the pointer from its title bar down.
+  const shown = useMemo(
+    () =>
+      screens.flatMap(({ screenful }) =>
+        screenful.placements.map(({ frame, id }) => ({ box: frame, id })),
+      ),
+    [screens],
+  );
   const { pointing } = usePointerWarp({
     domicile,
     focus,
     pressed: windows.pressed,
+    shown,
     windows: open,
   });
 

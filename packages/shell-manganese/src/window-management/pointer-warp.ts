@@ -20,6 +20,12 @@ export type Focus = {
   id: string | undefined;
 };
 
+/** A window the screen shows, and its box. */
+export type Shown = {
+  box: Rect;
+  id: string;
+};
+
 type Move = {
   /** The focus before the key press. */
   from: Focus | undefined;
@@ -40,6 +46,19 @@ export const warpTo = ({ from, pointer, to }: Move): Spot | undefined =>
   to === undefined || settled(from, to) || holds(to.box, pointer)
     ? undefined
     : middleOf(to.box);
+
+/**
+ * Whether the pointer is over a shown window other than `focus`.
+ *
+ * A window that opens only needs the pointer if another window would take
+ * focus from it. Over the top bar or an empty screen, nothing would.
+ */
+export const overAnother = (
+  shown: readonly Shown[],
+  focus: Focus | undefined,
+  pointer: Spot | undefined,
+): boolean =>
+  shown.some(({ box, id }) => id !== focus?.id && holds(box, pointer));
 
 /** Whether the focus stayed on the same window in the same box. */
 const settled = (from: Focus | undefined, to: Focus): boolean =>
