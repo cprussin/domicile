@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """The compositor's end of the control socket, for guard-extension-installer.sh.
 
-It accepts the browser's connection, answers with a `welcome`, and sends one
-`extensions` message naming the directories it was given as `unpacked` --
-none, for the guard's control. That is what the real compositor sends at the
+It answers the browser's `hello` with a `welcome` and one `extensions`
+message naming the directories it was given as `unpacked` -- none, for the
+guard's control. That is what the real compositor sends at the
 handshake from a desk's `[extensions]`, spelled as `domicile-protocol` spells
 it (`wire/host-messages.jsonl`).
 
@@ -26,8 +26,28 @@ def send(connection, message):
     print("sent: %s" % line.strip(), flush=True)
 
 
+def greet(connection, unpacked):
+    """Send the welcome and the list."""
+    send(connection, {"type": "welcome", "protocol_version": 1})
+    send(
+        connection,
+        {"type": "extensions", "web_store": [], "unpacked": unpacked},
+    )
+    print("sent the extensions", flush=True)
+
+
+def is_hello(line):
+    """Whether `line` is the browser's `hello`.
+
+    The real compositor says nothing before it. The browser drops page-bound
+    lines that arrive before the page binds its end of the channel.
+    """
+    return json.loads(line).get("type") == "hello"
+
+
 def serve(path, unpacked):
-    """Accept on `path`, send the welcome and the list, then read until EOF."""
+    """Accept on `path`, send the welcome and the list on `hello`, and read
+    until EOF."""
     if os.path.exists(path):
         os.unlink(path)
 
@@ -41,13 +61,6 @@ def serve(path, unpacked):
         connection, _ = listener.accept()
         print("a channel connected", flush=True)
         with connection:
-            send(connection, {"type": "welcome", "protocol_version": 1})
-            send(
-                connection,
-                {"type": "extensions", "web_store": [], "unpacked": unpacked},
-            )
-            print("sent the extensions", flush=True)
-
             remainder = b""
             while True:
                 chunk = connection.recv(65536)
@@ -57,6 +70,8 @@ def serve(path, unpacked):
                 while b"\n" in remainder:
                     line, remainder = remainder.split(b"\n", 1)
                     print("said: %s" % line.decode("utf-8", "replace"), flush=True)
+                    if is_hello(line):
+                        greet(connection, unpacked)
         print("the channel went away", flush=True)
 
 

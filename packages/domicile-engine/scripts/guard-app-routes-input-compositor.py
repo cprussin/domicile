@@ -35,12 +35,27 @@ def send(connection, message):
     print("sent: %s" % json.dumps(message), flush=True)
 
 
+def greet(connection):
+    send(connection, {"type": "welcome", "protocol_version": 1})
+    for message in SEQUENCE:
+        time.sleep(0.05)
+        send(connection, message)
+    send(connection, {"type": "focus_changed", "app_id": ""})
+    print("sent the sequence", flush=True)
+
+
+def is_hello(line):
+    """Whether `line` is the browser's `hello`.
+
+    The real compositor says nothing before it. The browser drops page-bound
+    lines that arrive before the page binds its end of the channel.
+    """
+    return json.loads(line).get("type") == "hello"
+
+
 def answer(connection, line):
     """What a compositor says back to a line, if anything."""
-    try:
-        message = json.loads(line)
-    except ValueError:
-        return
+    message = json.loads(line)
     if message.get("type") == "focus_app":
         send(connection, {"type": "focus_changed", "app_id": message.get("app_id")})
 
@@ -56,12 +71,6 @@ def serve(path):
         connection, _ = listener.accept()
         print("a channel connected", flush=True)
         with connection:
-            send(connection, {"type": "welcome", "protocol_version": 1})
-            for message in SEQUENCE:
-                time.sleep(0.05)
-                send(connection, message)
-            send(connection, {"type": "focus_changed", "app_id": ""})
-            print("sent the sequence", flush=True)
             remainder = b""
             while True:
                 chunk = connection.recv(65536)
@@ -72,6 +81,8 @@ def serve(path):
                     line, remainder = remainder.split(b"\n", 1)
                     text = line.decode("utf-8", "replace")
                     print("said: %s" % text, flush=True)
+                    if is_hello(line):
+                        greet(connection)
                     answer(connection, text)
         print("the channel went away", flush=True)
 
