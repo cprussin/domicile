@@ -56,6 +56,15 @@ export default defineConfig({
       userSelect: "text",
     },
   },
+  // Registered as a length so it can ease; see `stripStyles` in `TitleBar`.
+  // Inherited, since the slot's `::after` reads it.
+  globalVars: {
+    "--strip-rest": {
+      inherits: true,
+      initialValue: "0px",
+      syntax: "<length>",
+    },
+  },
   hash: true,
   // The shell renders component-library controls, so it must scan their
   // source to emit their CSS rules. Hashing is deterministic per preset, so the
