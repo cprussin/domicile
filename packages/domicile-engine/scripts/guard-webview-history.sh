@@ -164,7 +164,7 @@ rm -f "$ENGINE_LOG"
   --app="domicile://shell/?drive=$DRIVE&src=$SUBJECT&settle=$SETTLE_MS&step=$STEP_MS&quiet=$QUIET_MS&hold=$HOLD_MS" \
   --domicile-shell-root="$SCRIPTS" \
   --domicile-shell-module="guard-webview-history.js" \
-  --no-sandbox --password-store=basic --no-first-run \
+  --no-sandbox --password-store=basic --no-first-run --disable-component-update \
   --user-data-dir="$PROFILE" \
   --window-size="$WIDTH,$HEIGHT" \
   --enable-logging=stderr --log-level=0 \

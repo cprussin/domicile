@@ -128,7 +128,7 @@ rm -f "$BROKER"; rm -rf "$PROFILE"; mkdir -p "$PROFILE"
 # One <app>, so the client's window is under the probe at the center.
 "$CHROMIUM/$OUT/chrome" \
   --ozone-platform="$PLATFORM" \
-  --no-sandbox --password-store=basic --no-first-run \
+  --no-sandbox --password-store=basic --no-first-run --disable-component-update \
   --user-data-dir="$PROFILE" \
   "$(latency_window_flags "$PLATFORM")" \
   --enable-blink-features=DomicileExternalSurface \

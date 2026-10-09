@@ -117,7 +117,7 @@ TMPDIR=/tmp "$OUT/chrome" \
   "${GPU_FLAGS[@]}" \
   --no-sandbox \
   --password-store=basic \
-  --no-first-run \
+  --no-first-run --disable-component-update \
   --user-data-dir="$PROFILE" \
   --window-size="$WINDOW_SIZE" \
   --enable-blink-features=DomicileExternalSurface \
