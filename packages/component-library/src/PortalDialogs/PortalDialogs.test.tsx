@@ -270,20 +270,50 @@ const screenCast = (
   kind: "screen_cast",
 });
 
-/** A 300x100 frozen desk with one monitor and one window. */
+/**
+ * A 300x100 frozen desk with one monitor and one window: the desktop from
+ * (-10, 0) to (140, 50), at two frame pixels a CSS pixel.
+ */
 const frozen = (id: number, kind: "screenshot" | "pick_color") => ({
   app_id: "org.example.Shooter",
   body: {
+    desk: { position: [-10, 0], size: [150, 50] },
     frame: "data:image/png;base64,AA==",
     height: 100,
     monitors: [{ area: { height: 100, width: 300, x: 0, y: 0 }, name: "DP-1" }],
     width: 300,
     windows: [
-      { area: { height: 40, width: 30, x: 10, y: 20 }, name: "Terminal" },
+      {
+        app_id: "kitty",
+        area: { height: 40, width: 30, x: 10, y: 20 },
+        title: "~/src",
+      },
     ],
   },
   id,
   kind,
+});
+
+/** A `<webview>` drawing browser window `id` at `box` in the page. */
+const webview = (id: string | undefined, box: DOMRectInit): HTMLElement => {
+  const view = document.createElement("webview");
+  if (id !== undefined) {
+    view.setAttribute("window", id);
+  }
+  view.getBoundingClientRect = () => DOMRect.fromRect(box);
+  document.body.append(view);
+  return view;
+};
+
+/** Browser window `id`, titled `title`, as the engine lists it. */
+const browserWindow = (id: string, title: string) => ({
+  height: 0,
+  id,
+  isPrivate: false,
+  popupWindow: null,
+  title,
+  url: "https://example.com",
+  width: 0,
 });
 
 /** Draws `element` 150x50 at (10, 20), as layout would. */
@@ -1147,7 +1177,7 @@ describe(PortalDialogs, () => {
   });
 
   describe("screenshot", () => {
-    it("shows the frozen desk and offers it whole, each monitor and each window", () => {
+    it("shows the frozen desk and offers it whole, each screen and each window", () => {
       const host = new FakeHost();
       render(<PortalDialogs host={host.host} />);
       host.push([frozen(1, "screenshot")]);
@@ -1162,13 +1192,88 @@ describe(PortalDialogs, () => {
       expect(
         screen.getByRole("button", { name: "Whole desk" }),
       ).toHaveAttribute("aria-pressed", "true");
-      expect(screen.getByRole("button", { name: "DP-1" })).toHaveAttribute(
-        "aria-pressed",
-        "false",
-      );
       expect(
-        screen.getByRole("button", { name: "Terminal" }),
+        within(screen.getByRole("group", { name: "Screens" })).getByRole(
+          "button",
+          { name: "DP-1" },
+        ),
+      ).toHaveAttribute("aria-pressed", "false");
+      expect(
+        within(screen.getByRole("group", { name: "Windows" })).getByRole(
+          "button",
+          { name: "kitty: ~/src" },
+        ),
       ).toBeInTheDocument();
+    });
+
+    it("names each window by its application, with its icon", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} systemOf={desktop()} />);
+      const shot = frozen(1, "screenshot");
+      const area = { height: 1, width: 1, x: 0, y: 0 };
+      host.push([
+        {
+          ...shot,
+          body: {
+            ...shot.body,
+            windows: [
+              { app_id: "firefox", area, title: "Notes" },
+              { app_id: "", area, title: "" },
+            ],
+          },
+        },
+      ]);
+
+      const notes = await screen.findByRole("button", {
+        name: "Firefox: Notes",
+      });
+      expect(
+        within(notes).getByRole("presentation").getAttribute("src"),
+      ).toStartWith("data:image/svg+xml");
+      expect(
+        screen.getByRole("button", { name: "Untitled window" }),
+      ).toBeInTheDocument();
+    });
+
+    it("offers each browser window the page draws, where it is on the frame", async () => {
+      const host = new FakeHost();
+      host.fake.set({
+        browserWindows: [
+          browserWindow("1", "Pull requests"),
+          browserWindow("2", "Hidden"),
+        ],
+      });
+      const views = [
+        // Past the desk's right edge, at 140.
+        webview("1", { height: 40, width: 100, x: 50, y: 10 }),
+        // On another workspace: drawn nowhere.
+        webview("2", { height: 0, width: 0, x: 0, y: 0 }),
+        // The shell's own page, such as a preview.
+        webview(undefined, { height: 40, width: 100, x: 0, y: 0 }),
+      ];
+      render(<PortalDialogs host={host.host} />);
+      host.push([frozen(1, "screenshot")]);
+      const windows = within(screen.getByRole("group", { name: "Windows" }));
+      expect(
+        windows.getAllByRole("button").map((button) => button.textContent),
+      ).toEqual(["kitty: ~/src", "Browser: Pull requests"]);
+      await userEvent.click(
+        windows.getByRole("button", { name: "Browser: Pull requests" }),
+      );
+      await userEvent.click(screen.getByRole("button", { name: "Save" }));
+      for (const view of views) {
+        view.remove();
+      }
+
+      expect(host.answers).toEqual([
+        [
+          1,
+          {
+            area: { height: 80, width: 180, x: 120, y: 20 },
+            kind: "screenshot",
+          },
+        ],
+      ]);
     });
 
     it("names no asker when the shell asked for it", () => {
@@ -1201,7 +1306,9 @@ describe(PortalDialogs, () => {
       const host = new FakeHost();
       render(<PortalDialogs host={host.host} />);
       host.push([frozen(1, "screenshot")]);
-      await userEvent.click(screen.getByRole("button", { name: "Terminal" }));
+      await userEvent.click(
+        screen.getByRole("button", { name: "kitty: ~/src" }),
+      );
       await userEvent.click(screen.getByRole("button", { name: "Save" }));
 
       expect(host.answers).toEqual([

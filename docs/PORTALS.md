@@ -128,6 +128,12 @@ One request channel carries all dialogs. Each interface's backend builds on it.
   `$XDG_PICTURES_DIR/Screenshots/`.
   - A window is its area on the desk, so it shows what is over it. Its own
     buffer is kept only while it is cast.
+  - The picker lists screens and windows apart. A window is named by its
+    application's desktop entry and its title.
+  - The compositor sees only `<app>` windows. The picker adds each browser
+    window the page draws (`<webview window>`), placed with the frozen desk's
+    `desk` rectangle, since the page's CSS pixels are the desk's logical
+    pixels.
   - The frontend checks the `PermissionStore` for a non-interactive
     screenshot (`permission_store_checked`). Without that, the backend asks
     through an `Access` dialog once per app and keeps the answer in the same

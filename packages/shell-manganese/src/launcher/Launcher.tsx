@@ -85,6 +85,8 @@ const EMPTY_ICON_SIZE = 64;
 const ICON_SIZE = 16;
 
 type Props = {
+  /** Called once it has finished closing, its exit animation included. */
+  onClosed: () => void;
   /** Called on Escape or a backdrop click. The desktop decides what to do. */
   onDismiss: () => void;
   onLaunch: (launch: Launch) => void;
@@ -125,6 +127,7 @@ type Learn = (bookmark: string, icon: string) => void;
  * drift from the desktop's.
  */
 export const Launcher = ({
+  onClosed,
   onDismiss,
   onLaunch,
   open,
@@ -146,6 +149,11 @@ export const Launcher = ({
     onOpenChange={(next) => {
       if (!next) {
         onDismiss();
+      }
+    }}
+    onOpenChangeComplete={(next) => {
+      if (!next) {
+        onClosed();
       }
     }}
     open={open}

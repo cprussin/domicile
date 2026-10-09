@@ -137,6 +137,7 @@ const launcher = (
   const dismissed: true[] = [];
   const { unmount } = render(
     <Launcher
+      onClosed={() => undefined}
       onDismiss={() => {
         dismissed.push(true);
       }}
@@ -186,6 +187,7 @@ describe("Launcher", () => {
   it("shows nothing at all while it is shut", () => {
     render(
       <Launcher
+        onClosed={() => undefined}
         onDismiss={() => undefined}
         onLaunch={() => undefined}
         open={false}
@@ -199,6 +201,25 @@ describe("Launcher", () => {
     );
 
     expect(screen.queryByRole("combobox")).toBeNull();
+  });
+
+  it("says when it has finished closing", async () => {
+    const props = {
+      onDismiss: () => undefined,
+      onLaunch: () => undefined,
+      opening: { apps: [], bookmarks: [] },
+      preview: previewing,
+      screen: SCREEN,
+      search: searching(FILES, false),
+      searchApps: searchingApps([], []),
+    };
+    await new Promise<void>((closed) => {
+      const { rerender } = render(
+        <Launcher {...props} onClosed={closed} open />,
+        { wrapper: OnOneScreen },
+      );
+      rerender(<Launcher {...props} onClosed={closed} open={false} />);
+    });
   });
 
   it("opens wide, so the rows and a preview both have room", () => {
@@ -302,6 +323,7 @@ describe("Launcher", () => {
   it("draws the applications it opens onto without waiting on the host", () => {
     const { unmount } = render(
       <Launcher
+        onClosed={() => undefined}
         onDismiss={() => undefined}
         onLaunch={() => undefined}
         open

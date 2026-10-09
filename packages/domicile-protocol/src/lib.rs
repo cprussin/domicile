@@ -946,8 +946,10 @@ pub struct FrozenDesk {
     pub width: u32,
     pub height: u32,
     pub monitors: Vec<ShotArea>,
-    /// The open windows, by title.
-    pub windows: Vec<ShotArea>,
+    pub windows: Vec<ShotWindow>,
+    /// Where the frame is on the desktop, in logical pixels, which are the
+    /// shell page's CSS pixels. The shell places its own windows with it.
+    pub desk: DeskRect,
 }
 
 impl FrozenDesk {
@@ -966,11 +968,28 @@ impl FrozenDesk {
     }
 }
 
-/// A named part of a [`FrozenDesk`]: a monitor or a window.
+/// A monitor of a [`FrozenDesk`], by `wl_output` name.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ShotArea {
     pub name: String,
     pub area: ShotRect,
+}
+
+/// An open window of a [`FrozenDesk`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ShotWindow {
+    /// Empty until the client names it.
+    pub title: String,
+    /// Its Wayland app id, which names its desktop entry; empty if unset.
+    pub app_id: String,
+    pub area: ShotRect,
+}
+
+/// A rectangle of the desktop, in logical pixels.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DeskRect {
+    pub position: (i32, i32),
+    pub size: (i32, i32),
 }
 
 /// A rectangle of a [`FrozenDesk`]'s frame, in its pixels.

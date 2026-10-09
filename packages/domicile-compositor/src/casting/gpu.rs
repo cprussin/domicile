@@ -11,7 +11,7 @@ use smithay::backend::allocator::{Buffer as _, Fourcc};
 use smithay::backend::renderer::gles::{GlesError, GlesRenderer, GlesTexture};
 use smithay::backend::renderer::{
     Bind as _, Color32F, ExportMem as _, Frame, ImportDma as _, ImportMem as _, ImportMemWl as _,
-    Renderer as _, TextureMapping as _,
+    Renderer as _,
 };
 use smithay::reexports::wayland_server::protocol::{wl_buffer::WlBuffer, wl_shm};
 use smithay::utils::{Physical, Rectangle, Size, Transform};
@@ -123,7 +123,10 @@ pub fn read_back(
 ) -> Result<(), FillError> {
     let region = Rectangle::new((crop.0, crop.1).into(), (crop.2, crop.3).into());
     let mapping = renderer.copy_texture(texture, region, Fourcc::Argb8888)?;
-    let flipped = mapping.flipped();
+    // Rows come back in memory order, top first unless the texture is
+    // y-inverted. Smithay's `TextureMapping::flipped` is `true` for every
+    // GLES read, so it cannot say which.
+    let flipped = texture.is_y_inverted();
     let pixels = renderer.map_texture(&mapping)?;
     let row = crop.2 as usize * 4;
     let height = crop.3 as usize;
@@ -232,5 +235,33 @@ fn texture_of(renderer: &mut GlesRenderer, snapshot: &Snapshot) -> Result<GlesTe
             false,
         )?),
         Snapshot::Texture(texture) => Ok(texture.clone()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::dmabuf_import::headless_renderer;
+
+    /// Four opaque pixels in `Argb8888` byte order, one color per corner, so
+    /// a flip on either axis changes the result.
+    const CORNERS: [u8; 16] = [
+        0, 0, 255, 255, // top left: red
+        0, 255, 0, 255, // top right: green
+        255, 0, 0, 255, // bottom left: blue
+        255, 255, 255, 255, // bottom right: white
+    ];
+
+    #[test]
+    fn a_texture_reads_back_the_right_way_up() {
+        let (mut renderer, _) = headless_renderer().expect("EGL: llvmpipe will do");
+        let texture = renderer
+            .import_memory(&CORNERS, Fourcc::Argb8888, Size::from((2, 2)), false)
+            .expect("the pixels import");
+        let mut target = [0; 16];
+
+        read_back(&mut renderer, &texture, (0, 0, 2, 2), &mut target, 8).expect("read back");
+
+        assert_eq!(target, CORNERS);
     }
 }

@@ -19,6 +19,7 @@ import { useModifiers } from "./keyboard/useModifiers";
 import { appSearch } from "./launcher/app-search";
 import type { ApplicationsConfig } from "./launcher/applications-config";
 import { Launcher } from "./launcher/Launcher";
+import type { Launch } from "./launcher/launch";
 import { LaunchKind } from "./launcher/launch";
 import { OpenWith } from "./launcher/OpenWith";
 import { useOpeningApps } from "./launcher/useOpeningApps";
@@ -105,6 +106,9 @@ export const Desktop = ({
   const opening = useOpeningApps(apps.opening, windows.launcherOpen);
   // The file the launcher asked what to open with, while that is asked.
   const [openingWith, setOpeningWith] = useState<string | undefined>();
+  // The launcher's pick, held until it has closed, so nothing it opens sees
+  // it. A screenshot app would shoot it.
+  const [picked, setPicked] = useState<Launch | undefined>();
   // File previews, read through the desktop's system calls.
   const preview = useCallback(
     (path: string) => previewFile(system(domicile), path),
@@ -355,29 +359,18 @@ export const Desktop = ({
       )}
       {/* Panels cover the whole desktop, not one screen. */}
       <Launcher
+        onClosed={() => {
+          if (picked !== undefined) {
+            setPicked(undefined);
+            launch(picked, act, setOpeningWith);
+          }
+        }}
         onDismiss={() => {
           act(WindowAction.LauncherDismissed());
         }}
-        onLaunch={(launch) => {
-          switch (launch.kind) {
-            case LaunchKind.Ran: {
-              act(WindowAction.AppLaunched(launch.command));
-              break;
-            }
-            case LaunchKind.Opened: {
-              act(WindowAction.FileOpened(launch.path));
-              break;
-            }
-            case LaunchKind.OpenedWith: {
-              act(WindowAction.LauncherDismissed());
-              setOpeningWith(launch.path);
-              break;
-            }
-            case LaunchKind.Browsed: {
-              act(WindowAction.BrowserOpened(launch.url, launch.isPrivate));
-              break;
-            }
-          }
+        onLaunch={(pick) => {
+          setPicked(pick);
+          act(WindowAction.LauncherDismissed());
         }}
         open={windows.launcherOpen}
         opening={opening}
@@ -499,6 +492,32 @@ const focusOf = (
     throw new Error(`shell: window ${activeId} is not laid out on its screen`);
   } else {
     return { box: placement.surface ?? placement.bar, id: placement.id };
+  }
+};
+
+/** Does what the launcher picked, once it has closed. */
+const launch = (
+  picked: Launch,
+  act: (action: WindowAction) => void,
+  openWith: (path: string) => void,
+) => {
+  switch (picked.kind) {
+    case LaunchKind.Ran: {
+      act(WindowAction.AppLaunched(picked.command));
+      break;
+    }
+    case LaunchKind.Opened: {
+      act(WindowAction.FileOpened(picked.path));
+      break;
+    }
+    case LaunchKind.OpenedWith: {
+      openWith(picked.path);
+      break;
+    }
+    case LaunchKind.Browsed: {
+      act(WindowAction.BrowserOpened(picked.url, picked.isPrivate));
+      break;
+    }
   }
 };
 

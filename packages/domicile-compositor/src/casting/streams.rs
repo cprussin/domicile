@@ -385,6 +385,7 @@ impl Streams {
                         shot,
                         monitors,
                         windows,
+                        place: shooting.desk,
                     })
                     .map_err(|why| why.to_string()),
             );
@@ -906,6 +907,7 @@ fn placed(candidate: Candidate) -> Option<Window> {
     let bounds = candidate.bounds?;
     Some(Window {
         title: candidate.title,
+        app_id: candidate.app_id,
         desk: (
             bounds.position.0,
             bounds.position.1,
@@ -1201,6 +1203,7 @@ mod tests {
         let blue: Vec<u8> = desk.shot.bgra.chunks(4).map(|pixel| pixel[0]).collect();
         assert_eq!(blue, [10, 10, 20, 20, 10, 10, 20, 20]);
         assert_eq!(desk.monitors.len(), 2);
+        assert_eq!(desk.place, (0, 0, 2, 1));
         engine.stopped.sort_unstable();
         assert_eq!(engine.stopped, [1, 2]);
     }

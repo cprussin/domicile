@@ -18,8 +18,8 @@ use domicile_host::screenshot::{
     color_at, crop, encode, file_name, save, screenshots_dir, Shot, Taken,
 };
 use domicile_protocol::{
-    AccessDialog, FrozenDesk, PortalAnswer, PortalKind, ShotRect, SystemError, SystemErrorKind,
-    SHELL_APP_ID,
+    AccessDialog, DeskRect, FrozenDesk, PortalAnswer, PortalKind, ShotRect, SystemError,
+    SystemErrorKind, SHELL_APP_ID,
 };
 use tracing::warn;
 use zbus::object_server::ObjectServer;
@@ -366,6 +366,10 @@ fn frozen(desk: &Desk) -> FrozenDesk {
         height: desk.shot.height,
         monitors: desk.monitors.clone(),
         windows: desk.windows.clone(),
+        desk: DeskRect {
+            position: (desk.place.0, desk.place.1),
+            size: (desk.place.2, desk.place.3),
+        },
     }
 }
 
@@ -410,7 +414,8 @@ mod tests {
     use std::time::Duration;
 
     use domicile_protocol::{
-        AccessDialog, FrozenDesk, PortalAnswer, PortalKind, PortalRequest, ShotArea, ShotRect,
+        AccessDialog, DeskRect, FrozenDesk, PortalAnswer, PortalKind, PortalRequest, ShotArea,
+        ShotRect, ShotWindow,
     };
     use zbus::blocking::Connection;
     use zbus::zvariant::{ObjectPath, Value};
@@ -477,7 +482,12 @@ mod tests {
                 bgra: [[0, 51, 255, 255], [128, 0, 0, 128]].concat(),
             },
             monitors: vec![area("left", 0), area("right", 1)],
-            windows: vec![area("Terminal", 1)],
+            windows: vec![ShotWindow {
+                title: "~/src".into(),
+                app_id: "kitty".into(),
+                area: area("", 1).area,
+            }],
+            place: (-1, 0, 2, 1),
         }
     }
 
@@ -700,6 +710,7 @@ mod tests {
             height,
             monitors,
             windows,
+            desk,
         }) = &asked[0].kind
         else {
             panic!("a picker, not {:?}", asked[0].kind);
@@ -707,6 +718,14 @@ mod tests {
         assert!(frame.starts_with("data:image/png;base64,"));
         assert_eq!((*width, *height), (2, 1));
         assert_eq!((monitors.len(), windows.len()), (2, 1));
+        assert_eq!(windows[0].app_id, "kitty");
+        assert_eq!(
+            *desk,
+            DeskRect {
+                position: (-1, 0),
+                size: (2, 1),
+            }
+        );
         served.queue.answer(
             asked[0].id,
             PortalAnswer::Screenshot {

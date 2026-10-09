@@ -7,12 +7,12 @@ use std::collections::BTreeMap;
 
 use domicile_protocol::{
     AccessDialog, AccountDialog, AppChooserDialog, BoundShortcut, Captured, Capturing,
-    CapturingKind, CastPick, CastSource, ChosenTrigger, ChromeMessage, Devices, FileChoice,
-    FileChoiceOption, FileChooserAnswer, FileChooserDialog, FileChooserMode, FileFilter,
-    FrozenDesk, HostMessage, Inhibited, Inhibition, InputCaptureDialog, LauncherDialog,
+    CapturingKind, CastPick, CastSource, ChosenTrigger, ChromeMessage, DeskRect, Devices,
+    FileChoice, FileChoiceOption, FileChooserAnswer, FileChooserDialog, FileChooserMode,
+    FileFilter, FrozenDesk, HostMessage, Inhibited, Inhibition, InputCaptureDialog, LauncherDialog,
     LauncherType, PortalAnswer, PortalKind, PortalRequest, PortalWallpaper, ProposedShortcut,
-    RemoteDesktopDialog, ScreenCastDialog, ShortcutsDialog, ShotArea, ShotRect, TakenChord,
-    UsbDevice, UsbDialog, WallpaperDialog, WallpaperTarget,
+    RemoteDesktopDialog, ScreenCastDialog, ShortcutsDialog, ShotArea, ShotRect, ShotWindow,
+    TakenChord, UsbDevice, UsbDialog, WallpaperDialog, WallpaperTarget,
 };
 
 fn access() -> PortalRequest {
@@ -782,8 +782,9 @@ fn frozen() -> FrozenDesk {
                 height: 100,
             },
         }],
-        windows: vec![ShotArea {
-            name: "Terminal".into(),
+        windows: vec![ShotWindow {
+            title: "~/src".into(),
+            app_id: "kitty".into(),
             area: ShotRect {
                 x: 10,
                 y: 20,
@@ -791,6 +792,10 @@ fn frozen() -> FrozenDesk {
                 height: 40,
             },
         }],
+        desk: DeskRect {
+            position: (-10, 0),
+            size: (150, 50),
+        },
     }
 }
 
@@ -800,7 +805,7 @@ fn a_screenshot_picker_carries_the_frozen_desk_and_its_areas() {
 
     assert_eq!(
         written,
-        r#"{"kind":"screenshot","body":{"frame":"data:image/png;base64,AA==","width":300,"height":100,"monitors":[{"name":"DP-1","area":{"x":0,"y":0,"width":300,"height":100}}],"windows":[{"name":"Terminal","area":{"x":10,"y":20,"width":30,"height":40}}]}}"#
+        r#"{"kind":"screenshot","body":{"frame":"data:image/png;base64,AA==","width":300,"height":100,"monitors":[{"name":"DP-1","area":{"x":0,"y":0,"width":300,"height":100}}],"windows":[{"title":"~/src","app_id":"kitty","area":{"x":10,"y":20,"width":30,"height":40}}],"desk":{"position":[-10,0],"size":[150,50]}}}"#
     );
 }
 

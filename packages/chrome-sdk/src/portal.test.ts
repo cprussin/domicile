@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import type {
   BoundShortcut,
   Capturing,
+  FrozenDesk,
   PortalHost,
   PortalRequest,
   PortalWallpaper,
@@ -626,6 +627,7 @@ describe("watchPortalRequests", () => {
     const host = new FakeHost();
     const requests = watched(host);
     const desk = {
+      desk: { position: [-10, 0], size: [150, 50] },
       frame: "data:image/png;base64,AA==",
       height: 100,
       monitors: [
@@ -633,7 +635,11 @@ describe("watchPortalRequests", () => {
       ],
       width: 300,
       windows: [
-        { area: { height: 40, width: 30, x: 10, y: 20 }, name: "Terminal" },
+        {
+          app_id: "kitty",
+          area: { height: 40, width: 30, x: 10, y: 20 },
+          title: "~/src",
+        },
       ],
     };
     host.push([
@@ -641,7 +647,8 @@ describe("watchPortalRequests", () => {
       { app_id: "org.example.Shot", body: desk, id: 6, kind: "pick_color" },
     ]);
 
-    const frozen = {
+    const frozen: FrozenDesk = {
+      desk: { position: [-10, 0], size: [150, 50] },
       frame: "data:image/png;base64,AA==",
       height: 100,
       monitors: [
@@ -649,7 +656,11 @@ describe("watchPortalRequests", () => {
       ],
       width: 300,
       windows: [
-        { area: { height: 40, width: 30, x: 10, y: 20 }, name: "Terminal" },
+        {
+          appId: "kitty",
+          area: { height: 40, width: 30, x: 10, y: 20 },
+          title: "~/src",
+        },
       ],
     };
     expect(await requests).toEqual([
