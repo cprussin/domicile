@@ -9,9 +9,9 @@ so a ~40 Mpx desk, plus a tiling for each less dense monitor, runs on a
 laptop's budget. Over it, cc evicts and re-rasters on every commit and
 draws required tiles as solid color: the shell blinks.
 
-- A widget shown on monitors asks for every pixel of the page and of
-  each monitor's tiling, with room for several layers that big and
-  their pending twins, at most a quarter of RAM (DomicileTileBytesFor).
+- A widget shown on monitors asks for upstream's memory per screen
+  pixel for every pixel of the page and of each monitor's tiling, at
+  most a quarter of RAM (DomicileTileBytesFor).
 - The commit carries it to the compositor, which raises its policy to
   it and never lowers it, so upstream's budget is a floor.
 - --force-gpu-mem-available-mb is the budget: with it, a widget asks
