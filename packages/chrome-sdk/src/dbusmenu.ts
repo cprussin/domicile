@@ -42,11 +42,13 @@ export type MenuItem = {
   id: number;
   /** Its text, with the mnemonic's underscore removed. */
   label: string;
-  /** The character after the label's access-key underscore, if any. */
-  mnemonic: string | undefined;
+  /** Where in `label` the access key is, if its underscore marked one. */
+  mnemonic: number | undefined;
   enabled: boolean;
   /** A freedesktop icon name. */
   icon: string | undefined;
+  /** The application's own picture (`icon-data`), as a PNG `data:` URL. */
+  image: string | undefined;
   toggle: Toggle | undefined;
   /** Its entries, for an item that opens a submenu. */
   submenu: readonly MenuEntry[] | undefined;
@@ -253,6 +255,7 @@ const itemOf = (
     enabled: properties.enabled ?? true,
     icon: properties["icon-name"] === "" ? undefined : properties["icon-name"],
     id,
+    image: pngOf(properties["icon-data"]),
     label,
     mnemonic,
     submenu:
@@ -286,15 +289,34 @@ const toggleOf = (properties: Properties): Toggle | undefined => {
  */
 const withoutMnemonic = (
   written: string,
-): { label: string; mnemonic: string | undefined } => {
-  const parts = written.split("__").map((part) => part.split("_"));
-  const marked = parts.find((part) => part.length > 1);
-  const mnemonic = marked?.slice(1).join("").slice(0, 1);
+): { label: string; mnemonic: number | undefined } => {
+  const label = unescaped(written);
+  // The first underscore that is not half of a `__`.
+  const marker = [...written.matchAll(UNDERSCORE)].find(
+    ([, doubled]) => doubled === "",
+  );
+  const at =
+    marker === undefined
+      ? undefined
+      : unescaped(written.slice(0, marker.index)).length;
   return {
-    label: parts.map((part) => part.join("")).join("_"),
-    mnemonic: mnemonic === "" ? undefined : mnemonic,
+    label,
+    mnemonic: at === undefined || at === label.length ? undefined : at,
   };
 };
+
+/** An underscore, and the one after it if any. */
+const UNDERSCORE = /_(_?)/g;
+
+/** `written` with each `__` made `_` and each other `_` removed. */
+const unescaped = (written: string): string =>
+  written.replaceAll(UNDERSCORE, "$1");
+
+/** `icon-data`'s bytes as a `data:` URL, or nothing for none. */
+const pngOf = (bytes: readonly number[] | undefined): string | undefined =>
+  bytes === undefined || bytes.length === 0
+    ? undefined
+    : `data:image/png;base64,${btoa(bytes.map((byte) => String.fromCharCode(byte)).join(""))}`;
 
 /** A `v`, as `domicile_host::dbus_json` writes it, read as its value. */
 const variant = <T>(value: z.ZodType<T>) =>
@@ -303,6 +325,7 @@ const variant = <T>(value: z.ZodType<T>) =>
 const propertiesSchema = z.object({
   "children-display": variant(z.string()).optional(),
   enabled: variant(z.boolean()).optional(),
+  "icon-data": variant(z.array(z.number().int().min(0).max(255))).optional(),
   "icon-name": variant(z.string()).optional(),
   label: variant(z.string()).optional(),
   "toggle-state": variant(z.number()).optional(),

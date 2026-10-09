@@ -25,7 +25,7 @@ shell menu ─ dbusCall / dbusMatch (callSystem) ─▶ compositor ─▶ com.ca
 | `tray` attribute, `activateTrayItem()` | `components/domicile/mojom/control_channel.mojom`, `modules/domicile/domicile_tray_*`, patch 0063 |
 | SDK: `DomicileTrayItem`, `tray`, `activateTrayItem`; `TrayItem`, `TrayAction` | `@domicile-desktop/sdk/domicile-host`, `@domicile-desktop/sdk/tray` |
 | Menus: `watchMenu` reads, follows and clicks an item's dbusmenu | `@domicile-desktop/sdk/dbusmenu` |
-| Manganese tray: one reorderable row shared with extension actions; menus drawn with `ContextMenu` | `packages/shell-manganese/src/tray/` |
+| Manganese tray: one reorderable row shared with extension actions; menus drawn with `ContextMenu`, entry icons looked up with `@domicile-desktop/system-apps/app-icons` | `packages/shell-manganese/src/tray/` |
 
 ## Key decisions
 
@@ -59,6 +59,13 @@ shell menu ─ dbusCall / dbusMatch (callSystem) ─▶ compositor ─▶ com.ca
   libappindicator items only expose `com.canonical.dbusmenu`. The page reaches
   any session bus name with `dbusCall` and `dbusMatch`, so menus need no
   compositor or engine code. The lock refuses those calls.
+- **Menu entries draw their icon and mnemonic.**
+  - `icon-name` is looked up in `hicolor` (`actions`, `status`, `devices`,
+    `apps`) with the launcher's lookup. A name not found there falls back to
+    `icon-data`, the application's PNG.
+  - The mnemonic is underlined. Its letter chooses the first enabled entry
+    with it in the open menu or submenu, and opens a submenu. Other letters
+    go to base-ui's type-ahead, which only highlights.
 - **A menu is read only while open.** Opening sends `AboutToShow(0)`, then
   `GetLayout` reads the whole tree. `LayoutUpdated` and
   `ItemsPropertiesUpdated` read it again; so does an `AboutToShow` that
