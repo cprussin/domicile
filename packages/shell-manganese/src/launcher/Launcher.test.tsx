@@ -216,6 +216,26 @@ describe("Launcher", () => {
     });
   });
 
+  it("lists the tags a line can carry at the start of its footer", () => {
+    using _panel = launcher();
+
+    const tags = screen.getByRole("list", { name: "Tags" });
+    expect(
+      within(tags)
+        .getAllByRole("listitem")
+        .map((tag) => tag.textContent),
+    ).toStrictEqual([
+      "!p Private",
+      "!gh GitHub",
+      "!im Google Images",
+      "!maps Google Maps",
+      "!wiki Wikipedia",
+      "!yt YouTube",
+    ]);
+    // Pushes the keys to the footer's end.
+    expect(tags).toHaveStyle({ marginInlineEnd: "auto" });
+  });
+
   it("offers what the host found, each name under the directory it is in", async () => {
     // Directory and name are separate lines, so `textContent` has no
     // separator.

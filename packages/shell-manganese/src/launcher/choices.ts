@@ -82,7 +82,7 @@ export const Choice = {
 export type Choice = ReturnType<(typeof Choice)[keyof typeof Choice]>;
 
 /** The tag that makes every row private. */
-const PRIVATE_TAG = "!p";
+export const PRIVATE_TAG = "!p";
 
 /**
  * The rows for `query`, given what the host found for it.
