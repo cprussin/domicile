@@ -121,6 +121,9 @@ For how warping, browser-window focus and modifier drags work, see
 - **A drop can land on any screen.** Targets include tiled windows on other
   screens, and the whole of a screen with nothing tiled. Focus follows the
   window.
+- **Dropping on a tab** puts the window before or after it in its strip, by
+  which half of the tab the pointer is over. Dragging a tab along its strip
+  rearranges the tabs.
 - A move aims only once the pointer is 8px from the press, so clicking a tab
   never drops it beside its container's open tab.
 - **Meta+right-drag** or **Meta+Shift+drag** resizes from the

@@ -23,7 +23,7 @@ import type { Popup } from "./popup";
 import { popupsOver } from "./popup";
 import type { Rect } from "./rect";
 import { TitleBar } from "./TitleBar";
-import type { Aim, DropTargets, Target } from "./tiled/aim";
+import type { Aim, DropTargets, TabTarget, Target } from "./tiled/aim";
 import { bordersOf } from "./tiled/borders";
 import { DropIndicator } from "./tiled/DropIndicator";
 import { TileBorder } from "./tiled/TileBorder";
@@ -155,6 +155,7 @@ export const Stage = ({
   );
   const dropTargets: DropTargets = {
     screens: emptyScreens(screens),
+    tabs: tabTargets(screens),
     windows: targets,
   };
   return (
@@ -633,6 +634,20 @@ const tiledTargets = (placements: Screenful["placements"]): readonly Target[] =>
   placements
     .filter(({ depth, surface }) => depth === TILED && surface !== undefined)
     .map(({ frame, id }) => ({ frame, id }));
+
+/**
+ * The tiled windows' tabs, hidden ones too, which a tiled window can be
+ * dropped beside. Excludes fullscreen screens, whose tiling is hidden.
+ */
+const tabTargets = (screens: readonly StageScreen[]): readonly TabTarget[] =>
+  screens
+    .filter(({ fullscreenId }) => fullscreenId === undefined)
+    .flatMap(({ screenful }) => screenful.placements)
+    .flatMap(({ bar, depth, id, tabbed }) =>
+      depth === TILED && tabbed !== undefined
+        ? [{ id, rect: bar, tabbed }]
+        : [],
+    );
 
 /**
  * The screens with no tiled window to drop on, which a dropped window fills.

@@ -52,7 +52,7 @@ const dragging = (resizes = false) => {
       frame: DRAGGED.frame,
       id: DRAGGED.id,
       resizes,
-      targets: { screens: [], windows: [DRAGGED, OTHER] },
+      targets: { screens: [], tabs: [], windows: [DRAGGED, OTHER] },
       ...calls,
     }),
   );
