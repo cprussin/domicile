@@ -350,6 +350,9 @@ export const Desktop = ({
           onMove={(id, x, y) => {
             act(WindowAction.WindowMoved(id, x, y));
           }}
+          onNewTab={(id) => {
+            act(WindowAction.NewTabPressed(id));
+          }}
           // Converted to the float's screen's pixels.
           onResize={(id, box, on) => {
             act(

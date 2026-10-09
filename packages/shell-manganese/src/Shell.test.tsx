@@ -1458,6 +1458,21 @@ describe("Shell", () => {
       expect(shadows(container)).toHaveLength(0);
     });
 
+    it("opens the launcher from the new-tab button at a strip's end", async () => {
+      // The pointer equivalent of `mod+space` from inside the strip.
+      const user = userEvent.setup();
+      renderShell();
+      clientAppears("term");
+
+      await user.click(screen.getByRole("button", { name: "New tab" }));
+
+      expect(
+        screen.getByRole("combobox", {
+          name: "Open an app, a file, a URL, or search",
+        }),
+      ).toBeVisible();
+    });
+
     it("takes the window away when the client goes", () => {
       const { container } = renderShell();
       clientAppears("term");

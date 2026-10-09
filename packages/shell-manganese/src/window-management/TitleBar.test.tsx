@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
-import { fireEvent, render } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 
 import { css } from "../../styled-system/css";
 import { TitleBar } from "./TitleBar";
@@ -483,6 +483,18 @@ describe("TitleBar", () => {
       const open = tab({ strip: { ...MIDDLE_TAB, open: true } });
       expect(open.queryByRole("button", { name: "Maximize" })).not.toBeNull();
       expect(open.queryByRole("button", { name: "Float" })).not.toBeNull();
+    });
+
+    it("offers a new tab at the end of a tabbed strip only", async () => {
+      const middle = tab({ onNewTab: () => undefined });
+      expect(middle.queryByRole("button", { name: "New tab" })).toBeNull();
+      middle.unmount();
+
+      const added = new Promise<void>((resolve) => {
+        tab({ onNewTab: resolve, strip: { ...MIDDLE_TAB, rest: 300 } });
+      });
+      fireEvent.click(screen.getByRole("button", { name: "New tab" }));
+      await added;
     });
 
     it("shows the layout and size of a group it stands for", () => {

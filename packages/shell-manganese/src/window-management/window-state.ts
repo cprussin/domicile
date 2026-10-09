@@ -325,6 +325,7 @@ export enum WindowActionKind {
   LayoutSet,
   ModeSet,
   ModeSwapped,
+  NewTabPressed,
   ParentFocused,
   PopupPlaced,
   ScratchpadShown,
@@ -575,6 +576,16 @@ export const WindowAction = {
 
   /** `focus mode_toggle`: switch focus between floating and tiled windows. */
   ModeSwapped: () => ({ kind: WindowActionKind.ModeSwapped as const }),
+
+  /**
+   * The new-tab button at the end of the strip that holds tab `id`. Focuses
+   * the strip's open tab, so the window launched opens beside it, and opens
+   * the launcher.
+   */
+  NewTabPressed: (id: string) => ({
+    id,
+    kind: WindowActionKind.NewTabPressed as const,
+  }),
 
   /** `focus parent`. */
   ParentFocused: () => ({ kind: WindowActionKind.ParentFocused as const }),
@@ -915,6 +926,12 @@ const reduceAction = (
     }
     case WindowActionKind.ModeSwapped: {
       return onCurrent(state, modeToggled);
+    }
+    case WindowActionKind.NewTabPressed: {
+      return {
+        ...reachWindow(state, openTabBeside(state, action.id)),
+        launcherOpen: true,
+      };
     }
     case WindowActionKind.PopupPlaced: {
       // Moved in place rather than appended, so a menu keeps its order.
@@ -1277,6 +1294,16 @@ const pointAtWindow = (state: WindowState, id: string): WindowState => {
     return state;
   } else {
     return pointAtShown(state, workspace, screen, pointedOn(workspace, id));
+  }
+};
+
+/** The open tab of the strip holding tab `id`. */
+const openTabBeside = (state: WindowState, id: string): string => {
+  const workspace = workspaceHolding(state, id);
+  if (workspace === undefined) {
+    throw new Error(`window state: no window ${id} for a new tab beside`);
+  } else {
+    return pointedOn(workspace, id);
   }
 };
 

@@ -1,6 +1,7 @@
 # The launcher
 
-**Meta+Space** (or Meta+D, or the bar's launcher button) opens a search box.
+**Meta+Space** (or Meta+D, the bar's launcher button, or a tab strip's "+")
+opens a search box.
 Every row is something Enter can do. Source: `src/launcher/`.
 
 ## Rows, in order

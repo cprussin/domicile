@@ -76,6 +76,8 @@ type Props = {
   /** A browser window's page icon. See `BrowserWindow`. */
   onIcon: (window: string, icon: string) => void;
   onMove: (id: string, x: number, y: number) => void;
+  /** The new-tab button past the last tab of the strip holding tab `id`. */
+  onNewTab: (id: string) => void;
   /** A float resized to `box`, in the page's pixels, on the screen `on`. */
   onResize: (id: string, box: Rect, on: Geometry) => void;
   /** The user clicked a window or its chrome. */
@@ -120,6 +122,7 @@ export const Stage = ({
   onHover,
   onIcon,
   onMove,
+  onNewTab,
   onResize,
   onSelect,
   onStretch,
@@ -351,6 +354,9 @@ export const Stage = ({
                   onMove={(x, y) => {
                     onMove(window.id, x, y);
                   }}
+                  onNewTab={() => {
+                    onNewTab(window.id);
+                  }}
                   rect={placement.bar}
                   restack={restack}
                   strip={placement.strip}
@@ -543,6 +549,9 @@ export const Stage = ({
               }}
               onMotionEnded={() => {
                 motions.onPlayedOut(tab.id, motion, screen);
+              }}
+              onNewTab={() => {
+                onNewTab(tab.id);
               }}
               onPointerDown={() => {
                 onSelect(tab.id);

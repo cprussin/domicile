@@ -1397,6 +1397,23 @@ describe("the launcher", () => {
     );
   });
 
+  it("opens from a tab strip's new-tab button, on the strip's open tab", () => {
+    // A new window opens beside the focused one, so it joins the strip.
+    const state = reduce(
+      desktop("kitty", "editor"),
+      WindowAction.LayoutSet(Layout.SplitH),
+      WindowAction.ContainerSplit(Axis.Vertical),
+      WindowAction.AppAppeared("mail", "mail"),
+      WindowAction.LayoutSet(Layout.Tabbed),
+      WindowAction.FocusStepped(Direction.Left),
+      WindowAction.FocusStepped(Direction.Left),
+      WindowAction.NewTabPressed(APP("mail")),
+    );
+
+    expect(state.launcherOpen).toBe(true);
+    expect(activeIdOf(state)).toBe(APP("editor"));
+  });
+
   it("shuts when it is dismissed, however many times", () => {
     // Escape and a backdrop click both report a close, and the dialog also
     // reports its own closing, so dismissing a closed launcher must be a no-op.
