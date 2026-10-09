@@ -14,8 +14,18 @@ import socket
 import sys
 
 
+def is_hello(line):
+    """Whether `line` is the browser's `hello`.
+
+    The real compositor says nothing before it. The browser drops page-bound
+    lines that arrive before the page binds its end of the channel.
+    """
+    return json.loads(line).get("type") == "hello"
+
+
 def serve(path):
-    """Accept on `path`, answer with `welcome`, print every line until EOF."""
+    """Accept on `path`, answer `hello` with `welcome`, print every line until
+    EOF."""
     if os.path.exists(path):
         os.unlink(path)
 
@@ -28,8 +38,6 @@ def serve(path):
         connection, _ = listener.accept()
         print("a channel connected", flush=True)
         with connection:
-            welcome = {"type": "welcome", "protocol_version": 1}
-            connection.sendall((json.dumps(welcome) + "\n").encode("utf-8"))
             remainder = b""
             while True:
                 chunk = connection.recv(65536)
@@ -39,6 +47,9 @@ def serve(path):
                 while b"\n" in remainder:
                     line, remainder = remainder.split(b"\n", 1)
                     print("said: %s" % line.decode("utf-8", "replace"), flush=True)
+                    if is_hello(line):
+                        welcome = {"type": "welcome", "protocol_version": 1}
+                        connection.sendall((json.dumps(welcome) + "\n").encode("utf-8"))
         print("the channel went away", flush=True)
 
 

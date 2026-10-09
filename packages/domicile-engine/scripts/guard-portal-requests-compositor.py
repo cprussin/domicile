@@ -33,12 +33,24 @@ def send(connection, message):
     print("sent: %s" % json.dumps(message), flush=True)
 
 
+def greet(connection):
+    send(connection, {"type": "welcome", "protocol_version": 1})
+    send(connection, requests())
+    send(connection, {"type": "idle", "idle": True})
+
+
+def is_hello(line):
+    """Whether `line` is the browser's `hello`.
+
+    The real compositor says nothing before it. The browser drops page-bound
+    lines that arrive before the page binds its end of the channel.
+    """
+    return json.loads(line).get("type") == "hello"
+
+
 def heard(line):
     print("said: %s" % line.decode("utf-8", "replace"), flush=True)
-    try:
-        message = json.loads(line)
-    except ValueError:
-        return
+    message = json.loads(line)
     if message.get("type") == "answer_portal_request":
         print("answered: %s %s" % (message.get("id"),
                                    json.dumps(message.get("answer"),
@@ -56,9 +68,6 @@ def serve(path):
         connection, _ = listener.accept()
         print("a channel connected", flush=True)
         with connection:
-            send(connection, {"type": "welcome", "protocol_version": 1})
-            send(connection, requests())
-            send(connection, {"type": "idle", "idle": True})
             remainder = b""
             while True:
                 chunk = connection.recv(65536)
@@ -68,6 +77,8 @@ def serve(path):
                 while b"\n" in remainder:
                     line, remainder = remainder.split(b"\n", 1)
                     heard(line)
+                    if is_hello(line):
+                        greet(connection)
         print("the channel went away", flush=True)
 
 
