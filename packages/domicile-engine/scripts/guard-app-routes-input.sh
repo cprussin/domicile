@@ -31,9 +31,19 @@
 #   pointer_motion  menu 20,20
 #   pointer_button  menu 272 down
 #   pointer_button  menu 272 up
+#   pointer_leave   menu
+#   pointer_motion  term 100,50
+#   focus_app       term            a press dragged off the window
+#   pointer_motion  term 100,50
+#   pointer_button  term 272 down
+#   pointer_motion  term 550,-200   the press keeps the pointer: 700,600 is
+#                                    off `term`, mapped through its transform
+#   pointer_button  term 272 up     the release off the window still reaches
+#                                    the client that had the press
+#   pointer_leave   term
 #
 # and the page heard `domicile-focus-requested`, cancelable and bubbling, for
-# `term` twice.
+# `term` three times.
 #
 # HOW IT CAN FAIL. NEGATIVE=1 draws the same two boxes as `<div>`s and drives
 # the same input. The page hears the press -- it says so -- and not one of the
@@ -209,12 +219,21 @@ wanted = [
     "pointer_motion menu 20.0,20.0",
     "pointer_button menu 272 down",
     "pointer_button menu 272 up",
+    "pointer_leave menu",
+    "pointer_motion term 100.0,50.0",
+    "focus_app term",
+    "pointer_motion term 100.0,50.0",
+    "pointer_button term 272 down",
+    # Off `term`: the press captured the pointer for it.
+    "pointer_motion term 550.0,-200.0",
+    "pointer_button term 272 up",
+    "pointer_leave term",
 ]
 asked = page.count('"GUARD focus-requested term bubbles=true cancelable=true"')
 if '"GUARD keydown KeyA"' not in page:
     print("the page never heard the key (%s), so the harness delivered no key event and the key lines decide nothing" % page)
-elif asked != 2:
-    print("the page heard %d cancelable, bubbling `domicile-focus-requested` for term where the two presses owed two (%s)" % (asked, page))
+elif asked != 3:
+    print("the page heard %d cancelable, bubbling `domicile-focus-requested` for term where the three presses owed three (%s)" % (asked, page))
 elif heard != wanted:
     print("the compositor was sent %s where %s was owed" % (heard, wanted))
 PY
