@@ -105,6 +105,43 @@ describe("TitleBar", () => {
     expect(bar(container).style.getPropertyValue("--collapse-x")).toBe("0");
   });
 
+  // The slot is the tab's piece of the strip, which must stay whole; only the
+  // tab on it opens out.
+  it("opens out across a tabbed container's strip, leaving the strip whole", () => {
+    const { container } = render(
+      <TitleBar
+        {...barProps}
+        motion="opening-tab"
+        strip={MIDDLE_TAB}
+        tabbed={Layout.Tabbed}
+      />,
+    );
+
+    expect(globalThis.getComputedStyle(bar(container)).animation).not.toContain(
+      "windowOpeningTab",
+    );
+    expect(globalThis.getComputedStyle(face(container)).animation).toContain(
+      "windowOpeningTab",
+    );
+  });
+
+  it("says when its tab has opened out", async () => {
+    await new Promise<void>((resolve) => {
+      const { container } = render(
+        <TitleBar
+          {...barProps}
+          motion="opening-tab"
+          onMotionEnded={() => {
+            resolve();
+          }}
+          strip={MIDDLE_TAB}
+          tabbed={Layout.Tabbed}
+        />,
+      );
+      fireEvent.animationEnd(face(container));
+    });
+  });
+
   // A closing bar's buttons would do nothing.
   it("is nothing a pointer or a keyboard can reach while it leaves", () => {
     const { container } = render(<TitleBar {...barProps} motion="closing" />);

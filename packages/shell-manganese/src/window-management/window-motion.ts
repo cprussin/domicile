@@ -3,9 +3,10 @@
 // A string union because the values are Panda `cva` variant keys and are also
 // written to `data-motion`, which devtools and tests can read.
 //
-// A newly opened window grows from its frame's center. A window carried in by a
-// workspace switch slides in from the side that workspace is on, so a switch
-// does not look like many windows opening.
+// A newly opened window grows from its frame's center, and a new tab opens
+// along its strip. A window carried in by a workspace switch slides in from the
+// side that workspace is on, so a switch does not look like many windows
+// opening.
 
 /**
  * The direction of a workspace switch, in logical terms: `end` is the
@@ -21,6 +22,7 @@ export type WindowMotion =
   | "leaving-to-end"
   | "leaving-to-start"
   | "opening"
+  | "opening-tab"
   | Shuffle
   | "resting"
   | TabFade;
@@ -66,6 +68,7 @@ export const isLeaving = (motion: WindowMotion): boolean => {
     case "arriving-from-start":
     case "concealing":
     case "opening":
+    case "opening-tab":
     case "restacking":
     case "restacking-again":
     case "resting":
@@ -94,6 +97,7 @@ export const barMotion = (motion: WindowMotion): WindowMotion => {
     case "leaving-to-end":
     case "leaving-to-start":
     case "opening":
+    case "opening-tab":
     case "restacking":
     case "restacking-again":
     case "resting": {

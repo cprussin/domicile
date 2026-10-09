@@ -97,8 +97,8 @@ export const shuffledBy = (
       };
 
 /**
- * Custom property for the `windowClosingTab` keyframes: which axis a closing
- * tab collapses along. None for a bar that is not a tab.
+ * Custom property for the `windowClosingTab` and `windowOpeningTab` keyframes:
+ * which axis a tab collapses along. None for a bar that is not a tab.
  *
  * Set on the bar only; without it the keyframes just fade (see
  * `panda.config.ts`).
@@ -172,6 +172,10 @@ export const movingStyles = cva({
       },
       opening: {
         animation: "windowOpening {durations.fast} {easings.outQuart}",
+      },
+      // The reverse of `closing-tab`, on the same curve as its neighbors.
+      "opening-tab": {
+        animation: "windowOpeningTab {durations.fast} {easings.out}",
       },
       // Overlapping floats separate, swap depths, and rejoin. Parameters come
       // from {@link shuffledBy}. `in-out` pauses them where they swap.

@@ -147,6 +147,8 @@ export const TitleBar = ({
   window,
 }: Props) => {
   const hidden = strip !== undefined && !strip.open;
+  // A new tab opens out on its piece of the strip, which stays whole.
+  const opensOnStrip = motion === "opening-tab";
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: a press only raises the window; its buttons are the keyboard-reachable controls
     // biome-ignore lint/a11y/noNoninteractiveElementInteractions: same as above
@@ -159,7 +161,7 @@ export const TitleBar = ({
             selected: groupSelected,
             stacked: tabbed === Layout.Stacking,
           }),
-        movingStyles({ motion }),
+        movingStyles({ motion: opensOnStrip ? "resting" : motion }),
         isLeaving(motion) && clickThroughStyles,
         settlingStyles({ dragging }),
       )}
@@ -204,9 +206,16 @@ export const TitleBar = ({
                 !fullscreen && topCornerStyles,
               )
             : tabStyles({ focus, open: !hidden }),
+          opensOnStrip && movingStyles({ motion }),
           settlingStyles({ dragging }),
         )}
         data-face
+        // Ignore animations bubbling up from the buttons.
+        onAnimationEnd={(event) => {
+          if (opensOnStrip && event.target === event.currentTarget) {
+            onMotionEnded();
+          }
+        }}
       >
         {group !== undefined && (
           <GroupMark layout={group.layout} windows={group.windows} />
