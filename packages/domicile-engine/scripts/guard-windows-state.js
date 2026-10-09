@@ -104,6 +104,7 @@ export const Shell = (_root, desktop) => {
     const windows = host.windows.map((window) => ({
       appId: window.appId,
       cursor: window.cursor,
+      desktopId: window.desktopId,
       grab: window.grab,
       height: window.height,
       maxHeight: window.maxHeight,

@@ -21,6 +21,20 @@ describe("FakeDomicileHost", () => {
     expect(changed).toBe(4);
   });
 
+  it("lists a window with no desktop id until one is given", () => {
+    const fake = new FakeDomicileHost();
+
+    fake.appear("term");
+    fake.appear("files", { desktopId: "org.gnome.Nautilus" });
+
+    expect(
+      fake.host.windows.map(({ appId, desktopId }) => ({ appId, desktopId })),
+    ).toStrictEqual([
+      { appId: "term", desktopId: "" },
+      { appId: "files", desktopId: "org.gnome.Nautilus" },
+    ]);
+  });
+
   it("sets state and dispatches its change event", () => {
     const fake = new FakeDomicileHost();
     const heard: string[] = [];

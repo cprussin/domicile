@@ -71,6 +71,8 @@ pub struct App {
     /// Map order, so [`Host::open_apps`] re-announces windows in that order.
     pub arrival: u64,
     pub title: Option<String>,
+    /// The client's `xdg_toplevel.set_app_id`; `None` until it sets one.
+    pub desktop_id: Option<String>,
     /// Content size of the latest committed buffer; `None` before the first.
     pub size: Option<(f64, f64)>,
     /// Size limits in logical units. `0` on an axis means no limit.
@@ -368,6 +370,7 @@ impl Host {
                 app_id: app_id.clone(),
                 arrival: self.next_id,
                 title: title.clone(),
+                desktop_id: None,
                 size,
                 min_size: NO_LIMIT,
                 max_size: NO_LIMIT,
@@ -376,6 +379,7 @@ impl Host {
         let message = HostMessage::AppAppeared {
             app_id: app_id.clone(),
             title,
+            desktop_id: None,
             size: size.map(wire_size),
         };
         (app_id, message)
@@ -504,6 +508,22 @@ impl Host {
             Some(HostMessage::AppTitled {
                 app_id: app_id.to_string(),
                 title,
+            })
+        }
+    }
+
+    /// Record which desktop entry a client says it is. Returns the chrome
+    /// notification, or `None` if the app is unknown or the id has not
+    /// changed.
+    pub fn app_desktop_id(&mut self, app_id: &str, desktop_id: String) -> Option<HostMessage> {
+        let app = self.apps.get_mut(app_id)?;
+        if app.desktop_id.as_ref() == Some(&desktop_id) {
+            None
+        } else {
+            app.desktop_id = Some(desktop_id.clone());
+            Some(HostMessage::AppDesktopId {
+                app_id: app_id.to_string(),
+                desktop_id,
             })
         }
     }
@@ -654,6 +674,7 @@ fn announced(app: &App) -> Vec<HostMessage> {
     let appeared = HostMessage::AppAppeared {
         app_id: app.app_id.clone(),
         title: app.title.clone(),
+        desktop_id: app.desktop_id.clone(),
         size: app.size.map(wire_size),
     };
     let min = (app.min_size != NO_LIMIT).then(|| HostMessage::AppMinSize {
