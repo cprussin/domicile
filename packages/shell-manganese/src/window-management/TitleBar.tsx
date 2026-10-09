@@ -509,9 +509,9 @@ const stripEdgeStyles = cva({
 });
 
 /**
- * A tab, in its slot of the strip. The open tab is raised in the card with an
- * edge, and meets its window through the gap in the strip's bottom edge.
- * Hidden tabs lie flat on the strip.
+ * A tab, in its slot of the strip. The open tab is raised with an edge, and
+ * meets its window through the gap in the strip's bottom edge. Hidden tabs lie
+ * flat on the strip.
  */
 const tabStyles = cva({
   base: hstack.raw({
@@ -533,7 +533,12 @@ const tabStyles = cva({
   // The background follows both variants, so each pair sets it once.
   compoundVariants: [
     {
-      css: { backgroundColor: "card" },
+      // Matches the address bar, which it meets. Brighter than the card, so
+      // the open tab stands out from the strip.
+      css: {
+        backgroundColor:
+          "color-mix(in oklab, {colors.foreground} 14%, {colors.background})",
+      },
       focus: ["focused", "leaf", "resting", "selected"],
       open: true,
     },
@@ -590,7 +595,7 @@ const slidingStyles = cva({
  * Bar colors for sway's three client states plus `leaf`.
  *
  * The glow around the focused window is the main focus indicator (see
- * `FocusGlow`), so the bar only adds the card background and a heavier
+ * `FocusGlow`), so the bar only adds the open tab's background and a heavier
  * weight. No state uses an accent edge.
  *
  * Each state sets all its colors instead of overriding one: two rules on one
@@ -613,17 +618,18 @@ const barStyles = cva({
   variants: {
     focus: {
       focused: {
-        backgroundColor: "card",
+        backgroundColor:
+          "color-mix(in oklab, {colors.foreground} 14%, {colors.background})",
         color: "foreground",
         // Weight as well as color, for users who cannot tell the colors
         // apart.
         fontWeight: "medium",
       },
       // The focused window inside a `focus parent` selection. The group's
-      // bars use the card, so this one mixes in the accent.
+      // bars use the open tab's background, so this one mixes in the accent.
       leaf: {
         backgroundColor:
-          "color-mix(in oklab, {colors.accent} 45%, {colors.card})",
+          "color-mix(in oklab, {colors.accent} 45%, color-mix(in oklab, {colors.foreground} 14%, {colors.background}))",
         color: "foreground",
         fontWeight: "medium",
       },
@@ -634,7 +640,8 @@ const barStyles = cva({
       },
       // A bar in the `focus parent` selection.
       selected: {
-        backgroundColor: "card",
+        backgroundColor:
+          "color-mix(in oklab, {colors.foreground} 14%, {colors.background})",
         color: "foreground",
         fontWeight: "medium",
       },

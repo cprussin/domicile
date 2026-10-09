@@ -300,9 +300,9 @@ const lineFor = (suggestion: AddressSuggestion): Suggestion<string> => {
   }
 };
 
-// A slightly different background, so the bar reads as chrome, not page. A
-// private window's bar is tinted its own color, so it is never mistaken for
-// an ordinary one.
+// The open tab's background, so the bar reads as chrome, not page, and joins
+// the title bar above. A private window's bar is tinted its own color, so it is
+// never mistaken for an ordinary one.
 const barStyles = hstack({
   "&[data-private]": {
     backgroundColor:
@@ -310,7 +310,7 @@ const barStyles = hstack({
     borderBlockEndColor: "private",
   },
   backgroundColor:
-    "color-mix(in oklab, {colors.card} 88%, {colors.background})",
+    "color-mix(in oklab, {colors.foreground} 14%, {colors.background})",
   borderBlockEnd: "1px solid {colors.border}",
   flex: "none",
   gap: 2,
