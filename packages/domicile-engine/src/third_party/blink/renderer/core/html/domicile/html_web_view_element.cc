@@ -8,6 +8,7 @@
 #include <optional>
 #include <utility>
 
+#include "base/functional/callback.h"
 #include "base/logging.h"
 #include "base/task/single_thread_task_runner.h"
 #include "third_party/blink/public/common/page/page_zoom.h"
@@ -31,8 +32,10 @@
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
+#include "third_party/blink/renderer/platform/heap/persistent.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
+#include "third_party/blink/renderer/platform/wtf/functional.h"
 
 namespace blink {
 
@@ -61,6 +64,23 @@ constexpr char kZoomOutRequestEvent[] = "domicile-zoom-out-request";
 
 // More state changes.
 constexpr char kFaviconChangeEvent[] = "domicile-favicon-change";
+constexpr char kTargetUrlChangeEvent[] = "domicile-target-url-change";
+
+namespace {
+
+// The document's `mousemove`, for HTMLWebViewElement::PointerMoved.
+class PointerMovedListener final : public NativeEventListener {
+ public:
+  explicit PointerMovedListener(base::RepeatingCallback<void(Event*)> moved)
+      : moved_(std::move(moved)) {}
+
+  void Invoke(ExecutionContext*, Event* event) override { moved_.Run(event); }
+
+ private:
+  const base::RepeatingCallback<void(Event*)> moved_;
+};
+
+}  // namespace
 constexpr char kFindChangeEvent[] = "domicile-find-change";
 constexpr char kContentSizeChangeEvent[] = "domicile-content-size-change";
 
@@ -191,6 +211,7 @@ void HTMLWebViewElement::Trace(Visitor* visitor) const {
   visitor->Trace(client_receiver_);
   visitor->Trace(waiting_choosers_);
   visitor->Trace(permission_request_);
+  visitor->Trace(pointer_listener_);
   HTMLFrameElementBase::Trace(visitor);
 }
 
@@ -510,6 +531,36 @@ void HTMLWebViewElement::FaviconChanged(const KURL& icon) {
   favicon_ = icon.IsValid() ? icon.GetString() : String("");
 
   DispatchEvent(*Event::CreateBubble(AtomicString(kFaviconChangeEvent)));
+}
+
+void HTMLWebViewElement::TargetUrlChanged(const KURL& url) {
+  target_url_ = url.IsValid() ? url.GetString() : String("");
+
+  // The guest's renderer reports nothing when the pointer leaves the page, but
+  // the pointer then moves over this document.
+  if (target_url_.empty()) {
+    if (pointer_listener_) {
+      GetDocument().removeEventListener(event_type_names::kMousemove,
+                                        pointer_listener_.Get(),
+                                        /*use_capture=*/false);
+      pointer_listener_ = nullptr;
+    }
+  } else if (!pointer_listener_) {
+    pointer_listener_ = MakeGarbageCollected<PointerMovedListener>(
+        BindRepeating(&HTMLWebViewElement::PointerMoved,
+                      WrapWeakPersistent(this)));
+    GetDocument().addEventListener(event_type_names::kMousemove,
+                                   pointer_listener_.Get());
+  }
+
+  DispatchEvent(*Event::CreateBubble(AtomicString(kTargetUrlChangeEvent)));
+}
+
+void HTMLWebViewElement::PointerMoved(Event* event) {
+  // A move on this element is the pointer entering the page.
+  if (event->target() != this && guest_.is_bound()) {
+    guest_->PointerLeft();
+  }
 }
 
 void HTMLWebViewElement::FindChanged(int32_t matches, int32_t active_match) {
