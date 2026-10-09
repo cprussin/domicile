@@ -4,6 +4,7 @@ import type { Extension } from "@domicile-desktop/sdk/extension";
 import {
   WEBVIEW_CLOSE_EVENT,
   WEBVIEW_CONTENT_SIZE_CHANGE_EVENT,
+  WEBVIEW_PERMISSION_REQUEST_EVENT,
 } from "@domicile-desktop/sdk/webview-element";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -77,6 +78,32 @@ const trayAsking = (
       />,
     );
   });
+
+/**
+ * A fake engine camera request from the popup, recording its answers. Built
+ * by hand because the test DOM lacks the engine's event type.
+ */
+const askCamera = (view: HTMLWebViewElement, answers: string[]) => {
+  fireEvent(
+    view,
+    Object.assign(
+      new Event(WEBVIEW_PERMISSION_REQUEST_EVENT, { cancelable: true }),
+      {
+        allow: () => {
+          answers.push("allow");
+        },
+        deny: () => {
+          answers.push("deny");
+        },
+        dismiss: () => {
+          answers.push("dismiss");
+        },
+        origin: `chrome-extension://${BLOCKER}`,
+        permissions: ["camera"],
+      },
+    ),
+  );
+};
 
 describe("ExtensionAction", () => {
   describe("rendering", () => {
@@ -305,6 +332,44 @@ describe("ExtensionAction", () => {
       fireEvent.focusIn(await popupView());
 
       expect(asked).toBeNull();
+    });
+  });
+
+  describe("a permission request from the popup", () => {
+    it("asks in the panel, naming the extension", async () => {
+      render(
+        <ExtensionAction
+          domicile={NO_DOMICILE}
+          extension={blocker}
+          onOpen={() => undefined}
+          opened={BLOCKER}
+        />,
+      );
+
+      askCamera(await popupView(), []);
+
+      expect(await screen.findByText("Blocker")).toBeInTheDocument();
+      expect(screen.getByText("Camera")).toBeInTheDocument();
+    });
+
+    it("answers it, and stops asking", async () => {
+      const answers: string[] = [];
+      render(
+        <ExtensionAction
+          domicile={NO_DOMICILE}
+          extension={blocker}
+          onOpen={() => undefined}
+          opened={BLOCKER}
+        />,
+      );
+      askCamera(await popupView(), answers);
+
+      await userEvent.click(
+        await screen.findByRole("button", { name: "Allow" }),
+      );
+
+      expect(answers).toStrictEqual(["allow"]);
+      expect(screen.queryByRole("region", { name: "Request" })).toBeNull();
     });
   });
 });

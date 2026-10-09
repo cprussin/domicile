@@ -79,7 +79,7 @@ ContentSetting StoredSetting(mojom::WebViewPermissionSetting setting,
 }
 
 bool HasSitePermissions(const GURL& url) {
-  return url.SchemeIsHTTPOrHTTPS();
+  return url.SchemeIsHTTPOrHTTPS() || url.SchemeIs("chrome-extension");
 }
 
 bool IsDeviceCapture(blink::mojom::MediaStreamType audio,

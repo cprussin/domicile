@@ -381,8 +381,8 @@ declare global {
     inspect(): void;
     /**
      * The page's site's setting for each of {@link WEBVIEW_PERMISSIONS}, or
-     * `{}` for a page that is not `http` or `https`. Changes fire
-     * {@link WEBVIEW_SITE_PERMISSIONS_CHANGE_EVENT}.
+     * `{}` for a page that is not `http`, `https` or `chrome-extension`.
+     * Changes fire {@link WEBVIEW_SITE_PERMISSIONS_CHANGE_EVENT}.
      *
      * Keys and values are external data; parse them at the boundary.
      */
