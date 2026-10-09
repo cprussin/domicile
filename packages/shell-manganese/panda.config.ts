@@ -25,6 +25,15 @@ const RESTACKING = {
   },
 };
 
+// A tab moved along its strip slides from its old place, at `--slide-x` and
+// `--slide-y`, to its new one. Its slot is already there, so the strip stays
+// whole. Registered under two names so a second move restarts it; see
+// `useStripMove` and `slidingStyles`.
+const SLIDING_TAB = {
+  "0%": { transform: "translate(var(--slide-x), var(--slide-y))" },
+  "100%": { transform: "translate(0, 0)" },
+};
+
 // A side-to-side shake that dies down.
 const LOCK_REFUSED = {
   "0%, 100%": { transform: "translateX(0)" },
@@ -192,6 +201,8 @@ export default defineConfig({
           "0%": { opacity: "0", zIndex: "0" },
           "100%": { opacity: "1", zIndex: "0" },
         },
+        windowSlidingTab: SLIDING_TAB,
+        windowSlidingTabAgain: SLIDING_TAB,
         // The tab a close uncovers holds the tiled depth while the closed tab
         // fades over it. Otherwise `settlingStyles` would ease its depth up
         // from the hidden tabs', and one of them would show through.

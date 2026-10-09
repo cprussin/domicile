@@ -69,7 +69,14 @@ describe("placementsOf", () => {
       id: appWindowId("kitty"),
       selected: false,
       soleTab: true,
-      strip: { divided: false, first: true, open: true, rest: 1640 },
+      strip: {
+        at: 0,
+        divided: false,
+        first: true,
+        open: true,
+        rest: 1640,
+        tabs: 1,
+      },
       surface: {
         height: 1008 - TITLE_BAR + SURFACE_TUCK,
         width: 1880,

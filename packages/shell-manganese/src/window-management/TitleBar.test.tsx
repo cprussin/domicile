@@ -4,6 +4,7 @@ import { fireEvent, render } from "@testing-library/react";
 
 import { css } from "../../styled-system/css";
 import { TitleBar } from "./TitleBar";
+import type { StripPlace } from "./tree/frames";
 import { Layout } from "./tree/node";
 
 // Loads the real stylesheet, since the computed animation depends on the
@@ -69,10 +70,12 @@ const face = (container: HTMLElement): HTMLElement => {
 
 /** A tab's place in a strip, for cases about a tab. */
 const MIDDLE_TAB = {
+  at: 1,
   divided: false,
   first: false,
   open: false,
   rest: undefined,
+  tabs: 3,
 };
 
 // The bar and the contents are separate elements, so they must animate
@@ -365,6 +368,92 @@ describe("TitleBar", () => {
       expect(face(open.container).className).not.toContain(
         css({ marginBlockEnd: "-1px" }),
       );
+    });
+
+    describe("moved along its strip", () => {
+      const SLOT = { height: 30, width: 240, x: 260, y: 32 };
+      const moved = (strip: StripPlace) => {
+        const props: Parameters<typeof TitleBar>[0] = {
+          ...barProps,
+          frame: SLOT,
+          rect: SLOT,
+          strip: MIDDLE_TAB,
+          tabbed: Layout.Tabbed,
+        };
+        const rendered = render(<TitleBar {...props} />);
+        rendered.rerender(
+          <TitleBar
+            {...props}
+            rect={{ ...SLOT, x: SLOT.x + 240 * (strip.at - MIDDLE_TAB.at) }}
+            strip={strip}
+          />,
+        );
+        return rendered.container;
+      };
+
+      // Two tabs trading places would cross, opening a hole in the strip, and
+      // the strip's end would move to the new last slot.
+      it("moves its piece of the strip at once", () => {
+        const container = moved({ ...MIDDLE_TAB, at: 2, rest: 300 });
+
+        const { transition } = globalThis.getComputedStyle(bar(container));
+        expect(transition).not.toContain("inset-inline-start");
+        expect(transition).not.toContain("--strip-rest");
+      });
+
+      it("slides the tab over from where it was", () => {
+        const container = moved({ ...MIDDLE_TAB, at: 2 });
+
+        expect(
+          globalThis.getComputedStyle(face(container)).animation,
+        ).toContain("windowSlidingTab");
+        expect(face(container).style.getPropertyValue("--slide-x")).toBe(
+          "-240px",
+        );
+      });
+
+      // The gap in the edge under an open tab would wait at its new place.
+      it("joins its window once it is there", () => {
+        const pastSlot = css({ insetInlineStart: "100%" });
+        const edge = (container: HTMLElement) =>
+          bar(container).querySelector("[data-strip-edge]")?.className;
+        const container = moved({ ...MIDDLE_TAB, at: 2, open: true });
+        expect(edge(container)).not.toContain(pastSlot);
+
+        fireEvent.animationEnd(face(container), {
+          animationName: "windowSlidingTab",
+        });
+
+        expect(edge(container)).toContain(pastSlot);
+      });
+
+      it("stops sliding once it is there", () => {
+        const container = moved({ ...MIDDLE_TAB, at: 2 });
+
+        fireEvent.animationEnd(face(container), {
+          animationName: "windowSlidingTab",
+        });
+
+        expect(
+          globalThis.getComputedStyle(face(container)).animation,
+        ).not.toContain("windowSlidingTab");
+        expect(
+          globalThis.getComputedStyle(bar(container)).transition,
+        ).toContain("inset-inline-start");
+      });
+
+      // A tab opening before it moves every slot after it the same way, so
+      // the slots ease together and the strip stays whole.
+      it("eases with the strip when a tab opens before it", () => {
+        const container = moved({ ...MIDDLE_TAB, at: 2, tabs: 4 });
+
+        expect(
+          globalThis.getComputedStyle(face(container)).animation,
+        ).not.toContain("windowSlidingTab");
+        expect(
+          globalThis.getComputedStyle(bar(container)).transition,
+        ).toContain("inset-inline-start");
+      });
     });
 
     it("marks off a hidden tab from the hidden tab before it", () => {

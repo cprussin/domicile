@@ -276,19 +276,40 @@ describe("framesOf", () => {
       // The strip always shows past the tabs, so even one tab reads as a tab.
       expect(strip(Layout.Tabbed, 1)).toEqual([
         {
-          strip: { divided: false, first: true, open: true, rest: 760 },
+          strip: {
+            at: 0,
+            divided: false,
+            first: true,
+            open: true,
+            rest: 760,
+            tabs: 1,
+          },
           width: 240,
           x: 0,
         },
       ]);
       expect(strip(Layout.Tabbed, 2)).toEqual([
         {
-          strip: { divided: false, first: true, open: true, rest: undefined },
+          strip: {
+            at: 0,
+            divided: false,
+            first: true,
+            open: true,
+            rest: undefined,
+            tabs: 2,
+          },
           width: 240,
           x: 0,
         },
         {
-          strip: { divided: false, first: false, open: false, rest: 520 },
+          strip: {
+            at: 1,
+            divided: false,
+            first: false,
+            open: false,
+            rest: 520,
+            tabs: 2,
+          },
           width: 240,
           x: 240,
         },
@@ -302,22 +323,38 @@ describe("framesOf", () => {
         Array.from({ length: 8 }, () => 122),
       );
       expect(crowded.at(-1)?.strip).toEqual({
+        at: 7,
         divided: true,
         first: false,
         open: false,
         rest: 24,
+        tabs: 8,
       });
     });
 
     it("runs a stack's bars full width, the first at its top", () => {
       expect(strip(Layout.Stacking, 2)).toEqual([
         {
-          strip: { divided: false, first: true, open: true, rest: undefined },
+          strip: {
+            at: 0,
+            divided: false,
+            first: true,
+            open: true,
+            rest: undefined,
+            tabs: 2,
+          },
           width: 1000,
           x: 0,
         },
         {
-          strip: { divided: false, first: false, open: false, rest: undefined },
+          strip: {
+            at: 1,
+            divided: false,
+            first: false,
+            open: false,
+            rest: undefined,
+            tabs: 2,
+          },
           width: 1000,
           x: 0,
         },
@@ -372,7 +409,14 @@ describe("framesOf", () => {
         id: "a",
         rect: { height: TITLE_BAR, width: 240, x: 0, y: 0 },
         selected: false,
-        strip: { divided: false, first: true, open: true, rest: undefined },
+        strip: {
+          at: 0,
+          divided: false,
+          first: true,
+          open: true,
+          rest: undefined,
+          tabs: 2,
+        },
         tabbed: Layout.Tabbed,
         windows: 2,
       },
@@ -409,7 +453,14 @@ describe("framesOf", () => {
         id: "a",
         rect: { height: TITLE_BAR, width: 240, x: 0, y: 0 },
         selected: false,
-        strip: { divided: false, first: true, open: false, rest: undefined },
+        strip: {
+          at: 0,
+          divided: false,
+          first: true,
+          open: false,
+          rest: undefined,
+          tabs: 2,
+        },
         tabbed: Layout.Tabbed,
         windows: 2,
       },
