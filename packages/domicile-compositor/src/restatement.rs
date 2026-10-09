@@ -89,9 +89,9 @@ impl Restatement {
             theme: (was.theme.mode != now.theme.mode).then_some(now.theme.mode),
             appearance: (ThemeConfig {
                 mode: now.theme.mode,
-                ..was.theme
+                ..was.theme.clone()
             } != now.theme)
-                .then_some(now.theme),
+                .then(|| now.theme.clone()),
             omit: (was.files.omit != now.files.omit).then(|| now.files.omit.clone()),
             extensions: (was.extensions != now.extensions).then(|| now.extensions.clone()),
             lockdown: (was.lockdown != now.lockdown).then(|| now.lockdown.clone()),

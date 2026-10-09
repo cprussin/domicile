@@ -9,7 +9,8 @@ import { useState } from "react";
 
 import { css } from "../../styled-system/css";
 import { center } from "../../styled-system/patterns";
-import { menuIcons } from "./menu-icons";
+import type { MenuIcons } from "./menu-icons";
+import { desktopMenuIcons } from "./menu-icons";
 import { TrayMenu } from "./TrayMenu";
 import { useMenuIcons } from "./useMenuIcons";
 import { useTrayMenu } from "./useTrayMenu";
@@ -25,7 +26,7 @@ type Props = {
   /** Injectable so tests can answer for the application's menu. */
   watch?: typeof watchMenu | undefined;
   /** Injectable so tests can answer for the menu's icons. */
-  icons?: typeof menuIcons | undefined;
+  icons?: MenuIcons | undefined;
 };
 
 /**
@@ -41,7 +42,7 @@ type Props = {
  */
 export const TrayIcon = ({
   domicile,
-  icons = menuIcons,
+  icons = desktopMenuIcons,
   item: { bus, icon, id, menu, title },
   watch = watchMenu,
 }: Props) => {

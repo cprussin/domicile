@@ -29,8 +29,8 @@ Browser address bars use the same rule.
 ## Sources
 
 - **Applications**: `@domicile-desktop/system-apps` reads desktop entries
-  through the system calls (`launcher/app-search.ts`). Icons come from the
-  `hicolor` theme. Entries are read while the launcher is closed, so rows
+  through the system calls (`launcher/app-search.ts`). Icons come from
+  `theme.icon_theme`, then `hicolor`. Entries are read while the launcher is closed, so rows
   don't shift when it opens; typing searches that list.
 - **Bookmarks**: open as a page. The icon is the one the page named when last
   previewed or visited, else the one `system-apps` fetched with `curl`.

@@ -193,7 +193,7 @@ One request channel carries all dialogs. Each interface's backend builds on it.
 
 | Interface | Compositor | Shell UI |
 |---|---|---|
-| Settings | `color-scheme`, `accent-color`, `contrast`, `reduced-motion` from shell config | — |
+| Settings | `color-scheme`, `accent-color`, `contrast`, `reduced-motion` from shell config; `org.gnome.desktop.interface` `icon-theme` when `theme.icon_theme` is set | — |
 | FileChooser | `OpenFile`, `SaveFile`, `SaveFiles`; filters, `current_folder`, `choices` | picker (component-library's `FilePicker`) |
 | AppChooser | candidates from desktop entries and `mimeapps.list`; `UpdateChoices` | app list |
 | OpenURI | (frontend) | via AppChooser |

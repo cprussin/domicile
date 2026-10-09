@@ -411,11 +411,13 @@ Understood and not scheduled.
   - A desktop that exits uncleanly leaves its environment variables until the
     next one replaces them.
   - A nested desktop does not register, so the host session keeps its portal.
-- **The settings portal answers one namespace.** Desktop backends often also
-  serve `org.gnome.desktop.interface` (font, cursor theme). Domicile has no
-  values for those. An unanswered namespace falls
-  through to the next backend, which is correct, so `nix/domicile.portal`
-  lists only what Domicile implements.
+- **The settings portal answers little of `org.gnome.desktop.interface`.**
+  It serves `icon-theme` when `theme.icon_theme` is set. Desktop backends often
+  also serve font and cursor theme there; Domicile has no values for those. An
+  unanswered key falls through to the next backend, which is correct, so
+  `nix/domicile.portal` lists only what Domicile implements.
+- **Portal dialogs draw applications from `hicolor` only.** `describeApps`
+  does not read `theme.icon_theme`.
 
 - **Wayland capture tools cannot capture the desk.** Portal clients, the
   shell (`system(host).screenshot()`) and `domicile screenshot` all
@@ -430,6 +432,10 @@ Understood and not scheduled.
   right click and sends `Activate` on left click. Items that set `ItemIsMenu`
   expect left click to open the menu, but `TrayItem` does not carry it; adding
   it changes the protocol, the compositor and the engine's IDL.
+- **Tray bar icons ignore `theme.icon_theme`.** The compositor names them from
+  `hicolor` and the item's `IconThemePath` (`domicile_host::tray`), as it does
+  notification icons. Following the theme needs `index.theme` parsing in
+  Rust, as `@domicile-desktop/system-apps/app-icons` does in TypeScript.
 
 ### Shell reload
 

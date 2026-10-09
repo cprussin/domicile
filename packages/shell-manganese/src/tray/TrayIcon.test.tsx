@@ -10,6 +10,7 @@ import type {
 import type { SystemError } from "@domicile-desktop/sdk/system";
 import { SystemErrorKind } from "@domicile-desktop/sdk/system";
 import type { TrayAction } from "@domicile-desktop/sdk/tray";
+import type { ThemedIcon } from "@domicile-desktop/system-apps/app-icons";
 import {
   fireEvent,
   render,
@@ -19,7 +20,7 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import type { menuIcons } from "./menu-icons";
+import type { MenuIcons } from "./menu-icons";
 import { TrayIcon } from "./TrayIcon";
 
 /** An application with an image and a menu. */
@@ -144,13 +145,13 @@ const iconOf = (shown: DomicileTrayItem, watch?: typeof watchMenu) => {
 
 /** A theme with `pictures`, by icon name. */
 const themed =
-  (pictures: Readonly<Record<string, string>>): typeof menuIcons =>
+  (pictures: Readonly<Record<string, ThemedIcon>>): MenuIcons =>
   () =>
     Promise.resolve(
       Ok((name: string) => {
         const picture = pictures[name];
         return Promise.resolve(
-          Ok(picture === undefined ? None<string>() : Some(picture)),
+          Ok(picture === undefined ? None<ThemedIcon>() : Some(picture)),
         );
       }),
     );
@@ -158,7 +159,7 @@ const themed =
 /** Opens {@link network}'s menu with the secondary button. */
 const openMenu = async (
   watch: typeof watchMenu,
-  icons: typeof menuIcons = themed({}),
+  icons: MenuIcons = themed({}),
 ) => {
   render(
     <TrayIcon
@@ -305,7 +306,10 @@ describe("TrayIcon", () => {
         ]),
       );
 
-      await openMenu(watch, themed({ "network-wired": wired }));
+      await openMenu(
+        watch,
+        themed({ "network-wired": { symbolic: false, url: wired } }),
+      );
 
       const icon = (name: string) =>
         within(screen.getByRole("menuitem", { name })).queryByRole(
@@ -316,6 +320,26 @@ describe("TrayIcon", () => {
       });
       expect(icon("Mute")).toHaveAttribute("src", picture);
       expect(icon("Quit")).toBeNull();
+    });
+
+    it("tints a symbolic icon to the entry's text", async () => {
+      const exit = "data:image/svg+xml;base64,ZXhpdA==";
+      const { watch } = watching(
+        Ok([item(1, "Quit", { icon: "application-exit" })]),
+      );
+
+      await openMenu(
+        watch,
+        themed({ "application-exit": { symbolic: true, url: exit } }),
+      );
+
+      await waitFor(() => {
+        expect(
+          within(screen.getByRole("menuitem", { name: "Quit" })).getByRole(
+            "presentation",
+          ).style.maskImage,
+        ).toBe(`url("${exit}")`);
+      });
     });
 
     it("logs icons the desktop refused to read", async () => {

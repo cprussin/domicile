@@ -60,9 +60,11 @@ shell menu ─ dbusCall / dbusMatch (callSystem) ─▶ compositor ─▶ com.ca
   any session bus name with `dbusCall` and `dbusMatch`, so menus need no
   compositor or engine code. The lock refuses those calls.
 - **Menu entries draw their icon and mnemonic.**
-  - `icon-name` is looked up in `hicolor` (`actions`, `status`, `devices`,
-    `apps`) with the launcher's lookup. A name not found there falls back to
-    `icon-data`, the application's PNG.
+  - `icon-name` is looked up at 16 pixels in the config's
+    `theme.icon_theme`, its parents and `hicolor` (`actions`, `status`,
+    `devices`, `apps`), then as `<name>-symbolic`. A symbolic icon is a mask
+    over the text color. A name not found falls back to `icon-data`, the
+    application's PNG.
   - The mnemonic is underlined. Its letter chooses the first enabled entry
     with it in the open menu or submenu, and opens a submenu. Other letters
     go to base-ui's type-ahead, which only highlights.

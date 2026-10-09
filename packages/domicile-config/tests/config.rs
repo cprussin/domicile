@@ -342,8 +342,13 @@ fn rejects_a_theme_that_is_neither() {
 fn a_desk_that_says_nothing_about_its_look_has_no_accent_normal_contrast_and_motion() {
     let theme = Config::parse("{}").unwrap().theme;
     assert_eq!(
-        (theme.accent_color, theme.contrast, theme.reduced_motion),
-        (None, Contrast::Normal, false)
+        (
+            theme.accent_color,
+            theme.contrast,
+            theme.reduced_motion,
+            theme.icon_theme
+        ),
+        (None, Contrast::Normal, false, None)
     );
 }
 
@@ -351,15 +356,38 @@ fn a_desk_that_says_nothing_about_its_look_has_no_accent_normal_contrast_and_mot
 fn a_desk_that_states_its_look_gets_it() {
     let theme = Config::parse(
         r##"
-{ "theme": { "accent_color": "#3584E4", "contrast": "high", "reduced_motion": true } }
+{ "theme": { "accent_color": "#3584E4", "contrast": "high", "reduced_motion": true,
+             "icon_theme": "Papirus-Dark" } }
 "##,
     )
     .unwrap()
     .theme;
     assert_eq!(
-        (theme.accent_color, theme.contrast, theme.reduced_motion),
-        (Some(AccentColor([0x35, 0x84, 0xe4])), Contrast::High, true)
+        (
+            theme.accent_color,
+            theme.contrast,
+            theme.reduced_motion,
+            theme.icon_theme.as_deref()
+        ),
+        (
+            Some(AccentColor([0x35, 0x84, 0xe4])),
+            Contrast::High,
+            true,
+            Some("Papirus-Dark")
+        )
     );
+}
+
+#[test]
+fn rejects_an_icon_theme_that_is_not_a_directory_name() {
+    for name in ["", ".", "..", "Papirus/Dark"] {
+        let err =
+            Config::parse(&format!(r#"{{ "theme": {{ "icon_theme": "{name}" }} }}"#)).unwrap_err();
+        assert!(
+            matches!(err, ConfigError::Validation(_)),
+            "{name:?}: got {err:?}"
+        );
+    }
 }
 
 #[test]

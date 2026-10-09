@@ -37,6 +37,9 @@ const knownIcons = (icons: Readonly<Record<string, string>>) => {
   };
 };
 
+/** A config with `theme` as its icon theme, or none. */
+const configured = (theme?: string) => () => Promise.resolve(theme);
+
 describe("appSearch", () => {
   it("offers what is installed and not omitted, with its pictures", async () => {
     const system = fakeSystem(
@@ -54,6 +57,7 @@ describe("appSearch", () => {
     const apps = appSearch(
       system,
       { bookmarks: [], omit: ["browser.desktop"] },
+      configured(),
       knownIcons({}).icons,
     );
 
@@ -70,6 +74,29 @@ describe("appSearch", () => {
       ],
       bookmarks: [],
     });
+  });
+
+  it("draws icons from the config's icon theme", async () => {
+    const system = fakeSystem(
+      {
+        "/home/applications/editor.desktop": entry("Editor", "Icon=editor\n"),
+        "/home/icons/hicolor/48x48/apps/editor.png": "png",
+        "/home/icons/Papirus/48x48/apps/editor.svg": "papirus",
+        "/home/icons/Papirus/index.theme":
+          "[Icon Theme]\nDirectories=48x48/apps\n[48x48/apps]\nSize=48\nContext=Applications\n",
+      },
+      desktop,
+    );
+    const apps = appSearch(
+      system,
+      { bookmarks: [], omit: [] },
+      configured("Papirus"),
+      knownIcons({}).icons,
+    );
+
+    expect((await apps.opening()).apps.map(({ icon }) => icon)).toStrictEqual([
+      "data:image/svg+xml;base64,cGFwaXJ1cw==",
+    ]);
   });
 
   it("matches the query against applications and bookmarks", async () => {
@@ -89,6 +116,7 @@ describe("appSearch", () => {
         ],
         omit: [],
       },
+      configured(),
       knownIcons({ "https://calendar.example": "data:calendar" }).icons,
     );
 
@@ -112,6 +140,7 @@ describe("appSearch", () => {
         bookmarks: [{ name: "Mail", url: "https://mail.example" }],
         omit: [],
       },
+      configured(),
       lookup.icons,
     );
 
@@ -128,6 +157,7 @@ describe("appSearch", () => {
     const apps = appSearch(
       system,
       { bookmarks: [], omit: [] },
+      configured(),
       knownIcons({}).icons,
     );
     await apps.opening();
@@ -150,6 +180,7 @@ describe("appSearch", () => {
         desktop,
       ),
       { bookmarks: [], omit: [] },
+      configured(),
       knownIcons({}).icons,
     );
 

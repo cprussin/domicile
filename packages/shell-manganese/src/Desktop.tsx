@@ -14,6 +14,7 @@ import { Clipboard } from "./clipboard/Clipboard";
 import { useClipboard } from "./clipboard/useClipboard";
 import { popupShown } from "./extensions/shown";
 import { useExtensions } from "./extensions/useExtensions";
+import { sharedIconTheme } from "./followed-icon-theme";
 import { useKeybindings } from "./keyboard/useKeybindings";
 import { useModifiers } from "./keyboard/useModifiers";
 import { appSearch } from "./launcher/app-search";
@@ -98,7 +99,7 @@ export const Desktop = ({
   // Installed apps and bookmarks, read through the desktop's system calls.
   // Memoized because it holds what was read and the bookmarks' icons.
   const apps = useMemo(
-    () => appSearch(system(domicile), applications),
+    () => appSearch(system(domicile), applications, sharedIconTheme(domicile)),
     [applications, domicile],
   );
   // Read while the launcher is closed so its rows render with it rather than
