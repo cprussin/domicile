@@ -5,7 +5,7 @@ import type { Spot } from "./pointer-warp";
 import { slidAcross } from "./window-styles";
 
 type Props = {
-  /** The window's contents and, when on screen, its bar. */
+  /** The window's contents or its bar. */
   children: ReactNode;
   /**
    * Called when the pointer enters any part of this window, with the page

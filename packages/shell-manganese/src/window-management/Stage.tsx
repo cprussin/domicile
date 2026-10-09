@@ -216,16 +216,6 @@ export const Stage = ({
           const onMotionEnded = () => {
             motions.onPlayedOut(window.id, motion, screen);
           };
-          // A hidden tab is not highlighted with its `focus parent` group, or
-          // it would look open beside the shown tab. Container tabs are
-          // handled below.
-          const focus = titleFocus({
-            hasKeyboard: focused,
-            inSelection:
-              placement?.selected === true && placement.surface !== undefined,
-            isTab: placement?.tabbed !== undefined,
-            shownByContainer: false,
-          });
           return (
             <WindowFrame
               key={window.id}
@@ -278,12 +268,50 @@ export const Stage = ({
                   window={engineWindowOf(window.id)}
                 />
               )}
-              {/*
-              After the contents, so the bar wins the `z-index` tie by document
-              order. One component for tiled and floating, so the bar is not
-              remounted when the window floats. See `WindowTitleBar`.
-            */}
-              {placement !== undefined && (
+            </WindowFrame>
+          );
+        },
+      )}
+      {/*
+        Every bar after every window's contents, so bars win the `z-index`
+        tie by document order. A shown tab's contents tuck under its whole
+        strip (see `SURFACE_TUCK`), including other windows' tabs. One
+        component for tiled and floating, so the bar is not remounted when the
+        window floats. See `WindowTitleBar`.
+      */}
+      {motions.drawn.map(
+        ({ focused, motion, placement, restack, screen, window }) => {
+          if (placement === undefined) {
+            return undefined;
+          } else {
+            const on = screenNamed(screens, screen);
+            const floating = floats.find((float) =>
+              floatHolds(float, window.id),
+            );
+            // A hidden tab is not highlighted with its `focus parent` group, or
+            // it would look open beside the shown tab. Container tabs are
+            // handled below.
+            const focus = titleFocus({
+              hasKeyboard: focused,
+              inSelection:
+                placement.selected && placement.surface !== undefined,
+              isTab: placement.tabbed !== undefined,
+              shownByContainer: false,
+            });
+            const onMotionEnded = () => {
+              motions.onPlayedOut(window.id, motion, screen);
+            };
+            return (
+              <WindowFrame
+                key={window.id}
+                onHover={(at) => {
+                  onHover(window.id, at);
+                }}
+                onReach={() => {
+                  onSelect(window.id);
+                }}
+                width={on?.geometry.screen.width}
+              >
                 <WindowTitleBar
                   depth={placement.depth}
                   dragging={window.id === movingId}
@@ -322,9 +350,9 @@ export const Stage = ({
                   title={window.title}
                   window={window.id}
                 />
-              )}
-            </WindowFrame>
-          );
+              </WindowFrame>
+            );
+          }
         },
       )}
       {/*
