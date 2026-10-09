@@ -51,6 +51,9 @@ const A_KEYBOARD_XKB_HAS_NEVER_HEARD_OF: &str = r#"
 /// The Linux code for the left mouse button.
 const BTN_LEFT: u32 = 0x110;
 
+/// The Linux code for the right mouse button.
+const BTN_RIGHT: u32 = 0x111;
+
 /// The evdev code for `a`, which a chrome sends. The keymap uses X keycodes,
 /// which are 8 higher.
 const EVDEV_KEY_A: u32 = 30;
@@ -183,6 +186,126 @@ fn a_release_the_seat_never_saw_pressed_does_not_reach_the_client() {
         "a key nobody pressed was released at the client; it traced:\n{}",
         client.trace()
     );
+}
+
+/// A click on one window reaches it after the chrome lost a release on another.
+///
+/// The page forwards a release only over the window's own element, so a button
+/// let go over the shell never reaches the seat. Until the seat lets go of that
+/// button, the window that had the press keeps every later click.
+#[test]
+fn a_click_reaches_its_window_after_the_chrome_lost_a_release_on_another() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let mut chrome = compositor.chrome();
+    let mut held = compositor.client("held");
+    let held_id = appeared(&mut chrome);
+    let mut clicked = compositor.client("clicked");
+    let clicked_id = appeared(&mut chrome);
+
+    for message in [
+        motion(&held_id),
+        button(&held_id, BTN_RIGHT, true),
+        ChromeMessage::PointerLeave {
+            app_id: held_id.clone(),
+        },
+        motion(&clicked_id),
+        button(&clicked_id, BTN_LEFT, true),
+        button(&clicked_id, BTN_LEFT, false),
+    ] {
+        chrome.say(&message).expect("the chrome socket takes input");
+    }
+
+    assert!(
+        clicked.wait_for_trace(&format!(", {BTN_LEFT}, 1)"), 1),
+        "the click went to the window holding the lost press; it traced:\n{}",
+        clicked.trace()
+    );
+    assert!(
+        held.wait_for_trace(&format!(", {BTN_RIGHT}, 0)"), 1),
+        "the window that had the press was never told it came up; it traced:\n{}",
+        held.trace()
+    );
+}
+
+/// Clicks reach each window after one closed holding a press the chrome lost.
+///
+/// The seat forgets a grab whose window is gone but still counts the button as
+/// held. Each later click would then keep the pointer on whatever it clicked.
+#[test]
+fn clicks_reach_each_window_after_one_closed_holding_a_lost_press() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let mut chrome = compositor.chrome();
+    let mut held = compositor.client("held");
+    let held_id = appeared(&mut chrome);
+    let mut first = compositor.client("first");
+    let first_id = appeared(&mut chrome);
+    let mut second = compositor.client("second");
+    let second_id = appeared(&mut chrome);
+
+    for message in [motion(&held_id), button(&held_id, BTN_RIGHT, true)] {
+        chrome.say(&message).expect("the chrome socket takes input");
+    }
+    assert!(
+        held.wait_for_trace(&format!(", {BTN_RIGHT}, 1)"), 1),
+        "the window that closes was never pressed; it traced:\n{}",
+        held.trace()
+    );
+    drop(held);
+    chrome
+        .wait_for(
+            |message| matches!(message, HostMessage::AppClosed { app_id } if *app_id == held_id),
+        )
+        .expect("the window holding the press closes");
+
+    for app_id in [&first_id, &second_id] {
+        for message in [
+            motion(app_id),
+            button(app_id, BTN_LEFT, true),
+            button(app_id, BTN_LEFT, false),
+        ] {
+            chrome.say(&message).expect("the chrome socket takes input");
+        }
+    }
+
+    assert!(
+        first.wait_for_trace(&format!(", {BTN_LEFT}, 1)"), 1),
+        "the first window was never clicked; it traced:\n{}",
+        first.trace()
+    );
+    assert!(
+        second.wait_for_trace(&format!(", {BTN_LEFT}, 1)"), 1),
+        "the second click stayed with the first window; it traced:\n{}",
+        second.trace()
+    );
+}
+
+/// The pointer at a point inside `app_id`'s window.
+fn motion(app_id: &str) -> ChromeMessage {
+    ChromeMessage::PointerMotion {
+        app_id: app_id.to_string(),
+        x: 10.0,
+        y: 10.0,
+    }
+}
+
+/// A press or release of `button` over `app_id`'s window.
+fn button(app_id: &str, button: u32, pressed: bool) -> ChromeMessage {
+    ChromeMessage::PointerButton {
+        app_id: app_id.to_string(),
+        button,
+        pressed,
+    }
+}
+
+/// The id of the next window the chrome is told about.
+fn appeared(chrome: &mut domicile_test_chrome::Chrome) -> String {
+    let appeared = chrome
+        .wait_for(|message| matches!(message, HostMessage::AppAppeared { .. }))
+        .expect("a client that opened a window is announced to the chrome");
+    let HostMessage::AppAppeared { app_id, .. } = appeared else {
+        unreachable!("the wait matched on this variant")
+    };
+    app_id
 }
 
 /// A focus the chrome requested is reported back over the socket.

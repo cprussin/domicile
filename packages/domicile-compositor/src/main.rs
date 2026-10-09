@@ -1432,6 +1432,11 @@ struct DomicileCompositor {
     /// The app the pointer is currently over, so a `set_cursor` request can be
     /// attributed to the element the chrome should restyle.
     pointer_app: Option<String>,
+    /// Pointer buttons the seat was told are down, in the order pressed.
+    ///
+    /// Smithay keeps this list too but does not expose it. See
+    /// [`DomicileCompositor::let_go_of_lost_presses`].
+    held_buttons: Vec<u32>,
     /// InputCapture sessions, which take input once the pointer reaches a
     /// barrier. Set when the Wayland loop starts serving EIS. See
     /// [`crate::eis`].
@@ -2297,6 +2302,64 @@ impl DomicileCompositor {
                 None => return self.app_id_of(&parent),
             }
         }
+    }
+
+    /// Release the buttons held over another window before a press over this
+    /// one.
+    ///
+    /// The page forwards a release only over the window's own element, so a
+    /// button let go over the shell never reaches the seat. Smithay keeps the
+    /// pointer on the pressed surface until every button is up, and keeps
+    /// counting the button after that surface is gone, so the next press
+    /// anywhere would hold the pointer for good.
+    fn let_go_of_lost_presses(&mut self) {
+        let pointer = self.seat.get_pointer().unwrap();
+        let holder = pointer
+            .grab_start_data()
+            .and_then(|grab| grab.focus)
+            .map(|(surface, _)| surface);
+        let target = self
+            .pointer_app
+            .as_deref()
+            .and_then(|app_id| self.surface_for(app_id));
+        if self.held_buttons.is_empty() || holder == target {
+            return;
+        }
+        debug!(buttons = ?self.held_buttons, "a press elsewhere -> releasing lost presses");
+        for button in std::mem::take(&mut self.held_buttons) {
+            self.pointer_button(button, ButtonState::Released);
+        }
+        // The grab kept the pointer on the holder, so enter the window the
+        // press is over. The location is already local to it; see
+        // `ClientRequest::PointerMotion`.
+        let (serial, time) = (SERIAL_COUNTER.next_serial(), self.now_ms());
+        let location = pointer.current_location();
+        pointer.motion(
+            self,
+            target.map(|surface| (surface, (0.0, 0.0).into())),
+            &MotionEvent {
+                location,
+                serial,
+                time,
+            },
+        );
+        pointer.frame(self);
+    }
+
+    /// Send one pointer button change to the seat.
+    fn pointer_button(&mut self, button: u32, state: ButtonState) {
+        let pointer = self.seat.get_pointer().unwrap();
+        let (serial, time) = (SERIAL_COUNTER.next_serial(), self.now_ms());
+        pointer.button(
+            self,
+            &ButtonEvent {
+                button,
+                state,
+                serial,
+                time,
+            },
+        );
+        pointer.frame(self);
     }
 
     /// Every grabbing popup dismissed, innermost first, as xdg-shell wants.
@@ -4259,23 +4322,15 @@ impl DomicileCompositor {
             }
             ClientRequest::PointerButton { button, pressed } => {
                 tracing::debug!(button, pressed, "pointer button -> client");
-                let pointer = self.seat.get_pointer().unwrap();
-                let (serial, time) = (SERIAL_COUNTER.next_serial(), self.now_ms());
                 let state = if pressed {
+                    self.let_go_of_lost_presses();
+                    self.held_buttons.push(button);
                     ButtonState::Pressed
                 } else {
+                    self.held_buttons.retain(|held| *held != button);
                     ButtonState::Released
                 };
-                pointer.button(
-                    self,
-                    &ButtonEvent {
-                        button,
-                        state,
-                        serial,
-                        time,
-                    },
-                );
-                pointer.frame(self);
+                self.pointer_button(button, state);
             }
             ClientRequest::PointerAxis {
                 dx,
@@ -6739,6 +6794,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         grabbing: Vec::new(),
         bubbles: Vec::new(),
         pointer_app: None,
+        held_buttons: Vec::new(),
         captures: None,
         start: Instant::now(),
         last_frame: HashMap::new(),
