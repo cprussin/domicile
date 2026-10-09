@@ -1,0 +1,36 @@
+{
+  "dependencies": {
+    "@domicile-desktop/component-library": "workspace:*",
+    "@domicile-desktop/sdk": "workspace:*",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "zod": "catalog:"
+  },
+  "description": "The page Domicile shows while it builds the config's shell on the first start of a desktop.",
+  "devDependencies": {
+    "@cprussin/tsconfig": "catalog:",
+    "@domicile-desktop/test-support": "workspace:*",
+    "@pandacss/dev": "catalog:",
+    "@pandacss/preset-panda": "catalog:",
+    "@testing-library/react": "catalog:",
+    "@types/bun": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@vitejs/plugin-react": "catalog:",
+    "postcss": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:"
+  },
+  "license": "MIT",
+  "name": "@domicile-desktop/shell-splash",
+  "private": true,
+  "productName": "domicile-shell-splash",
+  "scripts": {
+    "build:vite": "vite build",
+    "prepare": "panda codegen --silent",
+    "test:types": "tsc --noEmit",
+    "test:unit": "bun test"
+  },
+  "type": "module",
+  "version": "0.0.0"
+}
