@@ -197,6 +197,15 @@ export const TitleBar = ({
         ...stripRestOf(strip),
       }}
     >
+      {strip !== undefined && (
+        <span
+          className={stripEdgeStyles({
+            // A stack's bars sit over each other, not over the window.
+            joined: strip.open && tabbed === Layout.Tabbed,
+          })}
+          data-strip-edge
+        />
+      )}
       <div
         className={cx(
           strip === undefined
@@ -329,6 +338,9 @@ const slotStyles = css({ display: "flex" });
  * edge all round, and a bottom edge that is the window's top edge. The last
  * slot draws the rest of the strip past itself, at `--strip-rest`, and passes
  * the pointer through it. A divided slot draws a divider before its tab.
+ *
+ * The slot leaves its bottom row unpainted: the window's top row is tucked
+ * under it (see `SURFACE_TUCK`). `stripEdgeStyles` draws the edge there.
  */
 const stripStyles = cva({
   base: {
@@ -345,20 +357,26 @@ const stripStyles = cva({
     },
     "&[data-strip-end]::after": {
       backgroundColor: "inherit",
-      borderBlockWidth: "1px",
-      borderColor: "inherit",
+      borderBlockStartWidth: "1px",
+      borderColor: "var(--strip-edge)",
       borderInlineEndWidth: "1px",
       borderStartEndRadius: "lg",
       borderStyle: "solid",
       content: '""',
       inlineSize: "var(--strip-rest)",
-      insetBlockEnd: "-1px",
+      insetBlockEnd: 0,
       insetBlockStart: "-1px",
       insetInlineStart: "100%",
       pointerEvents: "none",
       position: "absolute",
+      // Under the edge. See `stripEdgeStyles`.
+      zIndex: -2,
     },
+    backgroundClip: "padding-box",
+    borderBlockEndColor: "transparent",
     borderBlockEndWidth: "1px",
+    borderBlockStartColor: "var(--strip-edge)",
+    borderInlineColor: "var(--strip-edge)",
     borderStyle: "solid",
     paddingBlockStart: 1,
     paddingInlineStart: 1,
@@ -378,15 +396,15 @@ const stripStyles = cva({
     // A selected group lights its strip. Its tabs keep their own states.
     selected: {
       false: {
+        "--strip-edge": "{colors.borderStrong}",
         backgroundColor:
           "color-mix(in oklab, {colors.card} 45%, {colors.background})",
-        borderColor: "borderStrong",
       },
       true: {
+        "--strip-edge":
+          "color-mix(in oklab, {colors.accent} 70%, {colors.background})",
         backgroundColor:
           "color-mix(in oklab, {colors.accent} 30%, {colors.background})",
-        borderColor:
-          "color-mix(in oklab, {colors.accent} 70%, {colors.background})",
       },
     },
     // A stack's bars each span the strip. Each bar's bottom edge is the top
@@ -399,9 +417,40 @@ const stripStyles = cva({
 });
 
 /**
+ * The lower part of the strip and its bottom edge, in the slot and on past the
+ * last slot to the strip's end. The edge is in the slot's unpainted bottom row.
+ * An open tab joins its window, so its slot draws this only past itself.
+ *
+ * One square box per slot, so every slot shades the edge alike. At fractional
+ * scales a square box snaps to device pixels and a rounded one does not, so
+ * this stays below the rounded corners.
+ */
+const stripEdgeStyles = cva({
+  base: {
+    backgroundColor: "inherit",
+    borderBlockEndWidth: "1px",
+    borderColor: "var(--strip-edge)",
+    borderStyle: "solid",
+    insetBlockEnd: "-1px",
+    // Below the strip's rounded corners.
+    insetBlockStart: "{radii.lg}",
+    insetInlineEnd: "calc(-1 * var(--strip-rest, 0px))",
+    pointerEvents: "none",
+    position: "absolute",
+    zIndex: -1,
+  },
+  variants: {
+    joined: {
+      false: { insetInlineStart: 0 },
+      true: { insetInlineStart: "100%" },
+    },
+  },
+});
+
+/**
  * A tab, in its slot of the strip. The open tab is raised in the card with an
- * edge, and reaches over the strip's bottom edge to join its window. Hidden
- * tabs lie flat on the strip.
+ * edge, and meets its window through the gap in the strip's bottom edge.
+ * Hidden tabs lie flat on the strip.
  */
 const tabStyles = cva({
   base: hstack.raw({
@@ -453,7 +502,6 @@ const tabStyles = cva({
       true: {
         borderColor: "borderStrong",
         color: "foreground",
-        marginBlockEnd: "-1px",
       },
     },
   },
