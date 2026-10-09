@@ -31,6 +31,11 @@ type Props = {
   permissions: readonly SitePermission[];
   /** The request the page is waiting on, if any. Opens the panel. */
   request: PermissionRequest | undefined;
+  /**
+   * The page's address, for the panel's heading. Must come from the same
+   * report as `permissions` (see `useShownPage`).
+   */
+  url: string;
 };
 
 /**
@@ -40,7 +45,12 @@ type Props = {
  * The engine draws no prompt, so a request opens the panel. Closing it
  * without an answer dismisses the request, as closing Chrome's prompt does.
  */
-export const SitePermissions = ({ onSet, permissions, request }: Props) => {
+export const SitePermissions = ({
+  onSet,
+  permissions,
+  request,
+  url,
+}: Props) => {
   // Whether the user opened the panel. A request opens it regardless.
   const [browsing, setBrowsing] = useState(false);
 
@@ -57,7 +67,12 @@ export const SitePermissions = ({ onSet, permissions, request }: Props) => {
       onOpenChange={changeOpen}
       open={browsing || request !== undefined}
       side="bottom"
-      title="Site permissions"
+      title={
+        <span className={headingStyles}>
+          <span className={hostStyles}>{hostOf(url)}</span>
+          <span className={subtitleStyles}>Site permissions</span>
+        </span>
+      }
       trigger={
         <Button label="Site permissions" size="sm" variant="ghost">
           <SlidersHorizontalIcon size={14} />
@@ -65,57 +80,82 @@ export const SitePermissions = ({ onSet, permissions, request }: Props) => {
       }
       wide
     >
-      {request === undefined ? undefined : <Asking request={request} />}
-      {permissions.length === 0 ? (
-        <span className={noneStyles}>This page has no site permissions.</span>
-      ) : (
-        <div className={settingsStyles}>
-          {permissions.map(({ permission, setting }) => (
-            <div className={rowStyles} key={permission}>
-              <span className={nameStyles}>
-                {ICONS[permission]}
-                {LABELS[permission]}
-              </span>
-              <Select
-                aria-label={LABELS[permission]}
-                onValueChange={(next) => {
-                  if (next !== null) {
-                    onSet(permission, next);
-                  }
-                }}
-                options={SETTING_OPTIONS}
-                size="sm"
-                value={setting}
-              />
-            </div>
-          ))}
-        </div>
-      )}
+      <div className={panelStyles}>
+        {request === undefined ? undefined : (
+          <Asking request={request} url={url} />
+        )}
+        {permissions.length === 0 ? (
+          <span className={noneStyles}>This page has no site permissions.</span>
+        ) : (
+          <ul aria-label="Permissions" className={settingsStyles}>
+            {permissions.map(({ permission, setting }) => (
+              <li className={rowStyles} key={permission}>
+                <span className={tileStyles} data-setting={setting}>
+                  {ICONS[permission]}
+                </span>
+                <span className={nameStyles}>{LABELS[permission]}</span>
+                <span className={choiceStyles}>
+                  <Select
+                    aria-label={LABELS[permission]}
+                    onValueChange={(next) => {
+                      if (next !== null && next !== setting) {
+                        onSet(permission, next);
+                      }
+                    }}
+                    options={SETTING_OPTIONS}
+                    quiet
+                    size="xs"
+                    value={setting}
+                  />
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </Popover>
   );
 };
 
-/** The page's request: who asks, for what, and the two answers. */
-const Asking = ({ request }: { request: PermissionRequest }) => (
-  <div className={askingStyles}>
-    <span>{hostOf(request.origin)} wants to use</span>
+/**
+ * The page's request: who asks, for what, and the two answers.
+ *
+ * The heading already names the page's site, so the asking site is named
+ * again only when it differs.
+ */
+const Asking = ({
+  request,
+  url,
+}: {
+  request: PermissionRequest;
+  url: string;
+}) => (
+  <section aria-label="Request" className={askingStyles}>
+    <span className={askingTextStyles}>
+      <strong className={askingHostStyles}>
+        {hostOf(request.origin) === hostOf(url)
+          ? "This site"
+          : hostOf(request.origin)}
+      </strong>{" "}
+      <span>wants to use</span>
+    </span>
     <ul aria-label="Requested" className={requestedStyles}>
       {request.permissions.map((permission) => (
-        <li className={nameStyles} key={permission}>
+        <li className={chipStyles} key={permission}>
           {ICONS[permission]}
           {LABELS[permission]}
         </li>
       ))}
     </ul>
     <div className={answersStyles}>
-      <Button onClick={request.deny} size="sm" variant="outline">
+      <Button onClick={request.deny} size="sm" variant="primary">
         Block
       </Button>
       <Button onClick={request.allow} size="sm" variant="accent">
         Allow
       </Button>
     </div>
-  </div>
+  </section>
 );
 
 /** Each permission's name, as Chrome's site settings word it. */
@@ -144,23 +184,86 @@ const SETTING_OPTIONS: readonly SelectOption<WebViewPermissionSetting>[] = [
 ];
 
 /**
- * The host of `origin`, or the origin itself if it has none.
+ * The host of `url`, or the address itself if it has none.
  *
  * Uses `URL.parse`, which does not throw, for `ConnectionIndicator`'s reason.
  */
-const hostOf = (origin: string): string => {
-  const parsed = URL.parse(origin);
-  return parsed === null || parsed.host === "" ? origin : parsed.host;
+const hostOf = (url: string): string => {
+  const parsed = URL.parse(url);
+  return parsed === null || parsed.host === "" ? url : parsed.host;
 };
 
-const askingStyles = vstack({
-  alignItems: "stretch",
-  borderBlockEnd: "1px solid {colors.border}",
-  gap: 2,
-  paddingBlockEnd: 3,
+const headingStyles = vstack({
+  alignItems: "flex-start",
+  gap: 0,
 });
 
-const requestedStyles = vstack({
+const hostStyles = css({
+  color: "foreground",
+  fontSize: "sm",
+  fontWeight: "semibold",
+  overflowWrap: "anywhere",
+});
+
+const subtitleStyles = css({
+  color: "muted",
+  fontSize: "xs",
+  fontWeight: "normal",
+});
+
+// Wide enough that every label stays on one line and the choices line up.
+const panelStyles = vstack({
+  alignItems: "stretch",
+  gap: 3,
+  minInlineSize: 64,
+});
+
+// Tinted with the accent, so the question stands apart from the settings.
+const askingStyles = vstack({
+  alignItems: "stretch",
+  backgroundColor: "color-mix(in oklab, {colors.accent} 10%, {colors.card})",
+  border: "1px solid color-mix(in oklab, {colors.accent} 35%, {colors.border})",
+  borderRadius: "lg",
+  gap: 2.5,
+  padding: 3,
+});
+
+const askingTextStyles = css({
+  color: "foreground",
+  fontSize: "sm",
+});
+
+const askingHostStyles = css({
+  fontWeight: "semibold",
+  overflowWrap: "anywhere",
+});
+
+const requestedStyles = hstack({
+  flexWrap: "wrap",
+  gap: 1.5,
+  listStyle: "none",
+  margin: 0,
+  padding: 0,
+});
+
+const chipStyles = hstack({
+  backgroundColor: "color-mix(in oklab, {colors.accent} 18%, {colors.card})",
+  borderRadius: "full",
+  color: "foreground",
+  fontSize: "xs",
+  gap: 1.5,
+  paddingBlock: 1,
+  paddingInline: 2.5,
+});
+
+// Equal halves, Block first, as in Chrome's prompt.
+const answersStyles = css({
+  "& > *": { flex: "1 1 0" },
+  display: "flex",
+  gap: 2,
+});
+
+const settingsStyles = vstack({
   alignItems: "stretch",
   gap: 1,
   listStyle: "none",
@@ -168,25 +271,51 @@ const requestedStyles = vstack({
   padding: 0,
 });
 
-const answersStyles = hstack({
-  gap: 2,
-  justifyContent: "flex-end",
-});
-
-const settingsStyles = vstack({
-  alignItems: "stretch",
-  gap: 1.5,
-});
-
 const rowStyles = hstack({
-  gap: 4,
-  justifyContent: "space-between",
+  gap: 2.5,
+  paddingBlock: 0.5,
 });
 
-const nameStyles = hstack({
-  gap: 2,
+// One size for every icon, tinted by the stored setting so the list reads at
+// a glance.
+const tileStyles = css({
+  "&[data-setting=allow]": {
+    backgroundColor: "color-mix(in oklab, {colors.success} 18%, {colors.card})",
+    color: "success",
+  },
+  "&[data-setting=block]": {
+    backgroundColor: "color-mix(in oklab, {colors.danger} 18%, {colors.card})",
+    color: "danger",
+  },
+  alignItems: "center",
+  backgroundColor: "color-mix(in oklab, {colors.foreground} 8%, {colors.card})",
+  blockSize: 7,
+  borderRadius: "md",
+  color: "muted",
+  display: "inline-flex",
+  flex: "none",
+  inlineSize: 7,
+  justifyContent: "center",
+});
+
+const nameStyles = css({
+  color: "foreground",
+  flex: "1",
+  fontSize: "sm",
+  whiteSpace: "nowrap",
+});
+
+// A fixed column, so every choice's caret lines up.
+const choiceStyles = css({
+  display: "flex",
+  flex: "none",
+  inlineSize: 16,
+  justifyContent: "flex-end",
 });
 
 const noneStyles = css({
   color: "muted",
+  fontSize: "sm",
+  paddingBlock: 2,
+  textAlign: "center",
 });

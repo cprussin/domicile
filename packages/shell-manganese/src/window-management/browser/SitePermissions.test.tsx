@@ -41,6 +41,7 @@ describe("SitePermissions", () => {
           onSet={NO_SET}
           permissions={SITE}
           request={undefined}
+          url="https://meet.example.com/abc"
         />,
       );
 
@@ -63,6 +64,7 @@ describe("SitePermissions", () => {
           }}
           permissions={SITE}
           request={undefined}
+          url="https://meet.example.com/abc"
         />,
       );
       await userEvent.click(button());
@@ -73,9 +75,31 @@ describe("SitePermissions", () => {
       expect(set).toStrictEqual(["camera block"]);
     });
 
+    it("names the site it is for", async () => {
+      render(
+        <SitePermissions
+          onSet={NO_SET}
+          permissions={SITE}
+          request={undefined}
+          url="https://meet.example.com/abc"
+        />,
+      );
+
+      await userEvent.click(button());
+
+      expect(
+        await screen.findByRole("heading", { name: /meet\.example\.com/ }),
+      ).toBeInTheDocument();
+    });
+
     it("says so for a page with no site", async () => {
       render(
-        <SitePermissions onSet={NO_SET} permissions={[]} request={undefined} />,
+        <SitePermissions
+          onSet={NO_SET}
+          permissions={[]}
+          request={undefined}
+          url="about:blank"
+        />,
       );
 
       await userEvent.click(button());
@@ -93,15 +117,41 @@ describe("SitePermissions", () => {
           onSet={NO_SET}
           permissions={SITE}
           request={requestFor(["camera", "microphone"], [])}
+          url="https://meet.example.com/abc"
         />,
       );
 
-      expect(
-        await screen.findByText("meet.example.com wants to use"),
-      ).toBeInTheDocument();
+      expect(await screen.findByText("wants to use")).toBeInTheDocument();
       expect(screen.getByRole("list", { name: "Requested" })).toHaveTextContent(
         "CameraMicrophone",
       );
+    });
+
+    // The heading names the page's site already.
+    it("calls the page's own site this site", async () => {
+      render(
+        <SitePermissions
+          onSet={NO_SET}
+          permissions={SITE}
+          request={requestFor(["camera"], [])}
+          url="https://meet.example.com/abc"
+        />,
+      );
+
+      expect(await screen.findByText("This site")).toBeInTheDocument();
+    });
+
+    it("names another site that asks", async () => {
+      render(
+        <SitePermissions
+          onSet={NO_SET}
+          permissions={SITE}
+          request={requestFor(["camera"], [])}
+          url="https://other.example.com/"
+        />,
+      );
+
+      expect(await screen.findByText("meet.example.com")).toBeInTheDocument();
     });
 
     it("allows", async () => {
@@ -111,6 +161,7 @@ describe("SitePermissions", () => {
           onSet={NO_SET}
           permissions={SITE}
           request={requestFor(["camera"], answers)}
+          url="https://meet.example.com/abc"
         />,
       );
 
@@ -126,6 +177,7 @@ describe("SitePermissions", () => {
           onSet={NO_SET}
           permissions={SITE}
           request={requestFor(["camera"], answers)}
+          url="https://meet.example.com/abc"
         />,
       );
 
@@ -141,6 +193,7 @@ describe("SitePermissions", () => {
           onSet={NO_SET}
           permissions={SITE}
           request={requestFor(["camera"], answers)}
+          url="https://meet.example.com/abc"
         />,
       );
 
