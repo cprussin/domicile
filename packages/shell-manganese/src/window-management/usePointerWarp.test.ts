@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "bun:test";
 import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import { act, fireEvent, renderHook } from "@testing-library/react";
 
-import type { Focus, Spot } from "./pointer-warp";
+import type { Focus, Shown, Spot } from "./pointer-warp";
 import { usePointerWarp } from "./usePointerWarp";
 
 const LEFT = {
@@ -26,11 +26,12 @@ const recordingDomicile = {
 /** One render's inputs: the focused window and the open windows. */
 type Desktop = {
   focus: Focus | undefined;
+  shown: readonly Shown[];
   windows: readonly string[];
 };
 
 /** A desktop with nothing on it, which is what the chrome always mounts on. */
-const NOTHING: Desktop = { focus: undefined, windows: [] };
+const NOTHING: Desktop = { focus: undefined, shown: [], windows: [] };
 
 /**
  * The hook, mounted empty with `desktop`'s windows then opened into it.
@@ -48,6 +49,7 @@ const warping = (desktop: Desktop) => {
         domicile: recordingDomicile,
         focus: current.focus,
         pressed,
+        shown: current.shown,
         windows: current.windows,
       }),
     { initialProps: NOTHING },
@@ -63,9 +65,16 @@ const warping = (desktop: Desktop) => {
   };
 };
 
-/** A desktop of `windows`, with the keyboard on `focus`. */
+/**
+ * A desktop of `windows`, with the keyboard on `focus`.
+ *
+ * Shows `focus` and whichever of {@link LEFT} and {@link RIGHT} are open.
+ */
 const desktopOf = (focus: Focus, windows: readonly string[]): Desktop => ({
   focus,
+  shown: [LEFT, RIGHT, focus].flatMap(({ box, id }) =>
+    id !== undefined && windows.includes(id) ? [{ box, id }] : [],
+  ),
   windows,
 });
 
@@ -155,6 +164,25 @@ describe("usePointerWarp", () => {
     rerender(desktopOf(RIGHT, BOTH));
 
     expect(warps).toStrictEqual([[600, 350]]);
+  });
+
+  it("leaves the pointer alone for a window that opens where no other window is", () => {
+    // The first window on a workspace. Nothing else could take focus from it.
+    const { rerender } = warping({ focus: undefined, shown: [], windows: [] });
+    pointerAt(600, 350);
+
+    rerender(desktopOf(LEFT, [LEFT.id]));
+
+    expect(warps).toStrictEqual([]);
+  });
+
+  it("leaves the pointer alone for a window that opens while it is over the top bar", () => {
+    const { rerender } = warping(desktopOf(LEFT, [LEFT.id]));
+    pointerAt(200, 10);
+
+    rerender(desktopOf(RIGHT, BOTH));
+
+    expect(warps).toStrictEqual([]);
   });
 
   it("does not take it again once that window is no longer new", () => {
@@ -466,12 +494,16 @@ describe("usePointerWarp", () => {
     };
 
     it("takes the pointer to its middle when a key brings the keyboard", () => {
-      const { press, rerender } = warping({ focus: undefined, windows: BOTH });
+      const { press, rerender } = warping({
+        focus: undefined,
+        shown: [],
+        windows: BOTH,
+      });
 
       act(() => {
         press();
       });
-      rerender({ focus: EMPTY, windows: BOTH });
+      rerender({ focus: EMPTY, shown: [], windows: BOTH });
 
       expect(warps).toStrictEqual([[400, 300]]);
     });

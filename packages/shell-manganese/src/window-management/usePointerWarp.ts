@@ -1,8 +1,8 @@
 import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 
-import type { Focus, Spot } from "./pointer-warp";
-import { warpTo } from "./pointer-warp";
+import type { Focus, Shown, Spot } from "./pointer-warp";
+import { overAnother, warpTo } from "./pointer-warp";
 import type { Rect } from "./rect";
 import type { WindowState } from "./window-state";
 
@@ -36,6 +36,8 @@ type Options = {
    * press is answered by whichever monitor took focus.
    */
   pressed: WindowState["pressed"];
+  /** Every window the screens show, with its box. */
+  shown: readonly Shown[];
   /** Every window id, used to detect newly opened windows. */
   windows: readonly string[];
 };
@@ -71,7 +73,8 @@ export type Pointer = {
  * Three focus changes count as the desktop's: a key press (signaled by
  * `pressed`), a newly opened window taking focus, and the focused window
  * closing. A new tab or the next tab in the same box is skipped, since nothing
- * moved under the pointer.
+ * moved under the pointer. A newly opened window warps only when the pointer is
+ * over another window, which would otherwise take focus from it.
  *
  * It also reports whether a pointer event is the user's: windows moving under
  * a still pointer fire `pointerover` too. See {@link Pointer.pointing}.
@@ -80,6 +83,7 @@ export const usePointerWarp = ({
   domicile,
   focus,
   pressed,
+  shown,
   windows,
 }: Options): Pointer => {
   // Refs, not state: none of this is drawn, and pointer moves must not
@@ -147,15 +151,12 @@ export const usePointerWarp = ({
       !sameBox(was.box, focus?.box);
     const keyed = pressed !== answered.current;
     answered.current = pressed;
+    // The pending target, if any, so a second press before the first warp
+    // lands is measured from where the cursor is going.
+    const at = sent.current.at(-1) ?? pointer.current;
     const to =
-      keyed || opened || gone
-        ? warpTo({
-            from: was,
-            // The pending target, if any, so a second press before the
-            // first warp lands is measured from where the cursor is going.
-            pointer: sent.current.at(-1) ?? pointer.current,
-            to: focus,
-          })
+      keyed || gone || (opened && overAnother(shown, focus, at))
+        ? warpTo({ from: was, pointer: at, to: focus })
         : undefined;
     held.current = focus;
     open.current = windows;

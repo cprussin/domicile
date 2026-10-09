@@ -75,7 +75,9 @@ The pointer follows keyboard focus (sway's `mouse_warping container`):
 
 - A keyed focus change warps the pointer to the center of the new window,
   unless it is already over it. An empty screen warps to its center.
-- A window that opens with the keyboard also warps the pointer.
+- A window that opens with the keyboard also warps the pointer, but only when
+  the pointer is over another window. Over the top bar or an empty workspace,
+  it stays put.
 - Focus changes on `pointerover` only when the pointer moves. A window sliding
   under a still pointer does not take focus.
 
