@@ -153,6 +153,11 @@ It provides:
   session serves every desktop. Without the module,
   `services.displayManager.sessionPackages = [domicile]` adds it.
 - **The `domicile` PAM service**, for `lock.pam_service = "domicile"`.
+- **The `domicile` group.** Its members' login sessions may lower nice values
+  to -10 and use realtime priority 8. The engine asks for nice -8 on the
+  threads that draw and present frames, so animations stay smooth while the
+  machine is busy. Add yourself with
+  `users.users.<you>.extraGroups = ["domicile"]` and log in again.
 - **UPower**, which the battery readout reads. Without it, manganese shows no
   battery. Set `services.upower.enable = false` to opt out.
 - **`domicile-session.target`**, started by a desktop that is the session. User

@@ -2,7 +2,8 @@
 #
 # `nix/home-manager.nix` configures the desk itself. This module provides the
 # `domicile` login session and its user units, the PAM service the lock uses,
-# UPower for the battery, and portal routing. See
+# UPower for the battery, portal routing, and the `domicile` group whose
+# sessions may raise the engine's frame threads. See
 # docs/RUNNING-A-DESKTOP.md#on-nixos.
 #
 # The session runs whichever shell the config names. The module sets no
@@ -59,6 +60,28 @@ in {
     # Named by `lock.pam_service = "domicile"`. A desk whose PAM service is
     # missing fails to start.
     security.pam.services.domicile = {};
+
+    # The engine asks for nice -8 on the threads that draw and present frames
+    # and SCHED_RR 8 on its realtime audio threads, falling back to nice -10.
+    # Without these limits each request fails and the threads compete with a
+    # build at nice 0. Granted to a group, as NixOS's PipeWire and JACK modules
+    # do. Listed first (`mkBefore`) because a later pam_limits line for another
+    # group overrides an earlier one, so a larger grant such as PipeWire's wins.
+    users.groups.domicile = {};
+    security.pam.loginLimits = lib.mkBefore [
+      {
+        domain = "@domicile";
+        type = "-";
+        item = "nice";
+        value = -10;
+      }
+      {
+        domain = "@domicile";
+        type = "-";
+        item = "rtprio";
+        value = 8;
+      }
+    ];
 
     # Takes effect only when `xdg.portal.enable` is set. Domicile is the only
     # backend; `domicile-portals.conf` sends `Secret` to the keyring, which
