@@ -9,6 +9,33 @@
         "turbo": "catalog:",
       },
     },
+    "packages/app-history": {
+      "name": "@domicile-desktop/app-history",
+      "version": "0.0.0",
+      "dependencies": {
+        "@base-ui/react": "catalog:",
+        "@domicile-desktop/component-library": "workspace:*",
+        "@phosphor-icons/react": "catalog:",
+        "react": "catalog:",
+        "react-dom": "catalog:",
+        "zod": "catalog:",
+      },
+      "devDependencies": {
+        "@cprussin/tsconfig": "catalog:",
+        "@domicile-desktop/test-support": "workspace:*",
+        "@pandacss/dev": "catalog:",
+        "@pandacss/preset-panda": "catalog:",
+        "@testing-library/react": "catalog:",
+        "@testing-library/user-event": "catalog:",
+        "@types/bun": "catalog:",
+        "@types/react": "catalog:",
+        "@types/react-dom": "catalog:",
+        "@vitejs/plugin-react": "catalog:",
+        "postcss": "catalog:",
+        "typescript": "catalog:",
+        "vite": "catalog:",
+      },
+    },
     "packages/chrome-sdk": {
       "name": "@domicile-desktop/sdk",
       "version": "0.1.0",
@@ -389,6 +416,8 @@
     "@csstools/postcss-cascade-layers": ["@csstools/postcss-cascade-layers@5.0.2", "", { "dependencies": { "@csstools/selector-specificity": "^5.0.0", "postcss-selector-parser": "^7.0.0" }, "peerDependencies": { "postcss": "^8.4" } }, "sha512-nWBE08nhO8uWl6kSAeCx4im7QfVko3zLrtgWZY4/bP87zrSPpSyN/3W3TDqz1jJuH+kbKOHXg5rJnK+ZVYcFFg=="],
 
     "@csstools/selector-specificity": ["@csstools/selector-specificity@5.0.0", "", { "peerDependencies": { "postcss-selector-parser": "^7.0.0" } }, "sha512-PCqQV3c4CoVm3kdPhyeZ07VmBRdH2EpMFA/pd9OASpOEC3aXNGoqPDAZ80D0cLpMBxnmk0+yNhGsEx31hq7Gtw=="],
+
+    "@domicile-desktop/app-history": ["@domicile-desktop/app-history@workspace:packages/app-history"],
 
     "@domicile-desktop/builder": ["@domicile-desktop/builder@workspace:packages/domicile-builder"],
 

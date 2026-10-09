@@ -1,0 +1,8 @@
+{
+  "description": "Browse, search and clear your browsing history.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAoNoGxGJa7UCUki46RHN0qD1YAGjSHk5k4Khpy1Y8J9qRUmgup7DIPzzpCQI2YLrZLfCCsabEo1ByPE2UJTKEwQ3QwM4not83cz4FiUDGsAcw1uaRvpYeHgd3Aa/TVa9+YJONDwwM5AHHgRLcNZk/EeC0sx5Nj7zooZNOtIDpYuCff/5xvgacm2mmaVL3UAGEmKC/w2p6U4/OZ8tx0d9xyldU92Z5bhnqs4JnjMn8YYkpKAoRmAhp4OE+qfIiuc6DmpeFC7eTZRTRAqAWZrs9b9YMSTYVErvQk6HoDu8PRkiRvKlMVQnmYO6FAHBF1E+zQTh32dt307HOVMoPOOmpRwIDAQAB",
+  "manifest_version": 3,
+  "name": "History",
+  "permissions": ["history", "browsingData", "favicon"],
+  "version": "1.0.0"
+}

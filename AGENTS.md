@@ -156,6 +156,7 @@ How to use, configure and debug Domicile. No authority level.
 |---|---|
 | [/docs/RUNNING-A-DESKTOP.md](/docs/RUNNING-A-DESKTOP.md) | Running a desktop nested or on a tty, the pinned engine, launching clients, and the home-manager module. |
 | [/docs/SHELL-CONFIG.md](/docs/SHELL-CONFIG.md) | The desk config: file location, config modules, the home-manager module, what reloads, and the keyboard, idle, lock, theme and display sections. |
+| [/docs/HISTORY.md](/docs/HISTORY.md) | The History app: how visits are recorded, how every desktop installs and opens it, and Domicile's own launcher entries. |
 | [/docs/LAUNCHER.md](/docs/LAUNCHER.md) | Launcher config: `files.omit`, `applications.omit`, `X-Domicile-Preview`, bookmarks and their icons. |
 | [/docs/WRITING-A-SHELL.md](/docs/WRITING-A-SHELL.md) | Writing a shell outside this repo. Read before changing anything a shell can see (module name, document, SDK surface). Example: `examples/minimal-shell`. |
 | [/docs/SHELL-BROWSER-WINDOWS.md](/docs/SHELL-BROWSER-WINDOWS.md) | `<webview>` for shell authors: state properties and events, focus, keyboard, new windows, close requests, file pickers. |
