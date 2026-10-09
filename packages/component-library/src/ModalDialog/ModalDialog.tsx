@@ -1,6 +1,11 @@
 import { Dialog as BaseDialog } from "@base-ui/react/dialog";
 import { XIcon } from "@phosphor-icons/react/dist/ssr/X";
-import type { ComponentProps, ReactElement, ReactNode } from "react";
+import type {
+  ComponentProps,
+  KeyboardEvent,
+  ReactElement,
+  ReactNode,
+} from "react";
 import { css, cva } from "../../styled-system/css";
 import { center, flex, hstack } from "../../styled-system/patterns";
 import { Button } from "../Button/Button";
@@ -105,6 +110,7 @@ const ModalDialogComponent = ({
               data-placement={placement}
               data-size={size}
               data-surface={surface}
+              onKeyDown={moveFooterFocus}
             >
               {title !== undefined && (
                 <header
@@ -324,3 +330,45 @@ const footerStyles = hstack({
   paddingBlockStart: 3,
   paddingInline: 4,
 });
+
+/**
+ * Moves focus between the footer's enabled buttons on Left, Right, Home and
+ * End, when one of them has focus. Left and Right wrap. Focus only moves, so
+ * no key here answers a dialog.
+ */
+const moveFooterFocus = (event: KeyboardEvent<HTMLElement>) => {
+  const buttons = [
+    ...event.currentTarget.querySelectorAll<HTMLButtonElement>(
+      ":scope > footer button:not(:disabled)",
+    ),
+  ];
+  const targets: readonly EventTarget[] = buttons;
+  const index = targets.indexOf(event.target);
+  if (index !== -1) {
+    const target = footerKeyTarget(event.key, buttons, index);
+    if (target !== undefined) {
+      event.preventDefault();
+      target.focus();
+    }
+  }
+};
+
+/** The button `key` moves to from `buttons[index]`, or `undefined` for other keys. */
+const footerKeyTarget = (
+  key: string,
+  buttons: HTMLButtonElement[],
+  index: number,
+): HTMLButtonElement | undefined => {
+  switch (key) {
+    case "ArrowLeft":
+      return buttons.at(index - 1);
+    case "ArrowRight":
+      return buttons.at((index + 1) % buttons.length);
+    case "Home":
+      return buttons.at(0);
+    case "End":
+      return buttons.at(-1);
+    default:
+      return undefined;
+  }
+};

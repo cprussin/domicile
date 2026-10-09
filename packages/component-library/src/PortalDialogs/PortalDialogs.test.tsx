@@ -775,6 +775,20 @@ describe(PortalDialogs, () => {
       expect(host.answers).toEqual([[1, { kind: "canceled" }]]);
     });
 
+    it("starts on Deny, and the arrow keys move focus without answering", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} />);
+      host.push([access(1)]);
+      const deny = await screen.findByRole("button", { name: "Deny" });
+      await waitFor(() => {
+        expect(deny).toHaveFocus();
+      });
+      await userEvent.keyboard("{ArrowRight}");
+
+      expect(screen.getByRole("button", { name: "Allow" })).toHaveFocus();
+      expect(host.answers).toEqual([]);
+    });
+
     it("shares the user's name", async () => {
       const host = new FakeHost();
       render(<PortalDialogs host={host.host} />);
