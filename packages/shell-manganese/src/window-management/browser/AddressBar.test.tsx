@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-
+import { css } from "../../../styled-system/css";
 import { ConnectionSafety } from "../../address/connection-safety";
 import { AddressBar } from "./AddressBar";
 
@@ -40,6 +40,19 @@ describe("AddressBar", () => {
     render(<AddressBar {...BAR} />);
 
     expect(address()).toHaveValue("https://example.com");
+  });
+
+  // The focused bar or open tab above is the same color, so the two read as
+  // one piece of chrome.
+  it("is raised as far as the bar above", () => {
+    render(<AddressBar {...BAR} />);
+
+    expect(address().closest("form")?.className).toContain(
+      css({
+        backgroundColor:
+          "color-mix(in oklab, {colors.foreground} 14%, {colors.background})",
+      }),
+    );
   });
 
   describe("a private window", () => {

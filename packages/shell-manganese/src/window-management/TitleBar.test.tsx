@@ -21,6 +21,10 @@ stylesheet.textContent = readFileSync(
   .replaceAll(/@layer [^{]+\{/g, "@media all{");
 document.head.append(stylesheet);
 
+/** The address bar's background, which the bar or open tab above matches. */
+const RAISED =
+  "color-mix(in oklab, {colors.foreground} 14%, {colors.background})";
+
 /** An arbitrary bar position. */
 const ON_SCREEN = { height: 30, width: 1200, x: 0, y: 32 };
 
@@ -257,17 +261,17 @@ describe("TitleBar", () => {
     );
   });
 
-  it("grounds the bar being worked in in the card, and sinks the rest below it", () => {
-    // The card matches the address bar's background, so the focused bar
-    // reads as part of its window.
+  it("raises the bar being worked in to the address bar, and sinks the rest below it", () => {
+    // The focused bar matches the address bar, so it reads as part of its
+    // window.
     const focused = render(<TitleBar {...barProps} focus="focused" />);
     expect(face(focused.container).className).toContain(
-      css({ backgroundColor: "card" }),
+      css({ backgroundColor: RAISED }),
     );
 
     const resting = render(<TitleBar {...barProps} />);
     expect(face(resting.container).className).not.toContain(
-      css({ backgroundColor: "card" }),
+      css({ backgroundColor: RAISED }),
     );
   });
 
@@ -283,14 +287,12 @@ describe("TitleBar", () => {
   });
 
   it("washes the keyboard's own bar in the accent inside a selected group", () => {
-    // The whole group uses the card, so the card alone would not mark this
-    // one.
+    // The whole group is raised, so that alone would not mark this one.
     const { container } = render(<TitleBar {...barProps} focus="leaf" />);
 
     expect(face(container).className).toContain(
       css({
-        backgroundColor:
-          "color-mix(in oklab, {colors.accent} 45%, {colors.card})",
+        backgroundColor: `color-mix(in oklab, {colors.accent} 45%, ${RAISED})`,
       }),
     );
     expect(face(container).className).toContain(css({ fontWeight: "medium" }));
@@ -368,6 +370,15 @@ describe("TitleBar", () => {
       expect(face(open.container).className).not.toContain(
         css({ marginBlockEnd: "-1px" }),
       );
+    });
+
+    it("raises the open tab to match the address bar it meets", () => {
+      const raised = css({ backgroundColor: RAISED });
+
+      expect(
+        face(tab({ strip: { ...MIDDLE_TAB, open: true } }).container).className,
+      ).toContain(raised);
+      expect(face(tab({}).container).className).not.toContain(raised);
     });
 
     // A press on a hidden tab opens it; one on the open tab does nothing new.
