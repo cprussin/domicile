@@ -631,16 +631,14 @@ describe("watchPortalRequests", () => {
       frame: "data:image/png;base64,AA==",
       height: 100,
       monitors: [
-        { area: { height: 100, width: 300, x: 0, y: 0 }, name: "DP-1" },
-      ],
-      width: 300,
-      windows: [
         {
-          app_id: "kitty",
-          area: { height: 40, width: 30, x: 10, y: 20 },
-          title: "~/src",
+          area: { height: 100, width: 300, x: 0, y: 0 },
+          description: "BOE NE135A1M-NY1",
+          name: "DP-1",
         },
       ],
+      width: 300,
+      windows: [{ app_id: "kitty", id: "app-3", title: "~/src" }],
     };
     host.push([
       { app_id: "org.example.Shot", body: desk, id: 5, kind: "screenshot" },
@@ -652,16 +650,14 @@ describe("watchPortalRequests", () => {
       frame: "data:image/png;base64,AA==",
       height: 100,
       monitors: [
-        { area: { height: 100, width: 300, x: 0, y: 0 }, name: "DP-1" },
-      ],
-      width: 300,
-      windows: [
         {
-          appId: "kitty",
-          area: { height: 40, width: 30, x: 10, y: 20 },
-          title: "~/src",
+          area: { height: 100, width: 300, x: 0, y: 0 },
+          description: "BOE NE135A1M-NY1",
+          name: "DP-1",
         },
       ],
+      width: 300,
+      windows: [{ appId: "kitty", id: "app-3", title: "~/src" }],
     };
     expect(await requests).toEqual([
       {
@@ -944,6 +940,7 @@ describe("answerPortalRequest", () => {
       PortalAnswer.Screenshot({ height: 4, width: 3, x: 1, y: 2 }),
     );
     answerPortalRequest(host, 11, PortalAnswer.PickColor({ x: 5, y: 6 }));
+    answerPortalRequest(host, 12, PortalAnswer.ScreenshotWindow("app-3"));
 
     expect(host.answers).toEqual([
       [1, { kind: "access" }],
@@ -979,6 +976,7 @@ describe("answerPortalRequest", () => {
       ],
       [10, { area: { height: 4, width: 3, x: 1, y: 2 }, kind: "screenshot" }],
       [11, { kind: "pick_color", x: 5, y: 6 }],
+      [12, { id: "app-3", kind: "screenshot_window" }],
     ]);
   });
 

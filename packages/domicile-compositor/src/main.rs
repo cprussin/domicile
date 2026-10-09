@@ -2764,14 +2764,26 @@ impl DomicileCompositor {
             return Published::NotShown;
         }
         let published = match &committed {
-            CommittedBuffer::Gpu(dmabuf) => self.submit_to_the_engine(
-                app_id,
-                Submitted::Client(buffer.clone()),
-                &descriptor_from(dmabuf),
-                crop,
-                at_box,
-                Published::Held,
-            ),
+            CommittedBuffer::Gpu(dmabuf) => {
+                let published = self.submit_to_the_engine(
+                    app_id,
+                    Submitted::Client(buffer.clone()),
+                    &descriptor_from(dmabuf),
+                    crop,
+                    at_box,
+                    Published::Held,
+                );
+                if published != Published::NotShown {
+                    self.casting.shown(
+                        app_id,
+                        casting::Shown {
+                            dmabuf: dmabuf.clone(),
+                            crop,
+                        },
+                    );
+                }
+                published
+            }
             CommittedBuffer::Pixels { .. } => self.publish_shm_frame(app_id, buffer, crop, at_box),
         };
         if matches!(published, Published::Held | Published::Copied) {
@@ -2850,6 +2862,13 @@ impl DomicileCompositor {
         if published == Published::NotShown {
             // Never reached viz, so nothing will release it.
             self.uploads.give_back(copied.id);
+        } else {
+            let dmabuf = self
+                .uploads
+                .get(copied.id)
+                .expect("a buffer the engine holds is there")
+                .clone();
+            self.casting.shown(app_id, casting::Shown { dmabuf, crop });
         }
         published
     }

@@ -6,6 +6,7 @@ import { fakeSystem } from "@domicile-desktop/system-apps/fake-system";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
 import { PortalDialogs } from "./PortalDialogs";
+import { ShownWindow } from "./shown-windows";
 
 /**
  * A desktop that pushes `items` and `capturing` once. Answers go to the
@@ -284,21 +285,21 @@ const frozenDesk = {
   frame: deskFrame,
   height: 500,
   monitors: [
-    { area: { height: 500, width: 1000, x: 0, y: 0 }, name: "DP-1" },
-    { area: { height: 500, width: 600, x: 1000, y: 0 }, name: "HDMI-A-1" },
+    {
+      area: { height: 500, width: 1000, x: 0, y: 0 },
+      description: "Dell Inc. DELL U3219Q",
+      name: "DP-1",
+    },
+    {
+      area: { height: 500, width: 600, x: 1000, y: 0 },
+      description: "",
+      name: "HDMI-A-1",
+    },
   ],
   width: 1600,
   windows: [
-    {
-      app_id: "org.gnome.TextEditor",
-      area: { height: 340, width: 520, x: 80, y: 60 },
-      title: "Notes",
-    },
-    {
-      app_id: "kitty",
-      area: { height: 260, width: 420, x: 1080, y: 120 },
-      title: "~/src",
-    },
+    { app_id: "org.gnome.TextEditor", id: "app-1", title: "Notes" },
+    { app_id: "kitty", id: "app-2", title: "~/src" },
   ],
 };
 
@@ -322,6 +323,7 @@ const meta = {
     screen: undefined,
     screenOf: undefined,
     shellChords: undefined,
+    shownWindows: undefined,
     systemOf: undefined,
   },
   argTypes: {
@@ -339,6 +341,10 @@ const meta = {
     },
     shellChords: {
       control: "object",
+      table: { category: "Behavior" },
+    },
+    shownWindows: {
+      control: false,
       table: { category: "Behavior" },
     },
     systemOf: {
@@ -369,6 +375,7 @@ export const Access: Story = {
     screen: undefined,
     screenOf: undefined,
     shellChords: undefined,
+    shownWindows: undefined,
     systemOf: undefined,
   },
 };
@@ -379,6 +386,7 @@ export const AppChooser: Story = {
     screen: undefined,
     screenOf: undefined,
     shellChords: undefined,
+    shownWindows: undefined,
     systemOf: installed,
   },
 };
@@ -389,6 +397,7 @@ export const FileChooser: Story = {
     screen: undefined,
     screenOf: undefined,
     shellChords: undefined,
+    shownWindows: undefined,
     systemOf: home,
   },
 };
@@ -412,6 +421,7 @@ export const RemoteDesktop: Story = {
     screen: undefined,
     screenOf: undefined,
     shellChords: undefined,
+    shownWindows: undefined,
     systemOf: undefined,
   },
 };
@@ -422,6 +432,7 @@ export const InputCapture: Story = {
     screen: undefined,
     screenOf: undefined,
     shellChords: undefined,
+    shownWindows: undefined,
     systemOf: undefined,
   },
 };
@@ -494,6 +505,7 @@ export const Capturing: Story = {
     screen: undefined,
     screenOf: undefined,
     shellChords: undefined,
+    shownWindows: undefined,
     systemOf: undefined,
   },
 };
@@ -504,6 +516,7 @@ export const GlobalShortcuts: Story = {
     screen: undefined,
     screenOf: undefined,
     shellChords: ["Meta+Return"],
+    shownWindows: undefined,
     systemOf: undefined,
   },
 };
@@ -523,6 +536,10 @@ export const Screenshot: Story = {
     screen: undefined,
     screenOf: undefined,
     shellChords: undefined,
+    // The text editor on screen; the terminal is a hidden tab.
+    shownWindows: () => [
+      ShownWindow.App("app-1", { height: 360, width: 520, x: 80, y: 40 }),
+    ],
     systemOf: undefined,
   },
 };
@@ -533,6 +550,7 @@ export const PickColor: Story = {
     screen: undefined,
     screenOf: undefined,
     shellChords: undefined,
+    shownWindows: undefined,
     systemOf: undefined,
   },
 };

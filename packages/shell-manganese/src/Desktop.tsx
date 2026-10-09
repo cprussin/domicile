@@ -34,6 +34,7 @@ import { useNow } from "./notifications/useNow";
 import { readouts as deskReadouts } from "./readouts/readouts";
 import { Monitor } from "./screens/Monitor";
 import { NoScreens } from "./screens/NoScreens";
+import { shownWindowsOf } from "./screens/shown-windows";
 import type { StageScreen } from "./screens/stage-screens";
 import { stageScreensOf } from "./screens/stage-screens";
 import { useScreenFollowsPointer } from "./screens/useScreenFollowsPointer";
@@ -107,8 +108,8 @@ export const Desktop = ({
   const opening = useOpeningApps(apps.opening, windows.launcherOpen);
   // The file the launcher asked what to open with, while that is asked.
   const [openingWith, setOpeningWith] = useState<string | undefined>();
-  // The launcher's pick, held until it has closed, so nothing it opens sees
-  // it. A screenshot app would shoot it.
+  // The launcher's pick, held until it has closed and the screen shows it
+  // gone, so nothing it opens sees it. A screenshot app would shoot it.
   const [picked, setPicked] = useState<Launch | undefined>();
   // File previews, read through the desktop's system calls.
   const preview = useCallback(
@@ -363,7 +364,9 @@ export const Desktop = ({
         onClosed={() => {
           if (picked !== undefined) {
             setPicked(undefined);
-            launch(picked, act, setOpeningWith);
+            afterAFramePainted(() => {
+              launch(picked, act, setOpeningWith);
+            });
           }
         }}
         onDismiss={() => {
@@ -443,6 +446,9 @@ export const Desktop = ({
         screen={windows.focused}
         screenOf={(appId) => screenOfApp(windows, appId)}
         shellChords={shellChords}
+        // Frames with their bars; the page's own boxes leave those out and
+        // still count a hidden tab.
+        shownWindows={() => shownWindowsOf(screens)}
       />
       {/*
         Last, over every panel, so the modal launcher and clipboard cannot take
@@ -494,6 +500,16 @@ const focusOf = (
   } else {
     return { box: placement.surface ?? placement.bar, id: placement.id };
   }
+};
+
+/**
+ * Runs `then` once a frame drawn after now has been painted: the second
+ * animation frame from now runs after the first one's paint.
+ */
+const afterAFramePainted = (then: () => void) => {
+  requestAnimationFrame(() => {
+    requestAnimationFrame(then);
+  });
 };
 
 /** Does what the launcher picked, once it has closed. */

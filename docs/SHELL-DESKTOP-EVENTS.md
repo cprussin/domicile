@@ -131,7 +131,8 @@ import { PortalDialogs } from "@domicile-desktop/component-library/PortalDialogs
   device grant), `ScreenCast` (a picker of the windows or screens to share,
   or a region to draw), `Print` (a
   printer and its options, or "No printers are set up."), `Screenshot` (pick
-  the desk, a monitor, a window or a dragged area of a frozen frame) and
+  the desk, a monitor, a window or a dragged area of a frozen frame; pass
+  `shownWindows` so a window includes your frame around it) and
   `PickColor` (pick a pixel of it, with a magnifier). Answer `Access`,
   `Account`, `Wallpaper` and `Usb` with `PortalAnswer.Access()` to allow, and
   `DynamicLauncher` with `PortalAnswer.DynamicLauncher(name)`.

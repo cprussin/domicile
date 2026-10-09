@@ -8,9 +8,12 @@
 
 use domicile_host::screenshot::Shot;
 use domicile_protocol::{ShotArea, ShotRect, ShotWindow};
+use smithay::backend::allocator::dmabuf::Dmabuf;
+use smithay::backend::allocator::Buffer as _;
 use smithay::backend::renderer::gles::GlesRenderer;
+use smithay::backend::renderer::ImportDma as _;
 
-use crate::casting::gpu::{FillError, Layer};
+use crate::casting::gpu::{FillError, Layer, Snapshot};
 use crate::casting::negotiation::Pixel;
 use crate::casting::pacing::Rect;
 use crate::casting::paint::paint;
@@ -22,24 +25,27 @@ pub struct Desk {
     pub shot: Shot,
     /// Each monitor, by `wl_output` name, in the shot's pixels.
     pub monitors: Vec<ShotArea>,
-    /// Each window on the desk, in the shot's pixels.
+    /// Each open window, shown or not.
     pub windows: Vec<ShotWindow>,
     /// Where the shot is on the desktop, in logical pixels.
     pub place: Rect,
 }
 
-/// An open window, as a shot names it.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Window {
-    pub title: String,
-    pub app_id: String,
-    /// Where it is on the desktop, in logical pixels.
-    pub desk: Rect,
-}
-
 /// Hears a shot: the desk, or why there is none. Called on the Wayland
 /// thread, so it must not block.
 pub type Developed = Box<dyn FnOnce(Result<Desk, String>) + Send>;
+
+/// Hears a shot of one window, or why there is none. Called on the Wayland
+/// thread, so it must not block.
+pub type DevelopedWindow = Box<dyn FnOnce(Result<Shot, String>) + Send>;
+
+/// The last frame a window showed, which the engine still holds.
+pub struct Shown {
+    pub dmabuf: Dmabuf,
+    /// The part of the buffer that is the window, in buffer pixels. Empty
+    /// for all of it.
+    pub crop: Rect,
+}
 
 /// The rectangle every monitor fits in, in logical pixels. `None` without
 /// monitors.
@@ -70,46 +76,53 @@ pub fn compose(
     })
 }
 
-/// The monitors and windows of a shot of `desk` at `scale` shot pixels per
-/// logical pixel. A window is clipped to the desk, and left out when off it.
-pub fn areas(
+/// `shown` alone, read back through `renderer`.
+pub fn window(shown: &Shown, renderer: Option<&mut GlesRenderer>) -> Result<Shot, String> {
+    let renderer = renderer.ok_or("no GPU renderer to read the window's frame")?;
+    let size = shown.dmabuf.size();
+    let crop = match shown.crop {
+        (_, _, 0, 0) => (0, 0, size.w, size.h),
+        crop => crop,
+    };
+    let snapshot = Snapshot::Texture(
+        renderer
+            .import_dmabuf(&shown.dmabuf, None)
+            .map_err(|why| why.to_string())?,
+    );
+    let layer = Layer {
+        snapshot: &snapshot,
+        from: crop,
+        to: (0, 0, crop.2, crop.3),
+    };
+    compose((crop.2 as u32, crop.3 as u32), &[layer], Some(renderer)).map_err(|why| why.to_string())
+}
+
+/// The monitors of a shot of `desk` at `scale` shot pixels per logical
+/// pixel, each with what `describe` says of it by name.
+pub fn monitors(
     desk: Rect,
     scale: f64,
     screens: &[Screen],
-    windows: &[Window],
-) -> (Vec<ShotArea>, Vec<ShotWindow>) {
-    let place = |rect: Rect| {
-        let (x, y, width, height) = intersection(rect, desk)?;
-        let pixels = |logical: i32| (f64::from(logical) * scale).round() as u32;
-        let (left, top) = (x - desk.0, y - desk.1);
-        Some(ShotRect {
-            x: pixels(left),
-            y: pixels(top),
-            width: pixels(left + width) - pixels(left),
-            height: pixels(top + height) - pixels(top),
+    describe: impl Fn(&str) -> Option<String>,
+) -> Vec<ShotArea> {
+    screens
+        .iter()
+        .filter_map(|screen| {
+            let (x, y, width, height) = intersection(screen.desk, desk)?;
+            let pixels = |logical: i32| (f64::from(logical) * scale).round() as u32;
+            let (left, top) = (x - desk.0, y - desk.1);
+            Some(ShotArea {
+                name: screen.name.clone(),
+                description: describe(&screen.name).unwrap_or_default(),
+                area: ShotRect {
+                    x: pixels(left),
+                    y: pixels(top),
+                    width: pixels(left + width) - pixels(left),
+                    height: pixels(top + height) - pixels(top),
+                },
+            })
         })
-    };
-    (
-        screens
-            .iter()
-            .filter_map(|screen| {
-                Some(ShotArea {
-                    name: screen.name.clone(),
-                    area: place(screen.desk)?,
-                })
-            })
-            .collect(),
-        windows
-            .iter()
-            .filter_map(|window| {
-                Some(ShotWindow {
-                    title: window.title.clone(),
-                    app_id: window.app_id.clone(),
-                    area: place(window.desk)?,
-                })
-            })
-            .collect(),
-    )
+        .collect()
 }
 
 #[cfg(test)]
@@ -188,46 +201,27 @@ mod tests {
     }
 
     #[test]
-    fn monitors_and_windows_are_found_in_the_shots_pixels() {
-        let windows = [
-            Window {
-                title: "Half off".into(),
-                app_id: "kitty".into(),
-                desk: (-1, 0, 2, 1),
-            },
-            Window {
-                title: "Gone".into(),
-                app_id: String::new(),
-                desk: (10, 10, 1, 1),
-            },
-        ];
+    fn monitors_are_found_in_the_shots_pixels_and_described() {
+        let described = |name: &str| (name == "drm-1").then(|| "Dell U3219Q".to_string());
 
-        let (monitors, windows) = areas((0, -1, 3, 2), 2.0, &screens(), &windows);
+        let monitors = monitors((0, -1, 3, 2), 2.0, &screens(), described);
 
-        let at = |x, y, width, height| ShotRect {
-            x,
-            y,
-            width,
-            height,
-        };
-        let monitor = |name: &str, area| ShotArea {
+        let at = |name: &str, description: &str, x, y, width, height| ShotArea {
             name: name.into(),
-            area,
+            description: description.into(),
+            area: ShotRect {
+                x,
+                y,
+                width,
+                height,
+            },
         };
         assert_eq!(
             monitors,
             [
-                monitor("drm-1", at(0, 2, 4, 2)),
-                monitor("drm-2", at(4, 0, 2, 2))
+                at("drm-1", "Dell U3219Q", 0, 2, 4, 2),
+                at("drm-2", "", 4, 0, 2, 2)
             ]
-        );
-        assert_eq!(
-            windows,
-            [ShotWindow {
-                title: "Half off".into(),
-                app_id: "kitty".into(),
-                area: at(0, 2, 2, 2),
-            }]
         );
     }
 }
