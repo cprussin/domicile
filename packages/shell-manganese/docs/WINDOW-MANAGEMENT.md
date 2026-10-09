@@ -152,6 +152,8 @@ For how warping, browser-window focus and modifier drags work, see
 - The strip has a rounded top and an edge. Its bottom edge is the window's top
   edge; the open tab breaks it to join its window.
 - Tabs are at most 240px wide, so the strip always runs on past the last one.
+- A "+" past a tabbed strip's last tab focuses the strip's open tab and opens
+  the launcher, so the launched window opens as a tab beside it.
 - A hidden tab shows only its close button. Dividers separate hidden tabs.
 - A tab for a nested container shows the name of its last-focused window, an
   icon for its layout and its window count.

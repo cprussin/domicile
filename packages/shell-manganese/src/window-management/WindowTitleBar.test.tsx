@@ -36,6 +36,7 @@ const tabProps = {
   onGrab: nothing,
   onMotionEnded: nothing,
   onMove: nothing,
+  onNewTab: nothing,
   rect: TAB,
   strip: {
     at: 0,

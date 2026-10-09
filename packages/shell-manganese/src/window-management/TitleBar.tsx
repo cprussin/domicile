@@ -3,6 +3,7 @@ import { AppWindowIcon } from "@phosphor-icons/react/dist/ssr/AppWindow";
 import { BrowsersIcon } from "@phosphor-icons/react/dist/ssr/Browsers";
 import { CornersInIcon } from "@phosphor-icons/react/dist/ssr/CornersIn";
 import { CornersOutIcon } from "@phosphor-icons/react/dist/ssr/CornersOut";
+import { PlusIcon } from "@phosphor-icons/react/dist/ssr/Plus";
 import { RowsIcon } from "@phosphor-icons/react/dist/ssr/Rows";
 import { SquareSplitHorizontalIcon } from "@phosphor-icons/react/dist/ssr/SquareSplitHorizontal";
 import { SquareSplitVerticalIcon } from "@phosphor-icons/react/dist/ssr/SquareSplitVertical";
@@ -102,6 +103,10 @@ type Props = {
   onContextMenu?: ((event: { preventDefault: () => void }) => void) | undefined;
   /** A middle click, which closes the window as a browser closes a tab. */
   onMiddleClick?: (() => void) | undefined;
+  /**
+   * The new-tab button at the end of a tabbed strip, drawn past its last tab.
+   */
+  onNewTab?: (() => void) | undefined;
   /** A press on the bar, which starts a drag or selects a tab's window. */
   onPointerDown?: ((event: ReactPointerEvent<HTMLElement>) => void) | undefined;
   rect: Rect;
@@ -151,6 +156,7 @@ export const TitleBar = ({
   onFullscreen,
   onMiddleClick,
   onMotionEnded,
+  onNewTab,
   onPointerDown,
   rect,
   restack,
@@ -307,6 +313,19 @@ export const TitleBar = ({
           </Button>
         </span>
       </div>
+      {strip?.rest !== undefined && onNewTab !== undefined && (
+        // A press here must not select or drag the last tab.
+        <span
+          className={newTabStyles}
+          onPointerDown={(event) => {
+            event.stopPropagation();
+          }}
+        >
+          <Button label="New tab" onClick={onNewTab} size="xs" variant="ghost">
+            <PlusIcon size={12} />
+          </Button>
+        </span>
+      )}
     </div>
   );
 };
@@ -649,6 +668,18 @@ const barStyles = cva({
 const topCornerStyles = css({
   borderStartEndRadius: "lg",
   borderStartStartRadius: "lg",
+});
+
+/**
+ * The new-tab button's place: in the strip past the last tab, at its start.
+ * The strip always runs on at least `STRIP_END` there, which fits the button.
+ */
+const newTabStyles = hstack({
+  insetBlockEnd: "1px",
+  insetBlockStart: 1,
+  insetInlineStart: "100%",
+  paddingInlineStart: 0.5,
+  position: "absolute",
 });
 
 // No gap: each button is already padded, and together they read as a group.
