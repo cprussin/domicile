@@ -159,7 +159,7 @@ rm -f "$ENGINE_LOG"
   --domicile-shell-module="guard-webview-content-script.js" \
   --disable-features=DisableLoadExtensionCommandLineSwitch \
   ${EXTENSION_FLAG[@]+"${EXTENSION_FLAG[@]}"} \
-  --no-sandbox --password-store=basic --no-first-run \
+  --no-sandbox --password-store=basic --no-first-run --disable-component-update \
   --user-data-dir="$PROFILE" \
   --window-size="$WIDTH,$HEIGHT" \
   --enable-logging=stderr --log-level=0 \

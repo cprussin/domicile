@@ -10,6 +10,11 @@ A headless guard's compositor stand-in (`*-compositor.py`,
 like the real compositor. `/scripts/test-the-guard-stand-ins-wait-for-hello.sh`
 checks this.
 
+Every guard and spike starts Chrome with `--disable-component-update`.
+Otherwise Chrome downloads components into `$TMPDIR`, and a guard stops it
+before the download finishes, leaving 85-195M per run in the runner's tmpfs
+`/tmp`. `/scripts/test-the-guards-disable-component-updates.sh` checks this.
+
 CI runs them through `/scripts/engine-guard-*.sh`. Run one by hand inside the
 toolchain shell ([BUILD-MACHINE.md](BUILD-MACHINE.md#toolchain-shell)).
 

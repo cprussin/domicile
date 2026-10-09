@@ -119,7 +119,7 @@ rm -f "$ENGINE_LOG"
   --app="domicile://shell/?src=$SITE/camera&answer=$ANSWER" \
   --domicile-shell-root="$SCRIPTS" \
   --domicile-shell-module="guard-webview-permissions.js" \
-  --no-sandbox --password-store=basic --no-first-run \
+  --no-sandbox --password-store=basic --no-first-run --disable-component-update \
   --user-data-dir="$PROFILE" \
   --window-size="$WIDTH,$HEIGHT" \
   --enable-logging=stderr --log-level=0 \

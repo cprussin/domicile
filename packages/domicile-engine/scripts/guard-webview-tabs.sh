@@ -163,7 +163,7 @@ rm -f "$ENGINE_LOG"
   --domicile-shell-root="$SCRIPTS" \
   --domicile-shell-module="guard-webview-tabs.js" \
   --domicile-control-socket="$CONTROL" \
-  --no-sandbox --password-store=basic --no-first-run \
+  --no-sandbox --password-store=basic --no-first-run --disable-component-update \
   --user-data-dir="$PROFILE" \
   --enable-logging=stderr --log-level=0 \
   --domicile-broker-socket="$BROKER" >"$ENGINE_LOG" 2>&1 &

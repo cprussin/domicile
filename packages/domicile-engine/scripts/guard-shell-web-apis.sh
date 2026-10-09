@@ -95,7 +95,7 @@ measure() { # $1 which run, $2 what it reads, $3 1 to paint unasked
     --app="domicile://shell/?$query" \
     --domicile-shell-root="$SCRIPTS" \
     --domicile-shell-module="guard-shell-web-apis.js" \
-    --no-sandbox --password-store=basic --no-first-run \
+    --no-sandbox --password-store=basic --no-first-run --disable-component-update \
     --user-data-dir="$PROFILE" \
     --window-size="$WIDTH,$HEIGHT" \
     --enable-logging=stderr --log-level=0 \

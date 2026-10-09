@@ -118,7 +118,7 @@ rm -f "$ENGINE_LOG"
   --domicile-shell-module="guard-app-routes-input.js" \
   --domicile-control-socket="$CONTROL" \
   --remote-debugging-port=0 \
-  --no-sandbox --password-store=basic --no-first-run \
+  --no-sandbox --password-store=basic --no-first-run --disable-component-update \
   --user-data-dir="$PROFILE" \
   --window-size=1024,768 \
   --enable-logging=stderr --log-level=0 \

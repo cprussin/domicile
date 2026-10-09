@@ -112,7 +112,7 @@ rm -f "$BROKER"; rm -rf "$PROFILE"; mkdir -p "$PROFILE"
 # dmabuf import needs a GPU.
 "$OUT/chrome" \
   --ozone-platform=wayland \
-  --no-sandbox --password-store=basic --no-first-run \
+  --no-sandbox --password-store=basic --no-first-run --disable-component-update \
   --user-data-dir="$PROFILE" \
   --window-size=1024,768 \
   --enable-blink-features=DomicileExternalSurface \
