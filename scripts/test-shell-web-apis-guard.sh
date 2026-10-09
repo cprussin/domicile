@@ -58,7 +58,7 @@ says() { # $1 MEASURED, $2 what the failure must contain
 echo "the claim — the shell asking about notifications and reading /cors"
 expect "found is a pass" "pass" "$(verdict "granted 0")"
 expect "absent is a failure" "fail" "$(verdict "granted 1")"
-expect "absent names the patch" "yes" "$(says "granted 1" "0068")"
+expect "absent names the patch" "yes" "$(says "granted 1" "0105")"
 expect "and the fetch" "yes" "$(says "granted 1" "/cors")"
 expect "nothing drawn is a failure" "fail" "$(verdict "granted 2")"
 expect "nothing drawn blames the harness" "yes" "$(says "granted 2" "harness")"
