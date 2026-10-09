@@ -113,7 +113,7 @@ measure() { # $1 which run, $2 the URL to open
     --app="$url" \
     --domicile-shell-root="$SCRIPTS" \
     --domicile-shell-module="guard-webview-framing.js" \
-    --no-sandbox --password-store=basic --no-first-run \
+    --no-sandbox --password-store=basic --no-first-run --disable-component-update \
     --user-data-dir="$PROFILE" \
     --window-size="$WIDTH,$HEIGHT" \
     --enable-logging=stderr --log-level=0 \

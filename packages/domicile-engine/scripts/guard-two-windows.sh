@@ -115,7 +115,7 @@ rm -f "$BROKER"; rm -rf "$PROFILE"; mkdir -p "$PROFILE"
 
 "$OUT/chrome" \
   --ozone-platform=wayland \
-  --no-sandbox --password-store=basic --no-first-run \
+  --no-sandbox --password-store=basic --no-first-run --disable-component-update \
   --user-data-dir="$PROFILE" \
   --window-size="$WIDTH,$HEIGHT" \
   --enable-blink-features=DomicileExternalSurface \

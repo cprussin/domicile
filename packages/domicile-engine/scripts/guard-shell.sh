@@ -169,7 +169,7 @@ rm -rf "$PROFILE"; mkdir -p "$PROFILE"
   --domicile-shell-root="$PAGE_DIR" \
   --domicile-shell-module="$(basename "$MODULE")" \
   --domicile-control-socket="$COMP_SOCK" \
-  --no-sandbox --password-store=basic --no-first-run \
+  --no-sandbox --password-store=basic --no-first-run --disable-component-update \
   --user-data-dir="$PROFILE" \
   --window-size="$WIDTH,$HEIGHT" \
   --enable-blink-features=DomicileExternalSurface \

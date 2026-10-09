@@ -139,7 +139,7 @@ wait_for_line() { # $1 tries, $2 pattern, $3 file
   --domicile-shell-module=load-1.js \
   --domicile-control-socket="$COMP_SOCK" \
   --domicile-command-socket="$COMMAND" \
-  --no-sandbox --password-store=basic --no-first-run \
+  --no-sandbox --password-store=basic --no-first-run --disable-component-update \
   --user-data-dir="$PROFILE" \
   --window-size=1024,768 \
   --enable-blink-features=DomicileExternalSurface \

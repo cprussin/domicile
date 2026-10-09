@@ -216,7 +216,7 @@ env "$(compositor_env)" WAYLAND_DEBUG=1 "$CHROMIUM/$OUT/chrome" \
   --domicile-shell-root="$SCRIPTS" \
   --domicile-shell-module="guard-shortcuts-inhibitor.js" \
   "${SWITCH[@]}" \
-  --no-sandbox --password-store=basic --no-first-run \
+  --no-sandbox --password-store=basic --no-first-run --disable-component-update \
   --user-data-dir="$PROFILE" \
   --window-size="$WIDTH,$HEIGHT" \
   --enable-logging=stderr --log-level=0 \

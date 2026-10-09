@@ -101,7 +101,7 @@ measure() { # $1 which run, $2 the permission the page asks about
     --app="domicile://shell/?witness=$WITNESS&src=$page" \
     --domicile-shell-root="$SCRIPTS" \
     --domicile-shell-module="guard-webview-notifications.js" \
-    --no-sandbox --password-store=basic --no-first-run \
+    --no-sandbox --password-store=basic --no-first-run --disable-component-update \
     --user-data-dir="$PROFILE" \
     --window-size="$WIDTH,$HEIGHT" \
     --enable-logging=stderr --log-level=0 \

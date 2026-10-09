@@ -153,7 +153,7 @@ rm -f "$ENGINE_LOG"
   --domicile-shell-root="$SCRIPTS" \
   --domicile-shell-module="guard-extension-installer.js" \
   --domicile-control-socket="$CONTROL" \
-  --no-sandbox --password-store=basic --no-first-run \
+  --no-sandbox --password-store=basic --no-first-run --disable-component-update \
   --user-data-dir="$PROFILE" \
   --window-size="$WIDTH,$HEIGHT" \
   --enable-logging=stderr --log-level=0 \
