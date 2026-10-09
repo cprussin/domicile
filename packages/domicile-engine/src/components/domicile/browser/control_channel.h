@@ -203,6 +203,10 @@ class ControlChannel : public mojom::ControlChannel {
   std::string write_buffer_;
   size_t write_offset_ = 0;
 
+  // The page's lines that arrived before its SetClient, in order. Filled only
+  // until then, since `client_` stays bound after it.
+  std::vector<std::string> held_;
+
   scoped_refptr<net::IOBuffer> read_buffer_;
   LineFramer framer_;
 
