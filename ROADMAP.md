@@ -430,9 +430,6 @@ Understood and not scheduled.
   right click and sends `Activate` on left click. Items that set `ItemIsMenu`
   expect left click to open the menu, but `TrayItem` does not carry it; adding
   it changes the protocol, the compositor and the engine's IDL.
-- **Tray menus draw no icons or mnemonics.** `@domicile-desktop/sdk/dbusmenu`
-  parses `icon-name` and the access key; manganese draws neither.
-  [SYSTEM-TRAY.md](docs/architecture/SYSTEM-TRAY.md).
 
 ### Shell reload
 

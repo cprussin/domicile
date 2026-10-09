@@ -35,10 +35,11 @@ const recorded = (label: string): DbusBody => ({
         }),
         child(2, {
           enabled: { signature: "b", value: false },
-          label: { signature: "s", value: "Save__As" },
+          label: { signature: "s", value: "Save__As _Copy" },
         }),
         child(3, { type: { signature: "s", value: "separator" } }),
         child(4, {
+          "icon-data": { signature: "ay", value: [137, 80, 78, 71] },
           "icon-name": { signature: "s", value: "audio-volume-muted" },
           label: { signature: "s", value: "Mute" },
           "toggle-state": { signature: "i", value: 1 },
@@ -74,11 +75,12 @@ const recorded = (label: string): DbusBody => ({
 });
 
 /** What {@link recorded} reads as, with its first item labeled `label`. */
-const parsed = (label: string, mnemonic: string): readonly MenuEntry[] => [
+const parsed = (label: string, mnemonic: number): readonly MenuEntry[] => [
   Entry.Item({
     enabled: true,
     icon: undefined,
     id: 1,
+    image: undefined,
     label,
     mnemonic,
     submenu: undefined,
@@ -88,8 +90,9 @@ const parsed = (label: string, mnemonic: string): readonly MenuEntry[] => [
     enabled: false,
     icon: undefined,
     id: 2,
-    label: "Save_As",
-    mnemonic: undefined,
+    image: undefined,
+    label: "Save_As Copy",
+    mnemonic: 8,
     submenu: undefined,
     toggle: undefined,
   }),
@@ -98,6 +101,7 @@ const parsed = (label: string, mnemonic: string): readonly MenuEntry[] => [
     enabled: true,
     icon: "audio-volume-muted",
     id: 4,
+    image: "data:image/png;base64,iVBORw==",
     label: "Mute",
     mnemonic: undefined,
     submenu: undefined,
@@ -107,13 +111,15 @@ const parsed = (label: string, mnemonic: string): readonly MenuEntry[] => [
     enabled: true,
     icon: undefined,
     id: 5,
+    image: undefined,
     label: "Quality",
-    mnemonic: "Q",
+    mnemonic: 0,
     submenu: [
       Entry.Item({
         enabled: true,
         icon: undefined,
         id: 6,
+        image: undefined,
         label: "High",
         mnemonic: undefined,
         submenu: undefined,
@@ -123,6 +129,7 @@ const parsed = (label: string, mnemonic: string): readonly MenuEntry[] => [
         enabled: true,
         icon: undefined,
         id: 7,
+        image: undefined,
         label: "Low",
         mnemonic: undefined,
         submenu: undefined,
@@ -262,7 +269,7 @@ describe("watchMenu", () => {
 
       const menu = watchMenu(bus.system, MENU, heard.on);
 
-      expect(await heard.next()).toStrictEqual(Ok(parsed("Open", "O")));
+      expect(await heard.next()).toStrictEqual(Ok(parsed("Open", 0)));
       expect(bus.calls).toStrictEqual([GET_LAYOUT]);
       expect(bus.matches).toStrictEqual([
         {
@@ -287,7 +294,7 @@ describe("watchMenu", () => {
 
       expect(await heard.next()).toStrictEqual(Err(unknown));
       await bus.send(signal("LayoutUpdated", [8, 0]));
-      expect(await heard.next()).toStrictEqual(Ok(parsed("Open", "O")));
+      expect(await heard.next()).toStrictEqual(Ok(parsed("Open", 0)));
       menu.stop();
     });
 
@@ -314,9 +321,9 @@ describe("watchMenu", () => {
       await heard.next();
 
       await bus.send(signal("LayoutUpdated", [8, 0]));
-      expect(await heard.next()).toStrictEqual(Ok(parsed("Close", "C")));
+      expect(await heard.next()).toStrictEqual(Ok(parsed("Close", 0)));
       await bus.send(signal("ItemsPropertiesUpdated", [[], []]));
-      expect(await heard.next()).toStrictEqual(Ok(parsed("Open", "O")));
+      expect(await heard.next()).toStrictEqual(Ok(parsed("Open", 0)));
       menu.stop();
     });
 
@@ -329,7 +336,7 @@ describe("watchMenu", () => {
 
       await bus.send(signal("ItemActivationRequested", [1, 0]));
       await bus.send(signal("LayoutUpdated", [8, 0]));
-      expect(await heard.next()).toStrictEqual(Ok(parsed("Close", "C")));
+      expect(await heard.next()).toStrictEqual(Ok(parsed("Close", 0)));
       expect(bus.calls).toHaveLength(2);
       menu.stop();
     });
@@ -404,7 +411,7 @@ describe("watchMenu", () => {
         path: MENU.path,
         signature: "i",
       });
-      expect(await heard.next()).toStrictEqual(Ok(parsed("Close", "C")));
+      expect(await heard.next()).toStrictEqual(Ok(parsed("Close", 0)));
       menu.stop();
     });
 

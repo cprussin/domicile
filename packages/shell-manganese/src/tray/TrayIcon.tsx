@@ -9,7 +9,9 @@ import { useState } from "react";
 
 import { css } from "../../styled-system/css";
 import { center } from "../../styled-system/patterns";
+import { menuIcons } from "./menu-icons";
 import { TrayMenu } from "./TrayMenu";
+import { useMenuIcons } from "./useMenuIcons";
 import { useTrayMenu } from "./useTrayMenu";
 
 /** The middle button, as `MouseEvent.button` numbers it. */
@@ -22,6 +24,8 @@ type Props = {
   item: DomicileTrayItem;
   /** Injectable so tests can answer for the application's menu. */
   watch?: typeof watchMenu | undefined;
+  /** Injectable so tests can answer for the menu's icons. */
+  icons?: typeof menuIcons | undefined;
 };
 
 /**
@@ -37,12 +41,14 @@ type Props = {
  */
 export const TrayIcon = ({
   domicile,
+  icons = menuIcons,
   item: { bus, icon, id, menu, title },
   watch = watchMenu,
 }: Props) => {
   // Where the open menu hangs from, or `undefined` while it is closed.
   const [at, setAt] = useState<Point | undefined>(undefined);
   const opened = useTrayMenu(domicile, bus, menu, at !== undefined, watch);
+  const pictures = useMenuIcons(domicile, opened?.menu, icons);
   return (
     <>
       <Button
@@ -82,6 +88,7 @@ export const TrayIcon = ({
       {at !== undefined && opened !== undefined && (
         <TrayMenu
           at={at}
+          icons={pictures}
           label={title}
           menu={opened.menu}
           onClick={opened.click}

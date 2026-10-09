@@ -1,3 +1,7 @@
+import { ClockCounterClockwiseIcon } from "@phosphor-icons/react/dist/ssr/ClockCounterClockwise";
+import { FloppyDiskIcon } from "@phosphor-icons/react/dist/ssr/FloppyDisk";
+import { FolderOpenIcon } from "@phosphor-icons/react/dist/ssr/FolderOpen";
+import { SignOutIcon } from "@phosphor-icons/react/dist/ssr/SignOut";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
 import { ContextMenu as ContextMenuComponent } from "./ContextMenu";
@@ -93,6 +97,50 @@ export const TogglesAndSubmenu: StoryObj<typeof ContextMenuComponent> = {
       </>
     ),
     label: "Player",
+    open: true,
+  },
+};
+
+/**
+ * Labels line up whether or not an item has an icon. Each underlined letter
+ * chooses its item, or opens its submenu.
+ */
+export const IconsAndMnemonics: StoryObj<typeof ContextMenuComponent> = {
+  args: {
+    at: { x: 120, y: 80 },
+    children: (
+      <>
+        <ContextMenuComponent.Item icon={<FolderOpenIcon />} mnemonic={0}>
+          Open
+        </ContextMenuComponent.Item>
+        <ContextMenuComponent.Item icon={<FloppyDiskIcon />} mnemonic={0}>
+          Save
+        </ContextMenuComponent.Item>
+        <ContextMenuComponent.Item mnemonic={5}>
+          Save As
+        </ContextMenuComponent.Item>
+        <ContextMenuComponent.CheckboxItem checked mnemonic={1}>
+          Auto save
+        </ContextMenuComponent.CheckboxItem>
+        <ContextMenuComponent.Submenu
+          icon={<ClockCounterClockwiseIcon />}
+          label="Recent"
+          mnemonic={0}
+        >
+          <ContextMenuComponent.Item mnemonic={0}>
+            notes.txt
+          </ContextMenuComponent.Item>
+          <ContextMenuComponent.Item mnemonic={0}>
+            todo.txt
+          </ContextMenuComponent.Item>
+        </ContextMenuComponent.Submenu>
+        <ContextMenuComponent.Separator />
+        <ContextMenuComponent.Item icon={<SignOutIcon />} mnemonic={0}>
+          Quit
+        </ContextMenuComponent.Item>
+      </>
+    ),
+    label: "File",
     open: true,
   },
 };

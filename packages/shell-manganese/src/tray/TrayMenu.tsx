@@ -4,6 +4,7 @@ import { ContextMenu } from "@domicile-desktop/component-library/ContextMenu";
 import type { MenuEntry, MenuItem } from "@domicile-desktop/sdk/dbusmenu";
 import { MenuEntryKind, ToggleKind } from "@domicile-desktop/sdk/dbusmenu";
 import type { SystemError } from "@domicile-desktop/sdk/system";
+import type { ReactNode } from "react";
 
 type Requests = {
   /** Activate the item `id`. */
@@ -15,6 +16,8 @@ type Requests = {
 type Props = Requests & {
   /** Where the menu's corner goes, in the viewport's CSS pixels. */
   at: Point;
+  /** The theme's pictures for the menu's icon names. */
+  icons: ReadonlyMap<string, string>;
   /** The tray icon's title. */
   label: string;
   /** What the application's menu holds. */
@@ -26,9 +29,13 @@ type Props = Requests & {
 /**
  * A tray icon's `com.canonical.dbusmenu` menu. A menu that cannot be read
  * shows one disabled entry saying so.
+ *
+ * An entry's icon is the theme's for its name, else the application's own
+ * picture. Its mnemonic is underlined, and its key chooses it.
  */
 export const TrayMenu = ({
   at,
+  icons,
   label,
   menu,
   onClick,
@@ -48,15 +55,23 @@ export const TrayMenu = ({
     {menu.match({
       Err: () => <ContextMenu.Item disabled>Menu unavailable</ContextMenu.Item>,
       Ok: (entries) => (
-        <Entries entries={entries} onClick={onClick} onShow={onShow} />
+        <Entries
+          entries={entries}
+          icons={icons}
+          onClick={onClick}
+          onShow={onShow}
+        />
       ),
     })}
   </ContextMenu>
 );
 
-type EntriesProps = Requests & { entries: readonly MenuEntry[] };
+type EntriesProps = Requests & {
+  entries: readonly MenuEntry[];
+  icons: ReadonlyMap<string, string>;
+};
 
-const Entries = ({ entries, onClick, onShow }: EntriesProps) =>
+const Entries = ({ entries, icons, onClick, onShow }: EntriesProps) =>
   entries.map((entry) => {
     switch (entry.kind) {
       case MenuEntryKind.Separator: {
@@ -64,30 +79,46 @@ const Entries = ({ entries, onClick, onShow }: EntriesProps) =>
       }
       case MenuEntryKind.Item: {
         return (
-          <Item item={entry} key={entry.id} onClick={onClick} onShow={onShow} />
+          <Item
+            icons={icons}
+            item={entry}
+            key={entry.id}
+            onClick={onClick}
+            onShow={onShow}
+          />
         );
       }
     }
   });
 
-type ItemProps = Requests & { item: MenuItem };
+type ItemProps = Requests & {
+  icons: ReadonlyMap<string, string>;
+  item: MenuItem;
+};
 
 /** An item, a submenu, a check box or a radio item. */
-const Item = ({ item, onClick, onShow }: ItemProps) => {
+const Item = ({ icons, item, onClick, onShow }: ItemProps) => {
   if (item.submenu === undefined) {
-    return <Leaf item={item} onClick={onClick} />;
+    return <Leaf icons={icons} item={item} onClick={onClick} />;
   } else {
     return (
       <ContextMenu.Submenu
         disabled={!item.enabled}
+        icon={picture(icons, item)}
         label={item.label}
+        mnemonic={item.mnemonic}
         onOpenChange={(open) => {
           if (open) {
             onShow(item.id);
           }
         }}
       >
-        <Entries entries={item.submenu} onClick={onClick} onShow={onShow} />
+        <Entries
+          entries={item.submenu}
+          icons={icons}
+          onClick={onClick}
+          onShow={onShow}
+        />
       </ContextMenu.Submenu>
     );
   }
@@ -98,28 +129,27 @@ const Item = ({ item, onClick, onShow }: ItemProps) => {
  * sends the new state, so a toggle shows `checked` as read. Each radio item is
  * its own group: dbusmenu does not group them.
  */
-const Leaf = ({ item, onClick }: Omit<ItemProps, "onShow">) => {
-  const click = () => {
-    onClick(item.id);
+const Leaf = ({ icons, item, onClick }: Omit<ItemProps, "onShow">) => {
+  const shared = {
+    children: item.label,
+    disabled: !item.enabled,
+    icon: picture(icons, item),
+    mnemonic: item.mnemonic,
+    onClick: () => {
+      onClick(item.id);
+    },
   };
   switch (item.toggle?.kind) {
     case undefined: {
-      return (
-        <ContextMenu.Item disabled={!item.enabled} onClick={click}>
-          {item.label}
-        </ContextMenu.Item>
-      );
+      return <ContextMenu.Item {...shared} />;
     }
     case ToggleKind.Checkmark: {
       return (
         <ContextMenu.CheckboxItem
           checked={item.toggle.checked}
           closeOnClick
-          disabled={!item.enabled}
-          onClick={click}
-        >
-          {item.label}
-        </ContextMenu.CheckboxItem>
+          {...shared}
+        />
       );
     }
     case ToggleKind.Radio: {
@@ -127,16 +157,19 @@ const Leaf = ({ item, onClick }: Omit<ItemProps, "onShow">) => {
         <ContextMenu.RadioGroup
           value={item.toggle.checked ? item.id : undefined}
         >
-          <ContextMenu.RadioItem
-            closeOnClick
-            disabled={!item.enabled}
-            onClick={click}
-            value={item.id}
-          >
-            {item.label}
-          </ContextMenu.RadioItem>
+          <ContextMenu.RadioItem closeOnClick value={item.id} {...shared} />
         </ContextMenu.RadioGroup>
       );
     }
   }
+};
+
+/** `item`'s icon: the theme's for its name, else the application's picture. */
+const picture = (
+  icons: ReadonlyMap<string, string>,
+  item: MenuItem,
+): ReactNode => {
+  const src =
+    (item.icon === undefined ? undefined : icons.get(item.icon)) ?? item.image;
+  return src === undefined ? undefined : <img alt="" src={src} />;
 };

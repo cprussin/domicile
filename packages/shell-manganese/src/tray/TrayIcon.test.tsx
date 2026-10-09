@@ -1,6 +1,6 @@
 import { describe, expect, it, spyOn } from "bun:test";
 import type { Result } from "@cprussin/option-result";
-import { Err, Ok } from "@cprussin/option-result";
+import { Err, None, Ok, Some } from "@cprussin/option-result";
 import type { MenuEntry, watchMenu } from "@domicile-desktop/sdk/dbusmenu";
 import { MenuEntry as Entry, ToggleKind } from "@domicile-desktop/sdk/dbusmenu";
 import type {
@@ -10,9 +10,16 @@ import type {
 import type { SystemError } from "@domicile-desktop/sdk/system";
 import { SystemErrorKind } from "@domicile-desktop/sdk/system";
 import type { TrayAction } from "@domicile-desktop/sdk/tray";
-import { fireEvent, render, screen } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+import type { menuIcons } from "./menu-icons";
 import { TrayIcon } from "./TrayIcon";
 
 /** An application with an image and a menu. */
@@ -42,6 +49,7 @@ const item = (
     enabled: true,
     icon: undefined,
     id,
+    image: undefined,
     label,
     mnemonic: undefined,
     submenu: undefined,
@@ -134,9 +142,32 @@ const iconOf = (shown: DomicileTrayItem, watch?: typeof watchMenu) => {
   return click;
 };
 
+/** A theme with `pictures`, by icon name. */
+const themed =
+  (pictures: Readonly<Record<string, string>>): typeof menuIcons =>
+  () =>
+    Promise.resolve(
+      Ok((name: string) => {
+        const picture = pictures[name];
+        return Promise.resolve(
+          Ok(picture === undefined ? None<string>() : Some(picture)),
+        );
+      }),
+    );
+
 /** Opens {@link network}'s menu with the secondary button. */
-const openMenu = async (watch: typeof watchMenu) => {
-  render(<TrayIcon domicile={NO_DOMICILE} item={network} watch={watch} />);
+const openMenu = async (
+  watch: typeof watchMenu,
+  icons: typeof menuIcons = themed({}),
+) => {
+  render(
+    <TrayIcon
+      domicile={NO_DOMICILE}
+      icons={icons}
+      item={network}
+      watch={watch}
+    />,
+  );
   fireEvent.contextMenu(screen.getByRole("button", { name: network.title }));
   return await screen.findByRole("menu", { name: network.title });
 };
@@ -260,6 +291,78 @@ describe("TrayIcon", () => {
       expect(
         screen.getByRole("menuitemradio", { name: "Automatic" }),
       ).toHaveAttribute("aria-checked", "false");
+      expect(asked).toContainEqual(["aboutToShow", 5]);
+    });
+
+    it("draws entries' icons: the theme's by name, else the application's picture", async () => {
+      const picture = "data:image/png;base64,cGljdHVyZQ==";
+      const wired = "data:image/png;base64,d2lyZWQ=";
+      const { watch } = watching(
+        Ok([
+          item(1, "Wired", { icon: "network-wired", image: picture }),
+          item(2, "Mute", { icon: "not-installed", image: picture }),
+          item(3, "Quit"),
+        ]),
+      );
+
+      await openMenu(watch, themed({ "network-wired": wired }));
+
+      const icon = (name: string) =>
+        within(screen.getByRole("menuitem", { name })).queryByRole(
+          "presentation",
+        );
+      await waitFor(() => {
+        expect(icon("Wired")).toHaveAttribute("src", wired);
+      });
+      expect(icon("Mute")).toHaveAttribute("src", picture);
+      expect(icon("Quit")).toBeNull();
+    });
+
+    it("logs icons the desktop refused to read", async () => {
+      const logged = Promise.withResolvers<unknown[]>();
+      spyOn(console, "error").mockImplementationOnce((...args) => {
+        logged.resolve(args);
+      });
+      const { watch } = watching(Ok([item(1, "Mute", { icon: "muted" })]));
+
+      await openMenu(watch, () =>
+        Promise.resolve(
+          Err({ kind: SystemErrorKind.Locked, message: "locked" }),
+        ),
+      );
+
+      expect(await logged.promise).toStrictEqual([
+        "Could not read a tray menu's icons",
+        new Error("could not read the icons: locked"),
+      ]);
+    });
+
+    it("chooses entries and opens submenus by their mnemonics", async () => {
+      const user = userEvent.setup();
+      const { asked, watch } = watching(
+        Ok([
+          item(1, "Open", { mnemonic: 0 }),
+          item(5, "Mode", {
+            mnemonic: 0,
+            submenu: [
+              item(6, "Automatic", {
+                mnemonic: 0,
+                toggle: { checked: false, kind: ToggleKind.Radio },
+              }),
+            ],
+          }),
+        ]),
+      );
+      await openMenu(watch);
+
+      await user.keyboard("m");
+      // The rest of "Automatic", after its underlined letter.
+      await screen.findByText("utomatic");
+      await user.keyboard("a");
+
+      await waitFor(() => {
+        expect(asked).toContainEqual(["click", 6]);
+      });
       expect(asked).toContainEqual(["aboutToShow", 5]);
     });
 

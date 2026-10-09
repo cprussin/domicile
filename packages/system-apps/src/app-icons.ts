@@ -1,8 +1,8 @@
 // Desktop-entry icon names resolved to `data:` URLs, for `Icon` and
 // `X-Domicile-Preview`.
 //
-// Follows the icon theme spec: `icons/hicolor/<size>/apps/<name>.<ext>` under
-// each data directory, then `pixmaps/<name>.<ext>`. Only `hicolor` is
+// Follows the icon theme spec: `icons/hicolor/<size>/<context>/<name>.<ext>`
+// under each data directory, then `pixmaps/<name>.<ext>`. Only `hicolor` is
 // searched: every application installs into it and every theme inherits it.
 
 import type { Option, Result } from "@cprussin/option-result";
@@ -48,8 +48,9 @@ export type IconLookup = (
 type Listed = { dir: string; names: ReadonlySet<string> };
 
 /**
- * Icons under `dataDirs`, highest priority first. An absolute name is read as
- * a file, as the spec allows.
+ * Icons under `dataDirs`, highest priority first, in `contexts` (theme
+ * subdirectories such as `apps` or `status`) in order. An absolute name is
+ * read as a file, as the spec allows.
  *
  * Lists the theme's directories once, on the first lookup, and each name
  * once. Make a new lookup to see newly installed icons.
@@ -57,6 +58,7 @@ type Listed = { dir: string; names: ReadonlySet<string> };
 export const appIcons = (
   system: System,
   dataDirs: readonly string[],
+  contexts: readonly string[] = ["apps"],
 ): IconLookup => {
   let listed: Promise<Result<Listed[], SystemError>> | undefined;
   const looked = new Map<
@@ -66,7 +68,7 @@ export const appIcons = (
   return (name) => {
     const known = looked.get(name);
     if (known === undefined) {
-      listed ??= listings(system, dataDirs);
+      listed ??= listings(system, dataDirs, contexts);
       const lookup = name.startsWith("/")
         ? read(system, name)
         : listed.then((dirs) =>
@@ -84,9 +86,10 @@ export const appIcons = (
 const listings = async (
   system: System,
   dataDirs: readonly string[],
+  contexts: readonly string[],
 ): Promise<Result<Listed[], SystemError>> => {
   const themed = allOk(
-    await Promise.all(dataDirs.map((dir) => themeDirs(system, dir))),
+    await Promise.all(dataDirs.map((dir) => themeDirs(system, dir, contexts))),
   ).map((dirs) => dirs.flat());
   const pixmaps = dataDirs.map((dir) => `${dir}/pixmaps`);
   return themed.andThenAsync(async (dirs) =>
@@ -105,16 +108,19 @@ const listings = async (
   );
 };
 
-/** `hicolor`'s `apps` directories under `dataDir`, by preferred size. */
+/** `hicolor`'s `contexts` directories under `dataDir`, by preferred size. */
 const themeDirs = async (
   system: System,
   dataDir: string,
+  contexts: readonly string[],
 ): Promise<Result<string[], SystemError>> => {
   const theme = `${dataDir}/icons/hicolor`;
   return orAbsent(await system.readDir(theme), []).map((entries) => {
     const sizes = new Set(entries.map((entry) => entry.name));
-    return SIZES.filter((size) => sizes.has(size)).map(
-      (size) => `${theme}/${size}/apps`,
+    return contexts.flatMap((context) =>
+      SIZES.filter((size) => sizes.has(size)).map(
+        (size) => `${theme}/${size}/${context}`,
+      ),
     );
   });
 };

@@ -57,6 +57,25 @@ describe("appIcons", () => {
     );
   });
 
+  it("searches the contexts it is given, in order", async () => {
+    const icon = appIcons(
+      fakeSystem({
+        "/share/icons/hicolor/16x16/status/exit.png": "status",
+        "/share/icons/hicolor/48x48/apps/exit.png": "app",
+        "/share/icons/hicolor/48x48/status/muted.png": "png",
+      }),
+      ["/share"],
+      ["status", "apps"],
+    );
+
+    expect(await icon("exit")).toStrictEqual(
+      found("data:image/png;base64,c3RhdHVz"),
+    );
+    expect(await icon("muted")).toStrictEqual(
+      found("data:image/png;base64,cG5n"),
+    );
+  });
+
   it("reads an absolute icon as that file", async () => {
     const icon = appIcons(fakeSystem({ "/opt/editor/icon.svg": "svg" }), [
       "/share",
