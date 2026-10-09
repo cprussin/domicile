@@ -211,6 +211,8 @@ export const movingStyles = cva({
  * - Colors: always eased; focus follows the pointer, so snapping would
  *   flicker.
  * - Opacity: always eased, so `FocusGlow` fades rather than blinks.
+ * - Strip rest: eases with the box, so the end of a tab strip stays put while
+ *   its last tab moves (see `stripStyles` in `TitleBar`).
  *
  * One recipe because two rules setting `transition` on one element race on
  * Panda's emit order.
@@ -220,7 +222,7 @@ export const settlingStyles = cva({
     dragging: {
       false: {
         transition:
-          "inline-size {durations.fast} {easings.out}, block-size {durations.fast} {easings.out}, inset-block-start {durations.fast} {easings.out}, inset-inline-start {durations.fast} {easings.out}, z-index {durations.fast} {easings.out}, background-color {durations.fast} {easings.out}, border-color {durations.fast} {easings.out}, color {durations.fast} {easings.out}, opacity {durations.fast} {easings.out}",
+          "inline-size {durations.fast} {easings.out}, block-size {durations.fast} {easings.out}, inset-block-start {durations.fast} {easings.out}, inset-inline-start {durations.fast} {easings.out}, z-index {durations.fast} {easings.out}, background-color {durations.fast} {easings.out}, border-color {durations.fast} {easings.out}, color {durations.fast} {easings.out}, opacity {durations.fast} {easings.out}, --strip-rest {durations.fast} {easings.out}",
       },
       true: {
         transition:

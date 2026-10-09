@@ -276,6 +276,19 @@ describe("TitleBar", () => {
       expect(bar(tab({}).container)).not.toHaveAttribute("data-strip-end");
     });
 
+    // A tab opening or closing before the last moves the last tab's slot. The
+    // rest eases with it, so the strip's end stays put.
+    it("eases the strip it runs on along with its own box", () => {
+      const last = bar(tab({ strip: { ...MIDDLE_TAB, rest: 300 } }).container);
+
+      expect(stylesheet.textContent).toMatch(
+        /@property --strip-rest\s*\{[^}]*syntax:\s*['"]<length>['"]/,
+      );
+      expect(globalThis.getComputedStyle(last).transition).toContain(
+        "--strip-rest",
+      );
+    });
+
     it("draws the window's top edge along the strip, broken only by the open tab", () => {
       const line = css({ borderBlockEndWidth: "1px" });
       const overLine = css({ marginBlockEnd: "-1px" });
