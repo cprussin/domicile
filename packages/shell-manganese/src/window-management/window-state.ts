@@ -1118,9 +1118,23 @@ const listBrowsers = (
 // address and title.
 const takeUpBrowser = (
   state: WindowState,
-  { height, id, isPrivate, popupWindow, url, width }: DomicileBrowserWindow,
+  {
+    height,
+    id,
+    isPrivate,
+    popupWindow,
+    title,
+    url,
+    width,
+  }: DomicileBrowserWindow,
 ): WindowState => {
-  const window = Window.Browser(id, url, popupWindow ?? undefined, isPrivate);
+  const window = Window.Browser(
+    id,
+    url,
+    title,
+    popupWindow ?? undefined,
+    isPrivate,
+  );
   if (windowOf(state, window.id) !== undefined) {
     return {
       ...state,
