@@ -14,7 +14,7 @@ use std::ffi::{OsStr, OsString};
 use std::io::{BufRead, BufReader, Write};
 use std::os::fd::OwnedFd;
 use std::os::unix::net::{UnixListener, UnixStream};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::mpsc;
@@ -1402,6 +1402,9 @@ struct DomicileCompositor {
     /// Whether clients start in their own systemd scopes; see
     /// [`crate::app_scope`].
     scope_clients: bool,
+    /// Domicile's own apps, installed with every config's extensions; see
+    /// [`domicile_launch::apps`].
+    apps: Vec<PathBuf>,
     /// Commit count per surface, keyed as [`painted_key`].
     ///
     /// Tells a window that redrew in place from one that did not change. `Look`
@@ -3837,7 +3840,7 @@ impl DomicileCompositor {
             // list.
             let told = {
                 let mut host = self.hub.host.lock().unwrap();
-                hand_over_the_extensions(&mut host, extensions);
+                hand_over_the_extensions(&mut host, extensions, &self.apps);
                 host.describe_extensions()
             };
             self.hub.broadcast(
@@ -6010,15 +6013,18 @@ fn theme_on_the_wire(mode: ThemeMode) -> Theme {
     }
 }
 
-/// Give the host the config's `extensions`, for chromes that connect later.
+/// Give the host the config's `extensions` and Domicile's own `apps`, for
+/// chromes that connect later.
 ///
-/// Paths came from JSON, so they are UTF-8 and `display` is lossless.
-fn hand_over_the_extensions(host: &mut Host, extensions: &ExtensionsConfig) {
+/// Config paths came from JSON, so they are UTF-8 and `display` is lossless.
+/// App paths are under the installation's `libexec`.
+fn hand_over_the_extensions(host: &mut Host, extensions: &ExtensionsConfig, apps: &[PathBuf]) {
     host.set_extensions(
         extensions.web_store.clone(),
         extensions
             .unpacked
             .iter()
+            .chain(apps)
             .map(|path| path.display().to_string())
             .collect(),
     );
@@ -6382,6 +6388,17 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         Some(path) => Config::load(path)?,
         None => Config::default(),
     };
+    // Unreadable apps are fatal for the same reason: `domicile` names the
+    // directory only when it exists.
+    let apps = match &arguments.apps {
+        Some(directory) => domicile_launch::apps::apps_in(directory).map_err(|why| {
+            format!(
+                "cannot list Domicile's apps in {}: {why}",
+                directory.display()
+            )
+        })?,
+        None => Vec::new(),
+    };
 
     let mut event_loop: EventLoop<CalloopData> = EventLoop::try_new()?;
     let display: Display<DomicileCompositor> = Display::new()?;
@@ -6534,7 +6551,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         hand_over_the_keys(&mut host, keys);
         // Extensions, which the browser process installs. See
         // `docs/architecture/EXTENSIONS.md`.
-        hand_over_the_extensions(&mut host, &config.extensions);
+        hand_over_the_extensions(&mut host, &config.extensions, &apps);
         // The theme, so the page paints correctly the first time. Set, not
         // `take_up_the_theme`, since there is nobody to broadcast to yet.
         host.set_theme(theme_on_the_wire(config.theme.mode));
@@ -6787,6 +6804,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         gpu,
         hub,
         scope_clients: arguments.scope_clients,
+        apps,
         content: HashMap::new(),
         toplevels: Vec::new(),
         app_bounds: HashMap::new(),
@@ -7303,10 +7321,10 @@ mod tests {
     use super::{
         announce_open_apps, answer_on_the_connection, answers_keystroke, at, broadcast_closed,
         broadcast_focus_decision, broadcast_focus_request, channel, chrome_connection,
-        client_command, clipboard_of, cursor_shape, freshened, parse_find_colors, to_line,
-        write_responses, Chrome, ChromeHub, ClientRequest, Clipboard, Committer, ConnectionRequest,
-        Handshake, Lock, Offer, Offered, Outbound, Passphrase, Portals, SelectionTarget, Unlocking,
-        BOTH,
+        client_command, clipboard_of, cursor_shape, freshened, hand_over_the_extensions,
+        parse_find_colors, to_line, write_responses, Chrome, ChromeHub, ClientRequest, Clipboard,
+        Committer, ConnectionRequest, Handshake, Lock, Offer, Offered, Outbound, Passphrase,
+        Portals, SelectionTarget, Unlocking, BOTH,
     };
 
     use std::sync::Arc;
@@ -8143,6 +8161,31 @@ mod tests {
     fn nothing_to_look_for_is_nothing_to_look_for() {
         assert!(parse_find_colors("").is_empty());
         assert!(parse_find_colors(";  ;").is_empty());
+    }
+
+    /// Domicile's own apps go to the engine as unpacked extensions after the
+    /// config's, so editing the config never uninstalls them.
+    #[test]
+    fn domicile_s_own_apps_are_installed_with_the_configs_extensions() {
+        let mut host = domicile_host::Host::new();
+        hand_over_the_extensions(
+            &mut host,
+            &domicile_config::ExtensionsConfig {
+                web_store: vec!["ddkjiahejlhfcafbddmgiahcphecmpfh".to_string()],
+                unpacked: vec![std::path::PathBuf::from("/home/u/my-extension")],
+            },
+            &[std::path::PathBuf::from("/d/libexec/domicile/apps/history")],
+        );
+        assert_eq!(
+            host.describe_extensions(),
+            Some(HostMessage::Extensions {
+                web_store: vec!["ddkjiahejlhfcafbddmgiahcphecmpfh".to_string()],
+                unpacked: vec![
+                    "/home/u/my-extension".to_string(),
+                    "/d/libexec/domicile/apps/history".to_string(),
+                ],
+            })
+        );
     }
 
     /// Smithay's selection targets map to the matching engine clipboards. A
