@@ -156,6 +156,8 @@ pub fn engine(
 ///   `libdomicile_engine.so` the compositor `dlopen`s. The compositor removes
 ///   it again for its clients.
 ///
+/// `apps` passes `--apps`, Domicile's own apps for the compositor to install.
+///
 /// `scope_clients` passes `--scope-clients yes`, for a desk that is the login
 /// session.
 #[allow(clippy::too_many_arguments)] // Each from a different part of the run.
@@ -164,6 +166,7 @@ pub fn compositor(
     engine: &Path,
     browser: &Path,
     data: &Path,
+    apps: Option<&Path>,
     runtime: &Runtime,
     config: Option<&Path>,
     scope_clients: bool,
@@ -201,6 +204,10 @@ pub fn compositor(
     if let Some(path) = config {
         args.push("--config".into());
         args.push(path.into());
+    }
+    if let Some(apps) = apps {
+        args.push("--apps".into());
+        args.push(apps.into());
     }
     if scope_clients {
         args.push("--scope-clients".into());

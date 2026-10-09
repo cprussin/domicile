@@ -134,6 +134,13 @@ void ControlChannel::OnConnectFailed() {
 void ControlChannel::SetClient(
     mojo::PendingRemote<mojom::ControlChannelClient> client) {
   client_.Bind(std::move(client));
+  // Swapped out rather than read in place, so the vector is freed and nothing
+  // is held once the page is bound.
+  std::vector<std::string> held;
+  held.swap(held_);
+  for (const std::string& line : held) {
+    DispatchLine(line);
+  }
 }
 
 void ControlChannel::Spawn(const std::vector<std::string>& command) {
@@ -636,9 +643,12 @@ void ControlChannel::DispatchLine(const std::string& line) {
     return;
   }
 
-  // Everything below is relayed to the page, so there is nowhere to put it
-  // until the page has given this channel somewhere.
+  // Everything below is relayed to the page, so it waits for the page to give
+  // this channel somewhere. Until then they are held: the compositor answers
+  // `hello` with the desk's state, and that answer can arrive before the
+  // page's SetClient does. SetClient replays them.
   if (!client_) {
+    held_.push_back(line);
     return;
   }
 
