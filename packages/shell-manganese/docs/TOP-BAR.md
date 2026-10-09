@@ -36,13 +36,13 @@ Every bar and the lock screen share one watch per system readout. See
 - **left**: launcher button, tray, workspaces
 - **middle**: clock
 - **right**: sharing indicator (while recorded), binding mode (when not
-  `default`), theme selector, network, Bluetooth, volume, brightness, battery,
+  `default`), theme selector, brightness, volume, Bluetooth, network, battery,
   notification bell
 
 ## On the lock screen
 
-- The lock screen draws the same bar on every screen, with only Bluetooth,
-  volume, brightness and battery (`LOCK_TOP_BAR`, `src/lock/LockBar.tsx`). The
+- The lock screen draws the same bar on every screen, with only brightness,
+  volume, Bluetooth and battery (`LOCK_TOP_BAR`, `src/lock/LockBar.tsx`). The
   `topBar` option does not change it.
 - Each item offers only what a locked desktop allows
   ([LOCK.md](../../../docs/LOCK.md#lock-screen-readouts)):
