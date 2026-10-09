@@ -16,6 +16,7 @@ import { flex } from "../../styled-system/patterns";
 import { AddressBar } from "./browser/AddressBar";
 import { BrowserCommand, browserCommandFor } from "./browser/browser-command";
 import { FindBar } from "./browser/FindBar";
+import { LinkTarget } from "./browser/LinkTarget";
 import { PageMenu } from "./browser/PageMenu";
 import { choosePageCommand, pageMenuFor } from "./browser/page-menu";
 import { useFileRequest } from "./browser/useFileRequest";
@@ -31,6 +32,7 @@ import { useLoading } from "./useLoading";
 import { usePageIcon } from "./usePageIcon";
 import { useReclaimFocus } from "./useReclaimFocus";
 import { useShownPage } from "./useShownPage";
+import { useTargetUrl } from "./useTargetUrl";
 import { useZoom } from "./useZoom";
 import type { WindowMotion } from "./window-motion";
 import { isLeaving } from "./window-motion";
@@ -189,6 +191,7 @@ export const BrowserWindow = ({
   const { canGoBack, canGoForward } = useHistoryAvailability(view);
   const loading = useLoading(view);
   const zoom = useZoom(view);
+  const targetUrl = useTargetUrl(view);
   // Zoom count; each change re-shows the zoom indicator (see `ZoomIndicator`).
   const [zoomsAnnounced, setZoomsAnnounced] = useState(0);
   // True while `focusOwn` is calling `focus()`. Focus events fire
@@ -538,6 +541,7 @@ export const BrowserWindow = ({
           // See `window`.
           window={window}
         />
+        <LinkTarget url={targetUrl} />
         {finding && (
           <FindBar
             found={found}

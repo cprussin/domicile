@@ -55,6 +55,10 @@
   // `domicile-favicon-change` signals a change.
   readonly attribute USVString favicon;
 
+  // The address of the link under the pointer, for a status bubble. Empty
+  // over no link. `domicile-target-url-change` signals a change.
+  readonly attribute USVString targetUrl;
+
   // Finds `text` and selects the next match, or the previous one if
   // `backward`. Repeating the text finds the next match. Empty text stops
   // finding and clears the selection.

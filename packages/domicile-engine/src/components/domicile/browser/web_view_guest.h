@@ -36,6 +36,7 @@
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "third_party/blink/public/common/input/web_mouse_event.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/choosers/file_chooser.mojom-forward.h"
 #include "third_party/blink/public/mojom/favicon/favicon_url.mojom-forward.h"
@@ -342,6 +343,10 @@ class WebViewGuest : public mojom::WebViewGuest,
                             mojom::WebViewContextMenuAction action) override;
   void Inspect() override;
 
+  // Clears the link under the pointer. PreHandleMouseEvent reports it again
+  // when the pointer is back over the page.
+  void PointerLeft() override;
+
   // Stores the setting through the profile's HostContentSettingsMap, as
   // Chrome's page info does. The change reaches the shell through
   // OnContentSettingChanged.
@@ -400,6 +405,17 @@ class WebViewGuest : public mojom::WebViewGuest,
   // false for same-document navigations. Combined with IsLoading().
   void LoadingStateChanged(content::WebContents* source,
                            bool should_show_loading_ui) override;
+
+  // Reports the link under the pointer, as Chrome's status bubble shows it.
+  // See TargetUrlChanged in the mojom.
+  void UpdateTargetURL(content::WebContents* source, const GURL& url) override;
+
+  // Reports the renderer's last link again when the pointer is back over the
+  // page after PointerLeft, or clears it on a MouseLeave. The renderer reports
+  // no link on leaving, and only changes after: Chrome clears its bubble when
+  // its view sees the mouse exit, and a guest has no view of its own.
+  bool PreHandleMouseEvent(content::WebContents* source,
+                           const blink::WebMouseEvent& event) override;
 
   // Handles a page opening a new window (target="_blank", window.open, ...).
   //
@@ -572,6 +588,9 @@ class WebViewGuest : public mojom::WebViewGuest,
   // report to a fresh guest's values first, so every one is sent.
   void ReportEverything();
 
+  // Sends the link under the pointer to the element if it changed.
+  void ReportTargetUrl(const GURL& url);
+
   // Opens a browser window at `target_url` for a page that asked for one.
   // Never opens an empty window.
   void ReportNewWindow(const GURL& target_url);
@@ -672,6 +691,10 @@ class WebViewGuest : public mojom::WebViewGuest,
       mojom::WebViewSecurity::kNeutral;
   double reported_zoom_ = 1.0;
   GURL reported_favicon_;
+  GURL reported_target_url_;
+  // The renderer's last link, which stays set while the pointer is outside the
+  // page. See PreHandleMouseEvent.
+  GURL renderer_target_url_;
 
   // The current find's text, or empty. Decides whether a Find is the next
   // match or a new search.
