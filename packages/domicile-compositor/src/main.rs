@@ -110,6 +110,7 @@ use smithay::{
 use tracing::{debug, error, info, warn};
 
 mod activation;
+mod app_scope;
 mod casting;
 mod clipboard;
 mod coalesce;
@@ -1398,6 +1399,9 @@ struct DomicileCompositor {
 
     /// State shared with the chrome connection threads.
     hub: Arc<ChromeHub>,
+    /// Whether clients start in their own systemd scopes; see
+    /// [`crate::app_scope`].
+    scope_clients: bool,
     /// Commit count per surface, keyed as [`painted_key`].
     ///
     /// Tells a window that redrew in place from one that did not change. `Look`
@@ -4431,7 +4435,9 @@ impl DomicileCompositor {
                     debug!(%app_id, "bounds: a window with no toplevel");
                 }
             }
-            ClientRequest::Spawn { command } => spawn_client(&command, &self.hub.wayland_display),
+            ClientRequest::Spawn { command } => {
+                spawn_client(&command, &self.hub.wayland_display, self.scope_clients)
+            }
             ClientRequest::CloseApp { app_id } => match self.toplevel_for(&app_id) {
                 Some(toplevel) => {
                     debug!(%app_id, "close -> client");
@@ -5859,11 +5865,13 @@ fn chrome_display(socket_name: &OsStr) -> String {
 /// Spawn a client process onto Domicile's display.
 ///
 /// A reaper thread waits on the child so it doesn't become a zombie.
-fn spawn_client(command: &[String], wayland_display: &OsStr) {
+/// `scoped` starts it in its own systemd scope; see [`crate::app_scope`].
+fn spawn_client(command: &[String], wayland_display: &OsStr, scoped: bool) {
     let Some(mut child) = client_command(
         command,
         wayland_display,
         std::env::var_os("LD_LIBRARY_PATH").as_deref(),
+        scoped.then(app_scope::random),
     ) else {
         return;
     };
@@ -5882,7 +5890,12 @@ fn spawn_client(command: &[String], wayland_display: &OsStr) {
                 let _ = child.wait();
             });
         }
-        Err(err) => tracing::error!(%err, ?command, "failed to spawn client"),
+        Err(err) => tracing::error!(
+            %err,
+            program = ?child.get_program(),
+            ?command,
+            "failed to spawn client"
+        ),
     }
 }
 
@@ -5939,12 +5952,21 @@ fn home_directory() -> Option<std::path::PathBuf> {
 ///
 /// `DOMICILE_SOCK` is inherited unchanged: the launcher sets it to this
 /// desktop's control socket.
+///
+/// With a `scope`, the client starts in its own systemd scope; see
+/// [`app_scope::scoped`].
 fn client_command(
     command: &[String],
     wayland_display: &OsStr,
     library_path: Option<&OsStr>,
+    scope: Option<u64>,
 ) -> Option<Command> {
     let (program, args) = command.split_first()?;
+    let words = match scope {
+        Some(random) => app_scope::scoped(program, args, random),
+        None => command.to_vec(),
+    };
+    let (program, args) = words.split_first().expect("both start with a program");
     let mut child = Command::new(program);
     child.args(args);
     for (name, value) in desktop_environment(wayland_display, library_path) {
@@ -6388,7 +6410,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             notification_server.clone(),
             {
                 let display = socket_name.clone();
-                move |command| spawn_client(command, &display)
+                let scoped = arguments.scope_clients;
+                move |command| spawn_client(command, &display, scoped)
             },
             portals::ScreenCasting {
                 casting: casting::Casting::new(cast_requests.clone()),
@@ -6664,6 +6687,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         dmabuf_global,
         gpu,
         hub,
+        scope_clients: arguments.scope_clients,
         content: HashMap::new(),
         toplevels: Vec::new(),
         app_bounds: HashMap::new(),
@@ -6983,7 +7007,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     // Startup commands, once the desktop is live. Not run on reload; see
     // `StartupConfig`.
     for command in &config.startup.commands {
-        spawn_client(command, &socket_name);
+        spawn_client(command, &socket_name, arguments.scope_clients);
     }
 
     // Flush after every loop iteration so events queued while handling input
@@ -7833,7 +7857,7 @@ mod tests {
         library_path: Option<&OsStr>,
         name: &str,
     ) -> Option<OsString> {
-        client_command(command, OsStr::new(display), library_path)
+        client_command(command, OsStr::new(display), library_path, None)
             .expect("a command with a program builds")
             .get_envs()
             .find(|(key, _)| *key == OsStr::new(name))
@@ -7942,7 +7966,28 @@ mod tests {
 
     #[test]
     fn an_empty_command_spawns_nothing() {
-        assert!(client_command(&[], OsStr::new("wayland-7"), None).is_none());
+        assert!(client_command(&[], OsStr::new("wayland-7"), None, None).is_none());
+    }
+
+    #[test]
+    fn a_scoped_client_keeps_the_desktops_environment() {
+        // `systemd-run --scope` execs the client with its own environment.
+        let child = client_command(&kitty(), OsStr::new("wayland-7"), None, Some(7))
+            .expect("a command with a program builds");
+        assert_eq!(child.get_program(), "systemd-run");
+        assert!(
+            child
+                .get_envs()
+                .any(|pair| pair == (OsStr::new("WAYLAND_DISPLAY"), Some(OsStr::new("wayland-7")))),
+            "{child:?}"
+        );
+    }
+
+    #[test]
+    fn an_unscoped_client_starts_itself() {
+        let child = client_command(&kitty(), OsStr::new("wayland-7"), None, None)
+            .expect("a command with a program builds");
+        assert_eq!(child.get_program(), "kitty");
     }
 
     #[test]

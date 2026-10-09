@@ -526,6 +526,7 @@ fn up(desktop: &Desktop, heard: &Arc<Mutex<Heard>>) -> Result<(), String> {
                 &data_of(desktop.browser)?,
                 desktop.places,
                 desktop.config,
+                desktop.said.scope_clients,
                 desktop.env,
             ),
             heard,
@@ -851,16 +852,48 @@ fn session(session: &Path) -> Milestone {
 /// - Best effort: without a systemd user manager or `domicile-session.target`,
 ///   the portal does not start and a warning is printed. If the launcher is
 ///   killed, its variables remain until the next session sets its own.
+/// - Clients get their own scopes only when a user manager answers, since
+///   `systemd-run --user` fails without one and no app would start.
 struct SaidSession {
     is_the_session: bool,
+    scope_clients: bool,
     manager: Mutex<Option<zbus::blocking::Connection>>,
 }
 
 impl SaidSession {
     fn new(platform: &str) -> Self {
+        let is_the_session = platform == "drm";
         SaidSession {
-            is_the_session: platform == "drm",
+            is_the_session,
+            scope_clients: is_the_session && Self::a_user_manager_answers(),
             manager: Mutex::new(None),
+        }
+    }
+
+    /// Whether `org.freedesktop.systemd1` is on the session bus. Says why on
+    /// stderr when not.
+    fn a_user_manager_answers() -> bool {
+        let answered = notification::session_bus().and_then(|bus| {
+            zbus::blocking::fdo::DBusProxy::new(&bus)?
+                .name_has_owner("org.freedesktop.systemd1".try_into()?)
+                .map_err(zbus::Error::from)
+        });
+        match answered {
+            Ok(true) => true,
+            Ok(false) => {
+                eprintln!(
+                    "domicile: no systemd user manager is on the session bus, so apps share the \
+                     desktop's cgroup"
+                );
+                false
+            }
+            Err(why) => {
+                eprintln!(
+                    "domicile: the session bus did not say whether a user manager runs, so apps \
+                     share the desktop's cgroup: {why}"
+                );
+                false
+            }
         }
     }
 

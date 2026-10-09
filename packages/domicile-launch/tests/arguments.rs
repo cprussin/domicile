@@ -268,3 +268,49 @@ fn a_word_that_is_neither_is_refused() {
         }
     );
 }
+
+/// Clients stay in the compositor's cgroup unless the launcher says the desk is
+/// the session.
+#[test]
+fn clients_are_not_scoped_unless_the_command_line_says_so() {
+    let parsed = parse(the_required_two()).expect("both are there");
+
+    assert!(!parsed.scope_clients);
+}
+
+#[test]
+fn the_session_scopes_its_clients() {
+    let parsed = parse([
+        "--chrome-socket",
+        "/run/chrome.sock",
+        "--session",
+        "/run/session.json",
+        "--scope-clients",
+        "yes",
+    ])
+    .expect("a command line that scopes clients parses");
+
+    assert!(parsed.scope_clients);
+}
+
+/// As with `--expect-a-page`, a typo is refused.
+#[test]
+fn scoping_takes_yes_or_no() {
+    let err = parse([
+        "--chrome-socket",
+        "/run/chrome.sock",
+        "--session",
+        "/run/session.json",
+        "--scope-clients",
+        "on",
+    ])
+    .expect_err("on is neither yes nor no");
+
+    assert_eq!(
+        err,
+        ArgumentError::NotYesOrNo {
+            flag: "--scope-clients",
+            value: "on".to_string(),
+        }
+    );
+}

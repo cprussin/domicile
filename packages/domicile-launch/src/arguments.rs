@@ -31,6 +31,9 @@ pub struct Arguments {
     /// Defaults to [`Expected::APage`] so [`crate::handshake`] can report a
     /// page that never connects. See [`Expected`] for the exceptions.
     pub expect_a_page: Expected,
+    /// Whether to start each client in its own systemd scope. Only a desk that
+    /// is the login session does; see `docs/RUNNING-A-DESKTOP.md`.
+    pub scope_clients: bool,
 }
 
 /// A command line the compositor will not run.
@@ -62,6 +65,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
     let mut config = None;
     let mut engine_socket = None;
     let mut expect_a_page = None;
+    let mut scope_clients = None;
 
     let mut args = args.into_iter();
     let mut seen = Vec::new();
@@ -81,6 +85,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
             CONFIG => &mut config,
             ENGINE_SOCKET => &mut engine_socket,
             EXPECT_A_PAGE => &mut expect_a_page,
+            SCOPE_CLIENTS => &mut scope_clients,
             _ => return Err(ArgumentError::Unknown { argument: flag }),
         };
         let value = match joined {
@@ -110,6 +115,10 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
             Some(value) => expected(&value)?,
             None => Expected::APage,
         },
+        scope_clients: match scope_clients {
+            Some(value) => yes_or_no(SCOPE_CLIENTS, &value)?,
+            None => false,
+        },
     })
 }
 
@@ -118,17 +127,26 @@ const SESSION: &str = "--session";
 const CONFIG: &str = "--config";
 const ENGINE_SOCKET: &str = "--engine-socket";
 const EXPECT_A_PAGE: &str = "--expect-a-page";
+const SCOPE_CLIENTS: &str = "--scope-clients";
 
 /// Parses the `yes` or `no` given to `--expect-a-page`.
 ///
 /// Other values are rejected because this flag turns off a watchdog, and a
 /// typo should not silently leave it on.
 fn expected(value: &OsStr) -> Result<Expected, ArgumentError> {
+    match yes_or_no(EXPECT_A_PAGE, value)? {
+        true => Ok(Expected::APage),
+        false => Ok(Expected::NoPage),
+    }
+}
+
+/// Parses the `yes` or `no` given to `flag`.
+fn yes_or_no(flag: &'static str, value: &OsStr) -> Result<bool, ArgumentError> {
     match value.as_bytes() {
-        b"yes" => Ok(Expected::APage),
-        b"no" => Ok(Expected::NoPage),
+        b"yes" => Ok(true),
+        b"no" => Ok(false),
         _ => Err(ArgumentError::NotYesOrNo {
-            flag: EXPECT_A_PAGE,
+            flag,
             value: value.to_string_lossy().into_owned(),
         }),
     }
