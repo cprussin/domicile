@@ -17,6 +17,8 @@ import type { Restack } from "./restacking";
 import type { TitleFocus } from "./title-focus";
 import type { StripPlace, TabLayout } from "./tree/frames";
 import { Layout } from "./tree/node";
+import type { StripMove } from "./useStripMove";
+import { useStripMove } from "./useStripMove";
 import type { WindowMotion } from "./window-motion";
 import { isLeaving } from "./window-motion";
 import {
@@ -32,6 +34,9 @@ import {
 
 /** The middle button, as `MouseEvent.button` numbers it. */
 const MIDDLE_BUTTON = 1;
+
+/** The keyframes a moved tab slides by, under either of its two names. */
+const SLIDING_TAB = "windowSlidingTab";
 
 /** What a tab's group mark calls each layout. */
 const GROUP_NAMES: Record<Layout, string> = {
@@ -149,6 +154,13 @@ export const TitleBar = ({
   const hidden = strip !== undefined && !strip.open;
   // A new tab opens out on its piece of the strip, which stays whole.
   const opensOnStrip = motion === "opening-tab";
+  // A tab moved along its strip: its slot moves at once, and the tab slides.
+  // One opening out is already playing an animation, so it does not slide.
+  const { move, onMoved } = useStripMove(
+    opensOnStrip ? undefined : strip,
+    rect,
+  );
+  const sliding = move !== undefined;
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: a press only raises the window; its buttons are the keyboard-reachable controls
     // biome-ignore lint/a11y/noNoninteractiveElementInteractions: same as above
@@ -163,7 +175,8 @@ export const TitleBar = ({
           }),
         movingStyles({ motion: opensOnStrip ? "resting" : motion }),
         isLeaving(motion) && clickThroughStyles,
-        settlingStyles({ dragging }),
+        // Two slots easing past each other would open a hole in the strip.
+        settlingStyles({ dragging: dragging || sliding }),
       )}
       data-divided={strip?.divided || undefined}
       // Exposed as attributes so devtools and tests can read the state.
@@ -200,8 +213,9 @@ export const TitleBar = ({
       {strip !== undefined && (
         <span
           className={stripEdgeStyles({
-            // A stack's bars sit over each other, not over the window.
-            joined: strip.open && tabbed === Layout.Tabbed,
+            // A stack's bars sit over each other, not over the window. A
+            // sliding tab joins its window once it is there.
+            joined: strip.open && tabbed === Layout.Tabbed && !sliding,
           })}
           data-strip-edge
         />
@@ -216,15 +230,21 @@ export const TitleBar = ({
               )
             : tabStyles({ focus, open: !hidden }),
           opensOnStrip && movingStyles({ motion }),
+          sliding && slidingStyles({ again: move.again }),
           settlingStyles({ dragging }),
         )}
         data-face
         // Ignore animations bubbling up from the buttons.
         onAnimationEnd={(event) => {
-          if (opensOnStrip && event.target === event.currentTarget) {
-            onMotionEnded();
+          if (event.target === event.currentTarget) {
+            if (event.animationName.startsWith(SLIDING_TAB)) {
+              onMoved();
+            } else if (opensOnStrip) {
+              onMotionEnded();
+            }
           }
         }}
+        style={sliding ? slidFrom(move) : undefined}
       >
         {group !== undefined && (
           <GroupMark layout={group.layout} windows={group.windows} />
@@ -291,6 +311,12 @@ const stripRestOf = (
   strip?.rest === undefined
     ? {}
     : { "--strip-rest": `${strip.rest.toString()}px` };
+
+/** Inline custom properties for `windowSlidingTab`: where the tab slides from. */
+const slidFrom = (move: StripMove): Record<`--${string}`, string> => ({
+  "--slide-x": `${move.x.toString()}px`,
+  "--slide-y": `${move.y.toString()}px`,
+});
 
 /**
  * The layout of the group a tab stands for, and its size, so a group in a tab
@@ -502,6 +528,23 @@ const tabStyles = cva({
       true: {
         borderColor: "borderStrong",
         color: "foreground",
+      },
+    },
+  },
+});
+
+/**
+ * A moved tab sliding from its old place, on the same curve as
+ * `settlingStyles`. Two names, so a move during a slide restarts it.
+ */
+const slidingStyles = cva({
+  variants: {
+    again: {
+      false: {
+        animation: "windowSlidingTab {durations.fast} {easings.out}",
+      },
+      true: {
+        animation: "windowSlidingTabAgain {durations.fast} {easings.out}",
       },
     },
   },

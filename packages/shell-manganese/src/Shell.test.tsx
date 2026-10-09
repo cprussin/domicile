@@ -1860,6 +1860,26 @@ describe("Shell", () => {
       );
     });
 
+    // Its slot and the strip's end move at once; only the tab slides.
+    it("slides a tab moved along its strip over to its new place", () => {
+      const { container } = renderShell();
+      clientAppears("one");
+      clientAppears("two");
+      motionsPlayOut(container);
+
+      press("h", true);
+
+      const face = barFor(container, "app:two").querySelector<HTMLElement>(
+        "[data-face]",
+      );
+      expect(face?.style.getPropertyValue("--slide-x")).toBe("240px");
+      expect(
+        barFor(container, "app:one")
+          .querySelector<HTMLElement>("[data-face]")
+          ?.style.getPropertyValue("--slide-x"),
+      ).toBe("-240px");
+    });
+
     it("moves a window through the tiling with Shift held", () => {
       const { container } = renderShell();
       clientAppears("one");
