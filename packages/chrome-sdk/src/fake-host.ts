@@ -80,6 +80,7 @@ export const describedWindow = (
 ): DomicileWindow => ({
   appId,
   cursor: "default",
+  desktopId: "",
   grab: false,
   height: null,
   maxHeight: null,

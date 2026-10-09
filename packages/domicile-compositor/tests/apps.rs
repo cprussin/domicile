@@ -130,6 +130,28 @@ fn a_client_that_names_its_window_has_the_chrome_told() {
     );
 }
 
+/// A client's `set_app_id` reaches the chrome as `app_desktop_id`.
+///
+/// Only a real client exercises `app_id_changed`.
+#[test]
+fn a_client_that_names_its_application_has_the_chrome_told() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+
+    // Connect before the client, as for `app_titled`.
+    let mut chrome = compositor.chrome();
+    let _client = compositor.client("a window");
+
+    let named = chrome
+        .wait_for(|message| matches!(message, HostMessage::AppDesktopId { .. }))
+        .expect("a client that named its application has the chrome told");
+    let HostMessage::AppDesktopId { desktop_id, .. } = named else {
+        unreachable!("the wait matched on this variant")
+    };
+
+    // The id `domicile-test-client` sets.
+    assert_eq!(desktop_id, "dev.domicile.test-client");
+}
+
 /// A chrome's `spawn` starts a process on this compositor's display.
 ///
 /// A process that inherits the compositor's own `WAYLAND_DISPLAY` opens on the

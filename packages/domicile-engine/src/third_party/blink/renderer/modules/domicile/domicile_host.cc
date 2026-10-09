@@ -1078,10 +1078,15 @@ bool DomicileHost::Ask(Element& target,
   return target.DispatchEvent(*event) == DispatchEventResult::kNotCanceled;
 }
 
-void DomicileHost::AppAppeared(const String& app_id, const String& title,
-                               bool has_size, double width, double height) {
+void DomicileHost::AppAppeared(const String& app_id,
+                               const String& title,
+                               const String& desktop_id,
+                               bool has_size,
+                               double width,
+                               double height) {
   DomicileWindowState& state = WindowNamed(app_id);
   state.title = title;
+  state.desktop_id = desktop_id;
   if (has_size) {
     state.width = width;
     state.height = height;
@@ -1483,6 +1488,12 @@ void DomicileHost::DispatchPortalRequests() {
 
 void DomicileHost::AppTitled(const String& app_id, const String& title) {
   WindowNamed(app_id).title = title;
+  WindowsChanged();
+}
+
+void DomicileHost::AppDesktopId(const String& app_id,
+                                const String& desktop_id) {
+  WindowNamed(app_id).desktop_id = desktop_id;
   WindowsChanged();
 }
 

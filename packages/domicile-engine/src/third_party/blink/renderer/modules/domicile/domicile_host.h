@@ -231,8 +231,10 @@ class MODULES_EXPORT DomicileHost final
 
   // domicile::mojom::blink::ControlChannelClient:
   void AppTitled(const String& app_id, const String& title) override;
+  void AppDesktopId(const String& app_id, const String& desktop_id) override;
   void AppAppeared(const String& app_id,
                    const String& title,
+                   const String& desktop_id,
                    bool has_size,
                    double width,
                    double height) override;

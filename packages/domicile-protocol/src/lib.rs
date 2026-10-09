@@ -255,6 +255,10 @@ pub enum HostMessage {
     AppAppeared {
         app_id: String,
         title: Option<String>,
+        /// The client's `xdg_toplevel.set_app_id`, which names its desktop
+        /// entry. Usually absent here; it follows in
+        /// [`HostMessage::AppDesktopId`].
+        desktop_id: Option<String>,
         size: Option<[f64; 2]>,
     },
 
@@ -268,6 +272,14 @@ pub enum HostMessage {
         app_id: String,
         title: Option<String>,
     },
+
+    /// A window's desktop id (`xdg_toplevel.set_app_id`), sent whenever it
+    /// changes.
+    ///
+    /// Separate from [`HostMessage::AppAppeared`] for the reason
+    /// [`HostMessage::AppTitled`] is. xdg-shell cannot unset an app id, so
+    /// this always carries one.
+    AppDesktopId { app_id: String, desktop_id: String },
 
     /// A client's content size changed, in logical units (CSS pixels, as
     /// `wl_pointer` uses), not buffer pixels.
