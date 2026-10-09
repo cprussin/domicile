@@ -55,6 +55,8 @@ type Props = {
    * has it. Can differ from `activeId`: see `AppWindow`.
    */
   focusedId: string | undefined;
+  /** Client windows' icon URLs, by desktop id. See `useClientIcons`. */
+  clientIcons: ReadonlyMap<string, string>;
   /** Held modifiers, which decide who gets the pointer. */
   modifiers: Modifiers;
   onClose: (id: string) => void;
@@ -71,6 +73,8 @@ type Props = {
    * appearing under a still pointer.
    */
   onHover: (id: string, at: Spot) => void;
+  /** A browser window's page icon. See `BrowserWindow`. */
+  onIcon: (window: string, icon: string) => void;
   onMove: (id: string, x: number, y: number) => void;
   /** A float resized to `box`, in the page's pixels, on the screen `on`. */
   onResize: (id: string, box: Rect, on: Geometry) => void;
@@ -102,6 +106,7 @@ type Props = {
 export const Stage = ({
   activeId,
   behindPanel,
+  clientIcons,
   domicile,
   draggingId,
   focusedId,
@@ -113,6 +118,7 @@ export const Stage = ({
   onFullscreen,
   onGrab,
   onHover,
+  onIcon,
   onMove,
   onResize,
   onSelect,
@@ -258,6 +264,7 @@ export const Stage = ({
                   fullscreen={fillsScreen(screens, window.id)}
                   isPrivate={window.isPrivate}
                   motion={motion}
+                  onIcon={onIcon}
                   onMotionEnded={onMotionEnded}
                   onReach={() => {
                     onSelect(window.id);
@@ -321,6 +328,7 @@ export const Stage = ({
                   frame={placement.frame}
                   fullscreen={fillsScreen(screens, window.id)}
                   groupSelected={placement.selected}
+                  icon={iconOf(window, clientIcons)}
                   motion={barMotion(motion)}
                   onAim={setAim}
                   onClose={() => {
@@ -495,6 +503,7 @@ export const Stage = ({
       */}
       {motions.tabs.map(({ focused, motion, screen, tab }) => {
         const on = screenNamed(screens, screen);
+        const named = windowNamed(windows, tab.id);
         return (
           <Sliding key={tab.id} on={on}>
             <TitleBar
@@ -518,6 +527,7 @@ export const Stage = ({
               fullscreen={fillsScreen(screens, tab.id)}
               group={{ layout: tab.group, windows: tab.windows }}
               groupSelected={tab.selected}
+              icon={iconOf(named, clientIcons)}
               motion={motion}
               onClose={() => {
                 onClose(tab.id);
@@ -540,7 +550,7 @@ export const Stage = ({
               rect={tab.rect}
               strip={tab.strip}
               tabbed={tab.tabbed}
-              title={titleOf(windows, tab.id)}
+              title={named.title}
               window={tab.id}
             />
           </Sliding>
@@ -645,19 +655,34 @@ const focusBoxHolding = (
         .find((box) => box?.windows.includes(id) === true);
 
 /**
- * The title of window `id`.
+ * Window `id`, which a container's tab is named and marked after.
  *
  * Throws if the window is missing: the layout and window list update
  * together, so a missing window means inconsistent shell state.
  */
-const titleOf = (windows: readonly ShellWindow[], id: string): string => {
+const windowNamed = (
+  windows: readonly ShellWindow[],
+  id: string,
+): ShellWindow => {
   const window = windows.find((found) => found.id === id);
   if (window === undefined) {
     throw new Error(`shell: no window ${id} to name`);
   } else {
-    return window.title;
+    return window;
   }
 };
+
+/**
+ * A window's icon URL: a client's from its desktop entry, a browser window's
+ * page icon.
+ */
+const iconOf = (
+  window: ShellWindow,
+  clientIcons: ReadonlyMap<string, string>,
+): string | undefined =>
+  window.kind === WindowKind.App
+    ? clientIcons.get(window.desktopId)
+    : window.icon;
 
 /**
  * Returns the engine's id behind a browser window's window id. Every browser

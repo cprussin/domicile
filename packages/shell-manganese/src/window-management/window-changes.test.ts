@@ -34,6 +34,15 @@ describe("windowChanges", () => {
       ]);
     });
 
+    it("says the desktop entry its client already named", () => {
+      expect(
+        windowChanges([], [{ ...TERM, desktopId: "org.example.Term" }]),
+      ).toStrictEqual([
+        WindowAction.AppAppeared("term", "Terminal"),
+        WindowAction.AppDesktopIdChanged("term", "org.example.Term"),
+      ]);
+    });
+
     it("is placed, for a popup", () => {
       expect(
         windowChanges(
@@ -65,6 +74,15 @@ describe("windowChanges", () => {
       expect(
         windowChanges([TERM], [{ ...TERM, title: "vim", width: 640 }]),
       ).toStrictEqual([WindowAction.AppTitled("term", "vim")]);
+    });
+
+    it("says the desktop entry its client names later", () => {
+      // Clients usually set their app id after their toplevel appears.
+      expect(
+        windowChanges([TERM], [{ ...TERM, desktopId: "org.example.Term" }]),
+      ).toStrictEqual([
+        WindowAction.AppDesktopIdChanged("term", "org.example.Term"),
+      ]);
     });
 
     it("says its new limits", () => {

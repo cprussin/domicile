@@ -799,6 +799,9 @@ mod tests {
                     Heard::Msg(Request::Shoot { developed, .. }) => {
                         developed(Err("no desk here".into()));
                     }
+                    Heard::Msg(Request::ShootWindow { developed, .. }) => {
+                        developed(Err("no windows here".into()));
+                    }
                     Heard::Closed => *open = false,
                 })
                 .expect("a channel source");

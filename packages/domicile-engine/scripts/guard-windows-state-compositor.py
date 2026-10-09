@@ -2,8 +2,9 @@
 """The compositor's end of the control socket, for the guard that asks whether
 `DomicileHost.windows` and `focusedWindow` say what the compositor said.
 
-It answers `hello` with a `welcome`, then describes three windows, retitles and
-resizes one, focuses one, closes one and places a popup -- and prints every line
+It answers `hello` with a `welcome`, then describes three windows, retitles,
+renames the desktop entry of and resizes one, focuses one, closes one and places
+a popup -- and prints every line
 the browser writes. The page reads only after all of it, which is the case the
 attributes exist for: a shell that listens late misses nothing.
 
@@ -36,9 +37,16 @@ import time
 
 SEQUENCE = [
     {"type": "app_appeared", "app_id": "first", "title": "First"},
-    {"type": "app_appeared", "app_id": "second", "title": "Second", "size": [640, 480]},
+    {
+        "type": "app_appeared",
+        "app_id": "second",
+        "title": "Second",
+        "desktop_id": "org.example.Second",
+        "size": [640, 480],
+    },
     {"type": "app_appeared", "app_id": "gone", "title": "Gone"},
     {"type": "app_titled", "app_id": "first", "title": "Retitled"},
+    {"type": "app_desktop_id", "app_id": "first", "desktop_id": "org.example.First"},
     {"type": "app_resized", "app_id": "first", "size": [800, 600]},
     {"type": "app_min_size", "app_id": "first", "size": [100, 50]},
     {"type": "app_cursor", "app_id": "second", "cursor": "grab"},

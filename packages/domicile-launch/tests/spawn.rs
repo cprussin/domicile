@@ -313,6 +313,7 @@ fn the_compositor_is_a_producer_to_the_engine() {
         Path::new("/d/share"),
         &runtime(),
         None,
+        false,
         &|_| None,
     );
     let args = args_of(&spawned);
@@ -337,6 +338,28 @@ fn the_compositor_is_a_producer_to_the_engine() {
 }
 
 #[test]
+fn the_session_puts_each_client_in_its_own_scope() {
+    // Only a desk that is the login session asks the user manager for scopes.
+    // A nested desk's clients belong to its host session.
+    let spawned = compositor(
+        Path::new("/b/domicile-compositor"),
+        Path::new("/l/engine"),
+        Path::new("/b/domicile-open-url"),
+        Path::new("/d/share"),
+        &runtime(),
+        None,
+        true,
+        &|_| None,
+    );
+    assert!(
+        args_of(&spawned)
+            .windows(2)
+            .any(|pair| pair == ["--scope-clients", "yes"]),
+        "{spawned:?}"
+    );
+}
+
+#[test]
 fn the_compositor_carries_this_desktops_control_socket_to_everything_it_starts() {
     // A terminal opened inside this desktop finds it through this variable,
     // since every app inherits the compositor's environment.
@@ -351,6 +374,7 @@ fn the_compositor_carries_this_desktops_control_socket_to_everything_it_starts()
         Path::new("/d/share"),
         &runtime(),
         None,
+        false,
         &|_| None,
     );
     assert_eq!(
@@ -370,6 +394,7 @@ fn a_link_an_app_opens_opens_in_this_desktop() {
         Path::new("/d/share"),
         &runtime(),
         None,
+        false,
         &|_| None,
     );
     assert_eq!(env_of(&spawned, "BROWSER").unwrap(), "/b/domicile-open-url");
@@ -388,6 +413,7 @@ fn xdg_open_is_this_desktops_for_every_app_it_starts() {
         Path::new("/d/share"),
         &runtime(),
         None,
+        false,
         &inherited,
     );
     assert_eq!(
@@ -410,6 +436,7 @@ fn a_link_an_app_opens_through_gio_or_a_portal_opens_in_this_desktop_too() {
         Path::new("/d/share"),
         &runtime(),
         None,
+        false,
         &inherited,
     );
     assert_eq!(
@@ -429,6 +456,7 @@ fn a_machine_with_no_data_directories_keeps_the_defaults_behind_this_desktops() 
         Path::new("/d/share"),
         &runtime(),
         None,
+        false,
         &|_| None,
     );
     assert_eq!(
@@ -449,6 +477,7 @@ fn the_engines_libraries_go_in_front_of_whatever_was_there() {
         Path::new("/d/share"),
         &runtime(),
         None,
+        false,
         &inherited,
     );
     assert_eq!(
@@ -468,6 +497,7 @@ fn the_compositor_is_quiet_unless_asked_otherwise() {
         Path::new("/d/share"),
         &runtime(),
         None,
+        false,
         &|_| None,
     );
     assert_eq!(
@@ -483,6 +513,7 @@ fn the_compositor_is_quiet_unless_asked_otherwise() {
         Path::new("/d/share"),
         &runtime(),
         None,
+        false,
         &asked,
     );
     assert_eq!(env_of(&spawned, "RUST_LOG").unwrap(), "warn");
@@ -604,6 +635,7 @@ fn the_compositor_is_given_the_config_it_was_started_with() {
         Path::new("/d/share"),
         &runtime(),
         Some(Path::new("/etc/domicile/desk.json")),
+        false,
         &|_| None,
     );
     let args = args_of(&spawned);
@@ -633,6 +665,7 @@ fn a_desktop_with_no_config_is_given_no_flag_rather_than_an_empty_one() {
         Path::new("/d/share"),
         &runtime(),
         None,
+        false,
         &|_| None,
     ));
     assert!(

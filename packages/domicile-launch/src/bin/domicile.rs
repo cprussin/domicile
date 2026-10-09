@@ -13,11 +13,12 @@ use std::io::{BufRead, BufReader, IsTerminal, Write};
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
+use std::sync::mpsc::{channel, Receiver};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use domicile_launch::address::url_for;
-use domicile_launch::build_progress::{bar, heard, Heard as BuilderHeard};
+use domicile_launch::build_progress::{bar, heard, Heard as BuilderHeard, Step};
 use domicile_launch::cli::{invocation, CliError, Invocation};
 use domicile_launch::command_socket::{load_shell, open_url};
 use domicile_launch::components::{builder, components, our_shell, Components};
@@ -44,6 +45,7 @@ use domicile_launch::session::Session;
 use domicile_launch::shell_path::Shell;
 use domicile_launch::shell_source::{shell_source, ShellSource};
 use domicile_launch::spawn::{compositor, engine, Runtime};
+use domicile_launch::splash::{lay_out, tell, when_the_engine_answers, Progress};
 use domicile_launch::supervise::{catch_interrupts, interrupted, Running, ASK_EVERY};
 
 /// How long each startup milestone may take. A debug build on a loaded
@@ -53,6 +55,14 @@ const PATIENCE: Duration = Duration::from_secs(30);
 /// How long a screenshot may take: the compositor reads back every monitor
 /// and encodes a PNG, which for several 4K monitors takes seconds.
 const CAPTURE_WITHIN: Duration = Duration::from_secs(10);
+
+/// How long a first build may take before the splash shows. A cached build
+/// answers well within it, so the desk starts on its shell.
+const SPLASH_AFTER: Duration = Duration::from_millis(500);
+
+/// How long the splash plays its ending before the built shell replaces it.
+/// Matches `ENDING_MS` in `packages/shell-splash`.
+const SPLASH_ENDING: Duration = Duration::from_millis(900);
 
 /// How many of the compositor's last stderr lines to repeat when a run gives
 /// up.
@@ -115,6 +125,20 @@ fn shell_to_load(shell: &str) -> Result<Request, String> {
 /// `from` is the base for relative paths when the shell came from a config
 /// file: the config's directory. Otherwise the working directory is used.
 fn shell_named(shell: &str, handed_in: Option<&str>, from: Option<&Path>) -> Result<Shell, String> {
+    match wanted(shell, handed_in, from)? {
+        Wanted::Ready(page) => Ok(page),
+        Wanted::Built(asked) => built(&myself()?, &asked, &mut |_| {}).and_then(as_shell),
+    }
+}
+
+/// A shell to serve as it is, or the builder arguments that make one.
+enum Wanted {
+    Ready(Shell),
+    Built(Vec<std::ffi::OsString>),
+}
+
+/// What `shell` needs before it can be served; see [`shell_named`].
+fn wanted(shell: &str, handed_in: Option<&str>, from: Option<&Path>) -> Result<Wanted, String> {
     let env = |name: &str| std::env::var(name).ok();
     let here = match from {
         Some(directory) => directory.to_path_buf(),
@@ -131,30 +155,40 @@ fn shell_named(shell: &str, handed_in: Option<&str>, from: Option<&Path>) -> Res
         &|path| std::fs::read_to_string(path).ok(),
     )
     .map_err(|why| why.to_string())?;
-    let binary = std::env::current_exe().map_err(|why| format!("cannot find myself: {why}"))?;
     match source {
-        ShellSource::Module(page) => Ok(page),
+        ShellSource::Module(page) => Ok(Wanted::Ready(page)),
         // Prebuilt in the install, so no build is needed.
-        ShellSource::Ours(name) => our_shell(&binary, &name, &env, &|path| path.exists())
-            .map(|root| Shell {
-                root,
-                module: PathBuf::from("shell.js"),
+        ShellSource::Ours(name) => our_shell(&myself()?, &name, &env, &|path| path.exists())
+            .map(|root| {
+                Wanted::Ready(Shell {
+                    root,
+                    module: PathBuf::from("shell.js"),
+                })
             })
             .map_err(|missing| missing.to_string()),
-        ShellSource::Entry(entry) => {
-            built(&binary, &["--entry".into(), entry.into_os_string()]).and_then(as_shell)
-        }
-        ShellSource::Package(spec) => {
-            built(&binary, &["--package".into(), spec.into()]).and_then(as_shell)
-        }
+        ShellSource::Entry(entry) => Ok(Wanted::Built(vec![
+            "--entry".into(),
+            entry.into_os_string(),
+        ])),
+        ShellSource::Package(spec) => Ok(Wanted::Built(vec!["--package".into(), spec.into()])),
     }
+}
+
+/// This binary, which the other components are found beside.
+fn myself() -> Result<PathBuf, String> {
+    std::env::current_exe().map_err(|why| format!("cannot find myself: {why}"))
 }
 
 /// Runs the shell builder and returns its final result, showing progress.
 ///
 /// On a terminal the bar redraws in place; otherwise each step is one line.
-/// Build log lines are printed only if the build fails.
-fn built(binary: &Path, asked: &[std::ffi::OsString]) -> Result<BuilderHeard, String> {
+/// Each step also goes to `stepped`. Build log lines are printed only if the
+/// build fails.
+fn built(
+    binary: &Path,
+    asked: &[std::ffi::OsString],
+    stepped: &mut dyn FnMut(&Step),
+) -> Result<BuilderHeard, String> {
     let env = |name: &str| std::env::var(name).ok();
     let builder =
         builder(binary, &env, &|path| path.exists()).map_err(|missing| missing.to_string())?;
@@ -190,8 +224,12 @@ fn built(binary: &Path, asked: &[std::ffi::OsString]) -> Result<BuilderHeard, St
             BuilderHeard::Step(step) if terminal => {
                 eprint!("\r\x1b[K{}", bar(&step));
                 let _ = std::io::stderr().flush();
+                stepped(&step);
             }
-            BuilderHeard::Step(step) => eprintln!("domicile: {}", bar(&step)),
+            BuilderHeard::Step(step) => {
+                eprintln!("domicile: {}", bar(&step));
+                stepped(&step);
+            }
             BuilderHeard::Log(said) => log.push(said),
             BuilderHeard::Failed(why) => answer = Some(Err(why)),
             done => answer = Some(Ok(done)),
@@ -229,6 +267,7 @@ fn evaluated_json(binary: &Path, config: &Path) -> Result<PathBuf, String> {
     match built(
         binary,
         &["--evaluate".into(), config.as_os_str().to_os_string()],
+        &mut |_| {},
     )? {
         BuilderHeard::Evaluated(json) => Ok(json),
         other => Err(format!(
@@ -325,11 +364,10 @@ fn desktop(shell: Option<&str>, flag: Option<&Path>) -> Result<ExitCode, String>
     let browser = binary.with_file_name("domicile-open-url");
 
     // `DOMICILE_PAGE` names the module like the argument does, for packaged
-    // desktops. Build before starting anything, so a broken shell starts
-    // nothing.
-    let page = match (shell, named) {
-        (Some(shell), _) => shell_named(shell, env("DOMICILE_PAGE").as_deref(), None)?,
-        (None, Some((named, from))) => shell_named(&named, None, Some(&from))?,
+    // desktops.
+    let wanted = match (shell, named) {
+        (Some(shell), _) => wanted(shell, env("DOMICILE_PAGE").as_deref(), None)?,
+        (None, Some((named, from))) => wanted(&named, None, Some(&from))?,
         (None, None) => return Err(CliError::NoShell.to_string()),
     };
 
@@ -343,6 +381,14 @@ fn desktop(shell: Option<&str>, flag: Option<&Path>) -> Result<ExitCode, String>
 
     // A per-run directory for sockets, so concurrent desktops do not collide.
     let runtime = tempdir().map_err(|why| format!("no runtime directory: {why}"))?;
+
+    // A shell that builds quickly is built before anything starts, so a broken
+    // one starts nothing. A slower build continues behind the splash.
+    let splash = runtime.join("splash");
+    let (page, building) = match wanted {
+        Wanted::Ready(page) => (page, None),
+        Wanted::Built(asked) => first_build(&binary, asked, &splash)?,
+    };
     let places = Runtime {
         broker: runtime.join("broker"),
         chrome_socket: runtime.join("chrome.sock"),
@@ -370,7 +416,7 @@ fn desktop(shell: Option<&str>, flag: Option<&Path>) -> Result<ExitCode, String>
     // compositor, and it is keyed on the pid because no Wayland display exists
     // yet.
     let control = take(&places.control).map_err(|why| why.to_string())?;
-    let serving = Arc::new(Mutex::new(module));
+    let serving = Arc::new(Mutex::new(page));
     answering(
         &control,
         Arc::clone(&serving),
@@ -378,6 +424,14 @@ fn desktop(shell: Option<&str>, flag: Option<&Path>) -> Result<ExitCode, String>
         places.chrome_socket.clone(),
     )?;
     println!("{VARIABLE}={}", places.control.display());
+    if let Some(building) = building {
+        replacing_the_splash(
+            building,
+            splash,
+            Arc::clone(&serving),
+            places.command.clone(),
+        );
+    }
 
     // Watch a module config's directory. On an edit, re-evaluate it into the
     // JSON the compositor watches, and if the config is also the shell,
@@ -430,11 +484,11 @@ fn desktop(shell: Option<&str>, flag: Option<&Path>) -> Result<ExitCode, String>
         components: &components,
         config: compositor_config.as_deref(),
         env: &env,
-        page: &page,
         places: &places,
         platform: &platform,
         policy: &policy,
         said: &said,
+        serving: &serving,
     };
     // The last desktop's compositor output, repeated if the run gives up.
     // Only the last, since each attempt usually fails the same way.
@@ -468,7 +522,6 @@ struct Desktop<'a> {
     components: &'a Components,
     config: Option<&'a Path>,
     env: &'a dyn Fn(&str) -> Option<String>,
-    page: &'a Shell,
     places: &'a Runtime,
     platform: &'a str,
     /// The restart policy, shared by the engine and desktop loops. Each loop
@@ -476,6 +529,8 @@ struct Desktop<'a> {
     policy: &'a Policy,
     /// The graphical session registration, renewed by each desktop.
     said: &'a SaidSession,
+    /// The shell the engine serves, which a new engine starts on.
+    serving: &'a Mutex<Shell>,
 }
 
 /// Runs one desktop until its compositor exits.
@@ -526,6 +581,7 @@ fn up(desktop: &Desktop, heard: &Arc<Mutex<Heard>>) -> Result<(), String> {
                 &data_of(desktop.browser)?,
                 desktop.places,
                 desktop.config,
+                desktop.said.scope_clients,
                 desktop.env,
             ),
             heard,
@@ -624,7 +680,7 @@ fn start_an_engine(desktop: &Desktop, running: &mut Running) -> Result<(), Strin
             "engine",
             &engine(
                 &desktop.components.engine,
-                desktop.page,
+                &served(desktop.serving),
                 desktop.platform,
                 desktop.places,
                 (desktop.env)("DOMICILE_ENGINE_ARGS").as_deref(),
@@ -663,7 +719,7 @@ const CLEANLY: &str = "exit status: 0";
 /// the socket. `serving` tracks the current shell; see [`load_the_shell`].
 fn answering(
     control: &Control,
-    serving: Arc<Mutex<PathBuf>>,
+    serving: Arc<Mutex<Shell>>,
     engine: PathBuf,
     chrome: PathBuf,
 ) -> Result<(), String> {
@@ -689,11 +745,12 @@ fn answering(
 }
 
 /// Answers the one command on `stream`; see [`answering`].
-fn answer_a_command(stream: UnixStream, serving: &Mutex<PathBuf>, engine: &Path, chrome: &Path) {
+fn answer_a_command(stream: UnixStream, serving: &Mutex<Shell>, engine: &Path, chrome: &Path) {
     if let Err(why) = answer_one(stream, ANSWER_WITHIN, &|line| {
+        let page = served(serving);
         answer(
             line,
-            &shell(serving),
+            &page.root.join(&page.module),
             &|root, module| load_the_shell(engine, root, module, serving),
             &|url| open_url(engine, url, ANSWER_WITHIN).map_err(|why| why.to_string()),
             // The interactive one waits for the user, however long that takes.
@@ -716,7 +773,7 @@ fn watching_the_config(
     binary: &Path,
     config: &Path,
     evaluated: PathBuf,
-    shell: Option<(Arc<Mutex<PathBuf>>, PathBuf)>,
+    shell: Option<(Arc<Mutex<Shell>>, PathBuf)>,
 ) -> Result<config_watch::Watching, String> {
     let binary = binary.to_path_buf();
     let module_config = config.to_path_buf();
@@ -726,6 +783,7 @@ fn watching_the_config(
                 built(
                     &binary,
                     &["--entry".into(), module_config.clone().into_os_string()],
+                    &mut |_| {},
                 )
                 .and_then(as_shell)
                 .and_then(|page| load_the_shell(engine, &page.root, &page.module, serving))
@@ -768,8 +826,8 @@ fn reevaluated(binary: &Path, config: &Path, evaluated: &Path) -> Result<(), Str
         .map_err(|why| format!("cannot place the evaluated config: {why}"))
 }
 
-/// The module the desktop is currently serving.
-fn shell(serving: &Mutex<PathBuf>) -> PathBuf {
+/// The shell the desktop is currently serving.
+fn served(serving: &Mutex<Shell>) -> Shell {
     serving
         .lock()
         .expect("nothing panics holding which shell is served")
@@ -786,14 +844,111 @@ fn load_the_shell(
     engine: &Path,
     root: &Path,
     module: &Path,
-    serving: &Mutex<PathBuf>,
+    serving: &Mutex<Shell>,
 ) -> Result<(), String> {
     let mut served = serving
         .lock()
         .expect("nothing panics holding which shell is served");
     load_shell(engine, root, module, ANSWER_WITHIN).map_err(|why| why.to_string())?;
-    *served = root.join(module);
+    *served = Shell {
+        module: module.to_path_buf(),
+        root: root.to_path_buf(),
+    };
     Ok(())
+}
+
+/// A built shell, or why it did not build.
+type Building = Receiver<Result<Shell, String>>;
+
+/// Starts the first build of the shell and waits [`SPLASH_AFTER`] for it.
+///
+/// Returns the built shell, or, while the build continues, the splash laid out
+/// in `splash` and the build to wait on. Each step is told to the splash.
+fn first_build(
+    binary: &Path,
+    asked: Vec<std::ffi::OsString>,
+    splash: &Path,
+) -> Result<(Shell, Option<Building>), String> {
+    std::fs::create_dir_all(splash)
+        .and_then(|()| tell(splash, &Progress::Starting))
+        .map_err(|why| format!("cannot make the splash at {}: {why}", splash.display()))?;
+    let (answer, building) = channel();
+    let (builder_of, told) = (binary.to_path_buf(), splash.to_path_buf());
+    std::thread::spawn(move || {
+        let page = built(&builder_of, &asked, &mut |step| {
+            if let Err(why) = tell(&told, &Progress::from(step)) {
+                eprintln!("domicile: the splash missed a step: {why}");
+            }
+        })
+        .and_then(as_shell);
+        // The receiver is gone only if the run ended, and then nobody waits.
+        let _ = answer.send(page);
+    });
+    match building.recv_timeout(SPLASH_AFTER) {
+        Ok(page) => page.map(|page| (page, None)),
+        Err(_) => {
+            let env = |name: &str| std::env::var(name).ok();
+            let bundle = our_shell(binary, "splash", &env, &|path| path.exists())
+                .map_err(|missing| missing.to_string())?;
+            let page = lay_out(&bundle, splash)
+                .map_err(|why| format!("cannot lay out the splash: {why}"))?;
+            println!("the shell is still building, so the desk starts on the splash");
+            Ok((page, Some(building)))
+        }
+    }
+}
+
+/// Loads the shell `building` makes in place of the splash, on a thread.
+///
+/// The splash plays its ending first. A failed build or load stays on the
+/// splash, which shows why and logs out on a key.
+fn replacing_the_splash(
+    building: Building,
+    splash: PathBuf,
+    serving: Arc<Mutex<Shell>>,
+    engine: PathBuf,
+) {
+    std::thread::spawn(move || {
+        let loaded = building
+            .recv()
+            .unwrap_or_else(|_| Err("the shell builder's thread ended without an answer".into()))
+            .and_then(|page| {
+                if let Err(why) = tell(&splash, &Progress::Built) {
+                    eprintln!("domicile: the splash missed its ending: {why}");
+                }
+                std::thread::sleep(SPLASH_ENDING);
+                let asked = Instant::now();
+                when_the_engine_answers(
+                    &mut || {
+                        let mut served = serving
+                            .lock()
+                            .expect("nothing panics holding which shell is served");
+                        load_shell(&engine, &page.root, &page.module, ANSWER_WITHIN)?;
+                        *served = page.clone();
+                        Ok(())
+                    },
+                    // The engine has its own milestone to start within.
+                    &|| interrupted() || asked.elapsed() > 2 * PATIENCE,
+                    &mut || std::thread::sleep(ASK_EVERY),
+                )
+                .map(|()| page.root.join(&page.module))
+                .map_err(|why| why.to_string())
+            });
+        match loaded {
+            Ok(module) => println!("the splash gave way to {}", module.display()),
+            Err(why) => {
+                eprintln!("domicile: the desk stays on the splash: {why}");
+                let failed = Progress::Failed {
+                    supervisor: std::process::id(),
+                    // `built` ends a failure with the build log, often empty.
+                    why: why.trim_end(),
+                };
+                if let Err(unsaid) = tell(&splash, &failed) {
+                    eprintln!("domicile: the splash cannot say so: {unsaid}");
+                }
+            }
+        }
+    });
 }
 
 /// Waits for a milestone file, watching for exits and stop requests.
@@ -851,16 +1006,48 @@ fn session(session: &Path) -> Milestone {
 /// - Best effort: without a systemd user manager or `domicile-session.target`,
 ///   the portal does not start and a warning is printed. If the launcher is
 ///   killed, its variables remain until the next session sets its own.
+/// - Clients get their own scopes only when a user manager answers, since
+///   `systemd-run --user` fails without one and no app would start.
 struct SaidSession {
     is_the_session: bool,
+    scope_clients: bool,
     manager: Mutex<Option<zbus::blocking::Connection>>,
 }
 
 impl SaidSession {
     fn new(platform: &str) -> Self {
+        let is_the_session = platform == "drm";
         SaidSession {
-            is_the_session: platform == "drm",
+            is_the_session,
+            scope_clients: is_the_session && Self::a_user_manager_answers(),
             manager: Mutex::new(None),
+        }
+    }
+
+    /// Whether `org.freedesktop.systemd1` is on the session bus. Says why on
+    /// stderr when not.
+    fn a_user_manager_answers() -> bool {
+        let answered = notification::session_bus().and_then(|bus| {
+            zbus::blocking::fdo::DBusProxy::new(&bus)?
+                .name_has_owner("org.freedesktop.systemd1".try_into()?)
+                .map_err(zbus::Error::from)
+        });
+        match answered {
+            Ok(true) => true,
+            Ok(false) => {
+                eprintln!(
+                    "domicile: no systemd user manager is on the session bus, so apps share the \
+                     desktop's cgroup"
+                );
+                false
+            }
+            Err(why) => {
+                eprintln!(
+                    "domicile: the session bus did not say whether a user manager runs, so apps \
+                     share the desktop's cgroup: {why}"
+                );
+                false
+            }
         }
     }
 

@@ -1,4 +1,5 @@
 import { Button } from "@domicile-desktop/component-library/Button";
+import { AppWindowIcon } from "@phosphor-icons/react/dist/ssr/AppWindow";
 import { BrowsersIcon } from "@phosphor-icons/react/dist/ssr/Browsers";
 import { CornersInIcon } from "@phosphor-icons/react/dist/ssr/CornersIn";
 import { CornersOutIcon } from "@phosphor-icons/react/dist/ssr/CornersOut";
@@ -9,6 +10,7 @@ import { SquaresFourIcon } from "@phosphor-icons/react/dist/ssr/SquaresFour";
 import { TabsIcon } from "@phosphor-icons/react/dist/ssr/Tabs";
 import { XIcon } from "@phosphor-icons/react/dist/ssr/X";
 import type { PointerEvent as ReactPointerEvent } from "react";
+import { useState } from "react";
 
 import { css, cva, cx } from "../../styled-system/css";
 import { hstack } from "../../styled-system/patterns";
@@ -17,6 +19,8 @@ import type { Restack } from "./restacking";
 import type { TitleFocus } from "./title-focus";
 import type { StripPlace, TabLayout } from "./tree/frames";
 import { Layout } from "./tree/node";
+import type { StripMove } from "./useStripMove";
+import { useStripMove } from "./useStripMove";
 import type { WindowMotion } from "./window-motion";
 import { isLeaving } from "./window-motion";
 import {
@@ -32,6 +36,9 @@ import {
 
 /** The middle button, as `MouseEvent.button` numbers it. */
 const MIDDLE_BUTTON = 1;
+
+/** The keyframes a moved tab slides by, under either of its two names. */
+const SLIDING_TAB = "windowSlidingTab";
 
 /** What a tab's group mark calls each layout. */
 const GROUP_NAMES: Record<Layout, string> = {
@@ -67,6 +74,11 @@ type Props = {
    * {@link scaledAbout}. For a tab, this is the tab's own box.
    */
   frame: Rect;
+  /**
+   * The window's icon URL, drawn before its title, or `undefined` for a
+   * stand-in.
+   */
+  icon?: string | undefined;
   /** Whether the window floats. Switches the float button to "Tile". */
   floating: boolean;
   /**
@@ -131,6 +143,7 @@ export const TitleBar = ({
   fullscreen,
   group,
   groupSelected = false,
+  icon,
   motion,
   onClose,
   onContextMenu,
@@ -149,6 +162,13 @@ export const TitleBar = ({
   const hidden = strip !== undefined && !strip.open;
   // A new tab opens out on its piece of the strip, which stays whole.
   const opensOnStrip = motion === "opening-tab";
+  // A tab moved along its strip: its slot moves at once, and the tab slides.
+  // One opening out is already playing an animation, so it does not slide.
+  const { move, onMoved } = useStripMove(
+    opensOnStrip ? undefined : strip,
+    rect,
+  );
+  const sliding = move !== undefined;
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: a press only raises the window; its buttons are the keyboard-reachable controls
     // biome-ignore lint/a11y/noNoninteractiveElementInteractions: same as above
@@ -163,7 +183,8 @@ export const TitleBar = ({
           }),
         movingStyles({ motion: opensOnStrip ? "resting" : motion }),
         isLeaving(motion) && clickThroughStyles,
-        settlingStyles({ dragging }),
+        // Two slots easing past each other would open a hole in the strip.
+        settlingStyles({ dragging: dragging || sliding }),
       )}
       data-divided={strip?.divided || undefined}
       // Exposed as attributes so devtools and tests can read the state.
@@ -197,6 +218,16 @@ export const TitleBar = ({
         ...stripRestOf(strip),
       }}
     >
+      {strip !== undefined && (
+        <span
+          className={stripEdgeStyles({
+            // A stack's bars sit over each other, not over the window. A
+            // sliding tab joins its window once it is there.
+            joined: strip.open && tabbed === Layout.Tabbed && !sliding,
+          })}
+          data-strip-edge
+        />
+      )}
       <div
         className={cx(
           strip === undefined
@@ -207,19 +238,27 @@ export const TitleBar = ({
               )
             : tabStyles({ focus, open: !hidden }),
           opensOnStrip && movingStyles({ motion }),
+          sliding && slidingStyles({ again: move.again }),
           settlingStyles({ dragging }),
         )}
         data-face
         // Ignore animations bubbling up from the buttons.
         onAnimationEnd={(event) => {
-          if (opensOnStrip && event.target === event.currentTarget) {
-            onMotionEnded();
+          if (event.target === event.currentTarget) {
+            if (event.animationName.startsWith(SLIDING_TAB)) {
+              onMoved();
+            } else if (opensOnStrip) {
+              onMotionEnded();
+            }
           }
         }}
+        style={sliding ? slidFrom(move) : undefined}
       >
         {group !== undefined && (
           <GroupMark layout={group.layout} windows={group.windows} />
         )}
+        {/* Keyed so a new icon gets another try after one fails to load. */}
+        <WindowIcon icon={icon} key={icon} />
         <span className={titleStyles}>{title}</span>
         {/*
         A press on a button must not start a drag: drag pointer capture would
@@ -283,6 +322,12 @@ const stripRestOf = (
     ? {}
     : { "--strip-rest": `${strip.rest.toString()}px` };
 
+/** Inline custom properties for `windowSlidingTab`: where the tab slides from. */
+const slidFrom = (move: StripMove): Record<`--${string}`, string> => ({
+  "--slide-x": `${move.x.toString()}px`,
+  "--slide-y": `${move.y.toString()}px`,
+});
+
 /**
  * The layout of the group a tab stands for, and its size, so a group in a tab
  * reads as a group rather than as the window it is named after.
@@ -303,6 +348,31 @@ const GroupMark = ({
     {windows}
   </span>
 );
+
+/**
+ * The window's icon, or a stand-in when it has none or it does not load, so
+ * every title starts in the same place.
+ */
+const WindowIcon = ({ icon }: { icon: string | undefined }) => {
+  const [failed, setFailed] = useState(false);
+  return (
+    <span className={iconStyles} data-icon>
+      {icon === undefined || failed ? (
+        <AppWindowIcon size={14} />
+      ) : (
+        // biome-ignore lint/a11y/noNoninteractiveElementInteractions: `onError` is the image failing to load, not an interaction
+        <img
+          alt=""
+          className={iconImageStyles}
+          onError={() => {
+            setFailed(true);
+          }}
+          src={icon}
+        />
+      )}
+    </span>
+  );
+};
 
 const GroupIcon = ({ layout }: { layout: Layout }) => {
   switch (layout) {
@@ -329,6 +399,9 @@ const slotStyles = css({ display: "flex" });
  * edge all round, and a bottom edge that is the window's top edge. The last
  * slot draws the rest of the strip past itself, at `--strip-rest`, and passes
  * the pointer through it. A divided slot draws a divider before its tab.
+ *
+ * The slot leaves its bottom row unpainted: the window's top row is tucked
+ * under it (see `SURFACE_TUCK`). `stripEdgeStyles` draws the edge there.
  */
 const stripStyles = cva({
   base: {
@@ -345,20 +418,26 @@ const stripStyles = cva({
     },
     "&[data-strip-end]::after": {
       backgroundColor: "inherit",
-      borderBlockWidth: "1px",
-      borderColor: "inherit",
+      borderBlockStartWidth: "1px",
+      borderColor: "var(--strip-edge)",
       borderInlineEndWidth: "1px",
       borderStartEndRadius: "lg",
       borderStyle: "solid",
       content: '""',
       inlineSize: "var(--strip-rest)",
-      insetBlockEnd: "-1px",
+      insetBlockEnd: 0,
       insetBlockStart: "-1px",
       insetInlineStart: "100%",
       pointerEvents: "none",
       position: "absolute",
+      // Under the edge. See `stripEdgeStyles`.
+      zIndex: -2,
     },
+    backgroundClip: "padding-box",
+    borderBlockEndColor: "transparent",
     borderBlockEndWidth: "1px",
+    borderBlockStartColor: "var(--strip-edge)",
+    borderInlineColor: "var(--strip-edge)",
     borderStyle: "solid",
     paddingBlockStart: 1,
     paddingInlineStart: 1,
@@ -378,15 +457,15 @@ const stripStyles = cva({
     // A selected group lights its strip. Its tabs keep their own states.
     selected: {
       false: {
+        "--strip-edge": "{colors.borderStrong}",
         backgroundColor:
           "color-mix(in oklab, {colors.card} 45%, {colors.background})",
-        borderColor: "borderStrong",
       },
       true: {
+        "--strip-edge":
+          "color-mix(in oklab, {colors.accent} 70%, {colors.background})",
         backgroundColor:
           "color-mix(in oklab, {colors.accent} 30%, {colors.background})",
-        borderColor:
-          "color-mix(in oklab, {colors.accent} 70%, {colors.background})",
       },
     },
     // A stack's bars each span the strip. Each bar's bottom edge is the top
@@ -399,9 +478,40 @@ const stripStyles = cva({
 });
 
 /**
+ * The lower part of the strip and its bottom edge, in the slot and on past the
+ * last slot to the strip's end. The edge is in the slot's unpainted bottom row.
+ * An open tab joins its window, so its slot draws this only past itself.
+ *
+ * One square box per slot, so every slot shades the edge alike. At fractional
+ * scales a square box snaps to device pixels and a rounded one does not, so
+ * this stays below the rounded corners.
+ */
+const stripEdgeStyles = cva({
+  base: {
+    backgroundColor: "inherit",
+    borderBlockEndWidth: "1px",
+    borderColor: "var(--strip-edge)",
+    borderStyle: "solid",
+    insetBlockEnd: "-1px",
+    // Below the strip's rounded corners.
+    insetBlockStart: "{radii.lg}",
+    insetInlineEnd: "calc(-1 * var(--strip-rest, 0px))",
+    pointerEvents: "none",
+    position: "absolute",
+    zIndex: -1,
+  },
+  variants: {
+    joined: {
+      false: { insetInlineStart: 0 },
+      true: { insetInlineStart: "100%" },
+    },
+  },
+});
+
+/**
  * A tab, in its slot of the strip. The open tab is raised in the card with an
- * edge, and reaches over the strip's bottom edge to join its window. Hidden
- * tabs lie flat on the strip.
+ * edge, and meets its window through the gap in the strip's bottom edge.
+ * Hidden tabs lie flat on the strip.
  */
 const tabStyles = cva({
   base: hstack.raw({
@@ -449,11 +559,28 @@ const tabStyles = cva({
       selected: { fontWeight: "normal" },
     },
     open: {
-      false: { borderColor: "transparent", color: "muted" },
+      // A press opens a hidden tab.
+      false: { borderColor: "transparent", color: "muted", cursor: "pointer" },
       true: {
         borderColor: "borderStrong",
         color: "foreground",
-        marginBlockEnd: "-1px",
+      },
+    },
+  },
+});
+
+/**
+ * A moved tab sliding from its old place, on the same curve as
+ * `settlingStyles`. Two names, so a move during a slide restarts it.
+ */
+const slidingStyles = cva({
+  variants: {
+    again: {
+      false: {
+        animation: "windowSlidingTab {durations.fast} {easings.out}",
+      },
+      true: {
+        animation: "windowSlidingTabAgain {durations.fast} {easings.out}",
       },
     },
   },
@@ -540,6 +667,19 @@ const groupMarkStyles = hstack({
   // The config's `fonts.size = 11.0`, as for the title.
   fontSize: "0.6875rem",
   gap: 0.5,
+});
+
+// Sized to the title's line, like a browser tab's icon.
+const iconStyles = css({
+  color: "muted",
+  display: "flex",
+  flexShrink: 0,
+});
+
+const iconImageStyles = css({
+  height: "14px",
+  objectFit: "contain",
+  width: "14px",
 });
 
 const titleStyles = css({

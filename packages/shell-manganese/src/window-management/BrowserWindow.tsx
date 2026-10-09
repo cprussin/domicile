@@ -28,6 +28,7 @@ import type { Restack } from "./restacking";
 import { useFindResult } from "./useFindResult";
 import { useHistoryAvailability } from "./useHistoryAvailability";
 import { useLoading } from "./useLoading";
+import { usePageIcon } from "./usePageIcon";
 import { useReclaimFocus } from "./useReclaimFocus";
 import { useShownPage } from "./useShownPage";
 import { useZoom } from "./useZoom";
@@ -94,6 +95,11 @@ type Props = {
    */
   onMotionEnded: () => void;
   /**
+   * The page's icon URL, `""` for none, with {@link Props.window}. See
+   * `usePageIcon`.
+   */
+  onIcon: (window: string, icon: string) => void;
+  /**
    * Called when the user moves focus into this window (page or address bar).
    * Fires for every click, since a click raises the window even when it is
    * already focused.
@@ -152,6 +158,7 @@ export const BrowserWindow = ({
   isPrivate = false,
   listDirectory = defaultListDirectory,
   motion,
+  onIcon,
   onMotionEnded,
   onReach,
   popupWindow,
@@ -178,6 +185,7 @@ export const BrowserWindow = ({
   // The page's actual URL and connection security, including navigations
   // the shell did not start (links, redirects, form posts).
   const shown = useShownPage(view);
+  usePageIcon(view, window, onIcon);
   const { canGoBack, canGoForward } = useHistoryAvailability(view);
   const loading = useLoading(view);
   const zoom = useZoom(view);

@@ -49,6 +49,8 @@ export type Frame = {
 
 /** Where a tab sits in its container's tab strip. See `TitleBar`. */
 export type StripPlace = {
+  /** Its index in the strip, from the start. */
+  at: number;
   /**
    * Whether a divider marks its start: a hidden tab of a tabbed container
    * after another hidden tab. The open tab's own edge divides it from its
@@ -67,6 +69,8 @@ export type StripPlace = {
    * the strip's end. `undefined` for other tabs and in stacks.
    */
   rest: number | undefined;
+  /** How many tabs the strip holds. */
+  tabs: number;
 };
 
 /** The layouts that give each child a tab instead of a share of the area. */
@@ -386,6 +390,7 @@ const stripPlaceOf = (
 ): StripPlace => {
   const count = container.children.length;
   return {
+    at,
     divided:
       container.layout === Layout.Tabbed &&
       at > 0 &&
@@ -397,6 +402,7 @@ const stripPlaceOf = (
       container.layout === Layout.Tabbed && at === count - 1
         ? area.width - tabWidthOf(container, area) * count
         : undefined,
+    tabs: count,
   };
 };
 

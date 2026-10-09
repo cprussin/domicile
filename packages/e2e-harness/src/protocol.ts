@@ -41,6 +41,12 @@ const welcomeSchema = z.looseObject({
 // whenever any chrome connects. Key windows by app id.
 const appAppearedSchema = z.looseObject({
   app_id: z.string(),
+  // Usually absent: the client has not set it yet. It arrives in a later
+  // `app_desktop_id`.
+  desktop_id: z
+    .string()
+    .nullish()
+    .transform((desktopId) => desktopId ?? undefined),
   // Usually absent: the client has not drawn yet. The size arrives in a later
   // `app_resized`.
   size: sizeSchema.nullish().transform((size) => size ?? undefined),
@@ -53,6 +59,13 @@ const appTitledSchema = z.looseObject({
   app_id: z.string(),
   title: titleSchema,
   type: z.literal("app_titled"),
+});
+
+// Sent on each `set_app_id`, which names the client's desktop entry.
+const appDesktopIdSchema = z.looseObject({
+  app_id: z.string(),
+  desktop_id: z.string(),
+  type: z.literal("app_desktop_id"),
 });
 
 const appResizedSchema = z.looseObject({
@@ -445,6 +458,7 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   welcomeSchema,
   appAppearedSchema,
   appTitledSchema,
+  appDesktopIdSchema,
   appResizedSchema,
   popupPlacedSchema,
   appMinSizeSchema,
@@ -481,6 +495,7 @@ export type HostMessageJson = z.infer<typeof hostMessageSchema>;
 export type WelcomeMessage = z.infer<typeof welcomeSchema>;
 export type AppAppearedMessage = z.infer<typeof appAppearedSchema>;
 export type AppTitledMessage = z.infer<typeof appTitledSchema>;
+export type AppDesktopIdMessage = z.infer<typeof appDesktopIdSchema>;
 export type AppResizedMessage = z.infer<typeof appResizedSchema>;
 export type PopupPlacedMessage = z.infer<typeof popupPlacedSchema>;
 export type AppMinSizeMessage = z.infer<typeof appMinSizeSchema>;

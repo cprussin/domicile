@@ -474,6 +474,7 @@ pub fn serve(
     backends.config_home = xdg_home("XDG_CONFIG_HOME", home.as_deref(), ".config");
     let shots = Shots {
         shoot: screenshot::shooting(casting.casting.clone()),
+        shoot_window: screenshot::shooting_windows(casting.casting.clone()),
         save: screenshot::in_pictures(),
     };
     let portals = Portals {
@@ -823,8 +824,7 @@ fn export<'a>(
             OBJECT_PATH,
             Screenshot {
                 queue: Arc::clone(&backends.queue),
-                shoot: starting.shots.shoot,
-                save: starting.shots.save,
+                shots: starting.shots,
             },
         )
 }

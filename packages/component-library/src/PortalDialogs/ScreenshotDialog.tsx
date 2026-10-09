@@ -15,9 +15,11 @@ import { flex } from "../../styled-system/patterns";
 import { Button } from "../Button/Button";
 import { ModalDialog } from "../ModalDialog/ModalDialog";
 import type { App } from "../useApps/useApps";
-import { browserWindowsOn } from "./browser-windows";
 import type { FramePoint } from "./frame-point";
 import { draggedArea, framePoint } from "./frame-point";
+import { onFrame } from "./on-frame";
+import type { ShownWindow } from "./shown-windows";
+import { ShownWindowKind } from "./shown-windows";
 
 type Props = {
   answer: (answer: PortalAnswer) => void;
@@ -29,15 +31,33 @@ type Props = {
   /** The desktop's browser windows, as the engine lists them. */
   browserWindows: readonly DomicileBrowserWindow[];
   screen: string | undefined;
+  /** The windows the shell draws on screen, read once as the dialog opens. */
+  shownWindows: () => readonly ShownWindow[];
 };
 
+/** What saving a choice keeps. */
+enum PickKind {
+  Area,
+  Window,
+}
+
+const Pick = {
+  /** An area of the frozen desk. */
+  Area: (area: ShotRect) => ({ area, kind: PickKind.Area as const }),
+  /** A window not on screen, from its own last frame. */
+  Window: (id: string) => ({ id, kind: PickKind.Window as const }),
+};
+
+type Pick = ReturnType<(typeof Pick)[keyof typeof Pick]>;
+
 /** Something the dialog offers to save, and how it shows it. */
-type Choice = { area: ShotRect; icon: ReactNode; name: string };
+type Choice = { icon: ReactNode; name: string; pick: Pick };
 
 /**
- * Picks the area of a frozen desk to save: all of it, a screen, a window, or
- * an area dragged over it. Windows are the desk's and the browser windows the
- * page draws. Dismissing it cancels.
+ * Picks what to save of a frozen desk: all of it, a screen, a window, or an
+ * area dragged over it. A window the shell shows is its whole frame on the
+ * desk; one it does not show, such as a hidden tab, is saved from its own
+ * last frame. Dismissing it cancels.
  */
 export const ScreenshotDialog = ({
   answer,
@@ -46,41 +66,39 @@ export const ScreenshotDialog = ({
   body,
   browserWindows,
   screen,
+  shownWindows,
 }: Props) => {
   // Read once, as the desk froze; a later move would not match the frame.
-  const [browsers] = useState(() =>
-    browserWindowsOn(
-      body,
-      browserWindows,
-      document.querySelectorAll("webview[window]"),
-    ),
+  const [shown] = useState(shownWindows);
+  const screens: Choice[] = body.monitors.map(
+    ({ area, description, name }) => ({
+      icon: <MonitorIcon aria-hidden />,
+      name: description === "" ? name : description,
+      pick: Pick.Area(area),
+    }),
   );
-  const screens: Choice[] = body.monitors.map(({ area, name }) => ({
-    area,
-    icon: <MonitorIcon aria-hidden />,
-    name,
-  }));
   const windows: Choice[] = [
-    ...body.windows.map(({ appId, area, title }) =>
-      windowChoice(area, titled(title), appId === "" ? undefined : apps(appId)),
+    ...body.windows.map(({ appId, id, title }) =>
+      windowChoice(
+        pickOf(body, shown, id),
+        titled(title),
+        appId === "" ? undefined : apps(appId),
+      ),
     ),
-    ...browsers.map(({ area, title }) => ({
-      area,
-      icon: <GlobeIcon aria-hidden />,
-      name: `Browser: ${titled(title)}`,
-    })),
+    ...shown.flatMap((window) => browserChoices(body, browserWindows, window)),
   ];
   const whole: Choice = {
-    area: { height: body.height, width: body.width, x: 0, y: 0 },
     icon: undefined,
     name: "Whole desk",
+    pick: Pick.Area({ height: body.height, width: body.width, x: 0, y: 0 }),
   };
   const choices = [whole, ...screens, ...windows];
   // The index of the choice picked, or the area dragged.
   const [picked, setPicked] = useState<number | ShotRect>(0);
   const [dragFrom, setDragFrom] = useState<FramePoint | undefined>(undefined);
-  const area = typeof picked === "number" ? choices[picked]?.area : picked;
-  if (area === undefined) {
+  const pick =
+    typeof picked === "number" ? choices[picked]?.pick : Pick.Area(picked);
+  if (pick === undefined) {
     throw new Error(`no screenshot choice ${String(picked)}`);
   }
   const button = (choice: Choice, index: number) => (
@@ -119,7 +137,7 @@ export const ScreenshotDialog = ({
           </Button>
           <Button
             onClick={() => {
-              answer(Answer.Screenshot(area));
+              answer(answerOf(pick));
             }}
           >
             Save
@@ -152,6 +170,11 @@ export const ScreenshotDialog = ({
           </ChoiceGroup>
         )}
       </div>
+      {pick.kind === PickKind.Window && (
+        <p className={askerStyles}>
+          Not on screen: saved as it last drew itself.
+        </p>
+      )}
       <div
         aria-label="Drag to pick an area"
         className={deskStyles}
@@ -176,7 +199,9 @@ export const ScreenshotDialog = ({
           draggable={false}
           src={body.frame}
         />
-        <div className={pickedStyles} style={placed(area, body)} />
+        {pick.kind === PickKind.Area && (
+          <div className={pickedStyles} style={placed(pick.area, body)} />
+        )}
       </div>
     </ModalDialog>
   );
@@ -252,13 +277,66 @@ const placed = (
 const titled = (title: string): string =>
   title === "" ? "Untitled window" : title;
 
+/** The answer that saves `pick`. */
+const answerOf = (pick: Pick): PortalAnswer => {
+  switch (pick.kind) {
+    case PickKind.Area:
+      return Answer.Screenshot(pick.area);
+    case PickKind.Window:
+      return Answer.ScreenshotWindow(pick.id);
+  }
+};
+
+/**
+ * What saving window `id` keeps: its frame on the desk while the shell shows
+ * it there, else its own last frame.
+ */
+const pickOf = (
+  desk: FrozenDesk,
+  shown: readonly ShownWindow[],
+  id: string,
+): Pick => {
+  const window = shown.find(
+    (window) => window.kind === ShownWindowKind.App && window.appId === id,
+  );
+  const area = window === undefined ? undefined : onFrame(desk, window.box);
+  return area === undefined ? Pick.Window(id) : Pick.Area(area);
+};
+
+/**
+ * `window` as a choice when it is a listed browser window on the desk. The
+ * engine draws a browser window, so one not on screen has nothing to save.
+ */
+const browserChoices = (
+  desk: FrozenDesk,
+  listed: readonly DomicileBrowserWindow[],
+  window: ShownWindow,
+): Choice[] => {
+  switch (window.kind) {
+    case ShownWindowKind.App:
+      return [];
+    case ShownWindowKind.Browser: {
+      const browser = listed.find(({ id }) => id === window.id);
+      const area = onFrame(desk, window.box);
+      return browser === undefined || area === undefined
+        ? []
+        : [
+            {
+              icon: <GlobeIcon aria-hidden />,
+              name: `Browser: ${titled(browser.title)}`,
+              pick: Pick.Area(area),
+            },
+          ];
+    }
+  }
+};
+
 /** A window of the desk, named and drawn with its application if it has one. */
 const windowChoice = (
-  area: ShotRect,
+  pick: Pick,
   title: string,
   app: App | undefined,
 ): Choice => ({
-  area,
   icon:
     app?.icon === undefined ? (
       <AppWindowIcon aria-hidden />
@@ -266,4 +344,5 @@ const windowChoice = (
       <img alt="" className={appIconStyles} src={app.icon} />
     ),
   name: app === undefined ? title : `${app.name}: ${title}`,
+  pick,
 });

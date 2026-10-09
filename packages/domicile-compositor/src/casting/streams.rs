@@ -20,6 +20,7 @@ use std::os::fd::OwnedFd;
 use std::path::PathBuf;
 use std::time::Instant;
 
+use domicile_protocol::ShotWindow;
 use pipewire as pw;
 use smithay::backend::renderer::gles::GlesRenderer;
 use smithay::reexports::calloop::channel::Sender;
@@ -36,7 +37,7 @@ use crate::casting::pacing::{within, Due, Pacing, Rect};
 use crate::casting::paint::paint;
 use crate::casting::producer::{self, BufferId, StreamFormat, Target, ToPipewire, ToWayland};
 use crate::casting::region::{self, damage_in_stream, in_frame, Layout, Screen};
-use crate::casting::shots::{areas, compose, desk_of, Desk, Developed, Window};
+use crate::casting::shots::{self, compose, desk_of, monitors, Desk, Developed, Shown};
 use crate::casting::{Candidate, Event, Listener, Request, Source, StreamId};
 use crate::engine::{CaptureId, CapturedFrame};
 
@@ -86,6 +87,8 @@ pub struct Streams {
     sizes: HashMap<String, (u32, u32)>,
     /// Each cast window's last frame.
     shots: HashMap<String, Shot>,
+    /// Each window's last frame the engine shows, for a shot of it alone.
+    shown: HashMap<String, Shown>,
     /// The window under the pointer, and where, in its box's logical pixels.
     pointer: Option<(String, (f64, f64))>,
     /// Where the pointer is on the desktop, in logical pixels, when the
@@ -105,7 +108,9 @@ struct Shooting {
     /// The desk, in logical pixels.
     desk: Rect,
     layout: Layout,
-    windows: Vec<Window>,
+    windows: Vec<ShotWindow>,
+    /// Each monitor's make and model, by name.
+    descriptions: HashMap<String, String>,
     developed: Developed,
 }
 
@@ -169,6 +174,7 @@ impl Streams {
             casts: HashMap::new(),
             sizes: HashMap::new(),
             shots: HashMap::new(),
+            shown: HashMap::new(),
             pointer: None,
             desk_pointer: None,
             screens: Vec::new(),
@@ -205,9 +211,15 @@ impl Streams {
             }
             Request::List { reply } => reply.send(open()),
             Request::Shoot { stream, developed } => {
-                let windows = open().into_iter().filter_map(placed).collect();
-                self.shoot(stream, windows, developed, renderer, capturer);
+                let (windows, descriptions) = named(open());
+                self.shoot(stream, windows, descriptions, developed, renderer, capturer);
             }
+            Request::ShootWindow { app_id, developed } => developed(
+                self.shown
+                    .get(&app_id)
+                    .ok_or_else(|| format!("window {app_id} has shown no frame"))
+                    .and_then(|shown| shots::window(shown, renderer)),
+            ),
             Request::Stop { stream } => {
                 if self.casts.contains_key(&stream) {
                     self.send(ToPipewire::End {
@@ -305,7 +317,8 @@ impl Streams {
     fn shoot(
         &mut self,
         stream: StreamId,
-        windows: Vec<Window>,
+        windows: Vec<ShotWindow>,
+        descriptions: HashMap<String, String>,
         developed: Developed,
         renderer: Option<&mut GlesRenderer>,
         capturer: Option<&mut (dyn Capturer + 'static)>,
@@ -321,6 +334,7 @@ impl Streams {
                     desk,
                     layout,
                     windows,
+                    descriptions,
                     developed,
                 });
                 self.develop(renderer, capturer);
@@ -378,7 +392,10 @@ impl Streams {
             let shooting = self.shooting.remove(index);
             self.captures.forget(shooting.stream, capturer);
             let scale = f64::from(shooting.layout.size.0) / f64::from(shooting.desk.2);
-            let (monitors, windows) = areas(shooting.desk, scale, &self.screens, &shooting.windows);
+            let monitors = monitors(shooting.desk, scale, &self.screens, |name| {
+                shooting.descriptions.get(name).cloned()
+            });
+            let windows = shooting.windows;
             (shooting.developed)(
                 composed
                     .map(|shot| Desk {
@@ -824,9 +841,15 @@ impl Streams {
         self.next_due()
     }
 
+    /// Window `app_id` showed `frame`, which a shot of it alone reads.
+    pub fn shown(&mut self, app_id: &str, frame: Shown) {
+        self.shown.insert(app_id.to_string(), frame);
+    }
+
     /// A window closed: its streams end.
     pub fn window_gone(&mut self, app_id: &str) {
         self.sizes.remove(app_id);
+        self.shown.remove(app_id);
         self.shots.remove(app_id);
         let gone: Vec<_> = self
             .casts
@@ -902,19 +925,25 @@ impl Streams {
     }
 }
 
-/// `candidate` as a shot names it, if the page has placed it.
-fn placed(candidate: Candidate) -> Option<Window> {
-    let bounds = candidate.bounds?;
-    Some(Window {
-        title: candidate.title,
-        app_id: candidate.app_id,
-        desk: (
-            bounds.position.0,
-            bounds.position.1,
-            bounds.size.0,
-            bounds.size.1,
-        ),
-    })
+/// The windows among `open`, as a shot names them, and each monitor's
+/// description by name.
+fn named(open: Vec<Candidate>) -> (Vec<ShotWindow>, HashMap<String, String>) {
+    let mut windows = Vec::new();
+    let mut descriptions = HashMap::new();
+    for candidate in open {
+        match candidate.source {
+            Source::Window(id) => windows.push(ShotWindow {
+                id,
+                title: candidate.title,
+                app_id: candidate.app_id,
+            }),
+            Source::Monitor(name) => {
+                descriptions.insert(name, candidate.title);
+            }
+            Source::Region(_) => {}
+        }
+    }
+    (windows, descriptions)
 }
 
 /// A screen's mode: its logical size at its density.
@@ -1090,11 +1119,15 @@ mod tests {
 
     use smithay::reexports::calloop::channel::channel;
 
+    use std::collections::HashMap;
+
+    use domicile_protocol::ShotWindow;
+
     use super::Streams;
     use crate::casting::captures::Capturer;
     use crate::casting::region::Screen;
     use crate::casting::shots::Desk;
-    use crate::casting::StreamId;
+    use crate::casting::{Candidate, Region, Request, Source, StreamId};
     use crate::engine::{CaptureId, CapturedFrame, CapturedPixels, SharedFd};
 
     /// An engine that numbers captures by display and records stops.
@@ -1172,11 +1205,30 @@ mod tests {
     fn a_shot_waits_for_every_monitor_then_lets_their_captures_go() {
         let (mut streams, mut engine) = (streams(), Engine::default());
         let (developed, heard) = mpsc::channel();
+        let open = vec![
+            Candidate {
+                source: Source::Window("app-3".into()),
+                title: "~/src".into(),
+                app_id: "kitty".into(),
+                bounds: None,
+            },
+            Candidate {
+                source: Source::Monitor("drm-1".into()),
+                title: "BOE NE135A1M-NY1".into(),
+                app_id: String::new(),
+                bounds: Some(Region {
+                    position: (0, 0),
+                    size: (1, 1),
+                }),
+            },
+        ];
 
-        streams.shoot(
-            StreamId(9),
-            Vec::new(),
-            Box::new(move |desk| developed.send(desk).expect("heard")),
+        streams.request(
+            Request::Shoot {
+                stream: StreamId(9),
+                developed: Box::new(move |desk| developed.send(desk).expect("heard")),
+            },
+            || open,
             None,
             Some(&mut engine),
         );
@@ -1202,10 +1254,42 @@ mod tests {
         let desk: Desk = heard.try_recv().expect("developed").expect("a desk");
         let blue: Vec<u8> = desk.shot.bgra.chunks(4).map(|pixel| pixel[0]).collect();
         assert_eq!(blue, [10, 10, 20, 20, 10, 10, 20, 20]);
-        assert_eq!(desk.monitors.len(), 2);
+        assert_eq!(
+            desk.monitors
+                .iter()
+                .map(|monitor| (monitor.name.as_str(), monitor.description.as_str()))
+                .collect::<Vec<_>>(),
+            [("drm-1", "BOE NE135A1M-NY1"), ("drm-2", "")]
+        );
+        assert_eq!(
+            desk.windows,
+            [ShotWindow {
+                id: "app-3".into(),
+                title: "~/src".into(),
+                app_id: "kitty".into(),
+            }],
+            "the windows, not the monitors"
+        );
         assert_eq!(desk.place, (0, 0, 2, 1));
         engine.stopped.sort_unstable();
         assert_eq!(engine.stopped, [1, 2]);
+    }
+
+    #[test]
+    fn a_window_that_has_shown_nothing_cannot_be_shot_alone() {
+        let (developed, heard) = mpsc::channel();
+
+        streams().request(
+            Request::ShootWindow {
+                app_id: "app-3".into(),
+                developed: Box::new(move |shot| developed.send(shot).expect("heard")),
+            },
+            Vec::new,
+            None,
+            None,
+        );
+
+        assert!(heard.try_recv().expect("developed").is_err());
     }
 
     #[test]
@@ -1215,6 +1299,7 @@ mod tests {
         streams().shoot(
             StreamId(9),
             Vec::new(),
+            HashMap::new(),
             Box::new(move |desk| developed.send(desk).expect("heard")),
             None,
             None,
@@ -1230,6 +1315,7 @@ mod tests {
         streams.shoot(
             StreamId(9),
             Vec::new(),
+            HashMap::new(),
             Box::new(move |desk| developed.send(desk).expect("heard")),
             None,
             Some(&mut engine),

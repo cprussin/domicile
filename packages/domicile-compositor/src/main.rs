@@ -110,6 +110,7 @@ use smithay::{
 use tracing::{debug, error, info, warn};
 
 mod activation;
+mod app_scope;
 mod casting;
 mod clipboard;
 mod coalesce;
@@ -1398,6 +1399,9 @@ struct DomicileCompositor {
 
     /// State shared with the chrome connection threads.
     hub: Arc<ChromeHub>,
+    /// Whether clients start in their own systemd scopes; see
+    /// [`crate::app_scope`].
+    scope_clients: bool,
     /// Commit count per surface, keyed as [`painted_key`].
     ///
     /// Tells a window that redrew in place from one that did not change. `Look`
@@ -1428,6 +1432,11 @@ struct DomicileCompositor {
     /// The app the pointer is currently over, so a `set_cursor` request can be
     /// attributed to the element the chrome should restyle.
     pointer_app: Option<String>,
+    /// Pointer buttons the seat was told are down, in the order pressed.
+    ///
+    /// Smithay keeps this list too but does not expose it. See
+    /// [`DomicileCompositor::let_go_of_lost_presses`].
+    held_buttons: Vec<u32>,
     /// InputCapture sessions, which take input once the pointer reaches a
     /// barrier. Set when the Wayland loop starts serving EIS. See
     /// [`crate::eis`].
@@ -2295,6 +2304,64 @@ impl DomicileCompositor {
         }
     }
 
+    /// Release the buttons held over another window before a press over this
+    /// one.
+    ///
+    /// The page forwards a release only over the window's own element, so a
+    /// button let go over the shell never reaches the seat. Smithay keeps the
+    /// pointer on the pressed surface until every button is up, and keeps
+    /// counting the button after that surface is gone, so the next press
+    /// anywhere would hold the pointer for good.
+    fn let_go_of_lost_presses(&mut self) {
+        let pointer = self.seat.get_pointer().unwrap();
+        let holder = pointer
+            .grab_start_data()
+            .and_then(|grab| grab.focus)
+            .map(|(surface, _)| surface);
+        let target = self
+            .pointer_app
+            .as_deref()
+            .and_then(|app_id| self.surface_for(app_id));
+        if self.held_buttons.is_empty() || holder == target {
+            return;
+        }
+        debug!(buttons = ?self.held_buttons, "a press elsewhere -> releasing lost presses");
+        for button in std::mem::take(&mut self.held_buttons) {
+            self.pointer_button(button, ButtonState::Released);
+        }
+        // The grab kept the pointer on the holder, so enter the window the
+        // press is over. The location is already local to it; see
+        // `ClientRequest::PointerMotion`.
+        let (serial, time) = (SERIAL_COUNTER.next_serial(), self.now_ms());
+        let location = pointer.current_location();
+        pointer.motion(
+            self,
+            target.map(|surface| (surface, (0.0, 0.0).into())),
+            &MotionEvent {
+                location,
+                serial,
+                time,
+            },
+        );
+        pointer.frame(self);
+    }
+
+    /// Send one pointer button change to the seat.
+    fn pointer_button(&mut self, button: u32, state: ButtonState) {
+        let pointer = self.seat.get_pointer().unwrap();
+        let (serial, time) = (SERIAL_COUNTER.next_serial(), self.now_ms());
+        pointer.button(
+            self,
+            &ButtonEvent {
+                button,
+                state,
+                serial,
+                time,
+            },
+        );
+        pointer.frame(self);
+    }
+
     /// Every grabbing popup dismissed, innermost first, as xdg-shell wants.
     fn dismiss_the_menus(&mut self) {
         for menu in self.grabbing.drain(..).rev() {
@@ -2764,14 +2831,26 @@ impl DomicileCompositor {
             return Published::NotShown;
         }
         let published = match &committed {
-            CommittedBuffer::Gpu(dmabuf) => self.submit_to_the_engine(
-                app_id,
-                Submitted::Client(buffer.clone()),
-                &descriptor_from(dmabuf),
-                crop,
-                at_box,
-                Published::Held,
-            ),
+            CommittedBuffer::Gpu(dmabuf) => {
+                let published = self.submit_to_the_engine(
+                    app_id,
+                    Submitted::Client(buffer.clone()),
+                    &descriptor_from(dmabuf),
+                    crop,
+                    at_box,
+                    Published::Held,
+                );
+                if published != Published::NotShown {
+                    self.casting.shown(
+                        app_id,
+                        casting::Shown {
+                            dmabuf: dmabuf.clone(),
+                            crop,
+                        },
+                    );
+                }
+                published
+            }
             CommittedBuffer::Pixels { .. } => self.publish_shm_frame(app_id, buffer, crop, at_box),
         };
         if matches!(published, Published::Held | Published::Copied) {
@@ -2850,6 +2929,13 @@ impl DomicileCompositor {
         if published == Published::NotShown {
             // Never reached viz, so nothing will release it.
             self.uploads.give_back(copied.id);
+        } else {
+            let dmabuf = self
+                .uploads
+                .get(copied.id)
+                .expect("a buffer the engine holds is there")
+                .clone();
+            self.casting.shown(app_id, casting::Shown { dmabuf, crop });
         }
         published
     }
@@ -4236,23 +4322,15 @@ impl DomicileCompositor {
             }
             ClientRequest::PointerButton { button, pressed } => {
                 tracing::debug!(button, pressed, "pointer button -> client");
-                let pointer = self.seat.get_pointer().unwrap();
-                let (serial, time) = (SERIAL_COUNTER.next_serial(), self.now_ms());
                 let state = if pressed {
+                    self.let_go_of_lost_presses();
+                    self.held_buttons.push(button);
                     ButtonState::Pressed
                 } else {
+                    self.held_buttons.retain(|held| *held != button);
                     ButtonState::Released
                 };
-                pointer.button(
-                    self,
-                    &ButtonEvent {
-                        button,
-                        state,
-                        serial,
-                        time,
-                    },
-                );
-                pointer.frame(self);
+                self.pointer_button(button, state);
             }
             ClientRequest::PointerAxis {
                 dx,
@@ -4431,7 +4509,9 @@ impl DomicileCompositor {
                     debug!(%app_id, "bounds: a window with no toplevel");
                 }
             }
-            ClientRequest::Spawn { command } => spawn_client(&command, &self.hub.wayland_display),
+            ClientRequest::Spawn { command } => {
+                spawn_client(&command, &self.hub.wayland_display, self.scope_clients)
+            }
             ClientRequest::CloseApp { app_id } => match self.toplevel_for(&app_id) {
                 Some(toplevel) => {
                     debug!(%app_id, "close -> client");
@@ -5436,8 +5516,33 @@ impl XdgShellHandler for DomicileCompositor {
     }
 
     /// A client set or changed its window's application id, which the
-    /// Background portal reports.
-    fn app_id_changed(&mut self, _surface: ToplevelSurface) {
+    /// Background portal reports and the chrome reads as its desktop id.
+    fn app_id_changed(&mut self, surface: ToplevelSurface) {
+        // `None` for the chrome's own window, which is never announced.
+        if let Some(app_id) = self.app_id_of(surface.wl_surface()) {
+            let desktop_id = with_states(surface.wl_surface(), |states| {
+                states
+                    .data_map
+                    .get::<XdgToplevelSurfaceData>()
+                    .unwrap()
+                    .lock()
+                    .unwrap()
+                    .app_id
+                    .clone()
+            })
+            .expect("Smithay calls this only after the client set an app id");
+            // Separate `let` so the host guard drops before the broadcast, as
+            // in `title_changed`.
+            let named = self
+                .hub
+                .host
+                .lock()
+                .unwrap()
+                .app_desktop_id(&app_id, desktop_id);
+            if let Some(named) = named {
+                self.hub.broadcast(named);
+            }
+        }
         self.the_running_apps_changed();
     }
 
@@ -5859,11 +5964,13 @@ fn chrome_display(socket_name: &OsStr) -> String {
 /// Spawn a client process onto Domicile's display.
 ///
 /// A reaper thread waits on the child so it doesn't become a zombie.
-fn spawn_client(command: &[String], wayland_display: &OsStr) {
+/// `scoped` starts it in its own systemd scope; see [`crate::app_scope`].
+fn spawn_client(command: &[String], wayland_display: &OsStr, scoped: bool) {
     let Some(mut child) = client_command(
         command,
         wayland_display,
         std::env::var_os("LD_LIBRARY_PATH").as_deref(),
+        scoped.then(app_scope::random),
     ) else {
         return;
     };
@@ -5882,7 +5989,12 @@ fn spawn_client(command: &[String], wayland_display: &OsStr) {
                 let _ = child.wait();
             });
         }
-        Err(err) => tracing::error!(%err, ?command, "failed to spawn client"),
+        Err(err) => tracing::error!(
+            %err,
+            program = ?child.get_program(),
+            ?command,
+            "failed to spawn client"
+        ),
     }
 }
 
@@ -5939,12 +6051,21 @@ fn home_directory() -> Option<std::path::PathBuf> {
 ///
 /// `DOMICILE_SOCK` is inherited unchanged: the launcher sets it to this
 /// desktop's control socket.
+///
+/// With a `scope`, the client starts in its own systemd scope; see
+/// [`app_scope::scoped`].
 fn client_command(
     command: &[String],
     wayland_display: &OsStr,
     library_path: Option<&OsStr>,
+    scope: Option<u64>,
 ) -> Option<Command> {
     let (program, args) = command.split_first()?;
+    let words = match scope {
+        Some(random) => app_scope::scoped(program, args, random),
+        None => command.to_vec(),
+    };
+    let (program, args) = words.split_first().expect("both start with a program");
     let mut child = Command::new(program);
     child.args(args);
     for (name, value) in desktop_environment(wayland_display, library_path) {
@@ -6388,7 +6509,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             notification_server.clone(),
             {
                 let display = socket_name.clone();
-                move |command| spawn_client(command, &display)
+                let scoped = arguments.scope_clients;
+                move |command| spawn_client(command, &display, scoped)
             },
             portals::ScreenCasting {
                 casting: casting::Casting::new(cast_requests.clone()),
@@ -6664,6 +6786,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         dmabuf_global,
         gpu,
         hub,
+        scope_clients: arguments.scope_clients,
         content: HashMap::new(),
         toplevels: Vec::new(),
         app_bounds: HashMap::new(),
@@ -6671,6 +6794,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         grabbing: Vec::new(),
         bubbles: Vec::new(),
         pointer_app: None,
+        held_buttons: Vec::new(),
         captures: None,
         start: Instant::now(),
         last_frame: HashMap::new(),
@@ -6983,7 +7107,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     // Startup commands, once the desktop is live. Not run on reload; see
     // `StartupConfig`.
     for command in &config.startup.commands {
-        spawn_client(command, &socket_name);
+        spawn_client(command, &socket_name, arguments.scope_clients);
     }
 
     // Flush after every loop iteration so events queued while handling input
@@ -7833,7 +7957,7 @@ mod tests {
         library_path: Option<&OsStr>,
         name: &str,
     ) -> Option<OsString> {
-        client_command(command, OsStr::new(display), library_path)
+        client_command(command, OsStr::new(display), library_path, None)
             .expect("a command with a program builds")
             .get_envs()
             .find(|(key, _)| *key == OsStr::new(name))
@@ -7942,7 +8066,28 @@ mod tests {
 
     #[test]
     fn an_empty_command_spawns_nothing() {
-        assert!(client_command(&[], OsStr::new("wayland-7"), None).is_none());
+        assert!(client_command(&[], OsStr::new("wayland-7"), None, None).is_none());
+    }
+
+    #[test]
+    fn a_scoped_client_keeps_the_desktops_environment() {
+        // `systemd-run --scope` execs the client with its own environment.
+        let child = client_command(&kitty(), OsStr::new("wayland-7"), None, Some(7))
+            .expect("a command with a program builds");
+        assert_eq!(child.get_program(), "systemd-run");
+        assert!(
+            child
+                .get_envs()
+                .any(|pair| pair == (OsStr::new("WAYLAND_DISPLAY"), Some(OsStr::new("wayland-7")))),
+            "{child:?}"
+        );
+    }
+
+    #[test]
+    fn an_unscoped_client_starts_itself() {
+        let child = client_command(&kitty(), OsStr::new("wayland-7"), None, None)
+            .expect("a command with a program builds");
+        assert_eq!(child.get_program(), "kitty");
     }
 
     #[test]

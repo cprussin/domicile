@@ -9,8 +9,9 @@
 # the state as attributes there is nothing to buffer: the page reads, then
 # listens. This
 # guard's page reads only after the stand-in has said everything -- three
-# windows appearing, one retitled, resized, limited and given a cursor, one
-# focused, one closed, a popup placed -- and the attributes must hold all of it.
+# windows appearing, one retitled, given a desktop id, resized, limited and
+# given a cursor, one focused, one closed, a popup placed -- and the attributes
+# must hold all of it.
 # See packages/chrome-sdk/README.md.
 #
 # AND TWO THINGS NO OTHER GUARD READS IN A REAL ENGINE:
@@ -142,16 +143,17 @@ windows = json.loads(windows_line[len('"GUARD windows '):-1])
 by_id = {w["appId"]: w for w in windows}
 
 def default(**fields):
-    window = {"cursor": "default", "grab": False, "height": None, "maxHeight": None,
+    window = {"cursor": "default", "desktopId": "", "grab": False, "height": None, "maxHeight": None,
               "maxWidth": None, "minHeight": None, "minWidth": None, "parent": None,
               "title": "", "width": None, "x": None, "y": None}
     window.update(fields)
     return window
 
 wanted = [
-    default(appId="first", title="Retitled", width=800, height=600, minWidth=100, minHeight=50,
-            cursor="zoom-out"),
-    default(appId="second", title="Second", width=640, height=480, cursor="grab"),
+    default(appId="first", title="Retitled", desktopId="org.example.First", width=800,
+            height=600, minWidth=100, minHeight=50, cursor="zoom-out"),
+    default(appId="second", title="Second", desktopId="org.example.Second", width=640,
+            height=480, cursor="grab"),
     default(appId="menu", parent="second", x=10, y=20, width=120, height=90, grab=True),
 ]
 

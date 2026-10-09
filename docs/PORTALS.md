@@ -126,14 +126,19 @@ One request channel carries all dialogs. Each interface's backend builds on it.
   frame, so they never capture themselves; the shell answers an area or a
   pixel in frame pixels. Saved as a PNG under
   `$XDG_PICTURES_DIR/Screenshots/`.
-  - A window is its area on the desk, so it shows what is over it. Its own
-    buffer is kept only while it is cast.
-  - The picker lists screens and windows apart. A window is named by its
-    application's desktop entry and its title.
-  - The compositor sees only `<app>` windows. The picker adds each browser
-    window the page draws (`<webview window>`), placed with the frozen desk's
-    `desk` rectangle, since the page's CSS pixels are the desk's logical
-    pixels.
+  - The picker lists screens and windows apart. A screen is named by its
+    make and model, a window by its application's desktop entry and its
+    title.
+  - A window the shell shows is its whole frame on the desk (title bar,
+    address bar or tab strip included), so it shows what is over it. The
+    shell passes its frames as `shownWindows`; without them the picker reads
+    the page's `<app>` and `<webview window>` boxes. A box is placed with the
+    frozen desk's `desk` rectangle: the page's CSS pixels are the desk's
+    logical pixels.
+  - A window the shell does not show (a hidden tab, another workspace) is
+    answered `screenshot_window` and saved from the last frame it showed,
+    which the engine still holds. A browser window not on screen is not
+    offered: the engine draws it.
   - The frontend checks the `PermissionStore` for a non-interactive
     screenshot (`permission_store_checked`). Without that, the backend asks
     through an `Access` dialog once per app and keeps the answer in the same

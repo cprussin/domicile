@@ -63,6 +63,7 @@ temp directory. The modules that spawn processes or bind sockets stay thin.
 | `shell_path` | yes | name or path → module to load and the directory it is served from |
 | `shell_source` | yes | classifies a shell argument: module, entry to build, bundled shell, or package |
 | `build_progress` | yes | parses builder output into a terminal progress bar |
+| `splash` | yes | the splash shown during a slow first build: its copy, its progress file, and loading the shell once the engine answers |
 | `platform` | yes | `OZONE` / `WAYLAND_DISPLAY` / `DISPLAY` / `XDG_VTNR` → ozone platform (a console login gets `drm`), or an error saying what to set |
 | `control` | yes | control socket requests and replies; takes the engine calls as parameters for the commands it routes |
 | `command` | yes | engine command wire: the line, its version, and the reply |
@@ -211,7 +212,7 @@ Detecting a new engine:
 <prefix>/bin/domicile-compositor
 <prefix>/libexec/domicile/engine/     the Chromium tree, with `chrome` inside
 <prefix>/libexec/domicile/builder     builds a shell from an entry or a package
-<prefix>/libexec/domicile/shells/     bundled shells, prebuilt
+<prefix>/libexec/domicile/shells/     bundled shells and the splash, prebuilt
 ```
 
 - `current_exe()` reads `/proc/self/exe`, which resolves symlinks. A

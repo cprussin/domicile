@@ -34,6 +34,7 @@ import { useNow } from "./notifications/useNow";
 import { readouts as deskReadouts } from "./readouts/readouts";
 import { Monitor } from "./screens/Monitor";
 import { NoScreens } from "./screens/NoScreens";
+import { shownWindowsOf } from "./screens/shown-windows";
 import type { StageScreen } from "./screens/stage-screens";
 import { stageScreensOf } from "./screens/stage-screens";
 import { useScreenFollowsPointer } from "./screens/useScreenFollowsPointer";
@@ -43,11 +44,14 @@ import { trayEntries } from "./tray/tray-entry";
 import { useTray } from "./tray/useTray";
 import { useTrayOrder } from "./tray/useTrayOrder";
 import { Wallpaper } from "./wallpaper/Wallpaper";
+import { desktopClientIcons } from "./window-management/client-icons";
 import type { Focus } from "./window-management/pointer-warp";
 import { Stage } from "./window-management/Stage";
 import { AimKind } from "./window-management/tiled/aim";
+import { useClientIcons } from "./window-management/useClientIcons";
 import { usePointerWarp } from "./window-management/usePointerWarp";
 import { useWindows } from "./window-management/useWindows";
+import { WindowKind } from "./window-management/window";
 import { screenOfApp, WindowAction } from "./window-management/window-state";
 
 type Props = {
@@ -77,6 +81,13 @@ export const Desktop = ({
   const displays = useDisplays();
   const windows = useWindows(domicile, displays);
   const { act } = windows;
+  const clientIcons = useClientIcons(
+    domicile,
+    windows.windows.flatMap((window) =>
+      window.kind === WindowKind.App ? [window.desktopId] : [],
+    ),
+    desktopClientIcons,
+  );
 
   // Super returns the pointer to the page; Shift turns a drag into a resize.
   // Read from this page's key events and from the engine's report for browser
@@ -107,8 +118,8 @@ export const Desktop = ({
   const opening = useOpeningApps(apps.opening, windows.launcherOpen);
   // The file the launcher asked what to open with, while that is asked.
   const [openingWith, setOpeningWith] = useState<string | undefined>();
-  // The launcher's pick, held until it has closed, so nothing it opens sees
-  // it. A screenshot app would shoot it.
+  // The launcher's pick, held until it has closed and the screen shows it
+  // gone, so nothing it opens sees it. A screenshot app would shoot it.
   const [picked, setPicked] = useState<Launch | undefined>();
   // File previews, read through the desktop's system calls.
   const preview = useCallback(
@@ -283,14 +294,15 @@ export const Desktop = ({
       {screens.length > 0 && (
         <Stage
           activeId={windows.activeId}
-          // While a desktop panel is open the page keeps the keyboard; see
-          // `AppWindow`. Extension popups count.
           behindPanel={
             windows.launcherOpen ||
             windows.clipboardOpen ||
             popupOpen ||
             notificationsOpen
           }
+          // While a desktop panel is open the page keeps the keyboard; see
+          // `AppWindow`. Extension popups count.
+          clientIcons={clientIcons}
           domicile={domicile}
           draggingId={windows.draggingId}
           focusedId={windows.focusedId}
@@ -330,6 +342,9 @@ export const Desktop = ({
               act(WindowAction.WindowHovered(id));
             }
           }}
+          onIcon={(window, icon) => {
+            act(WindowAction.BrowserIconChanged(window, icon));
+          }}
           // In page pixels, so a float can be dragged to another screen; see
           // `floatDragged`.
           onMove={(id, x, y) => {
@@ -363,7 +378,9 @@ export const Desktop = ({
         onClosed={() => {
           if (picked !== undefined) {
             setPicked(undefined);
-            launch(picked, act, setOpeningWith);
+            afterAFramePainted(() => {
+              launch(picked, act, setOpeningWith);
+            });
           }
         }}
         onDismiss={() => {
@@ -443,6 +460,9 @@ export const Desktop = ({
         screen={windows.focused}
         screenOf={(appId) => screenOfApp(windows, appId)}
         shellChords={shellChords}
+        // Frames with their bars; the page's own boxes leave those out and
+        // still count a hidden tab.
+        shownWindows={() => shownWindowsOf(screens)}
       />
       {/*
         Last, over every panel, so the modal launcher and clipboard cannot take
@@ -494,6 +514,16 @@ const focusOf = (
   } else {
     return { box: placement.surface ?? placement.bar, id: placement.id };
   }
+};
+
+/**
+ * Runs `then` once a frame drawn after now has been painted: the second
+ * animation frame from now runs after the first one's paint.
+ */
+const afterAFramePainted = (then: () => void) => {
+  requestAnimationFrame(() => {
+    requestAnimationFrame(then);
+  });
 };
 
 /** Does what the launcher picked, once it has closed. */

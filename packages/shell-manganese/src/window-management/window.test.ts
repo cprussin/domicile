@@ -17,6 +17,7 @@ describe("ShellWindow", () => {
         appId: "term",
         // Unset until the client reports them.
         cursor: undefined,
+        desktopId: "",
         id: "app:term",
         kind: WindowKind.App,
         maxSize: [undefined, undefined],
@@ -74,6 +75,8 @@ describe("ShellWindow", () => {
           true,
         ),
       ).toEqual({
+        // The view reports it later.
+        icon: undefined,
         id: browserWindowId("2"),
         isPrivate: true,
         kind: WindowKind.Browser,

@@ -775,6 +775,7 @@ fn frozen() -> FrozenDesk {
         height: 100,
         monitors: vec![ShotArea {
             name: "DP-1".into(),
+            description: "BOE NE135A1M-NY1".into(),
             area: ShotRect {
                 x: 0,
                 y: 0,
@@ -783,14 +784,9 @@ fn frozen() -> FrozenDesk {
             },
         }],
         windows: vec![ShotWindow {
+            id: "app-3".into(),
             title: "~/src".into(),
             app_id: "kitty".into(),
-            area: ShotRect {
-                x: 10,
-                y: 20,
-                width: 30,
-                height: 40,
-            },
         }],
         desk: DeskRect {
             position: (-10, 0),
@@ -805,7 +801,7 @@ fn a_screenshot_picker_carries_the_frozen_desk_and_its_areas() {
 
     assert_eq!(
         written,
-        r#"{"kind":"screenshot","body":{"frame":"data:image/png;base64,AA==","width":300,"height":100,"monitors":[{"name":"DP-1","area":{"x":0,"y":0,"width":300,"height":100}}],"windows":[{"title":"~/src","app_id":"kitty","area":{"x":10,"y":20,"width":30,"height":40}}],"desk":{"position":[-10,0],"size":[150,50]}}}"#
+        r#"{"kind":"screenshot","body":{"frame":"data:image/png;base64,AA==","width":300,"height":100,"monitors":[{"name":"DP-1","description":"BOE NE135A1M-NY1","area":{"x":0,"y":0,"width":300,"height":100}}],"windows":[{"id":"app-3","title":"~/src","app_id":"kitty"}],"desk":{"position":[-10,0],"size":[150,50]}}}"#
     );
 }
 
@@ -822,6 +818,10 @@ fn the_screenshot_and_color_answers_the_sdk_sends_parse() {
                     height: 4,
                 },
             },
+        ),
+        (
+            r#"{"kind":"screenshot_window","id":"app-3"}"#,
+            PortalAnswer::ScreenshotWindow { id: "app-3".into() },
         ),
         (
             r#"{"kind":"pick_color","x":5,"y":6}"#,
@@ -857,6 +857,11 @@ fn a_frozen_desk_takes_only_its_own_answer_inside_the_frame() {
     );
     assert!(!picker.accepts(&area(0, 0, 0, 10)), "empty");
     assert!(!picker.accepts(&PortalAnswer::PickColor { x: 1, y: 1 }));
+    let window = |id: &str| PortalAnswer::ScreenshotWindow { id: id.into() };
+    assert!(picker.accepts(&window("app-3")));
+    assert!(!picker.accepts(&window("app-9")), "not on the desk");
+    assert!(!picking.accepts(&window("app-3")));
+    assert_eq!(window("app-3").response(), 0);
     assert!(picking.accepts(&PortalAnswer::PickColor { x: 299, y: 99 }));
     assert!(!picking.accepts(&PortalAnswer::PickColor { x: 300, y: 0 }));
     assert!(!picking.accepts(&area(0, 0, 1, 1)));

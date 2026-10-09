@@ -255,6 +255,10 @@ pub enum HostMessage {
     AppAppeared {
         app_id: String,
         title: Option<String>,
+        /// The client's `xdg_toplevel.set_app_id`, which names its desktop
+        /// entry. Usually absent here; it follows in
+        /// [`HostMessage::AppDesktopId`].
+        desktop_id: Option<String>,
         size: Option<[f64; 2]>,
     },
 
@@ -268,6 +272,14 @@ pub enum HostMessage {
         app_id: String,
         title: Option<String>,
     },
+
+    /// A window's desktop id (`xdg_toplevel.set_app_id`), sent whenever it
+    /// changes.
+    ///
+    /// Separate from [`HostMessage::AppAppeared`] for the reason
+    /// [`HostMessage::AppTitled`] is. xdg-shell cannot unset an app id, so
+    /// this always carries one.
+    AppDesktopId { app_id: String, desktop_id: String },
 
     /// A client's content size changed, in logical units (CSS pixels, as
     /// `wl_pointer` uses), not buffer pixels.
@@ -627,6 +639,9 @@ impl PortalKind {
                         .all(|range| 1 <= range.first && range.first <= range.last)
             }
             (PortalKind::Screenshot(desk), PortalAnswer::Screenshot { area }) => desk.holds(area),
+            (PortalKind::Screenshot(desk), PortalAnswer::ScreenshotWindow { id }) => {
+                desk.windows.iter().any(|window| window.id == *id)
+            }
             (PortalKind::PickColor(desk), PortalAnswer::PickColor { x, y }) => {
                 *x < desk.width && *y < desk.height
             }
@@ -644,6 +659,7 @@ impl PortalKind {
                 | PortalAnswer::ScreenCast { .. }
                 | PortalAnswer::Print { .. }
                 | PortalAnswer::Screenshot { .. }
+                | PortalAnswer::ScreenshotWindow { .. }
                 | PortalAnswer::PickColor { .. }
                 | PortalAnswer::Stop
                 | PortalAnswer::Pressed
@@ -968,21 +984,29 @@ impl FrozenDesk {
     }
 }
 
-/// A monitor of a [`FrozenDesk`], by `wl_output` name.
+/// A monitor of a [`FrozenDesk`].
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ShotArea {
+    /// Its `wl_output` name.
     pub name: String,
+    /// Its make, model and serial, or empty.
+    pub description: String,
     pub area: ShotRect,
 }
 
-/// An open window of a [`FrozenDesk`].
+/// An open window of a [`FrozenDesk`], whether or not it is on screen.
+///
+/// The shell knows where it draws each window, so it finds a shown one on
+/// the frame itself. One it does not show is saved from its own last frame;
+/// see [`PortalAnswer::ScreenshotWindow`].
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ShotWindow {
+    /// Its host app id.
+    pub id: String,
     /// Empty until the client names it.
     pub title: String,
     /// Its Wayland app id, which names its desktop entry; empty if unset.
     pub app_id: String,
-    pub area: ShotRect,
 }
 
 /// A rectangle of the desktop, in logical pixels.
@@ -1234,6 +1258,9 @@ pub enum PortalAnswer {
     GlobalShortcuts { triggers: Vec<ChosenTrigger> },
     /// The area of a [`PortalKind::Screenshot`] the user kept.
     Screenshot { area: ShotRect },
+    /// The [`ShotWindow`] of a [`PortalKind::Screenshot`] the user picked,
+    /// saved from its own last frame rather than from the frozen desk.
+    ScreenshotWindow { id: String },
     /// The pixel of a [`PortalKind::PickColor`] the user picked.
     PickColor { x: u32, y: u32 },
     /// The [`BoundShortcut`] with this id fired. Answers no request.
@@ -1261,6 +1288,7 @@ impl PortalAnswer {
             | PortalAnswer::ScreenCast { .. }
             | PortalAnswer::Print { .. }
             | PortalAnswer::Screenshot { .. }
+            | PortalAnswer::ScreenshotWindow { .. }
             | PortalAnswer::PickColor { .. }
             | PortalAnswer::Stop => 0,
             PortalAnswer::Canceled => 1,

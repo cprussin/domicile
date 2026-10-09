@@ -4,7 +4,8 @@
 //!   ([`shell_path`]), config ([`config_path`]), profile ([`profile_path`],
 //!   [`profile_claim`]), platform ([`platform`]) and components
 //!   ([`components`]), then start ([`spawn`]), order ([`supervise`]) and
-//!   restart ([`restart`]) them.
+//!   restart ([`restart`]) them. A slow first build of the shell runs behind
+//!   the [`splash`].
 //! - `domicile which-shell`: query a running desktop ([`control`],
 //!   [`control_socket`]).
 //! - `domicile load-shell` and `domicile open-url`: forwarded to the engine
@@ -45,5 +46,6 @@ pub mod session;
 pub mod shell_path;
 pub mod shell_source;
 pub mod spawn;
+pub mod splash;
 pub mod supervise;
 pub mod xdg_open;

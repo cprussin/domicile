@@ -45,6 +45,21 @@ Settings live in `~/.config/domicile/domicile.json` (or `.ts`/`.js`). Reference:
 { "startup": { "commands": [["emacsclient", "-e", "t"], ["sh", "-c", "mako >/dev/null"]] } }
 ```
 
+### Each app gets its own scope
+
+- A desktop that is the login session starts each app it launches (keys,
+  launcher, `startup.commands`, the portal's mail client) through
+  `systemd-run --user --scope`, in `app.slice`, named
+  `app-domicile-<program>-<random>.scope`.
+- The desktop stays in the login session's cgroup and the apps move to the
+  user manager's. The kernel shares CPU between those before it looks at nice
+  values, so a build in a terminal cannot take the desktop's share.
+- This needs `systemd-run` on `PATH` and a systemd user manager on the session
+  bus. Without one, the launcher says so and apps start in the desktop's
+  cgroup. A nested desktop leaves its apps to the host session.
+- An app's own children stay in its scope: `systemctl --user status` shows them
+  under it.
+
 ### Links open on the desktop
 
 - Apps get `BROWSER=domicile-open-url`, which opens the URL in a desktop
@@ -153,6 +168,11 @@ It provides:
   session serves every desktop. Without the module,
   `services.displayManager.sessionPackages = [domicile]` adds it.
 - **The `domicile` PAM service**, for `lock.pam_service = "domicile"`.
+- **The `domicile` group.** Its members' login sessions may lower nice values
+  to -10 and use realtime priority 8. The engine asks for nice -8 on the
+  threads that draw and present frames, so animations stay smooth while the
+  machine is busy. Add yourself with
+  `users.users.<you>.extraGroups = ["domicile"]` and log in again.
 - **UPower**, which the battery readout reads. Without it, manganese shows no
   battery. Set `services.upower.enable = false` to opt out.
 - **`domicile-session.target`**, started by a desktop that is the session. User

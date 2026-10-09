@@ -222,16 +222,27 @@ export type ChosenTrigger = { id: string; trigger: string | undefined };
 /** A rectangle of a {@link FrozenDesk}'s frame, in its pixels. */
 export type ShotRect = { x: number; y: number; width: number; height: number };
 
-/** A monitor of a {@link FrozenDesk}, by `wl_output` name. */
-export type ShotArea = { name: string; area: ShotRect };
+/** A monitor of a {@link FrozenDesk}. */
+export type ShotArea = {
+  /** Its `wl_output` name. */
+  name: string;
+  /** Its make, model and serial, or empty. */
+  description: string;
+  area: ShotRect;
+};
 
-/** An open window of a {@link FrozenDesk}. */
+/**
+ * An open window of a {@link FrozenDesk}, shown or not. The shell finds a
+ * shown one on the frame itself; one it does not show is saved from its own
+ * last frame with {@link PortalAnswer.ScreenshotWindow}.
+ */
 export type ShotWindow = {
+  /** Its host app id, as an `<app>`'s `app-id` names it. */
+  id: string;
   /** Empty until the client names it. */
   title: string;
   /** Its Wayland app id, which names its desktop entry; empty if unset. */
   appId: string;
-  area: ShotRect;
 };
 
 /**
@@ -578,6 +589,11 @@ export enum PortalAnswerKind {
   Print,
   /** The area of a {@link PortalKind.Screenshot} the user kept. */
   Screenshot,
+  /**
+   * The window of a {@link PortalKind.Screenshot} the user picked, saved from
+   * its own last frame.
+   */
+  ScreenshotWindow,
   /** The pixel of a {@link PortalKind.PickColor} the user picked. */
   PickColor,
   /** The user dismissed or denied the dialog. */
@@ -633,6 +649,11 @@ export const PortalAnswer = {
   Screenshot: (area: ShotRect) => ({
     area,
     kind: PortalAnswerKind.Screenshot as const,
+  }),
+  /** One of the request's windows, by {@link ShotWindow.id}. */
+  ScreenshotWindow: (id: string) => ({
+    id,
+    kind: PortalAnswerKind.ScreenshotWindow as const,
   }),
   Stop: () => ({ kind: PortalAnswerKind.Stop as const }),
 };
@@ -1078,11 +1099,15 @@ const shotRectSchema = z.object({
   y: z.number(),
 });
 
-const shotAreaSchema = z.object({ area: shotRectSchema, name: z.string() });
+const shotAreaSchema = z.object({
+  area: shotRectSchema,
+  description: z.string(),
+  name: z.string(),
+});
 
 const shotWindowSchema = z
-  .object({ app_id: z.string(), area: shotRectSchema, title: z.string() })
-  .transform(({ app_id, area, title }) => ({ appId: app_id, area, title }));
+  .object({ app_id: z.string(), id: z.string(), title: z.string() })
+  .transform(({ app_id, id, title }) => ({ appId: app_id, id, title }));
 
 const frozenDeskSchema = z.object({
   desk: z.object({ position: pairSchema, size: pairSchema }),
@@ -1419,6 +1444,8 @@ const wireAnswer = (answer: PortalAnswer): object => {
       };
     case PortalAnswerKind.Screenshot:
       return { area: answer.area, kind: "screenshot" };
+    case PortalAnswerKind.ScreenshotWindow:
+      return { id: answer.id, kind: "screenshot_window" };
     case PortalAnswerKind.PickColor:
       return { kind: "pick_color", x: answer.at.x, y: answer.at.y };
     case PortalAnswerKind.Refused:
