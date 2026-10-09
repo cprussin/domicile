@@ -191,21 +191,29 @@ std::vector<DomicileDisplay> HomeOfficeRightTwo() {
 
 constexpr size_t kNoCeiling = std::numeric_limits<size_t>::max();
 
+TEST(DomicileDisplayRegionsTest, ADeskOnOneScreenHasUpstreamsTileMemory) {
+  // Upstream's reference screen, 2056x1329 at 2, gets 1152 MiB.
+  EXPECT_EQ(DomicileTileBytesFor({{gfx::Rect(0, 0, 2056, 1329), 2.f}},
+                                 gfx::Rect(0, 0, 2056, 1329), 2.f, kNoCeiling),
+            1207959552u);
+}
+
 TEST(DomicileDisplayRegionsTest, TheDeskHasTileMemoryForEveryMonitor) {
   // The page at 1.5 is 8280x4800, 39744000 pixels. Each 1.2 monitor's tiling
-  // is its own 2160x3840, 8294400 pixels. 56332800 pixels at 4 bytes, 8 times.
+  // is its own 2160x3840, 8294400 pixels. 56332800 pixels at upstream's
+  // 1152 MiB per 2056x1329 at 2.
   EXPECT_EQ(DomicileTileBytesFor(HomeOfficeRightTwo(),
                                  gfx::Rect(0, 0, 5520, 3200), 1.5f, kNoCeiling),
-            1802649600u);
+            6225950278u);
 }
 
 TEST(DomicileDisplayRegionsTest, AWidgetHasTileMemoryForWhereItIs) {
   // A <webview> on the center monitor: 600x450 at 1.5, and as much again at
-  // 0.8 squared for the monitor's tiling of it. 442800 pixels, 4 bytes, 8 times.
+  // 0.8 squared for the monitor's tiling of it: 442800 pixels.
   EXPECT_EQ(
       DomicileTileBytesFor(HomeOfficeRightTwo(), gfx::Rect(2000, 100, 400, 300),
                            1.5f, kNoCeiling),
-      14169600u);
+      48938642u);
 }
 
 TEST(DomicileDisplayRegionsTest, TheDesksTileMemoryIsAtMostTheCeiling) {
