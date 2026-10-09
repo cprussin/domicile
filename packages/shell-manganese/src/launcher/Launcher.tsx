@@ -38,10 +38,16 @@ import {
 } from "react";
 import { css } from "../../styled-system/css";
 import { flex, hstack, vstack } from "../../styled-system/patterns";
-import { Engine } from "../address/search";
+import { Engine, TAGS } from "../address/search";
 import { AudioPreview } from "./AudioPreview";
 import type { Choice } from "./choices";
-import { ChoiceKind, choicesFor, launchOf, openWithOf } from "./choices";
+import {
+  ChoiceKind,
+  choicesFor,
+  launchOf,
+  openWithOf,
+  PRIVATE_TAG,
+} from "./choices";
 import { FolderPreview } from "./FolderPreview";
 import type { FileRow } from "./file-row";
 import type { DesktopEntry, FoundApps } from "./found-apps";
@@ -131,7 +137,12 @@ export const Launcher = ({
   <ModalDialog
     // Keyboard-driven, so no close button; the footer shows Escape.
     closeButton={false}
-    footer={<Keys />}
+    footer={
+      <>
+        <Tags />
+        <Keys />
+      </>
+    }
     onOpenChange={(next) => {
       if (!next) {
         onDismiss();
@@ -925,6 +936,20 @@ const StillIndexing = () => (
   </p>
 );
 
+/** Footer hints for the tags a line can carry. */
+const Tags = () => (
+  <ul aria-label="Tags" className={tagsStyles}>
+    {[
+      [PRIVATE_TAG, "Private"],
+      ...Object.entries(TAGS).map(([tag, engine]) => [tag, nameOf(engine)]),
+    ].map(([tag, name]) => (
+      <li className={keyStyles} key={tag}>
+        <Kbd>{tag}</Kbd> {name}
+      </li>
+    ))}
+  </ul>
+);
+
 /** Footer hints for the launcher's three keys. */
 const Keys = () => (
   <div className={keysStyles}>
@@ -1257,6 +1282,17 @@ const spinnerStyles = css({
   color: "accent",
   display: "inline-flex",
   flexShrink: 0,
+});
+
+// At the footer's start, pushing the keys to its end.
+const tagsStyles = hstack({
+  color: "muted",
+  fontSize: "xs",
+  gap: 4,
+  listStyle: "none",
+  margin: 0,
+  marginInlineEnd: "auto",
+  padding: 0,
 });
 
 const keysStyles = hstack({

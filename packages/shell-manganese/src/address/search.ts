@@ -46,7 +46,7 @@ export type TaggedSite = {
  *
  * Keys keep the `!` because a bare `yt` may be a search term.
  */
-const TAGS: Readonly<Record<string, Engine>> = {
+export const TAGS: Readonly<Record<string, Engine>> = {
   "!gh": Engine.GitHub,
   "!im": Engine.GoogleImages,
   "!maps": Engine.GoogleMaps,

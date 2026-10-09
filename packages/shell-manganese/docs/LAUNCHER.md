@@ -21,6 +21,8 @@ and 6), all private. A private browser's address bar is tinted the `private`
 color and says "Private"; its new windows are private too. See
 [private browsing](../../../docs/SHELL-BROWSER-WINDOWS.md#private-browsing).
 
+The footer lists every tag, `!p` included, at its start.
+
 `src/address/typed-address.ts` decides whether a line is a site or a search.
 Browser address bars use the same rule.
 
