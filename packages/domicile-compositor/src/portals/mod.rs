@@ -10,7 +10,7 @@
 //! `xdg-desktop-portal` routes to this backend by `XDG_CURRENT_DESKTOP`. It is
 //! activated by D-Bus or systemd, so it reads that from their activation
 //! environment, not from this process's clients. [`say_which_desktop`] sets it
-//! there. This does not re-route a frontend that is already running.
+//! there, and restarts a frontend that started under another desktop's name.
 //!
 //! Failures (no session bus, name taken) are logged once and leave clients
 //! unthemed and their dialogs unanswered; they never stop the compositor.
@@ -908,10 +908,11 @@ fn activation_environment(ours: &str, nested_in: Option<&OsStr>) -> Vec<(&'stati
 }
 
 /// Sets [`activation_environment`] in the D-Bus and systemd user activation
-/// environments, like `dbus-update-activation-environment --systemd`.
+/// environments, like `dbus-update-activation-environment --systemd`, then
+/// has a frontend already running read it ([`reroute_frontend`]).
 ///
-/// Without this `xdg-desktop-portal` never routes to this backend. Both calls
-/// are best effort and log at `debug`: a desk without a systemd user manager
+/// Without this `xdg-desktop-portal` never routes to this backend. Every call
+/// is best effort and logs at `debug`: a desk without a systemd user manager
 /// is normal.
 fn say_which_desktop(connection: &zbus::blocking::Connection, environment: &[(&str, String)]) {
     // For services D-Bus starts directly.
@@ -921,15 +922,16 @@ fn say_which_desktop(connection: &zbus::blocking::Connection, environment: &[(&s
         "/org/freedesktop/DBus",
         "org.freedesktop.DBus",
     );
-    let told_the_bus = bus.and_then(|bus| {
-        bus.call::<_, _, ()>(
+    let told_the_bus = match &bus {
+        Ok(bus) => bus.call::<_, _, ()>(
             "UpdateActivationEnvironment",
             &(environment
                 .iter()
                 .map(|(key, value)| (*key, value.as_str()))
                 .collect::<HashMap<_, _>>(),),
-        )
-    });
+        ),
+        Err(why) => Err(zbus::Error::Failure(why.to_string())),
+    };
     if let Err(why) = told_the_bus {
         tracing::debug!(%why, "the session bus would not take this desktop's name");
     }
@@ -942,18 +944,80 @@ fn say_which_desktop(connection: &zbus::blocking::Connection, environment: &[(&s
         "/org/freedesktop/systemd1",
         "org.freedesktop.systemd1.Manager",
     );
-    let told_systemd = systemd.and_then(|systemd| {
-        systemd.call::<_, _, ()>(
+    let told_systemd = match &systemd {
+        Ok(systemd) => systemd.call::<_, _, ()>(
             "SetEnvironment",
             &(environment
                 .iter()
                 .map(|(key, value)| format!("{key}={value}"))
                 .collect::<Vec<_>>(),),
-        )
-    });
+        ),
+        Err(why) => Err(zbus::Error::Failure(why.to_string())),
+    };
     if let Err(why) = told_systemd {
         tracing::debug!(%why, "no systemd user manager to tell this desktop's name to");
     }
+
+    // A desk in another session's window names nothing, so leaves that
+    // session's frontend alone too.
+    if let (false, Ok(bus), Ok(systemd)) = (environment.is_empty(), &bus, &systemd) {
+        reroute_frontend(bus, systemd);
+    }
+}
+
+/// The portal frontend's bus name and systemd user unit.
+const FRONTEND: &str = "org.freedesktop.portal.Desktop";
+const FRONTEND_UNIT: &str = "xdg-desktop-portal.service";
+
+/// Restarts a portal frontend that started under another desktop's name.
+///
+/// The frontend reads `XDG_CURRENT_DESKTOP` once, at startup, and routes by it
+/// until it exits. One started before this desk named itself (by an app or
+/// service at login) routes elsewhere, and every interface only this backend
+/// implements is missing from it. Its environment is read from
+/// `/proc/<pid>/environ`; only one that does not name this desktop is
+/// restarted, so a compositor restart leaves running casts alone. A frontend
+/// D-Bus started directly, not as a unit, is left running.
+fn reroute_frontend(bus: &zbus::blocking::Proxy<'_>, systemd: &zbus::blocking::Proxy<'_>) {
+    let Ok(pid) = bus.call::<_, _, u32>("GetConnectionUnixProcessID", &(FRONTEND,)) else {
+        // Not running: it reads the new environment when it starts.
+        return;
+    };
+    let environ = match std::fs::read(format!("/proc/{pid}/environ")) {
+        Ok(environ) => environ,
+        Err(why) => {
+            tracing::debug!(%why, pid, "could not read the portal frontend's environment");
+            return;
+        }
+    };
+    if names_this_desktop(&environ) {
+        return;
+    }
+    let restarted =
+        systemd.call::<_, _, OwnedObjectPath>("TryRestartUnit", &(FRONTEND_UNIT, "replace"));
+    match restarted {
+        Ok(_) => tracing::info!(
+            "restarted the portal frontend, which had started under another desktop's name"
+        ),
+        Err(why) => tracing::debug!(
+            %why,
+            "the portal frontend started under another desktop's name and could not be restarted"
+        ),
+    }
+}
+
+/// Whether a process environment (`/proc/<pid>/environ`: NUL-separated
+/// `KEY=value`) lists this desktop in `XDG_CURRENT_DESKTOP`, a colon-separated
+/// list the frontend matches without case.
+fn names_this_desktop(environ: &[u8]) -> bool {
+    environ
+        .split(|byte| *byte == 0)
+        .filter_map(|entry| entry.strip_prefix(b"XDG_CURRENT_DESKTOP="))
+        .any(|desktops| {
+            desktops
+                .split(|byte| *byte == b':')
+                .any(|desktop| desktop.eq_ignore_ascii_case(CURRENT_DESKTOP.as_bytes()))
+        })
 }
 
 #[cfg(test)]
@@ -1913,5 +1977,21 @@ mod tests {
             activation_environment("wayland-1", Some(OsStr::new(""))),
             activation_environment("wayland-1", None)
         );
+    }
+
+    #[test]
+    fn a_frontend_started_for_this_desktop_is_left_running() {
+        assert!(names_this_desktop(
+            b"HOME=/home/ada\0XDG_CURRENT_DESKTOP=domicile\0PATH=/bin\0"
+        ));
+        assert!(names_this_desktop(b"XDG_CURRENT_DESKTOP=sway:Domicile"));
+    }
+
+    #[test]
+    fn a_frontend_started_for_another_desktop_or_none_is_restarted() {
+        assert!(!names_this_desktop(b"XDG_CURRENT_DESKTOP=sway\0"));
+        assert!(!names_this_desktop(b"HOME=/home/ada\0PATH=/bin\0"));
+        assert!(!names_this_desktop(b"XDG_CURRENT_DESKTOP=domicile-ish\0"));
+        assert!(!names_this_desktop(b"NOT_XDG_CURRENT_DESKTOP=domicile\0"));
     }
 }
