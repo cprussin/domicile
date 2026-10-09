@@ -10,8 +10,8 @@ type LockState = {
   /** Whether a submitted passphrase is awaiting the compositor's answer. */
   checking: boolean;
   /**
-   * How many passphrases the compositor has refused. A count, not a flag, so
-   * repeated refusals each register as a change.
+   * How many passphrases the compositor has refused since the desk locked. A
+   * count, not a flag, so repeated refusals each register as a change.
    */
   refusals: number;
 };
@@ -47,7 +47,7 @@ export const useLocked = (
         setState((was) => ({
           checking: false,
           locked,
-          refusals: was.checking && locked ? was.refusals + 1 : was.refusals,
+          refusals: refusalsAfter(was, locked),
         }));
       }),
     [domicile],
@@ -66,3 +66,15 @@ export const useLocked = (
 
 const lockedOf = ({ locked }: DomicileHost): boolean | undefined =>
   locked ?? undefined;
+
+/**
+ * The refusal count after the compositor says `locked`. Unlocking resets it,
+ * so the next lock does not start shaken.
+ */
+const refusalsAfter = (was: LockState, locked: boolean): number => {
+  if (locked) {
+    return was.checking ? was.refusals + 1 : was.refusals;
+  } else {
+    return 0;
+  }
+};
