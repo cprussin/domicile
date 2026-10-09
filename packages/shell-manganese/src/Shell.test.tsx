@@ -1649,13 +1649,11 @@ describe("Shell", () => {
       }
     });
 
-    it("lights nothing while the desk shows one tab group alone", () => {
-      // There is nothing else on the desk to set the open tab apart from.
+    it("lights a window the desk shows alone", () => {
       const { container } = renderShell();
       clientAppears("one");
-      clientAppears("two");
 
-      expect(lit(container)).toBeUndefined();
+      expect(lit(container)).toEqual(["app:one"]);
     });
 
     it("lights only the screen being worked in", () => {

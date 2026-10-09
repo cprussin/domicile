@@ -8,7 +8,6 @@ import type { Modifiers } from "../keyboard/useModifiers";
 import type { StageScreen } from "../screens/stage-screens";
 import { AppPopup } from "./AppPopup";
 import { AppWindow } from "./AppWindow";
-import { showsOneThing } from "./alone";
 import { BrowserWindow } from "./BrowserWindow";
 import type { Direction } from "./direction";
 import { FocusGlow } from "./FocusGlow";
@@ -134,11 +133,7 @@ export const Stage = ({
     ),
   );
   const floats = screens.flatMap((screen) => screen.floats);
-  const glows = useFocusGlows(
-    showsOneThing(screens.map(({ screenful }) => screenful))
-      ? undefined
-      : focusBoxHolding(screens, activeId),
-  );
+  const glows = useFocusGlows(focusBoxHolding(screens, activeId));
   const active = motions.drawn.find(({ window }) => window.id === activeId);
   // Drawn over every window, not by the dragged one: see `DropIndicator`.
   const [aim, setAim] = useState<Aim | undefined>(undefined);
