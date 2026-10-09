@@ -27,13 +27,6 @@ export type Frame = {
   behind: Rect | undefined;
   id: string;
   /**
-   * For an inactive tab in a tabbed container, the window the open tab is
-   * named after. The tab draws its bottom line in that window's color, so the
-   * open window's top edge runs under every tab. `undefined` otherwise,
-   * including in stacks.
-   */
-  openTab: string | undefined;
-  /**
    * Whether it is in the container `focus parent` selected, which is
    * highlighted as a group.
    */
@@ -43,6 +36,8 @@ export type Frame = {
    * window does, rather than along the strip.
    */
   soleTab: boolean;
+  /** Its place in its tab strip, or `undefined` for a plain title bar. */
+  strip: StripPlace | undefined;
   /** Where its contents go, or `undefined` for a hidden tab. */
   surface: Rect | undefined;
   /**
@@ -50,6 +45,28 @@ export type Frame = {
    * `undefined` for a plain title bar.
    */
   tabbed: TabLayout | undefined;
+};
+
+/** Where a tab sits in its container's tab strip. See `TitleBar`. */
+export type StripPlace = {
+  /**
+   * Whether a divider marks its start: a hidden tab of a tabbed container
+   * after another hidden tab. The open tab's own edge divides it from its
+   * neighbors.
+   */
+  divided: boolean;
+  /** Whether it starts the strip, which rounds that end. */
+  first: boolean;
+  /**
+   * Whether its container shows it: the open tab, raised to join its window.
+   * Hidden tabs lie flat on the strip.
+   */
+  open: boolean;
+  /**
+   * For a tabbed container's last tab, how much empty strip runs past it to
+   * the strip's end. `undefined` for other tabs and in stacks.
+   */
+  rest: number | undefined;
 };
 
 /** The layouts that give each child a tab instead of a share of the area. */
@@ -63,11 +80,11 @@ export type Tab = {
   group: Layout;
   /** The container's last-focused window, which names the tab. */
   id: string;
-  /** The window its container's open tab is named after. See `Frame.openTab`. */
-  openTab: string | undefined;
   rect: Rect;
   /** Whether it is inside the container `focus parent` selected. */
   selected: boolean;
+  /** Its place in its tab strip. */
+  strip: StripPlace;
   /** The layout of the container whose tab this is. */
   tabbed: TabLayout;
   /** How many windows the nested container holds. */
@@ -173,9 +190,9 @@ const placed = (
             bar: barOf(area),
             behind: undefined,
             id: node.id,
-            openTab: undefined,
             selected,
             soleTab: false,
+            strip: undefined,
             surface: surfaceOf(area),
             tabbed: undefined,
           },
@@ -292,12 +309,11 @@ const titled = (
   selected: boolean,
 ): Tiled => {
   const contents = contentsOf(container, area);
-  const open = focusedWindowIn(container);
   return joined(
     container.children.map((child, at) => {
       const bar = titleOf(container, area, at);
       const showing = at === container.focused;
-      const openTab = layout === Layout.Tabbed && !showing ? open : undefined;
+      const strip = stripPlaceOf(container, area, at);
       switch (child.kind) {
         case NodeKind.Window: {
           // A window's surface tucks under the bars, as in `surfaceOf`.
@@ -308,9 +324,9 @@ const titled = (
                 bar,
                 behind: showing ? undefined : surface,
                 id: child.id,
-                openTab,
                 selected,
                 soleTab: container.children.length === 1,
+                strip,
                 surface: showing ? surface : undefined,
                 tabbed: layout,
               },
@@ -323,9 +339,9 @@ const titled = (
             active: showing,
             group: child.layout,
             id: focusedWindowIn(child),
-            openTab,
             rect: bar,
             selected,
+            strip,
             tabbed: layout,
             windows: windowsIn(child).length,
           };
@@ -342,15 +358,46 @@ const titled = (
   );
 };
 
-// Tabs share the top row; a stack gives each child a full-width bar. The bars
-// meet, so together they draw one tab strip. See `TitleBar`.
+/** The widest a tab grows, as in a browser. */
+const TAB_WIDTH = 240;
+
+/** The empty strip kept past the last tab, so the strip's end always shows. */
+const STRIP_END = 24;
+
+// Tabs share the top row, each at most `TAB_WIDTH`; a stack gives each child a
+// full-width bar. The bars meet, so together they draw one tab strip. See
+// `TitleBar`.
 const titleOf = (container: Container, area: Rect, at: number): Rect => {
   if (container.layout === Layout.Stacking) {
     return { ...barOf(area), y: area.y + TITLE_BAR * at };
   } else {
-    const width = area.width / container.children.length;
+    const width = tabWidthOf(container, area);
     return { ...barOf(area), width, x: area.x + width * at };
   }
+};
+
+const tabWidthOf = (container: Container, area: Rect): number =>
+  Math.min(TAB_WIDTH, (area.width - STRIP_END) / container.children.length);
+
+const stripPlaceOf = (
+  container: Container,
+  area: Rect,
+  at: number,
+): StripPlace => {
+  const count = container.children.length;
+  return {
+    divided:
+      container.layout === Layout.Tabbed &&
+      at > 0 &&
+      at !== container.focused &&
+      at - 1 !== container.focused,
+    first: at === 0,
+    open: at === container.focused,
+    rest:
+      container.layout === Layout.Tabbed && at === count - 1
+        ? area.width - tabWidthOf(container, area) * count
+        : undefined,
+  };
 };
 
 // The area under the titles: one bar for tabbed, one per child for stacking.

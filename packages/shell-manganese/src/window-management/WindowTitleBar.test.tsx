@@ -19,7 +19,6 @@ const nothing = () => undefined;
 
 /** A tab of a tabbed container; each case overrides what it tests. */
 const tabProps = {
-  besideOpenTab: false,
   depth: 0,
   dragging: false,
   float: undefined,
@@ -38,6 +37,7 @@ const tabProps = {
   onMotionEnded: nothing,
   onMove: nothing,
   rect: TAB,
+  strip: { divided: false, first: true, open: true, rest: undefined },
   tabbed: Layout.Tabbed,
   targets: { screens: [], windows: [{ frame: FRAME, id: "a" }, OTHER] },
   title: "kitty",

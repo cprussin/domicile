@@ -1752,11 +1752,11 @@ describe("Shell", () => {
 
       press("w");
 
-      // One tab each across the top, their slots meeting in one strip. Both
+      // One tab each across the top, at most 240px wide, in one strip. Both
       // contents share a box, the focused one on top, so the other is ready
       // when its tab is picked.
       expect(boxOf(barFor(container, "app:one"))).toMatchObject({
-        width: "940px",
+        width: "240px",
         x: "20px",
       });
       expect(boxOf(appElement(container, "one"))).toEqual(
@@ -1825,7 +1825,7 @@ describe("Shell", () => {
       expect(screen.queryAllByRole("button", { name: "Float" })).toEqual([]);
     });
 
-    it("runs the open tab's edge under the tabs beside it", () => {
+    it("runs the window's top edge along the strip, under all but the open tab", () => {
       // A sibling window keeps the tabs from filling the screen.
       const { container } = renderShell();
       clientAppears("one");
@@ -1836,12 +1836,15 @@ describe("Shell", () => {
 
       press("w");
 
-      expect(barFor(container, "app:two").className).toContain(
-        css({ borderBlockEndColor: "borderStrong" }),
-      );
-      expect(barFor(container, "app:three").className).toContain(
-        css({ borderBlockEndColor: "transparent" }),
-      );
+      // Every slot draws the line; the open tab reaches over its own part.
+      const line = css({ borderBlockEndWidth: "1px" });
+      const overLine = css({ marginBlockEnd: "-1px" });
+      const faceOf = (id: string) =>
+        barFor(container, id).querySelector("[data-face]")?.className;
+      expect(barFor(container, "app:two").className).toContain(line);
+      expect(barFor(container, "app:three").className).toContain(line);
+      expect(faceOf("app:two")).not.toContain(overLine);
+      expect(faceOf("app:three")).toContain(overLine);
     });
 
     it("grows the glow in with the window that opened", () => {

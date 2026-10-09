@@ -15,9 +15,9 @@ const shownIn = (id: string): Placement => ({
   depth: 0,
   frame: { ...CONTENTS, height: 800, y: 0 },
   id,
-  openTab: undefined,
   selected: false,
   soleTab: false,
+  strip: undefined,
   surface: CONTENTS,
   tabbed: Layout.Tabbed,
 });
@@ -28,9 +28,9 @@ const hiddenIn = (id: string): Placement => ({
   depth: 0,
   frame: BAR,
   id,
-  openTab: undefined,
   selected: false,
   soleTab: false,
+  strip: undefined,
   surface: undefined,
   tabbed: Layout.Tabbed,
 });

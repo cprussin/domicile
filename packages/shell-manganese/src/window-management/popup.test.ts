@@ -14,9 +14,9 @@ const placed = (
   depth,
   frame: { height: 0, width: 0, x: 0, y: 0 },
   id,
-  openTab: undefined,
   selected: false,
   soleTab: false,
+  strip: undefined,
   surface,
   tabbed: undefined,
 });

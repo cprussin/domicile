@@ -9,7 +9,13 @@ import { floatHolds, onScreen, rectOf } from "./floating/float";
 import { floatingGapOf, INNER_GAP, tiledAreaOf } from "./gaps";
 import type { Rect } from "./rect";
 import { barOf, surfaceOf } from "./rect";
-import type { FocusBox, Frame, Tab, TabLayout } from "./tree/frames";
+import type {
+  FocusBox,
+  Frame,
+  StripPlace,
+  Tab,
+  TabLayout,
+} from "./tree/frames";
 import { focusBoxOf, framesOf } from "./tree/frames";
 import type { WindowState } from "./window-state";
 import { workspaceOn } from "./window-state";
@@ -39,12 +45,12 @@ export type Placement = {
    */
   frame: Rect;
   id: string;
-  /** The window its container's open tab is named after. See `Frame.openTab`. */
-  openTab: string | undefined;
   /** Whether it is in the container `focus parent` selected. See `Frame.selected`. */
   selected: boolean;
   /** Whether it is its container's only tab. See `Frame.soleTab`. */
   soleTab: boolean;
+  /** Its place in its tab strip. See `Frame.strip`. */
+  strip: StripPlace | undefined;
   /** Where its contents go, or `undefined` for a hidden tab. */
   surface: Rect | undefined;
   /** The direction of the tab row its bar is in. See `Frame.tabbed`. */
@@ -226,9 +232,9 @@ const fullscreen = (
         bar: barOf(area),
         behind: undefined,
         id: full.id,
-        openTab: undefined,
         selected: false,
         soleTab: false,
+        strip: undefined,
         surface: surfaceOf(area),
         tabbed: undefined,
       },
@@ -242,7 +248,7 @@ const fullscreen = (
  * is built, so `frame` is computed one way.
  */
 const placed = (
-  { bar, behind, id, openTab, selected, soleTab, surface, tabbed }: Frame,
+  { bar, behind, id, selected, soleTab, strip, surface, tabbed }: Frame,
   depth: number,
 ): Placement => ({
   bar,
@@ -250,9 +256,9 @@ const placed = (
   depth,
   frame: surface === undefined ? bar : spanning(bar, surface),
   id,
-  openTab,
   selected,
   soleTab,
+  strip,
   surface,
   tabbed,
 });

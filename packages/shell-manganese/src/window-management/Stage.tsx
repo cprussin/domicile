@@ -294,7 +294,6 @@ export const Stage = ({
             */}
               {placement !== undefined && (
                 <WindowTitleBar
-                  besideOpenTab={placement.openTab !== undefined}
                   depth={placement.depth}
                   dragging={window.id === movingId}
                   float={floating}
@@ -326,6 +325,7 @@ export const Stage = ({
                   }}
                   rect={placement.bar}
                   restack={restack}
+                  strip={placement.strip}
                   tabbed={placement.tabbed}
                   targets={dropTargets}
                   title={window.title}
@@ -478,7 +478,6 @@ export const Stage = ({
         return (
           <Sliding key={tab.id} on={on}>
             <TitleBar
-              besideOpenTab={tab.openTab !== undefined}
               depth={tab.depth}
               // A tab moves only with its container.
               dragging={false}
@@ -521,6 +520,7 @@ export const Stage = ({
                 onSelect(tab.id);
               }}
               rect={tab.rect}
+              strip={tab.strip}
               tabbed={tab.tabbed}
               title={titleOf(windows, tab.id)}
               window={tab.id}
