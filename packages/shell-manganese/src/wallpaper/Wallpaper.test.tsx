@@ -2,12 +2,12 @@ import { describe, expect, it, jest } from "bun:test";
 import { DisplayProvider } from "@domicile-desktop/component-library/DisplayProvider";
 import type { Theme } from "@domicile-desktop/component-library/theme-core";
 import { THEMES } from "@domicile-desktop/component-library/theme-core";
-import { act, render } from "@testing-library/react";
+import { act, fireEvent, render } from "@testing-library/react";
 
 import { css } from "../../styled-system/css";
 import { token } from "../../styled-system/tokens";
 import { OnOneScreen } from "../screens/fixture";
-import { WALLPAPER_PHOTOS } from "./photos";
+import { WALLPAPER_FALLBACKS, WALLPAPER_PHOTOS } from "./photos";
 import { Wallpaper } from "./Wallpaper";
 
 /** How long each photograph shows; one rotation tick. */
@@ -53,6 +53,13 @@ const layer = (
     ),
   ].map((image) => image.getAttribute("src"));
 
+/** Finishes loading every photograph in `container`. */
+const loadPhotos = (container: HTMLElement) => {
+  for (const image of container.querySelectorAll("img")) {
+    fireEvent.load(image);
+  }
+};
+
 describe("Wallpaper", () => {
   it("shows the picture an application set instead of the rotation", () => {
     const { container } = render(<Wallpaper picture="blob:sky" />, {
@@ -67,16 +74,17 @@ describe("Wallpaper", () => {
     ).toEqual(["blob:sky"]);
   });
 
-  it("starts on the first photograph with every other one already loading", () => {
-    // Every photograph mounts up front so it has loaded before it fades in.
-    // This includes the other theme's, so a theme switch shows a loaded image.
+  it("starts on the first photograph with only the next one loading", () => {
+    // The next photograph mounts a whole step early so it has loaded before it
+    // fades in. The rest stay unmounted, so dozens of 4K photographs are not
+    // held at once. The other theme's mount too, so a theme switch shows a
+    // loaded image.
     const { container } = render(<Wallpaper />, { wrapper: OnOneScreen });
+    loadPhotos(container);
 
     for (const theme of THEMES) {
       expect(layer(container, theme, "current")).toEqual([photo(theme, 0)]);
-      expect(rotation(container, theme).querySelectorAll("img").length).toBe(
-        WALLPAPER_PHOTOS[theme].length,
-      );
+      expect(layer(container, theme, "waiting")).toEqual([photo(theme, 1)]);
     }
   });
 
@@ -135,7 +143,8 @@ describe("Wallpaper", () => {
     ]);
     for (const screen of screens) {
       expect(screen.querySelectorAll("img").length).toBe(
-        WALLPAPER_PHOTOS.dark.length + WALLPAPER_PHOTOS.light.length,
+        // The current, next and repository photographs, for each theme.
+        THEMES.length * 3,
       );
     }
   });
@@ -155,6 +164,7 @@ describe("Wallpaper", () => {
     // in, so the background never shows through mid-fade.
     jest.useFakeTimers();
     const { container } = render(<Wallpaper />, { wrapper: OnOneScreen });
+    loadPhotos(container);
 
     act(() => {
       jest.advanceTimersByTime(DWELL_MS);
@@ -178,9 +188,13 @@ describe("Wallpaper", () => {
       });
       const length = WALLPAPER_PHOTOS[theme].length;
 
-      act(() => {
-        jest.advanceTimersByTime(DWELL_MS * length);
-      });
+      // Each photograph loads while it is next.
+      for (let tick = 0; tick < length; tick++) {
+        loadPhotos(container);
+        act(() => {
+          jest.advanceTimersByTime(DWELL_MS);
+        });
+      }
 
       expect(layer(container, theme, "current")).toEqual([photo(theme, 0)]);
       expect(layer(container, theme, "previous")).toEqual([
@@ -193,13 +207,14 @@ describe("Wallpaper", () => {
 
   it("puts the one it left away once the fade is over", () => {
     // Each photograph must be transparent before its turn. Otherwise a
-    // rotation of two would cut instead of fade, and a longer one could fade
-    // out over the incoming photograph.
+    // rotation of two would cut instead of fade. A longer one unmounts it
+    // until its next turn comes near.
     for (const theme of THEMES) {
       jest.useFakeTimers();
       const { container, unmount } = render(<Wallpaper />, {
         wrapper: OnOneScreen,
       });
+      loadPhotos(container);
 
       // Two steps: the fade timer starts in the render after the tick.
       act(() => {
@@ -211,7 +226,9 @@ describe("Wallpaper", () => {
 
       expect(layer(container, theme, "current")).toEqual([photo(theme, 1)]);
       expect(layer(container, theme, "previous")).toEqual([]);
-      expect(layer(container, theme, "waiting")).toContain(photo(theme, 0));
+      expect(layer(container, theme, "waiting")).toEqual([
+        photo(theme, 2 % WALLPAPER_PHOTOS[theme].length),
+      ]);
       unmount();
       jest.useRealTimers();
     }
@@ -221,7 +238,7 @@ describe("Wallpaper", () => {
     // Other role changes happen under an opaque photograph. A transition on
     // them could draw over the incoming photograph.
     const { container } = render(<Wallpaper />, { wrapper: OnOneScreen });
-    const image = container.querySelector("img");
+    const image = container.querySelector('img[data-wallpaper="waiting"]');
 
     expect(image?.className).toContain(
       css({
@@ -230,5 +247,16 @@ describe("Wallpaper", () => {
         },
       }),
     );
+  });
+
+  it("shows a photograph from the repository under each theme's rotation", () => {
+    // Without a network no photograph loads, so the desktop shows this one.
+    const { container } = render(<Wallpaper />, { wrapper: OnOneScreen });
+
+    for (const theme of THEMES) {
+      expect(layer(container, theme, "fallback")).toEqual([
+        WALLPAPER_FALLBACKS[theme],
+      ]);
+    }
   });
 });

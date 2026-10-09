@@ -8,7 +8,9 @@ import { useEffect, useState } from "react";
 
 import { css } from "../../styled-system/css";
 import { token } from "../../styled-system/tokens";
-import { WALLPAPER_PHOTOS } from "./photos";
+import { Layer, layerStyles } from "./layer";
+import { Photo } from "./Photo";
+import { WALLPAPER_FALLBACKS, WALLPAPER_PHOTOS } from "./photos";
 
 /** How long each photograph shows before the next fades in. */
 const DWELL_MS = 60_000;
@@ -18,22 +20,6 @@ const DWELL_MS = 60_000;
  * the two stay in sync.
  */
 const CROSSFADE_MS = Number.parseFloat(token("durations.crossfade")) * 1000;
-
-/**
- * A photograph's role in the rotation. Styles are in {@link layerStyles}.
- *
- * The incoming photograph fades in over an opaque previous one. Fading both
- * at once would let the background show through mid-fade, which looks like a
- * blink.
- */
-enum Layer {
-  /** On screen, fading in over {@link Layer.Previous}. */
-  Current = "current",
-  /** Opaque underneath the current photograph until its fade ends. */
-  Previous = "previous",
-  /** Loaded and transparent. */
-  Waiting = "waiting",
-}
 
 type Props = {
   /**
@@ -54,7 +40,8 @@ type Props = {
  *   `data-screen`.
  * - Every copy shows the same step, so the screens change together.
  * - Both themes' rotations stay mounted and CSS shows one, so a theme switch
- *   shows loaded photographs and needs only the `data-theme` attribute.
+ *   shows loaded photographs and needs only the `data-theme` attribute. Each
+ *   rotation mounts only the photographs on screen and the next one.
  * - It takes no pointer events.
  */
 export const Wallpaper = ({ picture }: Props) => {
@@ -141,7 +128,10 @@ const ScreenWallpaper = ({
   </div>
 );
 
-/** Both themes' photographs at `step`. */
+/**
+ * Both themes' photographs at `step`, over each theme's photograph from the
+ * repository.
+ */
 const Rotation = ({ settled, step }: { settled: boolean; step: number }) => (
   <>
     {THEMES.map((theme) => (
@@ -150,22 +140,43 @@ const Rotation = ({ settled, step }: { settled: boolean; step: number }) => (
         data-wallpaper-theme={theme}
         key={theme}
       >
-        {WALLPAPER_PHOTOS[theme].map((photo, index, photos) => (
-          // Empty `alt` because the wallpaper is decorative. The role is an
-          // attribute so one stylesheet covers all states and tests can read
-          // it.
-          <img
-            alt=""
-            className={layerStyles}
-            data-wallpaper={layerOf(index, step, photos.length, settled)}
-            key={photo}
-            src={photo}
-          />
-        ))}
+        {/* Empty `alt` because the wallpaper is decorative. The role is an
+            attribute so one stylesheet covers all states and tests can read
+            it. */}
+        <img
+          alt=""
+          className={layerStyles}
+          data-wallpaper={Layer.Fallback}
+          src={WALLPAPER_FALLBACKS[theme]}
+        />
+        {WALLPAPER_PHOTOS[theme].map((photo, index, photos) =>
+          isMounted(index, step, photos.length, settled) ? (
+            <Photo
+              key={photo}
+              layer={layerOf(index, step, photos.length, settled)}
+              src={photo}
+            />
+          ) : undefined,
+        )}
       </div>
     ))}
   </>
 );
+
+/**
+ * Whether the photograph at `index` is mounted on this `step`: it is on
+ * screen, fading out, or next. The next one mounts a whole step early so it
+ * has loaded before it fades in. The rest stay unmounted, so the page does not
+ * hold every 4K photograph at once.
+ */
+const isMounted = (
+  index: number,
+  step: number,
+  length: number,
+  settled: boolean,
+): boolean =>
+  index === (step + 1) % length ||
+  layerOf(index, step, length, settled) !== Layer.Waiting;
 
 /**
  * The role of the photograph at `index` on this `step` of the rotation.
@@ -215,24 +226,3 @@ const rotationStyles: Record<Theme, string> = {
   dark: css({ _light: { display: "none" } }),
   light: css({ _light: { display: "contents" }, display: "none" }),
 };
-
-const layerStyles = css({
-  // Stacking comes from the role because on wrap-around the incoming
-  // photograph is the earlier element.
-  //
-  // Only this role transitions. Other role changes happen under an opaque
-  // photograph, and a transition on them could draw over the incoming one.
-  '&[data-wallpaper="current"]': {
-    opacity: 1,
-    transition: "opacity {durations.crossfade} {easings.in-out}",
-    zIndex: 1,
-  },
-  '&[data-wallpaper="previous"]': { opacity: 1 },
-  blockSize: "100%",
-  inlineSize: "100%",
-  inset: 0,
-  // Crops the photograph to the monitor's shape.
-  objectFit: "cover",
-  opacity: 0,
-  position: "absolute",
-});
