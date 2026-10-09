@@ -1373,6 +1373,20 @@ describe("Shell", () => {
       ).toBe("");
     });
 
+    // The shown tab's contents tuck under the strip at the same `z-index`, so
+    // only document order keeps them off a hidden tab's bottom edge.
+    it("draws every tab over the contents of the tab that is shown", () => {
+      const { container } = renderShell();
+      clientAppears("term");
+      clientAppears("editor");
+
+      expect(
+        appElement(container, "editor").compareDocumentPosition(
+          barFor(container, "app:term"),
+        ),
+      ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    });
+
     // Closing moves the keyboard elsewhere, so the closing bar keeps its
     // focused look from the snapshot.
     it("keeps its bar saying the keyboard was in it while it goes", () => {
@@ -2369,8 +2383,8 @@ describe("Shell", () => {
         ),
       ).toEqual([
         appElement(container, "one"),
-        barFor(container, "app:one"),
         appElement(container, "two"),
+        barFor(container, "app:one"),
         barFor(container, "app:two"),
       ]);
       for (const element of raised) {
