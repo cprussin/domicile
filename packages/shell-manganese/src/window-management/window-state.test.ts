@@ -158,6 +158,30 @@ describe("the browser windows the engine lists", () => {
     expect(state.windows[0]).toMatchObject({ title: "docs.rs" });
   });
 
+  it("marks a window with its page's icon, through later lists", () => {
+    const state = reduce(
+      desktop(),
+      WindowAction.BrowserWindowsListed([listed("1", "https://docs.rs/")]),
+      WindowAction.BrowserIconChanged("1", "https://docs.rs/icon.svg"),
+      WindowAction.BrowserWindowsListed([listed("1", "https://docs.rs/std")]),
+    );
+
+    expect(state.windows[0]).toMatchObject({
+      icon: "https://docs.rs/icon.svg",
+    });
+  });
+
+  it("takes the icon away from a page that has none", () => {
+    const state = reduce(
+      desktop(),
+      WindowAction.BrowserWindowsListed([listed("1", "https://docs.rs/")]),
+      WindowAction.BrowserIconChanged("1", "https://docs.rs/icon.svg"),
+      WindowAction.BrowserIconChanged("1", ""),
+    );
+
+    expect(state.windows[0]).toMatchObject({ icon: undefined });
+  });
+
   it("names a window after its page's title once the page has one", () => {
     const state = reduce(
       desktop(),

@@ -77,6 +77,51 @@ const MIDDLE_TAB = {
 
 // The bar and the contents are separate elements, so they must animate
 // identically or the window splits apart.
+describe("TitleBar's icon", () => {
+  const icon = (container: HTMLElement): Element => {
+    const element = face(container).querySelector("[data-icon]");
+    if (element === null) {
+      throw new Error("test: the title bar drew no icon");
+    } else {
+      return element;
+    }
+  };
+
+  it("draws the window's icon", () => {
+    const { container } = render(
+      <TitleBar {...barProps} icon="data:image/png;base64,AA==" />,
+    );
+
+    expect(icon(container).querySelector("img")?.getAttribute("src")).toBe(
+      "data:image/png;base64,AA==",
+    );
+  });
+
+  // Every bar has an icon, so titles line up.
+  it("draws a stand-in for a window with no icon", () => {
+    const { container } = render(<TitleBar {...barProps} icon={undefined} />);
+
+    expect(icon(container).querySelector("img")).toBeNull();
+    expect(icon(container).querySelector("svg")).not.toBeNull();
+  });
+
+  // A page can link an icon that does not load.
+  it("draws the stand-in when the icon does not load", () => {
+    const { container } = render(
+      <TitleBar {...barProps} icon="https://example.com/missing.png" />,
+    );
+    const image = icon(container).querySelector("img");
+    if (image === null) {
+      throw new Error("test: the title bar drew no image");
+    }
+
+    fireEvent.error(image);
+
+    expect(icon(container).querySelector("img")).toBeNull();
+    expect(icon(container).querySelector("svg")).not.toBeNull();
+  });
+});
+
 describe("TitleBar", () => {
   it("plays the motion the window it names is playing", () => {
     const { container } = render(<TitleBar {...barProps} motion="opening" />);
