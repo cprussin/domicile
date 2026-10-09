@@ -1022,6 +1022,23 @@
               exit 1
             }
 
+            # The `domicile` group's sessions may raise threads to the
+            # priorities the engine asks for its frame and audio threads.
+            [ ${pkgs.lib.boolToString (machine.config.users.groups ? domicile)} = true ] || {
+              echo "the module declares no domicile group" >&2
+              exit 1
+            }
+            for limit in ${pkgs.lib.escapeShellArgs (map (each: "${each.domain} ${each.type} ${each.item} ${toString each.value}") machine.config.security.pam.loginLimits)}; do
+              echo "$limit"
+            done >limits
+            for expected in '@domicile - nice -10' '@domicile - rtprio 8'; do
+              grep -qxF "$expected" limits || {
+                echo "the module's login limits are missing: $expected" >&2
+                cat limits >&2
+                exit 1
+              }
+            done
+
             # `domicile-portals.conf` routes every portal call to Domicile but
             # `Secret`, which goes to the keyring.
             found=
