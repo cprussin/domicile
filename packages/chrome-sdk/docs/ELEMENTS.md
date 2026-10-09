@@ -18,6 +18,11 @@ Event names and full types are in `src/app-element.ts` and
   client, in the client's surface coordinates, through its layout box and
   every transform above it (`zoom` and perspective included). A
   `preventDefault()` on the event takes it from the client.
+- **Press capture:** a press the client gets captures the pointer for the
+  element until the button is up, so the client gets the drag and the release
+  wherever the pointer goes. A page that captures the pointer itself in its
+  `pointerdown` listener loses that capture to the element; call
+  `preventDefault()` to keep the press.
 - **Keyboard:** the engine sends the keystrokes `document` hears to the window
   that has the keyboard. `domicile.focusApp(appId)` and `domicile.focusChrome()`
   move it in code, both in the compositor's seat and for the page's keys.

@@ -21,6 +21,9 @@ The sequence, in the shell's CSS pixels:
     key      a, down and up
     move     to 700,600       off every window
     press    left at 720,520  inside `menu`, and release it
+    press    left at 450,150  inside `term`
+    move     to 700,600       off every window, still held
+    release  left at 700,600
 """
 
 import argparse
@@ -68,6 +71,10 @@ SEQUENCE = (
     + [mouse("mouseMoved", OFF_EVERY_WINDOW)]
     + [mouse("mouseMoved", INSIDE_MENU)]
     + press(INSIDE_MENU)
+    + [mouse("mouseMoved", INSIDE_TERM)]
+    + [mouse("mousePressed", INSIDE_TERM, button="left", buttons=1, clickCount=1)]
+    + [mouse("mouseMoved", OFF_EVERY_WINDOW, button="left", buttons=1)]
+    + [mouse("mouseReleased", OFF_EVERY_WINDOW, button="left", buttons=0, clickCount=1)]
 )
 
 
