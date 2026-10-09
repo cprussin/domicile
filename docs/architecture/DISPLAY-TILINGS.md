@@ -77,16 +77,17 @@ moving layer draws from its tilings.
   budget does not apply. `domicile-launch` does not pass it, so the desk
   budget below sizes the shell's page.
 - **Desk budget** (patch 0088, `DomicileTileBytesFor`): the page's pixels at S
-  plus each monitor's tiling (its region × `r²`), at 4 bytes, × 8: four
-  full-desk layers (the page, two wallpapers mid-crossfade, an overlay), each
-  with a pending twin. At most a quarter of RAM. 0 for a widget on no
-  monitor.
+  plus each monitor's tiling (its region × `r²`), at upstream's memory per
+  screen pixel (1152 MiB per 2056x1329 at 2, ~110 bytes). At most a quarter of
+  RAM. 0 for a widget on no monitor.
+  - Less runs out while windows resize: cc counts every layer's tiles, both
+    trees' copies, and buffers still held by viz against the budget.
   - `WidgetBase` computes it with the regions. The commit carries it, and
     `LayerTreeHostImpl::ActualManagedMemoryPolicy` raises the budget to it.
     It never lowers the budget, so upstream's is a floor.
   - `home-office-right-two` (1.5 laptop, two 1.2 4K portrait monitors,
-    5520x3200 desk): 39.7 Mpx + 2 × 8.3 Mpx = 56.3 Mpx, ~1.7 GiB. Upstream
-    gives ~583 MB.
+    5520x3200 desk): 39.7 Mpx + 2 × 8.3 Mpx = 56.3 Mpx, ~5.8 GiB before the
+    ceiling. Upstream gives ~583 MB.
   - `CommitState`'s copy keeps the regions and the budget for the next commit.
 - Over budget, required tiles are marked OOM so activation can go ahead.
   Upstream draws an OOM tile as solid color. A display tiling's OOM tile is
