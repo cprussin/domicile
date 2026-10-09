@@ -22,7 +22,8 @@ Part of [WRITING-A-SHELL.md](WRITING-A-SHELL.md). Design:
 - `web_store`: Chrome Web Store ids (this one is uBlock Origin Lite).
 - `unpacked`: directories, absolute or under `~`.
 - Listed extensions install without a prompt and get every permission their
-  manifest declares.
+  manifest declares. Camera, microphone and the other site permissions are
+  asked for like a site's.
 - Removing one from the list uninstalls it on reload.
 
 ## The list
@@ -80,6 +81,10 @@ panel.append(view);
   `window.close()`), on a press outside it, and on Escape. Escape reaches you
   only while your page has focus, not while the popup's page does
   ([The keyboard](SHELL-BROWSER-WINDOWS.md#the-keyboard)).
+- **Permissions:** the popup fires `domicile-permission-request` like a
+  browser window ([Permissions](SHELL-BROWSER-WINDOWS.md#permissions)).
+  Unclaimed, the extension gets nothing. A choice is stored for the
+  extension's `chrome-extension://` origin, so it holds in all its pages.
 
 ## Tabs and windows
 
