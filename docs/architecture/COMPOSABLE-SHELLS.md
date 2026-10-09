@@ -103,9 +103,13 @@ spawns it. The supervisor makes decisions; the builder only builds.
   Domicile's version. A cache hit spawns nothing.
 - **Progress:** the builder prints JSON lines
   (`{"step":"install","done":12,"total":40}`). `domicile` draws a progress bar
-  on a TTY and plain lines elsewhere. The first build blocks startup, with no
-  fallback shell.
-- **Failure:** on first start, `domicile` prints the error and exits. On a
+  on a TTY and plain lines elsewhere.
+- **First start:** a build that finishes within 500 ms runs before anything
+  starts. A slower one continues behind the splash (`packages/shell-splash`),
+  which `domicile` replaces with the built shell. `domicile load-shell` and
+  reloads never show it.
+- **Failure:** on first start, a fast build's error is printed and `domicile`
+  exits. A slow build's error stays on the splash, and any key logs out. On a
   running desktop, the last good build stays loaded and the error is posted as
   a notification.
 
@@ -203,7 +207,8 @@ notification server, and manganese shows them as toasts.
   React break hooks, and a mismatched SDK speaks a different protocol. A
   user's `package.json` cannot choose another React version.
 - **No fallback shell during the first build.** A desktop running a shell the
-  user did not configure looks correct but is wrong. Startup shows a progress bar instead.
+  user did not configure looks correct but is wrong. Startup shows the splash
+  instead, which has no keys and no windows.
 - **home-manager builds a TS config with `bun2nix`.** The module takes a
   directory holding the config and its `bun.lock`. JSON stays the default.
 - **"Desk" is not a user-facing name.** No export, config key or CLI word uses

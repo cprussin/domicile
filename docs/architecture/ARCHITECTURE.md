@@ -147,6 +147,8 @@ Web side:
 - `packages/domicile-builder`: builds a shell from a user's TS/JS entry.
 - `packages/shell-manganese`: the reference desktop.
 - `packages/shell-simple`: a desktop with only windows.
+- `packages/shell-splash`: the page shown while `domicile` builds a shell on
+  first start.
 - `packages/system-network`, `packages/system-bluetooth`: NetworkManager, iwd
   or wpa_supplicant, and BlueZ, on the SDK's D-Bus calls.
 - `examples/minimal-shell`: the smallest shell; the worked example in

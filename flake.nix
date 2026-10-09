@@ -319,7 +319,8 @@
       #   libexec/domicile/engine     the Chromium tree, `chrome` inside it
       #   libexec/domicile/builder    builds a shell from an entry or a package
       #   libexec/domicile/shells/    Domicile's prebuilt shells, which
-      #                               `@domicile-desktop/manganese` names
+      #                               `@domicile-desktop/manganese` names,
+      #                               and the splash
       #
       # The binaries are copied, not symlinked. `domicile` finds its siblings
       # from `current_exe`, which resolves symlinks, so a symlink would point
@@ -374,6 +375,8 @@
         mkdir -p "$out/libexec/domicile/shells"
         ln -s ${shellPage "manganese"} "$out/libexec/domicile/shells/manganese"
         ln -s ${shellPage "simple"} "$out/libexec/domicile/shells/simple"
+        # What a desktop shows while it builds its shell on first start.
+        ln -s ${shellPage "splash"} "$out/libexec/domicile/shells/splash"
         # Tells `xdg-desktop-portal` which interfaces Domicile implements. The
         # compositor owns the D-Bus name and sets the matching
         # `XDG_CURRENT_DESKTOP` on clients.
@@ -561,7 +564,7 @@
         dontFixup = true;
         outputHashMode = "recursive";
         outputHashAlgo = "sha256";
-        outputHash = "sha256-hc1xbWtl5SY/N1LvRi7T9b3qN8yG+D0FXExPN8SfJoU=";
+        outputHash = "sha256-0Vd81Tb6iaiHVXNi8GxuzZTftVqPop96t9lDkclPJyQ=";
       };
 
 

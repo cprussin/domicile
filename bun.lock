@@ -150,6 +150,31 @@
         "vite": "catalog:",
       },
     },
+    "packages/shell-splash": {
+      "name": "@domicile-desktop/shell-splash",
+      "version": "0.0.0",
+      "dependencies": {
+        "@domicile-desktop/component-library": "workspace:*",
+        "@domicile-desktop/sdk": "workspace:*",
+        "react": "catalog:",
+        "react-dom": "catalog:",
+        "zod": "catalog:",
+      },
+      "devDependencies": {
+        "@cprussin/tsconfig": "catalog:",
+        "@domicile-desktop/test-support": "workspace:*",
+        "@pandacss/dev": "catalog:",
+        "@pandacss/preset-panda": "catalog:",
+        "@testing-library/react": "catalog:",
+        "@types/bun": "catalog:",
+        "@types/react": "catalog:",
+        "@types/react-dom": "catalog:",
+        "@vitejs/plugin-react": "catalog:",
+        "postcss": "catalog:",
+        "typescript": "catalog:",
+        "vite": "catalog:",
+      },
+    },
     "packages/system-apps": {
       "name": "@domicile-desktop/system-apps",
       "version": "0.0.0",
@@ -376,6 +401,8 @@
     "@domicile-desktop/sdk": ["@domicile-desktop/sdk@workspace:packages/chrome-sdk"],
 
     "@domicile-desktop/shell-simple": ["@domicile-desktop/shell-simple@workspace:packages/shell-simple"],
+
+    "@domicile-desktop/shell-splash": ["@domicile-desktop/shell-splash@workspace:packages/shell-splash"],
 
     "@domicile-desktop/system-apps": ["@domicile-desktop/system-apps@workspace:packages/system-apps"],
 
