@@ -183,6 +183,9 @@ const advanced = (playing: Playing, before: Desk, shown: Desk): Playing => {
     ...switched.flatMap(({ revealed }) =>
       revealed.map((id) => ({ id, motion: "revealing" as const })),
     ),
+    ...switched.flatMap(({ uncovered }) =>
+      uncovered.map((id) => ({ id, motion: "uncovering" as const })),
+    ),
   ];
   return {
     closing: [
@@ -305,7 +308,8 @@ const played = (
         : { ...playing, restacking };
     }
     case "concealing":
-    case "revealing": {
+    case "revealing":
+    case "uncovering": {
       const tabbing = playing.tabbing.filter(
         (fade) => fade.id !== id || fade.motion !== motion,
       );

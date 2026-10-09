@@ -127,7 +127,7 @@ export default defineConfig({
         // container, `--collapse-y` in a stack; see `collapsedAlong`.
         //
         // A visible tab's contents get neither and only fade, since the next
-        // tab is already drawn underneath at the same box.
+        // tab is drawn underneath at the same box (see `windowUncovering`).
         windowClosingTab: {
           "0%": { opacity: "1", transform: "scale(1, 1)" },
           "100%": {
@@ -173,6 +173,13 @@ export default defineConfig({
         windowRevealing: {
           "0%": { opacity: "0", zIndex: "0" },
           "100%": { opacity: "1", zIndex: "0" },
+        },
+        // The tab a close uncovers holds the tiled depth while the closed tab
+        // fades over it. Otherwise `settlingStyles` would ease its depth up
+        // from the hidden tabs', and one of them would show through.
+        windowUncovering: {
+          "0%": { zIndex: "0" },
+          "100%": { zIndex: "0" },
         },
         // The zoom indicator: appears quickly, holds long enough to read, then
         // fades out on its own.

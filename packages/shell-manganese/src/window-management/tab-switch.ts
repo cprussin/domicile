@@ -1,5 +1,5 @@
 // Detects a tabbed or stacking container switching its shown child, so the
-// page can crossfade.
+// page can crossfade, or showing the next child after a close.
 //
 // A hidden tab is drawn under the shown one (see `Frame.behind`), so a switch
 // is just a depth swap. No event announces it, so this compares two renders.
@@ -15,13 +15,18 @@ export type TabSwitch = {
   concealed: readonly string[];
   /** Hidden before, shown now. */
   revealed: readonly string[];
+  /**
+   * Hidden before, shown now with no window hidden in its place, as after a
+   * close.
+   */
+  uncovered: readonly string[];
 };
 
 /**
  * The windows tabs swapped since `before`.
  *
- * Only pairs count: one hidden and one shown in the same box. An unpaired
- * change is a tab opening or closing, which has its own animation.
+ * Only pairs count as a switch: one hidden and one shown in the same box. A
+ * window shown unpaired is uncovered, as when the tab over it closes.
  *
  * Tiled windows only, since the crossfade holds the pair at tiled depths (see
  * `windowRevealing`). Workspace switches are skipped.
@@ -37,12 +42,13 @@ export const tabSwitched = (before: Shown, shown: Shown): TabSwitch => {
           )
           .map(({ id }) => id),
         revealed: revealed
-          .filter((showing) =>
-            concealed.some(({ behind }) => sameBox(behind, showing.surface)),
-          )
+          .filter((showing) => paired(concealed, showing))
+          .map(({ id }) => id),
+        uncovered: revealed
+          .filter((showing) => !paired(concealed, showing))
           .map(({ id }) => id),
       }
-    : { concealed: [], revealed: [] };
+    : { concealed: [], revealed: [], uncovered: [] };
 };
 
 /** Current placements of windows that matched `was` before and `now` now. */
@@ -56,6 +62,10 @@ const swapped = (
     const then = before.placements.find(({ id }) => id === placement.id);
     return then !== undefined && was(then) && now(placement);
   });
+
+/** Whether a window was hidden in the box `showing` is now shown in. */
+const paired = (concealed: readonly Placement[], showing: Placement): boolean =>
+  concealed.some(({ behind }) => sameBox(behind, showing.surface));
 
 const sameBox = (one: Rect | undefined, other: Rect | undefined): boolean =>
   one !== undefined &&
