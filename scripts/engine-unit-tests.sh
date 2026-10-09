@@ -18,7 +18,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 . "$ROOT/scripts/lib/engine-guard.sh"
 require_engine_out
 
-FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRegistryTest.*:ShellURLLoaderFactoryTest.*:ShellDocumentTest.*:ShellSourceTest.*:CursorShapeTest.*:CommandProtocolTest.*:DomicileDisplayListTest.*:DomicileKeyboardLayoutTest.*:ShellWindowsTest.*:ShellWindowPlacesTest.*:LineFramerTest.*:DesktopPrefsTest.*:SurfaceCropTest.*:ExtensionInstallerTest.*:ExtensionTrayEntryTest.*:DeskTabsTest.*:DeskGeometryTest.*:DomicileDisplayRegionsTest.*:DomicileDeskTargeterTest.*:PlaceholderStageTest.*:SystemCallTest.*:PortalRequestTest.*:FileChoiceTest.*:DisplayCaptureTest.*:CapturedFourccTest.*:DisplayCaptureTargetTest.*:HeldChordsTest.*:SitePermissionsTest.*'
+FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRegistryTest.*:ShellURLLoaderFactoryTest.*:ShellDocumentTest.*:ShellSourceTest.*:CursorShapeTest.*:CommandProtocolTest.*:DomicileDisplayListTest.*:DomicileKeyboardLayoutTest.*:ShellWindowsTest.*:ShellWindowPlacesTest.*:LineFramerTest.*:DesktopPrefsTest.*:SurfaceCropTest.*:ExtensionInstallerTest.*:ExtensionTrayEntryTest.*:DeskTabsTest.*:DeskGeometryTest.*:DomicileDisplayRegionsTest.*:DomicileDeskTargeterTest.*:PlaceholderStageTest.*:SystemCallTest.*:PortalRequestTest.*:FileChoiceTest.*:DisplayCaptureTest.*:CapturedFourccTest.*:DisplayCaptureTargetTest.*:HeldChordsTest.*:SitePermissionsTest.*:ControlChannelTest.*'
 
 # Every suite in the filter, counted rather than estimated: FrameSinkBroker 25,
 # WindowDiff 7, EngineEventQueue 7, ShortcutRegistry 10, ShellURLLoaderFactory
@@ -28,9 +28,11 @@ FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRe
 # ExtensionInstaller 3, ExtensionTrayEntry 3, DeskTabs 12, DeskGeometry 13,
 # DomicileDisplayRegions 27, DomicileDeskTargeter 4, PlaceholderStage 3,
 # SystemCall 4, PortalRequest 3, FileChoice 13, DisplayCapture 7,
-# CapturedFourcc 1, DisplayCaptureTarget 4, HeldChords 6, SitePermissions 9.
+# CapturedFourcc 1, DisplayCaptureTarget 4, HeldChords 6, SitePermissions 9,
+# ControlChannel 1.
 #
-# 229, and it was 220 — a <webview>'s permissions are nine SitePermissions
+# 230, and it was 229 — the compositor's lines held until the page binds are
+# one ControlChannel case. Before that 229, and it was 220 — a <webview>'s permissions are nine SitePermissions
 # cases. Before that 220, and it was 223 — the engine takes no screenshots, which was three
 # CommandProtocol cases. Before that 223, and it was 215 — pairing a chord's press with its release is six
 # HeldChords cases and two more ShortcutRegistry ones. Before that 215, and it was 200 — a display capture is seven DisplayCapture cases, one
@@ -79,7 +81,7 @@ FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRe
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=229
+FLOOR=230
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.
