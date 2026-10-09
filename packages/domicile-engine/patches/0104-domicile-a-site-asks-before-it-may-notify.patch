@@ -1,0 +1,115 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Fri, 9 Oct 2026 00:00:00 +0000
+Subject: [PATCH] domicile: a site asks before it may notify
+
+Patch 0068 set the profile's notification default to allow, so every
+site a browser window opened could subscribe to push and notify from the
+background without asking. Patch 0103 gives a guest's permission prompt
+to the shell, so a site can ask.
+
+- PostProfileInit resets the notification default to ask. Setting it,
+  rather than dropping 0068's line, clears the allow stored in existing
+  profiles.
+- NotificationPermissionContext allows domicile://shell. The shell has no
+  prompt to ask through, and content settings are not stored for its
+  scheme.
+- NotificationPlatformBridgeLinux leaves a notification that does not
+  time out at its own urgency when the server is "Domicile", as it does
+  for Plasma. Chrome otherwise marks it critical for GNOME, which hides
+  anything else; Domicile keeps a timeout of 0 up.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on `crux`.
+---
+ chrome/browser/chrome_browser_main.cc                  | 10 ++++------
+ chrome/browser/notifications/BUILD.gn                  |  4 ++++
+ .../notifications/notification_permission_context.cc   |  9 +++++++++
+ .../notification_platform_bridge_linux.cc              |  6 +++++-
+ 4 files changed, 22 insertions(+), 7 deletions(-)
+
+diff --git a/chrome/browser/chrome_browser_main.cc b/chrome/browser/chrome_browser_main.cc
+index 9759229..aed27af 100644
+--- a/chrome/browser/chrome_browser_main.cc
++++ b/chrome/browser/chrome_browser_main.cc
+@@ -1628,14 +1628,12 @@ void ChromeBrowserMainParts::PostProfileInit(Profile* profile,
+   // And every <webview> a tab of one window, to chrome.tabs, before an
+   // extension's first call can ask.
+   domicile::StartDesk(profile);
+-  // And a page in a browser window may show notifications without asking:
+-  // the browser's permission prompt is a bubble drawn over the desktop, which
+-  // has nowhere to put one, so left at "ask" every request would go
+-  // unanswered. What a notification is shown as is the desktop's -- Chrome
+-  // hands it to org.freedesktop.Notifications, which the compositor serves.
++  // And a site asks before it notifies, and the shell answers. Resetting the
++  // default to ask clears an allow-all a profile may hold, which would let
++  // any site it ever opened push notifications from the background.
+   HostContentSettingsMapFactory::GetForProfile(profile)
+       ->SetDefaultContentSetting(ContentSettingsType::NOTIFICATIONS,
+-                                 CONTENT_SETTING_ALLOW);
++                                 CONTENT_SETTING_DEFAULT);
+ 
+   for (auto& chrome_extra_part : chrome_extra_parts_) {
+     chrome_extra_part->PostProfileInit(profile, is_initial_profile);
+diff --git a/chrome/browser/notifications/BUILD.gn b/chrome/browser/notifications/BUILD.gn
+index 5f32394..e4ec29d 100644
+--- a/chrome/browser/notifications/BUILD.gn
++++ b/chrome/browser/notifications/BUILD.gn
+@@ -210,6 +210,10 @@ source_set("impl") {
+     "//chrome/browser/updates/announcement_notification",
+     "//components/content_settings/browser",
+     "//components/content_settings/core/browser",
++
++    # Domicile's engine fork: the shell's origin may notify.
++    "//components/domicile:common",
++
+     "//components/pref_registry",
+     "//components/safe_browsing/content/browser/notification_content_detection",
+     "//components/safe_browsing/core/browser:safe_browsing_metrics_collector",
+diff --git a/chrome/browser/notifications/notification_permission_context.cc b/chrome/browser/notifications/notification_permission_context.cc
+index 8158400..028588b 100644
+--- a/chrome/browser/notifications/notification_permission_context.cc
++++ b/chrome/browser/notifications/notification_permission_context.cc
+@@ -19,6 +19,7 @@
+ #include "components/content_settings/core/browser/host_content_settings_map.h"
+ #include "components/content_settings/core/common/content_settings_pattern.h"
+ #include "components/content_settings/core/common/content_settings_types.h"
++#include "components/domicile/common/domicile_scheme.h"
+ #include "components/permissions/permission_decision.h"
+ #include "components/permissions/permission_prompt_decision.h"
+ #include "components/permissions/permission_request_id.h"
+@@ -99,6 +100,14 @@ ContentSetting NotificationPermissionContext::GetContentSettingStatusInternal(
+     return CONTENT_SETTING_BLOCK;
+   }
+ 
++  // Domicile's engine fork. The shell is the desktop, not a site: it has no
++  // prompt to ask through, and content settings are not stored for
++  // domicile://.
++  if (requesting_origin.SchemeIs(domicile::kDomicileScheme) &&
++      requesting_origin.host() == domicile::kDomicileShellHost) {
++    return CONTENT_SETTING_ALLOW;
++  }
++
+ #if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
+   // Extensions can declare the "notifications" permission in their manifest
+   // that also grant permission to use the Web Notification API.
+diff --git a/chrome/browser/notifications/notification_platform_bridge_linux.cc b/chrome/browser/notifications/notification_platform_bridge_linux.cc
+index 5477f49..198e0a0 100644
+--- a/chrome/browser/notifications/notification_platform_bridge_linux.cc
++++ b/chrome/browser/notifications/notification_platform_bridge_linux.cc
+@@ -312,7 +312,11 @@ bool ShouldMarkPersistentNotificationsAsCritical(
+   // For this reason, we mark a notification that should not time out as
+   // critical unless we are on KDE Plasma or Raspberry Pi (wf-panel-pi)
+   // which follows the notification spec.
+-  return server_name != "Plasma" && server_name != "wf-panel-pi";
++  //
++  // Domicile's engine fork: so does Domicile's compositor, and its shell
++  // marks a critical notification as urgent.
++  return server_name != "Plasma" && server_name != "wf-panel-pi" &&
++         server_name != "Domicile";
+ }
+ 
+ void ForwardNotificationOperation(NotificationOperation operation,
+-- 
+2.43.0
+

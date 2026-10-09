@@ -56,20 +56,20 @@ says() { # $1 MEASURED, $2 what the failure must contain
   )
 }
 
-echo "the claim — a page asking about notifications, which must be granted"
+echo "the claim — a page asking about notifications, which must be asked for"
 expect "found is a pass" "pass" "$(verdict "notifications 0")"
 expect "absent is a failure" "fail" "$(verdict "notifications 1")"
-expect "absent names the patch" "yes" "$(says "notifications 1" "0068")"
+expect "absent names the patch" "yes" "$(says "notifications 1" "0104")"
 expect "nothing drawn is a failure" "fail" "$(verdict "notifications 2")"
 expect "nothing drawn blames the harness" "yes" "$(says "notifications 2" "harness")"
 expect "an unusable probe fails" "fail" "$(verdict "notifications 3")"
 
 echo
-echo "the control — a page painting unasked, then one asking about geolocation"
+echo "the control — a page painting unasked, then one asking about a seeded geolocation"
 expect "shown then held is the pass" "pass" "$(verdict "control 0 1")"
-expect "geolocation granted too is a failure" "fail" "$(verdict "control 0 0")"
-expect "and says the profile grants what it is asked" "yes" \
-  "$(says "control 0 0" "grants what it is asked")"
+expect "geolocation still asked for is a failure" "fail" "$(verdict "control 0 0")"
+expect "and says the seeded profile was not read" "yes" \
+  "$(says "control 0 0" "seeded")"
 expect "a first leg that saw nothing fails, however right the second looks" \
   "fail" "$(verdict "control 1 1")"
 expect "and so does one whose second leg found it" "fail" \
