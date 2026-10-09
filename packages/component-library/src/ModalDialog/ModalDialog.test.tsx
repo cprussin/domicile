@@ -289,6 +289,70 @@ describe(ModalDialog, () => {
     });
   });
 
+  describe("footer keys", () => {
+    const renderFooter = () =>
+      render(
+        <ModalDialog
+          closeButton={false}
+          footer={
+            <>
+              <Button>Deny</Button>
+              <Button disabled>Later</Button>
+              <Button>Allow</Button>
+            </>
+          }
+          open
+        >
+          <input aria-label="Name" />
+        </ModalDialog>,
+      );
+
+    // The dialog focuses its first field on open; Tab reaches the footer.
+    const focusDeny = async (user: ReturnType<typeof userEvent.setup>) => {
+      await waitFor(() => {
+        expect(screen.getByRole("textbox", { name: "Name" })).toHaveFocus();
+      });
+      await user.tab();
+    };
+
+    it("moves between enabled footer buttons with the arrow keys, wrapping", async () => {
+      const user = userEvent.setup();
+      renderFooter();
+      const deny = screen.getByRole("button", { name: "Deny" });
+      const allow = screen.getByRole("button", { name: "Allow" });
+      await focusDeny(user);
+      await user.keyboard("{ArrowRight}");
+      expect(allow).toHaveFocus();
+      await user.keyboard("{ArrowRight}");
+      expect(deny).toHaveFocus();
+      await user.keyboard("{ArrowLeft}");
+      expect(allow).toHaveFocus();
+    });
+
+    it("moves to the first and last footer buttons with Home and End", async () => {
+      const user = userEvent.setup();
+      renderFooter();
+      const deny = screen.getByRole("button", { name: "Deny" });
+      const allow = screen.getByRole("button", { name: "Allow" });
+      await focusDeny(user);
+      await user.keyboard("{End}");
+      expect(allow).toHaveFocus();
+      await user.keyboard("{Home}");
+      expect(deny).toHaveFocus();
+    });
+
+    it("leaves the arrow keys alone outside the footer", async () => {
+      const user = userEvent.setup();
+      renderFooter();
+      const name = screen.getByRole("textbox", { name: "Name" });
+      await waitFor(() => {
+        expect(name).toHaveFocus();
+      });
+      await user.keyboard("{ArrowRight}{End}");
+      expect(name).toHaveFocus();
+    });
+  });
+
   describe("createHandle", () => {
     const HandleHarness = () => {
       const handle = useMemo(() => createHandle(), []);
