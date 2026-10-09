@@ -5,6 +5,11 @@ non-zero on failure. Most have a control run: the same run with one thing
 changed, where the result must differ. If a guard checks that something does
 not happen, its control makes it happen, which proves the guard can detect it.
 
+A headless guard's compositor stand-in (`*-compositor.py`,
+`guard-webview-keyboard-socket.py`) says nothing until the browser's `hello`,
+like the real compositor. `/scripts/test-the-guard-stand-ins-wait-for-hello.sh`
+checks this.
+
 CI runs them through `/scripts/engine-guard-*.sh`. Run one by hand inside the
 toolchain shell ([BUILD-MACHINE.md](BUILD-MACHINE.md#toolchain-shell)).
 

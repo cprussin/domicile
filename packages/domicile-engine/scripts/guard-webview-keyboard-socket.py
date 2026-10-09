@@ -10,10 +10,10 @@ and the press comes back up it -- so the guard needs something on the other end
 for the length of the run, and a real compositor is not available here: this
 guard is headless and software-composited, with no GPU and no Wayland.
 
-So this accepts the connection, describes a keyboard with Tab on evdev 15 --
-the page grabs Alt+Tab by name, and the engine resolves a name against the
-keyboard the compositor describes -- and reads. It answers nothing: no message
-the browser sends on this socket has an answer.
+So this accepts the connection, answers `hello` with a keyboard with Tab on
+evdev 15 -- the page grabs Alt+Tab by name, and the engine resolves a name
+against the keyboard the compositor describes -- and reads. It answers nothing
+else: no other message the browser sends on this socket has an answer.
 
 IT IS ALSO THE ASSERTION THAT A CLAIM IS NO LONGER RELAYED. Every line the
 browser writes is printed here, so `grab_shortcut` appearing in this log would
@@ -27,11 +27,19 @@ import json
 import os
 import socket
 import sys
-import time
 
 # The keyboard, as the compositor's `shell_config` describes it: each keysym
 # and the evdev key it is on.
 KEYBOARD = {"type": "shell_config", "keys": {"Tab": 15}}
+
+
+def is_hello(line):
+    """Whether `line` is the browser's `hello`.
+
+    The real compositor says nothing before it. The browser drops page-bound
+    lines that arrive before the page binds its end of the channel.
+    """
+    return json.loads(line).get("type") == "hello"
 
 
 def serve(path):
@@ -51,11 +59,6 @@ def serve(path):
         print("a channel connected", flush=True)
         remainder = b""
         with connection:
-            # After the page has bound the channel, as the shortcut-chords
-            # stand-in waits.
-            time.sleep(0.5)
-            connection.sendall((json.dumps(KEYBOARD) + "\n").encode("utf-8"))
-            print("sent: %s" % json.dumps(KEYBOARD), flush=True)
             while True:
                 chunk = connection.recv(65536)
                 if not chunk:
@@ -64,6 +67,9 @@ def serve(path):
                 while b"\n" in remainder:
                     line, remainder = remainder.split(b"\n", 1)
                     print("said: %s" % line.decode("utf-8", "replace"), flush=True)
+                    if is_hello(line):
+                        connection.sendall((json.dumps(KEYBOARD) + "\n").encode("utf-8"))
+                        print("sent: %s" % json.dumps(KEYBOARD), flush=True)
         print("the channel went away", flush=True)
 
 
