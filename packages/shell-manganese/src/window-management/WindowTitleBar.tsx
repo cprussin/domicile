@@ -31,6 +31,8 @@ type Props = {
   frame: Rect;
   /** Whether the window is fullscreen. See {@link TitleBar}. */
   fullscreen: boolean;
+  /** The window's icon URL. See {@link TitleBar}. */
+  icon?: string | undefined;
   /** The window's motion, which the bar plays too. */
   motion: WindowMotion;
   /** Where a dragged tiled window would land if dropped now. */
@@ -81,6 +83,7 @@ export const WindowTitleBar = ({
   frame,
   fullscreen,
   groupSelected,
+  icon,
   motion,
   onAim,
   onClose,
@@ -128,6 +131,7 @@ export const WindowTitleBar = ({
       frame={frame}
       fullscreen={fullscreen}
       groupSelected={groupSelected}
+      icon={icon}
       motion={motion}
       onClose={onClose}
       onFloat={onFloat}

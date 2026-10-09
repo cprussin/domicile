@@ -303,6 +303,7 @@ export enum WindowActionKind {
   AppMinSize,
   AppTitled,
   AppLaunched,
+  BrowserIconChanged,
   BrowserOpened,
   BrowserWindowsListed,
   ChildFocused,
@@ -404,6 +405,16 @@ export const WindowAction = {
     appId,
     kind: WindowActionKind.AppTitled as const,
     title,
+  }),
+
+  /**
+   * The view of the engine's browser window `windowId` reported its page's
+   * icon URL, `""` for none.
+   */
+  BrowserIconChanged: (windowId: string, icon: string) => ({
+    icon,
+    kind: WindowActionKind.BrowserIconChanged as const,
+    windowId,
   }),
 
   /**
@@ -806,6 +817,13 @@ const reduceAction = (
         action.title ?? action.appId,
       );
     }
+    case WindowActionKind.BrowserIconChanged: {
+      return markBrowser(
+        state,
+        browserWindowId(action.windowId),
+        action.icon === "" ? undefined : action.icon,
+      );
+    }
     case WindowActionKind.BrowserOpened: {
       // Closes the launcher, since opening a URL is one of its results. The
       // window itself arrives with the engine's next list.
@@ -1101,7 +1119,7 @@ const listBrowsers = (
 };
 
 // Opens a listed window the shell does not have yet. Otherwise updates its
-// address and title.
+// address and title, keeping the icon its view reported.
 const takeUpBrowser = (
   state: WindowState,
   {
@@ -1125,7 +1143,9 @@ const takeUpBrowser = (
     return {
       ...state,
       windows: state.windows.map((drawn) =>
-        drawn.id === window.id ? window : drawn,
+        drawn.id === window.id && drawn.kind === WindowKind.Browser
+          ? { ...window, icon: drawn.icon }
+          : drawn,
       ),
     };
   } else if (window.popupWindow === undefined) {
@@ -1289,6 +1309,20 @@ const renameWindow = (
   ...state,
   windows: state.windows.map((window) =>
     window.id === id ? { ...window, title } : window,
+  ),
+});
+
+/** Sets browser window `id`'s icon. */
+const markBrowser = (
+  state: WindowState,
+  id: string,
+  icon: string | undefined,
+): WindowState => ({
+  ...state,
+  windows: state.windows.map((window) =>
+    window.id === id && window.kind === WindowKind.Browser
+      ? { ...window, icon }
+      : window,
   ),
 });
 

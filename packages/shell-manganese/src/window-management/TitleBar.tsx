@@ -1,4 +1,5 @@
 import { Button } from "@domicile-desktop/component-library/Button";
+import { AppWindowIcon } from "@phosphor-icons/react/dist/ssr/AppWindow";
 import { BrowsersIcon } from "@phosphor-icons/react/dist/ssr/Browsers";
 import { CornersInIcon } from "@phosphor-icons/react/dist/ssr/CornersIn";
 import { CornersOutIcon } from "@phosphor-icons/react/dist/ssr/CornersOut";
@@ -9,6 +10,7 @@ import { SquaresFourIcon } from "@phosphor-icons/react/dist/ssr/SquaresFour";
 import { TabsIcon } from "@phosphor-icons/react/dist/ssr/Tabs";
 import { XIcon } from "@phosphor-icons/react/dist/ssr/X";
 import type { PointerEvent as ReactPointerEvent } from "react";
+import { useState } from "react";
 
 import { css, cva, cx } from "../../styled-system/css";
 import { hstack } from "../../styled-system/patterns";
@@ -67,6 +69,11 @@ type Props = {
    * {@link scaledAbout}. For a tab, this is the tab's own box.
    */
   frame: Rect;
+  /**
+   * The window's icon URL, drawn before its title, or `undefined` for a
+   * stand-in.
+   */
+  icon?: string | undefined;
   /** Whether the window floats. Switches the float button to "Tile". */
   floating: boolean;
   /**
@@ -131,6 +138,7 @@ export const TitleBar = ({
   fullscreen,
   group,
   groupSelected = false,
+  icon,
   motion,
   onClose,
   onContextMenu,
@@ -229,6 +237,8 @@ export const TitleBar = ({
         {group !== undefined && (
           <GroupMark layout={group.layout} windows={group.windows} />
         )}
+        {/* Keyed so a new icon gets another try after one fails to load. */}
+        <WindowIcon icon={icon} key={icon} />
         <span className={titleStyles}>{title}</span>
         {/*
         A press on a button must not start a drag: drag pointer capture would
@@ -312,6 +322,31 @@ const GroupMark = ({
     {windows}
   </span>
 );
+
+/**
+ * The window's icon, or a stand-in when it has none or it does not load, so
+ * every title starts in the same place.
+ */
+const WindowIcon = ({ icon }: { icon: string | undefined }) => {
+  const [failed, setFailed] = useState(false);
+  return (
+    <span className={iconStyles} data-icon>
+      {icon === undefined || failed ? (
+        <AppWindowIcon size={14} />
+      ) : (
+        // biome-ignore lint/a11y/noNoninteractiveElementInteractions: `onError` is the image failing to load, not an interaction
+        <img
+          alt=""
+          className={iconImageStyles}
+          onError={() => {
+            setFailed(true);
+          }}
+          src={icon}
+        />
+      )}
+    </span>
+  );
+};
 
 const GroupIcon = ({ layout }: { layout: Layout }) => {
   switch (layout) {
@@ -588,6 +623,19 @@ const groupMarkStyles = hstack({
   // The config's `fonts.size = 11.0`, as for the title.
   fontSize: "0.6875rem",
   gap: 0.5,
+});
+
+// Sized to the title's line, like a browser tab's icon.
+const iconStyles = css({
+  color: "muted",
+  display: "flex",
+  flexShrink: 0,
+});
+
+const iconImageStyles = css({
+  height: "14px",
+  objectFit: "contain",
+  width: "14px",
 });
 
 const titleStyles = css({

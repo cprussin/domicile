@@ -11,7 +11,10 @@ import type { DomicileState } from "@domicile-desktop/sdk/fake-host";
 import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import { KeyAction } from "@domicile-desktop/sdk/key-action";
 import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
-import { WEBVIEW_GUEST_FOCUS_EVENT } from "@domicile-desktop/sdk/webview-element";
+import {
+  WEBVIEW_FAVICON_CHANGE_EVENT,
+  WEBVIEW_GUEST_FOCUS_EVENT,
+} from "@domicile-desktop/sdk/webview-element";
 import {
   act,
   fireEvent,
@@ -1706,6 +1709,31 @@ describe("Shell", () => {
 
       expect(windowsOnScreen(container)).toEqual(["Browser", "Browser"]);
       expect(container.querySelector("webview[window='2']")).not.toBeNull();
+    });
+
+    it("marks a browser window's title bar with its page's icon", async () => {
+      const { container } = renderShell();
+      press("space");
+      await userEvent
+        .setup()
+        .type(screen.getByRole("combobox"), "example.com{Enter}");
+      const view = container.querySelector("webview");
+      if (view === null) {
+        throw new Error("test: no browser window");
+      }
+
+      // `defineProperty` because `favicon` is readonly on the real element.
+      Object.defineProperty(view, "favicon", {
+        configurable: true,
+        value: "https://example.com/icon.svg",
+      });
+      act(() => {
+        view.dispatchEvent(new Event(WEBVIEW_FAVICON_CHANGE_EVENT));
+      });
+
+      expect(
+        titleBars(container)[0]?.querySelector("img")?.getAttribute("src"),
+      ).toBe("https://example.com/icon.svg");
     });
 
     // `window.close()` or `chrome.tabs.remove`: the engine closes the window,

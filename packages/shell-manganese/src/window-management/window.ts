@@ -89,6 +89,11 @@ export const ShellWindow = {
     popupWindow: number | undefined,
     isPrivate: boolean,
   ) => ({
+    /**
+     * The page's icon URL, or `undefined` for none. The view reports it, not
+     * the engine's list; see `BrowserIconChanged` in `window-state.ts`.
+     */
+    icon: undefined as string | undefined,
     id: browserWindowId(windowId),
     isPrivate,
     kind: WindowKind.Browser as const,

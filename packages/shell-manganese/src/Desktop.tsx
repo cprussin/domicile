@@ -331,6 +331,9 @@ export const Desktop = ({
               act(WindowAction.WindowHovered(id));
             }
           }}
+          onIcon={(window, icon) => {
+            act(WindowAction.BrowserIconChanged(window, icon));
+          }}
           // In page pixels, so a float can be dragged to another screen; see
           // `floatDragged`.
           onMove={(id, x, y) => {

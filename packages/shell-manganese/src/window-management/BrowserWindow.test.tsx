@@ -236,6 +236,9 @@ const ON_SCREEN = { height: 800, width: 1200, x: 0, y: 32 };
 /** The box spanning title bar and contents. */
 const FRAME = { height: 830, width: 1200, x: 0, y: 2 };
 
+/** Drops the page icon; `usePageIcon`'s cases are in `Shell.test.tsx`. */
+const noIcon = () => undefined;
+
 const nothingEnded = () => {
   // No test here needs the callback.
 };
@@ -253,6 +256,7 @@ describe("BrowserWindow", () => {
         frame={FRAME}
         fullscreen={false}
         motion="resting"
+        onIcon={noIcon}
         onMotionEnded={nothingEnded}
         onReach={() => undefined}
         rect={ON_SCREEN}
@@ -280,6 +284,7 @@ describe("BrowserWindow", () => {
         frame={FRAME}
         fullscreen
         motion="resting"
+        onIcon={noIcon}
         onMotionEnded={nothingEnded}
         onReach={() => undefined}
         rect={ON_SCREEN}
@@ -309,6 +314,7 @@ describe("BrowserWindow", () => {
         frame={FRAME}
         fullscreen={false}
         motion="resting"
+        onIcon={noIcon}
         onMotionEnded={nothingEnded}
         onReach={() => undefined}
         rect={ON_SCREEN}
@@ -335,6 +341,7 @@ describe("BrowserWindow", () => {
         frame={FRAME}
         fullscreen={false}
         motion="resting"
+        onIcon={noIcon}
         onMotionEnded={nothingEnded}
         onReach={() => undefined}
         rect={ON_SCREEN}
@@ -360,6 +367,7 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
+          onIcon={noIcon}
           onMotionEnded={nothingEnded}
           onReach={() => undefined}
           rect={ON_SCREEN}
@@ -387,6 +395,7 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
+          onIcon={noIcon}
           onMotionEnded={nothingEnded}
           onReach={() => undefined}
           rect={ON_SCREEN}
@@ -415,6 +424,7 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
+          onIcon={noIcon}
           onMotionEnded={nothingEnded}
           onReach={() => undefined}
           rect={ON_SCREEN}
@@ -446,6 +456,7 @@ describe("BrowserWindow", () => {
       frame: FRAME,
       fullscreen: false,
       motion: "resting",
+      onIcon: noIcon,
       onMotionEnded: nothingEnded,
       onReach: () => undefined,
       rect: ON_SCREEN,
@@ -508,6 +519,7 @@ describe("BrowserWindow", () => {
       // One file in the home directory is enough for these tests.
       listDirectory: () => Promise.resolve(["notes.txt"]),
       motion: "resting",
+      onIcon: noIcon,
       onMotionEnded: nothingEnded,
       onReach: () => undefined,
       rect: ON_SCREEN,
@@ -613,6 +625,7 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
+          onIcon={noIcon}
           onMotionEnded={nothingEnded}
           onReach={() => undefined}
           rect={ON_SCREEN}
@@ -647,6 +660,7 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
+          onIcon={noIcon}
           onMotionEnded={nothingEnded}
           onReach={() => undefined}
           rect={ON_SCREEN}
@@ -670,6 +684,7 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
+          onIcon={noIcon}
           onMotionEnded={nothingEnded}
           onReach={() => undefined}
           rect={ON_SCREEN}
@@ -691,6 +706,7 @@ describe("BrowserWindow", () => {
         frame: FRAME,
         fullscreen: false,
         motion: "resting",
+        onIcon: noIcon,
         onMotionEnded: nothingEnded,
         onReach: () => undefined,
         rect: ON_SCREEN,
@@ -718,6 +734,7 @@ describe("BrowserWindow", () => {
         frame: FRAME,
         fullscreen: false,
         motion: "resting",
+        onIcon: noIcon,
         onMotionEnded: nothingEnded,
         onReach: () => undefined,
         rect: ON_SCREEN,
@@ -748,6 +765,7 @@ describe("BrowserWindow", () => {
         frame: FRAME,
         fullscreen: false,
         motion: "resting",
+        onIcon: noIcon,
         onMotionEnded: nothingEnded,
         onReach: () => undefined,
         rect: ON_SCREEN,
@@ -776,6 +794,7 @@ describe("BrowserWindow", () => {
         frame: FRAME,
         fullscreen: false,
         motion: "resting",
+        onIcon: noIcon,
         onMotionEnded: nothingEnded,
         onReach: () => undefined,
         rect: ON_SCREEN,
@@ -810,6 +829,7 @@ describe("BrowserWindow", () => {
             frame={FRAME}
             fullscreen={false}
             motion="resting"
+            onIcon={noIcon}
             onMotionEnded={nothingEnded}
             onReach={() => {
               resolve();
@@ -836,6 +856,7 @@ describe("BrowserWindow", () => {
             frame={FRAME}
             fullscreen={false}
             motion="resting"
+            onIcon={noIcon}
             onMotionEnded={nothingEnded}
             onReach={() => {
               resolve();
@@ -864,6 +885,7 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
+          onIcon={noIcon}
           onMotionEnded={nothingEnded}
           onReach={() => {
             reaches.push("reach");
@@ -895,6 +917,7 @@ describe("BrowserWindow", () => {
             frame={FRAME}
             fullscreen={false}
             motion="resting"
+            onIcon={noIcon}
             onMotionEnded={nothingEnded}
             onReach={() => {
               resolve();
@@ -923,6 +946,7 @@ describe("BrowserWindow", () => {
             frame={FRAME}
             fullscreen={false}
             motion="resting"
+            onIcon={noIcon}
             onMotionEnded={nothingEnded}
             onReach={() => {
               resolve();
@@ -950,6 +974,7 @@ describe("BrowserWindow", () => {
         frame: FRAME,
         fullscreen: false,
         motion: "resting",
+        onIcon: noIcon,
         onMotionEnded: nothingEnded,
         onReach: () => {
           reaches.push("reach");
@@ -989,6 +1014,7 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
+          onIcon={noIcon}
           onMotionEnded={nothingEnded}
           onReach={() => {
             reaches.push("reach");
@@ -1032,6 +1058,7 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
+          onIcon={noIcon}
           onMotionEnded={nothingEnded}
           onReach={() => undefined}
           rect={ON_SCREEN}
@@ -1058,6 +1085,7 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
+          onIcon={noIcon}
           onMotionEnded={nothingEnded}
           onReach={() => undefined}
           rect={ON_SCREEN}
@@ -1087,6 +1115,7 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
+          onIcon={noIcon}
           onMotionEnded={nothingEnded}
           onReach={() => undefined}
           rect={ON_SCREEN}
@@ -1115,6 +1144,7 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
+          onIcon={noIcon}
           onMotionEnded={nothingEnded}
           onReach={() => undefined}
           rect={ON_SCREEN}
@@ -1151,6 +1181,7 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
+          onIcon={noIcon}
           onMotionEnded={nothingEnded}
           onReach={() => undefined}
           rect={ON_SCREEN}
@@ -1262,6 +1293,7 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
+          onIcon={noIcon}
           onMotionEnded={nothingEnded}
           onReach={() => undefined}
           rect={ON_SCREEN}
@@ -1342,6 +1374,7 @@ describe("BrowserWindow", () => {
           fullscreen={false}
           isPrivate={isPrivate}
           motion="resting"
+          onIcon={noIcon}
           onMotionEnded={nothingEnded}
           onReach={() => undefined}
           rect={ON_SCREEN}
@@ -1477,6 +1510,7 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
+          onIcon={noIcon}
           onMotionEnded={nothingEnded}
           onReach={() => undefined}
           rect={ON_SCREEN}
@@ -1511,6 +1545,7 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
+          onIcon={noIcon}
           onMotionEnded={nothingEnded}
           onReach={() => undefined}
           rect={ON_SCREEN}
@@ -1628,6 +1663,7 @@ describe("BrowserWindow", () => {
         frame={FRAME}
         fullscreen={false}
         motion="resting"
+        onIcon={noIcon}
         onMotionEnded={nothingEnded}
         onReach={() => undefined}
         rect={undefined}
@@ -1651,6 +1687,7 @@ describe("BrowserWindow", () => {
       frame: FRAME,
       fullscreen: false,
       motion: "resting",
+      onIcon: noIcon,
       onMotionEnded: nothingEnded,
       onReach: () => undefined,
       rect: ON_SCREEN,
