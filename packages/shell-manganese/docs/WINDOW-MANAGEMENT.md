@@ -56,9 +56,8 @@ Workspaces belong to the desktop, and screens show them, as in sway:
 - **The focused window stands out.** An accent ring and glow surround it
   (`FocusGlow.tsx`), lighting the gaps around it. A window in a tab group
   lights the whole group, tabs included. Its title bar is raised with bold
-  text. Nothing is lit when the desktop shows a single window or tab group. The
-  glow fades out and in where it is, rather than moving to the next window, so
-  pointer-driven focus changes don't flash or slide.
+  text. The glow fades out and in where it is, rather than moving to the next
+  window, so pointer-driven focus changes don't flash or slide.
 - **Meta+A selects a group.** Commands then act on the whole container. One
   glow surrounds the group; the focused window's bar gets the accent color.
   A selected tab group lights its tab strip instead, and its tabs keep their
