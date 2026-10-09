@@ -714,6 +714,8 @@ void WebViewGuest::ReportEverything() {
   reported_security_ = mojom::WebViewSecurity::kNeutral;
   reported_find_matches_ = 0;
   reported_find_active_match_ = 0;
+  // The new element starts over no link; the next pointer move reports one.
+  reported_target_url_ = GURL();
 
   ReportHistory();
   ReportPage();
@@ -1208,6 +1210,10 @@ void WebViewGuest::EditWhenFocused(EditCommand command, int tries) {
       kEditRetry);
 }
 
+void WebViewGuest::PointerLeft() {
+  ReportTargetUrl(GURL());
+}
+
 void WebViewGuest::Inspect() {
   CHECK(guest_contents_);
   Inspector().Run(*guest_contents_->GetPrimaryMainFrame(), std::nullopt);
@@ -1297,6 +1303,31 @@ void WebViewGuest::DidChangeVisibleSecurityState() {
 void WebViewGuest::LoadingStateChanged(content::WebContents* source,
                                        bool should_show_loading_ui) {
   ReportLoading(should_show_loading_ui);
+}
+
+void WebViewGuest::UpdateTargetURL(content::WebContents* source,
+                                   const GURL& url) {
+  renderer_target_url_ = url;
+  ReportTargetUrl(url);
+}
+
+bool WebViewGuest::PreHandleMouseEvent(content::WebContents* source,
+                                       const blink::WebMouseEvent& event) {
+  // Any other mouse event means the pointer is over the page.
+  ReportTargetUrl(event.GetType() == blink::WebInputEvent::Type::kMouseLeave
+                      ? GURL()
+                      : renderer_target_url_);
+  // The page still gets the event.
+  return false;
+}
+
+void WebViewGuest::ReportTargetUrl(const GURL& url) {
+  // Report only changes; content also clears it on every navigation, and every
+  // mouse event calls this.
+  if (url != reported_target_url_) {
+    reported_target_url_ = url;
+    client_->TargetUrlChanged(url);
+  }
 }
 
 void WebViewGuest::ReportHistory() {
