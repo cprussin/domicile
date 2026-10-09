@@ -60,7 +60,7 @@ const shown = () => {
 };
 
 describe("LockBar", () => {
-  it("shows Bluetooth, volume, brightness and battery, as the desktop's bar does", () => {
+  it("shows brightness, volume, Bluetooth and battery, as the desktop's bar does", () => {
     const { backlight, battery, sound } = shown();
 
     battery.report({ charge: 0.8, charging: false });
@@ -71,7 +71,7 @@ describe("LockBar", () => {
       [...screen.getByRole("banner").querySelectorAll("[aria-label]")].map(
         (item) => item.getAttribute("aria-label"),
       ),
-    ).toEqual(["Bluetooth on", "Volume 50%", "Brightness 42%", "Battery"]);
+    ).toEqual(["Brightness 42%", "Volume 50%", "Bluetooth on", "Battery"]);
   });
 
   it("shows Bluetooth without turning it on or off", () => {
