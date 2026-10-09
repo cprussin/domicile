@@ -23,7 +23,9 @@ await setPowered(host, "/org/bluez/hci0", false);
 - Reads `GetManagedObjects` once, then again when an object comes or goes or
   one of these changes: an adapter's `Powered` or `Discovering`, a device's
   `Alias`, `Name`, `Connected` or `Paired`, or its battery's `Percentage`.
-- `devices` holds paired devices and, from a scan, those with a name.
+- `devices` holds paired devices and, from a scan, those with a name. Each
+  has `battery` (0 through 100) from `org.bluez.Battery1`, or `undefined` when
+  it reports none.
 - Requests: `setPowered`, `startDiscovery`, `stopDiscovery`, `connect`,
   `disconnect`, `pair` (then trusts the device) and `forget`.
 - `pair` registers no agent, so only devices that need no code pair.

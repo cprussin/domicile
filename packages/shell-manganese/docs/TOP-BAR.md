@@ -46,7 +46,7 @@ Every bar and the lock screen share one watch per system readout. See
   `topBar` option does not change it.
 - Each item offers only what a locked desktop allows
   ([LOCK.md](../../../docs/LOCK.md#lock-screen-readouts)):
-  - Bluetooth: the icon, not a button.
+  - Bluetooth: the icon, named as on the desktop; not a button.
   - Volume: the default output's slider and mute; no mixer.
   - Brightness and battery: as on the desktop.
 - Panels draw over the lock screen and keep the keyboard until they close.
@@ -101,8 +101,9 @@ Every bar and the lock screen share one watch per system readout. See
 ## Bluetooth
 
 - From BlueZ ([`@domicile-desktop/system-bluetooth`](../../system-bluetooth/README.md)).
-- An icon for off, on, or on with a device connected. Its name lists the
-  connected devices.
+- An icon for off, on, or on with a device connected. Its name and tooltip
+  list the connected devices, each with its battery, e.g.
+  `Bluetooth: WH-1000XM4 (80%)`.
 - Click for the Bluetooth panel:
   - A switch turns every adapter on or off.
   - While open with an adapter on, it scans for devices.
