@@ -6,18 +6,13 @@ import type {
   WebViewPermission,
   WebViewPermissionSetting,
 } from "@domicile-desktop/sdk/webview-element";
-import { BellIcon } from "@phosphor-icons/react/dist/ssr/Bell";
-import { CameraIcon } from "@phosphor-icons/react/dist/ssr/Camera";
-import { ClipboardIcon } from "@phosphor-icons/react/dist/ssr/Clipboard";
-import { MapPinIcon } from "@phosphor-icons/react/dist/ssr/MapPin";
-import { MicrophoneIcon } from "@phosphor-icons/react/dist/ssr/Microphone";
-import { PianoKeysIcon } from "@phosphor-icons/react/dist/ssr/PianoKeys";
 import { SlidersHorizontalIcon } from "@phosphor-icons/react/dist/ssr/SlidersHorizontal";
-import type { ReactNode } from "react";
 import { useState } from "react";
 
 import { css } from "../../../styled-system/css";
 import { hstack, vstack } from "../../../styled-system/patterns";
+import { PermissionAsk } from "./PermissionAsk";
+import { PERMISSION_ICONS, PERMISSION_LABELS } from "./permission-names";
 import type { SitePermission } from "./site-permissions";
 import type { PermissionRequest } from "./usePermissionRequest";
 
@@ -82,7 +77,16 @@ export const SitePermissions = ({
     >
       <div className={panelStyles}>
         {request === undefined ? undefined : (
-          <Asking request={request} url={url} />
+          <PermissionAsk
+            // The heading names the page's site, so only another site is
+            // named again.
+            asker={
+              hostOf(request.origin) === hostOf(url)
+                ? "This site"
+                : hostOf(request.origin)
+            }
+            request={request}
+          />
         )}
         {permissions.length === 0 ? (
           <span className={noneStyles}>This page has no site permissions.</span>
@@ -91,12 +95,14 @@ export const SitePermissions = ({
             {permissions.map(({ permission, setting }) => (
               <li className={rowStyles} key={permission}>
                 <span className={tileStyles} data-setting={setting}>
-                  {ICONS[permission]}
+                  {PERMISSION_ICONS[permission]}
                 </span>
-                <span className={nameStyles}>{LABELS[permission]}</span>
+                <span className={nameStyles}>
+                  {PERMISSION_LABELS[permission]}
+                </span>
                 <span className={choiceStyles}>
                   <Select
-                    aria-label={LABELS[permission]}
+                    aria-label={PERMISSION_LABELS[permission]}
                     onValueChange={(next) => {
                       if (next !== null && next !== setting) {
                         onSet(permission, next);
@@ -115,66 +121,6 @@ export const SitePermissions = ({
       </div>
     </Popover>
   );
-};
-
-/**
- * The page's request: who asks, for what, and the two answers.
- *
- * The heading already names the page's site, so the asking site is named
- * again only when it differs.
- */
-const Asking = ({
-  request,
-  url,
-}: {
-  request: PermissionRequest;
-  url: string;
-}) => (
-  <section aria-label="Request" className={askingStyles}>
-    <span className={askingTextStyles}>
-      <strong className={askingHostStyles}>
-        {hostOf(request.origin) === hostOf(url)
-          ? "This site"
-          : hostOf(request.origin)}
-      </strong>{" "}
-      <span>wants to use</span>
-    </span>
-    <ul aria-label="Requested" className={requestedStyles}>
-      {request.permissions.map((permission) => (
-        <li className={chipStyles} key={permission}>
-          {ICONS[permission]}
-          {LABELS[permission]}
-        </li>
-      ))}
-    </ul>
-    <div className={answersStyles}>
-      <Button onClick={request.deny} size="sm" variant="primary">
-        Block
-      </Button>
-      <Button onClick={request.allow} size="sm" variant="accent">
-        Allow
-      </Button>
-    </div>
-  </section>
-);
-
-/** Each permission's name, as Chrome's site settings word it. */
-const LABELS: Readonly<Record<WebViewPermission, string>> = {
-  camera: "Camera",
-  clipboard: "Clipboard",
-  location: "Location",
-  microphone: "Microphone",
-  midi: "MIDI devices",
-  notifications: "Notifications",
-};
-
-const ICONS: Readonly<Record<WebViewPermission, ReactNode>> = {
-  camera: <CameraIcon size={14} />,
-  clipboard: <ClipboardIcon size={14} />,
-  location: <MapPinIcon size={14} />,
-  microphone: <MicrophoneIcon size={14} />,
-  midi: <PianoKeysIcon size={14} />,
-  notifications: <BellIcon size={14} />,
 };
 
 const SETTING_OPTIONS: readonly SelectOption<WebViewPermissionSetting>[] = [
@@ -216,51 +162,6 @@ const panelStyles = vstack({
   alignItems: "stretch",
   gap: 3,
   minInlineSize: 64,
-});
-
-// Tinted with the accent, so the question stands apart from the settings.
-const askingStyles = vstack({
-  alignItems: "stretch",
-  backgroundColor: "color-mix(in oklab, {colors.accent} 10%, {colors.card})",
-  border: "1px solid color-mix(in oklab, {colors.accent} 35%, {colors.border})",
-  borderRadius: "lg",
-  gap: 2.5,
-  padding: 3,
-});
-
-const askingTextStyles = css({
-  color: "foreground",
-  fontSize: "sm",
-});
-
-const askingHostStyles = css({
-  fontWeight: "semibold",
-  overflowWrap: "anywhere",
-});
-
-const requestedStyles = hstack({
-  flexWrap: "wrap",
-  gap: 1.5,
-  listStyle: "none",
-  margin: 0,
-  padding: 0,
-});
-
-const chipStyles = hstack({
-  backgroundColor: "color-mix(in oklab, {colors.accent} 18%, {colors.card})",
-  borderRadius: "full",
-  color: "foreground",
-  fontSize: "xs",
-  gap: 1.5,
-  paddingBlock: 1,
-  paddingInline: 2.5,
-});
-
-// Equal halves, Block first, as in Chrome's prompt.
-const answersStyles = css({
-  "& > *": { flex: "1 1 0" },
-  display: "flex",
-  gap: 2,
 });
 
 const settingsStyles = vstack({
