@@ -423,7 +423,7 @@ Understood and not scheduled.
   lists only what Domicile implements.
 
 - **Wayland capture tools cannot capture the desk.** Portal clients, the
-  shell (`system(host).screenshot()`) and `domicile screenshot <file>` all
+  shell (`system(host).screenshot()`) and `domicile screenshot` all
   take the portal's frame (`Casting::shoot`,
   [PORTALS.md](docs/PORTALS.md)). `grim` and `wf-recorder` get
   nothing. Serve `ext-image-copy-capture-v1` (and `wlr-screencopy` for older tools) on

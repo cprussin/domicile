@@ -184,6 +184,9 @@ This is a working desktop: every window full-screen, newest on top.
 - Make the background transparent wherever a window should show. A background
   painted over an `<app>` hides it.
 - Set `document.title` if you want a title other than Domicile's.
+- This shell answers no portal requests, so an app's portal dialog and a bare
+  `domicile screenshot` wait until the desktop exits. Answer or refuse them as
+  `examples/minimal-shell` does; see [PORTALS.md](PORTALS.md).
 
 ### Popups
 

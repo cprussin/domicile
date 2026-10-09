@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Checks a running desktop loads a new shell, opens URLs and takes screenshots
 # on command, via `domicile load-shell`, `BROWSER`, the `xdg-open` shim on its
-# apps' PATH, and `domicile screenshot`.
+# apps' PATH, and `domicile screenshot` with and without a file.
 #
 #   ./scripts/test-a-running-desktop-takes-a-new-shell.sh
 #
@@ -101,10 +101,11 @@ ENGINE
 chmod +x "$WORK/engine/chrome"
 
 # Stub compositor: binds the chrome socket, publishes the session, and saves
-# every screenshot it is asked for.
+# every screenshot it is asked for. With no file, it is the user picking: it
+# waits for \$WORK/picked, which names the file saved or says "cancel".
 cat >"$WORK/domicile-compositor" <<COMPOSITOR
 #!/usr/bin/env python3
-import json, os, socket, sys
+import json, os, socket, sys, time
 
 arguments = dict(zip(sys.argv[1::2], sys.argv[2::2]))
 session = arguments["--session"]
@@ -129,7 +130,15 @@ while True:
     with open("$WORK/compositor-heard", "a") as heard:
         heard.write(line.decode())
     asked = json.loads(line)
-    reply = {"kind": "saved", "path": asked["request"]["file"]}
+    file = asked["request"]["file"]
+    if file is None:
+        while not os.path.exists("$WORK/picked"):
+            time.sleep(0.05)
+        file = open("$WORK/picked").read().strip()
+        os.remove("$WORK/picked")
+    reply = ({"kind": "failed",
+              "error": {"kind": "canceled", "message": "the screenshot dialog was dismissed"}}
+             if file == "cancel" else {"kind": "saved", "path": file})
     connection.sendall((json.dumps(
         {"type": "system_reply", "id": asked["id"], "reply": reply}) + "\n").encode())
     connection.close()
@@ -258,6 +267,51 @@ if [ "$SAID" = "$WORK/shot.png" ]; then
   echo "PASS: $SAID"
 else
   echo "FAIL: screenshot said '$SAID', and it wrote $WORK/shot.png"
+  FAILED=1
+fi
+
+echo "== a bare screenshot is the shell's, and other commands answer while the user picks =="
+PICKED="$WORK/Pictures/Screenshots/picked.png"
+ask_desktop screenshot >"$WORK/picking.log" &
+PICKING=$!
+WAITED=0
+until tail -n 1 "$WORK/compositor-heard" 2>/dev/null | grep -q '"file": *null' ||
+      [ "$WAITED" -ge 100 ]; do
+  sleep 0.1
+  WAITED=$((WAITED + 1))
+done
+HEARD="$(tail -n 1 "$WORK/compositor-heard" 2>/dev/null)"
+WANT='{"type":"system_request","id":1,"request":{"call":"screenshot","file":null}}'
+if [ "$HEARD" = "$WANT" ]; then
+  echo "PASS: $HEARD"
+else
+  echo "FAIL: the compositor heard '$HEARD'"
+  echo "      and the protocol says  $WANT"
+  FAILED=1
+fi
+if NOW="$(ask_desktop which-shell)"; then
+  echo "PASS: which-shell answered $NOW while the user was picking"
+else
+  echo "FAIL: which-shell did not answer while the user was picking: $NOW"
+  FAILED=1
+fi
+echo "$PICKED" >"$WORK/picked"
+if wait "$PICKING" && [ "$(cat "$WORK/picking.log")" = "$PICKED" ]; then
+  echo "PASS: $PICKED"
+else
+  echo "FAIL: screenshot said '$(cat "$WORK/picking.log")', and the shell saved $PICKED"
+  FAILED=1
+fi
+
+echo "== a screenshot the user dismissed fails and says so =="
+echo cancel >"$WORK/picked"
+if CANCELED="$(ask_desktop screenshot)"; then
+  echo "FAIL: a dismissed screenshot exited 0: $CANCELED"
+  FAILED=1
+elif [ "$CANCELED" = "domicile: the screenshot was canceled" ]; then
+  echo "PASS: $CANCELED"
+else
+  echo "FAIL: it failed for some other reason: $CANCELED"
   FAILED=1
 fi
 

@@ -3,7 +3,9 @@
 use std::cell::Cell;
 use std::path::{Path, PathBuf};
 
-use domicile_launch::control::{answer, parse_response, LoadShell, OpenUrl, Response, Screenshot};
+use domicile_launch::control::{
+    answer, parse_response, LoadShell, OpenUrl, Response, Screenshot, Shot,
+};
 
 #[test]
 fn a_desktop_says_which_shell_it_is_running() {
@@ -117,17 +119,44 @@ fn a_desktop_told_to_take_a_screenshot_tells_the_compositor_and_says_where_it_is
     let answered = answered_capturing(
         "{\"type\":\"screenshot\",\"file\":\"/home/me/shot.png\"}",
         &|file| {
-            told.set(Some(file.to_path_buf()));
-            Ok(())
+            told.set(Some(file.map(Path::to_path_buf)));
+            Ok(Shot::Saved(PathBuf::from("/home/me/shot.png")))
         },
     );
 
-    assert_eq!(told.take(), Some(PathBuf::from("/home/me/shot.png")));
+    assert_eq!(told.take(), Some(Some(PathBuf::from("/home/me/shot.png"))));
     assert_eq!(
         answered,
         Response::Captured {
             file: PathBuf::from("/home/me/shot.png")
         }
+    );
+}
+
+#[test]
+fn a_screenshot_with_no_file_is_the_shells_and_the_answer_is_where_it_saved_it() {
+    let told = Cell::new(None);
+    let answered = answered_capturing("{\"type\":\"screenshot\"}", &|file| {
+        told.set(Some(file.map(Path::to_path_buf)));
+        Ok(Shot::Saved(PathBuf::from(
+            "/home/me/Pictures/Screenshots/Screenshot.png",
+        )))
+    });
+
+    assert_eq!(told.take(), Some(None));
+    assert_eq!(
+        answered,
+        Response::Captured {
+            file: PathBuf::from("/home/me/Pictures/Screenshots/Screenshot.png")
+        }
+    );
+}
+
+#[test]
+fn a_screenshot_the_user_dismissed_is_canceled() {
+    assert_eq!(
+        answered_capturing("{\"type\":\"screenshot\"}", &|_| Ok(Shot::Canceled)),
+        Response::Canceled
     );
 }
 

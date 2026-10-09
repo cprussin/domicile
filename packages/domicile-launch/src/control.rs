@@ -26,10 +26,12 @@ pub enum Request {
     /// Open this URL in a browser window. The client converts paths with
     /// [`crate::address`].
     OpenUrl { url: String },
-    /// Write a PNG of the whole desk to this absolute path.
+    /// Write a PNG of the whole desk to this absolute path, or, with no
+    /// `file`, take the shell's interactive screenshot.
     ///
-    /// The client makes the path absolute, as for `LoadShell`.
-    Screenshot { file: PathBuf },
+    /// The client makes the path absolute, as for `LoadShell`. See
+    /// `SystemRequest::Screenshot` for where the interactive one is saved.
+    Screenshot { file: Option<PathBuf> },
 }
 
 /// A desktop's response.
@@ -49,6 +51,9 @@ pub enum Response {
 
     /// The compositor wrote the screenshot to this file.
     Captured { file: PathBuf },
+
+    /// The user dismissed the shell's screenshot dialog.
+    Canceled,
 
     /// The request was unknown or could not be carried out.
     ///
@@ -80,10 +85,19 @@ pub type LoadShell<'a> = &'a dyn Fn(&Path, &Path) -> Result<(), String>;
 /// [`crate::command_socket::open_url`] in a desktop; a closure in tests.
 pub type OpenUrl<'a> = &'a dyn Fn(&str) -> Result<(), String>;
 
-/// Tells the compositor to write a PNG of the desk to a file.
+/// Tells the compositor to take a screenshot, into the file if one is given.
 ///
 /// [`crate::compositor_socket::screenshot`] in a desktop; a closure in tests.
-pub type Screenshot<'a> = &'a dyn Fn(&Path) -> Result<(), String>;
+pub type Screenshot<'a> = &'a dyn Fn(Option<&Path>) -> Result<Shot, String>;
+
+/// How a screenshot the compositor took ended.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Shot {
+    /// Saved as this file.
+    Saved(PathBuf),
+    /// The user dismissed the shell's screenshot dialog.
+    Canceled,
+}
 
 /// Answers one request line, given the current shell `module`.
 ///
@@ -112,8 +126,9 @@ pub fn answer(
             Ok(()) => Response::Opened,
             Err(why) => Response::Refused { why },
         }),
-        Ok(Request::Screenshot { file }) => to_line(&match capture(&file) {
-            Ok(()) => Response::Captured { file },
+        Ok(Request::Screenshot { file }) => to_line(&match capture(file.as_deref()) {
+            Ok(Shot::Saved(file)) => Response::Captured { file },
+            Ok(Shot::Canceled) => Response::Canceled,
             Err(why) => Response::Refused { why },
         }),
         Err(why) => to_line(&Response::Refused {
