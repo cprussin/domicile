@@ -752,6 +752,11 @@ export type DomicileWindow = {
   /** Empty until the client names itself. */
   readonly title: string;
   /**
+   * The client's Wayland app id, which names its desktop entry. Empty when the
+   * client set none.
+   */
+  readonly desktopId: string;
+  /**
    * The size the client last committed, in CSS pixels; null until it has
    * committed one.
    */

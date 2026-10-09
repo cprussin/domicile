@@ -32,6 +32,7 @@ fn a_window_says_what_it_is_called_when_the_client_says_it() {
         Some(&HostMessage::AppAppeared {
             app_id: app.clone(),
             title: Some("a terminal".to_string()),
+            desktop_id: None,
             size: None,
         })
     );
@@ -39,6 +40,39 @@ fn a_window_says_what_it_is_called_when_the_client_says_it() {
     assert_eq!(host.app_titled(&app, Some("a terminal".to_string())), None);
     // An unknown app sends nothing.
     assert_eq!(host.app_titled("app-nowhere", None), None);
+}
+
+#[test]
+fn a_window_says_which_desktop_entry_it_is_when_the_client_says_it() {
+    // `set_app_id` comes after the toplevel, like `set_title`, and a shell
+    // reads it to find the app's icon.
+    let mut host = Host::new();
+    let (app, _) = host.app_appeared(None, None);
+
+    assert_eq!(
+        host.app_desktop_id(&app, "org.gnome.Nautilus".to_string()),
+        Some(HostMessage::AppDesktopId {
+            app_id: app.clone(),
+            desktop_id: "org.gnome.Nautilus".to_string(),
+        })
+    );
+    // The replay for a reloading chrome includes it.
+    assert_eq!(
+        host.open_apps().first(),
+        Some(&HostMessage::AppAppeared {
+            app_id: app.clone(),
+            title: None,
+            desktop_id: Some("org.gnome.Nautilus".to_string()),
+            size: None,
+        })
+    );
+    // An unchanged id sends nothing.
+    assert_eq!(
+        host.app_desktop_id(&app, "org.gnome.Nautilus".to_string()),
+        None
+    );
+    // An unknown app sends nothing.
+    assert_eq!(host.app_desktop_id("app-nowhere", String::new()), None);
 }
 
 #[test]
@@ -51,6 +85,7 @@ fn a_client_that_has_not_committed_is_announced_with_no_size() {
     let announced = |size| HostMessage::AppAppeared {
         app_id: app.clone(),
         title: None,
+        desktop_id: None,
         size,
     };
 
@@ -87,11 +122,13 @@ fn a_chrome_that_arrives_late_is_told_about_every_window_already_open() {
         HostMessage::AppAppeared {
             app_id: first,
             title: Some("a terminal".to_string()),
+            desktop_id: None,
             size: Some([640.0, 480.0]),
         },
         HostMessage::AppAppeared {
             app_id: second,
             title: None,
+            desktop_id: None,
             size: Some([100.0, 200.0]),
         },
     ]
@@ -102,6 +139,7 @@ fn a_chrome_that_arrives_late_is_told_about_every_window_already_open() {
             .map(|(n, app_id)| HostMessage::AppAppeared {
                 app_id,
                 title: None,
+                desktop_id: None,
                 size: Some([n as f64, 0.0]),
             }),
     )
@@ -254,6 +292,7 @@ fn app_appeared_assigns_ids_and_announces_to_chrome() {
         HostMessage::AppAppeared {
             app_id,
             title,
+            desktop_id: None,
             size,
         } => {
             assert_eq!(app_id, id1);
