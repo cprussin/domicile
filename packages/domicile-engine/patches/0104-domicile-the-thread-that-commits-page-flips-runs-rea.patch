@@ -1,0 +1,70 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Fri, 9 Oct 2026 00:00:00 +0000
+Subject: [PATCH] domicile: the thread that commits page flips runs realtime
+
+DrmThread commits every page flip, and a flip is due at vblank whatever
+else the machine is doing. Upstream marks it kPresentation, which on
+Linux is nice -8 at best, so a parallel build can still make a commit
+miss its vblank.
+
+DrmThread::Init moves the thread to SCHED_RR at
+PlatformThreadLinux::kRealTimeDisplayPrio (6, below realtime audio's 8),
+with SCHED_RESET_ON_FORK so no child inherits it. Mutter's KMS thread
+runs realtime for the same reason.
+
+The call needs RLIMIT_RTPRIO of at least 6. Without it the thread keeps
+its nice value and VPLOG(1) says so. The GPU sandbox allows
+sched_setscheduler on the caller's own thread (RestrictSchedTarget
+accepts pid 0).
+---
+ ui/ozone/platform/drm/gpu/drm_thread.cc | 15 +++++++++++++++
+ 1 file changed, 15 insertions(+)
+
+diff --git a/ui/ozone/platform/drm/gpu/drm_thread.cc b/ui/ozone/platform/drm/gpu/drm_thread.cc
+index 84a780f..b46637f 100644
+--- a/ui/ozone/platform/drm/gpu/drm_thread.cc
++++ b/ui/ozone/platform/drm/gpu/drm_thread.cc
+@@ -5,6 +5,7 @@
+ #include "ui/ozone/platform/drm/gpu/drm_thread.h"
+ 
+ #include <gbm.h>
++#include <sched.h>
+ 
+ #include <memory>
+ #include <utility>
+@@ -12,6 +13,7 @@
+ #include "base/functional/bind.h"
+ #include "base/logging.h"
+ #include "base/message_loop/message_pump_type.h"
++#include "base/threading/platform_thread.h"
+ #include "base/time/time.h"
+ #include "base/timer/elapsed_timer.h"
+ #include "base/trace_event/trace_event.h"
+@@ -36,6 +38,17 @@ namespace ui {
+ 
+ namespace {
+ 
++// Moves the calling thread to SCHED_RR at Chromium's display priority.
++//
++// Without RLIMIT_RTPRIO the thread keeps kPresentation's nice value. That is
++// the machine's choice, so it is logged only at VLOG(1).
++void RunInRealtimeIfAllowed() {
++  sched_param priority = base::PlatformThreadLinux::kRealTimeDisplayPrio;
++  if (sched_setscheduler(0, SCHED_RR | SCHED_RESET_ON_FORK, &priority) != 0) {
++    VPLOG(1) << "DrmThread stays at its nice value";
++  }
++}
++
+ void CreateBufferWithGbmFlags(const scoped_refptr<DrmDevice>& drm,
+                               uint32_t fourcc_format,
+                               const gfx::Size& size,
+@@ -103,6 +116,8 @@ void DrmThread::RunTaskAfterDeviceReady(base::OnceClosure task,
+ 
+ void DrmThread::Init() {
+   TRACE_EVENT0("drm", "DrmThread::Init");
++  // This thread commits page flips, which are due at vblank whatever the load.
++  RunInRealtimeIfAllowed();
+   device_manager_ =
+       std::make_unique<DrmDeviceManager>(std::move(device_generator_));
+   screen_manager_ = std::make_unique<ScreenManager>();
