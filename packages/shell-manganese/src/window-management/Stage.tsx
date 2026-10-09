@@ -253,6 +253,7 @@ export const Stage = ({
                 />
               ) : (
                 <BrowserWindow
+                  behindPanel={behindPanel}
                   clickThrough={clickThrough}
                   covered={placement?.behind !== undefined}
                   depth={depth}

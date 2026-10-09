@@ -22,6 +22,10 @@ How manganese implements the focus behavior in
 - A click in a `<webview>` sends no pointer or focus events to the shell. The
   element dispatches its own event, which the window listens for.
   `packages/domicile-engine/scripts/guard-webview-click.sh` tests this.
+- The engine also sends that event when the page regains the keyboard, such as
+  when the launcher opens, for the last focused guest. A window ignores it
+  while its page can't be clicked: behind another tab or a desktop panel.
+  Otherwise opening the launcher would move focus to that window's screen.
 - The engine reports a `<webview>` whose guest has focus as
   `document.activeElement` (patch
   `0011-domicile-let-a-guest-s-focus-reach-the-element-it-ha.patch`).
