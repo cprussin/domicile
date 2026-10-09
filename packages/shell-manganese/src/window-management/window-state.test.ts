@@ -198,6 +198,18 @@ describe("the browser windows the engine lists", () => {
     expect(state.windows[0]).toMatchObject({ title: "docs.rs" });
   });
 
+  it("names a window after its page's title once the page has one", () => {
+    const state = reduce(
+      desktop(),
+      WindowAction.BrowserWindowsListed([listed("1", "https://docs.rs/")]),
+      WindowAction.BrowserWindowsListed([
+        { ...listed("1", "https://docs.rs/"), title: "Docs.rs" },
+      ]),
+    );
+
+    expect(state.windows[0]).toMatchObject({ title: "Docs.rs" });
+  });
+
   it("takes a window away when the engine no longer lists it", () => {
     const state = reduce(
       desktop("kitty"),

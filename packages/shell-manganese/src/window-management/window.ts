@@ -76,6 +76,8 @@ export const ShellWindow = {
    *
    * - `windowId`: the engine's id, for `<webview window>`. `id` prefixes it.
    * - `url`: the page's current address.
+   * - `pageTitle`: the page's title, or `""` when it has none. Names the
+   *   window; a page with none is named after its site.
    * - `popupWindow`: the `chrome.windows` id of the extension popup window
    *   whose one tab this is. Drawn without an address bar, as in Chrome.
    * - `isPrivate`: whether the page is private. Its address bar says so.
@@ -83,6 +85,7 @@ export const ShellWindow = {
   Browser: (
     windowId: string,
     url: string,
+    pageTitle: string,
     popupWindow: number | undefined,
     isPrivate: boolean,
   ) => ({
@@ -90,7 +93,7 @@ export const ShellWindow = {
     isPrivate,
     kind: WindowKind.Browser as const,
     popupWindow,
-    title: url === "" ? BLANK_PAGE : siteOf(url),
+    title: pageTitle === "" ? untitledName(url) : pageTitle,
     url,
   }),
 };
@@ -130,3 +133,7 @@ export const siteOf = (url: string): string => {
   const { hostname } = new URL(url);
   return hostname === "" ? url : hostname;
 };
+
+/** The name of a page with no title: its site, or a blank page's name. */
+const untitledName = (url: string): string =>
+  url === "" ? BLANK_PAGE : siteOf(url);
