@@ -97,6 +97,25 @@ describe("useLocked", () => {
       });
     });
 
+    it("has its refusals forgotten when the desk opens", () => {
+      // A count left over would shake the field again on the next lock.
+      const host = client();
+      const { result } = renderHook(() => useLocked(host.domicile));
+      host.says(true);
+      act(() => {
+        result.current.unlock("wrong");
+      });
+      host.says(true);
+      act(() => {
+        result.current.unlock("open sesame");
+      });
+
+      host.says(false);
+      host.says(true);
+
+      expect(result.current.refusals).toBe(0);
+    });
+
     it("is not refused by a desk that shut with nothing out", () => {
       // The lock transition itself is not an answer.
       const host = client();
