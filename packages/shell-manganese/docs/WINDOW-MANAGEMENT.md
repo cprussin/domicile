@@ -64,9 +64,10 @@ Workspaces belong to the desktop, and screens show them, as in sway:
   A selected tab group lights its tab strip instead, and its tabs keep their
   usual states. Meta+Shift+A,
   focusing a floating window, or clicking another window ends the selection.
-- **`xdg-activation` requests are granted.** The compositor forwards them as
-  `focus_requested`. Manganese switches to that window's workspace and focuses
-  it.
+- **`xdg-activation` requests mark the window urgent.** The compositor
+  forwards them as `focus_requested`. Manganese does not move focus: the
+  window's title bar and its workspace in the bar take the urgent color until
+  it is worked in. A window cannot take focus from the one being typed in.
 
 ### Pointer warping
 

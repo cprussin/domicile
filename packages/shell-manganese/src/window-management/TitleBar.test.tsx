@@ -217,6 +217,17 @@ describe("TitleBar", () => {
     }
   });
 
+  it("washes the bar of a window that asked for the keyboard in the warning color", () => {
+    const { container } = render(<TitleBar {...barProps} focus="urgent" />);
+
+    expect(face(container).className).toContain(
+      css({
+        backgroundColor:
+          "color-mix(in oklab, {colors.warning} 45%, {colors.background})",
+      }),
+    );
+  });
+
   it("washes the keyboard's own bar in the accent inside a selected group", () => {
     // The whole group uses the card, so the card alone would not mark this
     // one.

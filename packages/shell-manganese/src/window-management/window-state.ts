@@ -182,6 +182,14 @@ export type WindowState = {
   pressed: number;
   /** The scratchpad windows, most recently hidden last. */
   scratchpad: readonly string[];
+  /**
+   * Windows that asked for the keyboard (`xdg-activation`) and have not been
+   * worked in since, oldest first.
+   *
+   * Marked rather than focused, as sway's `urgent`, so a window cannot take
+   * focus from the one being worked in.
+   */
+  urgent: readonly string[];
   windows: readonly ShellWindow[];
   workspaces: readonly Workspace[];
 };
@@ -201,6 +209,7 @@ export const NO_WINDOWS: WindowState = {
   replayed: false,
   scratchpad: [],
   screens: [{ box: NOWHERE, current: "1", name: UNDESCRIBED_SCREEN }],
+  urgent: [],
   windows: [],
   workspaces: WORKSPACES.map((name) => emptyWorkspace(name)),
 };
@@ -251,6 +260,12 @@ export const workspacesOn = (
   screen: string,
 ): readonly string[] =>
   WORKSPACES.filter((name) => state.homes[name] === screen);
+
+/** The workspaces holding a window that asked for the keyboard. */
+export const urgentWorkspacesOf = (state: WindowState): readonly string[] =>
+  state.workspaces
+    .filter((workspace) => state.urgent.some((id) => holds(workspace, id)))
+    .map(({ name }) => name);
 
 /** The workspace called `name`. Throws for an unknown name. */
 export const workspaceNamed = (state: WindowState, name: string): Workspace => {
@@ -496,8 +511,8 @@ export const WindowAction = {
 
   /**
    * A client requested focus over `xdg-activation`. The compositor leaves the
-   * decision to the shell; Manganese grants it and switches to the window's
-   * workspace.
+   * decision to the shell; Manganese marks the window urgent instead (see
+   * `WindowState.urgent`).
    */
   FocusRequested: (appId: string) => ({
     appId,
@@ -759,7 +774,8 @@ export type WindowAction = ReturnType<
 export const reduceWindows = (
   state: WindowState,
   action: WindowAction,
-): WindowState => rehomed(limited(state, reduceAction(state, action)));
+): WindowState =>
+  answered(rehomed(limited(state, reduceAction(state, action))));
 
 const reduceAction = (
   state: WindowState,
@@ -849,7 +865,7 @@ const reduceAction = (
       }
     }
     case WindowActionKind.FocusRequested: {
-      return reachWindow(state, appWindowId(action.appId));
+      return askedFor(state, appWindowId(action.appId));
     }
     case WindowActionKind.FocusStepped: {
       return stepFocus(state, action.direction);
@@ -1164,8 +1180,8 @@ const followFocus = (
 /**
  * Focuses a window, raising it if it floats, and shows its workspace.
  *
- * Only `xdg-activation` can reach an off-screen window, and switching to its
- * workspace is what makes granting that request visible.
+ * Switching to its workspace is what makes reaching an off-screen window, such
+ * as a browser window an extension raises, visible.
  */
 const reachWindow = (state: WindowState, id: string): WindowState => {
   const workspace = workspaceHolding(state, id);
@@ -1573,6 +1589,23 @@ const rehomed = (state: WindowState): WindowState => {
   return WORKSPACES.every((name) => homes[name] === state.homes[name])
     ? state
     : { ...state, homes };
+};
+
+// Marks window `id` urgent. `answered` drops the mark again when the window is
+// the one being worked in, or has closed.
+const askedFor = (state: WindowState, id: string): WindowState =>
+  state.urgent.includes(id)
+    ? state
+    : { ...state, urgent: [...state.urgent, id] };
+
+// Drops the urgent marks of the window being worked in and of closed windows.
+// The same object when none dropped.
+const answered = (state: WindowState): WindowState => {
+  const active = activeIdOf(state);
+  const urgent = state.urgent.filter(
+    (id) => id !== active && windowOf(state, id) !== undefined,
+  );
+  return urgent.length === state.urgent.length ? state : { ...state, urgent };
 };
 
 /** The screen `workspace` now belongs to, or `undefined` for none. */
