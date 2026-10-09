@@ -1,3 +1,7 @@
+import type {
+  DomicileBrowserWindow,
+  DomicileHost,
+} from "@domicile-desktop/sdk/domicile-host";
 import type { GlobalShortcutsHost } from "@domicile-desktop/sdk/global-shortcuts";
 import { fireGlobalShortcuts } from "@domicile-desktop/sdk/global-shortcuts";
 import type { Capturing, PortalRequest } from "@domicile-desktop/sdk/portal";
@@ -39,7 +43,7 @@ const NONE: readonly string[] = [];
 
 type Props = {
   /** The desktop `Shell` is handed. */
-  host: GlobalShortcutsHost & SystemHost;
+  host: GlobalShortcutsHost & SystemHost & Pick<DomicileHost, "browserWindows">;
   /**
    * The display to show a dialog on when it has no parent window. Needs a
    * `DisplayProvider`; without it, a dialog is centered on the whole page.
@@ -125,6 +129,7 @@ export const PortalDialogs = ({
           }}
           apps={apps}
           asker={apps(shown.appId).name}
+          browserWindows={host.browserWindows ?? []}
           key={shown.id}
           list={list}
           request={shown}
@@ -142,6 +147,7 @@ const Dialog = ({
   answer,
   apps,
   asker,
+  browserWindows,
   list,
   request,
   screen,
@@ -151,6 +157,7 @@ const Dialog = ({
   answer: (answer: PortalAnswer) => void;
   apps: (appId: string) => App;
   asker: string;
+  browserWindows: readonly DomicileBrowserWindow[];
   list: (path: string) => Promise<readonly string[]>;
   request: PortalRequest;
   screen: string | undefined;
@@ -275,8 +282,10 @@ const Dialog = ({
       return (
         <ScreenshotDialog
           answer={answer}
+          apps={apps}
           asker={request.appId === SHELL_APP_ID ? undefined : asker}
           body={request.body}
+          browserWindows={browserWindows}
           screen={screen}
         />
       );
@@ -308,16 +317,38 @@ const screenFor = (
   return parents ?? screen;
 };
 
-/** The applications `request` names: who asks, and windows it may record. */
-const appIds = (request: PortalRequest): string[] =>
-  request.kind === PortalKind.ScreenCast
-    ? [
-        request.appId,
-        ...request.body.sources.flatMap((source) =>
-          source.kind === CastSourceKind.Window ? [source.appId] : [],
-        ),
-      ]
-    : [request.appId];
+/** The applications `request` names: who asks, and the windows it offers. */
+const appIds = (request: PortalRequest): string[] => [
+  request.appId,
+  ...windowAppIds(request),
+];
+
+/** The applications of the windows `request` offers to record or shoot. */
+const windowAppIds = (request: PortalRequest): string[] => {
+  switch (request.kind) {
+    case PortalKind.ScreenCast:
+      return request.body.sources.flatMap((source) =>
+        source.kind === CastSourceKind.Window ? [source.appId] : [],
+      );
+    case PortalKind.Screenshot:
+      return request.body.windows.map((window) => window.appId);
+    case PortalKind.Access:
+    case PortalKind.AppChooser:
+    case PortalKind.FileChooser:
+    case PortalKind.RemoteDesktop:
+    case PortalKind.InputCapture:
+    case PortalKind.DynamicLauncher:
+    case PortalKind.Usb:
+    case PortalKind.Account:
+    case PortalKind.GlobalShortcuts:
+    case PortalKind.Wallpaper:
+    case PortalKind.Print:
+    case PortalKind.PickColor:
+    case PortalKind.Inhibit:
+    case PortalKind.Unknown:
+      return [];
+  }
+};
 
 /** Whether `request` is a question this draws a dialog for. */
 const isAsked = (request: PortalRequest): boolean => {

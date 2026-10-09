@@ -7,7 +7,7 @@
 //! `docs/PORTALS.md`.
 
 use domicile_host::screenshot::Shot;
-use domicile_protocol::{ShotArea, ShotRect};
+use domicile_protocol::{ShotArea, ShotRect, ShotWindow};
 use smithay::backend::renderer::gles::GlesRenderer;
 
 use crate::casting::gpu::{FillError, Layer};
@@ -22,14 +22,17 @@ pub struct Desk {
     pub shot: Shot,
     /// Each monitor, by `wl_output` name, in the shot's pixels.
     pub monitors: Vec<ShotArea>,
-    /// Each window on the desk, by title, in the shot's pixels.
-    pub windows: Vec<ShotArea>,
+    /// Each window on the desk, in the shot's pixels.
+    pub windows: Vec<ShotWindow>,
+    /// Where the shot is on the desktop, in logical pixels.
+    pub place: Rect,
 }
 
 /// An open window, as a shot names it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Window {
     pub title: String,
+    pub app_id: String,
     /// Where it is on the desktop, in logical pixels.
     pub desk: Rect,
 }
@@ -74,29 +77,37 @@ pub fn areas(
     scale: f64,
     screens: &[Screen],
     windows: &[Window],
-) -> (Vec<ShotArea>, Vec<ShotArea>) {
-    let place = |name: &str, rect: Rect| {
+) -> (Vec<ShotArea>, Vec<ShotWindow>) {
+    let place = |rect: Rect| {
         let (x, y, width, height) = intersection(rect, desk)?;
         let pixels = |logical: i32| (f64::from(logical) * scale).round() as u32;
         let (left, top) = (x - desk.0, y - desk.1);
-        Some(ShotArea {
-            name: name.to_string(),
-            area: ShotRect {
-                x: pixels(left),
-                y: pixels(top),
-                width: pixels(left + width) - pixels(left),
-                height: pixels(top + height) - pixels(top),
-            },
+        Some(ShotRect {
+            x: pixels(left),
+            y: pixels(top),
+            width: pixels(left + width) - pixels(left),
+            height: pixels(top + height) - pixels(top),
         })
     };
     (
         screens
             .iter()
-            .filter_map(|screen| place(&screen.name, screen.desk))
+            .filter_map(|screen| {
+                Some(ShotArea {
+                    name: screen.name.clone(),
+                    area: place(screen.desk)?,
+                })
+            })
             .collect(),
         windows
             .iter()
-            .filter_map(|window| place(&window.title, window.desk))
+            .filter_map(|window| {
+                Some(ShotWindow {
+                    title: window.title.clone(),
+                    app_id: window.app_id.clone(),
+                    area: place(window.desk)?,
+                })
+            })
             .collect(),
     )
 }
@@ -181,26 +192,42 @@ mod tests {
         let windows = [
             Window {
                 title: "Half off".into(),
+                app_id: "kitty".into(),
                 desk: (-1, 0, 2, 1),
             },
             Window {
                 title: "Gone".into(),
+                app_id: String::new(),
                 desk: (10, 10, 1, 1),
             },
         ];
 
         let (monitors, windows) = areas((0, -1, 3, 2), 2.0, &screens(), &windows);
 
-        let at = |name: &str, x, y, width, height| ShotArea {
-            name: name.into(),
-            area: ShotRect {
-                x,
-                y,
-                width,
-                height,
-            },
+        let at = |x, y, width, height| ShotRect {
+            x,
+            y,
+            width,
+            height,
         };
-        assert_eq!(monitors, [at("drm-1", 0, 2, 4, 2), at("drm-2", 4, 0, 2, 2)]);
-        assert_eq!(windows, [at("Half off", 0, 2, 2, 2)]);
+        let monitor = |name: &str, area| ShotArea {
+            name: name.into(),
+            area,
+        };
+        assert_eq!(
+            monitors,
+            [
+                monitor("drm-1", at(0, 2, 4, 2)),
+                monitor("drm-2", at(4, 0, 2, 2))
+            ]
+        );
+        assert_eq!(
+            windows,
+            [ShotWindow {
+                title: "Half off".into(),
+                app_id: "kitty".into(),
+                area: at(0, 2, 2, 2),
+            }]
+        );
     }
 }

@@ -222,8 +222,17 @@ export type ChosenTrigger = { id: string; trigger: string | undefined };
 /** A rectangle of a {@link FrozenDesk}'s frame, in its pixels. */
 export type ShotRect = { x: number; y: number; width: number; height: number };
 
-/** A monitor or a window of a {@link FrozenDesk}. */
+/** A monitor of a {@link FrozenDesk}, by `wl_output` name. */
 export type ShotArea = { name: string; area: ShotRect };
+
+/** An open window of a {@link FrozenDesk}. */
+export type ShotWindow = {
+  /** Empty until the client names it. */
+  title: string;
+  /** Its Wayland app id, which names its desktop entry; empty if unset. */
+  appId: string;
+  area: ShotRect;
+};
 
 /**
  * A frame of the whole desk, frozen while the user picks from it. Every
@@ -235,8 +244,15 @@ export type FrozenDesk = {
   width: number;
   height: number;
   monitors: readonly ShotArea[];
-  /** The open windows, by title. */
-  windows: readonly ShotArea[];
+  windows: readonly ShotWindow[];
+  /**
+   * Where the frame is on the desktop, in logical pixels, which are the
+   * shell page's CSS pixels.
+   */
+  desk: {
+    position: readonly [number, number];
+    size: readonly [number, number];
+  };
 };
 
 /** A chord an application holds, for the shell to grab. */
@@ -1064,12 +1080,17 @@ const shotRectSchema = z.object({
 
 const shotAreaSchema = z.object({ area: shotRectSchema, name: z.string() });
 
+const shotWindowSchema = z
+  .object({ app_id: z.string(), area: shotRectSchema, title: z.string() })
+  .transform(({ app_id, area, title }) => ({ appId: app_id, area, title }));
+
 const frozenDeskSchema = z.object({
+  desk: z.object({ position: pairSchema, size: pairSchema }),
   frame: z.string(),
   height: z.number(),
   monitors: z.array(shotAreaSchema),
   width: z.number(),
-  windows: z.array(shotAreaSchema),
+  windows: z.array(shotWindowSchema),
 });
 
 /** Each wire name and the value it stands for. */

@@ -2692,6 +2692,29 @@ describe("the launcher", () => {
     expect(launcherBox()).toBeNull();
   });
 
+  it("opens what was picked only once it has closed, so a screenshot leaves it out", async () => {
+    renderShell();
+    press("space");
+    await homeHolds("todo.txt");
+    const closing = Promise.withResolvers<unknown>();
+    const { getAnimations } = Element.prototype;
+    Element.prototype.getAnimations = () => [
+      { finished: closing.promise } as Animation,
+    ];
+    try {
+      await typeIntoLauncher("example.com{Enter}");
+
+      expect(browsing()).toStrictEqual([]);
+      await act(async () => {
+        closing.resolve(undefined);
+        await closing.promise;
+      });
+      expect(browsing()).toStrictEqual(["https://example.com"]);
+    } finally {
+      Element.prototype.getAnimations = getAnimations;
+    }
+  });
+
   it("searches for a query that is neither a file nor a URL", async () => {
     renderShell();
     press("space");

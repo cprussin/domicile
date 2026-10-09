@@ -1,3 +1,4 @@
+import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import type { GlobalShortcutsHost } from "@domicile-desktop/sdk/global-shortcuts";
 import type { SystemHost } from "@domicile-desktop/sdk/system";
@@ -13,7 +14,7 @@ import { PortalDialogs } from "./PortalDialogs";
 const pushing = (
   items: readonly object[],
   capturing: readonly object[] = [],
-): GlobalShortcutsHost & SystemHost => {
+): GlobalShortcutsHost & SystemHost & Pick<DomicileHost, "browserWindows"> => {
   const fake = new FakeDomicileHost();
   const data = JSON.stringify({ capturing, items, type: "portal_requests" });
   const host: GlobalShortcutsHost = {
@@ -35,7 +36,7 @@ const pushing = (
       fake.host.removeEventListener(type, listener);
     },
   };
-  return { ...host, callSystem: () => undefined };
+  return { ...host, browserWindows: null, callSystem: () => undefined };
 };
 
 const access = {
@@ -279,6 +280,7 @@ const deskFrame = `data:image/svg+xml,${encodeURIComponent(
 )}`;
 
 const frozenDesk = {
+  desk: { position: [0, 0], size: [1600, 500] },
   frame: deskFrame,
   height: 500,
   monitors: [
@@ -287,8 +289,16 @@ const frozenDesk = {
   ],
   width: 1600,
   windows: [
-    { area: { height: 340, width: 520, x: 80, y: 60 }, name: "Notes" },
-    { area: { height: 260, width: 420, x: 1080, y: 120 }, name: "Terminal" },
+    {
+      app_id: "org.gnome.TextEditor",
+      area: { height: 340, width: 520, x: 80, y: 60 },
+      title: "Notes",
+    },
+    {
+      app_id: "kitty",
+      area: { height: 260, width: 420, x: 1080, y: 120 },
+      title: "~/src",
+    },
   ],
 };
 
