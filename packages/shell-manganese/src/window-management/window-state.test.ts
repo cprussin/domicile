@@ -456,6 +456,39 @@ describe("the workspaces", () => {
     expect(activeIdOf(state)).toBe(APP("kitty"));
   });
 
+  it("sends a whole tab group selected by focus parent", () => {
+    const state = reduce(
+      desktop("mail", "kitty"),
+      WindowAction.ContainerSplit(Axis.Vertical),
+      WindowAction.AppAppeared("editor", "editor"),
+      WindowAction.LayoutSet(Layout.Tabbed),
+      WindowAction.ParentFocused(),
+      WindowAction.WindowSentToWorkspace("2"),
+    );
+
+    expect(windowsOn(workspaceHere(state))).toEqual([APP("mail")]);
+    expect(workspaceNamed(state, "2").tiling.root).toEqual(
+      LayoutNode.Container(
+        Layout.Tabbed,
+        [LayoutNode.Window(APP("kitty")), LayoutNode.Window(APP("editor"))],
+        1,
+      ),
+    );
+  });
+
+  it("leaves fullscreen behind with the group a fullscreen window went in", () => {
+    const state = reduce(
+      desktop("mail", "kitty"),
+      WindowAction.ContainerSplit(Axis.Vertical),
+      WindowAction.AppAppeared("editor", "editor"),
+      WindowAction.FullscreenToggled(false),
+      WindowAction.ParentFocused(),
+      WindowAction.WindowSentToWorkspace("2"),
+    );
+
+    expect(workspaceHere(state).fullscreen).toBeUndefined();
+  });
+
   it("tiles it there even while a floating group has the keyboard", () => {
     // Only a newly opened window joins the floating group; a window sent here
     // lands tiled.
