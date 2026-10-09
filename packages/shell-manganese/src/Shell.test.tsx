@@ -445,6 +445,16 @@ const barFor = (container: HTMLElement, id: string): HTMLElement => {
   }
 };
 
+/** Every title bar's window, from the start of the strip. */
+const tabOrder = (container: HTMLElement): (string | undefined)[] =>
+  titleBars(container)
+    .toSorted(
+      (one, other) =>
+        Number.parseFloat(one.style.insetInlineStart) -
+        Number.parseFloat(other.style.insetInlineStart),
+    )
+    .map((bar) => bar.dataset.window);
+
 /** The motion of every element that is arriving or leaving. */
 const moving = (container: HTMLElement): string[] =>
   [
@@ -1408,6 +1418,25 @@ describe("Shell", () => {
         width: "930px",
         x: "970px",
       });
+    });
+
+    it("moves a tab along its strip when dragged onto another tab", () => {
+      // Tabs are 240px wide from the gap; the drop lands past the last tab's
+      // middle, on its far side.
+      const { container } = renderShell();
+      for (const id of ["one", "two", "three"]) {
+        clientAppears(id);
+      }
+      const y = TOP_BAR + GAP + TITLE_BAR / 2;
+
+      fireEvent.pointerDown(barFor(container, "app:one"), {
+        clientX: GAP + 100,
+        clientY: y,
+      });
+      fireEvent.pointerMove(window, { clientX: GAP + 600, clientY: y });
+      fireEvent.pointerUp(window, { clientX: GAP + 600, clientY: y });
+
+      expect(tabOrder(container)).toEqual(["app:two", "app:three", "app:one"]);
     });
 
     it("asks a client to close its own window", async () => {

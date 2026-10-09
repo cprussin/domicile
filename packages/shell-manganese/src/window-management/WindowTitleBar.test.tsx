@@ -47,7 +47,11 @@ const tabProps = {
     tabs: 1,
   },
   tabbed: Layout.Tabbed,
-  targets: { screens: [], windows: [{ frame: FRAME, id: "a" }, OTHER] },
+  targets: {
+    screens: [],
+    tabs: [],
+    windows: [{ frame: FRAME, id: "a" }, OTHER],
+  },
   title: "kitty",
   window: "a",
 } as const;

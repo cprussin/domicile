@@ -3,6 +3,8 @@
 
 import { Direction } from "../direction";
 import type { Rect } from "../rect";
+import type { TabLayout } from "../tree/frames";
+import { Layout } from "../tree/node";
 
 /** A tiled window on screen that a dragged one can be dropped on. */
 export type Target = {
@@ -17,9 +19,18 @@ export type EmptyScreen = {
   name: string;
 };
 
+/** A tiled window's tab, hidden or open, which a dragged one goes beside. */
+export type TabTarget = {
+  id: string;
+  rect: Rect;
+  /** The layout of the container whose tab this is. */
+  tabbed: TabLayout;
+};
+
 /** Everything on every screen a dragged tiled window can be dropped on. */
 export type DropTargets = {
   screens: readonly EmptyScreen[];
+  tabs: readonly TabTarget[];
   windows: readonly Target[];
 };
 
@@ -67,15 +78,21 @@ const EDGE_ZONE = 0.3;
 /**
  * What dropping `dragged` at `x`, `y` would do, or `undefined` over itself or
  * over nothing to drop it on.
+ *
+ * A tab goes before or after the tab under the pointer, by which half of it the
+ * pointer is in. Tabs come before windows, whose frames hold their strips.
  */
 export const aimAt = (
-  { screens, windows }: DropTargets,
+  { screens, tabs, windows }: DropTargets,
   dragged: string,
   x: number,
   y: number,
 ): Aim | undefined => {
+  const tab = tabs.find(({ rect }) => contains(rect, x, y));
   const target = windows.find(({ frame }) => contains(frame, x, y));
-  if (target === undefined) {
+  if (tab !== undefined) {
+    return tab.id === dragged ? undefined : aimAtTab(tab, x, y);
+  } else if (target === undefined) {
     const screen = screens.find(({ area }) => contains(area, x, y));
     return screen === undefined
       ? undefined
@@ -97,6 +114,32 @@ export const cornerOf = (frame: Rect, x: number, y: number): Corner => ({
 const aimAtWindow = ({ frame, id }: Target, x: number, y: number): Aim => {
   const edge = edgeNear(frame, x, y);
   return Aim.Window(id, edge, edge === undefined ? frame : halfOf(frame, edge));
+};
+
+const aimAtTab = (
+  { id, rect, tabbed }: TabTarget,
+  x: number,
+  y: number,
+): Aim => {
+  const edge = tabEdgeNear(rect, tabbed, x, y);
+  return Aim.Window(id, edge, halfOf(rect, edge));
+};
+
+/** The end of the tab the point is nearer, along its strip. */
+const tabEdgeNear = (
+  rect: Rect,
+  tabbed: TabLayout,
+  x: number,
+  y: number,
+): Direction => {
+  switch (tabbed) {
+    case Layout.Tabbed: {
+      return x < rect.x + rect.width / 2 ? Direction.Left : Direction.Right;
+    }
+    case Layout.Stacking: {
+      return y < rect.y + rect.height / 2 ? Direction.Up : Direction.Down;
+    }
+  }
 };
 
 const contains = (rect: Rect, x: number, y: number): boolean =>
