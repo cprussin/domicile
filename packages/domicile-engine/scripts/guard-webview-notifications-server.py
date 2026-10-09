@@ -2,7 +2,7 @@
 """Serves the page guard-webview-notifications.sh loads.
 
 `/asks?permission=<name>` asks the Permissions API about `<name>`. It paints
-the guard's color if the answer is "granted", and white otherwise. `none`
+the guard's color if the answer is "prompt", and white otherwise. `none`
 paints the color without asking, so the control can show the probe sees it.
 """
 
@@ -42,7 +42,7 @@ PAGE = """<!doctype html>
         paint();
       }} else {{
         navigator.permissions.query({{ name: permission }}).then((status) => {{
-          if (status.state === "granted") {{
+          if (status.state === "prompt") {{
             paint();
           }}
         }});
@@ -89,7 +89,7 @@ def main():
     parser.add_argument("--port", type=int, required=True,
                         help="0 for any free one; the serving line names it")
     parser.add_argument("--color", required=True,
-                        help="RRGGBB, no leading #; what a granted page paints")
+                        help="RRGGBB, no leading #; what a page that must ask paints")
     arguments = parser.parse_args()
 
     Asks.color = arguments.color
