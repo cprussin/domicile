@@ -155,6 +155,10 @@ pub fn engine(
 /// - `LD_LIBRARY_PATH`: the engine directory first, for the
 ///   `libdomicile_engine.so` the compositor `dlopen`s. The compositor removes
 ///   it again for its clients.
+///
+/// `scope_clients` passes `--scope-clients yes`, for a desk that is the login
+/// session.
+#[allow(clippy::too_many_arguments)] // Each from a different part of the run.
 pub fn compositor(
     compositor: &Path,
     engine: &Path,
@@ -162,6 +166,7 @@ pub fn compositor(
     data: &Path,
     runtime: &Runtime,
     config: Option<&Path>,
+    scope_clients: bool,
     inherited: &dyn Fn(&str) -> Option<String>,
 ) -> Spawn {
     let mut path = OsString::from(&runtime.shims);
@@ -196,6 +201,10 @@ pub fn compositor(
     if let Some(path) = config {
         args.push("--config".into());
         args.push(path.into());
+    }
+    if scope_clients {
+        args.push("--scope-clients".into());
+        args.push("yes".into());
     }
     Spawn {
         args,
