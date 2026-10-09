@@ -211,6 +211,11 @@ To show one:
 
 Each entry in `domicile.windows` describes one client window.
 
+- **Identity:** `appId` is the compositor's id for the window, which `<app>`
+  takes. `desktopId` is the client's Wayland app id (`set_app_id`), which
+  names its desktop entry, for example `org.gnome.Nautilus` for
+  `org.gnome.Nautilus.desktop`. It is `""` until the client sets one. Look up
+  the entry's `Icon=` to draw the app's icon.
 - **Cursor:** `cursor` is the CSS cursor a client wants over its window. Set it
   with `element.style.cursor = cursor` (in React, `<app style={{ cursor }}>`).
 - **Size:** the `<app>` element's layout box is the window size. The engine

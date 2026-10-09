@@ -52,6 +52,7 @@ describe("parseHostMessage", () => {
     );
     expect(message).toEqual({
       app_id: "term",
+      desktop_id: undefined,
       size: [640, 480],
       title: undefined,
       type: "app_appeared",
@@ -60,15 +61,29 @@ describe("parseHostMessage", () => {
 
   it("normalizes the size of a client that has not committed to undefined", () => {
     // A window has no size until it draws; the host sends `null` and the
-    // size follows in `app_resized`.
+    // size follows in `app_resized`. The desktop id follows in
+    // `app_desktop_id`.
     const message = parseHostMessage(
-      '{"type":"app_appeared","app_id":"term","title":null,"size":null}',
+      '{"type":"app_appeared","app_id":"term","title":null,"desktop_id":null,"size":null}',
     );
-    expect(message).toEqual({
+    expect(message).toStrictEqual({
       app_id: "term",
+      desktop_id: undefined,
       size: undefined,
       title: undefined,
       type: "app_appeared",
+    });
+  });
+
+  it("decodes which desktop entry a client says it is", () => {
+    expect(
+      parseHostMessage(
+        '{"type":"app_desktop_id","app_id":"term","desktop_id":"kitty"}',
+      ),
+    ).toStrictEqual({
+      app_id: "term",
+      desktop_id: "kitty",
+      type: "app_desktop_id",
     });
   });
 

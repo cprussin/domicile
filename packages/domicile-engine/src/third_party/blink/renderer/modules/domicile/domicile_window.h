@@ -19,6 +19,7 @@ namespace blink {
 struct DomicileWindowState {
   String app_id;
   String title = g_empty_string;
+  String desktop_id = g_empty_string;
   std::optional<double> width;
   std::optional<double> height;
   std::optional<double> min_width;
@@ -43,6 +44,7 @@ class MODULES_EXPORT DomicileWindow final : public ScriptWrappable {
 
   const String& appId() const { return state_.app_id; }
   const String& title() const { return state_.title; }
+  const String& desktopId() const { return state_.desktop_id; }
   std::optional<double> width() const { return state_.width; }
   std::optional<double> height() const { return state_.height; }
   std::optional<double> minWidth() const { return state_.min_width; }
