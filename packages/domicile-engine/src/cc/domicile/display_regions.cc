@@ -15,13 +15,11 @@
 namespace cc {
 namespace {
 
-// RGBA8888.
-constexpr size_t kTileBytesPerPixel = 4;
-
-// Full-desk layers the budget holds at once, each with a pending twin: the
-// page's own, two wallpapers while they crossfade, and an overlay such as the
-// launcher.
-constexpr size_t kDomicileTileHeadroom = 4 * 2;
+// Upstream's tile memory per screen pixel (GetGpuMemoryPolicy): 1152 MiB for a
+// 2056x1329 screen at 2. A desk page given less runs out of memory while
+// windows resize.
+constexpr int64_t kUpstreamTileBytes = int64_t{1152} * 1024 * 1024;
+constexpr int64_t kUpstreamTilePixels = int64_t{2056} * 1329 * 2 * 2;
 
 std::optional<gfx::Rect> InLayer(const gfx::Rect& in_target,
                                  const gfx::Transform& to_target) {
@@ -95,7 +93,7 @@ size_t DomicileTileBytesFor(const std::vector<DomicileDisplay>& displays,
     pixels += std::llround(area * region.ratio * region.ratio);
   }
   return std::min(
-      static_cast<size_t>(pixels) * kTileBytesPerPixel * kDomicileTileHeadroom,
+      static_cast<size_t>(pixels * kUpstreamTileBytes / kUpstreamTilePixels),
       ceiling_bytes);
 }
 
