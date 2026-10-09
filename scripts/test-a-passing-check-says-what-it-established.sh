@@ -3,7 +3,8 @@
 #
 # `check.sh` keeps a check's log only on failure, so without this a pass gives
 # no evidence of what it measured. Also checks that a failure keeps its whole
-# log, a skip reads as a skip, and the tally format is unchanged.
+# log, a failing cargo test's report reaches the summary, a skip reads as a
+# skip, and the tally format is unchanged.
 #
 # Two parts: `check.sh` against stub checks, and the css-and-resize check,
 # whose guard output is quoted behind `  | ` and must relay its `PASS:` lines.
@@ -63,6 +64,26 @@ echo "PASS: a step before the one that needed a card"
 echo "  SKIP: no card here"
 exit 77'
 
+# A failing `cargo test --no-fail-fast`: the failing binary's report is
+# followed by more than the 100-line summary.
+standin nix-5-fails-a-test '
+echo "running 2 tests"
+echo "test it_works ... ok"
+echo "test it_breaks ... FAILED"
+echo
+echo "failures:"
+echo
+echo "---- it_breaks stdout ----"
+echo "thread '"'"'it_breaks'"'"' panicked at tests/it.rs:1:1:"
+echo "the reason it broke"
+echo
+echo "failures:"
+echo "    it_breaks"
+echo
+echo "test result: FAILED. 1 passed; 1 failed"
+for n in $(seq 1 150); do echo "a later test binary, line $n"; done
+exit 1'
+
 # Unset DOMICILE_CHECK_STRICT, which CI exports, so skips stay skips.
 check() { # env assignments...
   env -u DOMICILE_CHECK_STRICT "$@" DOMICILE_CHECK_LOG_DIR="$WORK/logs" \
@@ -100,19 +121,25 @@ expect "and its whole log is kept" \
   "$(printf 'PASS: an early run\n'; seq 1 150 | sed 's/^/line /')" \
   "$(cat "$WORK/logs/domicile-check-logs/nix-3-fails.log")"
 
+expect "a failing cargo test's report is in the summary above the tail" \
+  "$(printf -- "---- it_breaks stdout ----\nthread 'it_breaks' panicked at tests/it.rs:1:1:\nthe reason it broke\n\nfailures:\n    it_breaks\n\ntest result: FAILED. 1 passed; 1 failed")" \
+  "$(awk '/^--- nix-5-fails-a-test ---$/ { found = 1; next }
+          found && /^a later test binary/ { exit }
+          found { print }' "$WORK/out")"
+
 expect "a skip still reads as a skip, with no verdicts under it" "yes" \
   "$(grep -qE '^  nix-4-cannot-run +skipped \(no card here\)$' "$WORK/out" &&
      [ -z "$(under nix-4-cannot-run)" ] && echo yes || echo no)"
 
 expect "the tally keeps its format" "yes" \
-  "$(grep -qxF '== 2 passed, 1 failed, 1 skipped ==' "$WORK/out" &&
+  "$(grep -qxF '== 2 passed, 2 failed, 1 skipped ==' "$WORK/out" &&
      grep -qxF '  skipped: nix-4-cannot-run — no card here' "$WORK/out" &&
        echo yes || echo no)"
 
 check DOMICILE_CHECK_STRICT=1
 expect "under DOMICILE_CHECK_STRICT a skip is still a failure" "yes" \
   "$(grep -qE '^  nix-4-cannot-run +FAILED \(no card here\)$' "$WORK/out" &&
-     grep -qxF '== 2 passed, 2 failed, 0 skipped ==' "$WORK/out" &&
+     grep -qxF '== 2 passed, 3 failed, 0 skipped ==' "$WORK/out" &&
        echo yes || echo no)"
 
 echo "the css-and-resize check relays its guard's verdicts"

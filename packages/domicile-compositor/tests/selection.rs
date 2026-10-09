@@ -50,10 +50,12 @@ fn the_middle_click_selection_and_the_clipboard_are_two_clipboards() {
     let mut pasting = compositor.client_with("pasting", &["--paste"]);
 
     // The protocol denies `set_selection` from a client without the keyboard,
-    // so focus the copying client first, then the pasting one.
+    // so focus the copying client first, then the pasting one. The focus
+    // moves only once the compositor has handled both `set_selection`
+    // requests; moving it earlier would get them denied.
     focus(&mut chrome, "copier");
     assert!(
-        copier.wait_for_trace("set_selection", 2),
+        copier.wait_for_trace("copy handled", 1),
         "the client holding the keyboard could not copy; it traced:\n{}",
         copier.trace()
     );
@@ -74,17 +76,17 @@ fn the_middle_click_selection_and_the_clipboard_are_two_clipboards() {
 /// A clipboard manager's copy reaches the history, and a row the shell
 /// restores reaches the clipboard manager, with no window focused.
 ///
-/// The row is restored after `wl-copy` exits, so the paste can only come from
-/// the compositor's copy.
+/// `wl-copy` has exited before the paste, so the paste can only come from the
+/// compositor's copy.
 #[test]
 fn a_clipboard_manager_copies_into_the_history_and_pastes_from_it() {
     let compositor = Compositor::started_with(ONE_DISPLAY);
     let mut chrome = compositor.chrome();
 
-    let mut copying = compositor
+    let copying = compositor
         .command("wl-copy")
         .args(["--foreground", "--", "kept after the copier left"])
-        .stdout(Stdio::null())
+        .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
         .expect("wl-copy starts; it is in `nix develop .#full`");
@@ -94,8 +96,6 @@ fn a_clipboard_manager_copies_into_the_history_and_pastes_from_it() {
                 if entries.iter().any(|entry| entry.preview == "kept after the copier left"))
         })
         .expect("a copy with no window focused reaches the shell's history");
-    copying.kill().expect("wl-copy stops");
-    copying.wait().expect("wl-copy is reaped");
 
     let HostMessage::Clipboard { entries } = history else {
         unreachable!("the wait matched on this variant")
@@ -107,6 +107,10 @@ fn a_clipboard_manager_copies_into_the_history_and_pastes_from_it() {
     chrome
         .say(&ChromeMessage::CopyClipboardEntry { entry: row.id })
         .expect("the chrome socket takes a restore");
+    // `wl-copy` exits when its selection is replaced, so its exit shows the
+    // compositor has taken the restore.
+    let copied = finished(copying, Duration::from_secs(10));
+    assert!(copied.status.success(), "wl-copy failed: {}", copied.stderr);
 
     assert_eq!(
         paste(&compositor),

@@ -92,6 +92,9 @@ verdict() {
     echo "FAILED"
     FAILED+=("$name")
     echo "--- $name ---" >>"$FAILURES"
+    # A failing test's report from `cargo test`, which later test binaries
+    # can push above the tail.
+    sed -n '/^---- .* stdout ----$/,/^test result: /p' "$log" >>"$FAILURES"
     tail -100 "$log" >>"$FAILURES"
     # Keeps the whole log too: a failure's key line can sit above the tail.
     KEPT="$KEEP_LOGS/$name.log"
