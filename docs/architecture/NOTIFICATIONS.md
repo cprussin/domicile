@@ -23,7 +23,7 @@ shell ─ dismissNotifications(ids) / invokeNotificationAction(id, key) ─▶ e
 | History; mapping a `Notify` call to a notification (images, actions, urgency, page origin) | `packages/domicile-host/src/notifications.rs` |
 | D-Bus: the name, `Notify`, the signals | `packages/domicile-compositor/src/notifications.rs` |
 | `notifications` attribute, `dismissNotifications()`, `invokeNotificationAction()` | `control_channel.mojom`, `modules/domicile/domicile_notification*`, patch 0067 |
-| Web Notifications allowed without a prompt | patch 0068, `guard-webview-notifications.sh`; for the shell page, `guard-shell-web-apis.sh` |
+| Sites ask before they notify; the shell page is allowed; a notification that stays up is not marked critical | patch 0104, `guard-webview-notifications.sh`; for the shell page, `guard-shell-web-apis.sh` |
 | SDK: `DomicileNotification`, `notifications`, `dismissNotifications`, `invokeNotificationAction`; `Notification` | `@domicile-desktop/sdk/domicile-host`, `@domicile-desktop/sdk/notification` |
 | `Toaster` component | `@domicile-desktop/component-library/Toaster` |
 | Manganese toasts, bell and drawer | `packages/shell-manganese/src/notifications/` |
@@ -39,10 +39,17 @@ shell ─ dismissNotifications(ids) / invokeNotificationAction(id, key) ─▶ e
   `persistent` keeps the toast up; buttons and `default-action` become actions
   and a click. `transient` and the lock-screen hints change nothing: the drawer
   keeps every notification, and the shell shows none while locked.
-- **Pages get notification permission by default.** The profile allows it, so
-  sites notify without asking. A site's own setting can be changed to ask or
-  block in its site permissions
+- **Sites ask before they notify.** The profile's default is ask, reset at
+  every start, and the shell answers the prompt. An allow-all default would
+  let any site a browser window opened push notifications from the
+  background. A site's setting can be changed in its site permissions
   ([SHELL-BROWSER-WINDOWS.md](/docs/SHELL-BROWSER-WINDOWS.md#permissions)).
+- **The shell page may always notify.** `domicile://shell` has no prompt to
+  ask through, and Chrome stores no content settings for its scheme.
+- **Urgency is the sender's.** Chrome marks a notification that does not time
+  out as critical unless the server is one it knows keeps such notifications
+  up. Patch 0104 adds `Domicile` to that list, so `requireInteraction` alone
+  does not draw a notification as critical.
 - **The compositor keeps the history.**
   - It sends the full list on every change and on connect, so a reload keeps
     it and every monitor's page sees the same list.
