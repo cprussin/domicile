@@ -438,12 +438,6 @@ const tabStyles = cva({
       leaf: { fontWeight: "medium" },
       resting: { fontWeight: "normal" },
       selected: { fontWeight: "normal" },
-      // A window that asked for the keyboard (sway's `urgent`), as its bar.
-      urgent: {
-        backgroundColor:
-          "color-mix(in oklab, {colors.warning} 45%, {colors.background})",
-        fontWeight: "medium",
-      },
     },
     open: {
       false: { borderColor: "transparent", color: "muted" },
@@ -505,13 +499,6 @@ const barStyles = cva({
       // A bar in the `focus parent` selection.
       selected: {
         backgroundColor: "card",
-        color: "foreground",
-        fontWeight: "medium",
-      },
-      // A window that asked for the keyboard (sway's `urgent`).
-      urgent: {
-        backgroundColor:
-          "color-mix(in oklab, {colors.warning} 45%, {colors.background})",
         color: "foreground",
         fontWeight: "medium",
       },

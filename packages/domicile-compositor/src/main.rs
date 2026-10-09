@@ -109,6 +109,7 @@ use smithay::{
 };
 use tracing::{debug, error, info, warn};
 
+mod activation;
 mod casting;
 mod clipboard;
 mod coalesce;
@@ -235,6 +236,12 @@ mod grepped {
     ///
     /// A refused reload sends no message, so this line is the only sign of it.
     pub const KEYS_REFUSED: &str = "keeping the keys the shells were last told";
+    /// [`activation::earned`](crate::activation::earned) dropped a focus
+    /// request.
+    ///
+    /// A dropped request sends no message, so this line is the only sign of
+    /// it. Waited on by `tests/focus.rs`.
+    pub const FOCUS_REQUEST_DROPPED: &str = "focus request from before the keyboard last moved";
 }
 
 /// The renderer that imports client dmabufs and reads back shm buffers.
@@ -5560,22 +5567,29 @@ impl XdgActivationHandler for DomicileCompositor {
 
     /// A client asked for a window to be activated. Forwarded, not granted.
     ///
-    /// Whether this is focus stealing or a welcome request depends on what the
-    /// user is doing, which the shell knows. It is broadcast as
-    /// `focus_requested`; a shell grants it with `focus_app`.
-    ///
-    /// The usual checks (token age, requesting client) are also left to the
-    /// shell.
+    /// A token made before the keyboard last moved is dropped (see
+    /// [`activation::earned`]): the window is asking on its own, not for the
+    /// user. The rest are broadcast as `focus_requested`; a shell grants one
+    /// with `focus_app`.
     fn request_activation(
         &mut self,
         token: XdgActivationToken,
-        _token_data: XdgActivationTokenData,
+        token_data: XdgActivationTokenData,
         surface: WlSurface,
     ) {
         // Always remove the token; nothing else prunes the pool, so clients
         // could grow it without bound.
         self.xdg_activation_state.remove_token(&token);
-        if let Some(app_id) = self.app_id_of(&surface) {
+        let last_enter = self.seat.get_keyboard().unwrap().last_enter();
+        let asked = token_data.serial.map(|(serial, _)| serial);
+        if !activation::earned(asked, last_enter) {
+            debug!(
+                ?asked,
+                ?last_enter,
+                "{} -> dropped",
+                grepped::FOCUS_REQUEST_DROPPED
+            );
+        } else if let Some(app_id) = self.app_id_of(&surface) {
             broadcast_focus_request(&self.hub, &app_id);
         }
     }

@@ -1,9 +1,10 @@
 //! Tests for keyboard focus, which the shell decides.
 //!
-//! A client asks for focus over `xdg-activation`, and the compositor forwards
-//! the request to the shell. Unit tests cover the forwarding. These check the
-//! global is advertised, a real request arrives, and the shell's answer moves
-//! the seat.
+//! A client asks for focus over `xdg-activation`. The compositor forwards a
+//! request made since the keyboard last moved to the shell and drops the rest
+//! (`src/activation.rs`). Unit tests cover the forwarding. These check real
+//! requests on each side of that line, and that the shell's answer moves the
+//! seat.
 
 mod running;
 
@@ -65,36 +66,102 @@ fn appeared(chrome: &mut domicile_test_chrome::Chrome) -> String {
     app_id
 }
 
+/// A request backed by the user's own focus change reaches the shell, which
+/// decides.
 #[test]
-fn a_client_asks_for_the_keyboard_and_the_shell_is_what_gives_it() {
+fn a_request_made_since_the_keyboard_last_moved_reaches_the_shell() {
     let compositor = Compositor::started_with(ONE_DISPLAY);
     // Connect before the client: the `hello` replay does not include focus
     // requests.
     let mut chrome = compositor.chrome();
-    let _client = compositor.client_asking_for_focus("eager");
+    let _client = compositor.client_with("eager", &["--ask-for-focus-when-entered"]);
+    let app_id = appeared(&mut chrome);
 
-    let requested = chrome
-        .wait_for(|message| matches!(message, HostMessage::FocusRequested { .. }))
-        .expect("a client that binds xdg_activation_v1 and activates its surface is heard");
-    let HostMessage::FocusRequested { app_id } = requested else {
-        unreachable!("the wait matched on this variant")
-    };
-
-    // The seat moves only when the shell answers.
     chrome
         .say(&ChromeMessage::FocusApp {
             app_id: app_id.clone(),
         })
-        .expect("the chrome socket takes an answer");
+        .expect("the chrome socket takes a focus");
 
-    // Match a window, not any `focus_changed`: the handshake already sent
-    // one naming no window.
     assert_eq!(
         chrome
-            .wait_for(|message| matches!(message, HostMessage::FocusChanged { app_id: Some(_) }))
-            .expect("answering the request moves the keyboard"),
+            .wait_for(|message| matches!(message, HostMessage::FocusRequested { .. }))
+            .expect("a request with the serial of the keyboard's last enter is heard"),
+        HostMessage::FocusRequested { app_id }
+    );
+}
+
+/// A window that asks for the keyboard back after the user moved on is not
+/// heard, so it cannot take focus from where the user went.
+#[test]
+fn a_window_asking_for_the_keyboard_back_is_not_heard() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let mut chrome = compositor.chrome();
+    let _eager = compositor.client_with("eager", &["--ask-for-focus-when-left"]);
+    let eager_id = appeared(&mut chrome);
+    let _other = compositor.client("other");
+    let other_id = appeared(&mut chrome);
+    focus(&mut chrome, &eager_id);
+
+    // The keyboard leaving `eager` makes it ask, with its old enter's serial.
+    focus(&mut chrome, &other_id);
+    compositor.wait_for_log("focus request from before the keyboard last moved");
+
+    assert_not_heard(&mut chrome, &eager_id);
+}
+
+/// A request with no serial says nothing of the user, so it is not heard.
+#[test]
+fn a_request_without_a_serial_is_not_heard() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let mut chrome = compositor.chrome();
+    let _client = compositor.client_with("eager", &["--ask-for-focus"]);
+    let app_id = appeared(&mut chrome);
+    compositor.wait_for_log("focus request from before the keyboard last moved");
+
+    assert_not_heard(&mut chrome, &app_id);
+}
+
+/// Gives `app_id` the keyboard and waits for the chrome to be told.
+fn focus(chrome: &mut domicile_test_chrome::Chrome, app_id: &str) {
+    chrome
+        .say(&ChromeMessage::FocusApp {
+            app_id: app_id.to_string(),
+        })
+        .expect("the chrome socket takes a focus");
+    chrome
+        .wait_for(|message| {
+            *message
+                == HostMessage::FocusChanged {
+                    app_id: Some(app_id.to_string()),
+                }
+        })
+        .expect("the chrome is told where the keyboard went");
+}
+
+/// Checks no focus request reached the chrome before a fresh focus change.
+///
+/// Messages arrive in order, so a request broadcast before the dropped one
+/// was logged would come ahead of the change.
+fn assert_not_heard(chrome: &mut domicile_test_chrome::Chrome, app_id: &str) {
+    chrome
+        .say(&ChromeMessage::FocusChrome)
+        .expect("the chrome socket takes a focus");
+    chrome
+        .say(&ChromeMessage::FocusApp {
+            app_id: app_id.to_string(),
+        })
+        .expect("the chrome socket takes a focus");
+    assert_eq!(
+        chrome
+            .wait_for(|message| matches!(
+                message,
+                HostMessage::FocusRequested { .. } | HostMessage::FocusChanged { app_id: Some(_) }
+            ))
+            .expect("the chrome is told where the keyboard went"),
         HostMessage::FocusChanged {
-            app_id: Some(app_id)
-        }
+            app_id: Some(app_id.to_string())
+        },
+        "a focus request reached the chrome"
     );
 }

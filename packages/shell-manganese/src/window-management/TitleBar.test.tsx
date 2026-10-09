@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
-import { fireEvent, render, within } from "@testing-library/react";
+import { fireEvent, render } from "@testing-library/react";
 
 import { css } from "../../styled-system/css";
 import { TitleBar } from "./TitleBar";
@@ -197,17 +197,6 @@ describe("TitleBar", () => {
     }
   });
 
-  it("washes the bar of a window that asked for the keyboard in the warning color", () => {
-    const { container } = render(<TitleBar {...barProps} focus="urgent" />);
-
-    expect(face(container).className).toContain(
-      css({
-        backgroundColor:
-          "color-mix(in oklab, {colors.warning} 45%, {colors.background})",
-      }),
-    );
-  });
-
   it("washes the keyboard's own bar in the accent inside a selected group", () => {
     // The whole group uses the card, so the card alone would not mark this
     // one.
@@ -281,29 +270,6 @@ describe("TitleBar", () => {
       const open = tab({ strip: { ...MIDDLE_TAB, open: true } });
       expect(open.queryByRole("button", { name: "Maximize" })).not.toBeNull();
       expect(open.queryByRole("button", { name: "Float" })).not.toBeNull();
-    });
-
-    it("washes a tab whose window asked for the keyboard, open or hidden", () => {
-      const wash = css({
-        backgroundColor:
-          "color-mix(in oklab, {colors.warning} 45%, {colors.background})",
-      });
-
-      expect(face(tab({ focus: "urgent" }).container).className).toContain(
-        wash,
-      );
-      expect(
-        face(
-          tab({ focus: "urgent", strip: { ...MIDDLE_TAB, open: true } })
-            .container,
-        ).className,
-      ).toContain(wash);
-      // A hidden tab that asked stays hidden.
-      expect(
-        within(tab({ focus: "urgent" }).container).queryByRole("button", {
-          name: "Maximize",
-        }),
-      ).toBeNull();
     });
 
     it("shows the layout and size of a group it stands for", () => {

@@ -53,13 +53,12 @@ export const BarTray = () => {
 
 /** This screen's workspaces, with the visible one marked. */
 export const BarWorkspaces = () => {
-  const { current, focused, onSelectWorkspace, urgent, workspaces } = useBar();
+  const { current, focused, onSelectWorkspace, workspaces } = useBar();
   return (
     <Workspaces
       current={current}
       focused={focused}
       onSelect={onSelectWorkspace}
-      urgent={urgent}
       workspaces={workspaces}
     />
   );

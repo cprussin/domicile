@@ -10,7 +10,6 @@ describe("titleFocus", () => {
         inSelection: false,
         isTab: false,
         shownByContainer: false,
-        urgent: false,
       }),
     ).toBe("focused");
   });
@@ -23,7 +22,6 @@ describe("titleFocus", () => {
         inSelection: false,
         isTab: false,
         shownByContainer: true,
-        urgent: false,
       }),
     ).toBe("selected");
   });
@@ -35,7 +33,6 @@ describe("titleFocus", () => {
         inSelection: false,
         isTab: false,
         shownByContainer: false,
-        urgent: false,
       }),
     ).toBe("resting");
   });
@@ -47,7 +44,6 @@ describe("titleFocus", () => {
         inSelection: false,
         isTab: false,
         shownByContainer: true,
-        urgent: false,
       }),
     ).toBe("focused");
   });
@@ -59,7 +55,6 @@ describe("titleFocus", () => {
         inSelection: true,
         isTab: false,
         shownByContainer: false,
-        urgent: false,
       }),
     ).toBe("selected");
   });
@@ -73,7 +68,6 @@ describe("titleFocus", () => {
         inSelection: true,
         isTab: false,
         shownByContainer: false,
-        urgent: false,
       }),
     ).toBe("leaf");
   });
@@ -86,7 +80,6 @@ describe("titleFocus", () => {
         inSelection: true,
         isTab: true,
         shownByContainer: true,
-        urgent: false,
       }),
     ).toBe("focused");
     expect(
@@ -95,20 +88,7 @@ describe("titleFocus", () => {
         inSelection: true,
         isTab: true,
         shownByContainer: false,
-        urgent: false,
       }),
     ).toBe("resting");
-  });
-
-  it("marks a window that asked for the keyboard over any other state", () => {
-    expect(
-      titleFocus({
-        hasKeyboard: false,
-        inSelection: false,
-        isTab: true,
-        shownByContainer: true,
-        urgent: true,
-      }),
-    ).toBe("urgent");
   });
 });

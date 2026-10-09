@@ -13,7 +13,6 @@ import {
   NO_WINDOWS,
   reduceWindows,
   screenOfApp,
-  urgentWorkspacesOf,
   WindowAction,
   workspaceHere,
   workspaceNamed,
@@ -102,56 +101,17 @@ describe("the windows a host announces", () => {
     expect(state.windows[0]).toMatchObject({ title: "vim ~/notes" });
   });
 
-  it("marks a client asking for the keyboard as urgent, and leaves focus alone", () => {
-    // The compositor forwards xdg-activation requests without granting them.
-    // Granting would let a window take focus from the one being worked in.
+  it("grants a client asking for the keyboard, on the workspace it is on", () => {
+    // The compositor forwards xdg-activation requests without granting them;
+    // manganese grants them and switches to the window's workspace.
     const state = reduce(
       desktop("kitty", "editor"),
       WindowAction.WorkspaceSelected("2"),
       WindowAction.FocusRequested("kitty"),
     );
 
-    expect(currentHere(state)).toBe("2");
-    expect(state.urgent).toEqual([APP("kitty")]);
-  });
-
-  it("names the workspace a window that asked for the keyboard is on", () => {
-    const state = reduce(
-      desktop("kitty", "editor"),
-      WindowAction.WindowSentToWorkspace("2"),
-      WindowAction.FocusRequested("editor"),
-    );
-
-    expect(urgentWorkspacesOf(state)).toEqual(["2"]);
-  });
-
-  it("stops marking a window once it is worked in", () => {
-    const state = reduce(
-      desktop("kitty", "editor"),
-      WindowAction.FocusRequested("kitty"),
-      WindowAction.WindowSelected(APP("kitty")),
-    );
-
-    expect(state.urgent).toEqual([]);
-  });
-
-  it("does not mark the window being worked in", () => {
-    const state = reduce(
-      desktop("kitty"),
-      WindowAction.FocusRequested("kitty"),
-    );
-
-    expect(state.urgent).toEqual([]);
-  });
-
-  it("stops marking a window that closed", () => {
-    const state = reduce(
-      desktop("kitty", "editor"),
-      WindowAction.FocusRequested("kitty"),
-      WindowAction.AppClosed("kitty"),
-    );
-
-    expect(state.urgent).toEqual([]);
+    expect(currentHere(state)).toBe("1");
+    expect(activeIdOf(state)).toBe(APP("kitty"));
   });
 });
 
@@ -985,6 +945,19 @@ describe("the pointer", () => {
     expect(
       reduceWindows(state, WindowAction.WindowSelected(APP("editor"))),
     ).toBe(state);
+  });
+
+  it("goes to the workspace of a window that asks to be reached", () => {
+    // `xdg-activation`, which this shell grants. The window already has its
+    // workspace's focus, so granting means switching to that workspace.
+    const state = reduce(
+      desktop("kitty", "editor"),
+      WindowAction.WindowSentToWorkspace("2"),
+    );
+
+    expect(
+      currentHere(reduceWindows(state, WindowAction.FocusRequested("editor"))),
+    ).toBe("2");
   });
 
   it("moves the keyboard to the screen the window it crossed is on", () => {

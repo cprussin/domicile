@@ -350,7 +350,6 @@ export const Desktop = ({
           }}
           popups={windows.popups}
           screens={screens}
-          urgent={windows.urgent}
           windows={windows.windows}
         />
       )}
