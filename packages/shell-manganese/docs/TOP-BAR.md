@@ -187,8 +187,13 @@ extension with an action. See
 - **Drag to reorder.** The order is saved in `localStorage` (`tray-order:v1`)
   and shared by every screen. Extensions are keyed by id, apps by title. New
   icons go last, apps first.
-- **App icons**: click sends `Activate`, middle-click `SecondaryActivate`,
-  right-click `ContextMenu`.
+- **App icons**: click sends `Activate`, middle-click `SecondaryActivate`.
+  - Right-click opens the app's dbusmenu under the icon: submenus, check
+    boxes and radio items; disabled entries are grayed and hidden ones left
+    out. Choosing an entry sends it to the app and closes the menu. A menu
+    that cannot be read shows "Menu unavailable".
+  - An app without a dbusmenu gets `ContextMenu` on right-click instead.
+  - Menu icons and mnemonics are not drawn.
 - **Extension icons**: every click calls `activateExtension(id)`, giving the
   extension `activeTab` on the focused browser window.
   - With a popup, the click opens the popup in a `<webview>` panel under the

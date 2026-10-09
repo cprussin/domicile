@@ -47,6 +47,7 @@ export const Shell = async (root, domicile) => {
 | `@domicile-desktop/system-bluetooth` | BlueZ over D-Bus |
 | `@domicile-desktop/system-apps` | desktop entries, icons and bookmarks |
 | `@domicile-desktop/sdk/file-preview` | a launcher's file preview: directory entries, text, audio tags and cover |
+| `@domicile-desktop/sdk/dbusmenu` | a tray item's `com.canonical.dbusmenu` menu, on the item's own bus name |
 
 Each library owns its system's format and the safety rules for it (for
 example, `system-backlight` never sets the level to zero), with tests on

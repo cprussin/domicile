@@ -1,14 +1,21 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, spyOn } from "bun:test";
+import type { Result } from "@cprussin/option-result";
+import { Err, Ok } from "@cprussin/option-result";
+import type { MenuEntry, watchMenu } from "@domicile-desktop/sdk/dbusmenu";
+import { MenuEntry as Entry, ToggleKind } from "@domicile-desktop/sdk/dbusmenu";
 import type {
   DomicileHost,
   DomicileTrayItem,
 } from "@domicile-desktop/sdk/domicile-host";
+import type { SystemError } from "@domicile-desktop/sdk/system";
+import { SystemErrorKind } from "@domicile-desktop/sdk/system";
 import type { TrayAction } from "@domicile-desktop/sdk/tray";
 import { fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 import { TrayIcon } from "./TrayIcon";
 
-/** An application with an image. */
+/** An application with an image and a menu. */
 const network: DomicileTrayItem = {
   bus: ":1.42",
   icon: "data:image/png;base64,iVBORw0KGgo=",
@@ -17,7 +24,7 @@ const network: DomicileTrayItem = {
   title: "Wired connection 1",
 };
 
-/** An application whose image the compositor could not decode. */
+/** An application whose image the compositor could not decode, with no menu. */
 const sync: DomicileTrayItem = {
   bus: "org.kde.StatusNotifierItem-4071-1",
   icon: "",
@@ -25,6 +32,42 @@ const sync: DomicileTrayItem = {
   menu: "",
   title: "Syncthing",
 };
+
+const item = (
+  id: number,
+  label: string,
+  more: Partial<Omit<Parameters<typeof Entry.Item>[0], "id" | "label">> = {},
+) =>
+  Entry.Item({
+    enabled: true,
+    icon: undefined,
+    id,
+    label,
+    mnemonic: undefined,
+    submenu: undefined,
+    toggle: undefined,
+    ...more,
+  });
+
+/** {@link network}'s menu, as `watchMenu` reads it. */
+const MENU: readonly MenuEntry[] = [
+  item(1, "Open"),
+  item(2, "Disconnect", { enabled: false }),
+  Entry.Separator(3),
+  item(4, "Notifications", {
+    toggle: { checked: true, kind: ToggleKind.Checkmark },
+  }),
+  item(5, "Mode", {
+    submenu: [
+      item(6, "Automatic", {
+        toggle: { checked: false, kind: ToggleKind.Radio },
+      }),
+      item(7, "Manual", {
+        toggle: { checked: true, kind: ToggleKind.Radio },
+      }),
+    ],
+  }),
+];
 
 /** A host that resolves with the first click the tray forwards. */
 const clicked = (): {
@@ -39,6 +82,7 @@ const clicked = (): {
     activateTrayItem: (id: string, action: TrayAction) => {
       heard([id, action]);
     },
+    addEventListener: () => undefined,
   } as unknown as DomicileHost;
   return { click, domicile };
 };
@@ -46,17 +90,55 @@ const clicked = (): {
 /** A host for tests that ignore clicks. */
 const NO_DOMICILE = {
   activateTrayItem: () => undefined,
+  addEventListener: () => undefined,
 } as unknown as DomicileHost;
 
-const renderIcon = (item: DomicileTrayItem) => {
-  render(<TrayIcon domicile={NO_DOMICILE} item={item} />);
+/**
+ * A `watchMenu` that reports `menu` at once, and the requests made of it.
+ * Each request answers `answer`.
+ */
+const watching = (
+  menu: Result<readonly MenuEntry[], SystemError>,
+  answer: Result<never, SystemError> | undefined = undefined,
+) => {
+  const asked: [string, number | string][] = [];
+  const stopped = Promise.withResolvers<void>();
+  const watch: typeof watchMenu = (_system, address, onMenu) => {
+    asked.push(["watch", `${address.bus}${address.path}`]);
+    onMenu(menu);
+    return {
+      aboutToShow: (id) => {
+        asked.push(["aboutToShow", id]);
+        return Promise.resolve(answer ?? Ok("shown"));
+      },
+      click: (id) => {
+        asked.push(["click", id]);
+        return Promise.resolve(answer ?? Ok("clicked"));
+      },
+      stop: () => {
+        stopped.resolve();
+      },
+    };
+  };
+  return { asked, stopped: stopped.promise, watch };
 };
 
-/** Renders `item`'s icon, resolving with the first click it forwards. */
-const iconOf = (item: DomicileTrayItem) => {
+const renderIcon = (shown: DomicileTrayItem) => {
+  render(<TrayIcon domicile={NO_DOMICILE} item={shown} />);
+};
+
+/** Renders `shown`'s icon, resolving with the first click it forwards. */
+const iconOf = (shown: DomicileTrayItem, watch?: typeof watchMenu) => {
   const { click, domicile } = clicked();
-  render(<TrayIcon domicile={domicile} item={item} />);
+  render(<TrayIcon domicile={domicile} item={shown} watch={watch} />);
   return click;
+};
+
+/** Opens {@link network}'s menu with the secondary button. */
+const openMenu = async (watch: typeof watchMenu) => {
+  render(<TrayIcon domicile={NO_DOMICILE} item={network} watch={watch} />);
+  fireEvent.contextMenu(screen.getByRole("button", { name: network.title }));
+  return await screen.findByRole("menu", { name: network.title });
 };
 
 describe("TrayIcon", () => {
@@ -90,25 +172,21 @@ describe("TrayIcon", () => {
       expect(await click).toStrictEqual([network.id, "primary"]);
     });
 
-    it("asks for the application's menu on the secondary button", async () => {
-      const click = iconOf(network);
+    it("asks a menuless application for its menu on the secondary button", async () => {
+      const click = iconOf(sync);
 
-      fireEvent.contextMenu(
-        screen.getByRole("button", { name: network.title }),
-      );
+      fireEvent.contextMenu(screen.getByRole("button", { name: sync.title }));
 
-      expect(await click).toStrictEqual([network.id, "context"]);
+      expect(await click).toStrictEqual([sync.id, "context"]);
     });
 
     it("keeps the page's own menu away from the secondary button", () => {
-      renderIcon(network);
+      renderIcon(sync);
 
       // `false` means the default was prevented, so the engine's context menu
       // does not open over the application's.
       expect(
-        fireEvent.contextMenu(
-          screen.getByRole("button", { name: network.title }),
-        ),
+        fireEvent.contextMenu(screen.getByRole("button", { name: sync.title })),
       ).toBe(false);
     });
 
@@ -121,6 +199,107 @@ describe("TrayIcon", () => {
       );
 
       expect(await click).toStrictEqual([network.id, "secondary"]);
+    });
+  });
+
+  describe("the application's menu", () => {
+    it("opens on the secondary button and draws its entries", async () => {
+      const { asked, watch } = watching(Ok(MENU));
+
+      await openMenu(watch);
+
+      expect(
+        screen.getAllByRole("menuitem").map((entry) => entry.textContent),
+      ).toStrictEqual(["Open", "Disconnect", "Mode"]);
+      expect(
+        screen.getByRole("menuitem", { name: "Disconnect" }),
+      ).toHaveAttribute("aria-disabled", "true");
+      expect(screen.getByRole("separator")).toBeInTheDocument();
+      expect(
+        screen.getByRole("menuitemcheckbox", { name: "Notifications" }),
+      ).toHaveAttribute("aria-checked", "true");
+      expect(asked).toStrictEqual([
+        ["watch", ":1.42/MenuBar"],
+        ["aboutToShow", 0],
+      ]);
+    });
+
+    it("clicks the entry chosen, then closes and stops watching", async () => {
+      const user = userEvent.setup();
+      const { asked, stopped, watch } = watching(Ok(MENU));
+      await openMenu(watch);
+
+      await user.click(screen.getByRole("menuitem", { name: "Open" }));
+
+      await stopped;
+      expect(asked).toContainEqual(["click", 1]);
+    });
+
+    it("clicks a toggle", async () => {
+      const user = userEvent.setup();
+      const { asked, watch } = watching(Ok(MENU));
+      await openMenu(watch);
+
+      await user.click(
+        screen.getByRole("menuitemcheckbox", { name: "Notifications" }),
+      );
+
+      expect(asked).toContainEqual(["click", 4]);
+    });
+
+    it("prepares a submenu and draws its radio items", async () => {
+      const user = userEvent.setup();
+      const { asked, watch } = watching(Ok(MENU));
+      await openMenu(watch);
+
+      await user.click(screen.getByRole("menuitem", { name: "Mode" }));
+
+      expect(
+        await screen.findByRole("menuitemradio", { name: "Manual" }),
+      ).toHaveAttribute("aria-checked", "true");
+      expect(
+        screen.getByRole("menuitemradio", { name: "Automatic" }),
+      ).toHaveAttribute("aria-checked", "false");
+      expect(asked).toContainEqual(["aboutToShow", 5]);
+    });
+
+    it("says when the menu cannot be read", async () => {
+      const { watch } = watching(
+        Err({
+          kind: SystemErrorKind.Dbus,
+          message: "org.freedesktop.DBus.Error.ServiceUnknown: gone",
+        }),
+      );
+
+      await openMenu(watch);
+
+      expect(
+        screen.getByRole("menuitem", { name: "Menu unavailable" }),
+      ).toHaveAttribute("aria-disabled", "true");
+    });
+
+    it("logs a request the application refused", async () => {
+      const user = userEvent.setup();
+      const refused: SystemError = {
+        kind: SystemErrorKind.Dbus,
+        message: "org.freedesktop.DBus.Error.UnknownMethod: no Event",
+      };
+      const logged = Promise.withResolvers<unknown[]>();
+      const { watch } = watching(Ok(MENU), Err(refused));
+      // The first is `aboutToShow`'s, on opening.
+      spyOn(console, "error")
+        .mockImplementationOnce(() => undefined)
+        .mockImplementationOnce((...args) => {
+          logged.resolve(args);
+        });
+      await openMenu(watch);
+
+      await user.click(screen.getByRole("menuitem", { name: "Open" }));
+
+      expect(await logged.promise).toStrictEqual([
+        "A tray menu refused a request",
+        refused,
+      ]);
     });
   });
 });

@@ -75,8 +75,9 @@ domicile.activateTrayItem(id, "primary"); // or "secondary", "context"
 
 - The app decides what a click does.
 - `icon` is a `data:` URL or `""`. `menu` is the item's
-  `com.canonical.dbusmenu` object path on `bus`, or `""`; no library draws
-  it yet ([SYSTEM-TRAY.md](/docs/architecture/SYSTEM-TRAY.md)).
+  `com.canonical.dbusmenu` object path on `bus`, or `""`. Read it with
+  `watchMenu` from `@domicile-desktop/sdk/dbusmenu`
+  ([SYSTEM-TRAY.md](/docs/architecture/SYSTEM-TRAY.md)).
 - Manganese's: [`tray/Tray.tsx`](/packages/shell-manganese/src/tray/Tray.tsx).
 
 ## Notifications

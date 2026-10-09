@@ -57,6 +57,7 @@ See [docs/ELEMENTS.md](docs/ELEMENTS.md) for `<app>` input and focus, and the
 | `./bind-keys` | `bindKeys`: grab a shell's own chords by name and handle them by mode. `./key-action` and `./own-keybindings` are its parts. |
 | `./fake-host` | `FakeDomicileHost`: a desktop for a shell's tests. |
 | `./file-preview` | `previewFile(system, path)`: a launcher's preview of a path, read through the system calls: a directory's entries, a song's tags and cover, or the start of a text file. |
+| `./dbusmenu` | `watchMenu(system, { bus, path })`: a tray item's `com.canonical.dbusmenu` menu, read again on each change, with `click` and `aboutToShow`. Hidden entries are left out; labels lose their mnemonic underscore. See [SYSTEM-TRAY.md](/docs/architecture/SYSTEM-TRAY.md). |
 | `./system` | `system(domicile)`: files, watches, processes and D-Bus. Calls resolve a `Result`; the compositor refuses most while the desktop is locked. See [SHELL-SYSTEM-ACCESS.md](/docs/SHELL-SYSTEM-ACCESS.md). |
 | `./portal` | `watchPortalRequests` and `answerPortalRequest`: application dialogs from `xdg-desktop-portal`, parsed by kind. `watchCapturing` and `stopCapturing`: running sessions that record the screen or control or capture input. `<PortalDialogs />` in component-library draws them. See [PORTALS.md](/docs/PORTALS.md). |
 | `./global-shortcuts` | `fireGlobalShortcuts`: grab the chords applications hold through the GlobalShortcuts portal and report each press and release. `<PortalDialogs />` calls it. |

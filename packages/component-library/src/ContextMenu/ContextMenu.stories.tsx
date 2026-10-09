@@ -67,3 +67,32 @@ export const ContextMenu: StoryObj<typeof ContextMenuComponent> = {
     open: true,
   },
 };
+
+export const TogglesAndSubmenu: StoryObj<typeof ContextMenuComponent> = {
+  args: {
+    at: { x: 120, y: 80 },
+    children: (
+      <>
+        <ContextMenuComponent.CheckboxItem checked>
+          Mute
+        </ContextMenuComponent.CheckboxItem>
+        <ContextMenuComponent.Separator />
+        <ContextMenuComponent.RadioGroup value="low">
+          <ContextMenuComponent.RadioItem value="high">
+            High quality
+          </ContextMenuComponent.RadioItem>
+          <ContextMenuComponent.RadioItem value="low">
+            Low quality
+          </ContextMenuComponent.RadioItem>
+        </ContextMenuComponent.RadioGroup>
+        <ContextMenuComponent.Separator />
+        <ContextMenuComponent.Submenu label="Output">
+          <ContextMenuComponent.Item>Speakers</ContextMenuComponent.Item>
+          <ContextMenuComponent.Item>Headphones</ContextMenuComponent.Item>
+        </ContextMenuComponent.Submenu>
+      </>
+    ),
+    label: "Player",
+    open: true,
+  },
+};
