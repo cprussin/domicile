@@ -17,6 +17,7 @@
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/html/domicile/layout_app_surface.h"
 #include "third_party/blink/renderer/core/html_names.h"
+#include "third_party/blink/renderer/core/input/event_handler.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
 #include "third_party/blink/renderer/core/layout/layout_replaced.h"
 #include "third_party/blink/renderer/core/page/chrome_client.h"
@@ -299,6 +300,13 @@ void HTMLAppElement::ForwardInput(AppInputClient& client,
     ForwardMotion(client, app_id, *pointer);
     if (const std::optional<uint32_t> button = LinuxButton(pointer->button())) {
       client.AppPointerButton(app_id, *button, true);
+      // The pointer stays with this element until every button is up, as a
+      // Wayland seat keeps it on the pressed surface. Without it the release
+      // lands on whatever is under the pointer, and a button let go over the
+      // page never reaches the client that holds the press.
+      LocalFrame* frame = GetDocument().GetFrame();
+      CHECK(frame);
+      frame->GetEventHandler().SetPointerCapture(pointer->pointerId(), this);
     }
   } else if (type == event_type_names::kPointerup) {
     if (const std::optional<uint32_t> button = LinuxButton(pointer->button())) {
