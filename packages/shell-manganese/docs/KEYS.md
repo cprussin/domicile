@@ -11,7 +11,7 @@ Manganese binds sway's keys on Meta (Super, `Mod4`) by default:
 | Meta+H/J/K/L, Meta+arrows | Move focus. Wraps at the ends of a container. |
 | Meta+Shift+H/J/K/L, Meta+Shift+arrows | Move the window in that direction (sway's `move`), onto the next screen past the edge. |
 | Meta+1 … Meta+0 | Go to workspace 1–10. |
-| Meta+Shift+1 … Meta+Shift+0 | Send the window to workspace 1–10 and stay. |
+| Meta+Shift+1 … Meta+Shift+0 | Send the window, or the `focus parent` selection, to workspace 1–10 and stay. |
 | Meta+B / Meta+V | `splith` / `splitv`. |
 | Meta+W / Meta+S / Meta+E | `layout tabbed` / `layout stacking` / `layout toggle split`. |
 | Meta+A / Meta+Shift+A | `focus parent` / `focus child`. |
@@ -50,7 +50,7 @@ Build commands with the exported helpers (`focus`, `move`, `workspace`,
 | `focus mode_toggle` | Switch between floating and tiled windows. |
 | `move left/right/up/down` | Move the window. |
 | `move scratchpad` / `scratchpad show` | Hide the window / show the last hidden one. |
-| `move container to workspace <name>` | Send the window to workspace `1`–`10`. |
+| `move container to workspace <name>` | Send the window, or the `focus parent` selection, to workspace `1`–`10`. |
 | `workspace <name>` | Go to workspace `1`–`10`, or back to the previous one if it is already shown. |
 | `split h` / `split v` | Wrap the focus in a new container. |
 | `layout stacking/tabbed/toggle split` | Set the container's layout. |

@@ -141,6 +141,49 @@ export const tiledIn = (workspace: Workspace, id: string): Workspace => ({
   tiling: inserted(workspace.tiling, id),
 });
 
+/** The same for a whole node, such as a group sent from another workspace. */
+export const nodeTiledIn = (
+  workspace: Workspace,
+  node: LayoutNode,
+): Workspace => ({
+  ...workspace,
+  floatFocus: undefined,
+  floats: onWindows(workspace.floats),
+  tiling: insertedNode(workspace.tiling, node),
+});
+
+/**
+ * `move container to workspace <name>`: the node leaving and the workspace
+ * without it. A `focus parent` selection leaves whole; a float leaves as its
+ * focused window. `undefined` on an empty workspace.
+ */
+export const sentOff = (
+  workspace: Workspace,
+): { node: LayoutNode; rest: Workspace } | undefined => {
+  const { floatFocus, fullscreen, tiling } = workspace;
+  if (floatFocus !== undefined) {
+    return {
+      node: Node.Window(floatFocus),
+      rest: closed(workspace, floatFocus),
+    };
+  } else if (tiling.root === undefined) {
+    return undefined;
+  } else {
+    const node = focusedNodeOf(tiling);
+    return {
+      node,
+      rest: {
+        ...workspace,
+        fullscreen:
+          fullscreen !== undefined && windowsIn(node).includes(fullscreen.id)
+            ? undefined
+            : fullscreen,
+        tiling: removedAt(tiling.root, focusPathOf(tiling.root, tiling.depth)),
+      },
+    };
+  }
+};
+
 /**
  * The workspace without the window `id`, wherever it was.
  *

@@ -46,6 +46,7 @@ import {
   fullscreenToggled,
   holds,
   modeToggled,
+  nodeTiledIn,
   opened,
   openedFloating,
   parentFocused,
@@ -53,6 +54,7 @@ import {
   pushedOffBy,
   pushedOnBy,
   reached,
+  sentOff,
   shown,
   splitFlipped,
   tiledArrived,
@@ -1520,17 +1522,18 @@ const screenAt = (
       y < box.y + box.height,
   )?.name;
 
-// `move container to workspace <name>`: the window moves and focus stays, as
-// in sway. It always arrives tiled.
+// `move container to workspace <name>`: the window, or the container `focus
+// parent` selected, moves and focus stays, as in sway. It always arrives tiled.
 const sendToWorkspace = (state: WindowState, name: string): WindowState => {
-  const id = activeIdOf(state);
-  if (id === undefined || name === currentHere(state)) {
+  const leaving =
+    name === currentHere(state) ? undefined : sentOff(workspaceHere(state));
+  if (leaving === undefined) {
     return state;
   } else {
     return onWorkspace(
-      onCurrent(state, (workspace) => closed(workspace, id)),
+      onCurrent(state, () => leaving.rest),
       name,
-      (workspace) => tiledIn(workspace, id),
+      (workspace) => nodeTiledIn(workspace, leaving.node),
     );
   }
 };
