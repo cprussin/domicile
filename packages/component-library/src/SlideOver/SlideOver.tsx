@@ -105,13 +105,15 @@ const backdropStyles = css({
 
 // Pins the panel to the right edge at full height. A size container, so the
 // panel's width is relative to the screen. Clips, so the panel slides in from
-// its screen's edge rather than over the next monitor.
+// its screen's edge rather than over the next monitor. `clip`, not `hidden`: a
+// hidden box still scrolls, and focusing the off-screen panel on open would
+// scroll it into view.
 const viewportStyles = flex({
   align: "stretch",
   containerType: "size",
   inset: 0,
   justify: "flex-end",
-  overflow: "hidden",
+  overflow: "clip",
   position: "fixed",
   zIndex: "modal",
 });
