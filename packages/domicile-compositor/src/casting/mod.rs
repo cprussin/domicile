@@ -51,7 +51,7 @@ pub use cursor::CursorMode;
 pub use lifecycle::Ended;
 pub use producer::ToWayland;
 pub use region::Screen;
-pub use shots::{Desk, Developed};
+pub use shots::{Desk, Developed, DevelopedWindow, Shown};
 pub use streams::{Committed, Gpu, Streams};
 pub use test_pattern::TestPattern;
 
@@ -125,6 +125,11 @@ pub enum Request {
         stream: StreamId,
         developed: Developed,
     },
+    /// The last frame the window `app_id` showed, alone.
+    ShootWindow {
+        app_id: String,
+        developed: DevelopedWindow,
+    },
 }
 
 /// Starts and stops streams. Cheap to clone, and usable from any thread.
@@ -181,6 +186,12 @@ impl Casting {
     pub fn shoot(&self, developed: Developed) {
         let stream = StreamId(self.next.fetch_add(1, Ordering::Relaxed));
         self.send(Request::Shoot { stream, developed });
+    }
+
+    /// Takes the last frame window `app_id` showed. `developed` hears it, or
+    /// why there is none.
+    pub fn shoot_window(&self, app_id: String, developed: DevelopedWindow) {
+        self.send(Request::ShootWindow { app_id, developed });
     }
 
     fn send(&self, request: Request) {

@@ -73,7 +73,8 @@ settles, and keeps the last preview until then.
 ## Behavior
 
 - The highlight starts on the first row. The pointer moves it.
-- A pick runs once the launcher has finished closing, so nothing it opens
-  sees the launcher. A screenshot app would shoot it.
+- A pick runs once the launcher has finished closing and a frame without it
+  has been painted, so nothing it opens sees the launcher. A screenshot app
+  would shoot it.
 - While the launcher is open, other bindings are ignored. See
   [Keys](KEYS.md#commands).

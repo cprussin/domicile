@@ -243,6 +243,7 @@ impl Asked {
             | PortalAnswer::DynamicLauncher { .. }
             | PortalAnswer::GlobalShortcuts { .. }
             | PortalAnswer::Screenshot { .. }
+            | PortalAnswer::ScreenshotWindow { .. }
             | PortalAnswer::PickColor { .. }
             | PortalAnswer::Pressed
             | PortalAnswer::Released

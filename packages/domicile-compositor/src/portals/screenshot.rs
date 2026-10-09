@@ -18,8 +18,8 @@ use domicile_host::screenshot::{
     color_at, crop, encode, file_name, save, screenshots_dir, Shot, Taken,
 };
 use domicile_protocol::{
-    AccessDialog, DeskRect, FrozenDesk, PortalAnswer, PortalKind, ShotRect, SystemError,
-    SystemErrorKind, SHELL_APP_ID,
+    AccessDialog, DeskRect, FrozenDesk, PortalAnswer, PortalKind, SystemError, SystemErrorKind,
+    SHELL_APP_ID,
 };
 use tracing::warn;
 use zbus::object_server::ObjectServer;
@@ -33,6 +33,10 @@ use crate::casting::{Casting, Desk};
 pub type Shoot =
     Arc<dyn Fn() -> Pin<Box<dyn Future<Output = Result<Desk, String>> + Send>> + Send + Sync>;
 
+/// Takes the last frame a window drew, by host app id, or says why it cannot.
+pub type ShootWindow =
+    Arc<dyn Fn(String) -> Pin<Box<dyn Future<Output = Result<Shot, String>> + Send>> + Send + Sync>;
+
 /// Saves a screenshot as a PNG and returns its path, or says why it cannot.
 pub type Save = Arc<dyn Fn(&Shot) -> Result<PathBuf, String> + Send + Sync>;
 
@@ -40,6 +44,7 @@ pub type Save = Arc<dyn Fn(&Shot) -> Result<PathBuf, String> + Send + Sync>;
 #[derive(Clone)]
 pub struct Shots {
     pub shoot: Shoot,
+    pub shoot_window: ShootWindow,
     pub save: Save,
 }
 
@@ -49,6 +54,7 @@ impl Shots {
     pub fn none() -> Shots {
         Shots {
             shoot: Arc::new(|| Box::pin(async { Err("no desk here".into()) })),
+            shoot_window: Arc::new(|_| Box::pin(async { Err("no windows here".into()) })),
             save: Arc::new(|_| Err("no pictures here".into())),
         }
     }
@@ -64,8 +70,7 @@ const TABLE: &str = "screenshot";
 /// The `Screenshot` backend object.
 pub struct Screenshot {
     pub queue: Arc<Queue>,
-    pub shoot: Shoot,
-    pub save: Save,
+    pub shots: Shots,
 }
 
 #[zbus::interface(name = "org.freedesktop.impl.portal.Screenshot")]
@@ -93,9 +98,9 @@ impl Screenshot {
                     .await?;
             }
             let desk = self.desk().await?;
-            let area = if interactive {
+            let shot = if interactive {
                 let frozen = frozen(&desk);
-                match ask(
+                let answer = ask(
                     &self.queue,
                     server,
                     handle,
@@ -103,15 +108,20 @@ impl Screenshot {
                     &parent_window,
                     PortalKind::Screenshot(frozen),
                 )
-                .await
-                {
-                    PortalAnswer::Screenshot { area } => area,
-                    answer => return Err(answer.response().max(1)),
-                }
+                .await;
+                picked(&self.shots, &desk, answer)
+                    .await
+                    .map_err(|unpicked| match unpicked {
+                        Unpicked::Not(answer) => answer.response().max(1),
+                        Unpicked::Failed(why) => {
+                            warn!(%why, "a window could not be shot for a screenshot");
+                            2
+                        }
+                    })?
             } else {
-                whole(&desk.shot)
+                desk.shot
             };
-            let path = (self.save)(&crop(&desk.shot, area)).map_err(|why| -> u32 {
+            let path = (self.shots.save)(&shot).map_err(|why| -> u32 {
                 warn!(%why, "a screenshot could not be saved");
                 2
             })?;
@@ -162,7 +172,7 @@ impl Screenshot {
 impl Screenshot {
     /// A frame of the desk, or response `2`.
     async fn desk(&self) -> Result<Desk, u32> {
-        (self.shoot)().await.map_err(|why| {
+        (self.shots.shoot)().await.map_err(|why| {
             warn!(%why, "the desk could not be shot for a screenshot");
             2
         })
@@ -292,18 +302,42 @@ pub async fn for_the_shell(
             .map_err(|why| other(format!("the screenshot could not be written: {why}"))),
         None => {
             let kind = PortalKind::Screenshot(frozen(&desk));
-            match ask_unbidden(queue, SHELL_APP_ID.into(), "", kind).await {
-                PortalAnswer::Screenshot { area } => (shots.save)(&crop(&desk.shot, area))
+            let answer = ask_unbidden(queue, SHELL_APP_ID.into(), "", kind).await;
+            match picked(shots, &desk, answer).await {
+                Ok(shot) => (shots.save)(&shot)
                     .map_err(|why| other(format!("the screenshot could not be saved: {why}"))),
-                PortalAnswer::Canceled => Err(SystemError {
+                Err(Unpicked::Not(PortalAnswer::Canceled)) => Err(SystemError {
                     kind: SystemErrorKind::Canceled,
                     message: "the screenshot dialog was dismissed".into(),
                 }),
-                answer => Err(other(format!(
+                Err(Unpicked::Not(answer)) => Err(other(format!(
                     "the screenshot dialog was not answered: {answer:?}"
                 ))),
+                Err(Unpicked::Failed(why)) => {
+                    Err(other(format!("the window could not be shot: {why}")))
+                }
             }
         }
+    }
+}
+
+/// Why a picker's answer kept no shot.
+enum Unpicked {
+    /// It answered no picture: a dismissal, or no shell.
+    Not(PortalAnswer),
+    /// The window it picked could not be shot.
+    Failed(String),
+}
+
+/// The shot a picker over `desk` kept: an area of the desk, or a window's own
+/// last frame.
+async fn picked(shots: &Shots, desk: &Desk, answer: PortalAnswer) -> Result<Shot, Unpicked> {
+    match answer {
+        PortalAnswer::Screenshot { area } => Ok(crop(&desk.shot, area)),
+        PortalAnswer::ScreenshotWindow { id } => {
+            (shots.shoot_window)(id).await.map_err(Unpicked::Failed)
+        }
+        answer => Err(Unpicked::Not(answer)),
     }
 }
 
@@ -312,6 +346,19 @@ pub fn shooting(casting: Casting) -> Shoot {
     Arc::new(move || {
         let (replier, developed) = crate::reply::reply();
         casting.shoot(Box::new(move |desk| replier.send(desk)));
+        Box::pin(async move {
+            developed
+                .await
+                .unwrap_or_else(|| Err("the compositor dropped the shot".into()))
+        })
+    })
+}
+
+/// A [`ShootWindow`] that takes its frames through `casting`.
+pub fn shooting_windows(casting: Casting) -> ShootWindow {
+    Arc::new(move |app_id| {
+        let (replier, developed) = crate::reply::reply();
+        casting.shoot_window(app_id, Box::new(move |shot| replier.send(shot)));
         Box::pin(async move {
             developed
                 .await
@@ -370,16 +417,6 @@ fn frozen(desk: &Desk) -> FrozenDesk {
             position: (desk.place.0, desk.place.1),
             size: (desk.place.2, desk.place.3),
         },
-    }
-}
-
-/// All of `shot`.
-fn whole(shot: &Shot) -> ShotRect {
-    ShotRect {
-        x: 0,
-        y: 0,
-        width: shot.width,
-        height: shot.height,
     }
 }
 
@@ -483,9 +520,9 @@ mod tests {
             },
             monitors: vec![area("left", 0), area("right", 1)],
             windows: vec![ShotWindow {
+                id: "app-3".into(),
                 title: "~/src".into(),
                 app_id: "kitty".into(),
-                area: area("", 1).area,
             }],
             place: (-1, 0, 2, 1),
         }
@@ -494,6 +531,7 @@ mod tests {
     fn area(name: &str, x: u32) -> ShotArea {
         ShotArea {
             name: name.into(),
+            description: String::new(),
             area: ShotRect {
                 x,
                 y: 0,
@@ -501,6 +539,23 @@ mod tests {
                 height: 1,
             },
         }
+    }
+
+    /// Window `app-3`'s own last frame: one opaque green pixel.
+    fn own_frame() -> ShootWindow {
+        Arc::new(|id| {
+            Box::pin(async move {
+                if id == "app-3" {
+                    Ok(Shot {
+                        width: 1,
+                        height: 1,
+                        bgra: vec![0, 255, 0, 255],
+                    })
+                } else {
+                    Err(format!("no window {id}"))
+                }
+            })
+        })
     }
 
     /// A [`Shoot`] that always answers `shot`.
@@ -536,10 +591,13 @@ mod tests {
         let album = tempfile::tempdir().expect("a temporary folder");
         let backend = Screenshot {
             queue: Arc::clone(&queue),
-            shoot: shot_of(shot),
-            save: {
-                let dir = album.path().join("Screenshots");
-                saving_into(move || dir.clone())
+            shots: Shots {
+                shoot: shot_of(shot),
+                shoot_window: own_frame(),
+                save: {
+                    let dir = album.path().join("Screenshots");
+                    saving_into(move || dir.clone())
+                },
             },
         };
         let (server, client) =
@@ -729,13 +787,31 @@ mod tests {
         served.queue.answer(
             asked[0].id,
             PortalAnswer::Screenshot {
-                area: windows[0].area,
+                area: monitors[1].area,
             },
         );
 
         let (response, results) = picking.join().expect("returned");
         assert_eq!(response, 0);
         assert_eq!(png_at(&results["uri"]), ((1, 1), vec![0, 0, 255, 128]));
+    }
+
+    #[test]
+    fn a_window_picked_is_saved_from_its_own_frame() {
+        // A window the shell does not show, as a hidden tab, is not on the
+        // frozen desk.
+        let served = served(Ok(desk()));
+        let picking = calling(&served, "Screenshot", vec![("interactive", true)]);
+        let asked = next(&served);
+
+        served.queue.answer(
+            asked[0].id,
+            PortalAnswer::ScreenshotWindow { id: "app-3".into() },
+        );
+
+        let (response, results) = picking.join().expect("returned");
+        assert_eq!(response, 0);
+        assert_eq!(png_at(&results["uri"]), ((1, 1), vec![0, 255, 0, 255]));
     }
 
     #[test]
@@ -806,6 +882,7 @@ mod tests {
         let album = tempfile::tempdir().expect("a temporary folder");
         let shots = Shots {
             shoot: shot_of(shot),
+            shoot_window: own_frame(),
             save: {
                 let dir = album.path().join("Screenshots");
                 saving_into(move || dir.clone())
@@ -832,13 +909,13 @@ mod tests {
             .recv_timeout(Duration::from_secs(10))
             .expect("the queue published");
         assert_eq!(asked[0].app_id, SHELL_APP_ID);
-        let PortalKind::Screenshot(FrozenDesk { windows, .. }) = &asked[0].kind else {
+        let PortalKind::Screenshot(FrozenDesk { monitors, .. }) = &asked[0].kind else {
             panic!("a picker, not {:?}", asked[0].kind);
         };
         shooting.queue.answer(
             asked[0].id,
             PortalAnswer::Screenshot {
-                area: windows[0].area,
+                area: monitors[1].area,
             },
         );
 
@@ -847,6 +924,26 @@ mod tests {
         assert_eq!(
             png_at(&owned(Value::from(file_uri(&path.display().to_string())))),
             ((1, 1), vec![0, 0, 255, 128])
+        );
+    }
+
+    #[test]
+    fn the_shells_own_screenshot_of_a_window_is_its_own_frame() {
+        let shooting = shell_shot(Ok(desk()), None);
+        let asked = shooting
+            .published
+            .recv_timeout(Duration::from_secs(10))
+            .expect("the queue published");
+
+        shooting.queue.answer(
+            asked[0].id,
+            PortalAnswer::ScreenshotWindow { id: "app-3".into() },
+        );
+
+        let path = shooting.taken.join().expect("returned").expect("saved");
+        assert_eq!(
+            png_at(&owned(Value::from(file_uri(&path.display().to_string())))),
+            ((1, 1), vec![0, 255, 0, 255])
         );
     }
 

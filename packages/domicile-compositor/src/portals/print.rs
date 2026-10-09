@@ -200,6 +200,7 @@ impl Print {
             | PortalAnswer::DynamicLauncher { .. }
             | PortalAnswer::ScreenCast { .. }
             | PortalAnswer::Screenshot { .. }
+            | PortalAnswer::ScreenshotWindow { .. }
             | PortalAnswer::PickColor { .. }
             | PortalAnswer::GlobalShortcuts { .. }
             | PortalAnswer::Pressed

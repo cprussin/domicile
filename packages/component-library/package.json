@@ -58,6 +58,7 @@
     "./SlideOver": "./src/SlideOver/SlideOver.tsx",
     "./Slider": "./src/Slider/Slider.tsx",
     "./Switch": "./src/Switch/Switch.tsx",
+    "./shown-windows": "./src/PortalDialogs/shown-windows.ts",
     "./source-name": "./src/PortalDialogs/source-name.ts",
     "./spacing": "./src/spacing.ts",
     "./standalone-theme-source": "./src/ThemeSwitch/standalone-theme-source.ts",

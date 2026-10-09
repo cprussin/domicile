@@ -242,6 +242,22 @@ const renderShell = (desktop: readonly DomicileDisplay[] = [LEFT]) =>
 /** The chrome before any desktop is described, or with no host at all. */
 const renderUndescribedShell = () => renderingShell(undefined);
 
+/**
+ * Waits for the launcher's pick to run: it runs two animation frames after
+ * the launcher closes, so the screen no longer shows the launcher.
+ */
+const launched = () =>
+  act(
+    () =>
+      new Promise<void>((resolve) => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            resolve();
+          });
+        });
+      }),
+  );
+
 /** The host announces a client, which becomes a window. */
 const clientAppears = (appId: string, title = appId): void => {
   domicile.appear(appId, { title });
@@ -1026,6 +1042,121 @@ describe("Shell", () => {
       ]);
     });
 
+    describe("a screenshot", () => {
+      /** Asks to pick from a 1:1 frame of the one screen, with two windows. */
+      const asked = () => {
+        domicile.dispatch("portalrequests", {
+          data: JSON.stringify({
+            items: [
+              {
+                app_id: "org.example.Shooter",
+                body: {
+                  desk: { position: [0, 0], size: [1920, 1080] },
+                  frame: "data:image/png;base64,AA==",
+                  height: 1080,
+                  monitors: [
+                    {
+                      area: { height: 1080, width: 1920, x: 0, y: 0 },
+                      description: "",
+                      name: "left",
+                    },
+                  ],
+                  width: 1920,
+                  windows: [
+                    { app_id: "", id: "one", title: "one" },
+                    { app_id: "", id: "two", title: "two" },
+                  ],
+                },
+                id: 3,
+                kind: "screenshot",
+              },
+            ],
+            type: "portal_requests",
+          }),
+        });
+      };
+
+      it("keeps a window's title bar with it", async () => {
+        const { container } = renderShell();
+        clientAppears("one");
+        clientAppears("two");
+        press("w");
+        const bar = boxOf(barFor(container, "app:two"));
+        const contents = boxOf(appElement(container, "two"));
+        asked();
+
+        await userEvent.click(
+          await screen.findByRole("button", { name: "two" }),
+        );
+        await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+        // From the top of its tab down to the bottom of its contents.
+        const top = Number.parseFloat(bar.y);
+        const bottom =
+          Number.parseFloat(contents.y) + Number.parseFloat(contents.height);
+        expect(domicile.calls).toContainEqual([
+          "answerPortalRequest",
+          3,
+          JSON.stringify({
+            area: {
+              height: bottom - top,
+              width: Number.parseFloat(contents.width),
+              x: Number.parseFloat(contents.x),
+              y: top,
+            },
+            kind: "screenshot",
+          }),
+        ]);
+      });
+
+      it("keeps a browser window's address bar with it", async () => {
+        const { container } = renderShell();
+        domicile.engineOpens("https://example.com");
+        const bar = boxOf(barFor(container, "browser:1"));
+        asked();
+
+        await userEvent.click(
+          await screen.findByRole("button", {
+            name: "Browser: Untitled window",
+          }),
+        );
+        await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+        expect(
+          domicile.calls
+            .filter(([call]) => call === "answerPortalRequest")
+            .map(([, , answer]) => JSON.parse(String(answer))),
+        ).toMatchObject([
+          {
+            area: {
+              x: Number.parseFloat(bar.x),
+              y: Number.parseFloat(bar.y),
+            },
+            kind: "screenshot",
+          },
+        ]);
+      });
+
+      it("saves a hidden tab from its own frame", async () => {
+        renderShell();
+        clientAppears("one");
+        clientAppears("two");
+        press("w");
+        asked();
+
+        await userEvent.click(
+          await screen.findByRole("button", { name: "one" }),
+        );
+        await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+        expect(domicile.calls).toContainEqual([
+          "answerPortalRequest",
+          3,
+          '{"id":"one","kind":"screenshot_window"}',
+        ]);
+      });
+    });
+
     it("flags a global shortcut that takes one of the shell's chords", async () => {
       renderShell();
       domicile.dispatch("portalrequests", {
@@ -1515,6 +1646,7 @@ describe("Shell", () => {
       await userEvent
         .setup()
         .type(screen.getByRole("combobox"), "example.com{Enter}");
+      await launched();
 
       domicile.engineOpens("https://example.com/opened");
 
@@ -1530,6 +1662,7 @@ describe("Shell", () => {
       await userEvent
         .setup()
         .type(screen.getByRole("combobox"), "example.com{Enter}");
+      await launched();
 
       expect(domicile.calls).toContainEqual([
         "openBrowserWindow",
@@ -1543,6 +1676,7 @@ describe("Shell", () => {
       await userEvent
         .setup()
         .type(screen.getByRole("combobox"), "!p example.com{Enter}");
+      await launched();
 
       expect(domicile.calls).toContainEqual([
         "openPrivateBrowserWindow",
@@ -1566,6 +1700,7 @@ describe("Shell", () => {
       await userEvent
         .setup()
         .type(screen.getByRole("combobox"), "example.com{Enter}");
+      await launched();
 
       domicile.engineOpens("chrome-extension://vault/popup.html", 7);
 
@@ -1581,6 +1716,7 @@ describe("Shell", () => {
       await userEvent
         .setup()
         .type(screen.getByRole("combobox"), "example.com{Enter}");
+      await launched();
 
       domicile.engineCloses("1");
       motionsPlayOut(container);
@@ -1631,6 +1767,7 @@ describe("Shell", () => {
       await userEvent
         .setup()
         .type(screen.getByRole("combobox"), "example.com{Enter}");
+      await launched();
       clientAppears("one");
       press("e");
       pointerAt(1440, 800);
@@ -2210,6 +2347,7 @@ describe("Shell", () => {
       await userEvent
         .setup()
         .type(screen.getByRole("combobox"), "example.com{Enter}");
+      await launched();
       press("Tab", true);
       const view = container.querySelector("webview");
 
@@ -2678,6 +2816,7 @@ describe("the launcher", () => {
     await homeHolds("Notes/today.org");
 
     await userEvent.setup().click(screen.getByRole("option"));
+    await launched();
     await act(() => answerOpening(domicile.fake));
 
     expect(domicile.calls).toContainEqual([
@@ -2699,6 +2838,7 @@ describe("the launcher", () => {
     await homeHolds("todo.txt");
 
     await typeIntoLauncher("example.com{Enter}");
+    await launched();
 
     expect(browsing()).toStrictEqual(["https://example.com"]);
     expect(launcherBox()).toBeNull();
@@ -2721,7 +2861,11 @@ describe("the launcher", () => {
         closing.resolve(undefined);
         await closing.promise;
       });
-      expect(browsing()).toStrictEqual(["https://example.com"]);
+      // Not yet: the screen may still show the launcher's last frame.
+      expect(browsing()).toStrictEqual([]);
+      await waitFor(() => {
+        expect(browsing()).toStrictEqual(["https://example.com"]);
+      });
     } finally {
       Element.prototype.getAnimations = getAnimations;
     }
@@ -2732,6 +2876,7 @@ describe("the launcher", () => {
     press("space");
 
     await typeIntoLauncher("!wiki mesa{Enter}");
+    await launched();
 
     // The URL shows the search engine and escaping used.
     expect(browsing()).toStrictEqual([
@@ -2774,6 +2919,7 @@ describe("the launcher", () => {
     const { container } = renderShell();
     press("space");
     await typeIntoLauncher("example.com{Enter}");
+    await launched();
     expect(container.querySelector("webview")).not.toBeNull();
 
     press("space");
@@ -2788,6 +2934,7 @@ describe("the launcher", () => {
     press("space");
 
     await typeIntoLauncher("example.com{Enter}");
+    await launched();
 
     await waitFor(() => {
       expect(baseElement.querySelector("[data-backdrop]")).toBeNull();
@@ -2811,6 +2958,7 @@ describe("the launcher", () => {
     const { container } = renderShell();
     press("space");
     await typeIntoLauncher("example.com{Enter}");
+    await launched();
     clientAppears("two");
     press("space");
     const behind = container.querySelector<HTMLElement>("webview");

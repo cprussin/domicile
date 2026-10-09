@@ -35,6 +35,8 @@ import { PrintDialog } from "./PrintDialog";
 import { RemoteDesktopDialog } from "./RemoteDesktopDialog";
 import { ScreenCastDialog } from "./ScreenCastDialog";
 import { ScreenshotDialog } from "./ScreenshotDialog";
+import type { ShownWindow } from "./shown-windows";
+import { drawnWindows } from "./shown-windows";
 import { UsbDialog } from "./UsbDialog";
 import { WallpaperDialog } from "./WallpaperDialog";
 
@@ -54,6 +56,12 @@ type Props = {
    * them itself.
    */
   omitScreenCasts?: boolean | undefined;
+  /**
+   * The windows the shell draws on screen, with their whole frames. Without
+   * it, the screenshot dialog reads the page's `<app>` and `<webview window>`
+   * boxes. See {@link drawnWindows}.
+   */
+  shownWindows?: (() => readonly ShownWindow[]) | undefined;
   /** How dialogs read the desktop's files, for tests. */
   systemOf?: typeof system | undefined;
   /**
@@ -79,6 +87,7 @@ export const PortalDialogs = ({
   screen,
   screenOf,
   shellChords = NONE,
+  shownWindows = drawnOnPage,
   systemOf = system,
 }: Props) => {
   const [requests, setRequests] = useState<readonly PortalRequest[]>([]);
@@ -135,12 +144,16 @@ export const PortalDialogs = ({
           request={shown}
           screen={screenFor(shown, screen, screenOf)}
           shellChords={shellChords}
+          shownWindows={shownWindows}
           system={files}
         />
       )}
     </>
   );
 };
+
+/** The windows this page draws. */
+const drawnOnPage = () => drawnWindows(document);
 
 /** The dialog for `request`'s kind. */
 const Dialog = ({
@@ -152,6 +165,7 @@ const Dialog = ({
   request,
   screen,
   shellChords,
+  shownWindows,
   system: files,
 }: {
   answer: (answer: PortalAnswer) => void;
@@ -162,6 +176,7 @@ const Dialog = ({
   request: PortalRequest;
   screen: string | undefined;
   shellChords: readonly string[];
+  shownWindows: () => readonly ShownWindow[];
   system: System;
 }) => {
   switch (request.kind) {
@@ -287,6 +302,7 @@ const Dialog = ({
           body={request.body}
           browserWindows={browserWindows}
           screen={screen}
+          shownWindows={shownWindows}
         />
       );
     case PortalKind.PickColor:
