@@ -299,6 +299,7 @@ export enum WindowActionKind {
   AppAppeared,
   AppClosed,
   AppCursorChanged,
+  AppDesktopIdChanged,
   AppMaxSize,
   AppMinSize,
   AppTitled,
@@ -370,6 +371,16 @@ export const WindowAction = {
     appId,
     cursor,
     kind: WindowActionKind.AppCursorChanged as const,
+  }),
+
+  /**
+   * The client named its desktop entry (`set_app_id`), which the shell draws
+   * its icon from.
+   */
+  AppDesktopIdChanged: (appId: string, desktopId: string) => ({
+    appId,
+    desktopId,
+    kind: WindowActionKind.AppDesktopIdChanged as const,
   }),
 
   /**
@@ -795,6 +806,12 @@ const reduceAction = (
       return reshapeApp(state, action.appId, (window) => ({
         ...window,
         cursor: action.cursor,
+      }));
+    }
+    case WindowActionKind.AppDesktopIdChanged: {
+      return reshapeApp(state, action.appId, (window) => ({
+        ...window,
+        desktopId: action.desktopId,
       }));
     }
     case WindowActionKind.AppMaxSize: {

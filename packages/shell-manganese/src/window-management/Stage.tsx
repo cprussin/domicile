@@ -55,6 +55,8 @@ type Props = {
    * has it. Can differ from `activeId`: see `AppWindow`.
    */
   focusedId: string | undefined;
+  /** Client windows' icon URLs, by desktop id. See `useClientIcons`. */
+  clientIcons: ReadonlyMap<string, string>;
   /** Held modifiers, which decide who gets the pointer. */
   modifiers: Modifiers;
   onClose: (id: string) => void;
@@ -104,6 +106,7 @@ type Props = {
 export const Stage = ({
   activeId,
   behindPanel,
+  clientIcons,
   domicile,
   draggingId,
   focusedId,
@@ -324,7 +327,7 @@ export const Stage = ({
                   frame={placement.frame}
                   fullscreen={fillsScreen(screens, window.id)}
                   groupSelected={placement.selected}
-                  icon={iconOf(window)}
+                  icon={iconOf(window, clientIcons)}
                   motion={barMotion(motion)}
                   onAim={setAim}
                   onClose={() => {
@@ -523,7 +526,7 @@ export const Stage = ({
               fullscreen={fillsScreen(screens, tab.id)}
               group={{ layout: tab.group, windows: tab.windows }}
               groupSelected={tab.selected}
-              icon={iconOf(named)}
+              icon={iconOf(named, clientIcons)}
               motion={motion}
               onClose={() => {
                 onClose(tab.id);
@@ -668,9 +671,17 @@ const windowNamed = (
   }
 };
 
-/** A window's icon URL: a browser window's page icon. Clients have none yet. */
-const iconOf = (window: ShellWindow): string | undefined =>
-  window.kind === WindowKind.Browser ? window.icon : undefined;
+/**
+ * A window's icon URL: a client's from its desktop entry, a browser window's
+ * page icon.
+ */
+const iconOf = (
+  window: ShellWindow,
+  clientIcons: ReadonlyMap<string, string>,
+): string | undefined =>
+  window.kind === WindowKind.App
+    ? clientIcons.get(window.desktopId)
+    : window.icon;
 
 /**
  * Returns the engine's id behind a browser window's window id. Every browser

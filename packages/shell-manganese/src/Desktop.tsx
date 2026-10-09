@@ -44,11 +44,14 @@ import { trayEntries } from "./tray/tray-entry";
 import { useTray } from "./tray/useTray";
 import { useTrayOrder } from "./tray/useTrayOrder";
 import { Wallpaper } from "./wallpaper/Wallpaper";
+import { desktopClientIcons } from "./window-management/client-icons";
 import type { Focus } from "./window-management/pointer-warp";
 import { Stage } from "./window-management/Stage";
 import { AimKind } from "./window-management/tiled/aim";
+import { useClientIcons } from "./window-management/useClientIcons";
 import { usePointerWarp } from "./window-management/usePointerWarp";
 import { useWindows } from "./window-management/useWindows";
+import { WindowKind } from "./window-management/window";
 import { screenOfApp, WindowAction } from "./window-management/window-state";
 
 type Props = {
@@ -78,6 +81,13 @@ export const Desktop = ({
   const displays = useDisplays();
   const windows = useWindows(domicile, displays);
   const { act } = windows;
+  const clientIcons = useClientIcons(
+    domicile,
+    windows.windows.flatMap((window) =>
+      window.kind === WindowKind.App ? [window.desktopId] : [],
+    ),
+    desktopClientIcons,
+  );
 
   // Super returns the pointer to the page; Shift turns a drag into a resize.
   // Read from this page's key events and from the engine's report for browser
@@ -284,14 +294,15 @@ export const Desktop = ({
       {screens.length > 0 && (
         <Stage
           activeId={windows.activeId}
-          // While a desktop panel is open the page keeps the keyboard; see
-          // `AppWindow`. Extension popups count.
           behindPanel={
             windows.launcherOpen ||
             windows.clipboardOpen ||
             popupOpen ||
             notificationsOpen
           }
+          // While a desktop panel is open the page keeps the keyboard; see
+          // `AppWindow`. Extension popups count.
+          clientIcons={clientIcons}
           domicile={domicile}
           draggingId={windows.draggingId}
           focusedId={windows.focusedId}

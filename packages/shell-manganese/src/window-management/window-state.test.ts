@@ -101,6 +101,15 @@ describe("the windows a host announces", () => {
     expect(state.windows[0]).toMatchObject({ title: "vim ~/notes" });
   });
 
+  it("knows the desktop entry the client last named", () => {
+    const state = reduce(
+      desktop("kitty"),
+      WindowAction.AppDesktopIdChanged("kitty", "kitty"),
+    );
+
+    expect(state.windows[0]).toMatchObject({ desktopId: "kitty" });
+  });
+
   it("grants a client asking for the keyboard, on the workspace it is on", () => {
     // The compositor forwards xdg-activation requests without granting them;
     // manganese grants them and switches to the window's workspace.
