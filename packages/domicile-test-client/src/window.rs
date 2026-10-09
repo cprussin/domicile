@@ -274,6 +274,10 @@ struct Selections {
     copied: bool,
 }
 
+/// User data for the `wl_display.sync` that ends a copy. See
+/// [`Client::copy_what_was_asked_for`].
+struct CopyRole;
+
 /// User data for a popup's objects, so their events reach separate handlers
 /// from the window's.
 struct PopupRole;
@@ -621,7 +625,12 @@ impl Client {
     /// The serial is `0`. The protocol wants the serial of the triggering
     /// input event, which this client never had; Smithay checks focus, not
     /// the serial.
-    fn copy_what_was_asked_for(&mut self, handle: &QueueHandle<Client>) {
+    ///
+    /// A copy ends with a `wl_display.sync` whose `done` traces
+    /// `copy handled`. The compositor handles requests in order, so after that
+    /// line a check can move the keyboard away without getting the
+    /// `set_selection` requests denied.
+    fn copy_what_was_asked_for(&mut self, connection: &Connection, handle: &QueueHandle<Client>) {
         // Most clients copy nothing and have no devices.
         let Some(selections) = &mut self.selections else {
             return;
@@ -651,6 +660,9 @@ impl Client {
             source.offer(TEXT_MIME.to_string());
             selections.primary.set_selection(Some(&source), 0);
             crate::say!(selections.primary.id(), "set_selection({})", source.id());
+        }
+        if self.copy.is_some() || self.copy_primary.is_some() {
+            connection.display().sync(handle, CopyRole);
         }
     }
 
@@ -1346,6 +1358,22 @@ impl Dispatch<wl_callback::WlCallback, ()> for Client {
     }
 }
 
+/// The compositor has handled a copy's `set_selection` requests.
+impl Dispatch<wl_callback::WlCallback, CopyRole> for Client {
+    fn event(
+        _: &mut Client,
+        _: &wl_callback::WlCallback,
+        event: wl_callback::Event,
+        _: &CopyRole,
+        _: &Connection,
+        _: &QueueHandle<Client>,
+    ) {
+        if let wl_callback::Event::Done { .. } = event {
+            crate::trace::say(format_args!("copy handled"));
+        }
+    }
+}
+
 impl Dispatch<wl_buffer::WlBuffer, usize> for Client {
     fn event(
         client: &mut Client,
@@ -1856,7 +1884,7 @@ impl Dispatch<wl_keyboard::WlKeyboard, ()> for Client {
         keyboard: &wl_keyboard::WlKeyboard,
         event: wl_keyboard::Event,
         (): &(),
-        _: &Connection,
+        connection: &Connection,
         handle: &QueueHandle<Client>,
     ) {
         match event {
@@ -1867,7 +1895,7 @@ impl Dispatch<wl_keyboard::WlKeyboard, ()> for Client {
                 // The window's surface, or a grabbing popup's.
                 crate::say!(keyboard.id(), "enter({})", surface.id());
                 client.entered_at = Some(serial);
-                client.copy_what_was_asked_for(handle);
+                client.copy_what_was_asked_for(connection, handle);
                 ask_for_focus_or_stop(client, handle, AskForFocus::WhenEntered, Some(serial));
             }
             wl_keyboard::Event::Leave { .. } => {
