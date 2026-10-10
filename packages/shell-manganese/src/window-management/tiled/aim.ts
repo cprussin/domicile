@@ -97,8 +97,9 @@ const EDGE_ZONE = 0.3;
  * every window in a dragged group.
  *
  * A window goes before or after the tab under the pointer, by which half of it
- * the pointer is in. A tab over its own strip takes the slot under the pointer.
- * Tabs come before windows, whose frames hold their strips.
+ * the pointer is in. A tab over its own strip takes the slot under the pointer,
+ * and over its own window goes beside its group. Tabs come before windows,
+ * whose frames hold their strips.
  */
 export const aimAt = (
   { screens, tabs, windows }: DropTargets,
@@ -122,8 +123,10 @@ export const aimAt = (
     return screen === undefined
       ? undefined
       : Aim.Screen(screen.name, screen.area);
+  } else if (dragged.includes(target.id)) {
+    return aimOutOfGroup(tabs, dragged, target.frame, x, y);
   } else {
-    return dragged.includes(target.id) ? undefined : aimAtWindow(target, x, y);
+    return aimAtWindow(target, x, y);
   }
 };
 
@@ -139,6 +142,36 @@ export const cornerOf = (frame: Rect, x: number, y: number): Corner => ({
 const aimAtWindow = ({ frame, id }: Target, x: number, y: number): Aim => {
   const edge = edgeNear(frame, x, y);
   return Aim.Window(id, edge, edge === undefined ? frame : halfOf(frame, edge));
+};
+
+/**
+ * Aims a tab dragged over its own window, `frame`, beside the group it is in,
+ * on the half under the pointer. `undefined` for anything else, or a tab with
+ * no other tab in its strip.
+ *
+ * Aims at another tab in the strip, since the dragged one leaves the group.
+ */
+const aimOutOfGroup = (
+  tabs: readonly TabTarget[],
+  dragged: readonly string[],
+  frame: Rect,
+  x: number,
+  y: number,
+): Aim | undefined => {
+  const tab = tabs.find(({ id }) => dragged.includes(id));
+  const other =
+    tab === undefined
+      ? undefined
+      : tabs.find(
+          ({ id, strip }) =>
+            !dragged.includes(id) && sameRect(strip, tab.strip),
+        );
+  if (other === undefined) {
+    return undefined;
+  } else {
+    const edge = edgeNearest(frame, x, y);
+    return Aim.Window(other.id, edge, halfOf(frame, edge));
+  }
 };
 
 /** Aims at `tab`, along the strip if `dragged` is a tab in the same one. */
@@ -194,18 +227,41 @@ const contains = (rect: Rect, x: number, y: number): boolean =>
 
 /** The edge of `rect` nearest the point, if it is inside the edge zone. */
 const edgeNear = (rect: Rect, x: number, y: number): Direction | undefined => {
-  const distances = [
-    { distance: x - rect.x, edge: Direction.Left },
-    { distance: rect.x + rect.width - x, edge: Direction.Right },
-    { distance: y - rect.y, edge: Direction.Up },
-    { distance: rect.y + rect.height - y, edge: Direction.Down },
-  ];
-  const nearest = distances.reduce((best, next) =>
-    next.distance < best.distance ? next : best,
-  );
-  return nearest.distance > Math.min(rect.width, rect.height) * EDGE_ZONE
+  const edge = edgeNearest(rect, x, y);
+  return distanceTo(rect, edge, x, y) >
+    Math.min(rect.width, rect.height) * EDGE_ZONE
     ? undefined
-    : nearest.edge;
+    : edge;
+};
+
+/** The edge of `rect` nearest the point. */
+const edgeNearest = (rect: Rect, x: number, y: number): Direction =>
+  [Direction.Left, Direction.Right, Direction.Up, Direction.Down].reduce(
+    (best, next) =>
+      distanceTo(rect, next, x, y) < distanceTo(rect, best, x, y) ? next : best,
+  );
+
+/** How far the point is inside `rect` from its `edge`. */
+const distanceTo = (
+  rect: Rect,
+  edge: Direction,
+  x: number,
+  y: number,
+): number => {
+  switch (edge) {
+    case Direction.Left: {
+      return x - rect.x;
+    }
+    case Direction.Right: {
+      return rect.x + rect.width - x;
+    }
+    case Direction.Up: {
+      return y - rect.y;
+    }
+    case Direction.Down: {
+      return rect.y + rect.height - y;
+    }
+  }
 };
 
 /** The half of `rect` on its `edge` side. */

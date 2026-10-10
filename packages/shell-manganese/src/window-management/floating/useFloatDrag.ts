@@ -47,7 +47,8 @@ type Options = {
    */
   float: Float | undefined;
   onDrop: () => void;
-  onGrab: () => void;
+  /** The window was taken hold of, to resize it or else to move it. */
+  onGrab: (resizing: boolean) => void;
   onMove: (x: number, y: number) => void;
   /** The whole box, since dragging a top or left corner moves it too. */
   onResize: (box: Rect) => void;
@@ -121,7 +122,7 @@ export const useFloatDrag = ({
           },
         );
         setDrag({ corner });
-        onGrab();
+        onGrab(corner !== undefined);
       }
     },
   };

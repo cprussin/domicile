@@ -17,6 +17,7 @@ import { FloatShadow } from "./floating/FloatShadow";
 import { floatHolds } from "./floating/float";
 import { floatBordersOf } from "./floating/float-borders";
 import { ScratchpadBackdrop } from "./floating/ScratchpadBackdrop";
+import { GrabbingSheet } from "./GrabbingSheet";
 import type { Geometry, PlacedFocusBox, Screenful } from "./placement";
 import { contentsOf, raised, TILED } from "./placement";
 import type { Spot } from "./pointer-warp";
@@ -593,8 +594,14 @@ export const Stage = ({
                   <FloatGrab
                     depth={placement.depth}
                     float={floating}
-                    onDrop={onDrop}
-                    onGrab={onGrabThis}
+                    onDrop={() => {
+                      setStretching(false);
+                      onDrop();
+                    }}
+                    onGrab={(resizing) => {
+                      setStretching(resizing);
+                      onGrabThis();
+                    }}
                     onMove={(x, y) => {
                       onMove(window.id, x, y);
                     }}
@@ -672,6 +679,7 @@ export const Stage = ({
         );
       })}
       {aim !== undefined && <DropIndicator rect={aim.rect} />}
+      {movingId !== undefined && <GrabbingSheet />}
       {/*
         Last, so a popup wins the `z-index` tie at its window's depth but
         stays under windows stacked above.

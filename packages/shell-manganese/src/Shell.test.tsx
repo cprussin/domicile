@@ -34,7 +34,9 @@ import { Shell } from "./Shell";
 import { hostDisplays } from "./screens/host-displays";
 import { BarClock, BarLauncher, BarWorkspaces } from "./top-bar/bar-items";
 import type { TopBarLayout } from "./top-bar/layout";
+import { grabCursorStyles } from "./window-management/grab-cursor-styles";
 import { SURFACE_TUCK, TITLE_BAR } from "./window-management/rect";
+import { GrabCursor } from "./window-management/useGrabCursor";
 import {
   movingStyles,
   settlingStyles,
@@ -487,6 +489,16 @@ const grabSheets = (container: HTMLElement): HTMLElement[] => [
     "[data-window][aria-hidden]:not([data-border]):not([data-group-handle])",
   ),
 ];
+
+/** The sheet over the whole desk that shows the cursor while a window moves. */
+const grabbingSheet = (container: HTMLElement): HTMLElement => {
+  const sheet = container.querySelector<HTMLElement>("[data-grabbing]");
+  if (sheet === null) {
+    throw new Error("test: no window is moving");
+  } else {
+    return sheet;
+  }
+};
 
 /** The one tab strip's empty end, which drags its group. */
 const stripEnd = (container: HTMLElement): Element => {
@@ -1458,6 +1470,46 @@ describe("Shell", () => {
       fireEvent.pointerUp(window, { clientX: GAP + 600, clientY: y });
 
       expect(tabOrder(container)).toEqual(["app:two", "app:three", "app:one"]);
+    });
+
+    it("breaks a tab out of its group into a split when dragged over the group", () => {
+      const { container } = renderShell();
+      clientAppears("one");
+      clientAppears("two");
+
+      fireEvent.pointerDown(barFor(container, "app:two"), {
+        clientX: GAP + 300,
+        clientY: TOP_BAR + GAP + TITLE_BAR / 2,
+      });
+      fireEvent.pointerMove(window, { clientX: 1800, clientY: 500 });
+      fireEvent.pointerUp(window, { clientX: 1800, clientY: 500 });
+
+      expect(windowsOnScreen(container)).toEqual(["one", "two"]);
+      expect(boxOf(appElement(container, "two"))).toMatchObject({
+        x: "970px",
+      });
+    });
+
+    it("shows a grabbing pointer over the whole desk while a window moves", () => {
+      // The pointer leaves the bar for the gaps, the wallpaper and the top
+      // bar, which each have their own cursor.
+      const { container } = renderShell();
+      clientAppears("one");
+      clientAppears("two");
+      press("e");
+
+      fireEvent.pointerDown(barFor(container, "app:one"), {
+        clientX: 100,
+        clientY: TOP_BAR + GAP + TITLE_BAR / 2,
+      });
+      fireEvent.pointerMove(window, { clientX: 1800, clientY: 10 });
+
+      expect(grabbingSheet(container).className).toContain(
+        grabCursorStyles[GrabCursor.Grabbing],
+      );
+
+      fireEvent.pointerUp(window, { clientX: 1800, clientY: 10 });
+      expect(() => grabbingSheet(container)).toThrow();
     });
 
     it("drags a whole tab group by its strip's empty end onto another screen", () => {
@@ -2473,6 +2525,22 @@ describe("Shell", () => {
       expect(
         Number.parseFloat(barFor(container, "app:term").style.insetInlineStart),
       ).toBe(was + 40);
+    });
+
+    it("keeps the resize cursor while Meta+Shift resizes a float", () => {
+      const { container } = renderShell();
+      clientAppears("term");
+      press("Tab", true);
+      pageHolds({ meta: true, shift: true });
+      const [sheet] = grabSheets(container);
+
+      fireEvent.pointerDown(sheet as HTMLElement, {
+        clientX: 100,
+        clientY: 100,
+      });
+      fireEvent.pointerMove(window, { clientX: 140, clientY: 130 });
+
+      expect(() => grabbingSheet(container)).toThrow();
     });
 
     it("resizes a floating window by its edge, with no modifier held", () => {

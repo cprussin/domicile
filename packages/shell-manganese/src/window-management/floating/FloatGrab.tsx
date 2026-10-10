@@ -12,7 +12,7 @@ type Props = {
   depth: number;
   float: Float;
   onDrop: () => void;
-  onGrab: () => void;
+  onGrab: (resizing: boolean) => void;
   onMove: (x: number, y: number) => void;
   onResize: (box: Rect) => void;
   /** Whether a drag resizes the window instead of moving it. */
