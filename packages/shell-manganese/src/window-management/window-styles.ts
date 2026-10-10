@@ -78,8 +78,8 @@ export const scaledAbout = (frame: Rect, rect: Rect): CSSProperties => ({
 });
 
 /**
- * Custom properties for the `windowRestacking` keyframes, or none when the
- * window is not restacking.
+ * Custom properties for the `windowRestacking` and `windowRestackingDepth`
+ * keyframes, or none when the window is not restacking.
  *
  * The depths go through the animation so `z-index` changes when the windows
  * are furthest apart.
@@ -142,7 +142,9 @@ export const slidAcross = (
  * A window's animation, keyed by `WindowMotion`. Keyframes are in
  * `panda.config.ts`.
  *
- * All are transforms and opacity, so the client never redraws. Opening and
+ * All are transforms and opacity, so the client never redraws. A motion that
+ * also holds or swaps depth does so in a second animation, so the compositor
+ * thread can still run the first. Opening and
  * closing use `durations.fast` to match {@link settlingStyles}, so a window
  * and its neighbors move together. Both use `outQuart`, front-loading the
  * motion; an ease-in close at this length looks like the window sits still,
@@ -196,16 +198,19 @@ export const movingStyles = cva({
       // Overlapping floats separate, swap depths, and rejoin. Parameters come
       // from {@link shuffledBy}. `in-out` pauses them where they swap.
       restacking: {
-        animation: "windowRestacking {durations.slower} {easings.in-out}",
+        animation:
+          "windowRestacking {durations.slower} {easings.in-out}, windowRestackingDepth {durations.slower} {easings.in-out}",
       },
       // A second name so an immediate repeat restarts the animation.
       "restacking-again": {
-        animation: "windowRestackingAgain {durations.slower} {easings.in-out}",
+        animation:
+          "windowRestackingAgain {durations.slower} {easings.in-out}, windowRestackingDepthAgain {durations.slower} {easings.in-out}",
       },
       resting: {},
       // Fades in over the hidden tab in the same box, giving a crossfade.
       revealing: {
-        animation: "windowRevealing {durations.fast} {easings.in-out}",
+        animation:
+          "windowRevealing {durations.fast} {easings.in-out}, windowHeldTiled {durations.fast} {easings.in-out}",
       },
       // `outQuart` and `fast`, like `closing`, so it keeps pace with the
       // windows moving into its space.
@@ -222,7 +227,7 @@ export const movingStyles = cva({
       },
       // Lasts as long as `closing-tab`, which it is drawn under.
       uncovering: {
-        animation: "windowUncovering {durations.fast} {easings.out}",
+        animation: "windowHeldTiled {durations.fast} {easings.out}",
       },
     },
   },

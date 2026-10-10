@@ -29,7 +29,7 @@ export type TabSwitch = {
  * window shown unpaired is uncovered, as when the tab over it closes.
  *
  * Tiled windows only, since the crossfade holds the pair at tiled depths (see
- * `windowRevealing`). Workspace switches are skipped.
+ * `windowHeldTiled`). Workspace switches are skipped.
  */
 export const tabSwitched = (before: Shown, shown: Shown): TabSwitch => {
   const concealed = swapped(before, shown, isShown, isHidden);
