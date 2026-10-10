@@ -12,6 +12,7 @@ import {
   reduceWindows,
   WindowAction,
   workspaceHere,
+  workspaceOn,
 } from "./window-state";
 
 const GEOMETRY: Geometry = {
@@ -33,14 +34,18 @@ const desktop = (...appIds: readonly string[]): WindowState =>
     ...appIds.map((appId) => WindowAction.AppAppeared(appId, appId)),
   );
 
+/** What the screen of `geometry` shows. */
+const placementsIn = (state: WindowState, geometry: Geometry) =>
+  placementsOf(workspaceOn(state, geometry.name), geometry);
+
 const placementFor = (state: WindowState, appId: string) => {
-  const { placements } = placementsOf(state, GEOMETRY);
+  const { placements } = placementsIn(state, GEOMETRY);
   return placements.find(({ id }) => id === appWindowId(appId));
 };
 
 describe("placementsOf", () => {
   it("places nothing on an empty workspace", () => {
-    expect(placementsOf(NO_WINDOWS, GEOMETRY)).toEqual({
+    expect(placementsIn(NO_WINDOWS, GEOMETRY)).toEqual({
       focusBox: undefined,
       placements: [],
       tabs: [],
@@ -55,7 +60,7 @@ describe("placementsOf", () => {
     );
 
     expect(
-      placementsOf(state, GEOMETRY).placements.map(({ selected }) => selected),
+      placementsIn(state, GEOMETRY).placements.map(({ selected }) => selected),
     ).toEqual([true, true]);
   });
 
@@ -139,7 +144,7 @@ describe("placementsOf", () => {
     const state = reduce(desktop("kitty"), WindowAction.FloatToggled());
     const right = { ...GEOMETRY.screen, x: 1920 };
 
-    const { placements } = placementsOf(state, {
+    const { placements } = placementsIn(state, {
       ...GEOMETRY,
       screen: right,
       workspace: { ...GEOMETRY.workspace, x: 1920 },
@@ -213,7 +218,7 @@ describe("placementsOf", () => {
       WindowAction.FloatToggled(),
     );
 
-    expect(placementsOf(state, GEOMETRY).tabs).toMatchObject([
+    expect(placementsIn(state, GEOMETRY).tabs).toMatchObject([
       { depth: placementFor(state, "editor")?.depth },
     ]);
   });
@@ -258,8 +263,8 @@ describe("placementsOf", () => {
     );
     const state = reduce(tabbed, WindowAction.FullscreenToggled(false));
 
-    expect(placementsOf(state, GEOMETRY).tabs).toEqual(
-      placementsOf(tabbed, GEOMETRY).tabs,
+    expect(placementsIn(state, GEOMETRY).tabs).toEqual(
+      placementsIn(tabbed, GEOMETRY).tabs,
     );
   });
 
@@ -314,7 +319,7 @@ describe("placementsOf", () => {
         WindowAction.FullscreenToggled(false),
       );
 
-      expect(placementsOf(state, GEOMETRY).tabs).toMatchObject([
+      expect(placementsIn(state, GEOMETRY).tabs).toMatchObject([
         { depth: placementFor(state, "kitty")?.depth, rect: { y: 0 } },
       ]);
     });
@@ -340,7 +345,7 @@ describe("placementsOf", () => {
     );
 
     // A lone window in a tabbed container: its tab is its title bar.
-    expect(placementsOf(state, GEOMETRY).tabs).toEqual([]);
+    expect(placementsIn(state, GEOMETRY).tabs).toEqual([]);
     expect(placementFor(state, "kitty")?.bar).toMatchObject({ y: 52 });
   });
   // `frame` spans the bar and contents, so both scale about one center.
@@ -414,7 +419,7 @@ describe("placementsOf", () => {
 
 describe("the focus box", () => {
   const focusBoxOf = (state: WindowState) =>
-    placementsOf(state, GEOMETRY).focusBox;
+    placementsIn(state, GEOMETRY).focusBox;
 
   it("is the focused window's frame", () => {
     const state = reduce(

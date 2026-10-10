@@ -18,8 +18,6 @@ import type {
 } from "./tree/frames";
 import { focusBoxOf, framesOf } from "./tree/frames";
 import { focusedWindowIn } from "./tree/tiling";
-import type { WindowState } from "./window-state";
-import { workspaceOn } from "./window-state";
 import type { Workspace } from "./workspace";
 import { fullscreenOn } from "./workspace";
 
@@ -141,17 +139,16 @@ const FULLSCREEN = 2000;
 export const GRABBING = 3000;
 
 /**
- * Everything the screen shows, fullscreen included.
+ * Everything a screen showing `workspace` shows, fullscreen included.
  *
  * A fullscreen window or group is placed at {@link FULLSCREEN} over the normal
  * layout, which stays in place. That lets it animate from its tiled box and
  * back (see `settlingStyles`) while the other windows stay drawn underneath.
  */
 export const placementsOf = (
-  state: WindowState,
+  workspace: Workspace,
   geometry: Geometry,
 ): Screenful => {
-  const workspace = workspaceOn(state, geometry.name);
   const { frames, tabs } = framesOf(
     workspace.tiling,
     tiledAreaOf(geometry.workspace),

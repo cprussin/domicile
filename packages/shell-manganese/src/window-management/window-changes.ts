@@ -16,17 +16,17 @@ import { WindowAction } from "./window-state";
 export const windowChanges = (
   before: readonly DomicileWindow[],
   after: readonly DomicileWindow[],
-): readonly Action[] => [
-  ...after.flatMap((window) =>
-    changesOf(
-      before.find(({ appId }) => appId === window.appId),
-      window,
-    ),
-  ),
-  ...before
-    .filter(({ appId }) => !after.some((window) => window.appId === appId))
-    .map(({ appId }) => WindowAction.AppClosed(appId)),
-];
+): readonly Action[] => {
+  // Keyed once: the host lists every window on every change.
+  const was = new Map(before.map((window) => [window.appId, window]));
+  const listed = new Set(after.map(({ appId }) => appId));
+  return [
+    ...after.flatMap((window) => changesOf(was.get(window.appId), window)),
+    ...before
+      .filter(({ appId }) => !listed.has(appId))
+      .map(({ appId }) => WindowAction.AppClosed(appId)),
+  ];
+};
 
 /** The changes to one window. `was` is `undefined` for a new one. */
 const changesOf = (

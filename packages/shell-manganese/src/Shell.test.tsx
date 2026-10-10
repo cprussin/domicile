@@ -2082,6 +2082,27 @@ describe("Shell", () => {
       ]);
     });
 
+    // The page still gets keys while locked, for the passphrase.
+    it("keeps the keyboard out of a browser window's page while locked", async () => {
+      const { container } = renderShell();
+      press("space");
+      await userEvent
+        .setup()
+        .type(screen.getByRole("combobox"), "example.com{Enter}");
+      await launched();
+      act(() => {
+        domicile.set({ locked: true });
+      });
+      const field = document.createElement("input");
+      document.body.append(field);
+      field.focus();
+
+      field.remove();
+      await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+
+      expect(container.querySelector("webview")).not.toHaveFocus();
+    });
+
     it("lights the window being worked in, and rings no window's edge", () => {
       // Checked by declarations because Panda hashes class names.
       const { container } = renderShell();

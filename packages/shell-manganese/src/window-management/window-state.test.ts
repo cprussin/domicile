@@ -126,6 +126,71 @@ describe("the windows a host announces", () => {
   });
 });
 
+// The stage redraws only what changed, by identity, so a report that changes
+// nothing keeps the state, and one that changes a window keeps the others.
+describe("a report that changes nothing", () => {
+  it("keeps the desktop when the engine lists the same browser windows", () => {
+    const state = reduce(
+      desktop("kitty"),
+      WindowAction.BrowserWindowsListed([
+        listed("1", "https://example.com/"),
+        listed("2", "https://docs.rs/"),
+      ]),
+    );
+
+    expect(
+      reduceWindows(
+        state,
+        WindowAction.BrowserWindowsListed([
+          listed("1", "https://example.com/"),
+          listed("2", "https://docs.rs/"),
+        ]),
+      ),
+    ).toBe(state);
+  });
+
+  it("keeps the browser windows whose pages did not change", () => {
+    const state = reduce(
+      desktop(),
+      WindowAction.BrowserWindowsListed([
+        listed("1", "https://example.com/"),
+        listed("2", "https://docs.rs/"),
+      ]),
+    );
+
+    const next = reduceWindows(
+      state,
+      WindowAction.BrowserWindowsListed([
+        listed("1", "https://example.com/"),
+        listed("2", "https://docs.rs/std"),
+      ]),
+    );
+
+    expect(next.windows[0]).toBe(state.windows[0]);
+    expect(next.windows[1]).toMatchObject({ url: "https://docs.rs/std" });
+  });
+
+  it("keeps the desktop when a window is told what it already has", () => {
+    const state = reduce(
+      desktop("kitty"),
+      WindowAction.AppCursorChanged("kitty", "text"),
+      WindowAction.AppDesktopIdChanged("kitty", "kitty"),
+      WindowAction.BrowserWindowsListed([listed("1", "https://docs.rs/")]),
+      WindowAction.BrowserIconChanged("1", "https://docs.rs/icon.svg"),
+    );
+
+    expect(
+      reduce(
+        state,
+        WindowAction.AppTitled("kitty", "kitty"),
+        WindowAction.AppCursorChanged("kitty", "text"),
+        WindowAction.AppDesktopIdChanged("kitty", "kitty"),
+        WindowAction.BrowserIconChanged("1", "https://docs.rs/icon.svg"),
+      ),
+    ).toBe(state);
+  });
+});
+
 describe("the browser windows the engine lists", () => {
   it("opens one on the workspace on screen and works in it", () => {
     const state = reduce(

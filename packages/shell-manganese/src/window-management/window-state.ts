@@ -1270,58 +1270,59 @@ const openApp = (
     : state;
 };
 
-// Applies the engine's list: closes windows it no longer lists, then opens or
-// updates each listed one. The list is in open order, so windows tile in that
-// order.
+// Applies the engine's list: closes windows it no longer lists, updates the
+// ones the shell has, then opens the rest. The list is in open order, so
+// windows tile in that order.
 const listBrowsers = (
   state: WindowState,
   listed: readonly DomicileBrowserWindow[],
 ): WindowState => {
-  const ids = new Set(listed.map(({ id }) => browserWindowId(id)));
+  const browsers = listed.map((entry) => ({ entry, window: browserOf(entry) }));
+  const ids = new Set(browsers.map(({ window }) => window.id));
   const kept = state.windows
     .filter(({ id, kind }) => kind === WindowKind.Browser && !ids.has(id))
     .reduce((left, { id }) => closeWindow(left, id), state);
-  return listed.reduce(takeUpBrowser, kept);
+  const known = new Set(kept.windows.map(({ id }) => id));
+  return browsers
+    .filter(({ window }) => !known.has(window.id))
+    .reduce(
+      (opening, { entry, window }) =>
+        window.popupWindow === undefined
+          ? openWindow(opening, window)
+          : openPopupWindow(opening, window, entry.width, entry.height),
+      pagesShown(
+        kept,
+        new Map(browsers.map(({ window }) => [window.id, window])),
+      ),
+    );
 };
 
-// Opens a listed window the shell does not have yet. Otherwise updates its
-// address and title, keeping the icon its view reported.
-const takeUpBrowser = (
+/** A browser window as the shell holds it. */
+type BrowserRecord = ReturnType<typeof Window.Browser>;
+
+/** A listed browser window as the shell holds it, before its view's icon. */
+const browserOf = ({
+  id,
+  isApp,
+  isPrivate,
+  popupWindow,
+  title,
+  url,
+}: DomicileBrowserWindow): BrowserRecord =>
+  Window.Browser(id, url, title, popupWindow ?? undefined, isPrivate, isApp);
+
+// Updates each browser window the shell has to its listed address and title,
+// keeping the icon its view reported.
+const pagesShown = (
   state: WindowState,
-  {
-    height,
-    id,
-    isApp,
-    isPrivate,
-    popupWindow,
-    title,
-    url,
-    width,
-  }: DomicileBrowserWindow,
-): WindowState => {
-  const window = Window.Browser(
-    id,
-    url,
-    title,
-    popupWindow ?? undefined,
-    isPrivate,
-    isApp,
-  );
-  if (windowOf(state, window.id) !== undefined) {
-    return {
-      ...state,
-      windows: state.windows.map((drawn) =>
-        drawn.id === window.id && drawn.kind === WindowKind.Browser
-          ? { ...window, icon: drawn.icon }
-          : drawn,
-      ),
-    };
-  } else if (window.popupWindow === undefined) {
-    return openWindow(state, window);
-  } else {
-    return openPopupWindow(state, window, width, height);
-  }
-};
+  listed: ReadonlyMap<string, BrowserRecord>,
+): WindowState =>
+  windowsChanged(state, (drawn) => {
+    const now = listed.get(drawn.id);
+    return now === undefined || drawn.kind !== WindowKind.Browser
+      ? drawn
+      : { ...now, icon: drawn.icon };
+  });
 
 // Extension popups float at their requested size, as sway floats dialogs; a
 // tile would ignore the size the page was designed for.
@@ -1479,39 +1480,61 @@ const reshapeApp = (
   state: WindowState,
   appId: string,
   into: (window: ClientWindow) => ClientWindow,
-): WindowState => ({
-  ...state,
-  windows: state.windows.map((window) =>
+): WindowState =>
+  windowsChanged(state, (window) =>
     window.kind === WindowKind.App && window.appId === appId
       ? into(window)
       : window,
-  ),
-});
+  );
 
 const renameWindow = (
   state: WindowState,
   id: string,
   title: string,
-): WindowState => ({
-  ...state,
-  windows: state.windows.map((window) =>
+): WindowState =>
+  windowsChanged(state, (window) =>
     window.id === id ? { ...window, title } : window,
-  ),
-});
+  );
 
 /** Sets browser window `id`'s icon. */
 const markBrowser = (
   state: WindowState,
   id: string,
   icon: string | undefined,
-): WindowState => ({
-  ...state,
-  windows: state.windows.map((window) =>
+): WindowState =>
+  windowsChanged(state, (window) =>
     window.id === id && window.kind === WindowKind.Browser
       ? { ...window, icon }
       : window,
-  ),
-});
+  );
+
+/**
+ * Applies `into` to every window record. Keeps each record whose fields
+ * `into` left alone, and the state when it left them all, so only the
+ * windows that changed redraw.
+ */
+const windowsChanged = (
+  state: WindowState,
+  into: (window: ShellWindow) => ShellWindow,
+): WindowState => {
+  const windows = state.windows.map((window) => {
+    const next = into(window);
+    return sameFields(window, next) ? window : next;
+  });
+  return windows.every((window, at) => window === state.windows[at])
+    ? state
+    : { ...state, windows };
+};
+
+/** Whether two records hold the same value in every field. */
+const sameFields = <Fields extends object>(
+  one: Fields,
+  other: Fields,
+): boolean =>
+  Object.keys(one).length === Object.keys(other).length &&
+  (Object.keys(other) as (keyof Fields)[]).every(
+    (key) => one[key] === other[key],
+  );
 
 /**
  * Applies the host's screen list, one screen per display, in order.

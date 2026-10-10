@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it, mock, spyOn } from "bun:test";
 import { act, renderHook } from "@testing-library/react";
 
 import { useReclaimFocus } from "./useReclaimFocus";
@@ -27,27 +27,44 @@ const settled = () => act(() => Promise.resolve());
 
 afterEach(() => {
   document.body.replaceChildren();
+  mock.restore();
 });
 
 describe("useReclaimFocus", () => {
-  // A pressed close button is unmounted with its window. Removal fires no
-  // focus event, so only the re-render reveals focus landing on nothing.
+  // A pressed close button is unmounted with its window, possibly with no
+  // redraw of this one. Removal fires no focus event.
   it("takes it back when whatever held it was taken off the page", async () => {
     const view = page();
     const pressed = control();
-    const { rerender } = renderHook(() => {
+    renderHook(() => {
       useReclaimFocus(view, true, focusIt);
     });
     pressed.focus();
     expect(document.activeElement).toBe(pressed);
 
     pressed.remove();
-    await act(() => {
-      rerender();
-      return Promise.resolve();
-    });
+    await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
 
     expect(document.activeElement).toBe(view);
+  });
+
+  // Unlocking makes the lock screen inert, which drops its focus with no event
+  // and no redraw of the window.
+  it("looks again when part of the page goes inert", async () => {
+    const view = page();
+    const sheet = control();
+    // Record `take` calls without focusing, so focus stays on nothing.
+    const asked: Element[] = [];
+    renderHook(() => {
+      useReclaimFocus(view, true, (element) => {
+        asked.push(element);
+      });
+    });
+
+    sheet.inert = true;
+    await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+
+    expect(asked).toStrictEqual([view, view]);
   });
 
   it("takes it back when a press lands on nothing that can hold it", async () => {
@@ -109,6 +126,25 @@ describe("useReclaimFocus", () => {
     await settled();
 
     expect(asked).toStrictEqual([view]);
+  });
+
+  // Every window has the hook, so only the selected one listens.
+  it("listens to the document only while its window is selected", () => {
+    const view = page();
+    const listening = spyOn(document, "addEventListener");
+    const { rerender } = renderHook(
+      ({ focused }) => {
+        useReclaimFocus(view, focused, focusIt);
+      },
+      { initialProps: { focused: false } },
+    );
+    const added = () =>
+      listening.mock.calls.filter(([type]) => type === "focusout").length;
+    expect(added()).toBe(0);
+
+    rerender({ focused: true });
+
+    expect(added()).toBe(1);
   });
 
   it("stays out of it while the user is working in another window", () => {

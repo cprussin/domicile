@@ -1,5 +1,5 @@
 import type { PointerEvent as ReactPointerEvent } from "react";
-import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { useEffectEvent, useLayoutEffect, useRef, useState } from "react";
 
 import type { Direction } from "../direction";
 import type { Rect } from "../rect";
@@ -94,36 +94,44 @@ export const useTileDrag = ({
     undefined,
   );
 
-  useEffect(() => {
-    const moved = (event: PointerEvent) => {
-      const started = running.current;
-      if (started !== undefined) {
-        running.current = followed(
-          started,
-          targetsNow(),
-          event.clientX,
-          event.clientY,
-        );
-      }
-    };
-    // Idempotent: one drag can get both a release and a cancel.
-    const ended = () => {
-      const started = running.current;
-      if (started !== undefined) {
-        running.current = undefined;
-        setDrag(undefined);
-        dropped(started);
-      }
-    };
-    window.addEventListener("pointermove", moved);
-    window.addEventListener("pointerup", ended);
-    window.addEventListener("pointercancel", ended);
-    return () => {
-      window.removeEventListener("pointermove", moved);
-      window.removeEventListener("pointerup", ended);
-      window.removeEventListener("pointercancel", ended);
-    };
-  }, []);
+  const held = drag !== undefined;
+
+  // Only while a drag runs, since every title bar has this hook. A layout
+  // effect, so the listeners are up before the press's release can arrive.
+  useLayoutEffect(() => {
+    if (held) {
+      const moved = (event: PointerEvent) => {
+        const started = running.current;
+        if (started !== undefined) {
+          running.current = followed(
+            started,
+            targetsNow(),
+            event.clientX,
+            event.clientY,
+          );
+        }
+      };
+      // Idempotent: one drag can get both a release and a cancel.
+      const ended = () => {
+        const started = running.current;
+        if (started !== undefined) {
+          running.current = undefined;
+          setDrag(undefined);
+          dropped(started);
+        }
+      };
+      window.addEventListener("pointermove", moved);
+      window.addEventListener("pointerup", ended);
+      window.addEventListener("pointercancel", ended);
+      return () => {
+        window.removeEventListener("pointermove", moved);
+        window.removeEventListener("pointerup", ended);
+        window.removeEventListener("pointercancel", ended);
+      };
+    } else {
+      return undefined;
+    }
+  }, [held]);
 
   return {
     drag,

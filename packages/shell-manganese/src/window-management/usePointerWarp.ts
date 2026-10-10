@@ -133,8 +133,8 @@ export const usePointerWarp = ({
     };
   }, [arrivedAt]);
 
-  // No dependency array, as in `useReclaimFocus`: it compares this render's
-  // focus with the last, and must spend a press even if nothing else changed.
+  // Compares this render's focus with the last. `pressed` is a dependency, so
+  // a press is spent even when nothing else changed.
   useEffect(() => {
     const was = held.current;
     // A newly opened window took focus. Skip when it opened as a tab in the
@@ -167,7 +167,7 @@ export const usePointerWarp = ({
       sent.current = [...sent.current, to].slice(-IN_FLIGHT);
       domicile.warpPointer(to[0], to[1]);
     }
-  });
+  }, [domicile, focus, pressed, shown, windows]);
 
   return useMemo(() => ({ pointing: arrivedAt }), [arrivedAt]);
 };
