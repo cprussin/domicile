@@ -18,7 +18,10 @@ GUARD="$ROOT/packages/domicile-engine/scripts/guard-shell.sh"
 
 # From `EMBEDDED=0` to the success line. Both are whole-line anchors.
 BLOCK="$(awk '/^EMBEDDED=0$/,/^echo "the shell embedded the client it was announced"$/' "$GUARD")"
-[ -n "$BLOCK" ] || {
+# What the stage polls between reads, and the restart pattern it reads:
+# whether `domicile`'s desktop is still the one the guard started.
+UP="$(awk '/^RESTARTED=/,/^\}$/' "$GUARD")"
+[ -n "$BLOCK" ] && [ -n "$UP" ] || {
   echo "no embed stage in $GUARD — its markers moved. Fix this test with it." >&2
   exit 1
 }
@@ -60,16 +63,17 @@ NOISE='[875919:875919:0907/043334.201180:ERROR:dbus/bus.cc:405] Failed to connec
 BROKERED='2026-09-07T11:37:14.601033Z  INFO domicile_compositor: the browser brokered a frame sink app_id=app-1 surface=1'
 COMMITTED='2026-09-07T11:37:14.701044Z  INFO domicile_compositor: the chrome committed a frame'
 
-# The block polls until it embeds or the compositor exits. A failing case gets
-# an already-reaped child, which `kill -0` reports as gone. A passing case
-# gets one that outlives the check.
+# The block polls until it embeds or `domicile` exits. A failing case gets an
+# already-reaped child, which `kill -0` reports as gone. A passing case gets
+# one that outlives the check.
 #
 # `after` arrives two seconds in, which proves the block polls instead of
 # reading once.
-verdict() { # $1 compositor log, $2 engine log, $3 (optional) engine log after 2s
+verdict() { # $1 compositor log, $2 engine log, $3 (optional) engine log after 2s, $4 (optional) domicile's own lines
   local dir; dir="$(mktemp -d "$FIXTURES/XXXXXX")"
   printf '%s\n' "$1" >"$dir/comp"
   printf '%s\n' "$2" >"$dir/engine"
+  printf '%s\n' "${4:-}" >"$dir/run"
   : >"$dir/bridge"; : >"$dir/client"
   local live=no
   { printf '%s\n' "$2"; printf '%s\n' "${3:-}"; } | grep -q 'domicile: embedding' &&
@@ -77,18 +81,19 @@ verdict() { # $1 compositor log, $2 engine log, $3 (optional) engine log after 2
   (
     SHELL_NAME=simple
     CLIENT_DISPLAY=wayland-2
-    COMP_LOG="$dir/comp" ENGINE_LOG="$dir/engine"
+    COMP_LOG="$dir/comp" ENGINE_LOG="$dir/engine" RUN_LOG="$dir/run"
     BRIDGE_LOG="$dir/bridge" CLI_LOG="$dir/client"
+    eval "$UP"
     if [ -n "${3:-}" ]; then
       ( sleep 2; printf '%s\n' "$3" >>"$dir/engine" ) &
     fi
     if [ "$live" = yes ]; then
-      sleep 60 & COMP=$!
+      sleep 60 & DOMICILE_PID=$!
       eval "$BLOCK" 2>/dev/null | tail -1
-      kill $COMP 2>/dev/null
+      kill $DOMICILE_PID 2>/dev/null
     else
-      sleep 0 & COMP=$!
-      wait "$COMP"
+      sleep 0 & DOMICILE_PID=$!
+      wait "$DOMICILE_PID"
       eval "$BLOCK" 2>/dev/null | head -1
     fi
   )
@@ -151,6 +156,15 @@ expect "an embed that arrives while it is still waiting is seen" \
   "$(verdict "$JOINED
 $DESCRIBED
 $APPEARED" "$NOISE" "$EMBEDDING")"
+
+# `domicile` restarts a component that dies, under the same pid. A restarted
+# engine has lost the shell, so the run is over even though `domicile` lives.
+RESTARTED='domicile: starting the engine again in 1s — that is failure 1 of 5 in a row.'
+expect "a component domicile restarted ends the run" \
+  "::error::guard-shell: domicile restarted a component, so this is no longer the desktop the guard started%0A%0A$RESTARTED" \
+  "$(verdict "$JOINED
+$DESCRIBED
+$APPEARED" "$NOISE" "" "$RESTARTED")"
 
 # The block re-reads both flags after the loop, since a line can land between
 # the last poll and the verdict. That window is too small to schedule a
@@ -220,6 +234,53 @@ expect "the chrome's own frames are not the client's" \
 $BROKERED
 $COMMITTED
 $APPEARED")"
+
+# The startup stage: the apps' display, or which part of the desktop never
+# came up. `domicile` has exited in every case, so the wait ends at once.
+STARTUP="$(awk '/^for _ in \$\(seq 1 360\); do$/,/^fi$/' "$GUARD")"
+[ -n "$STARTUP" ] || {
+  echo "no startup stage in $GUARD — its markers moved. Fix this test." >&2
+  exit 1
+}
+
+startup_verdict() { # $1 compositor log, $2 run log
+  local dir; dir="$(mktemp -d "$FIXTURES/XXXXXX")"
+  printf '%s\n' "$1" | sed '/^$/d' >"$dir/comp"
+  printf '%s\n' "$2" >"$dir/run"
+  (
+    COMP_LOG="$dir/comp" RUN_LOG="$dir/run"
+    eval "$UP"
+    sleep 0 & DOMICILE_PID=$!
+    wait "$DOMICILE_PID"
+    eval "$STARTUP" >"$dir/out" 2>/dev/null
+    echo "display $CLIENT_DISPLAY" >>"$dir/out"
+  )
+  head -1 "$dir/out" | sed 's/%0A.*//'
+}
+
+# Built from domicile-compositor's main.rs; the chrome's display is on the
+# next line and must not be taken for the apps'.
+APPS='2026-09-07T11:37:12.101020Z  INFO domicile_compositor: domicile-compositor: apps connect here (WAYLAND_DISPLAY) display="wayland-2"'
+CHROMES='2026-09-07T11:37:12.101030Z  INFO domicile_compositor: domicile-compositor: the chrome connects here (WAYLAND_DISPLAY) display="wayland-2-chrome"'
+# Built from domicile.rs's `broker` milestone and milestones.rs.
+NO_BROKER="domicile: the engine's broker socket at /run/domicile-1/broker has not turned up after 30s."
+
+expect "the apps' display is the one clients use" \
+  "display wayland-2" \
+  "$(startup_verdict "$APPS
+$CHROMES" "")"
+
+expect "an engine with no broker socket is blamed on the engine" \
+  "::error::guard-shell: the engine never opened its broker socket" \
+  "$(startup_verdict "" "$NO_BROKER")"
+
+expect "a compositor that spoke and named no display says so" \
+  "::error::guard-shell: the compositor never named its Wayland display" \
+  "$(startup_verdict "$JOINED" "")"
+
+expect "a compositor that said nothing did not start" \
+  "::error::guard-shell: the compositor did not start" \
+  "$(startup_verdict "" "domicile: the compositor exited (exit status: 1)")"
 
 if [ "$FAILED" -gt 0 ]; then
   echo "$FAILED failed"

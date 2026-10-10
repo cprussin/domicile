@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Tests what `guard-shell.sh` accepts as a built shell and which switches it
-# passes to the engine.
+# Tests what `guard-shell.sh` accepts as a built shell, what it hands
+# `domicile`, and how it splits `domicile`'s output into its logs.
 #
 # A shell builds to one module, `shell.js`, with no document. `engine.yml`
 # runs only on engine changes, so this test runs the guard's resolution on
@@ -18,10 +18,10 @@ GUARD="$ROOT/packages/domicile-engine/scripts/guard-shell.sh"
 
 # From the module name to the `fi` that refuses when it is missing.
 RESOLVE="$(awk '/^MODULE="\$PAGE_DIR\/shell.js"$/,/^fi$/' "$GUARD")"
-# The chrome launch. Handing the engine a different path than the one
-# resolved leaves the desktop blank with nothing in any log.
-LAUNCH="$(awk '/^"\$CHROMIUM\/\$OUT\/chrome" \\$/,/^STARTED\+=\(\$!\)$/' "$GUARD")"
-[ -n "$RESOLVE" ] && [ -n "$LAUNCH" ] || {
+# The launch through `domicile`, and the function that splits its output.
+LAUNCH="$(awk '/^DOMICILE_ENGINE="\$CHROMIUM\/\$OUT" \\$/,/^STARTED\+=\("\$DOMICILE_PID"\)$/' "$GUARD")"
+SPLIT="$(awk '/^split_the_run\(\) \{/,/^\}$/' "$GUARD")"
+[ -n "$RESOLVE" ] && [ -n "$LAUNCH" ] && [ -n "$SPLIT" ] || {
   echo "no page resolution in $GUARD — its markers moved. Fix this test with it." >&2
   exit 1
 }
@@ -76,47 +76,114 @@ expect "an empty directory is refused, in words that name what is missing" \
   "refused: guard-shell: simple built no shell.js in $WORK/nothing" \
   "$(resolve "$WORK/nothing")"
 
-# The root and module switches. Passing the module as the root serves a
-# directory with no module in it, and the desktop comes up blank.
-launch() { # $1 MODULE, $2 PAGE_DIR
+# The launch. `domicile` turns the module into the engine's root and module
+# switches, which `packages/domicile-launch/tests/spawn.rs` covers. Handing it
+# a different path than the one resolved leaves the desktop blank with nothing
+# in any log.
+#
+# A stub `domicile` writes what it was given to a file, then prints lines as
+# each process writes them, so the split into the guard's logs is tested too.
+launch() { # $1 MODULE
   (
     MODULE="$1"
-    PAGE_DIR="$2"
-    COMP_SOCK="$WORK/sock"
-    PROFILE="$WORK/profile"
-    BROKER="$WORK/broker"
+    COLOR=19B36B
+    CHROMIUM="$WORK/tree"
+    OUT="out/Domicile"
+    COMPOSITOR="$WORK/bin/domicile-compositor"
+    DOMICILE="$WORK/bin/domicile"
+    NO_CONFIG="$WORK/config"
+    STATE="$WORK/state"
+    RUN_LOG="$WORK/run.log"
+    COMP_LOG="$WORK/comp.log"
     ENGINE_LOG="$WORK/engine.log"
     WIDTH=800
     HEIGHT=600
     STARTED=()
-    # A fake `chrome` that writes its arguments to the log.
-    CHROMIUM="$WORK"
-    OUT="bin"
-    mkdir -p "$WORK/bin"
-    printf '#!/bin/sh\nfor a in "$@"; do echo "$a"; done\n' >"$WORK/bin/chrome"
-    chmod +x "$WORK/bin/chrome"
-    : >"$ENGINE_LOG"
+    mkdir -p "$WORK/bin" "$NO_CONFIG" "$STATE"
+    export HANDED="$WORK/handed"
+    cat >"$DOMICILE" <<'STUB'
+#!/bin/sh
+{
+echo "shell=$*"
+echo "engine=${DOMICILE_ENGINE:-unset}"
+echo "compositor=${DOMICILE_COMPOSITOR:-unset}"
+echo "ozone=${OZONE:-unset}"
+echo "engine args=${DOMICILE_ENGINE_ARGS:-unset}"
+echo "config home=${XDG_CONFIG_HOME:-unset}"
+echo "state home=${XDG_STATE_HOME:-unset}"
+echo "find=${DOMICILE_SPIKE_FIND:-unset}"
+} >"$HANDED"
+echo "domicile: the engine's broker socket is up" >&2
+echo '2026-09-07T11:37:13.641032Z  INFO domicile_compositor: chrome agreed the protocol; it now gets the desktop'
+echo 'domicile-compositor: no session' >&2
+echo '[875919:875919:0907/043334.191180:INFO:external_surface_embedder.cc(100)] domicile: embedding "app-1"' >&2
+STUB
+    chmod +x "$DOMICILE"
+    : >"$RUN_LOG"; : >"$COMP_LOG"; : >"$ENGINE_LOG"
+    eval "$SPLIT"
     eval "$LAUNCH"
-    wait
-    cat "$ENGINE_LOG"
+    # The split runs in a process substitution, which `wait` does not cover.
+    for _ in $(seq 1 50); do
+      [ "$(wc -l <"$RUN_LOG")" -ge 4 ] && break
+      sleep 0.1
+    done
   )
 }
 
-ARGS="$(launch "$WORK/module/shell.js" "$WORK/module")"
+launch "$WORK/module/shell.js"
+RUN="$(cat "$WORK/handed")"
 
-expect "the directory holding the module is what the engine serves" \
-  "--domicile-shell-root=$WORK/module" \
-  "$(printf '%s\n' "$ARGS" | grep '^--domicile-shell-root=')"
+expect "domicile is handed the module the guard resolved" \
+  "shell=$WORK/module/shell.js" \
+  "$(printf '%s\n' "$RUN" | grep '^shell=')"
 
-expect "the module is named relative to that root, not as a path" \
-  "--domicile-shell-module=shell.js" \
-  "$(printf '%s\n' "$ARGS" | grep '^--domicile-shell-module=')"
+expect "the engine is the build under test" \
+  "engine=$WORK/tree/out/Domicile" \
+  "$(printf '%s\n' "$RUN" | grep '^engine=')"
 
-# The bare root, because the engine serves its generated document there. A
-# file path under it goes to the file resolver, which finds nothing.
-expect "the desktop starts on the document the engine writes" \
-  "--app=domicile://shell/" \
-  "$(printf '%s\n' "$ARGS" | grep '^--app=')"
+expect "the compositor is this checkout's" \
+  "compositor=$WORK/bin/domicile-compositor" \
+  "$(printf '%s\n' "$RUN" | grep '^compositor=')"
+
+# The guard runs under `under-wayland.sh`'s sway, whose dmabuf import is what
+# it tests.
+expect "the engine runs nested" \
+  "ozone=wayland" \
+  "$(printf '%s\n' "$RUN" | grep '^ozone=')"
+
+# An empty config home means compositor defaults, whatever the runner's user
+# has configured.
+expect "the runner's own config is not read" \
+  "config home=$WORK/config" \
+  "$(printf '%s\n' "$RUN" | grep '^config home=')"
+
+expect "the profile is the guard's own" \
+  "state home=$WORK/state" \
+  "$(printf '%s\n' "$RUN" | grep '^state home=')"
+
+expect "the compositor searches for the client's color" \
+  "find=19B36B" \
+  "$(printf '%s\n' "$RUN" | grep '^find=')"
+
+# `--log-level=0` for the renderer's `domicile: embedding`, which is INFO.
+# `--disable-component-update`: see `packages/domicile-engine/docs/GUARDS.md`.
+for flag in --no-sandbox --disable-component-update --log-level=0 --window-size=800,600; do
+  expect "the engine gets $flag" yes \
+    "$(printf '%s\n' "$RUN" | sed -n 's/^engine args=//p' | tr ' ' '\n' | grep -qxF -- "$flag" && echo yes || echo no)"
+done
+
+expect "the compositor's lines are the compositor log" \
+  "2026-09-07T11:37:13.641032Z  INFO domicile_compositor: chrome agreed the protocol; it now gets the desktop
+domicile-compositor: no session" \
+  "$(cat "$WORK/comp.log")"
+
+# The supervisor's own lines stay out, so a grep for `domicile:` in the engine
+# log finds only the engine's.
+expect "the engine's lines are the engine log" \
+  '[875919:875919:0907/043334.191180:INFO:external_surface_embedder.cc(100)] domicile: embedding "app-1"' \
+  "$(cat "$WORK/engine.log")"
+
+expect "every line is in the run log" 4 "$(wc -l <"$WORK/run.log" | tr -d ' ')"
 
 if [ "$FAILED" -gt 0 ]; then
   echo "$FAILED failed"
