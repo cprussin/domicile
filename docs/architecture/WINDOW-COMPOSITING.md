@@ -41,7 +41,7 @@ The page and the compositor share only a `viz::SurfaceId`.
 ## Hidden windows
 
 A window the page does not draw (another workspace, a background tab) draws
-about once a second.
+about once a second, unless a cast shows it.
 
 - **The page:** reports it with an empty box, `setAppBounds(appId, 0, 0, 0,
   0)`. The engine never says whether an `<app>` is composited.
@@ -54,6 +54,9 @@ about once a second.
   arrives: not a close, and not its other windows' events. At most 16 are
   held per window; a client that commits without waiting gets the oldest
   back.
+- **Casts:** a hidden window that a cast shows holds nothing and is not
+  suspended, so the cast keeps its frame rate (`HeldFrames::cast`). When its
+  last cast ends, it is held and suspended again.
 - **A new page** (`hello`) has hidden nothing, so every window is shown.
   Otherwise a shell that never reports boxes would leave them suspended.
 - **Cost:** a window shown again can take a frame or two to appear. Its

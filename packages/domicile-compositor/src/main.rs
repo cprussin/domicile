@@ -1069,11 +1069,7 @@ impl DomicileCompositor {
     /// never.
     fn show_every_window(&mut self) {
         for (app_id, held) in self.held_frames.show_all() {
-            let toplevel = self
-                .toplevel_for(&app_id)
-                // Closing a window forgets it; see `forget`.
-                .expect("a hidden window is open");
-            suspend(&toplevel, false);
+            suspend(&self.hidden_toplevel(&app_id), false);
             self.send_frames(held);
         }
     }
@@ -1173,6 +1169,7 @@ impl DomicileCompositor {
         let renderer = self.gpu.as_mut().map(Gpu::renderer);
         let capturer = capturer(&mut self.engine, &mut self.cast_test_pattern);
         self.casting.request(request, || open, renderer, capturer);
+        self.follow_the_casts();
     }
 
     /// The windows that can be cast, in the order they opened, then the
@@ -1210,10 +1207,39 @@ impl DomicileCompositor {
 
     /// News from the PipeWire thread.
     fn cast_news(&mut self, news: casting::ToWayland) {
+        let ended = matches!(news, casting::ToWayland::Ended { .. });
         let renderer = self.gpu.as_mut().map(Gpu::renderer);
         let capturer = capturer(&mut self.engine, &mut self.cast_test_pattern);
         let due = self.casting.news(news, renderer, capturer, Instant::now());
         self.arm_the_cast_deadline(due);
+        if ended {
+            self.follow_the_casts();
+        }
+    }
+
+    /// Let a hidden window draw while a cast shows it, and hold it again once
+    /// none does. See [`crate::held_frames`].
+    fn follow_the_casts(&mut self) {
+        let recast = self.held_frames.cast(self.casting.windows());
+        for (app_id, held) in recast.released {
+            debug!(%app_id, held = held.len(), "hidden but cast: frames released");
+            suspend(&self.hidden_toplevel(&app_id), false);
+            self.send_frames(held);
+        }
+        for app_id in recast.held {
+            debug!(%app_id, "hidden and no longer cast: frames held");
+            suspend(&self.hidden_toplevel(&app_id), true);
+        }
+        if self.held_frames.start_trickling() {
+            self.start_trickling();
+        }
+    }
+
+    /// The toplevel of `app_id`, which the page hides.
+    fn hidden_toplevel(&self, app_id: &str) -> ToplevelSurface {
+        self.toplevel_for(app_id)
+            // Closing a window forgets it; see `forget`.
+            .expect("a hidden window is open")
     }
 
     /// The pointer moved over `at`'s window box, or left every window.

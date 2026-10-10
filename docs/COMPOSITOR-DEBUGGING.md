@@ -84,8 +84,9 @@ fills monitor and region casts with one color instead
   import.
 - **A window drawing once a second may be hidden.** The page reports a
   window it does not draw with an empty box, and the compositor holds its
-  frames until it is shown. `RUST_LOG=domicile_compositor=debug` logs `hidden: frames
-  held` and `shown: frames released` with the app id.
+  frames until it is shown or cast. `RUST_LOG=domicile_compositor=debug` logs
+  `hidden: frames held`, `shown: frames released`, `hidden but cast: frames
+  released` and `hidden and no longer cast: frames held` with the app id.
 - **Clients do not report missing globals.** A missing
   `wl_data_device_manager` made the chrome freeze when a tab was dragged.
 - **Honor every advertised global.** Example: `wp_viewporter` must apply the
