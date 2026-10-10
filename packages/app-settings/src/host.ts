@@ -1,5 +1,6 @@
 // The app's native messaging host, `domicile-settings-host`: the desktop's
-// config and shell files, and its site permissions. Every reply is parsed.
+// config and shell files, its site permissions and the extensions it loads and
+// uninstalls. Every reply is parsed.
 // The protocol is `domicile_launch::settings`'s.
 
 import { z } from "zod";
@@ -92,6 +93,15 @@ export type SettingsHost = {
   sitePermissions: () => Promise<SiteSettings>;
   /** Stores a site's setting; a permission's default removes it. */
   setSitePermission: (site: SitePermission) => Promise<void>;
+  /**
+   * Loads the unpacked extension in `directory`, absolute or under `~`, and
+   * resolves with its id. It stays until uninstalled.
+   */
+  loadUnpacked: (directory: string) => Promise<string>;
+  /** Uninstalls an extension the config did not install. */
+  uninstallExtension: (id: string) => Promise<void>;
+  /** The ids of the extensions the config installed, which only it removes. */
+  configExtensions: () => Promise<string[]>;
   /** Calls `listener` when a file changes on disk. Returns an unsubscribe. */
   onChange: (listener: () => void) => () => void;
 };
@@ -139,6 +149,22 @@ export const nativeHost = (
     });
 
   return {
+    configExtensions: async () => {
+      const reply = await ask({ type: "config_extensions" });
+      if (reply.type === "config_extensions") {
+        return reply.ids;
+      } else {
+        throw unexpected(reply, "config_extensions");
+      }
+    },
+    loadUnpacked: async (directory) => {
+      const reply = await ask({ directory, type: "load_unpacked" });
+      if (reply.type === "loaded_unpacked") {
+        return reply.extension;
+      } else {
+        throw unexpected(reply, "loaded_unpacked");
+      }
+    },
     onChange: (listener) => {
       changes.add(listener);
       connected();
@@ -172,6 +198,12 @@ export const nativeHost = (
         throw unexpected(reply, "site_permissions");
       }
     },
+    uninstallExtension: async (extension) => {
+      const reply = await ask({ extension, type: "uninstall_extension" });
+      if (reply.type !== "uninstalled") {
+        throw unexpected(reply, "uninstalled");
+      }
+    },
     write: async (file, text) => {
       const reply = await ask({ file, text, type: "write" });
       if (reply.type !== "written") {
@@ -201,6 +233,17 @@ const replySchema = z.discriminatedUnion("type", [
     type: z.literal("site_permissions"),
   }),
   z.object({ id: z.number(), type: z.literal("stored") }),
+  z.object({
+    extension: z.string(),
+    id: z.number(),
+    type: z.literal("loaded_unpacked"),
+  }),
+  z.object({ id: z.number(), type: z.literal("uninstalled") }),
+  z.object({
+    id: z.number(),
+    ids: z.array(z.string()),
+    type: z.literal("config_extensions"),
+  }),
   z.object({ id: z.number(), type: z.literal("refused"), why: z.string() }),
   z.object({ type: z.literal("changed") }),
 ]);

@@ -7,6 +7,8 @@ import type { SettingsFiles, SettingsHost, SiteSettings, Target } from "./host";
 /** What a fake host starts with. */
 export type FakeHostState = {
   files: SettingsFiles;
+  /** The ids the engine says the config installed. */
+  configExtensions: string[];
   sites: SiteSettings;
   /** The reason every write is refused, if any. */
   refuse?: string | undefined;
@@ -16,7 +18,14 @@ export type FakeHostState = {
 export const fakeHost = (state: FakeHostState) => {
   const changes = new Set<() => void>();
   const writes: { file: Target; text: string }[] = [];
+  const loaded: string[] = [];
+  const uninstalled: string[] = [];
   const host: SettingsHost = {
+    configExtensions: () => Promise.resolve([...state.configExtensions]),
+    loadUnpacked: (directory) => {
+      loaded.push(directory);
+      return Promise.resolve("c".repeat(32));
+    },
     onChange: (listener) => {
       changes.add(listener);
       return () => {
@@ -40,6 +49,10 @@ export const fakeHost = (state: FakeHostState) => {
       return Promise.resolve();
     },
     sitePermissions: () => Promise.resolve(structuredClone(state.sites)),
+    uninstallExtension: (id) => {
+      uninstalled.push(id);
+      return Promise.resolve();
+    },
     write: (file, text) => {
       if (state.refuse === undefined) {
         writes.push({ file, text });
@@ -61,7 +74,7 @@ export const fakeHost = (state: FakeHostState) => {
       listener();
     }
   };
-  return { change, host, state, writes };
+  return { change, host, loaded, state, uninstalled, writes };
 };
 
 /** `chrome.management` over `installed`, which switches change. */
