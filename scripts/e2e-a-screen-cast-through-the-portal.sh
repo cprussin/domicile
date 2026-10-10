@@ -121,6 +121,10 @@ fi
 
 echo go >&3
 for _ in $(seq 1 200); do grep -q "^closed" "$SAID" && break; sleep 0.05; done
+# The stream stops on the PipeWire thread after the capture leaves the list.
+for _ in $(seq 1 200); do
+  grep -q "screen cast stream ended.*Stopped" "$LOG" && break; sleep 0.05
+done
 if ! after 2; then
   harness_fault "$COMP" "frames were read" "ERROR: no frames to stop reading."
 elif ! grep -q "^ended" "$SAID"; then
