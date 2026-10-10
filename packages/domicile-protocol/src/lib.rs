@@ -1398,6 +1398,15 @@ pub enum SystemRequest {
         #[serde(default)]
         file: Option<String>,
     },
+    /// Report each command sent with [`SystemRequest::SendShell`]. Answered
+    /// with [`SystemReply::Started`], then a [`SystemEvent::ShellCommand`] per
+    /// command. [`SystemRequest::Unwatch`] ends it.
+    ShellCommands,
+    /// Send `command` to every page listening with
+    /// [`SystemRequest::ShellCommands`], as a `send-shell` keybinding would
+    /// run it. Answered with [`SystemReply::Sent`]. `domicile send-shell`
+    /// sends this.
+    SendShell { command: Vec<String> },
 }
 
 /// The `app_id` of a portal dialog the shell asked for itself, such as
@@ -1450,6 +1459,8 @@ pub enum SystemReply {
     Started,
     /// The screenshot was written to this absolute path.
     Saved { path: String },
+    /// At least one page heard the command.
+    Sent,
     /// The call failed. Nothing else follows under this id.
     Failed { error: SystemError },
 }
@@ -1483,6 +1494,8 @@ pub enum SystemEvent {
     /// The watched file, or an entry of the watched directory, changed.
     /// `path` is absolute.
     Changed { path: String },
+    /// A command sent with [`SystemRequest::SendShell`].
+    ShellCommand { command: Vec<String> },
     /// A D-Bus signal a match named, its body written as
     /// [`SystemReply::Returned`]'s is.
     Signal {

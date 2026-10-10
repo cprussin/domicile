@@ -18,6 +18,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use crate::spawn::Runtime;
+use crate::supervise::Exit;
 
 /// Backoff and give-up limits for restarts.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -47,6 +48,23 @@ impl Default for Policy {
             long_enough: Duration::from_secs(60),
         }
     }
+}
+
+/// The [`Exit`] status text for a clean exit.
+///
+/// A string because [`Exit`] stores the status as displayed, which tells
+/// signals apart from exit codes.
+pub const CLEANLY: &str = "exit status: 0";
+
+/// Whether an exit restarts the engine under the compositor still serving.
+///
+/// - A compositor exit never does; the desktop goes with it.
+/// - An engine that fails always does.
+/// - An engine that exits 0 does only on `drm`. There is no window to close
+///   there, so any exit is a death, and Chromium exits 0 on `SIGTERM`.
+///   Elsewhere a clean exit is the window being closed, which ends the run.
+pub fn restarts_the_engine(exit: &Exit, platform: &str) -> bool {
+    exit.what == "engine" && (exit.how != CLEANLY || platform == "drm")
 }
 
 /// What is being restarted, for the message the user sees.

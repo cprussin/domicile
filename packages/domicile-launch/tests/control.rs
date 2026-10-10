@@ -1,11 +1,14 @@
 //! Tests for the control socket protocol.
 
 use std::cell::Cell;
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use domicile_launch::control::{
-    answer, parse_response, LoadShell, OpenUrl, Response, Screenshot, Shot,
+    answer, parse_response, Desktop, LoadShell, OpenUrl, Response, Screenshot, SendShell,
+    SettingsFiles, Shot,
 };
+use domicile_launch::site_permissions::{Permission, Setting, SitePermission, SiteSettings};
 
 #[test]
 fn a_desktop_says_which_shell_it_is_running() {
@@ -174,47 +177,192 @@ fn a_compositor_that_could_not_take_the_screenshot_is_quoted() {
     );
 }
 
+#[test]
+fn a_desktop_told_to_send_the_shell_a_command_tells_the_compositor() {
+    let told = Cell::new(None);
+    let answered = answered_sending(
+        "{\"type\":\"send_shell\",\"command\":[\"focus\",\"right\"]}",
+        &|command| {
+            told.set(Some(command.to_vec()));
+            Ok(())
+        },
+    );
+
+    assert_eq!(
+        told.take(),
+        Some(vec!["focus".to_string(), "right".to_string()])
+    );
+    assert_eq!(answered, Response::Sent);
+}
+
+#[test]
+fn a_compositor_that_did_not_send_the_command_is_quoted() {
+    let Response::Refused { why } = answered_sending(
+        "{\"type\":\"send_shell\",\"command\":[\"focus\",\"right\"]}",
+        &|_| Err("no page of this desktop listens for commands".to_string()),
+    ) else {
+        panic!("a compositor that refused the command is not one that sent it");
+    };
+    assert!(
+        why.contains("no page"),
+        "the refusal did not carry the compositor's own words: {why}"
+    );
+}
+
+#[test]
+fn a_desktop_says_which_files_the_settings_app_edits() {
+    let files = SettingsFiles {
+        config: Some(PathBuf::from("/home/me/.config/domicile/domicile.json")),
+        evaluated: None,
+        shell: Some(PathBuf::from("/home/me/.config/domicile/shell.ts")),
+    };
+    assert_eq!(
+        reply_to(
+            "{\"type\":\"settings_files\"}",
+            &Desktop {
+                files: &files,
+                ..nothing_dialed()
+            }
+        ),
+        Response::SettingsFiles {
+            files: files.clone()
+        }
+    );
+}
+
+#[test]
+fn a_desktop_asked_for_site_permissions_asks_the_engine() {
+    assert_eq!(
+        reply_to(
+            "{\"type\":\"site_permissions\"}",
+            &Desktop {
+                permissions: &|| Ok(stored()),
+                ..nothing_dialed()
+            }
+        ),
+        Response::SitePermissions(stored())
+    );
+}
+
+#[test]
+fn a_desktop_told_to_set_a_site_permission_tells_the_engine() {
+    let told = Cell::new(None);
+    let answered = reply_to(
+        "{\"type\":\"set_site_permission\",\"site\":{\"origin\":\"https://meet.example\",\"permission\":\"camera\",\"setting\":\"block\"}}",
+        &Desktop {
+            set_permission: &|site| {
+                told.set(Some(site.clone()));
+                Ok(())
+            },
+            ..nothing_dialed()
+        },
+    );
+
+    assert_eq!(told.take(), Some(a_site(Setting::Block)));
+    assert_eq!(answered, Response::Stored);
+}
+
+#[test]
+fn an_engine_that_would_not_set_a_site_permission_is_quoted() {
+    let Response::Refused { why } = reply_to(
+        "{\"type\":\"set_site_permission\",\"site\":{\"origin\":\"https://meet.example\",\"permission\":\"camera\",\"setting\":\"block\"}}",
+        &Desktop {
+            set_permission: &|_| Err("\"camera\" is not a permission".to_string()),
+            ..nothing_dialed()
+        },
+    ) else {
+        panic!("an engine that refused the setting is not one that stored it");
+    };
+    assert!(
+        why.contains("not a permission"),
+        "the refusal did not carry the engine's own words: {why}"
+    );
+}
+
+/// What the engine stores: camera's default, and one site's camera.
+fn stored() -> SiteSettings {
+    SiteSettings {
+        defaults: BTreeMap::from([(Permission::Camera, Setting::Ask)]),
+        sites: vec![a_site(Setting::Allow)],
+    }
+}
+
+/// `https://meet.example`'s camera, set to `setting`.
+fn a_site(setting: Setting) -> SitePermission {
+    SitePermission {
+        origin: "https://meet.example".to_string(),
+        permission: Permission::Camera,
+        setting,
+    }
+}
+
+/// Sends one request line to `desktop` and parses the one reply line.
+fn reply_to(line: &str, desktop: &Desktop) -> Response {
+    parse_response(answer(line, desktop).trim()).expect("a desktop answers with a response")
+}
+
+/// A desktop serving `/shell.js` with no settings files, whose every dial
+/// panics. Tests replace the one they expect.
+fn nothing_dialed() -> Desktop<'static> {
+    Desktop {
+        capture: &|_| panic!("only screenshot captures anything"),
+        files: &NO_FILES,
+        load: &|_, _| panic!("only load_shell loads anything"),
+        module: Path::new("/shell.js"),
+        open: &|_| panic!("only open_url opens anything"),
+        permissions: &|| panic!("only site_permissions lists site permissions"),
+        send: &|_| panic!("only send_shell sends anything"),
+        set_permission: &|_| panic!("only set_site_permission sets one"),
+    }
+}
+
+static NO_FILES: SettingsFiles = SettingsFiles {
+    config: None,
+    evaluated: None,
+    shell: None,
+};
+
 /// Sends one request line and parses the one reply line.
 fn answered(line: &str, module: &Path, load: LoadShell) -> Response {
-    parse_response(
-        answer(
-            line,
-            module,
+    reply_to(
+        line,
+        &Desktop {
             load,
-            &|_| panic!("only open_url opens anything"),
-            &|_| panic!("only screenshot captures anything"),
-        )
-        .trim(),
+            module,
+            ..nothing_dialed()
+        },
     )
-    .expect("a desktop answers with a response")
 }
 
 /// [`answered`], for `open_url`.
 fn answered_opening(line: &str, open: OpenUrl) -> Response {
-    parse_response(
-        answer(
-            line,
-            Path::new("/shell.js"),
-            &|_, _| panic!("only load_shell loads anything"),
+    reply_to(
+        line,
+        &Desktop {
             open,
-            &|_| panic!("only screenshot captures anything"),
-        )
-        .trim(),
+            ..nothing_dialed()
+        },
     )
-    .expect("a desktop answers with a response")
 }
 
 /// [`answered`], for `screenshot`.
 fn answered_capturing(line: &str, capture: Screenshot) -> Response {
-    parse_response(
-        answer(
-            line,
-            Path::new("/shell.js"),
-            &|_, _| panic!("only load_shell loads anything"),
-            &|_| panic!("only open_url opens anything"),
+    reply_to(
+        line,
+        &Desktop {
             capture,
-        )
-        .trim(),
+            ..nothing_dialed()
+        },
     )
-    .expect("a desktop answers with a response")
+}
+
+/// [`answered`], for `send_shell`.
+fn answered_sending(line: &str, send: SendShell) -> Response {
+    reply_to(
+        line,
+        &Desktop {
+            send,
+            ..nothing_dialed()
+        },
+    )
 }

@@ -27,6 +27,9 @@ interface ExternalSurfaceProvider {
   // Naming another window's surface gains nothing: the page allocated the
   // LocalSurfaceId, so no producer submits to the resulting surface.
   //
+  // `parent_frame_sink_id` must be one of the calling renderer's frame sinks.
+  // Any other parent is a bad message.
+  //
   // `app_id` selects the window when a page shows several.
   //
   // `scale` is device pixels per CSS pixel, passed to the producer so it can

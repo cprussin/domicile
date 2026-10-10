@@ -11,29 +11,28 @@
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::ffi::{OsStr, OsString};
-use std::io::{BufRead, BufReader, Write};
 use std::os::fd::OwnedFd;
-use std::os::unix::net::{UnixListener, UnixStream};
+use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
 use smithay::backend::allocator::dmabuf::Dmabuf;
 use smithay::backend::allocator::Buffer as _;
-use smithay::backend::input::{Axis, AxisSource, ButtonState, KeyState};
+use smithay::backend::input::{ButtonState, KeyState};
 use smithay::input::{
     keyboard::{FilterResult, Keycode, XkbConfig},
-    pointer::{AxisFrame, ButtonEvent, CursorIcon, CursorImageStatus, MotionEvent},
+    pointer::{ButtonEvent, CursorIcon, CursorImageStatus, MotionEvent},
     Seat, SeatHandler, SeatState,
 };
 use smithay::output::{Mode as OutputMode, Output, PhysicalProperties, Scale, Subpixel};
 use smithay::reexports::{
     calloop::{
-        channel::{channel, Event as ChannelEvent, Sender},
+        channel::{channel, Event as ChannelEvent},
         generic::Generic,
         timer::{TimeoutAction, Timer},
         EventLoop, InsertError, Interest, LoopHandle, Mode, PostAction, RegistrationToken,
@@ -111,7 +110,11 @@ use tracing::{debug, error, info, warn};
 
 mod activation;
 mod app_scope;
+mod buffer_transform;
 mod casting;
+mod chrome_connection;
+mod chrome_hub;
+mod client_requests;
 mod clipboard;
 mod coalesce;
 mod configure_answers;
@@ -124,6 +127,7 @@ mod engine_session;
 mod engine_surfaces;
 mod engine_waiting;
 mod file_indexing;
+mod frame_report;
 mod gbm;
 mod idle;
 mod keymap;
@@ -139,6 +143,7 @@ mod portals;
 mod reply;
 mod restatement;
 mod scale;
+mod screencopy;
 mod screens;
 mod shell_config;
 mod shm_upload;
@@ -150,6 +155,7 @@ mod which_engine;
 mod window_geometry;
 mod xdg_foreign;
 
+use crate::buffer_transform::{crop_in_buffer, upright_size, Sampled};
 use crate::dmabuf_descriptor::DmabufDescriptor;
 use crate::engine::{Bounds, Capture, Clipboard, NEWEST_BOX};
 use crate::engine_buffers::Returned;
@@ -159,23 +165,26 @@ use crate::latency::{Latency, Step as LatencyStep};
 use crate::shm_upload::{render_modifiers, shm_shape, CopyError};
 use crate::uploads::{UploadId, Uploads};
 
+use crate::chrome_connection::{bind_chrome_socket, serve_chrome};
+use crate::chrome_hub::{
+    broadcast_closed, broadcast_focus_decision, broadcast_focus_request, serve_outbound, ChromeHub,
+};
+use crate::client_requests::ClientRequest;
 use crate::coalesce::last_of_burst;
 use crate::configure_answers::ConfigureAnswers;
 use crate::dmabuf_descriptor::descriptor_from;
 use crate::dmabuf_import::{headless_renderer, DmabufImporter};
 use crate::eis::barriers::Zone;
-use crate::file_indexing::{keep_the_index, kept_at, Heard, Offered};
+use crate::file_indexing::{keep_the_index, kept_at, Heard};
 use crate::idle::{announced, darkened, somebody_is_here, Blanking, Idle, StillThere};
 use crate::keymap::compiled_keymap;
-use crate::lock::{Asked, Lock, Offer, Refusal, Seen, Unlocking, Verdict};
+use crate::lock::{Lock, Offer, Refusal, Unlocking, Verdict};
 use crate::modifiers::{Held, Modifiers};
-use crate::outbound::{outbound, Outbound, OutboundReceiver, OutboundSender};
 use crate::peer_process::peer_pid;
-use crate::portals::{shell_appearance, Portals, Selection, CURRENT_DESKTOP};
+use crate::portals::{shell_appearance, Selection, CURRENT_DESKTOP};
 use crate::restatement::Restatement;
 use crate::scale::{logical_size, output_scale};
 use crate::screens::{Advertised, Screens, Slot};
-use crate::timing_window::TimingWindow;
 use crate::viewport::{source_pixels, surface_size, Viewport};
 use crate::which_engine::another_engine;
 use domicile_config::{
@@ -183,17 +192,13 @@ use domicile_config::{
 };
 use domicile_host::clipboard::{text_mime, History, LONGEST_COPY, TEXT_MIMES};
 use domicile_host::data_dirs::data_dirs;
-use domicile_host::ipc::{apply_chrome_message, parse_chrome, to_line};
-use domicile_host::system::{locked_out, reach, Environment, Handled, System};
-use domicile_host::theme_turnover::{Step, Turnover, CAPTURE_WITHIN, REPAINT_WITHIN};
+use domicile_host::system::Environment;
+use domicile_host::theme_turnover::{Step, Turnover, REPAINT_WITHIN};
 use domicile_host::Host;
 use domicile_launch::arguments::arguments;
 use domicile_launch::handshake::{silence, Handshake, WAIT_FOR_A_PAGE};
 use domicile_launch::session::{publish, Session};
-use domicile_protocol::{
-    ChromeMessage, CursorShape, HostMessage, Passphrase, PortalAnswer, SystemRequest, Theme,
-    TrayAction,
-};
+use domicile_protocol::{ChromeMessage, CursorShape, HostMessage, Passphrase, Theme};
 use smithay::backend::renderer::gles::GlesRenderer;
 use smithay::backend::renderer::ImportMemWl as _;
 use zbus::zvariant::OwnedObjectPath;
@@ -267,994 +272,6 @@ impl Gpu {
 struct CalloopData {
     display: Display<DomicileCompositor>,
     state: DomicileCompositor,
-}
-
-/// A chrome request that must run on the Wayland thread, where the seat and
-/// surfaces live.
-///
-/// Emulated input from [`crate::eis`] becomes these too, so it takes the same
-/// path and the lock refuses it the same way.
-#[derive(Debug, PartialEq)]
-enum ClientRequest {
-    /// Every chrome in `chromes` was told `theme`. Switch the windows once
-    /// they have captured. See [`chrome_key`].
-    TurnTheWindows {
-        theme: Theme,
-        chromes: Vec<usize>,
-    },
-    /// A chrome's old frame is held for `theme`.
-    ThemeCaptured {
-        chrome: usize,
-        theme: Theme,
-    },
-    PointerMotion {
-        app_id: String,
-        x: f64,
-        y: f64,
-    },
-    PointerLeave,
-    PointerButton {
-        button: u32,
-        pressed: bool,
-    },
-    PointerAxis {
-        dx: f64,
-        dy: f64,
-        v120_x: i32,
-        v120_y: i32,
-    },
-    Key {
-        keycode: u32,
-        pressed: bool,
-    },
-    KeyboardFocus {
-        app_id: Option<String>,
-    },
-    /// The chrome reported its `devicePixelRatio`.
-    ///
-    /// `scale` is the integer the output advertises (see
-    /// [`crate::scale::output_scale`]). `ratio` is the exact value, needed to
-    /// convert the engine's device-pixel `<app>` bounds to logical units.
-    SetOutputScale {
-        ratio: f64,
-        scale: i32,
-    },
-    /// The chrome's viewport changed. Re-advertise the output at that size.
-    SetOutputSize {
-        logical: (i32, i32),
-    },
-    /// The page put the window `app_id` at `bounds`, in desktop logical units.
-    SetAppBounds {
-        app_id: String,
-        bounds: domicile_scene::Bounds,
-    },
-    /// The chrome asked the client of `app_id` to close its window.
-    CloseApp {
-        app_id: String,
-    },
-    /// The chrome asked to start a program.
-    ///
-    /// Handled here because the lock state lives here, and a locked desktop
-    /// refuses spawns. See [`crate::lock::refused`].
-    Spawn {
-        command: Vec<String>,
-    },
-    /// A chrome's page said `hello`. It holds no pixels yet.
-    ///
-    /// `served_by` is the peer process of the connection, which is the browser
-    /// process. A new pid means the engine was replaced, not just reloaded. See
-    /// [`crate::which_engine`].
-    ChromeHello {
-        served_by: Option<i32>,
-    },
-    /// A client's copied text, read from its pipe.
-    ///
-    /// Sent by the reader thread, not a chrome, because a client may write
-    /// slowly and the Wayland thread must not wait. See
-    /// [`DomicileCompositor::read_what_was_copied`].
-    ClipboardCopied {
-        clipboard: Clipboard,
-        text: String,
-    },
-    /// The shell picked a clipboard history entry. Make it the seat's
-    /// selection.
-    ///
-    /// The compositor owns this selection, so the entry stays pasteable after
-    /// its original client exits.
-    CopyClipboardEntry {
-        entry: u32,
-    },
-    /// The shell clicked a tray icon. Routed through this thread so a locked
-    /// desktop can refuse it. See [`crate::lock::refused`].
-    ActivateTrayItem {
-        id: String,
-        action: TrayAction,
-    },
-    /// The shell dismissed notifications. Routed here so a locked desktop can
-    /// refuse it.
-    DismissNotifications {
-        ids: Vec<u32>,
-    },
-    /// The shell invoked a notification action. Routed here so a locked desktop
-    /// can refuse it.
-    InvokeNotificationAction {
-        id: u32,
-        action: String,
-    },
-    /// The shell answered a portal dialog. Routed here so a locked desktop can
-    /// refuse it.
-    AnswerPortalRequest {
-        id: u32,
-        answer: PortalAnswer,
-    },
-    /// A passphrase typed at the lock screen.
-    ///
-    /// Handled here because locking blocks input to the seat, and the seat
-    /// lives on this thread. See [`crate::lock`].
-    Unlock {
-        passphrase: Passphrase,
-    },
-    /// The shell asked to lock now. See [`DomicileCompositor::shut_the_desk`].
-    Lock,
-    /// Whether any application holds an idle inhibitor through the portal.
-    /// From the portal thread; see [`crate::portals`].
-    HeldAwakeByThePortal {
-        held: bool,
-    },
-}
-
-/// A chrome request answered on its own connection thread.
-///
-/// These answers must not wait for a frame on the Wayland thread. See
-/// [`answer_on_the_connection`]. The lock refuses requests from both this and
-/// [`ClientRequest`]; see [`crate::lock::Asked`].
-enum ConnectionRequest {
-    SearchFiles { query: String },
-    SetTheme { theme: Theme },
-}
-
-/// One connected chrome: where to write to it.
-struct Chrome {
-    writer: Arc<Mutex<UnixStream>>,
-}
-
-/// State shared by the Wayland thread and the chrome connection threads.
-struct ChromeHub {
-    host: Mutex<Host>,
-    chromes: Mutex<Vec<Chrome>>,
-    request_tx: Mutex<Sender<ClientRequest>>,
-    outbound: OutboundSender,
-    timings: Mutex<FrameTimings>,
-    /// The highest output scale to advertise.
-    ///
-    /// Atomic because a config reload changes it on the Wayland thread while
-    /// connection threads read it.
-    max_scale: AtomicU32,
-    /// Our Wayland socket name, which spawned clients connect to.
-    wayland_display: OsString,
-    /// The latest file index snapshot, for answering `search_files`.
-    ///
-    /// Lives here because connection threads answer searches without waiting
-    /// for the Wayland thread. Readers clone the `Arc` and search after
-    /// releasing the lock. See [`crate::file_indexing`].
-    ///
-    /// `None` means no index (no `HOME`, or it was unreadable). `search_files`
-    /// then answers nothing, so a launcher does not show a broken desktop as an
-    /// empty home.
-    offered: Mutex<Option<Arc<Offered>>>,
-    /// The lock state, for [`answer_on_the_connection`]. Set once at startup,
-    /// only if the desktop can lock.
-    lock: OnceLock<Seen>,
-    /// The desktop portal: tells clients the theme, and takes the shell's
-    /// answers to their dialogs.
-    ///
-    /// The theme is driven by the Wayland thread's theme turnover, not the
-    /// broadcast: clients switch only after every chrome has captured its
-    /// starting frame. See [`crate::portals`].
-    portals: Portals,
-    /// The tray worker that activates items.
-    ///
-    /// Set once after the hub exists, because the tray publishes through the
-    /// hub. See [`crate::tray`]. Unset in unit tests, which have no bus.
-    tray: OnceLock<tray::Tray>,
-    /// The notification server's worker. Set once, like `tray`. See
-    /// [`crate::notifications`].
-    notifications: OnceLock<notifications::NotificationServer>,
-    /// Opens EIS contexts for the RemoteDesktop and InputCapture portals. Set
-    /// once, when the Wayland loop starts serving. See [`crate::eis`].
-    eis: OnceLock<eis::Eis>,
-}
-
-impl ChromeHub {
-    fn new(
-        request_tx: Sender<ClientRequest>,
-        max_scale: u32,
-        wayland_display: OsString,
-        portals: Portals,
-    ) -> (Arc<Self>, OutboundReceiver) {
-        let (outbound, outbound_rx) = outbound();
-        let hub = Arc::new(ChromeHub {
-            host: Mutex::new(Host::new()),
-            chromes: Mutex::new(Vec::new()),
-            request_tx: Mutex::new(request_tx),
-            outbound,
-            timings: Mutex::new(FrameTimings::default()),
-            max_scale: AtomicU32::new(max_scale),
-            wayland_display,
-            offered: Mutex::new(None),
-            lock: OnceLock::new(),
-            portals,
-            tray: OnceLock::new(),
-            notifications: OnceLock::new(),
-            eis: OnceLock::new(),
-        });
-        (hub, outbound_rx)
-    }
-
-    /// Set the theme, tell every chrome, and start switching the windows.
-    ///
-    /// Both a config reload and [`ChromeMessage::SetTheme`] call this. Windows
-    /// switch later, once every chrome has captured its starting frame; see
-    /// `domicile_host::theme_turnover`.
-    ///
-    /// Does nothing if the theme is unchanged, so rewriting the config does not
-    /// replay the theme transition. See `Host::set_theme`.
-    fn take_up_the_theme(&self, theme: Theme) {
-        let told = self.host.lock().unwrap().set_theme(theme);
-        if let Some(message) = told {
-            self.broadcast(message);
-            // Read after the broadcast. A chrome that joins in between is then
-            // waited on for a theme it already got in its handshake, which at
-            // worst costs a deadline.
-            let chromes = self
-                .chromes
-                .lock()
-                .unwrap()
-                .iter()
-                .map(|chrome| chrome_key(&chrome.writer))
-                .collect();
-            self.send_request(ClientRequest::TurnTheWindows { theme, chromes });
-        }
-    }
-
-    /// Whether the desktop is locked, for chrome connection threads.
-    ///
-    /// A desktop that cannot lock is never locked.
-    fn the_desk_is_locked(&self) -> bool {
-        self.lock.get().is_some_and(Seen::locked)
-    }
-
-    /// Forward an input event to the Wayland thread.
-    fn send_request(&self, event: ClientRequest) {
-        let _ = self.request_tx.lock().unwrap().send(event);
-    }
-
-    /// Queue a host message for every connected chrome.
-    fn broadcast(&self, message: HostMessage) {
-        self.outbound.message(message);
-    }
-}
-
-/// Apply a focus change made by the compositor and tell every chrome.
-///
-/// Broadcast because [`Host::focus_change`] reports each change once, and a
-/// chrome that misses it shows the wrong window as active.
-fn broadcast_focus_decision(hub: &ChromeHub, decision: ChromeMessage) {
-    let moved = {
-        let mut host = hub.host.lock().unwrap();
-        let mut ready = true;
-        let _ = apply_chrome_message(&mut host, &mut ready, decision);
-        host.focus_change()
-    };
-    if let Some(message) = moved {
-        hub.broadcast(message);
-    }
-}
-
-/// Tell every chrome that a client asked for keyboard focus, without granting
-/// it.
-///
-/// A shell grants it by sending `focus_app` back. A shell can refuse, so
-/// windows cannot steal focus from what the user is typing in. Broadcast
-/// because the compositor does not know which chrome shows the desktop.
-fn broadcast_focus_request(hub: &ChromeHub, app_id: &str) {
-    let asked = hub.host.lock().unwrap().focus_requested(app_id);
-    if let Some(message) = asked {
-        hub.broadcast(message);
-    }
-}
-
-/// Forget a closed client and tell every chrome.
-///
-/// Sends the close first, then any focus change it caused. The fallback hands
-/// focus to the chrome, so a shell that wants to focus another window can
-/// answer after it and have the last word.
-fn broadcast_closed(hub: &ChromeHub, app_id: &str) {
-    let (closed, focus) = {
-        let mut host = hub.host.lock().unwrap();
-        let closed = host.app_closed(app_id);
-        // After the close, because closing the focused window moves focus.
-        (closed, host.focus_change())
-    };
-    for message in closed.into_iter().chain(focus) {
-        hub.broadcast(message);
-    }
-}
-
-/// Tell every chrome which apps are already open.
-///
-/// `app_appeared` is sent once, so a page that loads or reloads after a client
-/// maps would never learn of it. Broadcast because shells ignore apps they
-/// already know.
-///
-/// Releases the `host` lock before broadcasting, so a slow chrome cannot block
-/// the Wayland thread.
-fn announce_open_apps(hub: &ChromeHub) {
-    let announcements = hub.host.lock().unwrap().open_apps();
-    for announcement in announcements {
-        hub.broadcast(announcement);
-    }
-}
-
-/// Write a message's responses to the connection that asked, in order.
-///
-/// Returns false if the socket is gone, which ends the connection. Separate
-/// from `read_chrome_messages` so tests can exercise [`freshened`] directly.
-fn write_responses(
-    hub: &ChromeHub,
-    writer: &Arc<Mutex<UnixStream>>,
-    responses: Vec<HostMessage>,
-) -> bool {
-    // Return before taking the writer lock. Most input messages have no
-    // response, and taking the lock would block this reader behind
-    // `serve_outbound` when a chrome is not reading. The compositor would then
-    // drop everything that chrome sends. Tested by
-    // `an_answer_with_nothing_in_it_does_not_wait_for_the_writer` and
-    // `tests/stuck_keys.rs`.
-    if responses.is_empty() {
-        return true;
-    }
-    let mut writer = writer.lock().unwrap();
-    for message in responses {
-        let message = freshened(hub, message);
-        if writer.write_all(to_line(&message).as_bytes()).is_err() {
-            return false;
-        }
-        let _ = writer.flush();
-    }
-    true
-}
-
-/// Replace a `displays` response with the current desktop.
-///
-/// Responses are built under the `host` lock and written later. If `set_output`
-/// broadcasts a new desktop in between, the stale handshake copy would arrive
-/// last and nothing would correct it.
-///
-/// Broadcasts are ordered by the outbound queue:
-/// [`DomicileCompositor::set_output`] describes and broadcasts on the Wayland
-/// thread, so a stale `displays` always has a newer one queued behind it. This
-/// function covers the one gap, a response written by another thread. Every
-/// describe must be followed by a broadcast; the startup describe in `main` is
-/// the only exception, and it runs before any connection thread exists.
-///
-/// Other messages pass through unchanged.
-fn freshened(hub: &ChromeHub, message: HostMessage) -> HostMessage {
-    if !matches!(message, HostMessage::Displays { .. }) {
-        return message;
-    }
-    let fresh = hub.host.lock().unwrap().describe_desktop();
-    // Logged because a chrome draws no windows until it knows the displays, and
-    // only this side can tell that apart from a chrome ignoring the host. The
-    // count lets readers, including `guard-shell.sh`, tell an empty desktop
-    // from a described one.
-    let HostMessage::Displays { displays } = fresh else {
-        unreachable!("describe_desktop returns Displays and nothing else");
-    };
-    debug!("told the chrome about {} display(s)", displays.len());
-    HostMessage::Displays { displays }
-}
-
-/// Write everything bound for the chromes, off the Wayland thread.
-///
-/// The only place that blocks on a chrome socket, so a slow chrome cannot stall
-/// `commit()` and every client with it.
-fn serve_outbound(hub: Arc<ChromeHub>, outbound: OutboundReceiver) {
-    let mut window = FrameWindow::default();
-    // Wake on a timeout too: compositing sends nothing outbound, so the report
-    // would otherwise never run.
-    while let Some(next) = outbound.recv_until(REPORT_EVERY) {
-        let Some(item) = next else {
-            report(&mut window, &hub);
-            continue;
-        };
-        let Outbound::Message(message) = item;
-        // Encoded once; every chrome gets the same line.
-        let line = to_line(&message);
-        let mut chromes = hub.chromes.lock().unwrap();
-        chromes.retain(|chrome| {
-            let mut stream = chrome.writer.lock().unwrap();
-            stream
-                .write_all(line.as_bytes())
-                .and_then(|_| stream.flush())
-                .is_ok()
-        });
-        drop(chromes);
-
-        report(&mut window, &hub);
-    }
-}
-
-/// Print one line, if the window that just closed saw anything.
-fn report(window: &mut FrameWindow, hub: &Arc<ChromeHub>) {
-    let Some(report) = window.due(hub) else {
-        return;
-    };
-    debug!(
-        composited = report.composited,
-        fps = report.fps,
-        commit_ms = report.commit_ms,
-        composite_ms = report.composite_ms,
-        composite_worst_ms = report.composite_worst_ms,
-        submit_ms = report.submit_ms,
-        submit_worst_ms = report.submit_worst_ms,
-        idle_ms = report.idle_ms,
-        response_ms = report.response_ms,
-        response_worst_ms = report.response_worst_ms,
-        chromes = hub.chromes.lock().unwrap().len(),
-        "frames"
-    );
-}
-
-/// Frame timings recorded on the Wayland thread, reported by the writer thread.
-///
-/// Shows whether a low frame rate comes from the compositor working or from
-/// waiting on clients.
-#[derive(Default)]
-struct FrameTimings {
-    /// Time handling one commit end to end, on the Wayland thread.
-    commit: TimingWindow,
-    /// Time between one commit finishing and the next arriving. Large means we
-    /// are waiting on the client or the throttle.
-    idle: TimingWindow,
-    /// Time from injecting a keystroke into a client to its next commit.
-    ///
-    /// Subtract this from the chrome's `rt_ms` to get the time a keystroke
-    /// takes to reach the client. Measured from the oldest unanswered
-    /// keystroke, as the chrome does, so the two compare.
-    response: TimingWindow,
-    /// Drawing time, up to but not including the submit. Excludes the
-    /// client-buffer import, which is on the commit path.
-    composite: TimingWindow,
-    /// The submit alone. See `docs/COMPOSITOR-DEBUGGING.md` for reading it with
-    /// `composite`.
-    submit: TimingWindow,
-    /// Frames composited in this window.
-    composited: usize,
-}
-
-/// When the writer thread last reported.
-#[derive(Default)]
-struct FrameWindow {
-    since: Option<Instant>,
-}
-
-/// One window's worth of numbers, rounded for reading.
-struct FrameReport {
-    /// Frames drawn into the window.
-    composited: usize,
-    fps: u32,
-    commit_ms: u32,
-    idle_ms: u32,
-    response_ms: u32,
-    response_worst_ms: u32,
-    /// Drawing time, excluding the submit. See `docs/COMPOSITOR-DEBUGGING.md`.
-    composite_ms: u32,
-    composite_worst_ms: u32,
-    /// The submit, which on a nested window blocks for a frame callback.
-    submit_ms: u32,
-    submit_worst_ms: u32,
-}
-
-/// Maximum file search results sent. `matched` still reports the full count.
-const FOUND: usize = 200;
-
-/// How often the writer thread reports frame timings.
-const REPORT_EVERY: Duration = Duration::from_secs(5);
-
-impl FrameWindow {
-    fn due(&mut self, hub: &ChromeHub) -> Option<FrameReport> {
-        let since = *self.since.get_or_insert_with(Instant::now);
-        let elapsed = since.elapsed();
-        if elapsed < REPORT_EVERY {
-            None
-        } else {
-            let mut timings = hub.timings.lock().unwrap();
-            // Stay quiet when nothing was composited, so an idle desktop does
-            // not fill the log.
-            let composited = std::mem::take(&mut timings.composited);
-            let report = (composited > 0).then(|| {
-                // A stage that recorded nothing reports zero.
-                let (commit, idle, response, composite) = (
-                    timings.commit.take().unwrap_or_default(),
-                    timings.idle.take().unwrap_or_default(),
-                    timings.response.take().unwrap_or_default(),
-                    timings.composite.take().unwrap_or_default(),
-                );
-                let submit = timings.submit.take().unwrap_or_default();
-                FrameReport {
-                    composited,
-                    fps: (composited as f64 / elapsed.as_secs_f64()).round() as u32,
-                    commit_ms: commit.average.as_millis() as u32,
-                    idle_ms: idle.average.as_millis() as u32,
-                    response_ms: response.average.as_millis() as u32,
-                    response_worst_ms: response.worst.as_millis() as u32,
-                    composite_ms: composite.average.as_millis() as u32,
-                    composite_worst_ms: composite.worst.as_millis() as u32,
-                    submit_ms: submit.average.as_millis() as u32,
-                    submit_worst_ms: submit.worst.as_millis() as u32,
-                }
-            });
-            drop(timings);
-            *self = FrameWindow {
-                since: Some(Instant::now()),
-            };
-            report
-        }
-    }
-}
-
-/// Bind the chrome protocol socket.
-///
-/// Called on the main thread so a failed bind is fatal: the chrome protocol is
-/// required. The error names the path because the common failure is a deep
-/// `XDG_RUNTIME_DIR` exceeding the ~108-byte `sun_path` limit.
-fn bind_chrome_socket(path: &std::path::Path) -> Result<UnixListener, Box<dyn std::error::Error>> {
-    let _ = std::fs::remove_file(path);
-    let listener = UnixListener::bind(path).map_err(|err| {
-        format!(
-            "cannot bind the chrome protocol socket at {}: {err}",
-            path.display()
-        )
-    })?;
-    debug!(?path, "chrome protocol socket up");
-    Ok(listener)
-}
-
-/// Accept chrome connections, one thread each, all sharing the hub's [`Host`].
-fn serve_chrome(hub: Arc<ChromeHub>, listener: UnixListener, handshake: Arc<Handshake>) {
-    for stream in listener.incoming().flatten() {
-        let writer = Arc::new(Mutex::new(match stream.try_clone() {
-            Ok(w) => w,
-            Err(_) => continue,
-        }));
-        // Not a broadcast target until its `hello` agrees a protocol version.
-        // `read_chrome_messages` adds it then.
-        debug!("chrome client connected");
-        handshake.connected();
-        let hub = hub.clone();
-        let handshake = handshake.clone();
-        thread::spawn(move || chrome_connection(hub, stream, writer, handshake));
-    }
-}
-
-/// Serve one chrome connection until EOF, then drop its writer.
-///
-/// Dead writers are otherwise pruned only by a failed broadcast, which an idle
-/// desktop never sends. Each page reload opens a new connection, so they would
-/// accumulate.
-fn chrome_connection(
-    hub: Arc<ChromeHub>,
-    stream: UnixStream,
-    writer: Arc<Mutex<UnixStream>>,
-    handshake: Arc<Handshake>,
-) {
-    read_chrome_messages(&hub, stream, &writer, &handshake);
-    hub.chromes
-        .lock()
-        .unwrap()
-        .retain(|held| !Arc::ptr_eq(&held.writer, &writer));
-    debug!("chrome client disconnected");
-}
-
-fn read_chrome_messages(
-    hub: &Arc<ChromeHub>,
-    stream: UnixStream,
-    writer: &Arc<Mutex<UnixStream>>,
-    handshake: &Arc<Handshake>,
-) {
-    // Read before the reader takes the stream. `SO_PEERCRED` is fixed at
-    // `connect(2)`, so once per connection is enough. See
-    // [`crate::which_engine`].
-    let served_by = peer_pid(&stream);
-    let reader = BufReader::new(stream);
-    // Dropped when the connection ends, which kills the page's processes.
-    let system = System::new(
-        // A user with no home gets `/`, as `login` gives them.
-        home_directory().unwrap_or_else(|| "/".into()),
-        desktop_environment(
-            &hub.wayland_display,
-            std::env::var_os("LD_LIBRARY_PATH").as_deref(),
-        ),
-        {
-            let writer = writer.clone();
-            move |message| {
-                // A failed write means the page is gone; this connection's
-                // reader then ends and drops `system`.
-                let mut writer = writer.lock().unwrap();
-                let _ = writer.write_all(to_line(&message).as_bytes());
-                let _ = writer.flush();
-            }
-        },
-    )
-    .screenshotting_with({
-        let portals = hub.portals.clone();
-        move |file| portals.screenshot(file)
-    });
-    let mut ready = false;
-    // Whether this connection is in the broadcast list. Separate from `ready`
-    // because a socket can send `hello` twice, and the writer must not be added
-    // twice.
-    let mut joined = false;
-    for line in reader.lines() {
-        let Ok(line) = line else { break };
-        let said = parse_chrome(line.trim());
-        // Log every frame verbatim, except `unlock`, which carries the
-        // passphrase. That one is logged parsed, and its `Debug` redacts the
-        // passphrase (`domicile_protocol::Passphrase`).
-        //
-        // A frame that fails to parse is still logged verbatim. A passphrase
-        // only reaches that path if `unlock` itself is misspelled or malformed.
-        if matches!(said, Ok(ChromeMessage::Unlock { .. })) {
-            tracing::trace!("chrome -> host chrome_msg=an unlock, whose passphrase is not printed");
-        } else {
-            tracing::trace!(chrome_msg = %line.trim(), "chrome -> host");
-        }
-        let responses = match said {
-            // `hello` means a page started (including after a reload or crash),
-            // so it resets what the compositor records the chrome as holding. A
-            // stale record would leave a hole in the page where an idle
-            // client's window should be.
-            Ok(ChromeMessage::Hello { protocol_version }) => {
-                // Scoped so the `host` guard drops before `chromes` is locked
-                // below. Otherwise this can deadlock: `serve_outbound` locks
-                // `chromes` then a `writer`, and `write_responses` locks a
-                // `writer` then `host` (via `freshened`). Needs two chromes to
-                // trigger, so no test catches it. The same applies to the
-                // `chromes` lock in the `else` arm.
-                let responses = {
-                    let mut host = hub.host.lock().unwrap();
-                    apply_chrome_message(
-                        &mut host,
-                        &mut ready,
-                        ChromeMessage::Hello { protocol_version },
-                    )
-                };
-                if ready {
-                    // Counted so the handshake watchdog can tell "no page came"
-                    // from "a page came and its version was refused".
-                    handshake.agreed();
-                    // Join only after the version is agreed: broadcasts use
-                    // this build's protocol. A refused chrome gets only its
-                    // `welcome`.
-                    if !joined {
-                        hub.chromes.lock().unwrap().push(Chrome {
-                            writer: writer.clone(),
-                        });
-                        joined = true;
-                        debug!("chrome agreed the protocol; it now gets the desktop");
-                    }
-                    // Announce after joining. The Wayland thread announces open
-                    // windows by broadcast, so a chrome not yet in the list
-                    // would miss them. Tested by
-                    // `a_chrome_that_connects_late_is_told_about_a_window_already_open`
-                    // in `tests/apps.rs`, though the race is narrow and the
-                    // test needs an added delay to catch a swap.
-                    hub.send_request(ClientRequest::ChromeHello { served_by });
-                } else if joined {
-                    // This connection agreed a version earlier and has now
-                    // named one this build cannot speak. Stop broadcasting to
-                    // it. A later good `hello` rejoins it.
-                    hub.chromes
-                        .lock()
-                        .unwrap()
-                        .retain(|held| !Arc::ptr_eq(&held.writer, writer));
-                    joined = false;
-                    debug!(
-                        "chrome took its protocol agreement back; it no longer gets the desktop"
-                    );
-                }
-                responses
-            }
-            // Sent to the Wayland thread so a locked desktop can refuse it.
-            Ok(ChromeMessage::Spawn { command }) => {
-                hub.send_request(ClientRequest::Spawn { command });
-                Vec::new()
-            }
-            Ok(ChromeMessage::SetTheme { theme }) => {
-                answer_on_the_connection(hub, ConnectionRequest::SetTheme { theme })
-            }
-            // The Wayland thread runs the theme turnover and its deadline
-            // timer.
-            Ok(ChromeMessage::ThemeCaptured { theme }) => {
-                hub.send_request(ClientRequest::ThemeCaptured {
-                    chrome: chrome_key(writer),
-                    theme,
-                });
-                Vec::new()
-            }
-            // Handled by the compositor, which owns the seat's clipboard and
-            // the history. No response; the shell sees the next `clipboard`
-            // broadcast.
-            Ok(ChromeMessage::CopyClipboardEntry { entry }) => {
-                hub.send_request(ClientRequest::CopyClipboardEntry { entry });
-                Vec::new()
-            }
-            // Sent to the Wayland thread so a locked desktop can refuse it.
-            Ok(ChromeMessage::ActivateTrayItem { id, action }) => {
-                hub.send_request(ClientRequest::ActivateTrayItem { id, action });
-                Vec::new()
-            }
-            // Sent to the Wayland thread so a locked desktop can refuse it,
-            // since an action can raise a window. The shell sees the result in
-            // the next `notifications`.
-            Ok(ChromeMessage::DismissNotifications { ids }) => {
-                hub.send_request(ClientRequest::DismissNotifications { ids });
-                Vec::new()
-            }
-            Ok(ChromeMessage::InvokeNotificationAction { id, action }) => {
-                hub.send_request(ClientRequest::InvokeNotificationAction { id, action });
-                Vec::new()
-            }
-            // Sent to the Wayland thread so a locked desktop can refuse it:
-            // an answer grants an application what it asked for.
-            Ok(ChromeMessage::AnswerPortalRequest { id, answer }) => {
-                hub.send_request(ClientRequest::AnswerPortalRequest { id, answer });
-                Vec::new()
-            }
-            Ok(ChromeMessage::SearchFiles { query }) => {
-                answer_on_the_connection(hub, ConnectionRequest::SearchFiles { query })
-            }
-            Ok(ChromeMessage::SystemRequest { id, request }) => {
-                call_the_system(hub, &system, id, request)
-            }
-            Ok(ChromeMessage::PointerMotion { app_id, x, y }) => {
-                hub.send_request(ClientRequest::PointerMotion { app_id, x, y });
-                Vec::new()
-            }
-            Ok(ChromeMessage::PointerLeave { .. }) => {
-                hub.send_request(ClientRequest::PointerLeave);
-                Vec::new()
-            }
-            Ok(ChromeMessage::PointerButton {
-                button, pressed, ..
-            }) => {
-                hub.send_request(ClientRequest::PointerButton { button, pressed });
-                Vec::new()
-            }
-            Ok(ChromeMessage::PointerAxis {
-                dx,
-                dy,
-                v120_x,
-                v120_y,
-                ..
-            }) => {
-                hub.send_request(ClientRequest::PointerAxis {
-                    dx,
-                    dy,
-                    v120_x,
-                    v120_y,
-                });
-                Vec::new()
-            }
-            Ok(ChromeMessage::Key {
-                keycode, pressed, ..
-            }) => {
-                hub.send_request(ClientRequest::Key { keycode, pressed });
-                Vec::new()
-            }
-            // No response here. A correct passphrase broadcasts `locked: false`
-            // to every chrome from the Wayland thread, so all monitors unlock
-            // together. A refusal is logged without the passphrase; see
-            // `crate::lock`.
-            Ok(ChromeMessage::Unlock { passphrase }) => {
-                hub.send_request(ClientRequest::Unlock { passphrase });
-                Vec::new()
-            }
-            // Handled on the Wayland thread, which holds the lock. The response
-            // is the `locked` broadcast.
-            Ok(ChromeMessage::Lock) => {
-                hub.send_request(ClientRequest::Lock);
-                Vec::new()
-            }
-            // The chrome's density sets the output scale, which is Wayland
-            // state, not something `Host` models.
-            Ok(ChromeMessage::SetDevicePixelRatio { ratio }) => {
-                hub.send_request(ClientRequest::SetOutputScale {
-                    ratio,
-                    scale: output_scale(ratio, hub.max_scale.load(Ordering::Relaxed)),
-                });
-                Vec::new()
-            }
-            // The desktop is the chrome's browser window, which the compositor
-            // cannot see. This message is its only source for the desktop size.
-            Ok(ChromeMessage::SetDesktopSize { size }) => {
-                hub.send_request(ClientRequest::SetOutputSize {
-                    logical: (size[0].round() as i32, size[1].round() as i32),
-                });
-                Vec::new()
-            }
-            // Which displays a window is on is Wayland state, not something
-            // `Host` models.
-            Ok(ChromeMessage::SetAppBounds {
-                app_id,
-                position: [x, y],
-                size: [width, height],
-            }) => {
-                hub.send_request(ClientRequest::SetAppBounds {
-                    app_id,
-                    bounds: domicile_scene::Bounds {
-                        min: domicile_scene::Point::new(x, y),
-                        max: domicile_scene::Point::new(x + width, y + height),
-                    },
-                });
-                Vec::new()
-            }
-            // `Host` decides focus and the seat follows its answer, so the
-            // keyboard and the page always agree on the focused window.
-            Ok(ChromeMessage::FocusApp { app_id }) => {
-                let (out, holder) = {
-                    let mut host = hub.host.lock().unwrap();
-                    let out = apply_chrome_message(
-                        &mut host,
-                        &mut ready,
-                        ChromeMessage::FocusApp {
-                            app_id: app_id.clone(),
-                        },
-                    );
-                    (out, host.focus_holder())
-                };
-                if holder.as_deref() != Some(app_id.as_str()) {
-                    debug!(app_id = %app_id, "keyboard focus -> a window this compositor does not know; the keyboard stays where it was");
-                }
-                hub.send_request(ClientRequest::KeyboardFocus { app_id: holder });
-                out
-            }
-            // Only the client's toplevel can close it. `app_closed` removes the
-            // window once it goes away.
-            Ok(ChromeMessage::CloseApp { app_id }) => {
-                hub.send_request(ClientRequest::CloseApp { app_id });
-                Vec::new()
-            }
-            Ok(ChromeMessage::FocusChrome) => {
-                hub.send_request(ClientRequest::KeyboardFocus { app_id: None });
-                let mut host = hub.host.lock().unwrap();
-                apply_chrome_message(&mut host, &mut ready, ChromeMessage::FocusChrome)
-            }
-            // No catch-all, so a new message type is a compile error here.
-            //
-            // An unparseable message is dropped, so a chrome one version out of
-            // step cannot crash the compositor, but it is logged.
-            Err(err) => {
-                // Log the error, which names the field, but not the frame. The
-                // frame may hold keycodes or argv, and drifting
-                // `pointer_motion` would log 60 lines a second. The frame is
-                // already logged at trace above.
-                warn!(%err, "{}", grepped::UNPARSEABLE);
-                Vec::new()
-            }
-        };
-        // Any message may have moved focus, so check once here instead of
-        // keeping a per-message list in sync with the protocol.
-        //
-        // Broadcast, because focus belongs to the whole desktop and
-        // [`Host::focus_change`] reports each change once. Drop the guard
-        // before broadcasting; the Wayland thread needs the lock.
-        let moved = hub.host.lock().unwrap().focus_change();
-        if let Some(message) = moved {
-            hub.broadcast(message);
-        }
-        if !write_responses(hub, writer, responses) {
-            return;
-        }
-    }
-}
-
-/// Answer a connection request, unless the desktop is locked.
-///
-/// These are answered off the Wayland thread so a per-keystroke search never
-/// waits on a frame. The lock lives on the Wayland thread, so this checks it
-/// through [`Seen`] with the same [`crate::lock::refused`] that
-/// `handle_client_request` uses.
-///
-/// A refusal gets no response, which reveals nothing about the query or path
-/// and matches a desktop with no index.
-fn answer_on_the_connection(hub: &ChromeHub, request: ConnectionRequest) -> Vec<HostMessage> {
-    let refusal = if hub.the_desk_is_locked() {
-        crate::lock::refused(Asked::OnTheConnection(&request))
-    } else {
-        None
-    };
-    match refusal {
-        Some(refusal) => {
-            say_what_the_lock_refused(refusal);
-            Vec::new()
-        }
-        None => answered_on_the_connection(hub, request),
-    }
-}
-
-/// Run a system call for the page, unless the desktop is locked.
-///
-/// Answers go straight to the page from `system`'s threads. The only response
-/// returned here is a refusal. See `docs/SHELL-SYSTEM-ACCESS.md`.
-fn call_the_system(
-    hub: &ChromeHub,
-    system: &System,
-    id: u32,
-    request: SystemRequest,
-) -> Vec<HostMessage> {
-    let refusal = if hub.the_desk_is_locked() {
-        crate::lock::refused(Asked::System(reach(&request)))
-    } else {
-        None
-    };
-    if let Some(refusal) = refusal {
-        say_what_the_lock_refused(refusal);
-        return locked_out(id, &request).into_iter().collect();
-    }
-    match system.handle(id, request) {
-        Handled::Done => {}
-        Handled::NothingRunning => debug!(id, "a system call drove an id that has ended"),
-        Handled::Malformed => warn!(
-            id,
-            "a system call drove an id with a request that does not fit it"
-        ),
-    }
-    Vec::new()
-}
-
-/// Answer a connection request.
-fn answered_on_the_connection(hub: &ChromeHub, request: ConnectionRequest) -> Vec<HostMessage> {
-    match request {
-        // Handled here because Wayland clients learn the theme through the
-        // settings portal, which this process serves.
-        //
-        // No direct response. Every chrome, this one included, gets the `theme`
-        // broadcast from `take_up_the_theme`, so all monitors switch together.
-        ConnectionRequest::SetTheme { theme } => {
-            hub.take_up_the_theme(theme);
-            Vec::new()
-        }
-        // A page has no filesystem, so the compositor searches for it. Safe
-        // because `search_files` names no path; this side decides what is read.
-        //
-        // Only matches are sent. Sending a large home's whole index to every
-        // page would cost tens of megabytes per change through the engine's
-        // control channel.
-        ConnectionRequest::SearchFiles { query } => {
-            // Release the lock before searching, so publishing the next index
-            // does not wait on this search.
-            let offered = hub.offered.lock().unwrap().clone();
-            offered
-                .map(|offered| {
-                    let found = offered.search.find(&query, FOUND);
-                    HostMessage::FoundFiles {
-                        query,
-                        files: found.files,
-                        matched: u32::try_from(found.matched)
-                            .expect("a home of fewer than four billion paths"),
-                        indexing: offered.indexing,
-                    }
-                })
-                // No index (no `HOME`, or it would not open) gets no response
-                // rather than an empty list. An empty list would show a broken
-                // desktop as an empty home. The launcher still works for paths,
-                // URLs and queries.
-                .into_iter()
-                .collect()
-        }
-    }
 }
 
 /// Log a request the lock refused.
@@ -1579,6 +596,8 @@ struct DomicileCompositor {
     turnover_deadline: Option<RegistrationToken>,
     /// Window, monitor and region streams. See [`crate::casting`].
     casting: casting::Streams,
+    /// Takes the shots Wayland capture clients copy. See [`crate::screencopy`].
+    screen_copying: casting::Casting,
     /// When the next paced cast frame is sent, if one waits.
     cast_deadline: Option<RegistrationToken>,
     /// `DOMICILE_CAST_WINDOW`: the title of a window to cast as soon as it has
@@ -2824,7 +1843,7 @@ impl DomicileCompositor {
         &mut self,
         app_id: &str,
         buffer: &wl_buffer::WlBuffer,
-        crop: (i32, i32, i32, i32),
+        sampled: Sampled,
         at_box: u64,
     ) -> Published {
         let Some(committed) = committed_buffer(buffer) else {
@@ -2839,7 +1858,7 @@ impl DomicileCompositor {
                     app_id,
                     Submitted::Client(buffer.clone()),
                     &descriptor_from(dmabuf),
-                    crop,
+                    sampled,
                     at_box,
                     Published::Held,
                 );
@@ -2848,13 +1867,15 @@ impl DomicileCompositor {
                         app_id,
                         casting::Shown {
                             dmabuf: dmabuf.clone(),
-                            crop,
+                            crop: sampled.crop,
                         },
                     );
                 }
                 published
             }
-            CommittedBuffer::Pixels { .. } => self.publish_shm_frame(app_id, buffer, crop, at_box),
+            CommittedBuffer::Pixels { .. } => {
+                self.publish_shm_frame(app_id, buffer, sampled, at_box)
+            }
         };
         if matches!(published, Published::Held | Published::Copied) {
             self.frame_shown(app_id);
@@ -2869,7 +1890,7 @@ impl DomicileCompositor {
         app_id: &str,
         submitted: Submitted,
         descriptor: &DmabufDescriptor,
-        crop: (i32, i32, i32, i32),
+        sampled: Sampled,
         at_box: u64,
         shown: Published,
     ) -> Published {
@@ -2882,7 +1903,7 @@ impl DomicileCompositor {
             app_id,
             submitted,
             descriptor,
-            crop,
+            sampled,
             (0, 0, 0, 0),
             at_box,
             Instant::now(),
@@ -2909,7 +1930,7 @@ impl DomicileCompositor {
         &mut self,
         app_id: &str,
         buffer: &wl_buffer::WlBuffer,
-        crop: (i32, i32, i32, i32),
+        sampled: Sampled,
         at_box: u64,
     ) -> Published {
         let copied = match self.copy_shm_frame(app_id, buffer) {
@@ -2925,7 +1946,7 @@ impl DomicileCompositor {
             app_id,
             Submitted::Upload(copied.id),
             &copied.descriptor,
-            crop,
+            sampled,
             at_box,
             Published::Copied,
         );
@@ -2938,7 +1959,13 @@ impl DomicileCompositor {
                 .get(copied.id)
                 .expect("a buffer the engine holds is there")
                 .clone();
-            self.casting.shown(app_id, casting::Shown { dmabuf, crop });
+            self.casting.shown(
+                app_id,
+                casting::Shown {
+                    dmabuf,
+                    crop: sampled.crop,
+                },
+            );
         }
         published
     }
@@ -3858,6 +2885,12 @@ impl DomicileCompositor {
         }
         if let Some(theme) = &restated.appearance {
             self.hub.portals.restyle(theme);
+            if let Some(tray) = self.hub.tray.get() {
+                tray.retheme(theme.icon_theme.clone());
+            }
+            if let Some(server) = self.hub.notifications.get() {
+                server.retheme(theme.icon_theme.clone());
+            }
             // Release the host before broadcasting.
             let told = self
                 .hub
@@ -4252,286 +3285,6 @@ impl DomicileCompositor {
                     }
                 }
             });
-        }
-    }
-
-    /// Handle a request from a chrome on the Wayland thread.
-    fn handle_client_request(&mut self, event: ClientRequest) {
-        // First, for every request: this is how the compositor knows someone is
-        // present.
-        self.keep_the_desktop_awake(&event);
-        // After counting activity, before anything reaches the seat. Input to a
-        // locked desktop still wakes the screens but reaches no client. The
-        // lock must act here, not at the socket, because the shell's own lock
-        // screen needs its keys. [`crate::lock::refused`] lists what is
-        // refused.
-        let refusal = if self.the_desk_is_locked() {
-            crate::lock::refused(Asked::OnTheWaylandThread(&event))
-        } else {
-            None
-        };
-        if let Some(refusal) = refusal {
-            say_what_the_lock_refused(refusal);
-            return;
-        }
-        // Input the lock let through, before it reaches the seat.
-        if self.captured(&event) {
-            return;
-        }
-        match event {
-            ClientRequest::PointerMotion { app_id, x, y } => {
-                let Some(surface) = self.surface_for(&app_id) else {
-                    tracing::debug!(%app_id, "pointer motion: no surface");
-                    return;
-                };
-                self.cast_pointer(Some((app_id.clone(), (x, y))));
-                // The chrome's box is the window geometry, not the surface, so
-                // offset for client-side shadows.
-                let (x, y) = crate::window_geometry::surface_point(
-                    with_states(&surface, window_geometry),
-                    (x, y),
-                );
-                self.pointer_app = Some(app_id);
-                let pointer = self.seat.get_pointer().unwrap();
-                let (serial, time) = (SERIAL_COUNTER.next_serial(), self.now_ms());
-                // The chrome sends surface-local coords, so anchor the focus at
-                // the origin and treat the location as already surface-local.
-                pointer.motion(
-                    self,
-                    Some((surface, (0.0, 0.0).into())),
-                    &MotionEvent {
-                        location: (x, y).into(),
-                        serial,
-                        time,
-                    },
-                );
-                pointer.frame(self);
-            }
-            ClientRequest::PointerLeave => {
-                self.cast_pointer(None);
-                self.pointer_app = None;
-                let pointer = self.seat.get_pointer().unwrap();
-                let (serial, time) = (SERIAL_COUNTER.next_serial(), self.now_ms());
-                pointer.motion(
-                    self,
-                    None,
-                    &MotionEvent {
-                        location: (0.0, 0.0).into(),
-                        serial,
-                        time,
-                    },
-                );
-                pointer.frame(self);
-            }
-            ClientRequest::PointerButton { button, pressed } => {
-                tracing::debug!(button, pressed, "pointer button -> client");
-                let state = if pressed {
-                    self.let_go_of_lost_presses();
-                    self.held_buttons.push(button);
-                    ButtonState::Pressed
-                } else {
-                    self.held_buttons.retain(|held| *held != button);
-                    ButtonState::Released
-                };
-                self.pointer_button(button, state);
-            }
-            ClientRequest::PointerAxis {
-                dx,
-                dy,
-                v120_x,
-                v120_y,
-            } => {
-                let pointer = self.seat.get_pointer().unwrap();
-                let mut frame = AxisFrame::new(self.now_ms()).source(AxisSource::Wheel);
-                if dx != 0.0 {
-                    frame = frame
-                        .value(Axis::Horizontal, dx)
-                        .v120(Axis::Horizontal, v120_x);
-                }
-                if dy != 0.0 {
-                    frame = frame.value(Axis::Vertical, dy).v120(Axis::Vertical, v120_y);
-                }
-                pointer.axis(self, frame);
-                pointer.frame(self);
-            }
-            ClientRequest::Key { keycode, pressed } => {
-                // Start timing here, the moment the client can know about the
-                // key.
-                //
-                // Presses only, as the chrome does: a release changes nothing
-                // on screen and would time some unrelated redraw.
-                if pressed {
-                    self.pending_key.get_or_insert_with(Instant::now);
-                }
-                self.inject_key(keycode, pressed);
-                self.tell_the_chromes_the_modifiers();
-            }
-            ClientRequest::KeyboardFocus { app_id } => {
-                // A menu over the target window keeps the keyboard. Focus
-                // anywhere else dismisses it, like a click elsewhere.
-                if let Some(menu) = self.grabbing.last().cloned() {
-                    if app_id.is_some() && app_id == self.window_under(&menu) {
-                        let keyboard = self.seat.get_keyboard().unwrap();
-                        let serial = SERIAL_COUNTER.next_serial();
-                        keyboard.set_focus(self, Some(menu.wl_surface().clone()), serial);
-                        return;
-                    }
-                    self.dismiss_the_menus();
-                }
-                let requested = match &app_id {
-                    Some(id) => self.surface_for(id),
-                    None => None,
-                };
-                if let Some(id) = &app_id {
-                    if requested.is_some() {
-                        debug!(app_id = %id, "keyboard focus -> client");
-                    } else {
-                        // The window closed or has not mapped yet. Focusing
-                        // nothing would leave the desktop deaf, since nothing
-                        // would take focus back.
-                        debug!(app_id = %id, "keyboard focus -> a window with no surface; the chrome keeps it");
-                    }
-                }
-                // Fall back to the chrome, so the keyboard always has a holder.
-                let surface = requested.or_else(|| {
-                    self.chrome_toplevel
-                        .as_ref()
-                        .map(|toplevel| toplevel.wl_surface().clone())
-                });
-                let keyboard = self.seat.get_keyboard().unwrap();
-                let serial = SERIAL_COUNTER.next_serial();
-                keyboard.set_focus(self, surface, serial);
-            }
-            ClientRequest::ClipboardCopied { clipboard, text } => {
-                self.took_a_copy(clipboard, text);
-                self.tell_the_engine_a_clipboard(clipboard);
-            }
-            // Forward to the tray worker, which talks to the session bus.
-            ClientRequest::ActivateTrayItem { id, action } => {
-                if let Some(tray) = self.hub.tray.get() {
-                    tray.activate(id, action);
-                }
-            }
-            // Forward to the notification server's worker.
-            ClientRequest::DismissNotifications { ids } => {
-                if let Some(server) = self.hub.notifications.get() {
-                    server.dismiss(ids);
-                }
-            }
-            ClientRequest::InvokeNotificationAction { id, action } => {
-                if let Some(server) = self.hub.notifications.get() {
-                    server.invoke(id, action);
-                }
-            }
-            ClientRequest::AnswerPortalRequest { id, answer } => {
-                self.hub.portals.answer(id, answer);
-            }
-            ClientRequest::CopyClipboardEntry { entry } => match self.clipboard.text(entry) {
-                Some(text) => {
-                    // Paste now yields this entry, not the newest. See
-                    // [`DomicileCompositor::holding`].
-                    self.holding[at(Clipboard::Copy)] = Some(text.to_owned());
-                    set_data_device_selection(
-                        &self.display_handle,
-                        &self.seat,
-                        text_mimes(),
-                        Holder::Desk(Clipboard::Copy),
-                    );
-                    self.hub.portals.selection_changed(text_mimes(), None);
-                    self.tell_the_engine_a_clipboard(Clipboard::Copy);
-                }
-                // The history dropped this entry. Set nothing rather than
-                // substitute another entry for what the user picked.
-                None => warn!(
-                    entry,
-                    "the shell asked for a clipboard entry this desktop no longer holds"
-                ),
-            },
-            ClientRequest::Unlock { passphrase } => self.offered_the_passphrase(&passphrase),
-            ClientRequest::HeldAwakeByThePortal { held } => self.held_awake_by_the_portal(held),
-            ClientRequest::Lock => {
-                if self.lock.is_some() {
-                    self.shut_the_desk("the shell asked for this desktop to be locked");
-                } else {
-                    warn!("a chrome asked to lock a desktop that has no lock");
-                }
-            }
-            ClientRequest::TurnTheWindows { theme, chromes } => {
-                // Replace any turnover in progress; its windows are about to
-                // get a newer theme.
-                let (turnover, step) = Turnover::begin(theme, chromes);
-                self.turnover = Some(turnover);
-                self.arm_the_turnover_deadline(CAPTURE_WITHIN, Turnover::capture_deadline);
-                self.follow_the_turnover(step);
-            }
-            ClientRequest::ThemeCaptured { chrome, theme } => {
-                if let Some(turnover) = &mut self.turnover {
-                    let step = turnover.captured(&chrome, theme);
-                    self.follow_the_turnover(step);
-                }
-            }
-            ClientRequest::ChromeHello { served_by } => {
-                // A page started, so any keys the previous page held will never
-                // be released. Release them.
-                //
-                // Every new connection sends `hello`, so on a two-chrome
-                // desktop one page starting releases keys held through another.
-                // `held` is cleared on the same terms.
-                self.release_pressed_keys();
-                // A hello is the only sign the engine was replaced; see
-                // [`crate::which_engine`]. Rejoin before announcing windows, so
-                // each has a frame sink again.
-                self.rejoin_the_engine(served_by);
-                // Catch up the new page on state it would otherwise only learn
-                // on the next change.
-                announce_open_apps(&self.hub);
-                // An empty clipboard is a valid message, so the normal
-                // broadcast works.
-                self.tell_the_chromes_the_clipboard();
-                // A shell that reloaded while the screens were dark would
-                // otherwise assume someone is present.
-                self.tell_a_new_chrome_whether_anybody_is_here();
-                // A shell that reloaded, or an engine that restarted, would
-                // otherwise show an unlocked desktop.
-                self.tell_a_new_chrome_whether_the_desk_is_locked();
-            }
-            ClientRequest::SetOutputScale { ratio, scale } => {
-                // Keep the ratio even if the scale is refused: the engine
-                // reports boxes in the page's device pixels regardless.
-                self.device_pixel_ratio = ratio;
-                self.set_output_scale(scale);
-            }
-            ClientRequest::SetOutputSize { logical } => self.set_output_size(logical),
-            ClientRequest::SetAppBounds { app_id, bounds } => {
-                if self.toplevel_for(&app_id).is_some() {
-                    self.app_bounds.insert(app_id, bounds);
-                    self.enter_the_displays_each_window_is_on();
-                } else {
-                    // Usually the window closed while the message was in
-                    // flight. Logged in case the chrome sent a bogus id.
-                    debug!(%app_id, "bounds: a window with no toplevel");
-                }
-            }
-            ClientRequest::Spawn { command } => {
-                spawn_client(&command, &self.hub.wayland_display, self.scope_clients)
-            }
-            ClientRequest::CloseApp { app_id } => match self.toplevel_for(&app_id) {
-                Some(toplevel) => {
-                    debug!(%app_id, "close -> client");
-                    toplevel.send_close();
-                }
-                // Dismiss a popup instead; the client then destroys it
-                // (`popup_destroyed`).
-                None => match self.popups.iter().find(|(id, _)| *id == app_id) {
-                    Some((_, popup)) => {
-                        debug!(%app_id, "dismiss -> client");
-                        popup.send_popup_done();
-                    }
-                    // Usually the window closed while the message was in
-                    // flight. Logged in case the chrome sent a bogus id.
-                    None => debug!(%app_id, "close: a window with no toplevel"),
-                },
-            },
         }
     }
 
@@ -4938,7 +3691,7 @@ impl CompositorHandler for DomicileCompositor {
         // Take the new buffer and the frame callbacks. Taking the buffer gives
         // us its release; otherwise Smithay holds it until the next buffer,
         // which the client may need the release to draw.
-        let (attached, callbacks, buffer_scale, viewport, geometry, damage) =
+        let (attached, callbacks, buffer_scale, buffer_transform, viewport, geometry, damage) =
             with_states(surface, |states| {
                 // Read with the buffer: the viewport is double-buffered and
                 // applies to this commit.
@@ -4966,12 +3719,14 @@ impl CompositorHandler for DomicileCompositor {
                 // The scale this buffer was drawn at. Read now; a client
                 // mid-scale-change may commit the next one differently.
                 let scale = attrs.buffer_scale;
+                let transform = Transform::from(attrs.buffer_transform);
                 drop(guard);
                 // Double-buffered too; see `crate::window_geometry`.
                 (
                     attached,
                     callbacks,
                     scale,
+                    transform,
                     viewport,
                     window_geometry(states),
                     damage,
@@ -5044,18 +3799,28 @@ impl CompositorHandler for DomicileCompositor {
                         // Sized by its own buffer.
                         Role::Bubble => (None, NEWEST_BOX),
                     };
+                    // Measured on the upright buffer, then mapped back into
+                    // the buffer the engine samples.
                     let crop = committed_buffer(&buffer).map_or((0, 0, 0, 0), |committed| {
-                        let size = committed.size();
-                        crate::window_geometry::crop(
-                            geometry,
-                            configured,
-                            surface_size(size, buffer_scale, viewport.destination),
+                        let size = upright_size(committed.size(), buffer_transform);
+                        crop_in_buffer(
+                            crate::window_geometry::crop(
+                                geometry,
+                                configured,
+                                surface_size(size, buffer_scale, viewport.destination),
+                                size,
+                                source_pixels(size, buffer_scale, viewport.source),
+                            ),
                             size,
-                            source_pixels(size, buffer_scale, viewport.source),
+                            buffer_transform,
                         )
                     });
                     self.cast_frame(app_id, &buffer, crop, buffer_scale, damage);
-                    let published = self.publish_frame(app_id, &buffer, crop, at_box);
+                    let sampled = Sampled {
+                        crop,
+                        transform: buffer_transform,
+                    };
+                    let published = self.publish_frame(app_id, &buffer, sampled, at_box);
                     // After the submit, so there is something to sample, but
                     // timed from `started` so the import and submit count as
                     // ours.
@@ -6252,7 +5017,10 @@ fn drawn_size(surface: &WlSurface) -> Option<(f64, f64)> {
             return None;
         };
         let (width, height) = surface_size(
-            committed_buffer(buffer)?.size(),
+            upright_size(
+                committed_buffer(buffer)?.size(),
+                Transform::from(attributes.buffer_transform),
+            ),
             attributes.buffer_scale,
             destination,
         );
@@ -6422,6 +5190,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     IdleInhibitManagerState::new::<DomicileCompositor>(&dh);
     // `parent_window` handles for portal dialogs.
     xdg_foreign::advertise(&dh);
+    // Screenshot and recording tools such as `grim` and `wf-recorder`.
+    screencopy::advertise(&dh);
 
     let mut seat_state = SeatState::new();
     let data_device_state = DataDeviceState::new::<DomicileCompositor>(&dh);
@@ -6504,11 +5274,14 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     // Notifications, from the bus and from the portal. Published once the hub
     // exists. See `notifications`.
-    let notification_server = notifications::serve(data_dirs(
-        std::env::var_os("XDG_DATA_HOME"),
-        std::env::var_os("XDG_DATA_DIRS"),
-        home_directory().as_deref(),
-    ));
+    let notification_server = notifications::serve(
+        data_dirs(
+            std::env::var_os("XDG_DATA_HOME"),
+            std::env::var_os("XDG_DATA_DIRS"),
+            home_directory().as_deref(),
+        ),
+        config.theme.icon_theme.clone(),
+    );
     // State shared by the Wayland thread and chrome connections.
     let (hub, outbound_rx) = ChromeHub::new(
         request_tx,
@@ -6570,6 +5343,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             std::env::var_os("XDG_DATA_DIRS"),
             home_directory().as_deref(),
         ),
+        config.theme.icon_theme.clone(),
         move |items| {
             // Release the host before broadcasting.
             let told = publishing.host.lock().unwrap().set_tray(items);
@@ -6859,6 +5633,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             streams
         },
         cast_deadline: None,
+        screen_copying: casting::Casting::new(cast_requests.clone()),
         cast_on_title: std::env::var("DOMICILE_CAST_WINDOW")
             .ok()
             .map(|title| (title, casting::Casting::new(cast_requests.clone()))),
@@ -7307,660 +6082,17 @@ fn parse_find_colors(raw: &str) -> Vec<u32> {
 #[cfg(test)]
 mod tests {
     use std::ffi::{OsStr, OsString};
-    use std::io::{BufRead, BufReader};
-    use std::os::unix::net::UnixStream;
-    use std::sync::Mutex;
-    use std::thread;
-    use std::thread::sleep;
-    use std::time::{Duration, Instant};
 
     use smithay::input::pointer::CursorIcon;
 
     use domicile_protocol::CursorShape;
 
     use super::{
-        announce_open_apps, answer_on_the_connection, answers_keystroke, at, broadcast_closed,
-        broadcast_focus_decision, broadcast_focus_request, channel, chrome_connection,
-        client_command, clipboard_of, cursor_shape, freshened, hand_over_the_extensions,
-        parse_find_colors, to_line, write_responses, Chrome, ChromeHub, ClientRequest, Clipboard,
-        Committer, ConnectionRequest, Handshake, Lock, Offer, Offered, Outbound, Passphrase,
-        Portals, SelectionTarget, Unlocking, BOTH,
+        answers_keystroke, at, client_command, clipboard_of, cursor_shape,
+        hand_over_the_extensions, parse_find_colors, Clipboard, Committer, SelectionTarget, BOTH,
     };
 
-    use std::sync::Arc;
-
-    use domicile_protocol::{ChromeMessage, HostMessage, Theme};
-
-    #[test]
-    fn a_chrome_that_goes_away_is_forgotten() {
-        // Otherwise only a failed broadcast prunes `chromes`, which an idle
-        // desktop never sends, so each reload would leak a writer.
-        //
-        // Uses a real socket pair, since only EOF ends the connection loop.
-        let (request_tx, _requests) = channel::<ClientRequest>();
-        let (hub, _outbound) = ChromeHub::new(
-            request_tx,
-            1,
-            OsString::from("wayland-1"),
-            Portals::to_nobody(),
-        );
-        let (page, compositor) = UnixStream::pair().expect("a socket pair");
-        let writer = Arc::new(Mutex::new(
-            compositor.try_clone().expect("the stream clones"),
-        ));
-        hub.chromes.lock().unwrap().push(Chrome {
-            writer: writer.clone(),
-        });
-
-        let serving = {
-            let hub = hub.clone();
-            thread::spawn(move || {
-                chrome_connection(hub, compositor, writer, Arc::new(Handshake::new()))
-            })
-        };
-        drop(page);
-        serving.join().expect("the connection thread ends at EOF");
-
-        assert!(
-            hub.chromes.lock().unwrap().is_empty(),
-            "the writer for a chrome that disconnected is not kept"
-        );
-    }
-
-    #[test]
-    fn a_socket_that_has_gone_away_ends_the_connection() {
-        // `false` stops `read_chrome_messages` from reading a peer that is
-        // gone. The caller's early return is not tested; a full close gives EOF
-        // on the next read anyway.
-        let (request_tx, _requests) = channel::<ClientRequest>();
-        let (hub, _outbound) = ChromeHub::new(
-            request_tx,
-            1,
-            OsString::from("wayland-1"),
-            Portals::to_nobody(),
-        );
-        let (page, compositor) = UnixStream::pair().expect("a socket pair");
-        let writer = Arc::new(Mutex::new(
-            compositor.try_clone().expect("the stream clones"),
-        ));
-        drop(page);
-
-        assert!(
-            !write_responses(
-                &hub,
-                &writer,
-                vec![HostMessage::Welcome {
-                    protocol_version: domicile_protocol::PROTOCOL_VERSION,
-                }],
-            ),
-            "a write to a peer that is gone ends the connection rather than looping"
-        );
-    }
-
-    #[test]
-    fn a_search_asked_while_a_passphrase_is_being_checked_is_answered_with_nothing() {
-        // PAM deliberately delays on a wrong password, so the desktop can be
-        // locked with a check pending for seconds. Searches must be refused
-        // throughout.
-        //
-        // No sleep needed: the desktop stays `Checking` until the test hands
-        // back the verdict.
-        let (request_tx, _requests) = channel::<ClientRequest>();
-        let (hub, _outbound) = ChromeHub::new(
-            request_tx,
-            1,
-            OsString::from("wayland-1"),
-            Portals::to_nobody(),
-        );
-        *hub.offered.lock().unwrap() = Some(Arc::new(Offered {
-            search: domicile_host::file_search::FileSearch::new(vec!["plan.org".into()]),
-            indexing: false,
-        }));
-        let verifier = crate::lock::chosen(
-            Some(domicile_config::LockVerifier::Passphrase("friend")),
-            std::path::Path::new("/nonexistent"),
-        )
-        .expect("a passphrase needs nothing from the machine")
-        .expect("a passphrase was stated");
-        let (told, heard) = std::sync::mpsc::channel();
-        let mut lock = Lock::held_by(verifier, move |verdict| {
-            told.send(verdict).expect("the test is listening")
-        });
-        hub.lock.set(lock.seen()).expect("the hub has no lock yet");
-        let search = || {
-            answer_on_the_connection(
-                &hub,
-                ConnectionRequest::SearchFiles {
-                    query: "plan".into(),
-                },
-            )
-        };
-
-        lock.shut();
-        assert_eq!(lock.offered(&Passphrase::from("friend")), Offer::Checking);
-        assert!(
-            search().is_empty(),
-            "a desk with a passphrase being checked answered a search out of the home"
-        );
-
-        let verdict = heard
-            .recv_timeout(Duration::from_secs(10))
-            .expect("the verifier answers");
-        assert_eq!(lock.answered(verdict), Unlocking::Opened);
-        assert_eq!(search().len(), 1, "and the verdict opens it to the search");
-    }
-
-    #[test]
-    fn an_answer_with_nothing_in_it_does_not_wait_for_the_writer() {
-        // Most messages have no response. Waiting here for a writer
-        // `serve_outbound` holds would stop reading that chrome and drop its
-        // messages.
-        let (request_tx, _requests) = channel::<ClientRequest>();
-        let (hub, _outbound) = ChromeHub::new(
-            request_tx,
-            1,
-            OsString::from("wayland-1"),
-            Portals::to_nobody(),
-        );
-        let (_page, compositor) = UnixStream::pair().expect("a socket pair");
-        let writer = Arc::new(Mutex::new(
-            compositor.try_clone().expect("the stream clones"),
-        ));
-
-        // Simulates `serve_outbound` blocked writing to a chrome that is not
-        // reading.
-        //
-        // Wait for the holder to confirm it has the lock. A sleep could let the
-        // main thread win, and a broken build would pass.
-        let (took_it, holds) = channel();
-        let held = writer.clone();
-        let holder = thread::spawn(move || {
-            let _guard = held.lock().unwrap();
-            took_it.send(()).expect("the test is still listening");
-            sleep(Duration::from_secs(1));
-        });
-        holds.recv().expect("the holder takes the lock and says so");
-
-        let started = Instant::now();
-        let answered = write_responses(&hub, &writer, Vec::new());
-        let took = started.elapsed();
-        holder.join().expect("the holder ends");
-
-        assert!(
-            answered,
-            "an answer with nothing in it is not a failed write"
-        );
-        assert!(
-            took < Duration::from_millis(500),
-            "an empty answer waited {took:?} for a writer another thread was holding"
-        );
-    }
-
-    #[test]
-    fn the_answer_on_the_wire_carries_the_desktop_as_of_when_it_was_written() {
-        // Tests `freshened` through its caller. Building the answers before
-        // changing the desktop reproduces the race without timing.
-        let (request_tx, _requests) = channel::<ClientRequest>();
-        let (hub, _outbound) = ChromeHub::new(
-            request_tx,
-            1,
-            OsString::from("wayland-1"),
-            Portals::to_nobody(),
-        );
-        let (page, compositor) = UnixStream::pair().expect("a socket pair");
-        let writer = Arc::new(Mutex::new(
-            compositor.try_clone().expect("the stream clones"),
-        ));
-
-        let booted = vec![window_following("domicile-0", [1280, 800], 1)];
-        hub.host.lock().unwrap().describe_displays(booted);
-        let answers = vec![
-            HostMessage::Welcome {
-                protocol_version: domicile_protocol::PROTOCOL_VERSION,
-            },
-            hub.host.lock().unwrap().describe_desktop(),
-        ];
-
-        // The desktop changes between building and writing, as when
-        // `set_output` lands in the gap.
-        let now = vec![window_following("domicile-0", [1280, 800], 2)];
-        hub.host.lock().unwrap().describe_displays(now.clone());
-
-        assert!(
-            write_responses(&hub, &writer, answers),
-            "the socket is open"
-        );
-        drop(writer);
-        drop(compositor);
-
-        // Compare the bytes a chrome reads, using the caller's encoder.
-        let written: Vec<String> = BufReader::new(page)
-            .lines()
-            .map(|line| line.expect("a line"))
-            .collect();
-        let expected: Vec<String> = [
-            HostMessage::Welcome {
-                protocol_version: domicile_protocol::PROTOCOL_VERSION,
-            },
-            HostMessage::Displays { displays: now },
-        ]
-        .iter()
-        .map(|message| to_line(message).trim_end().to_string())
-        .collect();
-        assert_eq!(
-            written, expected,
-            "the welcome is the answer it was built as, and the desktop is the current one"
-        );
-    }
-
-    #[test]
-    fn a_stale_desktop_in_a_handshake_answer_is_replaced_before_it_is_written() {
-        // `set_output` can broadcast a new desktop between building and writing
-        // the answer. Unfixed, the stale copy arrives last and the chrome keeps
-        // it.
-        let (request_tx, _requests) = channel::<ClientRequest>();
-        let (hub, _outbound) = ChromeHub::new(
-            request_tx,
-            1,
-            OsString::from("wayland-1"),
-            Portals::to_nobody(),
-        );
-        let described = vec![window_following("domicile-0", [1280, 800], 2)];
-        hub.host
-            .lock()
-            .unwrap()
-            .describe_displays(described.clone());
-
-        let built_earlier = HostMessage::Displays {
-            displays: vec![window_following("domicile-0", [1280, 800], 1)],
-        };
-
-        assert_eq!(
-            freshened(&hub, built_earlier),
-            HostMessage::Displays {
-                displays: described
-            },
-            "the desktop written is the one described now, not the one the answer was built from"
-        );
-    }
-
-    #[test]
-    fn the_rest_of_a_handshake_answer_is_written_as_it_was_built() {
-        // Only `displays` is refreshed. `welcome` answers this chrome's request
-        // and must not be re-derived.
-        let (request_tx, _requests) = channel::<ClientRequest>();
-        let (hub, _outbound) = ChromeHub::new(
-            request_tx,
-            1,
-            OsString::from("wayland-1"),
-            Portals::to_nobody(),
-        );
-        let welcome = HostMessage::Welcome {
-            protocol_version: domicile_protocol::PROTOCOL_VERSION,
-        };
-
-        assert_eq!(
-            freshened(&hub, welcome.clone()),
-            welcome,
-            "a message that is not the desktop passes through untouched"
-        );
-    }
-
-    /// The single display of a window-following desktop: mode equals logical
-    /// size, no transform.
-    fn window_following(name: &str, size: [u32; 2], scale: u32) -> domicile_protocol::DisplayInfo {
-        domicile_protocol::DisplayInfo {
-            name: name.to_string(),
-            position: [0, 0],
-            size,
-            scale,
-            mode: size,
-            transform: domicile_protocol::DisplayTransform::Normal,
-        }
-    }
-
-    #[test]
-    fn a_theme_the_shell_picked_reaches_every_page_on_the_desk() {
-        // A click on one monitor's page must switch every page. The compositor
-        // broadcasts the answer to all chromes, including the sender.
-        let (request_tx, _requests) = channel::<ClientRequest>();
-        let (hub, outbound) = ChromeHub::new(
-            request_tx,
-            1,
-            OsString::from("wayland-1"),
-            Portals::to_nobody(),
-        );
-
-        hub.take_up_the_theme(Theme::Light);
-
-        assert!(
-            matches!(
-                outbound.recv_until(Duration::from_millis(100)),
-                Some(Some(Outbound::Message(HostMessage::Theme {
-                    theme: Theme::Light
-                })))
-            ),
-            "the theme is broadcast"
-        );
-        assert_eq!(
-            hub.host.lock().unwrap().describe_theme(),
-            HostMessage::Theme {
-                theme: Theme::Light
-            },
-            "and remembered, so the chrome that connects next is told it too"
-        );
-    }
-
-    #[test]
-    fn a_theme_that_is_already_the_desks_is_not_restated() {
-        // Reloads re-apply the theme often. Broadcasting an unchanged theme
-        // would replay the transition on every page.
-        let (request_tx, _requests) = channel::<ClientRequest>();
-        let (hub, outbound) = ChromeHub::new(
-            request_tx,
-            1,
-            OsString::from("wayland-1"),
-            Portals::to_nobody(),
-        );
-
-        hub.take_up_the_theme(Theme::Dark);
-
-        assert!(
-            matches!(outbound.recv_until(Duration::from_millis(100)), Some(None)),
-            "a host that came up dark is already dark, so nothing is queued"
-        );
-    }
-
-    #[test]
-    fn a_page_that_says_hello_is_told_what_is_already_running() {
-        // Nothing else re-sends `app_appeared`, so a reloaded page would see an
-        // empty screen.
-        let (request_tx, _requests) = channel::<ClientRequest>();
-        let (hub, outbound) = ChromeHub::new(
-            request_tx,
-            1,
-            OsString::from("wayland-1"),
-            Portals::to_nobody(),
-        );
-        let (first, _) = hub
-            .host
-            .lock()
-            .unwrap()
-            .app_appeared(Some("a terminal".to_string()), Some((640.0, 480.0)));
-        let (second, _) = hub
-            .host
-            .lock()
-            .unwrap()
-            .app_appeared(None, Some((100.0, 200.0)));
-
-        announce_open_apps(&hub);
-
-        // Two windows plus a focus message, then one read that confirms nothing
-        // followed.
-        let mut announced = Vec::new();
-        for _ in 0..4 {
-            match outbound.recv_until(Duration::from_millis(100)) {
-                Some(Some(Outbound::Message(HostMessage::AppAppeared { app_id, .. }))) => {
-                    announced.push(app_id);
-                }
-                // Focus is sent with the windows; tested in `domicile-host`,
-                // skipped here.
-                Some(Some(Outbound::Message(HostMessage::FocusChanged { .. }))) => {}
-                Some(Some(_)) => panic!("something other than an announcement was queued"),
-                Some(None) => break,
-                None => panic!("the queue's sending half went away"),
-            }
-        }
-
-        assert_eq!(
-            announced,
-            vec![first, second],
-            "both open windows, in the order they arrived"
-        );
-    }
-
-    #[test]
-    fn a_chrome_asking_for_focus_is_answered_to_every_chrome() {
-        // `chrome_connection` asks `Host` what changed after each message and
-        // broadcasts it, so focus reaches every chrome, not only the sender.
-        // Only a real connection reaches that code.
-        //
-        // One chrome suffices: a focus written back only to the sender would
-        // never reach the queue. Fan-out to every chrome is tested in
-        // `tests/desktop.rs`
-        // (`a_density_one_chrome_reports_is_described_to_the_others`).
-        //
-        // Gap: no test drives `focus_changed` to two connected chromes at once.
-        // A fan-out that sent `FocusChanged` only to the first chrome would
-        // pass.
-        let (hub, outbound, app_id) = hub_with_an_app();
-        let (page, compositor) = UnixStream::pair().expect("a socket pair");
-        let writer = Arc::new(Mutex::new(
-            compositor.try_clone().expect("the stream clones"),
-        ));
-        hub.chromes.lock().unwrap().push(Chrome {
-            writer: writer.clone(),
-        });
-        let serving = {
-            let hub = hub.clone();
-            thread::spawn(move || {
-                chrome_connection(hub, compositor, writer, Arc::new(Handshake::new()))
-            })
-        };
-
-        {
-            use std::io::Write as _;
-            let version = domicile_protocol::PROTOCOL_VERSION;
-            let mut writing = &page;
-            for message in [
-                format!("{{\"type\":\"hello\",\"protocol_version\":{version}}}"),
-                format!("{{\"type\":\"focus_app\",\"app_id\":\"{app_id}\"}}"),
-            ] {
-                writeln!(writing, "{message}").expect("the page can write");
-            }
-        }
-        // Drain before closing the page: the handshake's `Welcome` is written
-        // to this socket, and a closed reader would end the connection before
-        // it reads the second line.
-        let seen = queued(&outbound);
-        drop(page);
-        serving.join().expect("the connection thread ends at EOF");
-
-        assert!(
-            seen.contains(&HostMessage::FocusChanged {
-                app_id: Some(app_id.clone()),
-            }),
-            "every chrome is told the window took the keyboard: {seen:?}"
-        );
-    }
-
-    #[test]
-    fn a_chrome_closing_a_window_asks_the_client_rather_than_the_brain() {
-        // Closing a window must go to the Wayland thread, where its toplevel
-        // is; only the client can end itself.
-        let (request_tx, requests) = channel::<ClientRequest>();
-        let (hub, _outbound) = ChromeHub::new(
-            request_tx,
-            1,
-            OsString::from("wayland-1"),
-            Portals::to_nobody(),
-        );
-        let (page, compositor) = UnixStream::pair().expect("a socket pair");
-        let writer = Arc::new(Mutex::new(
-            compositor.try_clone().expect("the stream clones"),
-        ));
-        let serving = {
-            let hub = hub.clone();
-            thread::spawn(move || {
-                chrome_connection(hub, compositor, writer, Arc::new(Handshake::new()))
-            })
-        };
-
-        {
-            use std::io::Write as _;
-            let version = domicile_protocol::PROTOCOL_VERSION;
-            let mut writing = &page;
-            // Handshake first, as a real page does.
-            for message in [
-                format!("{{\"type\":\"hello\",\"protocol_version\":{version}}}"),
-                "{\"type\":\"close_app\",\"app_id\":\"term\"}".to_string(),
-            ] {
-                writeln!(writing, "{message}").expect("the page can write");
-            }
-        }
-        // Collect before closing the page (see above). Poll, since another
-        // thread sends these.
-        let mut asked = Vec::new();
-        for _ in 0..200 {
-            while let Ok(request) = requests.try_recv() {
-                asked.push(request);
-            }
-            if asked.len() >= 2 {
-                break;
-            }
-            sleep(Duration::from_millis(10));
-        }
-        drop(page);
-        serving.join().expect("the connection thread ends at EOF");
-
-        assert!(
-            matches!(
-                asked.as_slice(),
-                [
-                    ClientRequest::ChromeHello { .. },
-                    ClientRequest::CloseApp { app_id }
-                ] if app_id == "term"
-            ),
-            "the handshake, and then the one client asked to close"
-        );
-    }
-
-    /// Drain the hub's queued messages, in order.
-    ///
-    /// Reads until a read times out. Callers that know the expected count
-    /// should assert the length.
-    fn queued(outbound: &crate::outbound::OutboundReceiver) -> Vec<HostMessage> {
-        let mut seen = Vec::new();
-        while let Some(Some(item)) = outbound.recv_until(Duration::from_millis(100)) {
-            let Outbound::Message(message) = item;
-            seen.push(message);
-        }
-        seen
-    }
-
-    /// A hub with one app, ready to be focused.
-    fn hub_with_an_app() -> (Arc<ChromeHub>, crate::outbound::OutboundReceiver, String) {
-        let (request_tx, _requests) = channel::<ClientRequest>();
-        let (hub, outbound) = ChromeHub::new(
-            request_tx,
-            1,
-            OsString::from("wayland-1"),
-            Portals::to_nobody(),
-        );
-        let app_id = {
-            let mut host = hub.host.lock().unwrap();
-            let (app_id, _) = host.app_appeared(None, Some((100.0, 100.0)));
-            app_id
-        };
-        (hub, outbound, app_id)
-    }
-
-    #[test]
-    fn a_focus_the_compositor_decided_reaches_every_chrome() {
-        // Focus decided by the compositor is invisible to the chrome otherwise,
-        // and `focus_change` reports it once.
-        let (hub, outbound, app_id) = hub_with_an_app();
-
-        broadcast_focus_decision(
-            &hub,
-            ChromeMessage::FocusApp {
-                app_id: app_id.clone(),
-            },
-        );
-
-        assert_eq!(
-            queued(&outbound),
-            vec![HostMessage::FocusChanged {
-                app_id: Some(app_id)
-            }]
-        );
-    }
-
-    #[test]
-    fn a_click_on_the_desktop_says_the_keyboard_came_back() {
-        // Focus returning to the chrome must be announced, or the window stays
-        // marked active.
-        let (hub, outbound, app_id) = hub_with_an_app();
-        broadcast_focus_decision(&hub, ChromeMessage::FocusApp { app_id });
-        let _ = queued(&outbound);
-
-        broadcast_focus_decision(&hub, ChromeMessage::FocusChrome);
-
-        assert_eq!(
-            queued(&outbound),
-            vec![HostMessage::FocusChanged { app_id: None }]
-        );
-    }
-
-    #[test]
-    fn a_client_asking_for_the_keyboard_reaches_every_chrome_and_moves_nothing() {
-        // Granting `xdg-activation` here would take the policy from the shell.
-        // It is broadcast as a question and focus does not move.
-        let (hub, outbound, app_id) = hub_with_an_app();
-        broadcast_focus_decision(&hub, ChromeMessage::FocusChrome);
-        let _ = queued(&outbound);
-
-        broadcast_focus_request(&hub, &app_id);
-
-        assert_eq!(
-            queued(&outbound),
-            vec![HostMessage::FocusRequested {
-                app_id: app_id.clone()
-            }],
-            "the request goes out, and no `focus_changed` with it"
-        );
-        assert_eq!(
-            hub.host.lock().unwrap().focus_holder(),
-            None,
-            "the keyboard is where it was"
-        );
-    }
-
-    #[test]
-    fn a_request_from_a_window_this_compositor_never_announced_goes_nowhere() {
-        // A shell has no element for it and could not answer.
-        let (hub, outbound, _) = hub_with_an_app();
-
-        broadcast_focus_request(&hub, "app-404");
-
-        assert_eq!(queued(&outbound), vec![]);
-    }
-
-    #[test]
-    fn a_focused_window_closing_says_both_things_in_order() {
-        // Both the close and the focus return, in that order, or the chrome
-        // marks a closed window active.
-        let (hub, outbound, app_id) = hub_with_an_app();
-        broadcast_focus_decision(
-            &hub,
-            ChromeMessage::FocusApp {
-                app_id: app_id.clone(),
-            },
-        );
-        let _ = queued(&outbound);
-
-        broadcast_closed(&hub, &app_id);
-
-        assert_eq!(
-            queued(&outbound),
-            vec![
-                HostMessage::AppClosed {
-                    app_id: app_id.clone()
-                },
-                HostMessage::FocusChanged { app_id: None },
-            ]
-        );
-    }
+    use domicile_protocol::HostMessage;
 
     /// The value `client_command` sets for `name`; `None` means cleared.
     fn child_env(command: &[String], display: &str, name: &str) -> Option<OsString> {

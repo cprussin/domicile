@@ -1,8 +1,7 @@
 import { describe, expect, it } from "bun:test";
-import type { Theme } from "@domicile-desktop/component-library/theme-core";
-
-import type { MediaQuery } from "./media";
-import { followReducedMotion, mediaThemeSource } from "./media";
+import type { MediaQuery } from "./media-theme-source";
+import { followReducedMotion, mediaThemeSource } from "./media-theme-source";
+import type { Theme } from "./theme-core";
 
 /** A media query whose match `set` changes, telling its listeners. */
 const fakeQuery = (matches: boolean) => {

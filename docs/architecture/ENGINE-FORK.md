@@ -129,7 +129,7 @@ Two mojo interfaces carry the ids, each with one method:
 
 | Interface | Direction | Carries |
 |---|---|---|
-| `domicile.mojom.ExternalSurfaceProvider` | renderer → browser | The page's `LocalSurfaceId` and size. Returns the `FrameSinkId`. A page naming a surface it was not offered gets an empty one. |
+| `domicile.mojom.ExternalSurfaceProvider` | renderer → browser | The page's `LocalSurfaceId` and size. Returns the `FrameSinkId`. A page naming a surface it was not offered gets an empty one. A parent frame sink outside the calling renderer is a bad message (patch `0107`). |
 | `domicile.mojom.SurfaceObserver` | browser → producer | A `LocalSurfaceId` and a size, sent again whenever the box changes. |
 
 ### One engine, many surfaces
@@ -191,7 +191,7 @@ Calls (compositor → engine):
 |---|---|
 | `domicile_surface_create(engine, app_id)` → `DomicileSurfaceId` | a window appearing. The page's embed waits for this call. |
 | `domicile_surface_import(surface, dmabuf)` → `DomicileBufferId` | `zwp_linux_dmabuf_v1` |
-| `domicile_surface_submit_for_box(surface, buffer, crop, damage, box)` | `wl_surface.commit` with `xdg_surface.set_window_geometry`, shown at the box of the acked configure |
+| `domicile_surface_submit_transformed(surface, buffer, crop, damage, box, transform)` | `wl_surface.commit` with `xdg_surface.set_window_geometry` and `wl_surface.set_buffer_transform`, shown at the box of the acked configure |
 | `domicile_displays_configure(layout, count)` | output configuration |
 | `domicile_clipboard_set(clipboard, text, length)` | `wl_data_offer.receive`. The compositor sends the selection text it already read. |
 | `domicile_display_capture_start(engine, display, width, height, max_fps)`, `_resize`, `_stop` | none: a screen cast of a monitor (see [Display capture](#display-capture)) |
@@ -315,8 +315,3 @@ items:
   is refused. `FrameSinkBroker::OnProducerDisconnected` drops the sinks but does
   not tell the renderer. Recommendation: invalidate the renderer's tokens on
   disconnect. This is the first reload case a shell hits.
-- **The renderer's parent frame sink is not checked.** `ExternalSurfaceProvider`
-  is bound as a free function, so the browser does not verify that the renderer
-  owns the parent frame sink it names. `EmbeddedFrameSinkProviderImpl` makes
-  that check. Recommendation: bind through `RenderProcessHostImpl` to get the
-  renderer's child process id, at the cost of one more edited file.

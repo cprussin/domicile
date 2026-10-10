@@ -332,10 +332,12 @@ impl Compositor {
         }
     }
 
-    /// Everything the compositor has written so far.
+    /// Everything read from the compositor's output so far.
     ///
-    /// Public so a test can check what the log does not contain, such as a
-    /// refused passphrase in `tests/lock.rs`.
+    /// A background thread reads the output, so a line the compositor has
+    /// written may not be here yet. To check for a line, use
+    /// [`wait_for_log`](Self::wait_for_log). This is for checking what the log
+    /// does not contain, such as a refused passphrase in `tests/lock.rs`.
     pub fn complaint(&self) -> String {
         let said = self.complaint.lock().expect("nothing panics holding this");
         if said.trim().is_empty() {

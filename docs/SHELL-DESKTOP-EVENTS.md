@@ -38,7 +38,8 @@ domicile.addEventListener("displayschanged", show);
   `@domicile-desktop/sdk/appearance` reads them now and on each change. `applyAppearance` in
   `@domicile-desktop/component-library/appearance` applies them to the preset:
   the `accent` token, the `_contrastHigh` condition and shortened animations.
-- `theme.icon_theme` goes to the settings portal only. `readIconTheme` and
+- `theme.icon_theme` goes to the settings portal, and draws the tray's and
+  notifications' icons. `readIconTheme` and
   `watchIconTheme` in `@domicile-desktop/sdk/icon-theme` read it from there,
   `watchIconTheme` again on each `SettingChanged`.
 - `prefers-color-scheme` in the shell's page follows it.
@@ -55,6 +56,9 @@ can animate the switch:
 3. Once every shell has called it, the compositor repaints the windows and
    sets `windowsTheme` and fires `windowsthemechanged`.
 4. If no shell calls it, windows switch after about a second.
+
+Browser windows change behind the wipe. Wayland windows change before it
+([ROADMAP.md](../ROADMAP.md#theme)).
 
 In a view transition, call `themeCaptured` inside the update callback and
 return a promise that resolves on `windowsthemechanged`.

@@ -76,6 +76,7 @@ const face = (container: HTMLElement): HTMLElement => {
 /** A tab's place in a strip, for cases about a tab. */
 const MIDDLE_TAB = {
   at: 1,
+  box: { height: 30, width: 1000, x: 0, y: 0 },
   divided: false,
   first: false,
   open: false,
@@ -239,6 +240,12 @@ describe("TitleBar", () => {
     const { transition } = globalThis.getComputedStyle(bar(container));
     expect(transition).not.toContain("inline-size");
     expect(transition).toContain("background-color");
+  });
+
+  it("shows a grabbing pointer while its window is being dragged", () => {
+    const { container } = render(<TitleBar {...barProps} dragging />);
+
+    expect(globalThis.getComputedStyle(bar(container)).cursor).toBe("grabbing");
   });
 
   // Focus follows the cursor, so these colors change often and would flicker

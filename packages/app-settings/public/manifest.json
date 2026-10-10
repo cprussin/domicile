@@ -1,0 +1,8 @@
+{
+  "description": "Edit the desktop's settings, shell, extensions and site permissions.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvlPcs4j/9Wb/+eJX38FWwq5f9S/7TuwRmBHbz8DBdDUOMyVM2dp91Y8TJCgSwG/FDj7uHr+ZRCwL/T4E46JoelADOLXKs/6ZZryD9EpmrGmhc8RQh/CPz7pODgXoOSyzHihTNSDvtq4eSPz+qR8IrUTA2qVfsdZettkeqoEpuYx95uAVOWTBAXKOQhD3ZCA+ZPQIjVmyjMTIhEUy22F2Q9+RRvAQ2HjnzoHX9YmHt2IX4Mbh7VZY5cO4CHG1xmj9hiyldRxGtb1v6q6aZkCCTpYiE9ePDenCL01oKGwz0A6jFooF9upMWEWQosE5BzkGpjRWPO7My6loHGI+8nn1BQIDAQAB",
+  "manifest_version": 3,
+  "name": "Settings",
+  "permissions": ["management", "nativeMessaging"],
+  "version": "1.0.0"
+}

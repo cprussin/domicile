@@ -125,6 +125,15 @@ pub enum Request {
         stream: StreamId,
         developed: Developed,
     },
+    /// One frame of monitor `name` at its own density, taken under
+    /// `stream`. `region` is a part of it, in logical pixels from its
+    /// corner; `None` for all of it.
+    ShootMonitor {
+        stream: StreamId,
+        name: String,
+        region: Option<Region>,
+        developed: Developed,
+    },
     /// The last frame the window `app_id` showed, alone.
     ShootWindow {
         app_id: String,
@@ -186,6 +195,18 @@ impl Casting {
     pub fn shoot(&self, developed: Developed) {
         let stream = StreamId(self.next.fetch_add(1, Ordering::Relaxed));
         self.send(Request::Shoot { stream, developed });
+    }
+
+    /// Takes one frame of `region` of monitor `name`, or all of it, at the
+    /// monitor's density. `developed` hears it, or why there is none.
+    pub fn shoot_monitor(&self, name: String, region: Option<Region>, developed: Developed) {
+        let stream = StreamId(self.next.fetch_add(1, Ordering::Relaxed));
+        self.send(Request::ShootMonitor {
+            stream,
+            name,
+            region,
+            developed,
+        });
     }
 
     /// Takes the last frame window `app_id` showed. `developed` hears it, or

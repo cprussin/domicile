@@ -4,6 +4,7 @@ import { css } from "../../styled-system/css";
 import { GrabCursor } from "./useGrabCursor";
 
 export const grabCursorStyles: Record<GrabCursor, string> = {
+  [GrabCursor.Grabbing]: css({ cursor: "grabbing" }),
   [GrabCursor.Move]: css({ cursor: "move" }),
   [GrabCursor.ResizeEw]: css({ cursor: "ew-resize" }),
   [GrabCursor.ResizeNesw]: css({ cursor: "nesw-resize" }),

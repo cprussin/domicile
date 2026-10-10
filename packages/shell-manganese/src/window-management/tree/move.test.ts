@@ -3,6 +3,7 @@ import { describe, expect, it } from "bun:test";
 import { Direction } from "../direction";
 import { movedBy } from "./move";
 import { Layout, LayoutNode } from "./node";
+import { removed } from "./remove";
 import {
   focusedIdOf,
   focusedNodeOf,
@@ -90,6 +91,14 @@ describe("movedBy", () => {
     );
   });
 
+  it("keeps each window's focus history as it moves", () => {
+    const visited = withFocusOn(withFocusOn(ROW, "c"), "b");
+
+    expect(focusedIdOf(removed(movedBy(visited, Direction.Left), "b"))).toBe(
+      "c",
+    );
+  });
+
   it("stays put against the edge of the workspace", () => {
     const tiling = withFocusOn(ROW, "c");
 
@@ -140,6 +149,27 @@ describe("movedBy", () => {
 
     expect(windowsOf(moved)).toEqual(["a", "b", "c"]);
     expect(moved.root).toMatchObject({ children: [{}, {}, {}] });
+  });
+
+  it("hands the focus back across the group a window moved out of", () => {
+    // sway's focus stack is per window, so b's old column does not inherit
+    // b's place in it.
+    const row = {
+      depth: 1,
+      root: LayoutNode.Container(Layout.SplitH, [
+        LayoutNode.Window("a"),
+        LayoutNode.Window("z"),
+        LayoutNode.Container(Layout.SplitV, [
+          LayoutNode.Window("b"),
+          LayoutNode.Window("e"),
+        ]),
+      ]),
+    };
+    const visited = withFocusOn(withFocusOn(row, "z"), "b");
+
+    expect(focusedIdOf(removed(movedBy(visited, Direction.Left), "b"))).toBe(
+      "z",
+    );
   });
 
   it("keeps the group a window moves out into, even with it alone", () => {

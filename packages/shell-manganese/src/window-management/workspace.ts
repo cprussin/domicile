@@ -26,8 +26,8 @@ import { enteredFrom, focusMoved, leavesBy } from "./tree/focus-direction";
 import { inserted, insertedNode } from "./tree/insert";
 import { laidOut, split, splitToggled } from "./tree/layout";
 import { movedBy, pushedOff, pushedOn } from "./tree/move";
-import type { Layout, LayoutNode } from "./tree/node";
-import { LayoutNode as Node, NodeKind, windowsIn } from "./tree/node";
+import type { LayoutNode } from "./tree/node";
+import { Layout, LayoutNode as Node, NodeKind, windowsIn } from "./tree/node";
 import { removed, removedAt } from "./tree/remove";
 import { resized } from "./tree/resize";
 import { stretched } from "./tree/stretch";
@@ -243,7 +243,7 @@ export const floatToggled = (workspace: Workspace, screen: Rect): Workspace => {
       ...workspace,
       floatFocus: undefined,
       floats: workspace.floats.filter((found) => found !== float),
-      tiling: insertedNode(tiling, float.root),
+      tiling: insertedNode(tiling, untabbed(float.root)),
     };
   } else if (tiling.root === undefined) {
     return workspace;
@@ -254,12 +254,26 @@ export const floatToggled = (workspace: Workspace, screen: Rect): Workspace => {
       floatFocus: focusedWindowIn(node),
       floats: [
         ...workspace.floats,
-        floatFor(node, workspace.floats.length, screen),
+        floatFor(tabbed(node), workspace.floats.length, screen),
       ],
       // Not {@link floatFocused}: `removedAt` already leaves the tiling's
       // focus on a window.
       tiling: removedAt(tiling.root, focusPathOf(tiling.root, tiling.depth)),
     };
+  }
+};
+
+/** `node` as a float's root: a lone window goes in a tabbed container. */
+const tabbed = (node: LayoutNode): LayoutNode =>
+  node.kind === NodeKind.Window ? Node.Container(Layout.Tabbed, [node]) : node;
+
+/** A float's root going back to the tiling, out of a one-child container. */
+const untabbed = (node: LayoutNode): LayoutNode => {
+  if (node.kind === NodeKind.Container) {
+    const [only, ...others] = node.children;
+    return only !== undefined && others.length === 0 ? only : node;
+  } else {
+    return node;
   }
 };
 

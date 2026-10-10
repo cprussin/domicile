@@ -365,12 +365,12 @@ mod tests {
     use zbus::blocking::MessageIterator;
     use zbus::MatchRule;
 
+    use crate::client_requests::ClientRequest;
     use crate::eis::recorded::{a_receiver, Got};
     use crate::portals::fixture::{
         call, next, options, path, reply, served, Results, Served, APP, SESSION,
     };
     use crate::portals::restore::Tokens;
-    use crate::ClientRequest;
 
     const INPUT_CAPTURE: &str = "org.freedesktop.impl.portal.InputCapture";
 

@@ -319,6 +319,7 @@ export const Desktop = ({
                 act(WindowAction.WindowDroppedOnScreen(id, aim.name));
                 break;
               }
+              case AimKind.Strip:
               case AimKind.Window: {
                 act(WindowAction.WindowDroppedOn(id, aim.id, aim.edge));
                 break;
@@ -429,13 +430,14 @@ export const Desktop = ({
       />
       {/*
         Over the windows and under every panel, so a toast never covers the
-        launcher. Hidden while locked so notifications are not shown on the
-        lock screen.
+        launcher. On the screen with the keyboard. Hidden while locked so
+        notifications are not shown on the lock screen.
       */}
       <NotificationToasts
         manager={toasts}
         now={now}
         onAction={notifications.invoke}
+        screen={windows.focused}
         shown={!lock.locked}
       />
       {/* Over the whole desktop, like the clipboard. */}

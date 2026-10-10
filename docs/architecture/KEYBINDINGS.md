@@ -23,6 +23,9 @@ Manganese takes the same shape as `runManganese({ keybindings })`, built with
 its typed commands (`focus("right")`, `mode("resize")`). With no keybindings it
 binds sway's defaults on Meta.
 
+`domicile send-shell focus right` in a terminal on the desktop runs the same
+command as a `SendShell(["focus", "right"])` binding.
+
 ## Design
 
 ```
@@ -46,6 +49,21 @@ compositor: keymap.rs ─▶ shell_config { keys } ─▶ engine ─────
   `Ctrl`/`Control`, `Alt`/`Mod1`.
 - Modifiers match exactly: `Meta+l` does not fire while Shift is held.
 
+### Commands from a terminal
+
+```
+domicile send-shell ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ compositor ─────────────────▶ every page
+                       (control socket)               (system_request send_shell)    (system_event shell_command
+                                                                                       ─▶ bindKeys onCommand)
+```
+
+| Piece | Where | Does |
+|---|---|---|
+| Verb | `domicile-launch` (`cli.rs`, `control.rs`) | `send-shell <word>…`; every word after it is the command |
+| Supervisor | `domicile-launch` (`compositor_socket::send_shell`) | Sends `send_shell` on the compositor's chrome socket without `hello`, as `domicile screenshot` does |
+| Fan-out | `domicile_host::shell_commands`, `domicile_host::system` | Tells every page listening with `shell_commands`; answers `sent`, or fails when none listens |
+| Listener | `@domicile-desktop/sdk/system` `shellCommands()`, `bindKeys` | `bindKeys` listens while bound and passes each command to `onCommand` |
+
 ## Key decisions
 
 - **Chords name keysyms** (`parenleft`), as in sway. The compositor owns the
@@ -60,13 +78,14 @@ compositor: keymap.rs ─▶ shell_config { keys } ─▶ engine ─────
 - **Applications' global shortcuts are grabs too.** The GlobalShortcuts
   portal's chords use this syntax and grab path; see
   [PORTALS.md](../PORTALS.md).
+- **A terminal command is a system call, not a host message.** The engine
+  relays system lines whole, so the route needs no engine change. A new
+  `HostMessage` would need a fork change and an engine release.
+- **Every page listening hears a terminal command.** The compositor does not
+  know which page the user is looking at.
+- **A locked desktop refuses `send_shell` but allows `shell_commands`.** A
+  page reloaded while locked still hears commands after unlock. See
+  [LOCK.md](../LOCK.md).
 - **Grabs are permanent.** The engine's `ShortcutRegistry` has no release. If
   a layout change moves a keysym to another key, the old key stays grabbed
   until restart.
-
-## Plan
-
-- [x] Key table, wire message, engine event, SDK dispatch
-- [x] Keybindings as shell props; manganese and shell-simple bind their own
-- [ ] `domicile send-shell <word>…`: run a `SendShell` action from a terminal,
-      routed supervisor → compositor → every page

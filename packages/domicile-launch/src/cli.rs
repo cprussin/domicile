@@ -19,7 +19,8 @@ pub enum CliError {
          --config <path>: a module's `Shell` export, or a JSON config's \
          \"shell\", is the shell when none is given.\n\
          Or a command for the desktop already running: which-shell, \
-         load-shell <shell>, open-url <url>, or screenshot [file]. Or \
+         load-shell <shell>, open-url <url>, screenshot [file], or \
+         send-shell <command>…. Or \
          check-config <file> to check a config without running it.\n"
     )]
     NoShell,
@@ -55,6 +56,12 @@ pub enum CliError {
     #[error("screenshot takes one file, and it was given {extra} as well.")]
     ExtraToSave { extra: String },
     #[error(
+        "send-shell takes the command to send the shell, and was given \
+         nothing:\n\n    \
+         domicile send-shell focus right\n"
+    )]
+    NothingToSend,
+    #[error(
         "check-config takes the config file to check, and was given \
          nothing:\n\n    \
          domicile check-config ~/.config/domicile/domicile.json\n"
@@ -88,7 +95,7 @@ pub enum Invocation {
         shell: Option<String>,
         config: Option<PathBuf>,
     },
-    /// Query the running desktop.
+    /// Send this request to the running desktop as it is.
     Ask { request: Request },
     /// Tell the running desktop to serve this shell instead.
     ///
@@ -142,6 +149,15 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
                 (Some(target), None) => Ok(Invocation::Open { target }),
                 (Some(_), Some(extra)) => Err(CliError::ExtraToOpen { extra }),
             },
+            Verb::Sending => {
+                let command: Vec<String> = args.collect();
+                match command.is_empty() {
+                    true => Err(CliError::NothingToSend),
+                    false => Ok(Invocation::Ask {
+                        request: Request::SendShell { command },
+                    }),
+                }
+            }
             Verb::Capturing => match (args.next(), args.next()) {
                 (Some(_), Some(extra)) => Err(CliError::ExtraToSave { extra }),
                 (file, _) => Ok(Invocation::Screenshot { file }),
@@ -197,6 +213,8 @@ enum Verb {
     Opening,
     /// `screenshot`, which takes a file or nothing.
     Capturing,
+    /// `send-shell`, which takes one or more words.
+    Sending,
     /// `check-config`, which takes a config file.
     Checking,
 }
@@ -210,6 +228,7 @@ fn verb(word: &str) -> Option<Verb> {
         "load-shell" => Some(Verb::Loading),
         "open-url" => Some(Verb::Opening),
         "screenshot" => Some(Verb::Capturing),
+        "send-shell" => Some(Verb::Sending),
         "check-config" => Some(Verb::Checking),
         _ => None,
     }

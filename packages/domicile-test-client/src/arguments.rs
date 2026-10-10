@@ -8,6 +8,8 @@
 
 use std::ffi::OsString;
 
+use wayland_client::protocol::wl_output::Transform;
+
 /// What to open.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Arguments {
@@ -77,6 +79,12 @@ pub struct Arguments {
     /// surface pixels. `0` on an axis means no limit.
     pub min_size: Option<(i32, i32)>,
     pub max_size: Option<(i32, i32)>,
+
+    /// The `wl_surface.set_buffer_transform` to draw with, if any.
+    ///
+    /// The buffer is drawn turned, half [`crate::window::TURNED_COLORS`]`[0]`
+    /// and half `[1]` across, so a check can tell which way it is shown.
+    pub buffer_transform: Option<Transform>,
 }
 
 /// When the client takes its idle inhibitor.
@@ -119,6 +127,9 @@ pub enum ArgumentError {
     #[error("{flag} wants WIDTHxHEIGHT, not {value}")]
     NotASize { flag: String, value: String },
 
+    #[error("--buffer-transform wants a wl_output.transform name, not {value}")]
+    NotATransform { value: String },
+
     #[error("unknown argument {argument}")]
     Unknown { argument: String },
 }
@@ -140,6 +151,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
     let mut bubble = None;
     let mut min_size = None;
     let mut max_size = None;
+    let mut buffer_transform = None;
 
     let mut args = args.into_iter();
     while let Some(argument) = args.next() {
@@ -207,6 +219,9 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
             "--max-size" => {
                 take(&mut max_size, &flag, size(&mut args, &flag)?)?;
             }
+            "--buffer-transform" => {
+                take(&mut buffer_transform, &flag, turn(&mut args, &flag)?)?;
+            }
             _ => return Err(ArgumentError::Unknown { argument: flag }),
         }
     }
@@ -227,6 +242,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
         bubble: bubble.unwrap_or(false),
         min_size,
         max_size,
+        buffer_transform,
     })
 }
 
@@ -263,6 +279,23 @@ fn size(
             flag: flag.to_string(),
             value: stated.clone(),
         })
+}
+
+/// The `wl_output.transform` named after a flag: `normal`, `90`, `180`, `270`,
+/// or `flipped` and `flipped-` before any of the turns.
+fn turn(args: &mut impl Iterator<Item = OsString>, flag: &str) -> Result<Transform, ArgumentError> {
+    let stated = value(args, flag)?;
+    match stated.as_str() {
+        "normal" => Ok(Transform::Normal),
+        "90" => Ok(Transform::_90),
+        "180" => Ok(Transform::_180),
+        "270" => Ok(Transform::_270),
+        "flipped" => Ok(Transform::Flipped),
+        "flipped-90" => Ok(Transform::Flipped90),
+        "flipped-180" => Ok(Transform::Flipped180),
+        "flipped-270" => Ok(Transform::Flipped270),
+        _ => Err(ArgumentError::NotATransform { value: stated }),
+    }
 }
 
 /// Store a flag's value, rejecting a repeated flag.

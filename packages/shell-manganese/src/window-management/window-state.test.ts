@@ -665,6 +665,24 @@ describe("the scratchpad", () => {
     expect(workspaceHere(state).floats).toEqual([]);
   });
 
+  it("rotates through its windows, oldest first, as sway does", () => {
+    const hidden = reduce(
+      desktop("kitty", "editor"),
+      WindowAction.WindowSentToScratchpad(),
+      WindowAction.WindowSentToScratchpad(),
+    );
+    const first = reduce(hidden, WindowAction.ScratchpadShown());
+    const second = reduce(
+      first,
+      WindowAction.ScratchpadShown(),
+      WindowAction.ScratchpadShown(),
+    );
+
+    expect(activeIdOf(first)).toBe(APP("editor"));
+    expect(activeIdOf(second)).toBe(APP("kitty"));
+    expect(second.scratchpad).toEqual([APP("editor")]);
+  });
+
   it("has nothing to show on an empty scratchpad", () => {
     const state = desktop("kitty");
 

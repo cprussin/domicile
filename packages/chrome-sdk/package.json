@@ -23,6 +23,13 @@
       "types": "./dist/bind-keys.d.ts",
       "default": "./dist/bind-keys.js"
     },
+    "./config": {
+      "types": "./dist/config.d.ts",
+      "default": "./dist/config.js"
+    },
+    "./config.schema.json": {
+      "default": "./config.schema.json"
+    },
     "./cursor-shape": {
       "types": "./dist/cursor-shape.d.ts",
       "default": "./dist/cursor-shape.js"
@@ -97,6 +104,7 @@
     }
   },
   "files": [
+    "config.schema.json",
     "dist/**"
   ],
   "license": "MIT",
@@ -107,7 +115,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "generate": "bun codegen/generate-domicile-host.ts",
+    "generate": "bun codegen/generate-domicile-host.ts && bun codegen/generate-config.ts",
     "test:types": "tsc --noEmit",
     "test:unit": "bun test"
   },

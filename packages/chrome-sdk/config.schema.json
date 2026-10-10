@@ -1,0 +1,460 @@
+{
+  "$defs": {
+    "AccentColor": {
+      "description": "An sRGB color, written `\"#rrggbb\"`.",
+      "pattern": "^#[0-9a-fA-F]{6}$",
+      "type": "string"
+    },
+    "Contrast": {
+      "description": "How strongly clients set text and edges apart from their background.",
+      "enum": ["normal", "high"],
+      "type": "string"
+    },
+    "DisplayConfig": {
+      "additionalProperties": false,
+      "description": "One display, described in the config rather than discovered.\n\nA nested compositor has no monitors to enumerate. Each display becomes a\n`wl_output` and a region of the chrome page, which the shell addresses by\n`name`. `position` and `size` are logical units.",
+      "properties": {
+        "name": {
+          "description": "The name the chrome and the compositor use for this display.\n\nMatched exactly, so a name padded with whitespace is rejected.",
+          "type": "string"
+        },
+        "position": {
+          "default": [0, 0],
+          "description": "The top-left corner in the config's coordinate space.\n\nMay be negative.",
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "format": "int32",
+              "type": "integer"
+            },
+            {
+              "format": "int32",
+              "type": "integer"
+            }
+          ],
+          "type": "array"
+        },
+        "scale": {
+          "default": 1,
+          "description": "The `wl_output` scale for clients on this display.\n\n`output.max_scale` does not apply to described displays.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "size": {
+          "description": "Width and height in logical units. The `wl_output` mode is this times\n`scale`.",
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          ],
+          "type": "array"
+        }
+      },
+      "required": ["name", "size"],
+      "type": "object"
+    },
+    "DisplayPlacement": {
+      "additionalProperties": false,
+      "description": "One display of a profile: which monitor, and what to do with it.\n\nEvery field but `display` defaults to leaving the monitor as it is.",
+      "properties": {
+        "display": {
+          "description": "The connected display this entry places, matched by exact name.\n\nOn a tty the output name is `drm-<id>`. Ozone derives the id from the\nEDID, so it survives a replug. A panel name also matches.",
+          "type": "string"
+        },
+        "enabled": {
+          "default": true,
+          "description": "Whether the display is part of the desktop.\n\nA disabled display must still be connected for the profile to match.\nThis lets a profile match a docked laptop and keep windows off its\nclosed lid.",
+          "type": "boolean"
+        },
+        "mode": {
+          "default": null,
+          "description": "The mode, in physical pixels, this entry's placement assumes. Absent\nmeans any mode.\n\nA check, not a request: the engine holds DRM master and sets each\nconnector's native mode, so the compositor cannot modeset. Positions\noften depend on other displays' sizes, so a different mode makes the\nprofile wrong, and applying it fails.\n\nNo refresh rate: it does not affect layout, cannot be chosen, and some\nmonitors report none.",
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          ],
+          "type": ["array", "null"]
+        },
+        "position": {
+          "default": [0, 0],
+          "description": "The top-left corner in the profile's coordinate space.\n\nMay be negative.",
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "format": "int32",
+              "type": "integer"
+            },
+            {
+              "format": "int32",
+              "type": "integer"
+            }
+          ],
+          "type": "array"
+        },
+        "scale": {
+          "default": 1.0,
+          "description": "Device pixels per logical pixel.\n\nFractional, because real scales are: 1.5 on a 2880x1920 panel gives a\n1920x1280 desktop. This differs from the integer `wl_output.scale`; the\ncompositor's `Screens` advertises that, and `xdg_output` carries the\nlogical size.",
+          "format": "double",
+          "type": "number"
+        },
+        "transform": {
+          "$ref": "#/$defs/Transform",
+          "description": "Which way up the monitor is."
+        }
+      },
+      "required": ["display"],
+      "type": "object"
+    },
+    "ExtensionsConfig": {
+      "additionalProperties": false,
+      "description": "Chrome extensions the engine installs into the browser windows' profile.\nSee `docs/architecture/EXTENSIONS.md`.\n\nListing an extension is consent: there is no install prompt. Removing one\nfrom the list uninstalls it.",
+      "properties": {
+        "unpacked": {
+          "default": [],
+          "description": "Directories holding an unpacked extension, loaded as they are.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "web_store": {
+          "default": [],
+          "description": "Chrome Web Store ids, installed from the Store and updated from it.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "FilesConfig": {
+      "additionalProperties": false,
+      "description": "What the file index is built from.",
+      "properties": {
+        "omit": {
+          "$ref": "#/$defs/FilesOmit"
+        }
+      },
+      "type": "object"
+    },
+    "FilesOmit": {
+      "description": "The paths the file index leaves out, and everything under them.\n\nPatterns follow gitignore's rules:\n- Each is a glob over a path relative to the home. `*` stops at `/`; `**`\n  does not.\n- A pattern starting with `!` takes a path back.\n- The last matching pattern wins.\n- An omitted directory is not walked, so nothing under it can be taken\n  back.\n\nThe default is `**/.*`, which omits hidden paths. A configured list\nreplaces the default.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "IdleConfig": {
+      "additionalProperties": false,
+      "description": "When an idle desktop turns its screens off.\n\nAbsent means never, and that is the default: a blank screen looks like a\ncrash, so a shell must opt in. When `lock` sets a verifier,\nblanking also locks the desk. See `docs/IDLE.md`.\n\nThe unit is in the key name because a generator writes this file.",
+      "properties": {
+        "blank_after_seconds": {
+          "default": null,
+          "description": "Seconds without input before the screens go dark.\n\nAbsent means never. Zero is refused.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": ["integer", "null"]
+        }
+      },
+      "type": "object"
+    },
+    "InputConfig": {
+      "additionalProperties": false,
+      "description": "Input-device settings.",
+      "properties": {
+        "keyboard": {
+          "$ref": "#/$defs/KeyboardConfig"
+        }
+      },
+      "type": "object"
+    },
+    "KeyboardConfig": {
+      "additionalProperties": false,
+      "description": "Keyboard settings, named after SwayWM's `xkb_*` options.\n\nThe string fields go to xkb verbatim, so sway's multi-layout form\n(`xkb_layout = \"us,de\"`) works. Empty `xkb_rules` and `xkb_model` use the\nlibxkbcommon defaults. The default layout is `us`.",
+      "properties": {
+        "xkb_layout": {
+          "default": "us",
+          "type": "string"
+        },
+        "xkb_model": {
+          "default": "",
+          "type": "string"
+        },
+        "xkb_options": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "xkb_rules": {
+          "default": "",
+          "type": "string"
+        },
+        "xkb_variant": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "LockConfig": {
+      "additionalProperties": false,
+      "description": "What unlocks this desk.\n\nAbsent means the desk never locks, and that is the default: a locked desk\nwith no verifier cannot be unlocked. Such a desk never sends\n`HostMessage::Locked`.\n\nSet one verifier:\n- `pam_service` authenticates the desk's user against a PAM service.\n- `passphrase` is for machines without a PAM service. The file is\n  generated, often into the world-readable Nix store, so any user can read\n  it.\n\nA config with both is refused, so a passphrase is never mistaken for a PAM\nfallback. A PAM service that does not exist stops the compositor from\nstarting. See `docs/LOCK.md#verifiers`.",
+      "properties": {
+        "pam_service": {
+          "default": null,
+          "description": "The PAM service the desk's user authenticates against.\n\nThe system must declare it in `/etc/pam.d/`; on NixOS,\n`security.pam.services.<name> = {};`. The docs use `\"domicile\"`.",
+          "type": ["string", "null"]
+        },
+        "passphrase": {
+          "default": null,
+          "description": "A passphrase that unlocks this desk. An empty string is refused.",
+          "type": ["string", "null"]
+        }
+      },
+      "type": "object"
+    },
+    "LockdownConfig": {
+      "additionalProperties": false,
+      "description": "What applications are told not to do, through the\n`org.freedesktop.impl.portal.Lockdown` portal. Every switch defaults to\noff.\n\nApplications enforce these themselves; the compositor only reports them.\nSee `docs/SHELL-CONFIG.md#lockdown`.",
+      "properties": {
+        "disable_application_handlers": {
+          "default": false,
+          "type": "boolean"
+        },
+        "disable_camera": {
+          "default": false,
+          "type": "boolean"
+        },
+        "disable_location": {
+          "default": false,
+          "type": "boolean"
+        },
+        "disable_microphone": {
+          "default": false,
+          "type": "boolean"
+        },
+        "disable_printing": {
+          "default": false,
+          "type": "boolean"
+        },
+        "disable_save_to_disk": {
+          "default": false,
+          "type": "boolean"
+        },
+        "disable_sound_output": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "OutputConfig": {
+      "additionalProperties": false,
+      "description": "Output settings.",
+      "properties": {
+        "displays": {
+          "description": "The displays that make up the desktop.\n\nEmpty means one output sized to Domicile's own window.",
+          "items": {
+            "$ref": "#/$defs/DisplayConfig"
+          },
+          "type": "array"
+        },
+        "max_scale": {
+          "default": 2,
+          "description": "The highest `wl_output` scale to advertise.\n\nLimits cost: a client at scale N renders N² times the pixels. `1` turns\nscaling off. Applies only while `displays` is empty.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "profiles": {
+          "description": "Placements for real monitors, matched against what is connected.\n\nRe-read on every hotplug. Empty leaves the monitors where the engine\nplaced them. See `docs/DISPLAYS.md#profiles`.",
+          "items": {
+            "$ref": "#/$defs/Profile"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "Profile": {
+      "additionalProperties": false,
+      "description": "One arrangement of monitors, and where each goes.\n\nApplies when the displays it names are exactly the connected ones.",
+      "properties": {
+        "displays": {
+          "description": "Every display this arrangement is for, including the ones it turns off.",
+          "items": {
+            "$ref": "#/$defs/DisplayPlacement"
+          },
+          "type": "array"
+        },
+        "name": {
+          "description": "The profile's name, unique in the config. The log prints it when the\nprofile applies.",
+          "type": "string"
+        }
+      },
+      "required": ["name", "displays"],
+      "type": "object"
+    },
+    "StartupConfig": {
+      "additionalProperties": false,
+      "description": "The commands a desk starts with.\n\nRun once, when the compositor starts. A reload does not rerun them, which\nwould start duplicates, or stop them, which would kill programs in use.",
+      "properties": {
+        "commands": {
+          "default": [],
+          "description": "Each an argv, run without a shell. For shell syntax, use\n`[\"sh\", \"-c\", \"…\"]`.",
+          "items": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "ThemeConfig": {
+      "additionalProperties": false,
+      "description": "How the desktop is themed.\n\nClients read every field but `mode` through the settings portal; see the\ncompositor's `portals::settings`.",
+      "properties": {
+        "accent_color": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AccentColor"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The color clients highlight with, or their own when unset."
+        },
+        "contrast": {
+          "$ref": "#/$defs/Contrast"
+        },
+        "icon_theme": {
+          "default": null,
+          "description": "The freedesktop icon theme's directory name, such as `Papirus-Dark`.\nUnset leaves shells with `hicolor`.",
+          "type": ["string", "null"]
+        },
+        "mode": {
+          "$ref": "#/$defs/ThemeMode"
+        },
+        "reduced_motion": {
+          "default": false,
+          "description": "Asks clients to keep animation to a minimum.",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "ThemeMode": {
+      "description": "Whether the desktop is drawn dark or light.\n\nThere is no \"follow the system\" option: the chrome is the system, so there\nis nothing to follow. Clients follow this value through the settings\nportal; see the compositor's `portals::settings`.",
+      "oneOf": [
+        {
+          "const": "dark",
+          "description": "Light text on a dark background, which the chrome is designed for.",
+          "type": "string"
+        },
+        {
+          "const": "light",
+          "description": "Dark text on a light background.",
+          "type": "string"
+        }
+      ]
+    },
+    "Transform": {
+      "description": "Which way up a monitor is, named for the matching `wl_output.transform`.\n\nRotations only; nothing needs flips.",
+      "oneOf": [
+        {
+          "const": "normal",
+          "description": "The connector's native orientation.",
+          "type": "string"
+        },
+        {
+          "const": "rotate-90",
+          "description": "Content turned a quarter counterclockwise.",
+          "type": "string"
+        },
+        {
+          "const": "rotate-180",
+          "description": "Content turned upside down.",
+          "type": "string"
+        },
+        {
+          "const": "rotate-270",
+          "description": "Content turned a quarter clockwise, for a panel standing on its left\nside.",
+          "type": "string"
+        }
+      ]
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "The full compositor configuration.",
+  "properties": {
+    "$schema": {
+      "default": null,
+      "description": "Where editors find this file's JSON Schema. Domicile ignores it.",
+      "type": ["string", "null"]
+    },
+    "extensions": {
+      "$ref": "#/$defs/ExtensionsConfig"
+    },
+    "files": {
+      "$ref": "#/$defs/FilesConfig"
+    },
+    "idle": {
+      "$ref": "#/$defs/IdleConfig"
+    },
+    "input": {
+      "$ref": "#/$defs/InputConfig"
+    },
+    "lock": {
+      "$ref": "#/$defs/LockConfig"
+    },
+    "lockdown": {
+      "$ref": "#/$defs/LockdownConfig"
+    },
+    "output": {
+      "$ref": "#/$defs/OutputConfig"
+    },
+    "shell": {
+      "default": null,
+      "description": "The shell `domicile` runs when given none: a path or a package, as\n`domicile load-shell` takes. The compositor ignores it.",
+      "type": ["string", "null"]
+    },
+    "startup": {
+      "$ref": "#/$defs/StartupConfig"
+    },
+    "theme": {
+      "$ref": "#/$defs/ThemeConfig"
+    }
+  },
+  "title": "Config",
+  "type": "object"
+}

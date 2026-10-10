@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "base/at_exit.h"
+#include "base/check_op.h"
 #include "base/compiler_specific.h"
 #include "base/containers/circular_deque.h"
 #include "base/containers/span.h"
@@ -32,6 +33,7 @@
 #include "components/domicile/engine/domicile_engine_spike.h"
 #include "components/domicile/engine/surface_alpha.h"
 #include "components/domicile/engine/surface_crop.h"
+#include "components/domicile/engine/surface_transform.h"
 #include "components/domicile/mojom/control_channel.mojom.h"
 #include "components/domicile/mojom/frame_sink_broker.mojom.h"
 #include "components/domicile/spike/mojom/spike_probe.mojom.h"
@@ -163,7 +165,8 @@ class Surface : public mojom::SurfaceObserver,
   bool Submit(uint64_t buffer_id,
               const gfx::Rect& crop,
               const gfx::Rect& damage,
-              uint64_t box) {
+              uint64_t box,
+              domicile::BufferTransform transform) {
     auto iter = buffers_.find(buffer_id);
     if (iter == buffers_.end() || boxes_.empty()) {
       return false;
@@ -182,8 +185,13 @@ class Surface : public mojom::SurfaceObserver,
     pass->SetNew(viz::CompositorRenderPassId{1}, rect,
                  damage.IsEmpty() ? rect : damage, gfx::Transform());
 
+    // Drawn in the buffer's orientation, then turned onto the box.
+    const domicile::BufferQuad placed =
+        domicile::QuadForBuffer(transform, shown.size);
+
     viz::SharedQuadState* quad_state = pass->CreateAndAppendSharedQuadState();
-    quad_state->SetAll(gfx::Transform(), rect, rect, gfx::MaskFilterInfo(),
+    quad_state->SetAll(placed.to_box, placed.rect, placed.rect,
+                       gfx::MaskFilterInfo(),
                        /*clip=*/std::nullopt, /*contents_opaque=*/opaque,
                        /*opacity_f=*/1.f, SkBlendMode::kSrcOver,
                        /*sorting_context=*/0, /*layer_id=*/0u,
@@ -194,7 +202,8 @@ class Surface : public mojom::SurfaceObserver,
         CropToUv(crop, iter->second.shared_image->size());
     viz::TextureDrawQuad* quad =
         pass->CreateAndAppendDrawQuad<viz::TextureDrawQuad>();
-    quad->SetNew(quad_state, rect, rect, /*needs_blending=*/!opaque,
+    quad->SetNew(quad_state, placed.rect, placed.rect,
+                 /*needs_blending=*/!opaque,
                  iter->second.resource.id, uv.origin(), uv.bottom_right(),
                  SkColors::kTransparent,
                  /*nearest_neighbor=*/false, /*secure_output_only=*/false,
@@ -706,11 +715,12 @@ struct DomicileEngine {
                     DomicileBufferId buffer,
                     const gfx::Rect& crop,
                     const gfx::Rect& damage,
-                    uint64_t box) {
+                    uint64_t box,
+                    domicile::BufferTransform transform) {
     thread_.task_runner()->PostTask(
         FROM_HERE, base::BindOnce(&DomicileEngine::SubmitBufferOnThread,
                                   base::Unretained(this), surface, buffer, crop,
-                                  damage, box));
+                                  damage, box, transform));
   }
 
   // Throwaway; see domicile_engine_spike.h.
@@ -1030,10 +1040,11 @@ struct DomicileEngine {
                             DomicileBufferId buffer,
                             const gfx::Rect& crop,
                             const gfx::Rect& damage,
-                            uint64_t box) {
+                            uint64_t box,
+                            domicile::BufferTransform transform) {
     auto iter = surfaces_.find(surface);
     if (iter != surfaces_.end()) {
-      iter->second->Submit(buffer, crop, damage, box);
+      iter->second->Submit(buffer, crop, damage, box, transform);
     }
   }
 
@@ -1275,10 +1286,35 @@ void domicile_surface_submit_for_box(DomicileEngine* engine,
                                      int32_t damage_width,
                                      int32_t damage_height,
                                      uint64_t box) {
+  domicile_surface_submit_transformed(
+      engine, surface, buffer, crop_x, crop_y, crop_width, crop_height,
+      damage_x, damage_y, damage_width, damage_height, box,
+      DOMICILE_BUFFER_TRANSFORM_NORMAL);
+}
+
+static_assert(static_cast<uint32_t>(domicile::BufferTransform::kFlipped270) ==
+                  DOMICILE_BUFFER_TRANSFORM_FLIPPED_270,
+              "the header's transforms are the engine's, in the same order");
+
+void domicile_surface_submit_transformed(DomicileEngine* engine,
+                                         DomicileSurfaceId surface,
+                                         DomicileBufferId buffer,
+                                         int32_t crop_x,
+                                         int32_t crop_y,
+                                         int32_t crop_width,
+                                         int32_t crop_height,
+                                         int32_t damage_x,
+                                         int32_t damage_y,
+                                         int32_t damage_width,
+                                         int32_t damage_height,
+                                         uint64_t box,
+                                         DomicileBufferTransform transform) {
+  CHECK_LE(transform, DOMICILE_BUFFER_TRANSFORM_FLIPPED_270);
   if (engine) {
     engine->SubmitBuffer(
         surface, buffer, gfx::Rect(crop_x, crop_y, crop_width, crop_height),
-        gfx::Rect(damage_x, damage_y, damage_width, damage_height), box);
+        gfx::Rect(damage_x, damage_y, damage_width, damage_height), box,
+        static_cast<domicile::BufferTransform>(transform));
   }
 }
 

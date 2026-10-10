@@ -796,7 +796,9 @@ mod tests {
                             listener(Event::Ended(Ended::Stopped));
                         }
                     }
-                    Heard::Msg(Request::Shoot { developed, .. }) => {
+                    Heard::Msg(
+                        Request::Shoot { developed, .. } | Request::ShootMonitor { developed, .. },
+                    ) => {
                         developed(Err("no desk here".into()));
                     }
                     Heard::Msg(Request::ShootWindow { developed, .. }) => {

@@ -31,6 +31,7 @@ domicile load-shell <shell>       # replace the running desktop's shell
 domicile open-url <url>           # open a URL in the running desktop (BROWSER)
 domicile screenshot               # the shell's interactive screenshot (Print in manganese)
 domicile screenshot <file>        # write a PNG of the running desk
+domicile send-shell <word>…       # run a shell command, as a SendShell keybinding does
 domicile check-config <file>      # exit 1 with the reason if the compositor refuses this JSON config
 ```
 
@@ -60,7 +61,9 @@ temp directory. The modules that spawn processes or bind sockets stay thin.
 |---|---|---|
 | `cli` | yes | arguments, and the error for each bad one |
 | `components` | yes | finds the engine and compositor from the binary's path or the environment; the builder, bundled shells and apps when needed |
-| `apps` | no | lists Domicile's own apps, which the compositor installs with the config's extensions; see [HISTORY.md](/docs/HISTORY.md) |
+| `apps` | no | lists Domicile's own apps, which the compositor installs with the config's extensions, and lists the Settings app's native messaging host in the profile; see [HISTORY.md](/docs/HISTORY.md) and [SETTINGS.md](/docs/SETTINGS.md) |
+| `settings` | yes | `domicile-settings-host`: the Settings app's native messaging, reading and writing the files the desktop names |
+| `site_permissions` | yes | a site's permission and setting, as the engine, the control socket and the Settings host carry it |
 | `shell_path` | yes | name or path → module to load and the directory it is served from |
 | `shell_source` | yes | classifies a shell argument: module, entry to build, bundled shell, or package |
 | `build_progress` | yes | parses builder output into a terminal progress bar |
@@ -171,6 +174,11 @@ starting the engine again in 1s — that is failure 1 of 5 in a row.
 
 Engine restart:
 
+- An engine that fails restarts. One that exits 0 restarts only on `drm`
+  (`restart::restarts_the_engine`): there is no window to close there, and
+  Chromium exits 0 on `SIGTERM`, so `pkill` reads as a clean exit. A nested
+  engine exits 0 when its window closes, which ends the run with
+  `the engine exited (exit status: 0)`.
 - The launcher removes the dead engine's broker socket. The new engine creates
   one at the same path.
 - `EngineSession::reconnect` joins it and re-sends the desktop state: a frame
@@ -183,6 +191,9 @@ Engine restart:
 
 Compositor restart:
 
+- A compositor that exits 0 ends the run, with
+  `the compositor exited (exit status: 0)`. Any other exit restarts the
+  desktop.
 - The page's control channel closes when either end exits
   (`components/domicile/browser/control_channel.h`). It only retries at
   startup, so a page cannot reconnect to a new compositor. Fixing that needs
@@ -233,17 +244,20 @@ running one. The first argument decides which.
 - Path: `$XDG_RUNTIME_DIR/domicile-ipc.<pid>.sock`, named after the
   supervisor's pid.
 - The path is exported as `DOMICILE_SOCK` on the compositor, so every app the
-  desktop spawns inherits it.
+  desktop spawns inherits it, and on the engine, so the Settings app's host
+  does ([SETTINGS.md](/docs/SETTINGS.md)).
 - One JSON line in, one back, then the connection closes.
   `domicile_launch::control` is the wire; `domicile_launch::control_socket` is
   the socket.
 - The supervisor answers each connection on its own thread, since an
   interactive screenshot waits on the user.
 - The supervisor answers and routes. `load-shell` and `open-url` go to the
-  engine. `screenshot` goes to the compositor's chrome socket as the
-  `screenshot` system call a page makes, with the file or without one
+  engine. `screenshot` and `send-shell` go to the compositor's chrome socket
+  as the `screenshot` and `send_shell` system calls a page makes
   (`domicile_launch::compositor_socket`). The connection never says `hello`,
-  so it is not a chrome.
+  so it is not a chrome. See
+  [KEYBINDINGS.md](KEYBINDINGS.md#commands-from-a-terminal) for where a
+  shell command goes from there.
 - A whole-desk screenshot times out. An interactive one waits until the shell
   answers or the compositor hangs up. A shell that answers no portal requests
   leaves it waiting until the desktop exits. Ending `domicile screenshot`
@@ -254,6 +268,8 @@ domicile which-shell ─▶ $DOMICILE_SOCK ─▶ supervisor
 domicile load-shell  ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ engine ─▶ page
 domicile open-url    ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ engine
 domicile screenshot  ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ compositor
+domicile send-shell  ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ compositor ─▶ every page
+domicile-settings-host ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ engine   (site permissions; settings_files stops at the supervisor)
 ```
 
 Several desktops per session:

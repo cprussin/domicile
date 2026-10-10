@@ -167,6 +167,23 @@ fn screenshot_takes_one_file_and_the_extra_word_is_named() {
 }
 
 #[test]
+fn send_shell_sends_every_word_after_it_as_the_command() {
+    assert_eq!(
+        run(&["send-shell", "focus", "right"]),
+        Ok(Invocation::Ask {
+            request: Request::SendShell {
+                command: vec!["focus".to_string(), "right".to_string()]
+            }
+        })
+    );
+}
+
+#[test]
+fn send_shell_with_no_command_is_refused() {
+    assert_eq!(run(&["send-shell"]), Err(CliError::NothingToSend));
+}
+
+#[test]
 fn a_shell_whose_name_is_a_verb_is_still_reachable_as_a_path() {
     // Verbs always win over a bare word, regardless of what is on disk. A
     // shell with a verb's name is run by path.

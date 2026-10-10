@@ -9,8 +9,11 @@ Manganese uses sway's layout model. For the key bindings, see
   children split, tabbed or stacking.
 - Tiled windows have a 20px gap between them and at the screen's edges, which
   the focus glow lights. A lone window keeps the gap at the edges.
-- A new window opens beside the focused one. Closing a window gives its space
-  to the rest.
+- A new window or tab opens just after the focused one. Closing a window
+  gives its space to the rest.
+- Closing the focused window focuses the one in its group focused most
+  recently before it, as sway's focus stack does. Each window records when it
+  last took focus, and keeps that when it moves.
 - Every tiled window is in a group. The first window on a workspace opens in a
   tab group of one, so the next window's place shows.
 - A group changes only on request (a layout or split command, a move or a
@@ -93,6 +96,9 @@ For how warping, browser-window focus and modifier drags work, see
 
 - **Meta+Shift+Tab** floats the window, or tiles it again at the tiling focus.
   New floats cascade from the previous ones. A click raises a float.
+- A floated window goes in a tabbed container, so new windows opened while it
+  has the keyboard join it as tabs. Tiling it again drops the container when
+  it holds one window.
 - After **Meta+A**, the whole selected container floats as one box and keeps
   its layout. Tiling keys work inside it. A new window opened while the
   keyboard is in a floating group joins that group.
@@ -126,8 +132,10 @@ For how warping, browser-window focus and modifier drags work, see
   screens, and the whole of a screen with nothing tiled. Focus follows the
   window.
 - **Dropping on a tab** puts the window before or after it in its strip, by
-  which half of the tab the pointer is over. Dragging a tab along its strip
-  rearranges the tabs.
+  which half of the tab the pointer is over.
+- **Dragging a tab along its strip** moves it at once into the slot under the
+  pointer, with no overlay.
+- The pointer shows `grabbing` while a window moves.
 - A move aims only once the pointer is 8px from the press, so clicking a tab
   never drops it beside its container's open tab.
 - **Meta+right-drag** or **Meta+Shift+drag** resizes from the

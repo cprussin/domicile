@@ -143,6 +143,7 @@ not rules, and carry no authority level. Read the one for the area you work in.
 | [/docs/architecture/NOTIFICATIONS.md](/docs/architecture/NOTIFICATIONS.md) | The compositor as the `org.freedesktop.Notifications` server for apps and sites; the shell toasts them and keeps a drawer. |
 | [/docs/architecture/KEYBINDINGS.md](/docs/architecture/KEYBINDINGS.md) | A shell's keybindings as props: sway-style chords resolved against the compositor's keyboard layout and dispatched by the SDK. |
 | [/docs/architecture/COMPOSABLE-SHELLS.md](/docs/architecture/COMPOSABLE-SHELLS.md) | The config as a TS, JS or JSON module whose `Shell` export is the shell; `domicile` builds it; manganese as a library; packages on npm. |
+| [/docs/architecture/SHELL-OPTIONS.md](/docs/architecture/SHELL-OPTIONS.md) | Options a shell declares, kept as JSON in the config and edited in the Settings app. |
 
 [`/ROADMAP.md`](/ROADMAP.md) lists open work and known gaps, each pointing at
 the doc with the detail. Read it before substantial work. Remove items when
@@ -157,6 +158,7 @@ How to use, configure and debug Domicile. No authority level.
 | [/docs/RUNNING-A-DESKTOP.md](/docs/RUNNING-A-DESKTOP.md) | Running a desktop nested or on a tty, the pinned engine, launching clients, and the home-manager module. |
 | [/docs/SHELL-CONFIG.md](/docs/SHELL-CONFIG.md) | The desk config: file location, config modules, the home-manager module, what reloads, and the keyboard, idle, lock, theme and display sections. |
 | [/docs/HISTORY.md](/docs/HISTORY.md) | The History app: how visits are recorded, how every desktop installs and opens it, and Domicile's own launcher entries. |
+| [/docs/SETTINGS.md](/docs/SETTINGS.md) | The Settings app: what it can change, its native messaging host, and how it lists site permissions. |
 | [/docs/LAUNCHER.md](/docs/LAUNCHER.md) | Launcher config: `files.omit`, `applications.omit`, `X-Domicile-Preview`, bookmarks and their icons. |
 | [/docs/WRITING-A-SHELL.md](/docs/WRITING-A-SHELL.md) | Writing a shell outside this repo. Read before changing anything a shell can see (module name, document, SDK surface). Example: `examples/minimal-shell`. |
 | [/docs/SHELL-BROWSER-WINDOWS.md](/docs/SHELL-BROWSER-WINDOWS.md) | `<webview>` for shell authors: state properties and events, focus, keyboard, new windows, close requests, file pickers. |
@@ -232,7 +234,7 @@ Three things this cannot reach, so do not read a green run as covering them:
   own tests — and anything you put *inside* it is not covered by anything.
 - **Presentation.** The pixel tests read an offscreen buffer back; no check
   puts a window on a screen.
-- **Hardware timing.** `composite_ms`, `submit_ms` and the rest come off a
+- **Hardware timing.** `commit_ms`, `response_ms` and the rest come off a
   software rasterizer here, which flatters some stages and punishes others.
   Numbers from this container are directional, not results.
 

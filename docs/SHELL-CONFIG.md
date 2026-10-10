@@ -5,7 +5,8 @@ keyboard, idle, lock, lockdown, theme and extensions. The compositor reads it at
 and reloads it on every change. The schema is the `domicile-config` crate's.
 
 For what a shell does with these settings, see
-[WRITING-A-SHELL.md](WRITING-A-SHELL.md).
+[WRITING-A-SHELL.md](WRITING-A-SHELL.md). The Settings app edits the file
+([SETTINGS.md](SETTINGS.md)).
 
 ## Where it is
 
@@ -41,14 +42,25 @@ A `.ts`, `.tsx`, `.js` or `.mjs` config is evaluated to JSON.
 ```tsx
 // ~/.config/domicile/domicile.tsx
 import { runManganese } from "@domicile-desktop/manganese";
+import type { InputConfig } from "@domicile-desktop/sdk/config";
 
-export const input = { keyboard: { xkb_variant: "dvp" } };
+export const input: InputConfig = { keyboard: { xkb_variant: "dvp" } };
 export const Shell = runManganese();
 ```
 
 - Styling custom manganese bar items:
   [CUSTOM-BAR-ITEMS.md](/packages/shell-manganese/docs/CUSTOM-BAR-ITEMS.md).
 - Design: [COMPOSABLE-SHELLS.md](/docs/architecture/COMPOSABLE-SHELLS.md).
+
+## Types and schema
+
+- `@domicile-desktop/sdk/config` has a type for each section (`InputConfig`,
+  `OutputConfig`, …) and `Config` for the whole file.
+- `@domicile-desktop/sdk/config.schema.json` is the JSON Schema. A JSON config
+  names it for editors, and the compositor ignores the key:
+  `{ "$schema": "https://unpkg.com/@domicile-desktop/sdk/config.schema.json" }`.
+- Both are generated from `domicile-config`'s Rust types; see the SDK's
+  [Generated types](/packages/chrome-sdk/README.md#generated-types).
 
 ## Home-manager
 
@@ -92,7 +104,7 @@ An edit applies to the running desktop, and windows stay open:
 | `idle.blank_after_seconds` | Idle timer restarts. Dark screens relight |
 | `theme.mode` | Shell and windows repaint |
 | `theme.accent_color`, `contrast`, `reduced_motion` | Shell and windows that read the settings portal follow |
-| `theme.icon_theme` | Shell and windows that read the settings portal follow; manganese on the next menu or launcher opening, and title bars when a new app id appears |
+| `theme.icon_theme` | Shell and windows that read the settings portal follow; tray icons redrawn and later notifications drawn in it; manganese on the next menu or launcher opening, and title bars when a new app id appears |
 | `files.omit` | Launcher file index rebuilt |
 | `extensions` | Extensions installed or removed ([EXTENSIONS.md](/docs/architecture/EXTENSIONS.md)) |
 | `lockdown` | Applications told through the Lockdown portal |
@@ -190,6 +202,8 @@ Applications read the rest through the settings portal
   `~/.nix-profile/share/icons`.
 - Shells read it with `watchIconTheme` from `@domicile-desktop/sdk/icon-theme`
   and look icons up with `@domicile-desktop/system-apps/app-icons`.
+- Portal dialogs draw applications in it: `describeApps` reads it each time
+  a dialog's applications change.
 
 In manganese:
 

@@ -49,7 +49,7 @@ export const fullscreen = (global = false) =>
     : command("fullscreen", "toggle");
 /** Toggle floating. */
 export const floating = () => command("floating", "toggle");
-/** Show the last scratchpad window. */
+/** Show the next scratchpad window, or hide the shown one. */
 export const scratchpad = () => command("scratchpad", "show");
 /** Grow the window in a direction, shrinking its neighbor. */
 export const grow = (way: Way) => command("resize", "grow", way);

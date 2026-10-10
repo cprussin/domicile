@@ -6,6 +6,7 @@
 
 #include <array>
 #include <optional>
+#include <string_view>
 
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_types.h"
@@ -49,6 +50,17 @@ ContentSetting ContentSettingFor(mojom::WebViewPermissionSetting setting);
 // the default is stored as no exception, so the site follows it.
 ContentSetting StoredSetting(mojom::WebViewPermissionSetting setting,
                              ContentSetting default_setting);
+
+// The name a shell and the command socket give `permission`: "camera",
+// "microphone", "location", "notifications", "clipboard" or "midi".
+std::string_view PermissionName(mojom::WebViewPermission permission);
+std::optional<mojom::WebViewPermission> PermissionNamed(std::string_view name);
+
+// The name a shell and the command socket give `setting`: "ask", "allow" or
+// "block".
+std::string_view SettingName(mojom::WebViewPermissionSetting setting);
+std::optional<mojom::WebViewPermissionSetting> SettingNamed(
+    std::string_view name);
 
 // Whether a page at `url` has site permissions: http, https and extension
 // pages do. An extension's pages share its origin's settings, so a grant in a

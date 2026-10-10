@@ -19,7 +19,19 @@ fn data_dir(files: &[(&str, &[u8])]) -> tempfile::TempDir {
 }
 
 fn icons_in(dir: &Path) -> TrayIcons {
-    TrayIcons::new(vec![dir.to_path_buf()])
+    TrayIcons::new(vec![dir.to_path_buf()], None)
+}
+
+/// A data directory with `sync` in `hicolor` and in the theme `Papirus`.
+fn themed_data_dir() -> tempfile::TempDir {
+    data_dir(&[
+        ("icons/hicolor/22x22/status/sync.png", b"hicolor"),
+        (
+            "icons/Papirus/index.theme",
+            b"[Icon Theme]\nDirectories=22x22/panel\n[22x22/panel]\nSize=22\nContext=Panel\n",
+        ),
+        ("icons/Papirus/22x22/panel/sync.svg", b"<svg/>"),
+    ])
 }
 
 fn properties() -> Properties {
@@ -192,6 +204,40 @@ mod items {
         assert_eq!(
             item("an-id", ":1.42", named, &mut icons_in(dir.path())).and_then(|told| told.icon),
             Some("data:image/png;base64,b3du".into())
+        );
+    }
+
+    #[test]
+    fn the_icon_theme_comes_before_hicolor_even_in_the_items_own_path() {
+        let dir = themed_data_dir();
+        let own = data_dir(&[("hicolor/22x22/status/sync.png", b"own")]);
+        let named = Properties {
+            icon_name: "sync".into(),
+            icon_theme_path: own.path().to_string_lossy().into_owned(),
+            ..properties()
+        };
+        let mut icons = TrayIcons::new(vec![dir.path().to_path_buf()], Some("Papirus".into()));
+
+        assert_eq!(
+            item("an-id", ":1.42", named, &mut icons).and_then(|told| told.icon),
+            Some("data:image/svg+xml;base64,PHN2Zy8+".into())
+        );
+    }
+
+    #[test]
+    fn a_new_icon_theme_redraws_icons_already_looked_up() {
+        let dir = themed_data_dir();
+        let mut icons = icons_in(dir.path());
+        assert_eq!(
+            icons.icon("sync", ""),
+            Some("data:image/png;base64,aGljb2xvcg==".into())
+        );
+
+        icons.retheme(Some("Papirus".into()));
+
+        assert_eq!(
+            icons.icon("sync", ""),
+            Some("data:image/svg+xml;base64,PHN2Zy8+".into())
         );
     }
 

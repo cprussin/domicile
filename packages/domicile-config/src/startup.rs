@@ -4,6 +4,7 @@
 //! page cannot start. Each runs like a launched application, with this desk's
 //! `WAYLAND_DISPLAY`.
 
+use schemars::JsonSchema;
 use serde::Deserialize;
 
 use crate::ConfigError;
@@ -12,7 +13,7 @@ use crate::ConfigError;
 ///
 /// Run once, when the compositor starts. A reload does not rerun them, which
 /// would start duplicates, or stop them, which would kill programs in use.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct StartupConfig {
     /// Each an argv, run without a shell. For shell syntax, use

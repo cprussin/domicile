@@ -21,8 +21,9 @@ use domicile_config::LockVerifier;
 use domicile_host::system::Reach;
 use domicile_protocol::{HostMessage, Passphrase};
 
+use crate::chrome_connection::ConnectionRequest;
+use crate::client_requests::ClientRequest;
 use crate::pam::{NoPam, Pam};
-use crate::{ClientRequest, ConnectionRequest};
 
 /// Checks whether a passphrase unlocks the desktop.
 ///
@@ -313,7 +314,9 @@ pub enum Asked<'a> {
 ///   lock screen's colors current.
 /// - **System calls** are refused, except reads under `/sys`, the calls a lock
 ///   screen makes to show and adjust the battery, brightness and volume
-///   (`Reach::Readout`), and calls that stop what the shell already started.
+///   (`Reach::Readout`), calls that stop what the shell already started, and
+///   listening for shell commands (`Reach::Listens`), so a page reloaded
+///   while locked hears them after unlock. Sending one is refused.
 ///   Processes and watches started before the lock keep running.
 pub fn refused(asked: Asked) -> Option<Refusal> {
     match asked {
@@ -352,7 +355,9 @@ pub fn refused(asked: Asked) -> Option<Refusal> {
             | ClientRequest::HeldAwakeByThePortal { .. },
         )
         | Asked::OnTheConnection(ConnectionRequest::SetTheme { .. })
-        | Asked::System(Reach::ReadsTheKernel | Reach::Readout | Reach::Stops) => None,
+        | Asked::System(
+            Reach::ReadsTheKernel | Reach::Readout | Reach::Stops | Reach::Listens,
+        ) => None,
     }
 }
 
@@ -381,8 +386,9 @@ mod tests {
         announced, chosen, refused, Asked, CouldNotCheck, Lock, Offer, Refusal, Unlocking, Verdict,
         Verifier,
     };
+    use crate::chrome_connection::ConnectionRequest;
+    use crate::client_requests::ClientRequest;
     use crate::engine::Clipboard;
-    use crate::{ClientRequest, ConnectionRequest};
 
     /// A verifier that accepts one word, so the tests focus on the lock.
     struct OnlyTheWord(&'static str);
@@ -745,6 +751,7 @@ mod tests {
         assert_eq!(refused(Asked::System(Reach::ReadsTheKernel)), None);
         assert_eq!(refused(Asked::System(Reach::Readout)), None);
         assert_eq!(refused(Asked::System(Reach::Stops)), None);
+        assert_eq!(refused(Asked::System(Reach::Listens)), None);
         assert_eq!(
             refused(Asked::System(Reach::Acts)),
             Some(Refusal::Command),

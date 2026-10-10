@@ -18,7 +18,7 @@ import { floatHolds, limitedTo, movedTo } from "./floating/float";
 import type { Popup } from "./popup";
 import type { Rect } from "./rect";
 import type { Layout } from "./tree/node";
-import { NodeKind } from "./tree/node";
+import { windowsIn } from "./tree/node";
 import type { ClientWindow, ShellWindow, SizeLimit } from "./window";
 import {
   appWindowId,
@@ -182,7 +182,7 @@ export type WindowState = {
    * monitor tell new presses from ones it has handled.
    */
   pressed: number;
-  /** The scratchpad windows, most recently hidden last. */
+  /** The scratchpad windows, next to show first. */
   scratchpad: readonly string[];
   windows: readonly ShellWindow[];
   workspaces: readonly Workspace[];
@@ -1631,14 +1631,15 @@ const hideInScratchpad = (state: WindowState): WindowState => {
 };
 
 /**
- * `scratchpad show`: hides the focused scratchpad float, or else shows the
- * most recently hidden window as a float, as sway cycles them.
+ * `scratchpad show`: hides the focused scratchpad float to the back of the
+ * scratchpad, or else shows the front one as a float, so presses rotate through
+ * the windows as in sway.
  */
 const showScratchpad = (state: WindowState): WindowState => {
   const workspace = workspaceHere(state);
   const id = focusedOn(workspace);
   const up = id === undefined ? undefined : floatOn(workspace, id);
-  const hidden = state.scratchpad.at(-1);
+  const [hidden, ...rest] = state.scratchpad;
   if (up?.scratchpad === true && id !== undefined) {
     return onCurrent(
       { ...state, scratchpad: [...state.scratchpad, id] },
@@ -1647,9 +1648,8 @@ const showScratchpad = (state: WindowState): WindowState => {
   } else if (hidden === undefined) {
     return state;
   } else {
-    return onCurrent(
-      { ...state, scratchpad: state.scratchpad.slice(0, -1) },
-      (found) => shown(found, hidden, screenHere(state)),
+    return onCurrent({ ...state, scratchpad: rest }, (found) =>
+      shown(found, hidden, screenHere(state)),
     );
   }
 };
@@ -1692,7 +1692,7 @@ const homeOf = (
 };
 
 /**
- * Clamps each single-window float to its client's size limits (see
+ * Clamps each float holding one window to its client's size limits (see
  * `limitedTo`).
  *
  * Runs after every action because a client can report limits after it
@@ -1716,10 +1716,10 @@ const limitedFloats = (
   workspace: Workspace,
 ): Workspace => {
   const floats = workspace.floats.map((float) => {
-    const { root } = float;
+    const [only, ...others] = windowsIn(float.root);
     const window =
-      root.kind === NodeKind.Window
-        ? after.windows.find(({ id }) => id === root.id)
+      others.length === 0
+        ? after.windows.find(({ id }) => id === only)
         : undefined;
     return window?.kind === WindowKind.App
       ? limitedTo(

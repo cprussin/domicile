@@ -14,7 +14,7 @@ use reis::request::{Connection, Device};
 use super::barriers::Barrier;
 use super::desk::Desk;
 use super::devices::Kind;
-use crate::ClientRequest;
+use crate::client_requests::ClientRequest;
 
 /// What a capture tells its InputCapture session.
 #[derive(Debug, Clone, PartialEq)]

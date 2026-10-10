@@ -1,5 +1,4 @@
-import { MoonIcon } from "@phosphor-icons/react/dist/ssr/Moon";
-import { SunIcon } from "@phosphor-icons/react/dist/ssr/Sun";
+import { CircleHalfIcon } from "@phosphor-icons/react/dist/ssr/CircleHalf";
 
 import { css, cx } from "../../styled-system/css";
 import type { ThemeControl } from "./ThemeProvider";
@@ -22,6 +21,9 @@ type Props = {
 /**
  * A dark/light theme toggle for the shell's chrome.
  *
+ * The icon is a half-filled circle, mirrored per theme, so it stays distinct
+ * from the brightness readout's sun.
+ *
  * There is no "system" option because Domicile is the system. A click asks
  * the compositor for the change; the page repaints when the answer arrives.
  * Throws when no `ThemeProvider` is mounted above it.
@@ -37,17 +39,17 @@ export const ThemeSwitch = ({ useTheme: useThemeHook = useTheme }: Props) => {
       title={LABELS[theme]}
       type="button"
     >
-      <span aria-hidden className={cx(slotStyles, sunSlotStyles)}>
-        <SunIcon size={16} weight="fill" />
+      <span aria-hidden className={cx(slotStyles, lightSlotStyles)}>
+        <CircleHalfIcon mirrored size={16} weight="fill" />
       </span>
-      <span aria-hidden className={cx(slotStyles, moonSlotStyles)}>
-        <MoonIcon size={16} weight="fill" />
+      <span aria-hidden className={cx(slotStyles, darkSlotStyles)}>
+        <CircleHalfIcon size={16} weight="fill" />
       </span>
     </button>
   );
 };
 
-// A circular window holding the sun and moon slots.
+// A circular window holding the light and dark slots.
 //
 // Sets no `color` so the icons inherit their surroundings' text color. The
 // toggle often sits in a white bar over the wallpaper, which does not change
@@ -105,7 +107,7 @@ const slotStyles = css({
 // The `color-mix` is repeated inline because Panda only extracts static
 // literals. A shared const would silently emit no rule.
 
-const sunSlotStyles = css({
+const lightSlotStyles = css({
   "[data-theme-mode=dark] &": {
     color: "color-mix(in oklab, currentcolor 40%, transparent)",
     transform: "translateY(100%)",
@@ -116,7 +118,7 @@ const sunSlotStyles = css({
   },
 });
 
-const moonSlotStyles = css({
+const darkSlotStyles = css({
   "[data-theme-mode=dark] &": {
     color: "currentcolor",
     transform: "translateY(0)",

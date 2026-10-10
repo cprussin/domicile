@@ -127,10 +127,9 @@ Evidence is in [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md),
      count. The lock makes this more pressing: a user about to touch the
      keyboard gets a lock screen with no warning.
 
-4. **Which monitor shows a notification.** The compositor serves
+4. **Notification follow-ups.** The compositor serves
    `org.freedesktop.Notifications`, including web notifications, and manganese
-   shows toasts and a drawer. Left:
-   - Toasts go to the top right of the whole desktop, not the focused monitor.
+   shows toasts on the focused monitor and a drawer. Left:
    - Inline reply.
    - Chrome's notification bridge looks for the server once at startup. A slow
      bus can leave it showing its own popups.
@@ -143,35 +142,32 @@ Evidence is in [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md),
    scale. Left: test on hardware.
    [ONE-PAGE-FOR-THE-DESK.md](docs/architecture/ONE-PAGE-FOR-THE-DESK.md).
 
-6. **`domicile send-shell` from a terminal.** Keybindings are shell props and
-   their commands reach the shell. The same command typed as
-   `domicile send-shell focus right` has no route yet (supervisor → compositor
-   → every page). [KEYBINDINGS.md](docs/architecture/KEYBINDINGS.md).
-
-7. **Composable shells, phase 3.** Phases 1, 2 and 4 are done. Left:
-   - A `schemars` schema with generated `@domicile-desktop/sdk/config` types.
-   - `nix/home-manager.nix` building a TS config directory with `bun2nix`. It
-     writes `domicile.json` today.
+6. **Composable shells, phase 3.** Phases 1, 2 and 4 are done. Left:
+   `nix/home-manager.nix` building a TS config directory with `bun2nix`. It
+   writes `domicile.json` today.
 
    [COMPOSABLE-SHELLS.md](docs/architecture/COMPOSABLE-SHELLS.md).
 
-8. **Split manganese into small packages.** `@domicile-desktop/manganese` is
+7. **Split manganese into small packages.** `@domicile-desktop/manganese` is
    one package with the layout, the bar and every bar item. Split the clock,
    tray, mixer and window management into their own packages, with manganese
    the shell that composes them. No design doc yet.
 
-9. **A Settings app.** Extensions and config values can only be set by editing
-   the config. A Settings app would manage both. It would also hold the
-   *Known gaps* that need a place to store state: a persistent theme choice,
-   and the cookies and site data that `chrome://settings` manages in
-   Chrome. No design doc yet.
+8. **Settings app follow-ups.** The app edits the config, the shell, extensions
+   and site permissions ([SETTINGS.md](docs/SETTINGS.md)). Left:
+   - Shell options a shell declares and the app edits
+     ([SHELL-OPTIONS.md](docs/architecture/SHELL-OPTIONS.md)).
+   - A persistent theme choice, which needs a store for desktop state.
+   - Cookies and site data, which `chrome://settings` manages in Chrome.
+   - No guard runs the app's native messaging host in the engine.
 
-10. **Split up the compositor's `main.rs`.** Subsystems such as the lock,
-    portals and screens are their own modules. `main.rs` still holds the
-    event-loop state, the chrome hub, frame reporting and most request
-    handling. Left: extract cohesive subsystems so each can be read and tested
-    alone, keeping the event-loop state and the order it changes in clear from
-    `main.rs`.
+9. **Split up the compositor's `main.rs`.** The lock, portals, screens, chrome
+   hub, chrome connection, frame report and request handling are their own
+   modules. `main.rs` still holds the event-loop state, startup (`run`), the
+   surface commit path, casting, the engine pump and the Wayland protocol
+   handlers. Left: extract cohesive subsystems so each can be read and tested
+   alone, keeping the event-loop state and the order it changes in clear from
+   `main.rs`.
 
 ## In the engine fork (the agent on `crux`)
 
@@ -240,22 +236,15 @@ Evidence is in [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md),
    before item 2's compositor restart can work.
    [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md#open-questions).
 
-9. **The renderer's parent frame sink is not checked.**
-   `ExternalSurfaceProvider` is bound as a free function, so the browser does
-   not verify that the renderer owns the parent frame sink it names
-   (`EmbeddedFrameSinkProviderImpl` does). Plan: bind through
-   `RenderProcessHostImpl` to get the renderer's child process id.
-   [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md#open-questions).
-
-10. **Keeping the fork current.** The fork is a patch series on the Chromium
-    named in `CHROMIUM_PIN`. A Chromium security fix reaches users only in a
-    new engine release, by moving the pin or carrying the fix as a patch.
-    Moving the pin rebases every patch and rebuilds on `crux`, the one build
-    machine ([Engine CI](#engine-ci)).
-    See [BUILDING-CHROMIUM.md](packages/domicile-engine/docs/BUILDING-CHROMIUM.md#rolling-the-pin),
-    [BUILD-MACHINE.md](packages/domicile-engine/docs/BUILD-MACHINE.md),
-    [RELEASES.md](packages/domicile-engine/docs/RELEASES.md) and
-    [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md).
+9. **Keeping the fork current.** The fork is a patch series on the Chromium
+   named in `CHROMIUM_PIN`. A Chromium security fix reaches users only in a
+   new engine release, by moving the pin or carrying the fix as a patch.
+   Moving the pin rebases every patch and rebuilds on `crux`, the one build
+   machine ([Engine CI](#engine-ci)).
+   See [BUILDING-CHROMIUM.md](packages/domicile-engine/docs/BUILDING-CHROMIUM.md#rolling-the-pin),
+   [BUILD-MACHINE.md](packages/domicile-engine/docs/BUILD-MACHINE.md),
+   [RELEASES.md](packages/domicile-engine/docs/RELEASES.md) and
+   [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md).
 
 ## Known gaps
 
@@ -275,9 +264,11 @@ Understood and not scheduled.
   `scripts/test-the-engines-fourccs-agree.sh` keeps them in sync.
 - **A chrome repaint marks the whole output damaged.** The chrome is one layer
   over the desktop, and it repaints for a clock, a caret or a hover.
-- **Clients that pre-rotate their buffer render wrong.** Clients may
-  pre-rotate their buffer to match `wl_output.transform`, but nothing reads
-  `wl_surface.set_buffer_transform`. The fix is in the dmabuf submit path.
+- **A window cast shows a pre-rotated buffer as drawn.** The engine turns a
+  buffer drawn with `wl_surface.set_buffer_transform` upright, but a window
+  cast (`cast_frame`, `casting::Shown`) copies the buffer unturned. The cast
+  needs the transform beside its crop.
+  [WINDOW-COMPOSITING.md](docs/architecture/WINDOW-COMPOSITING.md#pre-rotated-buffers).
 - **Browser window context menus have Chrome's core items only.** No
   spelling suggestions and no items a page or extension adds. DevTools' own
   menus get the page menu. Each needs a field on `WebViewContextMenu` in
@@ -340,8 +331,8 @@ Understood and not scheduled.
   - Download progress is not reported.
 - **No settings page.** Browser windows block every `chrome://` page (patch
   0083), so nothing can clear cookies and site data. Site permissions are set
-  per site from the address bar. The Settings app (item 9) will cover the
-  rest. Printing is also blocked: `window.print()` opens `chrome://print`.
+  from the address bar and the Settings app ([SETTINGS.md](docs/SETTINGS.md)).
+  Printing is also blocked: `window.print()` opens `chrome://print`.
 - **Some extension calls are refused.** `tabs.move`, `group`, `ungroup`,
   `discard`, `duplicate` and splits; `tabs.update`'s `pinned`, `openerTabId`
   and `autoDiscardable`; `windows.update` bounds and state; and any
@@ -385,14 +376,16 @@ Understood and not scheduled.
 - **A theme picked from the toggle lasts only until restart.** `theme.mode` is
   the startup value. The config file is generated (by a shell, or by
   home-manager on NixOS), so the desktop does not write to it. Persisting the
-  choice needs a separate store for desktop state; the Settings app (item 9)
-  needs the same.
-- **Unmeasured: whether Wayland windows are in the theme transition's old
-  frame.** Windows change theme inside the shell's view transition, after it
-  captures the old frame (`domicile_host::theme_turnover`). A `<webview>` was
-  verified against the published engine. An `<app>` is embedded the same way,
-  but no pixel guard has tested one. If it is not captured, the window changes
-  theme before the wipe instead of behind it.
+  choice needs a separate store for desktop state (item 8).
+- **A Wayland window changes theme before the wipe reaches it.** An `<app>`
+  is not frozen in the view transition's old frame; a `<webview>` is. Seen on
+  a tty with gnome-calculator: the shell changed behind the wipe, the window
+  at once. The compositor signals clients only after every chrome calls
+  `themeCaptured` (`domicile_host::theme_turnover`), and manganese calls it
+  from the transition's update callback, after the capture. So the client
+  redraws after the capture, and the old frame shows the `<app>`'s live
+  `SurfaceLayer`. The fix is likely in the engine's view-transition capture
+  of that layer ([WINDOW-COMPOSITING.md](docs/architecture/WINDOW-COMPOSITING.md)).
 
 ### Session and portals
 
@@ -411,15 +404,11 @@ Understood and not scheduled.
   also serve font and cursor theme there; Domicile has no values for those. An
   unanswered key falls through to the next backend, which is correct, so
   `nix/domicile.portal` lists only what Domicile implements.
-- **Portal dialogs draw applications from `hicolor` only.** `describeApps`
-  does not read `theme.icon_theme`.
 
-- **Wayland capture tools cannot capture the desk.** Portal clients, the
-  shell (`system(host).screenshot()`) and `domicile screenshot` all
-  take the portal's frame (`Casting::shoot`,
-  [PORTALS.md](docs/PORTALS.md)). `grim` and `wf-recorder` get
-  nothing. Serve `ext-image-copy-capture-v1` (and `wlr-screencopy` for older tools) on
-  the same display captures.
+- **Wayland capture copies monitors only, into shm, one shot per frame.**
+  No toplevel sources, no cursor sessions and no dmabuf buffers. Each frame
+  starts and stops the display captures, so `wf-recorder` records slowly.
+  A session could keep them running ([PORTALS.md](docs/PORTALS.md)).
 
 ### System tray
 
@@ -427,10 +416,6 @@ Understood and not scheduled.
   right click and sends `Activate` on left click. Items that set `ItemIsMenu`
   expect left click to open the menu, but `TrayItem` does not carry it; adding
   it changes the protocol, the compositor and the engine's IDL.
-- **Tray bar icons ignore `theme.icon_theme`.** The compositor names them from
-  `hicolor` and the item's `IconThemePath` (`domicile_host::tray`), as it does
-  notification icons. Following the theme needs `index.theme` parsing in
-  Rust, as `@domicile-desktop/system-apps/app-icons` does in TypeScript.
 
 ### Shell reload
 

@@ -1,11 +1,11 @@
 # Marks a Domicile desk as the graphical login session.
 #
-# The launcher starts this once the desk is up and has exported
-# `XDG_CURRENT_DESKTOP` to the user manager
-# (`domicile_launch::graphical_session`). It binds `graphical-session.target`,
-# which the portal and other graphical user units require, and wants
-# `xdg-desktop-autostart.target`, which starts `~/.config/autostart` entries
-# (the Background portal writes them).
+# The launcher starts this once the desk is up and has exported its
+# environment to the user manager (`domicile_launch::graphical_session`).
+# `XDG_CURRENT_DESKTOP` is exported before the desk starts. It binds
+# `graphical-session.target`, which the portal and other graphical user units
+# require, and wants `xdg-desktop-autostart.target`, which starts
+# `~/.config/autostart` entries (the Background portal writes them).
 [Unit]
 Description=Domicile desk
 Documentation=https://github.com/cprussin/domicile/blob/main/docs/RUNNING-A-DESKTOP.md

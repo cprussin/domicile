@@ -2,7 +2,7 @@ use std::os::unix::net::UnixStream;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-use domicile_launch::graphical_session::{begin, end, SHUTDOWN, TARGET};
+use domicile_launch::graphical_session::{begin, end, name, SHUTDOWN, TARGET};
 use domicile_launch::notification::connected;
 
 /// A call the fake user manager received.
@@ -73,6 +73,22 @@ fn paired() -> (
     let client =
         connected(zbus::blocking::connection::Builder::async_io_unix_stream(ours).p2p()).unwrap();
     (server.join().unwrap(), client, heard)
+}
+
+#[test]
+fn a_desk_names_its_desktop_before_anything_can_start_the_portal() {
+    // The engine starts before the compositor and can D-Bus activate the
+    // portal frontend, which reads `XDG_CURRENT_DESKTOP` once, when it starts.
+    // So the name is set before any component runs.
+    let (_server, client, heard) = paired();
+    name(&client).unwrap();
+    assert_eq!(
+        *heard.lock().unwrap(),
+        [Heard::SetEnvironment(vec![
+            "XDG_CURRENT_DESKTOP=domicile".into(),
+            "XDG_SESSION_TYPE=wayland".into(),
+        ])]
+    );
 }
 
 #[test]

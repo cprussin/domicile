@@ -4,13 +4,18 @@
 #ifndef COMPONENTS_DOMICILE_BROWSER_COMMAND_PROTOCOL_H_
 #define COMPONENTS_DOMICILE_BROWSER_COMMAND_PROTOCOL_H_
 
+#include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 
 #include "base/files/file_path.h"
 #include "base/functional/callback.h"
 #include "base/functional/function_ref.h"
+#include "components/domicile/mojom/web_view_guest.mojom-shared.h"
 #include "url/gurl.h"
+#include "url/origin.h"
 
 namespace domicile {
 
@@ -24,6 +29,20 @@ namespace domicile {
 //   {"type":"open_url","version":1,"url":"https://example.com/"}
 //   -> {"type":"opened"}
 //   -> {"type":"refused","why":"..."}
+//
+//   {"type":"site_permissions","version":1}
+//   -> {"type":"site_permissions","defaults":{"camera":"ask",...},
+//       "sites":[{"origin":"https://meet.example","permission":"camera",
+//                 "setting":"allow"}]}
+//   -> {"type":"refused","why":"..."}
+//
+//   {"type":"set_site_permission","version":1,
+//    "origin":"https://meet.example","permission":"camera","setting":"block"}
+//   -> {"type":"set"}
+//   -> {"type":"refused","why":"..."}
+//
+// The site permissions are the Settings app's, relayed by the supervisor
+// (docs/SETTINGS.md). Names are site_permissions.h's.
 //
 // This file only parses and answers lines; the actions are injected so it can
 // be tested with strings. chrome/browser/domicile/domicile_command_socket.cc
@@ -47,14 +66,53 @@ using LoadShell =
 // there is no shell to own the window.
 using OpenUrl = base::FunctionRef<bool(const GURL& url)>;
 
+// One site's stored setting for one permission.
+struct StoredSitePermission {
+  url::Origin origin;
+  mojom::WebViewPermission permission;
+  mojom::WebViewPermissionSetting setting;
+};
+
+// Every permission's default and every site's stored setting.
+struct SitePermissionList {
+  SitePermissionList();
+  SitePermissionList(const SitePermissionList&);
+  SitePermissionList& operator=(const SitePermissionList&);
+  ~SitePermissionList();
+
+  std::vector<
+      std::pair<mojom::WebViewPermission, mojom::WebViewPermissionSetting>>
+      defaults;
+  std::vector<StoredSitePermission> sites;
+};
+
+// Carries out `site_permissions`. Returns nothing if there is no shell, and so
+// no profile to read.
+using ListSitePermissions =
+    base::FunctionRef<std::optional<SitePermissionList>()>;
+
+// Carries out `set_site_permission`, storing the default as no setting.
+// Returns false if there is no shell, and so no profile to store in.
+using SetSitePermission =
+    base::FunctionRef<bool(const url::Origin& origin,
+                           mojom::WebViewPermission permission,
+                           mojom::WebViewPermissionSetting setting)>;
+
+// What each command does, injected so this file can be tested with strings.
+struct CommandActions {
+  LoadShell load_shell;
+  OpenUrl open_url;
+  ListSitePermissions list_site_permissions;
+  SetSitePermission set_site_permission;
+};
+
 // Receives the reply line, including its trailing newline.
 using CommandReply = base::OnceCallback<void(std::string)>;
 
 // Answers one request line (without its newline). `reply` runs once, before
 // this returns.
 void AnswerCommand(std::string_view line,
-                   LoadShell load_shell,
-                   OpenUrl open_url,
+                   const CommandActions& actions,
                    CommandReply reply);
 
 // Returns the refusal reply line for `why`.

@@ -16,7 +16,7 @@
 //! | `output.profiles` | re-matched against the connected monitors, same path |
 //! | `idle.blank_after_seconds` | idle clock restarted and timer re-armed (`reset_the_idle_clock`) |
 //! | `theme.mode` | sent to every chrome and the desk's clients (`take_up_the_theme`) |
-//! | `theme.accent_color`, `contrast`, `reduced_motion` | sent to the desk's clients (`Portals::restyle`) |
+//! | `theme.accent_color`, `contrast`, `reduced_motion`, `icon_theme` | sent to the desk's clients (`Portals::restyle`); `icon_theme` also redraws tray and notification icons |
 //! | `files.omit` | sent to the index, which rewalks the home (`omit_from_the_index`) |
 //! | `extensions.*` | sent to every chrome, whose browser installs them (`hand_over_the_extensions`) |
 //! | `lockdown.*` | sent to the Lockdown portal, which signals the change (`Portals::lock_down`) |

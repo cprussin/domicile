@@ -50,12 +50,13 @@ done
 : >"$broker"
 # Dies one second after coming up, for the first N starts, then stays up. The
 # delay avoids a race with the supervisor's milestone poll. Recovering lets
-# the test show the desktop survives on a later engine.
+# the test show the desktop survives on a later engine. The status is 5 unless
+# DOMICILE_FAKE_ENGINE_STATUS names one.
 if [ -n "${DOMICILE_FAKE_ENGINE_DIES_AFTER_UP:-}" ]; then
   so_far="$(wc -c <"$DOMICILE_FAKE_STARTS" | tr -d ' ')"
   if [ "$so_far" -le "$DOMICILE_FAKE_ENGINE_DIES_AFTER_UP" ]; then
     sleep 1
-    exit 5
+    exit "${DOMICILE_FAKE_ENGINE_STATUS:-5}"
   fi
 fi
 exec sleep 30
@@ -84,10 +85,11 @@ if [ -n "${DOMICILE_FAKE_COMPOSITOR_COMPLAINS:-}" ]; then
 fi
 : >"$session"
 # Dies one second after coming up. The supervisor polls the session document
-# every 100ms, so exiting immediately would look like it never came up.
+# every 100ms, so exiting immediately would look like it never came up. The
+# status is 6 unless DOMICILE_FAKE_COMPOSITOR_STATUS names one.
 if [ -n "${DOMICILE_FAKE_COMPOSITOR_DIES_AFTER_UP:-}" ]; then
   sleep 1
-  exit 6
+  exit "${DOMICILE_FAKE_COMPOSITOR_STATUS:-6}"
 fi
 exec sleep 30
 COMPOSITOR
@@ -215,6 +217,34 @@ else
   FAILED=1
 fi
 
+# ---- a nested engine that exits 0 -----------------------------------------
+#
+# Closing a nested desktop's window exits the engine 0, which ends the run and
+# says so. On drm a clean exit restarts the engine instead, since there is no
+# window to close; `tests/restart.rs` covers that, because a drm run here
+# would register with the real user manager.
+
+echo "== a nested engine that exits 0 ends the run and says so =="
+CLEAN="$WORK/engine-clean.log"
+ENGINES="$WORK/engine-clean-starts"
+: >"$ENGINES"
+run_domicile 10 "$CLEAN" \
+  DOMICILE_FAKE_ENGINE_DIES_AFTER_UP=1 \
+  DOMICILE_FAKE_ENGINE_STATUS=0 \
+  DOMICILE_FAKE_STARTS="$ENGINES"
+ENGINE_STARTS="$(wc -c <"$ENGINES" | tr -d ' ')"
+
+if [ "$ENGINE_STARTS" = 1 ] && [ "$STATUS" = 0 ] &&
+   grep -q "the engine exited (exit status: 0)" "$CLEAN"; then
+  echo "PASS: $(grep -m1 'the engine exited' "$CLEAN")"
+else
+  echo "FAIL: $ENGINE_STARTS engines, exit $STATUS (124 means still up) — a"
+  echo "      nested engine that exited 0 did not end the run, or did not say"
+  echo "      so. What it said:"
+  sed 's/^/    /' "$CLEAN"
+  FAILED=1
+fi
+
 # ---- a compositor that stops running --------------------------------------
 
 echo "== a compositor that exits is named, with its status =="
@@ -289,6 +319,23 @@ else
   echo "FAIL: a desktop that died after coming up was not stood back up; it"
   echo "      came up $UPS times and exited $STATUS. What it said:"
   sed 's/^/    /' "$AGAIN"
+  FAILED=1
+fi
+
+# ---- a desktop whose compositor exits 0 ------------------------------------
+#
+# A clean compositor exit ends the run. It still says why, so a session that
+# ends is never silent.
+
+echo "== a compositor that exits 0 ends the run and says so =="
+OVER="$WORK/compositor-clean.log"
+run_domicile 10 "$OVER" DOMICILE_FAKE_COMPOSITOR_DIES_AFTER_UP=1 DOMICILE_FAKE_COMPOSITOR_STATUS=0
+if grep -q "the compositor exited (exit status: 0)" "$OVER" && [ "$STATUS" = 0 ]; then
+  echo "PASS: $(grep -m1 'the compositor exited' "$OVER")"
+else
+  echo "FAIL: a compositor that exited 0 ended the run (status $STATUS) without"
+  echo "      saying so. What it said:"
+  sed 's/^/    /' "$OVER"
   FAILED=1
 fi
 

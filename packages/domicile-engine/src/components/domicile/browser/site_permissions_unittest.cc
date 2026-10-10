@@ -111,5 +111,24 @@ TEST(SitePermissionsTest, ScreenCaptureIsNotDeviceCapture) {
       IsDeviceCapture(MediaStreamType::NO_SERVICE, MediaStreamType::NO_SERVICE));
 }
 
+TEST(SitePermissionsTest, EachKindIsNamedAsTheShellNamesIt) {
+  for (const mojom::WebViewPermission permission : kSitePermissions) {
+    EXPECT_EQ(PermissionNamed(PermissionName(permission)), permission);
+  }
+  EXPECT_EQ(PermissionName(mojom::WebViewPermission::kLocation), "location");
+  EXPECT_EQ(PermissionNamed("bluetooth"), std::nullopt);
+}
+
+TEST(SitePermissionsTest, EachSettingIsNamedAsTheShellNamesIt) {
+  for (const mojom::WebViewPermissionSetting setting :
+       {mojom::WebViewPermissionSetting::kAsk,
+        mojom::WebViewPermissionSetting::kAllow,
+        mojom::WebViewPermissionSetting::kBlock}) {
+    EXPECT_EQ(SettingNamed(SettingName(setting)), setting);
+  }
+  EXPECT_EQ(SettingName(mojom::WebViewPermissionSetting::kBlock), "block");
+  EXPECT_EQ(SettingNamed("sometimes"), std::nullopt);
+}
+
 }  // namespace
 }  // namespace domicile

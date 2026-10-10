@@ -386,3 +386,42 @@ fn a_screenshot_is_answered_with_where_it_was_saved() {
         r#"{"type":"system_reply","id":10,"reply":{"kind":"failed","error":{"kind":"canceled","message":"the dialog was dismissed"}}}"#
     );
 }
+
+/// `domicile send-shell` sends a command to every page listening for one.
+#[test]
+fn a_shell_command_goes_to_each_page_that_listens_for_one() {
+    assert_eq!(
+        chrome(r#"{"type":"system_request","id":12,"request":{"call":"shell_commands"}}"#),
+        ChromeMessage::SystemRequest {
+            id: 12,
+            request: SystemRequest::ShellCommands,
+        }
+    );
+    assert_eq!(
+        chrome(
+            r#"{"type":"system_request","id":1,"request":{"call":"send_shell","command":["focus","right"]}}"#
+        ),
+        ChromeMessage::SystemRequest {
+            id: 1,
+            request: SystemRequest::SendShell {
+                command: vec!["focus".into(), "right".into()],
+            },
+        }
+    );
+    assert_eq!(
+        host(&HostMessage::SystemReply {
+            id: 1,
+            reply: SystemReply::Sent,
+        }),
+        r#"{"type":"system_reply","id":1,"reply":{"kind":"sent"}}"#
+    );
+    assert_eq!(
+        host(&HostMessage::SystemEvent {
+            id: 12,
+            event: SystemEvent::ShellCommand {
+                command: vec!["focus".into(), "right".into()],
+            },
+        }),
+        r#"{"type":"system_event","id":12,"event":{"kind":"shell_command","command":["focus","right"]}}"#
+    );
+}

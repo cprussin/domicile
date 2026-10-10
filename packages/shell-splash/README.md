@@ -9,7 +9,8 @@ The page a desktop shows while `domicile` builds its shell on first start.
   the prebuilt page into the run's directory and writes `progress.json` beside
   it; the page polls that file. `domicile load-shell` and config reloads never
   show it. See `domicile_launch::splash`.
-- On `built` it plays a 900 ms ending, then `domicile` loads the shell.
+- On `built` it shows "Ready" for 900 ms, then `domicile` loads the shell,
+  which crossfades in over it (the shell document's `@view-transition`).
 - On `failed` it shows the builder's error. Any key stops `domicile`
   (`kill -TERM`), which logs out.
 

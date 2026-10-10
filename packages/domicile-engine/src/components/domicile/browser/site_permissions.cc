@@ -78,6 +78,56 @@ ContentSetting StoredSetting(mojom::WebViewPermissionSetting setting,
   return stored == default_setting ? CONTENT_SETTING_DEFAULT : stored;
 }
 
+std::string_view PermissionName(mojom::WebViewPermission permission) {
+  switch (permission) {
+    case mojom::WebViewPermission::kCamera:
+      return "camera";
+    case mojom::WebViewPermission::kMicrophone:
+      return "microphone";
+    case mojom::WebViewPermission::kLocation:
+      return "location";
+    case mojom::WebViewPermission::kNotifications:
+      return "notifications";
+    case mojom::WebViewPermission::kClipboard:
+      return "clipboard";
+    case mojom::WebViewPermission::kMidi:
+      return "midi";
+  }
+}
+
+std::optional<mojom::WebViewPermission> PermissionNamed(std::string_view name) {
+  for (const mojom::WebViewPermission permission : kSitePermissions) {
+    if (PermissionName(permission) == name) {
+      return permission;
+    }
+  }
+  return std::nullopt;
+}
+
+std::string_view SettingName(mojom::WebViewPermissionSetting setting) {
+  switch (setting) {
+    case mojom::WebViewPermissionSetting::kAsk:
+      return "ask";
+    case mojom::WebViewPermissionSetting::kAllow:
+      return "allow";
+    case mojom::WebViewPermissionSetting::kBlock:
+      return "block";
+  }
+}
+
+std::optional<mojom::WebViewPermissionSetting> SettingNamed(
+    std::string_view name) {
+  for (const mojom::WebViewPermissionSetting setting :
+       {mojom::WebViewPermissionSetting::kAsk,
+        mojom::WebViewPermissionSetting::kAllow,
+        mojom::WebViewPermissionSetting::kBlock}) {
+    if (SettingName(setting) == name) {
+      return setting;
+    }
+  }
+  return std::nullopt;
+}
+
 bool HasSitePermissions(const GURL& url) {
   return url.SchemeIsHTTPOrHTTPS() || url.SchemeIs("chrome-extension");
 }

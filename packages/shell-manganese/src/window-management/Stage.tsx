@@ -655,9 +655,9 @@ const tabTargets = (screens: readonly StageScreen[]): readonly TabTarget[] =>
   screens
     .filter(({ fullscreenId }) => fullscreenId === undefined)
     .flatMap(({ screenful }) => screenful.placements)
-    .flatMap(({ bar, depth, id, tabbed }) =>
-      depth === TILED && tabbed !== undefined
-        ? [{ id, rect: bar, tabbed }]
+    .flatMap(({ bar, depth, id, strip, tabbed }) =>
+      depth === TILED && strip !== undefined && tabbed !== undefined
+        ? [{ at: strip.at, id, rect: bar, strip: strip.box, tabbed }]
         : [],
     );
 

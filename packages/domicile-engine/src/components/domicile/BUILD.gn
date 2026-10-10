@@ -241,8 +241,12 @@ source_set("command_protocol") {
   public_deps = [
     ":common",
     "//base",
+    "//components/domicile/mojom",
     "//url",
   ]
+
+  # The names of site permissions and their settings.
+  deps = [ ":site_permissions" ]
 }
 
 # The chords the shell claimed for the desktop, and who to tell when one fires.
@@ -695,6 +699,7 @@ source_set("unit_tests") {
     "//components/domicile/engine:event_queue_unit_tests",
     "//components/domicile/engine:surface_alpha_unit_tests",
     "//components/domicile/engine:surface_crop_unit_tests",
+    "//components/domicile/engine:surface_transform_unit_tests",
     "//components/autofill/core/common",
     "//components/password_manager/core/common",
     "//components/prefs:test_support",
@@ -705,6 +710,7 @@ source_set("unit_tests") {
     "//components/viz/service",
     "//components/viz/test:test_support",
     "//mojo/public/cpp/bindings",
+    "//mojo/public/cpp/test_support:test_utils",
     "//media",
     "//media/capture/mojom:video_capture_buffer",
     "//services/viz/privileged/mojom/compositing",

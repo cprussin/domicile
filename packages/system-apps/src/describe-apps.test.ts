@@ -38,6 +38,33 @@ describe("describeApps", () => {
     ]);
   });
 
+  it("draws icons from the config's icon theme before hicolor", async () => {
+    const system = fakeSystem(
+      {
+        "/share/applications/org.gnome.Evince.desktop": entry(
+          "Document Viewer",
+          "evince",
+        ),
+        "/share/icons/hicolor/scalable/apps/evince.svg": "svg",
+        "/share/icons/Papirus/48x48/apps/evince.svg": "papirus",
+        "/share/icons/Papirus/index.theme":
+          "[Icon Theme]\nDirectories=48x48/apps\n[48x48/apps]\nSize=48\nContext=Applications\n",
+      },
+      ENVIRONMENT,
+      "Papirus",
+    );
+
+    const described = await describeApps(system, ["org.gnome.Evince"]);
+
+    expect(described.unwrapOr([])).toStrictEqual([
+      {
+        icon: "data:image/svg+xml;base64,cGFwaXJ1cw==",
+        id: "org.gnome.Evince",
+        name: "Document Viewer",
+      },
+    ]);
+  });
+
   it("names an id with no entry, or an entry with no icon found, as it can", async () => {
     const system = fakeSystem(
       {

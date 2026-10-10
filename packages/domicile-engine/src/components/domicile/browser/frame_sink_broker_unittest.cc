@@ -10,9 +10,11 @@
 #include <vector>
 
 #include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/run_loop.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_future.h"
+#include "components/domicile/browser/external_surface_provider.h"
 #include "components/viz/common/surfaces/frame_sink_id.h"
 #include "components/viz/common/surfaces/frame_sink_id_allocator.h"
 #include "components/viz/common/surfaces/local_surface_id.h"
@@ -25,6 +27,7 @@
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "mojo/public/cpp/test_support/test_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/geometry/point.h"
@@ -396,6 +399,44 @@ TEST_F(FrameSinkBrokerTest, EmbedWaitsForAProducer) {
       BrokerASink(remote, sink_client, sink, mojo::NullRemote());
 
   EXPECT_EQ(frame_sink_id, embedded.Get());
+}
+
+// A renderer embeds under its own frame sink through the provider.
+TEST_F(FrameSinkBrokerTest, ARendererEmbedsUnderItsOwnFrameSink) {
+  mojo::Remote<mojom::FrameSinkBroker> remote;
+  broker()->Bind(remote.BindNewPipeAndPassReceiver());
+  viz::MockCompositorFrameSinkClient sink_client;
+  mojo::Remote<viz::mojom::CompositorFrameSink> sink;
+  const viz::FrameSinkId frame_sink_id =
+      BrokerASink(remote, sink_client, sink, mojo::NullRemote());
+
+  ExternalSurfaceProvider provider(broker());
+  mojo::Remote<mojom::ExternalSurfaceProvider> page;
+  provider.Bind(page.BindNewPipeAndPassReceiver(),
+                kPageFrameSinkId.client_id());
+
+  base::test::TestFuture<const std::optional<viz::FrameSinkId>&> embedded;
+  page->Embed(kTestApp, kPageFrameSinkId, AllocateLocalSurfaceId(),
+              kEmbeddedSize, kEmbeddedScale, embedded.GetCallback());
+
+  EXPECT_EQ(frame_sink_id, embedded.Get());
+}
+
+// A renderer that names another renderer's frame sink is reported, as
+// content::EmbeddedFrameSinkProviderImpl reports one.
+TEST_F(FrameSinkBrokerTest, ARendererNamingAnotherRenderersFrameSinkIsBad) {
+  ExternalSurfaceProvider provider(broker());
+  mojo::Remote<mojom::ExternalSurfaceProvider> page;
+  provider.Bind(page.BindNewPipeAndPassReceiver(),
+                kPageFrameSinkId.client_id() + 1);
+
+  mojo::test::BadMessageObserver bad_message;
+  page->Embed(kTestApp, kPageFrameSinkId, AllocateLocalSurfaceId(),
+              kEmbeddedSize, kEmbeddedScale, base::DoNothing());
+
+  // A substring: mojo prefixes the error when the message crossed processes.
+  EXPECT_THAT(bad_message.WaitForBadMessage(),
+              testing::HasSubstr("parent frame sink is not the renderer's"));
 }
 
 // Each <app> element gets the surface for its own app id.

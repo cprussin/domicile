@@ -5,13 +5,13 @@
 //! globs relative to the home. See `docs/LAUNCHER.md#files`.
 
 use globset::{Glob, GlobBuilder, GlobMatcher};
+use schemars::JsonSchema;
 use serde::Deserialize;
 
 /// What the file index is built from.
-///
-/// `PartialEq` lets a reload detect a change; see the compositor's
-/// `Restatement`.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+// `PartialEq` lets a reload detect a change; see the compositor's
+// `Restatement`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct FilesConfig {
     pub omit: Omit,
@@ -29,8 +29,10 @@ pub struct FilesConfig {
 ///
 /// The default is `**/.*`, which omits hidden paths. A configured list
 /// replaces the default.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
 #[serde(try_from = "Vec<String>")]
+// Renamed in the schema so the generated TypeScript does not shadow `Omit`.
+#[schemars(with = "Vec<String>", rename = "FilesOmit")]
 pub struct Omit {
     /// The patterns as written, for [`PartialEq`]. Two lists that match the
     /// same paths compare unequal, which costs one extra walk on reload.
