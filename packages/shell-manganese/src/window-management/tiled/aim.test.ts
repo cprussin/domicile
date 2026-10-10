@@ -12,15 +12,17 @@ const EMPTY = { area: { height: 400, width: 1000, x: 0, y: 500 }, name: "low" };
 const TARGETS = { screens: [EMPTY], tabs: [], windows: [LEFT, RIGHT] };
 
 /** Three tabs along the top of a tabbed `ROW`, "a" open over all of it. */
-const tabAt = (id: string, x: number): TabTarget => ({
+const tabAt = (id: string, at: number): TabTarget => ({
+  at,
   id,
-  rect: { height: 30, width: 200, x, y: 0 },
+  rect: { height: 30, width: 200, x: 200 * at, y: 0 },
+  strip: { height: 30, width: 1000, x: 0, y: 0 },
   tabbed: Layout.Tabbed,
 });
 const ROW = { frame: { height: 400, width: 1000, x: 0, y: 0 }, id: "a" };
 const TABS = {
   screens: [],
-  tabs: [tabAt("a", 0), tabAt("b", 200), tabAt("c", 400)],
+  tabs: [tabAt("a", 0), tabAt("b", 1), tabAt("c", 2)],
   windows: [ROW],
 };
 
@@ -64,9 +66,9 @@ describe("aimAt", () => {
     expect(aimAt(TARGETS, "a", 250, 450)).toBeUndefined();
   });
 
-  it("aims a tab before or after the tab under the pointer, by its half", () => {
+  it("aims a window before or after the tab under the pointer, by its half", () => {
     // Over the open window's frame too: the tab wins.
-    expect(aimAt(TABS, "a", 550, 10)).toEqual(
+    expect(aimAt(TABS, "x", 550, 10)).toEqual(
       Aim.Window("c", Direction.Right, {
         height: 30,
         width: 100,
@@ -74,15 +76,49 @@ describe("aimAt", () => {
         y: 0,
       }),
     );
-    expect(aimAt(TABS, "c", 250, 10)).toEqual(
+    expect(aimAt(TABS, "x", 250, 10)).toEqual(
       Aim.Window("b", Direction.Left, { height: 30, width: 100, x: 200, y: 0 }),
+    );
+  });
+
+  it("moves a tab along its own strip into the slot under the pointer", () => {
+    // Either half of the slot: the tabs are the same size, so the moved tab
+    // lands under the pointer.
+    expect(aimAt(TABS, "a", 250, 10)).toEqual(
+      Aim.Strip("b", Direction.Right, tabAt("b", 1).rect),
+    );
+    expect(aimAt(TABS, "c", 210, 10)).toEqual(
+      Aim.Strip("b", Direction.Left, tabAt("b", 1).rect),
+    );
+  });
+
+  it("moves a stacked tab up or down its strip", () => {
+    const stackedAt = (id: string, at: number): TabTarget => ({
+      at,
+      id,
+      rect: { height: 30, width: 1000, x: 0, y: 30 * at },
+      strip: { height: 60, width: 1000, x: 0, y: 0 },
+      tabbed: Layout.Stacking,
+    });
+    const targets = {
+      screens: [],
+      tabs: [stackedAt("a", 0), stackedAt("b", 1)],
+      windows: [],
+    };
+    expect(aimAt(targets, "a", 500, 40)).toEqual(
+      Aim.Strip("b", Direction.Down, stackedAt("b", 1).rect),
+    );
+    expect(aimAt(targets, "b", 500, 20)).toEqual(
+      Aim.Strip("a", Direction.Up, stackedAt("a", 0).rect),
     );
   });
 
   it("aims a tab above or below a stacked one, by its half", () => {
     const stacked: TabTarget = {
+      at: 1,
       id: "b",
       rect: { height: 30, width: 1000, x: 0, y: 30 },
+      strip: { height: 60, width: 1000, x: 0, y: 0 },
       tabbed: Layout.Stacking,
     };
     const targets = { screens: [], tabs: [stacked], windows: [] };

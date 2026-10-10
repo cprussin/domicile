@@ -51,6 +51,8 @@ export type Frame = {
 export type StripPlace = {
   /** Its index in the strip, from the start. */
   at: number;
+  /** The whole strip's box. Tabs in one strip share it. */
+  box: Rect;
   /**
    * Whether a divider marks its start: a hidden tab of a tabbed container
    * after another hidden tab. The open tab's own edge divides it from its
@@ -392,6 +394,7 @@ const stripPlaceOf = (
   const count = container.children.length;
   return {
     at,
+    box: { ...area, height: TITLE_BAR * barsOf(container) },
     divided:
       container.layout === Layout.Tabbed &&
       at > 0 &&
@@ -407,16 +410,19 @@ const stripPlaceOf = (
   };
 };
 
-// The area under the titles: one bar for tabbed, one per child for stacking.
+// The area under the titles.
 const contentsOf = (container: Container, area: Rect): Rect => {
-  const bars =
-    container.layout === Layout.Stacking ? container.children.length : 1;
+  const bars = barsOf(container);
   return {
     ...area,
     height: Math.max(0, area.height - TITLE_BAR * bars),
     y: area.y + TITLE_BAR * bars,
   };
 };
+
+/** How many bars tall a strip is: one for tabbed, one per child for stacking. */
+const barsOf = (container: Container): number =>
+  container.layout === Layout.Stacking ? container.children.length : 1;
 
 /** `path`, or its parent's path when the parent shows it as a tab. */
 const tabGroupAround = (root: LayoutNode, path: Path): Path => {

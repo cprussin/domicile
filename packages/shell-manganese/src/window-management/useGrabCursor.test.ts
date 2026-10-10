@@ -51,8 +51,8 @@ describe("useGrabCursor", () => {
     expect(result.current.cursor).toBe(GrabCursor.ResizeNesw);
   });
 
-  it("is a move while a move runs, even with Shift pressed since", () => {
+  it("grabs while a move runs, even with Shift pressed since", () => {
     const { result } = rendered({ drag: { corner: undefined }, resizes: true });
-    expect(result.current.cursor).toBe(GrabCursor.Move);
+    expect(result.current.cursor).toBe(GrabCursor.Grabbing);
   });
 });

@@ -48,3 +48,9 @@ export const tuckedUnderBar = (rect: Rect): Rect => ({
   height: rect.height + SURFACE_TUCK,
   y: rect.y - SURFACE_TUCK,
 });
+
+export const sameRect = (one: Rect, other: Rect): boolean =>
+  one.x === other.x &&
+  one.y === other.y &&
+  one.width === other.width &&
+  one.height === other.height;

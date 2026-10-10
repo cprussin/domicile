@@ -15,12 +15,14 @@ import { useState } from "react";
 
 import { css, cva, cx } from "../../styled-system/css";
 import { hstack } from "../../styled-system/patterns";
+import { grabCursorStyles } from "./grab-cursor-styles";
 import { raised } from "./placement";
 import type { Rect } from "./rect";
 import type { Restack } from "./restacking";
 import type { TitleFocus } from "./title-focus";
 import type { StripPlace, TabLayout } from "./tree/frames";
 import { Layout } from "./tree/node";
+import { GrabCursor } from "./useGrabCursor";
 import type { StripMove } from "./useStripMove";
 import { useStripMove } from "./useStripMove";
 import type { WindowMotion } from "./window-motion";
@@ -197,6 +199,8 @@ export const TitleBar = ({
         isLeaving(motion) && clickThroughStyles,
         // Two slots easing past each other would open a hole in the strip.
         settlingStyles({ dragging: dragging || sliding }),
+        // The bar holds pointer capture during a drag, so its cursor shows.
+        dragging && grabCursorStyles[GrabCursor.Grabbing],
       )}
       data-divided={strip?.divided || undefined}
       // Exposed as attributes so devtools and tests can read the state.

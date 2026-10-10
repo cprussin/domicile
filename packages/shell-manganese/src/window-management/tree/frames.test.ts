@@ -280,6 +280,7 @@ describe("framesOf", () => {
         {
           strip: {
             at: 0,
+            box: { height: TITLE_BAR, width: 1000, x: 0, y: 0 },
             divided: false,
             first: true,
             open: true,
@@ -294,6 +295,7 @@ describe("framesOf", () => {
         {
           strip: {
             at: 0,
+            box: { height: TITLE_BAR, width: 1000, x: 0, y: 0 },
             divided: false,
             first: true,
             open: true,
@@ -306,6 +308,7 @@ describe("framesOf", () => {
         {
           strip: {
             at: 1,
+            box: { height: TITLE_BAR, width: 1000, x: 0, y: 0 },
             divided: false,
             first: false,
             open: false,
@@ -326,6 +329,7 @@ describe("framesOf", () => {
       );
       expect(crowded.at(-1)?.strip).toEqual({
         at: 7,
+        box: { height: TITLE_BAR, width: 1000, x: 0, y: 0 },
         divided: true,
         first: false,
         open: false,
@@ -339,6 +343,7 @@ describe("framesOf", () => {
         {
           strip: {
             at: 0,
+            box: { height: TITLE_BAR * 2, width: 1000, x: 0, y: 0 },
             divided: false,
             first: true,
             open: true,
@@ -351,6 +356,7 @@ describe("framesOf", () => {
         {
           strip: {
             at: 1,
+            box: { height: TITLE_BAR * 2, width: 1000, x: 0, y: 0 },
             divided: false,
             first: false,
             open: false,
@@ -413,6 +419,7 @@ describe("framesOf", () => {
         selected: false,
         strip: {
           at: 0,
+          box: { height: TITLE_BAR, width: 1000, x: 0, y: 0 },
           divided: false,
           first: true,
           open: true,
@@ -457,6 +464,7 @@ describe("framesOf", () => {
         selected: false,
         strip: {
           at: 0,
+          box: { height: TITLE_BAR, width: 1000, x: 0, y: 0 },
           divided: false,
           first: true,
           open: false,
