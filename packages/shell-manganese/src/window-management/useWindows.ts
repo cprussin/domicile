@@ -4,7 +4,14 @@ import type {
   DomicileWindow,
 } from "@domicile-desktop/sdk/domicile-host";
 import { SystemErrorKind, system } from "@domicile-desktop/sdk/system";
-import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useReducer,
+  useRef,
+} from "react";
 import { openFileCommand } from "../launcher/open-file";
 import type { PlacedScreen } from "../screens/screen-toward";
 import { appIdOf, browserIdOf } from "./window";
@@ -49,6 +56,12 @@ export const useWindows = (
   const [state, dispatch] = useReducer(reduceWindows, NO_WINDOWS);
   // Memoized so `act` keeps its identity.
   const files = useMemo(() => system(domicile), [domicile]);
+  // The state as last drawn, for `act` to read without depending on it. A new
+  // `act` would re-add every listener that runs commands.
+  const drawn = useRef(state);
+  useLayoutEffect(() => {
+    drawn.current = state;
+  }, [state]);
 
   // Side effects the reducer cannot perform: spawning processes, locking,
   // asking a client to close, and opening or closing browser windows. A client
@@ -94,7 +107,7 @@ export const useWindows = (
         const id =
           action.kind === WindowActionKind.WindowClosed
             ? action.id
-            : activeIdOf(state);
+            : activeIdOf(drawn.current);
         const appId = id === undefined ? undefined : appIdOf(id);
         if (appId !== undefined) {
           domicile.closeApp(appId);
@@ -105,7 +118,7 @@ export const useWindows = (
         }
       }
     },
-    [domicile, files, openFile, state],
+    [domicile, files, openFile],
   );
 
   // The host's last window list, diffed against the next. A ref, not

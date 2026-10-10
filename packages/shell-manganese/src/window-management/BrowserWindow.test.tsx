@@ -784,6 +784,40 @@ describe("BrowserWindow", () => {
       expect(calls).toStrictEqual([]);
     });
 
+    // Keys typed into a panel over it, or the lock screen, must not reach the
+    // page when the panel drops focus, such as a dismissed card's button.
+    it("leaves focus dropped on nothing alone while behind a panel", async () => {
+      const { container } = render(
+        <BrowserWindow
+          behindPanel
+          clickThrough={false}
+          covered={false}
+          depth={0}
+          domicile={silentDomicile}
+          dragging={false}
+          focused
+          frame={FRAME}
+          fullscreen={false}
+          motion="resting"
+          onIcon={noIcon}
+          onMotionEnded={nothingEnded}
+          onPageFullscreen={noFullscreen}
+          onReach={() => undefined}
+          rect={ON_SCREEN}
+          url="https://example.com"
+          window="1"
+        />,
+      );
+      const card = document.createElement("button");
+      document.body.append(card);
+      card.focus();
+
+      card.remove();
+      await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+
+      expect(view(container)).not.toHaveFocus();
+    });
+
     // The guest page has its own browsing context, so the window must focus it.
     it("puts the keyboard in its page when it becomes the window being worked in", () => {
       const windowProps = {

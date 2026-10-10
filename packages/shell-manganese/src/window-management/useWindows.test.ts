@@ -196,6 +196,33 @@ describe("a command", () => {
     expect(currentHere(result.current)).toBe("4");
   });
 
+  it("is run by one function for the desktop's life", () => {
+    // Listeners that run commands, such as the pointer's, are added once.
+    const { host, result } = desktop([LEFT, RIGHT]);
+    const { act: run } = result.current;
+
+    host.announces("kitty");
+
+    expect(result.current.act).toBe(run);
+  });
+
+  it("kills the window being worked in now, not when the function was made", () => {
+    const { host, result } = desktop([LEFT, RIGHT]);
+    const { act: run } = result.current;
+    host.announces("kitty");
+    host.announces("foot");
+
+    act(() => {
+      run(WindowAction.WindowKilled());
+    });
+
+    expect(
+      host.fake.calls
+        .filter(([name]) => name === "closeApp")
+        .map(([, appId]) => appId),
+    ).toEqual(["foot"]);
+  });
+
   it("takes what only the compositor can do with it", () => {
     // An `exec` is a process the compositor starts.
     const { host, result } = desktop([LEFT, RIGHT]);

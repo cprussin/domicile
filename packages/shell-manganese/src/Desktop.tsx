@@ -36,8 +36,8 @@ import { Monitor } from "./screens/Monitor";
 import { NoScreens } from "./screens/NoScreens";
 import { shownWindowsOf } from "./screens/shown-windows";
 import type { StageScreen } from "./screens/stage-screens";
-import { stageScreensOf } from "./screens/stage-screens";
 import { useScreenFollowsPointer } from "./screens/useScreenFollowsPointer";
+import { useStageScreens } from "./screens/useStageScreens";
 import type { TopBarLayout } from "./top-bar/layout";
 import { showsSharing } from "./top-bar/shows-sharing";
 import { trayEntries } from "./tray/tray-entry";
@@ -45,9 +45,14 @@ import { useTray } from "./tray/useTray";
 import { useTrayOrder } from "./tray/useTrayOrder";
 import { Wallpaper } from "./wallpaper/Wallpaper";
 import { desktopClientIcons } from "./window-management/client-icons";
-import type { Focus } from "./window-management/pointer-warp";
+import type { Direction } from "./window-management/direction";
+import type { Geometry } from "./window-management/placement";
+import type { Focus, Spot } from "./window-management/pointer-warp";
+import type { Rect } from "./window-management/rect";
 import { Stage } from "./window-management/Stage";
+import type { Aim } from "./window-management/tiled/aim";
 import { AimKind } from "./window-management/tiled/aim";
+import type { NodeRef } from "./window-management/tree/path";
 import { useClientIcons } from "./window-management/useClientIcons";
 import { usePointerWarp } from "./window-management/usePointerWarp";
 import { useWindows } from "./window-management/useWindows";
@@ -176,10 +181,7 @@ export const Desktop = ({
   // cannot set it, and reloading the page does not unlock the desk.
   const lock = useLocked(domicile);
 
-  const screens = useMemo(
-    () => stageScreensOf(windows, displays ?? []),
-    [displays, windows],
-  );
+  const screens = useStageScreens(windows, displays);
 
   // The pointer follows the keyboard. Focus follows the pointer, so otherwise
   // the next pointer event would undo a keyboard focus change. See
@@ -232,6 +234,12 @@ export const Desktop = ({
       act(WindowAction.KeyPressed());
     },
     [act, spendShift],
+  );
+
+  // Memoized so the stage redraws only when what it shows changes.
+  const stageActions = useMemo(
+    () => stageActionsOf(act, pointing),
+    [act, pointing],
   );
 
   // A global shortcuts review flags these.
@@ -302,113 +310,17 @@ export const Desktop = ({
             windows.launcherOpen ||
             windows.clipboardOpen ||
             popupOpen ||
-            notificationsOpen
+            notificationsOpen ||
+            lock.locked
           }
           // While a desktop panel is open the page keeps the keyboard; see
-          // `AppWindow`. Extension popups count.
+          // `AppWindow`. Extension popups and the lock screen count.
           clientIcons={clientIcons}
           domicile={domicile}
           draggingId={windows.draggingId}
           focusedId={windows.focusedId}
           modifiers={modifiers}
-          onClose={(id) => {
-            act(WindowAction.WindowClosed(id));
-          }}
-          onDismiss={(id) => {
-            act(WindowAction.ScratchpadDismissed(id));
-          }}
-          onDrop={() => {
-            act(WindowAction.WindowDropped());
-          }}
-          onDropOn={(id, aim) => {
-            switch (aim.kind) {
-              case AimKind.Screen: {
-                act(WindowAction.WindowDroppedOnScreen(id, aim.name));
-                break;
-              }
-              case AimKind.Strip:
-              case AimKind.Window: {
-                act(WindowAction.WindowDroppedOn(id, aim.id, aim.edge));
-                break;
-              }
-            }
-          }}
-          onFloat={(id) => {
-            act(WindowAction.WindowFloated(id));
-          }}
-          onFullscreen={(id) => {
-            act(WindowAction.WindowFullscreened(id));
-          }}
-          onGrab={(id) => {
-            act(WindowAction.WindowGrabbed(id));
-          }}
-          onGroupDropOn={(group, aim) => {
-            switch (aim.kind) {
-              case AimKind.Screen: {
-                act(WindowAction.GroupDroppedOnScreen(group, aim.name));
-                break;
-              }
-              case AimKind.Strip: {
-                // `aimAt` aims only a single dragged tab along its strip.
-                throw new Error(
-                  `desktop: group ${group.id} aimed along a strip`,
-                );
-              }
-              case AimKind.Window: {
-                act(WindowAction.GroupDroppedOn(group, aim.id, aim.edge));
-                break;
-              }
-            }
-          }}
-          onGroupFloat={(group) => {
-            act(WindowAction.GroupFloated(group));
-          }}
-          onGroupFullscreen={(group) => {
-            act(WindowAction.GroupFullscreened(group));
-          }}
-          onGroupGrab={(group) => {
-            act(WindowAction.GroupGrabbed(group));
-          }}
-          // Only when the pointer actually moved. A window sliding under a
-          // still pointer also fires `pointerover`, and following it would
-          // steal focus. See `usePointerWarp`.
-          onHover={(id, at) => {
-            if (pointing(at)) {
-              act(WindowAction.WindowHovered(id));
-            }
-          }}
-          onIcon={(window, icon) => {
-            act(WindowAction.BrowserIconChanged(window, icon));
-          }}
-          // In page pixels, so a float can be dragged to another screen; see
-          // `floatDragged`.
-          onMove={(id, x, y) => {
-            act(WindowAction.WindowMoved(id, x, y));
-          }}
-          onNewTab={(id) => {
-            act(WindowAction.NewTabPressed(id));
-          }}
-          onPageFullscreen={(id, fullscreen) => {
-            act(WindowAction.PageFullscreened(id, fullscreen));
-          }}
-          // Converted to the float's screen's pixels.
-          onResize={(id, box, on) => {
-            act(
-              WindowAction.WindowResized(id, {
-                ...box,
-                x: box.x - on.screen.x,
-                y: box.y - on.screen.y,
-              }),
-            );
-          }}
-          onSelect={(id) => {
-            act(WindowAction.WindowSelected(id));
-          }}
-          // The tiling is laid out in the screen's workspace box, so a dragged
-          // pixel is a share of that.
-          onStretch={(id, edge, by, on) => {
-            act(WindowAction.WindowStretched(id, edge, by, on.workspace));
-          }}
+          {...stageActions}
           popups={windows.popups}
           scratchpad={windows.scratchpad}
           screens={screens}
@@ -602,3 +514,112 @@ const closedOn = (
   screen: string,
 ): { extension: string; screen: string } | undefined =>
   opened?.screen === screen ? undefined : opened;
+
+/**
+ * What each window's chrome does, as `Stage` takes it: every action goes
+ * through `act`.
+ *
+ * @param pointing - whether a pointer event is the user's; see
+ *   `usePointerWarp`.
+ */
+const stageActionsOf = (
+  act: (action: WindowAction) => void,
+  pointing: (at: Spot) => boolean,
+) => ({
+  onClose: (id: string) => {
+    act(WindowAction.WindowClosed(id));
+  },
+  onDismiss: (id: string) => {
+    act(WindowAction.ScratchpadDismissed(id));
+  },
+  onDrop: () => {
+    act(WindowAction.WindowDropped());
+  },
+  onDropOn: (id: string, aim: Aim) => {
+    switch (aim.kind) {
+      case AimKind.Screen: {
+        act(WindowAction.WindowDroppedOnScreen(id, aim.name));
+        break;
+      }
+      case AimKind.Strip:
+      case AimKind.Window: {
+        act(WindowAction.WindowDroppedOn(id, aim.id, aim.edge));
+        break;
+      }
+    }
+  },
+  onFloat: (id: string) => {
+    act(WindowAction.WindowFloated(id));
+  },
+  onFullscreen: (id: string) => {
+    act(WindowAction.WindowFullscreened(id));
+  },
+  onGrab: (id: string) => {
+    act(WindowAction.WindowGrabbed(id));
+  },
+  onGroupDropOn: (group: NodeRef, aim: Aim) => {
+    switch (aim.kind) {
+      case AimKind.Screen: {
+        act(WindowAction.GroupDroppedOnScreen(group, aim.name));
+        break;
+      }
+      case AimKind.Strip: {
+        // `aimAt` aims only a single dragged tab along its strip.
+        throw new Error(`desktop: group ${group.id} aimed along a strip`);
+      }
+      case AimKind.Window: {
+        act(WindowAction.GroupDroppedOn(group, aim.id, aim.edge));
+        break;
+      }
+    }
+  },
+  onGroupFloat: (group: NodeRef) => {
+    act(WindowAction.GroupFloated(group));
+  },
+  onGroupFullscreen: (group: NodeRef) => {
+    act(WindowAction.GroupFullscreened(group));
+  },
+  onGroupGrab: (group: NodeRef) => {
+    act(WindowAction.GroupGrabbed(group));
+  },
+  // Only when the pointer actually moved. A window sliding under a still
+  // pointer also fires `pointerover`, and following it would steal focus. See
+  // `usePointerWarp`.
+  onHover: (id: string, at: Spot) => {
+    if (pointing(at)) {
+      act(WindowAction.WindowHovered(id));
+    }
+  },
+  onIcon: (window: string, icon: string) => {
+    act(WindowAction.BrowserIconChanged(window, icon));
+  },
+  // In page pixels, so a float can be dragged to another screen; see
+  // `floatDragged`.
+  onMove: (id: string, x: number, y: number) => {
+    act(WindowAction.WindowMoved(id, x, y));
+  },
+  onNewTab: (id: string) => {
+    act(WindowAction.NewTabPressed(id));
+  },
+  onPageFullscreen: (id: string, fullscreen: boolean) => {
+    act(WindowAction.PageFullscreened(id, fullscreen));
+  },
+  // Converted to the float's screen's pixels.
+  onResize: (id: string, box: Rect, on: Geometry) => {
+    act(
+      WindowAction.WindowResized(id, {
+        ...box,
+        x: box.x - on.screen.x,
+        y: box.y - on.screen.y,
+      }),
+    );
+  },
+  onSelect: (id: string) => {
+    act(WindowAction.WindowSelected(id));
+  },
+  // The tiling is laid out in the screen's workspace box, so a dragged pixel
+  // is a share of that.
+  onStretch: (id: string, edge: Direction, by: number, on: Geometry) => {
+    act(WindowAction.WindowStretched(id, edge, by, on.workspace));
+  },
+});

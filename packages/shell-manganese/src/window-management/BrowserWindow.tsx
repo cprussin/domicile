@@ -421,8 +421,13 @@ export const BrowserWindow = ({
   }, [holdsKeyboard]);
 
   // Restores focus if chrome takes it later, such as when another window
-  // closes. See `useReclaimFocus`. Targets the picker while one is open.
-  useReclaimFocus<HTMLElement>(pickerBox ?? view, holdsKeyboard, focusOwn);
+  // closes. See `useReclaimFocus`. Targets the picker while one is open. Not
+  // behind a panel or the lock screen, whose keys must not reach the page.
+  useReclaimFocus<HTMLElement>(
+    pickerBox ?? view,
+    holdsKeyboard && !behindPanel,
+    focusOwn,
+  );
 
   // The view is attached before any control can be pressed, so a missing view
   // is a bug.

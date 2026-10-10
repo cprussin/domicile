@@ -285,6 +285,21 @@ describe("useWindowMotion", () => {
       expect(motionOf(result, EDITOR.id)).toBe("dropping");
     });
 
+    // Sent from a workspace no screen shows, so nothing on screen moves.
+    it("slides down a window it took while nothing on screen changed", () => {
+      const elsewhere = desktop("1", [TERMINAL, EDITOR], [TERMINAL]);
+      const { rerender, result } = showing(elsewhere);
+      act(() => {
+        rerender({ ...elsewhere, scratchpad: [EDITOR.id] });
+      });
+
+      act(() => {
+        rerender(desktop("1", [TERMINAL, EDITOR]));
+      });
+
+      expect(motionOf(result, EDITOR.id)).toBe("dropping");
+    });
+
     // Hidden before it finished growing in, it never reports that it has.
     it("slides down a window sent to it while it was opening", () => {
       const { rerender, result } = showing(

@@ -251,3 +251,21 @@ Rules:
   depth-only animation.
 - Durations live in the Panda tokens only. The shell waits for each CSS
   animation's end event.
+
+## Redrawing
+
+A change redraws only the windows it touches. Animations detect changes by
+identity, so each step keeps unchanged objects:
+
+- The reducer keeps window records whose fields did not change, and the whole
+  state for a report that changes nothing.
+- `useStageScreens` lays a screen out again only when its workspace or the
+  desk changes. Key presses, modes and titles keep every placement.
+- `Stage` and its per-window parts are memoized, with callbacks that take a
+  window id.
+- `useReclaimFocus` does not wait for a redraw: it watches the page for
+  focus dropped by chrome unmounting or going inert anywhere. It does not
+  reclaim behind a desktop panel or the lock screen, whose keys must not
+  reach the page.
+- Listeners every window would add exist only while needed: a tile drag's
+  while it runs, `useReclaimFocus`'s while its window is focused.

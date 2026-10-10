@@ -1,4 +1,4 @@
-import { describe, expect, it, mock } from "bun:test";
+import { afterEach, describe, expect, it, mock, spyOn } from "bun:test";
 import { act, fireEvent, renderHook } from "@testing-library/react";
 
 import { Direction } from "../direction";
@@ -65,7 +65,29 @@ const dragging = (resizes = false) => {
   return { calls, grab, result };
 };
 
+afterEach(() => {
+  mock.restore();
+});
+
 describe("useTileDrag", () => {
+  // Every title bar has the hook, so only a drag listens to the page.
+  it("listens for the pointer only while a drag runs", () => {
+    const added = spyOn(window, "addEventListener");
+    const removed = spyOn(window, "removeEventListener");
+    const moves = (spy: typeof added) =>
+      spy.mock.calls.filter(([type]) => type === "pointermove").length;
+    const { grab } = dragging();
+    expect(moves(added)).toBe(0);
+
+    grab(100, 100);
+    expect(moves(added)).toBe(1);
+
+    act(() => {
+      release();
+    });
+    expect(moves(removed)).toBe(1);
+  });
+
   describe("moving", () => {
     it("grabs the window as soon as it is pressed", () => {
       const { calls, grab } = dragging();

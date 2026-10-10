@@ -1,13 +1,7 @@
 import { useCallback, useState } from "react";
 
 import type { Closing, Leaving } from "./closing";
-import {
-  departed,
-  movesAsTab,
-  placedOn,
-  sentAway,
-  withClosing,
-} from "./closing";
+import { departed, movesAsTab, sentAway, withClosing } from "./closing";
 import type { PlacedTab, Placement } from "./placement";
 import type { Restack } from "./restacking";
 import { restacked } from "./restacking";
@@ -148,9 +142,10 @@ export const useWindowMotion = (shown: Desk): WindowMotions => {
     [],
   );
 
+  const index = indexOf(shown, playing);
   return {
     drawn: withClosing(windowsOf(shown), playing.closing).map((window) =>
-      drawnWindow(shown, playing, window),
+      drawnWindow(shown, playing, index, window),
     ),
     onPlayedOut,
     tabs: drawnTabs(shown, playing.switching),
@@ -167,6 +162,7 @@ const moved = (before: Desk, shown: Desk): boolean =>
       was.activeId !== now.activeId ||
       was.current !== now.current ||
       was.placements !== now.placements ||
+      was.scratchpad !== now.scratchpad ||
       was.tabs !== now.tabs ||
       was.windows !== now.windows
     );
@@ -194,6 +190,10 @@ const advanced = (playing: Playing, before: Desk, shown: Desk): Playing => {
       restack,
     }));
   const switched = screens.map(({ now, was }) => tabSwitched(was, now));
+  // Sets, since every window is checked against them.
+  const open = new Set(windows.map(({ id }) => id));
+  const wasOpen = new Set(windowsOf(before).map(({ id }) => id));
+  const shownIds = placedIds(shown);
   const fades = [
     ...switched.flatMap(({ concealed }) =>
       concealed.map((id) => ({ id, motion: "concealing" as const })),
@@ -205,6 +205,7 @@ const advanced = (playing: Playing, before: Desk, shown: Desk): Playing => {
       uncovered.map((id) => ({ id, motion: "uncovering" as const })),
     ),
   ];
+  const fading = new Set(fades.map(({ id }) => id));
   return {
     closing: [
       ...playing.closing,
@@ -217,38 +218,32 @@ const advanced = (playing: Playing, before: Desk, shown: Desk): Playing => {
     ],
     // Drop windows no longer shown: they never report the slide finished.
     dropping: [
-      ...playing.dropping.filter((id) => placedOn(Object.values(shown), id)),
+      ...playing.dropping.filter((id) => shownIds.has(id)),
       ...windows
         .filter(
           ({ id }) =>
-            stowed(before, id) &&
-            !stowed(shown, id) &&
-            placedOn(Object.values(shown), id),
+            stowed(before, id) && !stowed(shown, id) && shownIds.has(id),
         )
         .map(({ id }) => id),
     ],
     // Drop windows closed or hidden while opening: they never report the
     // opening finished.
     opening: [
-      ...playing.opening.filter((id) => placedOn(Object.values(shown), id)),
-      ...windows
-        .filter(({ id }) => !holds(windowsOf(before), id))
-        .map(({ id }) => id),
+      ...playing.opening.filter((id) => shownIds.has(id)),
+      ...windows.filter(({ id }) => !wasOpen.has(id)).map(({ id }) => id),
     ],
     // A window raised again before settling plays only the latest raise.
     restacking: [
       ...playing.restacking.filter(
         ({ restack }) =>
-          holds(windows, restack.id) && !shuffling(shuffles, restack.id),
+          open.has(restack.id) && !shuffling(shuffles, restack.id),
       ),
       ...shuffles,
     ],
     // Drop windows shown again or closed: neither finishes leaving.
     sending: [
       ...playing.sending.filter(
-        ({ window }) =>
-          holds(windows, window.id) &&
-          !placedOn(Object.values(shown), window.id),
+        ({ window }) => open.has(window.id) && !shownIds.has(window.id),
       ),
       ...screens.flatMap(({ name, now, was }) =>
         sentAway(was, now, Object.values(shown)).map((sending) => ({
@@ -260,7 +255,7 @@ const advanced = (playing: Playing, before: Desk, shown: Desk): Playing => {
     ],
     shuffled: [
       ...playing.shuffled.filter(
-        ({ id }) => holds(windows, id) && !shuffling(shuffles, id),
+        ({ id }) => open.has(id) && !shuffling(shuffles, id),
       ),
       ...shuffles.map(({ motion, restack }) => ({ id: restack.id, motion })),
     ],
@@ -273,9 +268,7 @@ const advanced = (playing: Playing, before: Desk, shown: Desk): Playing => {
     // A window switched back mid-fade plays the latest half, which always
     // differs from the current one, so the browser restarts it.
     tabbing: [
-      ...playing.tabbing.filter(
-        ({ id }) => holds(windows, id) && !fades.some((fade) => fade.id === id),
-      ),
+      ...playing.tabbing.filter(({ id }) => open.has(id) && !fading.has(id)),
       ...fades,
     ],
   };
@@ -300,8 +293,13 @@ const sendingMotion = (
   }
 };
 
-const holds = (windows: readonly ShellWindow[], id: string): boolean =>
-  windows.some((window) => window.id === id);
+/** The windows the desk's screens place. */
+const placedIds = (desk: Desk): ReadonlySet<string> =>
+  new Set(
+    Object.values(desk).flatMap(({ placements }) =>
+      placements.map(({ id }) => id),
+    ),
+  );
 
 const shuffling = (shuffles: readonly Shuffling[], id: string): boolean =>
   shuffles.some(({ restack }) => restack.id === id);
@@ -404,18 +402,61 @@ const played = (
   }
 };
 
+/** Where each window is, by id, built once per render. */
+type Index = {
+  closing: ReadonlyMap<string, ClosingOn>;
+  /** The departing workspace's placement of each window sliding off. */
+  leaving: ReadonlyMap<
+    string,
+    { left: WorkspaceSwitch; placement: Placement; screen: string }
+  >;
+  /**
+   * Each shown window's placement. At most one screen shows it: a workspace
+   * is on one screen, and a window on one workspace.
+   */
+  placed: ReadonlyMap<string, { placement: Placement; screen: string }>;
+  sending: ReadonlyMap<string, SendingOn>;
+};
+
+/**
+ * Keys each list by window. Reversed, so the first entry for a window wins, as
+ * `find` would.
+ */
+const indexOf = (shown: Desk, playing: Playing): Index => ({
+  closing: new Map(
+    playing.closing.toReversed().map((gone) => [gone.window.id, gone]),
+  ),
+  leaving: new Map(
+    Object.entries(playing.switching)
+      .flatMap(([screen, left]) =>
+        left.placements.map(
+          (placement) => [placement.id, { left, placement, screen }] as const,
+        ),
+      )
+      .toReversed(),
+  ),
+  placed: new Map(
+    Object.entries(shown)
+      .flatMap(([screen, { placements }]) =>
+        placements.map(
+          (placement) => [placement.id, { placement, screen }] as const,
+        ),
+      )
+      .toReversed(),
+  ),
+  sending: new Map(
+    playing.sending.toReversed().map((gone) => [gone.window.id, gone]),
+  ),
+});
+
 const drawnWindow = (
   shown: Desk,
   playing: Playing,
+  index: Index,
   window: ShellWindow,
 ): DrawnWindow => {
-  const closing = playing.closing.find((gone) => gone.window.id === window.id);
-  // At most one screen shows it: a workspace is on one screen, and a window on
-  // one workspace.
-  const placed = Object.entries(shown).flatMap(([screen, { placements }]) => {
-    const placement = placements.find(({ id }) => id === window.id);
-    return placement === undefined ? [] : [{ placement, screen }];
-  })[0];
+  const closing = index.closing.get(window.id);
+  const placed = index.placed.get(window.id);
   if (closing !== undefined) {
     return {
       focused: closing.focused,
@@ -428,11 +469,9 @@ const drawnWindow = (
       window,
     };
   } else if (placed === undefined) {
-    const sending = playing.sending.find(
-      (gone) => gone.window.id === window.id,
-    );
+    const sending = index.sending.get(window.id);
     return sending === undefined
-      ? leavingWindow(playing.switching, window)
+      ? leavingWindow(index, window)
       : {
           focused: sending.focused,
           motion: sending.motion,
@@ -491,14 +530,8 @@ const arriving = (
  * mounted to keep their surface and page alive. Windows under a fullscreen
  * window are not in this group: they keep their box and are covered.
  */
-const leavingWindow = (
-  switching: Playing["switching"],
-  window: ShellWindow,
-): DrawnWindow => {
-  const leaving = Object.entries(switching).flatMap(([screen, left]) => {
-    const placement = left.placements.find(({ id }) => id === window.id);
-    return placement === undefined ? [] : [{ left, placement, screen }];
-  })[0];
+const leavingWindow = (index: Index, window: ShellWindow): DrawnWindow => {
+  const leaving = index.leaving.get(window.id);
   if (leaving === undefined) {
     return {
       focused: false,
