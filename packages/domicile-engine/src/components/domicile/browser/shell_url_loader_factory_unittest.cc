@@ -220,6 +220,35 @@ TEST(ShellDocumentTest, RunsScriptOnlyFromTheShellRoot) {
             "script-src 'self'");
 }
 
+TEST(ShellDocumentTest, CrossfadesFromTheShellBefore) {
+  // `load_shell` navigates the window instead of reloading it, so Blink runs
+  // a cross-document view transition when both documents opt in. Every shell
+  // document is this one, so the splash crossfades into the built shell.
+  const std::string document = ShellURLLoaderFactory::ShellDocument("shell.js");
+  EXPECT_NE(document.find("@view-transition {\n        navigation: auto;"),
+            std::string::npos);
+}
+
+TEST(ShellDocumentTest, IsNeverReusedFromTheMemoryCache) {
+  // A shell is loaded by a navigation, not a cache-bypassing reload, and
+  // Blink caches non-HTTP responses without limit.
+  const network::mojom::URLResponseHeadPtr head =
+      ShellURLLoaderFactory::ShellDocumentHead();
+  ASSERT_TRUE(head->headers);
+  EXPECT_TRUE(head->headers->HasHeaderValue("Cache-Control", "no-store"));
+}
+
+TEST(ShellURLLoaderFactoryTest, ShellFilesAreNeverReusedFromTheMemoryCache) {
+  // A rebuilt shell keeps its file names, so a cached module from the shell
+  // before would run in place of the new one.
+  const scoped_refptr<net::HttpResponseHeaders> headers =
+      ShellURLLoaderFactory::ShellFileHeaders();
+  ASSERT_TRUE(headers);
+  EXPECT_TRUE(headers->HasHeaderValue("Cache-Control", "no-store"));
+  // The file loader adds to these per request, so each is its own.
+  EXPECT_NE(headers, ShellURLLoaderFactory::ShellFileHeaders());
+}
+
 TEST(ShellDocumentTest, HandsTheShellAnEmptyBody) {
   // `mount-point.test.ts` uses the same empty body as a fixture.
   const std::string document = ShellURLLoaderFactory::ShellDocument("shell.js");
