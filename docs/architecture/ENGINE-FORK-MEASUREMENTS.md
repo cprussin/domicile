@@ -254,3 +254,8 @@ Two guards, because the request and the result can disagree.
   - A chord neither side saw fails. An engine that died fails first.
   - It needs a reachable sway, so it is separate from the request guard.
   - Not covered: hosts other than sway, physical keyboards.
+
+A host may send modifiers before a keymap. sway does when the seat's last
+keyboard has gone, and upstream then crashes in `xkb_state_update_mask`. Patch
+`0108` ignores them; `WaylandKeyboardWithoutKeymapTest` in `ozone_unittests`
+covers it.
