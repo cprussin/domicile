@@ -298,6 +298,13 @@ export const windowOf = (
   id: string,
 ): ShellWindow | undefined => state.windows.find((window) => window.id === id);
 
+/** Whether the active window is a private browser window. */
+export const activeIsPrivate = (state: WindowState): boolean => {
+  const id = activeIdOf(state);
+  const active = id === undefined ? undefined : windowOf(state, id);
+  return active?.kind === WindowKind.Browser && active.isPrivate;
+};
+
 export enum WindowActionKind {
   AppAppeared,
   AppClosed,

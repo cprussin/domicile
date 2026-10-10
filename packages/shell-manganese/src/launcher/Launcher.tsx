@@ -85,6 +85,8 @@ const EMPTY_ICON_SIZE = 64;
 const ICON_SIZE = 16;
 
 type Props = {
+  /** Whether it opened over a private browser, so the box starts with `!p`. */
+  fromPrivate: boolean;
   /** Called once it has finished closing, its exit animation included. */
   onClosed: () => void;
   /** Called on Escape or a backdrop click. The desktop decides what to do. */
@@ -127,6 +129,7 @@ type Learn = (bookmark: string, icon: string) => void;
  * drift from the desktop's.
  */
 export const Launcher = ({
+  fromPrivate,
   onClosed,
   onDismiss,
   onLaunch,
@@ -169,6 +172,7 @@ export const Launcher = ({
       empty box without an effect to reset it.
     */}
     <Query
+      fromPrivate={fromPrivate}
       onLaunch={onLaunch}
       opening={opening}
       preview={preview}
@@ -179,6 +183,7 @@ export const Launcher = ({
 );
 
 type QueryProps = {
+  fromPrivate: boolean;
   onLaunch: (launch: Launch) => void;
   opening: FoundApps;
   preview: Preview;
@@ -193,6 +198,7 @@ type QueryProps = {
  * `aria-activedescendant` marks the highlighted row.
  */
 const Query = ({
+  fromPrivate,
   onLaunch,
   opening,
   preview,
@@ -200,7 +206,7 @@ const Query = ({
   searchApps,
 }: QueryProps) => {
   const listId = useId();
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(fromPrivate ? `${PRIVATE_TAG} ` : "");
   // The requested highlight index. `highlightIn` clamps it to the current
   // list.
   const [stepped, setStepped] = useState(0);
