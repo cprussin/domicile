@@ -24,6 +24,7 @@ const on = (current: string, showing: readonly ShellWindow[]): Shown => ({
   activeId: showing[0]?.id,
   current,
   placements: showing.map(({ id }) => placementOf(id)),
+  scratchpad: [],
   tabs: [],
   windows: [TERMINAL],
 });

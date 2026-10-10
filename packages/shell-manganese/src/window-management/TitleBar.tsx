@@ -176,11 +176,13 @@ export const TitleBar = ({
     rect,
   );
   const sliding = move !== undefined;
-  // A closing last tab leaves the strip past it to the tab before it.
+  // A last tab leaving its strip leaves the strip past it to the tab before
+  // it.
   const endsStrip =
     strip?.rest !== undefined &&
     strip.at === strip.tabs - 1 &&
-    motion !== "closing-tab";
+    motion !== "closing-tab" &&
+    motion !== "sending-tab";
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: a press only raises the window; its buttons are the keyboard-reachable controls
     // biome-ignore lint/a11y/noNoninteractiveElementInteractions: same as above

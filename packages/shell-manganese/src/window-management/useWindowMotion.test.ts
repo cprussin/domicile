@@ -34,6 +34,7 @@ const desktop = (
   activeId: showing[0]?.id,
   current,
   placements: showing.map(({ id }) => placementOf(id)),
+  scratchpad: [],
   tabs: [],
   windows,
 });
@@ -127,6 +128,172 @@ describe("useWindowMotion", () => {
       });
 
       expect(motionOf(result, EDITOR.id)).toBeUndefined();
+    });
+  });
+
+  // Sent to the scratchpad or to a workspace no screen shows. It stays open,
+  // so it stays in the window list.
+  describe("a window sent off the screen", () => {
+    const drawnOf = (
+      result: { current: ReturnType<typeof useWindowMotion> },
+      id: string,
+    ) => result.current.drawn.find((drawn) => drawn.window.id === id);
+
+    it("shrinks away from the box it had", () => {
+      const { rerender, result } = showing(desktop("1", [TERMINAL, EDITOR]));
+
+      act(() => {
+        rerender(desktop("1", [TERMINAL, EDITOR], [TERMINAL]));
+      });
+
+      expect(drawnOf(result, EDITOR.id)).toMatchObject({
+        motion: "sending",
+        // At its old box, above the windows moving into it.
+        placement: { ...placementOf(EDITOR.id), depth: LEAVING },
+      });
+    });
+
+    it("is hidden when it says it has gone", () => {
+      const { rerender, result } = showing(desktop("1", [TERMINAL, EDITOR]));
+      act(() => {
+        rerender(desktop("1", [TERMINAL, EDITOR], [TERMINAL]));
+      });
+
+      act(() => {
+        result.current.onPlayedOut(EDITOR.id, "sending", SCREEN);
+      });
+
+      expect(drawnOf(result, EDITOR.id)).toMatchObject({
+        motion: "resting",
+        placement: undefined,
+      });
+    });
+
+    it("leaves from its new box when shown and sent again", () => {
+      const moved = (placement: Placement): Placement => ({
+        ...placement,
+        frame: { ...placement.frame, x: 600 },
+      });
+      const { rerender, result } = showing(desktop("1", [TERMINAL, EDITOR]));
+      act(() => {
+        rerender(desktop("1", [TERMINAL, EDITOR], [TERMINAL]));
+      });
+      const shownAgain = desktop("1", [TERMINAL, EDITOR]);
+      act(() => {
+        rerender({
+          ...shownAgain,
+          placements: shownAgain.placements.map(moved),
+        });
+      });
+      expect(motionOf(result, EDITOR.id)).toBe("resting");
+
+      act(() => {
+        rerender(desktop("1", [TERMINAL, EDITOR], [TERMINAL]));
+      });
+
+      expect(drawnOf(result, EDITOR.id)).toMatchObject({
+        motion: "sending",
+        placement: { ...moved(placementOf(EDITOR.id)), depth: LEAVING },
+      });
+    });
+
+    it("closes up along its strip when it was a tab", () => {
+      const tabs = (showing: readonly ShellWindow[]): Shown => ({
+        ...desktop("1", [TERMINAL, EDITOR], showing),
+        placements: showing.map(({ id }) => ({
+          ...placementOf(id),
+          tabbed: Layout.Tabbed,
+        })),
+      });
+      const { rerender, result } = showing(tabs([TERMINAL, EDITOR]));
+
+      act(() => {
+        rerender(tabs([TERMINAL]));
+      });
+
+      expect(motionOf(result, EDITOR.id)).toBe("sending-tab");
+    });
+  });
+
+  // The scratchpad is a drop-down: its windows slide up off the top of the
+  // screen and back down.
+  describe("the scratchpad", () => {
+    const stowed: Shown = {
+      ...desktop("1", [TERMINAL, EDITOR], [TERMINAL]),
+      scratchpad: [EDITOR.id],
+    };
+
+    it("slides a window sent to it up off the screen", () => {
+      const { rerender, result } = showing(desktop("1", [TERMINAL, EDITOR]));
+
+      act(() => {
+        rerender(stowed);
+      });
+
+      expect(
+        result.current.drawn.find((drawn) => drawn.window.id === EDITOR.id),
+      ).toMatchObject({
+        motion: "stowing",
+        placement: { ...placementOf(EDITOR.id), depth: LEAVING },
+      });
+    });
+
+    it("hides the window once it has slid off", () => {
+      const { rerender, result } = showing(desktop("1", [TERMINAL, EDITOR]));
+      act(() => {
+        rerender(stowed);
+      });
+
+      act(() => {
+        result.current.onPlayedOut(EDITOR.id, "stowing", SCREEN);
+      });
+
+      expect(
+        result.current.drawn.find((drawn) => drawn.window.id === EDITOR.id)
+          ?.placement,
+      ).toBeUndefined();
+    });
+
+    it("slides a window it shows down onto the screen", () => {
+      const { rerender, result } = showing(stowed);
+
+      act(() => {
+        rerender(desktop("1", [TERMINAL, EDITOR]));
+      });
+
+      expect(motionOf(result, EDITOR.id)).toBe("dropping");
+    });
+
+    // Hidden before it finished growing in, it never reports that it has.
+    it("slides down a window sent to it while it was opening", () => {
+      const { rerender, result } = showing(
+        desktop("1", [TERMINAL], [TERMINAL]),
+      );
+      act(() => {
+        rerender(desktop("1", [TERMINAL, EDITOR]));
+      });
+      act(() => {
+        rerender(stowed);
+      });
+
+      act(() => {
+        rerender(desktop("1", [TERMINAL, EDITOR]));
+      });
+
+      expect(motionOf(result, EDITOR.id)).toBe("dropping");
+    });
+
+    it("is done showing it when it says it has slid down", () => {
+      const { rerender, result } = showing(stowed);
+      act(() => {
+        rerender(desktop("1", [TERMINAL, EDITOR]));
+      });
+
+      act(() => {
+        result.current.onPlayedOut(EDITOR.id, "dropping", SCREEN);
+      });
+
+      expect(motionOf(result, EDITOR.id)).toBe("resting");
     });
   });
 
@@ -501,6 +668,22 @@ describe("useWindowMotion", () => {
         result.current.onPlayedOut(TERMINAL.id, "leaving-to-start", "left");
       });
       expect(motionOf(result, TERMINAL.id)).toBe("resting");
+    });
+
+    it("does not send a window off the screen when another screen shows it", () => {
+      const { rerender, result } = showingDesk(desk("1"));
+
+      act(() => {
+        rerender({
+          left: desktop("1", WINDOWS, []),
+          right: desktop("2", WINDOWS, [EDITOR, TERMINAL]),
+        });
+      });
+
+      expect(result.current.drawn).toMatchObject([
+        { motion: "resting", screen: "right", window: TERMINAL },
+        { motion: "resting", screen: "right", window: EDITOR },
+      ]);
     });
   });
 });

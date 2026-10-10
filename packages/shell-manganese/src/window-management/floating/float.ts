@@ -70,15 +70,32 @@ export const floatFor = (
   root: LayoutNode,
   floating: number,
   screen: Pick<Rect, "height" | "width">,
-  scratchpad = false,
 ): Float => ({
   depth: focusChainOf(root).length,
   height: fitted(OPENS_AT.height, screen.height, SMALLEST.height),
   root,
-  scratchpad,
+  scratchpad: false,
   width: fitted(OPENS_AT.width, screen.width, SMALLEST.width),
   x: ORIGIN + CASCADE * floating,
   y: ORIGIN + CASCADE * floating,
+});
+
+/**
+ * A scratchpad window's box: the whole of `screen` but for {@link ORIGIN} at
+ * the sides and bottom. It hangs from the top edge, from which it slides in
+ * and out.
+ */
+export const scratchpadFloatFor = (
+  root: LayoutNode,
+  screen: Pick<Rect, "height" | "width">,
+): Float => ({
+  depth: focusChainOf(root).length,
+  height: Math.max(SMALLEST.height, screen.height - ORIGIN),
+  root,
+  scratchpad: true,
+  width: Math.max(SMALLEST.width, screen.width - 2 * ORIGIN),
+  x: ORIGIN,
+  y: 0,
 });
 
 /**

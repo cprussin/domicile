@@ -107,6 +107,8 @@ For how warping, browser-window focus and modifier drags work, see
   the desktop.
 - **A float moves to the screen its center is dragged onto**, as in sway
   (`floatDragged`). A browser window crosses screens without reloading.
+- A scratchpad window shows as wide and tall as the screen, less 48px at the
+  sides and bottom, flush with the screen's top edge (`scratchpadFloatFor`).
 - A float casts a shadow (`FloatShadow.tsx`), except when fullscreen.
 - Stacking order is the `z-index` of the window's element, so drawing order and
   hit-testing order match.
@@ -175,6 +177,10 @@ For how warping, browser-window focus and modifier drags work, see
 - Moving a tab along its strip: the strip stays whole and the tab slides to
   its new place.
 - Closing: shrink and fade out.
+- Sending to a workspace no screen shows: shrink further and fade out. A tab
+  closes up along its strip.
+- Sending to the scratchpad: slide up off the top of the screen. Showing it
+  slides the window back down.
 - Workspace switch: the new workspace slides in; the old one slides out.
 - Tab switch: crossfade.
 
@@ -188,10 +194,11 @@ Rules:
 - Only windows new since the last render animate open.
 - Hidden windows (behind a tab, on another workspace) stay mounted, so client
   surfaces and pages stay alive.
-- A closed window keeps rendering from a saved record (`closing.ts`) at its
-  old place in the document, so React does not remount a `<webview>`. It takes
-  no input while it leaves. A closed client's surface is already gone, so only
-  its frame animates; a browser window keeps its page.
-- A closing window draws above the windows moving into its space.
+- A closed or sent-away window keeps rendering from a saved record
+  (`closing.ts`) at its old place in the document, so React does not remount
+  a `<webview>`. It takes no input while it leaves. A closed client's surface
+  is already gone, so only its frame animates; a browser window keeps its
+  page.
+- A leaving window draws above the windows moving into its space.
 - Durations live in the stylesheet only. The shell waits for each animation's
   end event.

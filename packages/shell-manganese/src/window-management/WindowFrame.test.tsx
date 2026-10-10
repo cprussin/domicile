@@ -18,11 +18,12 @@ describe("WindowFrame", () => {
     const crossed: (readonly [number, number])[] = [];
     render(
       <WindowFrame
+        frame={undefined}
         onHover={(at) => {
           crossed.push(at);
         }}
         onReach={noReach}
-        width={undefined}
+        screen={undefined}
       >
         <button type="button">part</button>
       </WindowFrame>,
@@ -42,11 +43,12 @@ describe("WindowFrame", () => {
     const reached: string[] = [];
     render(
       <WindowFrame
+        frame={undefined}
         onHover={noHover}
         onReach={() => {
           reached.push("reach");
         }}
-        width={undefined}
+        screen={undefined}
       >
         <button type="button">part</button>
       </WindowFrame>,
@@ -57,18 +59,30 @@ describe("WindowFrame", () => {
     expect(reached).toStrictEqual(["reach"]);
   });
 
-  it("slides its parts the width of the screen it is on", () => {
-    // A workspace switch slides by the width of the window's screen.
-    render(
-      <WindowFrame onHover={noHover} onReach={noReach} width={1280}>
-        <button type="button">part</button>
-      </WindowFrame>,
-    );
+  describe("on a screen", () => {
+    const SCREEN = { height: 800, width: 1280, x: 0, y: 100 };
+    const styleOf = () => {
+      render(
+        <WindowFrame
+          frame={{ height: 400, width: 600, x: 40, y: 300 }}
+          onHover={noHover}
+          onReach={noReach}
+          screen={SCREEN}
+        >
+          <button type="button">part</button>
+        </WindowFrame>,
+      );
+      return screen.getByRole("button").parentElement?.style;
+    };
 
-    expect(
-      screen
-        .getByRole("button")
-        .parentElement?.style.getPropertyValue("--workspace-width"),
-    ).toBe("1280px");
+    it("slides its parts the width of the screen", () => {
+      // A workspace switch slides by the width of the window's screen.
+      expect(styleOf()?.getPropertyValue("--workspace-width")).toBe("1280px");
+    });
+
+    it("lifts its parts far enough to clear the top of the screen", () => {
+      // The scratchpad slides a window up off the screen and back down.
+      expect(styleOf()?.getPropertyValue("--lift")).toBe("600px");
+    });
   });
 });

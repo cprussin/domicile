@@ -120,11 +120,22 @@ export const collapsedAlong = (
 };
 
 /**
- * Custom property for the workspace switch keyframes: the screen width, so
- * the two workspaces stay side by side. Set once on the stage and inherited.
+ * Custom properties for the keyframes that slide a window off its `screen`,
+ * set on a wrapper and inherited by each part of the window:
+ *
+ * - `--workspace-width`: the screen width, so the two workspaces of a switch
+ *   stay side by side.
+ * - `--lift`: how far up `frame` must move to clear the screen's top edge, for
+ *   the scratchpad's slides. None for a window not drawn.
  */
-export const slidAcross = (width: number): Record<`--${string}`, string> => ({
-  "--workspace-width": `${width.toString()}px`,
+export const slidAcross = (
+  screen: Rect,
+  frame: Rect | undefined,
+): Record<`--${string}`, string> => ({
+  "--workspace-width": `${screen.width.toString()}px`,
+  ...(frame === undefined
+    ? {}
+    : { "--lift": `${(frame.y + frame.height - screen.y).toString()}px` }),
 });
 
 /**
@@ -162,6 +173,11 @@ export const movingStyles = cva({
       concealing: {
         animation: "windowConcealing {durations.fast} {easings.in-out}",
       },
+      // `emphasized` like a workspace switch: these slide up to a screen's
+      // height too.
+      dropping: {
+        animation: "windowDropping {durations.slow} {easings.emphasized}",
+      },
       "leaving-to-end": {
         animation:
           "windowLeavingToEnd {durations.slower} {easings.emphasized} forwards",
@@ -190,6 +206,19 @@ export const movingStyles = cva({
       // Fades in over the hidden tab in the same box, giving a crossfade.
       revealing: {
         animation: "windowRevealing {durations.fast} {easings.in-out}",
+      },
+      // `outQuart` and `fast`, like `closing`, so it keeps pace with the
+      // windows moving into its space.
+      sending: {
+        animation: "windowSending {durations.fast} {easings.outQuart} forwards",
+      },
+      // A tab leaves its strip as it does when closed.
+      "sending-tab": {
+        animation: "windowClosingTab {durations.fast} {easings.out} forwards",
+      },
+      stowing: {
+        animation:
+          "windowStowing {durations.slow} {easings.emphasized} forwards",
       },
       // Lasts as long as `closing-tab`, which it is drawn under.
       uncovering: {

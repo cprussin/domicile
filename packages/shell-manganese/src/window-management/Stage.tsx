@@ -91,6 +91,8 @@ type Props = {
   popups: readonly Popup[];
   /** Every screen and what it shows. */
   screens: readonly StageScreen[];
+  /** The windows hidden in the scratchpad. */
+  scratchpad: readonly string[];
   windows: readonly ShellWindow[];
 };
 
@@ -127,6 +129,7 @@ export const Stage = ({
   onSelect,
   onStretch,
   popups,
+  scratchpad,
   screens,
   windows,
 }: Props) => {
@@ -134,7 +137,7 @@ export const Stage = ({
     Object.fromEntries(
       screens.map(({ current, geometry, screenful: { placements, tabs } }) => [
         geometry.name,
-        { activeId, current, placements, tabs, windows },
+        { activeId, current, placements, scratchpad, tabs, windows },
       ]),
     ),
   );
@@ -169,7 +172,11 @@ export const Stage = ({
         placement !== undefined &&
         !fillsScreen(screens, window.id) &&
         floats.some((float) => floatHolds(float, window.id)) ? (
-          <Sliding key={window.id} on={screenNamed(screens, screen)}>
+          <Sliding
+            frame={placement.frame}
+            key={window.id}
+            on={screenNamed(screens, screen)}
+          >
             <FloatShadow
               depth={placement.depth}
               dragging={window.id === movingId}
@@ -188,6 +195,7 @@ export const Stage = ({
         const following = leaving ? undefined : active;
         return (
           <Sliding
+            frame={following?.placement?.frame}
             key={keyOf(box)}
             on={screenNamed(screens, following?.screen)}
           >
@@ -228,6 +236,7 @@ export const Stage = ({
           };
           return (
             <WindowFrame
+              frame={placement?.frame}
               key={window.id}
               onHover={(at) => {
                 onHover(window.id, at);
@@ -235,7 +244,7 @@ export const Stage = ({
               onReach={() => {
                 onSelect(window.id);
               }}
-              width={on?.geometry.screen.width}
+              screen={on?.geometry.screen}
             >
               {window.kind === WindowKind.App ? (
                 <AppWindow
@@ -315,6 +324,7 @@ export const Stage = ({
             };
             return (
               <WindowFrame
+                frame={placement.frame}
                 key={window.id}
                 onHover={(at) => {
                   onHover(window.id, at);
@@ -322,7 +332,7 @@ export const Stage = ({
                 onReach={() => {
                   onSelect(window.id);
                 }}
-                width={on?.geometry.screen.width}
+                screen={on?.geometry.screen}
               >
                 <WindowTitleBar
                   depth={placement.depth}
@@ -512,7 +522,7 @@ export const Stage = ({
         const on = screenNamed(screens, screen);
         const named = windowNamed(windows, tab.id);
         return (
-          <Sliding key={tab.id} on={on}>
+          <Sliding frame={undefined} key={tab.id} on={on}>
             <TitleBar
               depth={tab.depth}
               // A tab moves only with its container.
@@ -591,19 +601,21 @@ const stageStyles = css({
 });
 
 /**
- * Gives its children the width of screen `on`, which a workspace switch
- * slides them by. Has no box of its own; see `frameStyles` in `WindowFrame`.
+ * Gives its children the distances that slide `frame` off screen `on`. Has no
+ * box of its own; see `frameStyles` in `WindowFrame`.
  */
 const Sliding = ({
   children,
+  frame,
   on,
 }: {
   children: ReactNode;
+  frame: Rect | undefined;
   on: StageScreen | undefined;
 }) => (
   <div
     className={slidingStyles}
-    style={on === undefined ? undefined : slidAcross(on.geometry.screen.width)}
+    style={on === undefined ? undefined : slidAcross(on.geometry.screen, frame)}
   >
     {children}
   </div>

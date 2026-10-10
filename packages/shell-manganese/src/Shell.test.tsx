@@ -2208,6 +2208,9 @@ describe("Shell", () => {
 
       press("parenright", true);
 
+      // `two` animates off the screen first.
+      expect(windowsOnScreen(container)).toEqual(["one", "two"]);
+      motionsPlayOut(container);
       expect(windowsOnScreen(container)).toEqual(["one"]);
       press("parenright");
       // After the old workspace finishes sliding off, which keeps `one` drawn.
@@ -2662,10 +2665,19 @@ describe("Shell", () => {
       clientAppears("term");
 
       press("minus", true);
+      // It slides off the top of the screen first.
+      expect(appElement(container, "term")).toHaveAttribute(
+        "data-motion",
+        "stowing",
+      );
+      motionsPlayOut(container);
       expect(windowsOnScreen(container)).toEqual([]);
 
       press("minus");
-      expect(windowsOnScreen(container)).toEqual(["term"]);
+      expect(appElement(container, "term")).toHaveAttribute(
+        "data-motion",
+        "dropping",
+      );
       expect(
         Number(appElement(container, "term").style.zIndex),
       ).toBeGreaterThan(0);
