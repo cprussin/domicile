@@ -2,8 +2,8 @@
 // queries: Domicile sets `prefers-color-scheme` from its theme, and the page
 // has no `DomicileHost` to read it from.
 
-import type { Theme } from "@domicile-desktop/component-library/theme-core";
-import type { ThemeSource } from "@domicile-desktop/component-library/theme-source";
+import type { Theme } from "./theme-core";
+import type { ThemeSource } from "./theme-source";
 
 /** The parts of a `MediaQueryList` the page reads. */
 export type MediaQuery = {

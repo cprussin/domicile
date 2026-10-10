@@ -93,6 +93,10 @@ source_set("domicile") {
     "//chrome/browser/media/webrtc",
     "//components/domicile:site_permissions",
     "//components/permissions",
+    # The Settings app's site permissions, listed and set through the command
+    # socket.
+    "//components/content_settings/core/browser",
+    "//components/content_settings/core/common",
     # DevTools for a guest's page: Chrome's front end and its bindings.
     "//chrome/browser/devtools",
     # Tab zoom factors and range.

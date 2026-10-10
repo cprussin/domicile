@@ -153,11 +153,13 @@ Evidence is in [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md),
    tray, mixer and window management into their own packages, with manganese
    the shell that composes them. No design doc yet.
 
-8. **A Settings app.** Extensions and config values can only be set by editing
-   the config. A Settings app would manage both. It would also hold the
-   *Known gaps* that need a place to store state: a persistent theme choice,
-   and the cookies and site data that `chrome://settings` manages in
-   Chrome. No design doc yet.
+8. **Settings app follow-ups.** The app edits the config, the shell, extensions
+   and site permissions ([SETTINGS.md](docs/SETTINGS.md)). Left:
+   - Shell options a shell declares and the app edits
+     ([SHELL-OPTIONS.md](docs/architecture/SHELL-OPTIONS.md)).
+   - A persistent theme choice, which needs a store for desktop state.
+   - Cookies and site data, which `chrome://settings` manages in Chrome.
+   - No guard runs the app's native messaging host in the engine.
 
 9. **Split up the compositor's `main.rs`.** The lock, portals, screens, chrome
    hub, chrome connection, frame report and request handling are their own
@@ -327,8 +329,8 @@ Understood and not scheduled.
   - Download progress is not reported.
 - **No settings page.** Browser windows block every `chrome://` page (patch
   0083), so nothing can clear cookies and site data. Site permissions are set
-  per site from the address bar. The Settings app (item 9) will cover the
-  rest. Printing is also blocked: `window.print()` opens `chrome://print`.
+  from the address bar and the Settings app ([SETTINGS.md](docs/SETTINGS.md)).
+  Printing is also blocked: `window.print()` opens `chrome://print`.
 - **Some extension calls are refused.** `tabs.move`, `group`, `ungroup`,
   `discard`, `duplicate` and splits; `tabs.update`'s `pinned`, `openerTabId`
   and `autoDiscardable`; `windows.update` bounds and state; and any
@@ -372,8 +374,7 @@ Understood and not scheduled.
 - **A theme picked from the toggle lasts only until restart.** `theme.mode` is
   the startup value. The config file is generated (by a shell, or by
   home-manager on NixOS), so the desktop does not write to it. Persisting the
-  choice needs a separate store for desktop state; the Settings app (item 9)
-  needs the same.
+  choice needs a separate store for desktop state (item 8).
 - **A Wayland window changes theme before the wipe reaches it.** An `<app>`
   is not frozen in the view transition's old frame; a `<webview>` is. Seen on
   a tty with gnome-calculator: the shell changed behind the wipe, the window

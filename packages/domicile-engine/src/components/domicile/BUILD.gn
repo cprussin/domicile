@@ -241,8 +241,12 @@ source_set("command_protocol") {
   public_deps = [
     ":common",
     "//base",
+    "//components/domicile/mojom",
     "//url",
   ]
+
+  # The names of site permissions and their settings.
+  deps = [ ":site_permissions" ]
 }
 
 # The chords the shell claimed for the desktop, and who to tell when one fires.

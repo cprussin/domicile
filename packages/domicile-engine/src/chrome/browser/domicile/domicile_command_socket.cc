@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -23,8 +24,14 @@
 #include "chrome/browser/ui/browser_window/public/browser_collection.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
+#include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/content_settings/core/common/content_settings.h"
+#include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/domicile/browser/command_protocol.h"
 #include "components/domicile/browser/shell_source.h"
+#include "components/domicile/browser/site_permissions.h"
+#include "components/domicile/mojom/web_view_guest.mojom.h"
+#include "components/permissions/permissions_client.h"
 #include "components/domicile/common/domicile_scheme.h"
 #include "components/tabs/public/tab_interface.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -40,6 +47,7 @@
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "ui/base/page_transition_types.h"
 #include "url/gurl.h"
+#include "url/origin.h"
 
 namespace domicile {
 namespace {
@@ -119,6 +127,73 @@ bool OpenUrlInABrowserWindow(const GURL& url) {
   return OpenBrowserWindow(url);
 }
 
+// The site settings of the shell's profile, which browser windows share, or
+// null when there is no shell.
+HostContentSettingsMap* ShellSettings() {
+  content::WebContents* shell = FindShellContents();
+  if (shell == nullptr) {
+    return nullptr;
+  }
+  return permissions::PermissionsClient::Get()->GetSettingsMap(
+      shell->GetBrowserContext());
+}
+
+// Each permission's default and each site's own setting, as the address
+// bar's panel stores them: user settings for one origin. Settings from
+// policy or extensions, and patterns wider than an origin, are left out,
+// since `set_site_permission` could not change them.
+std::optional<SitePermissionList> ListShellSitePermissions() {
+  CHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  const HostContentSettingsMap* map = ShellSettings();
+  if (map == nullptr) {
+    return std::nullopt;
+  }
+  SitePermissionList list;
+  for (const mojom::WebViewPermission permission : kSitePermissions) {
+    const ContentSettingsType type = SettingsTypeFor(permission);
+    list.defaults.emplace_back(permission,
+                               SettingFor(map->GetDefaultContentSetting(type)));
+    for (const ContentSettingPatternSource& rule :
+         map->GetSettingsForOneType(type)) {
+      const ContentSetting setting = rule.GetContentSetting();
+      const bool shown = setting == CONTENT_SETTING_ASK ||
+                         setting == CONTENT_SETTING_ALLOW ||
+                         setting == CONTENT_SETTING_BLOCK;
+      const GURL site = rule.primary_pattern.ToRepresentativeUrl();
+      if (rule.source != content_settings::ProviderType::kPrefProvider ||
+          rule.incognito || !shown || rule.primary_pattern.MatchesAllHosts() ||
+          rule.primary_pattern.HasDomainWildcard() || !site.is_valid() ||
+          !HasSitePermissions(site)) {
+        continue;
+      }
+      list.sites.push_back({url::Origin::Create(site), permission,
+                            SettingFor(setting)});
+    }
+  }
+  return list;
+}
+
+// Stores `origin`'s setting as the address bar's panel does
+// (WebViewGuest::SetSitePermission). Open browser windows on the site see the
+// change through their content settings observers.
+bool SetShellSitePermission(const url::Origin& origin,
+                            mojom::WebViewPermission permission,
+                            mojom::WebViewPermissionSetting setting) {
+  CHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  HostContentSettingsMap* map = ShellSettings();
+  if (map == nullptr) {
+    return false;
+  }
+  const GURL site = origin.GetURL();
+  const ContentSettingsType type = SettingsTypeFor(permission);
+  map->SetContentSettingDefaultScope(
+      site, site, type,
+      StoredSetting(setting, map->GetDefaultContentSetting(type)));
+  return true;
+}
+
 // One request line, answered from the UI thread.
 //
 // Runs on the UI thread because `ShellSource` is unlocked and UI-thread only,
@@ -126,7 +201,11 @@ bool OpenUrlInABrowserWindow(const GURL& url) {
 // so it may be called from any thread.
 void AnswerOnUIThread(const std::string& line, CommandReply reply) {
   CHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  AnswerCommand(line, &LoadShellIntoTheShellWindow, &OpenUrlInABrowserWindow,
+  AnswerCommand(line,
+                {.load_shell = &LoadShellIntoTheShellWindow,
+                 .open_url = &OpenUrlInABrowserWindow,
+                 .list_site_permissions = &ListShellSitePermissions,
+                 .set_site_permission = &SetShellSitePermission},
                 std::move(reply));
 }
 

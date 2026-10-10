@@ -11,7 +11,10 @@ use std::os::unix::net::UnixStream;
 use std::path::Path;
 use std::time::Duration;
 
-use crate::command::{load_shell_line, open_url_line, reply, Reply};
+use crate::command::{
+    load_shell_line, open_url_line, reply, set_site_permission_line, site_permissions_line, Reply,
+};
+use crate::site_permissions::{SitePermission, SiteSettings};
 
 /// Why the engine did not carry out a command.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -69,6 +72,29 @@ pub fn open_url(socket: &Path, url: &str, patience: Duration) -> Result<(), Comm
     carry_out(socket, &open_url_line(url), Reply::Opened, patience)
 }
 
+/// Asks the engine at `socket` for every permission's default and every
+/// site's own setting.
+pub fn site_permissions(socket: &Path, patience: Duration) -> Result<SiteSettings, CommandError> {
+    match answered(socket, &site_permissions_line(), patience)? {
+        Reply::SitePermissions(settings) => Ok(settings),
+        other => Err(unexpected(socket, &other)),
+    }
+}
+
+/// Tells the engine at `socket` to store `site`'s setting.
+pub fn set_site_permission(
+    socket: &Path,
+    site: &SitePermission,
+    patience: Duration,
+) -> Result<(), CommandError> {
+    carry_out(
+        socket,
+        &set_site_permission_line(site),
+        Reply::Set,
+        patience,
+    )
+}
+
 /// Sends one command and succeeds only if the engine replies `done`.
 ///
 /// A reply meant for another command (e.g. `loaded` for `open_url`) is
@@ -79,14 +105,30 @@ fn carry_out(
     done: Reply,
     patience: Duration,
 ) -> Result<(), CommandError> {
+    match answered(socket, line, patience)? {
+        answered if answered == done => Ok(()),
+        other => Err(unexpected(socket, &other)),
+    }
+}
+
+/// Sends one command and reads the engine's reply, a refusal as an error.
+fn answered(socket: &Path, line: &str, patience: Duration) -> Result<Reply, CommandError> {
     let said = exchange(socket, line, patience)?;
     match reply(said.trim()) {
         Ok(Reply::Refused { why }) => Err(CommandError::Refused { why }),
-        Ok(answered) if answered == done => Ok(()),
-        _ => Err(CommandError::Unreadable {
+        Ok(answered) => Ok(answered),
+        Err(_) => Err(CommandError::Unreadable {
             path: socket.display().to_string(),
             said: said.trim().to_string(),
         }),
+    }
+}
+
+/// A reply meant for another command.
+fn unexpected(socket: &Path, reply: &Reply) -> CommandError {
+    CommandError::Unreadable {
+        path: socket.display().to_string(),
+        said: format!("{reply:?}"),
     }
 }
 
