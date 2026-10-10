@@ -170,7 +170,7 @@ describe("a floating group", () => {
     const selected = parentFocused(floated());
 
     expect(selectedIn(selected)).toMatchObject({ kind: NodeKind.Container });
-    expect(selectedIn(childFocused(selected))).toEqual({
+    expect(selectedIn(childFocused(selected))).toMatchObject({
       id: "c",
       kind: NodeKind.Window,
     });

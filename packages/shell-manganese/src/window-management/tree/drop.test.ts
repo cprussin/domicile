@@ -3,6 +3,7 @@ import { describe, expect, it } from "bun:test";
 import { Direction } from "../direction";
 import { droppedOn } from "./drop";
 import { Layout, LayoutNode } from "./node";
+import { removed } from "./remove";
 import { focusedIdOf, withFocusOn } from "./tiling";
 
 const ROW = {
@@ -25,13 +26,21 @@ describe("droppedOn", () => {
         [
           LayoutNode.Window("c"),
           LayoutNode.Window("b"),
-          LayoutNode.Window("a"),
+          LayoutNode.Window("a", 1),
         ],
         2,
         [0.2, 0.3, 0.5],
       ),
     );
     expect(focusedIdOf(dropped)).toBe("a");
+  });
+
+  it("keeps both windows' focus history when they trade places", () => {
+    const visited = withFocusOn(withFocusOn(withFocusOn(ROW, "c"), "a"), "b");
+
+    expect(
+      focusedIdOf(removed(droppedOn(visited, "b", "a", undefined), "b")),
+    ).toBe("a");
   });
 
   it("goes beside a window dropped on the edge that runs along its row", () => {
@@ -55,7 +64,7 @@ describe("droppedOn", () => {
       children: [
         LayoutNode.Window("b"),
         {
-          children: [LayoutNode.Window("a"), LayoutNode.Window("c")],
+          children: [LayoutNode.Window("a", 1), LayoutNode.Window("c")],
           layout: Layout.SplitV,
         },
       ],

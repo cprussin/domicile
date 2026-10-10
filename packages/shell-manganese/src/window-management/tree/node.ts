@@ -47,6 +47,13 @@ export type Container = {
 
 /** A window leaf in the tree. */
 export type WindowNode = {
+  /**
+   * When the window last took focus: higher is more recent, and 0 is never.
+   *
+   * Plays the part of sway's focus stack. Kept on the window, so it moves with
+   * it.
+   */
+  focusedAt: number;
   id: string;
   kind: NodeKind.Window;
 };
@@ -67,7 +74,11 @@ export const LayoutNode = {
     }
   },
 
-  Window: (id: string): WindowNode => ({ id, kind: NodeKind.Window }),
+  Window: (id: string, focusedAt = 0): WindowNode => ({
+    focusedAt,
+    id,
+    kind: NodeKind.Window,
+  }),
 };
 
 /**
@@ -140,6 +151,18 @@ export const windowsIn = (node: LayoutNode): readonly string[] => {
     }
     case NodeKind.Window: {
       return [node.id];
+    }
+  }
+};
+
+/** The latest {@link WindowNode.focusedAt} of any window in `node`. */
+export const lastFocusIn = (node: LayoutNode): number => {
+  switch (node.kind) {
+    case NodeKind.Container: {
+      return Math.max(...node.children.map((child) => lastFocusIn(child)));
+    }
+    case NodeKind.Window: {
+      return node.focusedAt;
     }
   }
 };

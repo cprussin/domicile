@@ -83,10 +83,11 @@ export const tradedFor = (tiling: Tiling, id: string, by: string): Tiling => {
 const traded = (root: LayoutNode, id: string, target: string): LayoutNode => {
   const from = pathOf(root, id);
   const to = pathOf(root, target);
+  const moving = nodeAt(root, from);
   return replacedAt(
-    replacedAt(root, from, () => Node.Window(target)),
+    replacedAt(root, from, () => nodeAt(root, to)),
     to,
-    () => Node.Window(id),
+    () => moving,
   );
 };
 
