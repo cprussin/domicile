@@ -12,11 +12,14 @@
 //! [`TRICKLE`] ([`HeldFrames::trickle`]), and before closing a hidden window
 //! ([`HeldFrames::take`]). The trickle runs only while a window is hidden
 //! ([`HeldFrames::start_trickling`]), so a desk with none never wakes for it.
+//!
+//! A hidden window a cast shows holds nothing ([`HeldFrames::cast`]), so the
+//! cast keeps its frame rate.
 
 use std::time::Duration;
 
 use std::collections::hash_map::Entry;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// How often a hidden window's held callbacks are sent anyway.
 pub const TRICKLE: Duration = Duration::from_secs(1);
@@ -25,10 +28,22 @@ pub const TRICKLE: Duration = Duration::from_secs(1);
 /// waiting for its callbacks gets the oldest back at once.
 pub const HELD_AT_MOST: usize = 16;
 
+/// What a change in the windows cast does to hidden ones.
+#[derive(Debug)]
+pub struct Recast<C> {
+    /// Hidden windows a cast started showing, with the callbacks they held.
+    /// They draw again and are no longer suspended.
+    pub released: Vec<(String, Vec<C>)>,
+    /// Hidden windows no cast shows any more. They are suspended again.
+    pub held: Vec<String>,
+}
+
 /// The callbacks held for each hidden window, by app id.
 #[derive(Debug)]
 pub struct HeldFrames<C> {
     hidden: HashMap<String, Vec<C>>,
+    /// The windows a cast shows. Hidden, they hold nothing.
+    cast: HashSet<String>,
     /// Whether the trickle timer is armed.
     trickling: bool,
 }
@@ -37,25 +52,29 @@ impl<C> HeldFrames<C> {
     pub fn new() -> Self {
         Self {
             hidden: HashMap::new(),
+            cast: HashSet::new(),
             trickling: false,
         }
     }
 
-    /// The page stopped drawing `window`. False when it was already hidden.
+    /// The page stopped drawing `window`. True when it starts holding its
+    /// callbacks: it was shown, and no cast shows it.
     pub fn hide(&mut self, window: &str) -> bool {
         match self.hidden.entry(window.to_string()) {
             Entry::Occupied(_) => false,
             Entry::Vacant(vacant) => {
                 vacant.insert(Vec::new());
-                true
+                !self.cast.contains(window)
             }
         }
     }
 
     /// The page draws `window` again: the callbacks held for it, or `None`
-    /// when it was not hidden.
+    /// when it held none: it was not hidden, or a cast shows it.
     pub fn show(&mut self, window: &str) -> Option<Vec<C>> {
-        self.hidden.remove(window)
+        self.hidden
+            .remove(window)
+            .filter(|_| !self.cast.contains(window))
     }
 
     pub fn is_hidden(&self, window: &str) -> bool {
@@ -95,12 +114,12 @@ impl<C> HeldFrames<C> {
     /// first: the rest wait for [`show`](Self::show).
     pub fn pass(&mut self, window: &str, callbacks: Vec<C>) -> Vec<C> {
         match self.hidden.get_mut(window) {
-            Some(held) => {
+            Some(held) if !self.cast.contains(window) => {
                 held.extend(callbacks);
                 let over = held.len().saturating_sub(HELD_AT_MOST);
                 held.drain(..over).collect()
             }
-            None => callbacks,
+            _ => callbacks,
         }
     }
 
@@ -127,6 +146,26 @@ impl<C> HeldFrames<C> {
             .get_mut(window)
             .map(std::mem::take)
             .unwrap_or_default()
+    }
+
+    /// The windows a cast shows: hidden, they draw on. What changes for the
+    /// hidden ones among them, and those no cast shows any more.
+    pub fn cast(&mut self, windows: HashSet<String>) -> Recast<C> {
+        let released = windows
+            .difference(&self.cast)
+            .filter_map(|window| {
+                let held = self.hidden.get_mut(window)?;
+                Some((window.clone(), std::mem::take(held)))
+            })
+            .collect();
+        let held = self
+            .cast
+            .difference(&windows)
+            .filter(|window| self.hidden.contains_key(*window))
+            .cloned()
+            .collect();
+        self.cast = windows;
+        Recast { released, held }
     }
 
     /// `window` closed. Its held callbacks go with its client's surface.
@@ -277,5 +316,38 @@ mod tests {
         held.forget("term");
         assert!(!held.is_hidden("term"));
         assert_eq!(held.show("term"), None);
+    }
+
+    #[test]
+    fn a_hidden_window_draws_while_a_cast_shows_it() {
+        let mut held = HeldFrames::new();
+        held.hide("term");
+        held.pass("term", vec![1]);
+
+        let recast = held.cast(HashSet::from(["term".to_string()]));
+        assert_eq!(recast.released, vec![("term".to_string(), vec![1])]);
+        assert!(recast.held.is_empty());
+        assert_eq!(held.pass("term", vec![2]), vec![2]);
+        // Input still finds no box for it.
+        assert!(held.is_hidden("term"));
+
+        let recast = held.cast(HashSet::new());
+        assert!(recast.released.is_empty());
+        assert_eq!(recast.held, vec!["term".to_string()]);
+        assert_eq!(held.pass("term", vec![3]), Vec::<u32>::new());
+    }
+
+    #[test]
+    fn a_cast_window_hidden_and_shown_holds_nothing() {
+        let mut held = HeldFrames::new();
+        held.cast(HashSet::from(["term".to_string()]));
+
+        assert!(!held.hide("term"), "a cast window is not suspended");
+        assert!(held.is_hidden("term"));
+        assert_eq!(held.pass("term", vec![1]), vec![1]);
+        assert_eq!(held.show("term"), None);
+        assert!(!held.is_hidden("term"));
+        // A cast that ends on a shown window holds nothing.
+        assert!(held.cast(HashSet::new()).held.is_empty());
     }
 }

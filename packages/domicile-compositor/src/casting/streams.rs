@@ -15,7 +15,7 @@
 //! - A shot of the desk (see [`shots`](crate::casting::shots)) shows every
 //!   monitor like a stream, until each has a frame.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::os::fd::OwnedFd;
 use std::path::PathBuf;
 use std::time::Instant;
@@ -884,6 +884,17 @@ impl Streams {
         self.next_due()
     }
 
+    /// The windows a stream shows.
+    pub fn windows(&self) -> HashSet<String> {
+        self.casts
+            .values()
+            .filter_map(|cast| match &cast.shows {
+                Shows::Window(app_id) => Some(app_id.clone()),
+                Shows::Desk { .. } => None,
+            })
+            .collect()
+    }
+
     /// Window `app_id` showed `frame`, which a shot of it alone reads.
     pub fn shown(&mut self, app_id: &str, frame: Shown) {
         self.shown.insert(app_id.to_string(), frame);
@@ -1165,6 +1176,7 @@ fn fill(
 
 #[cfg(test)]
 mod tests {
+    use std::collections::{HashMap, HashSet};
     use std::io::Write as _;
     use std::os::fd::{FromRawFd as _, OwnedFd};
     use std::sync::mpsc;
@@ -1177,9 +1189,10 @@ mod tests {
 
     use smithay::utils::Transform;
 
-    use super::{damage_in_view, Streams};
+    use super::{damage_in_view, Cast, Shows, Streams};
     use crate::buffer_transform::Sampled;
     use crate::casting::captures::Capturer;
+    use crate::casting::cursor::{CursorMode, Plan};
     use crate::casting::region::Screen;
     use crate::casting::shots::Desk;
     use crate::casting::{Candidate, Region, Request, Source, StreamId};
@@ -1452,5 +1465,34 @@ mod tests {
             damage_in_view(Some((15, 5, 2, 2)), turned),
             [(0, 0, 20, 30)]
         );
+    }
+
+    #[test]
+    fn each_window_a_cast_shows_is_named_once() {
+        let mut streams = streams();
+        for (stream, window) in [(1, "term"), (2, "term"), (3, "editor")] {
+            streams
+                .casts
+                .insert(StreamId(stream), cast(Shows::Window(window.into())));
+        }
+
+        assert_eq!(
+            streams.windows(),
+            HashSet::from(["term".to_string(), "editor".to_string()])
+        );
+    }
+
+    /// A stream of `shows` that has not negotiated.
+    fn cast(shows: Shows) -> Cast {
+        Cast {
+            shows,
+            cursor: CursorMode::Hidden,
+            format: None,
+            pacing: None,
+            targets: HashMap::new(),
+            filling: false,
+            asked: (1, 1),
+            cursor_plan: Plan::Nothing,
+        }
     }
 }

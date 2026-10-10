@@ -108,8 +108,6 @@ Understood and not scheduled.
   `domicile-host`).
 - **Clients only get 8-bit formats** (`FOURCCS` in `engine.rs`).
 - **A chrome repaint damages the whole output.**
-- **A cast of a hidden window drops to a frame a second.**
-  [WINDOW-COMPOSITING.md](docs/architecture/WINDOW-COMPOSITING.md#hidden-windows).
 - **Windows under a fullscreen window keep drawing,** so manganese can animate
   the fullscreen window back to its box.
 - **Browser window context menus have only Chrome's core items.** No spelling

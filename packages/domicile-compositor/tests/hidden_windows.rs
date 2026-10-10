@@ -3,10 +3,11 @@
 //! The page reports a hidden window (another workspace, a background tab) with
 //! an empty box (`set_app_bounds`). Its client gets a `wl_surface.frame`
 //! callback once a second and is marked `suspended` until the page gives it a
-//! box again.
+//! box again, unless a cast shows it.
 
 mod running;
 
+use std::process::{Child, Stdio};
 use std::time::{Duration, Instant};
 
 use domicile_host::theme_turnover::REPAINT_WITHIN;
@@ -70,6 +71,38 @@ fn a_hidden_window_draws_once_a_second_until_it_is_shown() {
     assert!(
         client.wait_for_trace(".release()", held + 3),
         "a window shown again never drew; it traced:\n{}",
+        client.trace()
+    );
+}
+
+/// A window a cast shows draws on while hidden, and is not suspended.
+///
+/// `DOMICILE_CAST_WINDOW` starts the cast, onto a private PipeWire daemon.
+#[test]
+fn a_hidden_window_a_cast_shows_draws_on() {
+    let compositor =
+        Compositor::started_with_env(ONE_DISPLAY, None, &[("DOMICILE_CAST_WINDOW", "cast-me")]);
+    let _pipewire = PipeWire::started(&compositor);
+    let mut chrome = compositor.chrome();
+    let client = compositor.client("cast-me");
+    let app_id = appeared(&mut chrome);
+    compositor.wait_for_log("cast ready");
+
+    placed(&mut chrome, &app_id, HIDDEN);
+    // Past a frame asked for before the hide.
+    std::thread::sleep(Duration::from_millis(200));
+    let before = frames(&client);
+    std::thread::sleep(Duration::from_secs(1));
+    let drawn = frames(&client) - before;
+
+    assert!(
+        drawn >= 10,
+        "a hidden window being cast drew {drawn} frames in 1 s; it traced:\n{}",
+        client.trace()
+    );
+    assert!(
+        !client.trace().contains(".suspended(true)"),
+        "a hidden window being cast was suspended; it traced:\n{}",
         client.trace()
     );
 }
@@ -150,6 +183,35 @@ fn a_theme_change_does_not_wait_for_a_hidden_window() {
         "the windows waited for the hidden one to repaint ({:?})",
         captured.elapsed()
     );
+}
+
+/// A `pipewire` daemon in the compositor's runtime directory, stopped on
+/// drop.
+struct PipeWire(Child);
+
+impl PipeWire {
+    fn started(compositor: &Compositor) -> PipeWire {
+        let daemon = compositor
+            .command("pipewire")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("pipewire starts; it is in `nix develop .#full`");
+        let socket = compositor.scratch_file("pipewire-0");
+        let until = Instant::now() + Duration::from_secs(10);
+        while !socket.exists() {
+            assert!(Instant::now() < until, "pipewire made no socket");
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        PipeWire(daemon)
+    }
+}
+
+impl Drop for PipeWire {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
 }
 
 /// How many frames the client has drawn.

@@ -343,8 +343,8 @@ draws for the densest monitor. `shell-manganese` reports from `AppWindow`.
 Report a window you hide (`display: none`, another workspace) as
 `setAppBounds(appId, 0, 0, 0, 0)`. Its client then draws about once a second:
 the compositor holds its frame callbacks and marks it `suspended` until you
-report a box again. A theme change does not wait for it. A new page starts
-with every window shown.
+report a box again. A window being cast draws on. A theme change does not wait
+for it. A new page starts with every window shown.
 
 ## Keybindings
 
