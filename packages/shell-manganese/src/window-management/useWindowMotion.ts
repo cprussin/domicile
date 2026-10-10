@@ -1,5 +1,7 @@
 import { useCallback, useState } from "react";
 
+import { token } from "../../styled-system/tokens";
+
 import type { Closing, Leaving } from "./closing";
 import { departed, movesAsTab, sentAway, withClosing } from "./closing";
 import type { PlacedTab, Placement } from "./placement";
@@ -27,6 +29,12 @@ export type DrawnWindow = {
   placement: Placement | undefined;
   /** The shuffle the window is playing, or `undefined` when not shuffling. */
   restack: Restack | undefined;
+  /**
+   * How far into its motion the window starts, in milliseconds. A scratchpad
+   * slide that cuts the other short starts where that one had got to; every
+   * other motion starts at 0.
+   */
+  rewound: number;
   /** The screen the window is drawn on, or `undefined` for none. */
   screen: string | undefined;
   window: ShellWindow;
@@ -66,17 +74,24 @@ type Shuffling = { motion: Shuffle; restack: Restack };
 /** A closing window and its screen. */
 type ClosingOn = Closing & { screen: string };
 
+/**
+ * When a scratchpad slide began, and how far into its animation, in
+ * milliseconds. See {@link rewoundAfter}.
+ */
+type Slid = { at: number; rewound: number };
+
 /** An open window sent off the screen, how it leaves, and from which screen. */
-type SendingOn = Leaving & {
-  motion: "sending" | "sending-tab" | "stowing";
-  screen: string;
-};
+type SendingOn = Leaving &
+  Slid & {
+    motion: "sending" | "sending-tab" | "stowing";
+    screen: string;
+  };
 
 /** Animations still playing. */
 type Playing = {
   closing: readonly ClosingOn[];
   /** Windows still sliding down from the scratchpad. */
-  dropping: readonly string[];
+  dropping: readonly (Slid & { id: string })[];
   /** Windows still playing their opening animation. */
   opening: readonly string[];
   /** Floats still shuffling in the stack. */
@@ -114,13 +129,17 @@ const NOTHING_PLAYING: Playing = {
  * first commit a render without the closed window, and React would unmount its
  * `<webview>`, blanking the page during the close animation.
  *
- * Animations end when the element reports it, so durations live only in the
- * stylesheet (see `movingStyles`).
+ * Animations end when the element reports it, so durations live in the
+ * stylesheet (see `movingStyles`). Only the scratchpad slides' is read here, to
+ * start one where the other was cut short.
  *
  * One list covers the whole desk, so a float dragged to another screen keeps
  * its element and its `<webview>` does not reload.
  */
-export const useWindowMotion = (shown: Desk): WindowMotions => {
+export const useWindowMotion = (
+  shown: Desk,
+  now: () => number = () => performance.now(),
+): WindowMotions => {
   // One state, not two: React may keep only one of two updates made during
   // render, which would desync the last desk from the animations it started.
   const [{ before, playing }, setState] = useState({
@@ -129,7 +148,10 @@ export const useWindowMotion = (shown: Desk): WindowMotions => {
   });
 
   if (moved(before, shown)) {
-    setState({ before: shown, playing: advanced(playing, before, shown) });
+    setState({
+      before: shown,
+      playing: advanced(playing, before, shown, now()),
+    });
   }
 
   const onPlayedOut = useCallback(
@@ -175,8 +197,15 @@ const moved = (before: Desk, shown: Desk): boolean =>
 const windowsOf = (desk: Desk): readonly ShellWindow[] =>
   Object.values(desk)[0]?.windows ?? [];
 
-/** What is playing after the desk changes from `before` to `shown`. */
-const advanced = (playing: Playing, before: Desk, shown: Desk): Playing => {
+/**
+ * What is playing after the desk changes from `before` to `shown` at `time`.
+ */
+const advanced = (
+  playing: Playing,
+  before: Desk,
+  shown: Desk,
+  time: number,
+): Playing => {
   // Only screens present in both renders; a new screen has no prior state.
   const screens = Object.entries(shown).flatMap(([name, now]) => {
     const was = before[name];
@@ -218,13 +247,23 @@ const advanced = (playing: Playing, before: Desk, shown: Desk): Playing => {
     ],
     // Drop windows no longer shown: they never report the slide finished.
     dropping: [
-      ...playing.dropping.filter((id) => shownIds.has(id)),
+      ...playing.dropping.filter(({ id }) => shownIds.has(id)),
       ...windows
         .filter(
           ({ id }) =>
             stowed(before, id) && !stowed(shown, id) && shownIds.has(id),
         )
-        .map(({ id }) => id),
+        .map(({ id }) => ({
+          at: time,
+          id,
+          rewound: rewoundAfter(
+            playing.sending.find(
+              (sending) =>
+                sending.window.id === id && sending.motion === "stowing",
+            ),
+            time,
+          ),
+        })),
     ],
     // Drop windows closed or hidden while opening: they never report the
     // opening finished.
@@ -246,11 +285,22 @@ const advanced = (playing: Playing, before: Desk, shown: Desk): Playing => {
         ({ window }) => open.has(window.id) && !shownIds.has(window.id),
       ),
       ...screens.flatMap(({ name, now, was }) =>
-        sentAway(was, now, Object.values(shown)).map((sending) => ({
-          ...sending,
-          motion: sendingMotion(shown, sending),
-          screen: name,
-        })),
+        sentAway(was, now, Object.values(shown)).map((sending) => {
+          const motion = sendingMotion(shown, sending);
+          return {
+            ...sending,
+            at: time,
+            motion,
+            rewound:
+              motion === "stowing"
+                ? rewoundAfter(
+                    playing.dropping.find(({ id }) => id === sending.window.id),
+                    time,
+                  )
+                : 0,
+            screen: name,
+          };
+        }),
       ),
     ],
     shuffled: [
@@ -273,6 +323,22 @@ const advanced = (playing: Playing, before: Desk, shown: Desk): Playing => {
     ],
   };
 };
+
+/**
+ * How long a scratchpad slide takes, in milliseconds. Matches `dropping` and
+ * `stowing` in `movingStyles`.
+ */
+const SLIDE = Number.parseFloat(token("durations.slow"));
+
+/**
+ * How far into a scratchpad slide starting at `time` to begin, given the
+ * opposite slide it cuts short, if any.
+ *
+ * Each slide is the other played backwards, so starting at the time the cut
+ * slide has left puts the window where that slide had moved it.
+ */
+const rewoundAfter = (cut: Slid | undefined, time: number): number =>
+  cut === undefined ? 0 : Math.max(0, SLIDE - (cut.rewound + time - cut.at));
 
 /** Whether the desk has the window `id` in the scratchpad. */
 const stowed = (desk: Desk, id: string): boolean =>
@@ -362,7 +428,7 @@ const played = (
         : { ...playing, sending };
     }
     case "dropping": {
-      const dropping = playing.dropping.filter((shown) => shown !== id);
+      const dropping = playing.dropping.filter((shown) => shown.id !== id);
       return dropping.length === playing.dropping.length
         ? playing
         : { ...playing, dropping };
@@ -465,6 +531,7 @@ const drawnWindow = (
       motion: movesAsTab(closing.placement) ? "closing-tab" : "closing",
       placement: closing.placement,
       restack: undefined,
+      rewound: 0,
       screen: closing.screen,
       window,
     };
@@ -477,6 +544,7 @@ const drawnWindow = (
           motion: sending.motion,
           placement: sending.placement,
           restack: undefined,
+          rewound: sending.rewound,
           screen: sending.screen,
           window,
         };
@@ -490,6 +558,10 @@ const drawnWindow = (
         (shuffle) =>
           shuffle.restack.id === window.id && shuffle.motion === motion,
       )?.restack,
+      // Only a slide reads it, so a drop outranked by another motion can keep
+      // it. One not dropping starts at the beginning.
+      rewound:
+        playing.dropping.find(({ id }) => id === window.id)?.rewound ?? 0,
       screen: placed.screen,
       window,
     };
@@ -512,7 +584,7 @@ const arriving = (
     return arrivalFrom(switching.towards);
   } else if (playing.opening.includes(id)) {
     return movesAsTab(placement) ? "opening-tab" : "opening";
-  } else if (playing.dropping.includes(id)) {
+  } else if (playing.dropping.some((dropping) => dropping.id === id)) {
     return "dropping";
   } else {
     return (
@@ -538,6 +610,7 @@ const leavingWindow = (index: Index, window: ShellWindow): DrawnWindow => {
       motion: "resting",
       placement: undefined,
       restack: undefined,
+      rewound: 0,
       screen: undefined,
       window,
     };
@@ -547,6 +620,7 @@ const leavingWindow = (index: Index, window: ShellWindow): DrawnWindow => {
       motion: departureFor(leaving.left.towards),
       placement: leaving.placement,
       restack: undefined,
+      rewound: 0,
       screen: leaving.screen,
       window,
     };

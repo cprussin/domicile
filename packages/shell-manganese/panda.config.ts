@@ -49,6 +49,28 @@ const SLIDING_TAB = {
   "100%": { transform: "translate(0, 0)" },
 };
 
+// The scratchpad is a drop-down: a window shown from it slides down from above
+// the screen's top edge, `--lift` away (see `slidAcross`). It is clear of the
+// edge only in the last stretch, so it fades in there and does not show on a
+// screen above. Played backwards, it stows the window again. Registered under
+// two names so one restarts the other; see `movingStyles`.
+const SCRATCHPAD_SLIDE = {
+  "0%": {
+    opacity: "0",
+    transform: "translateY(calc(-1 * var(--lift)))",
+  },
+  "15%": { opacity: "1" },
+  "100%": { opacity: "1", transform: "translateY(0)" },
+};
+
+// The scratchpad backdrop fades in with a window's drop, and out with its
+// stow by playing this backwards. Two names for the same reason as
+// `SCRATCHPAD_SLIDE`.
+const BACKDROP_FADE = {
+  "0%": { opacity: "0" },
+  "100%": { opacity: "1" },
+};
+
 // A side-to-side shake that dies down.
 const LOCK_REFUSED = {
   "0%, 100%": { transform: "translateX(0)" },
@@ -104,6 +126,8 @@ export default defineConfig({
   theme: {
     extend: {
       keyframes: {
+        backdropHiding: BACKDROP_FADE,
+        backdropShowing: BACKDROP_FADE,
         // The bar's bell on a new notification. Runs once per arrival, not
         // on a loop, since the toast already shows the notification.
         bellRing: {
@@ -196,18 +220,7 @@ export default defineConfig({
           "0%": { zIndex: "-1" },
           "100%": { zIndex: "-1" },
         },
-        // The scratchpad is a drop-down: a window shown from it slides down
-        // from above the screen's top edge, `--lift` away (see `slidAcross`).
-        // It is clear of the edge only in the last stretch, so it fades in
-        // there and does not show on a screen above.
-        windowDropping: {
-          "0%": {
-            opacity: "0",
-            transform: "translateY(calc(-1 * var(--lift)))",
-          },
-          "15%": { opacity: "1" },
-          "100%": { opacity: "1", transform: "translateY(0)" },
-        },
+        windowDropping: SCRATCHPAD_SLIDE,
         // Holds a window at the tiled depth. The tab a close uncovers, and the
         // tab a switch reveals, keep it while the other tab fades over or
         // under them. Otherwise `settlingStyles` would ease their depth up
@@ -264,15 +277,7 @@ export default defineConfig({
         },
         windowSlidingTab: SLIDING_TAB,
         windowSlidingTabAgain: SLIDING_TAB,
-        // The reverse of `windowDropping`: a window sent to the scratchpad.
-        windowStowing: {
-          "0%": { opacity: "1", transform: "translateY(0)" },
-          "85%": { opacity: "1" },
-          "100%": {
-            opacity: "0",
-            transform: "translateY(calc(-1 * var(--lift)))",
-          },
-        },
+        windowStowing: SCRATCHPAD_SLIDE,
         // The zoom indicator: appears quickly, holds long enough to read, then
         // fades out on its own.
         zoomAnnounced: {

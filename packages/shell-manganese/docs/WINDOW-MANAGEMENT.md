@@ -216,7 +216,9 @@ For how warping, browser-window focus and modifier drags work, see
 - Sending to a workspace no screen shows: shrink further and fade out. A tab
   closes up along its strip.
 - Sending to the scratchpad: slide up off the top of the screen. Showing it
-  slides the window back down.
+  slides the window back down. Each slide is the other played backwards, so
+  one that cuts the other short starts where the window is
+  (`DrawnWindow.rewound`). The backdrop fades with the slides.
 - Workspace switch: the new workspace slides in; the old one slides out.
   Each window is clipped to its screen, so it never shows on the next one.
 - Tab switch: crossfade.

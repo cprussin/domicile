@@ -2980,6 +2980,8 @@ describe("Shell", () => {
       press("minus", true);
       motionsPlayOut(container);
       press("minus");
+      // It fades with the window's slide.
+      expect(scratchpadBackdrop(container).dataset.motion).toBe("dropping");
       motionsPlayOut(container);
       const backdrop = scratchpadBackdrop(container);
       // Over every title bar under it, by document order at equal depths.
@@ -3001,6 +3003,7 @@ describe("Shell", () => {
         "data-motion",
         "stowing",
       );
+      expect(backdrop.dataset.motion).toBe("stowing");
       motionsPlayOut(container);
       expect(container.querySelector("[data-scratchpad-backdrop]")).toBeNull();
     });

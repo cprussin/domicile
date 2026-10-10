@@ -207,27 +207,30 @@ export const Stage = memo(
           order. See `FloatShadow`. Skipped for fullscreen floats, whose shadow
           would spill onto the next display.
         */}
-        {motions.drawn.map(({ motion, placement, restack, screen, window }) => {
-          const float = desk.floats.get(window.id);
-          return placement !== undefined &&
-            !desk.fullscreen.has(window.id) &&
-            float !== undefined ? (
-            <Sliding
-              frame={placement.frame}
-              key={window.id}
-              on={screenNamed(desk, screen)}
-            >
-              <FloatShadow
-                depth={placement.depth}
-                dragging={window.id === movingId}
+        {motions.drawn.map(
+          ({ motion, placement, restack, rewound, screen, window }) => {
+            const float = desk.floats.get(window.id);
+            return placement !== undefined &&
+              !desk.fullscreen.has(window.id) &&
+              float !== undefined ? (
+              <Sliding
                 frame={placement.frame}
-                hanging={float.scratchpad}
-                motion={motion}
-                restack={restack}
-              />
-            </Sliding>
-          ) : undefined;
-        })}
+                key={window.id}
+                on={screenNamed(desk, screen)}
+                rewound={rewound}
+              >
+                <FloatShadow
+                  depth={placement.depth}
+                  dragging={window.id === movingId}
+                  frame={placement.frame}
+                  hanging={float.scratchpad}
+                  motion={motion}
+                  restack={restack}
+                />
+              </Sliding>
+            ) : undefined;
+          },
+        )}
         {/*
           Before every window too, so the windows at its depth cover all but
           its glow. Only the glow fading in follows the focused window's
@@ -240,6 +243,7 @@ export const Stage = memo(
               frame={following?.placement?.frame}
               key={keyOf(box)}
               on={screenNamed(desk, following?.screen)}
+              rewound={following?.rewound ?? 0}
             >
               <FocusGlow
                 depth={box.depth}
@@ -258,7 +262,15 @@ export const Stage = memo(
           );
         })}
         {motions.drawn.map(
-          ({ focused, motion, placement, restack, screen, window }) => (
+          ({
+            focused,
+            motion,
+            placement,
+            restack,
+            rewound,
+            screen,
+            window,
+          }) => (
             <WindowContents
               behindPanel={behindPanel}
               // With the modifier held, the shell takes the pointer over every
@@ -285,6 +297,7 @@ export const Stage = memo(
               onSelect={onSelect}
               placement={placement}
               restack={restack}
+              rewound={rewound}
               screen={screen}
               screenBox={screenNamed(desk, screen)?.geometry.screen}
               window={window}
@@ -334,7 +347,7 @@ export const Stage = memo(
           the window floats. See `WindowTitleBar`.
         */}
         {motions.drawn.map(
-          ({ focused, motion, placement, restack, screen, window }) =>
+          ({ focused, motion, placement, restack, rewound, screen, window }) =>
             placement === undefined ? undefined : (
               <WindowBar
                 dragging={window.id === movingId}
@@ -358,6 +371,7 @@ export const Stage = memo(
                 onSelect={onSelect}
                 placement={placement}
                 restack={restack}
+                rewound={rewound}
                 screen={screen}
                 screenBox={screenNamed(desk, screen)?.geometry.screen}
                 targets={desk.dropTargets}
@@ -377,10 +391,11 @@ export const Stage = memo(
                 <ScratchpadBackdrop
                   depth={hanging.placement.depth - 1}
                   key={on.geometry.name}
-                  leaving={hanging.motion === "stowing"}
+                  motion={hanging.motion}
                   onDismiss={() => {
                     onDismiss(hanging.window.id);
                   }}
+                  rewound={hanging.rewound}
                   screen={on.geometry.screen}
                 />,
               ];
@@ -648,6 +663,8 @@ type WindowContentsProps = {
   onSelect: (id: string) => void;
   placement: Placement | undefined;
   restack: Restack | undefined;
+  /** How far into its motion it starts. See `DrawnWindow.rewound`. */
+  rewound: number;
   screen: string | undefined;
   /** The box of the screen it is drawn on. */
   screenBox: Rect | undefined;
@@ -675,6 +692,7 @@ const WindowContents = memo(
     onSelect,
     placement,
     restack,
+    rewound,
     screen,
     screenBox,
     window,
@@ -704,6 +722,7 @@ const WindowContents = memo(
         frame={placement?.frame}
         onHover={hovered}
         onReach={reached}
+        rewound={rewound}
         screen={screenBox}
       >
         {window.kind === WindowKind.App ? (
@@ -775,6 +794,8 @@ type WindowBarProps = {
   onSelect: (id: string) => void;
   placement: Placement;
   restack: Restack | undefined;
+  /** How far into its motion it starts. See `DrawnWindow.rewound`. */
+  rewound: number;
   screen: string | undefined;
   /** The box of the screen it is drawn on. */
   screenBox: Rect | undefined;
@@ -805,6 +826,7 @@ const WindowBar = memo(
     onSelect,
     placement,
     restack,
+    rewound,
     screen,
     screenBox,
     targets,
@@ -855,6 +877,7 @@ const WindowBar = memo(
         frame={placement.frame}
         onHover={hovered}
         onReach={reached}
+        rewound={rewound}
         screen={screenBox}
       >
         <WindowTitleBar
@@ -956,7 +979,7 @@ const ContainerTab = memo(
       onSelect(id);
     }, [id, onSelect]);
     return (
-      <Sliding frame={undefined} on={on}>
+      <Sliding frame={undefined} on={on} rewound={0}>
         <TitleBar
           depth={tab.depth}
           // A tab moves only with its container.
@@ -1013,14 +1036,20 @@ const Sliding = ({
   children,
   frame,
   on,
+  rewound,
 }: {
   children: ReactNode;
   frame: Rect | undefined;
   on: StageScreen | undefined;
+  rewound: number;
 }) => (
   <div
     className={slidingStyles}
-    style={on === undefined ? undefined : slidAcross(on.geometry.screen, frame)}
+    style={
+      on === undefined
+        ? undefined
+        : slidAcross(on.geometry.screen, frame, rewound)
+    }
   >
     {children}
   </div>

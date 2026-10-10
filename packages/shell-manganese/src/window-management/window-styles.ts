@@ -136,6 +136,14 @@ export const collapsedAlong = (
 };
 
 /**
+ * Custom property that starts a scratchpad slide, or the backdrop's fade with
+ * it, `rewound` milliseconds in. See `DrawnWindow.rewound`.
+ */
+export const rewoundBy = (rewound: number): Record<`--${string}`, string> => ({
+  "--motion-delay": `${(-rewound).toString()}ms`,
+});
+
+/**
  * Custom properties for the keyframes that slide a window off its `screen`,
  * set on a wrapper and inherited by each part of the window:
  *
@@ -146,11 +154,14 @@ export const collapsedAlong = (
  *   part sliding off its screen would otherwise show on the next one.
  * - `--lift`: how far up `frame` must move to clear the screen's top edge, for
  *   the scratchpad's slides. None for a window not drawn.
+ * - `--motion-delay`: see {@link rewoundBy}.
  */
 export const slidAcross = (
   screen: Rect,
   frame: Rect | undefined,
+  rewound: number,
 ): Record<`--${string}`, string> => ({
+  ...rewoundBy(rewound),
   "--screen-height": `${screen.height.toString()}px`,
   "--screen-x": `${screen.x.toString()}px`,
   "--screen-y": `${screen.y.toString()}px`,
@@ -200,10 +211,13 @@ export const movingStyles = cva({
         animation: "windowConcealing {durations.fast} {easings.in-out}",
       },
       // The scratchpad's slides avoid front-loaded curves, so a slide of up
-      // to a screen's height is seen: `out` settles the window into place,
-      // and `in` starts its exit where it can be seen.
+      // to a screen's height is seen: `out` settles the window into place.
+      // Stowing plays the drop backwards, so its exit starts where it can be
+      // seen, and either can take over from the other where it was cut short
+      // (`--motion-delay`, see `slidAcross`).
       dropping: {
-        animation: "windowDropping {durations.slow} {easings.out}",
+        animation:
+          "windowDropping {durations.slow} {easings.out} var(--motion-delay, 0ms)",
       },
       "leaving-to-end": {
         animation:
@@ -248,7 +262,8 @@ export const movingStyles = cva({
         animation: "windowClosingTab {durations.fast} {easings.out} forwards",
       },
       stowing: {
-        animation: "windowStowing {durations.slow} {easings.in} forwards",
+        animation:
+          "windowStowing {durations.slow} {easings.out} var(--motion-delay, 0ms) reverse forwards",
       },
       // Lasts as long as `closing-tab`, which it is drawn under.
       uncovering: {

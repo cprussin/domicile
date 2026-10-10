@@ -8,6 +8,7 @@ import {
   placedAt,
   scaledAbout,
   shuffledBy,
+  slidAcross,
 } from "./window-styles";
 
 const RECT = { height: 200, width: 300, x: 10, y: 20 };
@@ -114,5 +115,16 @@ describe("movingStyles", () => {
       .flatMap((frame) => Object.keys(frame));
 
     expect(animated).toContain("clipPath");
+  });
+});
+
+describe("slidAcross", () => {
+  const SCREEN = { height: 1080, width: 1920, x: 0, y: 0 };
+
+  // A scratchpad slide that cuts the other short starts partway in.
+  it("starts the slide as far in as the window was rewound", () => {
+    expect(slidAcross(SCREEN, undefined, 300)).toMatchObject({
+      "--motion-delay": "-300ms",
+    });
   });
 });
