@@ -49,6 +49,9 @@ struct BrowserWindow {
   // Whether the page is in the profile's off-the-record profile. A private
   // window's new windows are private too.
   bool private_browsing;
+  // Whether this is an app window (`domicile open-app`), which the shell draws
+  // without an address bar. Its page's new windows are browser windows.
+  bool app;
 };
 
 // Renderer -> browser, bound per document.

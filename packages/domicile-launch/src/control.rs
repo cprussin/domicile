@@ -28,6 +28,9 @@ pub enum Request {
     /// Open this URL in a browser window. The client converts paths with
     /// [`crate::address`].
     OpenUrl { url: String },
+    /// Open this URL in an app window: a browser window the shell draws
+    /// without an address bar. See `docs/architecture/WEB-APPS.md`.
+    OpenApp { url: String },
     /// Write a PNG of the whole desk to this absolute path, or, with no
     /// `file`, take the shell's interactive screenshot.
     ///
@@ -120,7 +123,8 @@ pub type LoadShell<'a> = &'a dyn Fn(&Path, &Path) -> Result<(), String>;
 
 /// Tells the engine to open an address in the shell.
 ///
-/// [`crate::command_socket::open_url`] in a desktop; a closure in tests.
+/// [`crate::command_socket::open_url`] or [`crate::command_socket::open_app`]
+/// in a desktop; a closure in tests.
 pub type OpenUrl<'a> = &'a dyn Fn(&str) -> Result<(), String>;
 
 /// Tells the compositor to take a screenshot, into the file if one is given.
@@ -156,6 +160,7 @@ pub struct Desktop<'a> {
     pub files: &'a SettingsFiles,
     pub load: LoadShell<'a>,
     pub open: OpenUrl<'a>,
+    pub open_app: OpenUrl<'a>,
     pub capture: Screenshot<'a>,
     pub send: SendShell<'a>,
     pub permissions: SitePermissions<'a>,
@@ -186,6 +191,10 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
             Err(why) => Response::Refused { why },
         }),
         Ok(Request::OpenUrl { url }) => to_line(&match (desktop.open)(&url) {
+            Ok(()) => Response::Opened,
+            Err(why) => Response::Refused { why },
+        }),
+        Ok(Request::OpenApp { url }) => to_line(&match (desktop.open_app)(&url) {
             Ok(()) => Response::Opened,
             Err(why) => Response::Refused { why },
         }),

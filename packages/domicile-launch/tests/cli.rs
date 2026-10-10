@@ -121,6 +121,23 @@ fn open_url_is_the_verb_that_takes_an_address() {
 }
 
 #[test]
+fn open_app_is_the_verb_that_takes_an_app_address() {
+    assert_eq!(
+        run(&["open-app", "https://example.com/"]).unwrap(),
+        Invocation::OpenApp {
+            target: "https://example.com/".to_string()
+        }
+    );
+    assert_eq!(run(&["open-app"]), Err(CliError::NothingToOpenAsApp));
+    assert_eq!(
+        run(&["open-app", "https://a.example", "https://b.example"]),
+        Err(CliError::ExtraToOpenAsApp {
+            extra: "https://b.example".to_string()
+        })
+    );
+}
+
+#[test]
 fn open_url_with_nothing_to_open_is_refused() {
     assert_eq!(run(&["open-url"]), Err(CliError::NothingToOpen));
 }

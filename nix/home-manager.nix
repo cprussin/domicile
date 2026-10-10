@@ -159,10 +159,10 @@
 
     # A verb is only a verb as the first word, and a line that starts with one
     # has said what it wants whatever follows -- `load-shell` takes a shell of
-    # its own and `open-url` an address, neither of which is the configured
-    # shell being asked for.
+    # its own and `open-url` and `open-app` an address, none of which is the
+    # configured shell being asked for.
     case "''${1-}" in
-      which-shell|load-shell|open-url) named_one=1 ;;
+      which-shell|load-shell|open-url|open-app) named_one=1 ;;
     esac
 
     if [ -n "''${named_one-}" ]; then

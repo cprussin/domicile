@@ -12,7 +12,8 @@ use std::path::Path;
 use std::time::Duration;
 
 use crate::command::{
-    load_shell_line, open_url_line, reply, set_site_permission_line, site_permissions_line, Reply,
+    load_shell_line, open_app_line, open_url_line, reply, set_site_permission_line,
+    site_permissions_line, Reply,
 };
 use crate::site_permissions::{SitePermission, SiteSettings};
 
@@ -70,6 +71,11 @@ pub fn load_shell(
 /// Tells the engine at `socket` to open `url` in the shell.
 pub fn open_url(socket: &Path, url: &str, patience: Duration) -> Result<(), CommandError> {
     carry_out(socket, &open_url_line(url), Reply::Opened, patience)
+}
+
+/// Tells the engine at `socket` to open `url` in an app window.
+pub fn open_app(socket: &Path, url: &str, patience: Duration) -> Result<(), CommandError> {
+    carry_out(socket, &open_app_line(url), Reply::Opened, patience)
 }
 
 /// Asks the engine at `socket` for every permission's default and every

@@ -4,7 +4,8 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use domicile_launch::command::{
-    load_shell_line, open_url_line, reply, set_site_permission_line, site_permissions_line, Reply,
+    load_shell_line, open_app_line, open_url_line, reply, set_site_permission_line,
+    site_permissions_line, Reply,
 };
 use domicile_launch::site_permissions::{Permission, Setting, SitePermission, SiteSettings};
 
@@ -24,6 +25,16 @@ fn an_open_url_names_the_version_it_is_written_in() {
     assert_eq!(
         open_url_line("https://example.com/?q=\"x\""),
         "{\"type\":\"open_url\",\"version\":1,\"url\":\"https://example.com/?q=\\\"x\\\"\"}\n"
+    );
+}
+
+#[test]
+fn an_open_app_is_an_open_url_that_asks_for_an_app_window() {
+    // A key rather than a new type, so an engine older than it opens a browser
+    // window instead of refusing.
+    assert_eq!(
+        open_app_line("https://example.com/"),
+        "{\"type\":\"open_url\",\"version\":1,\"url\":\"https://example.com/\",\"app\":true}\n"
     );
 }
 

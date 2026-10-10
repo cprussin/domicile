@@ -200,6 +200,8 @@ The browser opens a window without you for:
 - a `target="_blank"` link, `window.open` or a middle click
 - `domicile open-url <url>`, which `BROWSER` (`domicile-open-url`) and
   `xdg-open` run inside a desktop
+- `domicile open-app <url>`, which lists the window with `isApp`. Draw it
+  without an address bar ([WEB-APPS.md](architecture/WEB-APPS.md)).
 - an extension's `tabs.create` or `windows.create`
 - DevTools, from `view.inspect()` or a context menu's `inspect`
 

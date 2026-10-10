@@ -8,6 +8,7 @@
 //! {"type":"loaded"}   |   {"type":"refused","why":"…"}
 //!
 //! {"type":"open_url","version":1,"url":"https://example.com/"}
+//! {"type":"open_url","version":1,"url":"https://example.com/","app":true}
 //! {"type":"opened"}   |   {"type":"refused","why":"…"}
 //!
 //! {"type":"site_permissions","version":1}
@@ -70,6 +71,18 @@ pub fn open_url_line(url: &str) -> String {
     line(&Command::OpenUrl {
         url,
         version: VERSION,
+        app: false,
+    })
+}
+
+/// The request to open `url` in an app window: a browser window the shell
+/// draws without an address bar. An engine that predates `app` ignores it and
+/// opens a browser window.
+pub fn open_app_line(url: &str) -> String {
+    line(&Command::OpenUrl {
+        url,
+        version: VERSION,
+        app: true,
     })
 }
 
@@ -111,6 +124,10 @@ enum Command<'a> {
     OpenUrl {
         version: u32,
         url: &'a str,
+        // Left out when false, so a browser window's line is the one every
+        // engine reads.
+        #[serde(skip_serializing_if = "std::ops::Not::not")]
+        app: bool,
     },
     SitePermissions {
         version: u32,

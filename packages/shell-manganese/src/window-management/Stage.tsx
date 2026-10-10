@@ -297,6 +297,7 @@ export const Stage = ({
                   focused={focused}
                   frame={placement?.frame}
                   fullscreen={fillsScreen(screens, window.id)}
+                  isApp={window.isApp}
                   isPrivate={window.isPrivate}
                   motion={motion}
                   onIcon={onIcon}

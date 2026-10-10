@@ -138,6 +138,7 @@ The supervisor connects, sends one JSON line, reads one reply, and closes.
 {"type":"loaded"}   |   {"type":"refused","why":"…"}
 
 {"type":"open_url","version":1,"url":"https://example.com/"}
+{"type":"open_url","version":1,"url":"https://example.com/","app":true}
 {"type":"opened"}   |   {"type":"refused","why":"…"}
 
 {"type":"site_permissions","version":1}
@@ -150,11 +151,15 @@ The supervisor connects, sends one JSON line, reads one reply, and closes.
 - Without the switch, the engine binds nothing. Every desktop `domicile`
   starts passes one under the run's directory.
 - `domicile load-shell <path>` sends `load_shell`. `domicile open-url <url>`
-  sends `open_url`. `domicile screenshot <file>` goes to the compositor.
+  sends `open_url`, and `domicile open-app <url>` sends it with `"app":true`.
+  `domicile screenshot <file>` goes to the compositor.
 - `open_url` opens a browser window at the address, as a page's
   `target="_blank"` does. The shell gets it in `browserwindowschanged`, so a
-  shell mid-reload gets it with every other window. An unparsable URL, or a
-  desk with no shell to own the window, is refused.
+  shell mid-reload gets it with every other window. An unparsable URL, a
+  non-boolean `app`, or a desk with no shell to own the window, is refused.
+- `"app":true` opens an app window, listed with `isApp`
+  ([WEB-APPS.md](/docs/architecture/WEB-APPS.md)). An engine without it
+  ignores the key and opens a browser window.
 - `site_permissions` and `set_site_permission` are the Settings app's, relayed
   by `domicile` ([SETTINGS.md](/docs/SETTINGS.md)). They list and store the
   shell profile's content settings for each of `kSitePermissions`, as the

@@ -35,8 +35,14 @@ describe("ShellWindow", () => {
     it("has no client for a browser window", () => {
       expect(
         appIdOf(
-          ShellWindow.Browser("1", "https://example.com", "", undefined, false)
-            .id,
+          ShellWindow.Browser(
+            "1",
+            "https://example.com",
+            "",
+            undefined,
+            false,
+            false,
+          ).id,
         ),
       ).toBe(undefined);
     });
@@ -61,6 +67,7 @@ describe("ShellWindow", () => {
           "Google Search",
           undefined,
           false,
+          false,
         ),
       ).toMatchObject({ title: "Google Search" });
     });
@@ -73,11 +80,13 @@ describe("ShellWindow", () => {
           "",
           undefined,
           true,
+          false,
         ),
       ).toEqual({
         // The view reports it later.
         icon: undefined,
         id: browserWindowId("2"),
+        isApp: false,
         isPrivate: true,
         kind: WindowKind.Browser,
         popupWindow: undefined,
@@ -89,7 +98,9 @@ describe("ShellWindow", () => {
     it("titles a window that has shown nothing yet as a blank page", () => {
       // The engine lists a window before its page has an address. An empty
       // name would leave an unlabeled tab.
-      expect(ShellWindow.Browser("2", "", "", undefined, false)).toMatchObject({
+      expect(
+        ShellWindow.Browser("2", "", "", undefined, false, false),
+      ).toMatchObject({
         title: "about:blank",
       });
     });

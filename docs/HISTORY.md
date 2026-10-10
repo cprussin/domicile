@@ -1,8 +1,8 @@
 # History
 
 Every desktop has a History app: Chrome's history page for browser windows.
-`domicile-history`, or **History** in the launcher, opens it in a browser
-window.
+`domicile-history`, or **History** in the launcher, opens it in an app window
+([WEB-APPS.md](architecture/WEB-APPS.md)).
 
 - Lists visits by day, newest first, with search, "More from this site",
   removing entries and **Clear browsing data** (history, cookies, cached files
@@ -16,7 +16,7 @@ window.
 | Visits and their favicons go into the profile's history | `AttachTabHelpers` gives every tab guest a `HistoryTabHelper` and a favicon driver (`chrome/browser/domicile/domicile_tab_helpers.cc`). Patch 0106 lets the helper record a guest, which is in no `Browser`. |
 | The app | An unpacked MV3 extension with the `history`, `browsingData` and `favicon` permissions. Its manifest `key` fixes its id, `dimbckmbklbplcobppahmnepgiponamj`. |
 | Installing it | The flake puts it in `libexec/domicile/apps/history`. `domicile` passes `--apps` to the compositor, which adds each directory there to the config's `extensions.unpacked` (`domicile_launch::apps`). `DOMICILE_APPS` names another directory. |
-| Opening it | `domicile-history` runs `domicile open-url chrome-extension://dimbckmbklbplcobppahmnepgiponamj/history.html`. |
+| Opening it | `domicile-history` runs `domicile open-app chrome-extension://dimbckmbklbplcobppahmnepgiponamj/history.html`. |
 | The tray | The app's manifest names no action, so the tray leaves it out. See [EXTENSIONS.md](architecture/EXTENSIONS.md#the-tray). |
 
 ## Key decisions

@@ -73,6 +73,8 @@ Settings live in `~/.config/domicile/domicile.json` (or `.ts`/`.js`). Reference:
   portal runs. Through it, Flatpak apps open links on the desktop and get the
   theme.
 - `domicile open-url <url>` does the same from a terminal on the desktop.
+  `domicile open-app <url>` opens it as an app, without an address bar
+  ([WEB-APPS.md](architecture/WEB-APPS.md)).
 
 ## Screenshots
 

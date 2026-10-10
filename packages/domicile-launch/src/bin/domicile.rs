@@ -22,7 +22,7 @@ use domicile_launch::apps::list_the_settings_host;
 use domicile_launch::build_progress::{bar, heard, Heard as BuilderHeard, Step};
 use domicile_launch::cli::{invocation, CliError, Invocation};
 use domicile_launch::command_socket::{
-    load_shell, open_url, set_site_permission, site_permissions,
+    load_shell, open_app, open_url, set_site_permission, site_permissions,
 };
 use domicile_launch::components::{apps, builder, components, our_shell, Components};
 use domicile_launch::compositor_socket::{screenshot, send_shell};
@@ -97,11 +97,10 @@ fn run() -> Result<ExitCode, String> {
         Invocation::Ask { request } => asked(&request),
         Invocation::Load { shell } => asked(&shell_to_load(&shell)?),
         Invocation::Open { target } => asked(&Request::OpenUrl {
-            url: url_for(
-                &target,
-                &std::env::current_dir()
-                    .map_err(|why| format!("cannot tell where this was typed: {why}"))?,
-            ),
+            url: url_for(&target, &typed_in()?),
+        }),
+        Invocation::OpenApp { target } => asked(&Request::OpenApp {
+            url: url_for(&target, &typed_in()?),
         }),
         // Absolute here, since the compositor does not share this working
         // directory.
@@ -324,6 +323,12 @@ fn beside(config: &Path) -> PathBuf {
 }
 
 /// Sends one request to the running desktop and prints its response.
+/// The directory the command was typed in, which a relative address is
+/// relative to.
+fn typed_in() -> Result<PathBuf, String> {
+    std::env::current_dir().map_err(|why| format!("cannot tell where this was typed: {why}"))
+}
+
 fn asked(request: &Request) -> Result<ExitCode, String> {
     let socket =
         advertised(std::env::var(VARIABLE).ok().as_deref()).map_err(|why| why.to_string())?;
@@ -828,6 +833,9 @@ fn answer_a_command(
                 files,
                 load: &|root, module| load_the_shell(engine, root, module, serving),
                 open: &|url| open_url(engine, url, ANSWER_WITHIN).map_err(|why| why.to_string()),
+                open_app: &|url| {
+                    open_app(engine, url, ANSWER_WITHIN).map_err(|why| why.to_string())
+                },
                 // The interactive one waits for the user, however long that
                 // takes.
                 capture: &|file| {

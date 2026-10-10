@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Checks a running desktop loads a new shell, opens URLs, takes screenshots and
-# sends the shell commands on command, via `domicile load-shell`, `BROWSER`,
-# the `xdg-open` shim on its apps' PATH, `domicile screenshot` with and without
-# a file, and `domicile send-shell`.
+# Checks a running desktop loads a new shell, opens URLs and apps, takes
+# screenshots and sends the shell commands on command, via `domicile
+# load-shell`, `BROWSER`, `domicile open-app`, `domicile-settings`,
+# `domicile-history`, the `xdg-open` shim on its apps' PATH, `domicile
+# screenshot` with and without a file, and `domicile send-shell`.
 #
 #   ./scripts/test-a-running-desktop-takes-a-new-shell.sh
 #
@@ -369,6 +370,30 @@ else
   echo "      and the protocol says  $WANT"
   FAILED=1
 fi
+
+echo "== open-app, Settings and History reach the engine as app windows =="
+for opener in "domicile open-app https://example.com/" domicile-settings domicile-history; do
+  case "$opener" in
+    domicile-settings) WANT_URL="chrome-extension://acpgnhiblklkgbkcjgbabkcmdmchdphk/settings.html" ;;
+    domicile-history) WANT_URL="chrome-extension://dimbckmbklbplcobppahmnepgiponamj/history.html" ;;
+    *) WANT_URL="https://example.com/" ;;
+  esac
+  # shellcheck disable=SC2086 # `opener` is a program and its arguments.
+  if ! env DOMICILE_SOCK="$SOCK" "$TARGET/debug/"$opener >"$WORK/app.log" 2>&1; then
+    echo "FAIL: $opener failed:"
+    sed 's/^/    /' "$WORK/app.log"
+    FAILED=1
+  fi
+  HEARD="$(tail -n 1 "$WORK/engine-heard" 2>/dev/null)"
+  WANT="{\"type\":\"open_url\",\"version\":1,\"url\":\"$WANT_URL\",\"app\":true}"
+  if [ "$HEARD" = "$WANT" ]; then
+    echo "PASS: $opener: $HEARD"
+  else
+    echo "FAIL: for $opener the engine heard '$HEARD'"
+    echo "      and the protocol says  $WANT"
+    FAILED=1
+  fi
+done
 
 echo "== xdg-open, for the apps a desktop starts, is the desktop's =="
 APP_PATH="$(cat "$(dirname "$GIVEN")/path" 2>/dev/null)"

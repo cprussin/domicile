@@ -27,6 +27,7 @@ namespace domicile {
 //   -> {"type":"refused","why":"..."}
 //
 //   {"type":"open_url","version":1,"url":"https://example.com/"}
+//   {"type":"open_url","version":1,"url":"https://example.com/","app":true}
 //   -> {"type":"opened"}
 //   -> {"type":"refused","why":"..."}
 //
@@ -62,9 +63,10 @@ using LoadShell =
     base::FunctionRef<bool(const base::FilePath& root,
                            const std::string& module)>;
 
-// Carries out `open_url`: opens a browser window at `url`. Returns false if
-// there is no shell to own the window.
-using OpenUrl = base::FunctionRef<bool(const GURL& url)>;
+// Carries out `open_url`: opens a browser window at `url`, or with `app` an app
+// window, which the shell draws without an address bar. Returns false if there
+// is no shell to own the window.
+using OpenUrl = base::FunctionRef<bool(const GURL& url, bool app)>;
 
 // One site's stored setting for one permission.
 struct StoredSitePermission {

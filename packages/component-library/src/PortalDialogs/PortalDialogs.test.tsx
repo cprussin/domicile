@@ -322,6 +322,7 @@ const drawn = (
 const browserWindow = (id: string, title: string) => ({
   height: 0,
   id,
+  isApp: false,
   isPrivate: false,
   popupWindow: null,
   title,
