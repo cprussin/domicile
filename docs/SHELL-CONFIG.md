@@ -190,6 +190,8 @@ Applications read the rest through the settings portal
   `~/.nix-profile/share/icons`.
 - Shells read it with `watchIconTheme` from `@domicile-desktop/sdk/icon-theme`
   and look icons up with `@domicile-desktop/system-apps/app-icons`.
+- Portal dialogs draw applications in it: `describeApps` reads it each time
+  a dialog's applications change.
 
 In manganese:
 
