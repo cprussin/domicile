@@ -117,8 +117,9 @@ export default defineConfig({
           draw: { value: "1.6s" },
           // One full orbit of the aurora.
           drift: { value: "24s" },
-          // How long the splash takes to give way to the shell. `domicile`
-          // waits as long (`SPLASH_ENDING`) before it loads the shell.
+          // How long the splash shows "Ready" before `domicile` loads the
+          // shell (`SPLASH_ENDING`), which crossfades in over it. Also the
+          // aurora's ease to `danger` on a failure.
           ending: { value: "900ms" },
           // One ripple, and one breath of the lamp.
           halo: { value: "3.2s" },
