@@ -69,15 +69,18 @@ const renderApp = async (
   page: string,
   {
     config = {},
+    configExtensions = [],
     refuse,
     writable = true,
   }: {
     config?: Record<string, unknown>;
+    configExtensions?: string[];
     refuse?: string;
     writable?: boolean;
   } = {},
 ) => {
   const host = fakeHost({
+    configExtensions,
     files: files(config, writable),
     refuse,
     sites: structuredClone(SITES),
@@ -319,6 +322,48 @@ describe(App, () => {
       await waitFor(() => {
         expect(written(host.writes)).toEqual({});
       });
+    });
+  });
+
+  describe("unpacked and uninstalled through the engine", () => {
+    it("loads an unpacked folder", async () => {
+      const { host, user } = await renderApp("Extensions", {
+        writable: false,
+      });
+      await user.type(
+        screen.getByRole("textbox", { name: "Unpacked extension folder" }),
+        "~/src/my-extension",
+      );
+      await user.click(screen.getByRole("button", { name: "Load" }));
+      await waitFor(() => {
+        expect(host.loaded).toEqual(["~/src/my-extension"]);
+      });
+    });
+
+    it("uninstalls an extension the config did not install", async () => {
+      const { host, user } = await renderApp("Extensions");
+      await user.click(
+        await screen.findByRole("button", {
+          name: "Uninstall uBlock Origin Lite",
+        }),
+      );
+      await waitFor(() => {
+        expect(host.uninstalled).toEqual([UBLOCK]);
+      });
+    });
+
+    it("leaves an extension a read-only config installed", async () => {
+      await renderApp("Extensions", {
+        config: { extensions: { web_store: [UBLOCK] } },
+        configExtensions: [UBLOCK],
+        writable: false,
+      });
+      expect(
+        await screen.findByRole("switch", { name: "uBlock Origin Lite" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Uninstall uBlock Origin Lite" }),
+      ).not.toBeInTheDocument();
     });
   });
 
