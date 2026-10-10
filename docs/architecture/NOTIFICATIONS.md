@@ -75,12 +75,11 @@ shell ─ dismissNotifications(ids) / invokeNotificationAction(id, key) ─▶ e
   refuses dismiss and action requests.
 - **Critical** notifications stay up until dismissed and use the `danger`
   color.
+- **Toasts show on the focused monitor,** the one with the keyboard, in its
+  top-right corner under its bar.
 
 ## Open questions
 
-- **Which monitor shows toasts.** The shell page spans all monitors and toasts
-  in its top-right corner, which is on the rightmost monitor. Recommendation:
-  toast on the focused monitor once a toast can be placed per display.
 - **Startup race with Chrome's bridge.** Chrome checks for the server once,
   when its bridge starts. The compositor takes the name long before the engine
   starts, but a slow bus could leave Chrome using its own popups.

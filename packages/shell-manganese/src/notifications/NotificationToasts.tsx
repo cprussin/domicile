@@ -1,3 +1,4 @@
+import { useScreenRegion } from "@domicile-desktop/component-library/DisplayProvider";
 import type { ToastManager } from "@domicile-desktop/component-library/Toaster";
 import {
   Toaster,
@@ -19,6 +20,8 @@ type Props = {
   now: number;
   /** Press `key` on `id`. */
   onAction: (id: number, key: string) => void;
+  /** The screen to toast on: the one with the keyboard. */
+  screen: string;
   /**
    * Whether to show toasts. False while locked, so the lock screen does not
    * show notification content.
@@ -27,8 +30,8 @@ type Props = {
 };
 
 /**
- * Toasts for new notifications, stacked in the top trailing corner under the
- * bar and over windows. Each uses the drawer's card.
+ * Toasts for new notifications, stacked in the top trailing corner of `screen`
+ * under its bar and over windows. Each uses the drawer's card.
  *
  * Dismissing a toast (close, swipe or timeout) leaves the notification in the
  * drawer. Pressing one takes its action.
@@ -37,16 +40,25 @@ export const NotificationToasts = ({
   manager,
   now,
   onAction,
+  screen,
   shown,
-}: Props) => (
-  <Toaster.Provider limit={MOST_SHOWN} toastManager={manager}>
-    {shown && (
-      <div className={regionStyles} style={{ insetBlockStart: `${TOP_BAR}px` }}>
-        <Deck now={now} onAction={onAction} />
-      </div>
-    )}
-  </Toaster.Provider>
-);
+}: Props) => {
+  const region = useScreenRegion(screen);
+  return (
+    <Toaster.Provider limit={MOST_SHOWN} toastManager={manager}>
+      {shown && (
+        <div className={screenStyles} style={region}>
+          <div
+            className={regionStyles}
+            style={{ insetBlockStart: `${TOP_BAR}px` }}
+          >
+            <Deck now={now} onAction={onAction} />
+          </div>
+        </div>
+      )}
+    </Toaster.Provider>
+  );
+};
 
 /** Renders the toasts inside their provider. */
 const Deck = ({ now, onAction }: Pick<Props, "now" | "onAction">) => {
@@ -94,17 +106,25 @@ const toastNotification = (data: Notification | undefined): Notification => {
   }
 };
 
+// The toasting screen's box. Fixed so it stays over windows, and it ignores the
+// pointer so windows under its empty area stay clickable. Clips, so a toast
+// slides in from its screen's edge rather than over the next monitor.
+const screenStyles = css({
+  inset: 0,
+  overflow: "clip",
+  pointerEvents: "none",
+  position: "fixed",
+  zIndex: "toast",
+});
+
 // The toast region: the trailing corner, under the bar, inset by the bar's gap.
-// Fixed so it stays over windows, and it ignores the pointer except on the
-// cards so windows under its empty area stay clickable.
+// Only the cards take the pointer.
 const regionStyles = css({
   "& > *": {
     pointerEvents: "auto",
   },
-  inlineSize: "min({spacing.96}, calc(100vw - {spacing.6}))",
+  inlineSize: "min({spacing.96}, calc(100% - {spacing.6}))",
   insetInlineEnd: 3,
   marginBlockStart: 2,
-  pointerEvents: "none",
-  position: "fixed",
-  zIndex: "toast",
+  position: "absolute",
 });

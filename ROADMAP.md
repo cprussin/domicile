@@ -127,10 +127,9 @@ Evidence is in [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md),
      count. The lock makes this more pressing: a user about to touch the
      keyboard gets a lock screen with no warning.
 
-4. **Which monitor shows a notification.** The compositor serves
+4. **Notification follow-ups.** The compositor serves
    `org.freedesktop.Notifications`, including web notifications, and manganese
-   shows toasts and a drawer. Left:
-   - Toasts go to the top right of the whole desktop, not the focused monitor.
+   shows toasts on the focused monitor and a drawer. Left:
    - Inline reply.
    - Chrome's notification bridge looks for the server once at startup. A slow
      bus can leave it showing its own popups.
