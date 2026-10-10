@@ -382,6 +382,10 @@
       #   bin/domicile-open-url       what `BROWSER` names inside a desktop
       #   bin/domicile-xdg-open       what `xdg-open` is inside a desktop
       #   bin/domicile-history        opens the History app
+      #   bin/domicile-settings       opens the Settings app
+      #   bin/domicile-settings-host  the Settings app's native messaging
+      #                               host, which `domicile` lists in the
+      #                               engine's profile
       #   libexec/domicile/engine     the Chromium tree, `chrome` inside it
       #   libexec/domicile/builder    builds a shell from an entry or a package
       #   libexec/domicile/shells/    Domicile's prebuilt shells, which
@@ -390,7 +394,8 @@
       #   libexec/domicile/apps/      Domicile's own apps, which every
       #                               desktop installs
       #   share/applications/         launcher entries for History,
-      #                               Screenshot, Shutdown and Reboot
+      #                               Settings, Screenshot, Shutdown and
+      #                               Reboot
       #
       # The binaries are copied, not symlinked. `domicile` finds its siblings
       # from `current_exe`, which resolves symlinks, so a symlink would point
@@ -420,6 +425,10 @@
         cp ${domicileBinaries}/bin/domicile-xdg-open "$out/bin/domicile-xdg-open"
         # Opens the History app. Copied for the same reason as above.
         cp ${domicileBinaries}/bin/domicile-history "$out/bin/domicile-history"
+        # Opens the Settings app, and its native messaging host, which asks
+        # the desktop over `DOMICILE_SOCK`. Copied for the same reason.
+        cp ${domicileBinaries}/bin/domicile-settings "$out/bin/domicile-settings"
+        cp ${domicileBinaries}/bin/domicile-settings-host "$out/bin/domicile-settings-host"
         # Registers `domicile-open-url` as the web link handler, so links open
         # in a browser window of the current desktop. Hidden from launchers.
         mkdir -p "$out/share/applications"
@@ -451,6 +460,7 @@
         ln -s ${shellPage "splash"} "$out/libexec/domicile/shells/splash"
         mkdir -p "$out/libexec/domicile/apps"
         ln -s ${appExtension "history"} "$out/libexec/domicile/apps/history"
+        ln -s ${appExtension "settings"} "$out/libexec/domicile/apps/settings"
         # What the launcher offers of Domicile's own.
         ${launcherEntry {
           id = "history";
@@ -459,6 +469,14 @@
           exec = "$out/bin/domicile-history";
           icon = ./packages/app-history/icons/history.svg;
           preview = ./packages/app-history/icons/history-preview.svg;
+        }}
+        ${launcherEntry {
+          id = "settings";
+          name = "Settings";
+          comment = "Change the desktop's settings, shell, extensions and site permissions";
+          exec = "$out/bin/domicile-settings";
+          icon = ./packages/app-settings/icons/settings.svg;
+          preview = ./packages/app-settings/icons/settings-preview.svg;
         }}
         # The shell's picker, as Print in manganese: a monitor, a window or an
         # area.
@@ -601,7 +619,7 @@
         # binary is not installed.
         cargoBuildFlags = [
           "-p" "domicile-compositor" "--bin" "domicile-compositor"
-          "-p" "domicile-launch" "--bin" "domicile" "--bin" "domicile-open-url" "--bin" "domicile-xdg-open" "--bin" "domicile-history"
+          "-p" "domicile-launch" "--bin" "domicile" "--bin" "domicile-open-url" "--bin" "domicile-xdg-open" "--bin" "domicile-history" "--bin" "domicile-settings" "--bin" "domicile-settings-host"
         ];
 
         # CI's `cargo-test` job runs the tests on every push; repeating them
@@ -685,7 +703,7 @@
         dontFixup = true;
         outputHashMode = "recursive";
         outputHashAlgo = "sha256";
-        outputHash = "sha256-/Z5/N96n6JTKBwHuqhaHOFfcQQDRLNHKLJoNTsaqCWM=";
+        outputHash = "sha256-4pq1Hq3i8F7gVS6gltC36+MlDJFz1MHCivVKKJYgpNM=";
       };
 
 

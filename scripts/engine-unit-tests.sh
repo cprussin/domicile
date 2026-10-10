@@ -22,16 +22,18 @@ FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRe
 
 # Every suite in the filter, counted rather than estimated: FrameSinkBroker 27,
 # WindowDiff 7, EngineEventQueue 7, ShortcutRegistry 10, ShellURLLoaderFactory
-# 11, ShellDocument 12, ShellSource 3, CursorShape 3, CommandProtocol 11,
+# 11, ShellDocument 12, ShellSource 3, CursorShape 3, CommandProtocol 15,
 # DomicileDisplayList 6, DomicileKeyboardLayout 3, ShellWindows 8,
 # ShellWindowPlaces 7, LineFramer 4, DesktopPrefs 1, SurfaceCrop 3,
 # ExtensionInstaller 3, ExtensionTrayEntry 3, DeskTabs 12, DeskGeometry 13,
 # DomicileDisplayRegions 27, DomicileDeskTargeter 4, PlaceholderStage 3,
 # SystemCall 4, PortalRequest 3, FileChoice 13, DisplayCapture 7,
-# CapturedFourcc 1, DisplayCaptureTarget 4, HeldChords 6, SitePermissions 9,
+# CapturedFourcc 1, DisplayCaptureTarget 4, HeldChords 6, SitePermissions 11,
 # ControlChannel 1.
 #
-# 232, and it was 230 — refusing a parent frame sink in another renderer is
+# 238, and it was 232 — the Settings app's site permissions are four
+# CommandProtocol cases and two SitePermissions ones. Before that 232, and it
+# was 230 — refusing a parent frame sink in another renderer is
 # two more FrameSinkBroker cases. Before that 230, and it was 229 — the compositor's lines held until the page binds are
 # one ControlChannel case. Before that 229, and it was 220 — a <webview>'s permissions are nine SitePermissions
 # cases. Before that 220, and it was 223 — the engine takes no screenshots, which was three
@@ -82,7 +84,7 @@ FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRe
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=232
+FLOOR=238
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.

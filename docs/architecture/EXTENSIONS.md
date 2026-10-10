@@ -64,6 +64,10 @@ Once `ExtensionSystem::ready()`, reconciling:
 Listing an extension is consent. There is no install prompt, and manifest
 permissions are granted as declared.
 
+The Settings app installs and uninstalls by editing these lists, and switches
+extensions on and off through `chrome.management`
+([SETTINGS.md](/docs/SETTINGS.md)).
+
 Chromium disables unpacked extensions outside developer mode
 (`DISABLE_UNSUPPORTED_DEVELOPER_EXTENSION`). The installer sets
 `prefs::kExtensionsUIDeveloperMode` before loading a directory and leaves it
@@ -221,7 +225,7 @@ relative to the source window and passes `NaN` without them.
 ## Key decisions
 
 - **Config over a store UI.** Home-manager writes the config, and the Store
-  flow needs a browser window.
+  flow needs a browser window. The Settings app edits the config too.
 - **Compositor sends the list; the launcher does not pass `--load-extension`.**
   The launcher never reads the config, Chromium disables the switch by default
   (`DisableLoadExtensionCommandLineSwitch`), it can't name a Web Store id, and

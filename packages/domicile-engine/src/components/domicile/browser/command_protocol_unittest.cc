@@ -6,19 +6,24 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "base/files/file_path.h"
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/values.h"
+#include "components/domicile/mojom/web_view_guest.mojom-shared.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
+#include "url/origin.h"
 
 namespace domicile {
 namespace {
 
 using ::testing::HasSubstr;
+using mojom::WebViewPermission;
+using mojom::WebViewPermissionSetting;
 
 // Records which actions a request triggered.
 //
@@ -29,7 +34,23 @@ struct Told {
   std::string module;
   bool opened = false;
   std::string url;
+  bool set = false;
+  std::string origin;
+  std::optional<WebViewPermission> permission;
+  std::optional<WebViewPermissionSetting> setting;
 };
+
+// What the recording `list_site_permissions` answers: camera's default is
+// ask and notifications' allow, and one site has the camera.
+SitePermissionList StoredSettings() {
+  SitePermissionList list;
+  list.defaults = {{WebViewPermission::kCamera, WebViewPermissionSetting::kAsk},
+                   {WebViewPermission::kNotifications,
+                    WebViewPermissionSetting::kAllow}};
+  list.sites = {{url::Origin::Create(GURL("https://meet.example")),
+                 WebViewPermission::kCamera, WebViewPermissionSetting::kAllow}};
+  return list;
+}
 
 // Answers one line with recording actions. `has_window` false makes every
 // action fail, as when the engine has no shell window.
@@ -48,8 +69,29 @@ std::string Answer(std::string_view line,
     told->url = url.spec();
     return has_window;
   };
+  auto list_site_permissions =
+      [has_window]() -> std::optional<SitePermissionList> {
+    if (!has_window) {
+      return std::nullopt;
+    }
+    return StoredSettings();
+  };
+  auto set_site_permission = [told, has_window](
+                                 const url::Origin& origin,
+                                 WebViewPermission permission,
+                                 WebViewPermissionSetting setting) {
+    told->set = true;
+    told->origin = origin.Serialize();
+    told->permission = permission;
+    told->setting = setting;
+    return has_window;
+  };
   std::string reply;
-  AnswerCommand(line, load_shell, open_url,
+  AnswerCommand(line,
+                {.load_shell = load_shell,
+                 .open_url = open_url,
+                 .list_site_permissions = list_site_permissions,
+                 .set_site_permission = set_site_permission},
                 base::BindOnce([](std::string* out,
                                   std::string line) { *out = std::move(line); },
                                &reply));
@@ -217,6 +259,79 @@ TEST(CommandProtocolTest, RefusesWhenThereIsNoShellPageToOpenIn) {
              &told, /*has_window=*/false);
   EXPECT_EQ(TypeOf(reply), "refused");
   EXPECT_THAT(WhyOf(reply), HasSubstr("shell page"));
+}
+
+TEST(CommandProtocolTest, ListsEachPermissionsDefaultAndEachSitesSetting) {
+  Told told;
+  const std::string reply =
+      Answer(R"({"type":"site_permissions","version":1})", &told);
+  EXPECT_EQ(
+      base::JSONReader::ReadDict(reply, base::JSON_PARSE_RFC),
+      base::JSONReader::ReadDict(
+          R"({"type":"site_permissions",)"
+          R"("defaults":{"camera":"ask","notifications":"allow"},)"
+          R"("sites":[{"origin":"https://meet.example",)"
+          R"("permission":"camera","setting":"allow"}]})",
+          base::JSON_PARSE_RFC));
+  EXPECT_EQ(reply.find('\n'), reply.size() - 1);
+}
+
+TEST(CommandProtocolTest, StoresTheSettingARequestNames) {
+  Told told;
+  const std::string reply = Answer(
+      R"({"type":"set_site_permission","version":1,)"
+      R"("origin":"https://meet.example","permission":"microphone",)"
+      R"("setting":"block"})",
+      &told);
+  EXPECT_EQ(TypeOf(reply), "set");
+  EXPECT_TRUE(told.set);
+  EXPECT_EQ(told.origin, "https://meet.example");
+  EXPECT_EQ(told.permission, WebViewPermission::kMicrophone);
+  EXPECT_EQ(told.setting, WebViewPermissionSetting::kBlock);
+}
+
+TEST(CommandProtocolTest, RefusesASettingItCannotStore) {
+  // Each is refused by name, so the sender sees which field was wrong.
+  Told told;
+  const std::string permission = Answer(
+      R"({"type":"set_site_permission","version":1,)"
+      R"("origin":"https://meet.example","permission":"bluetooth",)"
+      R"("setting":"block"})",
+      &told);
+  EXPECT_EQ(TypeOf(permission), "refused");
+  EXPECT_THAT(WhyOf(permission), HasSubstr("bluetooth"));
+
+  const std::string setting = Answer(
+      R"({"type":"set_site_permission","version":1,)"
+      R"("origin":"https://meet.example","permission":"camera",)"
+      R"("setting":"sometimes"})",
+      &told);
+  EXPECT_EQ(TypeOf(setting), "refused");
+  EXPECT_THAT(WhyOf(setting), HasSubstr("sometimes"));
+
+  // A page with no site, such as a file, has no site permissions.
+  const std::string origin = Answer(
+      R"({"type":"set_site_permission","version":1,)"
+      R"("origin":"file:///home/someone/a.html","permission":"camera",)"
+      R"("setting":"block"})",
+      &told);
+  EXPECT_EQ(TypeOf(origin), "refused");
+  EXPECT_THAT(WhyOf(origin), HasSubstr("file:///home/someone/a.html"));
+
+  EXPECT_FALSE(told.set);
+}
+
+TEST(CommandProtocolTest, RefusesSitePermissionsWithNoProfileToKeepThem) {
+  // The settings are the shell's profile's; without a shell there is none.
+  Told told;
+  EXPECT_EQ(TypeOf(Answer(R"({"type":"site_permissions","version":1})",
+                          &told, /*has_window=*/false)),
+            "refused");
+  EXPECT_EQ(TypeOf(Answer(R"({"type":"set_site_permission","version":1,)"
+                          R"("origin":"https://meet.example",)"
+                          R"("permission":"camera","setting":"block"})",
+                          &told, /*has_window=*/false)),
+            "refused");
 }
 
 }  // namespace
