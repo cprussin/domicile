@@ -135,14 +135,18 @@ impl<S: StillThere + PartialEq> Idle<S> {
     /// Removes inhibitors whose clients are gone.
     ///
     /// Called after every client dispatch, so it returns `None` when nothing
-    /// was removed.
-    pub fn the_dead_let_go(&mut self, now: Instant, on_the_desktop: &[S]) -> Option<Blanking> {
+    /// was removed, and lists the desktop only when something was.
+    pub fn the_dead_let_go(
+        &mut self,
+        now: Instant,
+        on_the_desktop: impl FnOnce() -> Vec<S>,
+    ) -> Option<Blanking> {
         let held = self.inhibitors.len();
         self.inhibitors.retain(StillThere::still_there);
         if self.inhibitors.len() == held {
             None
         } else {
-            self.settle(now, on_the_desktop)
+            self.settle(now, &on_the_desktop())
         }
     }
 
@@ -652,7 +656,7 @@ mod tests {
         idle.elapsed(start + AFTER, &showing(1));
         film.the_client_died();
         assert_eq!(
-            idle.the_dead_let_go(start + AFTER, &showing(1)),
+            idle.the_dead_let_go(start + AFTER, || showing(1).to_vec()),
             Some(Blanking::GoDark)
         );
         assert!(idle.dark());
@@ -661,11 +665,16 @@ mod tests {
     #[test]
     fn nothing_is_decided_by_an_inhibitor_this_desk_never_had() {
         // Only the timer blanks the screens. Neither a no-op dead-client sweep
-        // nor destroying an unknown inhibitor may report an edge.
+        // nor destroying an unknown inhibitor may report an edge. The sweep
+        // runs after every client dispatch, so it lists the desktop only when
+        // an inhibitor went.
         let start = Instant::now();
         let mut idle = desk(start);
 
-        assert_eq!(idle.the_dead_let_go(start + AFTER, SHOWING_NOTHING), None);
+        assert_eq!(
+            idle.the_dead_let_go(start + AFTER, || unreachable!("nobody died")),
+            None
+        );
         assert_eq!(
             idle.uninhibited_by(&Inhibitor::on(1), start + AFTER, SHOWING_NOTHING),
             None

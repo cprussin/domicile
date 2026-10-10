@@ -695,12 +695,14 @@ impl Engine {
         ) {
             Ok(symbol) => symbol,
             // An older engine shows every frame at the newest box, so a
-            // resized window's old frame is stretched until it redraws.
+            // resized window's old frame is stretched until it redraws. The
+            // damage was mapped onto another box, so the whole box is
+            // damaged.
             Err(why) => {
                 if !self.said_it_cannot_wait.replace(true) {
                     tracing::warn!(%why, "resized windows stretch until they redraw");
                 }
-                return self.submit_at_the_newest_box(surface, buffer, crop, damage);
+                return self.submit_at_the_newest_box(surface, buffer, crop, (0, 0, 0, 0));
             }
         };
         let (crop_x, crop_y, crop_width, crop_height) = crop;

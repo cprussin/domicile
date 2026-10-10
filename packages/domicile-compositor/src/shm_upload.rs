@@ -7,11 +7,14 @@
 //! a buffer the GPU rendered into, so the client's pixels are uploaded as a
 //! texture and drawn as a quad.
 
+use std::sync::Mutex;
+
 use smithay::backend::allocator::Modifier;
 use smithay::backend::renderer::gles::{GlesError, GlesRenderer, GlesTexture};
-use smithay::backend::renderer::{Bind, Color32F, Frame, Renderer as _};
+use smithay::backend::renderer::{Bind, Color32F, Frame, ImportMemWl as _, Renderer as _};
 use smithay::reexports::wayland_server::protocol::wl_buffer;
-use smithay::utils::{Physical, Rectangle, Size, Transform};
+use smithay::utils::{Buffer as BufferCoords, Physical, Rectangle, Size, Transform};
+use smithay::wayland::compositor::SurfaceData;
 use smithay::wayland::shm::{shm_format_to_fourcc, with_buffer_contents};
 use thiserror::Error;
 
@@ -47,6 +50,78 @@ where
         1.0,
     )?;
     frame.finish()?.wait().map_err(|_| CopyError::Interrupted)
+}
+
+/// The rectangles of a `size` buffer to upload into the surface's texture, in
+/// Smithay's terms: empty uploads the whole buffer.
+///
+/// The client's `damage` is enough only when the texture holds the commit
+/// before it.
+pub fn uploaded(
+    damage: Option<(i32, i32, i32, i32)>,
+    texture_is_current: bool,
+    size: (u32, u32),
+) -> Vec<Rectangle<i32, BufferCoords>> {
+    let (width, height) = (size.0 as i32, size.1 as i32);
+    damage
+        .filter(|_| texture_is_current)
+        .map(|(x, y, w, h)| {
+            let (left, top) = (x.clamp(0, width), y.clamp(0, height));
+            let right = x.saturating_add(w).clamp(left, width);
+            let bottom = y.saturating_add(h).clamp(top, height);
+            Rectangle::new((left, top).into(), (right - left, bottom - top).into())
+        })
+        .into_iter()
+        .collect()
+}
+
+/// Imports `buffer`, of `shape`, through the surface's cached texture.
+///
+/// Smithay reuses the cached texture whenever the size matches, keeping the
+/// format it was made with: an opaque texture would hide a buffer's new
+/// alpha. A new format at the same size skips the cache, until the size
+/// changes and Smithay makes a texture in it.
+pub fn import(
+    renderer: &mut GlesRenderer,
+    buffer: &wl_buffer::WlBuffer,
+    states: &SurfaceData,
+    shape: Shape,
+    damage: &[Rectangle<i32, BufferCoords>],
+) -> Result<GlesTexture, GlesError> {
+    let cached = states
+        .data_map
+        .get_or_insert_threadsafe(|| Mutex::new(CachedTexture(None)));
+    let mut cached = cached.lock().expect("never poisoned");
+    through_the_cache(&mut cached.0, shape, |handed_over| {
+        renderer.import_shm_buffer(buffer, handed_over.then_some(states), damage)
+    })
+}
+
+/// The shape of the texture Smithay caches on a surface, as far as we have
+/// handed it the cache.
+struct CachedTexture(Option<Shape>);
+
+/// Runs `import`, told whether Smithay may use the surface's texture, last
+/// made as `cached`, for `shape`. Records the texture Smithay makes, once the
+/// import succeeds: a failed one leaves Smithay's cache as it was.
+fn through_the_cache<T, E>(
+    cached: &mut Option<Shape>,
+    shape: Shape,
+    import: impl FnOnce(bool) -> Result<T, E>,
+) -> Result<T, E> {
+    let handed_over = match *cached {
+        Some(held) if (held.width, held.height) == (shape.width, shape.height) => {
+            held.fourcc == shape.fourcc
+        }
+        // Smithay makes a new texture, in this commit's format.
+        _ => true,
+    };
+    let texture = import(handed_over)?;
+    if handed_over {
+        // Smithay made a texture in this shape, or reused one already in it.
+        *cached = Some(shape);
+    }
+    Ok(texture)
 }
 
 /// The GPU buffer shape an shm buffer needs. `None` for a buffer that is not
@@ -132,5 +207,98 @@ mod tests {
         drop(framebuffer);
         let pixels = renderer.map_texture(&mapping).expect("maps");
         assert_eq!(pixels, CORNERS);
+    }
+
+    mod through_the_cache {
+        use crate::uploads::Shape;
+
+        use super::super::through_the_cache;
+
+        const XRGB: u32 = 1;
+        const ARGB: u32 = 2;
+
+        fn shape(width: u32, fourcc: u32) -> Shape {
+            Shape {
+                width,
+                height: 100,
+                fourcc,
+            }
+        }
+
+        /// Whether the import was handed the cache. It succeeds.
+        fn handed_over(cached: &mut Option<Shape>, shape: Shape) -> bool {
+            through_the_cache(cached, shape, Ok::<_, ()>).expect("it succeeds")
+        }
+
+        #[test]
+        fn a_new_texture_takes_the_commits_format() {
+            let mut cached = None;
+
+            assert!(handed_over(&mut cached, shape(200, XRGB)));
+            assert_eq!(cached, Some(shape(200, XRGB)));
+        }
+
+        #[test]
+        fn a_new_format_at_the_same_size_skips_the_cache() {
+            // Smithay would keep the opaque format for a translucent buffer.
+            let mut cached = Some(shape(200, XRGB));
+
+            assert!(!handed_over(&mut cached, shape(200, ARGB)));
+            assert!(!handed_over(&mut cached, shape(200, ARGB)));
+            assert!(handed_over(&mut cached, shape(200, XRGB)));
+        }
+
+        #[test]
+        fn a_new_size_makes_a_texture_in_the_new_format() {
+            let mut cached = Some(shape(200, XRGB));
+
+            assert!(handed_over(&mut cached, shape(300, ARGB)));
+            assert_eq!(cached, Some(shape(300, ARGB)));
+        }
+
+        // Smithay caches a new texture only once the import gets that far.
+        #[test]
+        fn a_failed_import_leaves_the_cache_as_it_was() {
+            let mut cached = Some(shape(200, XRGB));
+
+            assert_eq!(
+                through_the_cache(&mut cached, shape(300, ARGB), |_| Err::<(), _>("no")),
+                Err("no")
+            );
+            assert_eq!(cached, Some(shape(200, XRGB)));
+        }
+    }
+
+    mod uploaded {
+        use smithay::utils::{Buffer as BufferCoords, Rectangle};
+
+        use super::super::uploaded;
+
+        fn rect(x: i32, y: i32, w: i32, h: i32) -> Rectangle<i32, BufferCoords> {
+            Rectangle::new((x, y).into(), (w, h).into())
+        }
+
+        #[test]
+        fn a_current_texture_takes_only_the_damage() {
+            assert_eq!(
+                uploaded(Some((10, 20, 5, 6)), true, (200, 100)),
+                vec![rect(10, 20, 5, 6)]
+            );
+        }
+
+        #[test]
+        fn a_stale_texture_or_unknown_damage_takes_the_whole_buffer() {
+            assert!(uploaded(Some((10, 20, 5, 6)), false, (200, 100)).is_empty());
+            assert!(uploaded(None, true, (200, 100)).is_empty());
+        }
+
+        #[test]
+        fn damage_past_the_buffer_is_cut_to_it() {
+            // GL refuses a sub-image that leaves the texture.
+            assert_eq!(
+                uploaded(Some((0, 0, i32::MAX, i32::MAX)), true, (200, 100)),
+                vec![rect(0, 0, 200, 100)]
+            );
+        }
     }
 }

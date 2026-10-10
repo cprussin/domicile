@@ -102,9 +102,22 @@ GBM buffer and submits that (`uploads.rs`, `shm_upload.rs`). The copy is tested
 on llvmpipe. The GBM allocation and the browser's import are not, because no
 check has a render node ([ENGINE-FORK.md](ENGINE-FORK.md#plan)).
 
+- The pixels pass through a texture kept on the surface. While it holds the
+  previous commit in the same format, only the client's damage is uploaded.
+  Smithay keeps a cached texture's format, so a new format at the same size
+  skips the cache.
+- The copy waits for the GPU on the Wayland thread. The C ABI carries no fence,
+  so the engine would otherwise sample an unfinished draw.
+
 ### Damage
 
-`domicile_surface_submit_crop(surface, buffer, crop, damage)` takes a damage
-rectangle, where empty means the whole surface. `publish_frame` always passes
-an empty one, so every commit damages the whole window. Mapping the client's
-reported damage needs a screen to verify: a wrong rectangle leaves stale pixels.
+The submit takes a damage rectangle in box pixels, where empty means the whole
+box. `engine_damage.rs` maps the client's damage onto the box when the engine
+shows the window's previous commit at the same box, from the same crop of a
+buffer of the same size, and nothing turns or scales either commit's buffer. Where the crop
+is stretched to another size, the damage grows a texel each way for the
+engine's filtering. Every other commit damages the whole box, as do popups and
+bubbles, whose box size the compositor does not know.
+
+Unverified on a screen: a wrong rectangle leaves stale pixels, and no check
+reads a lit CRTC ([ENGINE-FORK.md](ENGINE-FORK.md#plan)).
