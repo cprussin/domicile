@@ -23,31 +23,32 @@ import { ImageIcon } from "@phosphor-icons/react/dist/ssr/Image";
 import { LockIcon } from "@phosphor-icons/react/dist/ssr/Lock";
 import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/ssr/MagnifyingGlass";
 import { MusicNotesIcon } from "@phosphor-icons/react/dist/ssr/MusicNotes";
-import type { KeyboardEvent, ReactNode, Ref } from "react";
+import { WarningIcon } from "@phosphor-icons/react/dist/ssr/Warning";
+import type { FocusEvent, KeyboardEvent, ReactNode, Ref } from "react";
 import { useId, useState } from "react";
 
 import { css } from "../../styled-system/css";
 import { flex, grid, hstack, vstack } from "../../styled-system/patterns";
+import { focusOnAttach } from "../_control/focusOnAttach";
+import { useStableRef } from "../_control/useStableRef";
 import { Button } from "../Button/Button";
-import { Field } from "../Field/Field";
 import { Input } from "../Input/Input";
 import { Kbd } from "../Kbd/Kbd";
 import { highlightIn, keepInView, stepOf, steppedTo } from "../list-walk";
 import { Select } from "../Select/Select";
+import { Clash, clashOf } from "./clash";
 import { FileKind, fileKindOf, kindLabel } from "./file-kind";
 import type { FileFilter, FileRequest } from "./file-request";
 import { ChooserMode } from "./file-request";
 import { pathIn } from "./path-in";
 import type { Row } from "./rows";
 import { RowKind, rowsIn } from "./rows";
+import { stemEnd } from "./stem";
 import { ListingState, useListing } from "./useListing";
 import { crumbsOf, parentOf, shownPath, walked } from "./walk-path";
 
 /** The filter box's accessible name. */
 const PROMPT = "Filter or go to a path";
-
-/** The filter box's placeholder, listing the path shortcuts. */
-const PLACEHOLDER = "Filter, or type a path:  /  root   ~  home   ..  up";
 
 /** The icon size for rows and the filter box. */
 const ICON_SIZE = 16;
@@ -69,7 +70,10 @@ const STANDARD_PLACES: readonly (readonly [string, typeof FolderIcon])[] = [
 ];
 
 type Props = {
-  /** The filter box, for the caller to focus while the picker is open. */
+  /**
+   * The box that has the keyboard: the filter, or the name when saving. The
+   * caller focuses it while the picker is open.
+   */
   ref?: Ref<HTMLInputElement> | undefined;
   /** What to pick and how to answer. */
   request: FileRequest;
@@ -82,10 +86,13 @@ type Place = { glyph: typeof FolderIcon; label: string; path: string };
  * A file picker drawn over its positioned parent only, so the rest of the
  * screen stays usable.
  *
- * Starts in `currentFolder`, or the home, and lists one directory at a time; nothing is
- * indexed. Typing filters; a `/` walks the path like a shell (see `walked`).
- * A click or arrow key selects a file; Enter, a double click or the button
- * chooses it. Clicking a directory enters it.
+ * Starts in `currentFolder`, or the home, and lists one directory at a time;
+ * nothing is indexed. One box has the keyboard: the filter, or the file name
+ * when saving. A `/` in it walks the path like a shell (see `walked`).
+ * Opening, a click or arrow key selects a file; Enter, a double click or the
+ * button chooses it. Saving, the arrows pick a folder to enter and Enter
+ * saves, asking first before replacing a file. Clicking a directory enters
+ * it.
  *
  * Keys: arrows move, Enter opens, Backspace in an empty box goes up,
  * Ctrl+Enter confirms, Escape cancels, and Tab marks a file in multi-select,
@@ -94,16 +101,21 @@ type Place = { glyph: typeof FolderIcon; label: string; path: string };
 export const FilePicker = ({ ref, request }: Props) => {
   const titleId = useId();
   const listId = useId();
+  const replaceTitleId = useId();
+  const replaceNoteId = useId();
+  const [box, setBox] = useStableRef(ref);
   const [directory, setDirectory] = useState(
     request.currentFolder ?? request.home,
   );
   const [query, setQuery] = useState("");
   // The highlighted row, or `undefined` for the default: the first row below
-  // `..`.
+  // `..`, or none when saving, so Enter saves.
   const [stepped, setStepped] = useState<number | undefined>(undefined);
   // Marked file paths for multi-select, in marking order.
   const [marks, setMarks] = useState<readonly string[]>([]);
   const [name, setName] = useState(request.suggestedName);
+  // Whether the user is asked to confirm replacing a file.
+  const [replacing, setReplacing] = useState(false);
   const [filter, setFilter] = useState<FileFilter | undefined>(
     request.filters?.[request.currentFilter ?? 0],
   );
@@ -113,26 +125,34 @@ export const FilePicker = ({ ref, request }: Props) => {
     request.choose(paths, filterIndex);
   };
 
+  const saving = request.mode === ChooserMode.Save;
   const listing = useListing(request.list, directory);
+  const entries = listing.state === ListingState.Listed ? listing.entries : [];
   // Lists the home directory to find which standard folders exist.
   const homeListing = useListing(request.list, request.home);
+  const clash = saving ? clashOf(entries, name) : Clash.None;
   const rows = rowsIn({
     accept: filter === undefined ? request.accept : filter.extensions,
     directory,
-    entries: listing.state === ListingState.Listed ? listing.entries : [],
+    entries,
     filter: query,
     mode: request.mode,
   });
-  const highlighted = highlightIn(rows.length, stepped ?? firstOf(rows));
+  const highlighted =
+    saving && stepped === undefined
+      ? undefined
+      : highlightIn(rows.length, stepped ?? firstOf(rows));
   const current = highlighted === undefined ? undefined : rows[highlighted];
   const multiple = request.mode === ChooserMode.OpenMultiple;
   const answer = answerOf({
+    clash,
     current,
     directory,
     marks,
     mode: request.mode,
     name,
   });
+  const asking = replacing && clash === Clash.File;
 
   const go = (to: string) => {
     setDirectory(to);
@@ -140,10 +160,21 @@ export const FilePicker = ({ ref, request }: Props) => {
     setStepped(undefined);
   };
 
+  // Chooses the answer, asking first if it replaces a file.
   const confirm = () => {
     if (answer !== undefined) {
-      choose(answer);
+      if (clash === Clash.File) {
+        setReplacing(true);
+      } else {
+        choose(answer);
+      }
     }
+  };
+
+  // Back from the replace question to the name.
+  const reconsider = () => {
+    setReplacing(false);
+    box.current?.focus();
   };
 
   // Enter or double click: enters a directory, or chooses a file (or names
@@ -175,6 +206,7 @@ export const FilePicker = ({ ref, request }: Props) => {
       }
       case ChooserMode.Save: {
         setName(row.name);
+        setStepped(undefined);
         break;
       }
     }
@@ -184,22 +216,16 @@ export const FilePicker = ({ ref, request }: Props) => {
   // it as the mode requires.
   const pick = (row: Row, at: number) => {
     if (row.kind === RowKind.File) {
-      setStepped(at);
       if (multiple) {
+        setStepped(at);
         setMarks(toggled(marks, row.path));
-      } else if (request.mode === ChooserMode.Save) {
-        setName(row.name);
+      } else if (saving) {
+        openFile(row);
+      } else {
+        setStepped(at);
       }
     } else {
       go(row.path);
-    }
-  };
-
-  // Ctrl+Enter in either field confirms the current selection.
-  const confirmOnChord = (event: KeyboardEvent) => {
-    if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
-      event.preventDefault();
-      confirm();
     }
   };
 
@@ -211,28 +237,26 @@ export const FilePicker = ({ ref, request }: Props) => {
       onKeyDown={(event) => {
         if (event.key === "Escape") {
           event.preventDefault();
-          request.cancel();
+          if (asking) {
+            reconsider();
+          } else {
+            request.cancel();
+          }
         }
       }}
       open
     >
       <div className={panelStyles}>
+        <header className={headerStyles}>
+          <span className={modeGlyphStyles}>
+            <ModeGlyph mode={request.mode} />
+          </span>
+          <h2 className={titleStyles} id={titleId}>
+            {request.title ?? titleOf(request.mode)}
+          </h2>
+        </header>
         <aside className={sidebarStyles}>
-          <div className={brandStyles}>
-            <span className={brandTileStyles}>
-              <ModeGlyph mode={request.mode} />
-            </span>
-            <div className={brandTextStyles}>
-              <h2 className={titleStyles} id={titleId}>
-                {request.title ?? titleOf(request.mode)}
-              </h2>
-              <span className={subtitleStyles}>{subtitleOf(request.mode)}</span>
-            </div>
-          </div>
           <nav aria-label="Places" className={placesStyles}>
-            <span aria-hidden className={sectionLabelStyles}>
-              Places
-            </span>
             {placesOf(
               request.home,
               homeListing.state === ListingState.Listed
@@ -287,7 +311,7 @@ export const FilePicker = ({ ref, request }: Props) => {
                   onMouseDown={(event) => {
                     event.preventDefault();
                   }}
-                  size="xs"
+                  size="sm"
                   variant="ghost"
                 >
                   {crumb.label}
@@ -301,7 +325,7 @@ export const FilePicker = ({ ref, request }: Props) => {
             }
             aria-controls={listId}
             aria-expanded
-            aria-label={PROMPT}
+            aria-label={saving ? "Name" : PROMPT}
             onChange={(event) => {
               const to = walked({
                 directory,
@@ -309,9 +333,14 @@ export const FilePicker = ({ ref, request }: Props) => {
                 typed: event.target.value,
               });
               setDirectory(to.directory);
-              setQuery(to.filter);
+              if (saving) {
+                setName(to.filter);
+              } else {
+                setQuery(to.filter);
+              }
               setStepped(undefined);
             }}
+            onFocus={saving ? selectStem : undefined}
             onKeyDown={(event) => {
               const step = stepOf(event);
               const up = parentOf(directory);
@@ -341,22 +370,30 @@ export const FilePicker = ({ ref, request }: Props) => {
                 }
               } else if (
                 event.key === "Backspace" &&
-                query === "" &&
+                event.currentTarget.value === "" &&
                 up !== undefined
               ) {
                 event.preventDefault();
                 go(up);
-              } else {
-                confirmOnChord(event);
+              } else if (isConfirmChord(event)) {
+                event.preventDefault();
+                confirm();
               }
             }}
-            placeholder={PLACEHOLDER}
-            prefixIcon={<MagnifyingGlassIcon size={ICON_SIZE} />}
-            ref={ref}
+            placeholder={saving ? "Name the file" : "Filter, or type a path"}
+            prefixIcon={
+              saving ? (
+                <NameGlyph name={name} />
+              ) : (
+                <MagnifyingGlassIcon size={ICON_SIZE} />
+              )
+            }
+            ref={setBox}
             role="combobox"
+            size={saving ? "lg" : "md"}
             // File names are not prose.
             spellCheck={false}
-            value={query}
+            value={saving ? name : query}
           />
           <div className={resultsStyles}>
             <div aria-hidden className={columnsStyles}>
@@ -383,6 +420,13 @@ export const FilePicker = ({ ref, request }: Props) => {
                     className={rowStyles}
                     data-highlighted={at === highlighted ? "" : undefined}
                     data-marked={marked ? "" : undefined}
+                    data-replaced={
+                      clash === Clash.File &&
+                      row.kind === RowKind.File &&
+                      row.name === name
+                        ? ""
+                        : undefined
+                    }
                     data-tone={toneOf(row)}
                     id={rowId(listId, at)}
                     key={`${toneOf(row)}:${row.path}`}
@@ -394,7 +438,7 @@ export const FilePicker = ({ ref, request }: Props) => {
                         openFile(row);
                       }
                     }}
-                    // Keeps focus in the filter box.
+                    // Keeps focus in the box.
                     onMouseDown={(event) => {
                       event.preventDefault();
                     }}
@@ -421,66 +465,88 @@ export const FilePicker = ({ ref, request }: Props) => {
               shown={rows.some(({ kind }) => kind !== RowKind.Parent)}
             />
           </div>
-          {request.mode === ChooserMode.Save && (
-            <Field label="Name">
-              <Input
-                onChange={(event) => {
-                  setName(event.target.value);
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    confirm();
-                  }
-                }}
-                spellCheck={false}
-                value={name}
-              />
-            </Field>
-          )}
         </section>
-        <footer className={footerStyles}>
-          <output
-            aria-label="Selection"
-            className={selectionStyles}
-            data-empty={answer === undefined ? "" : undefined}
+        {asking && answer !== undefined ? (
+          <footer
+            aria-describedby={replaceNoteId}
+            aria-labelledby={replaceTitleId}
+            className={replaceStyles}
+            role="alertdialog"
           >
-            <Selection
-              answer={answer}
-              home={request.home}
-              marks={marks}
-              mode={request.mode}
-            />
-          </output>
-          <div className={actionsStyles}>
-            {request.controls}
-            {request.filters !== undefined && filter !== undefined && (
-              <Select
-                aria-label="File type"
-                onValueChange={(picked) => {
-                  if (picked !== null) {
-                    setFilter(picked);
-                  }
+            <span className={replaceGlyphStyles}>
+              <WarningIcon size={20} weight="fill" />
+            </span>
+            <div className={replaceTextStyles}>
+              <strong className={replaceTitleStyles} id={replaceTitleId}>
+                {`Replace “${name}”?`}
+              </strong>
+              <span className={replaceNoteStyles} id={replaceNoteId}>
+                {`It is already in ${shownPath(directory, request.home)}. Its contents will be lost.`}
+              </span>
+            </div>
+            <div className={actionsStyles}>
+              <Button onClick={reconsider} variant="ghost">
+                Go back
+              </Button>
+              <Button
+                onClick={() => {
+                  choose(answer);
                 }}
-                options={request.filters.map((group) => ({
-                  label: group.name,
-                  value: group,
-                }))}
-                value={filter}
-              />
+                ref={focusOnAttach}
+                variant="danger"
+              >
+                Replace
+              </Button>
+            </div>
+          </footer>
+        ) : (
+          <footer className={footerStyles}>
+            {saving ? (
+              <ClashHint clash={clash} />
+            ) : (
+              <output
+                aria-label="Selection"
+                className={selectionStyles}
+                data-empty={answer === undefined ? "" : undefined}
+              >
+                <Selection
+                  answer={answer}
+                  home={request.home}
+                  marks={marks}
+                  mode={request.mode}
+                />
+              </output>
             )}
-            <Button onClick={request.cancel} variant="ghost">
-              Cancel
-            </Button>
-            <Button
-              disabled={answer === undefined}
-              onClick={confirm}
-              variant="accent"
-            >
-              {request.acceptLabel ?? confirmOf(request.mode)}
-            </Button>
-          </div>
-        </footer>
+            <div className={actionsStyles}>
+              {request.controls}
+              {request.filters !== undefined && filter !== undefined && (
+                <Select
+                  aria-label="File type"
+                  onValueChange={(picked) => {
+                    if (picked !== null) {
+                      setFilter(picked);
+                    }
+                  }}
+                  options={request.filters.map((group) => ({
+                    label: group.name,
+                    value: group,
+                  }))}
+                  value={filter}
+                />
+              )}
+              <Button onClick={request.cancel} variant="ghost">
+                Cancel
+              </Button>
+              <Button
+                disabled={answer === undefined}
+                onClick={confirm}
+                variant="accent"
+              >
+                {request.acceptLabel ?? confirmOf(request.mode)}
+              </Button>
+            </div>
+          </footer>
+        )}
       </div>
     </dialog>
   );
@@ -509,12 +575,12 @@ const scrimStyles = css({
   transition: "opacity {durations.normal} {easings.out}",
 });
 
-// The library's glass surface (see `ModalDialog`). Two columns, sidebar and
-// folder, with the footer across both.
+// The library's glass surface (see `ModalDialog`). A header and footer across
+// two columns, places and folder.
 const panelStyles = grid({
   _before: {
     background:
-      "linear-gradient(90deg, transparent, color-mix(in oklab, {colors.foreground} 45%, transparent), transparent)",
+      "linear-gradient(90deg, transparent, color-mix(in oklab, {colors.foreground} 40%, transparent), transparent)",
     blockSize: "1px",
     content: '""',
     insetBlockStart: 0,
@@ -524,78 +590,58 @@ const panelStyles = grid({
   },
   _starting: {
     opacity: 0,
-    transform: "translateY({spacing.4}) scale(0.96)",
+    transform: "translateY({spacing.3}) scale(0.96)",
   },
   "& :has(> [data-control])": {
     backgroundColor:
       "color-mix(in oklab, {colors.background} 45%, transparent)",
   },
-  backdropFilter: "blur({spacing.6}) saturate(180%)",
+  backdropFilter: "blur({spacing.5}) saturate(180%)",
   // More opaque than `ModalDialog`'s glass, for readable rows over anything.
   backgroundColor: "color-mix(in oklab, {colors.card} 86%, transparent)",
-  blockSize: "min(86vh, {spacing.180})",
-  border: "1px solid color-mix(in oklab, {colors.foreground} 14%, transparent)",
-  borderRadius: "2xl",
+  blockSize: "min(86vh, {spacing.168})",
+  border: "1px solid color-mix(in oklab, {colors.foreground} 16%, transparent)",
+  borderRadius: "xl",
   boxShadow: "modal",
   gap: 0,
-  gridTemplateColumns: "{spacing.60} minmax(0, 1fr)",
-  gridTemplateRows: "minmax(0, 1fr) auto",
+  gridTemplateColumns: "{spacing.52} minmax(0, 1fr)",
+  gridTemplateRows: "auto minmax(0, 1fr) auto",
   inlineSize: "100%",
-  maxInlineSize: 256,
+  maxInlineSize: 240,
   overflow: "hidden",
   position: "relative",
   transition:
-    "opacity {durations.normal} {easings.out}, transform {durations.slow} {easings.outBack}",
+    "opacity {durations.normal} {easings.out}, transform {durations.normal} {easings.out}",
 });
 
-const sidebarStyles = flex({
-  backgroundColor: "color-mix(in oklab, {colors.foreground} 4%, transparent)",
-  backgroundImage:
-    "radial-gradient(120% 60% at 0% 0%, color-mix(in oklab, {colors.accent} 14%, transparent), transparent 70%)",
-  borderInlineEnd:
-    "1px solid color-mix(in oklab, {colors.foreground} 8%, transparent)",
-  direction: "column",
-  gap: 6,
-  minBlockSize: 0,
-  overflowY: "auto",
-  paddingBlock: 5,
-  paddingInline: 4,
+const headerStyles = hstack({
+  borderBlockEnd: "1px solid {colors.border}",
+  gap: 2.5,
+  gridColumn: "1 / -1",
+  paddingBlock: 3.5,
+  paddingInline: 5,
 });
 
-const brandStyles = hstack({
-  gap: 3,
-});
-
-const brandTileStyles = css({
-  backgroundImage:
-    "linear-gradient(160deg, color-mix(in oklab, {colors.accent} 80%, {colors.foreground}), {colors.accent} 60%, color-mix(in oklab, {colors.accent} 70%, {colors.background}))",
-  blockSize: 11,
-  borderRadius: "lg",
-  boxShadow:
-    "0 {spacing.2} {spacing.5} color-mix(in oklab, {colors.accent} 40%, transparent), inset 0 1px 0 color-mix(in oklab, {colors.foreground} 35%, transparent)",
-  color: "background",
-  display: "grid",
-  flexShrink: 0,
-  inlineSize: 11,
-  placeItems: "center",
-});
-
-const brandTextStyles = flex({
-  direction: "column",
-  minInlineSize: 0,
+const modeGlyphStyles = css({
+  color: "accent",
+  display: "inline-flex",
 });
 
 const titleStyles = css({
   fontSize: "md",
   fontWeight: "semibold",
-  letterSpacing: "tight",
   lineHeight: "tight",
   margin: 0,
 });
 
-const subtitleStyles = css({
-  color: "muted",
-  fontSize: "xs",
+const sidebarStyles = flex({
+  backgroundColor: "color-mix(in oklab, {colors.foreground} 3%, transparent)",
+  borderInlineEnd: "1px solid {colors.border}",
+  direction: "column",
+  gap: 6,
+  minBlockSize: 0,
+  overflowY: "auto",
+  padding: 3,
 });
 
 const placesStyles = flex({
@@ -605,7 +651,7 @@ const placesStyles = flex({
     justifyContent: "flex-start",
   },
   "& > button[aria-current=location]": {
-    backgroundColor: "color-mix(in oklab, {colors.accent} 18%, transparent)",
+    backgroundColor: "color-mix(in oklab, {colors.accent} 16%, transparent)",
     color: "accent",
     fontWeight: "semibold",
   },
@@ -613,35 +659,20 @@ const placesStyles = flex({
   gap: 0.5,
 });
 
-const sectionLabelStyles = css({
-  color: "textTertiary",
-  fontSize: "2xs",
-  fontWeight: "semibold",
-  letterSpacing: "widest",
-  marginBlockEnd: 1,
-  paddingInline: 2,
-  textTransform: "uppercase",
-});
-
 const mainStyles = flex({
   direction: "column",
   gap: 3,
   minBlockSize: 0,
   minInlineSize: 0,
-  padding: 5,
+  padding: 4,
 });
 
 const pathBarStyles = flex({
   "& [aria-current=location]": { color: "foreground", fontWeight: "semibold" },
   alignItems: "center",
-  alignSelf: "flex-start",
-  backgroundColor: "color-mix(in oklab, {colors.foreground} 5%, transparent)",
-  border: "1px solid color-mix(in oklab, {colors.foreground} 8%, transparent)",
-  borderRadius: "full",
   color: "muted",
   flexWrap: "wrap",
-  maxInlineSize: "100%",
-  paddingInline: 1,
+  marginInlineStart: -2,
   rowGap: 0.5,
 });
 
@@ -657,8 +688,8 @@ const crumbSeparatorStyles = css({
 
 const resultsStyles = css({
   backgroundColor: "color-mix(in oklab, {colors.background} 30%, transparent)",
-  border: "1px solid color-mix(in oklab, {colors.foreground} 7%, transparent)",
-  borderRadius: "xl",
+  border: "1px solid {colors.border}",
+  borderRadius: "lg",
   flex: "1 1 auto",
   minBlockSize: 40,
   overflowY: "auto",
@@ -697,6 +728,9 @@ const listStyles = flex({
 });
 
 const rowStyles = grid({
+  _hover: {
+    backgroundColor: "color-mix(in oklab, {colors.foreground} 5%, transparent)",
+  },
   // The tile color shows the file kind. Tones that blend two hues mix in
   // OKLCH, since OKLab mixing passes through gray.
   "& [data-row-tile]": {
@@ -717,6 +751,10 @@ const rowStyles = grid({
     backgroundColor: "accent",
     borderColor: "accent",
     color: "background",
+  },
+  // The file a save would replace.
+  "&[data-replaced]": {
+    backgroundColor: "color-mix(in oklab, {colors.warning} 14%, transparent)",
   },
   "&[data-tone=archive]": { "--tone": "{colors.warning}" },
   "&[data-tone=audio]": {
@@ -805,15 +843,59 @@ const placeholderNoteStyles = css({
   fontSize: "sm",
 });
 
+// Both footers share a height, so the list keeps its size between them.
 const footerStyles = hstack({
-  backgroundColor: "color-mix(in oklab, {colors.foreground} 3%, transparent)",
-  borderBlockStart:
-    "1px solid color-mix(in oklab, {colors.foreground} 8%, transparent)",
+  borderBlockStart: "1px solid {colors.border}",
   gap: 4,
   gridColumn: "1 / -1",
   justifyContent: "space-between",
-  paddingBlock: 3.5,
-  paddingInline: 5,
+  minBlockSize: 16,
+  paddingBlock: 3,
+  paddingInline: 4,
+});
+
+// The footer while asking whether to replace a file.
+const replaceStyles = hstack({
+  backgroundColor: "color-mix(in oklab, {colors.warning} 12%, transparent)",
+  borderBlockStart:
+    "1px solid color-mix(in oklab, {colors.warning} 40%, transparent)",
+  gap: 3,
+  gridColumn: "1 / -1",
+  minBlockSize: 16,
+  paddingBlock: 3,
+  paddingInline: 4,
+});
+
+const replaceGlyphStyles = css({
+  color: "warning",
+  display: "inline-flex",
+  flexShrink: 0,
+});
+
+const replaceTextStyles = flex({
+  direction: "column",
+  flex: "1 1 auto",
+  minInlineSize: 0,
+});
+
+const replaceTitleStyles = css({
+  fontSize: "sm",
+  fontWeight: "semibold",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+});
+
+const replaceNoteStyles = css({
+  color: "muted",
+  fontSize: "xs",
+});
+
+const clashHintStyles = hstack({
+  "&[data-clash=file]": { color: "warning" },
+  color: "muted",
+  fontSize: "sm",
+  gap: 2,
 });
 
 // Drawn as a chip only when there is a selection.
@@ -821,14 +903,11 @@ const selectionStyles = hstack({
   "&[data-empty]": {
     backgroundColor: "transparent",
     borderColor: "transparent",
-    boxShadow: "none",
     paddingInline: 0,
   },
   backgroundColor: "color-mix(in oklab, {colors.accent} 12%, transparent)",
   border: "1px solid color-mix(in oklab, {colors.accent} 30%, transparent)",
   borderRadius: "full",
-  boxShadow:
-    "0 0 0 {spacing.1} color-mix(in oklab, {colors.accent} 6%, transparent)",
   flex: "0 1 auto",
   fontSize: "sm",
   gap: 2,
@@ -836,7 +915,7 @@ const selectionStyles = hstack({
   paddingBlock: 1,
   paddingInline: 3,
   transition:
-    "background-color {durations.fast} {easings.out}, border-color {durations.fast} {easings.out}, box-shadow {durations.fast} {easings.out}",
+    "background-color {durations.fast} {easings.out}, border-color {durations.fast} {easings.out}",
 });
 
 const selectionGlyphStyles = css({
@@ -885,20 +964,21 @@ const actionsStyles = hstack({
   gap: 2,
 });
 
-const keysStyles = flex({
+// Two columns, keys and what they do, aligned across every row.
+const keysStyles = grid({
+  alignItems: "center",
   color: "muted",
-  direction: "column",
+  columnGap: 3,
   fontSize: "xs",
-  gap: 1.5,
+  gridTemplateColumns: "max-content minmax(0, 1fr)",
   margin: 0,
   marginBlockStart: "auto",
   paddingInline: 2,
+  rowGap: 2,
 });
 
-const keyStyles = grid({
-  alignItems: "center",
-  columnGap: 3,
-  gridTemplateColumns: "{spacing.16} minmax(0, 1fr)",
+const keyStyles = css({
+  display: "contents",
 });
 
 const keyCapsStyles = hstack({
@@ -913,16 +993,16 @@ const keyWhatStyles = css({
 const ModeGlyph = ({ mode }: { mode: ChooserMode }) => {
   switch (mode) {
     case ChooserMode.Open: {
-      return <FileArrowUpIcon size={22} weight="fill" />;
+      return <FileArrowUpIcon size={20} weight="fill" />;
     }
     case ChooserMode.OpenMultiple: {
-      return <FilesIcon size={22} weight="fill" />;
+      return <FilesIcon size={20} weight="fill" />;
     }
     case ChooserMode.OpenFolder: {
-      return <FolderOpenIcon size={22} weight="fill" />;
+      return <FolderOpenIcon size={20} weight="fill" />;
     }
     case ChooserMode.Save: {
-      return <FloppyDiskIcon size={22} weight="fill" />;
+      return <FloppyDiskIcon size={20} weight="fill" />;
     }
   }
 };
@@ -934,6 +1014,36 @@ const CrumbGlyph = ({ label }: { label: string }) =>
   ) : (
     <HardDrivesIcon size={14} weight="fill" />
   );
+
+/** The name box's icon: the kind of file the name makes. */
+const NameGlyph = ({ name }: { name: string }) => {
+  const Glyph = glyphOf(fileKindOf(name));
+  return <Glyph size={ICON_SIZE} weight="duotone" />;
+};
+
+/** What saving under the name would hit. Holds its place when empty. */
+const ClashHint = ({ clash }: { clash: Clash }) => {
+  switch (clash) {
+    case Clash.None: {
+      return <span />;
+    }
+    case Clash.File: {
+      return (
+        <span className={clashHintStyles} data-clash="file">
+          <WarningIcon size={14} weight="fill" />
+          Replaces the file with this name
+        </span>
+      );
+    }
+    case Clash.Folder: {
+      return (
+        <span className={clashHintStyles} data-clash="folder">
+          <FolderIcon size={14} weight="fill" />A folder has this name
+        </span>
+      );
+    }
+  }
+};
 
 /**
  * A row's icon: a check if marked, else its kind. Filled when highlighted,
@@ -1107,18 +1217,26 @@ const SelectedPath = ({ path }: { path: string }) => {
 };
 
 /** The key help at the foot of the sidebar. */
-const Keys = ({ mode }: { mode: ChooserMode }) => (
-  <dl className={keysStyles}>
-    <Key keys={["↑", "↓"]} what="Move" />
-    <Key keys={["↵"]} what="Open" />
-    <Key keys={["⌫"]} what="Up a folder" />
-    {mode === ChooserMode.OpenMultiple && <Key keys={["tab"]} what="Mark" />}
-    {(mode === ChooserMode.OpenFolder || mode === ChooserMode.Save) && (
-      <Key keys={["ctrl", "↵"]} what={confirmOf(mode)} />
-    )}
-    <Key keys={["esc"]} what="Cancel" />
-  </dl>
-);
+const Keys = ({ mode }: { mode: ChooserMode }) =>
+  mode === ChooserMode.Save ? (
+    <dl className={keysStyles}>
+      <Key keys={["↑", "↓"]} what="Pick a folder" />
+      <Key keys={["↵"]} what="Open it, or save" />
+      <Key keys={["/"]} what="Type a path" />
+      <Key keys={["esc"]} what="Cancel" />
+    </dl>
+  ) : (
+    <dl className={keysStyles}>
+      <Key keys={["↑", "↓"]} what="Move" />
+      <Key keys={["↵"]} what="Open" />
+      <Key keys={["⌫"]} what="Up a folder" />
+      {mode === ChooserMode.OpenMultiple && <Key keys={["tab"]} what="Mark" />}
+      {mode === ChooserMode.OpenFolder && (
+        <Key keys={["ctrl", "↵"]} what={confirmOf(mode)} />
+      )}
+      <Key keys={["esc"]} what="Cancel" />
+    </dl>
+  );
 
 const Key = ({ keys, what }: { keys: readonly string[]; what: string }) => (
   <div className={keyStyles}>
@@ -1150,15 +1268,18 @@ const firstOf = (rows: readonly Row[]): number =>
 /**
  * The paths the picker would return now, or `undefined` if nothing valid is
  * selected. A folder request returns the current directory; multi-select
- * returns the marks, or the highlighted file if none.
+ * returns the marks, or the highlighted file if none; a save returns the name
+ * in the current directory, unless a folder has it.
  */
 const answerOf = ({
+  clash,
   current,
   directory,
   marks,
   mode,
   name,
 }: {
+  clash: Clash;
   current: Row | undefined;
   directory: string;
   marks: readonly string[];
@@ -1177,7 +1298,9 @@ const answerOf = ({
       return [directory];
     }
     case ChooserMode.Save: {
-      return name === "" ? undefined : [pathIn(directory, name)];
+      return name === "" || clash === Clash.Folder
+        ? undefined
+        : [pathIn(directory, name)];
     }
   }
 };
@@ -1293,23 +1416,6 @@ const titleOf = (mode: ChooserMode): string => {
   }
 };
 
-const subtitleOf = (mode: ChooserMode): string => {
-  switch (mode) {
-    case ChooserMode.Open: {
-      return "Pick a file";
-    }
-    case ChooserMode.OpenMultiple: {
-      return "Pick one or more";
-    }
-    case ChooserMode.OpenFolder: {
-      return "Pick a folder";
-    }
-    case ChooserMode.Save: {
-      return "Pick where it goes";
-    }
-  }
-};
-
 const confirmOf = (mode: ChooserMode): string => {
   switch (mode) {
     case ChooserMode.Open:
@@ -1328,3 +1434,12 @@ const confirmOf = (mode: ChooserMode): string => {
 /** A row's id, for `aria-activedescendant`. */
 const rowId = (listId: string, at: number): string =>
   `${listId}-${at.toString()}`;
+
+/** Ctrl+Enter, or Cmd+Enter: confirms whatever is highlighted. */
+const isConfirmChord = (event: KeyboardEvent): boolean =>
+  event.key === "Enter" && (event.ctrlKey || event.metaKey);
+
+/** Selects the name up to its extension, so typing keeps the extension. */
+const selectStem = (event: FocusEvent<HTMLInputElement>) => {
+  event.currentTarget.setSelectionRange(0, stemEnd(event.currentTarget.value));
+};

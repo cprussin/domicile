@@ -70,6 +70,9 @@ const meta = {
           "A keyboard-first file picker drawn over its positioned parent. It lists one folder at a time through the request's `list`, and answers through `choose` or `cancel`.",
       },
     },
+    // The picker covers its parent, which the centered layout shrinks to
+    // nothing.
+    layout: "fullscreen",
   },
   tags: ["autodocs"],
   title: "Overlays/FilePicker",
@@ -97,6 +100,17 @@ export const Save: Story = {
   args: {
     ref: undefined,
     request: request({ mode: ChooserMode.Save, suggestedName: "photo.png" }),
+  },
+};
+
+export const Replace: Story = {
+  args: {
+    ref: undefined,
+    request: request({
+      currentFolder: `${HOME}/Pictures`,
+      mode: ChooserMode.Save,
+      suggestedName: "cat.png",
+    }),
   },
 };
 

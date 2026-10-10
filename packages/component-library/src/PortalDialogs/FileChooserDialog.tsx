@@ -9,6 +9,7 @@ import {
 } from "@domicile-desktop/sdk/portal";
 import { useState } from "react";
 import { css } from "../../styled-system/css";
+import { focusOnAttach } from "../_control/focusOnAttach";
 import { FilePicker } from "../FilePicker/FilePicker";
 import { ChooserMode } from "../FilePicker/file-request";
 import { useScreenRegion } from "../Screen/DisplayProvider";
@@ -29,7 +30,8 @@ type Props = {
 
 /**
  * An application's file chooser: the `FilePicker` over `screen`, or the
- * whole page, with the application's choices beside its buttons.
+ * whole page, with the application's choices beside its buttons. Its box
+ * takes the keyboard on open.
  */
 export const FileChooserDialog = ({ answer, body, list, screen }: Props) => {
   const region = useScreenRegion(screen);
@@ -39,6 +41,7 @@ export const FileChooserDialog = ({ answer, body, list, screen }: Props) => {
   return (
     <div className={regionStyles} style={region}>
       <FilePicker
+        ref={focusOnAttach}
         request={{
           accept: [],
           acceptLabel: body.acceptLabel ?? acceptOf(body.mode),
