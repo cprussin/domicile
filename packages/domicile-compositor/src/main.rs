@@ -139,6 +139,7 @@ mod portals;
 mod reply;
 mod restatement;
 mod scale;
+mod screencopy;
 mod screens;
 mod shell_config;
 mod shm_upload;
@@ -1579,6 +1580,8 @@ struct DomicileCompositor {
     turnover_deadline: Option<RegistrationToken>,
     /// Window, monitor and region streams. See [`crate::casting`].
     casting: casting::Streams,
+    /// Takes the shots Wayland capture clients copy. See [`crate::screencopy`].
+    screen_copying: casting::Casting,
     /// When the next paced cast frame is sent, if one waits.
     cast_deadline: Option<RegistrationToken>,
     /// `DOMICILE_CAST_WINDOW`: the title of a window to cast as soon as it has
@@ -6422,6 +6425,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     IdleInhibitManagerState::new::<DomicileCompositor>(&dh);
     // `parent_window` handles for portal dialogs.
     xdg_foreign::advertise(&dh);
+    // Screenshot and recording tools such as `grim` and `wf-recorder`.
+    screencopy::advertise(&dh);
 
     let mut seat_state = SeatState::new();
     let data_device_state = DataDeviceState::new::<DomicileCompositor>(&dh);
@@ -6859,6 +6864,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             streams
         },
         cast_deadline: None,
+        screen_copying: casting::Casting::new(cast_requests.clone()),
         cast_on_title: std::env::var("DOMICILE_CAST_WINDOW")
             .ok()
             .map(|title| (title, casting::Casting::new(cast_requests.clone()))),

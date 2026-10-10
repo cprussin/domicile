@@ -38,7 +38,7 @@ use crate::casting::paint::paint;
 use crate::casting::producer::{self, BufferId, StreamFormat, Target, ToPipewire, ToWayland};
 use crate::casting::region::{self, damage_in_stream, in_frame, Layout, Screen};
 use crate::casting::shots::{self, compose, desk_of, monitors, Desk, Developed, Shown};
-use crate::casting::{Candidate, Event, Listener, Request, Source, StreamId};
+use crate::casting::{Candidate, Event, Listener, Region, Request, Source, StreamId};
 use crate::engine::{CaptureId, CapturedFrame};
 
 /// A window's frame, as its commit brought it.
@@ -211,8 +211,17 @@ impl Streams {
             }
             Request::List { reply } => reply.send(open()),
             Request::Shoot { stream, developed } => {
-                let (windows, descriptions) = named(open());
-                self.shoot(stream, windows, descriptions, developed, renderer, capturer);
+                let desk = desk_of(&self.screens).ok_or_else(|| "no monitor is plugged in".into());
+                self.shoot(stream, desk, open(), developed, renderer, capturer);
+            }
+            Request::ShootMonitor {
+                stream,
+                name,
+                region,
+                developed,
+            } => {
+                let part = self.monitor_part(&name, region);
+                self.shoot(stream, part, Vec::new(), developed, renderer, capturer);
             }
             Request::ShootWindow { app_id, developed } => developed(
                 self.shown
@@ -311,14 +320,14 @@ impl Streams {
         });
     }
 
-    /// Takes a shot of the whole desk under `stream`, naming `windows` in
-    /// it. `developed` hears it once every monitor has a frame, or why it
-    /// failed.
+    /// Takes a shot of `desk`, a rectangle of the desktop, under `stream`,
+    /// naming the windows among `open` in it. `developed` hears it once every
+    /// monitor it touches has a frame, or why it failed.
     fn shoot(
         &mut self,
         stream: StreamId,
-        windows: Vec<ShotWindow>,
-        descriptions: HashMap<String, String>,
+        desk: Result<Rect, String>,
+        open: Vec<Candidate>,
         developed: Developed,
         renderer: Option<&mut GlesRenderer>,
         capturer: Option<&mut (dyn Capturer + 'static)>,
@@ -327,8 +336,9 @@ impl Streams {
             developed(Err("no engine is connected to capture the desktop".into()));
             return;
         };
-        match self.frame_the_desk(stream, capturer) {
+        match desk.and_then(|desk| self.frame_the_desk(stream, desk, capturer)) {
             Ok((desk, layout)) => {
+                let (windows, descriptions) = named(open);
                 self.shooting.push(Shooting {
                     stream,
                     desk,
@@ -343,14 +353,14 @@ impl Streams {
         }
     }
 
-    /// The desk and its layout, with the captures a shot of it draws from
+    /// `desk` and its layout, with the captures a shot of it draws from
     /// running under `stream`.
     fn frame_the_desk(
         &mut self,
         stream: StreamId,
+        desk: Rect,
         capturer: &mut (dyn Capturer + 'static),
     ) -> Result<(Rect, Layout), String> {
-        let desk = desk_of(&self.screens).ok_or("no monitor is plugged in")?;
         let layout = region::layout(desk, &self.screens).map_err(|why| why.to_string())?;
         self.captures.show(
             stream,
@@ -429,6 +439,38 @@ impl Streams {
                 (shooting.developed)(Err(why));
             }
             None => self.end(stream, Ended::Failed(why), capturer),
+        }
+    }
+
+    /// The size of a shot of `region` of monitor `name`, or all of it.
+    pub fn monitor_shot_size(
+        &self,
+        name: &str,
+        region: Option<Region>,
+    ) -> Result<(u32, u32), String> {
+        let part = self.monitor_part(name, region)?;
+        let layout = region::layout(part, &self.screens).map_err(|why| why.to_string())?;
+        Ok(layout.size)
+    }
+
+    /// The desktop rectangle of `region` of monitor `name`, cut at the
+    /// monitor's edges, or all of the monitor.
+    fn monitor_part(&self, name: &str, region: Option<Region>) -> Result<Rect, String> {
+        let monitor = self
+            .monitor(name)
+            .ok_or_else(|| format!("monitor {name} is not plugged in"))?;
+        match region {
+            None => Ok(monitor),
+            Some(Region { position, size }) => region::intersection(
+                (
+                    monitor.0 + position.0,
+                    monitor.1 + position.1,
+                    size.0,
+                    size.1,
+                ),
+                monitor,
+            )
+            .ok_or_else(|| format!("the region is off monitor {name}")),
         }
     }
 
@@ -1119,8 +1161,6 @@ mod tests {
 
     use smithay::reexports::calloop::channel::channel;
 
-    use std::collections::HashMap;
-
     use domicile_protocol::ShotWindow;
 
     use super::Streams;
@@ -1276,6 +1316,61 @@ mod tests {
     }
 
     #[test]
+    fn a_shot_of_one_monitor_draws_from_its_capture_alone_at_its_density() {
+        let (mut streams, mut engine) = (streams(), Engine::default());
+        let (developed, heard) = mpsc::channel();
+
+        streams.request(
+            Request::ShootMonitor {
+                stream: StreamId(9),
+                name: "drm-2".into(),
+                region: None,
+                developed: Box::new(move |desk| developed.send(desk).expect("heard")),
+            },
+            Vec::new,
+            None,
+            Some(&mut engine),
+        );
+        assert_eq!(engine.started, [2]);
+        streams.captured(
+            2,
+            1,
+            Ok(frame((2, 2), 20)),
+            None,
+            &mut engine,
+            Instant::now(),
+        );
+
+        let desk: Desk = heard.try_recv().expect("developed").expect("a desk");
+        let blue: Vec<u8> = desk.shot.bgra.chunks(4).map(|pixel| pixel[0]).collect();
+        assert_eq!(blue, [20, 20, 20, 20]);
+        assert_eq!(desk.place, (1, 0, 1, 1));
+        assert_eq!(engine.stopped, [2]);
+    }
+
+    #[test]
+    fn a_monitor_shot_is_the_monitors_size_at_its_density_clipped_to_it() {
+        let streams = streams();
+        let region = |x, y, width, height| {
+            Some(Region {
+                position: (x, y),
+                size: (width, height),
+            })
+        };
+
+        assert_eq!(streams.monitor_shot_size("drm-2", None), Ok((2, 2)));
+        assert_eq!(
+            streams.monitor_shot_size("drm-1", region(0, 0, 5, 5)),
+            Ok((1, 1)),
+            "a region past the monitor's edge is cut at it"
+        );
+        assert!(streams
+            .monitor_shot_size("drm-1", region(1, 0, 1, 1))
+            .is_err());
+        assert!(streams.monitor_shot_size("drm-3", None).is_err());
+    }
+
+    #[test]
     fn a_window_that_has_shown_nothing_cannot_be_shot_alone() {
         let (developed, heard) = mpsc::channel();
 
@@ -1298,8 +1393,8 @@ mod tests {
 
         streams().shoot(
             StreamId(9),
+            Ok((0, 0, 2, 1)),
             Vec::new(),
-            HashMap::new(),
             Box::new(move |desk| developed.send(desk).expect("heard")),
             None,
             None,
@@ -1314,8 +1409,8 @@ mod tests {
         let (developed, heard) = mpsc::channel();
         streams.shoot(
             StreamId(9),
+            Ok((0, 0, 2, 1)),
             Vec::new(),
-            HashMap::new(),
             Box::new(move |desk| developed.send(desk).expect("heard")),
             None,
             Some(&mut engine),
