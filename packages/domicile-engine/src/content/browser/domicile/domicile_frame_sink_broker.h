@@ -4,6 +4,8 @@
 #ifndef CONTENT_BROWSER_DOMICILE_DOMICILE_FRAME_SINK_BROKER_H_
 #define CONTENT_BROWSER_DOMICILE_DOMICILE_FRAME_SINK_BROKER_H_
 
+#include <cstdint>
+
 #include "components/domicile/mojom/external_surface.mojom.h"
 #include "content/common/content_export.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
@@ -23,8 +25,12 @@ CONTENT_EXPORT void StartDomicileFrameSinkBroker();
 
 // Binds a page to the browser's domicile::FrameSinkBroker.
 //
+// `renderer_client_id` is the client id of the page's renderer's frame sinks.
+// An embed under any other parent is a bad message.
+//
 // Call on the UI thread, after the compositor is up.
 CONTENT_EXPORT void BindDomicileExternalSurfaceProvider(
+    uint32_t renderer_client_id,
     mojo::PendingReceiver<domicile::mojom::ExternalSurfaceProvider> receiver);
 
 }  // namespace content

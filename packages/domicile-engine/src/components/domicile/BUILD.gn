@@ -705,6 +705,7 @@ source_set("unit_tests") {
     "//components/viz/service",
     "//components/viz/test:test_support",
     "//mojo/public/cpp/bindings",
+    "//mojo/public/cpp/test_support:test_utils",
     "//media",
     "//media/capture/mojom:video_capture_buffer",
     "//services/viz/privileged/mojom/compositing",

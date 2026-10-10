@@ -4,6 +4,9 @@
 #ifndef COMPONENTS_DOMICILE_BROWSER_EXTERNAL_SURFACE_PROVIDER_H_
 #define COMPONENTS_DOMICILE_BROWSER_EXTERNAL_SURFACE_PROVIDER_H_
 
+#include <cstdint>
+#include <string>
+
 #include "base/memory/raw_ptr.h"
 #include "components/domicile/mojom/external_surface.mojom.h"
 #include "components/viz/common/surfaces/frame_sink_id.h"
@@ -31,7 +34,10 @@ class ExternalSurfaceProvider : public mojom::ExternalSurfaceProvider {
 
   ~ExternalSurfaceProvider() override;
 
-  void Bind(mojo::PendingReceiver<mojom::ExternalSurfaceProvider> receiver);
+  // Binds a page in the renderer whose frame sinks have client id
+  // `renderer_client_id`.
+  void Bind(mojo::PendingReceiver<mojom::ExternalSurfaceProvider> receiver,
+            uint32_t renderer_client_id);
 
   // mojom::ExternalSurfaceProvider implementation.
   void Embed(const std::string& app_id,
@@ -44,7 +50,8 @@ class ExternalSurfaceProvider : public mojom::ExternalSurfaceProvider {
  private:
   const raw_ptr<FrameSinkBroker> broker_;
 
-  mojo::ReceiverSet<mojom::ExternalSurfaceProvider> receivers_;
+  // Each receiver's context is its renderer's frame sink client id.
+  mojo::ReceiverSet<mojom::ExternalSurfaceProvider, uint32_t> receivers_;
 };
 
 }  // namespace domicile
