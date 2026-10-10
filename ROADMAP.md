@@ -173,7 +173,8 @@ Evidence is in [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md),
     address bar; Settings and History open this way. Left: showing the
     address off the app's origin, `domicile install-app` from a web app
     manifest, and a home-manager option for desktop entries.
-    No guard checks the engine lists an app window with `isApp`.
+    No guard checks the engine lists an app window with `isApp`, or that it
+    records no visits.
     [WEB-APPS.md](docs/architecture/WEB-APPS.md).
 
 ## In the engine fork (the agent on `crux`)
