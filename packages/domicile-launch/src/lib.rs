@@ -38,6 +38,7 @@ pub mod control_socket;
 pub mod graphical_session;
 pub mod handshake;
 pub mod heard;
+pub mod media_devices;
 pub mod milestones;
 pub mod notification;
 pub mod platform;

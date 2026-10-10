@@ -3,8 +3,8 @@
 //! The app is an extension, so it cannot read files. Chrome starts this host
 //! for it and the two exchange messages over the host's stdin and stdout. The
 //! host asks the running desktop which files to edit ([`Request::SettingsFiles`])
-//! rather than taking a path from the page, and forwards site permissions and
-//! extensions to the engine through the desktop. See `docs/SETTINGS.md`.
+//! rather than taking a path from the page, and forwards site permissions,
+//! extensions and media devices to the engine through the desktop. See `docs/SETTINGS.md`.
 //!
 //! ```text
 //! {"id":1,"type":"read"}
@@ -21,6 +21,10 @@
 //!   {"id":6,"type":"uninstalled"}
 //! {"id":7,"type":"config_extensions"}
 //!   {"id":7,"type":"config_extensions","ids":["…"]}
+//! {"id":8,"type":"media_devices"}
+//!   {"id":8,"type":"media_devices","cameras":[{"id":…,"name":…}],"microphones":[…]}
+//! {"id":9,"type":"set_media_device","kind":"camera","device":"…"}
+//!   {"id":9,"type":"stored"}
 //! any request
 //!   {"id":…,"type":"refused","why":"…"}
 //! pushed when a file changes on disk
@@ -36,6 +40,7 @@ use serde_json::{json, Value};
 
 use crate::config_path::is_module;
 use crate::control::{Request, Response, SettingsFiles};
+use crate::media_devices::MediaKind;
 use crate::site_permissions::SitePermission;
 
 /// The largest message Chrome accepts from a host.
@@ -120,6 +125,9 @@ enum AppRequest {
     // `extension`, since the message's own `id` is the request's.
     UninstallExtension { extension: String },
     ConfigExtensions,
+    MediaDevices,
+    // `device`, since the message's own `id` is the request's.
+    SetMediaDevice { kind: MediaKind, device: String },
 }
 
 /// Which file a write replaces.
@@ -192,6 +200,20 @@ fn carry_out(request: AppRequest, host: &Host) -> Result<Value, String> {
             }
             other => Err(refusal_or_surprise(other)),
         },
+        AppRequest::MediaDevices => match (host.ask)(&Request::MediaDevices)? {
+            Response::MediaDevices(devices) => Ok(json!({
+                "type": "media_devices",
+                "cameras": devices.cameras,
+                "microphones": devices.microphones,
+            })),
+            other => Err(refusal_or_surprise(other)),
+        },
+        AppRequest::SetMediaDevice { kind, device } => {
+            match (host.ask)(&Request::SetMediaDevice { kind, id: device })? {
+                Response::Stored => Ok(json!({"type": "stored"})),
+                other => Err(refusal_or_surprise(other)),
+            }
+        }
     }
 }
 
