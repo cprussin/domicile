@@ -3864,6 +3864,12 @@ impl DomicileCompositor {
         }
         if let Some(theme) = &restated.appearance {
             self.hub.portals.restyle(theme);
+            if let Some(tray) = self.hub.tray.get() {
+                tray.retheme(theme.icon_theme.clone());
+            }
+            if let Some(server) = self.hub.notifications.get() {
+                server.retheme(theme.icon_theme.clone());
+            }
             // Release the host before broadcasting.
             let told = self
                 .hub
@@ -6510,11 +6516,14 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     // Notifications, from the bus and from the portal. Published once the hub
     // exists. See `notifications`.
-    let notification_server = notifications::serve(data_dirs(
-        std::env::var_os("XDG_DATA_HOME"),
-        std::env::var_os("XDG_DATA_DIRS"),
-        home_directory().as_deref(),
-    ));
+    let notification_server = notifications::serve(
+        data_dirs(
+            std::env::var_os("XDG_DATA_HOME"),
+            std::env::var_os("XDG_DATA_DIRS"),
+            home_directory().as_deref(),
+        ),
+        config.theme.icon_theme.clone(),
+    );
     // State shared by the Wayland thread and chrome connections.
     let (hub, outbound_rx) = ChromeHub::new(
         request_tx,
@@ -6576,6 +6585,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             std::env::var_os("XDG_DATA_DIRS"),
             home_directory().as_deref(),
         ),
+        config.theme.icon_theme.clone(),
         move |items| {
             // Release the host before broadcasting.
             let told = publishing.host.lock().unwrap().set_tray(items);

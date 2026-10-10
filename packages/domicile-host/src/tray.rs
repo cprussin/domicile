@@ -12,6 +12,7 @@ use std::path::{Path, PathBuf};
 use domicile_protocol::{TrayAction, TrayItem};
 
 use crate::data_url::data_url;
+use crate::icon_theme;
 use crate::png::png;
 
 /// The object path of an item registered by bus name alone.
@@ -20,17 +21,17 @@ const ITEM_PATH: &str = "/StatusNotifierItem";
 /// The `Menu` KDE's items give when they have none.
 const NO_MENU: &str = "/NO_DBUSMENU";
 
-/// The preferred pixmap width: a tray icon's size at a scale of 2. The
-/// smallest pixmap at least this wide wins, so the page only scales down.
-const WANTED_PIXELS: i32 = 32;
+/// The size, in CSS pixels, and the scale tray icons are looked up at. Panels
+/// draw them at about 16 pixels; a scale of 2 keeps them sharp on HiDPI
+/// screens, and the page only scales down.
+const LOOKED_UP_AT: (i64, i64) = (16, 2);
 
-/// Icon theme sizes to search, panel sizes first.
-const SIZES: &[&str] = &[
-    "22x22", "24x24", "scalable", "32x32", "16x16", "48x48", "64x64", "256x256",
-];
+/// The preferred pixmap width: a tray icon's size in pixels. The smallest
+/// pixmap at least this wide wins.
+const WANTED_PIXELS: i32 = (LOOKED_UP_AT.0 * LOOKED_UP_AT.1) as i32;
 
-/// Icon theme categories to search. Most tray icons are in `status`.
-const CATEGORIES: &[&str] = &["status", "apps", "devices", "panel"];
+/// Icon theme contexts to search. Most tray icons are in `status`.
+const CONTEXTS: &[&str] = &["status", "apps", "devices", "panel"];
 
 /// An item's `Status` property.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -307,21 +308,31 @@ fn pixmap(pixmaps: &[Pixmap]) -> Option<String> {
 
 /// Tray icon lookup by name in the XDG data directories.
 ///
-/// Searches `hicolor`, then `pixmaps`, after an item's own directory.
-/// Results, including misses, are cached for the compositor's
-/// lifetime: an item that changes its icon uses a new name.
+/// Searches an item's own directory, then the icon theme, its parents and
+/// `hicolor` (see [`icon_theme`]), then `pixmaps`. Results, including misses,
+/// are cached until the theme changes: an item that changes its icon uses a
+/// new name.
 pub struct TrayIcons {
     data_dirs: Vec<PathBuf>,
+    theme: Option<String>,
     found: HashMap<(String, String), Option<String>>,
 }
 
 impl TrayIcons {
-    /// Look up icons under `data_dirs`, highest priority first.
-    pub fn new(data_dirs: Vec<PathBuf>) -> Self {
+    /// Look up icons under `data_dirs`, highest priority first, in the icon
+    /// theme `theme`, or `hicolor` alone for `None`.
+    pub fn new(data_dirs: Vec<PathBuf>, theme: Option<String>) -> Self {
         TrayIcons {
             data_dirs,
+            theme,
             found: HashMap::new(),
         }
+    }
+
+    /// Look up icons in the icon theme `theme` from now on.
+    pub fn retheme(&mut self, theme: Option<String>) {
+        self.theme = theme;
+        self.found.clear();
     }
 
     /// Icon `name` as a `data:` URL, searching `theme_path` first. `None` for
@@ -343,39 +354,39 @@ impl TrayIcons {
         if Path::new(name).is_absolute() {
             return read(Path::new(name));
         }
-        // Applications use their own directory as either a theme root or a
+        // Applications use their own directory as either a theme base or a
         // flat pixmap directory, so search it as both.
         let own: Vec<PathBuf> = (!theme_path.is_empty())
             .then(|| PathBuf::from(theme_path))
             .into_iter()
             .collect();
-        let own_themed = own.iter().flat_map(|root| themed(root.join("hicolor")));
-        let system_themed = self
-            .data_dirs
+        let bases: Vec<PathBuf> = own
             .iter()
-            .flat_map(|dir| themed(dir.join("icons/hicolor")));
-        let pixmaps = self.data_dirs.iter().map(|dir| dir.join("pixmaps"));
-        own.iter()
             .cloned()
-            .chain(own_themed)
-            .chain(system_themed)
-            .chain(pixmaps)
-            .find_map(|dir| {
+            .chain(self.data_dirs.iter().map(|dir| dir.join("icons")))
+            .collect();
+        let flat = |dirs: Vec<PathBuf>| {
+            dirs.into_iter().flat_map(|dir| {
                 KINDS
                     .iter()
-                    .find_map(|(ext, _)| read(&dir.join(format!("{name}.{ext}"))))
+                    .map(move |(ext, _)| dir.join(format!("{name}.{ext}")))
             })
+        };
+        flat(own)
+            .chain(flat(icon_theme::directories(
+                &bases,
+                self.theme.as_deref(),
+                CONTEXTS,
+                LOOKED_UP_AT,
+            )))
+            .chain(flat(
+                self.data_dirs
+                    .iter()
+                    .map(|dir| dir.join("pixmaps"))
+                    .collect(),
+            ))
+            .find_map(|path| read(&path))
     }
-}
-
-/// The directories of the theme at `root` to search, panel sizes first.
-fn themed(root: PathBuf) -> impl Iterator<Item = PathBuf> {
-    SIZES.iter().flat_map(move |size| {
-        let root = root.clone();
-        CATEGORIES
-            .iter()
-            .map(move |category| root.join(size).join(category))
-    })
 }
 
 /// Supported extensions and their MIME types.

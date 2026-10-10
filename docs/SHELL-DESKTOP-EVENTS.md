@@ -38,7 +38,8 @@ domicile.addEventListener("displayschanged", show);
   `@domicile-desktop/sdk/appearance` reads them now and on each change. `applyAppearance` in
   `@domicile-desktop/component-library/appearance` applies them to the preset:
   the `accent` token, the `_contrastHigh` condition and shortened animations.
-- `theme.icon_theme` goes to the settings portal only. `readIconTheme` and
+- `theme.icon_theme` goes to the settings portal, and draws the tray's and
+  notifications' icons. `readIconTheme` and
   `watchIconTheme` in `@domicile-desktop/sdk/icon-theme` read it from there,
   `watchIconTheme` again on each `SettingChanged`.
 - `prefers-color-scheme` in the shell's page follows it.

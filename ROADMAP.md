@@ -415,10 +415,6 @@ Understood and not scheduled.
   right click and sends `Activate` on left click. Items that set `ItemIsMenu`
   expect left click to open the menu, but `TrayItem` does not carry it; adding
   it changes the protocol, the compositor and the engine's IDL.
-- **Tray bar icons ignore `theme.icon_theme`.** The compositor names them from
-  `hicolor` and the item's `IconThemePath` (`domicile_host::tray`), as it does
-  notification icons. Following the theme needs `index.theme` parsing in
-  Rust, as `@domicile-desktop/system-apps/app-icons` does in TypeScript.
 
 ### Shell reload
 

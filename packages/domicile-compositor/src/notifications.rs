@@ -101,8 +101,14 @@ impl NotificationServer {
         let (told, _) = channel();
         NotificationServer {
             told,
-            store: Arc::new(Store::new(data_dirs)),
+            store: Arc::new(Store::new(data_dirs, None)),
         }
+    }
+
+    /// Look up icons in the icon theme `theme` from now on. Notifications
+    /// already held keep their pictures.
+    pub fn retheme(&self, theme: Option<String>) {
+        self.store.held.lock().unwrap().notifications.retheme(theme);
     }
 
     /// Call `publish` with the notifications now and whenever they change.
@@ -170,13 +176,14 @@ impl NotificationServer {
     }
 }
 
-/// Start the notification server. Icons are looked up under `data_dirs`.
+/// Start the notification server. Icons are looked up under `data_dirs`, in
+/// the icon theme `theme`.
 ///
 /// Returns once the thread is spawned, like [`crate::tray::serve`].
 /// [`NotificationServer::listen`] says where the notifications go.
-pub fn serve(data_dirs: Vec<PathBuf>) -> NotificationServer {
+pub fn serve(data_dirs: Vec<PathBuf>, theme: Option<String>) -> NotificationServer {
     let (told, events) = channel();
-    let store = Arc::new(Store::new(data_dirs));
+    let store = Arc::new(Store::new(data_dirs, theme));
     let serving = Arc::clone(&store);
     thread::spawn(move || {
         if let Err(why) = answer(serving, &events) {
@@ -215,10 +222,10 @@ enum Pressed {
 }
 
 impl Store {
-    fn new(data_dirs: Vec<PathBuf>) -> Self {
+    fn new(data_dirs: Vec<PathBuf>, theme: Option<String>) -> Self {
         Store {
             held: Mutex::new(Held {
-                notifications: Notifications::new(TrayIcons::new(data_dirs)),
+                notifications: Notifications::new(TrayIcons::new(data_dirs, theme)),
                 portal: PortalNotifications::default(),
             }),
             publish: OnceLock::new(),
@@ -509,6 +516,42 @@ mod tests {
             expire_timeout: -1,
             ..Notify::default()
         }
+    }
+
+    #[test]
+    fn a_new_icon_theme_draws_the_next_notification() {
+        let dir = tempfile::tempdir().unwrap();
+        let papirus = dir.path().join("icons/Papirus");
+        std::fs::create_dir_all(papirus.join("48x48/apps")).unwrap();
+        std::fs::write(
+            papirus.join("index.theme"),
+            "[Icon Theme]\nDirectories=48x48/apps\n[48x48/apps]\nSize=48\nContext=Applications\n",
+        )
+        .unwrap();
+        std::fs::write(papirus.join("48x48/apps/thunderbird.svg"), "<svg/>").unwrap();
+        let server = NotificationServer::unserved(vec![dir.path().to_path_buf()]);
+
+        server.retheme(Some("Papirus".into()));
+        let id = server.store.change(|held| {
+            held.notifications
+                .notify(
+                    Notify {
+                        app_icon: "thunderbird".into(),
+                        ..bus_notify("Mail")
+                    },
+                    0,
+                )
+                .id
+        });
+
+        let icon = server.store.change(|held| {
+            held.notifications
+                .items()
+                .into_iter()
+                .find(|shown| shown.id == id)
+                .and_then(|shown| shown.icon)
+        });
+        assert_eq!(icon, Some("data:image/svg+xml;base64,PHN2Zy8+".into()));
     }
 
     #[test]
