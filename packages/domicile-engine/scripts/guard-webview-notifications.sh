@@ -1,27 +1,29 @@
 #!/usr/bin/env bash
-# Checks that a page in a browser window is granted notifications without a
-# prompt (patch 0068). See packages/domicile-engine/docs/GUARDS.md.
+# Checks that a page in a browser window must ask before it notifies, even in a
+# profile that stores an allow-all default (patch 0105). See
+# packages/domicile-engine/docs/GUARDS.md.
 #
 #   nix develop .#full --command \
 #     ./packages/domicile-engine/scripts/guard-webview-notifications.sh /build/chromium/src
 #
-# Chromium asks with a permission bubble, which has no browser window to attach
-# to on this desktop, so requests go unanswered. Patch 0068 makes the profile
-# default allow.
+# A profile may store an allow-all default, which lets any site notify from the
+# background. Patch 0105 resets it to ask at startup, and the shell answers the
+# prompt (patch 0103).
 #
 # Runs headless with software compositing. Delivery to
 # org.freedesktop.Notifications is the compositor's and is tested there.
 #
-# Passes when the page's color appears: the page paints it only if
-# navigator.permissions reports notifications as "granted".
+# Each run seeds the profile's default for the permission the page asks about
+# to allow. Passes when the page's color appears: the page paints it only if
+# navigator.permissions reports the permission as "prompt".
 #
 # NEGATIVE=1 is the control, two runs:
 #
 #   1. The page paints the color without asking. It must show, so the probe can
 #      see a guest's color.
-#   2. The page asks about geolocation, which is not granted. It must not show,
-#      so the positive run reflects the default and not a page that always
-#      paints.
+#   2. The page asks about geolocation, seeded the same way. It must not show,
+#      so the engine reads the seeded default and the positive run reflects the
+#      reset, not a seed that was ignored.
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
@@ -42,7 +44,7 @@ fi
 
 NEGATIVE="${NEGATIVE:-0}"
 
-# The granted page's color and the shell's background. Both are distinct from
+# The asking page's color and the shell's background. Both are distinct from
 # other guards' colors and from browser backgrounds.
 COLOR="${COLOR:-6B3FA0}"
 WITNESS="${WITNESS:-3A5A40}"
@@ -92,7 +94,13 @@ measure() { # $1 which run, $2 the permission the page asks about
 
   rm -f "$BROKER"
   rm -rf "$PROFILE"
-  mkdir -p "$PROFILE"
+  mkdir -p "$PROFILE/Default"
+  # The allow-all default a profile may hold. `none` asks about nothing, so it
+  # seeds nothing.
+  if [ "$permission" != "none" ]; then
+    printf '{"profile":{"default_content_setting_values":{"%s":1}}}\n' \
+      "$permission" >"$PROFILE/Default/Preferences"
+  fi
 
   rm -f "$engine_log"
   "$CHROMIUM/$OUT/chrome" \
@@ -180,13 +188,13 @@ FAILURE=""
 PASSED=""
 case "$MEASURED" in
 "notifications 0")
-  PASSED="a page in a browser window reads notifications as granted, so no \
-prompt stands between a site and the desktop's notifications"
+  PASSED="a page in a browser window reads notifications as \"prompt\" in a \
+profile that stored allow, so a site asks the shell before it notifies"
   ;;
 "notifications 1")
   FAILURE="the shell drew but the page's color did not: notifications are not \
-granted -- the profile's default is not allow (patch 0068) -- or the guest \
-never loaded; the server's log says which"
+\"prompt\" -- the profile's stored allow survived startup (patch 0105) -- or \
+the guest never loaded; the server's log says which"
   ;;
 "notifications 2")
   FAILURE="nothing was measured: the shell's own background never appeared, \
@@ -198,13 +206,13 @@ measurement here of any kind"
   ;;
 "control 0 1")
   PASSED="the control is sharp: a page that paints unasked showed, and one \
-asking about a permission nothing granted did not, so the claim's color is \
-the default patch 0068 sets"
+asking about a geolocation seeded to allow did not, so the engine reads the \
+seed and the claim's color is the reset patch 0105 makes"
   ;;
 "control 0 0")
-  FAILURE="a page asking about geolocation was told it was granted, so this \
-profile grants what it is asked and the claim's color says nothing about \
-notifications"
+  FAILURE="a page asking about geolocation read \"prompt\" though the profile \
+was seeded to allow it, so the seeded profile was not read and the claim's \
+color says nothing about the reset"
   ;;
 "control 0 2")
   FAILURE="the geolocation leg measured nothing: its own shell never drew, so \
