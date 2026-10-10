@@ -294,8 +294,9 @@ frame.addEventListener(WEBVIEW_PERMISSION_REQUEST_EVENT, (event) => {
   is ignored.
 - **Hidden windows wait.** A request is asked when its window is shown.
 - **Site settings:** `view.sitePermissions()` maps each permission to `ask`,
-  `allow` or `block` for the page's site, `{}` for a page that is not `http` or
-  `https`. `view.setSitePermission(permission, setting)` stores one.
+  `allow` or `block` for the page's site, `{}` for a page that is not `http`,
+  `https` or `chrome-extension`. An extension's pages share one origin, so a
+  choice made in a browser window holds in its action popup. `view.setSitePermission(permission, setting)` stores one.
   `domicile-site-permissions-change` signals a change.
 - **Notifications** default to `ask`, like the rest
   ([NOTIFICATIONS.md](/docs/architecture/NOTIFICATIONS.md)).
