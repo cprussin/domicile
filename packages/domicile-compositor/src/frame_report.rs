@@ -8,8 +8,8 @@ use std::time::{Duration, Instant};
 
 use tracing::debug;
 
+use crate::chrome_hub::ChromeHub;
 use crate::timing_window::TimingWindow;
-use crate::ChromeHub;
 
 /// How often the writer thread reports frame timings.
 pub const REPORT_EVERY: Duration = Duration::from_secs(5);
