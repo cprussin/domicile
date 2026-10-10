@@ -959,20 +959,21 @@ void ControlChannel::DispatchLine(const std::string& line) {
       }
       // An icon with no id or bus is one no click could reach, and one with no
       // title is one nothing could label: dropped, like a clipboard row
-      // missing either half. The picture and the menu are optional -- the
-      // compositor leaves them out for an item with none -- and are carried as
-      // empty.
+      // missing either half, as is one that does not say whether it is only a
+      // menu. The picture and the menu are optional -- the compositor leaves
+      // them out for an item with none -- and are carried as empty.
       const std::string* id = item->FindString("id");
       const std::string* title = item->FindString("title");
       const std::string* bus = item->FindString("bus");
-      if (!id || !title || !bus) {
+      const std::optional<bool> item_is_menu = item->FindBool("item_is_menu");
+      if (!id || !title || !bus || !item_is_menu) {
         continue;
       }
       const std::string* icon = item->FindString("icon");
       const std::string* menu = item->FindString("menu");
       items.push_back(mojom::TrayItem::New(
           *id, *title, icon ? *icon : std::string(), *bus,
-          menu ? *menu : std::string()));
+          menu ? *menu : std::string(), *item_is_menu));
     }
     // Sent even when it is empty, for `clipboard`'s reason: a tray with
     // nothing in it is an answer.

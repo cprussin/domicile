@@ -30,4 +30,8 @@
   // empty for an icon with none. A shell draws the menu itself, with D-Bus
   // calls through callSystem().
   readonly attribute DOMString menu;
+
+  // The icon's `ItemIsMenu`: it only has a menu, so a shell opens the menu on
+  // the primary button rather than activating it.
+  readonly attribute boolean itemIsMenu;
 };

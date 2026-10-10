@@ -28,6 +28,7 @@ const network: DomicileTrayItem = {
   bus: ":1.42",
   icon: "data:image/png;base64,iVBORw0KGgo=",
   id: ":1.42/org/ayatana/nm",
+  itemIsMenu: false,
   menu: "/MenuBar",
   title: "Wired connection 1",
 };
@@ -37,6 +38,7 @@ const sync: DomicileTrayItem = {
   bus: "org.kde.StatusNotifierItem-4071-1",
   icon: "",
   id: "org.kde.StatusNotifierItem-4071-1/StatusNotifierItem",
+  itemIsMenu: false,
   menu: "",
   title: "Syncthing",
 };
@@ -222,6 +224,14 @@ describe("TrayIcon", () => {
       ).toBe(false);
     });
 
+    it("asks a menuless icon that is only a menu for its menu on the primary button", async () => {
+      const click = iconOf({ ...sync, itemIsMenu: true });
+
+      fireEvent.click(screen.getByRole("button", { name: sync.title }));
+
+      expect(await click).toStrictEqual([sync.id, "context"]);
+    });
+
     it("secondary-activates an icon on the middle button", async () => {
       const click = iconOf(network);
 
@@ -254,6 +264,24 @@ describe("TrayIcon", () => {
         ["watch", ":1.42/MenuBar"],
         ["aboutToShow", 0],
       ]);
+    });
+
+    it("opens on the primary button for an icon that is only a menu", async () => {
+      const { watch } = watching(Ok(MENU));
+      render(
+        <TrayIcon
+          domicile={NO_DOMICILE}
+          icons={themed({})}
+          item={{ ...network, itemIsMenu: true }}
+          watch={watch}
+        />,
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: network.title }));
+
+      expect(
+        await screen.findByRole("menu", { name: network.title }),
+      ).toBeInTheDocument();
     });
 
     it("clicks the entry chosen, then closes and stops watching", async () => {

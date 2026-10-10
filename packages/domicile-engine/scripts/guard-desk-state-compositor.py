@@ -22,8 +22,9 @@ SEQUENCE = [
     {"type": "clipboard", "entries": [{"id": 7, "preview": "hello"}]},
     {"type": "tray", "items": [
         {"id": "nm", "title": "Network", "icon": "", "bus": ":1.42",
-         "menu": "/MenuBar"},
-        {"id": "sync", "title": "Sync", "bus": "org.kde.StatusNotifierItem-7-1"},
+         "menu": "/MenuBar", "item_is_menu": False},
+        {"id": "sync", "title": "Sync", "bus": "org.kde.StatusNotifierItem-7-1",
+         "item_is_menu": True},
         # No bus: nothing could reach it, so the browser drops it.
         {"id": "lost", "title": "Lost"},
     ]},
