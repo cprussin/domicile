@@ -239,22 +239,15 @@ Evidence is in [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md),
    before item 2's compositor restart can work.
    [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md#open-questions).
 
-9. **The renderer's parent frame sink is not checked.**
-   `ExternalSurfaceProvider` is bound as a free function, so the browser does
-   not verify that the renderer owns the parent frame sink it names
-   (`EmbeddedFrameSinkProviderImpl` does). Plan: bind through
-   `RenderProcessHostImpl` to get the renderer's child process id.
-   [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md#open-questions).
-
-10. **Keeping the fork current.** The fork is a patch series on the Chromium
-    named in `CHROMIUM_PIN`. A Chromium security fix reaches users only in a
-    new engine release, by moving the pin or carrying the fix as a patch.
-    Moving the pin rebases every patch and rebuilds on `crux`, the one build
-    machine ([Engine CI](#engine-ci)).
-    See [BUILDING-CHROMIUM.md](packages/domicile-engine/docs/BUILDING-CHROMIUM.md#rolling-the-pin),
-    [BUILD-MACHINE.md](packages/domicile-engine/docs/BUILD-MACHINE.md),
-    [RELEASES.md](packages/domicile-engine/docs/RELEASES.md) and
-    [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md).
+9. **Keeping the fork current.** The fork is a patch series on the Chromium
+   named in `CHROMIUM_PIN`. A Chromium security fix reaches users only in a
+   new engine release, by moving the pin or carrying the fix as a patch.
+   Moving the pin rebases every patch and rebuilds on `crux`, the one build
+   machine ([Engine CI](#engine-ci)).
+   See [BUILDING-CHROMIUM.md](packages/domicile-engine/docs/BUILDING-CHROMIUM.md#rolling-the-pin),
+   [BUILD-MACHINE.md](packages/domicile-engine/docs/BUILD-MACHINE.md),
+   [RELEASES.md](packages/domicile-engine/docs/RELEASES.md) and
+   [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md).
 
 ## Known gaps
 
