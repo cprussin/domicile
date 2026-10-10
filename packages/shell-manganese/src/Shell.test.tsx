@@ -2369,9 +2369,7 @@ describe("Shell", () => {
       clientAppears("term");
       press("Tab", true);
       pageHolds({});
-      const was = Number.parseFloat(
-        barFor(container, "app:term").style.inlineSize,
-      );
+      const was = Number.parseFloat(floatShadow(container).style.inlineSize);
 
       fireEvent.pointerDown(rightBorder(container), {
         clientX: 100,
@@ -2380,9 +2378,9 @@ describe("Shell", () => {
       fireEvent.pointerMove(window, { clientX: 140, clientY: 130 });
       fireEvent.pointerUp(window, { clientX: 140, clientY: 130 });
 
-      expect(
-        Number.parseFloat(barFor(container, "app:term").style.inlineSize),
-      ).toBe(was + 40);
+      expect(Number.parseFloat(floatShadow(container).style.inlineSize)).toBe(
+        was + 40,
+      );
     });
 
     it("keeps a float's glow on it while it is dragged rather than easing after it", () => {

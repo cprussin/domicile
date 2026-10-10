@@ -18,7 +18,7 @@ import { floatHolds, limitedTo, movedTo } from "./floating/float";
 import type { Popup } from "./popup";
 import type { Rect } from "./rect";
 import type { Layout } from "./tree/node";
-import { NodeKind } from "./tree/node";
+import { windowsIn } from "./tree/node";
 import type { ClientWindow, ShellWindow, SizeLimit } from "./window";
 import {
   appWindowId,
@@ -1692,7 +1692,7 @@ const homeOf = (
 };
 
 /**
- * Clamps each single-window float to its client's size limits (see
+ * Clamps each float holding one window to its client's size limits (see
  * `limitedTo`).
  *
  * Runs after every action because a client can report limits after it
@@ -1716,10 +1716,10 @@ const limitedFloats = (
   workspace: Workspace,
 ): Workspace => {
   const floats = workspace.floats.map((float) => {
-    const { root } = float;
+    const [only, ...others] = windowsIn(float.root);
     const window =
-      root.kind === NodeKind.Window
-        ? after.windows.find(({ id }) => id === root.id)
+      others.length === 0
+        ? after.windows.find(({ id }) => id === only)
         : undefined;
     return window?.kind === WindowKind.App
       ? limitedTo(

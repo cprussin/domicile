@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import { Axis, Direction } from "./direction";
 import { FLOAT_STEP } from "./floating/float";
-import { Layout, NodeKind, windowsIn } from "./tree/node";
+import { Layout, LayoutNode as Node, NodeKind, windowsIn } from "./tree/node";
 import { focusedNodeOf, focusedWindowIn, windowsOf } from "./tree/tiling";
 import type { Workspace } from "./workspace";
 import {
@@ -42,11 +42,13 @@ describe("opened", () => {
     expect(focusedOn(workspace)).toBe("b");
   });
 
-  it("tiles a window even while a float is being worked in", () => {
-    // Matches sway: a new window tiles even while a lone float has focus.
+  it("opens as a tab in a floated window's container", () => {
     const workspace = opened(floatToggled(tiling("a"), SCREEN), "b");
 
-    expect(windowsOf(workspace.tiling)).toEqual(["b"]);
+    expect(windowsOf(workspace.tiling)).toEqual([]);
+    expect(workspace.floats.map(({ root }) => root)).toEqual([
+      Node.Container(Layout.Tabbed, [Node.Window("a"), Node.Window("b")], 1),
+    ]);
     expect(focusedOn(workspace)).toBe("b");
   });
 
@@ -97,14 +99,24 @@ describe("floatToggled", () => {
     expect(focusedOn(workspace)).toBe("b");
   });
 
-  it("puts it back where the tiling focus is", () => {
+  it("floats a lone window in a tabbed container", () => {
+    const workspace = floatToggled(tiling("a", "b"), SCREEN);
+
+    expect(workspace.floats.map(({ root }) => root)).toEqual([
+      Node.Container(Layout.Tabbed, [Node.Window("b")]),
+    ]);
+  });
+
+  it("puts it back where the tiling focus is, without its tabbed container", () => {
     const workspace = floatToggled(
       floatToggled(tiling("a", "b"), SCREEN),
       SCREEN,
     );
 
     expect(workspace.floats).toEqual([]);
-    expect(windowsOf(workspace.tiling)).toEqual(["a", "b"]);
+    expect(workspace.tiling.root).toMatchObject({
+      children: [Node.Window("a"), Node.Window("b")],
+    });
     expect(focusedOn(workspace)).toBe("b");
   });
 
