@@ -128,6 +128,7 @@ describe("the desk's browser windows", () => {
   const EXAMPLE: DomicileBrowserWindow = {
     height: 0,
     id: "1",
+    isApp: false,
     isPrivate: false,
     popupWindow: null,
     title: "",

@@ -12,7 +12,7 @@ extensions and its site permissions. See [SETTINGS.md](/docs/SETTINGS.md).
   sets from the desktop.
 
 The manifest's `key` pins the id, so
-`domicile open-url chrome-extension://acpgnhiblklkgbkcjgbabkcmdmchdphk/settings.html`
+`domicile open-app chrome-extension://acpgnhiblklkgbkcjgbabkcmdmchdphk/settings.html`
 opens it, and the host's manifest lets only this id start it.
 
 ## Layout

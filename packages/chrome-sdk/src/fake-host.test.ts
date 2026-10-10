@@ -73,17 +73,26 @@ describe("FakeDomicileHost", () => {
     });
 
     fake.host.openBrowserWindow("https://example.com");
-    fake.openBrowser("chrome-extension://vault/popup.html", 7);
+    fake.openBrowser("chrome-extension://vault/popup.html", {
+      popupWindow: 7,
+    });
+    fake.openBrowser("chrome-extension://notes/index.html", { isApp: true });
     fake.host.closeBrowserWindow("1");
 
     expect(fake.host.browserWindows).toMatchObject([
-      { id: "2", popupWindow: 7, url: "chrome-extension://vault/popup.html" },
+      {
+        id: "2",
+        isApp: false,
+        popupWindow: 7,
+        url: "chrome-extension://vault/popup.html",
+      },
+      { id: "3", isApp: true, url: "chrome-extension://notes/index.html" },
     ]);
     expect(fake.calls).toStrictEqual([
       ["openBrowserWindow", "https://example.com"],
       ["closeBrowserWindow", "1"],
     ]);
-    expect(changed).toBe(3);
+    expect(changed).toBe(4);
   });
 
   it("opens private browser windows as the engine does", () => {

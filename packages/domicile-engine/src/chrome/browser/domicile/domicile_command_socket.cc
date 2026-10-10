@@ -121,10 +121,11 @@ bool LoadShellIntoTheShellWindow(const base::FilePath& root,
   return true;
 }
 
-// Opens a browser window at `url`, as for a page's target="_blank". The shell
-// sees it in its window list. See domicile_browser_windows.h.
-bool OpenUrlInABrowserWindow(const GURL& url) {
-  return OpenBrowserWindow(url);
+// Opens a browser window at `url`, as for a page's target="_blank", or with
+// `app` an app window. The shell sees it in its window list. See
+// domicile_browser_windows.h.
+bool OpenUrlInABrowserWindow(const GURL& url, bool app) {
+  return OpenBrowserWindow(url, app);
 }
 
 // The site settings of the shell's profile, which browser windows share, or

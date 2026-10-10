@@ -1451,7 +1451,8 @@ void DomicileHost::WindowsChanged(
         window->id, window->url.GetString(), window->title,
         window->popup_window == 0 ? std::nullopt
                                   : std::optional<int32_t>(window->popup_window),
-        window->width, window->height, window->private_browsing));
+        window->width, window->height, window->private_browsing,
+        window->app));
   }
   browser_windows_ = MakeGarbageCollected<FrozenArray<DomicileBrowserWindow>>(
       std::move(listed));

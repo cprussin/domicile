@@ -103,6 +103,24 @@ fn a_desktop_told_to_open_an_address_tells_the_engine() {
 }
 
 #[test]
+fn a_desktop_told_to_open_an_app_tells_the_engine() {
+    let told = Cell::new(None);
+    let answered = reply_to(
+        "{\"type\":\"open_app\",\"url\":\"https://example.com/\"}",
+        &Desktop {
+            open_app: &|url| {
+                told.set(Some(url.to_string()));
+                Ok(())
+            },
+            ..nothing_dialed()
+        },
+    );
+
+    assert_eq!(told.take(), Some("https://example.com/".to_string()));
+    assert_eq!(answered, Response::Opened);
+}
+
+#[test]
 fn an_engine_that_would_not_open_the_address_is_quoted() {
     let Response::Refused { why } = answered_opening(
         "{\"type\":\"open_url\",\"url\":\"https://example.com/\"}",
@@ -309,7 +327,8 @@ fn nothing_dialed() -> Desktop<'static> {
         files: &NO_FILES,
         load: &|_, _| panic!("only load_shell loads anything"),
         module: Path::new("/shell.js"),
-        open: &|_| panic!("only open_url opens anything"),
+        open: &|_| panic!("only open_url opens a browser window"),
+        open_app: &|_| panic!("only open_app opens an app window"),
         permissions: &|| panic!("only site_permissions lists site permissions"),
         send: &|_| panic!("only send_shell sends anything"),
         set_permission: &|_| panic!("only set_site_permission sets one"),

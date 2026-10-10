@@ -87,6 +87,8 @@ export const ShellWindow = {
    * - `popupWindow`: the `chrome.windows` id of the extension popup window
    *   whose one tab this is. Drawn without an address bar, as in Chrome.
    * - `isPrivate`: whether the page is private. Its address bar says so.
+   * - `isApp`: whether this is an app window (`domicile open-app`). Drawn
+   *   without an address bar.
    */
   Browser: (
     windowId: string,
@@ -94,6 +96,7 @@ export const ShellWindow = {
     pageTitle: string,
     popupWindow: number | undefined,
     isPrivate: boolean,
+    isApp: boolean,
   ) => ({
     /**
      * The page's icon URL, or `undefined` for none. The view reports it, not
@@ -101,6 +104,7 @@ export const ShellWindow = {
      */
     icon: undefined as string | undefined,
     id: browserWindowId(windowId),
+    isApp,
     isPrivate,
     kind: WindowKind.Browser as const,
     popupWindow,

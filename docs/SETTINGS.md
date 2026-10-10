@@ -1,7 +1,8 @@
 # Settings
 
 Every desktop has a Settings app. `domicile-settings`, or **Settings** in the
-launcher, opens it in a browser window.
+launcher, opens it in an app window
+([WEB-APPS.md](architecture/WEB-APPS.md)).
 
 - **Config pages:** Appearance, Keyboard, Displays, Power & lock, Privacy,
   Launcher and Startup cover every key of the config
@@ -50,7 +51,7 @@ Settings page ─ native messaging ─▶ domicile-settings-host ─ DOMICILE_SO
 | Which files | The host asks the desktop (`settings_files` on the control socket) on every request. The page never names a path. |
 | Writable | `access(W_OK)` on the file, following links. |
 | Site permissions | The engine's `site_permissions` and `set_site_permission` commands ([CONTROL-CHANNEL.md](/packages/domicile-engine/docs/CONTROL-CHANNEL.md#command-socket)). They read and write the shell profile's content settings as the address bar's panel does. |
-| Opening it | `domicile-settings` runs `domicile open-url chrome-extension://acpgnhiblklkgbkcjgbabkcmdmchdphk/settings.html`. |
+| Opening it | `domicile-settings` runs `domicile open-app chrome-extension://acpgnhiblklkgbkcjgbabkcmdmchdphk/settings.html`. |
 
 ## Key decisions
 

@@ -166,6 +166,12 @@ export type DomicileBrowserWindow = {
    * private window's new windows are private too.
    */
   readonly isPrivate: boolean;
+  /**
+   * Whether this is an app window, opened by `domicile open-app`. Draw it as
+   * an application: no address bar. Its page's new windows are browser
+   * windows. See docs/architecture/WEB-APPS.md.
+   */
+  readonly isApp: boolean;
 };
 
 /**

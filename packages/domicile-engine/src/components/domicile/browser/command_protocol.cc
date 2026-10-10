@@ -167,7 +167,14 @@ std::string AnswerOpenUrl(const base::DictValue& request, OpenUrl open_url) {
     return RefusedCommand(
         base::StrCat({"\"", *url, "\" is not a URL this engine can open"}));
   }
-  if (!open_url(parsed)) {
+  // Optional, so a supervisor older than app windows is still understood.
+  const base::Value* app = request.Find("app");
+  if (app != nullptr && !app->is_bool()) {
+    return RefusedCommand(
+        "open_url's \"app\" is true for an app window or false for a "
+        "browser window");
+  }
+  if (!open_url(parsed, app != nullptr && app->GetBool())) {
     return RefusedCommand("this engine has no shell page to open it in");
   }
   return Done("opened");

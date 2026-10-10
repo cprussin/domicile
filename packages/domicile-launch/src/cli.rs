@@ -19,7 +19,8 @@ pub enum CliError {
          --config <path>: a module's `Shell` export, or a JSON config's \
          \"shell\", is the shell when none is given.\n\
          Or a command for the desktop already running: which-shell, \
-         load-shell <shell>, open-url <url>, screenshot [file], or \
+         load-shell <shell>, open-url <url>, open-app <url>, screenshot \
+         [file], or \
          send-shell <command>…. Or \
          check-config <file> to check a config without running it.\n"
     )]
@@ -53,6 +54,17 @@ pub enum CliError {
          address is one browser window."
     )]
     ExtraToOpen { extra: String },
+    #[error(
+        "open-app takes the address of the app to open, and was given \
+         nothing:\n\n    \
+         domicile open-app https://example.com\n"
+    )]
+    NothingToOpenAsApp,
+    #[error(
+        "open-app takes one address, and it was given {extra} as well. One \
+         address is one app window."
+    )]
+    ExtraToOpenAsApp { extra: String },
     #[error("screenshot takes one file, and it was given {extra} as well.")]
     ExtraToSave { extra: String },
     #[error(
@@ -105,6 +117,11 @@ pub enum Invocation {
     ///
     /// Kept as typed; [`crate::address`] makes it a URL.
     Open { target: String },
+    /// Tell the running desktop to open this in a new app window: a browser
+    /// window without an address bar.
+    ///
+    /// Kept as typed, like [`Invocation::Open`]'s.
+    OpenApp { target: String },
     /// Tell the running desktop to write a PNG of the desk to this file, or,
     /// with none, to take the shell's interactive screenshot.
     ///
@@ -148,6 +165,11 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
                 (None, _) => Err(CliError::NothingToOpen),
                 (Some(target), None) => Ok(Invocation::Open { target }),
                 (Some(_), Some(extra)) => Err(CliError::ExtraToOpen { extra }),
+            },
+            Verb::OpeningApp => match (args.next(), args.next()) {
+                (None, _) => Err(CliError::NothingToOpenAsApp),
+                (Some(target), None) => Ok(Invocation::OpenApp { target }),
+                (Some(_), Some(extra)) => Err(CliError::ExtraToOpenAsApp { extra }),
             },
             Verb::Sending => {
                 let command: Vec<String> = args.collect();
@@ -211,6 +233,8 @@ enum Verb {
     Loading,
     /// `open-url`, which takes an address.
     Opening,
+    /// `open-app`, which takes an address.
+    OpeningApp,
     /// `screenshot`, which takes a file or nothing.
     Capturing,
     /// `send-shell`, which takes one or more words.
@@ -227,6 +251,7 @@ fn verb(word: &str) -> Option<Verb> {
         "which-shell" => Some(Verb::Asking(Request::WhichShell)),
         "load-shell" => Some(Verb::Loading),
         "open-url" => Some(Verb::Opening),
+        "open-app" => Some(Verb::OpeningApp),
         "screenshot" => Some(Verb::Capturing),
         "send-shell" => Some(Verb::Sending),
         "check-config" => Some(Verb::Checking),
