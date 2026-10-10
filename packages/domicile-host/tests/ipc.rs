@@ -306,6 +306,7 @@ fn the_tray_rides_with_the_handshake() {
         icon: None,
         bus: ":1.42".into(),
         menu: None,
+        item_is_menu: false,
     };
     let told = session.host_mut().set_tray(vec![icon.clone()]);
     assert_eq!(

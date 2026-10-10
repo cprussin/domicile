@@ -172,13 +172,15 @@ struct ClipboardEntry {
 // icon with. `icon` is a `data:` URL, and empty for an item whose picture the
 // compositor could not draw. `bus` is the bus name the item answers on, and
 // `menu` the object path of its `com.canonical.dbusmenu` menu there, empty for
-// none: a shell drives the menu with its own D-Bus calls.
+// none: a shell drives the menu with its own D-Bus calls. `item_is_menu` is the
+// item's `ItemIsMenu`: it only has a menu, so a primary click opens it.
 struct TrayItem {
   string id;
   string title;
   string icon;
   string bus;
   string menu;
+  bool item_is_menu;
 };
 
 // Which button clicked a tray icon, as StatusNotifierItem names the three

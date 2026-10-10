@@ -46,6 +46,7 @@ fn properties() -> Properties {
         attention_pixmaps: Vec::new(),
         icon_theme_path: String::new(),
         menu: String::new(),
+        item_is_menu: false,
     }
 }
 
@@ -186,6 +187,7 @@ mod items {
                 icon: Some("data:image/png;base64,d2lmaQ==".into()),
                 bus: ":1.42".into(),
                 menu: None,
+                item_is_menu: false,
             })
         );
     }
@@ -348,6 +350,22 @@ mod items {
     }
 
     #[test]
+    fn an_item_that_is_only_a_menu_says_so() {
+        // A shell opens its menu on a primary click.
+        let dir = data_dir(&[]);
+        let menu_only = Properties {
+            item_is_menu: true,
+            ..properties()
+        };
+
+        assert_eq!(
+            item("an-id", ":1.42", menu_only, &mut icons_in(dir.path()))
+                .map(|told| told.item_is_menu),
+            Some(true)
+        );
+    }
+
+    #[test]
     fn an_item_with_no_menu_says_so() {
         // KDE's items say `/NO_DBUSMENU` for none.
         let dir = data_dir(&[]);
@@ -379,6 +397,7 @@ mod items {
                 icon: None,
                 bus: ":1.42".into(),
                 menu: None,
+                item_is_menu: false,
             })
         );
     }
@@ -411,6 +430,7 @@ mod registry {
             icon: None,
             bus: ":1.42".into(),
             menu: None,
+            item_is_menu: false,
         }
     }
 

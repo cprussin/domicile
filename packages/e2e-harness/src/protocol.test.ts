@@ -353,7 +353,13 @@ describe("parseHostMessage", () => {
   });
 
   it("decodes the tray, with the bus each icon answers on", () => {
-    const icon = { bus: ":1.42", id: "nm", menu: "/MenuBar", title: "Network" };
+    const icon = {
+      bus: ":1.42",
+      id: "nm",
+      item_is_menu: false,
+      menu: "/MenuBar",
+      title: "Network",
+    };
 
     expect(
       parseHostMessage(JSON.stringify({ items: [icon], type: "tray" })),
@@ -362,6 +368,14 @@ describe("parseHostMessage", () => {
       parseHostMessage(
         JSON.stringify({
           items: [{ id: "nm", title: "Network" }],
+          type: "tray",
+        }),
+      ),
+    ).toThrow();
+    expect(() =>
+      parseHostMessage(
+        JSON.stringify({
+          items: [{ bus: ":1.42", id: "nm", title: "Network" }],
           type: "tray",
         }),
       ),

@@ -1276,7 +1276,8 @@ void DomicileHost::Tray(Vector<domicile::mojom::blink::TrayItemPtr> items) {
   tray.reserve(items.size());
   for (const auto& item : items) {
     tray.push_back(MakeGarbageCollected<DomicileTrayItem>(
-        item->id, item->title, item->icon, item->bus, item->menu));
+        item->id, item->title, item->icon, item->bus, item->menu,
+        item->item_is_menu));
   }
   tray_items_ =
       MakeGarbageCollected<FrozenArray<DomicileTrayItem>>(std::move(tray));

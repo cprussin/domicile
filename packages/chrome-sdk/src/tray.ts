@@ -33,4 +33,6 @@ export type TrayItem = {
    * `undefined` for none.
    */
   menu: string | undefined;
+  /** Whether it only has a menu, which the primary button opens. */
+  itemIsMenu: boolean;
 };
