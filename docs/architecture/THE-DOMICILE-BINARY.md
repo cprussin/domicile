@@ -59,7 +59,8 @@ temp directory. The modules that spawn processes or bind sockets stay thin.
 | Module | Pure? | What |
 |---|---|---|
 | `cli` | yes | arguments, and the error for each bad one |
-| `components` | yes | finds the engine and compositor from the binary's path or the environment; the builder and bundled shells when needed |
+| `components` | yes | finds the engine and compositor from the binary's path or the environment; the builder, bundled shells and apps when needed |
+| `apps` | no | lists Domicile's own apps, which the compositor installs with the config's extensions; see [HISTORY.md](/docs/HISTORY.md) |
 | `shell_path` | yes | name or path → module to load and the directory it is served from |
 | `shell_source` | yes | classifies a shell argument: module, entry to build, bundled shell, or package |
 | `build_progress` | yes | parses builder output into a terminal progress bar |

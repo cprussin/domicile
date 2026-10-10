@@ -8,6 +8,8 @@
 #include "chrome/browser/domicile/domicile_devtools.h"
 #include "chrome/browser/domicile/domicile_permissions.h"
 #include "chrome/browser/extensions/tab_helper.h"
+#include "chrome/browser/favicon/favicon_utils.h"
+#include "chrome/browser/history/history_tab_helper.h"
 #include "chrome/browser/sessions/session_tab_helper_factory.h"
 #include "components/domicile/browser/web_view_guest.h"
 #include "content/public/browser/browser_context.h"
@@ -44,6 +46,11 @@ void AttachTabHelpers(content::WebContents& guest) {
   // track the tab's window id. The SessionService it attaches records nothing
   // for guests (SessionServiceBase::ShouldTrackChangesToWindow).
   CreateSessionServiceTabHelper(&guest);
+
+  // Visits and their favicons go into the profile's history, which the
+  // History app reads. See docs/HISTORY.md.
+  HistoryTabHelper::GetOrCreateForWebContents(&guest)->set_desk_tab();
+  favicon::CreateContentFaviconDriverForWebContents(&guest);
 
   // Set the view type before extensions::TabHelper, as Chrome's
   // tab_helpers.cc does. A kInvalid view type crashes runtime.getContexts
