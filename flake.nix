@@ -57,6 +57,8 @@
         # `wl-copy` and `wl-paste`, the data-control clients the clipboard
         # checks run.
         wl-clipboard
+        # `grim`, the screenshot tool the screencopy checks run.
+        grim
         # `dbus-daemon`, a private session bus for the portal checks
         # (`packages/domicile-compositor/tests/`).
         dbus

@@ -402,12 +402,10 @@ Understood and not scheduled.
   unanswered key falls through to the next backend, which is correct, so
   `nix/domicile.portal` lists only what Domicile implements.
 
-- **Wayland capture tools cannot capture the desk.** Portal clients, the
-  shell (`system(host).screenshot()`) and `domicile screenshot` all
-  take the portal's frame (`Casting::shoot`,
-  [PORTALS.md](docs/PORTALS.md)). `grim` and `wf-recorder` get
-  nothing. Serve `ext-image-copy-capture-v1` (and `wlr-screencopy` for older tools) on
-  the same display captures.
+- **Wayland capture copies monitors only, into shm, one shot per frame.**
+  No toplevel sources, no cursor sessions and no dmabuf buffers. Each frame
+  starts and stops the display captures, so `wf-recorder` records slowly.
+  A session could keep them running ([PORTALS.md](docs/PORTALS.md)).
 
 ### System tray
 

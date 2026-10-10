@@ -236,3 +236,22 @@ One request channel carries all dialogs. Each interface's backend builds on it.
 
 Outside the portal, the compositor serves `ext-data-control-v1`, so clipboard
 managers and `wl-paste` work without a focused window.
+
+## Wayland capture
+
+The compositor also serves `ext-image-copy-capture-v1` (with
+`ext-image-capture-source-v1` output sources) and `zwlr_screencopy_manager_v1`
+v3, so `grim` and `wf-recorder` work. The code is `src/screencopy/`.
+
+- **Each frame is a shot of one monitor** from the same display captures
+  (`Casting::shoot_monitor`), at that monitor's density. A wlr region is cut
+  at the monitor's edges.
+- **Shm only.** Buffers are `argb8888` or `xrgb8888` with packed rows. A
+  frame copies at once and reports the whole buffer damaged.
+- **A resized monitor** gets new constraints on the next ext capture, which
+  fails with `buffer_constraints`. An unplugged one stops its sessions.
+- **No asking and no lock check.** Any client may capture, as any client may
+  use data control. The portal refuses no capture while locked either: a
+  running cast or a granted screenshot shows the lock screen.
+- Left out: toplevel sources, the pointer and cursor sessions (a cursor
+  session's capture session stops at once), and dmabufs.
