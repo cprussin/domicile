@@ -41,6 +41,11 @@ namespace domicile {
 // because the helpers do.
 void AttachTabHelpers(content::WebContents& guest);
 
+// AttachTabHelpers for an app window's guest (`domicile open-app`), without
+// HistoryTabHelper: an app's pages are not browsing, so its visits stay out of
+// the history.
+void AttachAppTabHelpers(content::WebContents& guest);
+
 }  // namespace domicile
 
 #endif  // CHROME_BROWSER_DOMICILE_DOMICILE_TAB_HELPERS_H_

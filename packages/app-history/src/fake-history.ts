@@ -66,7 +66,6 @@ export const fakeBrowser = (pages: FakePage[]) => {
       return Promise.resolve();
     },
     faviconUrl: (pageUrl) => `favicon:${pageUrl}`,
-    hiddenOrigin: "chrome-extension://dimbckmbklbplcobppahmnepgiponamj/",
     onChange: (listener) => {
       listeners.add(listener);
       return () => {
