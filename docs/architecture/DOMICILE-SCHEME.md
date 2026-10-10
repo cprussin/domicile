@@ -31,6 +31,9 @@ and the binding.
   (subresources).
 - `--domicile-shell-root` and `--domicile-shell-module` say what to serve.
 - Requests must resolve inside the shell root. Directory listings are off.
+- Shell files and the document are served `Cache-Control: no-store`. Blink
+  otherwise reuses non-HTTP responses across documents, and a rebuilt shell
+  keeps its file names.
 - The document is served with `Content-Security-Policy: script-src 'self'`.
   Only files under the shell root run, so markup the shell renders from
   outside cannot run script with the desktop. See
@@ -45,6 +48,9 @@ The fork writes the shell's HTML document
 - a `domicile-shell-module` meta naming the shell module. The document runs no
   script: Blink's `DomicileShell` imports the module once the document is
   parsed and calls `Shell(document.body, domicile)`
+- `@view-transition { navigation: auto }`. `load_shell` navigates the shell
+  window (a renderer-initiated replacement, not a reload), so the shell before,
+  such as the splash, crossfades into the new one over 600 ms
 
 ## `domicile://home/`
 
