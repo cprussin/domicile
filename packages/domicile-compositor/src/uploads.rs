@@ -10,6 +10,8 @@
 //! - After a resize, buffers of the old shape are dropped once free.
 //!   [`Uploads::take`] returns their ids so the caller can tell the engine.
 
+use std::collections::HashMap;
+
 /// The engine session's id for one of the compositor's buffers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct UploadId(u64);
@@ -33,23 +35,25 @@ pub struct Taken {
 #[derive(Debug)]
 struct Slot<B> {
     id: UploadId,
-    app_id: String,
     shape: Shape,
     buffer: B,
     out: bool,
 }
 
-/// Every window's buffers.
+/// Every window's buffers, by window, so a commit looks only at its own.
 #[derive(Debug)]
 pub struct Uploads<B> {
-    slots: Vec<Slot<B>>,
+    windows: HashMap<String, Vec<Slot<B>>>,
+    /// The window each buffer belongs to.
+    owners: HashMap<UploadId, String>,
     next: u64,
 }
 
 impl<B> Default for Uploads<B> {
     fn default() -> Self {
         Self {
-            slots: Vec::new(),
+            windows: HashMap::new(),
+            owners: HashMap::new(),
             next: 1,
         }
     }
@@ -68,9 +72,9 @@ impl<B> Uploads<B> {
     ) -> Result<Taken, E> {
         let dropped = self.drop_stale(app_id, shape);
         let free = self
-            .slots
-            .iter_mut()
-            .find(|slot| slot.app_id == app_id && !slot.out);
+            .windows
+            .get_mut(app_id)
+            .and_then(|slots| slots.iter_mut().find(|slot| !slot.out));
         let id = match free {
             Some(slot) => {
                 slot.out = true;
@@ -80,13 +84,16 @@ impl<B> Uploads<B> {
                 let buffer = allocate(shape)?;
                 let id = UploadId(self.next);
                 self.next += 1;
-                self.slots.push(Slot {
-                    id,
-                    app_id: app_id.to_owned(),
-                    shape,
-                    buffer,
-                    out: true,
-                });
+                self.owners.insert(id, app_id.to_owned());
+                self.windows
+                    .entry(app_id.to_owned())
+                    .or_default()
+                    .push(Slot {
+                        id,
+                        shape,
+                        buffer,
+                        out: true,
+                    });
                 id
             }
         };
@@ -95,24 +102,22 @@ impl<B> Uploads<B> {
 
     /// The buffer behind `id`, to describe.
     pub fn get(&self, id: UploadId) -> Option<&B> {
-        self.slots
-            .iter()
-            .find(|slot| slot.id == id)
+        self.owners
+            .get(&id)
+            .and_then(|app_id| self.windows.get(app_id))
+            .and_then(|slots| slots.iter().find(|slot| slot.id == id))
             .map(|slot| &slot.buffer)
     }
 
     /// The buffer behind `id`, to copy into.
     pub fn get_mut(&mut self, id: UploadId) -> Option<&mut B> {
-        self.slots
-            .iter_mut()
-            .find(|slot| slot.id == id)
-            .map(|slot| &mut slot.buffer)
+        self.slot_mut(id).map(|slot| &mut slot.buffer)
     }
 
     /// Marks `id` free: viz released it, or its frame never reached viz. A
     /// dropped id is ignored.
     pub fn give_back(&mut self, id: UploadId) {
-        if let Some(slot) = self.slots.iter_mut().find(|slot| slot.id == id) {
+        if let Some(slot) = self.slot_mut(id) {
             slot.out = false;
         }
     }
@@ -120,11 +125,17 @@ impl<B> Uploads<B> {
     /// Drops every buffer of a closed window and returns their ids, as
     /// [`Taken::dropped`] does.
     pub fn forget(&mut self, app_id: &str) -> Vec<UploadId> {
-        let (gone, kept) = std::mem::take(&mut self.slots)
+        let gone: Vec<UploadId> = self
+            .windows
+            .remove(app_id)
+            .unwrap_or_default()
             .into_iter()
-            .partition(|slot| slot.app_id == app_id);
-        self.slots = kept;
-        gone.into_iter().map(|slot: Slot<B>| slot.id).collect()
+            .map(|slot| slot.id)
+            .collect();
+        for id in &gone {
+            self.owners.remove(id);
+        }
+        gone
     }
 
     /// Drops `app_id`'s free buffers that are not `shape`.
@@ -132,11 +143,24 @@ impl<B> Uploads<B> {
     /// Buffers viz still holds are kept until they come back, so the import is
     /// not removed while viz reads it.
     fn drop_stale(&mut self, app_id: &str, shape: Shape) -> Vec<UploadId> {
-        let (stale, kept) = std::mem::take(&mut self.slots)
-            .into_iter()
-            .partition(|slot| slot.app_id == app_id && !slot.out && slot.shape != shape);
-        self.slots = kept;
-        stale.into_iter().map(|slot: Slot<B>| slot.id).collect()
+        let Some(slots) = self.windows.get_mut(app_id) else {
+            return Vec::new();
+        };
+        let stale: Vec<UploadId> = slots
+            .extract_if(.., |slot| !slot.out && slot.shape != shape)
+            .map(|slot| slot.id)
+            .collect();
+        for id in &stale {
+            self.owners.remove(id);
+        }
+        stale
+    }
+
+    fn slot_mut(&mut self, id: UploadId) -> Option<&mut Slot<B>> {
+        self.owners
+            .get(&id)
+            .and_then(|app_id| self.windows.get_mut(app_id))
+            .and_then(|slots| slots.iter_mut().find(|slot| slot.id == id))
     }
 }
 

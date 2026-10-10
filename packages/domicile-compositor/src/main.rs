@@ -54,7 +54,7 @@ use smithay::wayland::viewporter::{ViewportCachedState, ViewporterState};
 use smithay::wayland::{
     buffer::BufferHandler,
     compositor::{
-        get_children, get_parent, with_states, BufferAssignment, CompositorClientState,
+        get_children, get_parent, get_role, with_states, BufferAssignment, CompositorClientState,
         CompositorHandler, CompositorState, Damage, SubsurfaceCachedState, SurfaceAttributes,
         SurfaceData,
     },
@@ -88,7 +88,7 @@ use smithay::wayland::{
     shell::xdg::decoration::{XdgDecorationHandler, XdgDecorationState},
     shell::xdg::{
         PopupSurface, PositionerState, SurfaceCachedState, ToplevelSurface, XdgShellHandler,
-        XdgShellState, XdgToplevelSurfaceData,
+        XdgShellState, XdgToplevelSurfaceData, XDG_POPUP_ROLE,
     },
     shm::with_buffer_contents,
     shm::{ShmHandler, ShmState},
@@ -123,6 +123,7 @@ mod dmabuf_import;
 mod eis;
 mod engine;
 mod engine_buffers;
+mod engine_damage;
 mod engine_session;
 mod engine_surfaces;
 mod engine_waiting;
@@ -200,7 +201,6 @@ use domicile_launch::handshake::{silence, Handshake, WAIT_FOR_A_PAGE};
 use domicile_launch::session::{publish, Session};
 use domicile_protocol::{ChromeMessage, CursorShape, HostMessage, Passphrase, Theme};
 use smithay::backend::renderer::gles::GlesRenderer;
-use smithay::backend::renderer::ImportMemWl as _;
 use zbus::zvariant::OwnedObjectPath;
 
 /// Log messages that tests and operators search for by text.
@@ -422,11 +422,6 @@ struct DomicileCompositor {
     /// Domicile's own apps, installed with every config's extensions; see
     /// [`domicile_launch::apps`].
     apps: Vec<PathBuf>,
-    /// Commit count per surface, keyed as [`painted_key`].
-    ///
-    /// Tells a window that redrew in place from one that did not change. `Look`
-    /// and the draw order are compared alongside it.
-    content: HashMap<String, u64>,
     /// Mapped toplevels, paired with the host-assigned app id (Wayland-thread only).
     toplevels: Vec<(String, ToplevelSurface)>,
     /// Where the page last said each window is, in desktop logical units
@@ -463,8 +458,6 @@ struct DomicileCompositor {
     captures: Option<eis::Captures>,
     /// For frame-callback timestamps.
     start: Instant,
-    /// Last time a frame was broadcast per app, to throttle to ~30fps.
-    last_frame: HashMap<String, Instant>,
     /// When the last buffer commit finished, to time the gap to the next. Not
     /// per app: it measures whether this thread was busy.
     last_commit: Option<Instant>,
@@ -494,6 +487,16 @@ struct DomicileCompositor {
     /// Each toplevel's numbered configures, so a commit is shown at the box
     /// it was drawn for. See [`crate::configure_answers`].
     configure_answers: HashMap<String, ConfigureAnswers<Serial>>,
+    /// Each window's previous commit, if the engine shows it whole, so the
+    /// next can carry only the client's damage. See [`crate::engine_damage`].
+    shown: engine_damage::Shown,
+    /// The size limits each window's chromes were last told, so a commit
+    /// that keeps them does not lock the host.
+    size_limits: HashMap<String, SizeLimits>,
+    /// Every announced surface's app id and role, kept in step with
+    /// `toplevels`, `popups` and `bubbles`, so a commit finds its window
+    /// without searching them.
+    by_surface: HashMap<WlSurface, (String, Role)>,
 
     /// Apps whose first frame the engine accepted, logged once each.
     ///
@@ -730,29 +733,9 @@ impl DomicileCompositor {
                 return Some((Committer::Chrome, Role::Toplevel(chrome.clone())));
             }
         }
-        self.toplevels
-            .iter()
-            .find(|(_, toplevel)| toplevel.wl_surface() == surface)
-            .map(|(app_id, toplevel)| {
-                (
-                    Committer::App(app_id.clone()),
-                    Role::Toplevel(toplevel.clone()),
-                )
-            })
-            .or_else(|| {
-                self.popups
-                    .iter()
-                    .find(|(_, popup)| popup.wl_surface() == surface)
-                    .map(|(app_id, popup)| {
-                        (Committer::App(app_id.clone()), Role::Popup(popup.clone()))
-                    })
-            })
-            .or_else(|| {
-                self.bubbles
-                    .iter()
-                    .find(|bubble| bubble.surface == *surface)
-                    .map(|bubble| (Committer::App(bubble.app_id.clone()), Role::Bubble))
-            })
+        self.by_surface
+            .get(surface)
+            .map(|(app_id, role)| (Committer::App(app_id.clone()), role.clone()))
     }
 
     /// Announce a window's popup on its first buffer commit.
@@ -760,11 +743,7 @@ impl DomicileCompositor {
     /// A popup that never draws needs no placement. Popups over the chrome's
     /// own window belong to the engine and are ignored.
     fn announce_a_new_popup(&mut self, surface: &WlSurface) {
-        if self
-            .popups
-            .iter()
-            .any(|(_, popup)| popup.wl_surface() == surface)
-        {
+        if get_role(surface) != Some(XDG_POPUP_ROLE) || self.by_surface.contains_key(surface) {
             return;
         }
         let Some(popup) = self
@@ -801,6 +780,10 @@ impl DomicileCompositor {
         );
         if let Some((app_id, message)) = placed {
             debug!(%app_id, %parent, "popup mapped -> Host::popup_placed");
+            self.by_surface.insert(
+                surface.clone(),
+                (app_id.clone(), Role::Popup(popup.clone())),
+            );
             self.popups.push((app_id, popup));
             self.hub.broadcast(message);
         }
@@ -840,6 +823,7 @@ impl DomicileCompositor {
         match (tracked, parent) {
             (Some(at), None) => {
                 let bubble = self.bubbles.remove(at);
+                self.by_surface.remove(&bubble.surface);
                 debug!(app_id = %bubble.app_id, "bubble hidden -> Host::app_closed");
                 self.forget(&bubble.app_id);
             }
@@ -876,6 +860,8 @@ impl DomicileCompositor {
                     .popup_placed(&parent_id, position, size, false);
                 if let Some((app_id, message)) = placed {
                     debug!(%app_id, parent = %parent_id, "bubble mapped -> Host::popup_placed");
+                    self.by_surface
+                        .insert(surface.clone(), (app_id.clone(), Role::Bubble));
                     self.bubbles.push(Bubble {
                         app_id,
                         surface: surface.clone(),
@@ -931,19 +917,28 @@ impl DomicileCompositor {
     /// Checked on every commit because xdg-shell double-buffers them; they
     /// usually arrive on the first, bufferless commit.
     fn tell_the_size_limits(&mut self, app_id: &str, surface: &WlSurface) {
-        let (min, max) = with_states(surface, |states| {
+        let limits = with_states(surface, |states| {
             let mut cached = states.cached_state.get::<SurfaceCachedState>();
             let state = cached.current();
             (
-                (f64::from(state.min_size.w), f64::from(state.min_size.h)),
-                (f64::from(state.max_size.w), f64::from(state.max_size.h)),
+                (state.min_size.w, state.min_size.h),
+                (state.max_size.w, state.max_size.h),
             )
         });
-        // Separate `let`s so the host is unlocked before broadcasting. See
+        if self.size_limits.get(app_id) == Some(&limits) {
+            return;
+        }
+        self.size_limits.insert(app_id.to_owned(), limits);
+        let (min, max) = limits;
+        // Collected so the host is unlocked before broadcasting. See
         // `title_changed`.
-        let smallest = self.hub.host.lock().unwrap().app_min_size(app_id, min);
-        let largest = self.hub.host.lock().unwrap().app_max_size(app_id, max);
-        for told in smallest.into_iter().chain(largest) {
+        let told: Vec<HostMessage> = {
+            let mut host = self.hub.host.lock().unwrap();
+            let smallest = host.app_min_size(app_id, (f64::from(min.0), f64::from(min.1)));
+            let largest = host.app_max_size(app_id, (f64::from(max.0), f64::from(max.1)));
+            smallest.into_iter().chain(largest).collect()
+        };
+        for told in told {
             self.hub.broadcast(told);
         }
     }
@@ -983,10 +978,10 @@ impl DomicileCompositor {
     /// Tell every client which displays its windows and popups are on, and
     /// the scale to draw at.
     ///
-    /// Runs on every placement change, since the chrome can move an `<app>`
-    /// across displays without a Wayland event. Smithay only sends
-    /// `enter`/`leave` and the preferred scale when they change, so repeating
-    /// it is cheap.
+    /// Runs when the displays or their scales change. A window the page moves
+    /// (`ChromeMessage::SetAppBounds`) and a new popup are placed alone with
+    /// [`place_window`](Self::place_window). Smithay only sends
+    /// `enter`/`leave` and the preferred scale when they change.
     ///
     /// The chrome's own toplevel only gets its scale here. It belongs on every
     /// output, which `new_toplevel` and
@@ -1025,10 +1020,10 @@ impl DomicileCompositor {
 
     /// Where the page last put the window `surface` is, if it has said.
     fn bounds_of(&self, surface: &WlSurface) -> Option<domicile_scene::Bounds> {
-        self.toplevels
-            .iter()
-            .find(|(_, toplevel)| toplevel.wl_surface() == surface)
-            .and_then(|(app_id, _)| self.app_bounds.get(app_id).copied())
+        match self.by_surface.get(surface) {
+            Some((app_id, Role::Toplevel(_))) => self.app_bounds.get(app_id).copied(),
+            Some((_, Role::Popup(_) | Role::Bubble)) | None => None,
+        }
     }
 
     /// Enter `surface` on the displays `bounds` reaches and leave the rest.
@@ -1048,22 +1043,9 @@ impl DomicileCompositor {
 
     /// The window this surface is, if it is one this compositor announced.
     fn app_id_of(&self, surface: &WlSurface) -> Option<String> {
-        self.toplevels
-            .iter()
-            .find(|(_, toplevel)| toplevel.wl_surface() == surface)
+        self.by_surface
+            .get(surface)
             .map(|(app_id, _)| app_id.clone())
-            .or_else(|| {
-                self.popups
-                    .iter()
-                    .find(|(_, popup)| popup.wl_surface() == surface)
-                    .map(|(app_id, _)| app_id.clone())
-            })
-            .or_else(|| {
-                self.bubbles
-                    .iter()
-                    .find(|bubble| bubble.surface == *surface)
-                    .map(|bubble| bubble.app_id.clone())
-            })
     }
 
     /// Release everything held for an app (window or popup) and tell the
@@ -1296,9 +1278,8 @@ impl DomicileCompositor {
         // All of viz's buffers came back above, so the uploads can go.
         self.uploads.forget(app_id);
         self.configure_answers.remove(app_id);
-        self.last_frame.remove(app_id);
-        // Host ids are never reused, so a stale entry would only leak.
-        self.content.remove(app_id);
+        self.shown.missed(app_id);
+        self.size_limits.remove(app_id);
         self.app_bounds.remove(app_id);
         self.casting.window_gone(app_id);
         // An app id can return (a reconnecting client), but it then names a
@@ -1495,8 +1476,9 @@ impl DomicileCompositor {
                     //
                     // Use the scale the engine sends with the box. The reported
                     // ratio is a fallback for older engines.
+                    let device_size = (width, height);
                     let (width, height) = crate::scale::logical_box(
-                        (width, height),
+                        device_size,
                         scale.unwrap_or(self.device_pixel_ratio),
                     );
                     tracing::debug!(%app_id, width, height, "engine configure -> client");
@@ -1512,7 +1494,7 @@ impl DomicileCompositor {
                             self.configure_answers
                                 .entry(app_id)
                                 .or_insert_with(ConfigureAnswers::new)
-                                .sent(serial, number);
+                                .sent(serial, number, device_size);
                         }
                         // Sends only if the size differs from the last
                         // acknowledged configure.
@@ -1839,27 +1821,31 @@ impl DomicileCompositor {
     ///
     /// Every frame reaches the engine as a dmabuf; shm frames are copied first
     /// (see [`crate::uploads`]).
-    fn publish_frame(
-        &mut self,
-        app_id: &str,
-        buffer: &wl_buffer::WlBuffer,
-        sampled: Sampled,
-        at_box: u64,
-    ) -> Published {
-        let Some(committed) = committed_buffer(buffer) else {
+    fn publish_frame(&mut self, app_id: &str, commit: &Commit) -> Published {
+        let Some(committed) = committed_buffer(commit.buffer) else {
             return Published::NotShown;
         };
         if self.engine.is_none() {
             return Published::NotShown;
         }
+        let damage = self.shown.damage(
+            app_id,
+            engine_damage::Next {
+                damage: commit.damage,
+                at_box: commit.at_box,
+                box_size: commit.box_size,
+                crop: commit.sampled.crop,
+                buffer: committed.size(),
+            },
+        );
         let published = match &committed {
             CommittedBuffer::Gpu(dmabuf) => {
                 let published = self.submit_to_the_engine(
                     app_id,
-                    Submitted::Client(buffer.clone()),
+                    Submitted::Client(commit.buffer.clone()),
                     &descriptor_from(dmabuf),
-                    sampled,
-                    at_box,
+                    commit,
+                    damage,
                     Published::Held,
                 );
                 if published != Published::NotShown {
@@ -1867,45 +1853,42 @@ impl DomicileCompositor {
                         app_id,
                         casting::Shown {
                             dmabuf: dmabuf.clone(),
-                            crop: sampled.crop,
+                            crop: commit.sampled.crop,
                         },
                     );
                 }
                 published
             }
-            CommittedBuffer::Pixels { .. } => {
-                self.publish_shm_frame(app_id, buffer, sampled, at_box)
-            }
+            CommittedBuffer::Pixels { .. } => self.publish_shm_frame(app_id, commit, damage),
         };
-        if matches!(published, Published::Held | Published::Copied) {
+        if matches!(published, Published::Held | Published::Copied { .. }) {
             self.frame_shown(app_id);
         }
         published
     }
 
-    /// Submit `submitted` as `app_id`'s frame. Returns `shown` if the engine
-    /// took it, [`Published::NotShown`] if not.
+    /// Submit `submitted` as `app_id`'s frame, damaging `damage` (see
+    /// [`crate::engine_damage`]). Returns `shown` if the engine took it,
+    /// [`Published::NotShown`] if not.
     fn submit_to_the_engine(
         &mut self,
         app_id: &str,
         submitted: Submitted,
         descriptor: &DmabufDescriptor,
-        sampled: Sampled,
-        at_box: u64,
+        commit: &Commit,
+        damage: (i32, i32, i32, i32),
         shown: Published,
     ) -> Published {
         let Some(session) = self.engine.as_mut() else {
             return Published::NotShown;
         };
-        // Whole-surface damage. Mapping client damage to the engine's rectangle
-        // is its own correctness problem, and a wrong one leaves stale pixels.
         match session.submit(
             app_id,
             submitted,
             descriptor,
-            sampled,
-            (0, 0, 0, 0),
-            at_box,
+            commit.sampled,
+            damage,
+            commit.at_box,
             Instant::now(),
         ) {
             Submission::Taken => shown,
@@ -1929,11 +1912,10 @@ impl DomicileCompositor {
     fn publish_shm_frame(
         &mut self,
         app_id: &str,
-        buffer: &wl_buffer::WlBuffer,
-        sampled: Sampled,
-        at_box: u64,
+        commit: &Commit,
+        damage: (i32, i32, i32, i32),
     ) -> Published {
-        let copied = match self.copy_shm_frame(app_id, buffer) {
+        let copied = match self.copy_shm_frame(app_id, commit) {
             Ok(copied) => copied,
             Err(why) => {
                 if self.shm_refused.insert(app_id.to_string()) {
@@ -1946,9 +1928,11 @@ impl DomicileCompositor {
             app_id,
             Submitted::Upload(copied.id),
             &copied.descriptor,
-            sampled,
-            at_box,
-            Published::Copied,
+            commit,
+            damage,
+            Published::Copied {
+                fourcc: copied.fourcc,
+            },
         );
         if published == Published::NotShown {
             // Never reached viz, so nothing will release it.
@@ -1963,25 +1947,25 @@ impl DomicileCompositor {
                 app_id,
                 casting::Shown {
                     dmabuf,
-                    crop: sampled.crop,
+                    crop: commit.sampled.crop,
                 },
             );
         }
         published
     }
 
-    /// Copy `buffer` into a free buffer of `app_id`'s.
+    /// Copy the commit's buffer into a free buffer of `app_id`'s.
+    ///
+    /// The client's pixels reach the GPU through a texture kept on the
+    /// surface, so only the damage is uploaded while it holds the previous
+    /// commit.
     ///
     /// The buffer comes back taken; the caller gives it back if the engine
     /// does not take it.
-    fn copy_shm_frame(
-        &mut self,
-        app_id: &str,
-        buffer: &wl_buffer::WlBuffer,
-    ) -> Result<CopiedFrame, ShmRefused> {
+    fn copy_shm_frame(&mut self, app_id: &str, commit: &Commit) -> Result<CopiedFrame, ShmRefused> {
         let gpu = self.gpu.as_mut().ok_or(ShmRefused::NoRenderer)?;
         let gbm = gpu.gbm.as_ref().ok_or(ShmRefused::NoAllocator)?;
-        let shape = shm_shape(buffer).ok_or(ShmRefused::Unreadable)?;
+        let shape = shm_shape(commit.buffer).ok_or(ShmRefused::Unreadable)?;
         let modifiers = render_modifiers(&gpu.renderer, shape.fourcc);
         let taken = self
             .uploads
@@ -1996,15 +1980,21 @@ impl DomicileCompositor {
             .get_mut(taken.id)
             .expect("a buffer just taken is there");
         let size = (shape.width as i32, shape.height as i32).into();
-        let copied = gpu
-            .renderer
-            .import_shm_buffer(buffer, None, &[])
-            .map_err(CopyError::from)
-            .and_then(|texture| shm_upload::copy(&mut gpu.renderer, &texture, target, size));
+        let damage = shm_upload::uploaded(
+            commit.damage,
+            self.shown.texture_is_current(app_id, shape.fourcc),
+            (shape.width, shape.height),
+        );
+        let copied = with_states(commit.surface, |states| {
+            shm_upload::import(&mut gpu.renderer, commit.buffer, states, shape, &damage)
+        })
+        .map_err(CopyError::from)
+        .and_then(|texture| shm_upload::copy(&mut gpu.renderer, &texture, target, size));
         match copied {
             Ok(()) => Ok(CopiedFrame {
                 id: taken.id,
                 descriptor: descriptor_from(target),
+                fourcc: shape.fourcc,
             }),
             Err(err) => {
                 self.uploads.give_back(taken.id);
@@ -2465,8 +2455,10 @@ impl DomicileCompositor {
         match &rejoined.dialed {
             Ok(()) => {
                 self.watch_the_engines_fd();
-                // The new engine numbers its boxes afresh.
+                // The new engine numbers its boxes afresh, and shows none of
+                // the old one's frames.
                 self.configure_answers.clear();
+                self.shown.clear();
                 // The new engine does not know the profile, and
                 // `Screens::replugged_into` ignores an unchanged list, so
                 // restate the connectors or disabled ones come back lit.
@@ -2764,11 +2756,11 @@ impl DomicileCompositor {
     /// has already handled the dead client's window. This still releases
     /// inhibitors on surfaces that were never windows.
     fn let_go_of_what_the_dead_were_holding(&mut self) {
-        let on_the_desktop = self.surfaces_on_the_desktop();
+        let toplevels = &self.toplevels;
         let Some(idle) = self.idle.as_mut() else {
             return;
         };
-        let edge = idle.the_dead_let_go(Instant::now(), &on_the_desktop);
+        let edge = idle.the_dead_let_go(Instant::now(), || desktop_surfaces(toplevels));
         self.the_inhibitors_changed(edge, "the client holding this desktop awake is gone");
     }
 
@@ -2826,17 +2818,9 @@ impl DomicileCompositor {
         next
     }
 
-    /// Every toplevel surface on the desktop, the same list
-    /// [`app_id_of`](Self::app_id_of) reads.
-    ///
-    /// The idle clock needs it because an inhibitor on any other surface holds
-    /// nothing. Cloned (a refcount) because the clock is borrowed mutably
-    /// alongside.
+    /// Every toplevel surface on the desktop. See [`desktop_surfaces`].
     fn surfaces_on_the_desktop(&self) -> Vec<WlSurface> {
-        self.toplevels
-            .iter()
-            .map(|(_, toplevel)| toplevel.wl_surface().clone())
-            .collect()
+        desktop_surfaces(&self.toplevels)
     }
 
     /// Apply everything in a reloaded config except the display list.
@@ -3344,20 +3328,6 @@ struct SurfaceTexture {
     logical_size: (f64, f64),
 }
 
-/// A surface's key in [`DomicileCompositor::content`] and the painted frame.
-///
-/// The chrome has no `app_id` but is diffed like any layer. Its key cannot
-/// collide with host ids, which are `app-N`.
-fn painted_key(committer: &Committer) -> String {
-    match committer {
-        Committer::App(app_id) => app_id.clone(),
-        Committer::Chrome => CHROME_LAYER.to_string(),
-    }
-}
-
-/// See [`painted_key`].
-const CHROME_LAYER: &str = "<the chrome>";
-
 /// Identifies a chrome in a theme turnover: the address of its writer, as
 /// `ChromeHub::chromes` uses. Only compared, never dereferenced.
 fn chrome_key(writer: &Arc<Mutex<UnixStream>>) -> usize {
@@ -3391,6 +3361,22 @@ enum Committer {
     /// The engine drawing the desktop itself.
     Chrome,
 }
+
+/// Every surface of `toplevels`.
+///
+/// The idle clock needs it because an inhibitor on any other surface holds
+/// nothing. Cloned (a refcount) because the clock is borrowed mutably
+/// alongside.
+fn desktop_surfaces(toplevels: &[(String, ToplevelSurface)]) -> Vec<WlSurface> {
+    toplevels
+        .iter()
+        .map(|(_, toplevel)| toplevel.wl_surface().clone())
+        .collect()
+}
+
+/// A window's smallest and largest size, `(width, height)` each, as
+/// `xdg_toplevel` states them. Zero is no limit.
+type SizeLimits = ((i32, i32), (i32, i32));
 
 /// A rectangle of a client's buffer, in buffer pixels.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -3600,8 +3586,9 @@ enum Published {
     /// The engine samples the client's dmabuf directly, so viz owns it until
     /// released.
     Held,
-    /// The engine took a copy, so the client's buffer is already free.
-    Copied,
+    /// The engine took a copy, uploaded as `fourcc`, so the client's buffer
+    /// is already free.
+    Copied { fourcc: u32 },
     /// No page has embedded the window yet; the frame waits (see
     /// `engine_waiting`). `held` is as in [`Published::Held`].
     Waiting { held: bool },
@@ -3611,6 +3598,23 @@ enum Published {
 struct CopiedFrame {
     id: UploadId,
     descriptor: DmabufDescriptor,
+    /// The format the surface's texture now holds it in.
+    fourcc: u32,
+}
+
+/// An app's commit with a buffer, as [`DomicileCompositor::publish_frame`]
+/// shows it.
+struct Commit<'a> {
+    surface: &'a WlSurface,
+    buffer: &'a wl_buffer::WlBuffer,
+    sampled: Sampled,
+    /// The box to show it at. See [`crate::configure_answers`].
+    at_box: u64,
+    /// That box's size in device pixels, if the compositor knows it.
+    box_size: Option<(u32, u32)>,
+    /// The client's damage in buffer pixels, `(x, y, width, height)`. `None`
+    /// when unknown or not exact.
+    damage: Option<(i32, i32, i32, i32)>,
 }
 
 /// Why an shm client's frame could not be shown. Logged once per client.
@@ -3662,11 +3666,6 @@ impl CompositorHandler for DomicileCompositor {
         let Some((committer, role)) = self.committer(surface) else {
             return;
         };
-        // Count before any early return. This over-reports (a bufferless commit
-        // marks the window changed), but one place is safer than three where a
-        // miss leaves stale pixels.
-        *self.content.entry(painted_key(&committer)).or_default() += 1;
-
         // Send the initial configure once, so the client can map. A popup's was
         // sent in `new_popup`.
         if let Role::Toplevel(toplevel) = &role {
@@ -3708,13 +3707,13 @@ impl CompositorHandler for DomicileCompositor {
                 let mut guard = states.cached_state.get::<SurfaceAttributes>();
                 let attrs = guard.current();
                 let attached = match attrs.buffer.take() {
-                    Some(BufferAssignment::NewBuffer(buffer)) => Some(buffer),
-                    Some(BufferAssignment::Removed) | None => None,
+                    Some(BufferAssignment::NewBuffer(buffer)) => (Some(buffer), false),
+                    Some(BufferAssignment::Removed) => (None, true),
+                    None => (None, false),
                 };
                 let callbacks = std::mem::take(&mut attrs.frame_callbacks);
                 // Clear the accumulated damage, or it grows by a rectangle per
-                // commit for the window's life. The engine uses whole-surface
-                // damage; casts use the box.
+                // commit for the window's life.
                 let damage = take_damage(&mut attrs.damage, attrs.buffer_scale);
                 // The scale this buffer was drawn at. Read now; a client
                 // mid-scale-change may commit the next one differently.
@@ -3732,6 +3731,8 @@ impl CompositorHandler for DomicileCompositor {
                     damage,
                 )
             });
+        // Whether the client took its buffer away, unmapping the window.
+        let (attached, unmapped) = attached;
 
         // Ask the client to draw its next frame (keeps it animating).
         let time = self.start.elapsed().as_millis() as u32;
@@ -3747,29 +3748,31 @@ impl CompositorHandler for DomicileCompositor {
             self.follow_the_turnover(step);
         }
 
+        // Damage without a new buffer changes pixels the engine does not show,
+        // and a window mapped again starts from nothing.
+        if let (None, Committer::App(app_id)) = (&attached, &committer) {
+            if damage.is_some() || unmapped {
+                self.shown.missed(app_id);
+            }
+        }
+
         if let Some(buffer) = attached {
             // The gap since the last commit is time spent waiting on clients or
             // the throttle.
             let started = Instant::now();
-            {
-                let mut timings = self.hub.timings.lock().unwrap();
-                if let Some(waited) = self.last_commit.map(|done| started.duration_since(done)) {
-                    timings.idle.record(waited);
-                }
-                // Only app commits after a keystroke count as responses.
-                // Unprompted redraws (a blinking cursor) and chrome commits
-                // would skew it.
-                if answers_keystroke(&committer) {
-                    if let Some(keyed) = self.pending_key.take() {
-                        timings.response.record(started.duration_since(keyed));
-                    }
-                }
-            }
+            let waited = self.last_commit.map(|done| started.duration_since(done));
+            // Only app commits after a keystroke count as responses.
+            // Unprompted redraws (a blinking cursor) and chrome commits would
+            // skew it.
+            let responded = answers_keystroke(&committer)
+                .then(|| self.pending_key.take())
+                .flatten()
+                .map(|keyed| started.duration_since(keyed));
             let engine_holds = match &committer {
                 Committer::App(app_id) => {
                     // The size this commit was drawn for, and the engine's box
                     // at that size. See `crop` and `crate::configure_answers`.
-                    let (configured, at_box) = match &role {
+                    let (configured, (at_box, box_size)) = match &role {
                         Role::Toplevel(toplevel) => {
                             let acked = with_states(surface, |states| {
                                 states
@@ -3782,11 +3785,13 @@ impl CompositorHandler for DomicileCompositor {
                             });
                             (
                                 toplevel.current_state().size.map(|size| (size.w, size.h)),
-                                self.configure_answers
-                                    .get_mut(app_id)
-                                    .map_or(crate::engine::LAST_SHOWN_BOX, |answers| {
-                                        answers.answered(acked)
-                                    }),
+                                self.configure_answers.get_mut(app_id).map_or(
+                                    (crate::engine::LAST_SHOWN_BOX, None),
+                                    |answers| {
+                                        let at_box = answers.answered(acked);
+                                        (at_box, answers.box_size(at_box))
+                                    },
+                                ),
                             )
                         }
                         // The positioner's size, which the shell places.
@@ -3794,15 +3799,16 @@ impl CompositorHandler for DomicileCompositor {
                             popup.with_pending_state(|state| {
                                 Some((state.geometry.size.w, state.geometry.size.h))
                             }),
-                            NEWEST_BOX,
+                            (NEWEST_BOX, None),
                         ),
                         // Sized by its own buffer.
-                        Role::Bubble => (None, NEWEST_BOX),
+                        Role::Bubble => (None, (NEWEST_BOX, None)),
                     };
                     // Measured on the upright buffer, then mapped back into
                     // the buffer the engine samples.
-                    let crop = committed_buffer(&buffer).map_or((0, 0, 0, 0), |committed| {
-                        let size = upright_size(committed.size(), buffer_transform);
+                    let buffer_size = committed_buffer(&buffer).map(|committed| committed.size());
+                    let crop = buffer_size.map_or((0, 0, 0, 0), |buffer_size| {
+                        let size = upright_size(buffer_size, buffer_transform);
                         crop_in_buffer(
                             crate::window_geometry::crop(
                                 geometry,
@@ -3816,18 +3822,54 @@ impl CompositorHandler for DomicileCompositor {
                         )
                     });
                     self.cast_frame(app_id, &buffer, crop, buffer_scale, damage);
-                    let sampled = Sampled {
-                        crop,
-                        transform: buffer_transform,
+                    // Surface damage maps to buffer pixels by the scale alone
+                    // only when nothing turns or scales the buffer.
+                    let upright =
+                        buffer_transform == Transform::Normal && viewport == Viewport::default();
+                    let commit = Commit {
+                        surface,
+                        buffer: &buffer,
+                        sampled: Sampled {
+                            crop,
+                            transform: buffer_transform,
+                        },
+                        at_box,
+                        box_size,
+                        damage: damage.filter(|_| upright).map(|region| {
+                            (
+                                region.x as i32,
+                                region.y as i32,
+                                region.width as i32,
+                                region.height as i32,
+                            )
+                        }),
                     };
-                    let published = self.publish_frame(app_id, &buffer, sampled, at_box);
+                    let published = self.publish_frame(app_id, &commit);
+                    match published {
+                        Published::Held | Published::Copied { .. } => self.shown.shown(
+                            app_id,
+                            engine_damage::Frame {
+                                at_box,
+                                crop,
+                                buffer: buffer_size.expect("a shown frame has a buffer"),
+                                upright,
+                                texture: match published {
+                                    Published::Copied { fourcc } => Some(fourcc),
+                                    _ => None,
+                                },
+                            },
+                        ),
+                        Published::Waiting { .. } | Published::NotShown => {
+                            self.shown.missed(app_id)
+                        }
+                    }
                     // After the submit, so there is something to sample, but
                     // timed from `started` so the import and submit count as
                     // ours.
                     self.drive_latency(
                         app_id,
                         started,
-                        matches!(published, Published::Held | Published::Copied),
+                        matches!(published, Published::Held | Published::Copied { .. }),
                     );
                     matches!(
                         published,
@@ -3851,12 +3893,16 @@ impl CompositorHandler for DomicileCompositor {
                 tracing::trace!(?committer, "buffer released");
             }
             let done = Instant::now();
-            self.hub
-                .timings
-                .lock()
-                .unwrap()
-                .commit
-                .record(done - started);
+            {
+                let mut timings = self.hub.timings.lock().unwrap();
+                if let Some(waited) = waited {
+                    timings.idle.record(waited);
+                }
+                if let Some(responded) = responded {
+                    timings.response.record(responded);
+                }
+                timings.commit.record(done - started);
+            }
             self.last_commit = Some(done);
         }
     }
@@ -3869,6 +3915,7 @@ impl CompositorHandler for DomicileCompositor {
             .position(|bubble| bubble.surface == *surface)
         {
             let bubble = self.bubbles.remove(at);
+            self.by_surface.remove(&bubble.surface);
             debug!(app_id = %bubble.app_id, "bubble destroyed -> Host::app_closed");
             self.forget(&bubble.app_id);
         }
@@ -4240,6 +4287,10 @@ impl XdgShellHandler for DomicileCompositor {
             for live in &self.outputs {
                 live.output.enter(surface.wl_surface());
             }
+            self.by_surface.insert(
+                surface.wl_surface().clone(),
+                (app_id.clone(), Role::Toplevel(surface.clone())),
+            );
             self.toplevels.push((app_id, surface));
             announce
         };
@@ -4333,6 +4384,7 @@ impl XdgShellHandler for DomicileCompositor {
             .position(|(_, t)| t.wl_surface() == surface.wl_surface())
         {
             let (app_id, _) = self.toplevels.remove(pos);
+            self.by_surface.remove(surface.wl_surface());
             self.forget(&app_id);
             self.the_running_apps_changed();
             // Return the keyboard to the chrome. The shell usually refocuses
@@ -4353,6 +4405,7 @@ impl XdgShellHandler for DomicileCompositor {
             .position(|(_, popup)| popup.wl_surface() == surface.wl_surface())
         {
             let (app_id, _) = self.popups.remove(pos);
+            self.by_surface.remove(surface.wl_surface());
             debug!(%app_id, "popup destroyed -> Host::app_closed");
             self.forget(&app_id);
         }
@@ -4385,9 +4438,10 @@ impl XdgShellHandler for DomicileCompositor {
         if let Err(err) = surface.send_configure() {
             tracing::warn!(%err, "could not configure a popup");
         }
-        // Enter displays by the same rule as windows. Smithay adds the popup to
-        // `popup_surfaces` before calling this, so the pass covers it.
-        self.enter_the_displays_each_window_is_on();
+        // Enter displays by the rule
+        // [`enter_the_displays_each_window_is_on`](Self::enter_the_displays_each_window_is_on)
+        // applies to popups. Nothing else moved.
+        self.place_window(surface.wl_surface(), None);
     }
 
     fn reposition_request(
@@ -5579,7 +5633,6 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         hub,
         scope_clients: arguments.scope_clients,
         apps,
-        content: HashMap::new(),
         toplevels: Vec::new(),
         app_bounds: HashMap::new(),
         popups: Vec::new(),
@@ -5589,7 +5642,6 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         held_buttons: Vec::new(),
         captures: None,
         start: Instant::now(),
-        last_frame: HashMap::new(),
         last_commit: None,
         pending_key: None,
         latency: None,
@@ -5598,6 +5650,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         shm_refused: HashSet::new(),
         uploads: Uploads::default(),
         configure_answers: HashMap::new(),
+        shown: engine_damage::Shown::default(),
+        size_limits: HashMap::new(),
+        by_surface: HashMap::new(),
         first_frame_logged: HashSet::new(),
         last_probe: None,
         probe_refused: HashSet::new(),

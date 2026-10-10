@@ -57,14 +57,15 @@ pub struct Taken<B> {
     pub superseded: Vec<((SurfaceId, BufferId), B)>,
 }
 
-/// The buffers the engine is holding, keyed by surface and buffer id.
+/// The buffers the engine is holding, by surface and then buffer id.
 ///
 /// `BrokeredFrameSink` counts buffer ids per sink, so ids are unique only
 /// within a surface. Keying on the id alone lets one window's hold evict
-/// another's, and the evicted client never gets its release.
+/// another's, and the evicted client never gets its release. Keying by surface
+/// first keeps a commit's work to its own window's holds.
 #[derive(Debug)]
 pub struct HeldBuffers<B> {
-    held: HashMap<(SurfaceId, BufferId), Held<B>>,
+    held: HashMap<SurfaceId, HashMap<BufferId, Held<B>>>,
     deadline: Duration,
 }
 
@@ -82,7 +83,7 @@ impl<B> HeldBuffers<B> {
         }
     }
 
-    /// Whether anything is outstanding.
+    /// Whether anything is outstanding, or any surface is still listed.
     #[cfg(test)]
     pub fn is_empty(&self) -> bool {
         self.held.is_empty()
@@ -95,14 +96,15 @@ impl<B> HeldBuffers<B> {
     /// buffer, which viz now holds, so the caller must drop it without
     /// releasing it.
     pub fn hold(&mut self, surface: SurfaceId, id: BufferId, buffer: B, now: Instant) -> Option<B> {
-        for ((held_surface, _), held) in &mut self.held {
-            if *held_surface == surface && held.superseded.is_none() {
+        let holds = self.held.entry(surface).or_default();
+        for held in holds.values_mut() {
+            if held.superseded.is_none() {
                 held.superseded = Some(now);
             }
         }
-        self.held
+        holds
             .insert(
-                (surface, id),
+                id,
                 Held {
                     buffer,
                     superseded: None,
@@ -113,7 +115,12 @@ impl<B> HeldBuffers<B> {
 
     /// Viz released `id` on `surface`.
     pub fn release(&mut self, surface: SurfaceId, id: BufferId) -> Option<B> {
-        self.held.remove(&(surface, id)).map(|held| held.buffer)
+        let holds = self.held.get_mut(&surface)?;
+        let released = holds.remove(&id).map(|held| held.buffer);
+        if holds.is_empty() {
+            self.held.remove(&surface);
+        }
+        released
     }
 
     /// Removes and returns every superseded buffer past its deadline. The
@@ -123,19 +130,21 @@ impl<B> HeldBuffers<B> {
     /// on screen. The deadline runs from replacement, so viz has time to draw
     /// the newer frame before the old one is taken back.
     pub fn expired(&mut self, now: Instant) -> Vec<((SurfaceId, BufferId), B)> {
-        let overdue: Vec<(SurfaceId, BufferId)> = self
+        let deadline = self.deadline;
+        let expired = self
             .held
-            .iter()
-            .filter(|(_, held)| {
-                held.superseded
-                    .is_some_and(|superseded| now.duration_since(superseded) >= self.deadline)
+            .iter_mut()
+            .flat_map(|(surface, holds)| {
+                holds
+                    .extract_if(|_, held| {
+                        held.superseded
+                            .is_some_and(|superseded| now.duration_since(superseded) >= deadline)
+                    })
+                    .map(|(id, held)| ((*surface, id), held.buffer))
             })
-            .map(|(key, _)| *key)
             .collect();
-        overdue
-            .into_iter()
-            .filter_map(|key| self.held.remove(&key).map(|held| (key, held.buffer)))
-            .collect()
+        self.held.retain(|_, holds| !holds.is_empty());
+        expired
     }
 
     /// Removes every hold after the engine is lost, split into each surface's
@@ -147,6 +156,11 @@ impl<B> HeldBuffers<B> {
         let (kept, returned) = self
             .held
             .drain()
+            .flat_map(|(surface, holds)| {
+                holds
+                    .into_iter()
+                    .map(move |(id, held)| ((surface, id), held))
+            })
             .partition::<Vec<_>, _>(|(_, held)| held.superseded.is_none());
         Taken {
             on_screen: kept
@@ -162,15 +176,11 @@ impl<B> HeldBuffers<B> {
 
     /// Removes every hold for `surface` after the surface is gone.
     pub fn abandon(&mut self, surface: SurfaceId) -> Vec<((SurfaceId, BufferId), B)> {
-        let orphaned: Vec<(SurfaceId, BufferId)> = self
-            .held
-            .iter()
-            .filter(|((held_surface, _), _)| *held_surface == surface)
-            .map(|(key, _)| *key)
-            .collect();
-        orphaned
+        self.held
+            .remove(&surface)
+            .unwrap_or_default()
             .into_iter()
-            .filter_map(|key| self.held.remove(&key).map(|held| (key, held.buffer)))
+            .map(|(id, held)| ((surface, id), held.buffer))
             .collect()
     }
 }
@@ -237,6 +247,19 @@ mod tests {
             Some("new"),
             "and the one on screen is still there"
         );
+    }
+
+    // A surface whose last hold expires is not left listed, empty.
+    #[test]
+    fn a_surface_whose_holds_all_expire_is_dropped() {
+        let now = Instant::now();
+        let mut held = HeldBuffers::with_deadline(Duration::from_millis(500));
+        held.hold(SURFACE, 1, "old", now);
+        held.hold(SURFACE, 2, "new", now);
+        held.release(SURFACE, 2);
+
+        assert_eq!(held.expired(at(now, 500)), vec![((SURFACE, 1), "old")]);
+        assert!(held.is_empty());
     }
 
     // Two surfaces do not supersede each other. Each keeps its own latest.

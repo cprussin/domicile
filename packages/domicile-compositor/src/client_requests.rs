@@ -403,16 +403,18 @@ impl DomicileCompositor {
                 self.set_output_scale(scale);
             }
             ClientRequest::SetOutputSize { logical } => self.set_output_size(logical),
-            ClientRequest::SetAppBounds { app_id, bounds } => {
-                if self.toplevel_for(&app_id).is_some() {
+            ClientRequest::SetAppBounds { app_id, bounds } => match self.toplevel_for(&app_id) {
+                Some(toplevel) => {
+                    // Only this window moved. Its popups are on every display
+                    // whatever its bounds; see
+                    // `enter_the_displays_each_window_is_on`.
+                    self.place_window(toplevel.wl_surface(), Some(bounds));
                     self.app_bounds.insert(app_id, bounds);
-                    self.enter_the_displays_each_window_is_on();
-                } else {
-                    // Usually the window closed while the message was in
-                    // flight. Logged in case the chrome sent a bogus id.
-                    debug!(%app_id, "bounds: a window with no toplevel");
                 }
-            }
+                // Usually the window closed while the message was in flight.
+                // Logged in case the chrome sent a bogus id.
+                None => debug!(%app_id, "bounds: a window with no toplevel"),
+            },
             ClientRequest::Spawn { command } => {
                 spawn_client(&command, &self.hub.wayland_display, self.scope_clients)
             }
