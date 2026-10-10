@@ -3,6 +3,7 @@ import { Card } from "@domicile-desktop/component-library/Card";
 import { Input } from "@domicile-desktop/component-library/Input";
 import { Switch } from "@domicile-desktop/component-library/Switch";
 import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/ssr/DownloadSimple";
+import { FolderOpenIcon } from "@phosphor-icons/react/dist/ssr/FolderOpen";
 import { GearIcon } from "@phosphor-icons/react/dist/ssr/Gear";
 import { TrashIcon } from "@phosphor-icons/react/dist/ssr/Trash";
 import { useId, useState } from "react";
@@ -11,6 +12,7 @@ import { css } from "../../styled-system/css";
 import { circle, flex, grid } from "../../styled-system/patterns";
 import type { ConfigEditor, Report } from "../config-editor";
 import type { Extensions, InstalledExtension } from "../extensions";
+import type { SettingsHost } from "../host";
 import { ListSetting } from "../ListSetting";
 import { Notice } from "../Notice";
 import { Page } from "../Page";
@@ -25,24 +27,38 @@ type Props = {
   /** Why the config cannot change, or `undefined` if it can. */
   readOnly: string | undefined;
   extensions: Extensions;
+  host: SettingsHost;
   report: Report;
 };
 
 /**
  * The extensions in browser windows: switched on and off and configured
- * through the browser, installed and uninstalled through the config.
+ * through the browser. The config's are installed and uninstalled through the
+ * config; unpacked folders load, and others uninstall, through the engine.
  */
 export const ExtensionsPage = ({
   description,
   editor,
   extensions,
+  host,
   readOnly,
   report,
   title,
 }: Props) => {
-  const { failure, installed, reload } = useInstalled(extensions);
+  const { failure, listed, reload } = useInstalled(extensions, host);
   const fromStore = editor?.settings.extensions.web_store ?? [];
   const configurable = editor !== undefined && readOnly === undefined;
+  const store = configurable
+    ? {
+        ids: fromStore,
+        keep: (left: string[]) => {
+          editor.set(
+            ["extensions", "web_store"],
+            left.length === 0 ? undefined : left,
+          );
+        },
+      }
+    : undefined;
   return (
     <Page description={description} readOnly={readOnly} title={title}>
       <Card title="Installed">
@@ -53,7 +69,7 @@ export const ExtensionsPage = ({
           </Notice>
         )}
         <ul className={listStyles}>
-          {installed?.map((extension) => (
+          {listed?.installed.map((extension) => (
             <ExtensionRow
               extension={extension}
               key={extension.id}
@@ -67,23 +83,32 @@ export const ExtensionsPage = ({
                   .openOptions(url)
                   .catch(report(`Couldn't open ${extension.name}'s options`));
               }}
-              onUninstall={
-                configurable && fromStore.includes(extension.id)
-                  ? () => {
-                      const left = fromStore.filter(
-                        (id) => id !== extension.id,
-                      );
-                      editor.set(
-                        ["extensions", "web_store"],
-                        left.length === 0 ? undefined : left,
-                      );
-                    }
-                  : undefined
-              }
+              onUninstall={uninstaller({
+                extension,
+                fromConfig: listed.fromConfig,
+                onUninstalled: reload,
+                report,
+                store,
+                uninstall: host.uninstallExtension,
+              })}
               self={extension.id === extensions.selfId}
             />
           ))}
         </ul>
+      </Card>
+      <Card title="Load an unpacked folder">
+        <p className={hintStyles}>
+          Loads the extension in a folder on this computer, an absolute path or
+          one under ~, with every permission it asks for. It stays until you
+          uninstall it.
+        </p>
+        <UnpackedField
+          onLoad={async (directory) => {
+            await host.loadUnpacked(directory);
+            reload();
+          }}
+          report={report}
+        />
       </Card>
       {editor !== undefined && (
         <>
@@ -104,10 +129,10 @@ export const ExtensionsPage = ({
               report={report}
             />
           </Card>
-          <Card title="Unpacked folders">
+          <Card title="Unpacked folders in the config">
             <p className={hintStyles}>
-              Extensions loaded from a folder on this computer: an absolute
-              path, or one under ~.
+              Folders the config loads on every start: an absolute path, or one
+              under ~.
             </p>
             <ListSetting
               addButton="Add folder"
@@ -129,13 +154,56 @@ export const ExtensionsPage = ({
   );
 };
 
+type UninstallerOptions = {
+  extension: InstalledExtension;
+  /**
+   * The config's Web Store ids and how to keep only some, or `undefined` when
+   * the config cannot change.
+   */
+  store: { ids: string[]; keep: (left: string[]) => void } | undefined;
+  /** Every id the config installed. */
+  fromConfig: string[];
+  uninstall: SettingsHost["uninstallExtension"];
+  onUninstalled: () => void;
+  report: Report;
+};
+
+/**
+ * How to uninstall `extension`: through the config if it lists it, else
+ * through the engine. `undefined` if only a config that cannot change could
+ * remove it, since the engine installs the config's again.
+ */
+const uninstaller = ({
+  extension,
+  fromConfig,
+  onUninstalled,
+  report,
+  store,
+  uninstall,
+}: UninstallerOptions): (() => void) | undefined => {
+  if (store?.ids.includes(extension.id) === true) {
+    return () => {
+      store.keep(store.ids.filter((id) => id !== extension.id));
+    };
+  } else if (fromConfig.includes(extension.id)) {
+    return undefined;
+  } else {
+    return () => {
+      uninstall(extension.id).then(
+        onUninstalled,
+        report(`Couldn't uninstall ${extension.name}`),
+      );
+    };
+  }
+};
+
 type ExtensionRowProps = {
   extension: InstalledExtension;
   /** Whether this is the Settings app, which cannot switch itself off. */
   self: boolean;
   onEnabled: (enabled: boolean) => void;
   onOptions: (url: string) => void;
-  /** Removes it from the config, or `undefined` if the config did not add it. */
+  /** Uninstalls it, or `undefined` if the page cannot. */
   onUninstall: (() => void) | undefined;
 };
 
@@ -242,6 +310,52 @@ const StoreField = ({ disabled, onInstall, report }: StoreFieldProps) => {
         variant="primary"
       >
         Install
+      </Button>
+    </div>
+  );
+};
+
+type UnpackedFieldProps = {
+  onLoad: (directory: string) => Promise<void>;
+  report: Report;
+};
+
+/** Where an unpacked extension's folder is typed. */
+const UnpackedField = ({ onLoad, report }: UnpackedFieldProps) => {
+  const [written, setWritten] = useState("");
+  const load = () => {
+    const directory = written.trim();
+    onLoad(directory).then(
+      () => {
+        setWritten("");
+      },
+      report(`Couldn't load ${directory}`),
+    );
+  };
+  return (
+    <div className={storeStyles}>
+      <Input
+        aria-label="Unpacked extension folder"
+        onChange={(event) => {
+          setWritten(event.target.value);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" && written.trim() !== "") {
+            load();
+          }
+        }}
+        placeholder="~/src/my-extension"
+        size="sm"
+        value={written}
+      />
+      <Button
+        beforeIcon={<FolderOpenIcon size={14} />}
+        disabled={written.trim() === ""}
+        onClick={load}
+        size="sm"
+        variant="primary"
+      >
+        Load
       </Button>
     </div>
   );

@@ -3,8 +3,8 @@
 //! The app is an extension, so it cannot read files. Chrome starts this host
 //! for it and the two exchange messages over the host's stdin and stdout. The
 //! host asks the running desktop which files to edit ([`Request::SettingsFiles`])
-//! rather than taking a path from the page, and forwards site permissions to
-//! the engine through the desktop. See `docs/SETTINGS.md`.
+//! rather than taking a path from the page, and forwards site permissions and
+//! extensions to the engine through the desktop. See `docs/SETTINGS.md`.
 //!
 //! ```text
 //! {"id":1,"type":"read"}
@@ -15,6 +15,12 @@
 //!   {"id":3,"type":"site_permissions","defaults":{…},"sites":[…]}
 //! {"id":4,"type":"set_site_permission","site":{…}}
 //!   {"id":4,"type":"stored"}
+//! {"id":5,"type":"load_unpacked","directory":"~/src/my-extension"}
+//!   {"id":5,"type":"loaded_unpacked","extension":"…"}
+//! {"id":6,"type":"uninstall_extension","extension":"…"}
+//!   {"id":6,"type":"uninstalled"}
+//! {"id":7,"type":"config_extensions"}
+//!   {"id":7,"type":"config_extensions","ids":["…"]}
 //! any request
 //!   {"id":…,"type":"refused","why":"…"}
 //! pushed when a file changes on disk
@@ -44,6 +50,8 @@ pub struct Host<'a> {
     /// Asks the running desktop over its control socket.
     pub ask: &'a dyn Fn(&Request) -> Result<Response, String>,
     pub read: &'a dyn Fn(&Path) -> std::io::Result<String>,
+    /// The user's home directory, which a leading `~` names.
+    pub home: Option<&'a Path>,
     /// Whether this user may write the file, following links.
     pub writable: &'a dyn Fn(&Path) -> bool,
     /// Replaces the file's contents in place, so a link stays a link.
@@ -108,6 +116,10 @@ enum AppRequest {
     Write { file: Target, text: String },
     SitePermissions,
     SetSitePermission { site: SitePermission },
+    LoadUnpacked { directory: PathBuf },
+    // `extension`, since the message's own `id` is the request's.
+    UninstallExtension { extension: String },
+    ConfigExtensions,
 }
 
 /// Which file a write replaces.
@@ -159,6 +171,44 @@ fn carry_out(request: AppRequest, host: &Host) -> Result<Value, String> {
                 other => Err(refusal_or_surprise(other)),
             }
         }
+        AppRequest::LoadUnpacked { directory } => {
+            let directory = absolute(&directory, host.home)?;
+            match (host.ask)(&Request::LoadUnpacked { directory })? {
+                Response::LoadedUnpacked { id } => {
+                    Ok(json!({"type": "loaded_unpacked", "extension": id}))
+                }
+                other => Err(refusal_or_surprise(other)),
+            }
+        }
+        AppRequest::UninstallExtension { extension } => {
+            match (host.ask)(&Request::UninstallExtension { id: extension })? {
+                Response::Uninstalled => Ok(json!({"type": "uninstalled"})),
+                other => Err(refusal_or_surprise(other)),
+            }
+        }
+        AppRequest::ConfigExtensions => match (host.ask)(&Request::ConfigExtensions)? {
+            Response::ConfigExtensions { ids } => {
+                Ok(json!({"type": "config_extensions", "ids": ids}))
+            }
+            other => Err(refusal_or_surprise(other)),
+        },
+    }
+}
+
+/// `directory` with a leading `~` or `~/` expanded, refused unless absolute:
+/// the engine does not share the app's idea of a working directory.
+fn absolute(directory: &Path, home: Option<&Path>) -> Result<PathBuf, String> {
+    let expanded = match (directory.strip_prefix("~"), home) {
+        (Ok(rest), Some(home)) => home.join(rest),
+        (Ok(_), None) => return Err("HOME is not set, so ~ names no folder".to_string()),
+        (Err(_), _) => directory.to_path_buf(),
+    };
+    match expanded.is_absolute() {
+        true => Ok(expanded),
+        false => Err(format!(
+            "{} is not a folder this host can find: write an absolute path, or one under ~",
+            directory.display()
+        )),
     }
 }
 

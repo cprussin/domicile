@@ -10,6 +10,7 @@
 #include <optional>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "base/check.h"
 #include "base/check_op.h"
@@ -19,7 +20,10 @@
 #include "base/logging.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/no_destructor.h"
+#include "base/types/expected.h"
 #include "chrome/browser/domicile/domicile_browser_windows.h"
+#include "chrome/browser/domicile/domicile_extension_installer.h"
+#include "chrome/browser/profiles/profile.h"
 #include "base/task/bind_post_task.h"
 #include "chrome/browser/ui/browser_window/public/browser_collection.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
@@ -195,18 +199,65 @@ bool SetShellSitePermission(const url::Origin& origin,
   return true;
 }
 
+// The shell's profile, which browser windows share, or null when there is no
+// shell.
+Profile* ShellProfile() {
+  content::WebContents* shell = FindShellContents();
+  if (shell == nullptr) {
+    return nullptr;
+  }
+  return Profile::FromBrowserContext(shell->GetBrowserContext());
+}
+
+constexpr char kNoProfile[] =
+    "this engine has no shell, and so no profile to hold extensions";
+
+void LoadUnpackedIntoTheShellProfile(const base::FilePath& directory,
+                                     UnpackedLoaded loaded) {
+  CHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  Profile* profile = ShellProfile();
+  if (profile == nullptr) {
+    std::move(loaded).Run(base::unexpected(kNoProfile));
+    return;
+  }
+  LoadUnpackedInto(*profile, directory, std::move(loaded));
+}
+
+base::expected<void, std::string> UninstallFromTheShellProfile(
+    const std::string& id) {
+  CHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  Profile* profile = ShellProfile();
+  if (profile == nullptr) {
+    return base::unexpected(kNoProfile);
+  }
+  return UninstallFrom(*profile, id);
+}
+
+std::optional<std::vector<std::string>> ListTheShellProfilesConfigExtensions() {
+  CHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  Profile* profile = ShellProfile();
+  if (profile == nullptr) {
+    return std::nullopt;
+  }
+  return ConfigExtensionsOf(*profile);
+}
+
 // One request line, answered from the UI thread.
 //
 // Runs on the UI thread because `ShellSource` is unlocked and UI-thread only,
 // and loading a shell navigates a window. `reply` is bound to the IO thread,
-// so it may be called from any thread.
+// so it may be called from any thread, and later for `load_unpacked`.
 void AnswerOnUIThread(const std::string& line, CommandReply reply) {
   CHECK_CURRENTLY_ON(content::BrowserThread::UI);
   AnswerCommand(line,
                 {.load_shell = &LoadShellIntoTheShellWindow,
                  .open_url = &OpenUrlInABrowserWindow,
                  .list_site_permissions = &ListShellSitePermissions,
-                 .set_site_permission = &SetShellSitePermission},
+                 .set_site_permission = &SetShellSitePermission,
+                 .load_unpacked = &LoadUnpackedIntoTheShellProfile,
+                 .uninstall_extension = &UninstallFromTheShellProfile,
+                 .list_config_extensions =
+                     &ListTheShellProfilesConfigExtensions},
                 std::move(reply));
 }
 

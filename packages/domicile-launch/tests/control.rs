@@ -1,6 +1,6 @@
 //! Tests for the control socket protocol.
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
@@ -297,6 +297,69 @@ fn an_engine_that_would_not_set_a_site_permission_is_quoted() {
     );
 }
 
+#[test]
+fn a_desktop_told_to_load_an_unpacked_extension_tells_the_engine() {
+    let told = RefCell::new(None);
+    let answered = reply_to(
+        "{\"type\":\"load_unpacked\",\"directory\":\"/home/me/src/my-extension\"}",
+        &Desktop {
+            load_unpacked: &|directory| {
+                told.replace(Some(directory.to_path_buf()));
+                Ok("abcdefghijklmnopabcdefghijklmnop".to_string())
+            },
+            ..nothing_dialed()
+        },
+    );
+
+    assert_eq!(
+        told.take(),
+        Some(PathBuf::from("/home/me/src/my-extension"))
+    );
+    assert_eq!(
+        answered,
+        Response::LoadedUnpacked {
+            id: "abcdefghijklmnopabcdefghijklmnop".to_string()
+        }
+    );
+}
+
+#[test]
+fn a_desktop_told_to_uninstall_an_extension_tells_the_engine() {
+    let told = RefCell::new(None);
+    let answered = reply_to(
+        "{\"type\":\"uninstall_extension\",\"id\":\"abcdefghijklmnopabcdefghijklmnop\"}",
+        &Desktop {
+            uninstall_extension: &|id| {
+                told.replace(Some(id.to_string()));
+                Ok(())
+            },
+            ..nothing_dialed()
+        },
+    );
+
+    assert_eq!(
+        told.take().as_deref(),
+        Some("abcdefghijklmnopabcdefghijklmnop")
+    );
+    assert_eq!(answered, Response::Uninstalled);
+}
+
+#[test]
+fn a_desktop_asked_which_extensions_the_config_installed_asks_the_engine() {
+    assert_eq!(
+        reply_to(
+            "{\"type\":\"config_extensions\"}",
+            &Desktop {
+                config_extensions: &|| Ok(vec!["abcdefghijklmnopabcdefghijklmnop".to_string()]),
+                ..nothing_dialed()
+            }
+        ),
+        Response::ConfigExtensions {
+            ids: vec!["abcdefghijklmnopabcdefghijklmnop".to_string()]
+        }
+    );
+}
+
 /// What the engine stores: camera's default, and one site's camera.
 fn stored() -> SiteSettings {
     SiteSettings {
@@ -324,14 +387,17 @@ fn reply_to(line: &str, desktop: &Desktop) -> Response {
 fn nothing_dialed() -> Desktop<'static> {
     Desktop {
         capture: &|_| panic!("only screenshot captures anything"),
+        config_extensions: &|| panic!("only config_extensions lists the config's extensions"),
         files: &NO_FILES,
         load: &|_, _| panic!("only load_shell loads anything"),
+        load_unpacked: &|_| panic!("only load_unpacked loads an extension"),
         module: Path::new("/shell.js"),
         open: &|_| panic!("only open_url opens a browser window"),
         open_app: &|_| panic!("only open_app opens an app window"),
         permissions: &|| panic!("only site_permissions lists site permissions"),
         send: &|_| panic!("only send_shell sends anything"),
         set_permission: &|_| panic!("only set_site_permission sets one"),
+        uninstall_extension: &|_| panic!("only uninstall_extension uninstalls one"),
     }
 }
 
