@@ -384,6 +384,9 @@ export const Desktop = ({
           onNewTab={(id) => {
             act(WindowAction.NewTabPressed(id));
           }}
+          onPageFullscreen={(id, fullscreen) => {
+            act(WindowAction.PageFullscreened(id, fullscreen));
+          }}
           // Converted to the float's screen's pixels.
           onResize={(id, box, on) => {
             act(

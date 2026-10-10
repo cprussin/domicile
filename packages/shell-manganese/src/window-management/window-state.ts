@@ -52,6 +52,7 @@ import {
   nodeTiledIn,
   opened,
   openedFloating,
+  pageFullscreened,
   parentFocused,
   pointedOn,
   pushedOffBy,
@@ -334,6 +335,7 @@ export enum WindowActionKind {
   ModeSet,
   ModeSwapped,
   NewTabPressed,
+  PageFullscreened,
   ParentFocused,
   PopupPlaced,
   ScratchpadDismissed,
@@ -647,6 +649,16 @@ export const WindowAction = {
   NewTabPressed: (id: string) => ({
     id,
     kind: WindowActionKind.NewTabPressed as const,
+  }),
+
+  /**
+   * The page in browser window `id` entered or left fullscreen. See
+   * `pageFullscreened`.
+   */
+  PageFullscreened: (id: string, fullscreen: boolean) => ({
+    fullscreen,
+    id,
+    kind: WindowActionKind.PageFullscreened as const,
   }),
 
   /** `focus parent`. */
@@ -1040,6 +1052,11 @@ const reduceAction = (
             )
           : [...state.popups, placed],
       };
+    }
+    case WindowActionKind.PageFullscreened: {
+      return onWorkspaceWith(state, action.id, (workspace) =>
+        pageFullscreened(workspace, action.id, action.fullscreen),
+      );
     }
     case WindowActionKind.ParentFocused: {
       return onCurrent(state, parentFocused);

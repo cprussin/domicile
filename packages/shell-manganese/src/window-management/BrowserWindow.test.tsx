@@ -250,6 +250,9 @@ const FRAME = { height: 830, width: 1200, x: 0, y: 2 };
 /** Drops the page icon; `usePageIcon`'s cases are in `Shell.test.tsx`. */
 const noIcon = () => undefined;
 
+/** Drops the page's fullscreen; `usePageFullscreen` has its own tests. */
+const noFullscreen = () => undefined;
+
 const nothingEnded = () => {
   // No test here needs the callback.
 };
@@ -270,6 +273,7 @@ describe("BrowserWindow", () => {
         motion="resting"
         onIcon={noIcon}
         onMotionEnded={nothingEnded}
+        onPageFullscreen={noFullscreen}
         onReach={() => undefined}
         rect={ON_SCREEN}
         url="https://example.com"
@@ -299,6 +303,7 @@ describe("BrowserWindow", () => {
         motion="resting"
         onIcon={noIcon}
         onMotionEnded={nothingEnded}
+        onPageFullscreen={noFullscreen}
         onReach={() => undefined}
         rect={ON_SCREEN}
         url="https://example.com"
@@ -330,6 +335,7 @@ describe("BrowserWindow", () => {
         motion="resting"
         onIcon={noIcon}
         onMotionEnded={nothingEnded}
+        onPageFullscreen={noFullscreen}
         onReach={() => undefined}
         rect={ON_SCREEN}
         url="https://example.com"
@@ -358,6 +364,7 @@ describe("BrowserWindow", () => {
         motion="resting"
         onIcon={noIcon}
         onMotionEnded={nothingEnded}
+        onPageFullscreen={noFullscreen}
         onReach={() => undefined}
         rect={ON_SCREEN}
         url="https://example.com"
@@ -385,6 +392,7 @@ describe("BrowserWindow", () => {
           motion="resting"
           onIcon={noIcon}
           onMotionEnded={nothingEnded}
+          onPageFullscreen={noFullscreen}
           onReach={() => undefined}
           rect={ON_SCREEN}
           url="https://example.com"
@@ -414,6 +422,7 @@ describe("BrowserWindow", () => {
           motion="resting"
           onIcon={noIcon}
           onMotionEnded={nothingEnded}
+          onPageFullscreen={noFullscreen}
           onReach={() => undefined}
           rect={ON_SCREEN}
           url="https://example.com"
@@ -444,6 +453,7 @@ describe("BrowserWindow", () => {
           motion="resting"
           onIcon={noIcon}
           onMotionEnded={nothingEnded}
+          onPageFullscreen={noFullscreen}
           onReach={() => undefined}
           rect={ON_SCREEN}
           url="https://example.com"
@@ -477,6 +487,7 @@ describe("BrowserWindow", () => {
       motion: "resting",
       onIcon: noIcon,
       onMotionEnded: nothingEnded,
+      onPageFullscreen: noFullscreen,
       onReach: () => undefined,
       rect: ON_SCREEN,
     } as const;
@@ -541,6 +552,7 @@ describe("BrowserWindow", () => {
       motion: "resting",
       onIcon: noIcon,
       onMotionEnded: nothingEnded,
+      onPageFullscreen: noFullscreen,
       onReach: () => undefined,
       rect: ON_SCREEN,
       url: "https://example.com",
@@ -648,6 +660,7 @@ describe("BrowserWindow", () => {
           motion="resting"
           onIcon={noIcon}
           onMotionEnded={nothingEnded}
+          onPageFullscreen={noFullscreen}
           onReach={() => undefined}
           rect={ON_SCREEN}
           url="https://example.com"
@@ -681,6 +694,7 @@ describe("BrowserWindow", () => {
             motion="resting"
             onIcon={noIcon}
             onMotionEnded={nothingEnded}
+            onPageFullscreen={noFullscreen}
             onReach={() => undefined}
             rect={ON_SCREEN}
             url="https://example.com"
@@ -734,6 +748,7 @@ describe("BrowserWindow", () => {
           motion="resting"
           onIcon={noIcon}
           onMotionEnded={nothingEnded}
+          onPageFullscreen={noFullscreen}
           onReach={() => undefined}
           rect={ON_SCREEN}
           url="https://example.com"
@@ -759,6 +774,7 @@ describe("BrowserWindow", () => {
           motion="resting"
           onIcon={noIcon}
           onMotionEnded={nothingEnded}
+          onPageFullscreen={noFullscreen}
           onReach={() => undefined}
           rect={ON_SCREEN}
           url="https://example.com"
@@ -782,6 +798,7 @@ describe("BrowserWindow", () => {
         motion: "resting",
         onIcon: noIcon,
         onMotionEnded: nothingEnded,
+        onPageFullscreen: noFullscreen,
         onReach: () => undefined,
         rect: ON_SCREEN,
         url: "https://example.com",
@@ -811,6 +828,7 @@ describe("BrowserWindow", () => {
         motion: "resting",
         onIcon: noIcon,
         onMotionEnded: nothingEnded,
+        onPageFullscreen: noFullscreen,
         onReach: () => undefined,
         rect: ON_SCREEN,
         url: "https://example.com",
@@ -843,6 +861,7 @@ describe("BrowserWindow", () => {
         motion: "resting",
         onIcon: noIcon,
         onMotionEnded: nothingEnded,
+        onPageFullscreen: noFullscreen,
         onReach: () => undefined,
         rect: ON_SCREEN,
         url: "https://example.com",
@@ -873,6 +892,7 @@ describe("BrowserWindow", () => {
         motion: "resting",
         onIcon: noIcon,
         onMotionEnded: nothingEnded,
+        onPageFullscreen: noFullscreen,
         onReach: () => undefined,
         rect: ON_SCREEN,
         url: "https://example.com",
@@ -909,6 +929,7 @@ describe("BrowserWindow", () => {
             motion="resting"
             onIcon={noIcon}
             onMotionEnded={nothingEnded}
+            onPageFullscreen={noFullscreen}
             onReach={() => {
               resolve();
             }}
@@ -937,6 +958,7 @@ describe("BrowserWindow", () => {
             motion="resting"
             onIcon={noIcon}
             onMotionEnded={nothingEnded}
+            onPageFullscreen={noFullscreen}
             onReach={() => {
               resolve();
             }}
@@ -973,6 +995,7 @@ describe("BrowserWindow", () => {
             motion="resting"
             onIcon={noIcon}
             onMotionEnded={nothingEnded}
+            onPageFullscreen={noFullscreen}
             onReach={() => {
               reaches.push("reach");
             }}
@@ -1007,6 +1030,7 @@ describe("BrowserWindow", () => {
             motion="resting"
             onIcon={noIcon}
             onMotionEnded={nothingEnded}
+            onPageFullscreen={noFullscreen}
             onReach={() => {
               resolve();
             }}
@@ -1037,6 +1061,7 @@ describe("BrowserWindow", () => {
             motion="resting"
             onIcon={noIcon}
             onMotionEnded={nothingEnded}
+            onPageFullscreen={noFullscreen}
             onReach={() => {
               resolve();
             }}
@@ -1066,6 +1091,7 @@ describe("BrowserWindow", () => {
         motion: "resting",
         onIcon: noIcon,
         onMotionEnded: nothingEnded,
+        onPageFullscreen: noFullscreen,
         onReach: () => {
           reaches.push("reach");
         },
@@ -1107,6 +1133,7 @@ describe("BrowserWindow", () => {
           motion="resting"
           onIcon={noIcon}
           onMotionEnded={nothingEnded}
+          onPageFullscreen={noFullscreen}
           onReach={() => {
             reaches.push("reach");
           }}
@@ -1152,6 +1179,7 @@ describe("BrowserWindow", () => {
           motion="resting"
           onIcon={noIcon}
           onMotionEnded={nothingEnded}
+          onPageFullscreen={noFullscreen}
           onReach={() => undefined}
           rect={ON_SCREEN}
           url="https://example.com"
@@ -1180,6 +1208,7 @@ describe("BrowserWindow", () => {
           motion="resting"
           onIcon={noIcon}
           onMotionEnded={nothingEnded}
+          onPageFullscreen={noFullscreen}
           onReach={() => undefined}
           rect={ON_SCREEN}
           url="https://example.com"
@@ -1211,6 +1240,7 @@ describe("BrowserWindow", () => {
           motion="resting"
           onIcon={noIcon}
           onMotionEnded={nothingEnded}
+          onPageFullscreen={noFullscreen}
           onReach={() => undefined}
           rect={ON_SCREEN}
           url="https://example.com"
@@ -1241,6 +1271,7 @@ describe("BrowserWindow", () => {
           motion="resting"
           onIcon={noIcon}
           onMotionEnded={nothingEnded}
+          onPageFullscreen={noFullscreen}
           onReach={() => undefined}
           rect={ON_SCREEN}
           url="https://example.com"
@@ -1279,6 +1310,7 @@ describe("BrowserWindow", () => {
           motion="resting"
           onIcon={noIcon}
           onMotionEnded={nothingEnded}
+          onPageFullscreen={noFullscreen}
           onReach={() => undefined}
           rect={ON_SCREEN}
           url="https://example.com"
@@ -1395,6 +1427,7 @@ describe("BrowserWindow", () => {
           motion="resting"
           onIcon={noIcon}
           onMotionEnded={nothingEnded}
+          onPageFullscreen={noFullscreen}
           onReach={() => undefined}
           rect={ON_SCREEN}
           url="https://example.com"
@@ -1477,6 +1510,7 @@ describe("BrowserWindow", () => {
           motion="resting"
           onIcon={noIcon}
           onMotionEnded={nothingEnded}
+          onPageFullscreen={noFullscreen}
           onReach={() => undefined}
           rect={ON_SCREEN}
           url="https://example.com"
@@ -1614,6 +1648,7 @@ describe("BrowserWindow", () => {
           motion="resting"
           onIcon={noIcon}
           onMotionEnded={nothingEnded}
+          onPageFullscreen={noFullscreen}
           onReach={() => undefined}
           rect={ON_SCREEN}
           url="https://example.com"
@@ -1650,6 +1685,7 @@ describe("BrowserWindow", () => {
           motion="resting"
           onIcon={noIcon}
           onMotionEnded={nothingEnded}
+          onPageFullscreen={noFullscreen}
           onReach={() => undefined}
           rect={ON_SCREEN}
           url="https://example.com"
@@ -1769,6 +1805,7 @@ describe("BrowserWindow", () => {
         motion="resting"
         onIcon={noIcon}
         onMotionEnded={nothingEnded}
+        onPageFullscreen={noFullscreen}
         onReach={() => undefined}
         rect={undefined}
         url="https://example.com"
@@ -1794,6 +1831,7 @@ describe("BrowserWindow", () => {
       motion: "resting",
       onIcon: noIcon,
       onMotionEnded: nothingEnded,
+      onPageFullscreen: noFullscreen,
       onReach: () => undefined,
       rect: ON_SCREEN,
       url: "https://example.com",

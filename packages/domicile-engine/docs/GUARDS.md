@@ -89,6 +89,7 @@ Headless.
 | `guard-webview-activate.sh` | a page brought to the front (`Page.bringToFront`, the same `Activate()` as a notification click's `client.focus()`) fires `domicile-focus-request` |
 | `guard-webview-routed-link.sh` | a middle click on a link opens a browser window through `OpenURLFromTab` |
 | `guard-webview-target-url.sh` | the link under the pointer reaches the shell as `targetUrl`, clears when the pointer leaves the page, and returns when it comes back |
+| `guard-webview-fullscreen.sh` | a page enters fullscreen from its own button, the shell hears it as `pageFullscreen`, and Escape and `exitPageFullscreen()` each take it out |
 | `guard-webview-context-menu.sh` | a right click fires `domicile-context-menu` with the link and image under it; its `inspect` opens DevTools in a browser window (patch 0092) |
 | `guard-webview-new-window.sh` | a `target="_blank"` link opens a browser window, and the shell's `<webview window>` shows it |
 | `guard-webview-private.sh` | a cookie set in a `<webview private>` reaches private pages and windows, never ordinary ones; a private window is listed `isPrivate` |

@@ -96,6 +96,7 @@ stale state.
 | `targetUrl` | `domicile-target-url-change` | The link under the pointer, or `""`. The engine draws no status bubble; manganese's is `browser/LinkTarget.tsx` |
 | `findMatches`, `findActiveMatch` | `domicile-find-change` | Find-in-page results |
 | `contentWidth`, `contentHeight` | `domicile-content-size-change` | Page content size (for popups) |
+| `pageFullscreen` | `domicile-page-fullscreen-change` | Whether the page is fullscreen; see [Fullscreen](#fullscreen) |
 
 ```ts
 import { WEBVIEW_HISTORY_CHANGE_EVENT } from "@domicile-desktop/sdk/webview-element";
@@ -214,6 +215,20 @@ The new window is a fresh navigation to that address:
 - A form POSTed to a new target arrives as a GET of its action.
 
 A plain link (`target="_blank"` or middle click) loses nothing.
+
+## Fullscreen
+
+A page's `requestFullscreen()`, such as a video's fullscreen button, makes it
+fullscreen at once:
+
+- The page fills the `<webview>`'s box. Grow the view to fill the screen.
+- `pageFullscreen` turns true and `domicile-page-fullscreen-change` fires.
+- Escape in the page ends it, before the page sees the key.
+- `view.exitPageFullscreen()` ends it, such as when the user takes the window
+  out of fullscreen.
+
+Manganese fills the screen with the window while its page is fullscreen
+(`usePageFullscreen`).
 
 ## Close requests
 
