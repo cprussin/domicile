@@ -217,5 +217,9 @@ Rules:
   is already gone, so only its frame animates; a browser window keeps its
   page.
 - A leaving window draws above the windows moving into its space.
+- Keyframes that move or fade a window never set `z-index`. Chromium runs an
+  animation on the compositor thread only if it can run every property there,
+  and `z-index` cannot. A motion that holds or swaps depth adds a second,
+  depth-only animation.
 - Durations live in the stylesheet only. The shell waits for each animation's
   end event.

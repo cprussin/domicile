@@ -4,25 +4,22 @@ import { defineConfig } from "@pandacss/dev";
 // A float swapping depth with one it overlaps: it moves apart, swaps depth at
 // the furthest point, and moves back. See `shuffledBy` and `restacking.ts`.
 //
+// The move and the depth are two animations. The compositor thread can run the
+// move only if `z-index` is not in it.
+//
+// Each is defined once and registered under two names; see `nextShuffle`.
+const RESTACKING = {
+  "0%": { transform: "translate(0, 0)" },
+  "50%": { transform: "translate(var(--restack-x), var(--restack-y))" },
+  "100%": { transform: "translate(0, 0)" },
+};
+
 // The new depth is set at 51% so it lands right after the furthest point.
 // Interpolated from 50% to 100%, it would change too late, after the windows
 // overlap again.
-//
-// Defined once and registered under two names; see `nextShuffle`.
-const RESTACKING = {
-  "0%": {
-    transform: "translate(0, 0)",
-    zIndex: "var(--restack-from)",
-  },
-  "50%": {
-    transform: "translate(var(--restack-x), var(--restack-y))",
-    zIndex: "var(--restack-from)",
-  },
-  "51%": { zIndex: "var(--restack-to)" },
-  "100%": {
-    transform: "translate(0, 0)",
-    zIndex: "var(--restack-to)",
-  },
+const RESTACKING_DEPTH = {
+  "0%, 50%": { zIndex: "var(--restack-from)" },
+  "51%, 100%": { zIndex: "var(--restack-to)" },
 };
 
 // A tab moved along its strip slides from its old place, at `--slide-x` and
@@ -175,6 +172,14 @@ export default defineConfig({
           "15%": { opacity: "1" },
           "100%": { opacity: "1", transform: "translateY(0)" },
         },
+        // Holds a window at the tiled depth. The tab a close uncovers, and the
+        // tab a switch reveals, keep it while the other tab fades over or
+        // under them. Otherwise `settlingStyles` would ease their depth up
+        // from the hidden tabs', and one of them would show through.
+        windowHeldTiled: {
+          "0%": { zIndex: "0" },
+          "100%": { zIndex: "0" },
+        },
         // The workspace being left slides out by one screen width.
         windowLeavingToEnd: {
           "0%": { transform: "translateX(0)" },
@@ -209,9 +214,11 @@ export default defineConfig({
         },
         windowRestacking: RESTACKING,
         windowRestackingAgain: RESTACKING,
+        windowRestackingDepth: RESTACKING_DEPTH,
+        windowRestackingDepthAgain: RESTACKING_DEPTH,
         windowRevealing: {
-          "0%": { opacity: "0", zIndex: "0" },
-          "100%": { opacity: "1", zIndex: "0" },
+          "0%": { opacity: "0" },
+          "100%": { opacity: "1" },
         },
         // A window sent to a workspace no screen shows. It shrinks further
         // than `windowClosing`, so it does not look closed.
@@ -229,13 +236,6 @@ export default defineConfig({
             opacity: "0",
             transform: "translateY(calc(-1 * var(--lift)))",
           },
-        },
-        // The tab a close uncovers holds the tiled depth while the closed tab
-        // fades over it. Otherwise `settlingStyles` would ease its depth up
-        // from the hidden tabs', and one of them would show through.
-        windowUncovering: {
-          "0%": { zIndex: "0" },
-          "100%": { zIndex: "0" },
         },
         // The zoom indicator: appears quickly, holds long enough to read, then
         // fades out on its own.
