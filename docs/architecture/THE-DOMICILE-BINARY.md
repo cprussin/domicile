@@ -364,9 +364,5 @@ Done:
 - [x] `flake.nix` places the components beside the binary
 - [x] control socket and `domicile which-shell`
 - [x] engine command socket (fork patch) and `domicile load-shell`
-
-Left:
-
-- [ ] `packages/domicile-engine/scripts/guard-shell.sh` launches through
-      `domicile`. Convert it last: it has its own log capture and runs only on
-      `crux` in the engine job, so a mistake there cannot block ordinary CI.
+- [x] `packages/domicile-engine/scripts/guard-shell.sh` starts its desktop
+      with `domicile`

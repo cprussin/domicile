@@ -91,11 +91,15 @@ fn needs_building(file: &Path, read: &dyn Fn(&Path) -> Option<String>) -> bool {
 
 /// Whether `text` imports a package by name.
 ///
-/// A loose scan that also matches comments. A false positive only rebuilds a
-/// bundle; a false negative would serve a module the browser cannot load.
+/// A loose scan that also matches comments. A false positive rebuilds a
+/// bundle, or refuses it where there is no builder; a false negative would
+/// serve a module the browser cannot load.
 pub fn imports_a_package(text: &str) -> bool {
     ["from", "import", "import("].iter().any(|keyword| {
         text.match_indices(keyword).any(|(at, _)| {
+            if !starts_a_word(text, at) {
+                return false;
+            }
             let after = text[at + keyword.len()..].trim_start();
             let Some(quote) = after.chars().next().filter(|c| matches!(c, '"' | '\'')) else {
                 return false;
@@ -107,6 +111,15 @@ pub fn imports_a_package(text: &str) -> bool {
             is_bare(&specifier[..end])
         })
     })
+}
+
+/// Whether the text at `at` starts a word, so the keyword there is not the end
+/// of a longer one, such as the property name `"--restack-from"`.
+fn starts_a_word(text: &str, at: usize) -> bool {
+    text[..at]
+        .chars()
+        .next_back()
+        .is_none_or(|before| !(before.is_alphanumeric() || matches!(before, '_' | '$' | '-' | '.')))
 }
 
 /// Whether a browser cannot resolve `specifier`: it is not relative,
