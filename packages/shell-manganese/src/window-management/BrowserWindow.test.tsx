@@ -12,6 +12,7 @@ import {
   WEBVIEW_PAGE_CHANGE_EVENT,
   WEBVIEW_PERMISSION_REQUEST_EVENT,
   WEBVIEW_SITE_PERMISSIONS_CHANGE_EVENT,
+  WEBVIEW_TARGET_URL_CHANGE_EVENT,
   WEBVIEW_ZOOM_CHANGE_EVENT,
   WEBVIEW_ZOOM_OUT_REQUEST_EVENT,
 } from "@domicile-desktop/sdk/webview-element";
@@ -124,6 +125,15 @@ const shows = (
     url: { configurable: true, value: url },
   });
   fireEvent(element, new Event(WEBVIEW_PAGE_CHANGE_EVENT));
+};
+
+/** Fires a change of the link under the pointer. */
+const hovers = (element: HTMLWebViewElement, url: string): void => {
+  Object.defineProperty(element, "targetUrl", {
+    configurable: true,
+    value: url,
+  });
+  fireEvent(element, new Event(WEBVIEW_TARGET_URL_CHANGE_EVENT));
 };
 
 /**
@@ -652,6 +662,56 @@ describe("BrowserWindow", () => {
       // ...and the view stretches to fill it. A `<webview>` is a replaced
       // element with a 300x150 intrinsic size.
       expect(globalThis.getComputedStyle(view(container)).flexGrow).toBe("1");
+    });
+
+    describe("the link under the pointer", () => {
+      const renderWindow = () =>
+        render(
+          <BrowserWindow
+            behindPanel={false}
+            clickThrough={false}
+            covered={false}
+            depth={0}
+            domicile={silentDomicile}
+            dragging={false}
+            focused
+            frame={FRAME}
+            fullscreen={false}
+            motion="resting"
+            onIcon={noIcon}
+            onMotionEnded={nothingEnded}
+            onReach={() => undefined}
+            rect={ON_SCREEN}
+            url="https://example.com"
+            window="1"
+          />,
+        );
+
+      it("shows its address, as Chrome's status bubble does", () => {
+        const { container } = renderWindow();
+        hovers(view(container), "https://example.com/linked");
+        expect(screen.getByRole("status", { name: "Link" })).toHaveTextContent(
+          "https://example.com/linked",
+        );
+      });
+
+      it("shows nothing once the pointer leaves the link", () => {
+        const { container } = renderWindow();
+        hovers(view(container), "https://example.com/linked");
+        hovers(view(container), "");
+        expect(screen.queryByRole("status", { name: "Link" })).toBeNull();
+      });
+
+      // The page's own clicks must land on whatever is under the bubble.
+      it("lets the pointer through to the page", () => {
+        const { container } = renderWindow();
+        hovers(view(container), "https://example.com/linked");
+        expect(
+          globalThis.getComputedStyle(
+            screen.getByRole("status", { name: "Link" }),
+          ).pointerEvents,
+        ).toBe("none");
+      });
     });
   });
 
@@ -1307,6 +1367,9 @@ describe("BrowserWindow", () => {
     it("says what it zoomed to", () => {
       const { container } = renderWindow();
       zoomable(view(container), 1);
+      // Over no link, as the engine's element starts, so the zoom is the only
+      // status.
+      hovers(view(container), "");
 
       guestPresses(view(container), { ctrlKey: true, key: "+" });
 

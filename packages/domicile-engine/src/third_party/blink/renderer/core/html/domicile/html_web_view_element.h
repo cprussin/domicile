@@ -10,6 +10,7 @@
 
 #include "components/domicile/mojom/web_view_guest.mojom-blink.h"
 #include "third_party/blink/renderer/core/core_export.h"
+#include "third_party/blink/renderer/core/dom/events/native_event_listener.h"
 #include "third_party/blink/renderer/core/html/html_frame_element_base.h"
 #include "third_party/blink/renderer/platform/mojo/heap_mojo_receiver.h"
 #include "third_party/blink/renderer/platform/heap/collection_support/heap_hash_set.h"
@@ -89,6 +90,14 @@ class CORE_EXPORT HTMLWebViewElement final
   // The page's icon, or empty. See FaviconChanged in
   // components/domicile/mojom/web_view_guest.mojom.
   const String& favicon() const { return favicon_; }
+
+  // The link under the pointer, or empty. See TargetUrlChanged in
+  // components/domicile/mojom/web_view_guest.mojom.
+  const String& targetUrl() const { return target_url_; }
+
+  // Tells the browser the pointer left the page when the document sees a
+  // move off this element. Listens only while a link is shown.
+  void PointerMoved(Event* event);
   void setZoom(double factor, ExceptionState&);
 
   // Find in page. The browser searches the guest; results arrive in
@@ -224,6 +233,8 @@ class CORE_EXPORT HTMLWebViewElement final
 
   void FaviconChanged(const KURL& icon) override;
 
+  void TargetUrlChanged(const KURL& url) override;
+
   // Sent only on change, like HistoryChanged.
   void FindChanged(int32_t matches, int32_t active_match) override;
   void ContentSizeChanged(int32_t width, int32_t height) override;
@@ -294,6 +305,10 @@ class CORE_EXPORT HTMLWebViewElement final
   String security_;
   double zoom_ = 1.0;
   String favicon_;
+  String target_url_;
+  // On the document's `mousemove` while `target_url_` is set. See
+  // PointerMoved.
+  Member<NativeEventListener> pointer_listener_;
   int32_t find_matches_ = 0;
   int32_t find_active_match_ = 0;
   int32_t content_width_ = 0;

@@ -14,6 +14,9 @@ held button from affecting later readings. The release carries the same
 
 The button is an argument: guard-webview-routed-link.sh compares a left press
 (follows the link in place) with a middle press (opens a second window).
+
+`--move` moves the pointer there instead, with nothing held, so it hovers.
+guard-webview-target-url.sh uses it.
 """
 
 import argparse
@@ -34,6 +37,17 @@ def click(connection, x, y, button="left"):
         command(connection, 1, "Input.dispatchMouseEvent", pressing(x, y, button)),
         command(connection, 2, "Input.dispatchMouseEvent", releasing(x, y, button)),
     ]
+
+
+def move(connection, x, y):
+    """Move the pointer to (x, y) with nothing held, and return the response."""
+    return command(connection, 1, "Input.dispatchMouseEvent", moving(x, y))
+
+
+def moving(x, y):
+    """Build the event for the pointer arriving at (x, y) with nothing held."""
+    # No click count: a move is no part of a click.
+    return dict(mouse_event("mouseMoved", x, y, "none", NONE_HELD), clickCount=0)
 
 
 def pressing(x, y, button="left"):
@@ -74,19 +88,32 @@ def main():
         default="left",
         help="which button to press; middle asks for a second window, right for a menu",
     )
+    parser.add_argument(
+        "--move",
+        action="store_true",
+        help="move the pointer there with nothing held instead of clicking",
+    )
     arguments = parser.parse_args()
 
     connection = connect(shell_target(arguments.port))
-    answers = click(connection, arguments.x, arguments.y, arguments.button)
+    answers = (
+        [move(connection, arguments.x, arguments.y)]
+        if arguments.move
+        else click(connection, arguments.x, arguments.y, arguments.button)
+    )
     connection.close()
 
     for answer in answers:
         if "error" in answer:
-            raise SystemExit("the engine refused the click: %s" % answer["error"])
-    print(
-        "clicked the %s button at %d,%d" % (arguments.button, arguments.x, arguments.y),
-        flush=True,
-    )
+            raise SystemExit("the engine refused the event: %s" % answer["error"])
+    if arguments.move:
+        print("moved the pointer to %d,%d" % (arguments.x, arguments.y), flush=True)
+    else:
+        print(
+            "clicked the %s button at %d,%d"
+            % (arguments.button, arguments.x, arguments.y),
+            flush=True,
+        )
 
 
 if __name__ == "__main__":
