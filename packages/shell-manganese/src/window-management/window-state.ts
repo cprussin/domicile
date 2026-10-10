@@ -182,7 +182,7 @@ export type WindowState = {
    * monitor tell new presses from ones it has handled.
    */
   pressed: number;
-  /** The scratchpad windows, most recently hidden last. */
+  /** The scratchpad windows, next to show first. */
   scratchpad: readonly string[];
   windows: readonly ShellWindow[];
   workspaces: readonly Workspace[];
@@ -1631,14 +1631,15 @@ const hideInScratchpad = (state: WindowState): WindowState => {
 };
 
 /**
- * `scratchpad show`: hides the focused scratchpad float, or else shows the
- * most recently hidden window as a float, as sway cycles them.
+ * `scratchpad show`: hides the focused scratchpad float to the back of the
+ * scratchpad, or else shows the front one as a float, so presses rotate through
+ * the windows as in sway.
  */
 const showScratchpad = (state: WindowState): WindowState => {
   const workspace = workspaceHere(state);
   const id = focusedOn(workspace);
   const up = id === undefined ? undefined : floatOn(workspace, id);
-  const hidden = state.scratchpad.at(-1);
+  const [hidden, ...rest] = state.scratchpad;
   if (up?.scratchpad === true && id !== undefined) {
     return onCurrent(
       { ...state, scratchpad: [...state.scratchpad, id] },
@@ -1647,9 +1648,8 @@ const showScratchpad = (state: WindowState): WindowState => {
   } else if (hidden === undefined) {
     return state;
   } else {
-    return onCurrent(
-      { ...state, scratchpad: state.scratchpad.slice(0, -1) },
-      (found) => shown(found, hidden, screenHere(state)),
+    return onCurrent({ ...state, scratchpad: rest }, (found) =>
+      shown(found, hidden, screenHere(state)),
     );
   }
 };
