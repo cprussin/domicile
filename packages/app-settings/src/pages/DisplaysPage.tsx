@@ -1,0 +1,529 @@
+import { Button } from "@domicile-desktop/component-library/Button";
+import { Card } from "@domicile-desktop/component-library/Card";
+import { Input } from "@domicile-desktop/component-library/Input";
+import { Select } from "@domicile-desktop/component-library/Select";
+import { Switch } from "@domicile-desktop/component-library/Switch";
+import { PlusIcon } from "@phosphor-icons/react/dist/ssr/Plus";
+import { TrashIcon } from "@phosphor-icons/react/dist/ssr/Trash";
+import { XIcon } from "@phosphor-icons/react/dist/ssr/X";
+import { useId, useState } from "react";
+
+import { css } from "../../styled-system/css";
+import { flex, grid } from "../../styled-system/patterns";
+import type { ConfigPath } from "../config-document";
+import type { ConfigEditor, ConfigPageProps } from "../config-editor";
+import type { Display, Placement, Profile, TRANSFORMS } from "../config-schema";
+import type { NumberRule } from "../number-text";
+import { parseNumber } from "../number-text";
+import { Page } from "../Page";
+import { SettingRow } from "../SettingRow";
+import { TextSetting } from "../TextSetting";
+
+const ROTATIONS = [
+  { label: "None", value: "normal" },
+  { label: "90°", value: "rotate-90" },
+  { label: "180°", value: "rotate-180" },
+  { label: "270°", value: "rotate-270" },
+] as const satisfies readonly {
+  label: string;
+  value: (typeof TRANSFORMS)[number];
+}[];
+
+const WHOLE = { integer: true, positive: false } as const;
+const COUNT = { integer: true, positive: true } as const;
+const SCALE = { integer: false, positive: true } as const;
+
+/** `output`: the profiles that place monitors, and described displays. */
+export const DisplaysPage = ({
+  description,
+  editor,
+  title,
+}: ConfigPageProps) => {
+  const { readOnly, settings } = editor;
+  const { output } = settings;
+  const disabled = readOnly !== undefined;
+  return (
+    <Page description={description} readOnly={readOnly} title={title}>
+      <Card>
+        <SettingRow
+          hint="For Domicile's own window when no displays are described below. 1 turns scaling off."
+          title="Highest scale"
+        >
+          <NumberSetting
+            editor={editor}
+            fallback={2}
+            label="Highest scale"
+            path={["output", "max_scale"]}
+            rule={COUNT}
+            value={output.max_scale}
+          />
+        </SettingRow>
+      </Card>
+      {output.profiles.map((profile, index) => (
+        <ProfileCard
+          editor={editor}
+          index={index}
+          key={`${index}-${profile.name}`}
+          profile={profile}
+          profiles={output.profiles.length}
+        />
+      ))}
+      {!disabled && (
+        <Card title="New profile">
+          <AddRow
+            button="Add profile"
+            label="New profile name"
+            onAdd={(name) => {
+              editor.set(["output", "profiles", output.profiles.length], {
+                displays: [],
+                name,
+              });
+            }}
+            placeholder="desk"
+          />
+        </Card>
+      )}
+      <Card title="Described displays">
+        <p className={hintStyles}>
+          For a nested desktop, which has no monitors to find. Sizes and
+          positions are in logical pixels.
+        </p>
+        {output.displays.length > 0 && (
+          <div aria-hidden className={describedStyles}>
+            {["Display", "Width", "Height", "X", "Y", "Scale"].map(
+              (heading) => (
+                <span className={headingStyles} key={heading}>
+                  {heading}
+                </span>
+              ),
+            )}
+          </div>
+        )}
+        {output.displays.map((display, index) => (
+          <DescribedDisplay
+            display={display}
+            editor={editor}
+            index={index}
+            key={`${index}-${display.name}`}
+          />
+        ))}
+        {!disabled && (
+          <AddRow
+            button="Add display"
+            label="New display name"
+            onAdd={(name) => {
+              editor.set(["output", "displays", output.displays.length], {
+                name,
+                size: [1920, 1080],
+              });
+            }}
+            placeholder="left"
+          />
+        )}
+      </Card>
+    </Page>
+  );
+};
+
+type ProfileCardProps = {
+  editor: ConfigEditor;
+  profile: Profile;
+  index: number;
+  profiles: number;
+};
+
+/** A profile: its name, and where it puts each monitor. */
+const ProfileCard = ({
+  editor,
+  index,
+  profile,
+  profiles,
+}: ProfileCardProps) => {
+  const { readOnly, set } = editor;
+  const disabled = readOnly !== undefined;
+  const path = ["output", "profiles", index] as const;
+  return (
+    <Card title={`Profile: ${profile.name}`}>
+      <SettingRow
+        hint="The first profile whose monitors are all plugged in applies."
+        title="Name"
+      >
+        <TextSetting
+          disabled={disabled}
+          label={`Profile ${index + 1} name`}
+          onCommit={(name) => {
+            if (name.trim() === "") {
+              return false;
+            } else {
+              set([...path, "name"], name.trim());
+              return true;
+            }
+          }}
+          value={profile.name}
+        />
+      </SettingRow>
+      {profile.displays.length > 0 && (
+        <div aria-hidden className={placementStyles}>
+          {["Monitor", "", "Scale", "X", "Y", "Rotation"].map((heading, at) => (
+            <span className={headingStyles} key={`${at}-${heading}`}>
+              {heading}
+            </span>
+          ))}
+        </div>
+      )}
+      {profile.displays.map((placement, at) => (
+        <PlacementRow
+          editor={editor}
+          key={`${at}-${placement.display}`}
+          path={[...path, "displays", at]}
+          placement={placement}
+        />
+      ))}
+      {!disabled && (
+        <div className={actionsStyles}>
+          <AddRow
+            button="Add monitor"
+            label={`Add a monitor to ${profile.name}`}
+            onAdd={(display) => {
+              set([...path, "displays", profile.displays.length], { display });
+            }}
+            placeholder="DEL DELL U3219Q 2ZLS413"
+          />
+          <Button
+            beforeIcon={<TrashIcon size={14} />}
+            onClick={() => {
+              set(profiles === 1 ? ["output", "profiles"] : path, undefined);
+            }}
+            size="sm"
+            variant="ghost"
+          >
+            {`Remove ${profile.name}`}
+          </Button>
+        </div>
+      )}
+    </Card>
+  );
+};
+
+type PlacementRowProps = {
+  editor: ConfigEditor;
+  placement: Placement;
+  path: ConfigPath;
+};
+
+/** One monitor in a profile: on or off, its scale, position and rotation. */
+const PlacementRow = ({ editor, path, placement }: PlacementRowProps) => {
+  const { readOnly, set } = editor;
+  const disabled = readOnly !== undefined;
+  const name = placement.display;
+  const nameId = useId();
+  return (
+    <div className={placementStyles}>
+      <code className={nameStyles} id={nameId}>
+        {name}
+      </code>
+      <Switch
+        aria-labelledby={nameId}
+        checked={placement.enabled}
+        disabled={disabled}
+        label="On"
+        onCheckedChange={(enabled) => {
+          set([...path, "enabled"], enabled ? undefined : false);
+        }}
+      />
+      <NumberSetting
+        editor={editor}
+        fallback={1}
+        label={`${name} scale`}
+        path={[...path, "scale"]}
+        rule={SCALE}
+        value={placement.scale}
+      />
+      <PositionSetting
+        editor={editor}
+        name={name}
+        path={[...path, "position"]}
+        position={placement.position}
+      />
+      <Select
+        aria-label={`${name} rotation`}
+        disabled={disabled}
+        onValueChange={(transform) => {
+          set(
+            [...path, "transform"],
+            transform === "normal" ? undefined : transform,
+          );
+        }}
+        options={ROTATIONS}
+        size="sm"
+        value={placement.transform}
+      />
+      {!disabled && (
+        <Button
+          label={`Remove ${name}`}
+          onClick={() => {
+            set(path, undefined);
+          }}
+          size="sm"
+          variant="ghost"
+        >
+          <XIcon size={14} />
+        </Button>
+      )}
+    </div>
+  );
+};
+
+type DescribedDisplayProps = {
+  editor: ConfigEditor;
+  display: Display;
+  index: number;
+};
+
+/** A display described outright: its size, position and scale. */
+const DescribedDisplay = ({
+  display,
+  editor,
+  index,
+}: DescribedDisplayProps) => {
+  const { readOnly, set } = editor;
+  const path = ["output", "displays", index] as const;
+  const name = display.name;
+  return (
+    <div className={describedStyles}>
+      <code className={nameStyles}>{name}</code>
+      <NumberSetting
+        editor={editor}
+        label={`${name} width`}
+        path={[...path, "size", 0]}
+        rule={COUNT}
+        value={display.size[0]}
+      />
+      <NumberSetting
+        editor={editor}
+        label={`${name} height`}
+        path={[...path, "size", 1]}
+        rule={COUNT}
+        value={display.size[1]}
+      />
+      <PositionSetting
+        editor={editor}
+        name={name}
+        path={[...path, "position"]}
+        position={display.position}
+      />
+      <NumberSetting
+        editor={editor}
+        fallback={1}
+        label={`${name} scale`}
+        path={[...path, "scale"]}
+        rule={COUNT}
+        value={display.scale}
+      />
+      {readOnly === undefined && (
+        <Button
+          label={`Remove ${name}`}
+          onClick={() => {
+            set(path, undefined);
+          }}
+          size="sm"
+          variant="ghost"
+        >
+          <XIcon size={14} />
+        </Button>
+      )}
+    </div>
+  );
+};
+
+type PositionSettingProps = {
+  editor: ConfigEditor;
+  name: string;
+  path: ConfigPath;
+  position: readonly [number, number];
+};
+
+/** A position's x and y, written together; `[0, 0]` is the default. */
+const PositionSetting = ({
+  editor,
+  name,
+  path,
+  position,
+}: PositionSettingProps) => {
+  const [x, y] = position;
+  const commit = (next: [number, number]) => {
+    editor.set(path, next[0] === 0 && next[1] === 0 ? undefined : next);
+  };
+  return (
+    <>
+      <NumberInput
+        editor={editor}
+        label={`${name} x`}
+        onNumber={(value) => {
+          commit([value, y]);
+        }}
+        rule={WHOLE}
+        value={x}
+      />
+      <NumberInput
+        editor={editor}
+        label={`${name} y`}
+        onNumber={(value) => {
+          commit([x, value]);
+        }}
+        rule={WHOLE}
+        value={y}
+      />
+    </>
+  );
+};
+
+type NumberSettingProps = {
+  editor: ConfigEditor;
+  label: string;
+  path: ConfigPath;
+  rule: NumberRule;
+  value: number;
+  /** The default, which is written as no value. */
+  fallback?: number | undefined;
+};
+
+/** A number at `path`. */
+const NumberSetting = ({
+  editor,
+  fallback,
+  label,
+  path,
+  rule,
+  value,
+}: NumberSettingProps) => (
+  <NumberInput
+    editor={editor}
+    label={label}
+    onNumber={(number) => {
+      editor.set(path, number === fallback ? undefined : number);
+    }}
+    rule={rule}
+    value={value}
+  />
+);
+
+type NumberInputProps = {
+  editor: ConfigEditor;
+  label: string;
+  rule: NumberRule;
+  value: number;
+  onNumber: (value: number) => void;
+};
+
+/** A narrow text field that takes a number, reporting one it refuses. */
+const NumberInput = ({
+  editor,
+  label,
+  onNumber,
+  rule,
+  value,
+}: NumberInputProps) => (
+  <TextSetting
+    disabled={editor.readOnly !== undefined}
+    label={label}
+    onCommit={(text) =>
+      parseNumber(text, rule).match({
+        Err: (why) => {
+          editor.report(`Not a ${label}`)(why);
+          return false;
+        },
+        Ok: (number) => {
+          onNumber(number);
+          return true;
+        },
+      })
+    }
+    value={value.toString()}
+    width={16}
+  />
+);
+
+type AddRowProps = {
+  label: string;
+  button: string;
+  placeholder: string;
+  onAdd: (name: string) => void;
+};
+
+/** A field and button that add a named item. */
+const AddRow = ({ button, label, onAdd, placeholder }: AddRowProps) => {
+  const [name, setName] = useState("");
+  const add = () => {
+    if (name.trim() !== "") {
+      onAdd(name.trim());
+      setName("");
+    }
+  };
+  return (
+    <div className={addStyles}>
+      <Input
+        aria-label={label}
+        onChange={(event) => {
+          setName(event.target.value);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            add();
+          }
+        }}
+        placeholder={placeholder}
+        size="sm"
+        value={name}
+      />
+      <Button
+        beforeIcon={<PlusIcon size={14} />}
+        onClick={add}
+        size="sm"
+        variant="outline"
+      >
+        {button}
+      </Button>
+    </div>
+  );
+};
+
+const hintStyles = css({ color: "muted", fontSize: "xs", margin: 0 });
+
+const placementStyles = grid({
+  alignItems: "center",
+  columnGap: 2,
+  gridTemplateColumns:
+    "minmax(0, 1fr) auto {spacing.16} {spacing.16} {spacing.16} {spacing.28} {spacing.8}",
+});
+
+const describedStyles = grid({
+  alignItems: "center",
+  columnGap: 2,
+  gridTemplateColumns:
+    "minmax(0, 1fr) {spacing.16} {spacing.16} {spacing.16} {spacing.16} {spacing.16} {spacing.8}",
+});
+
+const headingStyles = css({ color: "muted", fontSize: "xs" });
+
+const nameStyles = css({
+  fontFamily: "mono",
+  fontSize: "xs",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+});
+
+const actionsStyles = flex({
+  align: "center",
+  gap: 2,
+  justify: "space-between",
+  wrap: "wrap",
+});
+
+const addStyles = grid({
+  alignItems: "center",
+  flexGrow: 1,
+  gap: 2,
+  gridTemplateColumns: "minmax(0, 1fr) auto",
+});

@@ -18,15 +18,20 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use domicile_launch::address::url_for;
+use domicile_launch::apps::list_the_settings_host;
 use domicile_launch::build_progress::{bar, heard, Heard as BuilderHeard, Step};
 use domicile_launch::cli::{invocation, CliError, Invocation};
-use domicile_launch::command_socket::{load_shell, open_url};
+use domicile_launch::command_socket::{
+    load_shell, open_url, set_site_permission, site_permissions,
+};
 use domicile_launch::components::{apps, builder, components, our_shell, Components};
 use domicile_launch::compositor_socket::{screenshot, send_shell};
 use domicile_launch::config_check::check;
 use domicile_launch::config_path::{config_file, is_module, ConfigFile};
 use domicile_launch::config_watch;
-use domicile_launch::control::{answer, Request, Response};
+use domicile_launch::control::{
+    answer, Desktop as ControlDesktop, Request, Response, SettingsFiles,
+};
 use domicile_launch::control_socket::{
     address, advertised, answer_one, ask, take, Control, PATIENCE as ANSWER_WITHIN, VARIABLE,
 };
@@ -131,7 +136,7 @@ fn shell_to_load(shell: &str) -> Result<Request, String> {
 /// file: the config's directory. Otherwise the working directory is used.
 fn shell_named(shell: &str, handed_in: Option<&str>, from: Option<&Path>) -> Result<Shell, String> {
     match wanted(shell, handed_in, from)? {
-        Wanted::Ready(page) => Ok(page),
+        Wanted::Ready(page) | Wanted::Ours(page) => Ok(page),
         Wanted::Built(asked) => built(&myself()?, &asked, &mut |_| {}).and_then(as_shell),
     }
 }
@@ -139,7 +144,25 @@ fn shell_named(shell: &str, handed_in: Option<&str>, from: Option<&Path>) -> Res
 /// A shell to serve as it is, or the builder arguments that make one.
 enum Wanted {
     Ready(Shell),
+    /// One of Domicile's prebuilt shells, which has no source to edit.
+    Ours(Shell),
     Built(Vec<std::ffi::OsString>),
+}
+
+impl Wanted {
+    /// The file the shell is written in, which the Settings app edits: a
+    /// module served as is, or an entry the builder builds. A package has
+    /// none.
+    fn source(&self) -> Option<PathBuf> {
+        match self {
+            Wanted::Ready(page) => Some(page.root.join(&page.module)),
+            Wanted::Ours(_) => None,
+            Wanted::Built(asked) => match asked.as_slice() {
+                [flag, entry] if flag == "--entry" => Some(PathBuf::from(entry)),
+                _ => None,
+            },
+        }
+    }
 }
 
 /// What `shell` needs before it can be served; see [`shell_named`].
@@ -165,7 +188,7 @@ fn wanted(shell: &str, handed_in: Option<&str>, from: Option<&Path>) -> Result<W
         // Prebuilt in the install, so no build is needed.
         ShellSource::Ours(name) => our_shell(&myself()?, &name, &env, &|path| path.exists())
             .map(|root| {
-                Wanted::Ready(Shell {
+                Wanted::Ours(Shell {
                     root,
                     module: PathBuf::from("shell.js"),
                 })
@@ -329,6 +352,10 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
             eprintln!("domicile: the screenshot was canceled");
             Ok(ExitCode::FAILURE)
         }
+        // Only `domicile-settings-host` asks for these.
+        Response::SettingsFiles { .. } | Response::SitePermissions(_) | Response::Stored => Err(
+            format!("the desktop answered {answer:?}, which no command asks for"),
+        ),
         // Print the desktop's own reason.
         Response::Refused { why } => {
             eprintln!("domicile: {why}");
@@ -386,14 +413,40 @@ fn desktop(shell: Option<&str>, flag: Option<&Path>) -> Result<ExitCode, String>
     let profile = claim(&kept)
         .map_err(|why| format!("cannot claim a profile beside {}: {why}", kept.display()))?;
 
+    // Lets the Settings app start its host, which ships beside this binary.
+    let settings_host = binary.with_file_name("domicile-settings-host");
+    match settings_host.exists() {
+        true => list_the_settings_host(&profile.path, &settings_host).map_err(|why| {
+            format!(
+                "cannot list the Settings app's host in {}: {why}",
+                profile.path.display()
+            )
+        })?,
+        false => println!(
+            "settings: no {} beside domicile, so the Settings app cannot read the config",
+            settings_host.display()
+        ),
+    }
+
     // A per-run directory for sockets, so concurrent desktops do not collide.
     let runtime = tempdir().map_err(|why| format!("no runtime directory: {why}"))?;
+
+    // What the Settings app edits. A module config is evaluated to
+    // `config.json` in the runtime directory, below.
+    let files = SettingsFiles {
+        config: config.path().map(Path::to_path_buf),
+        evaluated: config
+            .path()
+            .is_some_and(is_module)
+            .then(|| runtime.join("config.json")),
+        shell: wanted.source(),
+    };
 
     // A shell that builds quickly is built before anything starts, so a broken
     // one starts nothing. A slower build continues behind the splash.
     let splash = runtime.join("splash");
     let (page, building) = match wanted {
-        Wanted::Ready(page) => (page, None),
+        Wanted::Ready(page) | Wanted::Ours(page) => (page, None),
         Wanted::Built(asked) => first_build(&binary, asked, &splash)?,
     };
     let places = Runtime {
@@ -427,6 +480,7 @@ fn desktop(shell: Option<&str>, flag: Option<&Path>) -> Result<ExitCode, String>
     answering(
         &control,
         Arc::clone(&serving),
+        files,
         places.command.clone(),
         places.chrome_socket.clone(),
     )?;
@@ -730,21 +784,26 @@ const CLEANLY: &str = "exit status: 0";
 fn answering(
     control: &Control,
     serving: Arc<Mutex<Shell>>,
+    files: SettingsFiles,
     engine: PathBuf,
     chrome: PathBuf,
 ) -> Result<(), String> {
     let listener = control
         .listener()
         .map_err(|why| format!("cannot answer the control socket: {why}"))?;
-    let (engine, chrome) = (Arc::new(engine), Arc::new(chrome));
+    let (files, engine, chrome) = (Arc::new(files), Arc::new(engine), Arc::new(chrome));
     std::thread::spawn(move || {
         for connection in listener.incoming() {
             match connection {
                 Ok(stream) => {
-                    let (serving, engine, chrome) =
-                        (serving.clone(), engine.clone(), chrome.clone());
+                    let (serving, files, engine, chrome) = (
+                        serving.clone(),
+                        files.clone(),
+                        engine.clone(),
+                        chrome.clone(),
+                    );
                     std::thread::spawn(move || {
-                        answer_a_command(stream, &serving, &engine, &chrome)
+                        answer_a_command(stream, &serving, &files, &engine, &chrome)
                     });
                 }
                 Err(why) => eprintln!("domicile: a command did not arrive: {why}"),
@@ -755,21 +814,37 @@ fn answering(
 }
 
 /// Answers the one command on `stream`; see [`answering`].
-fn answer_a_command(stream: UnixStream, serving: &Mutex<Shell>, engine: &Path, chrome: &Path) {
+fn answer_a_command(
+    stream: UnixStream,
+    serving: &Mutex<Shell>,
+    files: &SettingsFiles,
+    engine: &Path,
+    chrome: &Path,
+) {
     if let Err(why) = answer_one(stream, ANSWER_WITHIN, &|line| {
         let page = served(serving);
         answer(
             line,
-            &page.root.join(&page.module),
-            &|root, module| load_the_shell(engine, root, module, serving),
-            &|url| open_url(engine, url, ANSWER_WITHIN).map_err(|why| why.to_string()),
-            // The interactive one waits for the user, however long that takes.
-            &|file| {
-                screenshot(chrome, file, file.map(|_| CAPTURE_WITHIN))
-                    .map_err(|why| why.to_string())
-            },
-            &|command| {
-                send_shell(chrome, command, Some(SEND_WITHIN)).map_err(|why| why.to_string())
+            &ControlDesktop {
+                module: &page.root.join(&page.module),
+                files,
+                load: &|root, module| load_the_shell(engine, root, module, serving),
+                open: &|url| open_url(engine, url, ANSWER_WITHIN).map_err(|why| why.to_string()),
+                // The interactive one waits for the user, however long that
+                // takes.
+                capture: &|file| {
+                    screenshot(chrome, file, file.map(|_| CAPTURE_WITHIN))
+                        .map_err(|why| why.to_string())
+                },
+                permissions: &|| {
+                    site_permissions(engine, ANSWER_WITHIN).map_err(|why| why.to_string())
+                },
+                set_permission: &|site| {
+                    set_site_permission(engine, site, ANSWER_WITHIN).map_err(|why| why.to_string())
+                },
+                send: &|command| {
+                    send_shell(chrome, command, Some(SEND_WITHIN)).map_err(|why| why.to_string())
+                },
             },
         )
     }) {

@@ -144,11 +144,16 @@ fn a_command_reaches_the_desktop_and_the_answer_comes_back() {
         answer_one(stream, BRIEFLY, &|line| {
             domicile_launch::control::answer(
                 line,
-                Path::new("/desktops/mine/shell.js"),
-                &|_, _| panic!("a question about this desktop reaches no engine"),
-                &|_| panic!("a question about this desktop reaches no engine"),
-                &|_| panic!("a question about this desktop reaches no engine"),
-                &|_| panic!("a question about this desktop reaches no compositor"),
+                &domicile_launch::control::Desktop {
+                    capture: &|_| panic!("a question about this desktop reaches no engine"),
+                    files: &domicile_launch::control::SettingsFiles::default(),
+                    load: &|_, _| panic!("a question about this desktop reaches no engine"),
+                    module: Path::new("/desktops/mine/shell.js"),
+                    open: &|_| panic!("a question about this desktop reaches no engine"),
+                    send: &|_| panic!("a question about this desktop reaches no compositor"),
+                    permissions: &|| panic!("a question about this desktop reaches no engine"),
+                    set_permission: &|_| panic!("a question about this desktop reaches no engine"),
+                },
             )
         })
         .expect("the client asked and read the answer");
