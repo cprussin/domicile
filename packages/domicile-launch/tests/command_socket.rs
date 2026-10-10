@@ -1,12 +1,18 @@
 //! Tests for sending commands over the engine command socket.
 
+use std::collections::BTreeMap;
 use std::io::{BufRead as _, BufReader, Write as _};
 use std::os::unix::net::UnixListener;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use domicile_launch::command::{load_shell_line, open_url_line};
-use domicile_launch::command_socket::{load_shell, open_url, CommandError};
+use domicile_launch::command::{
+    load_shell_line, open_url_line, set_site_permission_line, site_permissions_line,
+};
+use domicile_launch::command_socket::{
+    load_shell, open_url, set_site_permission, site_permissions, CommandError,
+};
+use domicile_launch::site_permissions::{Permission, Setting, SitePermission, SiteSettings};
 
 /// Reply timeout: long enough for a loaded machine, short enough for a fast
 /// suite.
@@ -145,4 +151,47 @@ fn scratch() -> (tempfile::TempDir, PathBuf) {
     let directory = tempfile::tempdir().expect("a temp directory");
     let path = directory.path().join("command.sock");
     (directory, path)
+}
+
+#[test]
+fn the_engine_is_asked_for_site_permissions_and_lists_them() {
+    let (_scratch, path) = scratch();
+    let heard = an_engine(
+        &path,
+        Some("{\"type\":\"site_permissions\",\"defaults\":{\"camera\":\"ask\"},\"sites\":[{\"origin\":\"https://meet.example\",\"permission\":\"camera\",\"setting\":\"allow\"}]}\n"),
+    );
+
+    assert_eq!(
+        site_permissions(&path, BRIEFLY).expect("the engine listed them"),
+        SiteSettings {
+            defaults: BTreeMap::from([(Permission::Camera, Setting::Ask)]),
+            sites: vec![SitePermission {
+                origin: "https://meet.example".to_string(),
+                permission: Permission::Camera,
+                setting: Setting::Allow,
+            }],
+        }
+    );
+    assert_eq!(
+        heard.join().expect("the engine was listening"),
+        site_permissions_line()
+    );
+}
+
+#[test]
+fn the_engine_is_sent_a_site_s_setting_and_says_it_stored_it() {
+    let (_scratch, path) = scratch();
+    let heard = an_engine(&path, Some("{\"type\":\"set\"}\n"));
+    let site = SitePermission {
+        origin: "https://meet.example".to_string(),
+        permission: Permission::Microphone,
+        setting: Setting::Block,
+    };
+
+    set_site_permission(&path, &site, BRIEFLY).expect("the engine stored it");
+
+    assert_eq!(
+        heard.join().expect("the engine was listening"),
+        set_site_permission_line(&site)
+    );
 }

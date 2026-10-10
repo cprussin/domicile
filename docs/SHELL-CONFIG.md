@@ -5,7 +5,8 @@ keyboard, idle, lock, lockdown, theme and extensions. The compositor reads it at
 and reloads it on every change. The schema is the `domicile-config` crate's.
 
 For what a shell does with these settings, see
-[WRITING-A-SHELL.md](WRITING-A-SHELL.md).
+[WRITING-A-SHELL.md](WRITING-A-SHELL.md). The Settings app edits the file
+([SETTINGS.md](SETTINGS.md)).
 
 ## Where it is
 

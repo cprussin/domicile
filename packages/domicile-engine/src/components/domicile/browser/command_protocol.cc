@@ -15,6 +15,7 @@
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/values.h"
+#include "components/domicile/browser/site_permissions.h"
 
 namespace domicile {
 namespace {
@@ -22,10 +23,13 @@ namespace {
 // The command names.
 constexpr char kLoadShell[] = "load_shell";
 constexpr char kOpenUrl[] = "open_url";
+constexpr char kListSitePermissionsCommand[] = "site_permissions";
+constexpr char kSetSitePermissionCommand[] = "set_site_permission";
 
 std::string Line(base::DictValue reply) {
   std::string line;
-  // Replies hold only strings, so a write failure is a bug.
+  // Replies hold only strings, lists and objects, so a write failure is a
+  // bug.
   CHECK(base::JSONWriter::Write(reply, &line));
   line.push_back('\n');
   return line;
@@ -40,8 +44,17 @@ std::string Done(std::string_view type) {
 std::string AnswerLoadShell(const base::DictValue& request,
                             LoadShell load_shell);
 std::string AnswerOpenUrl(const base::DictValue& request, OpenUrl open_url);
+std::string AnswerSitePermissions(ListSitePermissions list_site_permissions);
+std::string AnswerSetSitePermission(const base::DictValue& request,
+                                    SetSitePermission set_site_permission);
 
 }  // namespace
+
+SitePermissionList::SitePermissionList() = default;
+SitePermissionList::SitePermissionList(const SitePermissionList&) = default;
+SitePermissionList& SitePermissionList::operator=(const SitePermissionList&) =
+    default;
+SitePermissionList::~SitePermissionList() = default;
 
 std::string RefusedCommand(std::string_view why) {
   base::DictValue reply;
@@ -51,8 +64,7 @@ std::string RefusedCommand(std::string_view why) {
 }
 
 void AnswerCommand(std::string_view line,
-                   LoadShell load_shell,
-                   OpenUrl open_url,
+                   const CommandActions& actions,
                    CommandReply reply) {
   const std::optional<base::DictValue> request =
       base::JSONReader::ReadDict(line, base::JSON_PARSE_RFC);
@@ -83,16 +95,26 @@ void AnswerCommand(std::string_view line,
     return;
   }
   if (*type == kLoadShell) {
-    std::move(reply).Run(AnswerLoadShell(*request, load_shell));
+    std::move(reply).Run(AnswerLoadShell(*request, actions.load_shell));
     return;
   }
   if (*type == kOpenUrl) {
-    std::move(reply).Run(AnswerOpenUrl(*request, open_url));
+    std::move(reply).Run(AnswerOpenUrl(*request, actions.open_url));
+    return;
+  }
+  if (*type == kListSitePermissionsCommand) {
+    std::move(reply).Run(AnswerSitePermissions(actions.list_site_permissions));
+    return;
+  }
+  if (*type == kSetSitePermissionCommand) {
+    std::move(reply).Run(
+        AnswerSetSitePermission(*request, actions.set_site_permission));
     return;
   }
   std::move(reply).Run(RefusedCommand(base::StrCat(
       {"\"", *type, "\" is not a command this engine knows; it takes \"",
-       kLoadShell, "\" and \"", kOpenUrl, "\""})));
+       kLoadShell, "\", \"", kOpenUrl, "\", \"", kListSitePermissionsCommand,
+       "\" and \"", kSetSitePermissionCommand, "\""})));
 }
 
 namespace {
@@ -149,6 +171,72 @@ std::string AnswerOpenUrl(const base::DictValue& request, OpenUrl open_url) {
     return RefusedCommand("this engine has no shell page to open it in");
   }
   return Done("opened");
+}
+
+std::string AnswerSitePermissions(ListSitePermissions list_site_permissions) {
+  const std::optional<SitePermissionList> list = list_site_permissions();
+  if (!list) {
+    return RefusedCommand(
+        "this engine has no shell, and so no profile whose site permissions "
+        "to list");
+  }
+  base::DictValue defaults;
+  for (const auto& [permission, setting] : list->defaults) {
+    defaults.Set(PermissionName(permission), SettingName(setting));
+  }
+  base::ListValue sites;
+  for (const StoredSitePermission& site : list->sites) {
+    base::DictValue entry;
+    entry.Set("origin", site.origin.Serialize());
+    entry.Set("permission", PermissionName(site.permission));
+    entry.Set("setting", SettingName(site.setting));
+    sites.Append(std::move(entry));
+  }
+  base::DictValue reply;
+  reply.Set("type", kListSitePermissionsCommand);
+  reply.Set("defaults", std::move(defaults));
+  reply.Set("sites", std::move(sites));
+  return Line(std::move(reply));
+}
+
+std::string AnswerSetSitePermission(const base::DictValue& request,
+                                    SetSitePermission set_site_permission) {
+  const std::string* origin = request.FindString("origin");
+  const std::string* permission_name = request.FindString("permission");
+  const std::string* setting_name = request.FindString("setting");
+  if (origin == nullptr || permission_name == nullptr ||
+      setting_name == nullptr) {
+    return RefusedCommand(
+        "set_site_permission needs an \"origin\", a \"permission\" and a "
+        "\"setting\"");
+  }
+  const GURL site(*origin);
+  if (!site.is_valid() || !HasSitePermissions(site)) {
+    return RefusedCommand(base::StrCat(
+        {"\"", *origin,
+         "\" is not a site: only http, https and extension pages have site "
+         "permissions"}));
+  }
+  const std::optional<mojom::WebViewPermission> permission =
+      PermissionNamed(*permission_name);
+  if (!permission) {
+    return RefusedCommand(
+        base::StrCat({"\"", *permission_name,
+                      "\" is not a permission a site is asked for"}));
+  }
+  const std::optional<mojom::WebViewPermissionSetting> setting =
+      SettingNamed(*setting_name);
+  if (!setting) {
+    return RefusedCommand(base::StrCat(
+        {"\"", *setting_name,
+         "\" is not a setting; a site permission is \"ask\", \"allow\" or "
+         "\"block\""}));
+  }
+  if (!set_site_permission(url::Origin::Create(site), *permission, *setting)) {
+    return RefusedCommand(
+        "this engine has no shell, and so no profile to store the setting in");
+  }
+  return Done("set");
 }
 
 }  // namespace
