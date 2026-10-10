@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
-use domicile_launch::components::{builder, components, our_shell, Components};
+use domicile_launch::components::{apps, builder, components, our_shell, Components};
 
 fn nothing(_: &str) -> Option<String> {
     None
@@ -135,4 +135,32 @@ fn domicile_s_own_shell_is_its_prebuilt_directory() {
         Ok(PathBuf::from("/usr/libexec/domicile/shells/manganese"))
     );
     assert!(our_shell(Path::new("/usr/bin/domicile"), "nickel", &nothing, &built).is_err());
+}
+
+#[test]
+fn domicile_s_own_apps_are_beside_the_engine_or_where_the_environment_says() {
+    let shipped = |path: &Path| path == Path::new("/usr/libexec/domicile/apps");
+    assert_eq!(
+        apps(Path::new("/usr/bin/domicile"), &nothing, &shipped),
+        Some(PathBuf::from("/usr/libexec/domicile/apps"))
+    );
+    assert_eq!(
+        apps(
+            Path::new("/usr/bin/domicile"),
+            &|name| (name == "DOMICILE_APPS").then(|| "/src/apps".to_string()),
+            &shipped
+        ),
+        Some(PathBuf::from("/src/apps"))
+    );
+}
+
+/// A checkout builds no apps, and a desktop runs without them.
+#[test]
+fn a_desktop_without_apps_beside_it_has_none() {
+    assert_eq!(
+        apps(Path::new("/src/target/debug/domicile"), &nothing, &|_| {
+            false
+        }),
+        None
+    );
 }

@@ -21,7 +21,7 @@ use domicile_launch::address::url_for;
 use domicile_launch::build_progress::{bar, heard, Heard as BuilderHeard, Step};
 use domicile_launch::cli::{invocation, CliError, Invocation};
 use domicile_launch::command_socket::{load_shell, open_url};
-use domicile_launch::components::{builder, components, our_shell, Components};
+use domicile_launch::components::{apps, builder, components, our_shell, Components};
 use domicile_launch::compositor_socket::screenshot;
 use domicile_launch::config_check::check;
 use domicile_launch::config_path::{config_file, is_module, ConfigFile};
@@ -362,6 +362,8 @@ fn desktop(shell: Option<&str>, flag: Option<&Path>) -> Result<ExitCode, String>
         components(&binary, &env, &|path| path.exists()).map_err(|missing| missing.to_string())?;
     // `BROWSER` for apps in this desktop, installed next to this binary.
     let browser = binary.with_file_name("domicile-open-url");
+    // Domicile's own apps, such as History, which every desktop installs.
+    let apps = apps(&binary, &env, &|path| path.exists());
 
     // `DOMICILE_PAGE` names the module like the argument does, for packaged
     // desktops.
@@ -480,6 +482,7 @@ fn desktop(shell: Option<&str>, flag: Option<&Path>) -> Result<ExitCode, String>
     // Held for the whole run. Dropping it ends the graphical session.
     let said = SaidSession::new(&platform);
     let desktop = Desktop {
+        apps: apps.as_deref(),
         browser: &browser,
         components: &components,
         config: compositor_config.as_deref(),
@@ -518,6 +521,7 @@ fn desktop(shell: Option<&str>, flag: Option<&Path>) -> Result<ExitCode, String>
 
 /// Inputs shared by every desktop a run starts.
 struct Desktop<'a> {
+    apps: Option<&'a Path>,
     browser: &'a Path,
     components: &'a Components,
     config: Option<&'a Path>,
@@ -579,6 +583,7 @@ fn up(desktop: &Desktop, heard: &Arc<Mutex<Heard>>) -> Result<(), String> {
                 &desktop.components.engine,
                 desktop.browser,
                 &data_of(desktop.browser)?,
+                desktop.apps,
                 desktop.places,
                 desktop.config,
                 desktop.said.scope_clients,

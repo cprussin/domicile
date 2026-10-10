@@ -73,7 +73,10 @@ source_set("domicile") {
     "//ui/gfx",
     "//ui/gfx/codec",
     "//url",
-    # Tab helpers for <webview> guests (SessionTabHelper).
+    # Tab helpers for <webview> guests (SessionTabHelper, HistoryTabHelper,
+    # the favicon driver).
+    "//chrome/browser/favicon",
+    "//chrome/browser/history",
     "//chrome/browser/sessions",
     # Guests as tabs of the desk's one window for chrome.tabs and
     # chrome.windows.

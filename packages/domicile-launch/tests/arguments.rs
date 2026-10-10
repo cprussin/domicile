@@ -314,3 +314,29 @@ fn scoping_takes_yes_or_no() {
         }
     );
 }
+
+/// A compositor started from a checkout has no apps to install.
+#[test]
+fn there_are_no_apps_unless_the_command_line_names_them() {
+    let parsed = parse(the_required_two()).expect("both are there");
+
+    assert_eq!(parsed.apps, None);
+}
+
+#[test]
+fn the_apps_are_read_as_a_path() {
+    let parsed = parse([
+        "--chrome-socket",
+        "/run/chrome.sock",
+        "--session",
+        "/run/session.json",
+        "--apps",
+        "/usr/libexec/domicile/apps",
+    ])
+    .expect("a command line with apps parses");
+
+    assert_eq!(
+        parsed.apps,
+        Some(PathBuf::from("/usr/libexec/domicile/apps"))
+    );
+}
