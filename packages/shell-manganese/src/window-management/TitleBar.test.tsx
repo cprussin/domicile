@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { fireEvent, render, screen } from "@testing-library/react";
 
 import { css } from "../../styled-system/css";
+import { raised } from "./placement";
 import { TitleBar } from "./TitleBar";
 import type { StripPlace } from "./tree/frames";
 import { Layout } from "./tree/node";
@@ -379,6 +380,16 @@ describe("TitleBar", () => {
         face(tab({ strip: { ...MIDDLE_TAB, open: true } }).container).className,
       ).toContain(raised);
       expect(face(tab({}).container).className).not.toContain(raised);
+    });
+
+    // Swapped tabs slide past each other. The open tab slides over its
+    // neighbors, whose pieces of the strip would otherwise cover it.
+    it("draws the open tab over the rest of its strip", () => {
+      const depth = (strip: StripPlace) =>
+        bar(tab({ depth: 2, strip }).container).style.zIndex;
+
+      expect(depth({ ...MIDDLE_TAB, open: true })).toBe(raised(2).toString());
+      expect(depth(MIDDLE_TAB)).toBe("2");
     });
 
     // A press on a hidden tab opens it; one on the open tab does nothing new.
