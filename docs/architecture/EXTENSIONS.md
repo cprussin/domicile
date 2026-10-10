@@ -92,8 +92,10 @@ interface DomicileExtension {
 }
 ```
 
-- **`extensions`** holds the full list, and `extensionschanged` fires on every
-  change, so a reloaded page reads it again. Sources: `ExtensionRegistryObserver` and
+- **`extensions`** holds every extension whose manifest names an action, and
+  `extensionschanged` fires on every change, so a reloaded page reads it
+  again. Chrome synthesizes an action for one that names none and shows it in
+  the toolbar only once pinned; the tray has no pins, so it leaves it out. Sources: `ExtensionRegistryObserver` and
   `ExtensionActionDispatcher::Observer::OnExtensionActionUpdated`.
 - **`icon`** is a data URL because `action.setIcon({imageData})` has no URL.
 - **Action state** is per tab. The list reports the active tab's state and is
@@ -141,11 +143,13 @@ and popup panel in `packages/shell-manganese/src/extensions/`.
 | Window | One `DomicileWindowController : extensions::WindowController` in `WindowControllerList`. Its tabs are the live guests in creation order. |
 | Active tab | The guest whose element last took focus. Extension pages (popup windows, action popups) never become the active tab. |
 
-Patch 0056 attaches two helpers to every tab guest on creation:
+Patch 0056 attaches helpers to every tab guest on creation:
 
 - `SessionTabHelper`: tab id, read by `declarativeNetRequest` `tabIds` and
   `webRequest`.
 - `extensions::TabHelper`: `activeTab`, `scripting.executeScript`.
+- `HistoryTabHelper` and the favicon driver: visits for `chrome.history`. See
+  [HISTORY.md](/docs/HISTORY.md).
 
 The browser gets no focus notification for an inner `WebContents`, so the
 element reports it (`WebViewGuest.Focused`).
