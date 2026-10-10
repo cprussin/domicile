@@ -159,10 +159,11 @@ Evidence is in [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md),
    and the cookies and site data that `chrome://settings` manages in
    Chrome. No design doc yet.
 
-9. **Split up the compositor's `main.rs`.** Subsystems such as the lock,
-   portals and screens are their own modules. `main.rs` still holds the
-   event-loop state, the chrome hub, frame reporting and most request
-   handling. Left: extract cohesive subsystems so each can be read and tested
+9. **Split up the compositor's `main.rs`.** The lock, portals, screens, chrome
+   hub, chrome connection, frame report and request handling are their own
+   modules. `main.rs` still holds the event-loop state, startup (`run`), the
+   surface commit path, casting, the engine pump and the Wayland protocol
+   handlers. Left: extract cohesive subsystems so each can be read and tested
    alone, keeping the event-loop state and the order it changes in clear from
    `main.rs`.
 

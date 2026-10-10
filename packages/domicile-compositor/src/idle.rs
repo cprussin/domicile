@@ -19,8 +19,8 @@ use std::time::{Duration, Instant};
 
 use domicile_protocol::HostMessage;
 
+use crate::client_requests::ClientRequest;
 use crate::engine::{Connector, Display};
-use crate::ClientRequest;
 use domicile_config::Transform;
 
 /// A change in whether the screens should be lit.
@@ -324,8 +324,8 @@ mod tests {
     use domicile_protocol::{HostMessage, PortalAnswer, TrayAction};
 
     use super::{announced, darkened, somebody_is_here, Blanking, Idle, StillThere};
+    use crate::client_requests::ClientRequest;
     use crate::engine::{Clipboard, Connector, Display};
-    use crate::ClientRequest;
     use domicile_config::Transform;
 
     const AFTER: Duration = Duration::from_secs(600);

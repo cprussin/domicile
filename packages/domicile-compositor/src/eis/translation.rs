@@ -19,8 +19,8 @@ use std::collections::BTreeSet;
 use domicile_scene::Point;
 use tracing::warn;
 
+use crate::client_requests::ClientRequest;
 use crate::eis::desk::Desk;
-use crate::ClientRequest;
 
 /// The pointer's left button, in evdev codes.
 const BTN_LEFT: u32 = 0x110;
@@ -219,9 +219,9 @@ mod tests {
     use domicile_scene::{Bounds, Point};
 
     use super::{Emulated, Input, BTN_LEFT};
+    use crate::client_requests::ClientRequest;
     use crate::eis::desk::{Desk, Window};
     use crate::screens::Advertised;
-    use crate::ClientRequest;
 
     /// One 1280x800 display with a window at 100,100, 400x300.
     fn desk() -> Desk {

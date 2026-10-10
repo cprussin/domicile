@@ -16,8 +16,8 @@ use super::barriers::{placed, Zone};
 use super::recorded::{a_client, a_receiver, Got, Recorded, Saw, KEYSYM_A};
 use super::Compositor;
 use super::{serve, Capabilities, Captured, Captures, Eis, Emulated};
+use crate::client_requests::ClientRequest;
 use crate::lock::{refused, Asked, Refusal};
-use crate::ClientRequest;
 
 /// How long a test waits for the client or the server.
 const PATIENCE: Duration = Duration::from_secs(10);

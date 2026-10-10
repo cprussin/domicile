@@ -569,12 +569,12 @@ mod tests {
 
     use zbus::zvariant::Value;
 
+    use crate::client_requests::ClientRequest;
     use crate::eis::recorded::{a_client, Saw};
     use crate::portals::fixture::{
         call, next, options, path, served, starting, Results, Served, APP, SESSION,
     };
     use crate::portals::restore::Tokens;
-    use crate::ClientRequest;
 
     const REMOTE_DESKTOP: &str = "org.freedesktop.impl.portal.RemoteDesktop";
 

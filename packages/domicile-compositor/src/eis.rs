@@ -50,7 +50,7 @@ pub use self::devices::Capabilities;
 use self::devices::{devices, Kind};
 pub use self::translation::Emulated;
 use self::translation::Input;
-use crate::ClientRequest;
+use crate::client_requests::ClientRequest;
 
 /// What the server needs from the compositor it runs in.
 pub trait Compositor {
