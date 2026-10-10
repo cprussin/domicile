@@ -123,9 +123,9 @@ TEST(EngineEventQueueTest, ADisplayListArrivesWholeAcrossTheQueue) {
 TEST(EngineEventQueueTest, DrainTakesEverythingQueuedAndThenSleeps) {
   EngineEventQueue queue;
 
-  queue.Push({.type = EngineEvent::Type::kFrame, .surface = 1});
+  queue.Push({.type = EngineEvent::Type::kConfigure, .surface = 1});
   queue.Push({.type = EngineEvent::Type::kReleased, .surface = 1, .buffer = 9});
-  queue.Push({.type = EngineEvent::Type::kFrame, .surface = 2});
+  queue.Push({.type = EngineEvent::Type::kConfigure, .surface = 2});
 
   EXPECT_EQ(queue.Drain().size(), 3u);
   EXPECT_FALSE(Readable(queue.fd()));
@@ -136,10 +136,10 @@ TEST(EngineEventQueueTest, DrainTakesEverythingQueuedAndThenSleeps) {
 TEST(EngineEventQueueTest, AnEventPushedAfterADrainStillWakesThePoller) {
   EngineEventQueue queue;
 
-  queue.Push({.type = EngineEvent::Type::kFrame, .surface = 1});
+  queue.Push({.type = EngineEvent::Type::kReleased, .surface = 1});
   EXPECT_EQ(queue.Drain().size(), 1u);
 
-  queue.Push({.type = EngineEvent::Type::kFrame, .surface = 2});
+  queue.Push({.type = EngineEvent::Type::kReleased, .surface = 2});
 
   EXPECT_TRUE(Readable(queue.fd()));
   ASSERT_EQ(queue.Drain().size(), 1u);
@@ -152,7 +152,7 @@ class Pusher : public base::DelegateSimpleThread::Delegate {
 
   void Run() override {
     for (int i = 0; i < count_; ++i) {
-      queue_->Push({.type = EngineEvent::Type::kFrame,
+      queue_->Push({.type = EngineEvent::Type::kReleased,
                     .surface = static_cast<uint32_t>(i)});
     }
   }

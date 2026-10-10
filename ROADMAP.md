@@ -281,6 +281,10 @@ Understood and not scheduled.
   menus get the page menu. Each needs a field on `WebViewContextMenu` in
   `web_view_guest.mojom`.
 - **Client-drawn cursor surfaces show a plain arrow.**
+- **The engine's `frame` callback is never called.** The engine asks viz for no
+  BeginFrames ([ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md#the-c-abi)),
+  and the compositor ignores `Event::Frame`. Removing the field moves the
+  callbacks after it, so `domicile_engine.h` and `engine.rs` change together.
 - **Unknown: whether viz hit testing must agree with Domicile's.** Domicile
   routes input itself from the box the page reports. If viz's hit-test data
   disagrees, the engine may swallow events.
@@ -353,6 +357,11 @@ Understood and not scheduled.
   shell's frame until it draws at the new size
   ([ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md#embed-deadlines)). No
   guard times a resize of either.
+- **A browser window attached while hidden is visible for a moment.**
+  `WebViewGuest::AttachWindowTo` shows the page before the element's frame
+  reports `display: none`, so the page sees `visibilitychange` twice. The
+  browser learns whether a `<webview>` is rendered only from the frame the
+  attach creates. `guard-webview-hidden.sh` checks the state it settles in.
 - **The padlock state is not fully tested.** `PageChanged` carries the address
   and `security_state::GetSecurityLevel` for the visible entry, the same source
   as Chrome's omnibox. The fixture serves plain http from localhost, so the

@@ -15,15 +15,19 @@
 #include "base/test/task_environment.h"
 #include "base/test/test_future.h"
 #include "components/domicile/browser/external_surface_provider.h"
+#include "components/viz/common/frame_sinks/begin_frame_args.h"
 #include "components/viz/common/surfaces/frame_sink_id.h"
 #include "components/viz/common/surfaces/frame_sink_id_allocator.h"
 #include "components/viz/common/surfaces/local_surface_id.h"
 #include "components/viz/common/surfaces/parent_local_surface_id_allocator.h"
 #include "components/viz/host/host_frame_sink_manager.h"
+#include "components/viz/service/frame_sinks/compositor_frame_sink_support.h"
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
 #include "components/viz/test/compositor_frame_helpers.h"
+#include "components/viz/test/fake_external_begin_frame_source.h"
 #include "components/viz/test/fake_host_frame_sink_client.h"
 #include "components/viz/test/mock_compositor_frame_sink_client.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -70,7 +74,6 @@ class FakeSurfaceObserver : public mojom::SurfaceObserver {
   }
 
   // Unused here: these tests need no GPU.
-  void OnFrame(int64_t deadline_us) override { frames_++; }
   void OnBufferReleased(uint64_t buffer_id) override {
     released_.push_back(buffer_id);
   }
@@ -79,7 +82,6 @@ class FakeSurfaceObserver : public mojom::SurfaceObserver {
   base::test::TestFuture<viz::LocalSurfaceId, gfx::Size, double> embedded_;
   // Every LocalSurfaceId sent, in order. The producer submits to the last.
   std::vector<viz::LocalSurfaceId> told_;
-  int frames_ = 0;
   std::vector<uint64_t> released_;
 
  private:
@@ -191,6 +193,28 @@ class FrameSinkBrokerTest : public testing::Test {
     return future.Get();
   }
 
+  // Brokers a sink the browser holds, as a producer with only dmabufs asks
+  // for, and returns its id.
+  viz::FrameSinkId BrokerABrowserHeldSink(
+      mojo::Remote<mojom::FrameSinkBroker>& remote,
+      mojo::PendingRemote<mojom::SurfaceObserver> observer) {
+    base::test::TestFuture<const viz::FrameSinkId&> future;
+    remote->CreateFrameSink(mojo::NullRemote(), mojo::NullReceiver(),
+                            std::move(observer), kTestApp,
+                            future.GetCallback());
+    return future.Get();
+  }
+
+  // Sends BeginFrames to the page's frame sink and every sink under it, as the
+  // page's display does. Ticks only when a test calls TestOnBeginFrame.
+  viz::FakeExternalBeginFrameSource& DriveBeginFrames() {
+    begin_frame_source_.emplace(/*refresh_rate=*/60.0,
+                                /*tick_automatically=*/false);
+    frame_sink_manager_->RegisterBeginFrameSource(&*begin_frame_source_,
+                                                  kPageFrameSinkId);
+    return *begin_frame_source_;
+  }
+
  protected:
   void SetUp() override {
     host_frame_sink_manager_ = std::make_unique<viz::HostFrameSinkManager>();
@@ -241,6 +265,9 @@ class FrameSinkBrokerTest : public testing::Test {
   void TearDown() override {
     broker_.reset();
     RunUntilIdle();
+    if (begin_frame_source_) {
+      frame_sink_manager_->UnregisterBeginFrameSource(&*begin_frame_source_);
+    }
     host_frame_sink_manager_->InvalidateFrameSinkId(
         kPageFrameSinkId, &page_frame_sink_client_, {});
     frame_sink_manager_->SetLocalClient(nullptr);
@@ -263,6 +290,8 @@ class FrameSinkBrokerTest : public testing::Test {
   std::unique_ptr<viz::HostFrameSinkManager> host_frame_sink_manager_;
   std::unique_ptr<viz::FrameSinkManagerImpl> frame_sink_manager_;
   std::unique_ptr<FrameSinkBroker> broker_;
+  // Set by DriveBeginFrames.
+  std::optional<viz::FakeExternalBeginFrameSource> begin_frame_source_;
 };
 
 // A non-renderer caller gets an allocated FrameSinkId and a live
@@ -589,6 +618,53 @@ TEST_F(FrameSinkBrokerTest, EmbedRegistersTheHierarchyUnderThePage) {
   RunUntilIdle();
 
   EXPECT_TRUE(VizHasHierarchy(kPageFrameSinkId, frame_sink_id));
+}
+
+// An embedded window asks viz for no BeginFrames. Its producer submits when
+// its client commits, so a BeginFrame every vsync would only wake it.
+TEST_F(FrameSinkBrokerTest, AnEmbeddedWindowAsksForNoBeginFrames) {
+  viz::FakeExternalBeginFrameSource& begin_frames = DriveBeginFrames();
+  mojo::Remote<mojom::FrameSinkBroker> remote;
+  broker()->Bind(remote.BindNewPipeAndPassReceiver());
+  FakeSurfaceObserver observer;
+  BrokerABrowserHeldSink(remote, observer.BindRemote());
+
+  base::test::TestFuture<const std::optional<viz::FrameSinkId>&> embedded;
+  broker()->Embed(kTestApp, kPageFrameSinkId, AllocateLocalSurfaceId(),
+                  kEmbeddedSize, kEmbeddedScale, embedded.GetCallback());
+  ASSERT_TRUE(embedded.Wait());
+  RunUntilIdle();
+
+  EXPECT_EQ(0u, begin_frames.num_observers());
+}
+
+// A BeginFrame viz sends anyway, such as the one carrying a frame's
+// presentation timing, is answered with DidNotProduceFrame. Unanswered, viz
+// expects damage from the surface and the display waits for the window until
+// each frame's deadline.
+TEST_F(FrameSinkBrokerTest, ABeginFrameWithNothingToDrawIsAnswered) {
+  viz::FakeExternalBeginFrameSource& begin_frames = DriveBeginFrames();
+  mojo::Remote<mojom::FrameSinkBroker> remote;
+  broker()->Bind(remote.BindNewPipeAndPassReceiver());
+  FakeSurfaceObserver observer;
+  const viz::FrameSinkId frame_sink_id =
+      BrokerABrowserHeldSink(remote, observer.BindRemote());
+  base::test::TestFuture<const std::optional<viz::FrameSinkId>&> embedded;
+  broker()->Embed(kTestApp, kPageFrameSinkId, AllocateLocalSurfaceId(),
+                  kEmbeddedSize, kEmbeddedScale, embedded.GetCallback());
+  ASSERT_TRUE(embedded.Wait());
+  RunUntilIdle();
+
+  // Viz wanting to send one. With no active surface, the sink forwards it to
+  // its client rather than finishing it itself.
+  frame_sink_manager_->GetFrameSinkForId(frame_sink_id)
+      ->SetNeedsBeginFrame(true);
+  ASSERT_EQ(1u, begin_frames.num_observers());
+  begin_frames.TestOnBeginFrame(
+      begin_frames.CreateBeginFrameArgs(BEGINFRAME_FROM_HERE));
+  RunUntilIdle();
+
+  EXPECT_TRUE(begin_frames.AllFramesDidFinish());
 }
 
 // Destroying a sink also unregisters it from the hierarchy.

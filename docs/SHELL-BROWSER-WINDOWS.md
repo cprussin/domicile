@@ -69,6 +69,10 @@ plus.addEventListener("click", () => {
   drawing a browser window does not send `src` on connect, since the page is
   already loaded.
 - Give it a size. Its intrinsic size is 300×150.
+- **Hide a window with `display: none`** on the view or an ancestor, and keep
+  it mounted. Its page is then hidden like a background tab:
+  `document.visibilityState` is `hidden`, timers slow and nothing paints.
+  Showing the view shows the page.
 - `domicile://` addresses, and `blob:` URLs the shell created, show
   `about:blank#blocked`. A guest on the shell's origin could control the
   compositor.
