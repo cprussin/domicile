@@ -2,7 +2,9 @@
 # Runs the DRM platform's gtest cases in ozone_unittests, plus the two evdev
 # suites linked there (`ScrollAcceleratorTest` and `WheelTicksTest`; see
 # scripts/test-a-fast-scroll-goes-further.sh and
-# scripts/test-a-mouse-goes-through-libinput.sh).
+# scripts/test-a-mouse-goes-through-libinput.sh), and one Wayland suite,
+# `WaylandKeyboardWithoutKeymapTest` (see
+# scripts/test-modifiers-wait-for-a-keymap.sh).
 #
 #   ./scripts/engine-drm-unit-tests.sh        # the suites this fork wrote
 #   ./scripts/engine-drm-unit-tests.sh all    # and upstream's, on the probe
@@ -42,6 +44,7 @@ SUITES=(
   DrmPointerCrossingTest:20
   ScrollAcceleratorTest:7
   WheelTicksTest:3
+  WaylandKeyboardWithoutKeymapTest:1
 )
 
 cd "$ENGINE_OUT"

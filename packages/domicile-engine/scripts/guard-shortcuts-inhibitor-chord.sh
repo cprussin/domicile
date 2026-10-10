@@ -302,9 +302,9 @@ HOST_BEFORE="$(host_fired)"
 
 # 3b. Restore a seat keyboard. The calibration's wtype exited and left the
 #    seat with no active keyboard, so a new client gets modifiers before a
-#    keymap; the engine then segfaults in `xkb_state_update_mask` under
-#    `WaylandKeyboard::OnModifiers` (crux run 36232746099). A held Shift_L
-#    makes this wtype the seat keyboard for the rest of the run.
+#    keymap. Patch `0108` makes the engine ignore those. A held Shift_L makes
+#    this wtype the seat keyboard for the rest of the run, so the engine gets
+#    a keymap when its window takes focus.
 if [ "$KEYBOARD_UP" = "1" ]; then
   env "$(compositor_env)" \
     "${WTYPE[@]}" -k Shift_L -s "$KEYBOARD_LIVES_FOR_MS" >>"$KEYBOARD_LOG" 2>&1 &
