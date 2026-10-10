@@ -9,9 +9,6 @@
 //! 3. Once every mapped window has committed a frame
 //!    ([`Turnover::repainted`]), the chromes are told the windows switched.
 //!
-//! Browser windows are in the old frame. Wayland windows are not, so they
-//! change before the wipe reaches them (`ROADMAP.md`, "Theme").
-//!
 //! Each phase has a deadline, because some shells never capture and some
 //! windows never repaint. Past it, the theme switches without animation.
 //!
@@ -26,9 +23,7 @@ use domicile_protocol::Theme;
 
 /// How long the windows wait for every chrome to capture.
 ///
-/// A shell captures after about 150ms. The bound that matters is Chromium's
-/// four-second limit on a view transition's update callback, which must cover
-/// this, [`REPAINT_WITHIN`] and the shell's own work.
+/// A shell captures after about 150ms, once its view transition is ready.
 pub const CAPTURE_WITHIN: Duration = Duration::from_millis(1000);
 
 /// How long to wait for windows to repaint after the portal signal.

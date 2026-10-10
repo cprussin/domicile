@@ -32,6 +32,17 @@ describe("the domicile preset", () => {
     expect(unreadableOn("base")).toStrictEqual([]);
   });
 
+  it("holds the theme wipe at its start while windows turn", () => {
+    // `flipThemeWithAnimation` sets `data-theme-holding` until the windows
+    // have repainted behind the old frame.
+    expect(
+      at(
+        at(domicilePreset, "globalCss"),
+        "html[data-theme-holding]::view-transition-new(root)",
+      ),
+    ).toStrictEqual({ animationPlayState: "paused" });
+  });
+
   describe("under high contrast", () => {
     it("draws text further from the light ground", () => {
       expect(textContrast("_light", true)).toBeGreaterThan(
