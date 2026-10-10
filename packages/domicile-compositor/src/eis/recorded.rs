@@ -15,8 +15,8 @@ use reis::event::{Connection, Device, EiEvent};
 use smithay::reexports::calloop::EventLoop;
 
 use super::{serve, Compositor, Desk, Eis, Window};
+use crate::client_requests::ClientRequest;
 use crate::screens::Advertised;
-use crate::ClientRequest;
 
 /// `a`, which this compositor's keyboard types with `KEY_A`.
 pub const KEYSYM_A: u32 = 0x61;

@@ -13,12 +13,13 @@ use domicile_host::Host;
 use domicile_protocol::{ChromeMessage, HostMessage, Theme};
 use smithay::reexports::calloop::channel::Sender;
 
+use crate::client_requests::ClientRequest;
 use crate::file_indexing::Offered;
 use crate::frame_report::{report, FrameTimings, FrameWindow, REPORT_EVERY};
 use crate::lock::Seen;
 use crate::outbound::{outbound, Outbound, OutboundReceiver, OutboundSender};
 use crate::portals::Portals;
-use crate::{chrome_key, eis, notifications, tray, ClientRequest};
+use crate::{chrome_key, eis, notifications, tray};
 
 /// One connected chrome: where to write to it.
 pub struct Chrome {
@@ -248,9 +249,9 @@ pub mod fixture {
     use smithay::reexports::calloop::channel::channel;
 
     use super::ChromeHub;
+    use crate::client_requests::ClientRequest;
     use crate::outbound::Outbound;
     use crate::portals::Portals;
-    use crate::ClientRequest;
 
     /// Drain the hub's queued messages, in order.
     ///
@@ -296,9 +297,9 @@ mod tests {
         announce_open_apps, broadcast_closed, broadcast_focus_decision, broadcast_focus_request,
         ChromeHub,
     };
+    use crate::client_requests::ClientRequest;
     use crate::outbound::Outbound;
     use crate::portals::Portals;
-    use crate::ClientRequest;
 
     #[test]
     fn a_theme_the_shell_picked_reaches_every_page_on_the_desk() {

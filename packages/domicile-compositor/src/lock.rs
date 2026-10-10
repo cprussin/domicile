@@ -22,8 +22,8 @@ use domicile_host::system::Reach;
 use domicile_protocol::{HostMessage, Passphrase};
 
 use crate::chrome_connection::ConnectionRequest;
+use crate::client_requests::ClientRequest;
 use crate::pam::{NoPam, Pam};
-use crate::ClientRequest;
 
 /// Checks whether a passphrase unlocks the desktop.
 ///
@@ -387,8 +387,8 @@ mod tests {
         Verifier,
     };
     use crate::chrome_connection::ConnectionRequest;
+    use crate::client_requests::ClientRequest;
     use crate::engine::Clipboard;
-    use crate::ClientRequest;
 
     /// A verifier that accepts one word, so the tests focus on the lock.
     struct OnlyTheWord(&'static str);

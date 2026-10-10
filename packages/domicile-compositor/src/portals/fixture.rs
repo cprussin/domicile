@@ -17,9 +17,9 @@ use super::restore::Tokens;
 use super::settings::Appearance;
 use super::socket_pair::connected;
 use super::{export, heard, Backends, Starting, OBJECT_PATH};
+use crate::client_requests::ClientRequest;
 use crate::eis::recorded::in_the_background;
 use crate::notifications::NotificationServer;
-use crate::ClientRequest;
 
 const REMOTE_DESKTOP: &str = "org.freedesktop.impl.portal.RemoteDesktop";
 

@@ -14,13 +14,11 @@ use domicile_protocol::{ChromeMessage, HostMessage, SystemRequest, Theme};
 use tracing::{debug, warn};
 
 use crate::chrome_hub::{Chrome, ChromeHub};
+use crate::client_requests::ClientRequest;
 use crate::lock::Asked;
 use crate::peer_process::peer_pid;
 use crate::scale::output_scale;
-use crate::{
-    chrome_key, desktop_environment, grepped, home_directory, say_what_the_lock_refused,
-    ClientRequest,
-};
+use crate::{chrome_key, desktop_environment, grepped, home_directory, say_what_the_lock_refused};
 
 /// A chrome request answered on its own connection thread.
 ///
@@ -572,10 +570,10 @@ mod tests {
     };
     use crate::chrome_hub::fixture::{hub_with_an_app, queued};
     use crate::chrome_hub::{Chrome, ChromeHub};
+    use crate::client_requests::ClientRequest;
     use crate::file_indexing::Offered;
     use crate::lock::{Lock, Offer, Unlocking};
     use crate::portals::Portals;
-    use crate::ClientRequest;
 
     #[test]
     fn a_chrome_that_goes_away_is_forgotten() {
