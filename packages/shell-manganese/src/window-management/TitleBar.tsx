@@ -175,6 +175,11 @@ export const TitleBar = ({
     rect,
   );
   const sliding = move !== undefined;
+  // A closing last tab leaves the strip past it to the tab before it.
+  const endsStrip =
+    strip?.rest !== undefined &&
+    strip.at === strip.tabs - 1 &&
+    motion !== "closing-tab";
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: a press only raises the window; its buttons are the keyboard-reachable controls
     // biome-ignore lint/a11y/noNoninteractiveElementInteractions: same as above
@@ -197,7 +202,7 @@ export const TitleBar = ({
       data-focus={focus}
       data-group-selected={groupSelected || undefined}
       data-motion={motion}
-      data-strip-end={strip?.rest === undefined ? undefined : true}
+      data-strip-end={endsStrip || undefined}
       // A press here lands outside every `<app>`, so the window is named for
       // the focus handling in `AppWindow`.
       data-window={window}
@@ -313,7 +318,7 @@ export const TitleBar = ({
           </Button>
         </span>
       </div>
-      {strip?.rest !== undefined && onNewTab !== undefined && (
+      {endsStrip && onNewTab !== undefined && (
         // A press here must not select or drag the last tab.
         <span
           className={newTabStyles}
