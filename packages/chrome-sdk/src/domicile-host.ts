@@ -756,6 +756,11 @@ export type DomicileTrayItem = {
    * calls through callSystem().
    */
   readonly menu: string;
+  /**
+   * The icon's `ItemIsMenu`: it only has a menu, so a shell opens the menu on
+   * the primary button rather than activating it.
+   */
+  readonly itemIsMenu: boolean;
 };
 
 /**

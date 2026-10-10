@@ -196,6 +196,8 @@ extension with an action. See
     out. Choosing an entry sends it to the app and closes the menu. A menu
     that cannot be read shows "Menu unavailable".
   - An app without a dbusmenu gets `ContextMenu` on right-click instead.
+  - An app that is only a menu (`ItemIsMenu`) gets the right-click
+    behavior on click too.
   - Entries show their icon: the icon theme's for its name, else the app's
     own picture. Symbolic icons take the text's color. See
     [SHELL-CONFIG.md](/docs/SHELL-CONFIG.md#theme).
