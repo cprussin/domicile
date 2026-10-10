@@ -257,8 +257,9 @@ class DomicileBrowserService {
   ~DomicileBrowserService() = default;
 
   void Bind(
-      mojo::PendingReceiver<domicile::mojom::ExternalSurfaceProvider> receiver) {
-    provider_.Bind(std::move(receiver));
+      mojo::PendingReceiver<domicile::mojom::ExternalSurfaceProvider> receiver,
+      uint32_t renderer_client_id) {
+    provider_.Bind(std::move(receiver), renderer_client_id);
   }
 
  private:
@@ -338,8 +339,9 @@ void StartDomicileFrameSinkBroker() {
 }
 
 void BindDomicileExternalSurfaceProvider(
+    uint32_t renderer_client_id,
     mojo::PendingReceiver<domicile::mojom::ExternalSurfaceProvider> receiver) {
-  GetDomicileBrowserService().Bind(std::move(receiver));
+  GetDomicileBrowserService().Bind(std::move(receiver), renderer_client_id);
 }
 
 }  // namespace content

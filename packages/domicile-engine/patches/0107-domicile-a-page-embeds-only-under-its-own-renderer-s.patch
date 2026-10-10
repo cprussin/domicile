@@ -1,0 +1,53 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Sat, 10 Oct 2026 00:00:00 +0000
+Subject: [PATCH] domicile: a page embeds only under its own renderer's frame
+ sink
+
+ExternalSurfaceProvider was bound through a free function, so the
+browser did not know which renderer called Embed() and could not check
+the parent frame sink it named. The binding now passes the renderer's
+frame sink client id, the one CreateEmbeddedFrameSinkProvider gives
+EmbeddedFrameSinkProviderImpl, and the provider reports any other parent
+as a bad message.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on `crux`.
+---
+ .../render_process_host_impl_receiver_bindings.cc | 15 +++++++++------
+ 1 file changed, 9 insertions(+), 6 deletions(-)
+
+diff --git a/content/browser/renderer_host/render_process_host_impl_receiver_bindings.cc b/content/browser/renderer_host/render_process_host_impl_receiver_bindings.cc
+index eb72f30..781d934 100644
+--- a/content/browser/renderer_host/render_process_host_impl_receiver_bindings.cc
++++ b/content/browser/renderer_host/render_process_host_impl_receiver_bindings.cc
+@@ -8,6 +8,7 @@
+ #include "content/browser/renderer_host/render_process_host_impl.h"
+ // clang-format on
+ 
++#include "base/numerics/safe_conversions.h"
+ #include "components/discardable_memory/public/mojom/discardable_shared_memory_manager.mojom.h"
+ #include "components/discardable_memory/service/discardable_shared_memory_manager.h"
+ #include "components/metrics/single_sample_metrics.h"
+@@ -182,13 +183,15 @@ void RenderProcessHostImpl::RegisterMojoInterfaces() {
+           &RenderProcessHostImpl::CreateEmbeddedFrameSinkProvider,
+           instance_weak_factory_.GetWeakPtr()));
+ 
+-  // Domicile's counterpart of the line above, and deliberately not a method on
+-  // this class: brokering a frame sink to a producer that is not a renderer
+-  // hangs off nothing a RenderProcessHost owns. What the renderer gets here is
++  // Domicile's counterpart of the line above. What the renderer gets here is
+   // only the embedding half — see components/domicile/mojom/external_surface.mojom.
+-  AddUIThreadInterface(registry.get(),
+-                       base::BindRepeating(
+-                           &BindDomicileExternalSurfaceProvider));
++  // It takes the renderer's frame sink client id, the same one
++  // CreateEmbeddedFrameSinkProvider uses, to refuse a parent frame sink in
++  // another renderer.
++  AddUIThreadInterface(
++      registry.get(),
++      base::BindRepeating(&BindDomicileExternalSurfaceProvider,
++                          base::checked_cast<uint32_t>(id_.GetUnsafeValue())));
+ 
+   AddUIThreadInterface(
+       registry.get(),
