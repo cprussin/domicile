@@ -7,10 +7,12 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use domicile_launch::command::{
-    load_shell_line, open_url_line, set_site_permission_line, site_permissions_line,
+    config_extensions_line, load_shell_line, load_unpacked_line, open_url_line,
+    set_site_permission_line, site_permissions_line, uninstall_extension_line,
 };
 use domicile_launch::command_socket::{
-    load_shell, open_url, set_site_permission, site_permissions, CommandError,
+    config_extensions, load_shell, load_unpacked, open_url, set_site_permission, site_permissions,
+    uninstall_extension, CommandError,
 };
 use domicile_launch::site_permissions::{Permission, Setting, SitePermission, SiteSettings};
 
@@ -193,5 +195,56 @@ fn the_engine_is_sent_a_site_s_setting_and_says_it_stored_it() {
     assert_eq!(
         heard.join().expect("the engine was listening"),
         set_site_permission_line(&site)
+    );
+}
+
+#[test]
+fn the_engine_loads_an_unpacked_extension_and_names_its_id() {
+    let (_scratch, path) = scratch();
+    let heard = an_engine(
+        &path,
+        Some("{\"type\":\"loaded_unpacked\",\"id\":\"abcdefghijklmnopabcdefghijklmnop\"}\n"),
+    );
+    let directory = Path::new("/home/me/src/my-extension");
+
+    assert_eq!(
+        load_unpacked(&path, directory, BRIEFLY).expect("the engine loaded it"),
+        "abcdefghijklmnopabcdefghijklmnop"
+    );
+    assert_eq!(
+        heard.join().expect("the engine was listening"),
+        load_unpacked_line(directory)
+    );
+}
+
+#[test]
+fn the_engine_uninstalls_an_extension() {
+    let (_scratch, path) = scratch();
+    let heard = an_engine(&path, Some("{\"type\":\"uninstalled\"}\n"));
+
+    uninstall_extension(&path, "abcdefghijklmnopabcdefghijklmnop", BRIEFLY)
+        .expect("the engine uninstalled it");
+
+    assert_eq!(
+        heard.join().expect("the engine was listening"),
+        uninstall_extension_line("abcdefghijklmnopabcdefghijklmnop")
+    );
+}
+
+#[test]
+fn the_engine_lists_the_extensions_the_config_installed() {
+    let (_scratch, path) = scratch();
+    let heard = an_engine(
+        &path,
+        Some("{\"type\":\"config_extensions\",\"ids\":[\"abcdefghijklmnopabcdefghijklmnop\"]}\n"),
+    );
+
+    assert_eq!(
+        config_extensions(&path, BRIEFLY).expect("the engine listed them"),
+        vec!["abcdefghijklmnopabcdefghijklmnop".to_string()]
+    );
+    assert_eq!(
+        heard.join().expect("the engine was listening"),
+        config_extensions_line()
     );
 }

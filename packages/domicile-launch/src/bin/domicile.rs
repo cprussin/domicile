@@ -22,7 +22,8 @@ use domicile_launch::apps::list_the_settings_host;
 use domicile_launch::build_progress::{bar, heard, Heard as BuilderHeard, Step};
 use domicile_launch::cli::{invocation, CliError, Invocation};
 use domicile_launch::command_socket::{
-    load_shell, open_app, open_url, set_site_permission, site_permissions,
+    config_extensions, load_shell, load_unpacked, open_app, open_url, set_site_permission,
+    site_permissions, uninstall_extension,
 };
 use domicile_launch::components::{apps, builder, components, our_shell, Components};
 use domicile_launch::compositor_socket::{screenshot, send_shell};
@@ -358,9 +359,14 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
             Ok(ExitCode::FAILURE)
         }
         // Only `domicile-settings-host` asks for these.
-        Response::SettingsFiles { .. } | Response::SitePermissions(_) | Response::Stored => Err(
-            format!("the desktop answered {answer:?}, which no command asks for"),
-        ),
+        Response::SettingsFiles { .. }
+        | Response::SitePermissions(_)
+        | Response::Stored
+        | Response::LoadedUnpacked { .. }
+        | Response::Uninstalled
+        | Response::ConfigExtensions { .. } => Err(format!(
+            "the desktop answered {answer:?}, which no command asks for"
+        )),
         // Print the desktop's own reason.
         Response::Refused { why } => {
             eprintln!("domicile: {why}");
@@ -850,6 +856,15 @@ fn answer_a_command(
                 },
                 send: &|command| {
                     send_shell(chrome, command, Some(SEND_WITHIN)).map_err(|why| why.to_string())
+                },
+                load_unpacked: &|directory| {
+                    load_unpacked(engine, directory, ANSWER_WITHIN).map_err(|why| why.to_string())
+                },
+                uninstall_extension: &|id| {
+                    uninstall_extension(engine, id, ANSWER_WITHIN).map_err(|why| why.to_string())
+                },
+                config_extensions: &|| {
+                    config_extensions(engine, ANSWER_WITHIN).map_err(|why| why.to_string())
                 },
             },
         )

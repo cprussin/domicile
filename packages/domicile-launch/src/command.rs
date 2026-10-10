@@ -1,5 +1,5 @@
 //! The protocol the supervisor uses to send `load-shell`, `open-url` and the
-//! Settings app's site permissions to the engine.
+//! Settings app's site permissions and extensions to the engine.
 //!
 //! One JSON line each way per connection:
 //!
@@ -16,6 +16,15 @@
 //!
 //! {"type":"set_site_permission","version":1,"origin":"https://meet.example","permission":"camera","setting":"block"}
 //! {"type":"set"}   |   {"type":"refused","why":"…"}
+//!
+//! {"type":"load_unpacked","version":1,"directory":"/home/me/src/my-extension"}
+//! {"type":"loaded_unpacked","id":"…"}   |   {"type":"refused","why":"…"}
+//!
+//! {"type":"uninstall_extension","version":1,"id":"…"}
+//! {"type":"uninstalled"}   |   {"type":"refused","why":"…"}
+//!
+//! {"type":"config_extensions","version":1}
+//! {"type":"config_extensions","ids":["…"]}
 //! ```
 //!
 //! The engine side is C++ in the fork
@@ -50,6 +59,12 @@ pub enum Reply {
     SitePermissions(SiteSettings),
     /// The engine stored a site's setting.
     Set,
+    /// The engine loaded an unpacked extension, which has this id.
+    LoadedUnpacked { id: String },
+    /// The engine uninstalled an extension.
+    Uninstalled,
+    /// The ids of the extensions the desk's config installed.
+    ConfigExtensions { ids: Vec<String> },
     /// The engine refused, with its reason.
     Refused { why: String },
 }
@@ -101,6 +116,28 @@ pub fn set_site_permission_line(site: &SitePermission) -> String {
     })
 }
 
+/// The request to load the unpacked extension in `directory`, which must be
+/// absolute.
+pub fn load_unpacked_line(directory: &Path) -> String {
+    line(&Command::LoadUnpacked {
+        version: VERSION,
+        directory,
+    })
+}
+
+/// The request to uninstall extension `id`.
+pub fn uninstall_extension_line(id: &str) -> String {
+    line(&Command::UninstallExtension {
+        version: VERSION,
+        id,
+    })
+}
+
+/// The request for the ids of the extensions the desk's config installed.
+pub fn config_extensions_line() -> String {
+    line(&Command::ConfigExtensions { version: VERSION })
+}
+
 /// Parses one reply line, without its trailing newline.
 ///
 /// An unparseable reply is an error, not a [`Reply::Refused`]: it comes from
@@ -137,6 +174,17 @@ enum Command<'a> {
         origin: &'a str,
         permission: Permission,
         setting: Setting,
+    },
+    LoadUnpacked {
+        version: u32,
+        directory: &'a Path,
+    },
+    UninstallExtension {
+        version: u32,
+        id: &'a str,
+    },
+    ConfigExtensions {
+        version: u32,
     },
 }
 
