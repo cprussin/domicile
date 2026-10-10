@@ -3,7 +3,8 @@
 ## Unit tests
 
 - `domicile_unittests`: everything under `components/domicile/`.
-- `ozone_unittests`: the DRM platform.
+- `ozone_unittests`: the DRM platform, and the Wayland keyboard before a
+  keymap.
 
 ```sh
 autoninja -C out/Domicile domicile_unittests ozone_unittests

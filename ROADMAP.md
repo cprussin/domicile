@@ -92,8 +92,6 @@ item when it ships.
    [ENGINE-FORK-MEASUREMENTS.md](docs/architecture/ENGINE-FORK-MEASUREMENTS.md#host-shortcut-inhibitor).
    - Untested on other hosts. mutter may show an unseen permission dialog.
    - Untested with a physical keyboard.
-   - A host that sends no keymap crashes the browser on its first modifiers
-     event (`WaylandKeyboard::OnModifiers`).
 
 7. **`guard-shell.sh` launches through `domicile`.** Do this last.
    [THE-DOMICILE-BINARY.md](docs/architecture/THE-DOMICILE-BINARY.md).
