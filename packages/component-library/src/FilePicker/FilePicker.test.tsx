@@ -70,6 +70,9 @@ const rows = async (): Promise<readonly string[]> => {
     .map((row) => row.getAttribute("aria-label") ?? "");
 };
 
+const nameBox = (): HTMLElement =>
+  screen.getByRole("combobox", { name: "Name" });
+
 const places = (): HTMLElement =>
   screen.getByRole("navigation", { name: "Places" });
 
@@ -82,8 +85,12 @@ const where = (): readonly string[] =>
 const selection = (): HTMLElement =>
   screen.getByRole("status", { name: "Selection" });
 
+/** Cancels with Escape, from wherever in the picker focus is. */
 const cancel = async (answered: Promise<Answer>) => {
-  await userEvent.type(box(), "{Escape}");
+  act(() => {
+    screen.getByRole("button", { name: "Cancel" }).focus();
+  });
+  await userEvent.keyboard("{Escape}");
   await answered;
 };
 
@@ -437,17 +444,61 @@ describe("FilePicker", () => {
   });
 
   describe("saving", () => {
-    it("saves the name suggested in the folder it is in", async () => {
+    it("names the file in its only box, and saves it where it is", async () => {
       const answered = picker(ChooserMode.Save, { suggestedName: "photo.png" });
       await rows();
-      await userEvent.type(box(), "Pictures/");
 
-      expect(selection()).toHaveTextContent("~/Pictures/photo.png");
-      await userEvent.type(
-        screen.getByRole("textbox", { name: "Name" }),
-        "{Enter}",
-      );
-      expect(await answered).toStrictEqual([`${HOME}/Pictures/photo.png`]);
+      expect(
+        screen.queryByRole("combobox", { name: "Filter or go to a path" }),
+      ).not.toBeInTheDocument();
+      expect(nameBox()).toHaveValue("photo.png");
+      await userEvent.type(nameBox(), "{Enter}");
+      expect(await answered).toStrictEqual([`${HOME}/photo.png`]);
+    });
+
+    // So typing replaces the name and keeps the extension.
+    it("selects the suggested name up to its extension", async () => {
+      const answered = picker(ChooserMode.Save, { suggestedName: "photo.png" });
+      await rows();
+
+      act(() => {
+        nameBox().focus();
+      });
+
+      expect(nameBox()).toHaveProperty("selectionStart", 0);
+      expect(nameBox()).toHaveProperty("selectionEnd", 5);
+      await cancel(answered);
+    });
+
+    it("moves between folders with the arrows, and keeps the name", async () => {
+      const answered = picker(ChooserMode.Save, { suggestedName: "photo.png" });
+      await rows();
+
+      await userEvent.type(nameBox(), "{ArrowDown}{ArrowDown}{Enter}");
+      expect(where()).toStrictEqual(["~", "Pictures"]);
+      expect(nameBox()).toHaveValue("photo.png");
+
+      await rows();
+      await userEvent.type(nameBox(), "{ArrowUp}{Enter}");
+      expect(where()).toStrictEqual(["~"]);
+
+      await rows();
+      await userEvent.type(nameBox(), "{Enter}");
+      expect(await answered).toStrictEqual([`${HOME}/photo.png`]);
+    });
+
+    it("walks a path typed into the name", async () => {
+      const answered = picker(ChooserMode.Save);
+      await rows();
+
+      await userEvent.type(nameBox(), "Pictures/trips/beach.png");
+
+      expect(where()).toStrictEqual(["~", "Pictures", "trips"]);
+      expect(nameBox()).toHaveValue("beach.png");
+      await userEvent.type(nameBox(), "{Enter}");
+      expect(await answered).toStrictEqual([
+        `${HOME}/Pictures/trips/beach.png`,
+      ]);
     });
 
     it("takes the name of a file that is clicked", async () => {
@@ -456,11 +507,8 @@ describe("FilePicker", () => {
 
       await userEvent.click(screen.getByRole("option", { name: "notes.txt" }));
 
-      expect(screen.getByRole("textbox", { name: "Name" })).toHaveValue(
-        "notes.txt",
-      );
-      await userEvent.click(screen.getByRole("button", { name: "Save" }));
-      expect(await answered).toStrictEqual([`${HOME}/notes.txt`]);
+      expect(nameBox()).toHaveValue("notes.txt");
+      await cancel(answered);
     });
 
     it("saves nothing without a name", async () => {
@@ -470,6 +518,50 @@ describe("FilePicker", () => {
       expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
       await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
       expect(await answered).toBeUndefined();
+    });
+
+    it("saves nothing over a folder", async () => {
+      const answered = picker(ChooserMode.Save, { suggestedName: "Pictures" });
+      await rows();
+
+      expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+      expect(screen.getByText("A folder has this name")).toBeVisible();
+      await cancel(answered);
+    });
+  });
+
+  describe("replacing a file", () => {
+    it("asks first, and replaces it once told to", async () => {
+      const answered = picker(ChooserMode.Save, { suggestedName: "notes.txt" });
+      await rows();
+      expect(
+        screen.getByText("Replaces the file with this name"),
+      ).toBeVisible();
+
+      await userEvent.type(nameBox(), "{Enter}");
+
+      const asking = screen.getByRole("alertdialog", {
+        name: "Replace “notes.txt”?",
+      });
+      expect(
+        within(asking).getByRole("button", { name: "Replace" }),
+      ).toHaveFocus();
+      await userEvent.keyboard("{Enter}");
+      expect(await answered).toStrictEqual([`${HOME}/notes.txt`]);
+    });
+
+    it("goes back to the name on Escape", async () => {
+      const answered = picker(ChooserMode.Save, { suggestedName: "notes.txt" });
+      await rows();
+      await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+      await userEvent.keyboard("{Escape}");
+
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+      expect(nameBox()).toHaveFocus();
+      await userEvent.clear(nameBox());
+      await userEvent.type(nameBox(), "notes2.txt{Enter}");
+      expect(await answered).toStrictEqual([`${HOME}/notes2.txt`]);
     });
   });
 

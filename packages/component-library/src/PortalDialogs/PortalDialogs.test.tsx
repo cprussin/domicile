@@ -629,6 +629,15 @@ describe(PortalDialogs, () => {
       ).toBeInTheDocument();
     });
 
+    it("gives the keyboard to the name when saving", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} systemOf={home()} />);
+      host.push([fileChooser(1, { current_name: "notes.txt", mode: "save" })]);
+      await listed();
+
+      expect(screen.getByRole("combobox", { name: "Name" })).toHaveFocus();
+    });
+
     it("answers with the file chosen, the filter and each choice", async () => {
       const host = new FakeHost();
       render(<PortalDialogs host={host.host} systemOf={home()} />);
