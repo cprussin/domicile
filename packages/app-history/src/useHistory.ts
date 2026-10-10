@@ -90,7 +90,6 @@ export const useHistory = ({
       const started = ++generation.current;
       fetch({
         endTime,
-        hiddenOrigin: browser.hiddenOrigin,
         maxResults: pageSize,
         text,
       }).then(
@@ -124,7 +123,7 @@ export const useHistory = ({
         },
       );
     },
-    [browser, pageSize, text],
+    [pageSize, text],
   );
 
   const start = useCallback(() => {

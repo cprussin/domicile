@@ -13,7 +13,7 @@ Every desktop has a History app: Chrome's history page for browser windows.
 
 | Part | Where |
 |---|---|
-| Visits and their favicons go into the profile's history | `AttachTabHelpers` gives every tab guest a `HistoryTabHelper` and a favicon driver (`chrome/browser/domicile/domicile_tab_helpers.cc`). Patch 0106 lets the helper record a guest, which is in no `Browser`. |
+| Visits and their favicons go into the profile's history | `AttachTabHelpers` gives every tab guest a `HistoryTabHelper` and a favicon driver (`chrome/browser/domicile/domicile_tab_helpers.cc`). An app window gets `AttachAppTabHelpers`, which leaves out the `HistoryTabHelper`. Patch 0106 lets the helper record a guest, which is in no `Browser`. |
 | The app | An unpacked MV3 extension with the `history`, `browsingData` and `favicon` permissions. Its manifest `key` fixes its id, `dimbckmbklbplcobppahmnepgiponamj`. |
 | Installing it | The flake puts it in `libexec/domicile/apps/history`. `domicile` passes `--apps` to the compositor, which adds each directory there to the config's `extensions.unpacked` (`domicile_launch::apps`). `DOMICILE_APPS` names another directory. |
 | Opening it | `domicile-history` runs `domicile open-app chrome-extension://dimbckmbklbplcobppahmnepgiponamj/history.html`. |
@@ -26,9 +26,12 @@ Every desktop has a History app: Chrome's history page for browser windows.
   extension page everything the history page does.
 - **Private browser windows record nothing**, as in Chrome: they are in the
   off-the-record profile, which has no history.
-- **Extension pages are visits too.** Chrome records `chrome-extension://`
-  URLs, and the shell's window records `domicile://shell/`. The app hides
-  its own pages and every `domicile://` page from the list.
+- **App windows record nothing.** An app ([WEB-APPS.md](architecture/WEB-APPS.md))
+  is not browsing, so Settings, History and every `domicile open-app` window
+  stay out of the history.
+- **Extension pages are hidden.** Chrome records `chrome-extension://` URLs,
+  and the shell's window records `domicile://shell/`. The app hides every
+  `chrome-extension://` and `domicile://` page from the list.
 
 ## Launcher entries
 

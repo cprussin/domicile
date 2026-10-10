@@ -141,10 +141,6 @@ describe(chromeBrowser, () => {
     expect(copied).toBe("https://a.test/");
   });
 
-  it("knows its own pages' origin", () => {
-    expect(chromeBrowser(fakeChrome().api).hiddenOrigin).toBe(ORIGIN);
-  });
-
   it("gives a page's favicon from the extension's favicon service", () => {
     expect(
       chromeBrowser(fakeChrome().api).faviconUrl("https://a.test/?q=1"),
