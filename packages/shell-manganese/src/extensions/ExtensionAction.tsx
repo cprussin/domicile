@@ -6,7 +6,9 @@ import { WEBVIEW_CLOSE_EVENT } from "@domicile-desktop/sdk/webview-element";
 import { useEffect, useState } from "react";
 
 import { css } from "../../styled-system/css";
+import { DeviceAsk } from "../window-management/browser/DeviceAsk";
 import { PermissionAsk } from "../window-management/browser/PermissionAsk";
+import { useDeviceRequest } from "../window-management/browser/useDeviceRequest";
 import { usePermissionRequest } from "../window-management/browser/usePermissionRequest";
 import { useContentSize } from "./useContentSize";
 
@@ -121,14 +123,15 @@ type PopupViewProps = {
  * the shell. Like Chrome's popup, it sizes to its content, capped at
  * `viewStyles`' box (also its size until the page reports one).
  *
- * The page's permission requests are asked above it. A grant is the
- * extension's, so it holds in the extension's other pages too.
+ * The page's permission and device requests are asked above it. A grant is
+ * the extension's, so it holds in the extension's other pages too.
  */
 const PopupView = ({ name, onClose, popup }: PopupViewProps) => {
   // `null` because React passes it to a callback ref on unmount.
   const [view, setView] = useState<HTMLWebViewElement | null>(null);
   const size = useContentSize(view);
   const request = usePermissionRequest(view);
+  const deviceRequest = useDeviceRequest(view);
 
   useEffect(() => {
     if (view === null) {
@@ -146,6 +149,11 @@ const PopupView = ({ name, onClose, popup }: PopupViewProps) => {
       {request === undefined ? undefined : (
         <div className={askStyles}>
           <PermissionAsk asker={name} request={request} />
+        </div>
+      )}
+      {deviceRequest === undefined ? undefined : (
+        <div className={askStyles}>
+          <DeviceAsk request={deviceRequest} />
         </div>
       )}
       <webview

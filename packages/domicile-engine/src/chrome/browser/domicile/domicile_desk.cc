@@ -12,6 +12,7 @@
 #include "base/no_destructor.h"
 #include "chrome/browser/domicile/domicile_browser_windows.h"
 #include "chrome/browser/domicile/domicile_desk_functions.h"
+#include "chrome/browser/domicile/domicile_device_chooser.h"
 #include "chrome/browser/domicile/domicile_devtools.h"
 #include "chrome/browser/domicile/domicile_permissions.h"
 #include "chrome/browser/domicile/domicile_window_controller.h"
@@ -98,6 +99,8 @@ void StartDesk(Profile* profile) {
     WebViewGuest::SetInspect(base::BindRepeating(&OpenDevTools));
     // Camera and microphone requests, asked through the shell's prompt.
     UseChromeForGuestMedia();
+    // WebHID, WebUSB and Web Serial choosers, drawn by the shell.
+    UseTheShellForDeviceChoosers();
     return true;
   }();
   CHECK(installed);

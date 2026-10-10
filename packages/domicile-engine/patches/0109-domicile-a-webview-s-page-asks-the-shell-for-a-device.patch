@@ -1,0 +1,138 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Sat, 10 Oct 2026 00:00:00 +0000
+Subject: [PATCH] domicile: a webview's page asks the shell for a device
+
+WebHID, WebUSB and Web Serial each ask for a device through
+chrome::ShowDeviceChooserDialog, a bubble anchored to a browser window.
+A <webview> guest has no browser window, so the bubble never showed
+and the page was given no device. A Ledger wallet's extension could not
+connect.
+
+//chrome/browser/domicile sets an override that asks the shell instead
+(domicile_device_chooser.h). This patch carries the parts in files
+Chromium owns:
+
+- `browser_dialogs.{h,cc}`: SetDeviceChooserOverride and its getter.
+- `chooser_bubble_ui.cc`: ShowDeviceChooserDialog uses the override
+  when one is set.
+- Three lists, so that `DomicileDeviceRequestEvent`, the event a
+  `<webview>` dispatches for the shell to answer, and `DomicileDevice`,
+  the dictionary it lists devices in, are compiled and reach the page,
+  as patch 0103 does for permission requests.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on `crux`.
+---
+ chrome/browser/ui/dialogs/browser_dialogs.cc         | 12 ++++++++++++
+ chrome/browser/ui/dialogs/browser_dialogs.h          |  9 +++++++++
+ .../ui/views/permissions/chooser_bubble_ui.cc        |  5 +++++
+ .../blink/renderer/bindings/generated_in_core.gni    |  4 ++++
+ third_party/blink/renderer/bindings/idl_in_core.gni  |  2 ++
+ third_party/blink/renderer/core/html/build.gni       |  2 ++
+ 6 files changed, 34 insertions(+)
+
+diff --git a/chrome/browser/ui/dialogs/browser_dialogs.cc b/chrome/browser/ui/dialogs/browser_dialogs.cc
+--- a/chrome/browser/ui/dialogs/browser_dialogs.cc
++++ b/chrome/browser/ui/dialogs/browser_dialogs.cc
+@@ -33,6 +33,18 @@ void ShowWindowNamePromptForTesting(BrowserWindowInterface* browser,
+ #endif
+ 
+ #if defined(TOOLKIT_VIEWS)
++namespace {
++DeviceChooserOverride g_device_chooser_override = nullptr;
++}  // namespace
++
++void SetDeviceChooserOverride(DeviceChooserOverride show) {
++  g_device_chooser_override = show;
++}
++
++DeviceChooserOverride GetDeviceChooserOverride() {
++  return g_device_chooser_override;
++}
++
+ void ShowTabModal(std::unique_ptr<ui::DialogModel> dialog_model,
+                   content::WebContents* web_contents) {
+   constrained_window::ShowWebModal(std::move(dialog_model), web_contents);
+diff --git a/chrome/browser/ui/dialogs/browser_dialogs.h b/chrome/browser/ui/dialogs/browser_dialogs.h
+--- a/chrome/browser/ui/dialogs/browser_dialogs.h
++++ b/chrome/browser/ui/dialogs/browser_dialogs.h
+@@ -141,6 +141,15 @@ base::OnceClosure ShowDeviceChooserDialog(
+     content::RenderFrameHost* owner,
+     std::unique_ptr<permissions::ChooserController> controller);
+ bool IsDeviceChooserShowingForTesting(BrowserWindowInterface* browser);
++
++// DOMICILE: shows device choosers in place of Chrome's bubble, which anchors to
++// a browser window that a <webview> guest has none of. Set once, before any
++// page asks. See //chrome/browser/domicile/domicile_device_chooser.h.
++using DeviceChooserOverride = base::OnceClosure (*)(
++    content::RenderFrameHost* owner,
++    std::unique_ptr<permissions::ChooserController> controller);
++void SetDeviceChooserOverride(DeviceChooserOverride show);
++DeviceChooserOverride GetDeviceChooserOverride();
+ #endif
+ 
+ // Show the prompt to set a window name for browser's window, optionally with
+diff --git a/chrome/browser/ui/views/permissions/chooser_bubble_ui.cc b/chrome/browser/ui/views/permissions/chooser_bubble_ui.cc
+--- a/chrome/browser/ui/views/permissions/chooser_bubble_ui.cc
++++ b/chrome/browser/ui/views/permissions/chooser_bubble_ui.cc
+@@ -329,6 +329,11 @@ base::OnceClosure ShowDeviceChooserDialogForExtension(
+ base::OnceClosure ShowDeviceChooserDialog(
+     content::RenderFrameHost* owner,
+     std::unique_ptr<permissions::ChooserController> controller) {
++  // DOMICILE: see SetDeviceChooserOverride.
++  if (DeviceChooserOverride show = GetDeviceChooserOverride()) {
++    return show(owner, std::move(controller));
++  }
++
+   content::WeakDocumentPtr weak_document = owner->GetWeakDocumentPtr();
+   auto* contents = content::WebContents::FromRenderFrameHost(owner);
+ 
+diff --git a/third_party/blink/renderer/bindings/generated_in_core.gni b/third_party/blink/renderer/bindings/generated_in_core.gni
+--- a/third_party/blink/renderer/bindings/generated_in_core.gni
++++ b/third_party/blink/renderer/bindings/generated_in_core.gni
+@@ -210,6 +210,8 @@ generated_dictionary_sources_in_core = [
+   "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_dom_quad_init.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_dom_rect_init.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_dom_rect_init.h",
++  "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_domicile_device.cc",
++  "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_domicile_device.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_drag_event_init.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_drag_event_init.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_edit_context_init.cc",
+@@ -1202,6 +1204,8 @@ generated_interface_sources_in_core = [
+   "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_domicile_context_menu_event.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_domicile_permission_request_event.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_domicile_permission_request_event.h",
++  "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_domicile_device_request_event.cc",
++  "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_domicile_device_request_event.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_html_geolocation_element.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_html_geolocation_element.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_html_head_element.cc",
+diff --git a/third_party/blink/renderer/bindings/idl_in_core.gni b/third_party/blink/renderer/bindings/idl_in_core.gni
+--- a/third_party/blink/renderer/bindings/idl_in_core.gni
++++ b/third_party/blink/renderer/bindings/idl_in_core.gni
+@@ -463,6 +463,8 @@ static_idl_files_in_core = [
+   "//third_party/blink/renderer/core/html/domicile/domicile_file_chooser_event.idl",
+   "//third_party/blink/renderer/core/html/domicile/domicile_context_menu_event.idl",
+   "//third_party/blink/renderer/core/html/domicile/domicile_permission_request_event.idl",
++  "//third_party/blink/renderer/core/html/domicile/domicile_device.idl",
++  "//third_party/blink/renderer/core/html/domicile/domicile_device_request_event.idl",
+   "//third_party/blink/renderer/core/html/html_geolocation_element.idl",
+   "//third_party/blink/renderer/core/html/html_head_element.idl",
+   "//third_party/blink/renderer/core/html/html_heading_element.idl",
+diff --git a/third_party/blink/renderer/core/html/build.gni b/third_party/blink/renderer/core/html/build.gni
+--- a/third_party/blink/renderer/core/html/build.gni
++++ b/third_party/blink/renderer/core/html/build.gni
+@@ -100,6 +100,8 @@ blink_core_sources_html = [
+   "domicile/domicile_context_menu_event.h",
+   "domicile/domicile_permission_request_event.cc",
+   "domicile/domicile_permission_request_event.h",
++  "domicile/domicile_device_request_event.cc",
++  "domicile/domicile_device_request_event.h",
+   "domicile/html_app_element.cc",
+   "domicile/html_app_element.h",
+   "domicile/html_web_view_element.cc",
+-- 
+2.43.0
+

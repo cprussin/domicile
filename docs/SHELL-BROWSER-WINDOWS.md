@@ -328,6 +328,40 @@ frame.addEventListener(WEBVIEW_PERMISSION_REQUEST_EVENT, (event) => {
 Manganese draws both in the address bar's site permissions panel
 (`window-management/browser/SitePermissions.tsx`).
 
+## Devices
+
+The browser draws no device chooser. A page asking for a device through
+WebHID, WebUSB or Web Serial, such as a hardware wallet, fires
+`domicile-device-request`:
+
+```ts
+import { WEBVIEW_DEVICE_REQUEST_EVENT } from "@domicile-desktop/sdk/webview-element";
+
+frame.addEventListener(WEBVIEW_DEVICE_REQUEST_EVENT, (event) => {
+  event.preventDefault(); // claim it
+  pick(event.title, () => event.devices()).then(
+    (id) => event.choose([id]),
+    () => event.cancel(),
+  );
+});
+```
+
+- **`preventDefault()`:** claims it. Unclaimed requests are canceled: the page
+  gets no device.
+- **`title`:** Chrome's question, naming the site and the kind of device.
+- **`devices()`:** `{ id, name }` for each device on offer. Empty while
+  `listed` is false, before the browser has listed them.
+  `domicile-device-request-change` fires when they change, including as
+  devices are plugged in or removed.
+- **Answers:** `choose(ids)` grants the site those devices; `cancel()` grants
+  none. A device unplugged after it was offered is dropped from the answer.
+- **One at a time.** `multiple` is false for every chooser Chrome has.
+- **`domicile-device-request-withdrawn`:** the browser dropped the request,
+  for example on navigation. Stop showing it.
+
+Manganese draws it over the page (`window-management/browser/DeviceAsk.tsx`),
+and above an extension's popup.
+
 ## Not supported yet
 
 - `alert`, `confirm` and `prompt` show nothing and return at once.

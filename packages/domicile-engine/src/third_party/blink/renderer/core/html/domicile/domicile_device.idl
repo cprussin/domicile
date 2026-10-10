@@ -1,0 +1,12 @@
+// Copyright 2026 Connor Prussin
+// SPDX-License-Identifier: MIT
+
+// A device a DomicileDeviceRequestEvent offers.
+dictionary DomicileDevice {
+  // Names the device to `choose()`. Stays the device's own while offered, and
+  // is never reused.
+  required long id;
+
+  // The name Chrome's chooser shows, such as "Nano X".
+  required DOMString name;
+};

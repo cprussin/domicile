@@ -15,10 +15,12 @@ import { css, cx } from "../../styled-system/css";
 import { flex } from "../../styled-system/patterns";
 import { AddressBar } from "./browser/AddressBar";
 import { BrowserCommand, browserCommandFor } from "./browser/browser-command";
+import { DeviceAsk } from "./browser/DeviceAsk";
 import { FindBar } from "./browser/FindBar";
 import { LinkTarget } from "./browser/LinkTarget";
 import { PageMenu } from "./browser/PageMenu";
 import { choosePageCommand, pageMenuFor } from "./browser/page-menu";
+import { useDeviceRequest } from "./browser/useDeviceRequest";
 import { useFileRequest } from "./browser/useFileRequest";
 import { usePageMenu } from "./browser/usePageMenu";
 import { usePermissionRequest } from "./browser/usePermissionRequest";
@@ -249,6 +251,9 @@ export const BrowserWindow = ({
   // engine draws no prompt; the address bar's site permissions panel does.
   const sitePermissions = useSitePermissions(view);
   const permissionRequest = usePermissionRequest(view);
+  // The device the page asked for. The engine draws no chooser; this window
+  // asks over the page, address bar or not.
+  const deviceRequest = useDeviceRequest(view);
 
   // Focuses an element in this window without reporting it as a user reach.
   // All programmatic focus here must go through this.
@@ -610,6 +615,11 @@ export const BrowserWindow = ({
             onClose={dismissMenu}
           />
         )}
+        {deviceRequest !== undefined && (
+          <div className={deviceAskStyles}>
+            <DeviceAsk request={deviceRequest} />
+          </div>
+        )}
         {asking !== undefined && (
           <FilePicker
             // A new picker per request, so each starts empty.
@@ -663,6 +673,18 @@ const pageStyles = flex({
   minBlockSize: 0,
   minInlineSize: 0,
   position: "relative",
+});
+
+// At the top of the page, where Chrome's chooser hangs from its address bar.
+const deviceAskStyles = css({
+  borderRadius: "lg",
+  boxShadow: "lifted",
+  inlineSize: 88,
+  insetBlockStart: 2,
+  insetInlineStart: "50%",
+  maxInlineSize: "calc(100% - {spacing.4})",
+  position: "absolute",
+  transform: "translateX(-50%)",
 });
 
 // A `<webview>` is a replaced element with a 300x150 intrinsic size, so it
